@@ -2820,6 +2820,15 @@ var
     itself, nothing rewrites it, no entry is ever recorded, and that genuinely
     ambiguous case keeps resolving exactly as before. }
   GenMethImplSOff : array[0..MAX_GEN_METH_IMPL-1] of Integer;
+  { ...and the ARITY of the `<...>` that was stripped from that header, because
+    the name alone cannot tell two ARITY-OVERLOADED templates apart and that is
+    legal Pascal: rtl-generics declares `TGStringComparer<T, THashFactory>` and
+    `TGStringComparer<T>` in one unit. Matching a method impl by name alone
+    attributed the two-parameter body to the one-parameter template, bound only
+    `T`, and minted a specialization whose second argument was the PARAMETER NAME
+    `THashFactory`.
+    bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+  GenMethImplNArgs : array[0..MAX_GEN_METH_IMPL-1] of Integer;
   GenMethImplCount : Integer;
   SpecSubNames  : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecSubValues : array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
@@ -3126,6 +3135,26 @@ var
     already matches its recorded headers on.
     bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
   GenericMethodSrcOff: array[0..MAX_GENERIC_METHODS-1] of Integer;
+  { Was this row captured AHEAD of the parser (BufferTemplateMethodsAhead) rather
+    than as the parser walked the body? An ahead copy is a SNAPSHOT of a token
+    stream DelphiRewriteGenericUses has not finished rewriting -- that pass runs
+    to a fixed point PER TEMPLATE, so a marker for a template declared later is
+    injected into the main stream and never into the copy. Measured 2026-09-09 on
+    generics.defaults.pas: the body at :3247 is captured at parse line 994, and
+    `specialize` is injected before TGOrdinalStringComparer at :3250 when that
+    template is declared at line 1002.
+    bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+  GenericMethodAhead: array[0..MAX_GENERIC_METHODS-1] of Boolean;
+  { Aliases EmitLateNestedSpecDecls has spliced into the stream but the parser
+    has NOT reached yet. FindSpecialization cannot see them -- a specialization
+    registers when its declaration is PARSED -- and the pending-body flush runs
+    immediately after that splice, in the same call, so at splice time every
+    late prerequisite is invisible by construction. Without this list the
+    collapse arm leaves the group verbatim and `specialize` reaches the
+    expression parser.
+    bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+  LateSpecEmitted: array[0..MAX_SPECIALIZATIONS-1] of AnsiString;
+  LateSpecEmittedCount: Integer;
   GenericMethodCount : Integer;
   { Has this specialization's template methods already been materialised? Set
     when they are streamed at the specialization site, read by

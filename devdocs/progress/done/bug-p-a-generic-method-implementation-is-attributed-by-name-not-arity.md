@@ -3,9 +3,9 @@ track: P
 prio: 60
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: frankS
-summary: "TWO defects, and they must land together. (1) Two templates may share a NAME and differ in ARITY in one unit -- legal, and rtl-generics does it four times (`TGStringComparer<T, THashFactory>` beside `TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)`). FOUR sites attribute a generic method IMPLEMENTATION to a template by NAME ALONE, each taking the LAST match, so the two-parameter body is handed to the one-parameter template and streamed under a substitution binding only `T`. (2) `BufferTemplateMethodsAhead` copies a method body into the template arena at SPECIALIZATION time, which in generics.defaults is line 994, while `DelphiRewriteGenericUses` injects the `specialize` marker for `TGOrdinalStringComparer` when THAT template is declared at line 1002 -- into the main stream, never into the copy already taken. A COPY IS A SNAPSHOT AND THIS ONE IS TAKEN MID-REWRITE. Without the marker `NestedSpecGroup` cannot see the group (measured, gEnd=-1), so it is never collapsed to its minted alias, and the parser reads the surviving `<` as less-than: `undefined variable (TGOrdinalStringComparer)` at generics.defaults.pas:3250, against a line whose text is fine. Both drivers -- `uses Generics.Defaults` and `uses Generics.Collections` -- stop there at HEAD 7bbab967c. This is the wall of feature-pascal-corpus-generics. DO NOT AIM AT THE EXPRESSION PARSER: an earlier version of this summary called the second half an expression-position gap and that was the symptom, not the cause. A four-site arity patch and its probes exist in the frankS checkout ONLY, are not on origin, and fix half of this."
+summary: "FIXED 2026-09-09. Two defects that had to land together, both instances of a name standing in for an identity. (1) FOUR sites attributed a generic method IMPLEMENTATION to a template by NAME and kept the LAST match, while arity-overloaded template names are legal and rtl-generics declares four such pairs (`TGStringComparer<T, THashFactory>` beside `TGStringComparer<T>`) -- so a two-parameter body streamed under a substitution binding only `T`. Two sites now use SpecTemplateIdx, two the new DelphiGenMethImplHdrOfTemplate; an unrecorded arity answers True so objfpc is untouched. (2) BufferTemplateMethodsAhead's copy is a SNAPSHOT taken mid-rewrite -- its own comment claimed it was "identical by construction" and that sentence was the bug: DelphiRewriteGenericUses runs to a fixed point PER TEMPLATE, so a copy taken to get in front of the parser is also in front of every template declared later, and the `specialize` marker injected for one of those never reaches it. Re-captured at FLUSH time by SOURCE OFFSET. (3) Visible only once those two were right: a late prerequisite is invisible at splice time BY CONSTRUCTION, since EmitLateNestedSpecDecls splices declarations the parser has not reached and the flush runs in the same call -- LateSpecEmitted records them for the collapse arm alone. Verified: fixture byte-matches fpc 3.2.2, negative control fails on `SizeOf(H)`, gate GREEN, conformance 423/0/42 IDENTICAL to a HEAD control run (the +2 against the morning baseline is f0aca9c59 and 1c16d4523, not this). NOT FIXED: the corpus walls move to `unresolved forward: TInstance.CreateSelector` (Defaults) and `too many deferred specializations` with TEnumerator$PT minted 55 times (Collections), the latter possibly an amplification of this change rather than the older nested-type defect -- unmeasured."
 ---
 
 # A generic method implementation is attributed by name, not arity
@@ -205,3 +205,53 @@ I said earlier that `uses Generics.Defaults` alone compiled while
 `:3250`** — I measured the first at binary `417ee5636a72`, the tree has moved
 since, and the difference was never mine. Re-measure before quoting a
 driver-dependent wall on this rung.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## FIXED 2026-09-09 (frankS)
+
+Both halves, together, because neither lands alone.
+
+**Attribution (four sites).** Two now ask `SpecTemplateIdx[si]` — the template
+identity the specialization row was built from, which is what
+`SpecTemplateDeclUnit`'s header says the field exists for — and two ask the new
+`DelphiGenMethImplHdrOfTemplate`, comparing the arity `DelphiRewriteGenericUses`
+records in `GenMethImplNArgs` when it deletes the `<...>` group. An unrecorded
+arity answers True, so objfpc headers (`TFoo.M`, nothing to strip) resolve
+exactly as before.
+
+**The snapshot.** `RefreshAheadBufferedMethod` re-captures an ahead-buffered body
+at FLUSH time, keyed by source offset. Flush time is the point where every
+template the type section declares has swept; source offset is the stable key,
+because token indices move under the rewrite's own inserts. `BufferGenericMethod`
+said the ahead copy "is identical by construction" — that sentence was the bug.
+
+**The third thing, which only appeared once the first two were right.**
+`EmitLateNestedSpecDecls` splices prerequisite declarations the parser has not
+reached, and `FlushPendingClassSpecializations` runs in the same call, so at
+splice time `FindSpecialization` cannot see them — by construction, not by
+timing. `LateSpecEmitted` records them for the collapse arm ALONE.
+`NestedSpecKnown` is deliberately not widened: it also decides whether a
+prerequisite still needs emitting, and answering True there for something merely
+queued would drop the declaration this list exists to remember.
+
+**Verified.** `test/test_a_generic_method_impl_binds_by_arity_not_name.pas` with
+`test/units/uarityoverload.pas` prints `3` / `7`, byte-matching fpc 3.2.2
+`-Mdelphi`. Negative control (fix reverted, rebuilt): `SizeOf: unknown type or
+variable` on `H`, which is the mechanism itself. `gate.sh quick` GREEN.
+Conformance **423 pass / 0 fail / 42 gap — identical to a HEAD control run**;
+the +2 against this morning's 421/44 is `f0aca9c59` and `1c16d4523`, not mine.
+
+**What this does NOT fix**, measured at the same binary:
+
+| driver | wall now |
+| --- | --- |
+| `uses Generics.Defaults` | `unresolved forward: TInstance.CreateSelector` |
+| `uses Generics.Collections` | `too many deferred specializations` (`TEnumerator$PT` minted **55** times) |
+
+The second is [[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]]
+territory — `PT` is a nested type named as a specialization argument — reached
+far more often now that the parse gets past `:3250`. **Not investigated, and it
+may yet be an amplification of this change rather than the older defect.** Say
+which before quoting it.

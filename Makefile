@@ -5389,6 +5389,16 @@ test-core: $(COMPILER)
 	# a separate emitter: FlushLocalInits' `else` turns an unknown init kind into
 	# an integer literal, which compiled clean and SIGSEGV'd.
 	# bug-p-an-interface-name-in-a-var-initialiser-stores-the-guids-address-not-the-guid
+	# A generic method IMPLEMENTATION binds to the template of the same name AND
+	# ARITY. Two templates of one name differing only in parameter count are legal
+	# and rtl-generics declares four such pairs; four sites picked the LAST
+	# same-named template, so a two-parameter body streamed under a substitution
+	# binding only the first parameter and the second stayed spelled. The unit
+	# form is load-bearing -- the bodies must be buffered AHEAD of the parser --
+	# and 3/7 are chosen so a lost substitution cannot print them.
+	# bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity
+	./$(COMPILER) -Futest/units test/test_a_generic_method_impl_binds_by_arity_not_name.pas $(TESTTMP)/test_arityoverload26
+	$(TESTTMP)/test_arityoverload26 | diff -u test/test_a_generic_method_impl_binds_by_arity_not_name.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

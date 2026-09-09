@@ -472,6 +472,23 @@ begin
   Result := (FindSpecialization(nm) >= 0) or (FindUClass(nm) >= 0);
 end;
 
+{ ...or spliced by EmitLateNestedSpecDecls and not parsed yet. Separate from
+  NestedSpecKnown on purpose: that predicate also decides whether a prerequisite
+  still needs EMITTING, and answering True there for something merely queued
+  would drop the declaration this list exists to remember.
+  bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+function LateSpecEmittedName(const nm: AnsiString): Boolean;
+var i: Integer;
+begin
+  LateSpecEmittedName := False;
+  for i := 0 to LateSpecEmittedCount - 1 do
+    if CaseEqual(LateSpecEmitted[i], nm) then
+    begin
+      LateSpecEmittedName := True;
+      Exit;
+    end;
+end;
+
 { Which template a TemplateTokens[] pool index belongs to, as a KeyStrs id for
   its source file (-1 when unknown). Templates are captured in pool order and
   there are at most MAX_TEMPLATES of them, so a linear scan is the whole
@@ -844,7 +861,8 @@ begin
         StreamedSpecCanonName. Tested FIRST so a self-reference can never be
         answered by a same-named row minted for an earlier specialization. }
       if CaseEqual(aliasNm, StreamedSpecCanonName) then aliasNm := specName;
-      if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) then
+      if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) or
+         LateSpecEmittedName(aliasNm) then
       begin
         SpecializeTokens[subCount].Kind := tkIdent;
         SpecializeTokens[subCount].IVal := 0;
@@ -2135,6 +2153,9 @@ begin
               if GenMethImplCount < MAX_GEN_METH_IMPL then
               begin
                 GenMethImplSOff[GenMethImplCount] := Tokens[i].SOffset;
+                { the arity of the group being deleted -- the only place it is
+                  still visible. See GenMethImplNArgs in defs.inc. }
+                GenMethImplNArgs[GenMethImplCount] := na;
                 Inc(GenMethImplCount);
               end;
               RemoveTokens(i + 1, j - i);   { method impl reference }
@@ -3618,6 +3639,7 @@ procedure AppendTokenRangeToTemplateArena(fromIdx, toIdx: Integer;
                                          var ts, tc: Integer); forward;
 procedure ScanRangeForNestedSpecs(ts, tc: Integer; const specName: AnsiString); forward;
 function IsDelphiGenMethImplHdr(soff: Integer): Boolean; forward;
+function DelphiGenMethImplHdrOfTemplate(soff, ti: Integer): Boolean; forward;
 
 procedure ScanDelphiMethodImplsForNestedSpecs(ti: Integer; const specName: AnsiString);
 var dScan, dHdr, dBase, ts, tc: Integer;
@@ -3628,7 +3650,7 @@ begin
        (Tokens[dScan + 1].Kind = tkDot) and (dScan >= 1) and
        CaseEqual(GetTokenStrFromRaw(Tokens[dScan].SOffset, Tokens[dScan].SLen),
                  Templates[ti].Name) and
-       IsDelphiGenMethImplHdr(Tokens[dScan].SOffset) then
+       DelphiGenMethImplHdrOfTemplate(Tokens[dScan].SOffset, ti) then
     begin
       { the captured range starts at `procedure`/`function`, one earlier for a
         `class` method -- the same two shapes BufferGenericMethod is called with }
@@ -3749,9 +3771,15 @@ begin
   scan := 1;
   while scan < TokCount - 1 do
   begin
+    { NAME AND ARITY -- see DelphiGenMethImplHdrOfTemplate. Buffering by name
+      alone attached a two-parameter template's bodies to the one-parameter
+      template of the same name, and the pend then streamed them under a
+      substitution leaving the second parameter unbound.
+      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
     if (Tokens[scan].Kind = tkIdent) and (Tokens[scan + 1].Kind = tkDot) and
        CaseEqual(GetTokenStrFromRaw(Tokens[scan].SOffset, Tokens[scan].SLen),
-                 Templates[ti].Name) then
+                 Templates[ti].Name) and
+       DelphiGenMethImplHdrOfTemplate(Tokens[scan].SOffset, ti) then
     begin
       { the same two header shapes BufferGenericMethod is called with, plus the
         constructor/destructor spelling, which are identifiers in this dialect }
@@ -3782,6 +3810,7 @@ begin
           GenericMethods[GenericMethodCount].TokStart := ts;
           GenericMethods[GenericMethodCount].TokCount := tc;
           GenericMethodSrcOff[GenericMethodCount] := TokSrcOff[hdr];
+          GenericMethodAhead[GenericMethodCount] := True;   { snapshot; see defs.inc }
           Inc(GenericMethodCount);
         end;
       end;
@@ -3818,10 +3847,13 @@ begin
   BeginPrereqs;
   for si := 0 to SpecializationCount - 1 do
   begin
-    ti := -1;
-    for k := 0 to TemplateCount - 1 do
-      if CaseEqual(Templates[k].Name, Specializations[si].TemplateName) then ti := k;
-    if ti < 0 then Continue;
+    { SpecTemplateIdx, not a name match -- the identity this row was built from.
+      SpecTemplateDeclUnit's header already says why ("a name is not an identity
+      ... which is the bug SpecTemplateIdx exists to fix"); this site kept the old
+      lookup, and with an arity overload it scanned the wrong template's bodies.
+      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+    ti := SpecTemplateIdx[si];
+    if (ti < 0) or (ti >= TemplateCount) then Continue;
     SpecializeTemplateName := Templates[ti].Name;
     SetSpecSubs(ti, si);
     ScanDelphiMethodImplsForNestedSpecs(ti, Specializations[si].Name);
@@ -3832,6 +3864,12 @@ begin
     begin
       DbgMintTrace('late', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+      { spliced but not parsed -- see LateSpecEmitted in defs.inc }
+      if LateSpecEmittedCount < MAX_SPECIALIZATIONS then
+      begin
+        LateSpecEmitted[LateSpecEmittedCount] := NSpecName[k];
+        Inc(LateSpecEmittedCount);
+      end;
     end;
     { THE one site that needs the leading `type` -- the reason is on FlushPrereqs. }
     FlushPrereqs(TokPos, True, nIns);
@@ -3855,6 +3893,28 @@ begin
     if GenMethImplSOff[i] = soff then
     begin
       IsDelphiGenMethImplHdr := True;
+      Exit;
+    end;
+end;
+
+{ ...and is it THIS template's, not merely one of this NAME's? Two templates may
+  share a name and differ in arity in one unit -- legal, and rtl-generics does it
+  four times over. True when the header's stripped `<...>` had exactly this
+  template's parameter count.
+
+  A header with no recorded arity answers True deliberately: that is objfpc
+  source, which spells the header `TFoo.M` with nothing to strip, and it must
+  keep resolving exactly as before.
+  bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+function DelphiGenMethImplHdrOfTemplate(soff, ti: Integer): Boolean;
+var i: Integer;
+begin
+  DelphiGenMethImplHdrOfTemplate := True;
+  for i := 0 to GenMethImplCount - 1 do
+    if GenMethImplSOff[i] = soff then
+    begin
+      DelphiGenMethImplHdrOfTemplate := (GenMethImplNArgs[i] < 0) or
+                                        (GenMethImplNArgs[i] = TemplateNParams[ti]);
       Exit;
     end;
 end;
@@ -4587,6 +4647,55 @@ begin
   end;
 end;
 
+{ Re-capture a body that was buffered AHEAD of the parser, from the token stream
+  as it stands NOW.
+
+  BufferGenericMethod's own comment says the ahead copy "is identical by
+  construction". It is not, and that is this rung's wall.
+  DelphiRewriteGenericUses injects the objfpc `specialize` marker in front of a
+  generic USE when the template naming it is DECLARED, and it runs to a fixed
+  point PER TEMPLATE -- so the stream is only ever rewritten with respect to the
+  templates seen so far. Buffering ahead exists precisely to get in front of the
+  parser, which is the same thing as getting in front of later declarations.
+
+  Measured 2026-09-09, generics.defaults.pas: the body of
+  `TGStringComparer<T, THashFactory>.Ordinal` (:3247) is captured while the parse
+  cursor is at line 994 -- `TStringComparer = class(TGStringComparer<string>)` --
+  and `TGOrdinalStringComparer` is not declared until line 1002. Its sweep then
+  injects the marker at :3250 into the MAIN stream, never into the copy. Without
+  the marker NestedSpecGroup cannot see the group at all (gEnd = -1), so nothing
+  collapses it to the alias that was duly minted, and the surviving `<` reaches
+  the expression parser as less-than: `undefined variable (TGOrdinalStringComparer)`
+  against a line whose text is fine.
+
+  RE-CAPTURING AT FLUSH TIME AND NOT AT CAPTURE TIME is the whole point: the
+  flush runs at the END of the type section, by which time every template the
+  section declares has swept. The header is re-found by SOURCE OFFSET, which is
+  the stable key -- token INDICES move under the rewrite's own inserts, which is
+  why GenericMethodSrcOff exists.
+
+  Idempotent: the flag is cleared, so a body is re-captured at most once, and the
+  stale arena range is simply left behind (the arena is append-only and this is
+  one range per ahead-buffered method).
+  bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+procedure RefreshAheadBufferedMethod(gm: Integer);
+var k, hdr, ts, tc: Integer;
+begin
+  if not GenericMethodAhead[gm] then Exit;
+  GenericMethodAhead[gm] := False;
+  hdr := -1;
+  for k := 0 to TokCount - 1 do
+    if TokSrcOff[k] = GenericMethodSrcOff[gm] then
+    begin
+      hdr := k;
+      Break;
+    end;
+  if hdr < 0 then Exit;   { the stream moved out from under the key: keep the snapshot }
+  AppendTokenRangeToTemplateArena(hdr, GenericMethodBodyEnd(hdr), ts, tc);
+  GenericMethods[gm].TokStart := ts;
+  GenericMethods[gm].TokCount := tc;
+end;
+
 procedure FlushPendingClassSpecializations;
 var p, gm, ti, si, anchor: Integer;
 begin
@@ -4631,6 +4740,8 @@ begin
     SetSpecSubs(ti, si);
     for gm := 0 to GenericMethodCount - 1 do
       if GenericMethods[gm].TemplateIdx = ti then
+      begin
+        RefreshAheadBufferedMethod(gm);
         if anchor >= 0 then
           { Advance the anchor by what each splice inserted, so several bodies
             keep their order instead of each landing in front of the last. }
@@ -4639,6 +4750,7 @@ begin
         else
           SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
             Specializations[si].Name);
+      end;
     { Materialised here, at the specialization site. BufferGenericMethod must
       not stream a second copy when the parser reaches the template body -- see
       SpecMethodsDone. }
@@ -4746,6 +4858,7 @@ begin
     GenericMethods[GenericMethodCount].TokStart := mStart;
     GenericMethods[GenericMethodCount].TokCount := mCount;
     GenericMethodSrcOff[GenericMethodCount] := TokSrcOff[startTokIdx];
+    GenericMethodAhead[GenericMethodCount] := False;  { the parser is AT the body }
     Inc(GenericMethodCount);
   end;
 
@@ -4765,8 +4878,11 @@ begin
               ' visible=', Ord(DeclVisibleSect(SpecUnitIdx[si], SpecDeclImpl[si],
                                                IMPLTAB_SPEC, si)),
               ' curunit=', CurrentUnitIdx, ' cursrc=', CurSrcBaseName, ' at=', finalCur);
-    if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) and
-       (not SpecMethodsDone[si]) then
+    { SpecTemplateIdx, not the NAME -- the predicate the debug line above already
+      prints as `sameTmpl`. A name match streamed a two-parameter template's body
+      for a one-parameter specialization of the same name.
+      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+    if (SpecTemplateIdx[si] = ti) and (not SpecMethodsDone[si]) then
     begin
       SpecializeTemplateName := Templates[ti].Name;
       SetSpecSubs(ti, si);

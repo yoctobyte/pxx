@@ -928,6 +928,7 @@ var
   pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
   nonGenCi : Integer;  { ordinary class sharing a generic template's name }
   wasDelphiGenHdr : Boolean;  { this `X.M` header was `X<T>.M` in the source; the mode-Delphi rewrite deleted the group. See GenMethImplSOff. }
+  hdrArity : Integer;  { how many parameters that deleted group had, -1 if unrecorded. See GenMethImplNArgs. }
   isFunc   : Boolean;
   name     : AnsiString;
   pQualNm  : AnsiString;  { scratch for the qualified-prefix strip on a param type }
@@ -1129,10 +1130,25 @@ begin
   methSNOff := 0; methSNLen := 0;
   if CurTok.Kind = tkDot then
   begin
+    { ARITY FIRST, then the last same-named template. Two templates of one name
+      differing only in parameter count are legal and rtl-generics leans on it:
+      `TGStringComparer<T, THashFactory>` beside `TGStringComparer<T>`. Taking the
+      last name match handed the two-parameter template's method bodies to the
+      one-parameter one, which streamed them under a substitution binding only
+      `T`. The header's arity is knowable here only because
+      DelphiRewriteGenericUses records it when it deletes the `<...>` group; an
+      unrecorded arity is objfpc and keeps the old last-match rule exactly.
+      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+    hdrArity := -1;
+    if TokPos >= 2 then
+      for i := 0 to GenMethImplCount - 1 do
+        if GenMethImplSOff[i] = Tokens[TokPos - 2].SOffset then
+          hdrArity := GenMethImplNArgs[i];
     depth := -1;
     for i := 0 to TemplateCount - 1 do
       if CaseEqual(Templates[i].Name, name) then
-        depth := i;
+        if (hdrArity < 0) or (TemplateNParams[i] = hdrArity) then
+          depth := i;
     { A generic template and an ORDINARY class may share a name -- FPC's
       TDictionary alongside TDictionary<K,V>, and rtl-generics' THashService.
       The bare `X.M` header served by this branch is ALSO how the non-generic
