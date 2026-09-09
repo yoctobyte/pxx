@@ -832,6 +832,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
  szDeclTk: TTypeKind; szNameConsumed: Boolean;
+ szDeclRec, szDeclCap: Integer;   { ParseTypeKindSized's companions -- the record id and the frozen-string cap, captured by the same call that produced szDeclTk }
     seEtid, seOrd: Integer;
     dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
     dfNestCi, dfHops, dfI: Integer; dfNestName: AnsiString;   { Default(TOuter.TInner) — the SCOPED nested row }
@@ -4214,12 +4215,24 @@ begin
                       ParseTypeKind consumes the name itself, so the shared
                       trailing Next is suppressed.
                       bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size }
-                    szDeclTk := ParseTypeKind;
+                    { ParseTypeKindSized, not ParseTypeKind: the record id and
+                      the frozen-string cap come back through the SAME call that
+                      produced the kind. This read `LastTypeRecId` and
+                      `LastTypeStrCap` -- globals ParseTypeKind sets as a side
+                      effect -- and it read the cap in the `else` arm, AFTER
+                      `RecSize(LastTypeRecId)` in the `if` arm, so the capture sat
+                      behind an intervening call. RecSize parses nothing today,
+                      which is the character of the defect rather than a defence:
+                      correct until a callee this site does not control starts
+                      parsing, and a stale cap is a valid Integer that produces a
+                      plausible width with no diagnostic anywhere.
+                      refactor-p-the-frozen-string-cap-travels-to-its-sizer-in-a-global-whose-window-nobody-enforces }
+                    szDeclTk := ParseTypeKindSized(szDeclRec, szDeclCap);
                     szNameConsumed := True;
-                    if (szDeclTk = tyRecord) and (LastTypeRecId <> REC_NONE) then
-                      prevTok := RecSize(LastTypeRecId)
+                    if (szDeclTk = tyRecord) and (szDeclRec <> REC_NONE) then
+                      prevTok := RecSize(szDeclRec)
                     else
-                      prevTok := SizeOfSlot(szDeclTk, LastTypeStrCap);
+                      prevTok := SizeOfSlot(szDeclTk, szDeclCap);
                   end
                   else if szBTkAny <> tyUnknown then
                     prevTok := TypeSlotSize(szBTkAny)

@@ -11671,6 +11671,19 @@ test-core: $(COMPILER)
 	# only this half and shipped a wrong-answer regression.
 	./$(COMPILER) test/test_sizeof_builtin_type_names.pas $(TESTTMP)/test_sizeof_names26
 	tools/expect_same.sh test_sizeof_names26 "$$($(TESTTMP)/test_sizeof_names26)" "$$(printf '8 8 8 8 4 2 1\n2 4 2\nsplits 0')"
+	# The frozen-string CAP and the record ID travel to their sizer through a pair
+	# of globals ParseTypeKind sets as a side effect. ParseTypeKindSized returns
+	# all three from one call, so the window cannot be reopened by an intervening
+	# callee. THE `bytes` ROW IS THE ONLY CONTROL HERE and the rest of the file
+	# says why: measured 2026-09-09 with the alias cap write removed, `file` still
+	# prints `3 cc 3` -- a typed file is written and read through the SAME element
+	# width, so the count, the value and the position are all invariant to that
+	# width being wrong. Only the byte length separates them: 33 correct, 24 under
+	# the control. The four SizeOf rows do NOT reach the changed resolver at all
+	# (`PXXDBG=p.sized` fires twice, both from `file of`); they pin a neighbouring
+	# path that already took its pair from one indexed carrier.
+	./$(COMPILER) test/test_sizeof_of_a_frozen_string_type_name.pas $(TESTTMP)/test_sizeof_frozen_name26
+	tools/expect_same.sh test_sizeof_frozen_name26 "$$($(TESTTMP)/test_sizeof_frozen_name26)" "$$(printf 'fwd   11 201\nrev   201 11\nmix   11 12 201\nplain 12 4\nfile  3 cc 3\nbytes 33 12')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

@@ -638,6 +638,44 @@ begin
   DeclDistinctNow := savedDistinct;
 end;
 
+{ PARSE A TYPE AND CAPTURE ITS SIZING COMPANIONS IN ONE EXPRESSION.
+
+  `SizeOfSlot(tk, cap)` and `TypeStorageSize(tk, recId)` take a kind and a
+  companion, and eleven of the thirteen SizeOfSlot call sites take both halves
+  from ONE indexed carrier -- `Syms[i].ElemType` with `SymStrCap[i]`, `AliasTk[a]`
+  with `AliasStrCap[a]` -- so a mismatched pair is not even expressible there.
+  The two that did not are the reason this exists: they called ParseTypeKind and
+  then read `LastTypeRecId` / `LastTypeStrCap`, which are GLOBALS that
+  ParseTypeKind sets as a side effect and that the NEXT declaration parse
+  overwrites. Nothing enforced the window, nothing named it, and neither
+  ParseTypeKind nor SizeOfSlot can detect a violation -- a stale cap is a valid
+  Integer and produces a plausible width.
+
+  THAT WINDOW HAS ALREADY BEEN VIOLATED ONCE, WITH A SILENT WRONG VALUE.
+  `ArrTypeElemStrCap` (defs.inc) exists because `array[..] of string[N]` read the
+  cap at a USE of the alias, far from where `string[N]` was parsed, where
+  LastTypeStrCap is whatever the last unrelated declaration left behind
+  (bug-a-nd-array-function-result-indexes-the-wrong-slot). The fix that worked
+  there was a DEDICATED CARRIER, not a tighter window, and this is the same move
+  for the parse-time pair: the companions come back through the call that
+  produced the kind, so a caller cannot pick them up late.
+
+  It is not decoration at the SizeOf site in particular. There the read sat in an
+  `else` arm with `RecSize(LastTypeRecId)` in the `if` arm between the parse and
+  the read -- so the cap was captured AFTER an intervening call. RecSize parses
+  nothing today, which is the whole character of a route-4 defect: correct until
+  some callee it does not control starts parsing.
+
+  refactor-p-the-frozen-string-cap-travels-to-its-sizer-in-a-global-whose-window-nobody-enforces }
+function ParseTypeKindSized(var recId, strCap: Integer): TTypeKind;
+begin
+  ParseTypeKindSized := ParseTypeKind;
+  recId  := LastTypeRecId;
+  strCap := LastTypeStrCap;
+  if PxxDbgEnabled('p.sized') then
+    WriteLn('PXXDBG p.sized tk=', Ord(ParseTypeKindSized), ' rec=', recId, ' cap=', strCap);
+end;
+
 function ParseTypeKindInner: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -1071,9 +1109,13 @@ begin
         if CurTok.Kind = tkOf then
         begin
           Next;
-          fileElemTk := ParseTypeKind();
-          fileElemRec := LastTypeRecId;
-          fileElemCap := LastTypeStrCap;
+          { This three-line capture WAS the discipline, and it is what
+            ParseTypeKindSized generalises: the companions arrive with the kind
+            instead of being picked up from globals afterwards. Nothing about
+            this site was wrong -- it is the reference form, and now there is one
+            place holding the rule rather than two callers each remembering it.
+            refactor-p-the-frozen-string-cap-travels-to-its-sizer-in-a-global-whose-window-nobody-enforces }
+          fileElemTk := ParseTypeKindSized(fileElemRec, fileElemCap);
           { FPC refuses a REFERENCE-COUNTED element outright ("Type 'ansistring'
             is not allowed as a file element") and it is right to: what would go
             on disk is the pointer, so the file is meaningless the moment the

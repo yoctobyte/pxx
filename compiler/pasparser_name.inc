@@ -697,6 +697,7 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+function ParseTypeKindSized(var recId, strCap: Integer): TTypeKind; forward;  { ...and its sizing companions in ONE expression; body beside ParseTypeKind in pasparser_decl.inc }
 { True for a builtin type NAME whose ParseTypeKind arm carries more than a
   KIND -- a capacity, a record id, a pointee. SizeOf consults it to decide
   whether to resolve the name through ParseTypeKind instead of through the
