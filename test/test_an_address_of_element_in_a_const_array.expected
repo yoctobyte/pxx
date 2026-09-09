@@ -1,0 +1,5 @@
+call  207
+deref 3
+nil   TRUE
+local call  205
+local deref 3

@@ -4154,6 +4154,54 @@ begin
                 Inc(PendingInitCount);
               end;
             end
+            else if TryParseInitValForm(cElemTk, Ord(Syms[cIdx].PtrElemTk),
+                                        fvKind, fvVal, fvAux) then
+            begin
+              { An `@X` ELEMENT -- `array[..] of Pointer = (@Sel, nil)`, and
+                rtl-generics' `ComparerInstances` table, which is 20 rows of
+                `@TComparerService.SelectXComparer`.
+
+                THE FOURTH CALLER OF THIS HELPER AND THE FOURTH INSTANCE OF ONE
+                SHAPE in this loop: ConstEval cannot evaluate `@` and does not
+                CONSUME it either, so the fallback below left TokPos on the `@`,
+                the loop spun, and `Inc(cElem)` counted the same token once per
+                declared slot until the length check tripped. The diagnostic was
+                `too many array constant elements` with TokPos still on the FIRST
+                element -- a size complaint about a correct size. The string,
+                PChar and set arms above each record the identical failure; this
+                is the same paragraph a fourth time and the reason it is a shared
+                helper rather than a fourth hand-written arm.
+
+                Kinds 2 (AN_PROCADDR) and 4 (AN_ADDR) are what it yields, and
+                both flushes already build the value node independently of the
+                target, so an ELEMENT target (Elem >= 0 -> AN_INDEX) needs
+                nothing new on either side.
+                bug-p-an-address-of-element-in-a-const-array-is-counted-as-many }
+              if isLocalConst then
+              begin
+                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+                LocalInitSym[LocalInitCount]    := cIdx;
+                LocalInitElem[LocalInitCount]   := cLo + cElem;
+                LocalInitFOff[LocalInitCount]   := -1;
+                LocalInitKind[LocalInitCount]   := fvKind;
+                LocalInitVal[LocalInitCount]    := fvVal;
+                LocalInitValAux[LocalInitCount] := fvAux;
+                LocalInitTk[LocalInitCount]     := Ord(cElemTk);
+                Inc(LocalInitCount);
+              end
+              else
+              begin
+                EnsurePendingInitCapacity(PendingInitCount);
+                PendingInitSym[PendingInitCount]    := cIdx;
+                PendingInitElem[PendingInitCount]   := cLo + cElem;
+                PendingInitFOff[PendingInitCount]   := -1;
+                PendingInitKind[PendingInitCount]   := fvKind;
+                PendingInitVal[PendingInitCount]    := fvVal;
+                PendingInitValAux[PendingInitCount] := fvAux;
+                PendingInitTk[PendingInitCount]     := Ord(cElemTk);
+                Inc(PendingInitCount);
+              end;
+            end
             else if isLocalConst then
             begin
               if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');

@@ -5421,6 +5421,15 @@ test-core: $(COMPILER)
 	# bug-p-a-records-static-class-function-has-no-body-when-the-call-is-in-a-specialized-body
 	./$(COMPILER) test/test_a_records_static_class_function_binds_from_a_specialized_body.pas $(TESTTMP)/test_recstaticspec26
 	$(TESTTMP)/test_recstaticspec26 | diff -u test/test_a_records_static_class_function_binds_from_a_specialized_body.expected -
+	# `@X` as an ELEMENT of a typed const array. ConstEval cannot evaluate `@`
+	# and does not consume it, so the array-constant loop spun and reported
+	# `too many array constant elements` with TokPos on the FIRST element -- the
+	# fourth instance of that desync in one loop. Both emitter kinds are
+	# asserted (AN_PROCADDR for a routine, AN_ADDR for a variable) and the
+	# routine-local const array too, which is a separate flush.
+	# bug-p-an-address-of-element-in-a-const-array-is-counted-as-many
+	./$(COMPILER) test/test_an_address_of_element_in_a_const_array.pas $(TESTTMP)/test_constarrayaddr26
+	$(TESTTMP)/test_constarrayaddr26 | diff -u test/test_an_address_of_element_in_a_const_array.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:
