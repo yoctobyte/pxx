@@ -55,6 +55,17 @@ each is correct about its own. What makes it a defect on our side is only that
 real source someone MEANT to write builds FPC's one, and `generics.defaults.pas`
 is that source.
 
+**NOT `known-incompat/`, and the paragraph above is exactly what would get it
+refiled there.** "Both behaviours are correct about their own implementation"
+is the known-incompat criterion word for word, and it is satisfied here. What
+fails the rest of that test is the second half: known-incompat also requires
+that ours be **chosen**, and nothing chose this — it is the incidental
+consequence of recovering the IMT from RTTI, which was chosen to keep the value
+one word. A construct FPC's own packages use to reach every default comparer is
+not an edge case a programmer reached by mistake, so `ON PAR WITH THE LANGUAGE`
+does not excuse it either. It is a bug with a mirror, which is a different
+animal from a divergence with a rationale.
+
 ## Why the route differs and the contents do not
 
 pxx: the value is the INSTANCE. `AN_INTF_CALL` (ir.inc) emits
