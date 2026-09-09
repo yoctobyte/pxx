@@ -111,3 +111,6 @@ stay hidden.
 plain global is hoistable out of the loop at -O2 and this dialect has no
 `volatile` to say otherwise; the failure mode of a hoisted spin is a HANG, which
 trades a flaky row for a wedged tier job.
+
+## Log
+- 2026-09-09 — auto-closed by the seven watcher: `test-threads#src:test/test_a_threadvar_is_per_thread.pas` passes at ca890d59db6a (tier full); it was red at 88a84359f5a0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
