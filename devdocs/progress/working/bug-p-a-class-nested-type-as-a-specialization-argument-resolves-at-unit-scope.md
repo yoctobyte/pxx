@@ -816,3 +816,40 @@ that this argument never reaches the reader that consults them.
 **What this retires:** the eight-site question, and with it the last of the
 `TEnumerator$PT` line of enquiry. The measurement cost seven minutes and the
 repro it produced costs under a second, which is the whole return.
+
+### THE BOUNDARY, VARIED ONE AXIS AT A TIME — EXACTLY ONE CELL FAILS
+
+Each variant is the 21-line repro with a single thing changed, each compiles in
+under a second, and each was checked against fpc 3.2.2.
+
+| variant | `PT` comes from | `PT` is used as | result |
+| --- | --- | --- | --- |
+| `nb` | the template's OWN body | a generic argument in a nested type ALIAS | **pass** |
+| `nc` | a GENERIC ANCESTOR | a generic argument in a METHOD SIGNATURE | **pass** |
+| `nd` | a GENERIC ANCESTOR | a plain alias `TAlias = PT` and a field `FF: PT` | **pass**, `nd 0` = fpc |
+| **`na`** | **a GENERIC ANCESTOR** | **a generic argument in a nested type ALIAS** | **FAIL** |
+
+**Neither variable fails alone; the conjunction does.** That is what makes this
+a fourth door and not a gap in door C — the ancestor walk works (`nc`), the
+nested-alias path works (`nb`), and the inherited name is perfectly visible to
+ordinary type lookup inside the same class body (`nd`, which matches fpc
+byte for byte).
+
+`nd` is the load-bearing control: `FindNestedType` already walks own → ancestors
+and resolves the inherited `PT` in a nested `type` section. So this is NOT
+"inherited nested types are invisible here". It is specifically that a
+**generic ARGUMENT** is resolved by the specialization machinery — `SpecSubNames`
+and `HoistedNameFor`, the only two tables `NestedSpecArg` consults — and that
+path never asks the class-scope lookup that already knows the answer.
+
+`p.nspec` confirms the asymmetry directly: `nc` registers TWO rows
+(`TBase$LongInt` and `TBox$LongInt$TBase$LongInt$PT`); `na` registers only the
+first, so the `TBox<T, PT>` group in the alias RHS never reaches
+`ScanRangeForNestedSpecs` at all. `nb` registers NEITHER and still works,
+because there `PT` is a member alias of the class itself and ordinary scoping
+resolves it.
+
+**Where a fix goes, and where it does not.** Not `CollectHoistCandidates` and not
+the ancestor walk — `nc` proves both are fine. The question is why the group in a
+nested type alias RHS is not registered when its argument is inherited, and it is
+one probing round away.
