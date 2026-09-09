@@ -5406,7 +5406,7 @@ function PasCondProbeUsedUnits(const nm: AnsiString;
   exactly the way this file's forwards each record. The answers that do not fit
   in a Boolean come back in PasCondProbeInt / PasCondProbeStr.
   bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares }
-var k, u, savedTC, unreadable: Integer;
+var k, u, savedTC, unreadable, savedCondCount: Integer;
     savedQuiet: Boolean;
     unm, rPath, rEmsg: AnsiString;
     rIsC, rIsH, rIsPy, isPathForm: Boolean;
@@ -5472,7 +5472,47 @@ begin
                 and reports it properly if it still cannot. }
               savedQuiet := PasCondQuiet;
               PasCondQuiet := True;
+              { AND THE PROBED UNIT LEXES FROM AN EMPTY {$if} STACK, which is
+                the same discipline as the two baseline resets above and was
+                the missing third. PasCondCount is per-FILE, and LexAppend runs
+                the file to its EOF, where `PasCondCount > 0` is reported as
+                `unterminated conditional directive`. Enter the probe from
+                inside ANY conditional -- depth 1 is enough -- and that check
+                fires on a perfectly balanced unit, because the count it sees
+                is the outer file's plus the probed file's.
+
+                THE PROBE ALSO RE-LEXES THE FILE IT IS CURRENTLY INSIDE, and
+                that is what makes the arithmetic visible rather than academic:
+                the walk scans the WHOLE token stream for `uses`, and when this
+                unit is itself being lexed through LexAppend the stream already
+                holds its PARENT's `uses <thisunit>`. So the probe resolves this
+                very file and lexes it again from the outer count. Measured
+                2026-09-09 on FPC's entfile.pas (2131 lines, 170 openers, 170
+                {$endif}) and reduced to 14+5+3 lines; `{$if declared(X)}` has
+                the same shape and had it first, so this is not new with the
+                const/alias questions -- it is one conditional deep in ANY unit
+                a used unit is probed from.
+                bug-p-a-conditional-probe-launched-inside-a-conditional-unbalances-the-stack }
+              savedCondCount := PasCondCount;
+              PasCondCount := 0;
+              { AND ITS INCLUDES ARE SPLICED FIRST, which is what this routine's
+                own header says it does and what it did not do. LexAppend is the
+                real lexer but it is not the whole front of it: a unit's `{$I}`
+                directives are expanded by ExpandIncludes, which ParseUsesUnitBody
+                calls before the real LexAppend of the same content and the probe
+                did not. So a name declared in an .inc was invisible, and so was
+                every name behind a define an .inc SETS: measured 2026-09-09,
+                globtype.pas declares `PUint = qword` inside
+                {$ifdef cpu64bitaddr}, and cpu64bitaddr is derived by
+                fpcdefs.inc -- so the probe skipped the whole arm, `PUint` read
+                as undeclared, and the two-hop walk
+                TConstPtrUInt -> PUint -> qword stopped one hop short on the
+                unit that 18 of FPC's 207 compiler units ask about. The
+                header's own census is the size of it: 151 of 400 FPC unit
+                interfaces (38%) contain an {$I}. }
+              ExpandIncludes(UnitContent, GetFilePath(rPath), '');
               LexAppend(UnitContent);
+              PasCondCount := savedCondCount;
               PasCondQuiet := savedQuiet;
               Dec(ProbeDepth);
               if question = PCQ_CONSTINT then

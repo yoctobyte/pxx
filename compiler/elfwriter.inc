@@ -5703,6 +5703,7 @@ var
   fname, command, name, exprSource: AnsiString;
   incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
   cond, active, outermost, savedNestedComments, optOn: Boolean;
+  savedCondQuiet: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
   savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -5842,9 +5843,10 @@ begin
               real lex that follows. Halting here would refuse the file over a
               question the compiler is about to answer correctly. See
               PasCondQuiet in paslexer.inc for the residual this trades for. }
+            savedCondQuiet := PasCondQuiet;
             PasCondQuiet := True;
             cond := EvalPasCondExprText(exprSource);
-            PasCondQuiet := False;
+            PasCondQuiet := savedCondQuiet;
           end;
         end
         else
@@ -5869,9 +5871,10 @@ begin
         begin
           exprSource := '';
           for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
-          PasCondQuiet := True;          { same pre-pass, same reason }
+          savedCondQuiet := PasCondQuiet;   { same pre-pass, same reason }
+          PasCondQuiet := True;
           cond := EvalPasCondExprText(exprSource);
-          PasCondQuiet := False;
+          PasCondQuiet := savedCondQuiet;
           k := condCount - 1;
         end;
         condActive[k] := condParent[k] and not condTaken[k] and cond;
