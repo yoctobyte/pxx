@@ -7,7 +7,7 @@ status: done
 owner: frankZ
 found-by: frankS
 created: 2026-09-09
-summary: "FIXED 2026-09-09. A forward `^T` inside a CLASS's or RECORD's nested `type` section was not resolved when T is a nested plain ALIAS, POINTER alias or SUBRANGE -- and WAS resolved when T is a nested CLASS, RECORD, ARRAY or ENUM. THE TICKET'S FRAMING WAS ONE STEP TOO NARROW: it reads as a pointer-to-pointer defect and the chain depth is irrelevant; the discriminator is the KIND of the forward target, and five-of-eight passing is a per-TABLE shape. Cause: DrainPendingPtrTargets asked FindNestedType (class-like only) and then the FLAT FindTypeAlias -- which filters through AliasVisibleHere and therefore reads ParsingClassBodyCi -- and the drain runs at the unit's closing `end.` where that is -1. So FindTypeAlias correctly reported a nested alias as not visible FROM HERE; every arm was working and none was asking the row's question. The three kinds that passed did so only because IsRecordType / FindArrayType / FindEnumType carry no owner column and are asked UNSCOPED. Fixed by asking ClassDeclaresTypeNamed, which is exactly this question, consults FindNestedType first (so nothing that resolved can stop resolving) and walks the ancestor chain, which these arms did not. CLEARS THE REGRESSION IT WAS FILED BEHIND: generics.defaults.pas now compiles and the driver runs -- not merely past :224 but past the OLD :2729 wall too. Attributed by reverting the one edit and rebuilding: without it, `:224 forward type not resolved: PEqualityComparerVMT`, frankS's exact symptom."
+summary: "FIXED 2026-09-09. A forward `^T` inside a CLASS's or RECORD's nested `type` section was not resolved when T is a nested plain ALIAS, POINTER alias or SUBRANGE -- and WAS resolved when T is a nested CLASS, RECORD, ARRAY or ENUM. THE TICKET'S FRAMING WAS ONE STEP TOO NARROW: it reads as a pointer-to-pointer defect and the chain depth is irrelevant; the discriminator is the KIND of the forward target, and five-of-eight passing is a per-TABLE shape. Cause: DrainPendingPtrTargets asked FindNestedType (class-like only) and then the FLAT FindTypeAlias -- which filters through AliasVisibleHere and therefore reads ParsingClassBodyCi -- and the drain runs at the unit's closing `end.` where that is -1. So FindTypeAlias correctly reported a nested alias as not visible FROM HERE; every arm was working and none was asking the row's question. The three kinds that passed did so only because IsRecordType / FindArrayType / FindEnumType carry no owner column and are asked UNSCOPED. Fixed by asking ClassDeclaresTypeNamed, which is exactly this question, consults FindNestedType first (so nothing that resolved can stop resolving) and walks the ancestor chain, which these arms did not. CLEARS THE REGRESSION IT WAS FILED BEHIND -- and that regression was never one: frankH measured pin v407 failing at :224 on identical input, so ad7c03b03 did not cause it, it REMOVED an earlier wall so the end-of-unit drain could finally speak about a declaration 2500 lines back. 224 < 2729 reads as backward only because one is a stopping point and the other a declaration site. generics.defaults.pas now compiles and the driver runs -- not merely past :224 but past the OLD :2729 wall too. Attributed by reverting the one edit and rebuilding: without it, `:224 forward type not resolved: PEqualityComparerVMT`, frankS's exact symptom."
 ---
 
 # The repro — refused by pin and HEAD alike, compiled by fpc
@@ -128,11 +128,33 @@ Attributed rather than assumed: I reverted the one edit with
 `:224 forward type not resolved: PEqualityComparerVMT` — frankS's exact symptom
 — then reapplied the patch and rebuilt to a byte-identical `4f4875267033`.
 
-**What this does NOT answer is frankH's question.** frankS's ticket says
-`ad7c03b03` stopped whatever was *carrying* the corpus case, and predicted that
-fixing the latent bug would make the corpus immune. It has. Whether something
-worth keeping was lost in `ad7c03b03` is a separate question and is still theirs;
-the corpus can no longer be the instrument for it.
+### There is no residual question — frankH settled it, and my note above was wrong
+
+I closed this saying "whether something worth keeping was lost in `ad7c03b03` is
+still frankH's question". It is not a question. frankH had already measured it,
+on the full unit and before this fix:
+
+1. **Identical input, both compilers fail at 224.** The smallest reproducing
+   prefix (interface truncated at 884) prints `:224 forward type not resolved:
+   PEqualityComparerVMT` under HEAD *and* under pin v407. **The pin fails it
+   too, so `ad7c03b03` never caused the 224 failure** — it is this latent bug,
+   which was already there.
+2. **The drain runs after the whole unit parses** (`pasparser_prog.inc:2068`) —
+   the same fact this fix is built on, read from the other side. So *reaching*
+   that diagnostic means the unit parsed completely, and the line it names is
+   where the `^T` was DECLARED.
+
+Together: at `178270aba` the parse stopped at 2729 and the drain never ran; at
+`ad7c03b03` the parse finishes and the drain finally speaks, about a declaration
+2500 lines earlier. **The wall moved FORWARD, to the end of the unit. `224 <
+2729` reads as backward only because one number is a stopping point and the other
+is a declaration site.** Nothing was removed and nothing is owed a probe.
+
+frankH notes one honest gap so nobody inherits it as an implied fact: they could
+not reduce the pin's own wall (`System.Integer(ALeft) - System.Integer(ARight)`
+inside `TCompare.UInt8` — standalone it compiles and prints 5 on both), so the
+exact construct `ad7c03b03` unblocked was never identified. The two measurements
+above stand without it.
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2242a5903.

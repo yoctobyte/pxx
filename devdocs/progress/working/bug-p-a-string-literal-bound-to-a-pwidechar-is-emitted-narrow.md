@@ -3,8 +3,8 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: open
-owner: frankS
+status: working
+owner: frankZ
 summary: "TWO INDEPENDENT DEFECTS, NOT ONE, and the mechanism in the body below is wrong -- re-measured 2026-09-09 (frankD) at compiler `21ea7825000a`. (A) `Length` OF ANY PWideChar is broken with no literal in sight: a hand-built `p := @buf[0]` over a correct `array[0..4] of WideChar` INDEXES perfectly (97 98 99 100 0, identical to fpc) and `Length(p)` still answers 4411392, because `IsNodePChar` (ir.inc:4020) tests PtrBaseTk against tyChar/tyUInt8/tyInt8 and never tyWideChar, so the operand is not wrapped and Length takes the managed-string path that reads a [data-8] length header off the pointer. THAT is where every wild number in this ticket comes from -- not from a NUL scan overrunning. (B) The literal binding puts the pointer EIGHT BYTES EARLY, on a length header, and the payload after it is narrow: `pw as words` reads `4 0 0 0 25185 25699` = a 64-bit length of 4, then 'abcd' narrow. A `PChar` to the same literal in the SAME PROGRAM is entirely correct (97 98 99 100 0), so the header offset is wide-specific and is not a general literal-address problem. Both binding surfaces (initialiser and statement) behave identically. DO NOT 'FIX' THIS BY ADDING tyWideChar TO IsNodePChar: that routes a wide pointer into PCharToString, a NARROW strlen, which stops at the first zero BYTE and would make Length('abcd') answer 1 -- replacing an obviously-wrong number with a plausible one, which is strictly worse. There is no PWideCharToString in the tree; building one is the real (A) fix and it is separable from (B)."
 ---
 
