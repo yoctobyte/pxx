@@ -8745,6 +8745,43 @@ begin
           begin
             smci := CurSelfClass - REC_UCLASS_BASE;
             smmii := FindUMethOverloadAhead(smci, name, CountCallArgsAhead);
+            { ARITY, WHICH THIS DOOR DID NOT ASK -- the fourth spelling of the
+              same call, and the only one that accepted any argument count.
+
+              FindUMethOverloadAhead is a SELECTOR: asked which overload, having
+              already been told this IS a method call. With no candidate of the
+              right arity it falls through to FindUMethArity, which falls
+              through to FindUMeth -- the first name match at ANY arity -- and
+              this hand-rolled argument loop then appends whatever it parses
+              without consulting the signature. Measured 2026-09-09 against
+              fpc 3.2.2, which refuses all four:
+
+                Plain(1.5, 2, 3)   1 param   ->  x=0.0        every arg lost
+                Plain(1.5, 2)      1 param   ->  x=0.0
+                Two(7, 8, 9)       2 params  ->  a=8 b=9      Self ate the 7
+                Two(7)             2 params  ->  a=369098760  UNINITIALISED
+
+              `Self.Plain(1.5, 2, 3)`, `c.Plain(1.5, 2, 3)` and the free
+              `Free1(1.5, 2, 3)` are all refused today. This is the arm that
+              stays broken, and it is the ordinary bare call inside a class
+              body -- the most common method call there is.
+
+              THE VARREC CARVE-OUT IS NOT CAUTION, IT IS A MEASURED
+              DEPENDENCY. Variadic bracket-elision (`Desc('a', 1)` against
+              `Desc(const a: array of const)`, feature-writeln-as-library)
+              passes MORE explicit arguments than the signature has, and it
+              reaches this site through exactly the loose fallback being closed
+              here. It is a pxx extension: fpc refuses that source too, so an
+              arity gate written from fpc's answer alone would have deleted it
+              silently. Its own state at this door is separately broken -- the
+              elided spelling SEGFAULTS here while the bracketed one works --
+              and that is a different defect, left exactly as it is rather than
+              converted into a diagnostic by a fix aimed at something else.
+              bug-p-a-bare-method-call-inside-its-own-class-ignores-arity }
+            if (smmii >= 0) and
+               (FindUMethArityStrict(smci, name, CountCallArgsAhead) < 0) and
+               (not UMethNameCanAbsorbVarRecTail(smci, name)) then
+              ErrorRecover('wrong number of parameters in call to ' + name);
             if smmii >= 0 then
             begin
               EnforceMethVis(smmii, name);

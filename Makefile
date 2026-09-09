@@ -2857,6 +2857,33 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_parenless_still_valid.pas $(TESTTMP)/test_method_parenless26
 	@$(TESTTMP)/test_method_parenless26 | diff -u test/test_method_parenless_still_valid.expected - \
 	  || { echo 'test_method_parenless_still_valid: FAIL - a legitimate parenless method mention was broken'; exit 1; }
+	@# THE FOURTH SPELLING of that same call: bare, implicit Self, inside the
+	@# class body -- the only one that accepted any argument count at all.
+	@# `Self.Plain(1.5,2,3)`, `c.Plain(1.5,2,3)` and a free `Free1(1.5,2,3)`
+	@# were all refused; this one bound the first name match at ANY arity and
+	@# the hand-rolled argument loop appended whatever it parsed. Measured
+	@# pre-fix: `Two(7)` printed a=369098760 -- uninitialised memory, no crash,
+	@# no diagnostic. fpc 3.2.2 refuses all four.
+	@# bug-p-a-bare-method-call-inside-its-own-class-ignores-arity
+	@rm -f $(TESTTMP)/test_bare_arity26
+	@out=$$(./$(COMPILER) test/test_p_a_bare_method_call_ignores_arity_fail.pas $(TESTTMP)/test_bare_arity26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:42: error: wrong number of parameters in call to Plain' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: wrong number of parameters in call to Plain' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:44: error: wrong number of parameters in call to Two' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: wrong number of parameters in call to Two' \
+	   && test ! -e $(TESTTMP)/test_bare_arity26 \
+	  || { echo "test_p_a_bare_method_call_ignores_arity_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 42-45, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and its must-NOT-break direction. The row that carries the real risk is
+	@# the variadic `array of const` tail: it passes MORE arguments than the
+	@# signature has ON PURPOSE, fpc refuses that source, and it reaches the site
+	@# through the very fallback the check above closes -- so a gate written from
+	@# fpc's answer alone would have deleted a pxx extension in silence. Verified
+	@# byte-identical against the PINNED pre-fix compiler.
+	@./$(COMPILER) test/test_p_a_bare_method_call_arity_still_valid.pas $(TESTTMP)/test_bare_arity_ok26
+	@$(TESTTMP)/test_bare_arity_ok26 | diff -u test/test_p_a_bare_method_call_arity_still_valid.expected - \
+	  || { echo 'test_p_a_bare_method_call_arity_still_valid: FAIL - a legitimate bare method call was refused'; exit 1; }
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

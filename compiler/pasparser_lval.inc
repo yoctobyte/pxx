@@ -4551,6 +4551,50 @@ begin
             (ParamElemKind(procIdx, argNo) = tyRecord);
 end;
 
+function UMethNameCanAbsorbVarRecTail(ci: Integer; const name: AnsiString): Boolean;
+{ Does ANY method of this name, up the parent chain, end in an `array of const`?
+
+  The question a caller has to ask before REFUSING a bare method call on arity,
+  because variadic bracket-elision (`Desc('a', 1)` against
+  `Desc(const a: array of const)`, feature-writeln-as-library) deliberately
+  passes MORE explicit arguments than the signature has parameters. That is a
+  pxx extension -- fpc refuses the same source with "Wrong number of parameters"
+  -- so an arity gate written from fpc's answer would delete it.
+
+  Asked of the NAME over the whole visible set rather than of one candidate,
+  the same shape and for the same reason as ParamIsVarRecArray above: which
+  candidate the name resolves to is not settled yet at the point the surplus
+  has to be judged. }
+var i, base, cnt, curr, pi: Integer; lo, name2: AnsiString;
+begin
+  Result := False;
+  name2 := name;
+  lo := ULower(name2);
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
+      begin
+        pi := UMthProc_[base + i];
+        if (pi >= 0) and (Procs[pi].ParamCount > 1) and
+           ParamIsVarRecArrayAt(pi, Procs[pi].ParamCount - 1) then
+        begin
+          Result := True;
+          Exit;
+        end;
+      end;
+      Inc(i);
+    end;
+    if UClsLevelHidesMeth(curr, name, lo) then Break;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function AbsorbVariadicTailArgs(mpi, lastArg: Integer): Boolean;
 { Variadic bracket-elision for METHOD calls: `g.Log('x=', x)` against
   `procedure TLogger.Log(const a: array of const)`.

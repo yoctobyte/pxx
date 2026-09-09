@@ -6,7 +6,7 @@ blocked-by: []
 status: working
 owner: frankS
 created: 2026-09-06
-summary: "SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape. THE LIVE INSTANCE IS GONE AS OF 2026-09-09 AND THIS TICKET IS NOW ABOUT THE LATENT SHAPE ONLY -- re-measured at 69a5f3c6f, binary 5d5dcb45d328. Both halves of the fork this ticket described landed independently: the compiler reopens the intrinsic (f5ad23c32, 906737db0) and Track B removed the declarations (475528dae, 'sysutils must not declare the two names fpc keeps in system'). All three non-bare spellings this ticket listed as STILL CLOSED now work -- Delete(obj.Items,i,1), Delete(p^.list,i,1), Insert(x,Self.F,i) -- and the ESP risk the fork carried did not materialise: string Delete/Insert with sysutils in scope still gives fpc's answer. Enumerating from the concept rather than the callers, as this ticket instructs: NO free routine in lib/rtl re-declares any soft intrinsic today. The Delete/Insert/Move hits in classes.pas and contnrs.pas are METHODS, which FindProc does not see. What remains is a Boolean that cannot express WHICH, with no live instance."
+summary: "REJECTED 2026-09-09 -- THE LATENT SHAPE IS FPC'S OWN BEHAVIOUR, measured across five shadow shapes rather than reasoned about. This ticket already recorded that its live instance was gone; what it kept was the claim that a Boolean answering WHETHER (rather than WHICH) is a defect in waiting. It is not, because fpc answers WHETHER too: a user routine named Delete hides the System intrinsic ENTIRELY under fpc, in the same program, in a used unit, and even when marked `overload` -- three shapes, both compilers refuse, byte-for-byte the same verdict. The one shape where the two differ is the inverse of what the ticket predicts: with a SAME-ARITY wrong-type shadow (`Delete(var s: AnsiString; index, count)`, which is exactly what the live instance had), fpc REFUSES and pxx REOPENS the intrinsic and runs the dynamic-array Delete correctly. That is `us accepting what FPC rejects`, which is not a defect. The fifth shape -- a shadow declared as a MEMBER of the enclosing class -- WAS a real defect, and it is not this one: pxx silently ran the member with 0.0, which turned out to be an arity hole on every bare in-class call and is fixed under bug-p-a-bare-method-call-inside-its-own-class-ignores-arity. Nothing is left here: no divergence, and the residual design observation has no reachable observable."
 ---
 
 # A shadowed soft intrinsic is closed without consulting the arguments
@@ -142,3 +142,47 @@ cannot bind, and a user routine that CAN bind must still win, and does.
 Left at its current prio rather than demoted on one session's reading. A reader
 deciding between `low-prio/` and the fourteen-call-site overhaul should know the
 measured cost is currently zero, which is a fact this ticket did not have.
+
+
+## REJECTED (frankS, 2026-09-09) — the latent shape is fpc's own behaviour
+
+This ticket had already recorded that its live instance was gone and narrowed
+itself to a claim about the SHAPE: that `SoftIntrinsicOpen` being a Boolean —
+answering WHETHER a same-named routine is in scope, never WHICH — is a defect
+in waiting. **Measured rather than reasoned about, across five shadow shapes,
+and the claim does not survive.**
+
+pxx at `1180aa627` (+ today's arity fix), binary `813940cc2066`; fpc 3.2.2.
+
+| shadow | fpc | pxx |
+| --- | --- | --- |
+| `procedure Delete(x: Double)` in the program | refuses | refuses |
+| the same, exported from a **used unit** | refuses | refuses |
+| the same, marked **`overload`** | refuses | refuses |
+| `Delete(var s: AnsiString; index, count)` — **same arity, wrong types** | **refuses** | **reopens the intrinsic and runs** |
+| `Delete(x: Double)` as a **member** of the enclosing class | refuses | see below |
+
+**fpc answers WHETHER too.** A user routine of that name hides the System
+intrinsic entirely, and the `overload` directive does not change it — that was
+the shape most likely to make fpc consult the arguments, and it does not. So a
+Boolean is the right shape here, not a defect in waiting.
+
+**The one divergence points the other way from the ticket's prediction.** Row
+four is the shape the live instance actually had (`sysutils` declaring the
+string `Delete`), and there pxx is the PERMISSIVE one: fpc refuses the program
+outright and pxx reopens the intrinsic and does the right thing.
+`us accepting what FPC rejects is not a defect`.
+
+**Row five was a real defect and it is a different one.** pxx compiled
+`Delete(a, 1, 1)` inside a class declaring `Delete(x: Double)` and silently ran
+the member with `0.0`. That has nothing to do with intrinsics: EVERY bare
+method call inside its own class body was bound at any arity, including
+`Two(7)` reading uninitialised memory. Found from this ticket, fixed under
+[[bug-p-a-bare-method-call-inside-its-own-class-ignores-arity]] — which is the
+return on working the group rather than the ticket.
+
+**Why `rejected/` and not `known-incompat/`:** `known-incompat` is for a
+divergence that is true, reproducible and CHOSEN. There is no divergence in
+rows one to three, row four is the not-a-defect direction, and row five was a
+bug in something else. What remains is a design observation about a Boolean,
+with no reachable observable — which is what this folder is for.

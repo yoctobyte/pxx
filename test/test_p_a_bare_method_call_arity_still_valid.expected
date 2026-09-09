@@ -1,0 +1,9 @@
+plain 1.5
+def 1 9
+def 1 2
+nul
+ovl1 3
+ovl2 3 4
+inh 5
+desc n=2: chr=a int=1
+desc n=0:
