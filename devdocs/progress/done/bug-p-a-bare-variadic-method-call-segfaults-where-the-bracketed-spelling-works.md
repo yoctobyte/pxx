@@ -2,7 +2,7 @@
 track: P
 prio: 40
 type: bug
-status: working
+status: done
 owner: frankH
 created: 2026-09-09
 found-by: frankS
@@ -139,3 +139,6 @@ the two callers share it rather than growing an eighth copy of that loop.
   `test_variadic_elision_method_refusal` all unchanged.
 - Self-host `converged after 1 round(s)`; `tools/gate.sh quick` GREEN with the
   FPC seed canary active (committed from a dirty tree, so the canary ran).
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
