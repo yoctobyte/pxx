@@ -5,8 +5,8 @@ track: P
 prio: 40
 type: feature
 blocked-by: []
-status: working
-owner: frankH
+status: unfinished
+owner: 
 created: 2026-09-06
 summary: "`threadvar t: LongInt;` at program or unit level is refused with `expected 'begin' before 'threadvar'`. FPC supports it, and it is the language's only spelling for thread-local storage -- so a program that wants per-thread state has no way to ask for it. Measured 2026-09-06 by probe while dispositioning tclass17 and terecs21, two `%FAIL` rows about `threadvar` INSIDE A CLASS whose refusals were being satisfied by this gap rather than by their own subject."
 ---
@@ -210,3 +210,9 @@ remains is an addressing change in the hottest file in the compiler, and the
 neighbouring decide ticket's rule applies to it directly: **size the area
 first, demonstrate second** — a threadvar that fits in the three free slots
 would prove the part that was never in doubt.
+
+## Parked 2026-09-09
+
+banked: the blocking fork is settled and the mechanism proven end to end; what remains is an addressing change at ~20 x86-64 sites plus emit-time block sizing, and the funnel census is in the ticket
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
