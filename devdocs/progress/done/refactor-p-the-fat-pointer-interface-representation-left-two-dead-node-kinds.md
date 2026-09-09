@@ -139,4 +139,4 @@ isn't one. That is the check to run before retiring any node kind, and it is not
 a grep for the name.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 787185c01.
