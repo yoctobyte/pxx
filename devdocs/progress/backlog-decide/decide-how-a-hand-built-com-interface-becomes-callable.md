@@ -192,3 +192,37 @@ cheapest way to settle a fork of intent is to find out whether real source
 wants the behaviour, which is the standing rule for compat here — *evidence
 that settles it is real source that wants the behaviour*. The attempt is
 running now. Re-read this ticket when it has covered enough of FPC to say.
+
+## 2026-09-09 — the fork, restated so its actual reader can answer it
+
+This ticket went to the owner and came back: *"i hate to admit that i don't
+understand that question ... i dont know fpc's internals."* The analysis above
+is sound and it is **addressed to the wrong reader**. He owns the goals, not our
+representations. Restating, with no implementation noun:
+
+> **Do we want pxx-compiled and FPC-compiled code to hand interfaces to each
+> other at the BINARY level — link together, share objects? Or do we only want
+> FPC's source to compile and run correctly under pxx?**
+
+Both sentences name the same fork as "A or B" above. Only this one is answerable
+by the person it is addressed to.
+
+**And stated that way, an existing rule very nearly decides it.** *"We do NOT
+chase FPC parity — we just care for correct compiling pascal code, not emulating
+every behaviour."* Correct-compilation is A. B is only required by a
+**binary-interop goal**, and the sole hint of one is the foreign-object aim in
+`the-goal-cross-cross.md`, which is about foreign objects generally rather than
+about FPC's ABI specifically.
+
+**Default: A, unless he names a binary-interop goal.** Not marked decided — he
+was asked and has not yet answered the restated question — but a seat picking
+this up should implement A rather than wait, per *never wait on an event only
+the owner can cause*. If B is later wanted, A does not block it: A is local, and
+the two functions that price B (`PXXIntfIMTOf`, `PXXIntfComIMTOf`) are untouched
+by it.
+
+**One correction to this ticket's own recommendation while restating it:** the
+trigger is an ASSIGNMENT rule, not a cast rule. `generics.defaults.pas` contains
+zero pointer-to-interface casts; all six conversions are implicit assignments.
+An A keyed on the cast would compile the motivating source, change nothing, and
+be green — this ticket's own hazard, from the direction that looks like success.
