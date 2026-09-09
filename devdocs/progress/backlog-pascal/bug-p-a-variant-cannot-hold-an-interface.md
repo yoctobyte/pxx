@@ -104,13 +104,40 @@ ticket dismissed as "not one more arm" is most of what is left.
    - refuse COM and accept CORBA, keeping an honest diagnostic for the unsafe
      half.
 
-   **CORBA is pxx's default and is not refcounted at all**
-   (`UClsIsComInterface`, set only under `{$interfaces com}`), so the default
-   case needs no ARC and matches the borrow semantics VT_OBJECT already has for
-   a manual-lifetime instance.
+   `UClsIsComInterface` is set only under `{$interfaces com}`, and its comment
+   says "Default off (CORBA, no refcount)" — **which is about the FLAG and not
+   about what a program actually gets.** Measured 2026-09-09: a parentless
+   interface in `{$mode objfpc}` implicitly derives IInterface, and BOTH
+   compilers refuse a class that implements one without QueryInterface/_AddRef
+   (`class does not implement interface method: QueryInterface`; fpc says the
+   same). So the COM shape is what real code has, and the CORBA-only reading of
+   that comment is a third stale premise.
+
+   **This is why the cheap slice is not worth landing.** Boxing a CORBA
+   interface as VT_OBJECT would be a frontend-only change with no backend edits
+   and borrow semantics that are correct for the non-refcounted case — and it
+   would accept almost nothing anybody writes, while adding a second boxing path
+   and making the remaining refusal look like a deliberate design position. The
+   common idiom `class(TInterfacedObject, IFoo)` is the COM shape.
 
 3. **Reading it back.** `IIntf(v)` was not investigated. The ifaceId at a cast
    site is static, so the payload does not need to carry it.
+
+### What it would take, honestly
+
+A tag with its own retain/release arm — not membership of VT_OBJ_FIRST..
+VT_OBJ_LAST, whose release is the heap-block protocol (rc at [p-16]) and not
+`_Release` — in the six hand-written emitters plus the portable twins
+`PXXVarClear`/`PXXVarRetain` (builtinheap.pas), `PyVarSlotIsObj` (pylib.pas) and
+promocore's `ClearVariantSlot`. defs.inc's own note on that range says the
+failure mode of missing one is SILENT: no crash, no wrong value, no failing
+test, just RSS.
+
+The ifaceId has a likely answer that wants measuring before it is designed
+against: `_AddRef`/`_Release` live on the INSTANCE, so any COM entry in the
+class's RTTI interface table reaches the same pair, and a raw helper taking only
+the instance could find one. That keeps the 16-byte slot layout untouched, which
+is the property worth protecting.
 
 ### The ranking consequence
 
