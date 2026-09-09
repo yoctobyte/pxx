@@ -156,4 +156,4 @@ self-host fixedpoint is the running proof. The reason is written at
 "safe to grow" as a property of RTTI headers in general.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5d29682a2.

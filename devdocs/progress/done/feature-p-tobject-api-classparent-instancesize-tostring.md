@@ -86,4 +86,4 @@ Work, tests and controls: [[feature-a-classinfo-returns-the-typinfo-header]].
 `tclassinfo1.pp` is unskipped and passing.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5d29682a2.

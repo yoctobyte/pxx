@@ -208,4 +208,4 @@ point at the record layout descriptor, which is the counterexample (`30ed522b3`)
 and may not grow at all.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5d29682a2.
