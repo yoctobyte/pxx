@@ -136,3 +136,6 @@ assert something no row can test. Item dropped as moot, not satisfied.
   `fpc -Mobjfpc` with no flags, byte for byte, both re-measured in clean
   directories (fpc reuses a `.ppu` built under a different `-Sa`, and a stale
   one answered for the wrong command line once here).
+
+## Log
+- 2026-09-09 — resolved; the fix and the resolve rode the same commit here — commit 33078a1d0. Two changes in it: `--mimic-fpc` implying assertions-off (`compiler/compiler.pas`), and the used-unit directive baseline always resetting to the command line rather than being re-snapshotted from the main file's end-of-file lexer state (`compiler/pasparser_proc.inc`).
