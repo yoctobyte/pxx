@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: []
+blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]
 summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS EMPTY ON PURPOSE AND MUST BE GROWN BY ATTEMPTING, NOT BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.'"
 ---
 
@@ -59,3 +59,17 @@ edge, not a folder, and one ticket can sit under several umbrellas.
 attempted it**) and the busybox family, which has eleven open tickets across
 five folders and **no umbrella of its own**. Both are the same instruction:
 attempt the target, let the failures rank themselves.
+
+# Attempts
+
+## 2026-09-09, frankH — attempt 1: `uses cutils`
+
+First failure: `constexp.pas:164`, `undefined variable (internalerrorproc)`.
+Reduced to 8+9+4 lines and filed as
+[[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]]
+(p60). A unit cycle closed through an `implementation uses` clause cannot see
+the other unit's interface. **25 of 162 units** in `fpc-trunk/compiler` close
+such a cycle, so this is structural in the corpus, not incidental — and nothing
+behind it can be measured until it moves.
+
+Pre-existing, not a regression: pin v399 gives the identical error.
