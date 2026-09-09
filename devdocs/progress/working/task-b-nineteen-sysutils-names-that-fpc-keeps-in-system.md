@@ -3,10 +3,10 @@ slug: task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
 track: B
 type: task
 prio: 45
-status: backlog
+status: working
 found: 2026-09-06
 found-by: frankS
-owner: ""
+owner: frankS
 blocked-by: []
 summary: "TWELVE names an FPC program uses with NO uses clause and a pxx program cannot: AllocMem DynArraySize Error LowerCase SetString sLineBreak StringOfChar StrLen StrPas SysBackTraceStr UTF8Decode UTF8Encode. They are the second sign of the unit-boundary class whose first sign frankD fixed at f5ad23c32 (a sysutils declaration SHADOWING dyn-array Delete/Insert; declarations removed by frankH at 475528dae) -- opposite directions, same root, same tell of one `uses` line changing the answer. Measured TWICE with probes that fail differently, agreeing name for name: 167 sysutils interface routines, 17 that fpc resolves ambiently, 5 of those ambiently reachable here too (Concat/Copy/Pos/UpCase parser intrinsics, HexStr a builtin export), 12 left. Reproduce with tools/rtl_unit_boundary_census.py. THIS IS A POPULATION TO CHECK, NOT TWELVE CONFIRMED BUGS -- only DynArraySize is shown to break a real program (frankS: tarray13 dies at line 23, one `uses sysutils` advances it to line 68). sLineBreak is a const not a routine, and Error is also a compiler-internal name; both need a look before being treated as RTL gaps."
 ---
