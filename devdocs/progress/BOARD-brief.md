@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:105 backlog-tools:56 backlog-pascal:9 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3630 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:107 backlog-tools:56 backlog-pascal:9 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3635 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 428, ranked
+## Ready — top 30 of 430, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -85,12 +85,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [C]` bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header (unblocks 1)
 - `[p 75] [N]` bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link (unblocks 1)
 - `[p 75] [N]` bug-n-a-chained-assignment-to-two-attributes-does-not-parse (unblocks 1)
-- `[p 75] [N]` bug-n-collections-deque-is-missing (unblocks 1)
-- `[p 75] [N]` bug-n-str-join-rejects-an-argument-shape-cpython-accepts (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory (unblocks 1)
 - `[p 75] [N]` feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver (unblocks 1)
-- `[p 75] [N]` feature-n-the-array-module (unblocks 1)
 - `[p 75] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
@@ -105,5 +102,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-a-bracket-argument-reaches-the-same-door-at-every-call-path
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
+- `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
+- `[p 70] [P]` regression-test-pascal-conformance-shard0-6-5
 
-_398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

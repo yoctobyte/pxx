@@ -276,7 +276,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (105)
+## backlog-nilpy (107)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -292,6 +292,7 @@ _none_
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
+| bug-n-a-local-bound-to-both-a-pascal-class-and-its-subclass-loses-subscripting | N | 30 | bug | A name bound at one site to a Pascal class and at another to a NilPy SUBCLASS of it aborts at run time with `TypeError: object is not subscriptable` on the subscript, where CPython works. Measured 2026-09-09: `g = array.array(\"h\", bytes(2)); print(g[0]); g = Grid(\"h\")` with `class Grid(array.array)` fails at the FIRST subscript -- the one compiled before the subclass binding exists -- so it is the name's resolved TYPE that is wrong, not the operation. Three controls narrow it: the same name bound twice to the SAME Pascal class works; a Grid instance subscripted with no second binding works; and pure NilPy classes with __getitem__ rebound base->subclass work. So it is specific to a PASCAL class's `default` indexed property plus two bindings whose classes are related by inheritance. Loud, not silent. | — |
 | bug-n-a-module-alias-does-not-resolve-for-attribute-lookup | N | 55 | bug | A module alias resolves for calls but not for attributes | — |
 | bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race | N | 45 | bug | test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
@@ -302,8 +303,9 @@ _none_
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues | N | 25 | bug | `exec(\"import math\\nr = math.floor(3.7)\", d, d)` — pyeval's tree-walker discards the import statement without a word and keeps going, so the failure surfaces later as `pyeval: name not defined: math`, naming the module rather than the skipped import. When the imported name is never used there is no error at all and the remaining statements bind normally, which is the accepted-and-ignored failure mode the ambient-exec refusal was explicitly built to avoid. | — |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
+| bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type | N | 55 | bug | A NilPy construction `C(x)` on a class with several same-arity constructors runs the FIRST one declared, whatever x is. Measured 2026-09-09: one class with `Create(TPyBytes)` and `Create(TPyList)`, one unit with `which(TPyBytes)`/`which(TPyList)` -- the FUNCTIONS resolve correctly (list->2, bytes->1) and the CONSTRUCTORS both answer 1. Silent: the wrong body runs and whatever it does to the wrong argument type is what the program gets. PyClassCreate picks with FindUMeth(ci,'create'), a by-NAME first match; the type-aware picker FindUMethOverloadAhead exists and is already NilPy-aware, but it works by parsing the arguments speculatively and rewinding, and at PyClassCreate's pick site the arguments are ALREADY parsed -- so the fix is a selector over parsed argument NODES, not a call to the existing one. Blocks writing any shim class whose CPython constructor is type-overloaded; lib/rtl/mimic_array.pas carries a one-ctor + runtime `is` workaround with a revert-when-fixed note. | — |
 | bug-n-async-def-and-await-are-not-implemented | N | 60 | bug | `async def` is refused -- `undefined variable (async)`, so the keyword is not in the grammar at all. Python 3.5. Distinct from yield-from in that a correct implementation needs an event loop and not just a parser arm, so the honest first step may be deciding how far to go rather than typing. Found by the same probe suite as the sys.version_info ruling. | — |
-| bug-n-collections-deque-is-missing | N | 40→75 | bug | `collections.deque` does not resolve -- `no member deque came of the qualifier collections`. Measured 2026-09-08 against compiler/pascal26 a7b03135f504; blocks lekkerzeilen/chart.py:119. `collections` itself resolves (the parser knows the name), so this is a missing member on a qualifier that exists, not a missing module. | — |
+| bug-n-collections-counter-is-unreachable-through-its-qualified-spelling | N | 35 | bug | `collections.Counter()` is refused with `no member Counter came of the qualifier collections`, while the bare `Counter()` and `from collections import Counter` both work. Measured 2026-09-09. Cause: `collections` HAS a backing unit (lib/rtl/collections.pas, a Pascal generic TList unrelated to Python's module), so the qualifier resolves against it and asks it for a member it has never had. deque was fixed on 2026-09-09 by routing `collections.deque` through the frontend's stdlib-call table, which is consulted BEFORE unit-member lookup; Counter was deliberately NOT routed the same way, because that table re-targets by ARITY and cannot select by argument TYPE, and Counter's two 1-argument overloads differ only by type (TPyList vs AnsiString) -- an entry would compile `collections.Counter(s)` to whichever arity found first and answer a silently wrong count instead of today's honest refusal. So this is blocked on either type-aware selection in that table, or a different mechanism for qualified stdlib members. | — |
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
 | bug-n-double-star-unpacking-is-rejected-at-a-method-call | N | 45 | bug | `obj.m(**d)` is a parse error — `expected expression` — while the identical `f(**d)` on a plain function WORKS. Dict-unpacking into any METHOD call is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
@@ -322,7 +324,6 @@ _none_
 | bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name | N | 30 | bug | @property compiles and works, but `property` as a plain builtin NAME does not exist: `v = property(getter)` and `v = property(getter, setter)` both give `undefined variable (property)`. Real CPython code uses the callable form for read/write properties, because @property.setter needs the decorator pair and the two-arg call is the older, shorter spelling. Blocks html5lib's treebuilders/base.py:321 and therefore the whole dom treebuilder. | — |
 | bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled | N | 45 | bug | MEASURED. `PyFixIterableArgs` (pyparser.inc:21694) can be disabled at its first line -- `Result := False; if True then Exit;` -- and `test/test_nilpy_user_iterable_in_builtins.npy`, the test that exists to cover it, emits a BYTE-IDENTICAL binary and identical 37-line output, still matching CPython. So does the rest of the NilPy corpus tried. Either the mechanism has been superseded by another path and is dead code, or it is entirely uncovered; both are defects and they need different fixes. Found while proving a DIFFERENT set of arms dead -- this one is a live call site whose removal nothing notices, which is the more dangerous shape. | — |
 | bug-n-pyparser-property-accessor-sites-do-not-know-an-interface-receiver | N | 30 | bug | `pyparser.inc` has ~9 hand-written copies of the property-accessor call decision, and each knows exactly two answers (AN_VIRTUAL_CALL / AN_CALL, Self at argument 0). The choice is three-way: an interface receiver needs AN_INTF_CALL, slot in ASTSOffset, Self from the fat pointer. The Pascal-side twins had the identical defect and were fixed by extracting one MakeAccessorCall (0f0fd6642); pyparser.inc was deliberately NOT touched because it is Track N's file and N is parked. NOT KNOWN TO BE REACHABLE from NilPy today -- this is the sibling half of a fixed double case, filed so it is not rediscovered, not a measured failure. | — |
-| bug-n-str-join-rejects-an-argument-shape-cpython-accepts | N | 40→75 | bug | `no overload of join matches these arguments` at lekkerzeilen/text.py:144. Measured 2026-09-08 against compiler/pascal26 a7b03135f504. NOT YET REDUCED -- the failing argument shape has not been isolated, and the ticket says so rather than guessing, because `join` takes any iterable of str in CPython and the interesting question is which iterable shape nilpy's overload set misses (generator expression, comprehension, or a list of a non-str element type). | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
@@ -354,7 +355,8 @@ _none_
 | feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver | N | 60→75 | feature | NilPy resolves a method call on a dynamically-typed receiver by scanning the classes DECLARED IN THE COMPILATION UNIT and refuses when none declares the name -- `no class declares a method or callable field .contains()`. Ordinary cross-module duck typing therefore does not compile, which is the CPython behaviour NilPy is supposed to be upward compatible with. DIRECTION SETTLED (2026-09-09), and it follows from a written rule rather than a preference: refusing what CPython accepts is a defect for this lane. Blocks FOUR lekkerzeilen modules (chart, environment, wind, __main__), second only to math.atan2. The cost is real and it is why this is a FEATURE and not a fix: there is no runtime method-lookup-BY-NAME to dispatch through -- dispatch is a class-pointer compare against statically enumerated candidates, so with zero candidates there is nothing to emit. | — |
 | feature-n-route-pypal-through-wasi-imports-so-nilpy-can-do-file-io-on-wasm32 | N | 25 | feature | pypal on wasm32 returns a defined -1 from every entry point rather than trapping (the ESP precedent), which is what made NilPy compile for that target at all. It is not real file I/O: `open` fails, `os.listdir` is empty, `time.time()` raises. wasi preview1 HAS open/read/write/close/seek/getcwd/unlink/rename/readlink as imports, and lib/rtl/platform/wasi already binds them for the Pascal RTL -- so the work is a pypal backend that calls those imports, not new capability. ppoll is the one that does not map. | — |
 | feature-n-sys-version-info-implementation-and-the-probe-suite | N | 62 | feature | Implement sys.version_info / version / hexversion at (3, 9, 0, 'final', 0) plus sys.implementation carrying NilPy's own identity, per the owner's ruling. All four read ONE constant. The number is a compatibility affordance and must be backed by a probe suite that fails when it stops being true -- the same feature probes that produced the ruling. | — |
-| feature-n-the-array-module | N | 50→75 | feature | `import array` fails with `no unit named array and no shim mimic_array`. Measured 2026-09-08 against compiler/pascal26 a7b03135f504; it blocks lekkerzeilen's `world` and `audio` modules. The mechanism already exists -- lib/rtl/ carries ~20 mimic_* shims in both .py and .pas -- so this is writing one, not designing one. array is a typed dense buffer over the same typecodes struct already uses ('f', '<f', '=f' all appear in lekkerzeilen/world.py), which is what a program avoiding numpy reaches for instead. | — |
+| feature-n-the-queue-module | N | 45 | feature | `import queue` fails with `no unit named queue and no shim mimic_queue`. Measured 2026-09-09 at compiler 418064fca1d3: it is the first wall in lekkerzeilen's `gauges` and `app`. Measured surface is small -- Queue(), Queue(maxsize=N), .put, .get, .get_nowait and the queue.Empty exception -- and the storage is now free: pylib's TPyDeque landed 2026-09-09 and is exactly the right backing structure. THE OPEN QUESTION IS NOT THE CONTAINER, IT IS THE BLOCKING SEMANTICS: CPython's Queue is a THREAD-SAFE blocking queue and both callers use it to hand work between threads, with `except queue.Empty` around a non-blocking get. A single-threaded shim that never blocks is correct for the get_nowait path and WRONG (a deadlock or a silent drop) for a blocking get, so the subset has to be chosen deliberately rather than by writing the easy half. Rank reflects that it is a design question with a small implementation, not a large implementation. | — |
+| feature-n-the-struct-module | N | 50 | feature | `import struct` fails with `no unit named struct and no shim mimic_struct`. Measured 2026-09-09 at compiler 418064fca1d3: it is now the FIRST wall in lekkerzeilen's `world` (the array module, which used to be that wall, was landed the same day) and is reached by `rd` and `capture` too. The mechanism is the mimic_ shim fallback and needs no compiler change -- a .pas shim, like mimic_array beside it, because the whole job is reinterpreting bytes as fixed-width numbers, which a .py shim can only do by hand-rolling IEEE-754. Measured surface, from the corpus and nothing beyond it: pack/unpack with byte-order prefixes '<', '>', '=', formats I, i, h, H, B, f, d, and a REPEAT COUNT ('%df' % n, built at run time), plus calcsize. Roughly the same size as mimic_array and shares its typecode table -- doing the two together is the reason to take this next. | — |
 | feature-nilpy-a-genexpr-is-lazy-not-materialised | N | 30 | feature | A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression. | — |
 | feature-nilpy-ascii-flag-fast-path | N | 25 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
 | feature-nilpy-collections-and-string-methods | N | 30 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -962,9 +964,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3630)
+## done (3635)
 
-3630 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3635 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1064,12 +1066,9 @@ _none_
 - [p 75] [C] bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header (unblocks 1)
 - [p 75] [N] bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link (unblocks 1)
 - [p 75] [N] bug-n-a-chained-assignment-to-two-attributes-does-not-parse (unblocks 1)
-- [p 75] [N] bug-n-collections-deque-is-missing (unblocks 1)
-- [p 75] [N] bug-n-str-join-rejects-an-argument-shape-cpython-accepts (unblocks 1)
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory (unblocks 1)
 - [p 75] [N] feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver (unblocks 1)
-- [p 75] [N] feature-n-the-array-module (unblocks 1)
 - [p 75] [N] feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
@@ -1145,6 +1144,7 @@ _none_
 - [p 55] [N] bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def
 - [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
+- [p 55] [N] bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type
 - [p 55] [N] bug-n-compiling-html5lib-trie-never-terminates
 - [p 55] [N] bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method
 - [p 55] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
@@ -1185,6 +1185,7 @@ _none_
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [B] feature-b-getfpcheapstatus-needs-always-on-heap-accounting
+- [p 50] [N] feature-n-the-struct-module
 - [p 50] [T] feature-t-a-test-s-expected-transcript-should-live-beside-the-pas-not-in-the-makefile-recipe
 - [p 50] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 45] [U] decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes (unblocks 2)
@@ -1230,6 +1231,7 @@ _none_
 - [p 45] [A] feature-a-object-output-for-arm32-and-aarch64
 - [p 45] [B] feature-embed-pascal-script
 - [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file
+- [p 45] [N] feature-n-the-queue-module
 - [p 45] [N] feature-nilpy-hasattr-per-instance-assigned-tracking
 - [p 45] [N] feature-nilpy-methods-on-int-and-float
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
@@ -1314,6 +1316,7 @@ _none_
 - [p 35] [A] bug-c-generic-selection-loses-an-array-elements-pointer-target-and-its-constness
 - [p 35] [C] bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc
 - [p 35] [C] bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet
+- [p 35] [N] bug-n-collections-counter-is-unreachable-through-its-qualified-spelling
 - [p 35] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 35] [A] bug-o-nothing-asserts-that-o2-actually-uses-the-static-literal-handle
@@ -1357,6 +1360,7 @@ _none_
 - [p 30] [A] bug-a-three-targets-refuse-a-shortstring-sysopen-path-four-implement-it
 - [p 30] [A] bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc
 - [p 30] [C] bug-c-sqlite-with-threadsafe-stops-at-a-stray-BEGIN_DECLS
+- [p 30] [N] bug-n-a-local-bound-to-both-a-pascal-class-and-its-subclass-loses-subscripting
 - [p 30] [N] bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name
 - [p 30] [N] bug-n-pyparser-property-accessor-sites-do-not-know-an-interface-receiver
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
@@ -1503,8 +1507,6 @@ _none_
 - **1** — bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
 - **1** — bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
 - **1** — bug-n-a-chained-assignment-to-two-attributes-does-not-parse
-- **1** — bug-n-collections-deque-is-missing
-- **1** — bug-n-str-join-rejects-an-argument-shape-cpython-accepts
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
@@ -1529,7 +1531,6 @@ _none_
 - **1** — feature-dynamic-compiler-tables
 - **1** — feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory
 - **1** — feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
-- **1** — feature-n-the-array-module
 - **1** — feature-nilpy-math-module-twelve-absent-names-measured
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac

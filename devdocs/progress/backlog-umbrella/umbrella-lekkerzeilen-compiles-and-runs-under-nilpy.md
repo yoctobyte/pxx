@@ -306,3 +306,90 @@ measured state of the machinery are on the ticket.
 
 `math.atan2` stays the single largest cause at five modules and already has its
 ticket. Nothing in this pass changes it.
+
+## FOURTH CENSUS, 2026-09-09 (frankB) — the stdlib surface, and what a first-error census cannot tell you
+
+Group taken as one question: **what of the stdlib surface does a real program
+actually reach.** Three tickets — `feature-n-the-array-module`,
+`bug-n-collections-deque-is-missing`,
+`bug-n-str-join-rejects-an-argument-shape-cpython-accepts` — all three fixed and
+verified against CPython. **Census total unchanged at 8 of 23.**
+
+### THE FINDING THAT MATTERS MORE THAN THE THREE FIXES
+
+**Every "unblocks N modules" figure on this umbrella counts modules where a gap
+is the FIRST wall, not modules the gap is sufficient to clear.** A compiler
+stops at the first error, so a blocker census built by reading the first error
+of each module can only ever say that. Measured this pass, at compiler
+418064fca1d3:
+
+| module | ticket said | wall before | wall after |
+| --- | --- | --- | --- |
+| `world` | array unblocks it | `no unit named array` | `no unit named struct` |
+| `audio` | array unblocks it | `no unit named array` | dispatch (`.queued`) |
+| `chart` | deque unblocks it | `collections.deque` | dispatch (`.read_grid`) |
+| `text` | join unblocks it | `join` overloads | **compiles** |
+
+Three of four had a second wall behind the first. One did not. Nothing was
+wrong with the measurements that produced those numbers — they were honest
+first-error readings — but the NUMBER means "first wall here", and it has been
+read as "modules this would finish". **Read every count on this umbrella that
+way**, including the ones below, and expect the total to move by less than the
+sum of the parts.
+
+The cheap correction is to re-measure a module AFTER landing, which is what
+produced this table, and to say in the resolution which wall moved rather than
+which module was freed.
+
+### The three, landed
+
+- **array** — `lib/rtl/mimic_array.pas`, all twelve typecodes, verified
+  byte-for-byte against CPython. No resolver change: the `mimic_` fallback
+  already handles it, and a `.pas` shim gets the same free wiring as a `.py` one
+  while being able to reinterpret bytes with a pointer cast.
+- **deque** — `TPyDeque` in pylib plus one stdlib-table entry. O(1) amortised
+  `popleft`, because the caller is a flood fill.
+- **join** — the ticket named `str`; the real call is `b"".join(reversed(rows))`
+  and the gap was `bytes`. Grepping for siblings found two more, both fixed:
+  `bytes(n)` and `sorted()` over bytes.
+
+### What writing them turned up in the COMPILER
+
+Two silent defects, both fixed here, neither reported by anyone:
+
+- **A qualified constructor whose class name is a Pascal reserved word built
+  garbage.** `array.array("h")` compiled and evaluated to 104 — `ord('h')` —
+  then segfaulted. The reserved-member mapping (`tk.END` -> `END_`) reached the
+  value and call paths and not the constructor path.
+- **`bytes(n)` refused where `bytearray(n)` was accepted.**
+
+One filed rather than fixed, because it needs new machinery in a hot path:
+`bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type` —
+two same-arity constructors are not told apart, the first one runs, silently.
+The FUNCTION spelling of the same thing is correct, which is the control.
+
+### Blocked-by, re-measured — what actually stands between here and 23
+
+**Counts below are written in the form this census can actually support.**
+frankH's point, and it is the right one: a caveat sitting NEXT to a number gets
+read as care about the number rather than as a scope on it, so the population
+goes INSIDE the phrase or it does not travel. Every figure here is a
+**first-wall count, not measured as sufficient**.
+
+| cause | first-wall count; not measured as sufficient |
+| --- | --- |
+| `math.atan2` (refused, correctly rounded libm) | 6 — hud, rig, sim, traffic, vessel, and one more |
+| open-world dispatch on a dynamic receiver | 4 — audio, chart, environment, __main__, wind |
+| `ctypes` (settled: bind natively, do not shim) | 2 — capture, gfx |
+| `queue` | 2 — gauges, app |
+| `struct` | 1 — world |
+
+**The null row is what makes this readable as a measurement rather than a
+number** (frankH again): four first walls were cleared this pass and the total
+moved by zero. A census with no null row prints a figure where the honest answer
+is "unresolved" — so the zero is recorded here deliberately, not apologised for.
+
+`feature-n-the-struct-module` and `feature-n-the-queue-module` are filed with
+their measured surfaces. Neither needs a compiler change; both are shims, and
+`queue`'s real question is the BLOCKING semantics, not the container — pylib's
+new `TPyDeque` is already the right storage for it.

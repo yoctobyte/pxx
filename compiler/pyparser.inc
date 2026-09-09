@@ -7685,6 +7685,27 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     noParens: Boolean;   { `raise ValueError` — construct with no argument list }
 begin
   name := CurTok.SVal;
+  { A QUALIFIED constructor whose class name is a Pascal reserved word:
+    `array.array("h")` is what every CPython program writes, and a unit cannot
+    declare a class called `array`, so the shim spells it `array_` — the same
+    trailing-underscore convention `tk.END` -> END_ already follows. The
+    mapping is applied at the three OTHER sites that resolve a qualified member
+    (ConsumeUnitQualifier's NilPy caller, pasparser_expr's, and the value path),
+    and this CONSTRUCTOR path was the one that never got it: one concept, four
+    sites, and the one nobody extended is the one that stayed broken
+    (devdocs/dev/normalise-dont-special-case.md).
+
+    It did not fail LOUDLY. `FindUClassInUnit('array', ...)` simply missed, the
+    ctor branch was skipped, and the expression fell through to a path that read
+    whatever bytes sat at the handle — `array.array("h")` printed 104, which is
+    ord('h'), and the same program segfaulted one line later. A plausible number
+    from a construction that never happened.
+
+    Gated on PyCtorQualUnit, exactly as the other three sites gate on qUnit: an
+    UNQUALIFIED name is the program's own and must never be rewritten, or a user
+    `class array_` would start answering to `array`.
+    bug-n-a-qualified-constructor-named-by-a-pascal-reserved-word-builds-garbage }
+  if PyCtorQualUnit >= 0 then name := PyMapReservedMember(name);
   ci := -1;
   excArgsTup := -1;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
@@ -12770,6 +12791,35 @@ begin
   else if dotted = 'math.exp' then Result := 'Exp'
   else if dotted = 'math.sinh' then Result := 'Sinh'
   else if dotted = 'math.cosh' then Result := 'Cosh'
+  { `collections.deque()` — the QUALIFIED spelling, which is the only one a real
+    program writes: every use site in the lekkerzeilen corpus is `module.name`,
+    not `from module import name`. The bare and from-import spellings already
+    reach pylib's `deque` overloads because they are plain pylib procs; the
+    qualified one did not, because `collections` HAS a backing unit
+    (lib/rtl/collections.pas) and so the qualifier resolved against it and asked
+    it for a member `deque`, which a Pascal generic list has never heard of:
+    "no member deque came of the qualifier collections".
+
+    Routed HERE rather than by changing what `collections` resolves to, because
+    this table is consulted BEFORE unit-member lookup — measured with math.pow,
+    which is mapped here while lib/rtl/math.pas exists and is loaded — so it
+    needs no resolver-order change and leaves `collections.abc` (a real shim,
+    reached as a full dotted path) completely untouched.
+
+    Counter is NOT added beside it, and that is deliberate rather than an
+    oversight: this table re-targets by ARITY and cannot select by argument
+    TYPE, and Counter's two 1-argument overloads differ only by type (TPyList
+    vs AnsiString). An entry here would compile `collections.Counter(s)` to
+    whichever one arity found first — a silently wrong count instead of
+    today's honest refusal.
+
+    The target is pylib's INTERNAL `pydeque_new`, not `deque`, because this
+    table resolves with a plain FindProc BY NAME: mapped to `deque`, a program
+    that also wrote `def deque(): ...` had its own function called here and got
+    a silently wrong object. `math.pow` escapes that only by mapping to a
+    differently spelled proc (`Power`) — an accident, not a guard.
+    bug-n-collections-deque-is-missing }
+  else if dotted = 'collections.deque' then Result := 'pydeque_new'
   else Result := '';
 end;
 
@@ -12798,7 +12848,8 @@ begin
     added here.) }
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
-     (base <> 'random') and (base <> 'str') and (base <> 'time') then Exit;
+     (base <> 'random') and (base <> 'str') and (base <> 'time') and
+     (base <> 'collections') then Exit;
   if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot) then Exit;
   if TokPos + 1 >= TokCount then Exit;
   d2 := base + '.' + LowerCase(GetTokenStr(TokPos + 1));
@@ -36726,6 +36777,25 @@ begin
       { qualified: the named MODULE's class, so a same-named class being
         declared here cannot be the answer }
       baseCi := FindUClassInUnit(CurTok.SVal, baseQUnit);
+      { ...and the same name under the RESERVED-WORD spelling: `class
+        Grid(array.array)`. A unit cannot declare a class called `array`, so a
+        shim spells it `array_`, the trailing-underscore convention the
+        qualified-member mapper already applies (`tk.END` -> END_). This was the
+        FIFTH position that consumes a unit qualifier and the last one that
+        never applied it — `class C(array.array)` answered `unknown base class
+        array` while `class C(array.array_)` compiled.
+        Tried AFTER the plain spelling, so a unit that really does export the
+        bare name keeps it and this can only ADD a resolution.
+        Note the lookups here read CurTok.SVal and not `baseQName`, which
+        ConsumeUnitQualifier has already rewritten — mapping that variable
+        instead does nothing at all, which is how the first attempt at this
+        silently changed no behaviour.
+        Inside the qualified arm, so an UNQUALIFIED base name is still the
+        program's own and a user `class array_` cannot start answering to
+        `array`.
+        bug-n-a-base-class-named-by-a-pascal-reserved-word-is-not-mapped }
+      if baseCi < 0 then
+        baseCi := FindUClassInUnit(PyMapReservedMember(CurTok.SVal), baseQUnit);
       if baseCi < 0 then baseCi := FindUClassNonRecord(CurTok.SVal);
     end
     else
@@ -43341,7 +43411,7 @@ begin
   if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
      (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
      (Tokens[TokPos + 2].Kind = tkLParen) and
-     PyIsExactCtorName(GetTokenStr(TokPos + 1)) and
+     PyIsExactCtorName(PyMapReservedMember(GetTokenStr(TokPos + 1))) and
      (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
   begin
     { Remember WHICH unit was named: two libraries may export the same class

@@ -1,0 +1,18 @@
+b'efcdab'
+b'ef-cd-ab'
+b'abcdef'
+b'ab'
+b'ab,cd,ef'
+cdab
+a-b
+b'' 0
+b'\x00\x00\x00\x00' 4
+True
+0 0
+[b'ab', b'cd']
+[b'a', b'b', b'c']
+[b'\x01', b'\xff']
+[b'\x00', b'\x7f', b'\x80']
+[b'a', b'ab', b'abc']
+True True True
+['ab', 'cd'] [1, 2]

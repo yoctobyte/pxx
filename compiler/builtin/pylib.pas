@@ -626,6 +626,12 @@ type
   ResourceWarning   = class(Warning) end;
   EncodingWarning   = class(Warning) end;
 
+  { Forward: TPyBytes.join takes an ITERATOR overload and TPyIter is declared
+    below it. First forward class declaration in this unit; the alternative was
+    moving a 200-line class, which would have made the diff unreadable for one
+    method signature. }
+  TPyIter = class;
+
   TPyBytes = class
   public
     FLen: Integer;
@@ -731,7 +737,17 @@ type
     function rsplit: TPyList; overload;
     function splitlines: TPyList;
     { b'-'.join([b'a', b'b']) — Self is the SEPARATOR, as for str. }
-    function join(parts: TPyList): TPyBytes;
+    function join(parts: TPyList): TPyBytes; overload;
+    { ...and over an ITERATOR, which str.join has always accepted and this did
+      not: `b"".join(reversed(rows))` was a COMPILE error ("no overload of join
+      matches these arguments") while `"".join(reversed(rows))` worked, and
+      `b"".join(list(reversed(rows)))` worked too -- so the only missing step
+      was materialising. Two paths for one concept and the one nobody extended
+      is the one that stayed broken (devdocs/dev/normalise-dont-special-case.md).
+      A generator and a tuple already reached the TPyList arm; TPyIter is what
+      `reversed()` and `sorted()` return.
+      bug-n-str-join-rejects-an-argument-shape-cpython-accepts }
+    function join(parts: TPyIter): TPyBytes; overload;
     { .translate(table): table is 256 bytes mapping each byte value. A table of
       any other length is a ValueError in CPython. }
     function translate(table: TPyBytes): TPyBytes;
@@ -895,6 +911,53 @@ type
       range needs no new mechanism. }
     function at(i: Int64): Int64;
     property Items[i: Int64]: Int64 read at; default;
+  end;
+
+{ `collections.deque` — a double-ended queue.
+
+  BUILT ON A TPyList PLUS A HEAD INDEX, not on its own variant storage. The
+  slot machinery, the retain/release of an object element and the growth policy
+  are TPyList's already, and a second copy of them is exactly the duplication
+  devdocs/dev/normalise-dont-special-case.md is about. What a deque adds over a
+  list is one number: where the front currently is.
+
+  WHY NOT list.pop(0). Because that is O(n) per element, and the measured
+  caller is a BREADTH-FIRST FLOOD FILL over a chart raster (lekkerzeilen
+  chart.py) where every cell enters the queue exactly once — so list.pop(0)
+  makes the whole traversal quadratic in the pixel count. `popleft` here
+  advances FHead and nothing else; the abandoned prefix is reclaimed by a
+  compaction that runs only once the dead prefix is at least half the buffer,
+  which is what makes it O(1) AMORTISED rather than O(1) until memory runs out.
+
+  DELIBERATELY ABSENT: `maxlen`. It is a real part of the signature and it is
+  the half that silently DISCARDS elements, so a shim that accepted the keyword
+  and ignored it would turn a bounded ring buffer into an unbounded one and
+  lose nothing visibly. Nothing measured passes it; a caller who does gets a
+  loud unknown-argument error. Also absent: rotate, extendleft, index, count,
+  insert, remove, reverse — none is reached, and each would be a guess. }
+  TPyDeque = class
+  public
+    FBuf: TPyList;
+    FHead: Integer;     { index in FBuf of the front element }
+    constructor Create;
+    { Python's deque mutators return None, exactly as list's do — the
+      Self-returning variants TPyList carries are for the frontend's literal
+      chaining and have no deque counterpart. }
+    function append(const v: Variant): Variant;
+    function appendleft(const v: Variant): Variant;
+    function popleft: Variant;
+    function pop: Variant;
+    function clear: Variant;
+    { `len(d)`, and with it TRUTHINESS: `while queue:` on a class that is not
+      one of pylib's own containers is decided by __len__ and by nothing else.
+      Without it the overload matcher silently picks some other container's
+      overload and reads a length off unrelated bytes
+      (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic). }
+    function __len__: Integer;
+    procedure Compact(frontSlack: Integer);
+    function at(i: Integer): Variant;
+    procedure put(i: Integer; const v: Variant);
+    property Items[i: Integer]: Variant read at write put; default;
   end;
 
 { Python's `complex`. A CLASS rather than a new variant tag: a tag would need a
@@ -1156,7 +1219,36 @@ function bytearray(b: TPyBytes): TPyBytes; overload;
   here would be a wrong VALUE in a buffer, which is exactly the failure mode
   this type is used to avoid. }
 function bytearray(l: TPyList): TPyBytes; overload;
-function bytes(b: TPyBytes): TPyBytes;
+{ bytes(n) — n ZERO bytes, CPython's oldest bytes constructor and the one a
+  program reaches for to allocate a buffer of a known size (`array.array("h",
+  bytes(count * 2))`). `bytearray(n)` has carried this overload all along and
+  `bytes(n)` did not, so the immutable spelling was a COMPILE error where
+  CPython accepts it — two spellings of one concept and the one nobody extended
+  is the one that stayed broken (devdocs/dev/normalise-dont-special-case.md).
+  Refusing what CPython accepts is a defect in this direction: NilPy is UPWARD
+  compatible, one way.
+  Deliberately does NOT set FIsByteArray — that tag is the whole difference
+  between the two spellings, and stamping it here would make `bytes(4)` print
+  as a bytearray and answer `bytearray` to type(x).__name__.
+  bug-n-bytes-n-is-refused-where-bytearray-n-is-accepted }
+function bytes(n: Integer): TPyBytes; overload;
+{ ...and the VARIANT arm, which the integer overload above MADE NECESSARY.
+  A dynamically-typed receiver (`for y in [[3,1,2]]: bytes(y)`) used to bind to
+  the TPyBytes overload and be rescued by its runtime `is TPyList` check. Adding
+  an Integer overload changed which one a Variant binds to: it started matching
+  the INTEGER, and `bytes(y)` on a list aborted with "expected a number, got
+  object" — a working call turned into a runtime abort by an overload added for
+  an unrelated shape, with nothing refused at compile time.
+  Caught by test_nilpy_builtin_over_variant_receiver, which exists for exactly
+  this class and whose own header says the variant payload kinds are swept
+  BECAUSE testing only the static one shows nothing.
+  So the arm is explicit tag dispatch rather than `pylist_v(v)`, which is what
+  sum/any/all use: pylist_v SPREADS a str into its characters, and `bytes(s)`
+  with no encoding is a TypeError in CPython, which that same test asserts.
+  max/min/len/tuple/sum already carry a variant arm; bytes did not, and now the
+  reason it needs one exists. }
+function bytes(const v: Variant): TPyBytes; overload;
+function bytes(b: TPyBytes): TPyBytes; overload;
 { bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
   bug-a-overload-resolution-ignores-class-identity: before that, a list
   argument silently bound to the TPyBytes parameter above and was rescued by
@@ -2337,6 +2429,28 @@ function sum(const v: Variant): Variant; overload;
 function sum(const v: Variant; const start: Variant): Variant; overload;
 function any(const v: Variant): Boolean; overload;
 function all(const v: Variant): Boolean; overload;
+
+{ `deque()` and `deque(iterable)`. Two overloads that differ by ARITY only,
+  never by argument TYPE — the qualified spelling `collections.deque(...)`
+  reaches these through the frontend's stdlib-call table, which re-targets by
+  arity and cannot select by type at all. Counter is deliberately NOT routed
+  the same way for exactly that reason: its 1-argument overloads differ by type
+  (list vs str), so the table would pick one of them silently.
+  bug-n-collections-deque-is-missing }
+function deque: TPyDeque;
+function deque(l: TPyList): TPyDeque; overload;
+{ The same two, under a name a NilPy program cannot collide with. The QUALIFIED
+  spelling `collections.deque(...)` is routed to THESE by the frontend's
+  stdlib-call table, and it must be, because that table resolves its target with
+  a plain FindProc by name: mapped to `deque`, a program that also wrote
+  `def deque(): ...` had its own function called for `collections.deque()` and
+  got a silently wrong object where CPython gives the module's deque. `math.pow`
+  never had this problem only because it happens to map to a DIFFERENTLY named
+  proc (`Power`) — an accident of spelling, not a guard.
+  The bare `deque()` above stays shadowable, which is correct: shadowing a
+  builtin by defining one is ordinary Python. }
+function pydeque_new: TPyDeque; overload;
+function pydeque_new(l: TPyList): TPyDeque; overload;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -7136,6 +7250,32 @@ begin
       pyvar_gt := la > lb;
       Exit;
     end;
+    { ...and two BYTES, by the same lexicographic rule, on UNSIGNED byte values.
+      The arm above covers list/tuple/set because they are one TPyList; bytes is
+      a different class and fell through to pyvar_to_int, so `sorted([b"cd",
+      b"ab"])` raised "expected a number, got object" while `sorted(["cd",
+      "ab"])` and `sorted([2, 1])` both worked. One concept, and the sibling
+      nobody extended is the one that stayed broken
+      (devdocs/dev/normalise-dont-special-case.md).
+      Unsigned matters: CPython compares bytes as values 0..255, so b"\xff" is
+      GREATER than b"\x01". Reading them as signed would invert every pair with
+      a high bit set — a wrong ORDER that still sorts, which is the failure mode
+      a value assertion catches and a "does it run" assertion does not.
+      bug-n-sorted-over-bytes-raises-where-sorted-over-str-works }
+    if (oa is TPyBytes) and (ob is TPyBytes) then
+    begin
+      la := TPyBytes(oa).FLen;
+      lb := TPyBytes(ob).FLen;
+      if la < lb then n := la else n := lb;
+      for k := 0 to n - 1 do
+        if TPyBytes(oa).at(k) <> TPyBytes(ob).at(k) then
+        begin
+          pyvar_gt := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
+          Exit;
+        end;
+      pyvar_gt := la > lb;
+      Exit;
+    end;
     { Two USER objects: their own __gt__, or the reflected __lt__. Without this
       both fell through to pyvar_to_int and `pts.sort()` over a class defining
       __lt__ died with "expected a number, got object" — a runtime TypeError for
@@ -8108,6 +8248,117 @@ end;
 { Counter() / Counter(iterable) as plain functions, so Python's constructor
   spelling resolves through the ordinary call path with no frontend mapping —
   the same trick lib/rtl/re.pas uses for `import re`. }
+constructor TPyDeque.Create;
+begin
+  FBuf := TPyList.Create;
+  FHead := 0;
+end;
+
+function TPyDeque.__len__: Integer;
+begin
+  Result := FBuf.FLen - FHead;
+end;
+
+procedure TPyDeque.Compact(frontSlack: Integer);
+{ Rebuild the buffer with the dead prefix dropped and `frontSlack` spare slots
+  ahead of the front, so a run of appendleft has somewhere to go. The slack
+  slots hold None and are never read: FHead points past them. }
+var nb: TPyList; k: Integer;
+begin
+  nb := TPyList.Create;
+  for k := 0 to frontSlack - 1 do nb.append_self(pynone);
+  for k := FHead to FBuf.FLen - 1 do nb.append_self(FBuf.at(k));
+  FBuf := nb;
+  FHead := frontSlack;
+end;
+
+function TPyDeque.append(const v: Variant): Variant;
+begin
+  FBuf.append_self(v);
+  Result := pynone;
+end;
+
+function TPyDeque.appendleft(const v: Variant): Variant;
+begin
+  { No room in front: rebuild with slack proportional to the current size, so a
+    run of appendleft costs O(1) each rather than O(n) each. }
+  if FHead = 0 then
+  begin
+    if FBuf.FLen < 8 then Compact(8) else Compact(FBuf.FLen);
+  end;
+  Dec(FHead);
+  FBuf.put(FHead, v);
+  Result := pynone;
+end;
+
+function TPyDeque.popleft: Variant;
+begin
+  if FHead >= FBuf.FLen then
+    raise Exception.Create('pop from an empty deque');
+  Result := FBuf.at(FHead);
+  Inc(FHead);
+  { Reclaim only when the dead prefix is at least half the buffer, which is what
+    makes the amortised cost constant. Compacting eagerly would put an O(n) copy
+    behind every popleft and undo the whole point. }
+  if (FHead >= 32) and (FHead * 2 >= FBuf.FLen) then Compact(0);
+end;
+
+function TPyDeque.pop: Variant;
+begin
+  if FHead >= FBuf.FLen then
+    raise Exception.Create('pop from an empty deque');
+  Result := FBuf.pop;
+end;
+
+function TPyDeque.clear: Variant;
+begin
+  FBuf.clear;
+  FHead := 0;
+  Result := pynone;
+end;
+
+function TPyDeque.at(i: Integer): Variant;
+begin
+  { Python's deque indexes from the FRONT and supports negative indices, as
+    every sequence here does. }
+  if i < 0 then i := (FBuf.FLen - FHead) + i;
+  if (i < 0) or (FHead + i >= FBuf.FLen) then
+    raise Exception.Create('deque index out of range');
+  Result := FBuf.at(FHead + i);
+end;
+
+procedure TPyDeque.put(i: Integer; const v: Variant);
+begin
+  if i < 0 then i := (FBuf.FLen - FHead) + i;
+  if (i < 0) or (FHead + i >= FBuf.FLen) then
+    raise Exception.Create('deque index out of range');
+  FBuf.put(FHead + i, v);
+end;
+
+function pydeque_new: TPyDeque; overload;
+begin
+  Result := TPyDeque.Create;
+end;
+
+function pydeque_new(l: TPyList): TPyDeque; overload;
+var k: Integer;
+begin
+  Result := TPyDeque.Create;
+  if l = nil then Exit;
+  for k := 0 to l.FLen - 1 do Result.append(l.at(k));
+end;
+
+{ One implementation, two names — see the declaration. }
+function deque: TPyDeque;
+begin
+  Result := pydeque_new;
+end;
+
+function deque(l: TPyList): TPyDeque; overload;
+begin
+  Result := pydeque_new(l);
+end;
+
 function Counter: TPyDict;
 var c: TPyDict;
 begin
@@ -15262,7 +15513,51 @@ begin
   Result := pybytes_from_list(l);
 end;
 
-function bytes(b: TPyBytes): TPyBytes;
+function bytes(n: Integer): TPyBytes; overload;
+begin
+  { The zero-fill is TPyBytes.Create's own — see its comment: Python's
+    bytearray(n)/bytes(n) are n zero bytes, not uninitialised memory. }
+  Result := TPyBytes.Create(n);
+end;
+
+function bytes(const v: Variant): TPyBytes; overload;
+{ See the declaration for why this exists. Dispatches on the RUNTIME tag,
+  because a Variant is the one argument whose Python type is not knowable when
+  the overload is chosen. }
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    { list/tuple/set are one class here, so this is all three. }
+    if o is TPyList then
+    begin
+      Result := pybytes_from_list(TPyList(o));
+      Exit;
+    end;
+    if o is TPyBytes then
+    begin
+      Result := bytes(TPyBytes(o));
+      Exit;
+    end;
+  end;
+  { An INTEGER variant is bytes(n) — n zero bytes — exactly as the static
+    spelling is, so the two agree rather than diverging on how the value was
+    typed. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  begin
+    Result := TPyBytes.Create(Integer(p^.Payload));
+    Exit;
+  end;
+  { Everything else, a str included: CPython's `bytes(s)` without an encoding is
+    a TypeError, and answering with the encoded characters instead would be
+    accepting what CPython REJECTS in the one place that is a wrong VALUE rather
+    than laxity. }
+  raise TypeError.Create('cannot convert this value to bytes without an encoding');
+end;
+
+function bytes(b: TPyBytes): TPyBytes; overload;
 var k: Integer; src, dst: PByte;
 begin
   { Belt and braces. A list argument used to bind HERE, because class-arg
@@ -17994,6 +18289,16 @@ begin
     part := TPyBytes(TObject(pyvarobj(parts.at(i))));
     for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
   end;
+end;
+
+function TPyBytes.join(parts: TPyIter): TPyBytes; overload;
+begin
+  { Materialise and delegate -- deliberately NOT a second copy of the walk.
+    The TPyList arm computes the total length in one pass and fills in a
+    second, which needs a random-access source; an iterator has none, so a
+    "streaming" version would be a different algorithm with its own bugs for
+    no benefit at these sizes. }
+  Result := join(list(parts));
 end;
 
 function TPyBytes.translate(table: TPyBytes): TPyBytes;

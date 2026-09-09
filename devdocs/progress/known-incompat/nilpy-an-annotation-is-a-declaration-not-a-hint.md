@@ -52,3 +52,16 @@ narrowing conversion warning would satisfy both readings and change no value.
 Found while probing every rung of `PyInferFieldDecl` for
 `refactor-n-the-field-type-pre-pass-asks-one-question-in-six-places`; not
 looked for.
+
+---
+
+**A NARROWING WARNING IS COMPATIBLE WITH THE CHOSEN SEMANTICS** (frankuser,
+2026-09-09, and it sharpens the residual above rather than reopening it).
+"Chosen" covers the RULE — an annotation declares storage — and it does not
+cover the SILENCE. `self.a: int = t` with `t = 2.7` loses a value with no
+diagnostic, and a warning at the narrowing store would satisfy both readings
+while changing no value and no type. Same shape as the closed-world case one
+lane over: a WARNING is compatible with the behaviour we want, a REFUSAL is
+not. Still not worth a fix without real source that wants it — a probe cannot
+settle whether anyone writes this — but if someone touches this area, the
+warning is the cheap half.

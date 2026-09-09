@@ -1,0 +1,12 @@
+# The other two spellings of the same class, in their own file so the qualified
+# one above cannot mask a regression in them. from-import and bare both bind
+# pylib's `deque` proc directly -- no frontend table involved.
+from collections import deque
+
+q = deque()
+q.append(3)
+q.append(4)
+print(len(q), q.popleft(), q.popleft(), len(q))
+
+r = deque([9, 8])
+print(len(r), r[0], r[1])

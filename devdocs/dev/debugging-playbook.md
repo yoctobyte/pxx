@@ -22590,3 +22590,58 @@ anything nearby is edited — including when you edit it to add a probe. **A
 finding that survives your `WriteLn` is a different finding.** Anything that
 starts behaving when you insert a line in front of it is about NODE NUMBERING,
 not about the feature, and the next place to look is what resets the counter.
+## A STRUCTURAL EDIT BY LINE NUMBER FAILS 4000 LINES AWAY, IN A FILE YOU DID NOT TOUCH, ABOUT A SYMBOL THAT IS DEFINED
+
+Measured 2026-09-09 (`435d656ac`, frankB). A refactor spliced three function
+bodies in `compiler/pyparser.inc` with a Python script that computed ranges by
+line index. One splice left **one extra `end;`**. The build failed with:
+
+```
+pascal26:4660: error: undefined variable (LoadFileCI)
+  in: compiler/pasparser_proc.inc
+```
+
+`LoadFileCI` is forward-declared in `frontend_forwards.inc:4` and defined in
+`elfwriter.inc:5282`. Both were correct, untouched, and present. Ten more
+errors followed, all in that file, all about that symbol.
+
+**Every fact the error offers points away from the cause.** It names a file the
+edit never opened. It names a symbol that greps as properly declared and
+defined — so the natural next step, `grep -n LoadFileCI compiler/*.inc`, comes
+back clean and *strengthens* the wrong theory. And it says "undefined
+variable", which sounds like a scoping or ordering problem, so the reasonable
+next hypothesis is a dialect limitation in whatever the refactor introduced. In
+this case that was a `var sites: array of Integer` open-array parameter, which
+is rare in this tree; a standalone probe was written for it and **the probe
+passed**, costing the time and — worse — briefly making the real cause less
+likely, because the obvious suspect had been cleared.
+
+The mechanism is ordinary: an unbalanced `begin`/`end` does not stop the parse,
+it makes the parser close the wrong construct and keep going, so subsequent
+declarations are swallowed into a scope that then ends. The reported location
+is wherever the damage first becomes *unresolvable*, which can be an arbitrary
+distance downstream and in a different include.
+
+**THE DISCRIMINATOR IS ONE COMMAND AND NOBODY REACHES FOR IT, PRECISELY BECAUSE
+THE ERROR NAMES SOMEBODY ELSE'S FILE:**
+
+```
+git stash && make compiler/pascal26 ; git stash pop
+```
+
+Clean tree builds -> it is your edit, whatever the error says. Clean tree fails
+-> it is not. It costs one rebuild and it is decisive in both directions, where
+reading your own diff is not: a stray `end;` is invisible to a reader who knows
+what the code is *supposed* to say, and it sits in the whitespace at the tail of
+a function where nothing looks wrong.
+
+**So: before forming any hypothesis about a compile error in a file your change
+does not touch, establish whether your change causes it at all.** The
+temptation to skip that step is proportional to how unrelated the error looks,
+which is exactly backwards.
+
+Related: this is the general "an instrument that lies, lies by being correct
+about something else" shape — the compiler is telling the truth about the
+parse state it is in. And prefer an edit anchored on unique TEXT to one
+anchored on a line RANGE: the text anchor fails loudly at patch time (`assert
+s.count(OLD) == 1`), which is where you want a structural mistake to surface.
