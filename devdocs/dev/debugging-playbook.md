@@ -14017,6 +14017,42 @@ mechanism was sitting in the SIZE of the discrepancy**, and a magnitude that
 matches a known quantity is a fact about the cause, not a detail of the symptom.
 Read the size before accepting an argument that a mechanism does not apply.
 
+### AND THE FOURTH RUNG, WHERE THE NAME APPEARS NOWHERE AT ALL: A *POSITIONAL* TABLE, WHOSE Nth SLOT MEANS CONSTANT N
+
+Measured 2026-09-09, retiring two dead node kinds from `compiler/defs.inc`
+(`AN_INTF_FROM_CLASS`, `IR_IMTADDR`; landed `787185c01`). **The check came back
+NEGATIVE — there is no such table in this tree — and the rung is worth writing
+down anyway, because the negative is what made the deletion safe and no grep
+could have produced it.**
+
+The three rungs above get harder to enumerate and all three still leave a
+handle. Per SITE: list the callers. Per TABLE: interrogate each table. Per CALL:
+ask *what performs this operation*, since the open-coded mover is not a caller.
+**This one removes the last handle — the association is the INDEX, so the
+constant's name is not in the artefact at all.** A `const T: array[...] of X`
+whose Nth element means kind N never spells `IR_IMTADDR`; delete a constant from
+the middle and every later slot silently shifts by one. The identifier grep that
+answers every other question about a retirement is not weak here, it is
+**structurally blind** — there is nothing for it to match.
+
+**Retiring a constant is otherwise entirely a grep**, which is exactly why this
+step gets skipped: every other question the job raises is answered by the same
+command, so the one that isn't does not announce itself as a different kind of
+question. The check is cheap and specific — look for a bound (`AN_LAST`,
+`IR_MAX`, `*_COUNT`) and for anything dimensioned by the kind count, then for
+initialised tables in kind order. Neither exists here, which is why leaving 59 a
+**hole** costs nothing; and the hole is the right call for an adjacent reason —
+reusing the number would make every old IR dump, log line and ticket naming
+kind 59 quietly mean something else, which is a stale-name failure
+(`## The name is not the thing`) rather than a shift.
+
+**The general form, and it is what makes this a rung rather than an anecdote:
+ask what the artefact would look like if the association were carried by
+POSITION instead of by name.** Wherever it would, an identifier search has no
+aperture, and its clean result is not evidence. That is true of an ordered
+array, a positional record initialiser, a fixed-column file, and a protocol
+whose field meaning is its offset.
+
 
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
 
