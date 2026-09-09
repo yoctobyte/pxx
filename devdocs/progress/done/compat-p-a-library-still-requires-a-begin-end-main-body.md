@@ -3,10 +3,10 @@ slug: compat-p-a-library-still-requires-a-begin-end-main-body
 track: P
 type: compat
 prio: 30
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankD
-owner: ""
+owner: frankS
 blocked-by: []
 summary: "FPC compiles `library f; ... exports f; end.` with no statement part; pxx answers `expected 'begin' before 'end'`. A library with nothing to initialise is the common shape and writing `begin end.` is the workaround, so this is an acceptance gap and not a wrong answer. Found while documenting `library`/`exports` in docs/reference/objects.md, which now tells readers to write the `begin end.`"
 ---
@@ -56,3 +56,6 @@ statement part optional when `IsLibrary` is the narrow form; a program must keep
 requiring it.
 
 Not fixed here because I am Track D and `compiler/**` is not mine to edit.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

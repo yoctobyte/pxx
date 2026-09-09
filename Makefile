@@ -30679,6 +30679,32 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_library_exports_host "$$($(TESTTMP)/test_library_exports_host)" "$$(printf '42\n42\n-42')" || exit 1; \
 	  echo "test-emit-obj: library+exports links+runs under a gcc-built main ok"; \
 	else echo "gcc not installed; library+exports link check skipped"; fi
+	# ...and the SAME assertions on a library with NO statement part at all.
+	# Byte-for-byte the file above minus its `begin end.`, linked against the
+	# same host, so the row asserts a working export surface rather than a
+	# successful parse — which is what a compiler that dropped the file would
+	# also produce.
+	# compat-p-a-library-still-requires-a-begin-end-main-body
+	./$(COMPILER) --emit-obj test/test_a_library_needs_no_main_body.pas $(TESTTMP)/test_lib_nobody.o
+	test -s $(TESTTMP)/test_lib_nobody.o
+	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T PxxLibAdd$$'
+	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T PxxLibMul$$'
+	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T PxxLibNegate$$'
+	nm $(TESTTMP)/test_lib_nobody.o | grep -q ' t Hidden$$'
+	! nm $(TESTTMP)/test_lib_nobody.o | grep -q ' T Hidden$$'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -o $(TESTTMP)/test_lib_nobody_host test/library_exports_host.c $(TESTTMP)/test_lib_nobody.o || { echo "test-emit-obj: the body-less library .o FAILED to link with a C host"; exit 1; }; \
+	  tools/expect_same.sh test_lib_nobody_host "$$($(TESTTMP)/test_lib_nobody_host)" "$$(printf '42\n42\n-42')" || exit 1; \
+	  echo "test-emit-obj: a library with no main body links+runs under a gcc-built main ok"; \
+	else echo "gcc not installed; body-less library link check skipped"; fi
+	# THE NEGATIVE CONTROL, and it is the row that decides the fix was guarded
+	# on the right question. fpc 3.2.2 accepts `library l; ... end.` and REFUSES
+	# `program p; end.`; a fix keyed on "no begin follows" rather than on
+	# IsLibrary would accept both. The leading `!` is branched on, not
+	# commented — an unexpected SUCCESS fails here instead of falling through to
+	# a grep of an empty log.
+	! ./$(COMPILER) test/library_program_needs_a_main_body_fail.pas $(TESTTMP)/lib_prog_nobody >$(TESTTMP)/lib_prog_nobody.err 2>&1
+	grep -q "expected 'begin'" $(TESTTMP)/lib_prog_nobody.err
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

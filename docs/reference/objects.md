@@ -138,17 +138,19 @@ since ELF has no ordinal table.
 
 `exports` is rejected in a `program`, which has no export surface.
 
-Two differences from FPC worth knowing:
+One difference from FPC worth knowing:
 
-- **The main body is still required.** `library mylib; … exports f; end.` does
-  not compile; write `begin end.` before the final `end.` even when there is
-  nothing to run. (FPC lets you omit it.)
 - **`library` does not choose the output kind — the flag does.** Compiling one
   without `--shared` produces an ordinary ELF executable, not a `.so`. Write
   `pascal26 --shared mylib.pas mylib.so`.
 
+**The main body is optional**, as in FPC: `library mylib; … exports f; end.`
+compiles, and so does the same file with a `begin end.` before the final `end.`.
+Note this is a `library` rule and not a general one — `program p; end.` is
+refused, by pxx and by FPC alike.
+
 And the rule from below applies here too: loading the library does not run the
-main body, so `begin end.` is not a place to initialise anything an exported
+main body, so a `begin … end.` is not a place to initialise anything an exported
 routine depends on.
 
 ## A shared library

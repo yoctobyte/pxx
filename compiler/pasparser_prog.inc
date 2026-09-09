@@ -2119,10 +2119,29 @@ begin
   for i := 0 to InitProcCount - 1 do
     EmitCallProc(InitProcs[i]);
 
-  Expect(tkBegin, 'begin');
-  DbgMainBodyStart := CodeLen;   { -g: program-body code range → main subprogram }
-  ParseBlock;
-  DbgMainBodyEnd := CodeLen;
+  { A LIBRARY'S STATEMENT PART IS OPTIONAL, AND A PROGRAM'S IS NOT. Measured
+    against fpc 3.2.2, not assumed from symmetry: `library l; ... exports F;
+    end.` compiles, and `program p; end.` is REFUSED. A library with nothing to
+    initialise is the common shape — the export surface is the point of the
+    file — so demanding `begin end.` was an acceptance gap, never a wrong
+    answer, and `docs/reference/objects.md` had to tell readers to write it.
+
+    Guarded on IsLibrary rather than on "no begin follows", which would have
+    silently accepted the program form fpc rejects. The `end.` below is
+    unchanged: it terminates the file either way.
+    compat-p-a-library-still-requires-a-begin-end-main-body }
+  if IsLibrary and (CurTok.Kind <> tkBegin) then
+  begin
+    DbgMainBodyStart := CodeLen;
+    DbgMainBodyEnd := CodeLen;   { -g: an empty main subprogram, not a missing one }
+  end
+  else
+  begin
+    Expect(tkBegin, 'begin');
+    DbgMainBodyStart := CodeLen;   { -g: program-body code range → main subprogram }
+    ParseBlock;
+    DbgMainBodyEnd := CodeLen;
+  end;
   { -g: snapshot the program's own global vars (skGlobal past the runtime units)
     as children of the main-body subprogram. }
   if DebugInfo then
