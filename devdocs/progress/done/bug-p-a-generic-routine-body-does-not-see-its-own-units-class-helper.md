@@ -242,4 +242,4 @@ my 400/400 does. I compared their numbers against MY probe's numbering without
 reading theirs. Their conclusion, their evidence, and both were right.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7726e3e8b.
