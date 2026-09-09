@@ -309,3 +309,41 @@ is not evidence about a corpus nobody re-ran.
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2b43c97d0.
+
+## CORPUS RE-MEASURED, AND THE ANSWER IS ZERO — WITH THE CONTROL THAT MAKES THAT SAYABLE
+
+The section above said the corpus had not been re-run and that the retired
+`TEnumerator$PT` hypothesis stayed retired until somebody spent the seven
+minutes. Both runs are now in.
+
+| run | binary | errors | wall |
+| --- | --- | --- | --- |
+| with this fix | `00ca0d61bbce` | 14 | 6m59.3s |
+| **control — HEAD minus this fix ONLY** | `68421d8ff193` | 14 | 7m19.1s |
+
+**The two error lists are byte-identical**, same rows in the same order. This
+fix moves NO row of the `Generics.Collections` corpus, in either direction, and
+costs no measurable time — which was the one real risk in it, since
+`CollectHoistCandidates` now runs per specialization inside
+`BufferGenericMethod`'s loop over every specialization.
+
+**THE CONTROL IS THE POINT, NOT THE NUMBER.** The previous figure on record was
+11 errors, so the naive reading of this run is "+3, and I am the one who just
+landed a change here". That reading is available in both directions and both are
+wrong: the range between the two figures spans many commits by three seats, and
+the row set did not merely grow — `duplicate definition of
+'TComparer$UInt32.Construct'` and `cannot access private member "FComparison"`
+CLEARED while `generic template TArray not found` appeared. A count cannot see
+that. The control binary differs from HEAD by exactly the 20 lines of this fix
+and was verified to fail this ticket's own fixture before being run, so the
+comparison is attributable and the delta is provably not mine.
+
+CLAUDE.md, "a pull can improve your numbers" and its mirror added the same day:
+attribute a delta to a RANGE before attributing it to yourself, in the
+unflattering direction too — that is the direction where finding a culprit
+*ends* the search.
+
+**So the retirement stands and is now positive rather than merely unproven.**
+The single bare `alias=TEnumerator$PT` is not this defect: this defect is fixed
+and that mint is unchanged. Where it does come from is recorded in
+`bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope`.

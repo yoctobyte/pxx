@@ -657,3 +657,70 @@ also the signature of
 `bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`
 — but fixing that one's call site made the corpus WORSE, not better, so no link
 between them was established. Recorded so nobody spends the seven minutes twice.
+
+## THE EIGHT SITES ARE NOT ONE POPULATION — TWO OF THEM SPELL `PT` AS A TEMPLATE PARAMETER (frankZ, 2026-09-09)
+
+Read from the corpus source rather than from a probe, so this is a HYPOTHESIS
+about which site mints the bare alias, not a measurement of it. What it does
+settle is that the question "which of the eight" was drawn from a population
+that has two different shapes in it, and only one of them is this ticket's.
+
+**Six sites: `PT` is a NESTED TYPE.** `TEnumerable<T>` declares `PT = ^T` two
+lines above its own use at :133, and the descendants at :222/:361/:554/:619/:862
+inherit it. That is door B and door C, and the census says they work — the seven
+resolving mints are all of this shape (`$TEnumerable$UInt32$PT`,
+`$TCustomList$UInt32$PT` x4, `$UInt32` x2).
+
+**Two sites: `PT` is a TEMPLATE PARAMETER of the enclosing template**, and
+neither is a nested type at all:
+
+```pascal
+  // generics.collections.pas:144
+  TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);
+
+  // generics.collections.pas:152, inside
+  TCustomPointersCollection<T, PT> = object
+    function GetEnumerator: TEnumerator<PT>;
+```
+
+`:144` is a **declaration-time base-clause** prerequisite with an EMPTY class
+body — `= class abstract(...)` and then a semicolon, no `end` — so the group is
+scanned when `TCustomPointersEnumerator` is DECLARED, before anything specializes
+it, when `SpecSubCount` is 0 and `PT` can only map to itself. That is the exact
+shape that produces `args=PT`, and the bare mint is labelled `deferred`, which
+is the prerequisite path and not the late one. `:152` is the same spelling
+inside an `object`, not a class.
+
+**Why this matters beyond naming a line number:** a fix aimed at the hoist
+tables cannot reach either of them. `PT` there is not a name to hoist; it is a
+parameter awaiting a substitution that has not been established yet. If the
+measurement confirms `:144`, this ticket's remaining question belongs to
+declaration-time prerequisite ordering and not to nested-type resolution, and
+should be re-laned as its own ticket rather than left as the tail of this one.
+
+**The measurement that settles it** is `PXXDBG=p.nspec:TEnumerator` over the
+Collections driver, reading `nsub` and `under` on the bare row: `nsub=0` says
+declaration time and names `:144`/`:152`; a non-zero `nsub` with a real `under`
+says one of the six and keeps the question here. Seven minutes, not yet run.
+
+**Unmoved by the hoist-leak fix.** `unknown type: PT` at :120/:123/:217 is
+present at `00ca0d61bbce`, which carries
+`bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`
+in full. Those three rows are `TEnumerator<T>`'s own body materialised as
+`TEnumerator$PT` — the alias was emitted and its `T` substituted with the
+unresolved spelling — so they are the bare mint's consequence, not a separate
+wall.
+
+### The hoist-leak fix is now EXCLUDED, by a control and not by an argument
+
+Two 7-minute Collections runs, differing by exactly the 20 lines of
+`bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`:
+`00ca0d61bbce` (with) and `68421d8ff193` (without, verified to fail that
+ticket's own fixture first). **Byte-identical error lists, 14 rows each.**
+
+So the bare `alias=TEnumerator$PT` is not the leak, and this is no longer an
+experiment that settled nothing — it is a negative result with a control. The
+two-population reading above is what is left, and `:144` is the candidate.
+
+**The residual question has an owner and it is this ticket**, until the `nsub`
+measurement re-lanes it.
