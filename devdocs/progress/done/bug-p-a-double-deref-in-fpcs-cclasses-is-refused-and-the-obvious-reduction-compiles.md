@@ -180,5 +180,5 @@ diagnosis. `head -20` shows both errors. The instrument did not error; it
 answered about the tail.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6ae25b5f8.
 - 2026-09-09 — **the FIX is `a4cbaa1de`** (2026-09-06, `fix(P): the forward-pointee alias repair ran ONCE, forward`), found by bisect. The `PENDING-COMMIT` line above carries only the CLOSE, which changed no compiler code.
