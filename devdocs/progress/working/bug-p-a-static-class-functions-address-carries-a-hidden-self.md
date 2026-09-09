@@ -3,8 +3,8 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankH
 summary: "`@TSvc.Pick` where Pick is `class function ...; static;` yields a routine that still expects a leading Self, so casting it to a plain function pointer -- the ONLY way rtl-generics dispatches its comparers -- shifts every argument by one. Measured 2026-09-09 at binary a312307dfea3, one program, three rows: a direct call gives 107 in both compilers; through `function(A: Pointer; ASize: SizeInt)` pxx gives 119 against fpc's 107; through a cast with an EXPLICIT leading Self pxx gives 107 and fpc gives 100 -- the two compilers are exactly inverted, which is the positive control. Cause: pxx's `isStaticMethod` means `class method`, not the `static` DIRECTIVE (pasparser_decl.inc sets UMthIsStatic from isClassMethod for classes and from RecordMethodClassPrefix for records), and pasparser_proc.inc gives every one of them a Self at index 0. FPC's `static` means NO Self and a body that may not name it. This is what leaves `TComparer<T>.Default` nil on the rtl-generics rung: LookupComparer calls `TSelectFunc(LInstance.SelectorInstance)(GetTypeData(ATypeInfo), ASize)` through exactly this cast. NOT a wrong VALUE that a test would catch by reading a number -- the direct-call spelling is correct, so every ordinary use of a static method agrees with fpc."
 ---
 
