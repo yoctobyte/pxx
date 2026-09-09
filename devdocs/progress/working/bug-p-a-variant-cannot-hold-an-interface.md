@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankH
 created: 2026-08-26
-summary: "`v := ifc` for any interface does not compile (`Variant := this type not yet supported`). Reproduces at HEAD 2026-09-09 (923ac147a, compiler be9a7fbee4fa). **THE BLOCKER THIS TICKET WAS RANKED ON DOES NOT EXIST.** It said an interface is `a 16-byte fat pointer {IMT, instance}` needing `16 bytes of payload where the slot carries 8` -- taken from `UClsIsInterface`'s comment, which was stale. Measured: SizeOf(IIntf) = 8 in pxx and in fpc 3.2.2, in every aggregate context; an interface value is ONE WORD and a call recovers the IMT from the instance per call (PXXIntfIMTOf). So it fits the existing payload exactly, like VT_OBJECT's class instance pointer, and no payload widening is needed. What IS real: the LIFETIME half. A CORBA interface (pxx default) is not refcounted and needs none; a COM one needs _AddRef/_Release, and the slot has no room for the ifaceId that PXXIntfRelease takes -- which is the actual design question, and it is not the one the ticket asked. See [[refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds]] for the stale-comment group that produced the wrong premise."
+summary: "`v := ifc` still does not compile (`Variant := this type not yet supported`). TWO of the three premises this ticket was ranked on are now retired and the third is MEASURED. (1) The 16-byte fat pointer is gone -- an interface value is ONE WORD, SizeOf(IIntf)=8 in pxx and fpc, so no payload widening (frankD). (2) The five-copy VariantTagForTk collapse is LANDED at a770a1dd6 -- and the interface arm was never going to live there anyway, because that function keys on TTypeKind alone and an interface is tyRecord, so the case must be recognised in ir.inc lowering while the recId is in hand (frankD). (3) THE ifaceId QUESTION IS ANSWERED, 2026-09-09: for a COM class every IMT carries the same _AddRef/_Release pair so any entry would do, but under {$interfaces corba} on a plain TObject descendant IMT slots 0/1/2 are the interface's OWN first three methods -- a raw walk calls a user method as _Release, measured, with no diagnostic. So the enabling piece landed here: RTTI_IF_ID_COM (bit 24) flags refcounted entries, PXXIntfComIMTOf/AddRefAny/ReleaseAny let a variant slot retain and release from the INSTANCE alone with the 16-byte layout untouched, and nil is a refusal rather than a miss. Bit 24 and not bit 32 because PMachineWord is four bytes on i386, where the first version was silently dead. LEFT: the tag and its lowering arm, the six emitters plus PXXVarClear/PXXVarRetain/PyVarSlotIsObj/ClearVariantSlot, and reading back."
 ---
 
 # `v := ifc`
@@ -154,3 +154,111 @@ is the property worth protecting.
 This was p40 and unclaimed from 2026-08-26 because its first section says the
 work is a lifetime-and-payload overhaul. Half of that is gone. Whoever takes it
 should re-cost it against the two items above, not against the original text.
+
+## 2026-09-09 (frankH) — the ifaceId question is MEASURED, and one of the three options is unsafe
+
+frankD's re-scope named the measurement to run before designing against it:
+`_AddRef`/`_Release` live on the INSTANCE, so can a raw helper taking no
+ifaceId reach the same pair through any COM entry in the class's RTTI interface
+table? **Half yes, and the other half would have called a user method.**
+
+### What was measured
+
+Walking `PXXIntfIMTOf(inst, id)` over every id a class carries and reading IMT
+slots 1 and 2 out of each:
+
+```
+TImpl(TInterfacedObject, IFoo, IBar)   id=5,7,8   addref=4216231 release=4216331   (all three)
+TMix (TInterfacedObject, IFoo, ICorba) id=5,7,10  addref=4216231 release=4216331   (all three)
+```
+
+So for a **COM** class every IMT carries the same pair — including a GUID-less
+interface's — and any entry would do. That is the half frankD predicted.
+
+Then the other population, `{$interfaces corba}` on a plain `TObject`
+descendant:
+
+```
+corba id=7  slot0=4259184  slot1=4259296  slot2=4259408
+addr of A1..A3: 4259184     4259296       4259408
+```
+
+**IMT slots 0/1/2 ARE the interface's own first three methods.** A helper that
+took "any entry, slot 2" would call `A3` as `_Release` — right argument count,
+no diagnostic, and it does not crash. Confirmed by building that helper: with
+the flag test replaced by `if True`, the CORBA guard prints `!! A2 CALLED`
+where `_AddRef` belongs and `!! A3 CALLED` where `_Release` belongs.
+
+**Nothing in the entry separates the two populations.** `{GUID:16, IMT:8,
+id:8}` — and a CORBA interface may carry a GUID while a COM one may not, so the
+zero-GUID reading is not a discriminator either.
+
+### So: a COM flag in the ID word, and the helpers it makes safe
+
+Landed here rather than with the variant work, because it is the enabling piece
+and it is testable on its own:
+
+- `RTTI_IF_ID_COM` (bit 24) is set from the INTERFACE's `UClsIsComInterface` —
+  the property that decides whether slot 2 is `_Release` or a user method.
+- Every reader masks with `RTTI_IF_ID_MASK` first, so an entry written by an
+  older emitter (plain index, flag clear) still matches. That is what makes the
+  encoding change free across a bootstrap.
+- `PXXIntfComIMTOf(inst)` returns the first refcounted IMT or **nil, which is a
+  REFUSAL rather than a miss**; `PXXIntfAddRefAny` / `PXXIntfReleaseAny` are
+  no-ops returning 0 when it refuses. A variant slot now has a safe way to
+  retain and release from the instance alone, with the 16-byte layout untouched
+  — the property frankD flagged as worth protecting.
+
+### BIT 24, NOT BIT 32, AND THE FIRST VERSION WAS SILENTLY DEAD ON i386
+
+The flag went in at bit 32 first. Correct on x86-64. On i386 the readers walk
+that word through `PMachineWord`, which is **four bytes** there, so the flag was
+never read, `PXXIntfComIMTOf` found nothing, and both helpers became no-ops
+returning 0 — **a refcount that simply does not happen**, no crash, no wrong
+value, and every x86-64 row still green.
+
+Caught only by running the guard test under `--target=i386`, where it printed
+`com imt found: FALSE` against x86-64's `TRUE`. This is CLAUDE.md's
+native-only-measurement class exactly, and the general form is worth carrying:
+**any field packed above bit 31 is invisible to a 32-bit reader and fails
+silently.** The low 24 bits hold the index because `MAX_UCLASS` is 2048 —
+eleven bits, thirteen of headroom.
+
+### Guards
+
+`test/test_intf_com_flag.pas` and `test/test_intf_com_flag_corba.pas` (two
+files because `{$interfaces corba}` is a whole-unit switch). Identical output on
+x86-64 and i386; compile clean on arm32, riscv32, aarch64 and wasm32.
+
+**The CORBA file's `A1`/`A2`/`A3` print on purpose, and that is the design.** A
+silent `0` cannot tell a refusal from a call that happened to return zero, so
+the wrong answer had to be made LOUD rather than merely absent. The `if True`
+control above is what proves the file can fail, and it is drawn from exactly the
+population that would be mishandled.
+
+The refcount rows assert `1, 2, 1, 0` rather than "non-zero": an `_AddRef` that
+reached the wrong slot still returns something, and that sequence is one only
+the real pair produces. The `UseIt` row is the ENCODING control — ordinary
+interface ARC still goes through the id-keyed path, so its destructor line can
+only print if the masked compare still matches.
+
+### What is left on this ticket
+
+1. **The variant tag itself.** Not a `VariantTagForTk` arm — frankD's
+   correction, and it is right: that function keys on `TTypeKind` alone and an
+   interface is `tyRecord`, indistinguishable there from a plain record, which
+   must keep refusing. The interface case has to be recognised in `ir.inc`'s
+   lowering while the recId is still in hand.
+2. **The clear/retain sites.** Six hand-written emitters plus `PXXVarClear` /
+   `PXXVarRetain` (builtinheap), `PyVarSlotIsObj` (pylib) and promocore's
+   `ClearVariantSlot`. Its own tag with its own arm, NOT membership of
+   `VT_OBJ_FIRST..VT_OBJ_LAST`, whose release is the heap-block protocol and not
+   `_Release`. defs.inc's note on that range says missing one is silent: no
+   crash, no wrong value, just RSS.
+3. **Reading it back** (`IIntf(v)`) — the ifaceId at a cast site is static, so
+   the payload still does not need to carry one.
+
+**Assertion classes for (2), and it needs BOTH directions** (frankD): a leak
+check sees the missing-release direction and is silent on double-free, while a
+variant that outlives its last real reference and is then read fails loudly on a
+double-free and is silent under a leak. Neither instrument alone covers it.

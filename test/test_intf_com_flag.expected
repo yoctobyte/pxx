@@ -1,0 +1,9 @@
+com imt found: TRUE
+com addref: 1
+com addref: 2
+com release: 1
+destroyed
+com release: 0
+F
+destroyed
+done

@@ -8511,6 +8511,23 @@ test-core: $(COMPILER)
 	# so a neighbour always pulled it. Do not add a uses clause to that file.
 	./$(COMPILER) test/test_classref_member_needs_no_uses.pas $(TESTTMP)/test_crefnu26
 	tools/expect_same.sh test_crefnu26 "$$($(TESTTMP)/test_crefnu26)" "$$(cat test/test_classref_member_needs_no_uses.expected)"
+	# The interface table's ID word now carries a COM flag in bit 32, because a
+	# runtime holding only an INSTANCE (a variant slot: 16 bytes for {tag,
+	# payload}, nowhere for an interface id) cannot use the id-keyed IMT lookup.
+	# "Take any entry's IMT, slot 2" is the obvious substitute and it is unsafe:
+	# under {$interfaces corba} on a plain TObject descendant, slots 0/1/2 are the
+	# interface's OWN first three methods. THE CORBA FILE IS THE POSITIVE CONTROL
+	# and its A1/A2/A3 print on purpose -- with the flag check replaced by `if
+	# True` that file prints `!! A2 CALLED` where _AddRef belongs and `!! A3
+	# CALLED` where _Release belongs, measured. A silent 0 cannot tell a refusal
+	# from a call that happened to return zero, which is why the wrong answer is
+	# LOUD rather than merely absent. Two files because {$interfaces corba} is a
+	# whole-unit switch. .expected is pxx's own -- these are compiler internals
+	# with no FPC spelling; the ARC rows are the FPC-agreeing part and are marked.
+	./$(COMPILER) test/test_intf_com_flag.pas $(TESTTMP)/test_ifcom26
+	tools/expect_same.sh test_ifcom26 "$$($(TESTTMP)/test_ifcom26)" "$$(cat test/test_intf_com_flag.expected)"
+	./$(COMPILER) test/test_intf_com_flag_corba.pas $(TESTTMP)/test_ifcorba26
+	tools/expect_same.sh test_ifcorba26 "$$($(TESTTMP)/test_ifcorba26)" "$$(cat test/test_intf_com_flag_corba.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always

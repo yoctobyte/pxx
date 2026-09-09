@@ -526,7 +526,41 @@ const
                             self-host fixedpoint is the running proof of it. Re-run both
                             before growing this again; "safe to grow" is a property of
                             THIS header, not of RTTI headers. }
-  RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8} — the per-class
+  { The interface-table entry's ID word is the interface's class index in its
+    LOW 24 BITS, with RTTI_IF_ID_COM in bit 24 when that interface is
+    REFERENCE-COUNTED ({$interfaces com}, or objfpc's implicit IInterface
+    derivation, which is what real code has). Every reader masks with
+    RTTI_IF_ID_MASK before comparing, so an entry written by an older emitter --
+    a plain id, flag clear -- still matches, which is what makes the encoding
+    change safe across a bootstrap.
+
+    WHY THE FLAG EXISTS AT ALL, and it is a measured answer rather than a
+    defensive one: a runtime holding only an INSTANCE (a variant slot, say) has
+    no interface id, and "call slot 2 of any entry's IMT" is not a safe
+    substitute. Measured 2026-09-09: for a COM class every IMT carries the SAME
+    _AddRef/_Release pair, including a GUID-less interface's -- so any entry
+    would do. But under {$interfaces corba} on a plain TObject descendant, IMT
+    slots 0/1/2 are the interface's OWN first three methods (measured: they are
+    the addresses of A1, A2 and A3), so the same walk would call a user method
+    as if it were _Release. The two populations are indistinguishable from the
+    instance alone, and only one of them is safe to release.
+    BIT 24, NOT BIT 32, AND THAT IS NOT A STYLE CHOICE. The flag was written at
+    bit 32 first and was correct on x86-64 and SILENTLY DEAD on i386: the
+    readers walk this word through PMachineWord, which is FOUR BYTES on a 32-bit
+    target, so the flag was never read, PXXIntfComIMTOf found no refcounted
+    entry, and both Any helpers became no-ops that returned 0 -- a refcount that
+    simply does not happen, with no crash and no wrong value. Measured
+    2026-09-09 by running the guard test under --target=i386, where it printed
+    `com imt found: FALSE` against x86-64's TRUE. Any field packed above bit 31
+    has this shape.
+    The low 24 bits hold the index because MAX_UCLASS is 2048 -- eleven bits --
+    so there are thirteen bits of headroom, and a class index can never reach
+    the flag unless MAX_UCLASS grows past 16 million.
+    bug-p-a-variant-cannot-hold-an-interface }
+  RTTI_IF_ID_MASK  = $FFFFFF;
+  RTTI_IF_ID_COM   = $1000000;
+
+  RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8 (see RTTI_IF_ID_COM)} — the per-class
                             interface table. Every implemented interface gets an entry
                             (GUID-less CORBA ones too, GUID = zeros): GetInterface
                             searches it by GUID, and the interface-call path resolves an

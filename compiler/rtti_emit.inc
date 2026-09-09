@@ -1102,7 +1102,17 @@ begin
               for j := 0 to 15 do
                 Data[entryOff + j] := UClsGuidB[IMTIntf[i] * 16 + j];
             AddDataPtrFix(entryOff + 16, IMTOff[i]);
-            PatchDataU64(entryOff + 24, IMTIntf[i]);   { interface id = its class index }
+            { interface id = its class index, plus RTTI_IF_ID_COM when the
+              interface is refcounted. The flag is the only thing that lets a
+              runtime holding just an INSTANCE find a releasable IMT -- see the
+              measurement at RTTI_IF_ID_COM in defs.inc. It is written from
+              UClsIsComInterface of the INTERFACE, not of the implementing
+              class, because that is the property that decides whether slot 2
+              is _Release or a user method. }
+            if UClsIsComInterface[IMTIntf[i]] then
+              PatchDataU64(entryOff + 24, Int64(IMTIntf[i]) or RTTI_IF_ID_COM)
+            else
+              PatchDataU64(entryOff + 24, IMTIntf[i]);
             Inc(k);
           end;
       end;

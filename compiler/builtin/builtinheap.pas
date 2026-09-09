@@ -454,6 +454,9 @@ function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
 function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
+function PXXIntfComIMTOf(inst: Pointer): Pointer;
+function PXXIntfAddRefAny(inst: Pointer): NativeInt;
+function PXXIntfReleaseAny(inst: Pointer): NativeInt;
 procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
 
 { ---- IInterface / TInterfacedObject: the COM root pair (FPC declares them in
@@ -3572,6 +3575,15 @@ const
   PXXH_RTTI_IFSIZE  = 32;
   PXXH_RTTI_IF_IMT  = 16;
   PXXH_RTTI_IF_ID   = 24;
+  { The ID word is {com-flag: bit 24, class index: low 24} -- defs.inc
+    RTTI_IF_ID_COM. Masked before every compare, so an entry an OLDER emitter
+    wrote (plain index, flag clear) still matches and the encoding change costs
+    nothing across a bootstrap.
+    BIT 24 BECAUSE THIS WORD IS READ THROUGH PMachineWord, WHICH IS FOUR BYTES
+    ON A 32-BIT TARGET. At bit 32 the flag was invisible on i386 and the Any
+    helpers silently became no-ops -- measured, not anticipated. }
+  PXXH_IF_ID_MASK   = $FFFFFF;
+  PXXH_IF_ID_COM    = $1000000;
 
 function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
 var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
@@ -3589,7 +3601,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
-        if NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) = ifaceId then
+        if (NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) and PXXH_IF_ID_MASK) = ifaceId then
         begin
           Result := Pointer(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
           Exit;
@@ -3597,6 +3609,75 @@ begin
       end;
     rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
   end;
+end;
+
+function PXXIntfComIMTOf(inst: Pointer): Pointer;
+{ The IMT of the first REFERENCE-COUNTED interface this instance implements, or
+  nil when it implements none. For a caller that holds only the INSTANCE -- a
+  variant slot, say, which has 16 bytes for {tag, payload} and nowhere to put an
+  interface id.
+
+  WHY NOT SIMPLY THE FIRST ENTRY. Measured 2026-09-09: for a COM class every IMT
+  carries the SAME _AddRef/_Release pair -- three entries on one class, one of
+  them a GUID-less interface, all three identical -- so any entry would do. But
+  under {$interfaces corba} on a plain TObject descendant, IMT slots 0/1/2 are
+  the interface's OWN first three methods (measured: the addresses of A1, A2 and
+  A3), so the same walk would call a user method as if it were _Release, with
+  the right argument count and no diagnostic. Nothing else in the entry
+  separates the two populations: a CORBA interface may carry a GUID and a COM
+  one may not, which is why the flag is in the ID word rather than inferred.
+
+  nil is a REFUSAL, not a miss -- a caller must do nothing rather than guess,
+  which is why this is its own function and not a sentinel ifaceId. }
+var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
+begin
+  Result := nil;
+  if inst = nil then Exit;
+  vmt := Pointer(PMachineWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PMachineWord(Pointer(Int64(vmt) - 8))^);
+  while rtti <> nil do
+  begin
+    cnt := NativeInt(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
+        if (NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) and PXXH_IF_ID_COM) <> 0 then
+        begin
+          Result := Pointer(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
+          Exit;
+        end;
+      end;
+    rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+  end;
+end;
+
+function PXXIntfAddRefAny(inst: Pointer): NativeInt;
+{ _AddRef through any refcounted IMT the instance carries; a no-op returning 0
+  when it carries none. }
+var imt: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if inst = nil then Exit;
+  imt := PXXIntfComIMTOf(inst);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
+  Result := fn(inst);
+end;
+
+function PXXIntfReleaseAny(inst: Pointer): NativeInt;
+{ _Release through any refcounted IMT the instance carries; a no-op returning 0
+  when it carries none. }
+var imt: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if inst = nil then Exit;
+  imt := PXXIntfComIMTOf(inst);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
+  Result := fn(inst);
 end;
 
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
