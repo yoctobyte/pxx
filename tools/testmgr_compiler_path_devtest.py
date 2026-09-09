@@ -50,8 +50,17 @@ RUN = tm.RUN_COMPILER
 # CHANGED rather than only what is true now.
 OLD = __import__("re").compile(r"\./compiler/pascal26(?![-\w])")
 
-# The real row, as `make -n` expands it. Not a paraphrase: the `cd` and the
-# leading `!` are both load-bearing and both are why this went unnoticed.
+# A SYNTHETIC row in the shape the regex has to survive -- deliberately not a
+# copy of any live Makefile line, and it used to claim to be one.
+#
+# It was written as "the real row, as `make -n` expands it, not a paraphrase",
+# and by the time it landed that was false: the live row resolves the binary
+# with `readlink -f` before its `cd`, so it carries no relative prefix at all.
+# The aim check at the bottom of this file pinned the same stale spelling and
+# was born red because of it. A fixture that CLAIMS to be live invites exactly
+# that, so this one says what it is: the `cd` and the leading `!` are the
+# load-bearing parts -- the `!` is why the defect went unnoticed, since a
+# missing binary made the step exit 0 and pass.
 LIBMANIFEST = ("cd test/libmanifest && ! ../../compiler/pascal26 "
                "unitalias_no_row.pas /tmp/t/out > /tmp/t/out.log 2>&1")
 PLAIN = "./compiler/pascal26 test/x.pas /tmp/t/x"
@@ -122,19 +131,48 @@ def t_bool_search_does_not_move_so_pin_built_cannot():
     return "bool(search) identical on all 7 spellings; pin_built pinned"
 
 
-def t_the_real_recipe_row_still_exists_and_still_spells_it_that_way():
-    """AIM THE GUARD. Everything above tests a string literal; if the Makefile
-    row were respelled `./$(COMPILER)` to dodge the regex -- which the ticket
-    explicitly forbids, because the `cd` is the point of that test -- these
-    guards would all pass while guarding nothing.
+def t_the_real_recipe_row_still_runs_from_inside_its_own_directory():
+    """AIM THE GUARD -- AT THE PROPERTY, NOT AT A SPELLING.
+
+    Everything above tests a string literal. What makes those literals worth
+    testing is that some recipe really does invoke the compiler from INSIDE a
+    subdirectory, so a relative prefix has to survive the rewrite. Without such
+    a row the regex guards nothing.
+
+    THIS GUARD WAS BORN RED, AND THAT IS THE LESSON IT NOW CARRIES. It first
+    asserted the literal `cd test/libmanifest && ! ../../$(COMPILER)`, taken
+    from the TICKET's description of the row rather than from the tree in front
+    of it. That string was already absent at this file's own parent commit, so
+    the guard could never pass -- it was not a regression it detected, it was
+    one it manufactured, and it read as a failure of whatever landed beside it.
+    An assertion written from a report of the code pins the report, not the
+    code. Grep the tree before pinning a live line.
+
+    The row had been respelled to resolve the binary with `readlink -f` BEFORE
+    the `cd`. That is a better fix than the one this guard remembered, and the
+    opposite of a dodge: an absolute path cannot be mangled by a prefix rewrite
+    at all. So the spelling was never the property -- the `cd` is, and the `!`
+    beside it, because that row asserts a REFUSAL and its exit code is what the
+    compiler-path bug was silently inverting.
+
+    Note for whoever works
+    bug-t-three-compiler-spellings-opt-out-of-the-testmgr-snapshot-silently:
+    this row is now one of those opt-outs. `readlink -f ./$(COMPILER)` is not
+    matched by COMPILER_PATH_RE, so the job runs the worktree binary rather
+    than the per-run snapshot. Correct today because the snapshot is a copy of
+    it; wrong exactly when a rebuild lands mid-run.
     """
     mk = os.path.join(os.path.dirname(HERE), "Makefile")
     with open(mk, errors="replace") as f:
-        text = f.read()
-    assert "cd test/libmanifest && ! ../../$(COMPILER)" in text, (
-        "the libmanifest row no longer invokes ../../$(COMPILER) — either it "
-        "was respelled to suit the harness (do not), or it moved")
-    return "test/libmanifest still compiles from inside its own directory"
+        lines = f.read().splitlines()
+    hits = [ln for ln in lines if "cd test/libmanifest" in ln and "!" in ln]
+    assert hits, (
+        "no Makefile row compiles from inside test/libmanifest with a `!` "
+        "refusal any more. Either the row moved, or it was flattened to run "
+        "from the repo root -- which would leave every literal above testing a "
+        "prefix no recipe produces. Do NOT satisfy this by editing the "
+        "Makefile back: check what the row does now, and guard THAT.")
+    return "a recipe still refuses from inside test/libmanifest (%d row(s))" % len(hits)
 
 
 def main():
@@ -144,7 +182,7 @@ def main():
                t_the_ordinary_spelling_is_unchanged,
                t_the_managed_and_debug_binaries_are_still_excluded,
                t_bool_search_does_not_move_so_pin_built_cannot,
-               t_the_real_recipe_row_still_exists_and_still_spells_it_that_way):
+               t_the_real_recipe_row_still_runs_from_inside_its_own_directory):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going

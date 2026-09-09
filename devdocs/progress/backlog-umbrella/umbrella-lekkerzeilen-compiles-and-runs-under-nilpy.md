@@ -9,7 +9,7 @@ created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
-  - bug-n-a-class-body-cannot-alias-a-method-defined-above-it
+  - bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed
   - feature-n-the-array-module
   - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
   - bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
@@ -195,3 +195,38 @@ of the backlog.
 seven**, and this ticket is about `/home/neo/lekkerzeilen`, which matches his
 description (marine, new, Python, told about pxx) and whose README names pxx
 explicitly. If he meant a different tree, this ticket is about the wrong one.
+
+## RE-MEASURED 2026-09-09 (frankB) — blocker 1 is fixed and blocker 1b took its place
+
+`compiler/pascal26` sha256 `57ba8b0c2c8d`, every `lekkerzeilen/*.py` compiled
+one by one. **`undefined variable (__mul__)` is gone from every module.**
+
+The seven modules it blocked are **still blocked, and by one line again**:
+`math3d.py:287`, `f = (target - eye).normalized()` inside `Mat4.look_at`. Filed
+as [[bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed]]
+and wired above in place of the closed row.
+
+**That residual is NOT new and it was not introduced by the fix.** The PINNED
+binary, which predates it entirely, gives the identical error on the identical
+line once the alias line is deleted by hand; with the alias line present it
+gives the old `54: undefined variable (__mul__)`. Two binaries, one of which has
+never seen the change — the control fails differently, which is the point of
+running it.
+
+Per-module outcome today (23 files under `lekkerzeilen/`, a wider denominator
+than the 16 "runtime modules" the summary counts — not the same number, so do
+not read it as a delta against 3):
+
+```
+compile clean  5   geometry, scenery, shaders, rd, __init__
+parenthesised receiver (blocker 1b)   8   math3d wind rig vessel sim traffic wake __main__
+array                                 3   app audio world
+ctypes                                2   capture gfx
+collections.deque                     1   chart
+math.atan2                            1   hud
+str.join overload                     1   text
+queue                                 1   gauges
+```
+
+`wake` and `__main__` are two modules the earlier census did not list under
+blocker 1; they fail on 1b through the same import of `math3d`.

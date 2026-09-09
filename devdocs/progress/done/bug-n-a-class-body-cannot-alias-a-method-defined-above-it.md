@@ -3,7 +3,7 @@ slug: bug-n-a-class-body-cannot-alias-a-method-defined-above-it
 track: N
 prio: 55
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-08
 found-by: frankuser
@@ -43,3 +43,6 @@ rule, which permits changing that source and is deliberately not used here).
 
 Blast radius is the argument: one line, seven modules, because it sits in the
 vector-math module everything imports.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

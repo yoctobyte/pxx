@@ -6547,6 +6547,107 @@ begin
   Result := PyClsAttrEqIdx(TokPos - 1, TokCount);
 end;
 
+function PyClsMethodAliasTarget(nameIdx, stopIdx, ci: Integer): Integer;
+{ `__rmul__ = __mul__` in a class body: the METHOD INDEX its right-hand side
+  names, or -1 when this line is not a method alias.
+
+  `name = earlier_name` in a class body is ordinary Python -- it is how every
+  reflected operator is conventionally spelled, and how `update = __init__`
+  aliases are written throughout real code. It arrived here as a class
+  ATTRIBUTE whose initialiser needs evaluating, so the body evaluated `__mul__`
+  as a VALUE and reported `undefined variable (__mul__)`. That diagnostic reads
+  as "operator overloading is unsupported", which is false and sends the reader
+  at the dunder tables, where nothing is wrong: delete only the alias line and
+  the identical class compiles and gives CPython's answer. One line in
+  lekkerzeilen's math3d.py blocked seven of its sixteen runtime modules.
+  bug-n-a-class-body-cannot-alias-a-method-defined-above-it
+
+  THE DISCRIMINATOR IS FindUMeth, NOT THE SPELLING. Only a bare identifier that
+  is already a METHOD of this class is an alias; `n = 0`, `mode = Inner()` and
+  `x = some_global` are untouched and still take the attribute path. That also
+  makes the rule agree with Python's own without having to model a class
+  namespace: a class body executes top to bottom, so the target must be defined
+  ABOVE the alias -- which is exactly when the member pre-pass has registered
+  it and not before.
+
+  FindUMeth walks the PARENT chain, so an alias of an INHERITED method is
+  accepted where CPython raises NameError (the base's name is not in the
+  deriving body's namespace). Deliberate and left that way: NilPy is upward
+  compatible with CPython in one direction, and accepting what CPython rejects
+  is a feature, not a gap to close.
+
+  ONE HELPER FOR BOTH READERS, for the same reason PyClsAttrEqIdx is one: the
+  pre-pass registers the alias and the class body steps over it, and if they
+  disagree about which lines are aliases then a method is registered that the
+  body then evaluates as a value, or the reverse. }
+var eqAt: Integer;
+begin
+  Result := -1;
+  if ci < 0 then Exit;
+  eqAt := PyClsAttrEqIdx(nameIdx, stopIdx);
+  if eqAt < 0 then Exit;
+  if eqAt + 2 >= stopIdx then Exit;
+  if Tokens[eqAt + 1].Kind <> tkIdent then Exit;
+  { ...and that identifier must BE the whole initialiser. `f = g(1)` and
+    `f = g or h` both start with an identifier and are expressions; claiming one
+    here would bind the alias to g's body and silently drop the rest -- the same
+    trap the literal branch documents, which claimed the `2` of `g = 2 + 3`. }
+  if not (Tokens[eqAt + 2].Kind in [tkNewline, tkDedent, tkEOF]) then Exit;
+  Result := FindUMeth(ci, PyRawName(Tokens[eqAt + 1].SOffset,
+                                    Tokens[eqAt + 1].SLen));
+end;
+
+procedure PyAddClassMethodAlias(ci, nameIdx, stopIdx: Integer);
+{ Register the alias at nameIdx as a real method of ci sharing its target's
+  proc. Called by the member pre-pass only; the class body's own branch just
+  steps the line over. }
+var nm: AnsiString; mi, inhMi, slot, srcMi, srcProc: Integer; srcStatic: Boolean;
+begin
+  srcMi := PyClsMethodAliasTarget(nameIdx, stopIdx, ci);
+  if srcMi < 0 then Exit;
+  { Read the source row BEFORE AddUMeth. AddUMeth RELOCATES this class's method
+    window when another registration has landed inside it, so srcMi can name a
+    different method by the time it returns. }
+  srcProc := UMthProc_[srcMi];
+  srcStatic := UMthIsStatic[srcMi];
+  nm := PyRawName(Tokens[nameIdx].SOffset, Tokens[nameIdx].SLen);
+  mi := FindUMeth(ci, nm);
+  { A name this class ALREADY defines is REBOUND, not duplicated: two rows of
+    one name leave FindUMeth answering with the first, which is the definition
+    Python has just replaced. Keeping the row keeps its VMT slot, which is what
+    an override needs. An INHERITED row is not ours to rebind and falls through
+    to a new row below. }
+  if (mi >= UClsMBase[ci]) and (mi < UClsMBase[ci] + UClsMCount[ci]) then
+  begin
+    UMthProc_[mi] := srcProc;
+    UMthIsStatic[mi] := srcStatic;
+    Exit;
+  end;
+  AddUMeth(ci, StoredName(nm), Length(nm), srcProc);
+  mi := UMthCount - 1;
+  UMthIsStatic[mi] := srcStatic;
+  { The alias dispatches under its OWN name, so it takes the slot that name
+    already holds in the parent (it is an override) or the next free one --
+    the same rule the def path applies, and for the same reason. A static
+    method takes no slot: handing it one consumes a number the subclass's
+    override numbering then disagrees about. }
+  if not srcStatic then
+  begin
+    slot := -1;
+    if UClsParent[ci] >= 0 then
+    begin
+      inhMi := FindUMeth(UClsParent[ci], nm);
+      if inhMi >= 0 then slot := UMthVirSlot[inhMi];
+    end;
+    if slot < 0 then
+    begin
+      slot := UClsVirtCount[ci];
+      UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
+    end;
+    UMthVirSlot[mi] := slot;
+  end;
+end;
+
 { Is the class-body line at CurTok an attribute whose initialiser needs REAL
   evaluation? CurTok is the name, eqAt the index of its '='. A single literal
   followed by the end of the line is the folded-constant case the pre-pass
@@ -33708,6 +33809,27 @@ begin
     else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
             ((i = bodyStart) or
              (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
+            (not fieldsOnly) and
+            (PyClsMethodAliasTarget(i, bodyEnd, ci) >= 0) then
+    begin
+      { `__rmul__ = __mul__` -- a METHOD ALIAS, not an attribute. Registered as
+        a real method sharing the target's proc, so it dispatches, inherits and
+        overrides exactly like the def it names.
+
+        AHEAD OF BOTH ATTRIBUTE BRANCHES, and that ordering is load-bearing
+        here rather than belt-and-braces: the literal branch below cannot claim
+        this line (there is no constant to fold), but the NON-literal one can
+        and did -- it takes any initialiser at all and registers the name as a
+        FIELD, so the alias became an instance field whose expression the class
+        body then evaluated, which is the `undefined variable (__mul__)` this
+        fixes. See PyClsMethodAliasTarget.
+        bug-n-a-class-body-cannot-alias-a-method-defined-above-it }
+      PyAddClassMethodAlias(ci, i, bodyEnd);
+      while (i < bodyEnd) and (Tokens[i].Kind <> tkNewline) do Inc(i);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            ((i = bodyStart) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) and
             { the ANNOTATED shape is a PLAIN class's attribute only. In a
               @dataclass `label: str = ""` is a FIELD, owned by the isDC branches
               below which also record its default in the PyDc* tables and build
@@ -36688,6 +36810,19 @@ begin
 
         A bare `n: int` with no initialiser binds nothing in Python either — it
         is an annotation — so it simply steps over. }
+      { A METHOD ALIAS (`__rmul__ = __mul__`) is none of those. The member
+        pre-pass registered it as a real method, so there is no value to
+        evaluate and no slot to store into — the line is stepped over exactly
+        as an annotation is. Both readers ask the SAME helper; if they
+        disagreed, one of them would leave a method registered whose body the
+        other evaluates as a variable.
+        bug-n-a-class-body-cannot-alias-a-method-defined-above-it }
+      if PyClsMethodAliasTarget(TokPos - 1, TokCount, ci) >= 0 then
+      begin
+        while not (CurTok.Kind in [tkNewline, tkDedent, tkEOF]) do Next;
+        PySkipNewlines;
+        Continue;
+      end;
       clsEqAt := PyClsAttrAssignAt;
       { A LITERAL initialiser goes through the same routine now: its folded
         constant still drives construction, but the attribute's SHARED SLOT — the

@@ -118,3 +118,43 @@ point:
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6aa50d6eb.
+
+## CORRECTION 2026-09-09 (frankB) — two claims in `6aa50d6eb` were false when pushed
+
+**1. "Verified: tools-devtest 161 guard(s) green, a complete run" was not true of
+the tree it shipped on.** The sweep was green against the tree it ran on; 79
+commits were pulled during that session, and one of them had respelled the
+libmanifest row. The number was quoted afterwards as if it described the pushed
+tree.
+
+**This is a THIRD shape of the measure-then-move hazard and the existing rule
+covers it, but not obviously.** CLAUDE.md's sequence (push, let the pull settle,
+**rebuild**, measure) is written about a measurement going stale because the
+tree moved *under* it, and its mirror is a pull *improving* a number you did not
+earn. This one is neither: the measurement was correct when taken and the tree
+moved in the gap between taking it and pushing it, so **the number got
+better-looking by being older** — and nothing in the commit looked wrong,
+because a stale green is indistinguishable from a fresh one. Re-run the cheap
+guards after the rebase, not before it.
+
+**2. The aim check it added was BORN RED and could never have passed.**
+`t_the_real_recipe_row_still_exists_and_still_spells_it_that_way` asserted the
+literal `cd test/libmanifest && ! ../../$(COMPILER)`, which appears **0 times at
+`6aa50d6eb^`** — its own parent. The row had already been respelled to resolve
+the binary with `readlink -f` before the `cd` (`17a0e4bd6`, an ancestor), which
+is a better fix and the opposite of a dodge: an absolute path cannot be mangled
+by a prefix rewrite at all.
+
+**The assertion was written from this TICKET's description of the row, not from
+the tree.** That is the same failure as the census this ticket already records —
+a ticket you have just read is the most available description of the code and it
+is not the code — and it produced a guard that manufactured a regression rather
+than detecting one, reading as a failure of whatever landed beside it. Rewritten
+to assert the PROPERTY (some recipe still invokes the compiler from inside
+`test/libmanifest` with a `!` refusal) rather than a spelling, and the
+`LIBMANIFEST` fixture's "the real row ... not a paraphrase" comment corrected in
+the same pass — a fixture that claims to be live is what invited the stale
+assert.
+
+Found by frank-seven running the loop on seven (160 green, 1 red) and relayed by
+frankuser; both halves re-derived here before acting.

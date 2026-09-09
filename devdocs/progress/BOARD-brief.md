@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:28 unfinished:21 blocked:6 backlog:19 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:55 backlog-pascal:23 backlog-decide:45 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3596 rejected:80`
+`working:28 unfinished:21 blocked:6 backlog:19 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:55 backlog-pascal:23 backlog-decide:45 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3597 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
@@ -82,7 +82,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [C]` bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header (unblocks 1)
 - `[p 75] [N]` bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link (unblocks 1)
-- `[p 75] [N]` bug-n-a-class-body-cannot-alias-a-method-defined-above-it (unblocks 1)
+- `[p 75] [N]` bug-n-a-user-method-on-a-parenthesised-receiver-of-unknown-type-is-not-parsed (unblocks 1)
 - `[p 75] [N]` bug-n-collections-deque-is-missing (unblocks 1)
 - `[p 75] [N]` bug-n-str-join-rejects-an-argument-shape-cpython-accepts (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)

@@ -1,0 +1,58 @@
+# `name = earlier_name` in a class body -- how every reflected operator is
+# conventionally spelled, and the `update = __init__` idiom.
+# bug-n-a-class-body-cannot-alias-a-method-defined-above-it
+#
+# EVERY ROW IS CHOSEN SO THAT THE ALIAS BEING ABSENT GIVES A DIFFERENT ANSWER.
+# The ticket's own repro is `V(3) * 4`, which calls __mul__ and never touches
+# the alias: it proves the line compiles and nothing more, and it would print
+# the same 12 with the alias bound to nothing at all. __mul__ below is
+# deliberately asymmetric (+1) so a reflected call is distinguishable from a
+# forward one, and the reflected rows are the positive control.
+
+
+class Inner:
+    def __init__(self):
+        self.n = 99
+
+
+class V:
+    kind = 5                      # NEGATIVE CONTROL: literal class attribute
+    box = Inner()                 # NEGATIVE CONTROL: expression class attribute
+
+    def __init__(self, x):
+        self.x = x
+
+    def __mul__(self, s):
+        return V(self.x * s + 1)
+
+    __rmul__ = __mul__            # the subject
+
+    def label(self):
+        return "V" + str(self.x)
+
+    tag = label                   # the `update = __init__` idiom, non-dunder
+
+
+class W(V):
+    pass
+
+
+# the reflected operator dispatches THROUGH the alias -- 12 here would mean
+# __mul__ ran instead, and an unbound alias does not compile at all
+print((4 * V(3)).x)
+print((V(3) * 4).x)
+
+# the alias is a real method, callable by its own name
+print(V(3).__rmul__(4).x)
+
+# a NON-dunder alias
+print(V(7).label())
+print(V(7).tag())
+
+# inherited like any other method
+print((4 * W(3)).x)
+print(W(7).tag())
+
+# the negative controls still take the class-attribute path
+print(V(2).kind)
+print(V(2).box.n)
