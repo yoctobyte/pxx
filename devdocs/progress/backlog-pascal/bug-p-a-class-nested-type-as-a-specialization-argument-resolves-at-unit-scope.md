@@ -362,15 +362,21 @@ corpus now stops earlier, at `generics.defaults.pas:3250`, on a different shape.
 ## 2026-09-09 (frankS) — what an unresolved `PT` does downstream, measured
 
 Not a claim about this ticket's cause; a measurement of its consequence on the
-rtl-generics rung, in case it is useful for ranking. When `PT` (the class-nested
-`PT = ^T` of `TEnumerable<T>`, used through a descendant at
-generics.collections.pas:212) is carried into a specialization's mangled name as
-literal text rather than resolving, the alias gains a segment its own `args=`
-does not have — `alias=TCustomPointersEnumerator$UInt32$PT` against
-`args=UInt32` — and the next round reads the longer name back as an argument.
-`PXXDBG=p.mint:*` shows a 55-rung ladder, 10 aliases per rung, ending in
-`too many deferred specializations` only because `MAX_SPECIALIZATIONS = 256`
-stops it.
+rtl-generics rung, in case it is useful for ranking. When the bare `PT` at
+generics.collections.pas:212 is carried into a specialization's name as the
+still-unsubstituted parameter name, the run climbs a 55-rung ladder — 10 aliases
+per rung — ending in `too many deferred specializations` only because
+`MAX_SPECIALIZATIONS = 256` stops it. `p.nspec` names the pump: the seed
+registers a two-argument reference with `nsub=1 subs=T->UInt32`, and each later
+rung's substitution is the previous rung's alias
+(`subs=T->TEnumerable$UInt32$PT` -> `subs=T->TEnumerable$TEnumerable$UInt32$PT$PT`).
+
+**Correction to the first version of this note (`de029d555`), which I also sent
+you by message:** I claimed the alias gained a `$PT` segment its `args=` did not
+have. That was a substring-counting artifact — the alias spells the separator
+and the argument does not. All 872 mints satisfy
+`alias = tmpl + '$' + join('$', args)`. The mangler is not the site; the
+arguments are what runs away.
 
 Filed as
 [[bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]]

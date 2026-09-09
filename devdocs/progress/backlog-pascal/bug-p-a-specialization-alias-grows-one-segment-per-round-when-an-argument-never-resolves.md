@@ -5,58 +5,73 @@ type: bug
 blocked-by: []
 status: open
 owner: frankS
-summary: "The `generics.collections` wall `too many deferred specializations` is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT, not a missing dedup and not a cap that is too small. Measured 2026-09-09 at binary 5e00cec21466 / bab3814ad with `PXXDBG=p.mint:*`: 872 mints, and the aliases form a strict LADDER — 10 distinct aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument (`tmpl=TEnumerable args=TEnumerable$TEnumerable$UInt32$PT$PT` -> `alias=TEnumerable$TEnumerable$TEnumerable$UInt32$PT$PT`). The pump is 110 mints, exactly 55 from `TEnumerator` and 55 from `TCustomPointersEnumerator`, whose ALIAS carries more `$PT` segments than its own `args=` does — so the mangled name is not a function of the argument list, and the surplus segment is what the next round reads back. The unresolved argument is `PT`, the class-nested `PT = ^T` of `TEnumerable<T>` used through a DESCENDANT at generics.collections.pas:144/212; it is carried into the name literally instead of resolving, which is [[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]] territory — NOT PROVEN to be the same defect, and the discriminator is whether the ladder stops once PT resolves. RAISING `MAX_SPECIALIZATIONS` IS NOT THE FIX AND WAS MEASURED: at 1024 the run reaches `token character pool overflow` with one alias carrying ~120 `TEnumerable$` and ~130 `$PT`. The 256 cap is masking a runaway, and `too many deferred specializations` is the mask, not the defect."
+summary: "The `generics.collections` wall `too many deferred specializations` is a NON-CONVERGING SPECIALIZATION LADDER, not a missing dedup and not a cap that is too small. Measured 2026-09-09 at binary 5e00cec21466 / bab3814ad: `PXXDBG=p.mint:*` gives 872 mints whose distinct aliases bucket as 10 per rung across 55 rungs, and `p.nspec` names the pump in one row per rung — the SUBSTITUTION at rung N+1 is rung N's alias (`subs=T->TEnumerable$UInt32$PT` mints `TCustomPointersEnumerator$TEnumerable$UInt32$PT$PT`, whose own registration then reads `subs=T->TEnumerable$TEnumerable$UInt32$PT$PT`). The seed is the shape DbgMintTrace's own comment says the p.mint probe exists to catch: `alias=TCustomPointersEnumerator$UInt32$PT under=TCustomListWithPointers$UInt32 nsub=1 subs=T->UInt32` — a two-argument reference registered with ONE substitution in force, so the second argument is carried into the name as the still-unsubstituted parameter name `PT`. The template is generics.collections.pas:144 `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>)`, used at :212, and `PT` is ALSO the name of `TEnumerable<T>`'s nested `PT = ^T` (:131) — one spelling, two bindings. The per-name deferral cap cannot stop it: `SpecDeferRound` is counted per specName and every rung is a NEW name, so `circular generic specialization` never fires and `too many deferred specializations` (SpecDeferCount vs MAX_SPECIALIZATIONS = 256) is what gives out. RAISING THE CAP IS NOT THE FIX AND WAS MEASURED: at 1024 the run reaches `token character pool overflow` with one alias carrying ~120 `TEnumerable$` and ~130 `$PT`. NOT the mangler: all 872 aliases are exactly `tmpl + '$' + join('$', args)` (0 exceptions), and an earlier revision of this ticket claiming a name-vs-args surplus was a substring-counting artifact, corrected here."
 ---
 
-# A specialization alias grows one segment per round when an argument never resolves
+# A specialization ladder that gains an argument segment per round
 
 **Blocks [[feature-pascal-corpus-generics]]** — this is the `uses Generics.Collections`
 wall on rung 3, at binary `5e00cec21466` (`bab3814ad`).
 
-## What the instrument says
+## The ladder, and the row that names the pump
 
 `PXXDBG=p.mint:*`, driver `uses Generics.Collections`, corpus staged at
-`library_candidates/rtl-generics/packages/rtl-generics/src`:
+`library_candidates/rtl-generics/packages/rtl-generics/src`: **872 mints**, and
+the distinct aliases bucket by how many `TEnumerable$` segments they carry —
+109 at zero, then exactly **10 aliases at each of rungs 1..54**, 3 at rung 55.
+
+`PXXDBG=p.nspec:TCustomPointersEnumerator` says why, one row per rung:
 
 ```
-mints: 872        aliases carrying an already-mangled name in args=: 650
-ladder: 0:109  1:10  2:10  3:10 ... 54:10  55:3     (count of "TEnumerable$" in the alias)
-alias has MORE $PT than args=: 110   — 55 tmpl=TEnumerator, 55 tmpl=TCustomPointersEnumerator
-all 55 mints of TEnumerator$PT are kind=deferred
+alias=TCustomPointersEnumerator$UInt32$PT
+      under=TCustomListWithPointers$UInt32   nsub=1 subs=T->UInt32
+alias=TCustomPointersEnumerator$TEnumerable$UInt32$PT$PT
+      under=TQueue$TEnumerable$UInt32$PT     nsub=1 subs=T->TEnumerable$UInt32$PT
+alias=TCustomPointersEnumerator$TEnumerable$TEnumerable$UInt32$PT$PT$PT
+      under=TQueue$TEnumerable$TEnumerable$UInt32$PT$PT
+                                             nsub=1 subs=T->TEnumerable$TEnumerable$UInt32$PT$PT
 ```
 
-One rung, verbatim:
+The substitution at rung N+1 is the alias minted at rung N. 55 rungs, and the
+only thing that stops it is `MAX_SPECIALIZATIONS = 256`.
 
-```
-PXXDBG p.mint deferred alias=TEnumerable$TEnumerable$TEnumerable$UInt32$PT$PT
-                        tmpl=TEnumerable args=TEnumerable$TEnumerable$UInt32$PT$PT
-```
-
-The argument at rung N+1 *is* the alias minted at rung N. Ten aliases per rung,
-55 rungs, and the only thing that stops it is `MAX_SPECIALIZATIONS = 256`.
-
-## Where it starts
-
-`generics.collections.pas`:
+## Where it starts — one spelling, two bindings
 
 ```pascal
 TEnumerable<T> = class abstract
 public type
-  PT = ^T;                                   // :131 — class-nested
+  PT = ^T;                                                          // :131
 ...
-TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);   // :144
+TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);  // :144
 ...
-  TPointersEnumerator = class(TCustomPointersEnumerator<T, PT>)       // :212
+  TPointersEnumerator = class(TCustomPointersEnumerator<T, PT>)      // :212
 ```
 
-At :212 the bare `PT` is the nested type INHERITED from `TEnumerable<T>`. It does
-not resolve; it is carried into the mangled name as the literal text `PT`, and
-the seed row shows the surplus directly — `alias=TCustomPointersEnumerator$UInt32$PT`
-against `args=UInt32`. A name that is not a function of its arguments cannot
-dedup against a previous registration, so every round mints rather than matches.
+At :144 `PT` is the template's own SECOND PARAMETER. At :212 the bare `PT` is
+the nested type inherited from `TEnumerable<T>`. The seed row registers the :212
+reference with **`nsub=1`, `subs=T->UInt32`** — one substitution for a
+two-argument reference — so the second argument goes into the alias as the
+literal parameter name `PT`. That is precisely the defect shape `DbgMintTrace`'s
+own comment says the `p.mint` probe was written to catch: *"an argument that is
+still a template PARAMETER name … means the mapping through `SpecSub*` in
+`NestedSpecArg` did not happen or ran under the wrong substitution set."*
 
-The corpus's own comment above :144 reads `// error: no memory left for
-TCustomPointersEnumerator<PT> version` — fpc 3.2.2 nevertheless compiles the file.
+**What is NOT yet measured, and it is the next question:** why round N+1's `T`
+comes back wrapped as `TEnumerable$<round N>$PT` — i.e. why the resolution of
+`PT` lands as the FIRST argument of a fresh outer specialization instead of
+filling the second slot of the existing one. Do not fix from the paragraph above
+without measuring that; it is a reading of two probes, not a third measurement.
+
+## Why nothing bounds it
+
+There IS a round cap and it cannot see this: `SpecDeferRound[]` is counted per
+`specName`, and `circular generic specialization` fires only when ONE name is
+deferred more than `MAX_SPECIALIZATIONS` times. Every rung is a new name, so
+each one is deferred once and the counter never climbs. What gives out is
+`SpecDeferCount` — the number of DISTINCT deferred specializations — reported as
+`too many deferred specializations`. A ladder is invisible to a per-name cap by
+construction; only a cap on total deferrals, or on argument-name depth, would
+see it.
 
 ## Two things NOT to do
 
@@ -64,20 +79,23 @@ TCustomPointersEnumerator<PT> version` — fpc 3.2.2 nevertheless compiles the f
   `860aca3da02e`, experiment reverted, not landed) trades the diagnostic for
   `pascal26:30: error: token character pool overflow` with ~120 `TEnumerable$`
   and ~130 `$PT` in one alias. Same runaway, worse readout.
-- **Do not add a dedup on the alias string.** It would collapse rung N and rung
-  N+1 only if they were the same name, and they are not — by construction.
+- **Do not go after the mangler.** All 872 mints satisfy
+  `alias = tmpl + '$' + join('$', args)`, zero exceptions. **The first revision
+  of this ticket (`de029d555`) claimed 110 mints whose alias carried more `$PT`
+  than their `args=`, and that was a counting artifact** — the alias spells the
+  separator (`$PT`) and the argument does not (`PT`), so the substring counts
+  differ for names that agree exactly. The name IS a function of the arguments;
+  the arguments are what runs away.
 
-## Where the fix belongs
+## Relation to the nested-type ticket
 
-Either the mangler must derive the alias from the substituted argument list ONLY
-(so a name can never gain a segment its `args=` does not have), or `PT` must
-resolve at :212 so the argument list stops carrying an unresolved name. The
-second is frankZ's ticket. **The first is testable independently of it** and is
-the reason this is filed separately: the 110-row surplus is a property of the
-mangler, measurable in one run, and it is what turns an unresolved argument into
-a runaway instead of a plain `unknown type`.
+[[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]]
+is adjacent and **deliberately not merged**: that ticket's own summary says it is
+not this rung's blocker, and `unknown type: PT` here was cleared by `1c16d4523`.
+This ticket does not depend on it owning anything. The question that would merge
+them: make the :212 `PT` resolve to `TEnumerable<T>.PT` and see whether the mint
+count drops to one rung.
 
 **Dead end already paid for:** extending `CollectHoistCandidates` to walk the
 ancestor chain (so `PT` is found through `TEnumerable<T>`) HANGS this driver —
->90s, 176 mint lines, then `unknown type: TList$UInt32$PT`. Recorded on frankZ's
-ticket too.
+>90s, 176 mint lines, then `unknown type: TList$UInt32$PT`.
