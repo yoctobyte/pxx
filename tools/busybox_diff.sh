@@ -1238,6 +1238,7 @@ run_cases() {   # $1 = runner, $2 = install dir
 }
 
 RC=0
+NSKIP=0   # targets that never ran at all -- see the verdict block
 
 make_wrappers() {
   # One wrapper .c per translation unit, each carrying the SAME preamble the
@@ -1481,6 +1482,7 @@ target_bits() {
 }
 
 NOCMP=0        # targets that BUILT but were never compared to an oracle
+NCMP=0         # targets that were actually compared to an oracle (PASS or FAIL)
 WANT32=0
 for t in $TARGETS; do
   [ "$(target_bits "$t")" = 32 ] && WANT32=1
@@ -1643,6 +1645,7 @@ for t in $TARGETS; do
   if [ "$SEPARATE" -eq 1 ]; then
     if ! sep_probe "$t"; then
       printf '  note    %-8s skipped: %s\n' "$t" "$SEP_WHY"
+      NSKIP=$((NSKIP+1))
       continue
     fi
     rm -rf "$WORK/obj"; mkdir -p "$WORK/obj" "$WORK/tu"
@@ -1777,6 +1780,7 @@ for t in $TARGETS; do
     oracle_out="$WORK/oracle_gcc.out"; oracle_name="gcc oracle"
   fi
 
+  NCMP=$((NCMP + 1))
   if cmp -s "$oracle_out" "$WORK/pxx_$t.out"; then
     printf '  PASS    %-8s byte-identical to the %s over %d cases\n' \
            "$t" "$oracle_name" "$NCASES"
@@ -1799,6 +1803,22 @@ done
 # over nothing that looks like a result. It is not RED either, because on a host
 # without multilib no i386 run could ever be anything else, and a verdict that
 # is permanently RED teaches people to ignore RED.
+#
+# AND A TARGET THAT NEVER RAN IS THE SAME HOLE ONE STEP EARLIER, which the
+# paragraph above did not cover: `--separate --targets aarch64' prints one
+# `note ... skipped' line and then GREEN, because sep_probe's `continue' is
+# taken before anything can set RC, NCMP or NOCMP. Measured 2026-09-09 at
+# 049c379fd2df: a run that compared NOTHING AT ALL -- no objects, no cases, no
+# subject binary -- said GREEN and BUSYBOX-DIFF-COMPLETE, which is exactly the
+# result-over-nothing this script refuses everywhere else. The positive token
+# is per-RUN and cannot see it. NOCMP counts targets that BUILT and were not
+# compared; NSKIP counts targets that did not build, and only the sum tells you
+# whether any subject ran.
+if [ "$RC" -eq 0 ] && [ "$NCMP" -eq 0 ] && [ "$NOCMP" -eq 0 ] && [ "$NSKIP" -gt 0 ]; then
+  printf 'busybox-diff: NO RESULT -- all %d requested target(s) were skipped; nothing was built and nothing was compared (see the notes above)\n' "$NSKIP"
+  printf 'BUSYBOX-DIFF-COMPLETE\n'
+  exit 2
+fi
 if [ "$RC" -ne 0 ]; then
   printf 'busybox-diff: RED\n'
 elif [ "$NOCMP" -gt 0 ]; then

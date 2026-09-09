@@ -3,12 +3,12 @@ slug: feature-busybox-kiosk-selfhosting-target
 title: "A bootable image: busybox userland + shell + the self-hosting compiler, running a kiosk app under qemu-system"
 track: B
 prio: 80
-type: feature
-blocked-by: []
+type: umbrella
+blocked-by: [feature-a-object-output-for-arm32-and-aarch64]
 status: new
 created: 2026-08-30
 owner: ""
-summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1, 2, 2b AND 3 ARE DONE. As of 2026-09-04 the userland is 258 APPLETS built busybox's own way -- 400 translation units, 400 objects, one real link, 621 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`) -- and it BOOTS AS PID 1 under qemu-system-x86_64 with that same case list re-run inside the guest and compared byte for byte (`tools/mkkiosk.sh --busybox= --cases=`, feature-b-a-bootable-image-...). With --selfhost it reaches a SELF-HOST FIXEDPOINT INSIDE THAT VM (stage1 == stage2, seeded by pinned v403 against HEAD sources), and the kiosk app answers, so the owner's sentence -- busybox userland, shell, self-hosting compiler, kiosk app -- is met end to end on x86-64 with every one of those built by pxx. aarch64 is proven at 26 applets by unity build and still waits on an --emit-obj object writer. WHAT IS OPEN is no longer kernel-or-rootfs (settled by measurement 2026-08-30): it is aarch64, and running applets with REAL ARGUMENTS. That last is a measurement, not a ratio (feature-c-corpus-busybox-394-applets): frankc-af's 374-applet corpus -- 506 objects, 853 cases BYTE-IDENTICAL to the gcc oracle, GREEN -- was green on the same binary whose `uname -a` printed `Linux` eight times, because the corpus invokes applets with `--help` and `--help` prints a string literal. A wider, greener corpus, equally blind. The miscompile behind it (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently) is FIXED in 62463923f; the blindness that hid it is not, and frankD's real-argument case group (d0104ec8e) is the answer to it."
+summary: "RE-MEASURED AT HEAD 2026-09-09 (8ea912a48, binary 049c379fd2df): x86-64 at the 394-applet scope is GREEN again -- 521 of 521 TUs become objects, they link, and the binary is byte-identical to the gcc oracle over 938 cases (`tools/busybox_diff.sh --separate --targets x86_64`). It was RED at 516 of 521 when this attempt started, five TUs refusing on `undeclared identifier used as value` -- four crtl constant gaps and one compiler bug (a call in a VLA bound), all fixed in 9b0c07c2d and 8ea912a48. The aarch64 SEPARATE build is measured BLOCKED, by the compiler`s own words: `--emit-obj: no object writer for --target=aarch64; supported: x86-64, i386, xtensa, riscv32`, which is why this umbrella`s one blocked-by edge is [[feature-a-object-output-for-arm32-and-aarch64]] and nothing else -- the attempt named it, the backlog did not. aarch64 UNITY is green at HEAD at the rung-2 scope (2 applets, 28 TUs, 29 cases byte-identical); the 26-applet unity figure below was NOT re-run, and a different arbitrary 26 does not compile under gcc either, so that number stands or falls on its own applet set. TYPED `umbrella` 2026-09-09: this ticket called itself one in its own body while carrying `type: feature` and `blocked-by: []`, so progress.py:531 read it as a unit of work and its 80 pushed onto nothing. --- ORIGINAL: Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1, 2, 2b AND 3 ARE DONE. As of 2026-09-04 the userland is 258 APPLETS built busybox's own way -- 400 translation units, 400 objects, one real link, 621 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`) -- and it BOOTS AS PID 1 under qemu-system-x86_64 with that same case list re-run inside the guest and compared byte for byte (`tools/mkkiosk.sh --busybox= --cases=`, feature-b-a-bootable-image-...). With --selfhost it reaches a SELF-HOST FIXEDPOINT INSIDE THAT VM (stage1 == stage2, seeded by pinned v403 against HEAD sources), and the kiosk app answers, so the owner's sentence -- busybox userland, shell, self-hosting compiler, kiosk app -- is met end to end on x86-64 with every one of those built by pxx. aarch64 is proven at 26 applets by unity build and still waits on an --emit-obj object writer. WHAT IS OPEN is no longer kernel-or-rootfs (settled by measurement 2026-08-30): it is aarch64, and running applets with REAL ARGUMENTS. That last is a measurement, not a ratio (feature-c-corpus-busybox-394-applets): frankc-af's 374-applet corpus -- 506 objects, 853 cases BYTE-IDENTICAL to the gcc oracle, GREEN -- was green on the same binary whose `uname -a` printed `Linux` eight times, because the corpus invokes applets with `--help` and `--help` prints a string literal. A wider, greener corpus, equally blind. The miscompile behind it (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently) is FIXED in 62463923f; the blindness that hid it is not, and frankD's real-argument case group (d0104ec8e) is the answer to it."
 ---
 
 # The target, in the owner's words
@@ -93,8 +93,15 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    the shell and every tool are pxx-built. **The cross-CPU half is what is left**,
    and it is the strictly stronger claim: blocked on
    [[feature-a-object-output-for-arm32-and-aarch64]] (no aarch64 `--emit-obj`, so
-   no aarch64 busybox) and on
-   `bug-a-the-compiler-cannot-cross-build-itself-for-aarch64`. Related and not
+   no aarch64 busybox) and on a SECOND TICKET THIS PARAGRAPH NAMED AND THAT DOES
+   NOT EXIST: `bug-a-the-compiler-cannot-cross-build-itself-for-aarch64` has
+   never been a file in this repo (`git log --diff-filter=A` over every branch
+   finds nothing), and the nearest real work,
+   [[feature-cross-selfhost-aarch64]], is in `done/`. A bare slug in prose is
+   invisible to `check`, which reads `blocked-by:` — so this one read as a live
+   blocker for as long as anyone believed it. Whether the compiler cross-builds
+   itself for aarch64 today is NOT settled by removing the citation; it is
+   unmeasured, and saying so is the honest state. Related and not
    identical:
    `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one`.
 5. **The kiosk application** — **MET on x86-64, and deliberately NOT filed.**
