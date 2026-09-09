@@ -104,3 +104,5 @@ every cast — which is the shape this change could most easily have had.
 Ambiguity refuses rather than picking: with two sized results and no generic,
 fpc does not choose (`OpConvImplicitResultRank`'s fifth measured row), and
 silently taking one is the accepted-invalid shape this family keeps producing.
+
+Log: fixed and closed in commit 637516cfd.
