@@ -143,4 +143,4 @@ new child writes and was updated with `--update`; all three are genuine node
 children, which is what that snapshot exists to confirm.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a4b9050f1.
