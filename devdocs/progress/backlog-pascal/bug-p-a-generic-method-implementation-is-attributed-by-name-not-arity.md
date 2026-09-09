@@ -139,3 +139,69 @@ made arity-aware, `SpecTemplateIdx` used in `EmitLateNestedSpecDecls` -- exists
 in the frankS checkout as a scratch patch and **is not on origin**. It is the
 first half only, it makes the repro above fail, and it is deliberately unlanded.
 Its value is this write-up; do not go looking for the diff.
+
+## 2026-09-09 (frankS, later) — the second half is NOT an expression-position gap, and I said it was
+
+Measured at HEAD `7bbab967c` with the four-site patch applied, probes added for
+this question and then removed with it.
+
+### Correction first
+
+I wrote above that the second half is "a `specialize NAME<args>` group in
+EXPRESSION position inside a streamed body is never collapsed". **That is the
+symptom, not the cause, and the cause is nothing to do with expression
+position.** The group never carries the `specialize` marker in the first place,
+and `NestedSpecGroup` requires it, so the collapse arm cannot see the group at
+all — measured, `gEnd=-1`.
+
+### What the marker is missing FROM: a snapshot
+
+`DelphiRewriteGenericUses` injects `specialize` into the MAIN token stream when
+a template is declared. `BufferTemplateMethodsAhead` copies method bodies into
+the template arena at SPECIALIZATION time. In `generics.defaults.pas` those two
+orders cross:
+
+```
+line  994   TStringComparer = class(TGStringComparer<string>);    <- specialization
+line 1002   TGOrdinalStringComparer<T, THashFactory> = class(...) <- declaration
+line 3250   FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create;
+```
+
+Two probes, one run:
+
+```
+PXXDBG p.ahead  buffer tmpl=TGStringComparer hdrline=3247 toks=37
+                specialize-tokens=1 atparseline=994
+PXXDBG p.dgen   inject specialize before TGOrdinalStringComparer tok=153453 line=3250
+```
+
+The body at `:3247` is copied while the parser is at **line 994** — eight lines
+before `TGOrdinalStringComparer` exists. Its own sweep injects the marker at
+`:3250` afterwards, into the main stream, and **nothing re-visits the copy.** The
+arena holds one `specialize` (the return type's, injected by an earlier sweep)
+and not the one that matters.
+
+**A copy is a snapshot, and this one is taken mid-rewrite.** The rewrite runs to
+a fixed point PER TEMPLATE, so "the stream has been rewritten" is only ever true
+of the templates declared so far — and buffering ahead exists precisely to get in
+front of the parser, i.e. in front of later declarations.
+
+### What this means for a fixer
+
+- The four-site arity fix is correct and is NOT enough on its own; with it, the
+  30-line `wunit` repro above compiles again (the fourth site is
+  `BufferTemplateMethodsAhead`, which also matched by name).
+- The remaining work is the snapshot: either re-sweep the buffered arena range
+  when a template is declared later, or buffer lazily, or record which templates
+  a buffered range predates and re-rewrite on use. All three are real changes to
+  the rewrite/buffer boundary and none is a one-liner.
+- Do not aim at the expression parser. It is behaving correctly on the tokens it
+  is handed.
+
+### One number withdrawn
+
+I said earlier that `uses Generics.Defaults` alone compiled while
+`uses Generics.Collections` failed. At the current HEAD **both fail at
+`:3250`** — I measured the first at binary `417ee5636a72`, the tree has moved
+since, and the difference was never mine. Re-measure before quoting a
+driver-dependent wall on this rung.
