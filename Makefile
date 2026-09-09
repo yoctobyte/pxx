@@ -13741,6 +13741,19 @@ test-core: $(COMPILER)
 	grep -q "unit source not found: scoped.alias" $(TESTTMP)/unitalias_oos.log
 	! ./$(COMPILER) -Futest/libmanifest test/libmanifest/unitalias_no_row.pas $(TESTTMP)/unitalias_norow26 > $(TESTTMP)/unitalias_norow.log 2>&1
 	grep -q "unit source not found: scoped.nosuchrow" $(TESTTMP)/unitalias_norow.log
+	# THE SAME FILE, compiled from INSIDE its own directory as a bare filename.
+	# dir='' so PxxLibFindManifest exits before the walk begins and the manifest
+	# is never read -- and the message is identical to a genuinely missing unit,
+	# which is what makes it cost an hour: the natural next step is to doubt the
+	# feature rather than the invocation. The note is the whole fix. THE SCOPING
+	# RULE IS DELIBERATELY UNCHANGED -- widening the walk to the cwd would let a
+	# stray cfg in the invocation directory silently redefine somebody's build.
+	# The row ABOVE is this row's control: one file, one compiler, two
+	# invocations, and the note must appear in exactly one of them. A note that
+	# fired in both would be noise, and one that fired in neither is the bug.
+	cd test/libmanifest && ! ../../$(COMPILER) unitalias_no_row.pas $(TESTTMP)/unitalias_norow_bare26 > $(TESTTMP)/unitalias_norow_bare.log 2>&1
+	grep -q "pxxlib.cfg in the current directory and it was NOT consulted" $(TESTTMP)/unitalias_norow_bare.log
+	! grep -q "pxxlib.cfg in the current directory" $(TESTTMP)/unitalias_norow.log
 	# `.member` on an ARRAY ELEMENT whose type is not a record. The fall-through
 	# built a field access at offset 0 and read the element's own bytes:
 	# a[0].NoSuchMember COMPILED and printed a pointer as an integer, and

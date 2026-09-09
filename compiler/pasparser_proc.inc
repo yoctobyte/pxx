@@ -4645,6 +4645,9 @@ var
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
   savedNestedComments, savedDelphiMode, savedUnitImplCU: Boolean;
   unitAlias: AnsiString;   { pxxlib.cfg `unitalias` answer for a dotted name }
+  manBody: AnsiString;     { scratch for the "manifest present but not consulted" note }
+  manDotted: Boolean;      { the unresolved name has a dot, so a unitalias row could have answered it }
+  manDi: Integer;
   unitNeedsText: Boolean;
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
@@ -5560,7 +5563,33 @@ begin
       ConcatThree('import: no unit named ', Copy(lo, 7, Length(lo) - 6),
                   ' and no shim ' + lo, emsg)
     else
+    begin
       ConcatThree('uses: unit source not found: ', lo, '', emsg);
+      { A DOTTED name that did not resolve, with a pxxlib.cfg sitting in the
+        INVOCATION directory. PxxLibFindManifest deliberately stops before the
+        cwd -- a manifest is a property of where the SOURCE lives -- and a
+        source named by a BARE FILENAME has dir='' and so gets no manifest at
+        all. Both that and a genuinely absent unit print this same line, so the
+        natural next step is to doubt the feature rather than the invocation;
+        that cost a session an hour once. The resolver is correct that the unit
+        is not there and says nothing about the table it never read, which is
+        this repo's own "correct about something else".
+        THE SCOPING RULE IS NOT CHANGED HERE. This adds a note and nothing else:
+        widening the walk to the cwd would reintroduce exactly the hazard the
+        rule exists to stop (a stray cfg in the invocation directory silently
+        redefining somebody's build). }
+      manDotted := False;
+      for manDi := 1 to Length(lo) do
+        if lo[manDi] = '.' then manDotted := True;
+      if manDotted and PxxReadSmallFile('pxxlib.cfg', manBody) then
+        emsg := emsg + ' -- note: there IS a pxxlib.cfg in the current directory'
+              + ' and it was NOT consulted. A manifest applies to the directory'
+              + ' the SOURCE lives in, and the walk deliberately stops before the'
+              + ' invocation directory, so a source compiled as a bare filename'
+              + ' gets none. If this unit lives here, name it by a path that'
+              + ' includes its directory (or add -Fu for it) so its unitalias'
+              + ' rows apply.';
+    end;
     if diagLine > 0 then
     begin
       ConcatThree('include: Pascal unit source not found: ', diagSpell, '', emsg);
