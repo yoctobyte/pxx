@@ -2984,6 +2984,21 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_p_a_record_static_call_is_checked_like_every_other_call.pas $(TESTTMP)/test_recstatic26
 	@$(TESTTMP)/test_recstatic26 | diff -u test/test_p_a_record_static_call_is_checked_like_every_other_call.expected - \
 	  || { echo 'test_p_a_record_static_call_is_checked_like_every_other_call: FAIL - a legitimate record static/ctor call broke, most likely selfBase'; exit 1; }
+	@# SarShortint/SarSmallint/SarLongint/SarInt64 -- FPC's System ARITHMETIC
+	@# shift-right intrinsics, folded in pasparser_expr.inc to the SAME binop
+	@# the C frontend builds for a signed `>>` (Ord(tkShr)), never the logical
+	@# sibling. They are `internproc` in FPC's systemh.inc, so no unit can
+	@# supply them and a compiler that does not fold them cannot compile source
+	@# that calls them. THE NEGATIVE ROWS ARE THE TEST: an arithmetic and a
+	@# logical shift agree on every non-negative operand, so the positive rows
+	@# in this file are ballast and would pass against the wrong operator. The
+	@# last row is the pair's positive control -- Pascal's own `shr` must still
+	@# answer 4611686018427387900 for Int64(-16) shr 2, so wiring either half
+	@# to the other moves a row. Byte-identical to fpc 3.3.1 on every row.
+	@# Found by attempting umbrella-pxx-compiles-fpc-itself: SarInt64 is the
+	@# first failure of `uses constexp`, at cutils.pas:1322.
+	@./$(COMPILER) test/test_p_the_sar_intrinsics_are_arithmetic_not_logical.pas $(TESTTMP)/test_sar26
+	@tools/expect_same.sh test_sar26 "$$($(TESTTMP)/test_sar26 | tail -n 2)" "$$(printf 'fails=0\nSAR OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

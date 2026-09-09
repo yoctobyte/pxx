@@ -6584,6 +6584,55 @@ begin
         Exit;
       end;
 
+      { SarShortint/SarSmallint/SarLongint/SarInt64(e[, n]): FPC's System
+        ARITHMETIC shift-right intrinsics. systemh.inc declares them
+        `[internproc:fpc_in_sar_x]` / `fpc_in_sar_x_y`, so they have no unit
+        source anywhere and `uses system` cannot supply them — a compiler that
+        does not fold them cannot compile source that calls them, which is why
+        this is a parser arm and not an RTL function.
+
+        Folded to the binop the C frontend already builds for a SIGNED `>>`:
+        `Ord(tkShr)` is the sign-propagating shift and `Ord(tkShrLogical)` is
+        Pascal's `shr`. The pair must stay distinct (defs.inc, tkShrLogical's
+        block) — this arm is the one place in the Pascal frontend that wants
+        the arithmetic half, and spelling it `tkShrLogical` would silently
+        answer FPC's own compiler wrong rather than fail.
+
+        One argument means a shift of 1: FPC declares both a one-arg overload
+        (`fpc_in_sar_x`) and a two-arg one, and the one-arg form shifts once.
+        A user routine of the same name (procIdx>=0) shadows, like Succ/Pred.
+
+        The four names differ only in their DECLARED width, and the fold is
+        width-independent: the argument is a signed type, so it reaches the
+        binop sign-extended and an arithmetic shift right by n < width gives
+        the same bits at any width. Verified against fpc for all four names.
+
+        Found by attempting umbrella-pxx-compiles-fpc-itself: SarInt64 is the
+        first failure of `uses constexp`, at cutils.pas:1322 (LengthSleb128). }
+      if (CaseEqual(name, 'SarShortint') or CaseEqual(name, 'SarSmallint') or
+          CaseEqual(name, 'SarLongint') or CaseEqual(name, 'SarInt64')) and
+         (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; node := CurASTNode;
+        if CurTok.Kind = tkComma then
+        begin
+          Next;
+          ParseExpr; left := CurASTNode;
+        end
+        else
+        begin
+          left := AllocNode(AN_INT_LIT); ASTIVal[left] := 1;
+          ASTTk[left] := Ord(tyInteger);
+        end;
+        Expect(tkRParen, ')');
+        op := AllocNode(AN_BINOP); ASTIVal[op] := Ord(tkShr);
+        ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := ASTTk[node];
+        ASTSemId[op] := NodeSemIdOf(node);
+        CurASTNode := op; LastExprTk := IntToTypeKind(ASTTk[node]);
+        Exit;
+      end;
+
       { CompareByte/CompareChar(b1, b2, len): System memcmp primitives ->
         the __pxxCompareByte builtin (byte-wise; Char is a byte here). Soft
         alias like the statement-side Move/FillChar: rename + re-resolve so
