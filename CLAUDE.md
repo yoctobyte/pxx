@@ -542,6 +542,16 @@ claim** — `OLD.sub()` against `NEW.sub()` per line, which found it. So before
 trusting a count, ask **"what did I have to believe to decide what to count?"**
 A census whose filter restates the hypothesis is not evidence for it, however
 large N is, and N being large is what makes it persuasive.
+**AND THE SAME MISTAKE IN AN ASSERTION IS BORN RED.** Measured the same day,
+same seat, same subject (`6aa50d6eb`): a guard was written to pin a live
+Makefile row, asserting the exact string *the ticket* said was there — and the
+row had already been respelled by another seat, in a commit that is an ANCESTOR
+of the guard's own. It could never have passed once. **An assertion written
+from a REPORT of the code pins the report, not the code**, so it fails on
+arrival and reads as a regression in whatever landed beside it. Both halves of
+that collision were correct fixes; only the guard was wrong. Before pinning a
+live line, `grep` for it in the tree you are committing to — not in the ticket
+that describes it.
 
 **A positive control is not enough on its own — a guard must also be AIMED and
 READ.** Assert that the thing under test actually RAN before you compare its
