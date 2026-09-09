@@ -15006,8 +15006,8 @@
   "wall": 994.5
  },
  "last_idle_tier_try": {
-  "date": "2026-09-09T11:59:03Z",
-  "sha": "020f8e2e5622ef742a8a9d3345f97ea31a2dee38",
+  "date": "2026-09-09T12:26:07Z",
+  "sha": "ff7b4f2edb768905c648f2cdf8892ba0f45368aa",
   "tier": "full"
  },
  "last_opt": {
@@ -15058,6 +15058,7 @@
     "54286c1abc8b7d8a46dd16ceef618ff007d8fcc5",
     "b0d53c73acc6a4d00ff5fe40629f0b33a86d320d"
    ],
+   "range_non_causal": false,
    "src": "test/test_generic_nested_inline_specialize.pas tools/expect_same.sh",
    "status": "fail"
   }
