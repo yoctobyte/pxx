@@ -250,7 +250,13 @@ end;
   trigger is the argument, not the declaration. A template with nested types and
   no such use produces byte-identical output to before. }
 
-const MAX_HOISTED_NESTED = 32;
+{ 32 held while the candidate set was ONE class body. It now spans a class and
+  every ancestor it passes its parameters through to, and rtl-generics chains
+  are four deep with several nested types a rung. The overflow is SILENT -- the
+  scan simply stops recording -- and a dropped candidate degrades to the
+  pre-fix `unknown type`, so it fails in the safe direction but with a
+  diagnostic that points nowhere near the cap. }
+const MAX_HOISTED_NESTED = 96;
 var
   { in-body name, e.g. TPair }
   HoistName  : array[0..MAX_HOISTED_NESTED-1] of AnsiString;
@@ -4398,15 +4404,18 @@ begin
 end;
 
 { Find the nested TYPE declarations of one template's class body and record each
-  one's name and RHS extent. Nothing is hoisted here -- this only builds the
-  candidate set; HoistUsed decides. }
-procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
+  one's name and RHS extent, under a given top-level PREFIX. Nothing is hoisted
+  here -- this only builds the candidate set; HoistUsed decides.
+
+  APPENDS. The prefix is a parameter and the reset is the caller's, because the
+  candidate set spans a class AND ITS ANCESTORS and each rung carries its own
+  name. See CollectHoistCandidates below. }
+procedure ScanTemplateBodyForHoists(ti: Integer; const specName: AnsiString);
 var ts, tc, j, depth, k, pdepth: Integer;
     inTypeSec, isModifier: Boolean;
     nm: AnsiString;
 
 begin
-  HoistCount := 0;
   ts := Templates[ti].TokStart;
   tc := Templates[ti].TokCount;
   depth := 0;
@@ -4491,6 +4500,126 @@ begin
       end;
     end;
     Inc(j);
+  end;
+end;
+
+{ The ANCESTOR of one template, when that ancestor is a template specialized on
+  exactly this template's own parameters in order -- `TListWithPointers<T> =
+  class(TEnumerable<T>)`. Returns its index and its name, or -1.
+
+  DELIBERATELY NARROW, and the narrowness is the whole safety argument. The
+  substitution in force (SpecSub*) is this template's, and it carries over to
+  the ancestor UNCHANGED only when the ancestor's argument list is this
+  template's parameter list verbatim. `class(TEnumerable<Integer>)` or a
+  reordering binds the ancestor's parameters to something else, and hoisting its
+  members under the wrong substitution is a silent wrong type rather than a
+  refusal. So: same names, same order, same count, or nothing. }
+function TemplateSelfParamAncestor(ti: Integer; var aName: AnsiString): Integer;
+var ts, tc, j, k, np: Integer;
+begin
+  TemplateSelfParamAncestor := -1;
+  aName := '';
+  ts := Templates[ti].TokStart;
+  tc := Templates[ti].TokCount;
+  np := TemplateNParams[ti];
+  if (tc < 6) or (np <= 0) then Exit;
+  if TemplateTokens[ts].Kind <> tkClass then Exit;
+  { `class abstract(TEnumerator<PT>)` -- the hint words sit BETWEEN the keyword
+    and the parenthesis, and rtl-generics writes nearly every one of these
+    classes that way. Testing ts+1 for tkLParen refused the whole corpus while
+    passing every hand-written reduction, because nobody writes `abstract` in a
+    fifteen-line repro. Same two words DGenClassOpensBody skips, same reason. }
+  j := ts + 1;
+  while (j < ts + tc) and (TemplateTokens[j].Kind = tkIdent) and
+        (CaseEqual(GetTokenStrFromRaw(TemplateTokens[j].SOffset,
+                                      TemplateTokens[j].SLen), 'abstract') or
+         CaseEqual(GetTokenStrFromRaw(TemplateTokens[j].SOffset,
+                                      TemplateTokens[j].SLen), 'sealed')) do Inc(j);
+  if (j >= ts + tc) or (TemplateTokens[j].Kind <> tkLParen) then Exit;
+  Inc(j);
+  { `specialize` is present in objfpc source and is INSERTED by the Delphi
+    rewrite, so both spellings arrive here and neither is the interesting part. }
+  if (TemplateTokens[j].Kind = tkIdent) and
+     CaseEqual(GetTokenStrFromRaw(TemplateTokens[j].SOffset,
+                                  TemplateTokens[j].SLen), 'specialize') then Inc(j);
+  if (j + 2 >= ts + tc) or (TemplateTokens[j].Kind <> tkIdent) then Exit;
+  aName := GetTokenStrFromRaw(TemplateTokens[j].SOffset, TemplateTokens[j].SLen);
+  Inc(j);
+  if TemplateTokens[j].Kind <> tkLt then Exit;
+  Inc(j);
+  for k := 0 to np - 1 do
+  begin
+    if j >= ts + tc then begin aName := ''; Exit; end;
+    if TemplateTokens[j].Kind <> tkIdent then begin aName := ''; Exit; end;
+    if not CaseEqual(GetTokenStrFromRaw(TemplateTokens[j].SOffset,
+                                        TemplateTokens[j].SLen),
+                     TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k]) then
+      begin aName := ''; Exit; end;
+    Inc(j);
+    if k < np - 1 then
+    begin
+      if (j >= ts + tc) or (TemplateTokens[j].Kind <> tkComma) then
+        begin aName := ''; Exit; end;
+      Inc(j);
+    end;
+  end;
+  if (j >= ts + tc) or (TemplateTokens[j].Kind <> tkGt) then begin aName := ''; Exit; end;
+  TemplateSelfParamAncestor := FindNameableTemplate(aName, np);
+  { ...and the ancestor's OWN parameter names must be the same names, not just
+    the same COUNT. `TEnumerable<TItem> = class type PT = ^TItem` inherited by
+    `TWithPointers<T> = class(TEnumerable<T>)` passes every test above -- the
+    argument list is `T` and it is this template's parameter list verbatim --
+    and its body still says `TItem`, which is not in SpecSubNames. The hoisted
+    RHS would come out `^TItem` and declare a type out of a name that does not
+    exist at unit scope. Refuse instead: the substitution carries over only when
+    both ends spell the parameters the same way. }
+  for k := 0 to np - 1 do
+    if (TemplateSelfParamAncestor >= 0) and
+       (not CaseEqual(TemplateParamNames[TemplateSelfParamAncestor * MAX_TEMPLATE_PARAMS + k],
+                      TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k])) then
+      TemplateSelfParamAncestor := -1;
+  if TemplateSelfParamAncestor < 0 then aName := '';
+end;
+
+{ The candidate set for one specialization: this template's own nested types,
+  and then those of every ANCESTOR it passes its parameters straight through to.
+
+  THE ANCESTOR RUNGS ARE NOT OPTIONAL AND THEIR ABSENCE WAS THE rtl-generics
+  WALL. `TCustomListWithPointers<T> = class(TEnumerable<T>)` names TEnumerable's
+  `PT = ^T` as a generic argument; NestedSpecArg asks SpecSubNames (PT is not a
+  parameter) and HoistedNameFor (PT is not in THIS body), misses both, and the
+  bare spelling `PT` survives into the minted alias and then into the template
+  body that materialises at unit scope -- `unknown type: PT`, which is
+  generics.collections.pas:119/120 and the last wall on the Collections driver.
+  bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
+
+  THE HOISTED NAME IS STABLE ACROSS RUNGS, which is what makes this terminate.
+  The ancestor's member is lifted to `<ancestor>$<the same argument values>$<nm>`
+  -- exactly the name a specialization of the ancestor ITSELF would mint -- so
+  HoistEmitted, which is keyed on the name, recognises it. A scheme whose name
+  grew per rung would defeat that guard and re-emit forever; that is the shape
+  an earlier attempt at this hung on.
+
+  The walk is bounded by the template count, so a malformed or cyclic chain
+  stops rather than spinning. }
+procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString);
+var cur, ai, hops, k: Integer;
+    aName, aSpec: AnsiString;
+begin
+  HoistCount := 0;
+  ScanTemplateBodyForHoists(ti, specName);
+  cur := ti;
+  hops := 0;
+  while hops <= TemplateCount do
+  begin
+    ai := TemplateSelfParamAncestor(cur, aName);
+    if ai < 0 then Exit;
+    if ai = cur then Exit;
+    aSpec := aName;
+    for k := 0 to SpecSubCount - 1 do aSpec := aSpec + '$' + SpecSubValues[k];
+    ScanTemplateBodyForHoists(ai, aSpec);
+    cur := ai;
+    Inc(hops);
   end;
 end;
 

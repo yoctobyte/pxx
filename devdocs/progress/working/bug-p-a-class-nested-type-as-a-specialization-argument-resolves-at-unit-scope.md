@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: working
 owner: frankZ
-summary: "A type named as a SPECIALIZATION ARGUMENT inside a class body is resolved where the class does not yet exist. Class-nested is the case it was found through and NOT the boundary — frankH's `TEnum<TDerived>` inside `TDerived` fails on the class's own unit-scope name; the boundary is \"declared at or after the class's own declaration\". `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is the hoisted prerequisite's INSERTION POINT, not visibility and not the routine-local pass-order arm. Eleven-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild, which attributes THAT and cannot speak to the new wall's cause) and that wall is now generics.defaults.pas:3250, owned by bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity."
+summary: "A type named as a SPECIALIZATION ARGUMENT is resolved where the template body materialises, not where the source wrote it. Three doors, three ways to be in neither table NestedSpecArg consults. DOOR A (a non-generic class, its own or a non-generic ancestor's nested type) and DOOR C (inherited from a GENERIC ancestor, the rtl-generics shape) are FIXED here; DOOR B (the template's own body) always worked. The silent arm now answers 300 where it answered 44. Two regression tests, both byte-matching fpc 3.2.2, both with a clean negative control on a pre-fix binary. STILL OPEN: `unknown type: PT` at generics.collections.pas:120/123/217 is UNMOVED by any of this — one unidentified mint of `TEnumerator<PT>`. The driver now compiles the unit end to end (11 errors, 6m59s) where it used to abort on `duplicate class name TEnumerator$PT`, which is worth having because everything after an abort is unchecked, NOT because a count went down: an aborting run has no count to compare against. NOT a blocker of this ticket and filed separately: bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template, a PRE-EXISTING door-B leak (verified on a binary without this fix) that makes any two-instantiation regression row go red for its own reason."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -516,3 +516,105 @@ on the name, does its job. Bound it to the case where the ancestor's argument
 list is exactly the descendant's own parameters in order (`class(TEnumerable<T>)`
 inside `TListWithPointers<T>`) and the substitution carries over unchanged;
 anything else is refused. That is the next thing to try and it is mine.
+
+## 2026-09-09 (frankZ) — DOOR C: the ancestor chain, and the pre-existing defect it uncovered
+
+`CollectHoistCandidates` is now split: `ScanTemplateBodyForHoists(ti, prefix)`
+appends one body's nested types under a given top-level prefix, and
+`CollectHoistCandidates` calls it for the template and then for every ANCESTOR
+the template passes its parameters straight through to.
+
+**What makes it terminate**, which is the question the earlier hang raised: the
+ancestor's member is lifted to `<ancestor>$<the same argument values>$<nm>` —
+exactly the name a specialization of the ancestor ITSELF would mint. It is
+STABLE across rungs, so `HoistEmitted`, keyed on the name, recognises it. A
+scheme whose name grew per rung would defeat that guard and re-emit forever.
+
+**Three conditions, all required, and refusing is the safe answer to each:**
+
+1. the ancestor's argument list is this template's parameter list verbatim —
+   `class(TEnumerable<Integer>)` or a reordering binds the ancestor's
+   parameters to something else;
+2. the ancestor's OWN parameter names are the same names — `TEnumerable<TItem>`
+   inherited as `<T>` passes (1) and its body still says `TItem`, which is not
+   in `SpecSubNames`, so the hoisted RHS would come out `^TItem` and declare a
+   type from a name that does not exist;
+3. the ancestor must be a template we know.
+
+A refused rung leaves the program exactly as broken as it was.
+
+### `class abstract(...)` — a control drawn from the wrong population, and it cost a corpus run
+
+The first cut tested the token immediately after `class` for `(`. Every
+hand-written reduction passed. **The entire rtl-generics corpus failed**,
+because the hint words sit BETWEEN the keyword and the parenthesis and
+rtl-generics writes nearly every one of these classes as `class abstract(...)`.
+Nobody puts `abstract` in a fifteen-line repro, so the repro population and the
+corpus population disagree on exactly the token the walk was reading. The test
+now carries both spellings on the ladder.
+
+### The two-instantiation row is NOT in this ticket's test, and why
+
+Extending the walk made a PRE-EXISTING defect reachable from more places, and it
+is filed separately with its own 21-line repro:
+`bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`.
+
+`HoistName`/`HoistFull` are one global table that `CollectHoistCandidates`
+resets per specialization. `NestedSpecArg` reads it eagerly and bakes the answer
+into `NSpecArg`, so the answer is right for whatever the table held AT SCAN
+TIME — and a method-implementation header is one token range shared by every
+specialization, scanned after a later one has refilled the table. Two
+specializations of `TOwner<T>` mint `TPtrs$LongInt$TOwner$Byte$PT`: LongInt's
+header paired with **Byte's** hoisted PT, then `unknown type` on a name the
+compiler invented itself.
+
+**Not mine, and that was checked rather than assumed:** the repro fails
+identically on `c8ba1d666f79` (`3a89c6184`), which contains door A and not
+door C. **One instantiation is green**, which is why every hoisting test in
+`test/` passes while the defect is live — none of them specializes a template
+twice.
+
+### Corpus state
+
+`uses Generics.Defaults` alone is NOT this ticket. At HEAD it takes 30.8s and
+fails with `unresolved forward: TInstance.CreateSelector`, the first error and
+nothing before it; with door C stashed and the compiler rebuilt, 31.0s and
+byte-identical text. That wall is somebody else's.
+
+`uses Generics.Collections` before door C aborted early on `duplicate class name
+TEnumerator$PT`. With the first door-C cut — the one that refused every
+`class abstract` ancestor — it ran 7m17s to completion and surfaced 12 errors,
+reaching generics.defaults.pas:1054 and generics.collections.pas:1354. **The
+extra time is extra work, not a hang**: it no longer aborts, so it compiles the
+rest of the unit.
+
+### The corpus numbers, and a wrong one I sent a peer
+
+| tree | outcome |
+| --- | --- |
+| HEAD, door A only | **ABORTS** on `duplicate class name TEnumerator$PT` — no error count exists |
+| door C, first cut (no `class abstract`) | 7m17s, 12 errors, compiles end to end |
+| door C with `class abstract` | 6m59s, 11 errors, compiles end to end |
+
+**So the `class abstract` fix bought exactly one error on the corpus**, not the
+transformation the reduction ladder suggested, and `unknown type: PT` at
+:120/123/217 is unmoved by any of it. **Door C's value is the reduced shapes it
+fixes, not the corpus.**
+
+**I quoted "3 errors" to a peer from a log that was still being written.** The
+run takes seven minutes and the first three errors land in the first seconds, so
+`grep -c` mid-run returns a stable, confident, wrong total — it does not error
+and nothing about it looks partial. Corrected in the same channel. The general
+form is the one CLAUDE.md already names: a truncated read is an instrument that
+is correct about something else, here about the first ten seconds.
+
+### Next step, and it is one question
+
+Which site mints `TEnumerator<PT>` with the bare spelling. `TEnumerator<PT>`
+appears at generics.collections.pas:133 (inside `TEnumerable<T>`'s own body,
+where `PT = ^T` is declared two lines above — door B, which works), at :144
+(`TCustomPointersEnumerator<T, PT>`, where PT is that template's own PARAMETER),
+at :152, and at :222/:361/:554/:619/:862 as `GetPtrEnumerator: TEnumerator<PT>;
+override;` in descendants. One of them resolves `PT` to nothing. A
+`PXXDBG=p.mint:TEnumerator,p.specbound` run over the corpus names it; it costs
+seven minutes and nobody has spent them.

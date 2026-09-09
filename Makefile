@@ -17724,6 +17724,29 @@ test-core: $(COMPILER)
 	# bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
 	./$(COMPILER) test/test_a_class_nested_type_is_a_specialization_argument.pas $(TESTTMP)/sweep_clsnestarg26
 	tools/expect_same.sh sweep_clsnestarg26 "$$($(TESTTMP)/sweep_clsnestarg26)" "$$(printf 'own 8 300\ninherited 8 300\nmixed 8 300\nlate 8 300\nunitscope 1 44\nplainuse 1')"
+	# The same sentence one door along: the nested type is inherited from a
+	# GENERIC ancestor, so it is in neither table NestedSpecArg consults and the
+	# bare spelling reached the template body -- the rtl-generics shape.
+	#
+	# TWO RUNGS and `class abstract(...)` are both load-bearing. One rung passes
+	# with a walk that handles only the immediate parent. And the hint words sit
+	# BETWEEN `class` and `(`, so a walk testing the next token for `(` refuses
+	# every rtl-generics class while passing every hand-written repro -- a
+	# control drawn from the wrong population, and it cost a corpus run.
+	#
+	# ONE INSTANTIATION PER TEMPLATE, DELIBERATELY. A second specialization of
+	# one template trips a PRE-EXISTING and separate defect, verified on a
+	# binary without this fix:
+	# bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template
+	# owns that row and carries its repro.
+	#
+	# `ptr` is what makes this more than a parse test -- it stores through the
+	# inherited PT and reads the value back, so the hoisted type has to really
+	# be ^LongInt and not merely a name that resolves. Expected output is fpc
+	# 3.2.2's, taken from fpc and not written by hand.
+	# bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
+	./$(COMPILER) test/test_an_inherited_nested_type_is_a_specialization_argument.pas $(TESTTMP)/sweep_inhnestarg26
+	tools/expect_same.sh sweep_inhnestarg26 "$$($(TESTTMP)/sweep_inhnestarg26)" "$$(printf 'one 1\ndeep 1\nptr 9\nzero 0')"
 	# A nested pointer alias belongs to the class or record that declared it.
 	# Two bodies each declaring `PCell = ^TCell` with DIFFERENT pointee types
 	# shared one flat alias row, so the second was type-checked against the
