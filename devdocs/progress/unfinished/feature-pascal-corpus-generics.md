@@ -2,10 +2,10 @@
 track: P
 prio: 65
 owner: 
-blocked-by: [bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]
+blocked-by: []
 status: unfinished
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done. Re-staged and re-driven 2026-09-09 at compiler 0f14028acc04: the live wall is `generics.defaults.pas:2729`, `no overload of Create matches these arguments / (record, Cardinal, record)` -- a bare method name passed where a method pointer is wanted, read as a CALL. Filed as [[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]], which needs NO generics to reproduce and is now this rung's blocker. THE OLD WALL TABLE IN THIS FILE IS NOT COMPARABLE and must not be diffed against: it was measured on a /tmp symlink stage built from a local FPC checkout, while library_candidates/rtl-generics is the install_lib_candidates.sh tree pinned at 0d122c49, so the line numbers are from two different source sets. Against the SAME staging the frontier moved FORWARD -- pin v407 stops at defaults:1178, HEAD reaches defaults:2729."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, but NO LONGER BLOCKED and the frontier has moved a whole unit. Re-measured 2026-09-09 at binary 4a6207c05ba2 / HEAD a130f0689, against the SAME library_candidates staging (0d122c49) as the 2729 figure, so this is comparable: `generics.defaults` now COMPILES AND RUNS (`uses Generics.Defaults` -> rc=0, prints `defaults ok`), the old wall defaults:2729 is PAST, and its blocker bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced is in done/. The live wall driving the real target (uses Generics.Collections, specializing TList<LongInt>) is `generic template IEqualityComparer not found`, near `specialize IEqualityComparer<string>` / `TOnEqualityComparison$string` -- fired during INSTANTIATION, since the $string suffix is our own mangled specialization name. DO NOT AIM AT THE REPORTED LOCATION: it says generics.memoryexpanders.pas:67, and that file never mentions IEqualityComparer, uses only Classes and SysUtils, and has `const MAX_LOAD_FACTOR = 1;` on line 67 -- the filename and the line number come from different units. IEqualityComparer<T> is declared at defaults:77. THE OLD WALL TABLE IN THIS FILE IS STILL NOT COMPARABLE and must not be diffed against: it was measured on a /tmp symlink stage built from a local FPC checkout. Unclaimed -- frankH measured the frontier only to correct a summary stale in two places."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
@@ -1413,3 +1413,49 @@ twice: a lock over a ticket nobody is working reads as "someone is on it".
 blocked on bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced -- re-staged and re-driven 2026-09-09, wall reduced to that one bug; a fix was written and reverted (it turns the method-callee half into a segfault). Do not diff the old wall table against a library_candidates staging: different source sets.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-09 — the wall in the summary above is PAST; re-measured, and the new one MISREPORTS ITS LOCATION
+
+Measured at binary `4a6207c05ba2`, HEAD `a130f0689`, against the same
+`library_candidates/rtl-generics` staging (`0d122c49`) the summary names — not a
+`/tmp` symlink stage, so this IS comparable to the `2729` figure.
+
+**`generics.defaults` compiles and RUNS.** `program d1; uses Generics.Defaults;`
+→ compile rc=0, executes, prints `defaults ok`. The named blocker
+[[bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced]]
+is in `done/`, and `:2729` is past. This rung is **no longer blocked** by it.
+
+**The live wall, driving the real target** (`uses Generics.Defaults,
+Generics.Collections`, specializing `TList<LongInt>`):
+
+```
+error: generic template IEqualityComparer not found
+  in: .../generics.memoryexpanders.pas
+  near:  specialize IEqualityComparer  string  >>>  TOnEqualityComparison$string
+```
+
+**DO NOT AIM AT THAT FILE OR THAT LINE — the location is wrong, and it is wrong
+in exactly the way that produced the ticket rejected today.** Three checks, all
+cheap:
+
+- `grep -c IEqualityComparer generics.memoryexpanders.pas` → **0**. The file
+  never mentions the template.
+- Its entire uses clause is `Classes, SysUtils` — it cannot see
+  `Generics.Defaults` at all.
+- Line 67 there is `const MAX_LOAD_FACTOR = 1;`.
+
+`IEqualityComparer<T>` is declared at **`generics.defaults.pas:77`**, and the
+`$string` suffix in `TOnEqualityComparison$string` is our own mangled
+specialization name, so this fires during **instantiation**, not at a
+declaration. The filename and the line number come from different units. Whoever
+takes this rung: dump the AST rather than reading the caret —
+`PXXDBG=a.ast:<proc>` — and treat "which unit was the compiler REALLY in" as the
+first question, not a detail.
+
+*Retire this warning when the diagnostic carries a location that survives the
+three checks above.* Dated because a stale hazard block is obeyed silently
+(CLAUDE.md, "the most expensive stale row is a hazard block").
+
+**Not claimed.** frankH measured the frontier only to correct a summary that had
+gone stale in two places at once; the rung's implementation work is untouched
+and unowned.

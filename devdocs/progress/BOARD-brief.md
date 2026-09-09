@@ -54,7 +54,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-user-defined-decorators` [N]
 - `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
 - `feature-pal-esp-posix-fd-semantics` [B+S]
-- `feature-pascal-corpus-generics` [P] — blocked-by: bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced
+- `feature-pascal-corpus-generics` [P]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P]
