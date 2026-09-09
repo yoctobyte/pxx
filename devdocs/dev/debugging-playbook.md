@@ -14100,6 +14100,50 @@ consumer reads, and leaving it narrow silently mis-draws every population
 downstream.
 
 
+## A CONTROL ROW IS ASSERTED AGAINST ITSELF, WHICH IS WHY A DIVERGENCE CAN HIDE IN ONE
+
+**Measured 2026-09-09** (frankS, `231ac5795`), writing the fixture for
+`bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order`.
+
+Every other row of that fixture is a comparison against fpc. One row was not a
+comparison at all: the `tySet` **veto** path, put in as a must-not-move control
+so that a fix which overruled the veto could not pass. I diffed it against fpc
+anyway, out of habit, and it was **not inert**. With `array of Integer` and
+`set of Byte` at one slot, fpc picks the SET and we pick the array — a
+previously unrecorded divergence, sitting inside the row I was most confident
+about.
+
+**The mechanism, which is the part worth carrying:** a control row is asserted
+**against itself** — *must not move* — never against the oracle. So it records
+OUR answer in the position where every reader expects the RIGHT answer, and
+**excluding it from the oracle comparison is exactly what makes it look
+verified.** The `.expected` file does not distinguish "fpc says this" from
+"we say this and nobody asked fpc"; both are just lines. The more certain you
+are that a control is inert, the less likely anyone ever asks.
+
+This is a different failure from `## A GUARD THAT CANNOT FAIL` and its
+neighbours. Those are about what an assertion can OBSERVE. Here the assertion is
+fine and the row is doing its job; the defect is in what the row is COMPARED
+AGAINST, and no amount of strengthening the comparison it does have would
+surface it.
+
+**Two handles.**
+
+*Writing one:* run the oracle over the control rows too, even where you are
+certain they cannot move — it costs one command, and it is the only thing that
+distinguishes an inert control from a pinned divergence. Where they legitimately
+differ (here the veto is correct and stays: the `[...]` really may be a set, and
+guessing the other way would break a working call to buy this one), **keep the
+row and label it in the file, loudly, as OUR answer and not the oracle's**, with
+the ticket slug beside it. A pinned answer that nobody wrote down as a
+divergence is how a divergence becomes a belief.
+
+*Reading one:* a `.expected` whose header does not say where its values came
+from is a file where you cannot tell parity from a pin. Before quoting one as
+evidence of fpc parity, check whether every row was actually generated from fpc
+— on this fixture, eleven of twelve were and the twelfth was not.
+
+
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
 
 Measured 2026-09-06 (frank-optimize), and it cost a day and a wrong diagnosis in every part
