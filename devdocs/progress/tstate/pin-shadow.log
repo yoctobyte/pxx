@@ -647,3 +647,4 @@
 2026-09-08T23:10:33Z	seven	e8f1cb9f4dff4bd65693e4c1f99412bf58cd273e	would NOT pin e8f1cb9f4dff — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-09T06:23:37Z	seven	fc2ce3d025534ee225181dd7daae6ac240e8c422	would NOT pin fc2ce3d02553 — 5 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, tools-devtest#00
 2026-09-09T07:20:18Z	seven	69a5f3c6fb1de6dc5d4f16839d3b592f4a687296	would NOT pin 69a5f3c6fb1d — 6 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, test-core#src:test/test_libmanifest.pas
+2026-09-09T07:39:44Z	seven	2d3e5fb9dfd63d34d94fd7e45f20b9b58fb71713	would NOT pin 2d3e5fb9dfd6 — 6 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, test-core#src:test/test_libmanifest.pas
