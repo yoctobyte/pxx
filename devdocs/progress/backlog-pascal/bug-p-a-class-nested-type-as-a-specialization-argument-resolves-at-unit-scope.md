@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: open
 owner: frankZ
-summary: "A type named as a SPECIALIZATION ARGUMENT inside a class body is resolved where the class does not yet exist. Class-nested is the case it was found through and NOT the boundary — frankH's `TEnum<TDerived>` inside `TDerived` fails on the class's own unit-scope name; the boundary is \"declared at or after the class's own declaration\". `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is the hoisted prerequisite's INSERTION POINT, not visibility and not the routine-local pass-order arm. Ten-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
+summary: "A type named as a SPECIALIZATION ARGUMENT inside a class body is resolved where the class does not yet exist. Class-nested is the case it was found through and NOT the boundary — frankH's `TEnum<TDerived>` inside `TDerived` fails on the class's own unit-scope name; the boundary is \"declared at or after the class's own declaration\". `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is the hoisted prerequisite's INSERTION POINT, not visibility and not the routine-local pass-order arm. Eleven-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild, which attributes THAT and cannot speak to the new wall's cause) and that wall is now generics.defaults.pas:3250, owned by bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -240,6 +240,23 @@ the specialization is visible") cleared it. Revert-rebuild, not timing:
 Only two ticket-only commits separate the two trees. `4a6207c05ba2` is also the
 binary frankS quoted the PT wall at independently, which is a second source that
 fails differently from a revert.
+
+**WHAT THAT TABLE ATTRIBUTES, AND WHAT IT CANNOT — the row above it is one claim
+and the table looks like two.** It attributes the CLEARING of `unknown type: PT`
+and nothing else. It says nothing whatever about the CAUSE of
+`generics.defaults.pas:3250`, and a revert-rebuild is structurally unable to:
+with the fix out, the file stops at `collections:120` again and never reaches
+`:3250`, so the new wall's disappearance is guaranteed and carries no
+information. **A revert makes any LATER wall vanish, which reads exactly like
+proof.** frankS caught the reading and it is a correction to how I wrote this,
+not to the measurement: the two loops behind `:3250` are `3a011ed6f`
+(2026-08-29) and `951d9c9dd` (2026-08-20), both ancestors of the reverted tree,
+so `1c16d4523` made an August defect REACHABLE for the first time and did not
+introduce it — the same relationship `ad7c03b03` had with the forward-pointer
+bug. The discriminator for a moved wall is the CODE's age, never the error's
+presence. Owned and diagnosed at
+`bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity`
+(`a9a81a51c`, frankS).
 
 **The ladder in this ticket survives that fix** — all nine rows re-measured at
 `417ee5636a72`, nothing moved — so this is not the same defect wearing a
