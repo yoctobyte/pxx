@@ -8636,6 +8636,17 @@ test-core: $(COMPILER)
 	# fpc-identical on all eight rows; ran on i386/aarch64/arm32/riscv32.
 	./$(COMPILER) test/test_explicit_operator_at_the_keyword_cast_door.pas $(TESTTMP)/test_expkw26
 	tools/expect_same.sh test_expkw26 "$$($(TESTTMP)/test_expkw26)" "$$(cat test/test_explicit_operator_at_the_keyword_cast_door.expected)"
+	# A ROUTINE-LOCAL DYNAMIC-ARRAY INITIALIZER. Row 1 is the global control and
+	# must not move -- it is the same element loop, and the fix changed which
+	# TABLE that loop writes into. Every row prints TWICE, from two calls: an
+	# initializer that runs once at program entry and one that runs per entry to
+	# the routine are indistinguishable from a single call, and the first attempt
+	# registered the local declaration in the file-scope table (Length 0 then a
+	# SEGFAULT on the first index). Lengths are never asserted alone -- an empty
+	# dynamic array still indexes in range for zero iterations. fpc-identical on
+	# all seven rows; ran on i386/aarch64/arm32/riscv32 under qemu.
+	./$(COMPILER) test/test_a_routine_local_dynamic_array_initializer.pas $(TESTTMP)/test_ldyn26
+	tools/expect_same.sh test_ldyn26 "$$($(TESTTMP)/test_ldyn26)" "$$(cat test/test_a_routine_local_dynamic_array_initializer.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always

@@ -2597,11 +2597,18 @@ procedure RegisterVarInitElem(symIdx, elemIdx, gKind: Integer; val: Int64;
   two emitters that must not drift, and they did not agree on this one), so the
   translation lives here — once — rather than at each caller.
 
-  Kind 10 (a dynamic-array ELEMENT built from an element list, carried as an AST
-  node) has no local counterpart: FlushLocalInits reads kinds 0/1/2/4/5/9 and
-  nothing that holds a node. The caller refuses that combination before getting
-  here; this asserts it rather than silently writing a row the flush will read
-  as an integer literal.
+  Kind 10 (an element list carried as an AST NODE) reaches BOTH tables now.
+  It used to be refused here, with the reason "FlushLocalInits reads kinds
+  0/1/2/4/5/9 and nothing that holds a node" -- true when written and false
+  since a routine-local `var g: TGUID = ICom` gave that emitter a kind-10 arm of
+  its own (pasparser_proc.inc). Nothing about the dynamic-array case needed
+  building; the refusal had simply outlived its cause, which is why this ticket
+  came in as a feature and went out as two deletions.
+
+  The local flush's own comment says why a kind may not be known to one emitter
+  and not the other: its `else` is a silent catch-all that turns an unknown kind
+  into an AN_INT_LIT holding the raw Val, so a NODE INDEX becomes an integer
+  and the program takes a wrong value with no diagnostic. Both emitters, always.
   `val` IS Int64 AND MUST STAY Int64. It was Integer for four hours and that
   TRUNCATED EVERY 64-BIT INITIALIZER ELEMENT on the GLOBAL path this helper was
   only meant to pass through unchanged: PendingInitVal and LocalInitVal are both
@@ -2618,8 +2625,6 @@ var lk: Integer;
 begin
   if isLocal then
   begin
-    if gKind = 10 then
-      Error('a dynamic-array element list is not supported in a routine-local var initializer');
     if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
     lk := gKind;
     if lk = 8 then lk := 5;   { metaclass reference: the two tables number it differently }
@@ -2679,6 +2684,22 @@ begin
     TFoo.Destroy;` mis-reads `destructor` as a var name (real tokens like
     tkProcedure/tkFunction/tkBegin already stop the loop; the soft ones did
     not). See bug-var-section-eats-constructor-destructor. }
+  { WHICH TABLE every initializer element in this section goes into. Read once,
+    at the TOP, rather than at each registration: the seven sites that used to
+    write PendingInit* unconditionally are exactly why a routine-local array
+    initializer was refused instead of supported.
+
+    IT USED TO BE READ IN THE MIDDLE, after the dynamic-array arm rather than
+    before it, and that is what made the eighth site's fix wrong at first: the
+    dynamic arm called RegisterVarInitElem with whatever the PREVIOUS
+    declaration group had left in vIsLocal, so a routine-local `var v: array of
+    Integer = (1,2,3)` registered a FILE-SCOPE initializer, the program entry
+    assigned into a symbol index belonging to a rolled-back routine scope, and
+    Length(v) read 0 and the first index SEGFAULTED. `CurProc` does not change
+    inside this procedure, so there was never a reason for the read to sit
+    anywhere but here. A "read once" that is read once per SHAPE is not read
+    once. }
+  vIsLocal := CurProc >= 0;
   grpN := 0;
   while (CurTok.Kind = tkIdent) and
         not CaseEqual(CurTok.SVal, 'implementation') and
@@ -2944,14 +2965,17 @@ begin
 	          a missing FORK: the same declaration at file scope has always worked,
 	          and so has the local `const` spelling.
 
-	          A DYNAMIC array keeps a refusal, narrowed to what is actually absent.
-	          Its element list is carried as an AST node (pending-init kind 10) and
-	          FlushLocalInits reads kinds 0/1/2/4/5/9 — nothing that holds a node —
-	          so there is no local table row to write. fpc accepts it; we do not
-	          yet, and the message now says which half is missing.
-	          feature-p-a-local-var-section-array-initializer }
-	        if isDyn then
-	          Error('a routine-local dynamic-array initializer is not supported yet; assign in statements');
+	          A DYNAMIC array falls through as well, since 2026-09-09. It used to be
+	          refused here, narrowed to the half that was genuinely absent -- its
+	          element list is an AST node and the local flush read only kinds that
+	          hold a constant. That stopped being true when a routine-local
+	          `var g: TGUID = ICom` gave FlushLocalInits a kind-10 arm, and the
+	          refusal outlived its reason by three days. What was missing after
+	          that was one FORK: the dynamic arm below wrote PendingInit* by hand
+	          instead of going through RegisterVarInitElem, which is the same
+	          defect this whole block was created to remove and the seventh
+	          instance of it.
+	          feature-p-a-routine-local-dynamic-array-initializer }
 	        if not isArr then
 	        begin
 	        if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
@@ -3015,16 +3039,14 @@ begin
 	          program entry the pending init is emitted into. }
 	        if SymDynElemRowLen[idx] > 0 then
 	          Error('an element list cannot initialise a dynamic array of fixed rows');
-	        EnsurePendingInitCapacity(PendingInitCount);
-	        PendingInitSym[PendingInitCount]  := idx;
-	        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
-	        PendingInitFOff[PendingInitCount] := -1;
-	        PendingInitFLen[PendingInitCount] := 0;
-	        PendingInitPStart[PendingInitCount] := 0;
-	        PendingInitPCount[PendingInitCount] := 0;
-	        PendingInitFIdx[PendingInitCount] := PI_ELEM_NONE;
-	        PendingInitKind[PendingInitCount] := 10;
-	        PendingInitVal[PendingInitCount]  := ParseDynArrayInitElemsAST(0);
+	        { THROUGH RegisterVarInitElem, not by hand: this arm wrote PendingInit*
+	          directly, so a ROUTINE-LOCAL declaration recorded a FILE-SCOPE
+	          initializer against a symbol whose index is rolled back with the
+	          routine. That is the eighth instance of the fork this helper exists
+	          to own, and it is the whole of what was missing once the local flush
+	          learned kind 10. }
+	        initVal := ParseDynArrayInitElemsAST(0);
+	        RegisterVarInitElem(idx, PI_ELEM_NONE, 10, initVal, 0, Ord(tk), vIsLocal);
 	        { THE AST ARENA IS PER-PROC SCRATCH and this is the one pending-init
 	          kind that keeps a NODE rather than a constant, so it is the one that
 	          can be handed out again before it is read. Every proc body parsed
@@ -3038,9 +3060,6 @@ begin
 	          bug-nilpy-module-ast-recycled-by-nested-unit-compile, the same defect
 	          in the NilPy module parse). }
 	        if ASTNodeCount > ASTArenaFloor then ASTArenaFloor := ASTNodeCount;
-	        PendingInitValAux[PendingInitCount] := 0;
-	        PendingInitTk[PendingInitCount]   := Ord(tk);
-	        Inc(PendingInitCount);
 	        SkipHintDirectives;
 	        Eat(tkSemicolon);
 	        Continue;
@@ -3051,11 +3070,6 @@ begin
 	        single Char, and the bare-literal arm to refuse an N-D array. }
 	      vNDims := SymArrNDims[idx];
 	      if vNDims < 2 then vNDims := 1;
-	      { WHICH TABLE the elements below go into. Read once, here, rather than at
-	        each registration: the seven sites that used to write PendingInit*
-	        unconditionally are exactly why a routine-local array initializer was
-	        refused instead of supported. }
-	      vIsLocal := CurProc >= 0;
 	      if CurTok.Kind = tkLParen then
 	      begin
 	        { …or a RECORD var: `var R: TRec = (n: 7; s: 'seven')`. FPC treats a

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:22 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:104 backlog-tools:55 backlog-pascal:7 backlog-decide:46 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3620 rejected:80`
+`working:32 unfinished:22 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:104 backlog-tools:55 backlog-pascal:6 backlog-decide:46 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3621 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 425, ranked
+## Ready — top 30 of 424, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -109,4 +109,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 
-_395 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_394 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
