@@ -3,8 +3,8 @@ track: P
 prio: 25
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-06
 summary: "When two method overloads both take an ARRAY at the slot a `[...]` argument lands on, selection cannot separate them and falls through to arity, i.e. first-declared. `P2(N: Integer; A: array of Integer)` and `P2(N: Integer; A: array of const)` with `c.P2(2, [7, 8])` runs the Integer body; fpc 3.2.2 runs the array-of-const one. Silent — both bodies compile and run, only the printed line differs. Pre-existing and unchanged by f00d3d230, which narrows the bracket case to a single array candidate and deliberately declines this one: the speculative probe in FindUMethOverloadAhead still cannot PARSE a bracket argument, so it cannot rank two of them, and guessing would replace one silent wrong body with another."
 ---

@@ -3,8 +3,8 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-06
 summary: "SoftIntrinsicOpen answers WHETHER a routine of an intrinsic's name is in scope and nothing about the call's arguments, so any same-named declaration closes the intrinsic for every argument shape. THE LIVE INSTANCE IS GONE AS OF 2026-09-09 AND THIS TICKET IS NOW ABOUT THE LATENT SHAPE ONLY -- re-measured at 69a5f3c6f, binary 5d5dcb45d328. Both halves of the fork this ticket described landed independently: the compiler reopens the intrinsic (f5ad23c32, 906737db0) and Track B removed the declarations (475528dae, 'sysutils must not declare the two names fpc keeps in system'). All three non-bare spellings this ticket listed as STILL CLOSED now work -- Delete(obj.Items,i,1), Delete(p^.list,i,1), Insert(x,Self.F,i) -- and the ESP risk the fork carried did not materialise: string Delete/Insert with sysutils in scope still gives fpc's answer. Enumerating from the concept rather than the callers, as this ticket instructs: NO free routine in lib/rtl re-declares any soft intrinsic today. The Delete/Insert/Move hits in classes.pas and contnrs.pas are METHODS, which FindProc does not see. What remains is a Boolean that cannot express WHICH, with no live instance."
 ---
