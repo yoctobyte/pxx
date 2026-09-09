@@ -5399,6 +5399,17 @@ test-core: $(COMPILER)
 	# bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity
 	./$(COMPILER) -Futest/units test/test_a_generic_method_impl_binds_by_arity_not_name.pas $(TESTTMP)/test_arityoverload26
 	$(TESTTMP)/test_arityoverload26 | diff -u test/test_a_generic_method_impl_binds_by_arity_not_name.expected -
+	# A nested class's method impl belongs to the class at the HEAD of its
+	# qualified path. `constructor TQueue<T>.TEnumerator.Create` loses its `<T>`
+	# and reads `constructor TQueue . TEnumerator . Create`, so a scan keyed on
+	# the name alone matched the unit-level TEnumerator<T> too and captured a
+	# range starting at the DOT -- minting a TQueue nobody asked for. On
+	# rtl-generics that edge closes a cycle and the argument grows one segment
+	# per round until `too many deferred specializations`. Without the fix this
+	# file does not compile at all; the values are the second assertion.
+	# bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves
+	./$(COMPILER) test/test_a_nested_class_method_impl_is_not_the_unit_level_template_of_that_name.pas $(TESTTMP)/test_nestedmethimpl26
+	$(TESTTMP)/test_nestedmethimpl26 | diff -u test/test_a_nested_class_method_impl_is_not_the_unit_level_template_of_that_name.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

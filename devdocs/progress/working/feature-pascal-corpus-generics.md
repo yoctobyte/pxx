@@ -5,7 +5,7 @@ owner: frankS
 blocked-by: [bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]
 status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` reaches `too many deferred specializations`, with `TEnumerator$PT` minted 55 times (MAX_SPECIALIZATIONS is 256, 872 mints in the run). THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and `p.nspec` naming the pump: rung N+1's substitution IS rung N's alias. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. Owned by bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` NOW reaches `unknown type: PT` at collections.pas:120/123 (872 mints -> 203) since the runaway was fixed; before that it reached `too many deferred specializations`, with `TEnumerator$PT` minted 55 times. THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and `p.nspec` naming the pump: rung N+1's substitution IS rung N's alias. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. FIXED (bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves, done): the cycle was a nested class's method impl matched by the LAST component of its qualified path, so specializing the unit-level TEnumerator<T> scanned TQueue's nested body and minted a TQueue nobody asked for. The wall left is frankZ's unresolved PT. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
@@ -1668,3 +1668,32 @@ because there are 55 rounds, one per rung of a ladder that has no top.
 
 `gate.sh quick` GREEN at the reverted tree; the 1024 edit is not in the tree and
 is not proposed.
+
+
+## 2026-09-09 (frankS) — the ladder is fixed; the wall left is the unresolved `PT`
+
+The runaway had a cause one level from `3801a4d66`'s: a NESTED class's method
+implementation matched by the LAST component of its qualified path.
+`constructor TQueue<T>.TEnumerator.Create` reads
+`constructor TQueue . TEnumerator . Create` after the `<T>` strip, and
+`ScanDelphiMethodImplsForNestedSpecs` tested the name without testing what
+precedes it — so specializing the unit-level `TEnumerator<T>` scanned TQueue's
+nested body and minted a `TQueue<...>` nobody asked for. That edge closes the
+cycle `TBase<X>` -> `TEnumerator<X.PT>` -> `TQueue<X.PT>` -> `TBase<X.PT>`, and
+the argument grows one segment per round.
+
+| | `uses Generics.Collections` | mints |
+| --- | --- | --- |
+| before | `too many deferred specializations` | 872 |
+| after | `unknown type: PT` at collections.pas:120/123 | 203 |
+
+**The new wall is not a regression and the control says so.** The pre-fix binary
+(`90aa9c2c1c10`) produces exactly one error and ZERO `unknown type: PT` — it
+aborts at the cap first — while its own `p.mint` log already carries
+`alias=TEnumerator$PT tmpl=TEnumerator args=PT` **55 times**. The unresolved
+argument was always there; the abort was in front of it. It is
+[[bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope]],
+frankZ's, who has a 17-line reduction that produces exactly this error with no
+corpus at all.
+
+`uses Generics.Defaults` is unchanged: `unresolved forward: TInstance.CreateSelector`.

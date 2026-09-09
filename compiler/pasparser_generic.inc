@@ -3209,6 +3209,9 @@ begin
     end;
   end;
   TemplateNParams[TemplateCount] := np;
+  if PxxDbgEnabled('p.tmpl') then
+    writeln('PXXDBG p.tmpl reg idx=', TemplateCount, ' name=', templateName,
+            ' np=', np, ' delphi=', Ord(delphiForm));
   TemplateIsDelphi[TemplateCount] := delphiForm;
   { The one place a template is registered, so the one place these are set.
     Spelling the rule per caller is how the pointer arm of the nested-type case
@@ -3628,6 +3631,44 @@ end;
   from ParseSpecialization (the method impls the parser has not reached yet) and
   from EmitLateNestedSpecDecls at the end of the type section, by which time the
   rewrite has run over bodies it had not reached the first time. }
+{ The start index of the method-IMPLEMENTATION header whose class name sits at
+  nameIdx, or -1 when nameIdx is not a header's class name at all.
+
+  THE `-1` IS THE POINT, AND IT IS WHY THIS IS A FUNCTION AND NOT TWO COPIES.
+  A qualified impl of a NESTED class -- `constructor TQueue<T>.TEnumerator.Create`
+  -- has its class name at the HEAD of the dotted path, and after the `<T>` strip
+  the stream reads `constructor TQueue . TEnumerator . Create`. Every `<ident> .`
+  in that path answers a name match, so a scan keyed on the name alone matched
+  `TEnumerator` too and captured a range starting at the DOT. Specializing the
+  unit-level `TEnumerator<T>` then scanned TQueue's nested class body and minted
+  a `TQueue<...>` nobody asked for -- which on rtl-generics closes a cycle and
+  climbs a 55-rung ladder of ever-longer alias names until
+  `too many deferred specializations`.
+  The tell is what PRECEDES the name: only `procedure` / `function` /
+  `constructor` / `destructor` (the last two are soft keywords, lexed as
+  tkIdent, so compared by text) begin a header. A preceding tkDot says
+  qualifier, never header.
+  bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves }
+function DelphiMethImplHdrStart(nameIdx: Integer): Integer;
+var r: Integer;
+begin
+  r := -1;
+  if nameIdx >= 1 then
+  begin
+    if (Tokens[nameIdx - 1].Kind = tkProcedure) or
+       (Tokens[nameIdx - 1].Kind = tkFunction) then
+      r := nameIdx - 1
+    else if (Tokens[nameIdx - 1].Kind = tkIdent) and
+            (CaseEqual(GetTokenStrFromRaw(Tokens[nameIdx - 1].SOffset,
+                                          Tokens[nameIdx - 1].SLen), 'constructor') or
+             CaseEqual(GetTokenStrFromRaw(Tokens[nameIdx - 1].SOffset,
+                                          Tokens[nameIdx - 1].SLen), 'destructor')) then
+      r := nameIdx - 1;
+    if (r >= 1) and (Tokens[r - 1].Kind = tkClass) then r := r - 1;
+  end;
+  DelphiMethImplHdrStart := r;
+end;
+
 { Forwards for the three helpers below. All three are DEFINED later in this file
   and CALLED here, by ScanDelphiMethodImplsForNestedSpecs. pxx's own self-host
   resolves that either way; the FPC seed build does not, and fails with
@@ -3653,13 +3694,18 @@ begin
        DelphiGenMethImplHdrOfTemplate(Tokens[dScan].SOffset, ti) then
     begin
       { the captured range starts at `procedure`/`function`, one earlier for a
-        `class` method -- the same two shapes BufferGenericMethod is called with }
-      dHdr := dScan - 1;
-      if (dScan >= 2) and (Tokens[dScan - 2].Kind = tkClass) then dHdr := dScan - 2;
-      dBase := TemplateTokenCount;
-      AppendTokenRangeToTemplateArena(dHdr, GenericMethodBodyEnd(dHdr), ts, tc);
-      ScanRangeForNestedSpecs(ts, tc, specName);
-      TemplateTokenCount := dBase;   { scratch only: NOT a buffered method }
+        `class` method -- the same two shapes BufferGenericMethod is called with,
+        and -1 when this name is a QUALIFIER rather than a header's class name.
+        See DelphiMethImplHdrStart: this arm used to assume dScan - 1 was the
+        keyword and captured from the dot of `TQueue.TEnumerator.Create`. }
+      dHdr := DelphiMethImplHdrStart(dScan);
+      if dHdr >= 0 then
+      begin
+        dBase := TemplateTokenCount;
+        AppendTokenRangeToTemplateArena(dHdr, GenericMethodBodyEnd(dHdr), ts, tc);
+        ScanRangeForNestedSpecs(ts, tc, specName);
+        TemplateTokenCount := dBase;   { scratch only: NOT a buffered method }
+      end;
     end;
 end;
 
@@ -3782,18 +3828,10 @@ begin
        DelphiGenMethImplHdrOfTemplate(Tokens[scan].SOffset, ti) then
     begin
       { the same two header shapes BufferGenericMethod is called with, plus the
-        constructor/destructor spelling, which are identifiers in this dialect }
-      hdr := -1;
-      if (Tokens[scan - 1].Kind = tkProcedure) or
-         (Tokens[scan - 1].Kind = tkFunction) then
-        hdr := scan - 1
-      else if (Tokens[scan - 1].Kind = tkIdent) and
-              (CaseEqual(GetTokenStrFromRaw(Tokens[scan - 1].SOffset,
-                                            Tokens[scan - 1].SLen), 'constructor') or
-               CaseEqual(GetTokenStrFromRaw(Tokens[scan - 1].SOffset,
-                                            Tokens[scan - 1].SLen), 'destructor')) then
-        hdr := scan - 1;
-      if (hdr >= 1) and (Tokens[hdr - 1].Kind = tkClass) then hdr := hdr - 1;
+        constructor/destructor spelling, which are identifiers in this dialect.
+        ONE body, shared with ScanDelphiMethodImplsForNestedSpecs, which had a
+        second copy of this shape that was missing the test entirely. }
+      hdr := DelphiMethImplHdrStart(scan);
       if hdr >= 0 then
       begin
         dup := False;
