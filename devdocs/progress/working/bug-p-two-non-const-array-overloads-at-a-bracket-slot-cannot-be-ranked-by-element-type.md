@@ -2,8 +2,8 @@
 track: P
 prio: 20
 type: bug
-status: open
-owner: ""
+status: working
+owner: frankS
 created: 2026-09-09
 found-by: frankS
 tags: [overload, arrays, probe]

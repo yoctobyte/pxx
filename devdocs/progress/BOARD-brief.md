@@ -5,18 +5,20 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:152 backlog-nilpy:107 backlog-tools:56 backlog-pascal:7 backlog-decide:45 backlog-libs:25 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3639 rejected:81`
+`working:31 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:152 backlog-nilpy:107 backlog-tools:56 backlog-pascal:5 backlog-decide:45 backlog-libs:25 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3639 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
+- `bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
 - `bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand` [P] — owner: frankH
 - `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA
+- `bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type` [P] — owner: frankS
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
@@ -72,7 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 429, ranked
+## Ready — top 30 of 427, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -105,4 +107,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-pascal-conformance-shard0-6-5
 - `[p 70] [T]` regression-test-pascal-conformance-shard4-6-5
 
-_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
