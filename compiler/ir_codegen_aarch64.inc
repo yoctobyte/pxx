@@ -5040,22 +5040,12 @@ begin
         end
         else
         begin
-          case tk of
-            tyInteger, tyInt8, tyInt16, tyInt32: sz := VT_INT;
-            tyInt64, tyNativeInt:                sz := VT_INT64;
-            tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-            tyNativeUInt, tyPointer:             sz := VT_INT64;
-            tyBoolean:                           sz := VT_BOOL;
-            tyChar:                              sz := VT_CHAR;
-            tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
-            tyString, tyAnsiString:              sz := VT_STRING;
-            { A CLASS boxes as VT_OBJECT, as the x86-64 arm has long done;
-              aarch64 had not, so `v := someObject` failed to build for this
-              target only (examples/net/httpdemo.pas). }
-            tyClass:                             sz := VT_OBJECT;
-          else
-            Error('Variant := this type not yet supported');
-          end;
+          { The shared mapping (ir.inc's VariantTagForTk), which every other
+            backend already called. This copy is the one that proves the point:
+            its tyClass arm was MISSING while x86-64 had it, so `v :=
+            someObject` failed to build for aarch64 and no other target
+            (examples/net/httpdemo.pas). }
+          sz := VariantTagForTk(tk, 'Variant :=');
           { A CODE ADDRESS overrides the type-kind answer — defs.inc's
             VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
           if IRSrcIsCallable(IRB[node]) then sz := VT_CALLABLE_TAG;
@@ -5116,19 +5106,8 @@ begin
     IR_VAR_BOX:
       begin
         tk := IntToTypeKind(IRC[node]);
-        case tk of
-          tyInteger, tyInt8, tyInt16, tyInt32: sz := VT_INT;
-          tyInt64, tyNativeInt:                sz := VT_INT64;
-          tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-          tyNativeUInt, tyPointer:             sz := VT_INT64;
-          tyBoolean:                           sz := VT_BOOL;
-          tyChar:                              sz := VT_CHAR;
-          tyDouble, tySingle, tyExtended:      sz := VT_DOUBLE;
-          tyString, tyAnsiString:              sz := VT_STRING;
-          tyClass:                             sz := VT_OBJECT;
-        else
-          Error('Variant operand: this scalar type not yet supported');
-        end;
+        { The shared mapping — see the store arm above. }
+        sz := VariantTagForTk(tk, 'Variant operand');
         { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
         if IRSrcIsCallable(IRB[node]) then sz := VT_CALLABLE_TAG;
 

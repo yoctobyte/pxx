@@ -18743,6 +18743,19 @@ end;
   about the variant representation, not about any instruction set, so it belongs
   here where every backend can reach it. }
 function VariantTagForTk(tk: TTypeKind; const what: AnsiString): Integer;
+{ Source TTypeKind -> variant VType tag. THE one home, and since 2026-09-09 the
+  only one: x86-64 (ir_codegen.inc, both IR_VAR_STORE and IR_VAR_BOX) and
+  aarch64 each carried a verbatim copy of this case, while i386, arm32, riscv32,
+  xtensa and wasm32 already called here. Five copies of one mapping, and the
+  failure mode is not a wrong tag -- it is a MISSING arm in exactly one of them,
+  which builds fine everywhere the author tested. Both copies' `tyClass` notes
+  recorded an instance of it and are folded into that arm below.
+
+  `what` names the site for the diagnostic; the collapse also settled a
+  divergence nobody had to decide, since x86-64 and aarch64 said `Variant := this
+  type not yet supported` where every other target said
+  `Variant :=: this scalar type not yet supported` for the same program. No test
+  asserts either spelling. }
 begin
   case tk of
     tyInteger, tyInt8, tyInt16, tyInt32: Result := VT_INT;
@@ -18753,10 +18766,17 @@ begin
     tyChar:                              Result := VT_CHAR;
     tyDouble, tySingle, tyExtended:      Result := VT_DOUBLE;
     tyString, tyAnsiString:              Result := VT_STRING;
-    { A CLASS boxes as VT_OBJECT, the representation container slots and
-      isinstance already use — the x86-64 arm has had it; i386 had not, so
-      `v := someObject` (examples/net/httpdemo.pas) failed to build for this
-      target only. Retained at the store, so the slot's release balances. }
+    { A CLASS boxes as VT_OBJECT, the tag the representation container slots and
+      isinstance already use. Retained at the store, so the slot's release
+      balances.
+
+      THIS ARM WENT MISSING ONE COPY AT A TIME, which is the argument for there
+      being one copy. i386 lacked it, so `v := someObject`
+      (examples/net/httpdemo.pas) failed to build for that target and no other;
+      aarch64 lacked it and failed for the same program; and the NilPy path hit
+      it a third time, where storing a tuple or a list into a variant
+      (`self._pdf_font = (name, size)`, ordinary Python) answered "this scalar
+      type not yet supported". Three targets, three separate fixes, one line. }
     tyClass:                             Result := VT_OBJECT;
   else
     Error(what + ': this scalar type not yet supported');

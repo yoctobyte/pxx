@@ -11648,20 +11648,14 @@ begin
         end
         else
         begin
-          { select VType tag from the source scalar kind }
-          case tk of
-            tyInteger, tyInt8, tyInt16, tyInt32: size := VT_INT;
-            tyInt64, tyNativeInt:                size := VT_INT64;
-            tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-            tyNativeUInt, tyPointer:             size := VT_INT64;
-            tyClass:                             size := VT_OBJECT;
-            tyBoolean:                           size := VT_BOOL;
-            tyChar:                              size := VT_CHAR;
-            tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;
-            tyString, tyAnsiString:               size := VT_STRING;
-          else
-            Error('Variant := this type not yet supported');
-          end;
+          { select VType tag from the source scalar kind. VariantTagForTk
+            (ir.inc) is the one home; this arm carried a verbatim copy of its
+            case until 2026-09-09, and so did IR_VAR_BOX below and both aarch64
+            twins. Five copies of one mapping is how the enumeration grows a
+            hole in exactly one of them -- both surviving `tyClass` comments
+            recorded precisely that, each naming the target where `v :=
+            someObject` failed to build and nowhere else. }
+          size := VariantTagForTk(tk, 'Variant :=');
           { A CODE ADDRESS overrides the type-kind answer — see defs.inc's
             VT_CALLABLE_TAG. tyPointer said VT_INT64, the same tag an integer
             wears, so a def stored in a container was indistinguishable from a
@@ -11727,24 +11721,12 @@ begin
       begin
         { Box a scalar into a temp variant (IRA=temp addr), return addr in rax. }
         tk := IntToTypeKind(IRC[node]);
-        case tk of
-          tyInteger, tyInt8, tyInt16, tyInt32: size := VT_INT;
-          tyInt64, tyNativeInt:                size := VT_INT64;
-          tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-          tyNativeUInt, tyPointer:             size := VT_INT64;
-          tyBoolean:                           size := VT_BOOL;
-          tyChar:                              size := VT_CHAR;
-          tyDouble, tySingle, tyExtended:      size := VT_DOUBLE;
-          tyString, tyAnsiString:               size := VT_STRING;
-          { A CLASS boxes as VT_OBJECT — the representation container slots and
-            isinstance already use. Without it, storing a tuple or a list into a
-            variant (`self._pdf_font = (name, size)`, ordinary Python) failed
-            with "this scalar type not yet supported". Retained like any other
-            object slot, so the slot's release balances. }
-          tyClass:                             size := VT_OBJECT;
-        else
-          Error('Variant operand: this scalar type not yet supported');
-        end;
+        { The shared mapping — see the IR_VAR_STORE arm above. The tyClass note
+          that lived here moved to VariantTagForTk with it: storing a tuple or a
+          list into a variant (`self._pdf_font = (name, size)`, ordinary Python)
+          failed with "this scalar type not yet supported" until that arm
+          existed. }
+        size := VariantTagForTk(tk, 'Variant operand');
         { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
         if IRSrcIsCallable(IRB[node]) then size := VT_CALLABLE_TAG;
         IREmitNode(IRB[node]);                 { rax = scalar value }
