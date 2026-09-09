@@ -2410,3 +2410,26 @@ Collision with frankH, who had an equivalent fix unpushed. My half of it was
 claiming into a tree nobody can see — `progress.sh claim` warns in its own
 output that an unpushed claim leaves `ready` correctly offering the ticket to
 everyone else, and I read that and moved on.
+
+## 2026-09-09 | frankZ | compiler/builtin/builtinwide.pas, compiler/pasparser_lval.inc | the PWideChar length helper is declared as the type it returns, not stamped from the call site
+
+Follow-up to the fix an hour earlier, taking frankH's declaration and body after
+they dropped their equivalent in-flight change. `PXXWideFromPWChar` is now
+declared `: UnicodeString`, so the parser fills `ProcRetStrElemTk` from the
+declaration and the wrap stamps nothing.
+
+My argument for `: Pointer` plus a hand-written row was that a builtin
+implementing UTF-16 should not depend on the type it implements. frankH had a
+measurement that the declaration works, which beats the argument on its own —
+but the concrete defect is one neither of us named at the time: written from the
+wrap, that row is only true AFTER a Length has been seen. The callee's own
+return type became a fact about whether a particular call site was reached.
+Nothing reads it by another route today, so it was latent.
+
+Two dead ends recorded in the ticket with frankH's name, and the method is worth
+more than the rows: they put an append-built function beside a handle-built one
+in ONE program and read 8 and 4 side by side. I measured my own 8 in isolation,
+read it as handle-poking gone wrong, and abandoned a correct approach for the
+wrong reason. `Result := UnicodeString(h)` is a CONVERSION, not a
+reinterpretation — it transcodes narrow to wide and doubles the byte count, so
+it compiles, runs, and answers a plausible number.

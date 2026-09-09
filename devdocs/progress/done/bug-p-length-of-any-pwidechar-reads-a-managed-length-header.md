@@ -80,12 +80,34 @@ this reason and already covers this ticket's population.
 `Length(p)` over a raw PWideChar answers the UTF-16 unit count, byte-identical
 to fpc 3.2.2 on every row of `test_pwidechar_len26`.
 
-**The runtime.** `PXXWideFromPWChar(p): Pointer` in `builtinwide.pas` — scan for
-a zero UTF-16 UNIT, `PXXWideAlloc(n)`, copy. It calls `PXXWideAlloc` rather than
-building a block so it cannot disagree with the rest of that file about the
-layout; that function already zero-fills, writes both NUL bytes, the byte length
-and `PXX_KIND_WIDESTR`. nil in, nil out; an empty run is nil too, because an
-empty managed string IS the nil handle there.
+**The runtime.** `PXXWideFromPWChar(p: Pointer): UnicodeString` in
+`builtinwide.pas` — scan for a zero UTF-16 UNIT with a 2-byte pointer,
+`SetLength`, element writes. `PU16` and not `PByte` is the entire difference
+between this and the narrow strlen that answers 1 for `'abcd'`. nil in, empty
+out; an empty run is empty too, because an empty managed string IS the nil
+handle there. Body from frankH, who had an equivalent fix in flight.
+
+### Two shapes that compile and answer wrong (frankH, measured)
+
+Kept because both are the natural thing to reach for, and one of them this seat
+hit from the other side without understanding it.
+
+- **`Result := Result + c` over WideChars** — the exact shape of
+  `PCharToString` — needs `__pxxWideCharToUTF8`, which lives in `builtin.pas`, a
+  unit `builtinwide` sits BELOW. It works fine in ordinary user code, which is
+  what makes it the obvious move. Here it is `WideChar->string conversion:
+  __pxxWideCharToUTF8 helper not loaded`. A loud failure, and the cheap one.
+- **`PXXWideAlloc` + `PXXBlockCopy` + `Result := UnicodeString(h)` COMPILES AND
+  RUNS.** That cast is a CONVERSION, not a reinterpretation: it transcodes
+  narrow to wide, so a correct 4-unit / 8-byte block comes back 16 bytes and
+  `Length` answers 8. Contents right, length doubled.
+
+**The method is worth more than the rows.** frankH put an append-built function
+beside a handle-built one in ONE program and read 8 and 4 side by side. This
+seat measured its own 8 in isolation, read it as handle-poking gone wrong, and
+abandoned the approach for the wrong reason — `8` alone is a puzzle and `8`
+beside `4` is a fact. Two readings that fail differently, which is the whole
+requirement.
 
 **The wrap.** `WrapPWideCharToWideStr` in `pasparser_lval.inc`, beside its narrow
 sibling, and the Length operand dispatch is now two arms:
@@ -97,21 +119,20 @@ else if (not CProgramMode) and IsNodePWideChar(valNode) then
   valNode := WrapPWideCharToWideStr(valNode);
 ```
 
-Two lines of it are NOT a copy of the narrow one and both are recorded at the
-site. `ASTTk := tyAnsiString` rather than the callee's declared `Pointer` return
-— every managed-string constructor in `builtinwide` is declared `: Pointer`, and
-`IRStrWidthConv` already resolves that same mismatch one door over by stamping
-`PXXWideFromStr`'s result into a hidden local; this is that stamp at AST level,
-because the consumer here reads the AST. And `ProcRetStrElemTk := Ord(tyWideChar)`,
-which is a fact about the CALLEE, not about the call site: the block it returns
-is UTF-16 whatever the declaration says. Both are required — `IRLowerAST`'s
-`tkLength` arm halves only when ASTTk is `tyAnsiString` AND `ASTStrElemTkOf` is
-`tyWideChar`, and for an `AN_CALL` the second reads exactly that row. Without it
-the byte length arrives unhalved and `Length` answers 8 for `'abcd'`.
+The wrap is a line-for-line twin of the narrow one, and the thing to know is
+what is ABSENT from it: nothing stamps `ProcRetStrElemTk`. `PXXWideFromPWChar`
+is declared `: UnicodeString`, so the parser fills that row from the
+declaration and `ASTStrElemTkOf`'s `AN_CALL` arm reads it — which is what makes
+`IRLowerAST`'s `tkLength` arm halve the byte length. Without that row the length
+arrives unhalved and `Length` answers 8 for `'abcd'`.
 
-Declaring the builtin `: WideString` instead would let the parser fill that row
-in — rejected, because it makes the unit that IMPLEMENTS UTF-16 depend on the
-type it implements.
+**The first version shipped for an hour with the row written by hand**, on the
+argument that declaring the helper as the wide type makes the unit IMPLEMENTING
+UTF-16 depend on the type it implements. frankH had measured that the
+declaration simply works, and a measurement beats that argument. It is also the
+better shape for a reason the argument missed: written from the wrap, the row's
+value depends on whether a `Length` was ever seen, so the callee's own type is
+true only after somebody asks.
 
 ### THE THIRD THING, and it was a REGRESSION THE FIX ITSELF CREATED
 

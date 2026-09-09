@@ -64,7 +64,7 @@ function PXXWideCat(a: Pointer; b: Pointer): Pointer;
   answered an obviously-wild one. Routing a wide pointer into PCharToString
   compiles, is one character of diff, and makes the bug invisible instead of
   fixing it. bug-p-length-of-any-pwidechar-reads-a-managed-length-header }
-function PXXWideFromPWChar(p: Pointer): Pointer;
+function PXXWideFromPWChar(p: Pointer): UnicodeString;
 
 implementation
 
@@ -375,27 +375,58 @@ end;
 
 { Raw PWideChar -> managed wide handle. Header note above the declaration.
 
-  PXXWideAlloc already zero-fills and writes both NUL bytes, the byte length
-  and PXX_KIND_WIDESTR, so this adds only the scan and the payload copy and
-  cannot disagree with the rest of the file about the block layout -- which is
-  the reason it calls that rather than building a block of its own. nil in,
-  nil out, and an empty run (`p^` is already the terminator) is nil too: an
-  empty managed string IS the nil handle here, exactly as every constructor
-  above says.
+  DECLARED `: UnicodeString` where every other constructor in this file is
+  declared `: Pointer`, and that is deliberate rather than inconsistent. Those
+  four hand-build a block and hand back its handle, so `Pointer` is what they
+  return. This one is the only routine here whose CALLER is the type system:
+  `ASTStrElemTkOf`'s AN_CALL arm reads `ProcRetStrElemTk`, which the parser
+  stamps from the declaration, and that row is what makes IRLowerAST's tkLength
+  arm halve the byte length. Declared `: Pointer`, the wrap has to write that
+  row by hand -- which works, and makes the row's value depend on whether a
+  Length was ever seen. A declaration is the honest carrier for a fact about a
+  routine. (frankH, who measured that this works while the argument against it
+  was still only an argument.)
+
+  TWO SHAPES THAT COMPILE AND ANSWER WRONG, both measured 2026-09-09, kept
+  because both are the natural thing to reach for:
+  - `Result := Result + c` over WideChars -- the exact shape of PCharToString --
+    needs `__pxxWideCharToUTF8`, which lives in builtin.pas, a unit this one
+    sits BELOW. It works in ordinary user code, which is what makes it the
+    obvious move; here it is `WideChar->string conversion:
+    __pxxWideCharToUTF8 helper not loaded`. A loud failure.
+  - `PXXWideAlloc` + `PXXBlockCopy` + `Result := UnicodeString(h)` COMPILES AND
+    RUNS. That cast is a CONVERSION, not a reinterpretation: it transcodes
+    narrow to wide, so a correct 4-unit / 8-byte block comes back 16 bytes and
+    Length answers 8. Contents right, length doubled.
+  frankH separated them by putting an append-built function beside a
+  handle-built one in ONE program: 8 and 4 side by side is a fact, 8 alone is a
+  puzzle. This seat read its own 8 as handle-poking gone wrong and would have
+  gone looking in the frontend.
+
+  nil in, empty out; an empty run (`p^` is already the terminator) is empty too,
+  and an empty managed string IS the nil handle here, exactly as every
+  constructor above says.
 
   The scan is unbounded, like a strlen and like PCharToString: a raw pointer
   with no terminator is a caller error in both widths and there is no length
-  to bound it with. }
-function PXXWideFromPWChar(p: Pointer): Pointer;
-var n: Int64;
+  to bound it with. PU16 and not PByte is the entire difference between this
+  and the narrow strlen that would answer 1 for 'abcd'. }
+function PXXWideFromPWChar(p: Pointer): UnicodeString;
+var n, i, s: Int64;
 begin
-  Result := nil;
+  Result := '';
   if p = nil then Exit;
+  s := Int64(p);
   n := 0;
-  while PU16(Int64(p) + n * 2)^ <> 0 do n := n + 1;
-  if n = 0 then Exit;
-  Result := PXXWideAlloc(n);
-  PXXBlockCopy(Int64(Result), Int64(p), n * 2);
+  while PU16(s + n * 2)^ <> 0 do n := n + 1;
+  if n = 0 then Exit;   { an empty managed string IS the nil handle }
+  SetLength(Result, n);
+  i := 0;
+  while i < n do
+  begin
+    Result[i + 1] := WideChar(PU16(s + i * 2)^);
+    i := i + 1;
+  end;
 end;
 
 
