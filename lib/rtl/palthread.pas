@@ -49,11 +49,16 @@ type
 const
   PAL_DEFAULT_STACK = 1024 * 1024;   { 1 MiB default child stack }
   { What the clone stub carves off the top before the child's first instruction
-    -- a 1152-byte TLS block, a 32768-byte signal alt stack and a 256-byte
+    -- a 4224-byte TLS block, a 32768-byte signal alt stack and a 256-byte
     hidden-destination scratch for an entry that returns an aggregate -- plus a
     64KB working floor. Stated as one number here rather than derived from the
     compiler's constants because the RTL cannot see them; if either grows, this
-    is the second copy and the stub is the first. }
+    is the second copy and the stub is the first.
+
+    The block was 1152 bytes until `threadvar` landed. It is now 1152 bytes of
+    compiler-owned slot map plus TLS_USER_BYTES (3072) of source-declared
+    per-thread variables -- a FIXED cap, so this number does not move with the
+    program. Raise both together or not at all. }
   PAL_MIN_STACK = 128 * 1024;
 
 { Spawn a thread running entry(arg) on a fresh mmap'd stack. stackSize <= 0 picks
@@ -159,7 +164,7 @@ var
 begin
   if stackSize <= 0 then stackSize := PAL_DEFAULT_STACK;
   { A FLOOR, because the clone stub carves off the TOP before the thread runs:
-    a TLS block (1152 bytes) and, since a cloned thread got its own signal alt
+    a TLS block (4224 bytes: the slot map plus the `threadvar` area) and, since a cloned thread got its own signal alt
     stack, SIG_ALTSTACK_SIZE (32768) above it. A caller asking for less than
     that is not getting a small stack, it is getting a stub writing past the
     end of the mapping -- and the failure would land in another thread's

@@ -2002,6 +2002,12 @@ begin
             Inc(DeclItemCount);
           end;
         end
+        else if CaseEqual(CurTok.SVal, 'threadvar') then
+          { a section keyword the lexer has no token for, exactly like
+            `resourcestring` and `label` below it. Program and unit level only --
+            see ParseThreadVarSection.
+            feature-p-threadvar-is-not-supported-at-any-scope }
+          ParseThreadVarSection
         else if CaseEqual(CurTok.SVal, 'resourcestring') then
           ParseConstSection(-1, 0, True)   { real storage: see the section parser }
         else if CaseEqual(CurTok.SVal, 'label') then

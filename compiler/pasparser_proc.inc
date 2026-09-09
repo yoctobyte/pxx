@@ -3351,6 +3351,15 @@ begin
     because ISO Pascal puts it FIRST and it used to be handled only by a
     separate loop further down, i.e. only when it came last.
     bug-a-a-label-section-must-come-last-in-a-routine }
+  { `threadvar` inside a routine is refused BY NAME. FPC allows it at unit and
+    program level only, and the fall-through diagnostic was `expected 'begin'
+    before 'threadvar'` -- a complaint about the wrong token, and the exact
+    message feature-p-threadvar-is-not-supported-at-any-scope was filed on. }
+  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'threadvar') then
+    Error('threadvar is not allowed inside a routine: it declares per-thread '
+        + 'storage with the lifetime of the program, and a routine-local name has '
+        + 'the lifetime of a call. Declare it at unit or program level (FPC''s rule '
+        + 'too); a per-CALL copy is what an ordinary local already is.');
   while (CurTok.Kind in [tkVar, tkConst, tkType, tkProcedure, tkFunction]) or
         ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label')) do
     case CurTok.Kind of
@@ -5512,6 +5521,7 @@ var
     point of the rule. Empty when nothing was refused. }
   pasRefusedPath: AnsiString;
   isPyUnit, savedPyExprMode: Boolean;
+  savedParsingThreadVar: Boolean;   { see the save below }
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
     re-mangles to exactly the unit name that arrived. }
@@ -6138,6 +6148,14 @@ begin
       reached this branch with the flag still on: `(c >= 'A') and (c <= 'Z')`
       then failed on `and`. Restored below with the rest of the per-unit modes. }
     savedPyExprMode := PyExprMode;
+    { A used unit is not inside our `threadvar` section, whatever we are in the
+      middle of. A TYPE in a threadvar declaration can pull a unit in on demand,
+      and without this every plain `var` in that unit would be allocated a TLS
+      slot and silently become per-thread. Nothing would have reported it: the
+      declarations parse, the slots exist, and the values are simply not shared
+      any more. ParseThreadVarSection holds the caller's half of this pair. }
+    savedParsingThreadVar := ParsingThreadVar;
+    ParsingThreadVar := False;
     PyExprMode := False;
     { fresh per-unit default: FPC lexes each unit under its OWN mode — an
       includer's {$MODE DELPHI} (NestedComments off) must not change how this
@@ -6438,6 +6456,7 @@ begin
     InterfacesComMode := savedInterfacesCom;
     MaxStackFrameSize := savedMaxStackFrame;
     PyExprMode := savedPyExprMode;
+    ParsingThreadVar := savedParsingThreadVar;
     CurrentUnitIdx := savedCurrentUnitIdx;
     InUnitImpl := savedUnitImplCU;
     CurrentCLibrary := savedCurrentCLibrary;
@@ -6874,7 +6893,8 @@ begin
         { `resourcestring` sections (FPC rtlconsts et al) register as plain
           string constants — pxx has no resource tables; the format-arg
           machinery lives in whoever consumes the string. }
-        if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
+        if CaseEqual(CurTok.SVal, 'threadvar') then ParseThreadVarSection
+        else if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
         else if CaseEqual(CurTok.SVal, 'operator') then
           { An operator DECLARATION in the interface: a header with no body, and
             it REGISTERS. It used to be consumed and discarded, on the stated
@@ -7069,6 +7089,8 @@ begin
             ParseGenericFunctionDef;
             PreScanPass := True;
           end
+          else if CaseEqual(CurTok.SVal, 'threadvar') then
+            ParseThreadVarSection
           else if CaseEqual(CurTok.SVal, 'resourcestring') then
             ParseConstSection(-1, 0, True)    { real storage: see the section parser }
           else

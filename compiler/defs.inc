@@ -951,7 +951,12 @@ const
     zeroes the whole block, and a zeroed magazine reads as "every size class
     empty", which is the correct initial state and not a special case.
     feature-a-reentrant-heap-lock-and-per-thread-arenas }
-  TLS_BLOCK_SIZE   = 1152;
+  { TLS_BLOCK_SIZE is DEFINED BELOW THE MAP, not here, because it is now the sum
+    of the map and the source-declared `threadvar` area and the map's own extent
+    is computed from TLS_SLOT_HEAP_MAGN. It used to be the literal 1152 at this
+    line, which was the map's size and the block's size at once -- true while
+    nothing else lived in the block, and a second meaning waiting to drift the
+    moment something did. See TLS_USER_BYTES. }
   { The child's HIDDEN-DESTINATION SCRATCH, carved off the very top of a cloned
     thread's stack (above the alt stack) by the same stub.
 
@@ -1142,6 +1147,34 @@ const
   HEAP_MAG_HDISP    = TLS_SLOT_HEAP_MAG * 8 - 8;    { head  offset = rounded size + this }
   HEAP_MAG_NDISP    = TLS_SLOT_HEAP_MAGN * 8 - 8;   { count offset = rounded size + this }
 
+  { ---- the source-declared `threadvar` area, and the block size it makes ----
+
+    Everything above this offset is the compiler's own map: the 16 named slots,
+    then 64 magazine heads and 64 counts. A `threadvar` gets storage PAST all of
+    it, so no existing offset moves and the map stays exactly the ABI it was.
+    Its address is `__pxxTlsBase + TLS_USER_FIRST_OFF + <its own offset>`, which
+    is ordinary pointer arithmetic and needs no backend op -- see
+    feature-p-threadvar-is-not-supported-at-any-scope.
+
+    A FIXED CAP RATHER THAN A GROWN BLOCK, and the reason is an ORDERING one
+    that is not obvious: EmitTlsMainInstall runs from compiler.pas BEFORE
+    ParseProgram, because it emits the program's entry-point prologue -- so it
+    reserves BSS_TLS_MAIN and bakes the size into the clone stub's carve before
+    a single `threadvar` has been seen. Growing the block at emit time would
+    need the reservation to move after parsing, which means the entry prologue
+    stops being the first thing emitted. Out of scope for the first rung; a cap
+    with a diagnostic is honest, and the diagnostic names this constant.
+
+    3072 bytes = 384 slots. Costs that much of every thread's stack and of the
+    main thread's BSS whether or not the program declares a threadvar: against
+    palthread's PAL_MIN_STACK of 128 KiB and a carve that was already ~34 KiB,
+    it is affordable and it is why this is not a variable. Raise it if a real
+    program hits the diagnostic; lib/rtl/palthread.pas states the carve in prose
+    and has to be raised WITH it. }
+  TLS_USER_FIRST_OFF = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8;   { 1152 today }
+  TLS_USER_BYTES     = 3072;
+  TLS_BLOCK_SIZE     = TLS_USER_FIRST_OFF + TLS_USER_BYTES;
+
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.
                            ASTIVal = the interned-string index whose 16 bytes ARE the GUID in
@@ -1189,6 +1222,11 @@ const
   AN_TLSBASE       = 96; { __pxxTlsBase: the calling thread's TLS base pointer, read
                            from the architectural thread register. No operands; yields
                            tyPointer. Lowers to IR_TLSBASE.
+                           IVAL IS A BYTE OFFSET ADDED TO THE BASE, and it is 0 for the
+                           `__pxxTlsBase` intrinsic itself. The `threadvar` rewrite is
+                           the only writer -- see ThreadVarRewriteRange and the arm in
+                           ir.inc, which explains why the offset rides here rather than
+                           being built out of AST arithmetic nodes.
                            CONVENTION: slot 0 of the block holds the block's OWN address
                            (what glibc/musl do), because x86-64 cannot read the segment
                            base without a syscall -- `mov rax, gs:[0]` is the read. GS,
@@ -4732,6 +4770,21 @@ var
     authority on it. Zero for anything that never took global storage.
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   SymAllocSize   : array of Integer;
+  { A `threadvar`'s byte offset INSIDE the TLS block, or -1 for every other
+    symbol -- which is every symbol in every program that declares none.
+
+    A FLAG, DELIBERATELY, AND NOT A FOURTH TSymKind. The census in
+    feature-p-threadvar-is-not-supported-at-any-scope counted 175 `Kind =
+    skGlobal` tests tree-wide, every one of them written as `if Kind = skGlobal
+    then <absolute/RIP> else <rbp-relative>`. A fourth kind falls into the
+    `else` at every site nobody taught, so a threadvar would be addressed as a
+    LOCAL -- a plausible wrong address inside the current frame, no crash and no
+    link error. Keeping the symbol skGlobal with real (unused) BSS storage means
+    an untaught path answers process-wide instead: wrong, but it links and it is
+    findable. Nothing should reach that path today -- ThreadVarRewriteRange
+    rewrites the reference before any consumer sees it -- and this is the
+    failure mode if one ever does. }
+  SymTlsOffset   : array of Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -6133,6 +6186,9 @@ var
     note there. }
   TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TLS_BLOCK_SIZE bytes); cloned threads carve theirs off their own stack }
+  TlsUserUsed     : Integer;     { bytes of TLS_USER_BYTES handed out to `threadvar` declarations so far; the bump allocator's only state }
+  ThreadVarRewriteHigh: Integer; { how far into the PERMANENT AST region (below ASTArenaFloor) ThreadVarRewriteRange has swept. Never a high-water mark of ASTNodeCount: the arena is rolled back per statement and node indices are REUSED -- see the routine, which records the one-statement bug that came of assuming otherwise }
+  ParsingThreadVar: Boolean;     { ParseVarSection is running for a `threadvar` section, not a `var` one }
   BSS_SIG_NUM     : Integer;
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;

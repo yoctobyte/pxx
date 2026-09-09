@@ -4502,6 +4502,19 @@ test-threads: $(COMPILER)
 	# assertion below is not merely "it ran".
 	./$(COMPILER) --threadsafe test/test_tls_base.pas $(TESTTMP)/test_tls_base26
 	tools/expect_same.sh test_tls_base26 "$$($(TESTTMP)/test_tls_base26)" "$$(printf 'errors=0\nTLS OK')"
+	# ...and the SOURCE-LEVEL spelling of the same storage: `threadvar`. Four
+	# threads hammer a threadvar and a plain global in one loop, 200000 times
+	# each. THE PLAIN GLOBAL IS THE POSITIVE CONTROL and `control-raced` asserts
+	# it actually raced -- if a threadvar were an ordinary global both rows would
+	# fail together, and if the harness were inert neither would. Replacing
+	# `threadvar` with `var` in this exact file yields kept=1/4, zeroed=0/4,
+	# no-crosstalk=1/4 and main-copy=103 (measured 2026-09-09), so the row is not
+	# merely "it ran". zeroed-on-entry is the second claim: a child's block is
+	# carved off its own reused stack and the clone stub zeroes it, so a
+	# threadvar must not start life holding the previous thread's value.
+	# feature-p-threadvar-is-not-supported-at-any-scope
+	./$(COMPILER) --threadsafe test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26
+	tools/expect_same.sh test_threadvar_pt26 "$$($(TESTTMP)/test_threadvar_pt26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ncontrol-raced=TRUE\nmain-copy=7\nTHREADVAR OK')"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how
@@ -14612,6 +14625,54 @@ test-core: $(COMPILER)
 	@# directory after a stale .ppu answered for the wrong command line).
 	./$(COMPILER) --no-assertions -Futest/units test/test_a_directive_after_the_final_end_reaches_a_used_unit.pas $(TESTTMP)/assertpolarity_tail26
 	tools/expect_same.sh assertpolarity_tail26 "$$($(TESTTMP)/assertpolarity_tail26)" "unit-ambient=off"
+	# `threadvar` as a LANGUAGE surface, single-threaded, and every line of it is
+	# byte-identical to FPC 3.2.2 `fpc -Mobjfpc` (measured 2026-09-09). A
+	# threadvar in a program that spawns nothing IS an ordinary variable, so the
+	# oracle applies to scope, `@`, a var parameter, arithmetic, a second name in
+	# the group and a non-integer type -- without needing threads, which is why
+	# it runs here and not in test-threads. The per-THREAD claim cannot be made
+	# by a single-threaded run and is asserted separately, with a plain global as
+	# its positive control. feature-p-threadvar-is-not-supported-at-any-scope
+	./$(COMPILER) test/test_a_threadvar_is_a_variable.pas $(TESTTMP)/test_threadvar_var26
+	tools/expect_same.sh test_threadvar_var26 "$$($(TESTTMP)/test_threadvar_var26)" "$$(printf 't=10 u=20 before=1 after=2\nafter var param t=15\nthrough a pointer t=30 q^=30\ninc/dec t=28\nexpression=104\ncmp t>u\nd=4.5000\nptr points at before=TRUE\nindependent t=7 u=9')"
+	# THE SIX REFUSALS, ONE FILE PER DIAGNOSTIC. A single source carrying all six
+	# mistakes reports the first and hides five behind it, which is how a negative
+	# test quietly stops testing what it names. Generated rather than committed
+	# because each is two lines and none contains a string literal (a `''` inside
+	# a single-quoted printf closes the shell string -- that cost one round here).
+	#
+	# The leading `!` is the PRECONDITION and it is BRANCHED ON: a compile that
+	# unexpectedly SUCCEEDS fails the row, instead of falling through to a grep of
+	# an empty error log, which passes for the wrong reason on exactly the
+	# regression this guards against.
+	#
+	# Rows 5 and 6 are the two corpus rows this ticket named. tclass17/terecs21
+	# are %FAIL rows, so ANY refusal passed them -- and what they were getting was
+	# `expected ':' before Test`, the threadvar read as a FIELD NAME. Re-measured
+	# after the feature landed, which is when the ticket said to look.
+	printf 'program a; procedure Q; threadvar t: LongInt; begin end; begin Q; end.\n' > $(TESTTMP)/tv_routine.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_routine.pas $(TESTTMP)/tv_1 >$(TESTTMP)/tv_1.err 2>&1
+	grep -q 'threadvar is not allowed inside a routine' $(TESTTMP)/tv_1.err
+	printf 'program a; threadvar t: LongInt = 5; begin end.\n' > $(TESTTMP)/tv_init.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_init.pas $(TESTTMP)/tv_2 >$(TESTTMP)/tv_2.err 2>&1
+	grep -q 'a threadvar cannot have an initializer' $(TESTTMP)/tv_2.err
+	printf 'program a; var g: LongInt; threadvar t: LongInt absolute g; begin end.\n' > $(TESTTMP)/tv_abs.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_abs.pas $(TESTTMP)/tv_3 >$(TESTTMP)/tv_3.err 2>&1
+	grep -q 'absolute. overlays a specific' $(TESTTMP)/tv_3.err
+	printf 'program a; threadvar s: string; begin end.\n' > $(TESTTMP)/tv_str.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_str.pas $(TESTTMP)/tv_4 >$(TESTTMP)/tv_4.err 2>&1
+	grep -q 'only ordinal, pointer and floating-point threadvars' $(TESTTMP)/tv_4.err
+	printf 'program a; type TC = class public threadvar F: LongInt; end; begin end.\n' > $(TESTTMP)/tv_cls.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_cls.pas $(TESTTMP)/tv_5 >$(TESTTMP)/tv_5.err 2>&1
+	grep -q 'not allowed in a class or record body' $(TESTTMP)/tv_5.err
+	printf 'program a; type TR = record public class threadvar F: LongInt; end; begin end.\n' > $(TESTTMP)/tv_rec.pas
+	! ./$(COMPILER) $(TESTTMP)/tv_rec.pas $(TESTTMP)/tv_6 >$(TESTTMP)/tv_6.err 2>&1
+	grep -q 'not allowed in a class or record body' $(TESTTMP)/tv_6.err
+	# ...and the target refusal, which is the one that must NOT become a silent
+	# shared global -- that is the whole complaint in the C sibling ticket.
+	printf 'program a; threadvar t: LongInt; begin t := 1; end.\n' > $(TESTTMP)/tv_arch.pas
+	! ./$(COMPILER) --target=aarch64 $(TESTTMP)/tv_arch.pas $(TESTTMP)/tv_7 >$(TESTTMP)/tv_7.err 2>&1
+	grep -q 'threadvar is x86-64 only' $(TESTTMP)/tv_7.err
 	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
 	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
 	# mistakes reports the first and hides three behind it, which is how a

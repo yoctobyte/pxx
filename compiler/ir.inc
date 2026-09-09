@@ -11448,11 +11448,26 @@ begin
 
     AN_TLSBASE:
     begin
-      { __pxxTlsBase. Deliberately READ-only and base-only: with the block's own
-        address in slot 0 the caller does ordinary pointer arithmetic to reach a
-        slot, so one op covers every future per-thread field (arena, errno,
-        exception stack, RNG) without an intrinsic per field. }
+      { __pxxTlsBase. Deliberately READ-only: with the block's own address in
+        slot 0 the caller does ordinary pointer arithmetic to reach a slot, so
+        one op covers every per-thread field (arena, errno, exception stack,
+        RNG) without an intrinsic per field.
+
+        ASTIVal IS A BYTE OFFSET FROM THE BASE, and it is 0 for the
+        `__pxxTlsBase` intrinsic, which is where AllocNode leaves it. The
+        `threadvar` rewrite (ThreadVarRewriteRange) is the only thing that sets
+        it, and it sets it because the alternative was to build the sum out of
+        AST nodes -- which meant answering whether `Pointer + Integer` in this
+        dialect adds BYTES or scales by the pointee. At the IR level that
+        question does not exist: IR_BINOP on a tyPointer operand is a raw
+        byte-wise add, the same one AN_FRAME's `frame - 8` above uses. One arm
+        here, no casts in the frontend, and `__pxxTlsBase` itself is unchanged
+        because its offset is zero. }
       Result := IRAppend(IR_TLSBASE, -1, -1, -1, 0, Ord(tyPointer));
+      if ASTIVal[node] <> 0 then
+        Result := IRAppend(IR_BINOP, Result,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, ASTIVal[node], Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer));
     end;
 
     AN_FRAME:

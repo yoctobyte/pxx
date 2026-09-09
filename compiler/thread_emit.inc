@@ -57,11 +57,17 @@ begin
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
     { ---- carve the child's TLS block off the top of its stack ---- }
-    { TLS_BLOCK_SIZE bytes = 80 slots (16 of slot map + a 64-class heap
-      magazine), zeroed, slot 0 = its own address (the convention __pxxTlsBase
-      reads through). The zeroing is not merely hygiene for the magazine tail:
-      an all-zero magazine IS "every size class empty", so a fresh thread's
-      allocator fast path is correct with no initialisation of its own.
+    { TLS_BLOCK_SIZE bytes = the slot map (16 named slots plus the 64 magazine
+      heads and 64 counts behind them) followed by TLS_USER_BYTES of
+      source-declared `threadvar` storage. NO SLOT COUNT IN THIS SENTENCE: the
+      previous one said 80 and the answer was 144 by the time anyone read it --
+      defs.inc owns the census and this is a consumer.
+      Zeroed, slot 0 = its own address (the convention __pxxTlsBase reads
+      through). The zeroing is not merely hygiene for the magazine tail: an
+      all-zero magazine IS "every size class empty", so a fresh thread's
+      allocator fast path is correct with no initialisation of its own -- and
+      it is now also what makes every `threadvar` start a thread's life at 0,
+      which the language requires and a test asserts.
       Zeroed rather than trusted: palthread hands us
       fresh anonymous mmap, but __pxxclone is reachable directly and a reused
       stack would otherwise present the previous thread's slots as this one's.

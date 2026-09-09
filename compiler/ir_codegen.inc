@@ -84,11 +84,12 @@ procedure EmitAcquireHeapLock;
   Slot budget, RE-READ from defs.inc rather than carried forward: 0..12 are
   taken (the magazine's own busy flag is 12) and TLS_SLOT_FIRST_FREE = 13, so
   THREE map slots are free, not four. The magazine did not need them -- it took
-  a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and TLS_BLOCK_SIZE grew
-  to 1152 to hold it, which is stack the thread already owns. Both numbers in
+  a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and the block grew to
+  1152 to hold it, which is stack the thread already owns. Both numbers in
   this paragraph were one lower when it was written; a slot count in prose is a
   census with an owner elsewhere, and it goes stale the next time someone takes
-  a slot.
+  a slot -- as 1152 did: TLS_BLOCK_SIZE is now that map PLUS TLS_USER_BYTES of
+  `threadvar` storage, and the map's own extent is what the 1152 above names.
 
   THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
   but x86-64 — the others have a readable thread register (aarch64 tpidr_el0,
@@ -13779,6 +13780,104 @@ begin
   AstDumpTree(ASTChildRight(node), depth + 1);
 end;
 
+procedure ThreadVarRewriteRange;
+{ Turn every reference to a `threadvar` into a dereference of its address inside
+  the calling thread's TLS block, IN PLACE, before anything lowers it.
+
+  WHY A REWRITE AND NOT AN ADDRESSING MODE. The census in
+  feature-p-threadvar-is-not-supported-at-any-scope counted the four candidate
+  doors and none of them is one: ~80 AllocNode(AN_IDENT) sites in the Pascal
+  frontend, 449 IR_LOAD_SYM/IR_STORE_SYM/IR_LEA appends in ir.inc, 42
+  EmitGlobRef calls in this file alone times seven backends, and 175 `Kind =
+  skGlobal` tests tree-wide. A rule spelled at any of those fails by an ABSENT
+  COPY -- the site nobody edits keeps building a plain global reference, and on
+  the skGlobal route it is worse than that, because those sites are written `if
+  Kind = skGlobal then <absolute> else <rbp-relative>` and a fourth kind lands
+  in the `else` as a LOCAL. A plausible wrong address in the current frame.
+
+  So the door is the one place that exists: the node is rewritten into a shape
+  the compiler already handles everywhere. AN_DEREF is a first-class lvalue --
+  assignment, `@`, a var parameter, a field, an index all already route their
+  address through IRLowerAddress's AN_DEREF arm -- so nothing downstream needs
+  to know the word "threadvar" at all. That is the same argument
+  normalise-dont-special-case.md makes: reach the construct through a shape that
+  already works instead of growing a second path that will stay broken.
+
+  IN PLACE, so every parent's pointer to this node stays valid and no parent
+  fixup exists to get wrong. Only four slots change; Line/File are deliberately
+  KEPT, so a diagnostic about the reference still points at the source the user
+  wrote rather than at a node the compiler invented.
+
+  THE WATERMARK IS THE ARENA FLOOR, AND "NODES ARE ONLY EVER APPENDED" IS FALSE.
+  That was the first version of this routine and it was wrong in a way worth
+  recording, because it looked right and it failed on ONE statement: the AST
+  arena is ROLLED BACK per statement (`ASTNodeCount := ASTArenaFloor`, twelve
+  sites), so node INDICES ARE REUSED. A plain high-water mark therefore skips
+  any statement whose tree is SMALLER than the previous one's -- and after a
+  `uses palthread`, whose unit bodies had pushed the count high, the very first
+  statement of the main body was exactly that. `mine := 7` compiled as a store
+  to the symbol's unused BSS slot, the next statement was rewritten correctly,
+  and the program printed 0 then 8. Measured 2026-09-09: `dummy := 1` in front
+  of it made it pass, which is the tell -- a defect that moves when you add an
+  unrelated line is about node numbering, not about the feature.
+
+  So the range is [ASTArenaFloor .. ASTNodeCount), plus whatever of the
+  PERMANENT region below the floor has not been swept yet. Nodes below the floor
+  are never recycled, so one sweep of them is enough and the watermark carries
+  that progress; nodes at or above it are volatile and are swept every time. The
+  `min` with the floor covers a floor that MOVES UP (declaration-time nodes
+  become permanent -- pasparser_decl.inc raises it) and, defensively, one that
+  moves down, which only the NilPy frontend does.
+
+  FREE WHEN THE PROGRAM DECLARES NONE, which is every program that existed
+  before this feature: TlsUserUsed is 0 and the routine returns on the first
+  line. }
+var i, sym, addrNode: Integer;
+begin
+  if TlsUserUsed = 0 then Exit;
+  if ThreadVarRewriteHigh > ASTArenaFloor then ThreadVarRewriteHigh := ASTArenaFloor;
+  i := ThreadVarRewriteHigh;
+  while i < ASTNodeCount do
+  begin
+    if ASTKind[i] = AN_IDENT then
+    begin
+      sym := ASTIVal[i];
+      if (sym >= 0) and (sym < SymCount) and (SymTlsOffset[sym] >= 0) then
+      begin
+        addrNode := AllocNode(AN_TLSBASE);
+        ASTTk[addrNode]   := Ord(tyPointer);
+        ASTIVal[addrNode] := SymTlsOffset[sym];
+        ASTLine[addrNode] := ASTLine[i];
+        ASTFile[addrNode] := ASTFile[i];
+        ASTKind[i]  := AN_DEREF;
+        ASTLeft[i]  := addrNode;
+        { ASTRight IS DELIBERATELY NOT TOUCHED, and the reason is an instrument
+          rather than an opinion: test/ast_slot_writes.expected -- the census
+          tools/ast_slot_overloads.py keeps -- records every write to ASTLeft /
+          ASTRight per node kind across the whole compiler, and it has NO
+          `AN_IDENT Right` line at all. An AN_IDENT's Right is therefore always
+          AllocNode's -1 already, so clearing it would add nothing except a bare
+          integer literal written into a slot the overload table calls a CHILD,
+          which is the exact shape that census's second arm exists to flag. If a
+          future path ever does write Right on an AN_IDENT, the census reports
+          it as a new line and this comment is what connects the two. }
+        { the symbol index has no meaning on an AN_DEREF, and -1 is what every
+          reader of ASTIVal that is not guarded by kind treats as "none" }
+        ASTIVal[i]  := -1;
+        { the address is base+constant and can never be nil, so the {$NILCHECKS}
+          site class this node now belongs to has nothing to test. Cleared rather
+          than left at whatever StmtNChecks was when the IDENT was born: that
+          value described a pointer the user wrote, and this is not one. }
+        ASTNilChk[i] := 0;
+      end;
+    end;
+    Inc(i);
+  end;
+  { ...only the PERMANENT progress is kept. Banking ASTNodeCount here is the bug
+    described above: the volatile tail is gone by the next call. }
+  ThreadVarRewriteHigh := ASTArenaFloor;
+end;
+
 procedure CompileAST(node: Integer);
 var iZeroTmp: Integer;
 begin
@@ -13801,6 +13900,10 @@ begin
     WriteLn('PXXDBG a.ast ', Procs[CurProc].Name);
     AstDumpTree(node, 0);
   end;
+  { BEFORE IRReset, and before anything asks this tree a question: every
+    `threadvar` reference becomes a dereference of its per-thread address here,
+    so no consumer below ever meets a threadvar SYMBOL. See the routine. }
+  ThreadVarRewriteRange;
   IRReset;
   IRLowerAST(node);
   { THE LANDING-PAD GATE, ASKED WHERE IT CAN SEE THE ANSWER. IRLowerAST has just

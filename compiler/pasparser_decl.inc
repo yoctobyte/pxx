@@ -2658,6 +2658,72 @@ begin
   end;
 end;
 
+procedure AssignThreadVarStorage(idx: Integer);
+{ Give one `threadvar` its slot in the TLS block's user area, or refuse it with
+  a diagnostic that says which of the four reasons applied.
+
+  THE STORAGE IS THE ONLY THING THIS DECIDES. Addressing happens later and in
+  one place -- ThreadVarRewriteRange, run from CompileAST -- which is why there
+  is no second copy of "is this a threadvar" anywhere between here and the
+  backend. AllocFromDeclTypeDesc has ALREADY given the symbol ordinary global
+  BSS storage by the time this runs; that storage is simply never used. Leaving
+  it costs a few bytes per threadvar and buys the failure mode argued for at
+  SymTlsOffset: a path nobody taught reads a process-wide global instead of a
+  wild address.
+
+  REFUSING IS A FEATURE HERE, not a gap to apologise for. The sibling ticket
+  bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared
+  is this same missing mechanism one frontend over, and the whole complaint
+  about it is that it says nothing and shares the storage. Every refusal below
+  names what would have to change.
+
+  feature-p-threadvar-is-not-supported-at-any-scope }
+var tk: TTypeKind; sz, align, off: Integer;
+begin
+  if TargetArch <> TARGET_X86_64 then
+    Error('threadvar is x86-64 only: a per-thread block is installed with '
+        + 'arch_prctl(ARCH_SET_GS) by the clone stub, and the other targets have '
+        + 'a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but no '
+        + 'way to SET one yet. Answering with the parent thread''s block would be '
+        + 'a plausible wrong address, so this refuses instead -- the same refusal '
+        + '__pxxTlsBase gives, for the same reason.');
+  if not TlsMainInstalled then
+    Error('threadvar needs the per-thread block the program entry point installs, '
+        + 'and --emit-obj/--shared have no ELF entry point, so nothing installs '
+        + 'one. `gs:` with no base does not read 0, it FAULTS -- and inside a '
+        + 'glibc host it succeeds and returns glibc''s TCB, which is worse.');
+
+  tk := Syms[idx].TypeKind;
+  if Syms[idx].IsArray or (SymDynDepth[idx] > 0) then
+    Error('threadvar ' + Syms[idx].Name + ': an array threadvar is not supported yet. '
+        + 'The mechanism is the TLS block''s user area and an array fits it; what is '
+        + 'missing is that several paths reach an array through its SYMBOL (bounds, '
+        + 'dynamic-array handles, the element type) and a threadvar reference is '
+        + 'rewritten into a pointer dereference before they see it. Scalars first.');
+  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
+    Error('threadvar ' + Syms[idx].Name + ': only ordinal, pointer and floating-point '
+        + 'threadvars are supported. A managed type (string, interface, dynamic array, '
+        + 'Variant) additionally needs per-thread INITIALISATION and FINALISATION at '
+        + 'thread start and exit, which no thread hook exists for yet; a record or set '
+        + 'is reached through its symbol by paths that never see the rewritten '
+        + 'reference. Both are rungs above this one.');
+
+  sz := SymAllocSize[idx];
+  if sz <= 0 then sz := TypeSlotSize(tk);
+  align := TypeAlign(tk);
+  if align < 1 then align := 1;
+  off := AlignTo(TlsUserUsed, align);
+  if off + sz > TLS_USER_BYTES then
+    Error('threadvar ' + Syms[idx].Name + ': the per-thread variable area is full ('
+        + AIntToStr(TLS_USER_BYTES) + ' bytes, TLS_USER_BYTES in defs.inc). It is a '
+        + 'fixed cap and not a shortage of memory: the block is reserved by '
+        + 'EmitTlsMainInstall, which runs before parsing, so its size is baked in '
+        + 'before any threadvar has been seen. Raise TLS_USER_BYTES and the carve '
+        + 'stated in lib/rtl/palthread.pas with it.');
+  SymTlsOffset[idx] := TLS_USER_FIRST_OFF + off;
+  TlsUserUsed := off + sz;
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
@@ -2710,6 +2776,12 @@ begin
         not CaseEqual(CurTok.SVal, 'generic') and
         not CaseEqual(CurTok.SVal, 'specialize') and
         not CaseEqual(CurTok.SVal, 'operator') and
+        { ...and `threadvar`, which introduces a section of its own. Without it
+          `var a: Integer; threadvar t: Integer;` reads `threadvar` as the next
+          variable NAME and `t` as a syntax error two tokens later -- a
+          diagnostic about the wrong token, which is how the previous soft
+          section words got onto this list too. }
+        not CaseEqual(CurTok.SVal, 'threadvar') and
         not CaseEqual(CurTok.SVal, 'label') do
   begin
     { A TRAILING VAR DIRECTIVE -- `var GCount: Integer; cvar;` -- which is how a
@@ -2879,6 +2951,23 @@ begin
 	      grpIdx[i] := -1;
 	      idx := AllocFromDeclTypeDesc(names[i]);
 	      grpIdx[i] := idx;   { the group a trailing `cvar`/`public` would apply to }
+	      { A `threadvar` section runs this same parser -- one grammar, one set of
+	        type rules, one place that knows about `absolute` and initialisers --
+	        and differs only in where the storage comes from. }
+	      if ParsingThreadVar then
+	      begin
+	        { `threadvar t: Integer absolute x` would ask for one variable to be
+	          both per-thread and an overlay of a process-wide one. Refused here
+	          rather than left to produce the overlay silently -- the overlay arm
+	          below writes Syms[].Offset, and a threadvar is not addressed through
+	          Syms[].Offset at all, so the request would have been ACCEPTED and
+	          IGNORED. }
+	        if absTarget >= 0 then
+	          Error('threadvar ' + names[i] + ': `absolute` overlays a specific '
+	              + 'variable''s storage, which is process-wide; a threadvar has one '
+	              + 'copy per thread. The two cannot both be true of one name.');
+	        AssignThreadVarStorage(idx);
+	      end;
 	      if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
 	      { `absolute` overlay: take the target's storage instead of our own. The alloc
 	        already reserved a slot; we simply never use it, which costs a few bytes and
@@ -2934,6 +3023,23 @@ begin
 	      end;
 	    end;
 	    grpHadInit := Eat(tkEq);
+	    { A `threadvar` cannot carry one. HERE, at the `=` itself, and not in
+	      RegisterVarInitElem: that helper is the funnel for the ARRAY element
+	      forms only -- the plain scalar arm below writes PendingInit* inline, so
+	      a guard there let `threadvar t: LongInt = 5` compile clean and silently
+	      initialise the main thread's copy alone. Measured, not reasoned: the
+	      first version of this refusal WAS in the helper, and this exact line is
+	      the row that walked past it.
+
+	      The reason it is refused at all is not syntax. Both initializer tables
+	      are flushed ONCE, by program-entry code on the main thread, so the value
+	      would reach that thread's copy and no other -- accepted, silent, and
+	      wrong in precisely the threads the declaration exists for. }
+	    if ParsingThreadVar and grpHadInit then
+	      Error('a threadvar cannot have an initializer: the initializers run once, '
+	          + 'at program entry on the main thread, so the value would reach that '
+	          + 'thread''s copy and no other. Every thread''s copy starts zeroed (the '
+	          + 'clone stub zeroes the whole block); assign it from the thread itself.');
 	    if grpHadInit then
 	    begin
 	      { Constant initializer `= v` / `= (e0,e1,...)`. Recorded as pending
@@ -3298,6 +3404,35 @@ begin
 	    Eat(tkSemicolon);
 	  end;
 	end;
+
+procedure ParseThreadVarSection;
+{ `threadvar t: Integer;` -- FPC's only source-level spelling of thread-local
+  storage, and the language's.
+
+  ONE PARSER, NOT TWO. This is ParseVarSection with a flag, so the grammar, the
+  type rules, `absolute`, the hint directives and the group handling are shared
+  by construction rather than by discipline; the flag is read at exactly two
+  places (the storage assignment and the initialiser refusal) and nowhere else.
+  A copied section parser is how the class-var branch drifted from this one --
+  see the note above ParseVarSection's array loop.
+
+  SAVED AND RESTORED rather than set and cleared, because a TYPE inside the
+  section can pull in a unit on demand, and that unit's own `var` sections are
+  parsed by a nested call to this same routine. The nested unit-compile entry in
+  pasparser_proc.inc clears the flag for its duration for the same reason; this
+  is the caller's half of that, and either alone leaves a hole.
+
+  SCOPE: unit and program level only, which is FPC's rule. The routine-level
+  decl loops refuse it by name instead of falling through to `expected 'begin'`,
+  which is the diagnostic this ticket was filed on.
+  feature-p-threadvar-is-not-supported-at-any-scope }
+var saved: Boolean;
+begin
+  saved := ParsingThreadVar;
+  ParsingThreadVar := True;
+  ParseVarSection;
+  ParsingThreadVar := saved;
+end;
 
 { One array DIMENSION bound pair: `lo..hi`, or an ordinal TYPE naming its whole range.
 
@@ -6273,6 +6408,22 @@ begin
       continue;
     end;
 
+    { `threadvar` / `class threadvar` in a RECORD body. The class body's twin of
+      this refusal is beside its `class operator` one; this is the second copy
+      and it exists because the two bodies have separate member loops -- the
+      class arm alone left terecs20 (`record ... public class threadvar`) still
+      failing as `expected ':' before Test`, i.e. with the threadvar read as a
+      field name. Grep for the sibling before closing one arm of a double case.
+      feature-p-threadvar-is-not-supported-at-any-scope }
+    if ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'threadvar')) or
+       ((CurTok.Kind = tkClass) and (TokPos < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'threadvar')) then
+      Error('threadvar is not allowed in a class or record body: it declares '
+          + 'per-thread storage with the lifetime of the program, and a record body '
+          + 'declares members of a VALUE. FPC rejects the plain form here too. '
+          + 'Declare it at unit or program level; `class var` is the type-wide '
+          + '(process-wide) member this looks like.');
+
     { `class operator + (const a, b: TPt): TPt;` inside a record — the SIGNATURE only. pxx
       keys an operator on its OPERAND TYPES, so the in-record declaration carries nothing the
       definition does not; it is parsed and discarded, and the `class operator TPt.+(...)`
@@ -8324,6 +8475,23 @@ begin
              CaseEqual(CurTok.SVal, 'operator') then
             Error('`class operator` is not supported in a class body yet — ' +
                   'it is implemented for RECORD types only');
+          { `threadvar` / `class threadvar` in a class or record body, for the
+            same reason and by the same argument as `class operator` above: the
+            writer wrote a construct, and without this the `threadvar` is read as
+            a FIELD NAME and the complaint arrives one token later as `expected
+            ':' before Test`. That symptom is what tclass17 and terecs21 were
+            passing on -- they are %FAIL rows, so ANY refusal passes them, and
+            the refusal they were getting had nothing to do with their subject.
+            Re-measured 2026-09-09 after plain `threadvar` landed, which is when
+            the ticket said to look. Four rows: tclass17, terecs21 (plain) and
+            tclass16, terecs20 (`class threadvar`).
+            feature-p-threadvar-is-not-supported-at-any-scope }
+          if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'threadvar') then
+            Error('threadvar is not allowed in a class or record body: it declares '
+                + 'per-thread storage with the lifetime of the program, and a class '
+                + 'body declares members of an INSTANCE. FPC rejects it here too. '
+                + 'Declare it at unit or program level; `class var` is the class-wide '
+                + '(process-wide) member this looks like.');
           if sawClassKw and
              not ((CurTok.Kind = tkConst) or (CurTok.Kind = tkVar) or
                   (CurTok.Kind = tkProperty) or (CurTok.Kind = tkProcedure) or

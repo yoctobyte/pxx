@@ -5,10 +5,10 @@ track: P
 prio: 40
 type: feature
 blocked-by: []
-status: working
+status: done
 owner: frankH
 created: 2026-09-06
-summary: "`threadvar t: LongInt;` at program or unit level is refused with `expected 'begin' before 'threadvar'`. FPC supports it, and it is the language's only spelling for thread-local storage -- so a program that wants per-thread state has no way to ask for it. Measured 2026-09-06 by probe while dispositioning tclass17 and terecs21, two `%FAIL` rows about `threadvar` INSIDE A CLASS whose refusals were being satisfied by this gap rather than by their own subject."
+summary: "DONE for scalars at unit and program level, x86-64. A threadvar reference is REWRITTEN at CompileAST into a dereference of __pxxTlsBase + a constant, so no consumer downstream sees a threadvar symbol and no addressing rule is spelled per caller -- the funnel census in this ticket counted 80/449/42/175 sites for the four doors that look like one. Storage is TLS_USER_BYTES past the slot map, a fixed cap because EmitTlsMainInstall runs before parsing. Byte-identical to fpc on the single-threaded language surface; per-thread proven under 4-thread churn with a plain global as the positive control. Refused by name inside a routine, in a class/record body, with an initializer or `absolute`, for non-scalar types, off x86-64 and under --emit-obj. Remaining rungs: managed and aggregate types, `class threadvar`, and the C sibling."
 ---
 
 # The measurement
@@ -216,3 +216,133 @@ would prove the part that was never in doubt.
 banked: the blocking fork is settled and the mechanism proven end to end; what remains is an addressing change at ~20 x86-64 sites plus emit-time block sizing, and the funnel census is in the ticket
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+---
+
+## 2026-09-09 (frankH) — BUILT. `threadvar` works at unit and program level
+
+Resumed from the park above. The banked half held: the fork was settled, the
+mechanism was right, and the funnel census was the part that saved the time —
+it named the door that does not exist and the one that does.
+
+### The door, which is none of the four the census counted
+
+Not the parser, not `ir.inc`, not `EmitGlobRef`, not a fourth `TSymKind`. The
+door is **`CompileAST`** — the one routine every Pascal AST passes through on its
+way to IR — and what happens there is a **rewrite, not an addressing mode**:
+
+```
+AN_IDENT(threadvar sym)   ->   AN_DEREF( AN_TLSBASE(+off) )
+```
+
+in place, so every parent's pointer stays valid and no parent fixup exists to
+get wrong. `AN_DEREF` is already a first-class lvalue — assignment, `@`, a var
+parameter, a field, an index all route their address through
+`IRLowerAddress`'s `AN_DEREF` arm — so **nothing downstream knows the word
+threadvar**. That is `normalise-dont-special-case.md`'s argument applied
+literally: reach the construct through a shape that already works instead of
+growing a second path that stays broken.
+
+The offset rides on `AN_TLSBASE`'s `ASTIVal` rather than being built out of AST
+arithmetic, which sidesteps "does `Pointer + Integer` add bytes or scale" — at
+the IR level that question does not exist, `IR_BINOP` on a tyPointer operand is
+a raw byte add (the same one `AN_FRAME`'s `frame - 8` uses). One arm in
+`ir.inc`, no casts in the frontend, and `__pxxTlsBase` itself is unchanged
+because its offset is zero.
+
+`SymTlsOffset` is a FLAG on the symbol, not a kind — exactly as the census
+argued. The symbol stays `skGlobal` with real (unused) BSS storage, so a path
+nobody taught reads a process-wide global rather than an rbp-relative address
+in the caller's frame.
+
+### Storage: a fixed cap, and the ordering reason it is not grown
+
+`TLS_USER_BYTES = 3072` (384 slots) sits past slot 143, so **no existing offset
+moves** and the slot map stays the ABI it was. The clone stub already zeroes the
+whole block, so a thread's copies start at 0 with nothing added — the language
+requires that and a test asserts it.
+
+Fixed rather than grown because **`EmitTlsMainInstall` runs from `compiler.pas`
+BEFORE `ParseProgram`** — it emits the entry-point prologue, so it reserves
+`BSS_TLS_MAIN` and bakes the size into the clone stub's carve before a single
+`threadvar` has been seen. Growing it needs that reservation to move after
+parsing, i.e. the entry prologue stops being the first thing emitted. Out of
+scope for this rung; the exhaustion diagnostic names the constant and
+`lib/rtl/palthread.pas`'s second copy of the carve was raised with it.
+
+### The one-statement bug, banked because it looked right
+
+The first rewrite used a high-water mark on `ASTNodeCount` — "nodes are only
+ever appended". **They are not**: the AST arena is rolled back per statement
+(`ASTNodeCount := ASTArenaFloor`, twelve sites), so node indices are REUSED and
+a monotonic watermark skips any statement whose tree is SMALLER than the
+previous one's. After a `uses palthread`, whose unit bodies had pushed the count
+high, that was the very first statement of the main body:
+
+```
+mine := 7;  WriteLn('A mine=', mine);   ->  A mine=0
+mine := 8;  WriteLn('B mine=', mine);   ->  B mine=8
+```
+
+`dummy := 1` in front of it made it pass, which is the tell — **a defect that
+moves when you add an unrelated line is about node numbering, not about the
+feature**. The range is now `[ASTArenaFloor .. ASTNodeCount)` plus the unswept
+part of the permanent region below the floor.
+
+### What is refused, and every refusal says what would have to change
+
+| refused | why |
+| --- | --- |
+| inside a routine | FPC's rule; the fall-through was `expected 'begin' before 'threadvar'` — this ticket's own filing message |
+| in a class or record body | two arms, two member loops; see below |
+| an initializer | the tables are flushed once, on the main thread, so the value would reach that copy and no other |
+| `absolute` | the overlay is process-wide; both cannot be true of one name |
+| a non-scalar type | managed types need per-thread init/final at thread start and exit, which no hook exists for; a record/set is reached through its symbol |
+| an array | same reason, plus bounds and dyn handles |
+| not x86-64 | the same refusal `__pxxTlsBase` gives, for the same reason |
+| `--emit-obj` / `--shared` | no ELF entry point installs a block, and `gs:` with no base faults — or worse, returns glibc's TCB |
+
+### The corpus rows, re-measured as the ticket asked
+
+All four now refuse **by name** instead of through a parse gap:
+
+| row | before | after |
+| --- | --- | --- |
+| tclass17 `%FAIL` | `expected ':' before 'Test'` | `threadvar is not allowed in a class or record body` |
+| terecs21 `%FAIL` | same | same |
+| tclass16 | `class here must be followed by const, var, ...` | same |
+| terecs20 | `expected ':' before 'Test'` | same |
+
+The two `%FAIL` rows were passing on **any** refusal, and the one they were
+getting had nothing to do with their subject — the `threadvar` was being read as
+a FIELD NAME. The class body and the record body have SEPARATE member loops, and
+fixing only the class arm left terecs20 still failing the old way: one arm of a
+double case, caught by grepping for the sibling before closing.
+
+`class threadvar` (tclass16, terecs20) remains unsupported and is the rung
+above; those two also still need the RTLEvent family
+(`feature-b-the-rtlevent-family-is-absent-from-the-threading-rtl`).
+
+### Verification
+
+- `test_a_threadvar_is_a_variable.pas` — the LANGUAGE surface, single-threaded,
+  **byte-identical to `fpc -Mobjfpc`** (FPC 3.2.2). Scope, `@`, a var parameter,
+  arithmetic, `Inc`/`Dec`, a second name in the group, `Double`, `Pointer`, and
+  a `var` section the threadvar section did not eat.
+- `test_a_threadvar_is_per_thread.pas` — 4 threads, 200000 iterations, with a
+  **plain global as the positive control**: `control-raced` asserts the harness
+  can see cross-talk, so the two rows can only both pass if the storage really is
+  per-thread. Replacing `threadvar` with `var` in that exact file gives
+  `kept=1/4 zeroed=0/4 no-crosstalk=1/4 main-copy=103`.
+- Seven refusal rows, one file per diagnostic, each with a branched-on `!`.
+- `gate.sh quick` GREEN with `compiler/**` uncommitted (FPC seed canary ran);
+  self-host fixedpoint `converged after 1 round(s)`, `7052ba37afa1`.
+
+### The C sibling
+
+[[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]]
+is now the only half of this missing. The mechanism it needs is built and is
+frontend-agnostic — `SymTlsOffset`, the user area, and an `AN_TLSBASE`-rooted
+deref — so what remains there is the C frontend's own rewrite site, not a new
+mechanism. Left for its own lane; not wired as an edge, because neither gates
+the other.
