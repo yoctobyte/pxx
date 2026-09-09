@@ -1,12 +1,23 @@
 # Python's `str` surface must win over sysutils' TStringHelper when the two
 # spell the same member -- and must NOT win where only the helper has the name.
 #
-# The precondition is the import below: sysutils declares
-# `TStringHelper = type helper for AnsiString`, so from that point every
-# str-typed receiver has a Pascal helper in scope, and Pascal member lookup is
+# The precondition is the sysutils import below: it declares
+# `TStringHelper = type helper for AnsiString`, so every str-typed receiver in
+# THIS module has a Pascal helper in scope, and Pascal member lookup is
 # case-insensitive. Four Python spellings collide with it. Only the first was
 # visible as a failure; the other three COMPILED and silently called the
 # Pascal method, which is the half worth guarding.
+#
+# THE sysutils IMPORT IS LOAD-BEARING AND MUST BE THIS MODULE'S OWN. Until
+# 2026-09-09 this file imported only strhelperprobe.pas, whose `uses sysutils`
+# was believed to put the helper in scope here. It did not -- FindHelperForType
+# was a flat scan of every helper ever registered with no visibility test at
+# all, so ANY helper anywhere answered, and this file was reading that. f0aca9c59
+# gave it one, and the negative arms below then failed with `unsupported str
+# method .Trim()`: the guard had not changed, the helper had simply stopped
+# being reachable from a scope that never used its unit -- which is what fpc
+# does too, since a unit's `uses` does not re-export to its consumers.
+# regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper
 #
 # The receiver is spelled as a PARAMETER annotated `: str` in a def that is
 # pulled as a UNIT, because that is the shape the dispatch keys on -- a
@@ -15,6 +26,7 @@
 # bug-n-a-later-wall-in-key-analysis-blocks-convertrawtext-and-songformatter
 
 import 'strhelperprobe.pas' as probe
+import 'sysutils.pas' as su
 
 # --- the four collisions: Python semantics must win ---
 

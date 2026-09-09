@@ -2466,14 +2466,27 @@ function FindHelperForType(tk: TTypeKind; rec: Integer): Integer;
   FPC scoping: the last visible helper wins, hence the downward scan. The two
   string flavours (frozen tyString / managed tyAnsiString) are one family —
   an AnsiString helper serves a frozen-string receiver too. }
-var i, want, have: Integer;
+var i, want, have: Integer; hDbg: Boolean;
 begin
   Result := -1;
   want := Ord(tk);
+  { PROBE (p.helper): one line per candidate row, with the three numbers that
+    decide it -- the row's unit, the unit being compiled, and the verdict. The
+    defect shape it exists for is a helper that IS registered and is not
+    VISIBLE, which reads at the call site as "no helper exists" and sends the
+    caller down an unrelated path. Hoisted out of the loop: this runs for every
+    helper lookup in the program.
+    regression-test-nilpy-test-nilpy-str-method-vs-pascal-string-helper }
+  hDbg := PxxDbgEnabled('p.helper');
   for i := UClsCount - 1 downto 0 do
   begin
     have := UClsHelperTk[i];
     if have < 0 then continue;
+    if hDbg then
+      writeln('PXXDBG p.helper row=', i, ' tk=', have, ' rec=', UClsHelperRec[i],
+              ' rowunit=', UClsUnitIdx[i], ' rowimpl=', Ord(UClsDeclImpl[i]),
+              ' curunit=', CurrentUnitIdx, ' spechost=', SpecBodyHostUnitIdx,
+              ' visible=', Ord(HelperRowVisibleHere(i)), ' want=', want, ' wantrec=', rec);
     if not HelperRowVisibleHere(i) then continue;
     if (have = want) or
        (((have = Ord(tyString)) or (have = Ord(tyAnsiString))) and

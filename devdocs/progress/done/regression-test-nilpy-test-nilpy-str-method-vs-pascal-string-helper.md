@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+summary: "NOT a NilPy defect and not a too-broad str-method guard: `f0aca9c59` gave FindHelperForType a visibility test where it had had NONE (a flat scan in which any helper anywhere answered), and the test was reading that. Its precondition -- `import 'strhelperprobe.pas'`, a unit whose `uses sysutils` was believed to put TStringHelper in scope for the importing module -- was never true scoping: a unit's `uses` does not re-export to its consumers, in fpc or here. So `label.Trim()` stopped finding the Pascal helper and fell through to the Python str table, which correctly refuses it. ATTRIBUTED BY BUILD, NOT BY PLAUSIBILITY: the row passes at f0aca9c59^ (compiler 417ee5636a72) and fails at f0aca9c59 (compiler eb141da06a89), both measured by checking out compiler/ at each sha and rebuilding. Fixed by making the module import sysutils itself; all seven rows match, gate quick GREEN. The guard is unchanged and both negative arms still reach the helper, so the too-broad-guard control the test exists for is intact."
+status: done
 ---
 
 > **Track guessed as N from the FAILING STEP** — line 1 of 2, `./compiler/pascal26 test/test_nilpy_str_method_vs_pascal_string_helper.npy /tmp/test_nilpy_strmhelper26`, which names `test/test_nilpy_str_method_vs_pascal_string_helper.npy`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -10,7 +12,7 @@ track: P
 # regression: test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy at 4d018b041297 in step 1/2, `./compiler/pascal26 test/test_nilpy_str_method_vs_pascal_string_helper.npy /tmp/test_nilpy_strmhelper26` (auto-filed by twatch)
 
 - **Type:** regression (auto-filed by Track T watcher, host seven, twatch `0c5ad13167ab`).
-  Untriaged.
+  **RESOLVED 2026-09-09 by frankS** — see the summary and the section at the end.
 - **Found:** 2026-09-09T09:28:31Z
 - **Test source:** test/test_nilpy_str_method_vs_pascal_string_helper.npy test/test_nilpy_str_method_vs_pascal_string_helper.expected
 - **Failing step:** line 1 of 2 of the job's recipe; it names `test/test_nilpy_str_method_vs_pascal_string_helper.npy`.
@@ -76,3 +78,41 @@ number you did not earn; this is its mirror, where a pull worsens one and the
 obvious suspect is your own diff. I reverted a good change on that reading
 before re-checking. Attribute a tier delta to a RANGE before attributing it to
 yourself.
+
+## 2026-09-09 (frankS) — attributed by build, and the test's premise was the defect
+
+**The lane guess was right for the wrong reason, and the re-lane was right for
+the right one.** `track: N` came from the failing step's filename, which is the
+documented fallback. frankB re-laned to P on the reasoning that the mechanism is
+Pascal helper scope. That reasoning holds, and the measurement now says so.
+
+**The range had two buildable commits, so the bisect is one build.**
+`06e404587e29..4d018b041297` is 15 commits and 13 of them are docs or tstate;
+only `1c16d4523` and `f0aca9c59` touch the compiler, and nothing between them
+does, so `1c16d4523`'s tree IS `f0aca9c59^` for this purpose.
+
+| tree | compiler | row |
+| --- | --- | --- |
+| `git checkout 1c16d4523 -- compiler/` | `417ee5636a72` | **passes, byte-identical to .expected** |
+| `git checkout f0aca9c59 -- compiler/` | `eb141da06a89` | `unsupported str method .Trim()` |
+
+**The mechanism, from `PXXDBG=p.helper` (added in this commit).** The failing
+lookup prints
+`row=111 tk=23 rowunit=641 curunit=-1 visible=0` — the helper row is
+sysutils', the scope asking is the main PROGRAM, and `DeclVisibleSect` says no.
+Correctly: the module imports `strhelperprobe.pas`, whose `uses sysutils` does
+not re-export to its consumers. Before `f0aca9c59`, `FindHelperForType` had no
+visibility test of any kind, so any helper anywhere answered and the test read
+that as "in scope".
+
+**So the fix is the test's precondition, not the guard.** The module imports
+sysutils itself; all seven rows match and gate quick is GREEN. `PyStrMethodOwnsMember`
+is untouched, and both negative arms (`Trim`, `IsEmpty`) reach the Pascal helper
+again — which is what keeps the four positive arms from being a guard that
+cannot fail.
+
+**Not a regression to revert.** `f0aca9c59` made helper lookup more correct;
+what broke was a test asserting a scoping accident. Its own comment, and
+`strhelperprobe.pas`'s, both stated that accident as the premise, and both are
+corrected in place rather than left to be read as verified.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
