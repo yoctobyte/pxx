@@ -1,0 +1,74 @@
+# A field assigned from a module global whose initialiser is an EXPRESSION.
+# bug-n-a-field-assigned-from-a-module-global-expression-is-refused
+#
+# The single-token reader that types a global could see a bare LITERAL and
+# nothing else, so every row above the divider was a hard compile refusal of a
+# program CPython runs -- while `G = 3.5` two lines away was accepted, which is
+# what shows the global-ness was never the subject.
+#
+# THE CONTROLS BELOW THE DIVIDER ARE THE POINT OF THIS FILE. The expression
+# scanner answers a KIND, and the arm that types `G = K()` needs the class
+# IDENTITY as well; answering the kind alone reads the field at the wrong
+# layout and prints a plausible large number instead of 9. That row is here
+# because it is the one this change could have broken and it would not have
+# failed to compile.
+
+
+EXTRA = ["b"]
+
+G = 7 / 2                      # true division: 3.5, not 3
+MAX = 1 << 20
+TAU = 2 * 3.14159
+NAMES = ["a"] + EXTRA          # a container built from a container
+OPTS = {"a": 1}
+
+
+class D:
+    def __init__(self):
+        self.v = G
+        self.m = MAX
+        self.t = TAU
+        self.n = NAMES
+        self.o = OPTS
+
+
+d = D()
+print(d.v)
+print(d.m)
+print(d.t)
+print(d.n[1])
+print(d.o["a"])
+
+
+# ---- the shapes that already worked and must keep working ----
+
+def named(x):
+    return x + 1
+
+
+class K:
+    def __init__(self):
+        self.z = 9
+
+
+LIT = 3.5
+INST = K()
+BARE = ["p", "q"]
+
+
+class C:
+    def __init__(self):
+        self.lit = LIT
+        self.inst = INST       # the class IDENTITY row, not just the kind
+        self.fn = named        # the def arm reads the name DIRECTLY; one
+                               # level of indirection (`FN = named` then
+                               # `self.fn = FN`) is still refused, at the pin
+                               # too -- noted on the ticket, not fixed here
+        self.bare = BARE
+
+
+c = C()
+print(c.lit)
+print(c.inst.z)
+print(c.fn(4))
+print(c.bare[1])

@@ -28998,7 +28998,7 @@ function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
   by carrying the identity, not by changing the store — an annotated
   `self.k: K = G` always worked, which is the control that proves it.
   bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage. }
-var k, d, rhs: Integer;
+var k, d, rhs, rhsEnd: Integer;
     atStart: Boolean;
 begin
   Result := tyUnknown;
@@ -29034,10 +29034,47 @@ begin
             PyCollectModuleLocalsAST types the same shape }
           Result := tyVariant
         else
+        begin
           { the name IS bound here and this binding is unreadable: a LATER
             rebinding cannot make it more certain, so stop rather than let a
             second assignment of the same name answer for the first }
           Result := tyUnknown;
+          { ...unless the initialiser is an EXPRESSION rather than one
+            literal -- `G = 7 / 2`, `MAX = 1 << 20`, `TAU = 2 * 3.14159`,
+            `NAMES = ["a"] + EXTRA`. The single-token readers above are the
+            whole reason this routine exists and none of them can see any of
+            those, so the caller fell straight through to its ErrorAt and
+            REFUSED a program CPython runs -- with `G = 3.5` accepted two
+            lines away, which is what shows the global-ness was never the
+            subject. Hand the range to the one expression scanner instead of
+            growing a second half-reader here: the same move, and the same
+            reasoning, as the field pre-pass one rung up.
+            bug-n-a-field-assigned-from-a-module-global-expression-is-refused }
+          if not PyBlkRhsEndsAt(rhs) then
+          begin
+            rhsEnd := rhs;
+            while (rhsEnd < MainProgramTokCount) and
+                  not (Tokens[rhsEnd].Kind in [tkNewline, tkSemicolon,
+                                               tkEOF]) do Inc(rhsEnd);
+            Result := PyInferExprType(rhs, rhsEnd);
+            { NEVER a class from here. `G = K()` needs the class IDENTITY and
+              not merely the kind, and the caller's NEXT arm --
+              PyModuleGlobalCtorClass -- is what carries it. Answering
+              tyClass here would set fldRec to REC_NONE and the field would
+              read at the wrong layout, which is the recorded 5887615-for-9
+              case beside that arm. }
+            if Result = tyClass then Result := tyUnknown;
+            { A CONTAINER the scanner declined is still a container:
+              `NAMES = ["a"] + EXTRA`, `OPTS = {"a": 1} | MORE`. The bare
+              literal two branches up already answers tyVariant for exactly
+              this global, so an expression BUILT from one gets the same
+              answer rather than a refusal -- widening an arm that exists,
+              not adding a reader. }
+            if (Result = tyUnknown) and
+               (Tokens[rhs].Kind in [tkLBrack, tkBegin]) then
+              Result := tyVariant;
+          end;
+        end;
       end;
     end;
     Inc(k);

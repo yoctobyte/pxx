@@ -276,7 +276,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (105)
+## backlog-nilpy (104)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -287,7 +287,6 @@ _none_
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name | N | 60→75 | bug | NilPy dispatches a method call on a dynamically-typed receiver by scanning every class DECLARED IN THE COMPILATION UNIT, and refuses outright when none declares the name: `no class declares a method or callable field .contains()`. Ordinary cross-module duck typing therefore does not compile -- the object's class lives in a module this one never imports, which is the normal Python arrangement and the whole point of duck typing. Blocks FOUR lekkerzeilen modules (chart, environment, wind, __main__), the largest cause after math.atan2. The closed world is deliberate and is what catches a typo on a variant receiver, so this is a FORK, not a one-line widening: the machinery for the other answer already exists (PyMakeOptionalMissingCall, feature-nilpy-fallback-import) but there is no runtime method-lookup-by-name to dispatch through. | — |
-| bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
 | bug-n-a-from-import-alias-resolves-its-source-through-flat-scope | N | 55 | bug | bug: a from-import alias resolves its SOURCE name through flat unit scope, not through the exporting module | — |
 | bug-n-a-frozenset-returned-from-a-def-arrives-empty | N | 60 | bug | A frozenset returned from a def arrives at the caller EMPTY -- len 0, repr 'frozenset()', membership False -- no matter how it was built. set, list, dict and tuple returned from the same shape are all correct, and a frozenset that never crosses a return is correct too. Silent data loss, no crash, no error. | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
@@ -962,9 +961,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3618)
+## done (3619)
 
-3618 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3619 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (80)
 
@@ -1136,7 +1135,6 @@ _none_
 - [p 55] [A] bug-a-typeinfo-does-not-return-one-shape-of-pointer
 - [p 55] [C] bug-c-the-canonical-linux-syscall-asm-idiom-is-refused-output-and-input-may-share-a-fixed-register
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
-- [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-from-import-alias-resolves-its-source-through-flat-scope
 - [p 55] [N] bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime
 - [p 55] [N] bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver

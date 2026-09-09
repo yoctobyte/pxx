@@ -1587,6 +1587,13 @@ test-nilpy: $(COMPILER)
 	if ./$(COMPILER) $(TESTTMP)/nilpy_field_unbound.npy $(TESTTMP)/nilpy_field_unbound26 >/dev/null 2>&1; then \
 	  echo "FAIL: a field assigned from a name the method never binds was accepted"; exit 1; \
 	fi
+	# The same ladder one rung out: a field assigned from a module global whose
+	# INITIALISER is an expression (`G = 7 / 2`, `MAX = 1 << 20`). The control
+	# rows below the divider in that file are the load-bearing ones -- `G = K()`
+	# needs the class IDENTITY and not just the kind, and getting that wrong
+	# prints a plausible large number rather than failing to compile.
+	./$(COMPILER) test/test_nilpy_field_from_a_module_global_expression.npy $(TESTTMP)/test_nilpy_field_mge26
+	$(TESTTMP)/test_nilpy_field_mge26 | diff -u test/test_nilpy_field_from_a_module_global_expression.expected -
 	./$(COMPILER) test/test_nilpy_class_attribute_through_class_name.npy $(TESTTMP)/test_nilpy_clsattr_byname26
 	$(TESTTMP)/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which
