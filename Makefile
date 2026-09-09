@@ -17348,6 +17348,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_gendirstate26 "$$($(TESTTMP)/test_gendirstate26)" "$$(cat test/test_a_generic_body_keeps_its_own_directive_state.expected)"
 	./$(COMPILER) -Futest/generic_xunit_params_units test/test_a_cross_unit_specialized_method_sees_its_own_parameters.pas $(TESTTMP)/test_xunitparams26
 	tools/expect_same.sh test_xunitparams26 "$$($(TESTTMP)/test_xunitparams26)" "$$(cat test/test_a_cross_unit_specialized_method_sees_its_own_parameters.expected)"
+	./$(COMPILER) -Futest/generic_circular_spec_units test/test_a_specialized_body_materialises_under_circular_uses.pas $(TESTTMP)/test_circspec26
+	tools/expect_same.sh test_circspec26 "$$($(TESTTMP)/test_circspec26)" "$$(cat test/test_a_specialized_body_materialises_under_circular_uses.expected)"
 	./$(COMPILER) test/test_two_scopes_sharing_a_type_name_are_two_specializations.pas $(TESTTMP)/test_twoscopespec26
 	tools/expect_same.sh test_twoscopespec26 "$$($(TESTTMP)/test_twoscopespec26)" "$$(cat test/test_two_scopes_sharing_a_type_name_are_two_specializations.expected)"
 	./$(COMPILER) test/test_a_generic_method_takes_its_own_specialization_as_a_parameter.pas $(TESTTMP)/test_genselfparam26

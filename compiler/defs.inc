@@ -3094,7 +3094,34 @@ var
   GMSpecKind : array[0..MAX_GENERIC_METHOD_SPECS-1] of TTokenKind;
   GMSpecCount : Integer;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
+  { The SOURCE spelling offset of each buffered method's first token -- the
+    identity BufferTemplateMethodsAhead and BufferGenericMethod dedupe on, since
+    the same body can be reached twice: once by the lookahead a nested `uses`
+    forces, and once by the parser when it finally walks over it.
+
+    Keyed on TokSrcOff and not on the token INDEX because a splice earlier in
+    the stream shifts every index after it, and the lookahead exists precisely
+    because splices are happening. The offset is into the shared source pool, so
+    it is stable and globally unique -- the same key IsDelphiGenMethImplHdr
+    already matches its recorded headers on.
+    bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+  GenericMethodSrcOff: array[0..MAX_GENERIC_METHODS-1] of Integer;
   GenericMethodCount : Integer;
+  { Has this specialization's template methods already been materialised? Set
+    when they are streamed at the specialization site, read by
+    BufferGenericMethod so the parser's own later pass over the template body
+    does not stream a SECOND copy for the same specialization.
+
+    The before/after split it repairs ("methods buffered before this
+    specialization are deferred to the pending queue; ones buffered after are
+    streamed by BufferGenericMethod, so each (method, specialization) pair is
+    materialised exactly once") assumed the two orders are exclusive. Under a
+    circular implementation-`uses` they are not: the specializing unit runs
+    NESTED INSIDE the template unit's own implementation, so the methods are
+    buffered ahead for it and then buffered again when the suspended parse
+    resumes. Both halves fire for one pair.
+    bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+  SpecMethodsDone    : array[0..MAX_SPECIALIZATIONS-1] of Boolean;
   { Class specializations seen in the current type section whose template
     methods must be materialised AFTER the section closes (streaming a method —
     a `procedure ...` — inside the section would terminate it). Stored as

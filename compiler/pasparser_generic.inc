@@ -3602,6 +3602,94 @@ begin
     end;
 end;
 
+function TemplateHasBufferedMethods(ti: Integer): Boolean;
+var gm: Integer;
+begin
+  TemplateHasBufferedMethods := False;
+  for gm := 0 to GenericMethodCount - 1 do
+    if GenericMethods[gm].TemplateIdx = ti then
+    begin
+      TemplateHasBufferedMethods := True;
+      Exit;
+    end;
+end;
+
+{ Buffer this template's method IMPLEMENTATIONS before the parser has reached
+  them, so a specialization can materialise its bodies where the specialization
+  itself is VISIBLE.
+
+  WHY THIS IS NEEDED AT ALL, and it is one situation. Normally a template's
+  methods are buffered when the parser walks over them, and the before/after
+  split in BufferGenericMethod keeps each (method, specialization) pair
+  materialised exactly once. That split assumes the specializing unit is parsed
+  either wholly before or wholly after the template's bodies. Under a CIRCULAR
+  implementation-`uses` it is neither: unit A's implementation says `uses B` on
+  a line ABOVE its own template bodies, so B is parsed NESTED INSIDE A, B
+  specializes A's template, and A's method bodies do not exist yet. Nothing is
+  buffered, so nothing is pended, and the body is instead streamed much later --
+  when A's parse resumes and finally reaches the template body -- into A, where
+  B's specialization NAME is not visible. `expected 'begin' before '.'`, against
+  a file whose text is fine, because the spliced tokens carry the template's
+  source offsets.
+
+  Only ONE side of the cycle needs to specialize; the ticket's "each specializes
+  the other's" is the shape it was found in, not the boundary.
+
+  ATTRIBUTION is by the name the CURRENT scope resolves, which is the same rule
+  FindSpecialization and FindUClass use ("last visible row wins"): the header's
+  class name must match this template's name. Two templates of one name in two
+  unrelated units would need the losing one to also have a method impl in the
+  stream at this moment; the alternative -- matching on parameter shape -- is
+  what ScanDelphiMethodImplsForNestedSpecs refuses for a stronger reason, since
+  `T` is the commonest parameter name there is.
+  bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+procedure BufferTemplateMethodsAhead(ti: Integer);
+var scan, hdr, fin, ts, tc, gm: Integer; dup: Boolean;
+begin
+  scan := 1;
+  while scan < TokCount - 1 do
+  begin
+    if (Tokens[scan].Kind = tkIdent) and (Tokens[scan + 1].Kind = tkDot) and
+       CaseEqual(GetTokenStrFromRaw(Tokens[scan].SOffset, Tokens[scan].SLen),
+                 Templates[ti].Name) then
+    begin
+      { the same two header shapes BufferGenericMethod is called with, plus the
+        constructor/destructor spelling, which are identifiers in this dialect }
+      hdr := -1;
+      if (Tokens[scan - 1].Kind = tkProcedure) or
+         (Tokens[scan - 1].Kind = tkFunction) then
+        hdr := scan - 1
+      else if (Tokens[scan - 1].Kind = tkIdent) and
+              (CaseEqual(GetTokenStrFromRaw(Tokens[scan - 1].SOffset,
+                                            Tokens[scan - 1].SLen), 'constructor') or
+               CaseEqual(GetTokenStrFromRaw(Tokens[scan - 1].SOffset,
+                                            Tokens[scan - 1].SLen), 'destructor')) then
+        hdr := scan - 1;
+      if (hdr >= 1) and (Tokens[hdr - 1].Kind = tkClass) then hdr := hdr - 1;
+      if hdr >= 0 then
+      begin
+        dup := False;
+        for gm := 0 to GenericMethodCount - 1 do
+          if (GenericMethods[gm].TemplateIdx = ti) and
+             (GenericMethodSrcOff[gm] = TokSrcOff[hdr]) then dup := True;
+        if not dup then
+        begin
+          fin := GenericMethodBodyEnd(hdr);
+          AppendTokenRangeToTemplateArena(hdr, fin, ts, tc);
+          if GenericMethodCount >= MAX_GENERIC_METHODS then
+            Error('too many generic methods');
+          GenericMethods[GenericMethodCount].TemplateIdx := ti;
+          GenericMethods[GenericMethodCount].TokStart := ts;
+          GenericMethods[GenericMethodCount].TokCount := tc;
+          GenericMethodSrcOff[GenericMethodCount] := TokSrcOff[hdr];
+          Inc(GenericMethodCount);
+        end;
+      end;
+    end;
+    Inc(scan);
+  end;
+end;
+
 { End of a top-level type section: emit alias declarations for nested
   specializations that could not be seen when the class was specialized.
 
@@ -4310,7 +4398,17 @@ begin
   SpecOwnerProc[SpecializationCount] := CurProc;
   SpecDeclImpl[SpecializationCount] := DeclInImplNow;
   SpecTemplateIdx[SpecializationCount] := ti;
+  SpecMethodsDone[SpecializationCount] := False;
   Inc(SpecializationCount);
+
+  { The template's method bodies may not have been walked yet -- see
+    BufferTemplateMethodsAhead, which is only ever reached under a circular
+    implementation-`uses`. Buffering them HERE is what lets the pend below fire,
+    so the bodies are streamed at this specialization site, where this
+    specialization's name is visible, instead of inside the template's own unit
+    where it is not.
+    bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+  if not TemplateHasBufferedMethods(ti) then BufferTemplateMethodsAhead(ti);
 
   { Stream the concrete class body inline so the fall-through binds the alias
     name. Methods that were buffered BEFORE this specialization (template in a
@@ -4415,6 +4513,20 @@ begin
   begin
     ti := PendingSpecTi[p];
     si := PendingSpecIdx[p];
+    { PXXDBG=p.specsplice:* -- WHERE a specialized body is about to be spliced,
+      and in whose token stream. The near-window cannot answer this: spliced
+      tokens carry the TEMPLATE's source offsets, so a splice that lands in the
+      wrong unit is reported against the template's file and reads as a defect
+      in a file whose text is fine. Printing the splice site beside the unit
+      the parse cursor is actually in is the only readout that separates them.
+      bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+    if PxxDbgWants('p.specsplice', '*') then
+      WriteLn('PXXDBG p.specsplice spec=', Specializations[si].Name,
+              ' tmpl=', Templates[ti].Name,
+              ' cursrc=', CurSrcBaseName,
+              ' curunit=', CurrentUnitIdx,
+              ' inintf=', Ord(InInterface),
+              ' tokpos=', TokPos, ' anchor=', anchor, ' tokcount=', TokCount);
     SpecializeTemplateName := Templates[ti].Name;
     SetSpecSubs(ti, si);
     for gm := 0 to GenericMethodCount - 1 do
@@ -4427,6 +4539,10 @@ begin
         else
           SpecializeStream(GenericMethods[gm].TokStart, GenericMethods[gm].TokCount,
             Specializations[si].Name);
+    { Materialised here, at the specialization site. BufferGenericMethod must
+      not stream a second copy when the parser reaches the template body -- see
+      SpecMethodsDone. }
+    SpecMethodsDone[si] := True;
   end;
   PendingSpecCount := 0;
 end;
@@ -4501,16 +4617,37 @@ var
 begin
   finalCur := GenericMethodBodyEnd(startTokIdx);
 
-  AppendTokenRangeToTemplateArena(startTokIdx, finalCur, mStart, mCount);
+  { Already buffered? Only BufferTemplateMethodsAhead can have done it, and then
+    this is the suspended parse of the template's own unit finally walking over
+    a body that was read ahead on a nested unit's behalf. Re-appending would put
+    a SECOND row for one body in the table, and the pending flush streams per
+    row -- so every specialization declared after this point would get the body
+    twice. Reuse the row instead; the arena copy is identical by construction.
+    bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+  mStart := -1;
+  mCount := 0;
+  for si := 0 to GenericMethodCount - 1 do
+    if (GenericMethods[si].TemplateIdx = ti) and
+       (GenericMethodSrcOff[si] = TokSrcOff[startTokIdx]) then
+    begin
+      mStart := GenericMethods[si].TokStart;
+      mCount := GenericMethods[si].TokCount;
+    end;
 
-  { Remember the buffered method so a later specialization (parsed after this
-    method, e.g. template in a unit + `specialize` in the program) can still
-    materialise it. See ParseSpecialization. }
-  if GenericMethodCount >= MAX_GENERIC_METHODS then Error('too many generic methods');
-  GenericMethods[GenericMethodCount].TemplateIdx := ti;
-  GenericMethods[GenericMethodCount].TokStart := mStart;
-  GenericMethods[GenericMethodCount].TokCount := mCount;
-  Inc(GenericMethodCount);
+  if mStart < 0 then
+  begin
+    AppendTokenRangeToTemplateArena(startTokIdx, finalCur, mStart, mCount);
+
+    { Remember the buffered method so a later specialization (parsed after this
+      method, e.g. template in a unit + `specialize` in the program) can still
+      materialise it. See ParseSpecialization. }
+    if GenericMethodCount >= MAX_GENERIC_METHODS then Error('too many generic methods');
+    GenericMethods[GenericMethodCount].TemplateIdx := ti;
+    GenericMethods[GenericMethodCount].TokStart := mStart;
+    GenericMethods[GenericMethodCount].TokCount := mCount;
+    GenericMethodSrcOff[GenericMethodCount] := TokSrcOff[startTokIdx];
+    Inc(GenericMethodCount);
+  end;
 
   { Insert specializations AFTER the template method body, not at the dot
     position. Only specializations already registered are streamed here; ones
@@ -4519,7 +4656,17 @@ begin
   TokPos := finalCur;
   for si := 0 to SpecializationCount - 1 do
   begin
-    if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
+    if PxxDbgWants('p.specsplice', '*') and
+       CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) then
+      WriteLn('PXXDBG p.specsplice buffer spec=', Specializations[si].Name,
+              ' tmpl=', Templates[ti].Name,
+              ' specunit=', SpecUnitIdx[si], ' specimpl=', Ord(SpecDeclImpl[si]),
+              ' sameTmpl=', Ord(SpecTemplateIdx[si] = ti),
+              ' visible=', Ord(DeclVisibleSect(SpecUnitIdx[si], SpecDeclImpl[si],
+                                               IMPLTAB_SPEC, si)),
+              ' curunit=', CurrentUnitIdx, ' cursrc=', CurSrcBaseName, ' at=', finalCur);
+    if CaseEqual(Specializations[si].TemplateName, Templates[ti].Name) and
+       (not SpecMethodsDone[si]) then
     begin
       SpecializeTemplateName := Templates[ti].Name;
       SetSpecSubs(ti, si);

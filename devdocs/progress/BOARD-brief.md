@@ -5,14 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:28 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:54 backlog-pascal:24 backlog-decide:45 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3593 rejected:80`
+`working:27 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:103 backlog-tools:54 backlog-pascal:24 backlog-decide:45 backlog-libs:23 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3594 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
-- `bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses` [P] — owner: frankH
 - `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
 - `bug-p-the-two-halves-of-an-overload-report-spell-an-array-argument-differently` [P] — owner: frankA

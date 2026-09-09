@@ -1,8 +1,8 @@
 ---
 prio: 55
 track: P
-status: working
-summary: "When two units each specialize the other's generic through mutually recursive implementation-section `uses`, the specialized method bodies are spliced somewhere the parser will not accept a method implementation: `expected 'begin' before '.'`, near `; end ; class procedure TSomeGeneric1LongInt >>> . Test ;`. Reduced to 30 lines, two units, no corpus. Was hidden behind bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters until 2026-09-07; that fix moved the wall here and did not reach it. The conformance row is tgeneric91.pp."
+status: done
+summary: "RESOLVED 2026-09-09. THIS TICKET NAMED THE WRONG SUSPECT: FlushPendingClassSpecializations never runs in the repro -- measured with a channel added for it (PXXDBG=p.specsplice), the failing compile prints no flush event, because nothing was ever pended. The splice site is BufferGenericMethod, which streams a body for every registered specialization of the template while asking neither which unit registered it nor whether that unit is visible from here. Order is the defect: unit A's implementation says `uses B` ABOVE A's own template bodies, so B is parsed NESTED INSIDE A; B specializes A's template before A's method bodies are walked, so nothing is buffered, the GenericMethodCount>0 pend does not fire, and the body is streamed much later into A -- where B's implementation-private specialization name does not exist. The pre-scan cannot help: it walks the same section in the same order and hits `uses` first too. BOUNDARY NARROWER THAN THE TITLE: only ONE side need specialize; one-way cross-unit specialization was always fine, so circularity alone is the discriminator. Fixed by BufferTemplateMethodsAhead (buffer the template's methods ahead of the parser when a nested `uses` forces the question, so the existing pend/flush streams at the specialization site where the name IS visible), plus two once-only guards -- GenericMethodSrcOff dedupes the arena copy, SpecMethodsDone stops the second stream -- because the before/after split assumed the two orders are exclusive and under a cycle both fire for one pair. Fixture test_circspec26, three arms, each template adding a DIFFERENT constant to one input so a wrong materialisation prints a wrong number; the PINNED compiler refuses it with this ticket's own shape, so the fixture can fail. fpc 3.2.2 agrees byte for byte. Corpus row tgeneric91.pp burned, verified byte-identical to fpc before deleting."
 owner: frankH
 ---
 
@@ -158,3 +158,80 @@ the HEADER. Two ways to carry it, and both touch something shared:
 So the marker-token shape, which is otherwise the most robust of the three, is
 the one that cannot be landed unilaterally. That is a scheduling fact rather
 than a design objection, and it is why this was left rather than half-done.
+
+## Resolved 2026-09-09 — and this ticket's named suspect was not on the path
+
+**The diagnosis above is wrong in its first sentence and in its last section**,
+and it is worth saying which, because both readings were reasonable from the
+`near:` window alone.
+
+`FlushPendingClassSpecializations` **never runs** in this repro. Measured with a
+channel added for it (`PXXDBG=p.specsplice`): the failing compile prints no
+flush event at all, because nothing was ever *pended*. The anchor choice this
+ticket sends the reader to inspect is not reached.
+
+### What actually happens
+
+`BufferGenericMethod` is the splice site. It streams a body for **every
+registered specialization of the template**, asking neither which unit
+registered it nor whether that unit is visible from here — and it matches on the
+template's **name**, which `SpecTemplateIdx`'s own comment already says is not an
+identity.
+
+The order is the whole defect. Unit A's implementation says `uses B` on a line
+**above** A's own template bodies, so B is parsed **nested inside** A's
+implementation. B specializes A's template — and A's method bodies have not been
+walked yet, so nothing is buffered, so the `GenericMethodCount > 0` pend does not
+fire and B materialises nothing. Later, when A's suspended parse resumes and
+finally reaches `class procedure TG1.Test`, `BufferGenericMethod` streams
+`class procedure TG1L.Test; ...` into **A**, where `TG1L` — declared in B's
+implementation section — does not exist.
+
+The pre-scan does not help and it is worth recording why, because it looks like
+it should: the implementation pre-scan walks the same section in the same order
+and hits `uses` first too.
+
+**The boundary is narrower than this ticket's title.** Only ONE side needs to
+specialize; "two units each specialize the other's" is the shape it was found
+in. Measured, one-way cross-unit specialization was always fine (`oneway` arm) —
+circularity alone is the discriminator.
+
+### The fix
+
+The bodies must be materialised where the specialization is **visible**, which
+means buffering the template's methods **ahead** of the parser when a nested
+`uses` forces the question. `BufferTemplateMethodsAhead` does that, and the
+existing pend/flush then streams at the specialization site, inside B.
+
+Two once-only guards, because the "before/after split" that kept each (method,
+specialization) pair materialised exactly once assumed the two orders are
+exclusive, and under a cycle they are not — both halves fire for one pair:
+`GenericMethodSrcOff` dedupes the arena copy when the suspended parse walks over
+a body already read ahead, and `SpecMethodsDone` stops the second stream.
+
+`GenericMethodSrcOff` is keyed on the source offset, **not** the token index,
+because a splice earlier in the stream shifts every index after it — and the
+lookahead exists precisely because splices are happening.
+
+### Verified
+
+`test_a_specialized_body_materialises_under_circular_uses` (fixture
+`test_circspec26`), three arms: the mutual pair, the one-sided pair, and the
+plain call. Each template's `Bump` adds a **different** constant to one input of
+20, so a body materialised against the wrong template prints 21/22/23 wrongly
+rather than passing — the right answer cannot collide with another arm's.
+
+**The fixture can fail:** the PINNED compiler, which predates the fix, refuses it
+with this ticket's own shape — `expected ':' before '.'`, near
+`; end ; class function TGenALong >>> . Bump (`.
+
+fpc 3.2.2 runs all three arms and agrees byte for byte.
+
+**Corpus row burned:** `tgeneric91.pp` is out of `test/pascal-conformance/pxx.skip`.
+Verified before deleting rather than trusted: it compiles under pxx, and its
+output is BYTE-IDENTICAL to fpc's (`TSomeGeneric2<System.LongInt>` /
+`TSomeGeneric1<System.LongInt>`), both exiting 0. It is `%NORUN`, so only the
+parse was required; it runs anyway.
+
+Gate GREEN, FPC seed canary PASS — which matters here, since the fix adds
+routines called above their definitions.

@@ -1,0 +1,3 @@
+a-uses-b 22 TGenB<System.LongInt>
+b-uses-a 21 TGenA<System.LongInt>
+c-plain 23
