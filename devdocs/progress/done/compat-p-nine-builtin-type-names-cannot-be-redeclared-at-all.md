@@ -142,4 +142,4 @@ for the names nobody redeclared, which is the recognition half of
 and is where the seven defects in one day came from.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e4df76033.
