@@ -1559,6 +1559,18 @@ begin
        (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom') or
         CaseEqual(GetTokenStr(i), 'classparent') or
         CaseEqual(GetTokenStr(i), 'instancesize') or CaseEqual(GetTokenStr(i), 'classnameis') or
+        { `unitname` and `classinfo` are the same bare-name shape and BOTH were
+          missing from this list. classinfo is new; unitname landed 2026-08-25
+          without its trigger, and the gap is real rather than theoretical:
+          measured 2026-09-09 by removing ONLY the `unitname` term and
+          rebuilding, `program un; type TFoo = class end; begin
+          WriteLn(TFoo.UnitName) end.` is refused with `class method not found
+          (UnitName)` -- the same wrong-shaped diagnostic a missing helper
+          always produces here, naming the MEMBER when what is absent is the
+          unit. It survived because its own test `uses` a helper unit and every
+          other UnitName caller in the tree writes ClassName too, so the
+          trigger was always pulled by a neighbour. }
+        CaseEqual(GetTokenStr(i), 'unitname') or CaseEqual(GetTokenStr(i), 'classinfo') or
         { `E is <class-reference VALUE>` lowers to __pxxInheritsFrom (see ParseExpr).
           Whether the right-hand side is a class NAME (compile-time, no helper) or a
           TClass value (runtime, helper) is not knowable from the tokens, so the

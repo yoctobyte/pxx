@@ -3315,6 +3315,66 @@ single early exit, not N measurements — which is the other half of what the
 pinned binary cost here. Splitting the 14 rows into 14 programs is what turned
 "the baseline crashes" into "exactly one row diverges, and it is this one".
 
+## A BISECT PREDICATE KEYED ON THE ERROR MESSAGE IS STRONGEST WHERE THE TREE IS WORST
+
+Two instances the same week, from opposite ends, and neither errored.
+
+**The shape.** A long file fails to compile. You have a diagnostic in front of
+you — `cclasses.pas:2909: dereferenced value is not a pointer` — so the obvious
+predicate is *does that message appear*. It is wrong, and it is wrong in the
+direction that reads as success: on an OLDER tree the parse stops EARLIER, at a
+wall that has since been fixed, and `:2909` is never reached. The predicate sees
+no message and votes GOOD. Every commit before the first wall fell answers GOOD
+for a reason that has nothing to do with the defect you are chasing, and the
+bisect converges, quickly and confidently, on a sha for a question you were not
+asking.
+
+Measured 2026-09-09 on the FPC-compiler-source march. At `cf7101dfa` the wall in
+that unit is `cclasses.pas:676: unknown type: TFPCHeapStatus`; at the pin it is
+gone entirely. **Walls fall in sequence in a big unit** — four fell in `cclasses`
+in four days, each invisible until the one in front of it cleared — so the
+stopping point is a moving target and the diagnostic in front of you names only
+the frontmost one. The predicate that works is the thing you actually want:
+**does the unit compile AT ALL** (`bis.sh` exits 0 for the wall present, 1 for
+gone, 125 when the tree will not build so a broken step is skipped rather than
+voted). That found `a4cbaa1de` and it is the right answer.
+
+**The same inversion arrives wearing a revert** (frankS, same day, on
+`generics.defaults.pas:3250`): reverting the suspect commit makes `:3250`
+disappear — because the file then stops at `:120`. "The error went away" read as
+"the defect went away", from the other direction.
+
+**The general statement.** *An error message is a statement about where the
+compiler STOPPED, not about which declaration is wrong.* Any predicate over a
+stopping point is a predicate over everything upstream of it, so it answers
+"is the frontier at least this far" and gets read as "is this defect present".
+The two coincide only on the tree where you first observed it. Same family as
+the rejected ticket
+`bug-p-the-generics-corpus-wall-moved-backward-from-2729-to-224`, where a wall
+moving backward was reported as a regression and was the frontier moving.
+
+**So:**
+
+- Key the predicate on the OUTCOME (does it compile, does it run, does it print
+  the right value), never on a diagnostic string.
+- If you cannot avoid a message-keyed predicate, run the oldest in-range commit
+  by hand FIRST and look at what it actually says. One command, and it is the
+  whole control: if the old tree fails with a DIFFERENT message, your predicate
+  is measuring the frontier.
+- Exit 125 for "cannot build", so a tree that fails for an unrelated reason is
+  skipped instead of voting.
+- Remove `compiler/.pascal26.fixedpoint` at every step. Otherwise a step can
+  answer from a stamp written for another tree — see the stale-binary sections.
+
+**And read a compiler's stderr from the FRONT.** Errors come out in source
+order, so the first is the cause and the rest are consequences; `tail` on it is
+reading the wrong end by construction. Measured the same day: `tail -4` on the
+march's new frontier cut the first of two identical `TExecuteFlags` errors, so
+`:136` looked ACCEPTED while `:137` was refused — from which "the
+plain-AnsiString overload resolves the type and the open-array one does not"
+follows *validly*. `head -20` shows both. The habit comes from gate logs, where
+the verdict really is last; it transfers and the justification does not.
+
 ## A bisect can name the RIGHT commit and still be wrong
 
 Measured 2026-08-26, on `test-uforth#core` and a NilPy type-name red. Read this

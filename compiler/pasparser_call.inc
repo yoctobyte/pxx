@@ -2494,6 +2494,19 @@ begin
     if pi < 0 then Exit;
     outTk := tyAnsiString;
   end
+  else if CaseEqual(op, 'ClassInfo') then
+  begin
+    { the blob's +104 word: the typinfo facade's PTypeInfo header, which
+      rtti_emit back-links after EmitTypeInfoHeaders. Same one-field shape as
+      UnitName -- the value is emitted, this is only the accessor.
+      outTk is tyPointer because that is FPC's signature and because the two
+      things callers do with it -- compare it to TypeInfo(T), or cast it to
+      PTypeInfo and walk it -- both want an untyped pointer.
+      feature-a-classinfo-returns-the-typinfo-header }
+    pi := FindProc('__pxxClassInfo');
+    if pi < 0 then Exit;
+    outTk := tyPointer;
+  end
   else if CaseEqual(op, 'InstanceSize') then
   begin
     { the blob's +16 word, which rtti_emit has always written }
@@ -2546,7 +2559,7 @@ begin
   IsClassRefOpName := CaseEqual(m, 'ClassName') or CaseEqual(m, 'ClassType') or
                       CaseEqual(m, 'InheritsFrom') or CaseEqual(m, 'ClassParent') or
                       CaseEqual(m, 'InstanceSize') or CaseEqual(m, 'ClassNameIs') or
-                      CaseEqual(m, 'UnitName');
+                      CaseEqual(m, 'UnitName') or CaseEqual(m, 'ClassInfo');
 end;
 
 { The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:

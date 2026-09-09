@@ -404,6 +404,7 @@ function __pxxInheritsFrom(Rtti, Other: Pointer): Boolean;
 function __pxxClassParent(Rtti: Pointer): Pointer;
 function __pxxClassName(Rtti: Pointer): AnsiString;
 function __pxxUnitName(Rtti: Pointer): AnsiString;
+function __pxxClassInfo(Rtti: Pointer): Pointer;
 function __pxxInstanceSize(Rtti: Pointer): PtrInt;
 function __pxxClassNameIs(Rtti: Pointer; const Name: AnsiString): Boolean;
 function __pxxTObjectEquals(Inst: Pointer; Obj: Pointer): Boolean;
@@ -2238,6 +2239,7 @@ const
   PXX_RTTI_METH_FLAGS = 40;
   PXX_RTTI_METH_PUBLISHED = 1;
   PXX_RTTI_UNITNAME  = 96;   { the DECLARING unit's interned name — TObject.UnitName }
+  PXX_RTTI_CLASSINFO = 104;  { the typinfo-facade PTypeInfo header — TObject.ClassInfo }
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -2326,6 +2328,28 @@ begin
   if Rtti = nil then Exit;
   Result := __pxxRttiName(PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_UNITNAME)^);
 end;
+
+function __pxxClassInfo(Rtti: Pointer): Pointer;
+{ x.ClassInfo: the typinfo facade's PTypeInfo for the class -- the SAME 24-byte
+  {Kind; NamePtr; DataPtr} header TypeInfo(TThatClass) mints, so
+  `o.ClassInfo = TypeInfo(TFoo)` is a pointer equality that holds. rtti_emit
+  writes it at +104 after the headers exist; one field read, like UnitName.
+
+  WHY NOT THE BLOB ITSELF, which was the cheaper option and is what the raw
+  pointer already is: a caller doing `PTypeInfo(x.ClassInfo)^.Kind` would read
+  the blob's +0 word -- an interned-name POINTER -- and take its low byte as a
+  TTypeKind. Non-nil, plausible, different every run, and no diagnostic. That is
+  frontend-compat-philosophy.md's "a silent wrong VALUE is a bug in any
+  dialect", so it was refused by decide-tobject-classinfo-blob-or-refusal
+  rather than shipped as the cheap answer.
+  A nil result means the class has no header, which is the same "nil = no
+  descriptor" contract the ord headers use for a payload nobody could read. }
+begin
+  Result := nil;
+  if Rtti = nil then Exit;
+  Result := PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_CLASSINFO)^;
+end;
+
 
 function __pxxInstanceSize(Rtti: Pointer): PtrInt;
 { x.InstanceSize: the byte size of an instance of the class, which rtti_emit

@@ -1392,7 +1392,26 @@ procedure EmitTypeInfoHeaders;
 var i, hdr, strIdx, ci, kind: Integer; nm: AnsiString;
     tdOff, elemTk, elemEnum, elemRec, elemSz: Integer;
     ordTy, fltTy, loV, hiV: Int64;
+    reqIdx: Integer;
 begin
+  { EVERY class with a blob gets a header, whether or not the program ever
+    wrote TypeInfo() for it -- because `x.ClassInfo` is a RUNTIME member on a
+    possibly-dynamic receiver. `o: TObject` holding a TDer must answer TDer's
+    header, and nothing in the token stream says which classes a program will
+    ask about, so the answer has to be reachable from the blob rather than
+    minted per compile-time use.
+    RegisterTypeInfoReq dedups on (cat, key), so a class the program DOES write
+    TypeInfo() for gets ONE header shared with the ClassInfo path -- which is
+    exactly what `o.ClassInfo = TypeInfo(TFoo)` asserts, and why the dedup is
+    load-bearing here rather than merely thrifty.
+    Registering happens in its own loop because the emit loop below walks
+    TypeInfoReqCount, and growing that array while iterating it would emit some
+    headers and silently skip others.
+    feature-a-classinfo-returns-the-typinfo-header }
+  for ci := 0 to UClsCount - 1 do
+    if (not UClsIsRecord[ci]) and (UClsRTTIOff[ci] >= 0) then
+      reqIdx := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_CLASS, ci);
+
   for i := 0 to TypeInfoReqCount - 1 do
   begin
     hdr := DataLen;
@@ -1559,6 +1578,21 @@ begin
     end;
     TypeInfoReqOff[i] := hdr;
   end;
+
+  { The BACKLINK, and it can only be written now: the blob is emitted by
+    EmitRTTI, the header by the loop above, so the blob's +104 word is the one
+    field whose target does not exist when the blob is filled. Same two-phase
+    shape as the VMT backlink at -8, for the same reason.
+    A second lookup rather than a remembered index: RegisterTypeInfoReq is a
+    dedup, so asking it again returns the request the loop above just emitted,
+    and there is no third state where the two disagree. }
+  for i := 0 to TypeInfoReqCount - 1 do
+    if (TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_CLASS) and (TypeInfoReqOff[i] >= 0) then
+    begin
+      ci := TypeInfoReqKey[i];
+      if (ci >= 0) and (ci < UClsCount) and (UClsRTTIOff[ci] >= 0) then
+        AddDataPtrFix(UClsRTTIOff[ci] + 104, TypeInfoReqOff[i]);
+    end;
 end;
 
 procedure EmitLayoutRTTI;

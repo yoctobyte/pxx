@@ -504,12 +504,28 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 104; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName
+  RTTI_CLS_SIZE    = 112; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName,classInfo
                             +8 for the DECLARING UNIT's name at +96 (TObject.UnitName,
-                            feature-pascal-builtin-tobject-class). Safe to grow: nothing
+                            feature-pascal-builtin-tobject-class), then +8 for the
+                            typinfo-facade PTypeInfo at +104 (TObject.ClassInfo,
+                            feature-a-classinfo-returns-the-typinfo-header). Safe to grow: nothing
                             strides over these headers -- rtti_emit records each one's
                             offset and every reader (builtin.pas' PXX_RTTI_*, lib/rtl/rtti.pas'
-                            RTTI_OFS_*) names a FIELD offset, never the total. }
+                            RTTI_OFS_*) names a FIELD offset, never the total.
+                            THE GROWTH RULE IS NOT UNIVERSAL, AND THE RECORD LAYOUT
+                            DESCRIPTOR IS THE COUNTEREXAMPLE (30ed522b3): that one may NOT
+                            grow, because builtinheap.pas reads it during the bootstrap,
+                            where the OLD emitter's Data[] meets the NEW runtime's offsets.
+                            This header is safe from that for one CHECKABLE reason: the
+                            compiler declares no class type and calls no class-blob
+                            accessor, so no stage-1 binary ever dereferences a field the
+                            seed did not write. Checked by grep for a `X = class`
+                            declaration and for .ClassName/.ClassInfo/.InstanceSize/
+                            .UnitName in compiler/*.pas and compiler/*.inc outside
+                            builtin/ -- every hit is inside a comment -- and the
+                            self-host fixedpoint is the running proof of it. Re-run both
+                            before growing this again; "safe to grow" is a property of
+                            THIS header, not of RTTI headers. }
   RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8} — the per-class
                             interface table. Every implemented interface gets an entry
                             (GUID-less CORBA ones too, GUID = zeros): GetInterface

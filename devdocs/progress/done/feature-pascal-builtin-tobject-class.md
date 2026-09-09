@@ -2,8 +2,9 @@
 track: P
 prio: 42
 type: feature
-blocked-by: [decide-tobject-classinfo-blob-or-refusal]
-status: backlog
+blocked-by: []
+status: done
+summary: "CLOSED 2026-09-09. Builtin TObject class: the class row, TObject.Create, the root methods, UnitName and finally ClassInfo all land. ClassInfo answers the typinfo facade's PTypeInfo header per decide-tobject-classinfo-blob-or-refusal option 3 -- work and controls in feature-a-classinfo-returns-the-typinfo-header, which also caught that this ticket's own UnitName shipped without its builtin-pull pre-scan trigger and was refused in any program with no uses clause. Blob is 112 bytes (+96 unitName, +104 classInfo)."
 ---
 
 # Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods
@@ -183,3 +184,28 @@ Regression test: `test/test_tobject_unitname.pas` + its helper unit, wired into
 **Remaining: `ClassInfo` only**, and it is now filed as the Track U call it
 always was — [[decide-tobject-classinfo-blob-or-refusal]]. Do not implement it
 by picking a side here.
+
+## 2026-09-09 — `ClassInfo` LANDED. This ticket is closed.
+
+The last PXX-REJECT member, and the one that was a Track U call rather than an
+implementation choice. Built to the decision
+([[decide-tobject-classinfo-blob-or-refusal]], option 3): `x.ClassInfo` answers
+the typinfo facade's `PTypeInfo` header, the same value `TypeInfo(TThatClass)`
+mints, so identity holds AND a layout walker reads a real kind byte.
+
+Work and evidence are in [[feature-a-classinfo-returns-the-typinfo-header]] —
+including the second, older defect it turned up: **`UnitName`, landed here on
+2026-08-25, shipped without its builtin-pull pre-scan trigger**, so it was
+refused in any program with no `uses` clause. This ticket's own note above says
+`UnitName` is done, and it was right about the value and the accessor and wrong
+about the LINKAGE; the row that would have caught it did not exist, because
+`test_tobject_unitname.pas` uses a helper unit and so always pulled the trigger
+by a neighbour. Fixed, with a bare-program test of its own.
+
+Blob is 112 bytes now (`+96` unitName, `+104` classInfo). The "safe to grow"
+note at `RTTI_CLS_SIZE` has been narrowed to say WHY it is safe here and to
+point at the record layout descriptor, which is the counterexample (`30ed522b3`)
+and may not grow at all.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

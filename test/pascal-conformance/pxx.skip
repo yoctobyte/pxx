@@ -43,7 +43,6 @@ tarrconstr2.pp	wontfix: dialect-pass -- `TAB.create(1 + 2, 'c')` for `TAB = arra
 tarrconstr5.pp	gap: `array of TSet` where TSet is a SET type, line 47, `unknown type: TSet` -- a set as an open-array element. WALL MOVED 2026-09-06 at d674faa3ea21, from line 14: the previous reason was `inline specialize TArray<specialize TArray<String>> in type decl`, which was TArray not being ambient; the nested inline specialization itself parses. Everything past 47 is UNVERIFIED
 tclass15.pp	gap: nested class type + Classes TCustomMemoryStream/SetPointer
 tclass5.pp	gap: class constructor `fail` + range-check error 210 semantics
-tclassinfo1.pp	wontfix: TObject.ClassInfo = TypeInfo(TObject) — FPC RTTI/typeinfo internals
 tdefault1.pp	wontfix: needs FPC `variants` unit as shipped (Default() over Variant types)
 tdefault5.pp	gap: Default() on record/object containing TextFile field (delphi mode)
 tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator classes

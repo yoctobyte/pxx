@@ -8490,6 +8490,27 @@ test-core: $(COMPILER)
 	# that declares nothing. .expected IS fpc 3.2.2's own output.
 	./$(COMPILER) test/test_tobject_unitname.pas $(TESTTMP)/test_tobjun26
 	tools/expect_same.sh test_tobjun26 "$$($(TESTTMP)/test_tobjun26)" "$$(cat test/test_tobject_unitname.expected)"
+	# ...and TObject.ClassInfo, the LAST member of that ticket, out of a second
+	# new blob word (+104) holding the typinfo facade's PTypeInfo -- the same
+	# header TypeInfo(TThatClass) mints, so identity holds AND a layout walker
+	# reads a real kind byte. Returning the raw blob instead was refused by
+	# decide-tobject-classinfo-blob-or-refusal: a walker would take an interned
+	# name POINTER's low byte as a TTypeKind, with no diagnostic.
+	# TWO ROWS MUST BE FALSE and they carry the file: `o.ClassInfo =
+	# TypeInfo(TBase)` where o HOLDS a TDer (an answer from the DECLARED type
+	# passes every other row), and `TBase.ClassInfo = TDer.ClassInfo` (a nil or
+	# shared answer passes every TRUE row). Both controls were run: returning the
+	# blob flips 9 of 13 rows, dropping the back-link flips the two FALSE rows and
+	# segfaults the walker rows. .expected IS fpc 3.2.2's own output.
+	./$(COMPILER) test/test_tobject_classinfo.pas $(TESTTMP)/test_tobjci26
+	tools/expect_same.sh test_tobjci26 "$$($(TESTTMP)/test_tobjci26)" "$$(cat test/test_tobject_classinfo.expected)"
+	# The same two members from a program with NO USES CLAUSE, which is a
+	# different population and the one the defect lived in: both lower to builtin
+	# helpers the token PRE-SCAN must pull, and `unitname` shipped 2026-08-25
+	# without its trigger. Every existing caller wrote ClassName or used a unit,
+	# so a neighbour always pulled it. Do not add a uses clause to that file.
+	./$(COMPILER) test/test_classref_member_needs_no_uses.pas $(TESTTMP)/test_crefnu26
+	tools/expect_same.sh test_crefnu26 "$$($(TESTTMP)/test_crefnu26)" "$$(cat test/test_classref_member_needs_no_uses.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always

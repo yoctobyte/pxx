@@ -3,8 +3,8 @@ track: P
 prio: 15
 type: feature
 blocked-by: []
-summary: "Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class."
-status: backlog
+summary: "CLOSED 2026-09-09. Was six TObject members pxx rejected; all six now land. ClassInfo was the last and needed a Track U decision, not an implementation: it answers the typinfo facade's PTypeInfo header (the same value TypeInfo(TThatClass) mints), so identity callers and layout walkers are both served -- see feature-a-classinfo-returns-the-typinfo-header. UnitName, never one of the six, is done too."
+status: done
 ---
 
 # TObject API: ClassParent, InstanceSize, ClassInfo, ToString, Equals, GetHashCode
@@ -73,3 +73,17 @@ left here is one member gated on a decision, not five members of work.
 `UnitName` — never in this ticket's six — is the other TObject member still
 rejected; it is tracked in [[feature-pascal-builtin-tobject-class]] because it
 needs a word added to the class RTTI blob rather than a new accessor.
+
+## 2026-09-09 — `ClassInfo` LANDED. All six members are done; this ticket is closed.
+
+The last row of the table above, and the only one that needed a decision rather
+than an implementation. `x.ClassInfo` answers the typinfo facade's `PTypeInfo`
+header — the same value `TypeInfo(TThatClass)` mints — so the identity callers
+and the layout walkers are both served, and the "answer with our blob" option
+that would have served only the first was refused as a silent wrong value.
+
+Work, tests and controls: [[feature-a-classinfo-returns-the-typinfo-header]].
+`tclassinfo1.pp` is unskipped and passing.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
