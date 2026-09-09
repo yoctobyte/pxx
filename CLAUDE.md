@@ -1100,6 +1100,19 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   not get run is the whole finding: **the number moved in the direction you
   wanted, which is the direction nobody checks.** Attribute a delta before you
   quote it, and say in the resolution which rows are NOT yours.
+  **AND THE UNFAVOURABLE DIRECTION IS UNCHECKED TOO, FOR THE OPPOSITE REASON —
+  YOU STOP LOOKING BECAUSE YOU HAVE FOUND A CULPRIT, AND IT IS YOU.** Read
+  literally, the lines above say the unwatched direction is the flattering one.
+  That is half true and the other half is nastier. Measured 2026-09-09 (frankB,
+  `b59a53a99`): a tier row went GREEN in the first run and RED in the second
+  with only its own change in between, and the red was exactly the failure that
+  change could cause. It parked the patch and reverted — and the row was
+  another seat's, arrived in the PULL between the two runs. **The suspect is
+  your own diff and the evidence reads like a confession**, so the self-blaming
+  reading TERMINATES the search, where a self-crediting one at least leaves a
+  number someone may query. Same discriminator either way: **attribute a tier
+  delta to a RANGE before attributing it to yourself**, and a pinned-versus-HEAD
+  control settles it in one command.
 - **Park held work as a PATCH or a STASH. Never a file copy.** Unconditionally.
   A patch goes through a merge and can therefore CONFLICT; `cp` has no merge step
   to fail at, so a restored copy silently reverts everything that landed while it
