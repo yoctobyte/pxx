@@ -71,4 +71,4 @@ only the words the Pascal side needs a distinct kind for. A test against
 tkFor compiles and never fires. Found by writing one.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 57f494a94.
