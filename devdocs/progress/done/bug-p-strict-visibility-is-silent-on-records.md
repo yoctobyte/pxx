@@ -61,7 +61,7 @@ correct: it is a RECORD row, the runner passes only `--strict-case --strict-oper
 the default is lax by design. This ticket does not reopen it.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 178270aba.
 
 ## 2026-09-09 — fixed, and the ticket's own reading was backwards
 
