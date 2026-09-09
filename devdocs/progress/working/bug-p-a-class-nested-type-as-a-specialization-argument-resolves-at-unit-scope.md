@@ -384,3 +384,135 @@ and kept SEPARATE from this ticket deliberately: the mangler surplus is testable
 on its own, and I have not shown that resolving `PT` ends the ladder. **That is
 the discriminator if you want to merge the two** — resolve `PT` at :212 and see
 whether the mint count drops to one rung.
+
+## 2026-09-09 (frankZ) — TWO of the three doors are FIXED. What remains is one, and it is named
+
+**Fixed:** every ladder row whose nested type is declared in a NON-GENERIC class
+— its own (v5, v6, v8, v10, v11) or a non-generic ANCESTOR's (v3, v4) — plus the
+silent arm, which now answers 300 where it answered 44. Regression test
+`test/test_a_class_nested_type_is_a_specialization_argument.pas`, six rows,
+byte-matching fpc 3.2.2, wired into the Makefile sweep.
+
+**Negative control, run clean on the pre-fix binary `90aa9c2c1c10`:** `rc=1`,
+five errors, no binary produced — `unknown type: TAlias`, `unknown type:
+TInner`, `unknown type: TAfter` (the template body carrying the bare spellings)
+and two `SizeOf: unknown type or variable`. Note which name is ABSENT from that
+list: `TElem`, the `mixed` row, because the unit-scope namesake absorbed it.
+**The control errors on four rows and is silent on the fifth**, which is the row
+that was wrong. Only the VALUE assertion catches it, and that is why the test
+reads `V` and not `SizeOf` — both compilers answer 8 for the size.
+
+### The mechanism, no longer a hypothesis
+
+`NestedSpecArg` (`pasparser_generic.inc:420`) maps an argument identifier
+through exactly two tables: `SpecSubNames`, the enclosing template's own
+parameters, and `HoistedNameFor`, the names the enclosing template declares in
+its OWN body via `CollectHoistCandidates` — which stops at `depth <= 0`. A name
+in neither survives into the alias as its literal spelling. That is the whole
+defect, and the three doors are three ways to be in neither table:
+
+| door | shape | table that misses | status |
+| --- | --- | --- | --- |
+| A | non-generic class, own or non-generic ancestor's nested type | neither — the token sweep never consults one | **fixed here** |
+| B | the template's own body | `HoistedNameFor` covers it | already worked |
+| C | inherited from a GENERIC ancestor | `CollectHoistCandidates` walks one body, not the chain | **open** |
+
+Door A does not go through `p.nspec` at all — it is the token-level
+`DelphiRewriteGenericUses` sweep, which minted `TEnum$PT` directly. Measuring
+that is what separated the doors; a `p.nspec` probe on the ticket's own 15-line
+repro prints nothing.
+
+### The remedy, and the half that is load-bearing
+
+Hoist the DECLARATION and leave an ALIAS behind — the same shape the
+template-side door already uses, over `Tokens` instead of `TemplateTokens` and
+with no substitution to apply:
+
+```
+TDerived$PT = ^Integer;                    <- lifted, above TDerived
+TEnum$TDerived$PT = specialize TEnum<TDerived$PT>;
+TDerived = class
+  type PT = TDerived$PT;                   <- alias, NOT a second copy
+  function F: TEnum$TDerived$PT;
+end;
+```
+
+A top-level DUPLICATE would be structurally identical but a DISTINCT type, so
+`d.P` and the specialization's result would not assign to each other. Collapsing
+the in-body declaration is not an optimisation; it is the correctness half.
+
+**Two things the first cut got wrong, both measured rather than reasoned:**
+
+- **The method IMPLEMENTATION header is a second scope and missing it moved
+  nothing.** `function TDerived.GetPtrEnum: TEnum<PT>;` sits at unit level,
+  outside every class body, and Delphi resolves its signature in TDerived's
+  scope. With only the body arm wired, the declaration was rewritten and the
+  implementation was not, the two headers named different types, and the
+  template was still minted on the bare spelling — **the symptom did not change
+  at all**, which reads exactly like a fix that does nothing.
+- **A qualified argument must be skipped, not rewritten.** `TEnum<TDerived.PT>`
+  — the v7 row, a separate open bug — had its `PT` rewritten into
+  `TDerived.TDerived$PT`, a name the source never wrote and a strictly worse
+  diagnostic than the one it replaced. An ident preceded by `tkDot` now belongs
+  to the qualified-argument arm and is left alone. v7 is back to its own
+  original failure, unchanged.
+
+### The closure guard, and why it fails in the safe direction
+
+`PT = ^TDerived` lifted above `TDerived` is a forward reference we would be
+creating ourselves. The RHS is refused when it names anything declared at or
+after the class. The test is crude on purpose — a `const nm = 3` counts — and
+the asymmetry is deliberate: a false positive costs a refused hoist, i.e. a
+program exactly as broken as it already was, while a false negative would cost
+a new defect.
+
+### Door C is the remaining wall, and it is now the LAST one on the Collections driver
+
+frankS's `2473d920e` closed the `TQueue`/`TEnumerator` cycle that made the
+rtl-generics failure a ladder; what stands behind it is this ticket's plain
+`unknown type: PT`. **Seventeen-line reduction, no corpus, fpc 3.2.2 accepts and
+runs it:**
+
+```pascal
+program n1;
+{$mode delphi}
+type
+  TEnumerable<T> = class
+  public type
+    PT = ^T;
+  end;
+  TPointersEnum<T, P> = class
+    function G: P; virtual; abstract;
+  end;
+  TListWithPointers<T> = class(TEnumerable<T>)
+  public
+    function Ptrs: TPointersEnum<T, PT>;
+  end;
+function TListWithPointers<T>.Ptrs: TPointersEnum<T, PT>; begin Result := nil; end;
+var a: TListWithPointers<LongInt>;
+begin a := nil; WriteLn('ok'); end.
+```
+
+```
+PXXDBG p.nspec reg alias=TPointersEnum$LongInt$PT under=TListWithPointers$LongInt nsub=1 subs=T->LongInt
+pascal26:9: error: unknown type: PT
+```
+
+fpc's own mangled name in that program says what it resolved to:
+`TPointersEnum$2<SYSTEM.LongInt,N1.TEnumerable$1$crc9F312717.PT>`.
+
+**`nsub=1` is CORRECT and reading it as the argument count was an error that
+cost a round of analysis.** The `p.nspec` probe prints `SpecSubCount` — the
+substitution set in force — and `TListWithPointers<T>` has exactly one
+parameter. The reference's own argument count is `na`/`NSpecNArg` and the probe
+does not print it. Both arguments ARE recorded; the second simply resolves
+through neither table.
+
+**Why the ancestor extension is worth one run and not obviously doomed.** The
+hoisted name for the ancestor's member under a substitution is
+`TEnumerable$LongInt$PT` — the same name a specialization of `TEnumerable`
+itself would mint. It is STABLE across rungs, so `HoistEmitted`, which is keyed
+on the name, does its job. Bound it to the case where the ancestor's argument
+list is exactly the descendant's own parameters in order (`class(TEnumerable<T>)`
+inside `TListWithPointers<T>`) and the substitution carries over unchanged;
+anything else is refused. That is the next thing to try and it is mine.

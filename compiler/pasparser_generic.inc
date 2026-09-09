@@ -1305,6 +1305,8 @@ function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body i
 function StringTypeNameKind(const nm: AnsiString): TTypeKind; forward;   { same file, same reason, and the operator-operand door in pasparser_call.inc calls it EARLIER than either — `shortstring` is the one builtin string name BuiltinTypeNameTk deliberately excludes, so the operand resolver has to ask this one too. Caught by gate.sh quick's FPC seed canary, which is the only instrument that sees a declaration-order break: pxx prescans headers and compiles it happily. }
 function QualArgAliasName(const path: AnsiString): AnsiString; forward;
 procedure EmitQualAliasDecl(const aliasNm, path: AnsiString); forward;   { both bodies live below their first CALL (the qualified-type-name-as-generic-argument arms). pxx resolves across the unit; FPC resolves in source order and the seed build fails without these. }
+procedure QualPush(k: TTokenKind; const txt: AnsiString; ln: Integer); forward;   { same reason again: the class-nested hoist above DelphiRewriteGenericUses is a fifth filler of the prerequisite buffer and sits above every one of its routines. }
+procedure PrereqPushRaw(const t: TRawToken); forward;
 procedure BeginPrereqs; forward;
 procedure FlushPrereqs(at: Integer; needsTypeKeyword: Boolean; var nInserted: Integer); forward;   { same reason: DelphiRewriteGenericUses is the one prerequisite door ABOVE the buffer's own routines. }
 
@@ -1922,6 +1924,405 @@ end;
   Guards: the name must match ti's, the `<...>` group must be a plain
   comma-separated list of type idents closed by `>`, and the arity must match
   — anything else (e.g. a real `a < b` comparison) is left untouched. }
+{ ===== A NESTED TYPE OF A NON-GENERIC CLASS, USED AS A GENERIC ARGUMENT =====
+
+  `TDerived = class public type PT = ^Integer; function F: TEnum<PT>; end;`
+  fpc compiles and runs it. We minted `TEnum$PT = specialize TEnum<PT>;` ahead
+  of TDerived and the template body then failed on `unknown type: PT`: the
+  argument travelled as a SPELLING to a place where that spelling means nothing.
+  Give the unit a namesake and the refusal becomes a WRONG ANSWER instead --
+  measured 44 where fpc prints 300, a 300 stored through a unit-scope `Byte`
+  while the source meant the class's own `Int64`. The wrong answer is the
+  expensive half and it is the one a size probe cannot see, because both
+  compilers answer 8 for `SizeOf`; only the VALUE separates them.
+  bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
+
+  The sibling door -- a nested type of the TEMPLATE's own body -- is
+  CollectHoistCandidates / HoistedNameFor / EmitHoistedDecls, over
+  TemplateTokens and with a substitution to apply. This one is over Tokens and
+  has none. They are deliberately DISJOINT rather than shared: this collector
+  matches `Name = class` only, and a generic header is `Name<T> = class`, so the
+  tkEq test excludes it and a name reachable from both doors is hoisted by
+  exactly one.
+
+  A THIRD DOOR REMAINS OPEN AND IS NOT THIS ONE: a nested type inherited from a
+  GENERIC ancestor (`TListWithPointers<T> = class(TEnumerable<T>)` naming
+  TEnumerable's `PT = ^T`). There NestedSpecArg finds the name in neither
+  SpecSubNames nor HoistedNameFor and the bare spelling survives into the alias
+  -- the rtl-generics ladder. Its ancestor is a generic header, which this
+  collector skips by construction, so the two do not overlap and neither covers
+  the other.
+
+  Same remedy as the template-side door and the same load-bearing half: hoist
+  the DECLARATION and leave an ALIAS behind, never a second copy.
+
+    TDerived$PT = ^Integer;                    <- lifted, above TDerived
+    TEnum$TDerived$PT = specialize TEnum<TDerived$PT>;
+    TDerived = class
+      type PT = TDerived$PT;                   <- alias, NOT a second copy
+      function F: TEnum$TDerived$PT;
+    end;
+
+  A top-level DUPLICATE of the RHS would be structurally identical but a
+  DISTINCT type, so `d.P` and the specialization's result would not assign to
+  each other. That is the silent shape, which is why collapsing the in-body
+  declaration is the part to get right and not an optimisation.
+
+  ONLY WHAT IS ACTUALLY USED AS A GENERIC ARGUMENT IS HOISTED -- the trigger is
+  the argument, not the declaration, for the reason the template-side door
+  already gives: hoisting every nested type would rewrite programs that work
+  today.
+
+  AND ONLY WHEN THE RHS IS CLOSED OVER WHAT PRECEDES THE CLASS. `PT = ^TDerived`
+  lifted above TDerived is a forward reference we would be creating ourselves,
+  so the RHS is refused when it names anything declared at or after the class.
+  A refused hoist leaves the program exactly as broken as it already was, which
+  is the right failure: it does not invent a second one. }
+
+const
+  MAX_CLASS_NESTED = 64;
+  MAX_CNEST_CLASSES = 256;
+var
+  { every NON-GENERIC class/record/object body in the stream, its ancestor (''
+    when it has none or the ancestor is not a plain name), and its extent }
+  CClsName  : array[0..MAX_CNEST_CLASSES-1] of AnsiString;
+  CClsParent: array[0..MAX_CNEST_CLASSES-1] of AnsiString;
+  { the class's own declaration index and the token past its `end` -- a use is
+    inside this body only when it lies strictly between them }
+  CClsB0    : array[0..MAX_CNEST_CLASSES-1] of Integer;
+  CClsB1    : array[0..MAX_CNEST_CLASSES-1] of Integer;
+  CClsCount : Integer;
+
+  { the in-body name, e.g. PT }
+  CNestName : array[0..MAX_CLASS_NESTED-1] of AnsiString;
+  { the top-level name it is lifted to, e.g. TDerived$PT }
+  CNestFull : array[0..MAX_CLASS_NESTED-1] of AnsiString;
+  { which CCls declares it }
+  CNestCi   : array[0..MAX_CLASS_NESTED-1] of Integer;
+  { the declaration RHS, both inclusive }
+  CNestR0   : array[0..MAX_CLASS_NESTED-1] of Integer;
+  CNestR1   : array[0..MAX_CLASS_NESTED-1] of Integer;
+  CNestCount: Integer;
+
+{ The arena index of the last token of the declaration RHS starting at d,
+  stepping over any nested record/class/case body. -1 when it never closes.
+  Tokens-side sibling of HoistDeclEndAt. }
+function CNestDeclEnd(d: Integer): Integer;
+var q, dep: Integer;
+begin
+  CNestDeclEnd := -1;
+  q := d; dep := 0;
+  while q < TokCount do
+  begin
+    if (Tokens[q].Kind = tkRecord) or (Tokens[q].Kind = tkCase) or
+       (Tokens[q].Kind = tkClass) then
+      Inc(dep)
+    else if Tokens[q].Kind = tkEnd then
+    begin
+      Dec(dep);
+      if dep < 0 then Exit;
+    end
+    else if (Tokens[q].Kind = tkSemicolon) and (dep <= 0) then
+    begin
+      CNestDeclEnd := q - 1;
+      Exit;
+    end;
+    Inc(q);
+  end;
+end;
+
+{ Walk Tokens for NON-GENERIC class/record/object bodies. Records every one of
+  them (the ancestor chain needs the classes that declare nothing too) and every
+  nested type declaration they hold. Nothing is hoisted here -- the argument
+  decides, which is the trigger rule the template-side door already states. }
+procedure CollectClassNestedTypesFromTokens;
+var i, j, depth, r1, ci: Integer;
+    inTypeSec, opens: Boolean;
+    cname: AnsiString;
+begin
+  CNestCount := 0;
+  CClsCount := 0;
+  i := 1;
+  while i + 2 < TokCount do
+  begin
+    opens := (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkEq) and
+             ((Tokens[i-1].Kind = tkType) or (Tokens[i-1].Kind = tkSemicolon));
+    j := i + 2;
+    if opens then
+    begin
+      while (j < TokCount) and (DGenIdentIs(j, 'packed') or DGenIdentIs(j, 'bitpacked')) do
+        Inc(j);
+      opens := (j < TokCount) and
+               ((Tokens[j].Kind = tkRecord) or DGenIdentIs(j, 'object') or
+                ((Tokens[j].Kind = tkClass) and DGenClassOpensBody(j, TokCount)));
+    end;
+    if opens and (CClsCount >= MAX_CNEST_CLASSES) then opens := False;
+    if opens then
+    begin
+      cname := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+      ci := CClsCount;
+      CClsName[ci]   := cname;
+      CClsParent[ci] := '';
+      CClsB0[ci]     := i;
+      CClsB1[ci]     := TokCount;   { backfilled below }
+      Inc(CClsCount);
+      { `class(TBase)` -- one plain ancestor name. An interface list after it is
+        ignored on purpose: a nested TYPE comes from the class ancestor. }
+      if (Tokens[j].Kind = tkClass) and (j + 2 < TokCount) and
+         (Tokens[j+1].Kind = tkLParen) and (Tokens[j+2].Kind = tkIdent) then
+        CClsParent[ci] := GetTokenStrFromRaw(Tokens[j+2].SOffset, Tokens[j+2].SLen);
+      depth := 1;
+      inTypeSec := False;
+      Inc(j);
+      while (j < TokCount) and (depth > 0) do
+      begin
+        if Tokens[j].Kind = tkEnd then
+        begin
+          Dec(depth);
+          inTypeSec := False;
+        end
+        else if (Tokens[j].Kind = tkRecord) or (Tokens[j].Kind = tkCase) or
+                DGenIdentIs(j, 'object') then
+          Inc(depth)
+        else if (Tokens[j].Kind = tkClass) and DGenClassOpensBody(j, TokCount) then
+          Inc(depth)
+        else if Tokens[j].Kind = tkType then
+          inTypeSec := (depth = 1)
+        else if (Tokens[j].Kind = tkVar) or (Tokens[j].Kind = tkConst) or
+                (Tokens[j].Kind = tkProcedure) or (Tokens[j].Kind = tkFunction) or
+                (Tokens[j].Kind = tkProperty) then
+          inTypeSec := False
+        else if inTypeSec and (depth = 1) and (Tokens[j].Kind = tkIdent) and
+                (j + 2 < TokCount) and (Tokens[j+1].Kind = tkEq) then
+        begin
+          r1 := CNestDeclEnd(j + 2);
+          if (r1 >= j + 2) and (CNestCount < MAX_CLASS_NESTED) then
+          begin
+            CNestName[CNestCount] := GetTokenStrFromRaw(Tokens[j].SOffset, Tokens[j].SLen);
+            CNestFull[CNestCount] := cname + '$' + CNestName[CNestCount];
+            CNestCi[CNestCount]   := ci;
+            CNestR0[CNestCount]   := j + 2;
+            CNestR1[CNestCount]   := r1;
+            Inc(CNestCount);
+            j := r1;
+          end;
+        end;
+        Inc(j);
+      end;
+      CClsB1[ci] := j;
+      i := j;
+    end
+    else Inc(i);
+  end;
+end;
+
+{ The index of the class whose SCOPE covers a use at token k, or -1.
+
+  TWO scopes, and the second one is where a first attempt stopped short. A use
+  inside the class BODY is the obvious half. The other is a method
+  IMPLEMENTATION header -- `function TDerived.GetPtrEnum: TEnum<PT>;` sits at
+  unit level, outside every body, and Delphi still resolves its signature in
+  TDerived's scope. Missing it left the declaration rewritten and the
+  implementation not, so the two headers named different types and the template
+  was still minted on the bare spelling: the symptom did not move at all.
+
+  The backward walk is BOUNDED rather than open: a header is a few dozen tokens
+  and an unbounded walk would make this quadratic on a large unit. Running off
+  the budget means "no qualifier", which refuses the hoist. }
+function CNestScopeAt(k: Integer): Integer;
+var c, q, budget: Integer;
+begin
+  CNestScopeAt := -1;
+  { innermost body wins, so a nested class shadowing an outer one's member name
+    resolves the way the source reads }
+  for c := 0 to CClsCount - 1 do
+    if (k > CClsB0[c]) and (k < CClsB1[c]) and
+       ((CNestScopeAt < 0) or (CClsB0[c] > CClsB0[CNestScopeAt])) then
+      CNestScopeAt := c;
+  if CNestScopeAt >= 0 then Exit;
+  q := k;
+  budget := 400;
+  while (q > 2) and (budget > 0) do
+  begin
+    { `constructor` / `destructor` are SOFT keywords and lex as tkIdent -- the
+      same two DGenClassOpensBody spells out by name for the same reason. }
+    if (Tokens[q].Kind = tkFunction) or (Tokens[q].Kind = tkProcedure) or
+       DGenIdentIs(q, 'constructor') or DGenIdentIs(q, 'destructor') then
+    begin
+      if (q + 2 < TokCount) and (Tokens[q+2].Kind = tkDot) then
+        for c := 0 to CClsCount - 1 do
+          if DGenIdentIs(q + 1, CClsName[c]) then CNestScopeAt := c;
+      Exit;
+    end;
+    Dec(q);
+    Dec(budget);
+  end;
+end;
+
+{ Does the class at scope index `sc` see the nested type `c`? Its own, or any
+  its ANCESTOR CHAIN reaches -- `TDerived = class(TBase)` naming TBase's `PT` is
+  the v3/v4 rung of the ticket's ladder and fails identically without this. The
+  walk is bounded by the class count, so a cycle in a malformed chain stops
+  rather than spinning. }
+function CNestVisible(sc, c: Integer): Boolean;
+var hops, k: Integer;
+    cur: AnsiString;
+begin
+  CNestVisible := False;
+  if sc < 0 then Exit;
+  hops := 0;
+  while (sc >= 0) and (hops <= CClsCount) do
+  begin
+    if sc = CNestCi[c] then
+    begin
+      CNestVisible := True;
+      Exit;
+    end;
+    cur := CClsParent[sc];
+    if cur = '' then Exit;
+    sc := -1;
+    for k := 0 to CClsCount - 1 do
+      if CaseEqual(CClsName[k], cur) then sc := k;
+    Inc(hops);
+  end;
+end;
+
+{ Is anything the RHS of `c` names declared at or after its class? The closure
+  guard, and it is deliberately crude: an `nm =` pair anywhere from the class's
+  own declaration onwards is enough, so a `const nm = 3` counts too. A false
+  positive costs a refused hoist -- a program that stays exactly as broken as it
+  was -- and a false negative would cost a forward reference we created
+  ourselves, so the asymmetry is the right way round. }
+function CNestRhsEscapes(c: Integer): Boolean;
+var q, k: Integer;
+    nm: AnsiString;
+begin
+  CNestRhsEscapes := False;
+  for q := CNestR0[c] to CNestR1[c] do
+    if Tokens[q].Kind = tkIdent then
+    begin
+      nm := GetTokenStrFromRaw(Tokens[q].SOffset, Tokens[q].SLen);
+      k := CClsB0[CNestCi[c]];
+      while k + 1 < TokCount do
+      begin
+        if (Tokens[k+1].Kind = tkEq) and DGenIdentIs(k, nm) then
+        begin
+          CNestRhsEscapes := True;
+          Exit;
+        end;
+        Inc(k);
+      end;
+    end;
+end;
+
+{ Has an earlier round already lifted this one? Then its RHS IS the hoisted
+  name, and re-emitting would declare `TDerived$PT = TDerived$PT`. Asked of the
+  TOKENS rather than of a name list, because a list would have to survive across
+  units and the tokens cannot go stale. }
+function CNestAlreadyHoisted(c: Integer): Boolean;
+begin
+  CNestAlreadyHoisted := (CNestR1[c] = CNestR0[c]) and
+                         (Tokens[CNestR0[c]].Kind = tkIdent) and
+                         DGenIdentIs(CNestR0[c], CNestFull[c]);
+end;
+
+{ Rewrite every use of a class-nested type as an argument of THIS template into
+  the hoisted name, collapse the declaration it names into an alias, and emit
+  the hoisted declaration at insertAt. Returns the tokens emitted, so the
+  fixed-point loop takes another round and the ordinary sweep below then sees an
+  argument that resolves where it lands.
+
+  Returning 0 does NOT mean nothing happened: an argument whose type an earlier
+  round already lifted is rewritten here and emits nothing, and the caller falls
+  through to the ordinary sweep in the same call, which is what must happen. }
+function HoistClassNestedGenericArgs(const tname: AnsiString; var insertAt: Integer): Integer;
+var i, gEnd, k, c, sc, best, q, ln, nIns, hits: Integer;
+    pend: array[0..MAX_CLASS_NESTED-1] of Boolean;
+    nm: AnsiString;
+begin
+  HoistClassNestedGenericArgs := 0;
+  if CNestCount = 0 then Exit;
+  for c := 0 to CNestCount - 1 do pend[c] := False;
+  hits := 0;
+  i := 1;
+  while i + 1 < TokCount do
+  begin
+    if DGenIdentIs(i, tname) and (Tokens[i+1].Kind = tkLt) then
+    begin
+      gEnd := DGenAngleGroupEnd(i + 1, TokCount);
+      if gEnd > i + 1 then
+      begin
+        for k := i + 2 to gEnd - 1 do
+          { A member selector, not a bare name: the `PT` of `TEnum<TDerived.PT>`
+            is already qualified and belongs to the qualified-argument arm.
+            Rewriting it produced `TDerived.TDerived$PT`, a name the source
+            never wrote and a worse diagnostic than the one it replaced. }
+          if (Tokens[k].Kind = tkIdent) and (Tokens[k-1].Kind <> tkDot) then
+          begin
+            nm := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
+            sc := CNestScopeAt(k);
+            best := -1;
+            for c := 0 to CNestCount - 1 do
+              if CaseEqual(nm, CNestName[c]) and CNestVisible(sc, c) and
+                 ((best < 0) or (CClsB0[CNestCi[c]] > CClsB0[CNestCi[best]])) then
+                best := c;
+            if (best >= 0) and (not CNestRhsEscapes(best)) then
+            begin
+              Tokens[k].Kind := tkIdent;
+              Tokens[k].IVal := 0;
+              Tokens[k].SOffset := TokCharsAppend(CNestFull[best]);
+              Tokens[k].SLen := Length(CNestFull[best]);
+              if not CNestAlreadyHoisted(best) then pend[best] := True;
+              Inc(hits);
+            end;
+          end;
+        i := gEnd;
+      end;
+    end;
+    Inc(i);
+  end;
+  if hits = 0 then Exit;
+
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  BeginPrereqs;
+  nIns := 0;
+  for c := 0 to CNestCount - 1 do
+    if pend[c] then
+    begin
+      QualPush(tkIdent, CNestFull[c], ln);
+      QualPush(tkEq, '', ln);
+      for q := CNestR0[c] to CNestR1[c] do PrereqPushRaw(Tokens[q]);
+      QualPush(tkSemicolon, '', ln);
+      Inc(nIns);
+    end;
+  if nIns = 0 then Exit;
+
+  { Collapse BEFORE the flush and BACKWARDS: the flush shifts every index at or
+    after insertAt and every class body sits after it, and a later RHS shrinking
+    must not move an earlier one this loop has yet to reach. }
+  for c := CNestCount - 1 downto 0 do
+    if pend[c] then
+    begin
+      Tokens[CNestR0[c]].Kind := tkIdent;
+      Tokens[CNestR0[c]].IVal := 0;
+      Tokens[CNestR0[c]].SOffset := TokCharsAppend(CNestFull[c]);
+      Tokens[CNestR0[c]].SLen := Length(CNestFull[c]);
+      if CNestR1[c] > CNestR0[c] then
+        RemoveTokens(CNestR0[c] + 1, CNestR1[c] - CNestR0[c]);
+    end;
+
+  nIns := 0;
+  FlushPrereqs(insertAt, False, nIns);
+  insertAt := insertAt + nIns;
+  { every recorded index is stale now; the next round rebuilds the table }
+  CNestCount := 0;
+  CClsCount := 0;
+  if PxxDbgEnabled('p.cnest') then
+    writeln('PXXDBG p.cnest tmpl=', tname, ' rewrote=', hits, ' tokens=', nIns);
+  HoistClassNestedGenericArgs := nIns;
+end;
+
 function DelphiRewriteGenericUses(ti: Integer; var insertAt: Integer; delphiPattern: Boolean): Integer;
 { insertAt is VAR so a caller can run this to a FIXED POINT: each round leaves it
   past the alias declarations that round emitted, so the next round's aliases land
@@ -1956,6 +2357,15 @@ begin
   dgQCount := 0;
   tname := Templates[ti].Name;
   np := TemplateNParams[ti];
+  { The class-nested-argument door runs FIRST and, when it fires, shifts every
+    index the sweep below would record -- so it returns instead of falling
+    through, and the fixed-point loop re-enters with an argument that resolves. }
+  nIns := HoistClassNestedGenericArgs(tname, insertAt);
+  if nIns > 0 then
+  begin
+    DelphiRewriteGenericUses := nIns;
+    Exit;
+  end;
   seenCnt := 0;
   i := insertAt;
   { `PXXDBG=p.dgen:<TemplateName>` — one template's whole sweep. The sweep is
@@ -2409,6 +2819,7 @@ begin
     before := TokCount;
     atBefore := at;
     CollectSpecializationBoundNamesFromTokens;
+    CollectClassNestedTypesFromTokens;
     emitted := 0;
     for t := 0 to TemplateCount - 1 do
       if not TemplateShadowedByThisFile(t, TokPos) then
@@ -3294,6 +3705,7 @@ begin
       turned the inner group into a plain ident is what finishes the outer one. }
     dgenAtBefore := dgenAt;
     CollectSpecializationBoundNamesFromTokens;
+    CollectClassNestedTypesFromTokens;
     dgenEmitted := 0;
     for dgenT := 0 to TemplateCount - 1 do
       dgenEmitted := dgenEmitted +

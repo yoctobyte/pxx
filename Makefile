@@ -17684,6 +17684,28 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_gennestfld26 "$$($(TESTTMP)/sweep_gennestfld26)" "$$(printf '2 one 2\n1 x')"
 	./$(COMPILER) test/test_generic_nested_type_identity.pas $(TESTTMP)/sweep_gennestid26
 	tools/expect_same.sh sweep_gennestid26 "$$($(TESTTMP)/sweep_gennestid26)" "$$(printf '2 one\n1 7\n1 10')"
+	# A type declared INSIDE a class, named as a generic argument in that
+	# class's own scope. The argument travelled as a SPELLING to the point the
+	# template body materialises at, where it means nothing -- three rows here
+	# refused with `unknown type` on the pre-fix binary 90aa9c2c1c10.
+	#
+	# `mixed` IS THE ROW THAT MATTERS AND IT DID NOT ERROR. With a unit-scope
+	# namesake present the refusal became a silent wrong answer: 44, a 300
+	# stored through a Byte, where the source meant the class's own Int64.
+	#
+	# THE READOUT IS THE VALUE AND NOT SizeOf, DELIBERATELY. Both compilers
+	# answer 8 for the size because the probe casts to the type it is asking
+	# about and reports the CAST's view -- a size row prints parity on the one
+	# row where the two compilers disagree completely.
+	#
+	# `unitscope` and `plainuse` are the controls: the namesake must stay
+	# reachable outside the class, and the same nested name in an ordinary type
+	# position resolved correctly the whole time, which is what makes this a
+	# specialization-argument defect and not a scoping one. Expected output is
+	# fpc 3.2.2's, taken from fpc and not written by hand.
+	# bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
+	./$(COMPILER) test/test_a_class_nested_type_is_a_specialization_argument.pas $(TESTTMP)/sweep_clsnestarg26
+	tools/expect_same.sh sweep_clsnestarg26 "$$($(TESTTMP)/sweep_clsnestarg26)" "$$(printf 'own 8 300\ninherited 8 300\nmixed 8 300\nlate 8 300\nunitscope 1 44\nplainuse 1')"
 	# A nested pointer alias belongs to the class or record that declared it.
 	# Two bodies each declaring `PCell = ^TCell` with DIFFERENT pointee types
 	# shared one flat alias row, so the second was type-checked against the
