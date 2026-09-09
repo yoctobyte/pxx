@@ -112,4 +112,4 @@ typed const plus `TypeInfo(T)` RTTI — not this ABI. Named here so nobody reads
 this resolution as the rung's cure.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b0d53c73a.
