@@ -5,9 +5,73 @@ type: bug
 blocked-by: []
 status: open
 owner: frankS
+summary: "TWO INDEPENDENT DEFECTS, NOT ONE, and the mechanism in the body below is wrong -- re-measured 2026-09-09 (frankD) at compiler `21ea7825000a`. (A) `Length` OF ANY PWideChar is broken with no literal in sight: a hand-built `p := @buf[0]` over a correct `array[0..4] of WideChar` INDEXES perfectly (97 98 99 100 0, identical to fpc) and `Length(p)` still answers 4411392, because `IsNodePChar` (ir.inc:4020) tests PtrBaseTk against tyChar/tyUInt8/tyInt8 and never tyWideChar, so the operand is not wrapped and Length takes the managed-string path that reads a [data-8] length header off the pointer. THAT is where every wild number in this ticket comes from -- not from a NUL scan overrunning. (B) The literal binding puts the pointer EIGHT BYTES EARLY, on a length header, and the payload after it is narrow: `pw as words` reads `4 0 0 0 25185 25699` = a 64-bit length of 4, then 'abcd' narrow. A `PChar` to the same literal in the SAME PROGRAM is entirely correct (97 98 99 100 0), so the header offset is wide-specific and is not a general literal-address problem. Both binding surfaces (initialiser and statement) behave identically. DO NOT 'FIX' THIS BY ADDING tyWideChar TO IsNodePChar: that routes a wide pointer into PCharToString, a NARROW strlen, which stops at the first zero BYTE and would make Length('abcd') answer 1 -- replacing an obviously-wrong number with a plausible one, which is strictly worse. There is no PWideCharToString in the tree; building one is the real (A) fix and it is separable from (B)."
 ---
 
 # A string literal bound to a PWideChar is emitted narrow, and only the cast surface refuses
+
+> ## RE-MEASURED 2026-09-09 (frankD) — THE MECHANISM BELOW IS WRONG, AND THIS IS TWO DEFECTS
+>
+> Compiler `21ea7825000a`, `{$mode delphi}`, against fpc 3.2.2. Everything from
+> here to "## The part that matters for ranking" is the original filing and its
+> reasoning does not survive; the TABLE in it is still reproducible.
+>
+> **(A) `Length` of a PWideChar is broken on its own, with no literal involved.**
+> The discriminator is a pointer built by hand, so the literal cannot be
+> implicated:
+>
+> ```pascal
+> var buf: array[0..4] of WideChar; p: PWideChar;
+> buf[0]:='a'; buf[1]:='b'; buf[2]:='c'; buf[3]:='d'; buf[4]:=#0;
+> p := @buf[0];
+> for i := 0 to 4 do Write(' ', Ord(p[i]));   { 97 98 99 100 0  — IDENTICAL to fpc }
+> WriteLn(Length(p));                          { 4411392  where fpc says 4 }
+> ```
+>
+> The pointer is correct, indexing through it is correct, `SizeOf(buf)` is 10.
+> `Length` alone is wrong. **Every wild number in this ticket comes from here**,
+> including the 4261104 the body warns not to read as data — and the warning is
+> right for the wrong reason: it is not a NUL scan running until it meets a
+> 2-byte zero, it is a length field read off `[p-8]`.
+>
+> Cause, and it is a one-armed double case: `IsNodePChar` (`ir.inc:4020`) tests
+> `SymTR[].PtrBaseTk` against `tyChar`, `tyUInt8` and `tyInt8`. There is no
+> `tyWideChar` arm, so `WrapPCharToString` is never applied and the operand
+> reaches the runtime Length path — the one whose own comment in
+> `pasparser_expr.inc` records that it "reads a [data-8] length header off the
+> value" and answered 1 for an Integer.
+>
+> **DO NOT ADD `tyWideChar` TO THAT LIST.** `WrapPCharToString` calls
+> `PCharToString`, a NARROW strlen: over UTF-16 `'abcd'` (`61 00 62 00 ...`) it
+> stops at the first zero byte and answers 1. That turns an obviously-wrong
+> 4411392 into a plausible 1 — the failure mode this repo names most often, and
+> strictly worse than the bug. There is no `PWideCharToString` in the tree
+> (checked: `lib/rtl`, `compiler/builtin`); building one is the real fix, and it
+> is what makes concat, compare and WriteLn work through the same funnel rather
+> than growing a Length-only second path.
+>
+> **(B) The literal binding lands EIGHT BYTES EARLY, on a length header.**
+>
+> ```
+> pxx  pw as words : 4 0 0 0 25185 25699        fpc: 97 98 99 100 0 0
+>      pc as bytes : 97 98 99 100 0 0 0 0       fpc: 97 98 99 100 0 0 0 0
+> ```
+>
+> `04 00 00 00 00 00 00 00 | 61 62 63 64` — a 64-bit length of 4, then `'abcd'`
+> NARROW. So the payload being narrow is real and it is the SECOND half; the
+> first is that the pointer is not at the payload at all. **The `PChar` control
+> is in the same program and is entirely correct**, which is what makes this
+> wide-specific rather than a general literal-address problem — and that control
+> is the reason the claim is a measurement and not an inference.
+>
+> Both binding surfaces do the same thing: `var pw: PWideChar = 'abcd'` and
+> `pw := 'abcd'` both give `4 0 0 0 25185 25699`.
+>
+> **(A) and (B) are independently fixable and (A) does not need the payload
+> model.** A ticket that fixes only (B) will still print a wild `Length`; one
+> that fixes only (A) will print a correct length of a wrong string. Neither
+> alone will look like progress, which is the argument for splitting the work
+> and not the ticket.
 
 `WideChar` is 2 bytes here and `array[0..4] of WideChar` is 10 — the CHAR side is
 already right. What is wrong is the LITERAL: a string literal reaching a
