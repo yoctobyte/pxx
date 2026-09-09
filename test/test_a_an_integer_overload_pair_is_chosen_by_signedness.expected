@@ -1,0 +1,16 @@
+free A byte  qword  B qword
+free A word  qword  B qword
+free A card  qword  B qword
+free A neg   i64  B i64
+meth A var   i64  B i64
+meth A card  qword  B qword
+meth A call  i64  B i64
+meth A ccall qword  B qword
+meth A expr  i64  B i64
+meth A ecard i64  B i64
+meth A cast  i64  B i64
+meth A ccast qword  B qword
+meth A unry  i64  B i64
+ctor A neg   i64  B i64
+ctor A card  qword  B qword
+ctor A call  qword  B qword

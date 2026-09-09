@@ -5464,6 +5464,21 @@ test-core: $(COMPILER)
 	# bug-p-a-static-class-functions-address-carries-a-hidden-self
 	./$(COMPILER) test/test_a_static_class_functions_address_has_no_hidden_self.pas $(TESTTMP)/test_staticnoself26
 	$(TESTTMP)/test_staticnoself26 | diff -u test/test_a_static_class_functions_address_has_no_hidden_self.expected -
+	# Two integer overloads differing ONLY in signedness, EVERY family declared
+	# in BOTH orders in the one program -- the two halves of each row must agree.
+	# A single-order fixture cannot fail this: the original ticket's table was
+	# measured in one order and so recorded pxx as agreeing with fpc on the row
+	# that disagrees the moment you swap the declarations. Before the fix 13 of
+	# these 16 rows flip with the order and three of them print `qword BIG`,
+	# i.e. `-5 > 1000000` answered TRUE through the sign-losing arm -- a wrong
+	# value, which is why this was not a compat nicety. The `expr`/`ecard`/`unry`
+	# rows CANNOT fail it and are here for the other direction: `cd + 0` is
+	# signed however unsigned `cd` is, so a rule that matched the spelled type
+	# would break them. All three selectors, and the call/cast rows are the ones
+	# that check the method probe's speculative parse against the committed one.
+	# compat-pascal-overload-prefers-signed-for-an-unsigned-argument
+	./$(COMPILER) test/test_a_an_integer_overload_pair_is_chosen_by_signedness.pas $(TESTTMP)/test_ovlsign26
+	$(TESTTMP)/test_ovlsign26 | diff -u test/test_a_an_integer_overload_pair_is_chosen_by_signedness.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

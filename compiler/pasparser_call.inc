@@ -2369,6 +2369,33 @@ begin
   Result := 3;
 end;
 
+function OverloadSignMiss(pTk, aTk: TTypeKind): Integer;
+{ 1 when a machine-integer parameter and a machine-integer argument disagree
+  about SIGNEDNESS, 0 otherwise. A TIE-BREAK, summed over the arguments and
+  consulted only when two candidates score identically -- never a rank.
+
+  It is not a rank on purpose. OverloadArgRank ties EVERY machine-int pair at
+  1, and demoting a sign mismatch to 2 would sink it to the same level as
+  "merely compatible", where it would tie with a Pointer or procedural
+  parameter and reintroduce the six-row defect the TypeIsMachineInt arm above
+  was written to close. The ranks that decide today keep deciding; this only
+  replaces the tie-break that was there, which was DECLARATION ORDER.
+
+  Measured 2026-09-09 against fpc 3.2.2, both declaration orders, arguments
+  Byte/Word/Cardinal/Integer against an `Int64`/`QWord` overload pair: fpc is
+  stable across the swap and picks by signedness on every row; pxx followed
+  the swap on every row, through all three doors -- the free path (Phase 1c2
+  in MatchProcCall, which gets the same rule as a strict sub-pass), the method
+  path and the constructor path. The negative row was a wrong VALUE and not a
+  preference: `Big(v: QWord)` declared first ran `-5 > 1000000` as TRUE.
+  compat-pascal-overload-prefers-signed-for-an-unsigned-argument }
+begin
+  Result := 0;
+  if TypeIsMachineInt(pTk) and TypeIsMachineInt(aTk) and
+     (TypeSigned(pTk) <> TypeSigned(aTk)) then
+    Result := 1;
+end;
+
 function HexDigitVal(c: Char): Integer;
 begin
   if (c >= '0') and (c <= '9') then Result := Ord(c) - Ord('0')
@@ -3442,6 +3469,7 @@ var
   pj: Integer;                                        { argument j's parameter slot }
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
+  signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
   nBr, brOnly: Integer;
   rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
@@ -3666,12 +3694,14 @@ begin
        argument is out. }
   best := -1;
   bestScore := 0;
+  bestSign := 0;
   for c := 0 to nCand - 1 do
   begin
     pi := UMthProc_[cand[c]];
     base := 1;   { params[0] is always Self (metaclass for a class method) }
     ok := True;
     score := 0;
+    signMiss := 0;
     for j := 0 to nArgs - 1 do
     begin
       pj := OverloadArgParamIdx(pi, base, j, argKwTok[j]);
@@ -3717,11 +3747,18 @@ begin
         rank := 2;
       if rank >= 3 then ok := False;
       score := score + rank;
+      signMiss := signMiss + OverloadSignMiss(ParamStoredKind(pi, pj), argTk[j]);
     end;
-    if ok and ((best < 0) or (score < bestScore)) then
+    { The tie-break used to be "keep the first-declared", which for two integer
+      parameters is the whole of the decision -- they tie at rank 1 by
+      construction. Signedness is asked first now and declaration order still
+      settles what it cannot separate. }
+    if ok and ((best < 0) or (score < bestScore) or
+               ((score = bestScore) and (signMiss < bestSign))) then
     begin
       best := cand[c];
       bestScore := score;
+      bestSign := signMiss;
     end;
   end;
 
@@ -4249,6 +4286,7 @@ var
   argNodeC: array[0..MAX_PROC_PARAMS-1] of Integer;   { the argument NODES, for the element-aware tie-break }
   nCand, nArgs, i, j, c, pi, want, curr, mbase, cnt, best: Integer;
   score, bestScore, rank, argSeq: Integer;
+  signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
   ok: Boolean;
   lo, nm: AnsiString;
 begin
@@ -4308,11 +4346,13 @@ begin
 
   best := -1;
   bestScore := 0;
+  bestSign := 0;
   for c := 0 to nCand - 1 do
   begin
     pi := UMthProc_[cand[c]];
     ok := True;
     score := 0;
+    signMiss := 0;
     for j := 0 to nArgs - 1 do
     begin
       { STORED kind on purpose -- see the twin in FindUMethOverloadAhead. }
@@ -4324,11 +4364,15 @@ begin
         rank := 2;
       if rank >= 3 then ok := False;
       score := score + rank;
+      signMiss := signMiss + OverloadSignMiss(ParamStoredKind(pi, 1 + j), argTk[j]);
     end;
-    if ok and ((best < 0) or (score < bestScore)) then
+    { the twin of the tie-break in FindUMethOverloadAhead, same reason }
+    if ok and ((best < 0) or (score < bestScore) or
+               ((score = bestScore) and (signMiss < bestSign))) then
     begin
       best := cand[c];
       bestScore := score;
+      bestSign := signMiss;
     end;
   end;
 

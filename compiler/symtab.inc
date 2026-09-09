@@ -13086,13 +13086,41 @@ begin
     so Phase 1d below — which ranks purely by losslessness — handed `f(n + 1)`
     to the Double overload and computed something entirely different, silently.
 
-    Two passes, because losslessness still ranks WITHIN the integer candidates:
-    a lossless integer parameter must beat a narrowing one (`f(Integer)` vs
-    `f(Int64)` with an Int64 argument stays Int64), and only then does a
-    narrowing integer parameter beat a float. Both run before Phase 1d, so an
-    integer candidate outranks a float one either way.
-    bug-a-an-integer-binop-argument-binds-a-double-overload }
-  for pass := 0 to 1 do
+    THREE passes, because two things rank WITHIN the integer candidates and
+    they are asked in FPC's order: SIGNEDNESS first, then losslessness.
+
+    Pass 0 admits only a candidate whose every integer parameter has the SAME
+    SIGNEDNESS as its argument. Passes 1 and 2 are the two this phase has
+    always had -- lossless before narrowing -- unchanged, so a set with no
+    signedness-matched candidate behaves exactly as it did.
+
+    Pass 0 exists because pxx had NO signedness preference and the tie was
+    settled by chain order, i.e. by which overload was DECLARED FIRST. With
+    `f(Int64)` and `f(QWord)` both visible, every integer argument bound the
+    first-declared arm; swap the two declarations and every answer flips. That
+    is not a preference the compiler holds, it is the absence of one, and the
+    ticket recorded it as `prefers signed` because it was measured in the
+    order that made it look like a rule.
+
+    THE NEGATIVE ROW IS A WRONG VALUE, WHICH IS WHY THIS IS NOT A COMPAT NICETY.
+    With `f(QWord)` declared first and `si: Integer = -5`, `Big(si)` running
+    `v > 1000000` answered TRUE in pxx and FALSE in fpc -- the sign-losing arm
+    was chosen over an exact-signedness one that was sitting right there. An
+    Int64/QWord overload pair is what a numeric library writes.
+
+    Measured 2026-09-09 against fpc 3.2.2 at `1180aa627`, binary 226c79e87aaa,
+    BOTH declaration orders, argument kinds Byte/Word/Cardinal/Integer: fpc is
+    stable across the swap on all of them and pxx followed the swap on all of
+    them. The same twelve rows go through the method and constructor doors --
+    see the twin tie-break in FindUMethOverloadAhead and FindUCtorOverloadArgs.
+
+    `ArgNarrowsInt` is deliberately NOT the place for this. It is asked on the
+    default path as well and the default dialect's widening is intended
+    behaviour; a signedness rule expressed as narrowing would demote candidates
+    that are the only ones present. This pass RANKS and never rejects: with no
+    signedness-matched candidate it finds nothing and falls straight through.
+    compat-pascal-overload-prefers-signed-for-an-unsigned-argument }
+  for pass := 0 to 2 do
   begin
     { --strict-overload-width: FPC picks the NARROWEST parameter that FITS,
       where pxx's default takes the first qualifying candidate in chain order
@@ -13100,8 +13128,8 @@ begin
       dialect (user, 2026-08-14) — so the ranking is only collected under the
       flag and the unflagged walk below is byte-for-byte the old one.
 
-      "Fits" is already decided by ArgNarrowsInt, which this phase's pass 0
-      excludes: that is what makes `Cardinal` keep binding Int64 (LongInt
+      "Fits" is already decided by ArgNarrowsInt, which this phase's passes 0
+      and 1 exclude: that is what makes `Cardinal` keep binding Int64 (LongInt
       cannot hold every Cardinal, so it narrows and is not a candidate at all),
       which is the row that proves FPC's rule is narrowest-that-FITS rather
       than narrowest-declared.
@@ -13122,8 +13150,10 @@ begin
           else if TypeIsMachineInt(argTypes[j]) and
                   TypeIsMachineInt(Procs[i].Params[j].TypeKind) and
                   MatchParamCompatible(i, j, argTypes[j]) and
-                  ((pass = 1) or
-                   not ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j])) then
+                  ((pass = 2) or
+                   not ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j])) and
+                  ((pass > 0) or
+                   (TypeSigned(Procs[i].Params[j].TypeKind) = TypeSigned(argTypes[j]))) then
             match := True
           else if (Procs[i].Params[j].TypeKind = argTypes[j]) and
                   not MatchArgRecMismatch(i, j, argTypes[j]) then
