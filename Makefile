@@ -8591,6 +8591,21 @@ test-core: $(COMPILER)
 	grep -q "cannot access strict private" $(TESTTMP)/test_mvsf.log
 	! ./$(COMPILER) --strict-visibility test/test_method_visibility_strict_fail.pas $(TESTTMP)/test_methvsf26 > $(TESTTMP)/test_methvsf.log 2>&1
 	grep -q "cannot access strict private" $(TESTTMP)/test_methvsf.log
+	# RECORD member visibility -- the class rows above have passed since the flag
+	# landed, while every RECORD row compiled silently: ParseRecordFields consumed
+	# `private` / `strict private` and stamped VIS_PUBLIC, so EnforceMemberVis
+	# exited on every record member it was ever handed. A guard that cannot fail
+	# on records is not a guard on records, and the class rows could not see it --
+	# the control has to come from the record population.
+	# The LAX DEFAULT is asserted on the same file, because the fix must not turn
+	# the dialect's deliberate lax ergonomics into a rejection: same source, two
+	# configurations, opposite verdicts. Configuration was the missing axis here,
+	# not time -- the pin agrees with HEAD on every row in both flag states.
+	./$(COMPILER) --strict-visibility test/test_record_visibility.pas $(TESTTMP)/test_record_visibility_strict26
+	tools/expect_same.sh test_record_visibility_strict26 "$$($(TESTTMP)/test_record_visibility_strict26)" "$$(printf '3\n6\n14')"
+	./$(COMPILER) test/test_record_visibility_strict_fail.pas $(TESTTMP)/test_rvsf_lax26 > $(TESTTMP)/test_rvsf_lax.log 2>&1
+	! ./$(COMPILER) --strict-visibility test/test_record_visibility_strict_fail.pas $(TESTTMP)/test_rvsf26 > $(TESTTMP)/test_rvsf.log 2>&1
+	grep -q "cannot access strict private" $(TESTTMP)/test_rvsf.log
 	# strict-private CLASS CONST reached from a descendant method (tclass12b shape)
 	./$(COMPILER) test/test_class_const_visibility_strict_fail.pas $(TESTTMP)/test_ccvsf_lax26 > $(TESTTMP)/test_ccvsf_lax.log 2>&1
 	! ./$(COMPILER) --strict-visibility test/test_class_const_visibility_strict_fail.pas $(TESTTMP)/test_ccvsf26 > $(TESTTMP)/test_ccvsf.log 2>&1

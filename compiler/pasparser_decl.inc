@@ -4952,7 +4952,7 @@ begin
   Result := True;
 end;
 
-procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean);
+procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean; vis: Integer);
 { A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
   own RTL leans on it — TPoint/TSize/TRect are all advanced records).
 
@@ -5339,6 +5339,10 @@ begin
   UMthIsCtor[UMthCount - 1] := isCtor;
   UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
   UMthPub[UMthCount - 1] := 0;
+  { A record method's visibility, from the section marker ParseRecordFields is
+    now tracking. Was never stamped, so it read as VIS_PUBLIC (=0) and
+    EnforceMethVis returned without checking. }
+  UMthVis[UMthCount - 1] := vis;
 end;
 
 procedure ParseClassVarSection(ci: Integer);
@@ -5734,6 +5738,8 @@ var
   opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
   savedPCB: Integer;  { ParsingClassBodyCi around this body -- see below }
   recEnumRole: Integer;   { `enumerator Current` on the record property just parsed: 1, 2 or 0 }
+  curVis: Integer;        { current member visibility (VIS_*) for this record body }
+  curStrictVis: Boolean;  { the pending `strict` prefix, consumed by the next section marker }
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -5742,6 +5748,8 @@ var
 begin
   curFieldOff := 0;
   classAlign := 1;
+  curVis := VIS_PUBLIC;   { an unmarked record body is public, as an unmarked class body is }
+  curStrictVis := False;
   { Types declared from here to the matching `end` belong to THIS record, exactly
     as the class body claims its own (ParseTypeSection's class arm). Without it a
     nested type parsed but was registered flat, invisible to FindNestedType — so
@@ -5886,6 +5894,7 @@ begin
     begin
       if CaseEqual(GetTokenStr(TokPos), 'protected') and not isObjectType then
         Error('a record cannot have protected members (records do not inherit)');
+      curStrictVis := True;   { the section marker one token ahead consumes this }
       Next;
     end;
     if (CurTok.Kind = tkIdent) and
@@ -5901,6 +5910,24 @@ begin
         Error('a record cannot have protected members (records do not inherit)');
       if CaseEqual(CurTok.SVal, 'published') then
         Error('a record cannot have a published section');
+      { RECORD the section rather than dropping it. Until 2026-09-09 this arm
+        consumed the marker and moved on, so every record field and method was
+        stamped VIS_PUBLIC and `--strict-visibility` -- which is wired at the
+        record ACCESS path already (EnforceFieldVis, pasparser_lval.inc) -- had
+        nothing to enforce and silently passed every record row it was given.
+        The default stays lax: EnforceMemberVis exits on `not StrictVisibility`
+        before it reads any of this. }
+      if CaseEqual(CurTok.SVal, 'private') then
+      begin
+        if curStrictVis then curVis := VIS_STRICT_PRIVATE else curVis := VIS_PRIVATE;
+      end
+      else if CaseEqual(CurTok.SVal, 'protected') then
+      begin
+        if curStrictVis then curVis := VIS_STRICT_PROTECTED else curVis := VIS_PROTECTED;
+      end
+      else
+        curVis := VIS_PUBLIC;
+      curStrictVis := False;
       Next;
       continue;
     end;
@@ -5921,7 +5948,7 @@ begin
     if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
        ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')) then
     begin
-      ParseRecordMethodDecl(ci, isObjectType);
+      ParseRecordMethodDecl(ci, isObjectType, curVis);
       continue;
     end;
     if CurTok.Kind = tkProperty then
@@ -5947,7 +5974,7 @@ begin
     begin
       Next;
       RecordMethodClassPrefix := True;
-      ParseRecordMethodDecl(ci, isObjectType);
+      ParseRecordMethodDecl(ci, isObjectType, curVis);
       RecordMethodClassPrefix := False;
       continue;
     end;
@@ -5965,7 +5992,7 @@ begin
     begin
       Next;
       RecordMethodClassPrefix := True;
-      ParseRecordMethodDecl(ci, isObjectType);
+      ParseRecordMethodDecl(ci, isObjectType, curVis);
       RecordMethodClassPrefix := False;
       continue;
     end;
@@ -6000,7 +6027,7 @@ begin
     if CurTok.Kind = tkIdent then
     begin
       ParseFieldDeclInto(ci, curFieldOff, classAlign, isPackedRecord, True, False,
-                         0, VIS_PUBLIC);
+                         0, curVis);
       Eat(tkSemicolon);
     end
     else if CurTok.Kind = tkCase then
