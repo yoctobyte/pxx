@@ -4,7 +4,7 @@ blocked-by: []
 track: P
 status: working
 owner: "frankS"
-summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **392 pass, 0 fail, 108 skip, 50 auto-gated of 550** at compiler `6ae3a04d3e5c` (frankS, 2026-09-06; 391/0/109 confirmed twice earlier the same day at `88a0b3d93835`), superseding 377 at `e929e720f` and 368 at `36d7e5fd4`. PARK CONDITION SUPERSEDED: the 2026-07-10 park in the body is not a live block -- its three named tickets are in `done/` and sole-A confirmation no longer exists in this repo. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn: exit-clean is not correct — the runner compares exit codes, not output."
+summary: "Rung 1 of the Pascal corpus ladder: FPC 3.2.2's own `tests/test` suite (1447 `.pp`, fetched by `tools/install_lib_candidates.sh fpc-testsuite`, gitignored) run as a conformance corpus, burning the skip list one narrowed frontend bug at a time. Last full census **392 pass, 0 fail, 108 skip, 50 auto-gated of 550** at compiler `6ae3a04d3e5c` (frankS, 2026-09-06; 391/0/109 confirmed twice earlier the same day at `88a0b3d93835`), superseding 377 at `e929e720f` and 368 at `36d7e5fd4`. PARK CONDITION SUPERSEDED: the 2026-07-10 park in the body is not a live block -- its three named tickets are in `done/` and sole-A confirmation no longer exists in this repo. **IT WENT UP ACROSS A RUNNER CHANGE THAT REMOVES ROWS**: `109fbebb1` auto-gates a unit source (FPC's `dotest` compiles a unit standalone, pxx refuses, and a refusal satisfies `%FAIL` whatever the file holds, so those rows passed vacuously — 17 rows gated as `unit-source` here), and the generic-method work outran it. The 377 is a NET and has NOT been decomposed into newly-gated versus newly-passing; that needs the old runner at the old commit and nobody has run it (frankS's caveat, and they declined to guess). `--report` now writes a per-row TSV, so the next delta is a diff rather than a re-derivation. THE TWO `blocked-by:` EDGES ARE STALE AS BLOCKERS: `erroraddr`, `TFPCHeapStatus` and `GetFPCHeapStatus` all resolve from user code at `855356445cd7` and the heap counters are genuinely always-on (measured by delta, not by declaration), so `erroru.pp` — the suite helper whose absence gated `tobject1 tstring2 tstring4 tstring5 texception3` as three unrelated-looking clusters — now compiles. Four of those five compile; `tobject1` has a different wall behind it (`bug-p-object-value-types-standard-meaning`). The B rows stay open on their own criterion, which is a march over the separate FPC compiler-source corpus, so this row is gated by paperwork rather than by capability. Known trap on any burn, BOTH DIRECTIONS, because it is one error and not two: exit-clean is not correct — the runner compares exit codes, not output — and the inverse bites identically, a row whose whole assertion IS its exit code (`halt(1)`/`halt(2)`) says NOTHING when you only compile it, so `both compilers build it` reads as non-discriminating when the row is in fact discriminating and you never ran it. Ask what quantity the row ASSERTS in, and measure that one (frankD, 2026-09-09, on toperator6 — nearly reported as non-discriminating for exactly this reason)."
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
@@ -861,3 +861,26 @@ Three defects behind those two rows, none visible from either reason:
    the only one that keeps a NODE rather than a constant, so the second array's
    nodes were re-allocated as the first array's assignment. The minimum test
    that exercises the feature passes; it takes two.
+
+
+## 2026-09-09 (frankS, from frankD's toperator6 burn) — the exit-code trap runs both ways
+
+The summary has long carried "exit-clean is not correct — the runner compares
+exit codes, not output". frankD hit the mirror image while burning
+`toperator6.pp` and nearly reported the row as non-discriminating: both
+compilers COMPILE it before and after the fix, and the entire assertion lives in
+`halt(1)`/`halt(2)`, so comparing compile success compares a quantity the row
+does not assert in. The row discriminates perfectly; the instrument did not.
+
+Worth stating as one rule rather than two traps, because the underlying error is
+the same and only its direction changes: **the row asserts in exactly one
+quantity — output, or exit code, or "did it refuse" — and any verdict read off a
+different quantity is silent, in whichever direction is convenient.** Scoring an
+exit code where the row asserts output passes a wrong answer; scoring compilation
+where the row asserts an exit code discards a right one. Ask what the file
+asserts in before choosing what to measure.
+
+It has now bitten three separate shapes in this repo in one day: a guard that
+could not fail, `%FAIL` rows passing because pxx refused the wrong thing
+(toperator92/95), and this. A row that passes for a reason nobody checked is
+indistinguishable from one that passes.
