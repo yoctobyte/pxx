@@ -113,4 +113,4 @@ otherwise, oracle: the pre-fix code"* — not a policy about empty logs. That
 reading is what made it look like an argued rule.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6aa50d6eb.

@@ -117,4 +117,4 @@ point:
   they would all pass while guarding nothing.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6aa50d6eb.

@@ -173,4 +173,4 @@ yet got past `p` alphabetically. *"Do not touch the instrument while it is
 measuring"* paid here for a reason unrelated to the corruption it guards against.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6aa50d6eb.
