@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-08T05:11:15Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "5ca90f027eeb9529a35ccf4ec79289703019fcf5",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-08T05:15:29Z",
    "fixed": [],
    "new_red": [],
@@ -476,6 +467,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-09T06:27:28Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -5153,7 +5153,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
-  "test-uforth#src:tools/compiler_srchash.sh": "e8f1cb9f4dff4bd65693e4c1f99412bf58cd273e",
+  "test-uforth#src:tools/compiler_srchash.sh": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
   "test-uforth#src:tools/compiler_srchash.sh@1": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
   "test-uforth#src:tools/compiler_srchash.sh@10": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
   "test-uforth#src:tools/compiler_srchash.sh@11": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
@@ -14797,14 +14797,14 @@
  },
  "last": {
   "code_fp": "0c5ad13167ab",
-  "date": "2026-09-09T06:23:37Z",
+  "date": "2026-09-09T06:27:28Z",
   "deadline": 4547.4,
   "sha": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 748.6
+  "verdict": "GREEN",
+  "wall": 214.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14854,15 +14854,15 @@
    "wall": 1434.1
   },
   "slow": {
-   "code_fp": "5666dc9dba23",
-   "date": "2026-09-08T23:14:52Z",
+   "code_fp": "0c5ad13167ab",
+   "date": "2026-09-09T06:27:28Z",
    "deadline": 4547.4,
-   "sha": "e8f1cb9f4dff4bd65693e4c1f99412bf58cd273e",
+   "sha": "fc2ce3d025534ee225181dd7daae6ac240e8c422",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 213.2
+   "wall": 214.6
   }
  },
  "last_full": {
