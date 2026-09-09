@@ -22387,3 +22387,38 @@ instance to pass. That is a green that is correct about a tree the program
 cannot execute. The rule this file already carries (*"a comment and code that
 disagree: one is wrong and you do not know which"*) has a parser twin: **two
 declarations that disagree, and the callers are the tiebreak.**
+
+### And supplying the missing half can make the program WORSE, because something downstream was reading the broken half as a signal
+
+The section above is about a rule present on one side of a pair and absent on
+the other. This is what happens when you add it. Measured 2026-09-09 by frankZ
+(`7525966a5`, compiler untouched — the diagnosis was banked and the fix was
+NOT landed), in the generic hoist table:
+
+`EmitLateNestedSpecDecls` calls `SetSpecSubs(ti, si)` per specialization and
+never `CollectHoistCandidates`, so the substitution is refreshed per iteration
+and the hoist table is not, and `NestedSpecArg` reads BOTH. The missing call was
+real. Adding it:
+
+| | result |
+| --- | --- |
+| HEAD | `unknown type: TPtrs$LongInt$TOwner$Byte$PT` |
+| + `CollectHoistCandidates` | `unknown type: specialize` |
+| + that + `EmitHoistedDecls` | `expected 'begin' before 'TPtrs'` |
+
+Each step is further from working. The cause is not the fix: **registering a
+`specialize X<...>` group is what COLLAPSES it in the token stream**, and
+`ScanRangeForNestedSpecs` skips a group that is already `NestedSpecKnown`. With
+the WRONG name the group registered, and therefore collapsed. With the RIGHT
+name it is already known, does not register, and nothing collapses it — so the
+literal `specialize` keyword survives into the parse. A second mechanism had
+been depending on the first one being wrong.
+
+**So "fix the pair" is not the end of the work.** When one operation serves two
+purposes — here registration and collapse — correcting its input moves both, and
+the one you were not thinking about is the one that regresses. The tell is a fix
+whose failure mode CHANGES SHAPE rather than improving: `unknown type: <a wrong
+mangled name>` becoming `unknown type: specialize` is not "closer", it is a
+different layer failing, which means the first layer stopped running. Ask what
+else the call you just corrected was ACHIEVING as a side effect before reading a
+new error as progress.
