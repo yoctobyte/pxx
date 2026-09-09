@@ -3,8 +3,8 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
-owner: unassigned
+status: working
+owner: frankH
 found-by: frankS
 created: 2026-09-09
 summary: "A generic routine's body resolves names in the SPECIALIZING scope, so a `class helper` declared by the specializing program reaches inside a template imported from another unit. `specialize DoTest<TTest2>` answers 4 (the program's TTest2Helper) where fpc 3.2.2 answers 3 (TTest2's own method). ONE ROW, and it is asserted in test/test_a_class_helper_on_a_class_level_method.pas as a KNOWN DIVERGENCE with the other seven rows around it as the constraint. THE EVIDENCE THAT THIS IS REAL AND NOT A PREFERENCE is entirely inside fpc: it answers 4 for `TTest2.CS` and 3 for `specialize DoTest<TTest2>` -- SAME class, SAME helper, SAME program -- so fpc really does bind a template body's names in the TEMPLATE's declaration context. Two-phase lookup. It was NOT MEASURABLE until 2026-09-09: pxx applied no class-level helper in any scope, so it answered 3 by applying nothing, and the row looked correct. DO NOT FIX BY NARROWING HELPER DISPATCH -- the seven rows beside it are what that would break."

@@ -235,3 +235,8 @@ parse was required; it runs anyway.
 
 Gate GREEN, FPC seed canary PASS — which matters here, since the fix adds
 routines called above their definitions.
+
+Log: fixed in `compiler/pasparser_generic.inc` + `compiler/defs.inc`, commit
+1c16d4523. That commit also burns `tgeneric91.pp` from
+`test/pascal-conformance/pxx.skip` and adds fixture `test_circspec26`; the close
+is this file's move to `done/` in the same commit.
