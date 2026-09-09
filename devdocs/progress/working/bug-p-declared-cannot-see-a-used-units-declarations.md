@@ -4,6 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 status: working
+summary: "`{$if declared(X)}` cannot see a used unit's declarations and answers False, silently taking the `{$else}` arm -- the type is fully usable in the same program in which `declared()` says it is not. `PasCondNameDeclared` scans `Tokens[0..TokCount-1]`, and a used unit's tokens are appended by `LexAppend` at PARSE time, so every conditional in the main file is decided before a single unit token exists. THREE THINGS MEASURED 2026-09-09 THAT DECIDE THE FIX. (1) Refusing cannot be the third answer: it regresses every defensive `declared()` in a program with any `uses` at all, which is the Synapse shape the operator was written for -- the third answer has to be a WARNING attached to the False. (2) A Pascal-only resolver in the lexer is a NEW wrong answer, not a narrower one: the chain at `pasparser_proc.inc:4928-5589` has C stages in ORDERING-SIGNIFICANT positions -- a `.c` beside the source at :5190 blocks the `-Fu` Pascal stage at :5236 -- so a second copy answers True about a `.pas` the compile never reads. (3) The resolver alone is NECESSARY BUT NOT SUFFICIENT: 151 of 400 real FPC unit interfaces (38%) carry an `{$I}` include and 94 (24%) a conditional, so a text scan answers about text rather than declarations -- and `lib/rtl` is 0/111 on includes, so A FIXTURE BUILT FROM OUR OWN RTL CANNOT SAMPLE THAT. The fix is to lex the unit with the real lexer (`LexAppend` documents itself re-entrant) into a scratch region and scan the TOKENS; the one blocker is that the search chain is unreachable from the lexer, so step one is a faithful extraction of 4928-5589 into one resolver with one owner. Deferring the conditional to parse time is rejected and why is recorded."
 owner: frankZ
 ---
 
@@ -104,3 +105,72 @@ making the negative DISTINGUISHABLE rather than by making the lookup wider. That
 is a hint about the shape of the answer here, not a design for it: `declared()`
 returning False is correct for the case the operator was written for (a profile
 with no such unit), so the repair has to add a THIRD answer, not flip the second.
+
+
+## 2026-09-09 (frankZ) — the scope, measured before designing anything
+
+Three measurements. Two of them close off the cheap version of this fix, and the
+third says what the fix has to be.
+
+**1. Refusing cannot be the third answer.** The tempting spend for "declared
+somewhere I cannot see yet" is to REFUSE when the token stream holds a `uses`
+whose units are not lexed. That is a regression for every defensive `declared()`
+sitting in a program with any `uses` clause at all — which is Synapse's own
+shape, and Synapse is the case the operator's header was written for. False is
+the correct answer there. So the third answer can only be a **WARNING attached
+to the False**, naming the units that were named but not read at
+conditional-evaluation time. That is the same "make the negative
+distinguishable" move that closed this ticket's three neighbours, and it is the
+only spend that does not break the case the feature exists for.
+
+**2. A Pascal-only resolver in the lexer is a NEW wrong answer, not a narrower
+one.** The chain in `pasparser_proc.inc` runs 4928-5589 — roughly 660 lines, ~18
+stages, `isPath` → `CurUnitDir` → `SourceFileDir` → `PasUnitDirs` →
+`cdir`/`bdir`/`rtldir`/`lcldir` → the CWD-relative last resort — and the C
+stages are **ordering-significant, not appended**. Measured at
+`pasparser_proc.inc:5190`: a `.c` or `.h` next to the source sets `UnitContent`
+and thereby BLOCKS the `-Fu` Pascal stage at 5236. So a Pascal-only copy answers
+True about a `.pas` in a search root that the real compile never reads, whenever
+a `foo.c` sits beside the program. That configuration is reachable and it is the
+subject of a closed ticket
+([[bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import]]),
+which deliberately did NOT extend its reordering to `SourceFileDir` because a
+`.c` beside the program is an explicit local choice. **The resolver has to be
+the same code, not the same idea.**
+
+**3. And the resolver alone is NECESSARY BUT NOT SUFFICIENT, which the ticket
+did not say.** A raw token scan of a unit's source text answers about the text,
+not about the declarations. Measured over 400 real FPC unit sources
+(`/usr/share/fpcsrc/3.2.2`): **151 of 400 interfaces (38%) contain an `{$I}`
+include and 94 (24%) contain a conditional.** For `lib/rtl` the numbers are
+mild — 0 of 111 interfaces include, 11 carry a conditional — so **a fixture
+built from our own RTL will not sample the population this operator serves.**
+The include direction is the dangerous one: the name lives in an `.inc` the scan
+never opens, and the scan answers False. That is this ticket's own silent
+negative, reproduced one level down and invisible to any test written against
+`lib/rtl`.
+
+## What that makes the fix
+
+Not a scan of unit text. **Lex the unit with the real lexer and scan the tokens.**
+`LexAppend` (`lexer.inc:857`) already saves and restores `Source`, `SrcPos`,
+`SrcLine`, `LexMarkDbgLines` and `Lexing`, and its own comment states it "runs
+re-entrantly (a unit's own `uses` loads another unit mid-lex)" — so appending a
+unit into a scratch region at the end of the stream during `LexAll`, scanning it,
+and truncating `TokCount` back is using the machinery as designed rather than
+working around it. Includes and the unit's own conditionals are then handled by
+the thing that handles them everywhere else.
+
+Which leaves exactly one blocker, and it is measurement 2: the search chain is
+unreachable from the lexer because it is 660 lines in the middle of a parser
+procedure. **Step one is a faithful extraction of 4928-5589 into one resolver
+with one owner** — every stage, C and NilPy included, in the same order, so the
+answer cannot differ from the compile's. That extraction is worth landing on its
+own and is a prerequisite for any correct version of this fix.
+
+Rejected alternative, recorded so it is not re-derived: DEFER the unresolvable
+conditional to parse time by keeping both arms' tokens behind a marker. It
+avoids the resolver entirely, and it fails because the two arms of a
+`{$if declared(X)}` routinely declare the SAME NAME differently — so the parser,
+not the lexer, would have to honour a skip marker at every declaration site.
+That is more invasive than the extraction and lands the cost in a worse place.
