@@ -1459,3 +1459,74 @@ three checks above.* Dated because a stale hazard block is obeyed silently
 **Not claimed.** frankH measured the frontier only to correct a summary that had
 gone stale in two places at once; the rung's implementation work is untouched
 and unowned.
+
+## 2026-09-09 (frankS, later) — a second driver, a second wall, and two corrections I owe this file
+
+The section above drives `uses Generics.Defaults, Generics.Collections` and
+specializes `TList<LongInt>`. Driving **`generics.collections.pas` itself** gives
+a different frontier, and both are real — the walls are per-driver, so quote the
+driver beside the number or the next reader will read one as a regression of the
+other.
+
+**Compiling a driver over the unit** (`uses Generics.Collections;` alone, DELPHI
+and objfpc both, binary `4a6207c05ba2` at HEAD `a9b94453f`):
+
+```
+collections.pas:119: error: duplicate class name TEnumerator$PT -- one of that
+  name is already declared in this unit
+  near:  PT   class abstract >>> protected function DoGetCurrent
+```
+
+`generics.defaults.pas` compiles and runs on its own driver.
+
+**Attribution, because I nearly took credit for this.** Two fixes moved the rung
+and NEITHER IS MINE: frankH's `ad7c03b03` (a bare method name in argument
+position -- the `:2729` wall) and frankZ's `2242a5903` (a forward `^T` in a
+nested type section -- the latent weakness `ad7c03b03` exposed). I wrote a fix
+for that second one concurrently and it is DISCARDED: frankZ's landed first and
+is strictly better -- two lines onto the existing `ClassDeclaresTypeNamed` where
+mine added a predicate, three kinds mine did not cover, and a `%FAIL` row mine
+did not have.
+
+**AND THE NUMBER I FIRST WROTE HERE CAME OFF THAT DISCARDED TREE.** I recorded
+the frontier as `collections:120 -- unknown type: PT`, an exact match for the
+2026-08-30 table, and built a correction on the exactness. Re-measured at HEAD
+with no local change, the diagnostic is the one above: **one line earlier and a
+different error.** The `:120` figure is not reproducible -- the tree that
+produced it no longer exists -- so do not quote it. What survives is that both
+land on the SAME declaration, `TEnumerator<PT> = class abstract` with
+`DoGetCurrent` at the caret, which is the 2026-08-30 caret's own subject.
+
+### Correction 1 — the stagings ARE comparable, and I said they were not
+
+This morning I wrote that the old wall table "is NOT comparable to a
+library_candidates staging" because one was a `/tmp` symlink tree from a local
+FPC checkout and the other is the `install_lib_candidates.sh` tree at
+`0d122c49`, "so the line numbers are different coordinates". Both stagings wall at the SAME
+declaration in the same file -- `TEnumerator<PT> = class abstract`, `:119`/`:120`
+with `DoGetCurrent` at the caret in both. Two stagings of different sources do
+not land on one declaration by coincidence: it is the same upstream, and the line
+numbers are the same coordinates. **What I do NOT have is a match to the line and
+the message** -- I claimed one this morning off the discarded tree, and the
+diagnostic has moved since. The comparability holds on the construct, not on the
+digits.
+
+The caution was reasonable when I wrote it and it was doing real work — it
+stopped me reporting a regression off a staging difference. But it was a
+hypothesis stated as a fact, and it was the convenient one: it explained away a
+number I could not otherwise account for.
+
+### Correction 2 — so the :2729 wall was not a staging artefact either
+
+The honest history: the rung reached `collections:120` on 2026-08-30; something
+between then and 09-08 broke `generics.defaults` at `:2729` and MASKED that
+frontier; `ad7c03b03` removed it and `2242a5903` cleared the weakness behind it.
+The rung is back where it was in August with two fixes under it.
+
+**Next**, for whoever takes it: the wall is on `TEnumerator<PT> = class abstract`
+in `generics.collections.pas` (`:119` today, `duplicate class name
+TEnumerator$PT`; `:120`, `unknown type: PT` in the 2026-08-30 table). `PT` is a
+generic type PARAMETER and `$PT` is our own mangled specialization name, so this
+fires during instantiation, twice for one template. The 2026-08-30 note warns it
+must not be assumed to be the same defect as the `TKey` one before it. Still
+unmeasured, still stands.
