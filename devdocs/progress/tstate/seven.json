@@ -14891,8 +14891,8 @@
   "wall": 748.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-08T02:19:44Z",
-  "sha": "24b9641ae7cfc2070983f43def63e620f55b4ddf",
+  "date": "2026-09-09T07:09:34Z",
+  "sha": "69a5f3c6fb1de6dc5d4f16839d3b592f4a687296",
   "tier": "full"
  },
  "last_opt": {
@@ -14940,6 +14940,7 @@
     "dcbef591a0b7445520f8c28e4d877967c13971d2",
     "102d954409ff6bfed3435b89bde5e1b63f25363a"
    ],
+   "range_non_causal": false,
    "src": "test/test_libmanifest.pas tools/expect_same.sh +2",
    "status": "fail"
   }
