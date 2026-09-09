@@ -76,4 +76,4 @@ line once the alias line is deleted, so nothing here was introduced by that
 change. It was masked behind the earlier error.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b59a53a99.
