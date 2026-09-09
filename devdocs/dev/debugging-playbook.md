@@ -15819,6 +15819,55 @@ Point the tool at a tree that changes and an edit above the failure moves every 
 the measurement does not transfer, and the honest move is to re-measure rather than to inherit
 the number. *A normalisation is a claim about noise; it needs a rate, not a plausible story.*
 
+### THE MIRROR: A KEY THAT IS *NEVER* THE SAME DEFEATS A COUNTER EXACTLY AS WELL
+
+The section above is a capture whose value is the same for every row. This is
+the same defeat from the opposite end — a key that is **different for every
+row** — and the two are worth holding as a pair, because a reviewer who has
+learned to look for a constant column will walk straight past a column that
+varies perfectly.
+
+Measured 2026-09-09 by frankS on the `Generics.Collections` wall. The frontend
+has a runaway guard: `SpecDeferRound[]` counts how many times a specialization
+has been deferred, and past `MAX_SPECIALIZATIONS` it raises **`circular generic
+specialization`**. It is a real guard, it is reached, it is evaluated on every
+rung — and **it cannot fire on this defect by construction.**
+
+`SpecDeferRound[]` is keyed **per specName**. The failure is a 55-rung ladder in
+which **rung N+1's substitution IS rung N's alias**, so every rung is a NEW
+name, deferred exactly ONCE. The counter the guard reads never reaches two.
+
+**What actually gives out is a different counter with a different message** —
+`SpecDeferCount`, the count of *distinct* deferred specializations, printing
+`too many deferred specializations`. So the diagnostic that reaches the user is
+the one about breadth, on a defect that is entirely about depth, and the guard
+named for exactly this failure stays silent through all 55 rungs.
+
+**The general form, and it is worth carrying:** *a per-key cap is blind to any
+runaway that mints a new key each round.* Recursion guards keyed by name,
+memo-tables keyed by argument, dedup keyed by identity, rate limits keyed by
+client — every one of them has this hole, and in each case the guard looks
+correct in review because the mechanism it names is genuinely the mechanism the
+bug uses. **Ask what the guard's KEY is, then ask whether the runaway changes
+it.** If it does, the guard is decoration.
+
+**And the cheap tell that the cap is the wrong one: the message.** When a
+runaway ends in a diagnostic about *how many different things* rather than *how
+deep*, the depth guard did not fire — which is a fact about the guard, not about
+the input.
+
+**One note on how the ladder was nearly mis-sited.** The first version of the
+finding reported 110 mints whose alias carried more `$PT` segments than their
+`args=`, which pointed at the mangler. It was a substring-counting artifact —
+**the alias spells the separator `$PT` and the argument spells `PT`** — and all
+872 mints in fact satisfy `alias = tmpl + '$' + join('$', args)`, zero
+exceptions. Retracted by its own author at `339dc0ef1`, and the retraction is
+what produced the sharper result: the ladder re-sourced from `p.nspec` instead
+of from arithmetic over names, showing the seed registering a TWO-argument
+reference with `nsub=1`, so the second argument enters the name unsubstituted
+and pumps the next rung. **A count over rendered names measures the renderer.**
+
+
 ## THE DEGENERATE CASE IS THE ONE A CAREFUL AUTHOR REACHES FOR FIRST, AND IT IS THE ONE THAT CANNOT FAIL — an empty open array's length is 0, and so is a lost one
 
 **A new member of the collision-with-a-legal-value family, and the most dangerous one so far
