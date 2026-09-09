@@ -22261,6 +22261,18 @@ Measured 2026-09-09, four instances between frankS and frankZ:
 | a class-nested type argument is rewritten to its hoisted name | class body | the impl header was not rewritten, so the two headers named different types |
 | a QUALIFIED argument is skipped, not rewritten | — | rewritten on both, minting a name the source never wrote |
 
+**Provenance, because it goes stale silently (frankZ's own correction):** the
+first three reached origin; the fourth was found and removed inside one unlanded
+change and never shipped. Same shape, weaker evidence — count it as
+three-and-a-half.
+
+**And the wrong side is the side that LOOKS FINISHED.** In both of frankZ's
+cases the half that had the rule read correctly on inspection: the class body was
+rewritten and the declaration was right, the qualified argument was rewritten and
+the name it produced parses. Neither failed at the rewrite. They failed at the
+OTHER header, later, in a materialised body — so the surviving half is what makes
+the pair look correct while you read it.
+
 **The shared signature: silence, then a diagnostic about a third party.** None
 of the four refuses anything at the pair. Two of them surfaced in a file nobody
 wrote — `unresolved forward: TInst.Mk` in `compiler/builtin/builtinheap.pas`,
@@ -22275,6 +22287,18 @@ body and the bodyless one is never called. It takes a caller parsed EARLY — a
 specialized body, materialised before the implementation is reached — to bind
 to the other row. So the defect is dormant for every ordinary program and fires
 the moment generics reach it, which reads as "a generics bug" and is not one.
+
+**A SUITE OF ORDINARY PROGRAMS CERTIFIES THIS CLASS, AND NOBODY AUDITS A SUITE
+FOR WHAT IT CANNOT REACH.** The dormancy above is not "the bug is subtle" — it
+is that an ordinary program is EVIDENCE OF NOTHING here, because binding after
+the implementation is the only thing it can do. The same epistemics, different
+mechanism, in
+`bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template`:
+every hoisting test in `test/` instantiates each template ONCE, all of them are
+green, and the leak needs two instantiations to be observable at all. **Ask what
+shape the suite is before reading its green** — the answer decides which defects
+it is physically able to see, and it is a property of the suite, not of any test
+in it.
 
 **What to do.** When a symptom involves a method that is declared in one place
 and implemented in another, **print both registrations before theorising**:
