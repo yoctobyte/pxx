@@ -4099,6 +4099,11 @@ procedure AppendTokenRangeToTemplateArena(fromIdx, toIdx: Integer;
 procedure ScanRangeForNestedSpecs(ts, tc: Integer; const specName: AnsiString); forward;
 function IsDelphiGenMethImplHdr(soff: Integer): Boolean; forward;
 function DelphiGenMethImplHdrOfTemplate(soff, ti: Integer): Boolean; forward;
+{ DEFINED further down, USED by EmitLateNestedSpecDecls above it. pxx's own
+  self-host resolves that either way; the FPC seed build does not -- the seed
+  canary in gate.sh quick is what catches it, and it caught this one.
+  See bug-a-fpc-seed-drift-emitasmx64-forward. }
+procedure CollectHoistCandidates(ti: Integer; const specName: AnsiString); forward;
 
 procedure ScanDelphiMethodImplsForNestedSpecs(ti: Integer; const specName: AnsiString);
 var dScan, dHdr, dBase, ts, tc: Integer;
@@ -4351,6 +4356,13 @@ begin
     if (ti < 0) or (ti >= TemplateCount) then Continue;
     SpecializeTemplateName := Templates[ti].Name;
     SetSpecSubs(ti, si);
+    { BOTH HALVES. SetSpecSubs and CollectHoistCandidates are two pieces of ONE
+      per-specialization state, and until 2026-09-09 only ParseSpecialization
+      set both -- the other three sites set the substitution and left the hoist
+      table holding whichever specialization ran last. See the note above
+      CollectHoistCandidates.
+      bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template }
+    CollectHoistCandidates(ti, Specializations[si].Name);
     ScanDelphiMethodImplsForNestedSpecs(ti, Specializations[si].Name);
   end;
   if NSpecCount > 0 then
@@ -5356,6 +5368,12 @@ begin
               ' tokpos=', TokPos, ' anchor=', anchor, ' tokcount=', TokCount);
     SpecializeTemplateName := Templates[ti].Name;
     SetSpecSubs(ti, si);
+    { ...and the hoist table with it -- see EmitLateNestedSpecDecls. The stream
+      collapse below reads it through NestedSpecAlias, so a stale table makes a
+      group's alias resolve to another specialization's hoisted name and the
+      collapse silently declines.
+      bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template }
+    CollectHoistCandidates(ti, Specializations[si].Name);
     for gm := 0 to GenericMethodCount - 1 do
       if GenericMethods[gm].TemplateIdx = ti then
       begin
@@ -5504,6 +5522,8 @@ begin
     begin
       SpecializeTemplateName := Templates[ti].Name;
       SetSpecSubs(ti, si);
+      { ...and the hoist table with it -- see EmitLateNestedSpecDecls. }
+      CollectHoistCandidates(ti, Specializations[si].Name);
       SpecializeStream(mStart, mCount, Specializations[si].Name);
     end;
   end;

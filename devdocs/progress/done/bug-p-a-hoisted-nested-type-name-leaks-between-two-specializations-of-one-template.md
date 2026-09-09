@@ -3,8 +3,9 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: open
-summary: "The hoist table is GLOBAL and single-slot, so a method-implementation header scanned for one specialization reads the hoisted names of whichever specialization ran LAST. `TOwner<T>` with a nested `PT = ^T` used as a generic argument, specialized on LongInt and Byte, mints `TPtrs$LongInt$TOwner$Byte$PT` — LongInt's method header paired with BYTE's hoisted PT — then fails `unknown type` on the name it just invented. 21-line repro, fpc 3.2.2 runs it. ONE instantiation is green, which is why every hoisting test written so far passes: the defect needs a SECOND specialization of the same template and no existing test has one."
+status: done
+summary: "FIXED. `SetSpecSubs` and `CollectHoistCandidates` are two halves of ONE per-specialization state and only `ParseSpecialization` set both -- `EmitLateNestedSpecDecls`, `FlushPendingClassSpecializations` and `BufferGenericMethod` refreshed the substitution and left the hoist table holding whichever specialization ran LAST. `TOwner<T>` with a nested `PT = ^T` used as a generic argument, specialized on LongInt and Byte, minted `TPtrs$LongInt$TOwner$Byte$PT` -- LongInt substitution, BYTE hoisted name -- then failed `unknown type` on a name it invented itself. Adding the call at ONE of the three made it WORSE (`unknown type: specialize`), because the stream collapse in `SpecializeToBuffer` reads the same table: fixing one half of a two-site state converts a wrong answer into no answer. ONE instantiation was green, which is why every single-instantiation hoisting test passed throughout. Test `sweep_hoistleak26`, two pointees that DIFFER; the deferred two-instantiation row in `sweep_inhnestarg26` is closed too."
+owner: frankZ
 ---
 
 # A hoisted nested-type name leaks between two specializations of one template
@@ -221,3 +222,90 @@ second is the smaller claim and matches the existing comment at
 `ScanRangeForNestedSpecs` about method bodies being buffered separately —
 that arm was added because a range was being missed; this is the same arm
 being scanned at the wrong time.
+
+## FIXED — THREE OF FOUR SITES SET HALF THE STATE (frankZ, 2026-09-09)
+
+**`SetSpecSubs(ti, si)` and `CollectHoistCandidates(ti, specName)` are two
+halves of ONE per-specialization state, and only `ParseSpecialization` set
+both.** The census is four rows and it is the whole finding:
+
+| site | `SetSpecSubs` | `CollectHoistCandidates` |
+| --- | --- | --- |
+| `ParseSpecialization` | yes | yes |
+| `EmitLateNestedSpecDecls` | yes | **no** |
+| `FlushPendingClassSpecializations` | yes | **no** |
+| `BufferGenericMethod` | yes | **no** |
+
+Three sites refreshed the substitution and left the hoist table holding
+whichever specialization was collected LAST. The fix adds the missing half at
+all three. The repro now prints `a 1 1`, matching fpc 3.2.2.
+
+### Why the one-line version made it worse, measured this time
+
+The earlier attempt added the call at `EmitLateNestedSpecDecls` alone. With
+`PXXDBG=p.mint:*,p.nspec:*` on the patched binary the whole chain is visible:
+
+```
+p.nspec reg alias=TPtrs$LongInt$TOwner$LongInt$PT under=TOwner$LongInt ts=12
+p.nspec reg alias=TPtrs$Byte$TOwner$Byte$PT       under=TOwner$Byte    ts=12
+pascal26:15: error: unknown type: specialize
+```
+
+**No late registration at all** — the two aliases the method-impl header would
+mint are now `NestedSpecKnown`, `ScanRangeForNestedSpecs` skips them,
+`NSpecCount` stays 0, and `EmitLateNestedSpecDecls` returns having emitted
+nothing. That part is correct and desirable.
+
+What broke is one layer down. The stream collapse in `SpecializeToBuffer` keys
+on the alias resolving:
+
+```pascal
+      if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) or
+         LateSpecEmittedName(aliasNm) then
+```
+
+and it computes `aliasNm` through the **same hoist table**. `BufferGenericMethod`
+did not refresh it either, so when `TOwner$LongInt`'s body streamed, the table
+still held Byte's names and the group's alias came out
+`TPtrs$LongInt$TOwner$Byte$PT` — not known, no collapse, and the literal word
+`specialize` survived into the stream. `pasparser_generic.inc:4899` documents
+that exact symptom for a range that was never swept; this is the same symptom
+reached a different way.
+
+**So the coupling is real and it is TWO steps, not a side effect:** the late
+scan REGISTERING the alias is what made `NestedSpecKnown` answer true, which is
+what the collapse reads. With the wrong name it registered, so the collapse
+fired on a wrong-but-declared name; with the right name it correctly did not
+register, and the collapse then had nothing to fire on because the OTHER site
+was still stale. **Fixing one half of a two-site state converts a wrong answer
+into no answer.** This ticket asserted a one-step mechanism for a day and that
+sentence has been cut; the measurement above is what replaces it.
+
+### The test
+
+`test/test_a_hoisted_nested_type_does_not_leak_between_specializations.pas`,
+wired as `sweep_hoistleak26`. Two owners with **different pointees** — Int64 and
+Byte — because with the same argument the two hoisted names coincide and the
+row passes with the defect live. Neither expected size is 4, since `SizeOf` of
+an unrecorded type answers the int width and a row expecting 4 cannot tell a
+correct answer from a blank one. Output is fpc 3.2.2's, byte for byte.
+
+**Positive control, run rather than assumed:** at `2ccc85cef` the same file
+gives `unknown type: TBox$Int64$TOwner$Byte$PT` — Int64's substitution carrying
+Byte's hoisted `PT`, the defect in one line.
+
+**And the deferred row is closed.**
+`test_an_inherited_nested_type_is_a_specialization_argument` was written with
+ONE instantiation per template *because of this ticket*, which its own header
+said in those words. It now carries `two` and `ptr2`, a second specialization of
+every template on the chain with a different pointee, matching fpc.
+
+### What this does NOT establish
+
+The corpus was not re-measured before this was written. The retired hypothesis
+above — that the single bare `alias=TEnumerator$PT` in the Collections driver is
+this defect — stays retired until somebody runs the seven minutes; a fix landing
+is not evidence about a corpus nobody re-ran.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

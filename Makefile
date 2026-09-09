@@ -17784,11 +17784,13 @@ test-core: $(COMPILER)
 	# every rtl-generics class while passing every hand-written repro -- a
 	# control drawn from the wrong population, and it cost a corpus run.
 	#
-	# ONE INSTANTIATION PER TEMPLATE, DELIBERATELY. A second specialization of
-	# one template trips a PRE-EXISTING and separate defect, verified on a
-	# binary without this fix:
+	# THE SECOND INSTANTIATION WAS DEFERRED AND IS NOW HERE (`two`, `ptr2`). It
+	# tripped a pre-existing and separate defect, verified on a binary without
+	# this fix; that one is fixed, so the row is back. The two pointees DIFFER on
+	# purpose -- with the same argument the two hoisted names coincide and the
+	# row passes with the defect live, which is why it had to wait for a fix
+	# rather than being written to pass:
 	# bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template
-	# owns that row and carries its repro.
 	#
 	# `ptr` is what makes this more than a parse test -- it stores through the
 	# inherited PT and reads the value back, so the hoisted type has to really
@@ -17796,7 +17798,27 @@ test-core: $(COMPILER)
 	# 3.2.2's, taken from fpc and not written by hand.
 	# bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope
 	./$(COMPILER) test/test_an_inherited_nested_type_is_a_specialization_argument.pas $(TESTTMP)/sweep_inhnestarg26
-	tools/expect_same.sh sweep_inhnestarg26 "$$($(TESTTMP)/sweep_inhnestarg26)" "$$(printf 'one 1\ndeep 1\nptr 9\nzero 0')"
+	tools/expect_same.sh sweep_inhnestarg26 "$$($(TESTTMP)/sweep_inhnestarg26)" "$$(printf 'one 1\ndeep 1\nptr 9\nzero 0\ntwo 1\nptr2 200')"
+	# TWO specializations of one template whose nested type is a generic
+	# argument. SetSpecSubs and CollectHoistCandidates are two halves of ONE
+	# per-specialization state and only ParseSpecialization set both, so the
+	# method-impl header -- one token range shared by every specialization --
+	# minted TBox$$Int64$$TOwner$$Byte$$PT: Int64's substitution with BYTE's
+	# hoisted PT, then `unknown type` on a name the compiler invented itself.
+	#
+	# THE TWO POINTEES MUST DIFFER. Give both owners the same argument and the
+	# two hoisted names coincide -- the test then prints the right answer while
+	# reading the wrong row, and passes with the defect live. That is why the
+	# three single-instantiation hoisting rows above stayed green throughout.
+	#
+	# AND NEITHER SIZE IS 4: SizeOf of an unrecorded type answers the int width,
+	# so a row expecting 4 cannot tell a correct answer from a blank one.
+	# The value rows assert something else again -- 70000 does not fit in a
+	# Byte, so a deref through the wrong pointee truncates visibly.
+	# Expected output is fpc 3.2.2's, byte for byte.
+	# bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template
+	./$(COMPILER) test/test_a_hoisted_nested_type_does_not_leak_between_specializations.pas $(TESTTMP)/sweep_hoistleak26
+	tools/expect_same.sh sweep_hoistleak26 "$$($(TESTTMP)/sweep_hoistleak26)" "$$(printf 'int64 8 70000\nbyte 1 9')"
 	# A nested pointer alias belongs to the class or record that declared it.
 	# Two bodies each declaring `PCell = ^TCell` with DIFFERENT pointee types
 	# shared one flat alias row, so the second was type-checked against the

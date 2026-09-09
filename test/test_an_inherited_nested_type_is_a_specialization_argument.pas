@@ -22,13 +22,18 @@
   reduction does, so the entire corpus failed while every repro passed. Both
   spellings are on the ladder here.
 
-  ONE INSTANTIATION PER TEMPLATE, DELIBERATELY, AND IT IS NOT THE SHAPE I
-  WANTED. A second specialization of the same template trips
+  THE SECOND INSTANTIATION WAS DEFERRED AND IS NOW HERE (2026-09-09). It tripped
   bug-p-a-hoisted-nested-type-name-leaks-between-two-specializations-of-one-template,
-  which is PRE-EXISTING and separate -- verified by reproducing it on a binary
-  that does not contain this fix. Adding the row here would assert two defects
-  at once and go red for the other one's reason. That ticket carries the
-  two-instantiation repro and owns the row.
+  which was pre-existing and separate -- verified by reproducing it on a binary
+  without this fix -- so the row would have gone red for the other defect's
+  reason. That one is fixed, so `two` and `ptr2` close the gap.
+
+  THE TWO POINTEES DIFFER, WHICH IS THE WHOLE POINT OF THE ROW. Give both
+  instantiations the same argument and the two hoisted names coincide, and the
+  test prints the right answer while reading the wrong row. `ptr2` assigns
+  `by.First` into a `^Byte`: under the leak that expression is typed `^LongInt`
+  and the program does not compile at all, so the discriminator is the type and
+  not only the value.
 
   `ptr` is what makes this more than a parse test: it stores through the
   inherited PT and reads the value back, so the hoisted type has to really be
@@ -69,7 +74,9 @@ function TQueueLike<T>.Deep: TPtrs<T, PT>; begin Result := nil; end;
 
 var
   li: TQueueLike<LongInt>;
+  by: TQueueLike<Byte>;
   p:  ^LongInt;
+  pb: ^Byte;
 begin
   li := TQueueLike<LongInt>.Create;
   li.FItem := 7;
@@ -84,4 +91,13 @@ begin
   WriteLn('ptr ', li.FItem);
 
   WriteLn('zero ', li.Zero);
+
+  { a SECOND specialization of every template on the chain, with a different
+    pointee -- see the note at the top }
+  by := TQueueLike<Byte>.Create;
+  by.FItem := 3;
+  WriteLn('two ', Ord(by.Ptrs = nil));
+  pb := by.First;
+  pb^ := 200;
+  WriteLn('ptr2 ', by.FItem);
 end.
