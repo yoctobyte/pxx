@@ -934,6 +934,7 @@ var
   retType  : TTypeKind;
   tk       : TTypeKind;
   pnames    : array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  hlpAi     : Integer;   { a helper target's ArrType row, when it has one }
   ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
@@ -2112,6 +2113,12 @@ begin
         (dummy; static bodies may not use Self) — must agree with the decl }
       ptypes[0] := IntToTypeKind(UClsHelperTk[methOwnerCi]);
       ptypesRec[0] := UClsHelperRec[methOwnerCi];
+      if UClsHelperArrAi[methOwnerCi] > 0 then
+      begin
+        hlpAi := UClsHelperArrAi[methOwnerCi] - 1;
+        ptypes[0] := IntToTypeKind(ArrTypeElemTk[hlpAi]);
+        ptypesRec[0] := ArrTypeElemRec[hlpAi];
+      end;
       pbyref[0] := False;
     end
     else if isStaticMethod then
@@ -2129,6 +2136,14 @@ begin
         Self goes by value (same fork as the decl side). }
       ptypes[0] := IntToTypeKind(UClsHelperTk[methOwnerCi]);
       ptypesRec[0] := UClsHelperRec[methOwnerCi];
+      { …and the ARRAY target, which UClsHelperTk structurally cannot carry: see
+        the matching fork on the decl side, which this must agree with. }
+      if UClsHelperArrAi[methOwnerCi] > 0 then
+      begin
+        hlpAi := UClsHelperArrAi[methOwnerCi] - 1;
+        ptypes[0] := IntToTypeKind(ArrTypeElemTk[hlpAi]);
+        ptypesRec[0] := ArrTypeElemRec[hlpAi];
+      end;
       pbyref[0] := ptypes[0] <> tyClass;
     end
     else if UClsIsRecord[methOwnerCi] then
@@ -2171,6 +2186,31 @@ begin
     pElemDynDepth[0] := 0;
     pFixedLen[0] := 0;
     pFixedLo[0] := 0;
+    { A HELPER WHOSE TARGET IS AN ARRAY: restore the shape the reset just
+      cleared. This CANNOT live in the arm that chose ptypes[0], because the
+      block above zeroes parr / pNDims / pDynDepth / pFixedLen for EVERY Self
+      unconditionally -- the arm ran first and was silently undone. That is
+      exactly what `Length needs a string, an array or a PChar, not LongInt`
+      was saying once the element kind landed: the kind had taken and the
+      array-ness had not, so a half-applied fix reads as a wrong element type
+      rather than as a lost flag.
+      Only THIS Self block needs it -- the second one in this procedure has no
+      helper arm at all, so a restore there would be a guard that cannot fire.
+      Fixed arrays are restored too: the ticket named only `array of T`, and a
+      helper for `array[0..3] of T` fails identically. Measured, not assumed. }
+    if (methOwnerCi >= 0) and (UClsHelperArrAi[methOwnerCi] > 0) then
+    begin
+      hlpAi := UClsHelperArrAi[methOwnerCi] - 1;
+      parr[0] := True;
+      pNDims[0] := ArrTypeNDims[hlpAi];
+      if ArrTypeIsDyn[hlpAi] then
+        pDynDepth[0] := ArrTypeDynDepth[hlpAi]
+      else
+      begin
+        pFixedLen[0] := ArrTypeHi[hlpAi] - ArrTypeLo[hlpAi] + 1;
+        pFixedLo[0] := ArrTypeLo[hlpAi];
+      end;
+    end;
     ptypesFileRecSize[0] := 0;
     ptypesFileElemTk[0] := 0;
     pdefault[0] := False;

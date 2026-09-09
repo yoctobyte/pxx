@@ -6475,6 +6475,25 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_th_constarr26 "$$($(TESTTMP)/test_th_constarr26)" "$$(printf 'helper-name : 32768\nTYPE-name   : 2147483648\nfrom body   : 8388608\n128 32768 8388608 2147483648 ')"
 	./$(COMPILER) test/test_type_helper_typename_receiver.pas $(TESTTMP)/test_th_typename26
 	tools/expect_same.sh test_th_typename26 "$$($(TESTTMP)/test_th_typename26)" "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
+	# `record helper for` whose target is an ARRAY type. `Self` typed as Integer in
+	# the body and the CALL SITE refused the member outright -- one cause, three
+	# consumers, because there is no tyArray in TTypeKind: a helper target was
+	# representable as a scalar kind or a record id, an array is NEITHER, and
+	# ParseTypeKind answered its unknown-name default that all three then read.
+	# The ticket reported the dynamic case only; the FIXED-array row here failed
+	# identically and is in the file because "one cause or two" was its question.
+	# The %FAIL row below is what makes the fix correct rather than merely working.
+	# bug-p-self-in-a-record-helper-for-a-dynamic-array-types-as-integer
+	./$(COMPILER) test/test_record_helper_for_an_array.pas $(TESTTMP)/test_rec_helper_arr26
+	tools/expect_same.sh test_rec_helper_arr26 "$$($(TESTTMP)/test_rec_helper_arr26)" "$$(printf 'dyn=3\nfixed=4\nstr=4\nsum=15')"
+	# TA and TB are both `array of LongInt`: identical element type, identical
+	# dynamic-ness, identical depth. A symbol records an array's SHAPE and not its
+	# IDENTITY, so matching a helper by element kind and depth COMPILES this file.
+	# That is why the wiring is keyed on the ArrType ROW (SymArrAi/UClsHelperArrAi)
+	# and why this row exists: without it the shape-matching implementation passes
+	# every other array-helper row in the tree.
+	! ./$(COMPILER) test/test_a_record_helper_for_one_array_type_does_not_attach_to_another_fail.pas $(TESTTMP)/test_rha_other26 > $(TESTTMP)/test_rha_other.log 2>&1
+	grep -q "an array variable has no members" $(TESTTMP)/test_rha_other.log
 	# `T = type Base` -- the strong-typedef spelling, which was `unknown type: type`
 	# and stopped the file. The keyword is consumed ahead of the whole type-binding
 	# chain, so the seven declarations cover one RHS arm each. The three helper

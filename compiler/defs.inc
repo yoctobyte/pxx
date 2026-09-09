@@ -4019,6 +4019,7 @@ var
     Horner( (i_d - lo_d) over span_d ). NDims=0 means single-dimension. Per-dim
     lo/span live in flat side tables indexed [sym*MAX_ARR_DIMS + d]. }
   SymArrNDims  : array of Integer;
+  SymArrAi     : array of Integer; { array VARIABLE declared through a NAMED array type: that ArrType row PLUS ONE, 0 = none. A symbol otherwise records an array's SHAPE (element kind, dyn depth, bounds) and not its IDENTITY, and shape is the wrong key for a helper: `TA = array of LongInt` and `TB = array of LongInt` are the same shape and a `record helper for TA` must not attach to a TB. Written only at the two var-declaration Alloc*Array sites, from VDArrAi -- params, record fields and the C frontend leave it 0, which is the same scoping SymArrIdxTk beside it documents. bug-p-self-in-a-record-helper-for-a-dynamic-array-types-as-integer }
   SymArrIdxTk  : array of Integer; { array VARIABLE: the INDEX type of dimension 0, as Ord(TTypeKind); same convention as ArrTypeIdxTk -- 0 means nothing recorded, i.e. a plain Integer index. Written only at the var-declaration AllocArray site (from VDIdxTk), so params, record fields and the C frontend leave it 0 and keep their previous answer. }
   SymArrIdxEnumId : array of Integer; { the enum type index when SymArrIdxTk is Ord(tyInteger). Guarded exactly like ArrTypeIdxEnumId: 0 is a real enum id, so the tk is the only thing that says whether this slot means anything. }
   SymArrDimLo  : array of Integer;
@@ -5157,6 +5158,7 @@ var
   VDElemProcSig  : Integer;
   VDAliasIdx     : Integer;  { the alias row the declared type resolved through, else -1. Captured from LastTypeAlias at the END of ParseDeclTypeDesc rather than read at the allocation site, because the two are separated by AllocVar/AllocArray/AllocDynArray -- any of which may parse nothing but does call into code that runs ParseTypeKind for an initializer. A LastType* read at the far end is the stale-channel shape this file's own comments warn about for LastTypeSemId. bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct }
   VDElemEnumId   : Integer;  { array element's enum type index, else -1 -> SymElemEnumId }
+  VDArrAi        : Integer;  { the ArrType row a variable's named array type resolved to -> SymArrAi, PLUS ONE; 0 when the type was spelled inline or is not an array. Biased for the reason AliasSemId and UClsHelperArrAi are: SetLength zero-fills, 0 is a VALID ArrType row, and every symbol that is not a declared array variable would otherwise read as row 0. Reset per declaration beside VDIdxTk. }
   VDIdxTk        : Integer;  { the declared array's dimension-0 INDEX type -> SymArrIdxTk. Reset per declaration beside VDElemEnumId; filled either from the named type's ArrTypeIdxTk or from LastArrIdxTk after the inline `[..]` list. }
   VDIdxEnumId    : Integer;  { its enum type index when VDIdxTk is Ord(tyInteger) -> SymArrIdxEnumId. }
   VDNdCnt        : Integer;
@@ -6660,6 +6662,7 @@ var
   UClsEnumMoveNextM : array[0..MAX_UCLASS-1] of Integer;
   UClsEnumCurrentP  : array[0..MAX_UCLASS-1] of Integer;
   UClsHelperTk : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER: Ord(target TTypeKind), -1 = not a helper }
+  UClsHelperArrAi : array[0..MAX_UCLASS-1] of Integer;  { record/type HELPER whose target is a named ARRAY type (`record helper for TArr`): that ArrType row index PLUS ONE, 0 = the target is not an array. THE THIRD CARRIER, and it exists because there is no tyArray in TTypeKind at all -- a helper's target was representable as a scalar kind (UClsHelperTk) or a record id (UClsHelperRec) and an array is NEITHER, so ParseTypeKind answered its unknown-name default (tyInteger) and every consumer then read Self as an Integer. STORED +1 for exactly the reason AliasSemId is: 0 is a VALID ArrType index, so an unwritten row would read as "the helper targets array type 0" -- and an unwritten row is precisely how the fact went missing the first time. With the bias, a row nobody wrote means NONE and the omission is inert. bug-p-self-in-a-record-helper-for-a-dynamic-array-types-as-integer }
   UClsHelperRec : array[0..MAX_UCLASS-1] of Integer; { helper target's rec id (REC_NONE for scalars/strings) }
   { Class-name aliases (`TOptionList = TList;`) — FindUClass resolves the alias
     to the target class row, so every class-name consumer (var decls,

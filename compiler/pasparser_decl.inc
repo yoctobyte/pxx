@@ -1635,6 +1635,7 @@ begin
     VDAliasIdx := -1;
     VDElemEnumId := -1;
     VDIdxTk := 0; VDIdxEnumId := -1;
+    VDArrAi := 0;
     VDIsArrND := False; VDNdCnt := 0;
     ai := -1;
     { STRIP `TOwner.` FIRST, because the array probe below reads CurTok.SVal and
@@ -1670,6 +1671,7 @@ begin
       VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]); VDTk := VDElemTk;
       VDElemEnumId := ArrTypeElemEnumId[ai];
       VDIdxTk := ArrTypeIdxTk[ai]; VDIdxEnumId := ArrTypeIdxEnumId[ai];
+      VDArrAi := ai + 1;   { the array type's IDENTITY, which shape alone cannot supply; +1 so an unwritten slot means NONE }
       LastTypeRecId := ArrTypeElemRec[ai];
       LoadPointeeFromArrType(ai);
       { The alias records its frozen-string element width; LastTypeStrCap here
@@ -2014,12 +2016,14 @@ begin
       LastTypeDynElemRowLen := VDElemRowLen;  { fixed-array row element (consumed + reset by AllocDynArray) }
       LastTypeDynElemRowLo := VDElemRowLo;
       idx := AllocDynArray(nm, VDElemTk, VDDynDepth);
+      SymArrAi[idx] := VDArrAi;
     end
     else
     begin
       LastTypeElemDynDepth := VDElemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
       idx := AllocArray(nm, VDElemTk, VDArrLo, VDArrHi);
       SymArrIdxTk[idx] := VDIdxTk; SymArrIdxEnumId[idx] := VDIdxEnumId;
+      SymArrAi[idx] := VDArrAi;
       if VDElemTk = tyRecord then
       begin
         Syms[idx].ElemRecName := LastTypeRecId;
@@ -4999,6 +5003,7 @@ var
   rmEnumRole: Integer;   { `enumerator MoveNext` on this record method: 1, 2 or 0 }
   rmClassCtorDtor: Boolean;   { `class constructor`/`class destructor` in a record -- inherently static, see the check below }
   rmMandatory: Integer;
+  hlpAi: Integer;   { the helper target's ArrType row, when it has one }
 begin
   for k := 0 to MAX_PROC_PARAMS - 1 do
   begin
@@ -5055,6 +5060,21 @@ begin
   begin
     pt[0] := IntToTypeKind(UClsHelperTk[ci]);
     ptRec[0] := UClsHelperRec[ci];
+    { A helper whose target is a named ARRAY type. UClsHelperTk cannot say so --
+      there is no tyArray in TTypeKind -- so it holds ParseTypeKind's unknown-name
+      default and Self read as an Integer, whatever the element type and whether
+      the array was dynamic or fixed. The ArrType row is the only place the shape
+      exists, so Self is typed from it: the ELEMENT kind plus the array flags, which
+      is exactly how an ordinary array PARAMETER is carried. The impl side forks
+      identically and must -- they agree or the impl never binds (the b321 lesson). }
+    if UClsHelperArrAi[ci] > 0 then
+    begin
+      hlpAi := UClsHelperArrAi[ci] - 1;
+      pt[0] := IntToTypeKind(ArrTypeElemTk[hlpAi]);
+      ptRec[0] := ArrTypeElemRec[hlpAi];
+      rmArr[0] := True;
+      if ArrTypeIsDyn[hlpAi] then rmDynA[0] := ArrTypeDynDepth[hlpAi];
+    end;
     { a `class function ...; static;` helper method takes Self BY VALUE (the
       body may not use Self, per FPC static rules) so a TYPE-NAME call site
       (TU32Helper.GetSignMask) can pass a dummy literal.
@@ -7146,6 +7166,7 @@ var
   mDefaultVal: Int64;
   mDefaultIsStr, mDefaultIsFloat: Boolean;
   mDefaultSOff, mDefaultSLen: Integer;
+  hlpTgtNm: AnsiString;   { a `helper for` target's NAME, captured before ParseTypeKind consumes it }
 begin
   Next;
   stopTypes := False;
@@ -8920,9 +8941,15 @@ begin
             (they must agree — the b321 lesson). }
           Next;                       { helper }
           Expect(tkFor, 'for');
+          if CurTok.Kind = tkIdent then hlpTgtNm := CurTok.SVal else hlpTgtNm := '';
           fTk := ParseTypeKind;
           UClsHelperTk[ci] := Ord(fTk);
           UClsHelperRec[ci] := LastTypeRecId;
+          { The target's NAME, captured above because ParseTypeKind has consumed it by
+            here and an array type is not in the scalar alias table for it to report.
+            The CLASS-helper site does not need this: it refuses any target that is not
+            a class, so an array target cannot reach it. }
+          NoteHelperArrayTarget(ci, hlpTgtNm);
         end;
         ParseRecordFields(ci, isPackedRecord, False);
       end
@@ -8971,9 +8998,15 @@ begin
         UClsIsRecord[ci] := True;
         Next;                       { helper }
         Expect(tkFor, 'for');
+        if CurTok.Kind = tkIdent then hlpTgtNm := CurTok.SVal else hlpTgtNm := '';
         fTk := ParseTypeKind;
         UClsHelperTk[ci] := Ord(fTk);
         UClsHelperRec[ci] := LastTypeRecId;
+        { The target's NAME, captured above because ParseTypeKind has consumed it by
+          here and an array type is not in the scalar alias table for it to report.
+          The CLASS-helper site does not need this: it refuses any target that is not
+          a class, so an array target cannot reach it. }
+        NoteHelperArrayTarget(ci, hlpTgtNm);
         ParseRecordFields(ci, False, False);
       end
       else if CurTok.Kind = tkCaret then

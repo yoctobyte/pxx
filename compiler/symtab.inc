@@ -2384,6 +2384,7 @@ begin
   UClsEnumCurrentP[UClsCount] := -1;    { no `enumerator Current` directive }
   UClsEnclosingCi[UClsCount] := -1;   { unit level until a body parser says otherwise }
   UClsHelperTk[UClsCount] := -1;
+  UClsHelperArrAi[UClsCount] := 0;   { 0 = target is not an array; explicit for the same reason the line above is }
   UClsHelperRec[UClsCount] := REC_NONE;
   UClsForward[UClsCount] := False;
   { NilPy classes are Python classes: `self.c` and `self.C` are two attributes
@@ -2391,6 +2392,41 @@ begin
     Same reason C sets this for structs; Pascal classes stay case-insensitive. }
   UClsCaseSensFields[UClsCount] := NilPyUserCode;
   UClsCount := UClsCount + 1;
+end;
+
+procedure NoteHelperArrayTarget(ci: Integer; const nm: AnsiString);
+{ Record that a helper's target names an ARRAY type. Called at the TWO reachable
+  `helper for` parse sites -- the `type helper`/`record helper` pair -- with the
+  target's NAME captured before ParseTypeKind consumed it, the name being the only
+  handle because an array type is not in the scalar alias table and ParseTypeKind
+  therefore cannot report it. The third site, `class helper for`, is deliberately
+  NOT a caller: it refuses any target that is not a class, so an array can never
+  reach it and a call there would be a branch that cannot fire. Writes the ArrType
+  row PLUS ONE; see UClsHelperArrAi. }
+var ai: Integer;
+begin
+  UClsHelperArrAi[ci] := 0;
+  if Length(nm) = 0 then Exit;
+  ai := FindArrayType(nm);
+  if ai >= 0 then UClsHelperArrAi[ci] := ai + 1;
+end;
+
+function FindHelperForArrayType(ai: Integer): Integer;
+{ Newest-declared helper whose target is the named ARRAY type `ai`, or -1.
+  The array twin of FindHelperForType, and a separate function rather than a
+  widened one because its key is an ArrType row and not a (kind, rec) pair --
+  the two cannot be asked the same question. Downward scan for the same reason:
+  the last visible helper wins. }
+var i: Integer;
+begin
+  Result := -1;
+  if ai < 0 then Exit;
+  for i := UClsCount - 1 downto 0 do
+    if UClsHelperArrAi[i] = ai + 1 then
+    begin
+      Result := i;
+      Exit;
+    end;
 end;
 
 function FindHelperForType(tk: TTypeKind; rec: Integer): Integer;
@@ -5817,6 +5853,7 @@ begin
   SetLength(SymObjDataExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymCModule, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
+  SetLength(SymArrAi, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
   SetLength(SymArrDimLo, n * MAX_ARR_DIMS);   SetLength(SymArrDimSpan, n * MAX_ARR_DIMS);
   { -1, not SetLength's zero-fill: 0 is a VALID bucket, so an uninserted slot

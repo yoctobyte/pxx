@@ -632,12 +632,24 @@ begin
     receiver node as the Self argument takes its address, exactly like an
     advanced-record method. Guarded on the member actually existing, so every
     other '.' path is untouched. }
+  { An ARRAY receiver is admitted only when a helper names ITS array type. The
+    guard excluded every array outright, which is why `a.Cnt` answered "an array
+    variable has no members" for a type that had a helper -- and the exclusion
+    was correct while a helper could not name an array target at all. Keyed on
+    the ArrType ROW and never on the shape: `TA = array of LongInt` and
+    `TB = array of LongInt` are indistinguishable by shape, and a helper for TA
+    must not attach to a TB. }
   if (idx >= 0) and (CurTok.Kind = tkDot) and
-     (Syms[idx].RecName < REC_UCLASS_BASE) and (not Syms[idx].IsArray) and
+     (Syms[idx].RecName < REC_UCLASS_BASE) and
+     ((not Syms[idx].IsArray) or
+      ((SymArrAi[idx] > 0) and (FindHelperForArrayType(SymArrAi[idx] - 1) >= 0))) and
      not (Syms[idx].TypeKind in [tyRecord, tyClass, tyVariant, tyPointer]) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
   begin
-    mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
+    if Syms[idx].IsArray then
+      mci := FindHelperForArrayType(SymArrAi[idx] - 1)
+    else
+      mci := FindHelperForType(Syms[idx].TypeKind, Syms[idx].RecName);
     { A PROPERTY counts as a member here too, not just a method. FPC declares
       TStringHelper.Length as `property Length: SizeInt read GetLength` over a
       PRIVATE accessor, so a method-only guard makes the single most-used member
@@ -2540,8 +2552,15 @@ begin
         field access that crashed at runtime (tarrconstr8). Element access
         `arr[i].field` takes the bracket branch above, strings take Length()
         style intrinsics — neither reaches this check. }
+      { …unless a helper names this array's TYPE, in which case the member is
+        the helper's and the dispatch above has already taken it. Reached only
+        when it did not, so this stays the refusal for every array that has no
+        helper -- the message was right for years and is right still, it was
+        simply the only answer available. }
       if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
          Syms[ASTIVal[node]].IsArray and
+         not ((SymArrAi[ASTIVal[node]] > 0) and
+              (FindHelperForArrayType(SymArrAi[ASTIVal[node]] - 1) >= 0)) and
          not (Syms[ASTIVal[node]].TypeKind in [tyRecord, tyClass]) then
         Error('an array variable has no members (use SetLength / index it)');
       { …and the same refusal for every other memberless SCALAR, which the array
