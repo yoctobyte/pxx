@@ -115,4 +115,4 @@ cannot fail.
 what broke was a test asserting a scoping accident. Its own comment, and
 `strhelperprobe.pas`'s, both stated that accident as the premise, and both are
 corrected in place rather than left to be read as verified.
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9b4146700.
