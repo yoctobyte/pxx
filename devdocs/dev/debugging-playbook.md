@@ -22408,18 +22408,29 @@ real. Adding it:
 
 Each step is further from working.
 
-**The mechanism sentence that stood here for one hour was wrong, and how it got
-wrong is the second half of the lesson.** It read: *"registering a `specialize
-X<...>` group is what COLLAPSES it in the token stream"* — retracted by its own
-author within the hour. The collapse lives in `SpecializeToBuffer` and keys on
-`NestedSpecKnown(alias) or LateSpecEmittedName(alias) or alias = specName`, not
-on any scan having registered anything. There IS a coupling, and
-`pasparser_generic.inc:4899` documents a THIRD route to the same `specialize`
-symptom that involves neither. **With three routes to one symptom, no
-single-route explanation is measured until you say which one fired** — and "there
-is a coupling" and "this link fires" are different claims that read identically.
-The explanatory sentence was the part that got quoted precisely because it was
-the part that felt like understanding.
+**The mechanism sentence that first stood here was wrong, it was retracted by
+its own author within the hour, and it was then MEASURED — three states in one
+day on one claim, which is the second half of the lesson.** As written it said
+*"registering a `specialize X<...>` group is what COLLAPSES it in the token
+stream"*: a one-step side effect. The measured mechanism (`2b43c97d0`, with
+`p.mint` and `p.nspec` on the patched binary) is **two steps through
+`NestedSpecKnown`** — registration makes a name KNOWN, and knownness is what
+`SpecializeToBuffer`'s collapse reads. With the wrong name the group registered
+and collapsed onto a wrong-but-declared name; with the right name it correctly
+did not register, and the collapse had nothing to fire on. **"There is a
+coupling" and "this link fires" are different claims that read identically**, and
+the second one needed a probe, not a closer reading — `pasparser_generic.inc:4899`
+documents a THIRD route to the same `specialize` symptom involving neither, so no
+single-route explanation was measured until someone said which one fired. The
+explanatory sentence was the part that got quoted precisely because it was the
+part that felt like understanding.
+
+**And the census is what turned the anecdote into the rule.** `SetSpecSubs` and
+`CollectHoistCandidates` are two halves of one per-specialization state, and
+**three of the four sites set only half of it** — `EmitLateNestedSpecDecls`,
+`FlushPendingClassSpecializations` and `BufferGenericMethod`, against
+`ParseSpecialization` which sets both. One missing call is an oversight; three of
+four is the shape. Count the sites before you call it a one-line fix.
 
 **So "fix the pair" is not the end of the work.** When one operation serves two
 purposes, correcting its input moves both, and the one you were not thinking
@@ -22430,6 +22441,13 @@ mangled name>` becoming `unknown type: specialize` is not "closer", it is a
 different layer failing, which means the first layer stopped running. Ask what
 else the call you just corrected was ACHIEVING as a side effect before reading a
 new error as progress.
+
+**And read that change of shape the right way round** (frankZ's sentence, and it
+is the one to carry): fixing ONE half of a two-site state converts a wrong answer
+into NO answer — so *"the fix made it worse"* is **evidence the pair is real**,
+not evidence the fix was wrong. The instinct it has to beat is the obvious one:
+a regression on your own patch reads as a refutation, and here it is
+confirmation with the other half still missing.
 
 ## A NEW-LOOKING FAILURE READS AS A FRESH ONE, AND THAT IS HOW A STALE BINARY SURVIVES A RULE YOU READ THIS MORNING
 
