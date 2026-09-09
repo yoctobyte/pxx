@@ -187,3 +187,5 @@ single-pass seed. `make compiler/pascal26` and `--tier quick` both passed;
 `gate.sh quick`'s canary is the only instrument that sees it. Forward
 declaration added beside `BuiltinTypeNameTk`'s, which exists for the same
 reason.
+
+Log: fixed and closed in commit 6e1be1b6d.
