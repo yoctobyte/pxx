@@ -68,3 +68,88 @@ prices A. **(2)** how many places actually read an interface value as an
 instance: I named four from reading, and that number is the price of B and I
 have not counted it. Whoever takes this should get (2) before arguing either
 way; my recommendation of A is made without it and should not outrank it.
+
+## Both measurements, taken 2026-09-09 (frankH) — and they move the fork
+
+Taken because the ticket asks for them before either option is argued. Neither
+option is chosen here; what follows prices them.
+
+### (1) The cast sites in `generics.defaults.pas`: there are NONE
+
+`/home/neo/src/fpc-trunk/packages/rtl-generics/src/generics.defaults.pas`
+contains **zero** written casts of a pointer to an interface type. The
+conversion is an IMPLICIT ASSIGNMENT: `_LookupVtableInfo` and
+`_LookupVtableInfoEx` are declared `: Pointer`, and six sites assign their
+result straight into an interface-typed `Result` —
+
+    1108  Result := _LookupVtableInfo(giComparer, ...)            IComparer<T>
+    2756  Result := _LookupVtableInfo(giEqualityComparer, ...)    IEqualityComparer<T>
+    2764  Result := _LookupVtableInfoEx(giExtendedEquality..., ...)
+    2766  Result := _LookupVtableInfoEx(giEqualityComparer, ...)
+    2908  Result := _LookupVtableInfo(giExtendedEquality..., ...)
+    2918  Result := _LookupVtableInfoEx(giExtendedEquality..., ...)
+
+(`:3502` is the seventh occurrence and is Pointer-to-Pointer, not a conversion.)
+
+**So option A as written does not fire on the code that motivates it.** Its
+trigger is *"a hard cast to an interface type whose operand is statically a
+non-class pointer"*, and the real source never writes one. The discrimination
+point exists and is still compile-time visible — a `Pointer`-typed value
+reaching an interface-typed destination — but it is an ASSIGNMENT rule, not a
+cast rule, and an implementation keyed on the cast would compile
+`generics.defaults` and change nothing. **This is the ticket's own hazard from
+the other side: the shape a fix keys on has to be the shape the source
+actually writes.**
+
+**It also answers the storage sub-question, differently and better than "one
+site" would have.** The operands are not dynamic: the hand-built instances are
+TYPED CONSTANTS, one per element type —
+
+    Comparer_Int32_Instance : Pointer = @Comparer_Int32_VMT;
+
+— fourteen of them plus the ShortString family. So a shim can be keyed on the
+OPERAND (static, one shim per hand-built table, materialised beside it) rather
+than on the site, and both objections in A's "against" evaporate: no
+same-site-different-pointer problem, and no lifetime problem, because a shim
+for a static operand is itself static. The two dynamic comparers
+(`Comparer_Binary`, `Comparer_DynArray` — commented out in the const block as
+*"dynamic instance"*) are the exception and would need the heap answer, so the
+count that matters is "how many operands are NOT static", not "how many sites".
+
+### (2) The places that read an interface value as an instance: not four, and the four is the wrong axis
+
+**The dereference `[inst]` -> vmt -> `[vmt-8]` -> rtti exists in exactly TWO
+functions in the whole tree**, both in `compiler/builtin/builtinheap.pas`:
+`PXXIntfIMTOf` (`:3602`) and `PXXIntfComIMTOf` (`:3628`). Every other name in
+the family — `PXXIntfAddRef`, `PXXIntfRelease`, `PXXIntfAddRefAny`,
+`PXXIntfReleaseAny`, `PXXIntfAddRefRaw`, `PXXIntfAssign`,
+`PXXIntfFromVariant` — routes through one of those two and never touches the
+layout itself. So two of the named four (the ARC helpers, the variant path)
+are not independent sites; they are callers of the two that are.
+
+**One of the four is representation-agnostic and should come off the list.**
+The emitted nil check (`IRWrapNilChk`, `ir.inc:16556`) compares the word to
+nil. An IMT pointer is nil-checkable exactly as an instance pointer is; that
+site does not care what the word means.
+
+**And the one that decides B is not on the list at all: `Self`.**
+`AN_INTF_CALL`'s lowering (`ir.inc:16542`) takes the callee's `Self` from the
+interface value itself — `Self = [iface]` — and then calls
+`PXXIntfIMTOf(self, ci)` for the code address. Under B the value is the IMT,
+and **pxx's IMT is a bare array of code addresses**: no offset-to-object field,
+no adjustor thunks. There is nowhere for `Self` to come from. B therefore is
+not "four read sites move"; it is *every interface method call's receiver*
+plus a change to how IMTs are BUILT (`rtti_emit.inc`) to carry what FPC's
+carry.
+
+**So the answer to "is four the number or the first four" is neither.** Two of
+it collapses into one pair of functions, one of it is not a read of the
+meaning, and the item that prices B was absent. The recommendation of A was
+correctly flagged as made without this measurement; with it, B is *more*
+expensive than the recommendation assumed and A is *cheaper* — but A must be
+re-specified onto the assignment, because the cast it keys on does not occur.
+
+**Still not decided here, and deliberately.** What (1) and (2) settle is the
+price. What they do not settle is whether pxx wants FPC's interface ABI as a
+GOAL — `the-goal-cross-cross` wants foreign objects and documented layouts to
+work, and that is an argument for B that no cost measurement can answer.
