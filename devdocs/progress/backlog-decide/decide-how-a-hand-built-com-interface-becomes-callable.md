@@ -45,9 +45,12 @@ real pxx RTTI whose interface table maps the target id to the raw pointer, so
 `PXXIntfIMTOf` finds it by the existing walk.
 
 - **For:** local. Nothing else in the compiler or RTL moves. The one-word value
-  keeps its meaning everywhere, including the four places that read it as an
-  instance: `AN_INTF_CALL`'s lowering, the ARC assign/release helpers,
-  `PXXIntfComIMTOf`'s variant path, and the emitted nil checks.
+  keeps its meaning everywhere — and *(2)* below is what makes that cheap rather
+  than merely true: `AN_INTF_CALL` takes the callee's `Self` FROM the interface
+  value, which under A it still is. **This bullet said "the four places that read
+  it as an instance" and the list was wrong** (see *(2)*): the walk is in two
+  functions, the nil check does not care, and `Self` — the item that does — was
+  not on it.
 - **Against, as first written:** the shim needs storage and a lifetime.
   Static-per-site is wrong if the same site converts different pointers;
   heap-per-conversion needs a free. **BOTH OBJECTIONS ARE ANSWERED** by *(1)*:
