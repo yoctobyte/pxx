@@ -645,3 +645,4 @@
 2026-09-08T18:51:53Z	seven	5506794317a72bf76120a20eb4a7356fcf1449e0	would NOT pin 5506794317a7 — 6 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, test-c-abi-mixed-link#src:tools/compiler_srchash.sh
 2026-09-08T19:59:39Z	seven	7deb97fbdb2a2acb573fb5281512b491a40075ec	would NOT pin 7deb97fbdb2a — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
 2026-09-08T23:10:33Z	seven	e8f1cb9f4dff4bd65693e4c1f99412bf58cd273e	would NOT pin e8f1cb9f4dff — 4 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12
+2026-09-09T06:23:37Z	seven	fc2ce3d025534ee225181dd7daae6ac240e8c422	would NOT pin fc2ce3d02553 — 5 red(s) the current pin does not have: optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12, optdiff#shard5/12, tools-devtest#00
