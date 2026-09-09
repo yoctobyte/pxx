@@ -2747,6 +2747,13 @@ def regen_index(clone):
 # records the decision it WOULD have made so a week of them can be compared
 # against what a human actually blessed — evidence instead of argument.
 PIN_ALLOWLIST_REL = TSTATE_REL + "/pin-allowlist.tsv"
+# ARMED 2026-09-09 by the owner ("go ahead and arm it"), ending a month of
+# shadow mode. The arming switch is a COMMITTED FILE and
+# not an env var or a constant, for three reasons: disarming is then a commit
+# every seat can see and `git log` explains, it survives a daemon restart, and
+# the owner can disarm from any checkout without editing code that would then
+# need review. Delete tstate/pin-armed and the next cycle is back to shadow.
+PIN_ARMED_REL = TSTATE_REL + "/pin-armed"
 PIN_SHADOW_REL = TSTATE_REL + "/pin-shadow.log"
 PIN_STREAK_K = 2          # one clean matrix can be luck; today proved phantoms
 PIN_TIER = "full"         # only the broadest nested tier may qualify a pin
@@ -2820,10 +2827,15 @@ def seed_baseline(clone, prev, pin_id, reds):
 
 
 def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
-    """Would this sha have qualified for an automatic pin? LOG ONLY.
+    """Would this sha qualify for an automatic pin? Returns True if so.
 
-    Deliberately never touches `pinned`, `make pin`, or `stable_linux_amd64/**`
-    — face 1's write scope is tstate/ and this stays inside it.
+    This function still only DECIDES and logs; it moves nothing. Acting on the
+    answer is pin_now(), called by the caller while the tree is still detached
+    at the sha that was tested — which is the whole reason the two are separate.
+
+    NOTE the write scope changed on 2026-09-09. Face 1 was tstate/-only and is
+    now tstate/ plus `stable_linux_amd64/**` when armed. That is a real widening
+    and it is why every guard in pin_now() fails CLOSED.
     """
     if report.get("tier") != PIN_TIER:
         return                        # only the broadest tier may qualify one
@@ -2941,6 +2953,124 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     except OSError as e:
         print("twatch: could not record the pin-shadow line (%s)" % e,
               flush=True)
+    return would
+
+
+def _sha256_file(path):
+    """Local, because file_sha256() lives in testmgr and twatch does not import
+    it. Defined here rather than reached for across modules: pin_refusal() runs
+    OUTSIDE pin_now()'s try/except by design (a refusal must be reportable, not
+    swallowed), so a NameError in it would propagate into the daemon's cycle."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def pin_armed(clone):
+    """Is automatic pinning armed? Presence of the committed switch file."""
+    return os.path.exists(os.path.join(clone.path, PIN_ARMED_REL))
+
+
+def pin_refusal(clone, sha, report):
+    """Why this run must NOT be auto-pinned, or "" if it may be.
+
+    EVERY guard here fails closed, and the failure mode is "did not pin", which
+    is exactly the behaviour of the last month. There is no guard whose absence
+    would be safe, so none of them is optional:
+
+      * armed          — the owner's committed switch; absent means shadow.
+      * detached at sha — a tier runs in a detached checkout AT THE SHA TESTED.
+        If HEAD has moved, `make pin` would freeze `compiler/builtin/**` from a
+        tree nobody tested. This is the guard that matters most and it is the
+        one a naive arming would omit, because on a quiet tree it always passes.
+      * clean tree     — an uncommitted edit would be compiled into the blessed
+        binary and then be invisible in the pin commit.
+      * binary identity — the tier snapshots the compiler it tested and records
+        `compiler_sha256`. If `compiler/pascal26` no longer hashes to it, the
+        verdict is about a different binary than the one on disk.
+      * not moved mid-run — testmgr says so itself; a straddled run's verdict
+        cannot be attributed to either side.
+      * a real measurement — no_measurement() is the empty-run backstop.
+    """
+    if not pin_armed(clone):
+        return "not armed (no %s)" % PIN_ARMED_REL
+    why = no_measurement(report)
+    if why:
+        return "no measurement: %s" % why
+    if report.get("compiler_changed_mid_run"):
+        return "the compiler changed mid-run"
+    try:
+        head = sh(["git", "rev-parse", "HEAD"], cwd=clone.path).strip()
+    except Exception as e:
+        return "cannot read HEAD (%s)" % e
+    if head != sha:
+        return "HEAD is %s, not the tested %s" % (head[:12], sha[:12])
+    if clone.dirty():
+        return "the clone has uncommitted tracked changes"
+    want = report.get("compiler_sha256") or ""
+    live = os.path.join(clone.path, "compiler", "pascal26")
+    if not os.path.exists(live):
+        return "compiler/pascal26 is absent"
+    got = _sha256_file(live)
+    if want and got != want:
+        return "compiler/pascal26 is %s, the run tested %s" % (got[:12], want[:12])
+    return ""
+
+
+def pin_now(clone, host, sha, report):
+    """Bless the tree under test as the new pin. Never raises.
+
+    Runs the sequence CLAUDE.md prescribes for a human -- `make stabilize-fast`
+    (which is test-smoke, i.e. a fresh self-host chain, then stabilize-record)
+    followed by `make pin` -- while the checkout is still DETACHED at the sha
+    the tier ran on, then carries the artefacts onto the branch and publishes.
+
+    The carry is not a git trick on purpose. `publish()` checks out the branch,
+    and a modified binary that also differs on the branch makes that checkout
+    refuse; copying the artefacts aside, restoring the detached tree, switching,
+    and copying back is the version whose failure mode is obvious.
+    """
+    why = pin_refusal(clone, sha, report)
+    if why:
+        print("twatch: [auto-pin] declined %s — %s" % (sha[:12], why), flush=True)
+        record_pin_line(clone, host, sha, "AUTO-PIN DECLINED — %s" % why)
+        return False
+    tmp = tempfile.mkdtemp(prefix="twatch-pin-")
+    try:
+        for tgt in (["make", "stabilize-fast"], ["make", "pin"]):
+            sh(tgt, cwd=clone.path, capture=False)
+        src = os.path.join(clone.path, PIN_ARTEFACT_REL)
+        held = os.path.join(tmp, "stable")
+        shutil.copytree(src, held, symlinks=True)
+        # Put the detached tree back exactly as git believes it to be, so the
+        # branch checkout below cannot refuse and cannot silently merge.
+        sh(["git", "checkout", "--", PIN_ARTEFACT_REL], cwd=clone.path)
+        sh(["git", "checkout", "--quiet", clone.branch], cwd=clone.path)
+        shutil.copytree(held, src, symlinks=True, dirs_exist_ok=True)
+        clone.publish("chore(stable): auto-pin at %s (Track T, full tier green)"
+                      % sha[:12], paths=[PIN_ARTEFACT_REL])
+        print("twatch: [auto-pin] PINNED %s" % sha[:12], flush=True)
+        record_pin_line(clone, host, sha, "AUTO-PINNED %s" % sha[:12])
+        return True
+    except Exception as e:
+        # A failure here must cost this cycle's pin and nothing else. The
+        # daemon is the fleet's breadth instrument; taking it down to avoid a
+        # missed pin would trade the cheap loss for the expensive one.
+        print("twatch: [auto-pin] FAILED for %s — %s" % (sha[:12], e), flush=True)
+        record_pin_line(clone, host, sha, "AUTO-PIN FAILED — %s" % e)
+        return False
+
+
+def record_pin_line(clone, host, sha, text):
+    """Append to the same log the shadow verdicts go in, so one file is the
+    whole history of what this machinery decided AND what it then did."""
+    try:
+        with open(os.path.join(clone.path, PIN_SHADOW_REL), "a") as f:
+            f.write("%s\t%s\t%s\t%s\n" % (utcnow(), host, sha, text))
+    except OSError:
+        pass
 
 
 def run_is_incomplete(report):
@@ -3594,8 +3724,19 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                                if k not in dead}
         authoritative = {k: v for k, v in authoritative.items() if k not in dead}
     update_job_reasons(st, report, st["jobs"])
-    # Shadow only — records the pin it WOULD have made, moves nothing.
-    pin_shadow(clone, host, st, sha, report, authoritative, now)
+    # Decide, then act. ARMED 2026-09-09; before that this line was the whole
+    # mechanism and its verdict had no consumer for a month.
+    would = pin_shadow(clone, host, st, sha, report, authoritative, now)
+    # HERE, and not after publish(): the tree is still DETACHED at the sha the
+    # tier ran on. publish() checks out the branch, and pinning from the branch
+    # tip would bless sources no tier has seen -- the exact failure the whole
+    # pin discipline exists to prevent.
+    if would:
+        try:
+            pin_now(clone, host, sha, report)
+        except Exception as e:                       # never take the daemon down
+            print("twatch: [auto-pin] unexpected error, continuing — %s" % e,
+                  flush=True)
     save_state(clone, host, st)
     # uncapped run archive (host.json history is capped): one ndjson line per
     # run — the web UI's history/regression-frequency source

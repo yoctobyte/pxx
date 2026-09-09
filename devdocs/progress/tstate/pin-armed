@@ -1,0 +1,32 @@
+Track T automatic pinning is ARMED.
+
+Armed 2026-09-09 by the owner: "go ahead and arm it."
+
+This file IS the switch. Its presence arms; deleting it returns the watcher to
+shadow mode on the next cycle, with no code change and no review. That is
+deliberate -- disarming should be something anyone can do from any checkout, and
+should leave a `git log` entry saying who did it and when.
+
+WHAT FIRES A PIN. tools/twatch.py, pin_shadow() -> pin_now(). All of:
+  - tier is `full` (the broadest nested tier; nothing narrower may qualify one)
+  - no red the current pin does not already carry, and the allowlist is EMPTY
+    so nothing at all is waived today
+  - a LIVE self-host fixedpoint job in THIS run, passing. Never waivable: a
+    compiler that cannot reproduce itself must not become anyone's ground
+  - two consecutive qualifying shas (PIN_STREAK_K = 2)
+  - the checkout is still DETACHED at the sha the tier ran on
+  - the tree is clean, and compiler/pascal26 still hashes to the binary the run
+    recorded in compiler_sha256
+  - the run did not straddle a compiler change, and produced a real measurement
+
+Every one of those fails CLOSED. The failure mode is "did not pin", which is
+what the last month did anyway.
+
+CONTROLS: python3 tools/twatch_autopin_devtest.py -- 8 rows, and one of them is
+a MUST-ALLOW. That row is not a formality. Auto-pin spent a month in shadow
+behind an evidence gate that could not be satisfied by any amount of waiting,
+and a refusal gate that always refuses is that same bug wearing safety colours.
+The must-allow row is what proves this one can fire.
+
+HISTORY: decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written,
+and decided/decide-track-t-autopin-criteria for the original 2026-08-08 design.
