@@ -159,4 +159,4 @@ ticket. Corrected to name all three, because the COUNT is what makes "safe by
 construction" a checkable claim rather than an assurance.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 92175e59f.
