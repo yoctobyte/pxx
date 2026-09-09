@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 10d1h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `e8020484be2c` | 2026-09-09T11:32:55Z | RED (native) | 187.9s | `cbb03092bac6` RED |
+| seven | `e8020484be2c` | 2026-09-09T11:49:56Z | RED (full) | 994.2s | `e8020484be2c` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `cbb03092bac6` on seven, 2026-09-09T11:27:26Z (5m ago).**
+**Newest full tier in the fleet: `e8020484be2c` on seven, 2026-09-09T11:49:56Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `cbb03092bac6` | RED | 5m | — (newest) |
+| seven | `e8020484be2c` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 10d1h | 10d1h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -31,7 +31,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **test-core#src:test/test_generic_delphi_method_header_binds_to_the_generic.pas** — test/test_generic_delphi_method_header_binds_to_the_generic.pas tools/expect_same.sh (seven): bad `5acbe362b034`, last good `06e404587e29`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_str_method_vs_pascal_string_helper.npy** — test/test_nilpy_str_method_vs_pascal_string_helper.npy test/test_nilpy_str_method_vs_pascal_string_helper.expected (seven): bad `b293f97bfa08`, last good `06e404587e29`, 7 commit(s) in range
+- **test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (seven): bad `e8020484be2c`, last good `cbb03092bac6`, 3 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
