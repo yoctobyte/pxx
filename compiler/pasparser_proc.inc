@@ -5537,7 +5537,6 @@ var
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
   unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
-  unitNeedsBuiltinSys: Boolean; { …and the System names that live in `builtin` }
   unitTnm: AnsiString;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
   savedPackRecords, savedPackEnum, savedNChecks, savedMaxStackFrame: Integer;
@@ -6310,7 +6309,6 @@ begin
     unitNeedsRootMeth := False;
     unitNeedsMath := False;
     unitNeedsThreads := False;
-    unitNeedsBuiltinSys := False;
     while i < TokCount do
     begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
@@ -6378,47 +6376,24 @@ begin
           unitNeedsMath := True;
         if CaseEqual(unitTnm, 'pi') then unitNeedsMath := True;
       end;
-      { …and the SYSTEM NAMES THAT LIVE IN `builtin`. THIRD instance of the
-        shape the math and thread triggers in this same loop record, and the
-        shape is about the SCAN being per-file rather than about any of the
-        three name sets: a program-level pre-scan reads only the PROGRAM's
-        tokens, so a unit that calls the name and names no unit is invisible to
-        it. Measured 2026-09-09: with the six moved and the program-level
-        trigger in place, a no-uses PROGRAM worked and a no-uses UNIT still
-        answered `undefined variable`.
+      { NO CLAUSE HERE FOR THE SYSTEM NAMES THAT LIVE IN `builtin`, AND THAT IS
+        A MEASUREMENT RATHER THAN AN OVERSIGHT. One was written on 2026-09-09
+        alongside the six names moved into compiler/builtin/builtin.pas
+        (AllocMem, DynArraySize, SetString, sLineBreak, UTF8Decode, UTF8Encode)
+        and it was DEAD CODE: disabling it changed nothing, because ANY `uses`
+        clause already pulls `builtin` (the tkUses arm), and a unit is only ever
+        compiled because a program `uses` it -- pxx refuses a standalone unit
+        outright ("this file is a unit, not a program"). So by the time any unit
+        is parsed, `builtin` is in scope.
 
-        FPC declares AllocMem / DynArraySize / SetString / sLineBreak /
-        UTF8Decode / UTF8Encode in its System unit and they lived only in
-        lib/rtl/sysutils here, so neither a program nor a unit could reach them
-        without a `uses` line.
-
-        FIVE MORE (LowerCase, StrLen, StrPas, SysBackTraceStr, StringOfChar)
-        are NOT in this list and the reason is the PIN, not the names:
-        something built with $(PXX_STABLE) calls each of them, and that build
-        uses the PINNED compiler against a FROZEN copy of compiler/builtin, so
-        moving one out of sysutils removes it from the only place that build
-        can look. Measured the same day: with all eleven moved, `make lib-test`
-        failed every unit with `undefined variable (LowerCase)` raised from
-        inside sysutils.pas itself. Finish them once a pin carries this trigger
-        and a refreshed frozen builtin --
-        task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision.
-
-        Same trigger shape as its neighbours -- a following '(' for the
-        functions, so `var strlen: Integer` does not drag the unit in, and bare
-        for the paramless sLineBreak. A self-pull is harmless: `builtin` is
-        already in CompiledUnits by the time it scans its own tokens.
+        THE MATH CLAUSE ABOVE IS NOT IN THAT POSITION AND THE DIFFERENCE IS THE
+        UNIT, NOT THE NAMES: it pulls `math`, which no `uses` clause pulls for
+        you. Measured both ways at 470240dd0eb5 with
+        test_unit_ambient_system_surface: with the builtin pull disabled the
+        fixture still compiles and prints every row; with the MATH pull disabled
+        it is refused at `pi`. Two clauses that looked like one class, and only
+        one of them had ever been able to fail.
         task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
-      if (Tokens[i].Kind = tkIdent) and
-         (Tokens[i].SLen >= 8) and (Tokens[i].SLen <= 15) then
-      begin
-        unitTnm := GetTokenStr(i);
-        if (CaseEqual(unitTnm, 'allocmem') or CaseEqual(unitTnm, 'dynarraysize') or
-            CaseEqual(unitTnm, 'setstring') or
-            CaseEqual(unitTnm, 'utf8decode') or CaseEqual(unitTnm, 'utf8encode')) and
-           (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) then
-          unitNeedsBuiltinSys := True;
-        if CaseEqual(unitTnm, 'slinebreak') then unitNeedsBuiltinSys := True;
-      end;
       if ThreadSafeMode and (Tokens[i].Kind = tkIdent) and
          (Tokens[i].SLen >= 9) and (Tokens[i].SLen <= 22) then
       begin
@@ -6456,9 +6431,6 @@ begin
     { Same gating and same idempotence as the textfile pull above. }
     if unitNeedsMath and (not NoDefaultRtl) and (not TargetIsEspClass) then
       ParseUsesUnitAmbient('math');
-    if unitNeedsBuiltinSys and (not NoDefaultRtl) and (not TargetIsEspClass) then
-      ParseUsesUnitAmbient('builtin');
-
     if unitNeedsThreads and (not NoDefaultRtl) and (not TargetIsEspClass) then
       ParseUsesUnitAmbient('palthreadobj');
 

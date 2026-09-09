@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankS
 owner: frankS
 blocked-by: []
-summary: "RESOLVED 2026-09-09: the classification the ticket asked for is done and six of the twelve are FIXED. A per-name no-uses probe (fpc 3.2.2 vs pxx, one program each, scratchpad ub/gen.py) ran ELEVEN of the twelve -- Error was not probed, it is also a compiler-internal name and needs sysutils' exception hierarchy -- and ALL ELEVEN were real: fpc runs them, pxx answered `undefined variable`. MOVED into compiler/builtin/builtin.pas with pre-scan triggers: AllocMem DynArraySize SetString sLineBreak UTF8Decode UTF8Encode, all six now matching fpc line for line in a no-uses PROGRAM and in a no-uses UNIT. HELD BACK, five: LowerCase StrLen StrPas SysBackTraceStr StringOfChar -- not on merit, on the PIN: lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name something in that build calls deletes it from the only place that build can look (measured twice: `make lib-test` failed every unit with `undefined variable (LowerCase)`, then again with StringOfChar). The split criterion is exactly \"does something built with $(PXX_STABLE) call it\", and the finishing trigger is a pin carrying the new unit-level pre-scan plus a refreshed frozen builtin -- carried forward as [[task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision]]. The unit-level hole was a SECOND scan and a second hole: the program-level pre-scan reads only the PROGRAM's tokens, so a unit calling AllocMem with no `uses` still failed after the program case worked -- third instance of [[bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units]]. tarray13 advances from line 23 to line 67: DynArraySize is supplied, DynArrayIndex/DynArraySetLength still are not."
+summary: "RESOLVED 2026-09-09: the classification the ticket asked for is done and six of the twelve are FIXED. A per-name no-uses probe (fpc 3.2.2 vs pxx, one program each, scratchpad ub/gen.py) ran ELEVEN of the twelve -- Error was not probed, it is also a compiler-internal name and needs sysutils' exception hierarchy -- and ALL ELEVEN were real: fpc runs them, pxx answered `undefined variable`. MOVED into compiler/builtin/builtin.pas with pre-scan triggers: AllocMem DynArraySize SetString sLineBreak UTF8Decode UTF8Encode, all six now matching fpc line for line in a no-uses PROGRAM and in a no-uses UNIT. HELD BACK, five: LowerCase StrLen StrPas SysBackTraceStr StringOfChar -- not on merit, on the PIN: lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name something in that build calls deletes it from the only place that build can look (measured twice: `make lib-test` failed every unit with `undefined variable (LowerCase)`, then again with StringOfChar). The split criterion is exactly \"does something built with $(PXX_STABLE) call it\", and the finishing trigger is a pin carrying the new unit-level pre-scan plus a refreshed frozen builtin -- carried forward as [[task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision]]. CORRECTED 2026-09-09, same day: this summary claimed a SECOND hole at the unit level and there is none. A unit-level trigger was written and is now removed as dead code -- any `uses` clause already pulls `builtin`, and a unit is only ever compiled because a program `uses` it, so `builtin` is in scope before any unit is parsed. Measured by disabling each pull and rebuilding: without the unit-level BUILTIN pull the unit fixture still compiles and prints every row; without the unit-level MATH pull it is refused at `pi`. The math case is a real second hole because no `uses` clause pulls `math`; this one was not, and the lib-test failure that made me believe it was the FROZEN-BUILTIN problem below, misread. So this is NOT a third instance of [[bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units]]. tarray13 advances from line 23 to line 67: DynArraySize is supplied, DynArrayIndex/DynArraySetLength still are not."
 ---
 
 # Twelve names sit on the wrong side of our unit boundary — the second sign of a class whose first sign is fixed
@@ -211,3 +211,53 @@ which is the same criterion, read the other way round.
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0ffe185bb.
+
+## CORRECTION, 2026-09-09, hours after the resolution above (frankS)
+
+**The "two holes, two scans" half of this resolution was wrong and is retracted.
+The six names, the probe, the eleven-of-twelve classification and the pin-shaped
+split are unaffected.**
+
+I added a unit-level trigger (`unitNeedsBuiltinSys`, `pasparser_proc.inc`)
+believing a no-uses UNIT could not otherwise reach the moved names. It is dead
+code and has been removed.
+
+### The control I did not run, and what it says
+
+Disable one pull, rebuild, run `test_unit_ambient_system_surface`:
+
+| pull disabled | result |
+| --- | --- |
+| unit-level **builtin** | compiles, every row prints — **the clause could never fail** |
+| unit-level **math** | refused at `pi` — that clause is load-bearing |
+
+**Any `uses` clause pulls `builtin`** (the tkUses arm, which my own comment in
+`builtin.pas` already said), and a unit is only ever compiled because a program
+`uses` it — pxx refuses a standalone unit outright. So `builtin` is in scope
+before any unit is parsed. `math` is different: nothing pulls it for you, which
+is why the earlier fix needed a unit-level clause and this one did not.
+
+Confirmed independently with a name that has **no trigger in either scan**:
+`VariantTagName`, declared in `builtin.pas`, is refused from a no-uses PROGRAM
+and compiles fine from a no-uses UNIT.
+
+### Why I believed it
+
+`make lib-test` failed every unit with `undefined variable (LowerCase)` while
+only the program-level trigger existed, and I read that as the unit-level hole.
+It was the FROZEN-BUILTIN problem — the pinned build cannot see a name moved out
+of `lib/rtl` — which is the *other* finding in this ticket and is unaffected.
+**Two failures with the same error string, one cause, and I attributed it to the
+hypothesis I was already holding.** The fixture I then wrote to prove the
+unit-level hole passes with or without the clause, so it certified it.
+
+### What is left of the class claim
+
+Two instances, not three: the math/thread surface and the Classes enumerators.
+The shape is still "an ambient unit that nothing pulls for you", and the six
+names never had it — `builtin` is pulled by every `uses` clause there is.
+
+frank-coordinator's probe is what started this: it found `UniqueString` and
+`RunError` reaching a no-uses unit while sitting in the program scan only, and
+said plainly that it had NOT established they were the same mechanism. They
+were not, and the question it flagged is the one that turned out to matter.

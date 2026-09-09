@@ -339,6 +339,14 @@ function PXXEntropy64: Int64;
   Each name also needs a PRE-SCAN TRIGGER in pasparser_prog.inc: this unit is
   dragged in by a token scan, and a builtin that is declared but never dragged
   in is `undefined variable` -- which is the very symptom being fixed.
+
+  ONE TRIGGER, NOT TWO. A matching unit-level trigger was written in
+  pasparser_proc.inc and REMOVED the same day as dead code: any `uses` clause
+  already pulls this unit, and a unit is only ever compiled because a program
+  `uses` it, so nothing that reaches a unit can arrive without `builtin` in
+  scope. The math/thread triggers there are a different case -- they pull
+  `math` and `palthreadobj`, which no `uses` clause pulls for you. See the note
+  in pasparser_proc.inc where the clause used to be.
   task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 { FPC System.AllocMem: GetMem plus a zero fill. NOT a GetMem alias -- FPC
