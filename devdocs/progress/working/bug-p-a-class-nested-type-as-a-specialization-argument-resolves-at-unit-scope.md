@@ -724,3 +724,95 @@ two-population reading above is what is left, and `:144` is the candidate.
 
 **The residual question has an owner and it is this ticket**, until the `nsub`
 measurement re-lanes it.
+
+## MEASURED — AND MY HYPOTHESIS WAS WRONG. IT IS `:157`, AND `nsub` IS 2
+
+`PXXDBG=p.nspec:TEnumerator,p.mint:TEnumerator` over the Collections driver,
+binary `70a22d6332f3`, 7m26s. **The row is present** (checked before its value
+was read — an absent row and a zero read identically in a grep):
+
+```
+p.nspec reg alias=TEnumerator$PT under=TPointersCollection
+        tmplName=TEnumerableWithPointers  nsub=2  subs=T->UInt32 PT->PT
+        ts=14941 tc=32
+        head=object strict private type TLocalEnumerable specialize TEnumerable
+        at=GetEnumerator specialize TEnumerator PT
+```
+
+**I predicted `:144` with `nsub=0`, declaration time, and both halves are
+refuted.** `nsub=2`: a substitution WAS in force. The site is `:152`
+(`GetEnumerator: TEnumerator<PT>` inside `TCustomPointersCollection<T, PT>`),
+reached from `:157`, and the defect is one field of that line —
+
+    subs=T->UInt32  PT->PT
+
+**`PT` is bound to itself.** The specialization row was built with the literal
+spelling as its concrete argument, so this is not a scan reading a stale hoist
+table; the row was already wrong when it was registered.
+
+### The root is one level up, and the corpus row is its consequence
+
+```pascal
+  TEnumerable<T> = class abstract              // :129
+  public type
+    PT = ^T;                                   // :131
+  ...
+  TEnumerableWithPointers<T> = class(TEnumerable<T>)          // :155
+  strict private type
+    TPointersCollection = TCustomPointersCollection<T, PT>;   // :157   <-- HERE
+```
+
+`PT` at `:157` is **inherited from the generic ancestor** and used as a
+specialization argument in a **nested type ALIAS**. `TPointersCollection` is
+specialized with `PT` unresolved; only then is its body scanned, and
+`TEnumerator<PT>` inherits the broken substitution. So the bare
+`alias=TEnumerator$PT` is not a `TEnumerator` problem at all — chasing which of
+eight `TEnumerator<PT>` sites produced it was chasing a symptom.
+
+### 21-line repro, under a second, fpc 3.2.2 prints `na 1`
+
+```pascal
+program na;
+{$mode delphi}
+type
+  TBase<T> = class
+  public type
+    PT = ^T;
+  end;
+  TBox<A, B> = class
+    Q: B;
+  end;
+  TDeriv<T> = class(TBase<T>)
+  strict private type
+    TColl = TBox<T, PT>;
+  private
+    function G: TColl;
+  end;
+function TDeriv<T>.G: TColl; begin Result := nil; end;
+var d: TDeriv<LongInt>;
+begin
+  d := TDeriv<LongInt>.Create;
+  WriteLn('na ', Ord(d.G = nil));
+end.
+```
+
+pxx: `pascal26:9: error: unknown type: PT`, `near: PT > ; class Q : >>> PT ; end`
+— the materialised `TBox` body with `B` substituted by the literal spelling.
+
+**A FOURTH DOOR, and the reduction proves it is a different one from the three
+already fixed.** `p.nspec` prints NO row for the `TBox<T, PT>` group at all, so
+`ScanRangeForNestedSpecs` — and therefore `NestedSpecArg`, the only reader of
+the hoist table — never sees it. The argument is resolved on the
+`DelphiRewriteGenericUses` minting path instead, which is door A's territory,
+but door A handles a NON-GENERIC class's own nested type; this is a GENERIC
+class's INHERITED nested type appearing in a nested type ALIAS whose RHS is
+itself a specialization.
+
+So the remaining work here is **not** more ancestor-walking in
+`CollectHoistCandidates` (door C already reaches `TBase` from `TDeriv` — the
+walk is not the failing part) and **not** anything in the hoist tables. It is
+that this argument never reaches the reader that consults them.
+
+**What this retires:** the eight-site question, and with it the last of the
+`TEnumerator$PT` line of enquiry. The measurement cost seven minutes and the
+repro it produced costs under a second, which is the whole return.

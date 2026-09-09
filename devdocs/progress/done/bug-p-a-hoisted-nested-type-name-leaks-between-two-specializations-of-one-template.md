@@ -343,6 +343,19 @@ attribute a delta to a RANGE before attributing it to yourself, in the
 unflattering direction too — that is the direction where finding a culprit
 *ends* the search.
 
+**AND THIS CASE IS ONE STEP EARLIER THAN EITHER OF THOSE RULES, WHICH BOTH
+ASSUME THE DELTA IS A DELTA. DIFF THE ROW SET, NEVER THE COUNT.** 11 → 14 reads
+as +3 and is actually **−2 / +1**: two rows cleared and one appeared, across a
+range three seats were burning at once. No amount of careful reasoning about who
+landed what recovers that from the totals, in either direction, because the
+count does not merely misattribute the cause — **it destroys the evidence that
+there were several causes at all.** A corpus under simultaneous work produces
+COMPENSATING movements by construction, and the count is the one view in which
+they cancel. Keep the row list, `diff` it, and quote the set difference; the
+number is a summary of the thing you actually needed to look at.
+(frankS's framing, from the same exchange — the rule as landed was still too
+weak, and this is the correction.)
+
 **So the retirement stands and is now positive rather than merely unproven.**
 The single bare `alias=TEnumerator$PT` is not this defect: this defect is fixed
 and that mint is unchanged. Where it does come from is recorded in
