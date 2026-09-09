@@ -318,6 +318,13 @@ const
   VT_OBJ_FIRST = 7;
   VT_OBJ_LAST  = 10;
   VT_STRING_TAG = 6;
+  { MIRRORS defs.inc's VT_INTF_TAG. Deliberately OUTSIDE the object range: an
+    interface payload is released through `_Release` in the IMT, not through the
+    heap-block protocol that range uses -- and PXXObjRelease would be a silent
+    NO-OP on it, because a manual-lifetime Pascal instance fails the [p-8]
+    population-tag guard. Its own arm, one line below each range test. }
+  VT_INTF_TAG   = 14;
+  VT_EMPTY_TAG  = 0;    { MIRRORS defs.inc's VT_EMPTY -- an unassigned slot }
   VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
   VT_PROMO_LAST  = 8199;
 
@@ -546,6 +553,8 @@ function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
+procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
+procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
 procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
@@ -5639,7 +5648,9 @@ begin
      ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PMachineWord(Int64(v) + 8)^))
   else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRelease(Pointer(PMachineWord(Int64(v) + 8)^));
+    PXXObjRelease(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if PMachineWord(v)^ = VT_INTF_TAG then
+    PXXIntfReleaseAny(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
 
 { Retain ONE promo-int element in place: an inline-tier slot owns nothing, a
@@ -5665,8 +5676,89 @@ begin
      ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrIncRef(Pointer(PMachineWord(Int64(v) + 8)^))
   else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRetain(Pointer(PMachineWord(Int64(v) + 8)^));
+    PXXObjRetain(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if PMachineWord(v)^ = VT_INTF_TAG then
+    PXXIntfAddRefAny(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
+
+procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
+{ Box an interface value into a variant slot: release whatever the slot held,
+  write {VT_INTF_TAG, instance}, and take the +1.
+
+  A CALL rather than an inline boxing arm in seven backends, and that is the
+  point: the interface case cannot be recognised from a TTypeKind (an interface
+  is tyRecord there, indistinguishable from a plain record, which must keep
+  refusing), so it is recognised in ir.inc's assignment lowering where the AST
+  node is still in hand -- and lowering it to this call means no backend needs a
+  boxing edit at all. The CLEAR side still needs its arm in each inline emitter,
+  because those emitters test the tag themselves.
+
+  Retain AFTER the clear is safe here in the way the variant-to-variant copy's
+  retain-before-release is not: `inst` is a bare instance pointer already held
+  by the source interface variable, so it cannot be freed by clearing v -- v's
+  old payload is a different value, or the same one holding a reference the
+  clear brings from 2 to 1. Self-assignment through a variant goes through
+  PXXVarRetain/PXXVarReleasePayload, not here. }
+begin
+  if v = nil then Exit;
+  PXXVarReleasePayload(v);
+  PMachineWord(v)^ := VT_INTF_TAG;
+  PMachineWord(Int64(v) + 8)^ := PtrUInt(inst);
+  if inst <> nil then PXXIntfAddRefAny(inst);
+end;
+
+procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
+{ `g := v` where g is an interface and v a Variant: ARC-correct assignment of a
+  boxed interface out of a variant slot.
+
+  RETAIN THE SOURCE BEFORE RELEASING THE DESTINATION, which is the same order
+  PXXIntfAssign uses and for the same reason: dest may already hold the very
+  object v does, and releasing first can take it to zero and free it before the
+  store. The order costs one extra pair of calls on the aliased case and is the
+  only one that is correct.
+
+  AN EMPTY SLOT IS NIL AND ANY OTHER PAYLOAD IS A RUNTIME ERROR, which is where
+  this stopped being "return nil and be honest". Measured against fpc 3.2.2,
+  2026-09-09, on `h := v` for an interface h:
+
+      v := Unassigned   ->  h = nil, no exception
+      v := Null         ->  EVariantTypeCastError (Null into Unknown)
+      v := 'abc' / 5    ->  EVariantTypeCastError
+
+  So FPC splits the population, and it splits it the way CLAUDE.md's "ask what
+  the source MEANT" argues for: an unset variant read into an interface is a
+  program saying "nothing here", and a variant holding a STRING read into an
+  interface is a program that is already wrong. Returning nil for the second
+  half is the silent answer -- the mistake surfaces later, as a nil dereference
+  at the first method call, arbitrarily far from the assignment that caused it.
+  Halt(220) is FPC's own "invalid variant typecast" code and it names the
+  ACTUAL error at the ACTUAL line. This unit is a leaf with no exception
+  machinery (see PXXHdrKindCheck's Halt(204) for the same shape), so the halt is
+  the diagnostic rather than a raise; a raise belongs here the day builtinheap
+  can reach one.
+
+  RETAINING NIL AND RELEASING THE OLD VALUE STILL HAPPENS FIRST on the empty
+  path -- `h := Unassigned` must drop h's reference, not leak it.
+  bug-p-a-variant-cannot-hold-an-interface }
+var inst, old: Pointer;
+    tag: PtrUInt;
+begin
+  if dest = nil then Exit;
+  inst := nil;
+  if v <> nil then
+  begin
+    tag := PMachineWord(v)^;
+    if tag = VT_INTF_TAG then
+      inst := Pointer(PMachineWord(Int64(v) + 8)^)
+    else if tag <> VT_EMPTY_TAG then
+      Halt(220);   { invalid variant typecast -- see the header }
+  end;
+  if inst <> nil then PXXIntfAddRefAny(inst);
+  old := Pointer(PMachineWord(dest)^);
+  if old <> nil then PXXIntfReleaseAny(old);
+  PMachineWord(dest)^ := PtrUInt(inst);
+end;
+
 
 { ---- Float -> text writers (portable bodies for the cross targets, used in
   place of the per-arch EmitWriteFloat* emitters; x86-64 keeps its native

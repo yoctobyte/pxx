@@ -8541,6 +8541,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ifcom26 "$$($(TESTTMP)/test_ifcom26)" "$$(cat test/test_intf_com_flag.expected)"
 	./$(COMPILER) test/test_intf_com_flag_corba.pas $(TESTTMP)/test_ifcorba26
 	tools/expect_same.sh test_ifcorba26 "$$($(TESTTMP)/test_ifcorba26)" "$$(cat test/test_intf_com_flag_corba.expected)"
+	# A Variant HOLDS an interface, and holding one is a reference. .expected is
+	# byte-identical to fpc 3.2.2 on all eight rows (verified 2026-09-09), and
+	# every row prints the destructor count because neither direction of this
+	# defect can fail a value check alone: no retain = an object that dies too
+	# early, no release = one that never dies. Also run on i386/aarch64/arm32/
+	# riscv32 under qemu -- aarch64 was the one that leaked, its variant clear
+	# and retain being hand-written and needing their own VT_INTF arm.
+	./$(COMPILER) test/test_variant_holds_interface.pas $(TESTTMP)/test_vintf26
+	tools/expect_same.sh test_vintf26 "$$($(TESTTMP)/test_vintf26)" "$$(cat test/test_variant_holds_interface.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always

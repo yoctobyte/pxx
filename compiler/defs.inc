@@ -1628,6 +1628,36 @@ const
     reason VT_CLASSREF_TAG does. bug-n-a-type-name-is-not-a-first-class-value }
   VT_BTYPE_TAG = 13;
 
+  { payload = the INSTANCE pointer of a COM/ARC interface value. An interface
+    value IS one machine word -- FPC's ABI, and SizeOf(IIntf) = 8 in pxx and in
+    fpc 3.2.2 -- so it fits the existing payload exactly and nothing widens.
+
+    ITS OWN TAG, DELIBERATELY OUTSIDE VT_OBJ_FIRST..VT_OBJ_LAST, and that is the
+    whole design decision. Those tags are released through the HEAP-BLOCK
+    protocol (rc at [p-16], guarded by the [p-8] population tag). An interface
+    is released through `_Release` in the IMT, which runs the class's own
+    destructor logic. Putting this tag inside the range would call the wrong
+    release on every boxed interface -- a manual-lifetime Pascal instance's
+    population tag makes PXXObjRelease a NO-OP, so the refcount would simply
+    never come down and the object would never be freed. Silent, and only
+    visible as RSS, which is the failure mode that range's own note describes.
+
+    The slot has room for {tag, instance} and NOT for an interface id, which is
+    why PXXIntfComIMTOf exists: it finds a REFCOUNTED IMT from the instance
+    alone, and refuses (nil) rather than guessing when the class implements only
+    non-refcounted interfaces. See RTTI_IF_ID_COM above for why guessing is not
+    available -- under {$interfaces corba} the first three IMT slots are the
+    interface's own methods.
+
+    The boxing itself is NOT a VariantTagForTk arm: that function keys on
+    TTypeKind alone and an interface is tyRecord there, indistinguishable from a
+    plain record, which must keep refusing. It is recognised in ir.inc's
+    assignment lowering, where the AST node is still in hand and
+    NodeIsInterface can answer, and lowered to a PXXVarSetIntf call -- which is
+    also why no backend needs a boxing edit.
+    bug-p-a-variant-cannot-hold-an-interface }
+  VT_INTF_TAG = 14;
+
   { Bounds of the NESTED for-target tables in pyparser.inc. Named constants, not
     High() over the array: this dialect's High() on the inner dimension of a 2-D
     array does not answer the inner bound, and a nested target of two names was
@@ -6210,6 +6240,8 @@ var
                                    population-tag guard + finalizer hook live in the
                                    Pascal proc (feature-nilpy-object-reclamation) }
   ObjReleaseBlobAddr : Integer;  { same, over PXXObjRelease }
+  IntfRetainBlobAddr : Integer;  { same, over PXXIntfAddRefAny  (VT_INTF_TAG payloads) }
+  IntfReleaseBlobAddr: Integer;  { same, over PXXIntfReleaseAny (VT_INTF_TAG payloads) }
   { The variant clear/retain pair, out of line for the same reason the
     ansistring and object pairs are. It used to be emitted INLINE at every site
     -- ~96 bytes x 9,859 sites on a zero-byte .npy, i.e. ~42% of the whole

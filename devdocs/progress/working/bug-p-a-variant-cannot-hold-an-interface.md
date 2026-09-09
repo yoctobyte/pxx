@@ -5,10 +5,10 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankH
 created: 2026-08-26
-summary: "`v := ifc` still does not compile (`Variant := this type not yet supported`). TWO of the three premises this ticket was ranked on are now retired and the third is MEASURED. (1) The 16-byte fat pointer is gone -- an interface value is ONE WORD, SizeOf(IIntf)=8 in pxx and fpc, so no payload widening (frankD). (2) The five-copy VariantTagForTk collapse is LANDED at a770a1dd6 -- and the interface arm was never going to live there anyway, because that function keys on TTypeKind alone and an interface is tyRecord, so the case must be recognised in ir.inc lowering while the recId is in hand (frankD). (3) THE ifaceId QUESTION IS ANSWERED, 2026-09-09: for a COM class every IMT carries the same _AddRef/_Release pair so any entry would do, but under {$interfaces corba} on a plain TObject descendant IMT slots 0/1/2 are the interface's OWN first three methods -- a raw walk calls a user method as _Release, measured, with no diagnostic. So the enabling piece landed here: RTTI_IF_ID_COM (bit 24) flags refcounted entries, PXXIntfComIMTOf/AddRefAny/ReleaseAny let a variant slot retain and release from the INSTANCE alone with the 16-byte layout untouched, and nil is a refusal rather than a miss. Bit 24 and not bit 32 because PMachineWord is four bytes on i386, where the first version was silently dead. LEFT: the tag and its lowering arm, the six emitters plus PXXVarClear/PXXVarRetain/PyVarSlotIsObj/ClearVariantSlot, and reading back."
+summary: "DONE. A Variant holds an interface, and holding one is a REFERENCE: `v := ifc` boxes with an _AddRef (VT_INTF_TAG = 14, deliberately OUTSIDE VT_OBJ_FIRST..VT_OBJ_LAST because it releases through the IMT and not the heap-block protocol), the variant clear and retain paths release and retain it, `g := v` reads it back ARC-correctly, an EMPTY slot reads back as nil, and any other payload halts 220 -- fpc-identical on all eight rows of test_variant_holds_interface, byte for byte, and identical again on i386/aarch64/arm32/riscv32 under qemu. Enabling piece landed first at 8d68c7736 (RTTI_IF_ID_COM, bit 24, flags the REFCOUNTED interface entries so an id-less AddRef/Release pair cannot call a user method). Known gaps recorded in place, not silent: promocore ClearVariantSlot drops the tag without a _Release (leaf unit, no hook, no repro that reaches it -- the same standing gap as VT_OBJECT), and `IFoo(v)` SPELLED AS A CAST still segfaults, which is bug-p-a-variant-typecast-to-an-interface-segfaults and not this."
 ---
 
 # `v := ifc`
@@ -262,3 +262,99 @@ only print if the masked compare still matches.
 check sees the missing-release direction and is silent on double-free, while a
 variant that outlives its last real reference and is then read fails loudly on a
 double-free and is silent under a leak. Neither instrument alone covers it.
+
+
+## 2026-09-09 (frankH) — DONE, and the two arms that were never entered
+
+Landed: the tag, the boxing arm, the read-back arm, the ARC pairs in every
+emitter that has one, the guard test, and the cross-target verification.
+
+### What was actually hard: BOTH lowering arms were written correctly and then never reached
+
+The boxing half went in on the first try. The read-back half compiled clean and
+did nothing, **twice, from two different causes**, and neither cause errors:
+
+1. **First placement — the variant-SOURCE unboxing block.** That block is
+   reached only after the interface-target arms and it keys on
+   `IRVariantUnboxKind`, which answers about SCALAR kinds; an interface is
+   `tyRecord` there, indistinguishable from a plain record, which must keep
+   refusing. `g := v` still yielded nil.
+2. **Second placement — beside the other interface-target arms, but BELOW the
+   `interface := nil` arm.** That arm is keyed NEGATIVELY: *"the RHS is neither
+   a class nor a record, so it can only be nil"*. A variant RHS is neither, so
+   it claimed `g := v` and lowered it to release-then-zero.
+
+The instrument that separated them was a `WriteLn` probe at the TOP of the
+`AN_ASSIGN` lowering printing `lhsTk`, `rhsTk` and `ASTKind` for EVERY
+assignment — not beside the arm, where it printed one line about a different
+statement (`rhsTk=6`, tyClass: only `f := TImpl.Create` got that far) and said
+nothing about where `g := w` had gone. The IR dump named the consequence
+(`call PXXIntfRelease` then `default_mem ival=8`) and the probe named the arm.
+
+**A negative kind test is a claim about every kind nobody has enumerated yet.**
+That is the reusable half, and it is why the new arm carries a comment saying it
+must stay above the nil arm.
+
+### And one that was entered on four targets out of five
+
+`test_variant_holds_interface` printed `destroyed=0` where the last reference
+drops — on **aarch64 only**. x86-64, i386, arm32 and riscv32 were identical to
+FPC. The cross targets other than aarch64 release through the portable Pascal
+`PXXVarReleasePayload`, which the tag arm already covered; **x86-64 and aarch64
+hand-write their own clear and retain**, and only x86-64 had been given the
+VT_INTF arm. This is exactly the failure mode defs.inc predicts for that range —
+no crash, no wrong value, only a refcount that never moves — and it was visible
+here only because the test counts destructor calls rather than reading values.
+Control: a plain interface ARC program with no variant in it destroyed
+correctly on aarch64 throughout, so the leak was the variant path and not
+interface ARC.
+
+### The refusal is not nil, because FPC splits the population and it is right to
+
+Measured against fpc 3.2.2 for `h := v` with h an interface:
+
+    v := Unassigned   ->  h = nil, no exception
+    v := Null         ->  EVariantTypeCastError
+    v := 'abc' / 5    ->  EVariantTypeCastError
+
+An unset variant read into an interface is a program saying "nothing here"; a
+variant holding a string read into an interface is a program that is already
+wrong. Returning nil for the second half is the silent answer — the mistake
+surfaces later as a nil dereference arbitrarily far from the assignment. So
+`PXXIntfFromVariant` yields nil for VT_EMPTY and `Halt(220)` (FPC's own
+invalid-variant-typecast code) for anything else. builtinheap is a leaf with no
+exception machinery, so the halt is the diagnostic rather than a raise; a raise
+belongs there the day it can reach one.
+
+### Where the arms are
+
+| | |
+| --- | --- |
+| tag + COM-id mask | `compiler/defs.inc` (`VT_INTF_TAG`, `RTTI_IF_ID_COM`) |
+| boxing / read-back lowering | `compiler/ir.inc`, AN_ASSIGN, above the `interface := nil` arm |
+| runtime | `compiler/builtin/builtinheap.pas` — `PXXVarSetIntf`, `PXXIntfFromVariant`, `PXXIntfComIMTOf/AddRefAny/ReleaseAny`, arms in `PXXVarReleasePayload`/`PXXVarRetain` |
+| x86-64 emitters | `compiler/ir_codegen.inc` — the two blobs, arms in `EmitVariantClearBody`/`EmitVariantRetainBody` |
+| aarch64 emitters | `compiler/ir_codegen_aarch64.inc` — `EmitIntfRetainA64`/`EmitIntfReleaseA64`, arms in both A64 bodies |
+| registration | `compiler/pasparser_prog.inc` — the id-less pair in the SHARED runtime-proc routine, not only in ParseProgram's superset |
+
+That last row is its own small lesson: the blobs are emitted by
+`EmitAnsiStringRuntime` for **every driver**, so registering their callees only
+in ParseProgram's Pascal-side superset killed NilPy — `compiler error:
+PXXIntfAddRefAny not registered before EmitAnsiStringRuntime`, on a program that
+cannot contain an interface. gate.sh quick's NilPy canary caught it; the Pascal
+gate could not, and neither could any amount of testing the feature itself.
+
+### Left open, on purpose
+
+- **`IFoo(v)` spelled as a CAST segfaults.** `g := v` is correct; the cast form
+  goes through the identifier-cast path, which
+  [[bug-p-a-typecast-of-a-variant-reinterprets-it-instead-of-converting]]
+  deliberately scoped to scalars. Filed as
+  [[bug-p-a-variant-typecast-to-an-interface-segfaults]].
+- **promocore's `ClearVariantSlot`** drops a VT_INTF_TAG payload without a
+  `_Release`, joining the standing VT_OBJECT gap on identical terms (leaf unit,
+  no hook, no repro that reaches it). Recorded in that routine's header so the
+  omission reads as the known gap it is.
+- **pylib's `PyVarSlotIsObj`** deliberately does not list the tag: NilPy has no
+  interfaces, so it cannot reach a Python slot — and widening that RANGE would
+  be a silent no-op, not a fix. Recorded there too.

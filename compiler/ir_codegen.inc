@@ -4336,6 +4336,17 @@ begin
   ObjReleaseBlobAddr := CodeLen;
   EmitObjBlobBody('PXXObjRelease');
 
+  { The same wrapper shape over the INTERFACE pair. A boxed interface
+    (VT_INTF_TAG) is refcounted through `_Release` in the IMT, NOT through the
+    heap-block protocol the object blobs use -- and PXXObjRelease would be a
+    SILENT no-op on one, because a manual-lifetime Pascal instance fails the
+    [p-8] population guard. Same argument shape (rax = the instance), so the
+    same wrapper serves. bug-p-a-variant-cannot-hold-an-interface }
+  IntfRetainBlobAddr := CodeLen;
+  EmitObjBlobBody('PXXIntfAddRefAny');
+  IntfReleaseBlobAddr := CodeLen;
+  EmitObjBlobBody('PXXIntfReleaseAny');
+
   AnsiStrUniqueAddr := CodeLen;
   EmitAsmX64(['push rbx', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
 
@@ -4651,7 +4662,7 @@ procedure EmitVariantClearBody(zeroSlot: Boolean);
   read, so `v := v` came back Empty. The zeroing was never wanted here — the
   copy overwrites those bytes on the next instruction.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -4673,6 +4684,13 @@ begin
   EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
   EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
   Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
+  { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
+    range above: widening the range would route it to PXXObjRelease/Retain,
+    which no-op on a manual-lifetime instance, so the refcount would simply
+    never move -- no crash, no wrong value, only RSS. See VT_INTF_TAG in
+    defs.inc; it is refcounted through _Release/_AddRef in the IMT. }
+  EmitAsmX64(['cmp rcx, %', VT_INTF_TAG]);
+  EmitB($0F); EmitB($84); pIntf := CodeLen; EmitI32(0);  { je intf }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -4686,6 +4704,11 @@ begin
   Patch32(pObj, CodeLen - (pObj + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjReleaseBlobAddr);
+  EmitB($E9); pSkip2 := CodeLen; EmitI32(0);             { jmp done }
+  Patch32(pIntf, CodeLen - (pIntf + 4));                 { intf: }
+  EmitAsmX64(['mov rax, [rax+8]']);
+  IREmitCodeCall(IntfReleaseBlobAddr);
+  Patch32(pSkip2, CodeLen - (pSkip2 + 4));
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
@@ -4803,7 +4826,7 @@ end;
 procedure EmitVariantRetainBody;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClearBody for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip, pSkip2, pIntf: Integer;
 begin
   { Same managed-payload test as EmitVariantClearBody — see there, including the
     object-tag arm and its population-tag guard. }
@@ -4818,6 +4841,13 @@ begin
   EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
   EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
   Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
+  { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
+    range above: widening the range would route it to PXXObjRelease/Retain,
+    which no-op on a manual-lifetime instance, so the refcount would simply
+    never move -- no crash, no wrong value, only RSS. See VT_INTF_TAG in
+    defs.inc; it is refcounted through _Release/_AddRef in the IMT. }
+  EmitAsmX64(['cmp rcx, %', VT_INTF_TAG]);
+  EmitB($0F); EmitB($84); pIntf := CodeLen; EmitI32(0);  { je intf }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -4831,6 +4861,11 @@ begin
   Patch32(pObj, CodeLen - (pObj + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjRetainBlobAddr);
+  EmitB($E9); pSkip2 := CodeLen; EmitI32(0);             { jmp done }
+  Patch32(pIntf, CodeLen - (pIntf + 4));                 { intf: }
+  EmitAsmX64(['mov rax, [rax+8]']);
+  IREmitCodeCall(IntfRetainBlobAddr);
+  Patch32(pSkip2, CodeLen - (pSkip2 + 4));
   Patch32(pDone, CodeLen - (pDone + 4));
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));

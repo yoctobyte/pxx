@@ -1546,6 +1546,23 @@ begin
   IRPromoCall := IRAppendCall(cpi, arg0, -1, Ord(retTk));
 end;
 
+function IRRtCall2(const fname: AnsiString; a0, a1: Integer): Integer;
+{ Call a two-pointer-argument builtinheap runtime helper as a STATEMENT. Its own
+  function rather than IRPromoCall because that one's not-found diagnostic names
+  the promocore unit, and a helper that lives in builtinheap would then be
+  reported as a missing promocore -- a true-sounding message about the wrong
+  unit is worse than none. }
+var cpi, arg0, arg1: Integer;
+begin
+  cpi := FindProc(fname);
+  if cpi < 0 then
+    Error('runtime helper ' + fname + ' not found (builtinheap unit not loaded)');
+  arg0 := IRAppend(IR_ARG, a0, -1, -1, 0, Ord(tyPointer));
+  arg1 := IRAppend(IR_ARG, a1, -1, -1, 0, Ord(tyPointer));
+  IRB[arg0] := arg1;
+  IRRtCall2 := IRAppendCall(cpi, arg0, -1, Ord(tyUnknown));
+end;
+
 { Three- and four-argument variants of IRPromoCall. Same linked IR_ARG chain
   (IRB = next argument) — see IRPromoCall for why that link is load-bearing. }
 function IRPromoCall3(const fname: AnsiString; a0, a1, a2: Integer; retTk: TTypeKind): Integer;
@@ -14126,6 +14143,42 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                      UClsIsInterface[varIdx - REC_UCLASS_BASE] and
                      UClsIsComInterface[varIdx - REC_UCLASS_BASE] and
                      (not lhsWholeArray);
+        if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant) and
+           (FindProc('PXXIntfFromVariant') >= 0) then
+        begin
+          { `g := v`, the read-back half of `v := ifc`. It belongs HERE, beside
+            the other interface-target arms, and not in the variant-source
+            unboxing block further down: that block is reached only after these,
+            and it asks IRVariantUnboxKind, which answers about SCALAR kinds. An
+            interface is tyRecord to that predicate — the kind a variant payload
+            may never stand in for, which is right for a plain record and wrong
+            for this one.
+
+            The first version of this arm WAS in that block and compiled clean
+            and did nothing: the assignment never reached it, so `g := v` still
+            yielded nil. A lowering arm that is never entered fails exactly like
+            one that is missing.
+
+            AND IT MUST STAY ABOVE THE `interface := nil` ARM BELOW, which is
+            keyed NEGATIVELY — "the RHS is neither a class nor a record, so it
+            can only be nil". A variant RHS is neither, so that arm claimed
+            `g := v` and lowered it to release-then-zero: visible in the IR dump
+            as a PXXIntfRelease call followed by `default_mem ival=8`, i.e. g
+            correctly released and then deliberately blanked. Placed second,
+            this arm compiled clean and did nothing FOR THE SECOND TIME, from a
+            different cause than the first. A negative kind test is a claim
+            about every kind nobody has enumerated yet.
+
+            PXXIntfFromVariant retains before it releases (dest may already hold
+            the object v does) and yields NIL for a slot holding anything else,
+            rather than reinterpreting eight bytes that are not an instance.
+            bug-p-a-variant-cannot-hold-an-interface }
+          Result := IRRtCall2('PXXIntfFromVariant', IRLowerAddress(ASTLeft[node]),
+                              IRLowerAddress(ASTRight[node]));
+          IRMarkStatementNode(Result);
+          Exit;
+        end;
         { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
           pointer/ordinal nil, not a class or interface, so it never reaches the
           record-copy path (which would dereference a bogus source). }
@@ -14697,6 +14750,32 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           else
             right := IRLowerAST(ASTRight[node]);
           Result := IRAppend(IR_VAR_STORE, leftAddr, right, Ord(tyVariant), 0, Ord(tyVariant));
+        end
+        else if NodeIsInterface(ASTRight[node]) and (FindProc('PXXVarSetIntf') >= 0) then
+        begin
+          { `v := ifc`. HERE and not in a backend tag table, because the
+            discrimination is not available there: VariantTagForTk keys on
+            TTypeKind alone and an interface is tyRecord, indistinguishable from
+            a plain record, which must keep refusing. At this point the AST node
+            is still in hand and NodeIsInterface can answer.
+
+            An interface value IS one machine word -- the instance pointer,
+            FPC's ABI -- so it fits the payload with nothing widened, and the
+            work is entirely lifetime: PXXVarSetIntf clears the old payload,
+            stamps VT_INTF_TAG and takes the +1 through PXXIntfComIMTOf, which
+            finds a REFCOUNTED IMT from the instance alone. Lowering to a call
+            rather than an inline arm is what keeps every backend's boxing
+            untouched; the CLEAR side still needs its own arm in the two inline
+            emitters, since those test the tag themselves.
+            The FindProc guard is the ESP arm: those backends cannot lower the
+            IMT's indirect call, so the ARC helpers are not registered there and
+            this arm declines rather than emitting a call to a name that does
+            not exist. The program then gets the pre-existing refusal, which is
+            the honest answer where the mechanism is absent.
+            bug-p-a-variant-cannot-hold-an-interface }
+          Result := IRRtCall2('PXXVarSetIntf', leftAddr,
+                              IRIntfInstanceWord(ASTRight[node]));
+          IRMarkStatementNode(Result);
         end
         else
         begin

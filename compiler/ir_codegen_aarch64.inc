@@ -236,6 +236,33 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitIntfRetainA64;
+{ x0 = interface INSTANCE pointer (nil ok). x0 clobbered.
+
+  Not EmitObjRetainA64 with a wider tag range: a boxed interface is refcounted
+  through _AddRef/_Release in the IMT, and PXXObjRetain would be a SILENT no-op
+  on a manual-lifetime Pascal instance (it fails the [p-8] population guard), so
+  the refcount would simply never move. Measured on this target, 2026-09-09:
+  with only the x86-64 arms in place, test_variant_holds_interface printed
+  `destroyed=0` on the row where the last reference drops -- every other row
+  identical to x86-64 and i386, and the object never freed.
+  bug-p-a-variant-cannot-hold-an-interface }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXIntfAddRefAny');
+  if procIdx < 0 then Error('compiler error: PXXIntfAddRefAny not found');
+  EmitCallProc(procIdx);
+end;
+
+procedure EmitIntfReleaseA64;
+{ x0 = interface INSTANCE pointer (nil ok). x0 clobbered. See EmitIntfRetainA64. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXIntfReleaseAny');
+  if procIdx < 0 then Error('compiler error: PXXIntfReleaseAny not found');
+  EmitCallProc(procIdx);
+end;
+
 procedure EmitStrDecRefA64;
 { x0 = managed-string handle. x0 clobbered. }
 var procIdx: Integer;
@@ -734,7 +761,7 @@ procedure EmitVariantClearA64Ex(zeroSlot: Boolean);
   bytes, and zeroing dest when dest IS src wiped the bytes the copy was about to
   read, so `v := v` came back Empty.
   bug-a-a-variant-assigned-to-itself-becomes-empty }
-var pDone, pRel, pObj, pObj2, pSkip: Integer;
+var pDone, pRel, pObj, pObj2, pSkip, pIntf, pSkip2: Integer;
 begin
   { Managed payload = VT_STRING, or any tag in the promotable-int block (a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -764,6 +791,12 @@ begin
   EmitI32($5400000D);                                           { b.le .objchk }
   { .notobj }
   Patch32(pObj2, $5400000B or (((CodeLen - pObj2) div 4) and $7FFFF) shl 5);
+  { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
+    range above -- see EmitIntfRetainA64 for why widening the range is a silent
+    leak rather than a crash. bug-p-a-variant-cannot-hold-an-interface }
+  EmitI32($F100381F);                                           { cmp x0, #14 (VT_INTF_TAG) }
+  pIntf := CodeLen;
+  EmitI32($54000000);                                           { b.eq .intf }
   EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
   EmitI32($5400000B);                                           { b.lt .done }
@@ -778,9 +811,17 @@ begin
   EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitObjReleaseA64;
+  pSkip2 := CodeLen;
+  EmitI32($14000000);                                           { b .done }
+  { .intf }
+  Patch32(pIntf, $54000000 or (((CodeLen - pIntf) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] (addr) }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitIntfReleaseA64;
   { .done }
   Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
   Patch32(pSkip, $14000000 or (((CodeLen - pSkip) div 4) and $03FFFFFF));
+  Patch32(pSkip2, $14000000 or (((CodeLen - pSkip2) div 4) and $03FFFFFF));
   if zeroSlot then
   begin
     EmitI32($F94003E0);                                         { ldr x0, [sp] }
@@ -802,7 +843,7 @@ begin
 end;
 
 procedure EmitVariantRetainA64;
-var pDone, pRel, pObj, pObj2, pSkip: Integer;
+var pDone, pRel, pObj, pObj2, pSkip, pIntf, pSkip2: Integer;
 begin
   { Same managed-payload test as EmitVariantClearA64, object arm included — see
     there. The two MUST agree: a slot that retains an object and does not
@@ -820,6 +861,12 @@ begin
   EmitI32($5400000D);                                           { b.le .objchk }
   { .notobj }
   Patch32(pObj2, $5400000B or (((CodeLen - pObj2) div 4) and $7FFFF) shl 5);
+  { A BOXED INTERFACE gets its OWN equality test rather than an extension of the
+    range above -- see EmitIntfRetainA64 for why widening the range is a silent
+    leak rather than a crash. bug-p-a-variant-cannot-hold-an-interface }
+  EmitI32($F100381F);                                           { cmp x0, #14 (VT_INTF_TAG) }
+  pIntf := CodeLen;
+  EmitI32($54000000);                                           { b.eq .intf }
   EmitI32($F140081F);                                           { cmp x0, #2, lsl #12 (8192) }
   pDone := CodeLen;
   EmitI32($5400000B);                                           { b.lt .done }
@@ -834,9 +881,17 @@ begin
   EmitI32($F94003E0);                                           { ldr x0, [sp] }
   EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
   EmitObjRetainA64;
+  pSkip2 := CodeLen;
+  EmitI32($14000000);                                           { b .done }
+  { .intf }
+  Patch32(pIntf, $54000000 or (((CodeLen - pIntf) div 4) and $7FFFF) shl 5);
+  EmitI32($F94003E0);                                           { ldr x0, [sp] }
+  EmitI32($F9400400);                                           { ldr x0, [x0, #8] }
+  EmitIntfRetainA64;
   { .done }
   Patch32(pDone, $5400000B or (((CodeLen - pDone) div 4) and $7FFFF) shl 5);
   Patch32(pSkip, $14000000 or (((CodeLen - pSkip) div 4) and $03FFFFFF));
+  Patch32(pSkip2, $14000000 or (((CodeLen - pSkip2) div 4) and $03FFFFFF));
   EmitI32($F84107E0);                                           { ldr x0, [sp], #16 }
 end;
 

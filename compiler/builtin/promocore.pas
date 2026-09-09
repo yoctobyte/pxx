@@ -1517,7 +1517,14 @@ end;
   is a leaf unit and cannot see builtinheap, so a release would have to arrive
   as a hook, the way PXXObjFinalizeHook already does — i.e. the fix is not one
   line even once it is justified.
-  refactor-a-variant-object-tag-list-lives-in-four-places }
+
+  A BOXED INTERFACE (VT_INTF_TAG, 14) joins that gap on exactly the same terms,
+  2026-09-09: dropped here without a _Release, for want of a hook this leaf unit
+  could call, and with no repro that reaches this routine holding one. Recording
+  it so the omission reads as the known gap it is rather than as the arm someone
+  forgot when the tag was added.
+  refactor-a-variant-object-tag-list-lives-in-four-places
+  bug-p-a-variant-cannot-hold-an-interface }
 procedure ClearVariantSlot(dstVar: Pointer);
 var tagW, payW: PVarWord;
     sp: PPromoStr;

@@ -5395,7 +5395,15 @@ begin
     lifted bound-fn (both RAW2 blocks). The last of those is here so a closure
     stored IN a container is reclaimed with the container; the variant
     clear/retain emitters cover the same tags for a plain slot, which is why
-    both sides read one range instead of keeping two lists in step. }
+    both sides read one range instead of keeping two lists in step.
+
+    VT_INTF_TAG (14) is deliberately NOT here and is not a missed sibling: a
+    boxed interface is refcounted through _Release in the IMT, not through the
+    heap-block protocol PXXObjRetain/Release implement, and NilPy has no
+    interfaces, so the tag cannot reach a Python variant slot at all. If it ever
+    can, this needs its own test and PXXIntfAddRefAny/PXXIntfReleaseAny, NOT a
+    wider range -- a wider range is a SILENT no-op on it.
+    bug-p-a-variant-cannot-hold-an-interface }
   PyVarSlotIsObj := (t >= VT_OBJ_FIRST) and (t <= VT_OBJ_LAST);
 end;
 

@@ -51,6 +51,21 @@ begin
   { the emitted obj blobs call these (feature-nilpy-object-reclamation) }
   i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
   i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
+  { And the emitted INTERFACE blobs call these, for the same reason and in the
+    same place. They were registered only in ParseProgram's superset at first,
+    which is the exact mistake this routine's header describes: the blobs are
+    emitted by EmitAnsiStringRuntime for EVERY driver, so a NilPy program --
+    which cannot contain an interface and never asks for one -- died at
+    `compiler error: PXXIntfAddRefAny not registered before EmitAnsiStringRuntime`
+    before compiling a line of its own. Caught by gate.sh quick's NilPy canary.
+    Gated exactly as ParseProgram gates them: the bodies are {$ifndef PXX_ESP}
+    in builtinheap, and no ESP backend emits these blobs either.
+    bug-p-a-variant-cannot-hold-an-interface }
+  if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
+  begin
+    i := RegisterProc('PXXIntfAddRefAny', True, tyNativeInt, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXIntfReleaseAny', True, tyNativeInt, 1, dummyNames, dummyTypes);
+  end;
   dummyNames[0] := 'p';       dummyTypes[0] := tyPointer;
   dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
   dummyNames[2] := 'align';   dummyTypes[2] := tyInteger;
@@ -1295,6 +1310,25 @@ begin
     dummyNames[1] := 'src';     dummyTypes[1] := tyPointer;
     dummyNames[2] := 'ifaceId'; dummyTypes[2] := tyNativeInt;
     i := RegisterProc('PXXIntfAssign', False, tyPointer, 3, dummyNames, dummyTypes);
+    { The id-LESS pair, for a caller that holds only the instance -- a variant
+      slot is {tag, payload} and has nowhere to put an interface id. They find a
+      REFCOUNTED IMT from the instance alone and refuse (nil / 0) when the class
+      implements none, which is why they are separate entry points rather than
+      a sentinel id. bug-p-a-variant-cannot-hold-an-interface }
+    dummyNames[0] := 'inst';    dummyTypes[0] := tyPointer;
+    i := RegisterProc('PXXIntfComIMTOf', True, tyPointer, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXIntfAddRefAny', True, tyNativeInt, 1, dummyNames, dummyTypes);
+    i := RegisterProc('PXXIntfReleaseAny', True, tyNativeInt, 1, dummyNames, dummyTypes);
+    { `v := ifc`. Registered under the same gate as the pair it calls, so on ESP
+      the name is absent and ir.inc's lowering arm declines rather than emitting
+      a call to nothing -- the program then gets the pre-existing refusal, which
+      is the honest answer where the ARC helpers cannot be lowered at all. }
+    dummyNames[0] := 'v';       dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'inst';    dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXVarSetIntf', False, tyPointer, 2, dummyNames, dummyTypes);
+    dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
+    dummyNames[1] := 'v';       dummyTypes[1] := tyPointer;
+    i := RegisterProc('PXXIntfFromVariant', False, tyPointer, 2, dummyNames, dummyTypes);
   end;
   dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
   i := RegisterProc('PXXStrUnique', True, tyPointer, 1, dummyNames, dummyTypes);

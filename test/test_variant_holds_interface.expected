@@ -1,0 +1,9 @@
+1 boxed              destroyed=0
+2 source cleared     destroyed=0
+3 copied, v cleared  destroyed=0
+F called
+4 read back          destroyed=0
+5 w cleared          destroyed=0
+6 empty slot         h=nil? TRUE destroyed=0
+7 last ref dropped   destroyed=1
+8 cleared again      destroyed=1
