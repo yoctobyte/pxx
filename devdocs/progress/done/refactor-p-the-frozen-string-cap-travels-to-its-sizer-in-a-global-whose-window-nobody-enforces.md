@@ -111,7 +111,7 @@ Pascal program can sample "a caller added later", so nothing here is a control
 for that and the fixture says so in its own header.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 14547b15f.
 
 **One near-miss worth a line, because it nearly landed:** the CONTROL binary —
 built before the `Erase` calls existed — was run once from the repo root, and
