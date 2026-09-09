@@ -1,0 +1,7 @@
+gen-TTest         = 1
+gen-TTest2        = 3
+inunit            = 1
+plain-TTest       = 1
+plain-TTest2      = 3
+classfn-nonstatic = 10
+instance          = 400

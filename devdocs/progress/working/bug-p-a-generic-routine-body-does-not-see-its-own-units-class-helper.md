@@ -3,8 +3,8 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
-owner: ""
+status: working
+owner: frankZ
 created: 2026-09-08
 summary: "CORRECTED 2026-09-09 BY MEASUREMENT -- THE PREMISE BELOW WAS FALSE AND THIS IS NOT A GENERICS DEFECT. The old summary said the helper `applies to an ordinary non-generic call in that unit -- it is the substituted body that misses it`. It does not: a plain non-generic `TTest.Test` added INSIDE ugenfunc19 answers 1 against fpc 2, with no generics in the row at all. Measured at 0f14028acc04, five rows: gen-TTest 1/2, gen-TTest2 3/3, inunit 1/2, plain-TTest 1/2, plain-TTest2 3/4 (pxx/fpc). The boundary, one class and one helper across three member shapes: `class function static` 1/2, `class function` non-static 10/20, INSTANCE method 200/200. So class-helper instance methods dispatch correctly and CLASS-LEVEL helper methods are never applied at all, static or not -- the defect is helper dispatch through `TClass.Method`, not specialization scope and not `static`. AND THE SECOND ROW IS CORRECT BY ACCIDENT: pxx answers gen-TTest2 = 3 because it applies no helper anywhere, not because it correctly excludes the specializing program's helper -- rows 3-5 prove there is no exclusion rule to work. A dispatch fix WILL flip that row to 4, so it needs its own assertion first or the fix will look like it caused a regression it only revealed. fpc gives plain-TTest2 = 4 and gen-TTest2 = 3 for the same class, helper and program, so fpc really does resolve a template body in the TEMPLATE's context (two-phase lookup) -- that generics question is real but only becomes MEASURABLE once helpers are applied at all."
 ---
@@ -114,3 +114,56 @@ a template body in the TEMPLATE's declaration context. That generics question is
 genuine, and it is not measurable until helpers are applied at all.
 
 Handed to frankZ whole; the slug now names something this is not.
+
+## 2026-09-09 (frankZ) — re-measured before starting, and the assertion is landed
+
+frankS's boundary holds. I rebuilt the probe from scratch rather than reuse
+theirs — a second reading only counts if it can fail differently — and it agrees
+on the conclusion while **disagreeing on one row's numbers**.
+
+At `4d1b041a7fc9` (and unchanged from `92aba669db31`), `test/uclshelperdispatch.pas` + `test/test_a_class_helper_on_a_class_level_method.pas`,
+both compilers run on the *same* two files:
+
+| row | pxx | fpc 3.2.2 |
+| --- | ---: | ---: |
+| `gen-TTest` | 1 | 2 |
+| `gen-TTest2` | 3 | 3 |
+| `inunit` | 1 | 2 |
+| `plain-TTest` | 1 | 2 |
+| `plain-TTest2` | 3 | 4 |
+| `classfn-nonstatic` (`class function CN`) | 10 | 20 |
+| **`instance` (`function Inst`)** | **400** | **400** |
+
+Confirmed: class-level helper members are never applied, `static` is not the
+discriminator, three of the rows contain no generics, and `gen-TTest2 = 3` is
+accidental — `plain-TTest2` is the same class, helper and program with generics
+removed and pxx answers 3 there too.
+
+### The one row that differs, and it matters for what it proves
+
+frankS recorded the instance row as **200/200**. I get **400/400**. The number
+is the difference between two opposite readings:
+
+- **200/200** means *neither* compiler applied the helper. That agrees with fpc,
+  but by the same accident as `gen-TTest2` — it is not evidence that instance
+  dispatch works.
+- **400/400** means *both* applied it. That is real evidence, and it is what
+  makes "instance members dispatch, class-level members do not" a boundary
+  rather than a guess.
+
+So the conclusion frankS drew is right and their evidence for it was the weaker
+of the two possible measurements. I have not seen their probe; the likely cause
+is a helper method that did not shadow the class's own. Recorded because a
+200/200 row would be quoted later as a control and it cannot serve as one.
+
+### Assertion landed first, as promised
+
+`test/test_a_class_helper_on_a_class_level_method.pas` pins all seven rows with
+its `.expected` as a **snapshot, not a specification** — five of the seven record
+a wrong answer on purpose. Its header carries the table above and states what
+each row becomes when dispatch is fixed: five turn correct (1→2, 1→2, 1→2, 3→4,
+10→20) and **`gen-TTest2` turns wrong at 4 against fpc's 3**. That flip is the
+second defect being revealed, not caused, and it is the point of landing this
+before touching dispatch.
+
+Wired in the Makefile beside `test_class_helper_for_a_class`, with `-Futest`.

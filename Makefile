@@ -6452,6 +6452,22 @@ test-core: $(COMPILER)
 	# second. Every row is oracled against FPC 3.2.2 -Mobjfpc.
 	./$(COMPILER) test/test_class_helper_for_a_class.pas $(TESTTMP)/test_class_helper26
 	tools/expect_same.sh test_class_helper26 "$$($(TESTTMP)/test_class_helper26)" "$$(printf 'a 42\ne 63\nd 42\ni  22\ni2 7\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
+	# THIS ROW PINS A DEFECT AND ITS .expected IS A SNAPSHOT, NOT A SPECIFICATION.
+	# A class helper's CLASS-LEVEL members are never applied -- `TTest.CS` gives the
+	# class's own 1 where fpc gives the helper's 2, non-static `CN` the same at
+	# 10/20 -- while INSTANCE members dispatch correctly (400 in both). The
+	# receiver is the discriminator, not `static` and not generics: three of the
+	# seven rows contain no generics at all.
+	# Committed BEFORE the dispatch fix on purpose. `gen-TTest2` currently agrees
+	# with fpc at 3 and agrees FOR THE WRONG REASON -- pxx applies no class-level
+	# helper in any scope, so no exclusion rule is doing the work, which the
+	# `plain-TTest2` row beneath it (3 here, 4 in fpc, generics removed) settles.
+	# A dispatch fix flips gen-TTest2 to 4 with nothing to stop it; pinning it
+	# first is what makes that flip read as a defect REVEALED, not one caused.
+	# The header of the .pas carries the full table and what each row becomes.
+	# bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper
+	./$(COMPILER) -Futest test/test_a_class_helper_on_a_class_level_method.pas $(TESTTMP)/test_clshelper_classlevel26
+	$(TESTTMP)/test_clshelper_classlevel26 | diff -u test/test_a_class_helper_on_a_class_level_method.expected -
 	# v3: the TARGET TYPE'S OWN NAME as receiver — UInt32.GetSignMask, how
 	# generics.helpers spells its UInt32/UInt64 sections. Not a second dispatch
 	# path: the name resolves to the HELPER's ci, so the spelling that already
@@ -13797,7 +13813,28 @@ test-core: $(COMPILER)
 	# The row ABOVE is this row's control: one file, one compiler, two
 	# invocations, and the note must appear in exactly one of them. A note that
 	# fired in both would be noise, and one that fired in neither is the bug.
-	cd test/libmanifest && ! ../../$(COMPILER) unitalias_no_row.pas $(TESTTMP)/unitalias_norow_bare26 > $(TESTTMP)/unitalias_norow_bare.log 2>&1
+	@# NAMED THROUGH A VARIABLE CAPTURED BEFORE THE `cd`, so the recipe still spells
+	@# the literal `./$(COMPILER)` that tools/testmgr.py rewrites to its per-run
+	@# snapshot. This row said `../../$(COMPILER)` until 2026-09-09 and that ALSO
+	@# matched the rewrite -- COMPILER_PATH_RE (testmgr.py:2029) has no left anchor,
+	@# so it matched at the FOURTH character and produced
+	@# `.././tmp/<run>/compiler/pascal26`, a path that does not exist. Exit 127,
+	@# which the `!` inverted to SUCCESS: the compile row went green while writing
+	@# an EMPTY log, and the next row -- a bare `grep -q`, which prints nothing when
+	@# it fails -- took the blame with a 0-byte job log and an empty failure-detail
+	@# block. Green under `gate.sh quick` and under any bare `make`, red only under
+	@# testmgr, for eight days. Diagnosed by frank-seven on seven; this was the only
+	@# `../../$(COMPILER)` in the file. `$(CURDIR)/$(COMPILER)` is the other
+	@# spelling that works, and it works by OPTING OUT of the rewrite -- that runs
+	@# the repo binary rather than the run's snapshot, which is not what this row
+	@# wants.
+	@# AND THE FIRST GREP BELOW IS THE PRECONDITION: it asserts the compiler RAN
+	@# before the second asks what it printed. `!` was doing double duty here --
+	@# "this compile is expected to fail" and, silently, "this compile did not
+	@# happen" -- and only an assertion about the compiler's OWN output can tell
+	@# those apart.
+	C=`readlink -f ./$(COMPILER)`; cd test/libmanifest && ! "$$C" unitalias_no_row.pas $(TESTTMP)/unitalias_norow_bare26 > $(TESTTMP)/unitalias_norow_bare.log 2>&1
+	grep -q "unit source not found: scoped.nosuchrow" $(TESTTMP)/unitalias_norow_bare.log
 	grep -q "pxxlib.cfg in the current directory and it was NOT consulted" $(TESTTMP)/unitalias_norow_bare.log
 	! grep -q "pxxlib.cfg in the current directory" $(TESTTMP)/unitalias_norow.log
 	# `.member` on an ARRAY ELEMENT whose type is not a record. The fall-through
