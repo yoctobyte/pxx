@@ -1,0 +1,14 @@
+intstr  ints sum=15
+strint  ints sum=15
+intstr  strs s=xyz
+strint  strs s=xyz
+intbyte ints sum=15
+byteint ints sum=15
+intdbl  ints sum=15
+dblint  ints sum=15
+intdbl  dbls sum=4.00
+dblint  dbls sum=4.00
+dblstr  strs s=xyz
+strdbl  strs s=xyz
+dblstr  dbls sum=4.00
+strdbl  dbls sum=4.00

@@ -3297,6 +3297,181 @@ begin
   end;
 end;
 
+{ Element classes for BracketArgElemClass below. Plain constants rather than an
+  enum: they cross into BracketCandRank as an Integer and nothing else consumes
+  them. }
+const
+  BEC_UNKNOWN = 0;   { not confidently classifiable -- behave as before }
+  BEC_ORDINAL = 1;   { every element an integer literal }
+  BEC_REAL    = 2;   { every element numeric, at least one a float literal }
+  BEC_STRING  = 3;   { every element a string literal, at least one not 1 char }
+  BEC_CHAR    = 4;   { every element a one-character string literal }
+
+{ WHAT KIND OF THING the bracketed argument at `slot` is made of, decided at
+  TOKEN level because that is all this layer has. The overload probe cannot
+  parse a `[...]` -- there is no parameter to bind against, so ParseArgExpr
+  reads it as a set literal and Error halts -- and that was recorded as "two
+  array overloads at a bracket slot cannot be ranked". They can: FPC's rule
+  needs the elements' CLASS, not their parsed types, and a class is readable
+  from the tokens.
+
+  DELIBERATELY CONSERVATIVE: an element counts only if it is exactly ONE
+  literal token. `[x + 1]`, `[f(y)]`, `[1..5]`, a named constant -- all answer
+  BEC_UNKNOWN, and the caller then behaves exactly as it did before this
+  existed. The point is to rank the cases where the answer is certain, not to
+  reimplement expression typing here; a wrong confident answer costs more than
+  an honest unknown.
+
+  An EMPTY `[]` is BEC_UNKNOWN on purpose rather than a class of its own. FPC
+  refuses `c.P(1, [])` against two array overloads outright -- "Can't determine
+  which overloaded function to call" -- and we accept it as the first declared.
+  Us accepting what FPC rejects is not a defect, so there is nothing here to
+  match and no reason to grow a rule for it.
+  bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type }
+function BracketArgElemClass(lp, slot: Integer): Integer;
+var i, depth, cur, nTok, nElem, nInt, nFloat, nStr, nStr1, lastTok: Integer;
+    tk: TTokenKind; atElemStart, started: Boolean;
+
+  { One element has just ended. It counts only if it was exactly one literal
+    token -- see the header on why anything else is deliberately unknown. }
+  procedure CountOne(at: Integer);
+  begin
+    if nTok <> 1 then Exit;
+    if at < 0 then Exit;
+    case Tokens[at].Kind of
+      tkInteger: Inc(nInt);
+      tkFloat:   Inc(nFloat);
+      tkString:  begin
+                   Inc(nStr);
+                   if Tokens[at].SLen = 1 then Inc(nStr1);
+                 end;
+    end;
+  end;
+
+begin
+  Result := BEC_UNKNOWN;
+  if lp < 0 then Exit;
+  { find the '[' that opens argument `slot` -- same walk as ArgListBracketElemMask }
+  depth := 0; atElemStart := True; i := lp + 1; cur := 0; started := False;
+  while i < TokCount do
+  begin
+    tk := Tokens[i].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkLBrack) and (depth = 0) and atElemStart and (cur = slot) then
+    begin started := True; Break; end;
+    if (tk = tkLParen) or (tk = tkLBrack) then Inc(depth)
+    else if tk = tkRBrack then Dec(depth)
+    else if tk = tkRParen then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end;
+    atElemStart := (tk = tkComma) and (depth = 0);
+    if atElemStart then Inc(cur);
+    Inc(i);
+  end;
+  if not started then Exit;
+
+  { walk the elements at bracket depth 1 }
+  nElem := 0; nInt := 0; nFloat := 0; nStr := 0; nStr1 := 0;
+  nTok := 0; lastTok := -1;
+  depth := 0;
+  while i < TokCount do
+  begin
+    tk := Tokens[i].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkLParen) or (tk = tkLBrack) then
+    begin
+      Inc(depth);
+      if depth = 1 then begin Inc(i); Continue; end;   { the opening '[' itself }
+    end
+    else if (tk = tkRParen) or (tk = tkRBrack) then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        if nTok > 0 then begin Inc(nElem); CountOne(lastTok); end;
+        Break;
+      end;
+    end
+    else if (tk = tkComma) and (depth = 1) then
+    begin
+      Inc(nElem); CountOne(lastTok);
+      nTok := 0; lastTok := -1;
+      Inc(i); Continue;
+    end;
+    Inc(nTok); lastTok := i;
+    Inc(i);
+  end;
+
+  if nElem = 0 then Exit;                       { `[]` -- see the header }
+  if nInt = nElem then Result := BEC_ORDINAL
+  else if (nFloat > 0) and ((nInt + nFloat) = nElem) then Result := BEC_REAL
+  else if nStr = nElem then
+  begin
+    if nStr1 = nElem then Result := BEC_CHAR else Result := BEC_STRING;
+  end;
+end;
+
+{ HOW WELL does parameter `pj` of candidate `pi` want an element list of class
+  `cls`? Higher wins; -1 means the candidate cannot take it at all.
+
+  MEASURED, not designed. fpc 3.2.2, 2026-09-09, a 72-row matrix over six
+  candidate pairs x six element lists x BOTH declaration orders. Two facts the
+  table makes plain and that the old fall-through could not express:
+
+    1. FPC'S ANSWER DOES NOT DEPEND ON DECLARATION ORDER. Every pair answered
+       identically in both orders. Ours depended on nothing else, which is the
+       defect.
+    2. THE INTERESTING HALF IS THE REFUSALS WE EMIT, NOT THE BODIES WE PICK.
+       With `array of string` declared first, `c.P(1, [7, 8])` was REFUSED --
+       `incompatible types: cannot assign Integer to AnsiString` -- where fpc
+       compiles it and runs the Integer body. Legal code turned away, in the
+       pinned compiler too, and a silently-wrong body is the milder sibling.
+
+  The scores encode exactly the rows that were measured:
+    ordinal elements -> a signed/unsigned machine-word array beats a NARROWER
+      ordinal one (fpc takes `array of Integer` over `array of Byte`), which
+      beats a float array (`array of Double` when it is the only numeric
+      candidate), and a string array is not viable at all.
+    real elements -> only a float array; fpc refuses when the only other
+      candidate is `array of string`.
+    string/char elements -> only a string array.
+
+  NOT ENCODED, AND ON PURPOSE: `tySet` at the slot. fpc gives the SET the slot
+  for ordinal elements even against `array of Integer`, and matching that means
+  changing how the argument is PARSED and not merely which candidate is named
+  -- the veto above and ParamIsVarRecArray have to agree, or the probe's
+  reading and the committed parse disagree, which is the worst shape this file
+  has. Left as the veto, measured and written up in
+  bug-p-a-set-candidate-at-a-bracket-slot-vetoes-the-narrowing-instead-of-winning-it. }
+function BracketCandRank(pi, pj, cls: Integer): Integer;
+var ek: TTypeKind;
+begin
+  Result := -1;
+  if cls = BEC_UNKNOWN then Exit;
+  if (pi < 0) or (pj < 0) then Exit;
+  if not Procs[pi].Params[pj].IsArray then Exit;
+  ek := ParamElemKind(pi, pj);
+  case cls of
+    BEC_ORDINAL:
+      case ek of
+        tyInteger, tyInt32, tyInt64, tyNativeInt,
+        tyUInt32, tyUInt64, tyNativeUInt: Result := 90;
+        tyInt8, tyUInt8, tyInt16, tyUInt16, tyChar, tyBoolean: Result := 80;
+        tySingle, tyDouble, tyExtended: Result := 70;
+      end;
+    BEC_REAL:
+      case ek of
+        tySingle, tyDouble, tyExtended: Result := 90;
+      end;
+    BEC_STRING, BEC_CHAR:
+      case ek of
+        tyString, tyAnsiString: Result := 90;
+      end;
+  end;
+end;
+
 { True when some argument in the call's parenthesised list STARTS with a
   NilPy unpack -- `*xs` or `**kw` at bracket depth 0 (`**` lexes as two tkStar,
   so one test covers both). Purely token-level, and a
@@ -3674,6 +3849,7 @@ var
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   signMiss, bestSign: Integer;   { the signedness tie-break -- OverloadSignMiss }
   nBr, brOnly: Integer;
+  bcls, bestRank, bestCand, nBest, rk: Integer;   { element-class ranking at a bracket slot }
   nVR, vrOnly: Integer;   { ...and how many of those are `array of const` }
   rep: AnsiString;   { the refusal's argument-type list — see the Error below }
   bmask: LongWord;
@@ -3862,6 +4038,69 @@ begin
       begin
         Result := vrOnly;
         Exit;
+      end;
+      { TWO OR MORE PLAIN ARRAY CANDIDATES, RANKED BY WHAT THE ELEMENTS ARE.
+        This is the residual the comment above handed to
+        bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type,
+        and the blocker it named was the wrong one: it said the probe cannot
+        PARSE a `[...]`, which is true and does not matter, because fpc's rule
+        needs the elements' CLASS and a class is readable from the tokens.
+        A blocker names an input, not an answer.
+
+        WHAT THIS FIXES IS A REFUSAL OF LEGAL CODE, not only a wrong pick. With
+        `array of string` declared before `array of Integer`, `c.P(1, [7, 8])`
+        was refused outright -- `incompatible types: cannot assign Integer to
+        AnsiString` -- because arity handed the slot to the first-declared
+        candidate and the committed parse then bound the literal to it. fpc
+        compiles it and runs the Integer body, in BOTH declaration orders; so
+        does the pinned compiler refuse it, so this is not a regression being
+        repaired but a gap being closed.
+
+        A TIE OR AN UNCLASSIFIABLE LIST FALLS THROUGH UNCHANGED. Ranking only
+        decides when exactly one candidate scores best; equal scores, no viable
+        candidate, or BEC_UNKNOWN all reach the same arity fallback these calls
+        had before. That is deliberate -- a confident wrong answer here is a
+        silently miscompiled argument, and the honest unknown costs nothing that
+        was not already being paid. }
+      if (nBr > 1) and not vetoed then
+      begin
+        bcls := BEC_UNKNOWN;
+        for j := 0 to nExplicitArgs - 1 do
+          if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
+          begin
+            bcls := BracketArgElemClass(lp, j);
+            Break;   { rank on the FIRST bracketed slot; see the note below }
+          end;
+        if bcls <> BEC_UNKNOWN then
+        begin
+          bestRank := -1; bestCand := -1; nBest := 0;
+          for c := 0 to nCand - 1 do
+          begin
+            pi := UMthProc_[cand[c]];
+            okBr := True;
+            rk := -1;
+            for j := 0 to nExplicitArgs - 1 do
+              if (j < 32) and ((bmask and (LongWord(1) shl j)) <> 0) then
+              begin
+                pj := 1 + j;
+                if (pj >= MAX_PROC_PARAMS) or (pj >= Procs[pi].ParamCount) or
+                   (not Procs[pi].Params[pj].IsArray) then okBr := False
+                else if rk < 0 then
+                  rk := BracketCandRank(pi, pj, BracketArgElemClass(lp, j));
+              end;
+            if okBr and (rk > 0) then
+            begin
+              if rk > bestRank then
+              begin bestRank := rk; bestCand := cand[c]; nBest := 1; end
+              else if rk = bestRank then Inc(nBest);
+            end;
+          end;
+          if (nBest = 1) and (bestCand >= 0) then
+          begin
+            Result := bestCand;
+            Exit;
+          end;
+        end;
       end;
       Result := FindUMethArity(ci, name, nExplicitArgs);
       Exit;

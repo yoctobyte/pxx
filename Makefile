@@ -5641,6 +5641,22 @@ test-core: $(COMPILER)
 	# bug-p-two-array-parameters-at-one-bracket-slot-are-decided-by-declaration-order
 	./$(COMPILER) test/test_p_an_array_of_const_wins_a_bracket_argument.pas $(TESTTMP)/test_arrconstwin26
 	$(TESTTMP)/test_arrconstwin26 | diff -u test/test_p_an_array_of_const_wins_a_bracket_argument.expected -
+	# The RESIDUAL of that one, closed: two PLAIN array overloads at one bracket
+	# slot, ranked by what the elements are. The old comment said the probe
+	# cannot rank them because it cannot PARSE a `[...]` -- true, and the wrong
+	# blocker: fpc's rule needs the elements' CLASS, which is readable from the
+	# tokens. A blocker names an input, not an answer.
+	# EVERY SHAPE IN BOTH DECLARATION ORDERS. fpc's answer does not depend on
+	# order and ours depended on nothing else, so a one-order fixture passes on
+	# whichever order happens to agree and asserts nothing.
+	# POSITIVE CONTROL, verified: the PINNED compiler REFUSES this file at the
+	# last row -- `incompatible types: cannot assign Double to AnsiString` --
+	# because the first-declared `array of string` took the slot. That is the
+	# defect, and it is a refusal of legal code rather than only a wrong pick.
+	# Every expected line is fpc 3.2.2's for the identical source.
+	# bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type
+	./$(COMPILER) test/test_p_a_bracket_slot_is_ranked_by_what_its_elements_are.pas $(TESTTMP)/test_brkrank26
+	$(TESTTMP)/test_brkrank26 | diff -u test/test_p_a_bracket_slot_is_ranked_by_what_its_elements_are.expected -
 	# The OTHER half of the `static` directive change: a record's static class
 	# function no longer HAS a Self, and the call site that hand-rolls its own
 	# argument loop was still prepending a by-value dummy. The chain was then one
