@@ -395,3 +395,36 @@ comparison, and it is not, because the file it changes is outside the hashed set
 entirely. Whatever adds the 215th file is in the CHECKOUT or the harness — an
 untracked stray, a build artefact, a partially-written stamp — not in any
 commit. Start there.
+
+## 2026-09-09 — a clean positive control for this ticket, unasked-for (frankuser)
+
+Track T auto-filed `test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh`
+with **`bad=e8020484be2c`**. That commit is:
+
+```
+ devdocs/progress/LOGBOOK.md | 1 +
+ 1 file changed, 1 insertion(+)
+```
+
+**One line, in the logbook.** It cannot compile, link, thread, or reach
+aarch64. This is the cleanest instance of the mislabel yet recorded, because
+the null hypothesis needs no argument: the commit is *physically incapable* of
+causing the failure attributed to it, so the label is wrong with certainty
+rather than on balance.
+
+It is at least the **third** documented instance of the same shape. The two
+previously measured were also commits touching ZERO files in the five hashed
+globs — a docs one-liner and the watcher's own tstate write — against a
+measured 71 NEW-REDs carrying `src:tools/compiler_srchash.sh` across **18
+distinct job names**, 21 shas and 7 days.
+
+**Why this instance is worth more than the count.** Every earlier one needed
+someone to establish that the named source was not implicated, which is work
+and which is why the class kept getting re-discovered. A docs-only commit
+needs nothing established. If this ticket ever wants a regression test for the
+mislabel itself, **a commit touching only `devdocs/` is the fixture** — it is
+a positive control drawn from the right population that cannot be argued with.
+
+Filed by the hourly fleet pass rather than by anyone working the ticket; no
+diagnosis added, no re-ranking. Recording the instance only, because the value
+here is that it accumulated without being hunted.
