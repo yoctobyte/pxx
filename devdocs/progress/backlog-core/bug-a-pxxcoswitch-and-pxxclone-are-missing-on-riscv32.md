@@ -18,14 +18,22 @@ Six of the seven-way difference are `IR_CLONE`, `IR_COSWITCH`, `IR_IMTADDR`,
 `IR_IO_LOCK`, `IR_IO_UNLOCK`, `IR_MULHI`. (The seventh, `IR_WRITELN`, was a
 false positive — it is the trailing label of `IR_WRITE, IR_WRITELN:`.)
 
-**Four of the six cannot be reached on riscv32**, so they are not bugs:
+**Now five, not six: `IR_IMTADDR` was RETIRED on 2026-09-09** — it is not an
+absent node kind any more, it is not a node kind. This audit reached that
+conclusion from the opposite direction to the grep that retired it (a
+cross-target arm census, not an identifier search), which is why the two count
+as two readings and not one.
+
+**Three of the remaining five cannot be reached on riscv32**, so they are not
+bugs:
 
 - `IR_MULHI` — `ir.inc:7781` errors at the emission site for any non-64-bit
   target and points at `MulHiU64` in lib/rtl.
 - `IR_IO_LOCK` / `IR_IO_UNLOCK` — `ir.inc:13213` gates them to
   x86-64/i386/aarch64/arm32 under `--threadsafe`.
-- `IR_IMTADDR` — no emitter anywhere in the frontend, and interface dispatch
-  through a `TInterfacedObject` runs correctly on riscv32 today (verified).
+(`IR_IMTADDR` was the fourth: no emitter anywhere in the frontend, and
+interface dispatch through a `TInterfacedObject` running correctly on riscv32
+today. Retired outright, so riscv32's missing arm is now missing nothing.)
 
 **Two are reachable.** `AN_COSWITCH` (`pasparser_expr.inc:4132`,
 `pasparser_stmt.inc:5056`, `pyparser.inc:46140`) and `AN_CLONE`

@@ -766,13 +766,14 @@ const
                            The IMT is recovered from the instance PER CALL via
                            PXXIntfIMTOf (see pasparser_stmt.inc's own note), which
                            is what makes the value one word. }
-  { DEAD SINCE THE FAT POINTER WENT AWAY, 2026-09-09: nothing constructs one.
-    Census that says so, and the one that would retire this line -- `grep -rn
-    AN_INTF_FROM_CLASS compiler/ | grep -v defs.inc` returns ZERO. Kept only
-    because removing an AST kind is node numbering, which CLAUDE.md says to
-    coordinate by message rather than land alone.
+  { 59 IS A HOLE. It was AN_INTF_FROM_CLASS -- the class -> interface fat-pointer
+    build -- retired 2026-09-09 when nothing had constructed one for months: an
+    interface value is ONE WORD, so there is no pair to assemble. The number is
+    deliberately NOT reused: nothing in this codebase is dimensioned by the AST
+    kind count and no table is positional, so a hole costs nothing, while
+    reusing 59 would make every old IR dump, log and ticket that names kind 59
+    silently mean something else.
     refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
-  AN_INTF_FROM_CLASS = 59; { was: class -> interface fat-pointer build. }
   AN_SET_INCL      = 60; { Include(s, v): Left = set lvalue, Right = value expr. }
   AN_SET_EXCL      = 61; { Exclude(s, v): Left = set lvalue, Right = value expr. }
   AN_DYN_COPY      = 62; { Copy(arr, index [, count]) over a dynamic array → fresh
@@ -1331,16 +1332,15 @@ const
   IR_YIELD        = 56;  { IRA = value node; IRIVal = generator self-pointer local sym idx. Stores value to [self+16] then CoSwitch(self+0 -> self+8) }
   IR_CALL_IND     = 57;  { Indirect call. IRA = callee value node (code addr); IRB = first IR_ARG; IRIVal = signature proc index (Params/RetType); IRStmtRoot marks a statement-level call (result discarded) }
   IR_VMTADDR      = 58;  { IRA = class index (ci); load the runtime address of that class's VMT (= the per-class identity stored at [instance+0]). Used by is/as type-tests. }
-  { DEAD SINCE THE FAT POINTER WENT AWAY, 2026-09-09. It existed to load the IMT
-    for a fat pointer's FIRST WORD, and an interface value has no first word any
-    more -- it IS the instance pointer, and AN_INTF_CALL recovers the IMT per
-    call via PXXIntfIMTOf. Four backends still carry an encoder arm for it
-    (ir_codegen.inc, _aarch64, _arm32, _386) plus an IRVerify arm, and NOTHING
-    creates the node: `grep -rn 'IRAppend(IR_IMTADDR' compiler/` returns zero,
-    which is the census that would retire these five arms. Kept because removing
-    an IR node kind is node numbering -- coordinate, do not land it alone.
+  { 59 IS A HOLE, and stays one. It was IR_IMTADDR -- load the address of a
+    (class,interface) IMT -- which existed to fill a fat pointer's FIRST WORD.
+    An interface value has no first word any more: it IS the instance pointer,
+    and AN_INTF_CALL recovers the IMT per call via PXXIntfIMTOf. Retired
+    2026-09-09 with its four backend encoder arms and its IRVerify arm, none of
+    which could ever run -- nothing appended the node. Not reused, for the same
+    reason as AST kind 59 above: an IR dump naming op 59 should stay
+    unresolvable rather than quietly become a different op.
     refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
-  IR_IMTADDR      = 59;  { IRA = IMT-table entry index; load the runtime address of that (class,interface) Interface Method Table. }
   IR_STORE_DYN    = 60;  { ARC-correct whole dyn-array store into a slot ADDRESS (record/class field or nested sub-array). IRA = slot-address node; IRB = new handle value node; IRC = dyn depth; IRIVal = -1 (non-symbol → node-derived descriptor); IRTk = base TTypeKind; IRSetLenBaseRec = base record id. Retains the new handle, publishes it, element-aware releases the old. Implemented on EVERY backend, and emitted for every target -- this line named five and excluded xtensa for a while after xtensa had the arm, which is why the arm sat unreachable. Regression: test_cross_dynarray_slot_store, which fails on any target that publishes the handle without retaining. }
   IR_SETLEN_STR   = 61;  { SetLength on a managed AnsiString reached through ANY lvalue (symbol, record/class field, var-param field, index, deref). IRA = target slot-ADDRESS node (IRLowerAddress of the lvalue → &handle slot); IRB = new length count node. Calls PXXStrSetLen(addr, n). Address-based so a field/var-param target needs no symbol reconstruction — the managed-string analogue of IR_SETLEN_DYN. Frozen inline strings (tyString, the self-host model) keep the -101 store-length path; only tyAnsiString reaches here. }
   IR_CLONE        = 62;  { IRA = first IR_ARG (flags, childStack, entry, arg, ctidptr — exactly 5); moves them into the SysV arg regs and calls the bare clone+trampoline stub (CloneStubAddr). Result (child tid) in the accumulator. Libc-free thread creation; x86-64 first, i386 next. }
@@ -6894,8 +6894,9 @@ var
     pointer's first word`. An interface value is ONE WORD, the instance pointer,
     and a call recovers its IMT from the instance's RTTI by interface id
     (PXXIntfIMTOf; RTTI_IFACE_SIZE above states the same thing and is the
-    comment that stayed right). IMTOff is read by the RTTI emitter and by
-    IR_IMTADDR, which nothing emits.
+    comment that stayed right). IMTOff is read by the RTTI emitter, and by
+    FindIMT's compile-time check that a class implements the interface it is
+    being assigned to. It was also read by IR_IMTADDR, retired 2026-09-09.
 
     THE STALE VERSION COST A TICKET. bug-p-a-variant-cannot-hold-an-interface
     was filed and ranked on `pxx spells it tyRecord (a 16-byte fat pointer)`,

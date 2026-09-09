@@ -481,7 +481,6 @@ begin
     IR_PROCADDR: Result := 'procaddr';
     IR_CLASSREF: Result := 'classref';
     IR_VMTADDR: Result := 'vmtaddr';
-    IR_IMTADDR: Result := 'imtaddr';
     IR_SET_SIGNAL: Result := 'set_signal';
     IR_IO_LOCK: Result := 'io_lock';
     IR_IO_UNLOCK: Result := 'io_unlock';
@@ -993,10 +992,6 @@ begin
       IR_VMTADDR:
         if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
           IRVerifyError(i, 'invalid class index in vmtaddr');
-
-      IR_IMTADDR:
-        if (IRA[i] < 0) or (IRA[i] >= IMTCount) then
-          IRVerifyError(i, 'invalid IMT index in imtaddr');
 
       IR_UNSUPPORTED:
         { A frontend could not lower this AST node (ir.inc IRLowerAST /

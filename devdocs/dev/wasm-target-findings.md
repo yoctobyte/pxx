@@ -42,7 +42,7 @@ this note.
 | --- | --- | --- |
 | mechanical transliteration | ~50 | consts, loads/stores, binop, index/field, args, sets, variants, records, dyn arrays, strings, RTTI. Register → wasm local; addressing mode → explicit `i32.load` / `i32.store`. |
 | control flow → restructure | 5 | `IR_BLOCK`, `IR_IF`, `IR_LABEL`, `IR_JUMP`, `IR_JUMP_IF_FALSE`. wasm has structured control flow only. |
-| code addresses → table indices | 5 | `IR_PROCADDR`, `IR_CALL_IND`, `IR_VIRTUAL_CALL`, `IR_VMTADDR`, `IR_IMTADDR`. |
+| code addresses → table indices | 4 | `IR_PROCADDR`, `IR_CALL_IND`, `IR_VIRTUAL_CALL`, `IR_VMTADDR`. (Was 5: `IR_IMTADDR` was retired 2026-09-09 — nothing had ever emitted it, and an interface value no longer carries an IMT to load.) |
 | exceptions → redesign | 7 | `IR_EXC_ENTER/LEAVE/MATCH/MATCH_HIT/STORE/CLEAR`, `IR_RAISE`. |
 | **already refused on non-x86 targets — free** | 9 | `IR_SYSCALL`, `IR_ASM`, `IR_CLONE`, `IR_COSWITCH`, `IR_YIELD`, `IR_SET_SIGNAL`, `IR_ATOMIC`, `IR_IO_LOCK`, `IR_IO_UNLOCK`. |
 

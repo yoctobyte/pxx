@@ -67,8 +67,11 @@ harder features (generics+bounds, lifetimes, `macro_rules!`, `dyn Trait`,
 
 - `AN_AWAIT`/`AN_YIELD`/`AN_COSWITCH` (defs.inc ~163-179) — async/generator
   AST nodes, coroutine-backed. Reuse for `async`/`.await`.
-- `AN_INTF_FROM_CLASS`/`AN_INTF_CALL` (defs.inc ~186-189) — fat-pointer
-  interface dispatch, same shape as `dyn Trait` (data ptr + vtable ptr).
+- `AN_INTF_CALL` (defs.inc) — interface dispatch, but NOT a fat pointer: an
+  interface value is ONE WORD (the instance pointer) and the IMT is recovered
+  per call from the instance's RTTI. `AN_INTF_FROM_CLASS`, named here as the
+  build half, was retired 2026-09-09. Not the same shape as `dyn Trait` —
+  see [[feature-rust-dyn-trait-dispatch]], which carries the consequence.
 - `GenericFuncs`/`GenericMethods`/specialization (defs.inc ~679-789) —
   monomorphization engine, reuse for Rust generics.
 - ARC on managed strings/dynarrays — reuse for `Rc`/`Arc`.

@@ -9,7 +9,9 @@ only way to learn which op is missing is to edit the backend and self-compile.
 That is not hypothetical. Seven ops were unnamed until 2026-08-31 --
 IR_PROCADDR, IR_CLASSREF, IR_VMTADDR, IR_IMTADDR, IR_SET_SIGNAL, IR_IO_LOCK,
 IR_IO_UNLOCK -- and IR_CLASSREF was found the expensive way, on xtensa, at the
-cost of a build.
+cost of a build. (IR_IMTADDR was retired outright on 2026-09-09; it is left in
+this list because the list is what HAPPENED, and the count the lint reports
+moved 77 -> 76 the same day.)
 
 The gap could open because nothing counted. The count that found it was a
 parser someone ran once by hand; this is that parser, wired, so the eighth gap

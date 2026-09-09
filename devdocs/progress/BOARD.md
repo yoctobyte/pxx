@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (29)
+## working (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -40,7 +40,6 @@ _none_
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command but the target is NOT zero -- the census counts UNDEFINED symbols under the flag, so a NilPy arm whose helper lives in a shared file is invisible to it: `pasparser_proc.inc` carries nine real `isNilPy` arms and the census scores that file at ZERO. `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver. | — |
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to — FOUR since `1df943481` | — |
-| refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds | P | 25 | refactor | An interface value used to be a 16-byte fat pointer {IMT, instance} and is now ONE WORD -- the instance pointer, with the IMT recovered per call from the instance's RTTI (PXXIntfIMTOf). Measured 2026-09-09: SizeOf(IIntf) = 8, a record of two is 16, an array of three is 24, and fpc 3.2.2 agrees on all three. The move left residue: `AN_INTF_FROM_CLASS` has ZERO references outside defs.inc, `IR_IMTADDR` is never created (four backend encoder arms plus an IRVerify arm for a node nothing emits), and about a dozen ir.inc lowering comments still narrate the fat pointer. Both constants are now marked dead in defs.inc with the census that would retire them; REMOVING them is node numbering, which CLAUDE.md says to coordinate by message rather than land alone, which is why this is a ticket and not a commit. | — |
 
 ## unfinished (21)
 
@@ -960,9 +959,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3610)
+## done (3611)
 
-3610 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3611 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (80)
 
