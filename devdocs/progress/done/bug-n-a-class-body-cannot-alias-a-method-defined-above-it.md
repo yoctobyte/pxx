@@ -45,4 +45,4 @@ Blast radius is the argument: one line, seven modules, because it sits in the
 vector-math module everything imports.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bbd27a5c3.
