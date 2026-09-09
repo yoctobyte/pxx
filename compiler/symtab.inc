@@ -9570,6 +9570,24 @@ begin
         with a sized one at all. Asked exactly, three results are three results. }
       if okRes and capExact and TypeIsFrozenString(Procs[pi].RetType) then
         okRes := (OpConvDestCapNorm(Ord(Procs[pi].RetType), ProcRetStrCap[pi]) = dstCap);
+      { ...AND THE EXPLICIT PATH ASKS EXACTLY TOO, for a different reason than
+        capExact does. There is NO generic Explicit fallback in fpc 3.2.2:
+        measured on toperator91, `ExplicitShortString` is never incremented
+        ANYWHERE in that program, including the two rows (`TString40(t)`,
+        `TString100(t)`) whose capacity no Explicit operator has. fpc prints
+        `ShortString Implicit` for both. So an Explicit operator serves a
+        frozen-string destination only at its OWN capacity, and a cast that
+        matches none of them is not an explicit conversion at all -- it falls
+        through to the IMPLICIT lookup, where the generic exemption above is
+        real and a bare ShortString result does serve every destination.
+
+        The exemption this overrides (`ProcRetStrCap[pi] <> DEFAULT_STR_CAP` in
+        OpConvResultMatches) is what made the generic Explicit win those rows.
+        It stays for the implicit path, which is the path that needs it.
+        bug-p-an-explicit-cast-with-no-capacity-match-falls-back-to-the-wrong-conversion-operator }
+      if okRes and (opKey = OPK_EXPLICIT) and (dstCap <> 0) and
+         TypeIsFrozenString(Procs[pi].RetType) then
+        okRes := (OpConvDestCapNorm(Ord(Procs[pi].RetType), ProcRetStrCap[pi]) = dstCap);
       if okRes then
       begin
         r := OpConvSourceRank(OvrlTypeKind[i], srcTk);

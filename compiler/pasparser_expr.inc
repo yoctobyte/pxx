@@ -9759,6 +9759,7 @@ function TryExplicitOpCast(n: Integer; castTk: TTypeKind; castCap: Integer): Int
   reader noticing.
   refactor-p-five-dispatch-sites-for-one-named-type-cast }
 var eoSci, eoArg, eoNd: Integer;
+    eoAmb: Boolean;
 begin
   TryExplicitOpCast := -1;
   if n < 0 then Exit;
@@ -9773,6 +9774,44 @@ begin
     the two changes belong in one commit. }
   eoSci := FindOpConvRanked(OPK_EXPLICIT, ASTTk[n], ResolveNodeRec(n),
                             Ord(castTk), REC_NONE, castCap, OPCONV_RANK_MAX);
+  { NO EXPLICIT OPERATOR SERVES THIS DESTINATION -- SO ASK THE IMPLICIT ONES.
+    An explicit cast is not "use an Explicit operator or reinterpret"; in fpc
+    3.2.2 it is "use the Explicit operator for exactly this type, otherwise
+    convert as if assigning". Measured on toperator91: `TString40(t)` and
+    `TString100(t)` both print `ShortString Implicit`, and `ShortString
+    Explicit` is never called anywhere in the program even though it is
+    declared. This lookup is where that second half was missing -- the
+    capacity filter in FindOpConvRankedAmb makes the Explicit ones stop
+    matching, and without this retry those rows would reinterpret instead.
+
+    Ambiguity REFUSES rather than picking: with two sized results and no
+    generic, fpc does not choose (OpConvImplicitResultRank's fifth measured
+    row), and silently taking one of them is the accepted-invalid shape this
+    family keeps producing.
+    bug-p-an-explicit-cast-with-no-capacity-match-falls-back-to-the-wrong-conversion-operator }
+  if eoSci < 0 then
+  begin
+    eoAmb := False;
+    eoSci := FindOpConvToDestAmb(ASTTk[n], ResolveNodeRec(n),
+                                 Ord(castTk), REC_NONE, castCap, eoAmb);
+    if eoAmb then
+      Error('this cast is ambiguous: two conversion operators produce ' +
+            'the destination type and neither is the generic one');
+  end;
+  { A RECORD OR CLASS CAST TO A FROZEN STRING WITH NO CONVERSION AT ALL IS A
+    DIAGNOSTIC, NOT A REINTERPRET. Returning -1 here sends the caller to a raw
+    record-to-string cast, which writes a garbage length byte and SEGFAULTS in
+    writeln -- the failure this family has produced twice. fpc refuses it:
+    `Illegal type conversion: "TTest" to "TString40"`, measured with only a
+    non-matching Explicit operator declared.
+
+    Narrowed to frozen-string destinations on purpose. A record cast to a
+    pointer or to another record is a legitimate reinterpret and must keep
+    falling through; it is the string destination that has no sane raw reading,
+    because the length byte is the first byte of whatever the record holds. }
+  if (eoSci < 0) and TypeIsFrozenString(castTk) then
+    Error('no conversion operator produces this string type from the ' +
+          'record or class being cast');
   if eoSci < 0 then Exit;
   { NO SECOND, STRICTER RESULT TEST HERE. The lookup has already matched the
     destination, and it does so with the frozen-string equivalence

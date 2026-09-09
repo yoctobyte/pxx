@@ -17173,6 +17173,32 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_forinopalias26 "$$($(TESTTMP)/test_forinopalias26)" "$$(cat test/test_for_in_operator_enumerator_on_an_alias_and_an_expression.expected)"
 	./$(COMPILER) test/test_conversion_operator_result_capacity_is_part_of_its_identity.pas $(TESTTMP)/test_convcap26
 	tools/expect_same.sh test_convcap26 "$$($(TESTTMP)/test_convcap26)" "$$(cat test/test_conversion_operator_result_capacity_is_part_of_its_identity.expected)"
+	# ...and the REFUSAL half of the same rule: the identical shape with no
+	# Implicit operator to retry against. The pair is the point -- one row shows
+	# the retry landing on the generic Implicit conversion, the other shows the
+	# refusal when there is nothing to retry with, and neither alone can tell a
+	# working retry from a refusal that swallows every cast. Before 2026-09-09
+	# this row COMPILED, taking the generic Explicit conversion; fpc refuses it
+	# (`Illegal type conversion`) and so does pxx now. Reads WHICH refusal: a
+	# bare exit check would pass on the ambiguity message too.
+	# bug-p-an-explicit-cast-with-no-capacity-match-falls-back-to-the-wrong-conversion-operator
+	if ./$(COMPILER) test/test_conversion_operator_no_capacity_match_is_refused.pas $(TESTTMP)/test_convcap_ref26 >/dev/null 2>&1; then \
+	  echo "FAIL: a record cast to a string type no conversion operator produces compiled -- that is a raw cast with a garbage length byte"; exit 1; \
+	fi
+	./$(COMPILER) test/test_conversion_operator_no_capacity_match_is_refused.pas $(TESTTMP)/test_convcap_ref26 2>&1 \
+	  | grep -q "no conversion operator produces this string type"
+	# ...and the AMBIGUOUS case, which is a THIRD rule and not a variation of
+	# the second: two sized results, no generic, nothing to prefer. It is here
+	# because its arm rides on FindOpConvRankedAmb's tie counter, which the
+	# implicit store path and the declaration-time duplicate check also use --
+	# a change there that stops counting these ties turns the refusal into a
+	# silent pick of whichever operator was scanned first, and no other row in
+	# this file would notice. fpc refuses too, with different wording.
+	if ./$(COMPILER) test/test_conversion_operator_ambiguous_cast_is_refused.pas $(TESTTMP)/test_convcap_amb26 >/dev/null 2>&1; then \
+	  echo "FAIL: an ambiguous cast compiled -- two sized conversions with no generic must refuse, not pick the first scanned"; exit 1; \
+	fi
+	./$(COMPILER) test/test_conversion_operator_ambiguous_cast_is_refused.pas $(TESTTMP)/test_convcap_amb26 2>&1 \
+	  | grep -q "this cast is ambiguous"
 	./$(COMPILER) test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.pas $(TESTTMP)/test_forinpick26
 	tools/expect_same.sh test_forinpick26 "$$($(TESTTMP)/test_forinpick26)" "$$(cat test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.expected)"
 	./$(COMPILER) test/test_for_in_lowers_class_record_and_interface_enumerators_alike.pas $(TESTTMP)/test_foringrid26

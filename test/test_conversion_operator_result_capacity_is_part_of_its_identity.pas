@@ -15,14 +15,28 @@ program test_conversion_operator_result_capacity_is_part_of_its_identity;
   printed the conversion. A row that only asserted the new capability would have
   been green throughout that.
 
-  ORACLES, PER ROW, because they are not the same:
-    rows 1-2  fpc 3.2.2 agrees exactly -- `to80 / got a / to90 / got b`.
-    row 3     fpc REFUSES (`Illegal type conversion: "TTest" to "TS40"`) and pxx
-              takes it through the generic ShortString conversion. Accepting
-              what fpc rejects is not a defect (CLAUDE.md), and this is not new
-              behaviour being claimed: the PINNED compiler runs this shape
-              correctly when the sized pair is removed. The row is here as a
-              REGRESSION guard, not as a feature.
+  ROW 3 MOVED OUT 2026-09-09, and the comment above is why it is worth saying
+  where it went rather than deleting it. It asserted that `TS40(t)` -- a
+  destination no Explicit operator has the capacity for -- reaches the GENERIC
+  ShortString Explicit conversion. It noted in the same breath that fpc REFUSES
+  that cast, and kept the leniency because the alternative at the time was the
+  segfault.
+
+  It was the same mechanism as a real bug. The generic-Explicit fallback that
+  served row 3 is exactly what made toperator91 call `ShortString Explicit`
+  where fpc calls `ShortString Implicit` -- in fpc 3.2.2 `ExplicitShortString`
+  is never incremented anywhere in that program. One rule cannot do both, so
+  the fallback is gone: an Explicit operator now serves a frozen-string
+  destination only at its OWN capacity, and a cast matching none of them
+  retries the IMPLICIT lookup.
+
+  The segfault is still closed, by a diagnostic instead of a wrong conversion:
+  see test_conversion_operator_no_capacity_match_is_refused.pas, which is row 3
+  under its new (and fpc's) answer, and ROW 3 BELOW, which is the case that
+  proves the retry actually retries rather than the refusal simply swallowing
+  everything.
+
+  ORACLES: fpc 3.2.2 agrees with every row in this file exactly.
   Positive control: the pinned compiler refuses this whole file with
   `duplicate conversion operator`, so the fixture cannot pass by doing nothing. }
 type
@@ -34,6 +48,7 @@ type
     class operator Explicit(const aArg: TTest): TS80;
     class operator Explicit(const aArg: TTest): TS90;
     class operator Explicit(const aArg: TTest): ShortString;
+    class operator Implicit(const aArg: TTest): ShortString;
   end;
 
 class operator TTest.Explicit(const aArg: TTest): TS80;
@@ -45,6 +60,9 @@ begin WriteLn('to90'); Result := 'b'; end;
 class operator TTest.Explicit(const aArg: TTest): ShortString;
 begin WriteLn('toSS'); Result := 'c'; end;
 
+class operator TTest.Implicit(const aArg: TTest): ShortString;
+begin WriteLn('toSSimp'); Result := 'd'; end;
+
 var
   s80: TS80;
   s90: TS90;
@@ -53,5 +71,9 @@ var
 begin
   s80 := TS80(t);   WriteLn('got ', s80);   { the exactly-sized conversion }
   s90 := TS90(t);   WriteLn('got ', s90);   { ...and its sibling, not the first declared }
-  s40 := TS40(t);   WriteLn('got ', s40);   { no String[40] conversion -> the GENERIC one }
+  { ROW 3: no Explicit operator has capacity 40, so the cast is NOT an explicit
+    conversion -- it retries the implicit lookup and lands on the generic
+    ShortString IMPLICIT one. `toSS` must not appear: the Explicit ShortString
+    operator is declared right above and fpc never calls it either. }
+  s40 := TS40(t);   WriteLn('got ', s40);
 end.
