@@ -138,3 +138,22 @@ ancestor chain (so `PT` is found through `TEnumerable<T>`) HANGS this driver —
 
 ## Log
 - 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2473d920e.
+
+## Conformance at the fix, with the delta attributed
+
+`tools/run_pascal_conformance.sh ./compiler/pascal26` at `9b4f55176`, binary
+`f22102f66298`: **425 pass, 0 fail, 75 skip, 50 auto-gated (of 550); 41 gap.**
+
+Against this session's earlier 423/0/77/50 (41 gap -> 42 gap the other way: 42
+before, 41 now) the delta is **+2 pass, -2 skip, -1 gap, and NONE of it is
+mine.** `git diff` on `test/pascal-conformance/pxx.skip` names both rows:
+`tclassinfo1.pp` removed by frankH's `5d29682a2` (TObject.ClassInfo answers the
+typinfo header) and `tgeneric93.pp` by frankZ's `004793f42` (declared() reads
+the generic arity spelling). Both arrived in the pull that banked this fix.
+
+My change moved **nothing** in this corpus — the same result the arity fix had.
+That is expected: the ladder needs a nested class whose name collides with a
+unit-level template, which is an rtl-generics idiom and not something the
+conformance corpus exercises. The assertion for this fix is
+`test_a_nested_class_method_impl_is_not_the_unit_level_template_of_that_name`,
+which does not compile at all without it.
