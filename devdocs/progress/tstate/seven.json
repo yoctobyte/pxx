@@ -14927,8 +14927,8 @@
   "wall": 631.8
  },
  "last_idle_tier_try": {
-  "date": "2026-09-09T08:01:38Z",
-  "sha": "2423a1a5f0f5fc27964894567a2c9f6f3590680f",
+  "date": "2026-09-09T09:11:42Z",
+  "sha": "5acbe362b0340998e9b2bf0aff83b52473839874",
   "tier": "full"
  },
  "last_opt": {
@@ -14976,6 +14976,7 @@
    "range": [
     "1c16d4523de1495f87ac06a076d724b51a9ddc88"
    ],
+   "range_non_causal": false,
    "src": "test/test_generic_delphi_method_header_binds_to_the_generic.pas tools/expect_same.sh",
    "status": "fail"
   }
