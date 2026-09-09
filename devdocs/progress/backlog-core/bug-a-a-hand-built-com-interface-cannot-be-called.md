@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: bug
-blocked-by: []
+blocked-by: [decide-how-a-hand-built-com-interface-becomes-callable]
 status: backlog
 found: 2026-09-09
 found-by: frankS
@@ -98,7 +98,17 @@ rtl-generics builds are correctly shaped for us; nothing can find them.
   answer, which is exactly the property that lets it stay one word.
 - So the options are: give the cast a synthesised shim carrying real RTTI whose
   IMT is `[raw]`; or move to FPC's representation. Both are Track A ABI work.
-  Not attempted here.
+  **Unattempted as of `7b62e7758` (2026-09-09)** — dated rather than left as a
+  bare "not attempted here", which is the construct that sent frankH at the
+  static-Self ticket this morning: true when written, unread afterwards, and
+  invalidated first by its own author.
+  **That fork is now its own ticket and this one is blocked by it:**
+  [[decide-how-a-hand-built-com-interface-becomes-callable]]. It was ranked 55
+  under a live umbrella with an architecture decision inside a bug body, so
+  every `ready --track A` handed it to a seat that had to make an ABI call alone
+  or skip — and skipping leaves no trace, so it reads as available work forever
+  (frank-coordinator's finding, and it is the half neither the filer nor the
+  claimant can see).
 
 Measured 2026-09-09 at binary `68421d8ff193`, commit `f68021557`, against
 fpc 3.2.2 `-Mdelphi`.
