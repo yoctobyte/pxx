@@ -20542,7 +20542,7 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=riscv32 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_rv >/dev/null || { echo "c_alloca_expression_stack riscv32 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh riscv32/c_alloca_expr_rv "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_alloca_expr_rv)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
 	  ./$(COMPILER) --target=riscv32 test/c_vla.c $(TESTTMP)/c_vla_rv >/dev/null || { echo "c_vla riscv32 compile FAIL"; exit 1; }; \
-	  tools/expect_same.sh riscv32/c_vla_rv "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_vla_rv)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
+	  tools/expect_same.sh riscv32/c_vla_rv "$$(tools/run_target.sh riscv32 $(TESTTMP)/c_vla_rv)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24\n9 7 6')" || exit 1; \
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
 	fi
@@ -20555,7 +20555,7 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=arm32 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_a32 >/dev/null || { echo "c_alloca_expression_stack arm32 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh arm32/c_alloca_expr_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_alloca_expr_a32)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
 	  ./$(COMPILER) --target=arm32 test/c_vla.c $(TESTTMP)/c_vla_a32 >/dev/null || { echo "c_vla arm32 compile FAIL"; exit 1; }; \
-	  tools/expect_same.sh arm32/c_vla_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_vla_a32)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
+	  tools/expect_same.sh arm32/c_vla_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_vla_a32)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24\n9 7 6')" || exit 1; \
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-arm absent, arm32 arm NOT verified ==="; \
 	fi
@@ -20568,7 +20568,7 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=i386 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_i386 >/dev/null || { echo "c_alloca_expression_stack i386 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh i386/c_alloca_expr_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_alloca_expr_i386)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
 	  ./$(COMPILER) --target=i386 test/c_vla.c $(TESTTMP)/c_vla_i386 >/dev/null || { echo "c_vla i386 compile FAIL"; exit 1; }; \
-	  tools/expect_same.sh i386/c_vla_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_vla_i386)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
+	  tools/expect_same.sh i386/c_vla_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_vla_i386)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24\n9 7 6')" || exit 1; \
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
 	fi
