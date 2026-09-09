@@ -299,4 +299,4 @@ means `NestedComments` is on under `{$mode delphi}` where fpc has it off, that
 direction is worth someone's measurement.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 004793f42.
