@@ -2999,6 +2999,20 @@ test-nilpy: $(COMPILER)
 	@# first failure of `uses constexp`, at cutils.pas:1322.
 	@./$(COMPILER) test/test_p_the_sar_intrinsics_are_arithmetic_not_logical.pas $(TESTTMP)/test_sar26
 	@tools/expect_same.sh test_sar26 "$$($(TESTTMP)/test_sar26 | tail -n 2)" "$$(printf 'fails=0\nSAR OK')"
+	@# A subrange bound may be a FOLDED CALL: `low(TCGLoc)..pred(LOC_CREFERENCE)`.
+	@# The type-level peek was two tokens wide (identifier, then `..`), so three
+	@# tokens of `low ( TE )` hid the `..` and `low` was reported as an unknown
+	@# TYPE. Nothing new evaluates anything -- ConstEvalOrdBound already folded
+	@# all four intrinsics, which the array-index door (no peek, never broken)
+	@# proves; only the peek was missing. THE ARRAY ROWS IN THIS FILE ARE THE
+	@# CONTROL, asserting the two doors agree, because a type row that matched
+	@# fpc while the array row did not would mean the fold had been DUPLICATED
+	@# rather than reached. The anonymous-parameter spelling is deliberately
+	@# absent: fpc refuses it and we accept it, which is not a defect and not a
+	@# parity row. Byte-identical to fpc 3.3.1; the PIN refuses the file at
+	@# line 45. Found at cgbase.pas:63 (umbrella-pxx-compiles-fpc-itself).
+	@./$(COMPILER) test/test_p_a_subrange_bound_can_be_a_folded_call.pas $(TESTTMP)/test_subcall26
+	@tools/expect_same.sh test_subcall26 "$$($(TESTTMP)/test_subcall26 | tail -n 3)" "$$(printf 'member=ea\nfails=0\nSUBCALL OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

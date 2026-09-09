@@ -384,17 +384,49 @@ end;
   and CEEnumId (the enum type id when the value is a member). Nothing new had to
   be able to evaluate anything; the two arms simply never asked.
 
-  The discriminator is the `..` two tokens on -- the same peek the array-index
-  parser uses to tell `array[TEnum]` from `array[lo..hi]`. Deliberately narrow:
-  a BARE identifier immediately followed by `..`, not a qualified `TEnum.member`
-  and not an expression bound like `Lo+1..Hi`, because those are not among the
-  shapes measured to matter and widening the guess is how a wrong type gets
-  stamped on a right value -- the rule the char-literal peek beside it states. }
-function SubrangeStartsHere: Boolean;
+  The discriminator is the `..` AFTER THE BOUND -- the same peek the array-index
+  parser uses to tell `array[TEnum]` from `array[lo..hi]`.
+
+  IT WAS DELIBERATELY NARROWED TO A BARE IDENTIFIER, and the corpus has since
+  produced the shape that narrowing excluded. The 2026-09-05 note read: "not a
+  qualified `TEnum.member` and not an expression bound like `Lo+1..Hi`, because
+  those are not among the shapes measured to matter". A CALL-SHAPED bound is now
+  measured to matter: FPC's own compiler writes
+
+      TCGNonRefLoc = low(TCGLoc)..pred(LOC_CREFERENCE);      { cgbase.pas:63 }
+
+  and pxx answered `unknown type: low` -- the identical symptom the paragraph
+  above describes, one spelling further out, because `low ( TE ) ..` puts three
+  tokens between the identifier and the `..` and a two-token peek cannot see it.
+  cgbase is `uses`d by most of FPC's compiler, so this one line is in front of
+  a large part of the corpus (umbrella-pxx-compiles-fpc-itself).
+
+  AND AGAIN NOTHING NEW HAD TO EVALUATE ANYTHING. ConstEvalOrdBound already
+  folds `low(T)`, `high(T)`, `pred(x)` and `succ(x)` correctly -- measured
+  against fpc through the array-index door, which has no guard:
+  `array[low(TE)..pred(ec)] of Integer` compiles and indexes right, and always
+  did. Only the PEEK was missing, in the one arm that has a peek.
+
+  So the second bound-shape test is name-independent on purpose: it takes the
+  MATCHING close paren and asks what follows it, rather than listing `low`,
+  `high`, `pred`, `succ`. A list would be a fifth place that has to know which
+  intrinsics fold, and ConstEvalOrdBound is already the one place that knows;
+  a name it cannot fold gets its own diagnostic there rather than a wrong
+  branch here. Nothing but a subrange can put `ident ( ... ) ..` in a type
+  position, so the wider test cannot steal a spelling from anything.
+
+  WHAT THIS FUNCTION IS NOT: the literal-token shapes (`1..5`, `-3..3`,
+  `'a'..'z'`) are dispatched by ParseTypeKind's own `case` at tkInteger /
+  tkMinus / tkString and never come here. This is only the half a `case` on
+  CurTok.Kind CANNOT decide, which is why it exists at all. It was named
+  SubrangeStartsHere and carried that half too -- and had NO CALLER, because
+  both live sites had inlined their own copy of the peek. A function that
+  states the rule while the rule is enforced somewhere else is the decoy this
+  file's own comments keep warning about, so it is one routine with one caller
+  now, and the name says which half it owns. }
+function SubrangeIdentBoundStartsHere: Boolean;
+var k, depth: Integer;
 begin
-  Result := (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or
-            (CurTok.Kind = tkString);
-  if Result then Exit;
   { True and False are NOT tkIdent -- the lexer gives them tkTrue/tkFalse of
     their own -- so a guard written only for identifiers misses `False..True`,
     which is why that spelling outlived the first version of this fix by one
@@ -403,6 +435,27 @@ begin
   Result := ((CurTok.Kind = tkIdent) or (CurTok.Kind = tkTrue) or
              (CurTok.Kind = tkFalse)) and
             (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDotDot);
+  if Result then Exit;
+  { `low(TCGLoc)..` -- walk to the paren that closes this one and look past it.
+    Bounded by TokCount, so an unbalanced source runs out rather than away. }
+  if (CurTok.Kind <> tkIdent) or (TokPos >= TokCount) or
+     (Tokens[TokPos].Kind <> tkLParen) then Exit;
+  depth := 0;
+  k := TokPos;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkLParen then Inc(depth)
+    else if Tokens[k].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        Result := (k + 1 < TokCount) and (Tokens[k + 1].Kind = tkDotDot);
+        Exit;
+      end;
+    end;
+    Inc(k);
+  end;
 end;
 
 function ParseSubrangeTail: TTypeKind;
@@ -708,13 +761,14 @@ begin
   LastTypeFileElemTk := 0;
   LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
   LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
-  { A subrange whose bounds are NAMED rather than spelled as literals. Checked
-    before the case because `case CurTok.Kind of` cannot dispatch on the
-    two-token lookahead that separates `sat..sun` from a plain type name; see
-    SubrangeStartsHere for the seven spellings and why the peek is narrow. }
-  if ((CurTok.Kind = tkIdent) or (CurTok.Kind = tkTrue) or
-      (CurTok.Kind = tkFalse)) and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDotDot) then
+  { A subrange whose bounds are NAMED (`sat..sun`) or CALL-SHAPED
+    (`low(TCGLoc)..pred(LOC_CREFERENCE)`) rather than spelled as literals.
+    Checked before the case because `case CurTok.Kind of` cannot dispatch on
+    the lookahead that separates either of those from a plain type name. The
+    peek used to be inlined here, which is why the function that documented it
+    had no caller; see SubrangeIdentBoundStartsHere for the spellings and for
+    what the two shapes have in common. }
+  if SubrangeIdentBoundStartsHere then
   begin
     Result := ParseSubrangeTail;
     Exit;
