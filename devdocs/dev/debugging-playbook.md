@@ -3007,6 +3007,17 @@ Measured 2026-09-09, three sessions, three costumes in one day:
 - **Which spelling of one expression you probe** (frankH, `(x + y).v`). The
   temporary spelling `z := x + y; z.v` compiled the whole time the direct one
   was an IR_UNSUPPORTED. A row asserting the workaround passes forever.
+- **A SYMMETRIC-LOOKING WIDENING OF AN EXISTING GUARD** (frankZ, a PWideChar
+  literal emitted narrow). The obvious edit was to widen the existing `+8`
+  guard to cover both pointer kinds — and it reads `0 0 0 0 0`. A managed
+  handle already points AT the data; a literal is a static block whose address
+  is the block start. **The two cases differ in what the value IS, not in how
+  wide its characters are**, so a guard parameterised on width generalises
+  along the wrong axis. The wrong version compiles, looks symmetric, and no
+  existing row can see it. This is the same shape as the operator matrix above
+  and the most dangerous member of the family, because "make the narrow case
+  and the wide case share a path" is what *normalise-don't-special-case* asks
+  for — the rule is right and the AXIS was the thing to check.
 
 **The question to ask is not "can this guard fail" but "does my input reach the
 arm at all".** A positive control drawn from the right population, reading the
