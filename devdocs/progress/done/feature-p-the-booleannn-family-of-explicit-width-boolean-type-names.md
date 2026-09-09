@@ -109,3 +109,6 @@ instead. Report the wall that moved, never the files that "now work".
 - `compiler/ir.inc`, `compiler/pasparser_decl.inc` — call sites.
 - `test/test_booleannn_family.pas` + `.expected` — 13 rows, `.expected` is fpc's.
 - `Makefile` — `test-core` row `test_boolnn26`.
+- All of the above landed together, commit e1808ad71, at compiler `9b2cfef2721d`;
+  `gate.sh quick` GREEN and `make compiler/pascal26` recomputed the fixedpoint
+  (`converged`, not the stamp path) at that tree.
