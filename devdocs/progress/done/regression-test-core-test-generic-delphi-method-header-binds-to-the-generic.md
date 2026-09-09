@@ -118,7 +118,7 @@ from the right population, which is why it is the one that caught this.
 fixture — the reason the lookahead exists at all), `test_twoscopespec26`,
 `test_genselfparam26`, `sweep_gennestid26`, `sweep_clsnestarg26`,
 `sweep_inhnestarg26`.
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 54286c1ab.
 
 ### What this fix does NOT establish
 
