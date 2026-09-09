@@ -43,7 +43,7 @@ before the cwd. Adding the cwd back would reintroduce exactly the hazard those
 notes describe. **Fix the silence.**
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 102d95440.
 
 ## 2026-09-09 — fixed as a diagnostic; and the repro is narrower than filed
 
