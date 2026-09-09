@@ -1,8 +1,9 @@
 ---
 prio: 55
 track: P
-status: open
+status: working
 summary: "When two units each specialize the other's generic through mutually recursive implementation-section `uses`, the specialized method bodies are spliced somewhere the parser will not accept a method implementation: `expected 'begin' before '.'`, near `; end ; class procedure TSomeGeneric1LongInt >>> . Test ;`. Reduced to 30 lines, two units, no corpus. Was hidden behind bug-p-a-cross-unit-specialized-method-cannot-see-its-own-parameters until 2026-09-07; that fix moved the wall here and did not reach it. The conformance row is tgeneric91.pp."
+owner: frankH
 ---
 
 ## Repro
