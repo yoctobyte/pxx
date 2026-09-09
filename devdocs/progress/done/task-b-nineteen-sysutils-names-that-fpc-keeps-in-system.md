@@ -241,15 +241,24 @@ Confirmed independently with a name that has **no trigger in either scan**:
 `VariantTagName`, declared in `builtin.pas`, is refused from a no-uses PROGRAM
 and compiles fine from a no-uses UNIT.
 
-### Why I believed it
+### Why I believed it — AND THIS TICKET'S TWO FINDINGS WERE ONE OBSERVATION
 
-`make lib-test` failed every unit with `undefined variable (LowerCase)` while
-only the program-level trigger existed, and I read that as the unit-level hole.
-It was the FROZEN-BUILTIN problem — the pinned build cannot see a name moved out
-of `lib/rtl` — which is the *other* finding in this ticket and is unaffected.
-**Two failures with the same error string, one cause, and I attributed it to the
-hypothesis I was already holding.** The fixture I then wrote to prove the
-unit-level hole passes with or without the clause, so it certified it.
+Read top to bottom this ticket looks like it found two independent things: a
+unit-level ambient hole and a frozen-builtin split. **They are one observation,
+read twice.** `make lib-test` failed every unit with `undefined variable
+(LowerCase)` while only the program-level trigger existed. That single failure
+is the entire evidence for both readings, and only the second one is true — the
+pinned build cannot see a name moved out of `lib/rtl`.
+
+**The error string is doing the work a discriminator should do.** `undefined
+variable (X)` is what a missing ambient pull says and what a name missing from
+the frozen builtin says, so the message cannot separate them and I picked the
+hypothesis already in hand. The fixture I then wrote to prove the unit-level
+reading passes with or without the clause, so it could not separate them either
+— it certified the belief instead of testing it.
+
+The discriminator, when it was finally run, is not a better error message but a
+**differential build**: disable one pull, rebuild, see which fixture moves.
 
 ### What is left of the class claim
 
