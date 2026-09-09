@@ -4229,6 +4229,41 @@ end;
   looked for. (CLAUDE.md, "hedge the premise, not just the inference" and "the
   most expensive stale row is a hazard block".)
   bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses }
+{ The SECOND half of ParseSubroutine's `X.M` predicate, which the lookahead
+  below did not have. Name and arity say the header COULD be this template's;
+  they cannot say it is not the same-named ORDINARY class's own impl, because
+  the two are spelled identically by construction -- in objfpc always, and in
+  mode Delphi as soon as DelphiRewriteGenericUses has deleted the `<T>` group.
+
+  Ask which class DECLARES the method, exactly as pasparser_proc.inc does, and
+  for the same reason its comment gives: with `TSvc` and `TSvc<T>` both declaring
+  `Sel`, matching on the spelling silently hands the ordinary class's body to
+  the template.
+
+  A header the rewrite RECORDED skips the test: the source did write `<T>`, so
+  it was never ambiguous, and asking would give the template's body away instead.
+  That asymmetry is the parser's too (`wasDelphiGenHdr`).
+
+  WHY THE LOOKAHEAD NEEDED ITS OWN COPY. The parser reaches this header later
+  and decides correctly -- but by then the row is already in the arena and the
+  pend has streamed it, so the correct decision changes nothing. A predicate
+  that lives on one side of a lookahead/parse pair fails by AGREEING with the
+  other side about every header except the one that matters.
+  bug-p-a-generic-methods-out-of-line-header-binds-to-a-same-named-non-generic-class }
+function TemplateOwnsMethodImplHdr(scan, ti: Integer): Boolean;
+var nonGenCi: Integer;
+begin
+  TemplateOwnsMethodImplHdr := True;
+  if IsDelphiGenMethImplHdr(Tokens[scan].SOffset) then Exit;
+  if scan + 2 >= TokCount then Exit;
+  if Tokens[scan + 2].Kind <> tkIdent then Exit;
+  nonGenCi := FindUClass(Templates[ti].Name);
+  if nonGenCi < 0 then Exit;
+  if FindUMeth(nonGenCi, GetTokenStrFromRaw(Tokens[scan + 2].SOffset,
+                                            Tokens[scan + 2].SLen)) >= 0 then
+    TemplateOwnsMethodImplHdr := False;
+end;
+
 procedure BufferTemplateMethodsAhead(ti: Integer);
 var scan, hdr, fin, ts, tc, gm: Integer; dup: Boolean;
 begin
@@ -4239,11 +4274,15 @@ begin
       alone attached a two-parameter template's bodies to the one-parameter
       template of the same name, and the pend then streamed them under a
       substitution leaving the second parameter unbound.
-      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity }
+      bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity
+
+      ...and NAME AND ARITY ARE NOT ENOUGH -- see TemplateOwnsMethodImplHdr just
+      above, which is the half ParseSubroutine has and this scan did not. }
     if (Tokens[scan].Kind = tkIdent) and (Tokens[scan + 1].Kind = tkDot) and
        CaseEqual(GetTokenStrFromRaw(Tokens[scan].SOffset, Tokens[scan].SLen),
                  Templates[ti].Name) and
-       DelphiGenMethImplHdrOfTemplate(Tokens[scan].SOffset, ti) then
+       DelphiGenMethImplHdrOfTemplate(Tokens[scan].SOffset, ti) and
+       TemplateOwnsMethodImplHdr(scan, ti) then
     begin
       { the same two header shapes BufferGenericMethod is called with, plus the
         constructor/destructor spelling, which are identifiers in this dialect.

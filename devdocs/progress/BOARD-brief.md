@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:105 backlog-tools:55 backlog-pascal:14 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3614 rejected:80`
+`working:29 unfinished:21 blocked:6 backlog:17 backlog-umbrella:9 backlog-core:150 backlog-nilpy:105 backlog-tools:55 backlog-pascal:14 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:4 float:25 done-followup:3 decided:149 done:3615 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
@@ -72,7 +72,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 432, ranked
+## Ready — top 30 of 431, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -101,8 +101,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
-- `[p 70] [T]` regression-test-core-test-generic-delphi-method-header-binds-to-the-generic
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
+- `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 
-_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

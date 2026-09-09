@@ -165,21 +165,43 @@ measured on the repro:
 | `+ CollectHoistCandidates` | `unknown type: specialize` at line 15 |
 | `+ CollectHoistCandidates + EmitHoistedDecls` | `expected 'begin' before 'TPtrs'` at line 15 |
 
-**The name became correct and the program got WORSE**, and the reason is the
-part worth having: `ScanRangeForNestedSpecs` skips a group whose alias is
-already `NestedSpecKnown`, and **collapsing the `specialize X<...>` group in the
-stream is a SIDE EFFECT of registering it.** With the wrong name the group was
-registered (wrongly) and therefore collapsed; with the right name it is already
-known, so it is not registered, so nothing collapses it and the literal word
-`specialize` survives into the stream — which is the exact symptom
-`ScanRangeForNestedSpecs`'s own header comment describes for a range it never
-scanned.
+**The name became correct and the program got WORSE**, which is the finding.
+The three rows above are measured and they are the durable part; the causal
+story is not, and the version this ticket carried until 2026-09-09 was wrong in
+a way worth spelling out, because a peer had already built a playbook section on
+it.
 
-So this is **not a one-line fix and not only a table-refresh bug.** Registration
-and collapse are one operation serving two purposes, and they need separating
-before the table can be corrected: the scan must collapse a group whose alias is
-already known, and register only when it is not. Anyone taking this should
-expect to touch that skip condition, not just the call site.
+**The tell that travels, and it needs nothing about the hoist table:** the
+failure mode CHANGED SHAPE rather than improving. `unknown type: <a wrong
+mangled name>` → `unknown type: specialize` is not closer to working — it is a
+DIFFERENT LAYER failing, which means the first layer stopped running. Read the
+table that way and it is actionable without any mechanism at all.
+
+**WHAT THIS TICKET CLAIMED AND CANNOT SUPPORT.** It said *"collapsing the
+`specialize X<...>` group in the stream is a SIDE EFFECT of registering it"*.
+It is not. The collapse lives in `SpecializeToBuffer`, and its condition is
+
+```pascal
+      if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) or
+         LateSpecEmittedName(aliasNm) then
+```
+
+— three predicates about whether the NAME resolves, and none of them asks
+whether `ScanRangeForNestedSpecs` registered anything. That scan only fills
+`NSpec*`. There is a real coupling — a name skipped at scan time never reaches
+`LateSpecEmitted`, and `EmitLateNestedSpecDecls` only calls `FlushPrereqs` when
+`NSpecCount > 0` — but WHICH link fires here is unmeasured, and
+`pasparser_generic.inc:4899` documents a THIRD route to the identical
+`specialize`-survives symptom (a method body never swept at all) that involves
+neither. **Three candidate routes to one symptom, one experiment run: that is
+not enough to name a cause, and the confident sentence above was written from
+one reading.**
+
+So what stands is narrower and still decides the shape of the work: **this is
+not a one-line fix.** Refreshing the table alone is measured to break the
+program, so whoever takes it must first establish which of the three routes the
+`specialize` survival came through — `PXXDBG=p.nspec:*` on the repro under the
+patched binary answers it directly, and that measurement was never run.
 
 **That also retires the hypothesis above.** The single bare
 `alias=TEnumerator$PT` in the Collections driver is NOT shown to be this defect
