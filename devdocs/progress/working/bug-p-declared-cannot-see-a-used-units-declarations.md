@@ -3,8 +3,8 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: open
-owner: frankS
+status: working
+owner: frankZ
 ---
 
 # `{$if declared(X)}` cannot see a used unit's declarations, and answers False rather than refusing
