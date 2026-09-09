@@ -358,3 +358,6 @@ gate could not, and neither could any amount of testing the feature itself.
 - **pylib's `PyVarSlotIsObj`** deliberately does not list the tag: NilPy has no
   interfaces, so it cannot reach a Python slot — and widening that RANGE would
   be a silent no-op, not a fix. Recorded there too.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
