@@ -15143,7 +15143,7 @@
  "open_regressions": [
   {
    "bad": "bdfa9484f2f401f3050e2cbadab7df640cfd27b5",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "cbb03092bac6f384a11220e8e6fcdc9db8cf1333",
    "job": "test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh",
