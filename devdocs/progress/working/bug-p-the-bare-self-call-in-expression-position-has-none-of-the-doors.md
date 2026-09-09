@@ -4,8 +4,8 @@ title: "The bare implicit-Self call in EXPRESSION position has none of the five 
 track: P
 prio: 45
 type: bug
-status: open
-owner: ""
+status: working
+owner: frankS
 found-by: frankH
 created: 2026-09-09
 tags: [methods, arity, array-of-const, variadic]
