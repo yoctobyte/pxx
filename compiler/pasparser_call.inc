@@ -2794,6 +2794,131 @@ begin
   Expect(tkRParen, ')');
 end;
 
+{ THE ONE ARGUMENT LOOP FOR A BARE IMPLICIT-SELF CALL -- `Log(...)` written
+  inside a sibling method of the class that declares Log, with no receiver.
+
+  There were TWO hand-rolled copies of this loop, one in the STATEMENT parser
+  and one in the expression parser's factor, and between them five doors were
+  found missing, one at a time, by five different sessions:
+
+    `[...]` is an open array here, not a set   bug-p-an-array-of-const-literal-is-a-set-at-a-bare-self-method-call
+    a bare method NAME is a reference          bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced
+    the arity is checked at all                bug-p-a-bare-method-call-inside-its-own-class-ignores-arity
+    an elided `array of const` tail is absorbed bug-p-a-bare-variadic-method-call-segfaults-where-the-bracketed-spelling-works
+    empty parens against a required parameter  bug-p-empty-parens-at-a-bare-method-call-reads-a-garbage-argument
+
+  EVERY ONE OF THOSE WAS FIXED IN THE STATEMENT COPY ONLY, and the expression
+  copy still had none of them -- `Desc(['a', 1])` answered n=0 there because the
+  bracket was read as a set, `Desc('a', 1)` segfaulted, `Req(1, 2, 3)` against a
+  one-parameter method was accepted and returned 3, and `Req()` read garbage.
+  Not four bugs: one loop that was never given the fixes. Each of those five
+  fix comments ends with some version of *every other call path asks; this one
+  hand-rolled its loop and asked nothing*, and being able to write that five
+  times is the argument for this routine rather than for a sixth patch.
+  bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors
+
+  Called with CurTok just past the `(`; consumes the `)`. mai is in/out because
+  a caller may already have filled slots, and counts from 1 because parameter 0
+  is the implicit Self -- so it IS the callee slot each argument fills, which is
+  what the bracket door needs to ask its question.
+
+  TWO OF THREE ARMS, AND THE THIRD IS NAMED HERE ON PURPOSE. The record-static
+  call arm is a separate hand-rolled copy with the same omissions and this
+  routine cannot reach it: measured by frankS at fd01b434e7ff,
+  `TR.One(1, 2, 3)` against a one-parameter `static` gives 3 and `TR.One()`
+  gives 12 -- uninitialised memory, exit 0, no diagnostic. Its Self handling
+  genuinely differs (UMthNoSelf, a lifted record temp, or a -1 self), so it is
+  not a substitution into this routine. Written down rather than left implicit
+  because the whole reason this routine exists is that the class kept closing
+  on paper while a copy kept its holes, five times running.
+  bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop
+
+  arityAlreadyReported is the caller's pre-check verdict, and it does two
+  things: it suppresses the empty-parens arm (a too-few call the pre-check
+  already named) and it routes the tail past ExpectCallRParen's own arity
+  report (a surplus the pre-check already named). ONE MISTAKE, ONE DIAGNOSTIC:
+  the pre-check catches BOTH directions and the shared tail structurally cannot
+  see the too-few one, so the pre-check is the site's single arity authority
+  and all that is owed here is the resync. }
+procedure ParseBareSelfCallArgs(mpi: Integer; const calleeName: AnsiString;
+                                callNode: Integer; var lastArg: Integer;
+                                var mai: Integer;
+                                arityAlreadyReported: Boolean);
+var argSeq, entryLastArg: Integer;
+begin
+  entryLastArg := lastArg;
+  if (CurTok.Kind = tkRParen) and (not arityAlreadyReported) then
+    ApplyEmptyCallParens(mpi, calleeName, callNode, lastArg, mai);
+  { NilPy `d.update(**e)` / `dict(a=1)`: this callee's keywords are dict KEYS,
+    so the whole run is one argument. Inert outside NilPy -- PyKwDictArgsHere
+    is guarded on isNilPy, which is why it can live in the shared routine
+    rather than at the one caller that used to ask it. }
+  if PyKwDictArgsHere(mpi) then
+  begin
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := PyBuildKeywordDictHere;
+    ASTIVal[argSeq] := 0;
+    ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+    Inc(mai);
+  end;
+  { BOUNDED at the declared parameter count, like every other method-argument
+    loop in the frontend rather than swallowing to the `)`. The one shape that
+    legitimately passes MORE arguments than the signature has is variadic
+    bracket-elision, and it is the shared tail below that absorbs it. }
+  while (CurTok.Kind <> tkRParen) and
+        ((mpi < 0) or (mai < Procs[mpi].ParamCount)) do
+  begin
+    { THE BRACKET DOOR: `[...]` at an argument position is a SET to ParseExpr
+      and an `array of const` / open-array LITERAL to the callee, and only the
+      parameter can say which. THE REFUSAL IS THE LUCKY CASE -- `['#0']` is two
+      characters and could not be a set, so it was diagnosed; `['x']` is a legal
+      single-character set, so it COMPILED and the callee read a Length off a
+      set. Any single-char or integer element has that shape. }
+    argSeq := TryParseBracketArgForSlot(mpi, mai);
+    if argSeq >= 0 then CurASTNode := argSeq
+    else
+    begin
+      { THE BARE-METHOD-NAME DOOR: `Take(HashIt)` against a method-pointer
+        parameter must OFFER the reference reading. Without it ParseExpr takes
+        the bare name under call-first precedence and hands the callee a
+        LongInt. It looked like a lowering bug because the overload PROBES do
+        ask, so a methodref really was built and really did decide the match --
+        and was then discarded with the probe while this loop re-parsed the
+        argument as a call. The verdict came from one reading and the tree from
+        another. }
+      argSeq := TryDelphiBareProcArg;
+      if argSeq >= 0 then CurASTNode := argSeq else ParseExpr;
+    end;
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := CurASTNode;
+    ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+    Inc(mai);
+    { THE COMMA IS LEFT IN PLACE ONCE THE DECLARED SLOTS ARE FULL, and that is
+      load-bearing rather than tidy: AbsorbVariadicTailArgs reads
+      `while CurTok.Kind = tkComma`, so eating it here would leave the tail
+      standing on the first surplus EXPRESSION, wrap element 0 only, and then
+      report an arity error for the one call shape the extension exists to
+      accept. }
+    if (CurTok.Kind = tkComma) and
+       ((mpi < 0) or (mai < Procs[mpi].ParamCount)) then Next;
+  end;
+  if arityAlreadyReported then
+  begin
+    SkipSurplusCallArgTail;
+    Expect(tkRParen, ')');
+  end
+  else if lastArg = entryLastArg then
+    { EMPTY PARENS, and handing THAT to the absorber wraps the implicit SELF
+      POINTER as element 0: `Desc()` against `Desc(const a: array of const)`
+      printed n=1 with a garbage element. -1 is the absorber's own "no
+      meaningful last argument" convention. }
+    ExpectCallRParen(mpi, -1)
+  else
+    ExpectCallRParen(mpi, lastArg);
+end;
+
 function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
 var callNode, lastArg, argSeq, exprNode, argIdx, ai, selfBase: Integer;
     mkw, kwHead, kwCount: Integer;

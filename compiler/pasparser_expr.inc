@@ -786,6 +786,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
       ParseCastPostfixSuffix carries the equivalent bit (pcMovedOff) as its own
       local, because it is state of the WALK and never of the factor parser.
       refactor-p-three-hand-rolled-postfix-loops }
+    exprArityBad: Boolean;  { the bare implicit-Self call's arity pre-check verdict -- see its arm }
     pcMovedOff: Boolean;    { the pointer-alias cast walk has left the CAST -- see its loop }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
@@ -9044,6 +9045,27 @@ begin
             otherwise on the extended class — SelfMemberCi. }
           ci := SelfMemberCi(name);
           mmi := FindUMethOverloadAhead(ci, name, CountCallArgsAhead);
+          { ARITY, WHICH THIS DOOR DID NOT ASK EITHER -- the statement twin's
+            own note (bug-p-a-bare-method-call-inside-its-own-class-ignores-arity)
+            says FindUMethOverloadAhead is a SELECTOR, asked which overload
+            having already been told this IS a method call, and with no
+            candidate of the right arity it falls through to the first name
+            match at ANY arity. That note was written into the statement copy
+            and this copy kept the loose fallback: `Req(1, 2, 3)` against
+            `Req(x: Integer)` was accepted and returned 3, the arguments having
+            shifted one slot.
+
+            THE VARREC CARVE-OUT IS NOT CAUTION, IT IS A MEASURED DEPENDENCY,
+            and it is carried across verbatim: variadic bracket-elision passes
+            MORE explicit arguments than the signature has ON PURPOSE, fpc
+            refuses that source, so an arity gate written from fpc's answer
+            alone would delete a pxx extension in silence.
+            bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors }
+          exprArityBad := (mmi >= 0) and
+             (FindUMethArityStrict(ci, name, CountCallArgsAhead) < 0) and
+             (not UMethNameCanAbsorbVarRecTail(ci, name));
+          if exprArityBad then
+            ErrorRecover('wrong number of parameters in call to ' + name);
           if mmi >= 0 then
           begin
             EnforceMethVis(mmi, name);
@@ -9073,31 +9095,23 @@ begin
             begin
               Next;
               i := 1;
-              { `d.update(**e)` reaches THIS loop (the plain class-method one,
-                which has no keyword handling at all and met the `*` with
-                "expected expression"), while `d.update(a=1)` reaches the
-                arity-driven loop above — the same construct through two paths,
-                so both ask the one builder. }
-              if PyKwDictArgsHere(mpi) then
-              begin
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := PyBuildKeywordDictHere;
-                ASTIVal[argSeq] := 0;
-                ASTRight[mlastArg] := argSeq;
-                mlastArg := argSeq;
-                Inc(i);
-              end;
-              while CurTok.Kind <> tkRParen do
-              begin
-                ParseExpr;
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := CurASTNode;
-                ASTRight[mlastArg] := argSeq;
-                mlastArg := argSeq;
-                Inc(i);
-                if CurTok.Kind = tkComma then Next;
-              end;
-              Expect(tkRParen, ')');
+              { THE SAME LOOP THE STATEMENT PARSER HAS, and this copy had NONE
+                of its five doors -- measured 2026-09-09, all inside the class
+                that declares the callee:
+
+                  Desc(['a', 1])            -> n=0, the bracket read as a SET
+                  Desc('a', 1)              -> SEGFAULT
+                  Req(1, 2, 3) vs Req(x)    -> accepted, returned 3
+                  Req()        vs Req(x)    -> accepted, read garbage
+
+                Every one of those is a defect that was found, diagnosed and
+                fixed at the statement twin by a different session on a
+                different day. Not four bugs: one copy that was never given the
+                fixes, and a grep for any of those rules returns the correct
+                copy and is silent about this one.
+                bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors }
+              ParseBareSelfCallArgs(mpi, name, mcallNode, mlastArg, i,
+                                    exprArityBad);
             end;
             { A SUFFIX ON THE RESULT — and the RETURN-TYPE LIST HERE WAS THE BUG.
               This asked `RetType = tyClass or tyRecord` and dropped the suffix

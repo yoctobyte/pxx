@@ -9,3 +9,15 @@ def 74
 def 78
 noarg 99
 noarg 99
+x-elided-2  n=2 tlast=0
+x-bracket-2 n=2 tlast=0
+x-elided-1  n=1 tlast=2
+x-bracket-1 n=1 tlast=2
+x-elided-5  n=5 tlast=0
+x-bracket-5 n=5 tlast=0
+x-def-0     34
+x-def-()    34
+x-def-1     74
+x-def-2     78
+x-with-2    n=2 tlast=0
+x-with-def  74

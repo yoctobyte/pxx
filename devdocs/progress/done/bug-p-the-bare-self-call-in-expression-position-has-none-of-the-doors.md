@@ -4,7 +4,7 @@ title: "The bare implicit-Self call in EXPRESSION position has none of the five 
 track: P
 prio: 45
 type: bug
-status: open
+status: done
 owner: frankH
 found-by: frankH
 created: 2026-09-09
@@ -72,6 +72,8 @@ frankB reached the same evening from a NilPy constructor mapping.
 carries a correction because its write-up asserted this arm "already had the
 tail" before anyone measured it.
 
+---
+
 ## Claim collision, resolved in frankH's favour (2026-09-09, frankS)
 
 I claimed this (`1db9e8007`), built the extraction, and **dropped it**: frankH
@@ -109,3 +111,103 @@ unbounded, calls `ParseExpr` only, and has no bracket door, no bare-method-name
 door, no arity check and no `ExpectCallRParen` tail. Filed separately as
 [[bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop]] so
 closing this one does not read as closing the class.
+
+---
+
+## Fixed 2026-09-09 (frankH) — by extraction, as the ticket argued
+
+`ParseBareSelfCallArgs` (`compiler/pasparser_call.inc`) is now the one argument
+loop for a bare implicit-Self call, and both copies were deleted and routed
+through it: the statement arm in `pasparser_stmt.inc` and the factor arm in
+`pasparser_expr.inc`. About 12.4k characters of duplicated loop went with them.
+
+### Measured before and after, one class, one program
+
+| call | before | after |
+| --- | --- | --- |
+| `Desc(['a', 1])` in an expression | `n=0` (bracket read as a SET) | `n=2` |
+| `Desc('a', 1)` in an expression | SEGFAULT | `n=2` |
+| `Desc('a')` in an expression | SEGFAULT | `n=1` |
+| `Req(1, 2, 3)` vs `Req(x: Integer)` | accepted, returned 3 | refused, one diagnostic |
+| `Req()` vs the same | accepted, read garbage | refused, one diagnostic |
+| `Two(7)` vs `Two(a, b)` | accepted | refused, one diagnostic |
+| `with Self do n := Req(1, 2, 3)` | accepted | refused, one diagnostic |
+
+`Opt()`, `Opt`, `Opt(9)` on an all-defaulted signature are unaffected in both
+positions — the strict arity check accounts for defaults.
+
+### The three things extraction nearly breaks, all carried
+
+1. **The varrec carve-out.** `UMethNameCanAbsorbVarRecTail` is ported to the
+   expression arm with the pre-check, because variadic bracket-elision passes
+   MORE explicit arguments than the signature has *on purpose* and fpc refuses
+   that source — an arity gate written from fpc's answer alone deletes a pxx
+   extension in silence. frankS's sentence, kept verbatim.
+2. **`PyKwDictArgsHere(mpi)`**, which only the expression arm asked. It lives in
+   the shared routine now; that is safe *because* it is guarded on `isNilPy`,
+   so it is inert for Pascal — `f(a=1)` in Pascal stays a comparison.
+3. **The `-1` when no explicit argument was parsed.** `lastArg` still being the
+   entry value means empty parens, and handing that to `AbsorbVariadicTailArgs`
+   wraps the implicit Self POINTER as element 0.
+
+### One mistake, one diagnostic — and whose check owns it
+
+Bounding the expression loop makes a surplus reach `ExpectCallRParen`'s tail,
+which would report the same mistake a second time under the qualified wording.
+The pre-check stays the single authority at BOTH sites, confirmed with frankS
+who owns it: the shared tail is structurally blind to the too-few direction (a
+short call leaves `CurTok` on `)`), so giving it the surplus direction would
+split one site's arity reporting across two wordings depending on which way the
+count was wrong.
+
+### TWO OF THREE ARMS. The third is named, in the ticket AND in the code
+
+The **record-static** call arm is a third hand-rolled copy with the same
+omissions, and this routine cannot reach it — its Self handling genuinely
+differs (`UMthNoSelf`, a lifted record temp, or a `-1` self). Measured by
+frankS at `fd01b434e7ff`: `TR.One(1, 2, 3)` against a one-parameter `static`
+gives 3, and `TR.One()` gives 12 — uninitialised memory, exit 0, no
+diagnostic. Filed as
+[[bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop]],
+and written into `ParseBareSelfCallArgs`'s own header.
+
+Saying it out loud is the point: this ticket's whole argument is that the class
+kept closing on paper while a copy kept its holes, five times running. A
+resolution that says "extracted, done" closes it the same way.
+
+Note for whoever takes it: `class function Desc(const a: array of const):
+Integer; static` inside a RECORD is refused outright with `unknown type:
+const`, so the array-of-const doors cannot be exercised at that arm at all
+today — the arity rows are the whole measurable surface.
+
+### Verification
+
+- `test/test_p_a_bare_variadic_method_call.pas` grew an EXPRESSION half: every
+  statement row now has an `x-` twin printing the same descriptor, through the
+  second parser arm, plus two `with Self do` rows. Two functions rather than
+  one, because a length alone cannot tell a correct descriptor from a
+  differently-wrong one — `DescTag` reads the LAST element's tag, which is the
+  slot the old loop filled with whatever the second argument left.
+- Statement side unchanged on all six of its fixtures, including
+  `test_p_a_bare_method_call_ignores_arity_fail` at exactly four diagnostics on
+  lines 42-45 and `test_p_empty_parens_at_a_bare_method_call_fail` at line 43.
+- Positive control: the pinned compiler segfaults on the fixture's first row.
+- **Full tier run** (`PXX_ALLOW_FULL_SUITE=1 tools/gate.sh full`), because this
+  change can REJECT source that previously compiled — an arity refusal at a
+  site that had none — which is the one shape `--tier quick` cannot rule out.
+  `make test-nilpy` PASSED (2011s), which is the run that matters most here:
+  the shared routine absorbed the expression arm's `PyKwDictArgsHere` step.
+  `make test` came back RED on **one pre-existing row**,
+  `test_a_bracket_argument_reaches_the_same_door_at_every_call_path`
+  (`FAIL constructor, open array of scalar: got 10 want 60`). **Not this
+  change.** Controlled: stash, rebuild (`converged after 1 round(s)`,
+  `f561030936e8`), run — it fails identically without any of this work.
+  The pin answers `BRACKETDOOR OK`, and Track T had already filed it
+  independently at `af0e5a0ad099` (`61f1fbb39`). Reported to frankS, whose
+  `231ac5795` is the likely cause; not claimed here.
+- **The first full run was discarded, not quoted.** Its verdict was invalid: I
+  edited the fixture and its `.expected` while it was reading them. Killed,
+  tree settled, restarted. The number above is the clean run.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

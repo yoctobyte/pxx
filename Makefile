@@ -2931,10 +2931,16 @@ test-nilpy: $(COMPILER)
 	@# matches, nothing surplus, a scalar into a vector slot) and is the reason
 	@# the absorbing tail is called unconditionally. Positive control: the
 	@# PINNED compiler segfaults on the very first row.
+	@# THE x- ROWS ARE THE EXPRESSION TWIN of every row above them, and they are
+	@# a second parser arm, not a restatement: that arm had none of the five
+	@# doors until both loops were routed through ParseBareSelfCallArgs. The two
+	@# halves must print the same descriptor for the same call; if they ever
+	@# part company, the copy came back.
+	@# bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors
 	@# bug-p-a-bare-variadic-method-call-segfaults-where-the-bracketed-spelling-works
 	@./$(COMPILER) test/test_p_a_bare_variadic_method_call.pas $(TESTTMP)/test_bare_variadic26
 	@$(TESTTMP)/test_bare_variadic26 | diff -u test/test_p_a_bare_variadic_method_call.expected - \
-	  || { echo 'test_p_a_bare_variadic_method_call: FAIL - elided and bracketed spellings disagree, or a bounded-loop control broke'; exit 1; }
+	  || { echo 'test_p_a_bare_variadic_method_call: FAIL - elided and bracketed spellings disagree, a bounded-loop control broke, or the statement and EXPRESSION halves parted company'; exit 1; }
 	@# ...and the FOURTH door in that same hand-rolled loop, which was never
 	@# built rather than built wrong: EMPTY PARENS. `Desc();` against a required
 	@# `const a: array of const` was accepted and the callee read a garbage
