@@ -33,3 +33,6 @@ bad `69a5f3c6fb1d`, last good `8f9f196e22cd`, 3 commit(s) in range — the watch
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-09 — auto-closed by the seven watcher: `test-core#src:test/test_libmanifest.pas` passes at 8befd373b9a0 (tier native); it was red at 69a5f3c6fb1d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
