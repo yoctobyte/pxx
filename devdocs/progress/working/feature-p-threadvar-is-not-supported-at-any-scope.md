@@ -164,3 +164,49 @@ Threadvars go PAST slot 143, so every existing offset — the slot map, the
 floor itself has to move. That number is a SECOND COPY of the stub's
 requirement and palthread.pas says so in its own comment; whatever grows the
 block has to move both.
+
+### The funnel census — measured, and it is the reason this is parked rather than done
+
+The mechanism is settled and cheap (above). What is NOT cheap is reaching every
+place that turns a variable into an access, and I measured four candidate
+layers before parking. **None of them is a funnel**, which is the finding:
+
+| layer | sites | why it is not the door |
+| --- | --- | --- |
+| the PARSER, at `AllocNode(AN_IDENT)` | ~80 in the Pascal frontend alone (26 `_lval`, 21 `_expr`, 21 `_stmt`, ...) | a rule spelled per caller; the site nobody edits keeps building a plain global reference |
+| `ir.inc`, at the lowering | 449 `IR_LOAD_SYM` / `IR_STORE_SYM` / `IR_LEA` appends | most are compiler temps, but there is no one arm an ident must pass through |
+| the BACKEND, at `EmitGlobRef` | 42 in `ir_codegen.inc` alone, times seven backends | same shape, one layer down |
+| `TSymKind`, a new `skThreadVar` | 175 `skGlobal` tests tree-wide, 20 in `ir_codegen.inc` | **and this one fails DANGEROUSLY** |
+
+**The fourth row is why a storage class is the wrong first instinct.** Every one
+of those 175 sites is written as `if Kind = skGlobal then <absolute/RIP> else
+<rbp-relative>`. A fourth kind that a site has not been taught falls into the
+`else` — so a threadvar would be addressed **rbp-relative**, as a local, at
+every site nobody updated. That is a plausible wrong address inside the current
+frame, not a crash and not a link error, and it is the failure mode this repo
+spends its days on.
+
+**So the shape that survives the census is a FLAG on the symbol, not a kind.**
+Keep the symbol `skGlobal` with real storage, add `SymTlsOffset` (-1 = not a
+threadvar), and replace `Kind = skGlobal` with a shared "how is this symbol
+addressed" helper at the ~20 x86-64 sites that actually compute an address.
+Untaught sites then keep answering `skGlobal`, which is wrong but LINKS and is
+process-wide — the same failure the C sibling has today, loud enough to find —
+rather than pointing into the caller's frame.
+
+The other six targets refuse, which is already the established pattern:
+`__pxxTlsBase` refuses off x86-64 with a diagnostic naming the reason
+(`pasparser_expr.inc:4286`), and a `threadvar` must refuse the same way rather
+than silently becoming a shared global — that IS
+[[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]],
+one frontend over.
+
+**PARKED, not abandoned, and re-claim before resuming.** What is banked is the
+part that costs an hour to rediscover: the blocking fork is settled, the
+mechanism is proven end to end, the sizing route is `TLS_BLOCK_SIZE` at emit
+time with ~90 KiB of measured headroom and a second copy in `palthread.pas`,
+and the four candidate doors are counted with the dangerous one named. What
+remains is an addressing change in the hottest file in the compiler, and the
+neighbouring decide ticket's rule applies to it directly: **size the area
+first, demonstrate second** — a threadvar that fits in the three free slots
+would prove the part that was never in doubt.
