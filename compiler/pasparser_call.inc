@@ -51,10 +51,19 @@ begin
   if CaseEqual(nm, 'string') or CaseEqual(nm, 'ansistring') then
     stk := tyAnsiString
   else
+  begin
     { the shared builtin-type-name table, not a private copy of the float names
       — which is how `Extended` came to register as tyDouble here while
       ParseTypeKind gave it tyExtended. }
     stk := BuiltinTypeNameTk(nm);
+    { ...and `shortstring`, which that table deliberately EXCLUDES because it
+      sets LastTypeStrCap and the table holds only side-effect-free names. So
+      `operator + (a, b: ShortString)` answered `ShortString is not a supported
+      operand type` -- a builtin name with no door, while `AnsiString` and
+      `Char` had one. Asked second, so a name the scalar table knows can never
+      be shadowed, which is the same ordering the alias arm below relies on. }
+    if stk = tyUnknown then stk := StringTypeNameKind(nm);
+  end;
   if stk = tyUnknown then
   begin
     { A NAMED SCALAR ALIAS -- `type TInt = Integer`, and `type Twice = type
@@ -656,8 +665,19 @@ begin
       row. ParsePowTerm has no fallback to poison -- `**` has no arithmetic path
       at all, so the table lookup is the ONLY thing it can do and a scalar entry
       is exactly what it must find. }
-    if (recId = REC_NONE) and (not TkIsRecordOrClass(rightTk)) and
-       (opKey <> Ord(tkPow)) then
+    { ASK THE TABLE, not "is one operand an aggregate". The rule fpc applies is
+      that the operation must not ALREADY be defined for these operand types,
+      and the aggregate test was an approximation of it that refused 92 of the
+      209 measured same-type cells fpc accepts -- `operator div (a, b: Single)`,
+      `operator and (a, b: Char)`, `operator >< (a, b: LongInt)`,
+      `operator - (a, b: AnsiString)` are all legal fpc and were all refused.
+      OperationIsPredefined carries the measured table and the reasoning.
+
+      `**` NO LONGER NEEDS ITS EXEMPTION and does not have one: it is a row of
+      the table with nothing in it. The old `opKey <> Ord(tkPow)` clause existed
+      because the aggregate rule had nowhere to put a row.
+      bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
+    if OperationIsPredefined(opKey, opTypeKind, rightTk) then
       Error('impossible operator overload: this operation is predefined for built-in operand types');
   end;
   { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }

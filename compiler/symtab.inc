@@ -4374,6 +4374,114 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+function OpndFamily(tk: Integer): Integer;
+{ The operand FAMILY an operator's predefined-ness is decided by:
+    0 aggregate/other (record, class, variant, ...)  1 integer   2 float
+    3 stringy   4 boolean   5 pointer   6 set
+  There is deliberately no ENUM family: pxx has no tyEnum -- an enum operand
+  carries an integer kind -- so the TEnum column of the measured table below is
+  answered as integer. Two cells differ because of it (`*` and `/` on an enum
+  pair are accepted by fpc and refused here), both in the SAFE direction: a
+  refusal fpc would not raise is a compat gap, never an overload shadowing a
+  builtin. Recorded rather than worked around, because inventing a kind for it
+  is a type-system change and not an operator one. }
+begin
+  OpndFamily := 0;
+  case tk of
+    2, 29: OpndFamily := 4;                       { tyBoolean, tyBool8 }
+    3, 4, 23, 25, 26, 30, 31: OpndFamily := 3;    { tyChar, tyString, tyAnsiString,
+                                                    tyShortString, tyFixedString,
+                                                    tyUCS4Char, tyWideChar }
+    17: OpndFamily := 5;                          { tyPointer }
+    18, 19, 20: OpndFamily := 2;                  { tySingle, tyDouble, tyExtended }
+    21: OpndFamily := 6;                          { tySet }
+    1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16: OpndFamily := 1;   { the integer kinds }
+  end;
+end;
+
+function OperationIsPredefined(opKey, ltk, rtk: Integer): Boolean;
+{ Does the language ALREADY define `opKey` for this operand pair? FPC refuses an
+  operator overload exactly when it does, and accepts every other pair.
+
+  THIS TABLE IS MEASURED, NOT DERIVED. tools/operator_predefined_matrix_probe.py
+  compiles one program per cell with both compilers; the fpc column IS the
+  specification and re-running it is this function's regression test. The two
+  asymmetries a hand-written table gets wrong are why:
+
+      `+` on Pointer is NOT predefined and `-` on Pointer IS
+        (pointer difference exists, pointer sum does not)
+      `+` on Boolean is NOT predefined while `and`/`or`/`xor` on Boolean ARE
+
+  WHAT REPLACED WHAT. The old rule was "at least one operand must be a
+  record/class", which is a much stricter approximation: it refused 92 of the
+  209 same-type cells fpc accepts, `operator div (a, b: Single)` and
+  `operator and (a, b: Char)` among them. The comment stating it was honest
+  about being an approximation; this is the thing it approximated.
+
+  MIXED-FAMILY PAIRS ANSWER TRUE, AND THAT IS A DELIBERATE CONSERVATISM RATHER
+  THAN THE RULE. Measured 2026-09-09, and it is why the ticket's plan to
+  "generalise to mixed pairs by type family" is not what landed: the mixed
+  matrix is IRREGULAR and a family rule gets it wrong in both directions.
+  `+ (LongInt, Pointer)` is predefined while `- (LongInt, Pointer)` is not;
+  `+ (Pointer, Pointer)` is not predefined while `- (Pointer, Pointer)` is;
+  `+ (Char, AnsiString)` is predefined while `+ (LongInt, Char)` is not; and
+  `div`/`and` have NO predefined mixed pair at all. Answering True keeps
+  today's behaviour exactly -- a mixed scalar pair is refused now -- so this
+  change can only ever widen what is accepted, never narrow it. The remaining
+  gap is a measurement nobody has taken (11x11x19 cells), not a rule anyone
+  has guessed at.
+
+  `**` is not a special case here, which is the point of writing the rule as a
+  table: it is simply a row with nothing in it. It had an explicit exemption at
+  the declaration check because the old aggregate rule had no row to put it in.
+  bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
+var lf, rf: Integer;
+begin
+  OperationIsPredefined := False;
+  { An aggregate operand is the whole reason overloading exists. }
+  lf := OpndFamily(ltk);
+  rf := OpndFamily(rtk);
+  if (lf = 0) or (rf = 0) then Exit;
+  { `**` has no predefined meaning for ANY operand pair -- fpc's own math unit
+    declares it on plain floats. }
+  if opKey = Ord(tkPow) then Exit;
+  { Different families: conservative True, see the header. }
+  if lf <> rf then
+  begin
+    OperationIsPredefined := True;
+    Exit;
+  end;
+  case opKey of
+    Ord(tkPlus):
+      OperationIsPredefined := (lf = 1) or (lf = 2) or (lf = 3) or (lf = 6);
+    Ord(tkMinus):
+      OperationIsPredefined := (lf = 1) or (lf = 2) or (lf = 5) or (lf = 6);
+    Ord(tkStar):
+      OperationIsPredefined := (lf = 1) or (lf = 2) or (lf = 6);
+    Ord(tkSlash):
+      OperationIsPredefined := (lf = 1) or (lf = 2);
+    Ord(tkDiv), Ord(tkMod), Ord(tkShl), Ord(tkShr), Ord(tkShrLogical):
+      { tkShrLogical IS Pascal's `shr`, and leaving it out was a one-cell hole
+        the probe's shadow check caught: `operator shr (a, b: LongInt)` was
+        ACCEPTED while `shl` on the same pair was refused. The lexer gives
+        `shr` no token of its own -- it arrives as a tkIdent whose text is
+        'shr' and BOTH the declaration (pasparser_call.inc) and the use site
+        (ParseTerm, `if op = tkIdent then op := tkShrLogical`) rename it on the
+        way in. So the ordinal this table has to name is the IR's, not the
+        one the operator is spelled with. tkShr stays listed beside it: that is
+        the ARITHMETIC shift, which is C's `>>` on a signed operand and is
+        predefined there. }
+      OperationIsPredefined := (lf = 1);
+    Ord(tkAnd), Ord(tkOr), Ord(tkXor):
+      OperationIsPredefined := (lf = 1) or (lf = 4);
+    Ord(tkEq), Ord(tkNeq), Ord(tkLt), Ord(tkLe), Ord(tkGt), Ord(tkGe):
+      { every non-aggregate family compares }
+      OperationIsPredefined := True;
+    Ord(tkSymDiff):
+      OperationIsPredefined := (lf = 6);
+  end;
+end;
+
 { ===== Assignment compatibility ============================================
 
   An assignment between incompatible types was not checked at ALL: seventeen of

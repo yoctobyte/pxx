@@ -17264,6 +17264,17 @@ test-core: $(COMPILER)
 	fi
 	./$(COMPILER) test/test_conversion_operator_ambiguous_cast_is_refused.pas $(TESTTMP)/test_convcap_amb26 2>&1 \
 	  | grep -q "this cast is ambiguous"
+	# An operator overload on SCALAR operands -- no record or class anywhere.
+	# Both halves in one file because neither is worth anything alone: rows 1-3
+	# prove a scalar overload FIRES (accepting the declaration without widening
+	# the use site leaves a silently inert operator, worse than the refusal it
+	# replaced) and rows 4-6 prove `3 * 5` and `i shr 1` still take the builtin.
+	# The predefined TABLE's own regression test is
+	# tools/operator_predefined_matrix_probe.py, which compiles all 209 cells
+	# against fpc; this row is the behaviour, not the table.
+	# bug-p-the-operator-predefined-check-is-an-aggregate-approximation
+	./$(COMPILER) test/test_operator_overload_on_scalar_operands.pas $(TESTTMP)/test_opscalar26
+	$(TESTTMP)/test_opscalar26 | diff -u test/test_operator_overload_on_scalar_operands.expected -
 	./$(COMPILER) test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.pas $(TESTTMP)/test_forinpick26
 	tools/expect_same.sh test_forinpick26 "$$($(TESTTMP)/test_forinpick26)" "$$(cat test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.expected)"
 	./$(COMPILER) test/test_for_in_lowers_class_record_and_interface_enumerators_alike.pas $(TESTTMP)/test_foringrid26

@@ -10278,7 +10278,23 @@ begin
       it — which is what keeps `3 * 5` plain arithmetic with an
       `(Integer, TCx)` operator in scope.
       feature-a-operator-table-keyed-on-both-operands }
-    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) then
+    { ...OR the operation is not predefined for these operands, which is what
+      lets a SCALAR-keyed overload fire at all. `operator - (a, b: AnsiString)`
+      is legal fpc and used to register and then never be found: this guard
+      asked only whether an operand was an aggregate, so the entry sat in the
+      table inert -- worse than the refusal it replaced.
+
+      THE PARTITION IS WHAT MAKES IT SAFE, and it is why this may not land
+      without the declaration check beside it. A scalar entry can only EXIST
+      for a pair OperationIsPredefined says False for, so "predefined ->
+      builtin, otherwise -> table" partitions the space rather than racing:
+      `3 * 5` is predefined, takes no lookup, and cannot find an
+      `(Integer, TCx)` row. That was the hazard the old comment here warned
+      about, and it is closed by the two halves agreeing rather than by this
+      guard being narrow.
+      bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
+    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) or
+       (not OperationIsPredefined(Ord(op), ASTTk[left], ASTTk[right])) then
       opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
                               ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then
@@ -10743,7 +10759,23 @@ begin
       it — which is what keeps `3 * 5` plain arithmetic with an
       `(Integer, TCx)` operator in scope.
       feature-a-operator-table-keyed-on-both-operands }
-    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) then
+    { ...OR the operation is not predefined for these operands, which is what
+      lets a SCALAR-keyed overload fire at all. `operator - (a, b: AnsiString)`
+      is legal fpc and used to register and then never be found: this guard
+      asked only whether an operand was an aggregate, so the entry sat in the
+      table inert -- worse than the refusal it replaced.
+
+      THE PARTITION IS WHAT MAKES IT SAFE, and it is why this may not land
+      without the declaration check beside it. A scalar entry can only EXIST
+      for a pair OperationIsPredefined says False for, so "predefined ->
+      builtin, otherwise -> table" partitions the space rather than racing:
+      `3 * 5` is predefined, takes no lookup, and cannot find an
+      `(Integer, TCx)` row. That was the hazard the old comment here warned
+      about, and it is closed by the two halves agreeing rather than by this
+      guard being narrow.
+      bug-p-the-operator-predefined-check-is-an-aggregate-approximation }
+    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) or
+       (not OperationIsPredefined(Ord(op), ASTTk[left], ASTTk[right])) then
       opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
                               ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then
