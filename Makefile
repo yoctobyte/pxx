@@ -1570,6 +1570,23 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_class_body_method_alias26 | diff -u test/test_nilpy_class_body_method_alias.expected -
 	./$(COMPILER) test/test_nilpy_attribute_on_a_parenthesised_receiver.npy $(TESTTMP)/test_nilpy_paren_recv26
 	$(TESTTMP)/test_nilpy_paren_recv26 | diff -u test/test_nilpy_attribute_on_a_parenthesised_receiver.expected -
+	# A field assigned from a bare LOCAL of the same method, and from an
+	# expression built only out of locals. Both were refused outright before
+	# bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type; the
+	# .expected is what controls, because the pre-pass answers a KIND and a
+	# field that took the wrong one prints a different number.
+	./$(COMPILER) test/test_nilpy_field_from_a_local.npy $(TESTTMP)/test_nilpy_field_local26
+	$(TESTTMP)/test_nilpy_field_local26 | diff -u test/test_nilpy_field_from_a_local.expected -
+	# ...and the refusal that has to SURVIVE that widening. The arm accepts a
+	# right-hand side built only from names the method BINDS, so a typo is
+	# still refused -- without this row the arm could be relaxed to accept any
+	# identifier and every value assertion above would still pass. Written
+	# here rather than as a test/ file because a file that must not compile
+	# cannot be one of those.
+	printf 'class C:\n    def __init__(self):\n        self.a = nosuchname\n\nC()\n' > $(TESTTMP)/nilpy_field_unbound.npy
+	if ./$(COMPILER) $(TESTTMP)/nilpy_field_unbound.npy $(TESTTMP)/nilpy_field_unbound26 >/dev/null 2>&1; then \
+	  echo "FAIL: a field assigned from a name the method never binds was accepted"; exit 1; \
+	fi
 	./$(COMPILER) test/test_nilpy_class_attribute_through_class_name.npy $(TESTTMP)/test_nilpy_clsattr_byname26
 	$(TESTTMP)/test_nilpy_clsattr_byname26 | diff -u test/test_nilpy_class_attribute_through_class_name.expected -
 	# ...and through a class REFERENCE (alias, parameter, dict/list element), which

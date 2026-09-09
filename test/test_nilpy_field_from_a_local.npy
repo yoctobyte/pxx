@@ -1,0 +1,60 @@
+# A class field assigned from a bare LOCAL of the same method, and from an
+# expression built only out of locals.
+# bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type
+#
+# EVERY ROW PRINTS A VALUE A WRONG TYPE WOULD GET WRONG. Compiling is not the
+# assertion here: the pre-pass answers a KIND, and a field that took the wrong
+# one prints a different number or dies, so the .expected is what controls.
+# The refusal that must SURVIVE -- a field assigned from a name the method
+# never binds, which is the typo this diagnostic exists for -- is asserted by
+# the Makefile row beside this one, because a file that must not compile
+# cannot be one of these.
+
+
+class V:
+    def __init__(self, t):
+        w = 1.5                            # a bare local
+        self.a = w
+
+        n = 7                              # int: a float field prints 7.0
+        self.b = n
+
+        s = "tag"                          # str
+        self.c = s
+
+        p, q = float(t[0]), float(t[1])    # BOTH names of an unpack
+        half = 0.25
+        self.d, self.e = p - half, q - half
+
+        for u in [3.5, 4.5]:               # a loop target binds too
+            self.f = u
+
+    def grown(self):
+        return self.d + self.e
+
+
+# the shapes that ALWAYS worked and must keep working: a literal, a bare
+# parameter, an expression carrying a literal operand, and a field read
+class K:
+    def __init__(self, t):
+        self.lit = 2.5
+        self.par = t
+        z = 1.0
+        self.expr = z + 0.5
+        self.copy = self.lit
+
+
+v = V((10.0, 20.0))
+print(v.a)
+print(v.b)
+print(v.c)
+print(v.d)
+print(v.e)
+print(v.f)
+print(v.grown())
+
+k = K(9)
+print(k.lit)
+print(k.par)
+print(k.expr)
+print(k.copy)

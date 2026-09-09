@@ -33453,6 +33453,113 @@ begin
   end;
 end;
 
+function PyMethodBindsLocal(methodStart, stopIdx: Integer;
+                            const nm: AnsiString): Boolean;
+{ Does this method BIND `nm` as a local, at statement level, before stopIdx?
+
+  Only "is it bound", never "to what". The answer a field assigned from one
+  takes is tyVariant -- the same answer the bare-PARAMETER arm below already
+  gives, and the same thing an unannotated local already carries -- so the
+  runtime tag travels with the value and nothing here has to grow a second
+  scanner that types an expression.
+
+  It has to be a REAL binding and not any identifier, because that is what
+  keeps the diagnostic honest: an unbound name on the right-hand side is a
+  typo, and `cannot infer the type of field` is what catches it. Bound names
+  are recognised in the four shapes Python binds one at statement level --
+  `nm = ...`, `nm, other = ...`, `for nm in ...` (and `for a, nm in ...`),
+  and `... as nm`. Depth 0 only: a default argument (`def f(self, cx=1.0)`)
+  and a keyword argument both sit inside parentheses and are not bindings of
+  this method's locals.
+  bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type }
+var k, d, b, e, m: Integer;
+    atStart: Boolean;
+begin
+  Result := False;
+  d := 0;
+  k := methodStart;
+  while k < stopIdx do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(d)
+    else if (d = 0) and (Tokens[k].Kind = tkIdent) then
+    begin
+      { `with open(p) as fh`. `as` is an ordinary IDENTIFIER here, and so are
+        `for` and `with`: PyKeyword binds only the words the Pascal side needs
+        a distinct kind for, so a test against tkFor would never fire. That is
+        the whole reason this reads strings. }
+      if (k > methodStart) and (Tokens[k - 1].Kind = tkIdent) and
+         (GetTokenStr(k - 1) = 'as') and (GetTokenStr(k) = nm) then
+      begin Result := True; Exit; end;
+      atStart := (k = methodStart) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                         tkSemicolon]);
+      if atStart then
+      begin
+        { A comma-separated run of NAMES at the head of a statement, and then
+          the token that says what the run is: `=` makes it an assignment
+          target list, `in` after a leading `for` makes it a loop target list.
+          Both bind every name in the run -- which is what `cx, cz = ...`
+          needs, and reading only the FIRST name is what left `cz` unbound. }
+        b := k;
+        if GetTokenStr(k) = 'for' then b := k + 1;
+        e := b;
+        while (e < stopIdx) and (Tokens[e].Kind in [tkIdent, tkComma]) do Inc(e);
+        if (e < stopIdx) and
+           (((b = k) and (Tokens[e].Kind = tkAssign)) or
+            ((b > k) and (Tokens[e].Kind = tkIn))) then
+          for m := b to e - 1 do
+            if (Tokens[m].Kind = tkIdent) and (GetTokenStr(m) = nm) then
+            begin Result := True; Exit; end;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
+function PyRhsOnlyNamesThisMethodBinds(methodStart, rhsAt,
+                                       limit: Integer): Boolean;
+{ Is this right-hand side built ONLY out of values this method binds -- its
+  parameters and its own locals -- and at least one of them?
+
+  `self.x0, self.z0 = cx - half, cz - half` (lekkerzeilen chart.py:191). Every
+  scanner above reads TOKENS, and a local's inferred type does not exist yet
+  when the field pre-pass runs, so an expression over two locals types as
+  nothing and the class was REJECTED. `self.a = cx + 0.0` was accepted all
+  along -- the literal operand types the expression -- which is what shows the
+  operator was never the subject.
+
+  The answer such a field takes is tyVariant, the same as the bare-PARAMETER
+  arm and for the same reason: the runtime tag travels with the value, and
+  that is what an unannotated local carries anyway.
+
+  What keeps the diagnostic honest is that every name must be BOUND. A typo
+  is not a parameter and not a local, so `cannot infer the type of field`
+  still fires for it -- which is the case this error exists for. A CALL ends
+  the scan too: `self.v = f(cx)` is the expression scanner's job and it types
+  it, so widening here would only take work away from a reader that does it
+  better. Names after a dot are attribute selectors, not bindings. }
+var k, n: Integer;
+begin
+  Result := False;
+  n := 0;
+  k := rhsAt;
+  while (k < limit) and
+        not (Tokens[k].Kind in [tkNewline, tkDedent, tkSemicolon, tkEOF]) do
+  begin
+    if (Tokens[k].Kind = tkIdent) and
+       not ((k > rhsAt) and (Tokens[k - 1].Kind = tkDot)) then
+    begin
+      if (k + 1 < limit) and (Tokens[k + 1].Kind = tkLParen) then Exit;
+      if PyHeaderHasParam(methodStart, rhsAt, GetTokenStr(k)) or
+         PyMethodBindsLocal(methodStart, rhsAt, GetTokenStr(k)) then Inc(n)
+      else Exit;
+    end;
+    Inc(k);
+  end;
+  Result := n > 0;
+end;
+
 procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
                            isCtor: Boolean;
                            var tk: TTypeKind; var fldRec, fldSig: Integer);
@@ -33671,7 +33778,20 @@ begin
       real mistake. }
     if ((Tokens[j + 4].Kind = tkIdent) and
         PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4))) or
-       (Tokens[j + 4].Kind = tkNil) then
+       (Tokens[j + 4].Kind = tkNil) or
+       { ...or from a bare LOCAL of the same method: `cx, cz = float(c[0]),
+         float(c[1])` then `self.x0, self.z0 = cx - half, cz - half`. Same
+         blind spot as the parameter arm and the module-global family above --
+         the scanners read tokens, and a local's inferred type does not exist
+         yet at pre-pass time -- except that this one had no arm at all, so an
+         ordinary Python constructor was REJECTED. `self.a = cx + 0.0` was
+         accepted all along, because the literal operand types the expression;
+         the bare name is the one spelling with nothing to read.
+         PyRhsOnlyNamesThisMethodBinds is deliberately a BINDING test rather
+         than a type reader: a name the method never binds still errors, so
+         the typo this diagnostic exists for is still caught.
+         bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type }
+       PyRhsOnlyNamesThisMethodBinds(methodStart, j + 4, bodyEnd) then
     begin
       { ...or assigned None outright: `self.file_path = None`, which is
         how Python declares a field that gets a value later. There is

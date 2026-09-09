@@ -16,6 +16,8 @@ blocked-by:
   - bug-n-collections-deque-is-missing
   - bug-n-str-join-rejects-an-argument-shape-cpython-accepts
   - feature-nilpy-math-module-twelve-absent-names-measured
+  - bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name
+  - bug-n-a-chained-assignment-to-two-attributes-does-not-parse
 summary: "Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen, 14,297 LOC of Python, 26 runtime modules -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. Measured 2026-09-08 with compiler/pascal26 at a7b03135f504: 3 of 16 runtime modules compile clean, and the other 13 fail on SIX distinct causes, one of which blocks seven modules by itself. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
 ---
 
@@ -248,3 +250,59 @@ reducing before they are worth a ticket:
 Every number here is a LOWER BOUND: this is a first-error census, so a module
 that clears one cause may surface another, which is exactly what math3d did
 twice in a row today.
+
+---
+
+## Third census, 2026-09-09 — 7 of 23, and one cause is now the biggest after atan2
+
+Same instrument as the second census: every `lekkerzeilen/*.py` compiled on its
+own with `compiler/pascal26`, FIRST error only, so every count here is a LOWER
+BOUND — a module with two causes shows one.
+
+**7 of 23 compile clean** (geometry, `__init__`, math3d, rd, scenery, shaders,
+wake). Unchanged in COUNT from the second census, and that is the honest
+reading: this pass removed a blocker from `chart` without unblocking it, and
+`chart` now fails on the cause below instead.
+
+| cause | modules | ticket |
+| --- | --- | --- |
+| `math.atan2` absent | hud, rig, sim, traffic, vessel (5) | feature-nilpy-math-module-twelve-absent-names-measured |
+| closed-world method dispatch | chart, environment, wind, `__main__` (4) | **bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name** (new) |
+| `import array` | app, audio, world (3) | feature-n-the-array-module |
+| `import ctypes` | capture, gfx (2) | (ctypes) |
+| `import queue` | gauges (1) | (queue) |
+| `str.join` argument shape | text (1) | bug-n-str-join-rejects-an-argument-shape-cpython-accepts |
+
+### The two causes the second census named, both now reduced and both filed
+
+The second census recorded them as unreduced first-error readings and
+deliberately did not file them. Reducing changed what one of them WAS.
+
+**`chart:191` "cannot infer the type of field self.z0"** reduced to four lines
+and turned out to have nothing to do with `chart` or with tuple unpacking:
+a class field assigned from a bare LOCAL of the same method had no inference
+arm at all, where a literal, a parameter, a module global, a global holding an
+instance, a global holding a def, and None each had one. **Fixed**
+(bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type). It unmasked
+a THIRD gap behind it at `chart:184` — `self.width = self.height = max(...)`,
+a chained assignment to two attributes, which does not parse; the module-level
+`a = b = 3` does. Filed as
+bug-n-a-chained-assignment-to-two-attributes-does-not-parse, and it is
+pre-existing at the pin, not a consequence of the fix.
+
+**`environment`/`wind`/`__main__` at `:141` "no class declares a method or
+callable field .contains()"** is one defect at one line — `wind.py:141`, which
+the other two reach through their imports — and reducing it made it BIGGER, not
+smaller: `chart:102` is the same cause (`tile.read_grid("bed")`), so it blocks
+four modules, not three. It is the first cause on this umbrella that is a
+genuine FORK rather than a gap: NilPy resolves a method call on a dynamically
+typed receiver by scanning the classes declared in the compilation unit, and
+the closed world is deliberate — it is what catches a typo on a variant
+receiver. `canopy`'s class lives in `world.py`, which no module in the package
+imports, because that is what duck typing IS. The recommendation and the
+measured state of the machinery are on the ticket.
+
+### What did NOT need filing
+
+`math.atan2` stays the single largest cause at five modules and already has its
+ticket. Nothing in this pass changes it.

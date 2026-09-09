@@ -105,3 +105,25 @@ program may use `ArcTan2`. A target permitted to change its own source (see
 [[umbrella-lekkerzeilen-compiles-and-runs-under-nilpy]], where the owner has
 licensed exactly that) can call an explicit helper and carry the 1 ulp knowingly
 — a HUD heading does not care. Do not read this as licence to map the name.
+
+---
+
+## `atan2` alone is the largest single blocker on the lekkerzeilen umbrella (2026-09-09)
+
+Measured over `lekkerzeilen/*.py`, first error only: `math.atan2` is the first
+failure in **five of the twenty-three modules** — hud, rig, sim, traffic,
+vessel — which is more than any other cause, ahead of the closed-world dispatch
+fork (4) and `import array` (3). The umbrella is owner-directed at prio 75, so
+this ticket's effective prio already inherits that; what the body did not say
+is that ONE of the twelve names carries almost all of it.
+
+That does not by itself overturn the split above — `atan2` is in the eight that
+inherit the do-not-map-a-1-ulp-off-routine policy, and this is a ranking fact,
+not an accuracy argument. It is recorded because whoever picks this up should
+know that landing `atan2` and nothing else is worth five modules, and that the
+question to settle first is the policy one, not the implementation.
+
+Beside it, for whoever sweeps this again: `math` here resolves far enough to
+report `no member atan2 came of the qualifier math`, i.e. the import bound
+something. That is the loud-at-compile behaviour the sweep claimed, re-observed
+25 days later on real source.
