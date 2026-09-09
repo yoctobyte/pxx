@@ -73,3 +73,27 @@ such a cycle, so this is structural in the corpus, not incidental — and nothin
 behind it can be measured until it moves.
 
 Pre-existing, not a regression: pin v399 gives the identical error.
+
+## 2026-09-09 — the owner's framing, which bounds this umbrella
+
+> *"the challenge is just to compile FPC as a proof of pudding. we don't target
+> any advanced compatibility. i can see what FPC is doing, sortof. we don't
+> care. FPC is a great compiler and we have other goals, the common thing is
+> pascal and that we sayd we target FPC's dialect as de-facto standard."*
+
+**This is a PROOF, not a compatibility programme, and the distinction is the
+one most likely to be lost by whoever attempts it.** Pointing pxx at 400k lines
+of another compiler's source will surface a great many differences. Almost none
+of them are ours.
+
+**A finding belongs under this umbrella only if it stops correct Pascal
+compiling or running.** Not because FPC does it differently, not because a
+diagnostic differs, not because an intermediate has a different type. If the
+source compiles and the program behaves, there is nothing to file — and the
+temptation to file it anyway is exactly what turned 5035 tickets into 467 open
+ones.
+
+**Binary interop with FPC is NOT a goal** — settled the same day in
+`decide-how-a-hand-built-com-interface-becomes-callable`, now in `done/`. Do not
+rank anything here on exchanging objects with FPC-compiled code, sharing its
+representations, or linking against its output.

@@ -422,15 +422,19 @@ intent (Track U); authority only he holds (sudo, hardware, money).
 **Everything else: act, then report.** Reporting is not asking.
 
 **AND A QUESTION HE CANNOT ANSWER IS WORSE THAN NO QUESTION — A `decide` FOR
-THE OWNER MUST BE ANSWERABLE WITHOUT KNOWING OUR INTERNALS.** He owns the
-GOALS; he does not own our representations, and he has never claimed to. If
-answering needs the reader to know what an IMT is, which node kind carries
-`Self`, or how another compiler lays a value out, **it is an engineering
-decision wearing a fork's clothes** — take it. Measured 2026-09-09, in his own
-words about a p55 `decide` this seat relayed to him: *"i hate to admit that i
-don't understand that question ... i dont know fpc's internals."* The ticket
-was competent and the fork was real; it was **addressed to the wrong reader**,
-and relaying it cost him a turn and returned nothing.
+THE OWNER MUST BE STATED IN GOALS, NOT IN REPRESENTATIONS.** This is NOT
+"he would not understand" — he is a compiler engineer by now and says so:
+*"i am slowly becoming a compiler engineer. just i don't know all."* The reason
+is structural. **A fork stated in implementation terms hides where the decision
+actually lives**, so it reads as a technical question, and the technical
+question is ours. If answering needs the reader to know what an IMT is or how
+another compiler lays a value out, **it is an engineering decision wearing a
+fork's clothes** — take it. Measured 2026-09-09, on a p55 `decide` this seat
+relayed to him: *"i hate to admit that i don't understand that question ... i
+dont know fpc's internals."* The ticket was competent and the fork was real; it
+was **addressed in the wrong terms**, and relaying it cost him a turn and
+returned nothing. Restated in one sentence about what we want, he answered it
+immediately and completely.
 
 **The test before it goes up: can you state the fork as a sentence about what
 we WANT, with no implementation noun in it?** *"Do we want pxx and FPC binaries
@@ -443,6 +447,17 @@ already decides it**, which is what happened here.
 
 **Cost is not the fork.** Two options priced against each other is engineering.
 It becomes his only where the options differ in what we are TRYING TO BE.
+
+**HIS ANSWER, AND IT SETTLES A CLASS AND NOT ONE TICKET** (owner, 2026-09-09):
+*"the challenge is just to compile FPC as a proof of pudding. we don't target
+any advanced compatibility ... FPC is a great compiler and we have other goals,
+the common thing is pascal and that we sayd we target FPC's dialect as de-facto
+standard."* So **the dialect is the target and the implementation is not.**
+Binary interop with FPC — exchanging objects, sharing a representation, linking
+against its output — **is not a goal**, and no ticket may be ranked on it.
+Compiling FPC is a PROOF, not a compatibility programme: a divergence found
+while attempting it is a bug only if it stops correct Pascal compiling or
+running, never because FPC does it differently.
 
 **The worst question is one a MEASUREMENT would have answered.** Before
 escalating, ask what you would have to measure for the question to disappear.

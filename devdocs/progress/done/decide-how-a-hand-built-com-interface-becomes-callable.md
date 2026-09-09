@@ -2,7 +2,7 @@
 track: U
 prio: 55
 type: decide
-status: open
+status: decided
 owner: ""
 created: 2026-09-09
 found-by: frankS
@@ -226,3 +226,30 @@ trigger is an ASSIGNMENT rule, not a cast rule. `generics.defaults.pas` contains
 zero pointer-to-interface casts; all six conversions are implicit assignments.
 An A keyed on the cast would compile the motivating source, change nothing, and
 be green — this ticket's own hazard, from the direction that looks like success.
+
+## 2026-09-09 — DECIDED BY THE OWNER: option A. Binary interop is not a goal.
+
+Asked in goal terms, he answered in one turn:
+
+> *"the challenge is just to compile FPC as a proof of pudding. we don't target
+> any advanced compatibility. i can see what FPC is doing, sortof. we don't
+> care. FPC is a great compiler and we have other goals, the common thing is
+> pascal and that we sayd we target FPC's dialect as de-facto standard."*
+
+**Option A.** The dialect is the target; the implementation is not. Nothing in
+pxx moves toward FPC's interface representation, and **B is not a deferred plan
+— it is off the table** until someone names a binary-interop goal, which he has
+explicitly declined to. Do not leave B ranked as future work; that is how a
+rejected option comes back as a rainy-day item nobody re-reads.
+
+**For whoever implements A, the one trap, carried from `2304d362c`:** the
+trigger is an **ASSIGNMENT** rule, not a cast rule. `generics.defaults.pas`
+holds **zero** pointer-to-interface casts; all six conversions are implicit
+assignments of a `Pointer`-typed result into an interface-typed destination. An
+A keyed on the cast compiles the motivating source, changes nothing, and reports
+green — this ticket's own hazard arriving from the direction that looks like
+success.
+
+Moving to `done/` as decided. The implementation lives on in
+[[bug-a-a-hand-built-com-interface-cannot-be-called]], which is where the repro
+and the measurement already are.
