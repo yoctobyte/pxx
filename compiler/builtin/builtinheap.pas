@@ -3565,8 +3565,13 @@ begin
   end;
 end;
 
-{ COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte
-  interface fat pointer (word 0 = IMT, word 1 = instance). The IMT is the
+{ COM/ARC interface refcount helpers. `p` is the ADDRESS OF THE SLOT holding an
+  interface value, and that value is ONE WORD -- the instance pointer. The IMT
+  is not in it and never was passed in: it is recovered from the instance's RTTI
+  by PXXIntfIMTOf(inst, ifaceId), which is exactly what lets the value stay a
+  single pointer. (This paragraph described a 16-byte fat pointer {IMT@0,
+  instance@8} until 2026-09-09; the bodies below have read `PMachineWord(p)^` as
+  the instance for longer than that.) The IMT is the
   implementing class's Interface Method Table: a vector of code addresses,
   slot 1 = _AddRef, slot 2 = _Release (slot 0 = QueryInterface), so the call
   dispatches polymorphically into the concrete TInterfacedObject-derived method.

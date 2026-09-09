@@ -798,8 +798,8 @@ begin
 
               MakeAccessorCall is the right dispatcher here, unlike the
               class-NAME arm further down: the receiver is an INSTANCE, so Self
-              belongs at argument 0 for a plain or virtual call and comes out of
-              the fat pointer for an interface. That three-way choice is the one
+              belongs at argument 0 for a plain or virtual call and IS the
+              receiver itself for an interface. That three-way choice is the one
               thing the eleven hand-rolled accessor calls each got wrong in
               their own way, and it is why this arm asks rather than builds.
               bug-p-a-with-scoped-property-with-method-accessors-is-undefined }
@@ -3388,7 +3388,8 @@ begin
         if (mci >= 0) and UClsIsInterface[mci] then
         begin
           { CORBA interface call `iface.M(args)`: dispatch through the IMT slot.
-            Self comes from the fat pointer's instance word at call time. }
+            Self IS the interface value -- one word, the instance pointer -- and
+            the IMT is recovered from its RTTI at call time. }
           mcallNode := AllocNode(AN_INTF_CALL);
           ASTRight[mcallNode] := node;                 { the interface value }
           ASTIVal[mcallNode] := mpi;                   { signature proc (marshalling) }
@@ -3398,7 +3399,7 @@ begin
           if CurTok.Kind = tkLParen then
           begin
             Next;
-            mai := 1; { param 0 = Self (provided by the fat pointer) }
+            mai := 1; { param 0 = Self (the interface value itself: the instance) }
             { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
               accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
               the `)` to ParseExpr and reports "expected expression". A method with NO parameters

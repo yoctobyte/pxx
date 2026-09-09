@@ -267,8 +267,10 @@ begin
         working code is a worse defect than the false accept being fixed here.
 
         The reference-shaped bail: an interface AND a method pointer are both
-        spelled tyRecord -- each is a 16-byte fat pointer -- so the record rule
-        would refuse `p := o.IntfField` and `c.OnHit := nil`, which are both
+        spelled tyRecord while neither is a value record -- an interface is ONE
+        MACHINE WORD (the instance pointer) and a method pointer is the 16-byte
+        {Code, Data} pair, and both are nil-able and pointer-assignable -- so the
+        record rule would refuse `p := o.IntfField` and `c.OnHit := nil`, which are both
         legal. This arm shipped with only the interface half and the second half
         was the regression; RecIsReferenceShaped is now the one place that
         knows, and the AN_IDENT arm below asks it too. }
@@ -3268,7 +3270,8 @@ begin
   end
   else if (ASTKind[node] = AN_AS_CAST) and UClsIsInterface[Integer(ASTIVal[node])] then
   begin
-    { `obj as IFoo` is an interface lvalue: the address of its fat-pointer temp. }
+    { `obj as IFoo` is an interface lvalue: the address of its temp, which holds
+      ONE WORD (the instance pointer). See IRMaterializeIntfCast. }
     Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
   else if ASTKind[node] = AN_COMMA then
@@ -5746,8 +5749,8 @@ begin
     Exit;
   end;
   { Implicit class -> interface coercion: a class argument given to an interface
-    parameter is wrapped in the same fat-pointer build as an explicit `obj as
-    IFoo`, then marshalled by the ordinary record-param ABI (re-entry below). }
+    parameter is materialised the same way an explicit `obj as IFoo` is, then
+    marshalled by the ordinary record-param ABI (re-entry below). }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      (Procs[cpi].Params[pathIdx].TypeKind = tyRecord) and
      (IntToTypeKind(ASTTk[argAST]) = tyClass) then
@@ -6846,7 +6849,7 @@ begin
   instSym := AllocVar('', tyPointer);
   { The instance is a single pointer. A plain object/interface-var operand lowers
     straight to that pointer, but an interface `as`-cast operand lowers to the
-    ADDRESS of its fat-pointer temp (see the AN_AS_CAST value path) — so a nested
+    ADDRESS of its temp (see the AN_AS_CAST value path) — so a nested
     `(x as IA) as IB` would store the temp's address as the "instance" and the
     trap below would read the wrong word and Halt 1 on a valid cast. Deref it to
     recover the instance value. See bug-pascal-nested-interface-as-cast. }
@@ -11558,8 +11561,11 @@ begin
     begin
       if UClsIsInterface[Integer(ASTIVal[node])] then
       begin
-        { `obj as IFoo`: yield the address of the materialised fat pointer (the
-          aggregate-by-reference convention, like a record-returning call). }
+        { `obj as IFoo`: yield the address of the materialised interface temp
+          (the aggregate-by-reference convention, like a record-returning call).
+          The temp is one word wide -- an interface VALUE is the instance
+          pointer -- but it is still passed by address, because the type is
+          spelled tyRecord and the record ABI is what every consumer expects. }
         Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
         Exit;
       end;
@@ -14097,17 +14103,19 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         Exit;
       end;
 
-      { Class -> interface: build the CORBA fat pointer {IMT, instance} into the
-        LHS. The IMT for (RHS static class, interface) is captured here; the
-        instance pointer is the RHS value. (interface := interface falls through
-        to the 16-byte record copy below.) }
+      { Class -> interface: store the INSTANCE POINTER into the LHS. That is the
+        whole value -- an interface is one machine word, and the IMT is recovered
+        per call from the instance's RTTI by PXXIntfIMTOf. FindIMT is still
+        called in the arm below, but only as a COMPILE-TIME check that the class
+        implements the interface; its result is not stored. (interface :=
+        interface falls through to the record copy below, of RecSize = 8.) }
       if lhsTk = tyRecord then
       begin
         varIdx := ResolveNodeRec(ASTLeft[node]);
         { NOT when the LHS is a whole ARRAY. An array's TypeKind IS its element
           kind, so `b := a` with `a, b: array of IFoo` arrives here with
           lhsTk = tyRecord and ResolveNodeRec answering IFoo — and the ARC arms
-          below then treated the ARRAY HANDLE as an interface fat pointer and
+          below then treated the ARRAY HANDLE as an interface value and
           lowered the assignment to PXXIntfAssign(&b, &a, ifaceId). That reads a
           dyn-array handle as an instance pointer and dispatches _Release through
           a garbage IMT: SIGSEGV, even when every element is nil, because nothing
@@ -14179,7 +14187,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           IRMarkStatementNode(Result);
           Exit;
         end;
-        { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
+        { interface := nil — zero the slot. The RHS is a
           pointer/ordinal nil, not a class or interface, so it never reaches the
           record-copy path (which would dereference a bogus source). }
         if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
@@ -14295,7 +14303,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           a borrow FROM ITS TEMP — IRMaterializeIntfCast retains that temp and
           scope exit releases it — so it retains, like the other four.
           IRLowerAddress already materialises an interface as-cast into an
-          addressable fat-pointer temp, so no new address path is needed.
+          addressable temp, so no new address path is needed.
           bug-a-an-as-cast-assigned-to-an-interface-variable-is-not-retained }
         if isComIntf and
            ((ASTKind[ASTRight[node]] = AN_IDENT) or (ASTKind[ASTRight[node]] = AN_FIELD) or
@@ -14356,7 +14364,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
           IRIVal[seq] := 1;
 
-          { move the fat pointer in ... }
+          { move the interface value in (RecSize = one word) ... }
           IRAppend(IR_COPY_REC, IRLowerAddress(ASTLeft[node]),
                    IRAppend(IR_LOAD_SYM, intfResAddr, -1, -1, 0, Ord(tyPointer)),
                    -1, RecSize(varIdx), Ord(tyRecord));
@@ -16526,9 +16534,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
 
     AN_INTF_CALL:
     begin
-      { CORBA interface call. The interface value is a fat pointer {IMT@0,
-        instance@8}. Self = [iface+8] (prepended like a method-pointer call);
-        code = [[iface+0] + slot*8]. Marshal explicit args by the signature. }
+      { CORBA interface call. The interface value is ONE WORD -- the instance
+        pointer -- so Self = [iface], and the IMT is recovered from the
+        instance's RTTI by PXXIntfIMTOf(self, ci) rather than read out of the
+        value; code = [imt + slot*8]. Marshal explicit args by the signature.
+
+        This paragraph described a 16-byte {IMT@0, instance@8} fat pointer until
+        2026-09-09, contradicting the line directly beneath it. }
       cpi := ASTIVal[node];
       { An interface value is ONE pointer: the instance. Self = [iface]. }
       intfCallCi := ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE;

@@ -6910,14 +6910,16 @@ var
     That the one word is the INSTANCE POINTER is read off IRIntfInstanceWord's
     body and RTTI_IFACE_SIZE above, not measured here.
 
-    NOT RECONCILED: about a dozen comments in ir.inc's lowering still narrate a
-    16-byte fat pointer -- `build the CORBA fat pointer {IMT, instance}`,
-    `interface := interface falls through to the 16-byte record copy`, `the
-    address of its fat-pointer temp`. They are describing code that now moves
-    one word, and the record-copy path they name copies RecSize bytes, which the
-    SizeOf rows say is 8. Left alone deliberately rather than half-corrected:
-    each needs its own path read, and a comment rewritten from a neighbour's
-    measurement is how this drift started.
+    RECONCILED 2026-09-09: the ~35 comments across nine files that narrated a
+    16-byte fat pointer have been corrected, each against the path it describes
+    rather than against a neighbour's wording -- ir.inc's lowering arms, the
+    AN_INTF_CALL header (which contradicted the line directly beneath it),
+    RecIsReferenceShaped, the interface parameter's by-ref rule in
+    pasparser_proc.inc (whose "no-op on 64-bit" parenthetical had become false
+    while the code stayed right), and the PXXIntfAddRef/Release header, which
+    named a parameter `fatptr` that its own body has read as the instance for
+    longer than that. The few surviving mentions are deliberate: each says what
+    the comment USED to claim, at the site that claimed it.
     refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds }
   IMTClass : array[0..MAX_IMT-1] of Integer;  { implementing class ci }
   IMTIntf  : array[0..MAX_IMT-1] of Integer;  { interface ci }

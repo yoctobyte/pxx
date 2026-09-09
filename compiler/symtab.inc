@@ -4232,9 +4232,9 @@ begin
   end
   else if SymIsComInterface(i) then
   begin
-    { COM/ARC interface value: a fat pointer that the ARC path releases on
-      overwrite and at scope exit, so it must start nil (all-zero) — otherwise the
-      first release dispatches through a garbage IMT. }
+    { COM/ARC interface value: one word (the instance pointer) that the ARC path
+      releases on overwrite and at scope exit, so it must start nil (all-zero) —
+      otherwise the first release resolves an IMT from a garbage instance. }
     zeroBytes := RecSize(SymTR[i].RecId);
     Result := True;
   end
@@ -11134,8 +11134,9 @@ begin
 end;
 
 function ProcParamIsInterface(procIdx, j: Integer): Boolean;
-{ True iff parameter j of proc procIdx is a CORBA interface type (a fat-pointer
-  record), so overload matching can accept a class argument that implements it.
+{ True iff parameter j of proc procIdx is a CORBA interface type (spelled
+  tyRecord, though the value is one word), so overload matching can accept a
+  class argument that implements it.
   The param's rec id comes from ProcParamRecId, not the param symbol: param sym
   slots are reused across procs, so Syms[SymIdx].RecName is unreliable here. }
 var rec: Integer;
@@ -11181,11 +11182,14 @@ begin
 end;
 
 function RecIsReferenceShaped(rec: Integer): Boolean;
-{ Is this record id one of the two records that are really a FAT POINTER?
+{ Is this record id one of the two records that are really a REFERENCE?
 
-  An interface (16 bytes {IMT, instance}) and a method pointer (16 bytes
-  {Code, Data}) both present as tyRecord, and both are nil-able and
-  pointer-assignable where a plain record is neither. So every rule phrased on
+  An interface (ONE machine word -- the instance pointer, with the IMT recovered
+  per call from RTTI) and a method pointer (the 16-byte {Code, Data} pair) both
+  present as tyRecord, and both are nil-able and pointer-assignable where a plain
+  record is neither. The two differ in WIDTH and that is not what this asks: the
+  question is reference-vs-value, which is why the routine is named for the shape
+  and not for a layout. So every rule phrased on
   the type KIND is wrong for them, and the only way to tell is to consult the
   record IDENTITY -- which is what this asks, once.
 
@@ -15445,8 +15449,8 @@ begin
     Exit;
   end;
 
-  { Managed aggregate (record with managed fields / variant / COM fat pointer /
-    array of managed): zero the whole extent. }
+  { Managed aggregate (record with managed fields / variant / COM interface
+    slot / array of managed): zero the whole extent. }
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($48); EmitB($8D); EmitB($BD); EmitI32(frameOff);   { lea rdi, [rbp+off] }

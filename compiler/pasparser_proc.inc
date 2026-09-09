@@ -202,8 +202,8 @@ begin
   end
   else if SymIsComInterface(symIdx) then
   begin
-    { the fat pointer {IMT, instance} is zeroed by the interface := nil arm,
-      which releases the old reference first }
+    { the slot is zeroed by the interface := nil arm, which releases the old
+      reference first }
     valNode := AllocNode(AN_INT_LIT);
     ASTIVal[valNode] := 0;
     ASTTk[valNode] := Ord(tyPointer);
@@ -3055,11 +3055,18 @@ begin
       { Persist the param's rec id: param sym slots are reused across procs, so
         overload matching / call-arg coercion cannot read it back from the sym. }
       if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
-      { Records larger than a qword are passed by reference. A CORBA interface is
-        a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
-        but on 32-bit targets it is only 8 bytes — force by-ref there too so the
-        whole fat pointer crosses the call uniformly instead of being squeezed
-        into one machine word. (No-op on 64-bit, so self-host stays identical.)
+      { Records larger than a qword are passed by reference. A CORBA interface
+        is forced by-ref at ANY width, which is what the explicit UClsIsInterface
+        clause below is for.
+
+        That clause used to be described as a 32-bit-only correction — an
+        interface was a 16-byte fat pointer {IMT, instance}, so on 64-bit it
+        already took the >8 path and the clause was called a no-op there. It is
+        not one any more: an interface value is ONE MACHINE WORD on every
+        target, so RecSize is 8 everywhere and this clause is now the ONLY
+        reason an interface parameter is by-ref at all. The behaviour did not
+        change; the reason it holds did. By-ref is still what the ARC arms need,
+        because every one of them takes the slot's ADDRESS.
 
         A record with MANAGED FIELDS joins them at any size. A <=8-byte record
         travels INLINE in the param slot (see AllocParam) — a raw byte copy of

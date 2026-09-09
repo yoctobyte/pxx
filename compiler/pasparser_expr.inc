@@ -349,9 +349,9 @@ begin
       which a merged arm would swallow. }
     zeroBytes := RecSize(Syms[i].ElemRecName)
   else if SymIsComInterface(i) then
-    { COM/ARC interface fat pointer: must start nil so the ARC release at
-      first overwrite / scope exit sees an empty slot, not stale stack bytes
-      (a garbage IMT would dispatch _Release into nowhere). }
+    { COM/ARC interface slot: must start nil so the ARC release at first
+      overwrite / scope exit sees an empty slot, not stale stack bytes (a
+      garbage instance pointer would resolve _Release out of nowhere). }
     zeroBytes := RecSize(Syms[i].RecName)
   else if SymElemIsComInterface(i) then
     { STATIC ARRAY of COM interfaces — `keep: array[0..N] of IFoo`. Exactly
@@ -1741,7 +1741,7 @@ begin
             if CurTok.Kind = tkLParen then
             begin
               Next;
-              mai := 1; { param 0 = Self (provided by the fat pointer) }
+              mai := 1; { param 0 = Self (the interface value itself: the instance) }
               { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC
                 accepts it (fcl-json's own suite calls `J.FormatJSON()`); without this the loop hands
                 the `)` to ParseExpr and reports "expected expression". A method with NO parameters
@@ -11245,8 +11245,9 @@ begin
     begin
       node := AllocNode(AN_AS_CAST);
       ASTLeft[node] := left; ASTIVal[node] := isci;
-      { `obj as IFoo` yields an interface VALUE (a CORBA fat pointer, a 2-word
-        record); `obj as TClass` yields a class reference. }
+      { `obj as IFoo` yields an interface VALUE -- one word, the instance
+        pointer, carried as a tyRecord over the interface's UCls entry;
+        `obj as TClass` yields a class reference. }
       if UClsIsInterface[isci] then ASTTk[node] := Ord(tyRecord)
       else ASTTk[node] := Ord(tyClass);
     end;

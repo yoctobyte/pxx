@@ -968,11 +968,13 @@ end;
                   under both pxx and fpc 3.2.2, UClsSize_ is set to
                   TARGET_PTR_SIZE at the interface's own parse site, and
                   AN_INTF_CALL recovers the IMT per call via PXXIntfIMTOf. The
-                  "16-byte fat pointer {IMT, instance}" wording that appears in
-                  roughly two dozen comments across compiler/** -- including one
-                  line above the AN_INTF_CALL lowering that immediately
-                  contradicts it -- describes a representation the code does not
-                  have. Do not propagate it; this comment did, before the
+                  "16-byte fat pointer {IMT, instance}" wording described a
+                  representation the code does not have. It was in roughly two
+                  dozen comments across compiler/** when this note was written --
+                  including one line above the AN_INTF_CALL lowering that
+                  immediately contradicted it -- and those were swept on
+                  2026-09-09, each against the path it described. Do not
+                  reintroduce it; this comment carried it too, before the
                   measurement.
   ONE ANSWER FOR EVERY CALLER. The GetEnumerator builder knew two of the three
   and the `operator enumerator` builder knew none -- it hardcoded tyClass at

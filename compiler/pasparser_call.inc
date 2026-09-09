@@ -1245,7 +1245,7 @@ end;
   argument 0,
   and carries its slot in ASTSOffset rather than ASTRight. None of the eleven
   copies knew that, so a property declared in an interface read a class VMT off
-  a fat pointer -- the ordinary method call `i.M(...)` had the arm (see the
+  an interface value -- the ordinary method call `i.M(...)` had the arm (see the
   AN_INTF_CALL site in ParseClassRecordSelectors) and the property path, being
   a separate copy, did not.
 

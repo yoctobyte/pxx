@@ -1394,8 +1394,10 @@ begin
         end
         else if (ci >= 0) and UClsIsInterface[ci] then
         begin
-          { Interface-typed variable: a 16-byte fat pointer {IMT, instance}.
-            Modelled as a tyRecord whose rec id is the interface's UCls entry. }
+          { Interface-typed variable: ONE MACHINE WORD, the instance pointer.
+            Modelled as a tyRecord whose rec id is the interface's UCls entry --
+            the tyRecord spelling is about how the type is CARRIED (rec id, ABI,
+            addressability), not about the width. }
           LastTypeRecId := REC_UCLASS_BASE + ci;
           Result := tyRecord;
         end
@@ -7339,8 +7341,9 @@ begin
       begin
         { `IFoo = interface [guid] <method signatures> end;` — CORBA-style.
           The interface is a UCls entry with no fields; its methods are slot
-          signatures (declaration order = IMT slot). A var of it is a 16-byte
-          fat pointer {IMT, instance}. }
+          signatures (declaration order = IMT slot). A var of it is ONE MACHINE
+          WORD -- the instance pointer; the IMT is recovered per call from the
+          instance's RTTI by PXXIntfIMTOf. }
         Next;
         { FORWARD declaration: `IFoo = interface;` with nothing after it. The
           CLASS arm two hundred lines down has had this since forever
