@@ -168,3 +168,27 @@ re-specified onto the assignment, because the cast it keys on does not occur.
 price. What they do not settle is whether pxx wants FPC's interface ABI as a
 GOAL — `the-goal-cross-cross` wants foreign objects and documented layouts to
 work, and that is an argument for B that no cost measurement can answer.
+
+## 2026-09-09 — do NOT escalate this yet; the FPC target may answer it for free
+
+frankH's observation, filed when the fleet switched to application-driven work
+and worth acting on before anyone spends the owner on this.
+
+This ticket's own closing line is *"whether pxx WANTS fpc's interface ABI as a
+goal is the part no cost measurement answers."* That was true while the only
+evidence available was a cost measurement. It is **no longer the only evidence
+available**: `umbrella-pxx-compiles-fpc-itself` (prio 85, filed `0500e9198`)
+points pxx at ~400k lines of FPC's own Object Pascal, and **FPC's source will
+either need that ABI or it will not.**
+
+If the attempt reaches a hand-built COM interface, the fork is answered by
+demand rather than by taste, and this becomes an ordinary blocker wired under
+that umbrella. If 400k lines never reach one, that is a measurement too — and
+the honest disposition then is `low-prio/` or `rainy-day/`, not an owner
+decision.
+
+**So: leave this open, unowned, and do not put it in front of the owner.** The
+cheapest way to settle a fork of intent is to find out whether real source
+wants the behaviour, which is the standing rule for compat here — *evidence
+that settles it is real source that wants the behaviour*. The attempt is
+running now. Re-read this ticket when it has covered enough of FPC to say.
