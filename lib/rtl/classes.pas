@@ -164,6 +164,25 @@ type
   TComponent = class;
   TComponentClass = class of TComponent;
 
+  { ---- TComponentEnumerator: `for C in AComponent` over its owned children ----
+    FPC's classesh.inc:1874. Declared with the two above and for the same
+    reason -- tenumerators1.pp names the type and drives it by hand.
+    THAT ROW STILL DOES NOT PASS and this does not make it: it also wants
+    TCollection / TCollectionItem / TCollectionEnumerator, which this RTL does
+    not have at all. Verified by probe rather than by that row -- see
+    test/lib_classes_enumerators.pas, whose
+    component section matches fpc 3.2.2. }
+  TComponentEnumerator = class
+  private
+    FComponent: TComponent;
+    FPosition: Integer;
+  public
+    constructor Create(AComponent: TComponent);
+    function GetCurrent: TComponent;
+    function MoveNext: Boolean;
+    property Current: TComponent read GetCurrent;
+  end;
+
   TComponent = class(TPersistent)
   private
     FOwner: TComponent;
@@ -185,6 +204,8 @@ type
     property ComponentCount: Integer read FComponentCount;
     property Name: string read FName write FName;
     property Tag: NativeInt read FTag write FTag;
+    { `for C in AComponent` -- iterates the components this one OWNS. }
+    function GetEnumerator: TComponentEnumerator;
   end;
 
   { ---- TStream: abstract byte stream + TMemoryStream concrete ---- }
@@ -306,6 +327,43 @@ type
   PPointerList = ^TPointerList;
 
   { ---- TList: a growable list of untyped pointers ---- }
+  TList = class;
+  TFPList = class;
+
+  { ---- TListEnumerator / TFPListEnumerator ----
+    Same shape and same reason as TStringsEnumerator above: FPC's classesh.inc
+    (:287 and :206) declares them as plain classes with GetCurrent / MoveNext /
+    Current, and tenumerators1.pp names both types and drives them BY HAND
+    (`Enumerator := List.GetEnumerator; while Enumerator.MoveNext do`), so the
+    type name and the manual protocol are surface rather than an internal
+    choice. Both yield Pointer, as FPC's do.
+
+    NOTE OUR HIERARCHY IS INVERTED RELATIVE TO FPC'S and that is deliberate and
+    pre-existing: here TFPList descends from TList, where FPC keeps them
+    separate. The two enumerators are still declared separately, because the
+    corpus names TFPListEnumerator as its own type. }
+  TListEnumerator = class
+  private
+    FList: TList;
+    FPosition: Integer;
+  public
+    constructor Create(AList: TList);
+    function GetCurrent: Pointer;
+    function MoveNext: Boolean;
+    property Current: Pointer read GetCurrent;
+  end;
+
+  TFPListEnumerator = class
+  private
+    FList: TFPList;
+    FPosition: Integer;
+  public
+    constructor Create(AList: TFPList);
+    function GetCurrent: Pointer;
+    function MoveNext: Boolean;
+    property Current: Pointer read GetCurrent;
+  end;
+
   TList = class
   private
     FItems: array of Pointer;
@@ -338,6 +396,8 @@ type
       expects, so this is a cast and not a reshaping. nil on an empty list,
       as in FPC -- `Count` is what says whether it may be indexed. }
     property List: PPointerList read GetList;
+    { `for P in AList` and tenumerators1's hand-driven form. }
+    function GetEnumerator: TListEnumerator;
   end;
 
   { ---- TFPList: FPC's plain pointer list ----
@@ -349,6 +409,12 @@ type
     a parameter typed TFPList. }
   TFPList = class(TList)
   public
+    { Reintroduced rather than inherited: tenumerators1.pp declares
+      `Enumerator: TFPListEnumerator` and assigns `List.GetEnumerator` to it, so
+      the STATIC result type has to be the TFPList one. Inheriting TList's would
+      return a TListEnumerator and the assignment would be refused -- FPC keeps
+      the two separate for the same reason. }
+    function GetEnumerator: TFPListEnumerator;
     { FPC's TFPList.Assign — replace this list's contents with another's.
       Pointers only: the list does not own what it holds, so this copies the
       pointer array and nothing else, which is what makes it different from
@@ -363,6 +429,38 @@ type
       cases, which is the version that keeps a caller's bug from becoming
       silent data loss or a crash inside the RTL. }
     procedure Assign(Obj: TFPList);
+  end;
+
+  TStrings = class;
+
+  { ---- TStringsEnumerator: what `for S in AStringList` binds to ----
+    Shape copied from FPC's classesh.inc:592 -- a plain class with GetCurrent /
+    MoveNext / Current, NOT one of the interface pairs, because that is what the
+    corpus writes: tenumerators1.pp declares `Enumerator: TStringsEnumerator`
+    and drives it by hand, so the NAME and the manual protocol are both part of
+    the surface, not an implementation detail we may choose differently.
+
+    WHY IT WAS MISSING AND WHY THAT LOOKED LIKE A FRONTEND BUG: for-in over a
+    TStrings was recorded for months as an enumerator-SELECTION gap. The
+    selection mechanism was fixed 2026-09-07 (a container carrying both a
+    GetEnumerator and an `operator enumerator` now chooses by the loop
+    variable's type) and tforin24 still failed -- because TStrings declared no
+    GetEnumerator at all, so there was nothing for the selection to select and
+    the object-yielding `operator enumerator` in the test file took BOTH loops.
+    The diversion had nothing to divert to. A missing declaration and a wrong
+    choice present the same way at the call site.
+
+    Positioned before TStrings and after the forward so the enumerator can name
+    it; FPC does the same thing in the same order. }
+  TStringsEnumerator = class
+  private
+    FStrings: TStrings;
+    FPosition: Integer;
+  public
+    constructor Create(AStrings: TStrings);
+    function GetCurrent: string;
+    function MoveNext: Boolean;
+    property Current: string read GetCurrent;
   end;
 
   { ---- TStrings: abstract string-list base ---- }
@@ -394,6 +492,8 @@ type
     procedure Delete(Index: Integer); virtual; abstract;
     procedure Insert(Index: Integer; const S: string); virtual; abstract;
     function IndexOf(const S: string): Integer; virtual;
+    { `for S in AStrings` -- see TStringsEnumerator above. }
+    function GetEnumerator: TStringsEnumerator;
     function GetText: string;
     procedure SetText(const Value: string);
     procedure LoadFromStream(Stream: TStream);
@@ -748,6 +848,54 @@ end;
 
 { ============================ TList ============================ }
 
+{ ---- TListEnumerator / TFPListEnumerator ---- }
+
+constructor TListEnumerator.Create(AList: TList);
+begin
+  inherited Create;
+  FList := AList;
+  FPosition := -1;
+end;
+
+function TListEnumerator.GetCurrent: Pointer;
+begin
+  Result := FList[FPosition];
+end;
+
+function TListEnumerator.MoveNext: Boolean;
+begin
+  Inc(FPosition);
+  Result := FPosition < FList.Count;
+end;
+
+constructor TFPListEnumerator.Create(AList: TFPList);
+begin
+  inherited Create;
+  FList := AList;
+  FPosition := -1;
+end;
+
+function TFPListEnumerator.GetCurrent: Pointer;
+begin
+  Result := FList[FPosition];
+end;
+
+function TFPListEnumerator.MoveNext: Boolean;
+begin
+  Inc(FPosition);
+  Result := FPosition < FList.Count;
+end;
+
+function TList.GetEnumerator: TListEnumerator;
+begin
+  Result := TListEnumerator.Create(Self);
+end;
+
+function TFPList.GetEnumerator: TFPListEnumerator;
+begin
+  Result := TFPListEnumerator.Create(Self);
+end;
+
 function TList.GetList: PPointerList;
 begin
   Result := PPointerList(FItems);
@@ -915,6 +1063,31 @@ begin
   inherited Destroy;
 end;
 
+{ ---- TComponentEnumerator ---- }
+
+constructor TComponentEnumerator.Create(AComponent: TComponent);
+begin
+  inherited Create;
+  FComponent := AComponent;
+  FPosition := -1;
+end;
+
+function TComponentEnumerator.GetCurrent: TComponent;
+begin
+  Result := FComponent.Components[FPosition];
+end;
+
+function TComponentEnumerator.MoveNext: Boolean;
+begin
+  Inc(FPosition);
+  Result := FPosition < FComponent.ComponentCount;
+end;
+
+function TComponent.GetEnumerator: TComponentEnumerator;
+begin
+  Result := TComponentEnumerator.Create(Self);
+end;
+
 function TComponent.GetComponent(Index: Integer): TComponent;
 begin
   if (Index < 0) or (Index >= FComponentCount) then
@@ -1007,6 +1180,34 @@ end;
   Linux, not 6 — and SaveToFile through here was writing DOS line endings into
   files on a Unix host. SetText below already accepts either form, which is why
   the round-trip hid this. }
+{ ---- TStringsEnumerator ---- }
+
+constructor TStringsEnumerator.Create(AStrings: TStrings);
+begin
+  inherited Create;
+  FStrings := AStrings;
+  { -1 so the first MoveNext lands on 0. FPC's is identical; the enumerator is
+    positioned BEFORE the first element, which is what lets a caller drive
+    MoveNext/Current by hand exactly as the loop does. }
+  FPosition := -1;
+end;
+
+function TStringsEnumerator.GetCurrent: string;
+begin
+  Result := FStrings[FPosition];
+end;
+
+function TStringsEnumerator.MoveNext: Boolean;
+begin
+  Inc(FPosition);
+  Result := FPosition < FStrings.Count;
+end;
+
+function TStrings.GetEnumerator: TStringsEnumerator;
+begin
+  Result := TStringsEnumerator.Create(Self);
+end;
+
 function TStrings.GetText: string;
 var i: Integer; r: string;
 begin

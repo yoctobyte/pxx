@@ -32191,6 +32191,22 @@ lib-test: pxx-stable-check
 	# against an FPC build, per the ticket's method note.
 	$(PXX_STABLE) -Fulib/rtl test/lib_fpc_surface_2026_08.pas $(TESTTMP)/lib_fpc_surface
 	tools/expect_same.sh lib_fpc_surface "$$($(TESTTMP)/lib_fpc_surface | tail -n 1)" "FPCSURFACE OK"
+	# The four Classes containers FPC gives a GetEnumerator -- TStrings, TList,
+	# TFPList, TComponent -- through BOTH doors: `for X in C` AND the hand-driven
+	# `E := C.GetEnumerator; while E.MoveNext do E.Current`. Both, because
+	# tenumerators1.pp of the FPC testsuite writes only the second one and names
+	# the enumerator TYPES (`Enumerator: TStringsEnumerator`), so the names and
+	# the manual protocol are surface we owe; a for-in-only fixture would pass
+	# with an enumerator of any name and any shape. Expected output is fpc
+	# 3.2.2's in full, 25 rows.
+	# WHAT THIS CAUGHT BY EXISTING AT ALL: for-in over a TStrings sat in the
+	# conformance skip list for months as an enumerator-SELECTION gap, and the
+	# selection fix (2026-09-07) did not burn the row, because TStrings declared
+	# no GetEnumerator AT ALL -- nothing to select, so the test file's own
+	# object-yielding `operator enumerator` took both loops. A missing
+	# declaration and a wrong choice present identically at the call site.
+	$(PXX_STABLE) -Fulib/rtl test/lib_classes_enumerators.pas $(TESTTMP)/lib_classes_enumerators
+	$(TESTTMP)/lib_classes_enumerators | diff -u test/lib_classes_enumerators.expected -
 	# TStrings.CommaText/DelimitedText: 43 cases whose expectations are FPC's own
 	# output, including the two quoting rules a from-the-description
 	# implementation gets wrong ("a"b is TWO items; a"b" is one literal item).

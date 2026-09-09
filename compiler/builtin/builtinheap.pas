@@ -490,6 +490,30 @@ type
   end;
   IUnknown = IInterface;
 
+  { ---- IEnumerator / IEnumerable, the NON-GENERIC TObject-based pair ----
+    FPC declares these in the System unit (rtl/inc/objpash.inc:273/280), so a
+    program sees them with NO `uses` at all -- which is the whole reason they are
+    here and not in Classes beside the generic pair. tforin8.pp of the FPC
+    testsuite has no uses clause and writes
+    `TMyList = class(TInterfacedObject, IEnumerable)`; from Classes it would
+    still fail. The generic `IEnumerator<T>` / `IEnumerable<T>` stay in
+    lib/rtl/classes.pas and their own note there explains that placement.
+    Shapes copied from objpash.inc, including `Reset` and Current typed TObject.
+
+    Trigger for this addition was written down in advance: classes.pas's note
+    said "nothing in the corpus references it. Add it when something does."
+    Something does. }
+  IEnumerator = interface(IInterface)
+    function GetCurrent: TObject;
+    function MoveNext: Boolean;
+    procedure Reset;
+    property Current: TObject read GetCurrent;
+  end;
+
+  IEnumerable = interface(IInterface)
+    function GetEnumerator: IEnumerator;
+  end;
+
   TInterfacedObject = class(TObject, IInterface)
     FRefCount: Integer;
     function QueryInterface(constref IID: TGuid; out Obj): HResult;
