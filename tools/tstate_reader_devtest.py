@@ -47,6 +47,20 @@ ALLOWED = {
         "Arrived with 85c8c1bf8 on 2026-09-06 and broke this file for ~40 "
         "minutes -- gate.sh quick does not run tools-devtest, so the author "
         "landed green and the red only existed in the full tier.",
+    "twatch_autopin_devtest.py":
+        "same shape as twatch_idle_tier_try_devtest above: make_repo() joins "
+        "TSTATE_REL onto its own mkdtemp (line 52) so the arming switch "
+        "PIN_ARMED_REL exists for the not-armed control to find ABSENT and "
+        "the others to find present. Routing it through materialize_tstate "
+        "would point the fixture at the LIVE tstate -- and this one is worse "
+        "than most, because the file it looks for is the switch that arms "
+        "auto-pin: a fixture reading the real tree would make the controls "
+        "answer about whether the FLEET is armed instead of about the guard. "
+        "Arrived with fc2ce3d02 on 2026-09-09 and broke this file the same "
+        "way, for the same reason: gate.sh quick does not run tools-devtest, "
+        "so the author landed green and the red existed only in the full "
+        "tier. THIRD entry carrying that sentence -- see the ticket named in "
+        "the note below the table.",
     "twatch_requested_reds_devtest.py":
         "writes a synthetic runs-seven.ndjson under its own tmp dir and hands "
         "that dir to job_history()/job_selectors(). The fixture IS the "

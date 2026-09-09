@@ -16,6 +16,8 @@ Run: python3 tools/twatch_autopin_devtest.py
 """
 import os
 import sys
+import atexit
+import shutil
 import tempfile
 import subprocess
 
@@ -42,6 +44,13 @@ class FakeClone:
 def make_repo(head=SHA, armed=True, binary=b"COMPILER-BYTES"):
     """A directory shaped like a watcher clone at a given HEAD."""
     d = tempfile.mkdtemp(prefix="autopin-devtest-")
+    # Reap it. mkdtemp with no rmtree is the family that took seven dark for ten
+    # hours on /tmp inode exhaustion (2026-09-07): the box was 9% full by BYTES
+    # and had 8 free inodes of 1048576. Each make_repo() is a git init plus a
+    # commit, so a run leaves eight repos behind, and this file runs in every
+    # full tier. atexit rather than a finally: the controls deliberately keep
+    # their repos alive across the whole run to compare them.
+    atexit.register(shutil.rmtree, d, ignore_errors=True)
     subprocess.run(["git", "init", "--quiet", d], check=True)
     subprocess.run(["git", "-C", d, "config", "user.email", "t@t"], check=True)
     subprocess.run(["git", "-C", d, "config", "user.name", "t"], check=True)
