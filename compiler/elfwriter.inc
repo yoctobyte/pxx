@@ -5835,7 +5835,16 @@ begin
           begin
             exprSource := '';
             for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+            { QUIET: this pass runs before a single token exists (measured:
+              TokCount = 0 here), so any question whose answer lives in the
+              token stream -- declared(), a source `const`, sizeof of a
+              source type alias -- is unanswerable NOW and answerable in the
+              real lex that follows. Halting here would refuse the file over a
+              question the compiler is about to answer correctly. See
+              PasCondQuiet in paslexer.inc for the residual this trades for. }
+            PasCondQuiet := True;
             cond := EvalPasCondExprText(exprSource);
+            PasCondQuiet := False;
           end;
         end
         else
@@ -5860,7 +5869,9 @@ begin
         begin
           exprSource := '';
           for k := j to closePos - 1 do AppendChar(exprSource, src[k]);
+          PasCondQuiet := True;          { same pre-pass, same reason }
           cond := EvalPasCondExprText(exprSource);
+          PasCondQuiet := False;
           k := condCount - 1;
         end;
         condActive[k] := condParent[k] and not condTaken[k] and cond;

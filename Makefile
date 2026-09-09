@@ -3013,6 +3013,20 @@ test-nilpy: $(COMPILER)
 	@# line 45. Found at cgbase.pas:63 (umbrella-pxx-compiles-fpc-itself).
 	@./$(COMPILER) test/test_p_a_subrange_bound_can_be_a_folded_call.pas $(TESTTMP)/test_subcall26
 	@tools/expect_same.sh test_subcall26 "$$($(TESTTMP)/test_subcall26 | tail -n 3)" "$$(printf 'member=ea\nfails=0\nSUBCALL OK')"
+	@# `{$if}` can read a CONST and follow a TYPE ALIAS the source declares --
+	@# in this file and in a used unit. Before this, a name the evaluator could
+	@# not resolve fell through to a boolean reading and the conditional took the
+	@# ELSE arm SILENTLY, and `sizeof` knew only builtin type NAMES, so an alias
+	@# could not be sized at all. EVERY VALUE ROW IS PAIRED WITH A MIRROR ROW
+	@# that must take the other arm: an unresolved expression answers False, so
+	@# a single row would agree with a compiler that resolved nothing. The
+	@# declared()/$ifdef rows are the regression control for the probe walk this
+	@# change made re-entrant. Byte-identical to fpc 3.2.2 on all 23 rows; the
+	@# PIN refuses the file on the first row. 19 of FPC's 207 compiler units stop
+	@# on this family (umbrella-pxx-compiles-fpc-itself); globtype.pas:126 and
+	@# ncon.pas:968 are the two named in the ticket.
+	@./$(COMPILER) test/test_p_a_conditional_directive_can_read_a_source_const.pas $(TESTTMP)/test_condsrc26
+	@tools/expect_same.sh test_condsrc26 "$$($(TESTTMP)/test_condsrc26 | tail -n 2)" "$$(printf 'fails=0\nCONDSRC OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

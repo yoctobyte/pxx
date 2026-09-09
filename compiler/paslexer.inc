@@ -1421,6 +1421,161 @@ var
   PasCondExprText: AnsiString;
   PasCondExprPos: Integer;
 
+{ THE CONDITIONAL EVALUATOR RUNS TWICE OVER EVERY FILE, and the first run knows
+  much less than the second. Measured 2026-09-09 by printing TokCount at entry:
+  the INCLUDE-EXPANSION pre-pass in elfwriter.inc evaluates each `{$if}` with
+  `TokCount = 0` -- no tokens exist yet -- and LexAll then evaluates the same
+  expression again with the file lexed. That is why `{$if declared(X)}` for a
+  name in the SAME FILE works at all: it answers False in the pre-pass, which
+  needs no diagnostic, and correctly in the real one.
+
+  A question whose answer comes from the TOKEN STREAM therefore cannot be
+  answered in the pre-pass, and it must not HALT there either -- the real pass
+  is the authority and will raise the error itself if the name is genuinely
+  unresolvable. PasCondQuiet says "this is the pre-pass"; PasCondUnresolved
+  says a value had to be invented, and turns the whole expression False.
+
+  THE RESIDUAL, stated rather than left to be found: the pre-pass's only job is
+  deciding which `{$i}` files to expand, so an unresolvable conditional whose
+  arms contain NO include costs nothing at all, and one that does GUARDS AN
+  INCLUDE THE REAL LEXER WILL THEN LOOK FOR AND NOT FIND. False is the same
+  conservative direction the {$IFOPT} arm beside it chose, and for its reason:
+  expanding an arm that should be dead turns a missing file into a hard error
+  even when nothing reads it. If that bites, the tell is an include inside an
+  arm guarded by a source-level `const` or `sizeof` -- not a wrong value, a
+  missing declaration. Before this, the same shape did not choose an arm at
+  all: it halted the compile in the preprocessor. }
+var
+  PasCondQuiet: Boolean = False;
+  PasCondUnresolved: Boolean = False;
+
+var
+  { ...and ONE saved copy of all of it, because a probe launched from the
+    MIDDLE of an expression re-enters the evaluator that owns these.
+
+    THE SHAPE, and it is a latent bug this makes safe rather than a new
+    requirement: `{$if declared(X)}` answers by LEXING each used unit, that
+    unit has conditionals of its own -- `{$i fpcdefs.inc}` alone is nothing
+    but conditionals -- and lexing runs them, so EvalPasCondExprText is
+    re-entered while the OUTER expression is half-built. The inner run resets
+    PasCondValueCount to 0 and leaves its own result on the stack; the outer
+    then pushes the probe's answer on top of that and finds TWO values where
+    it expects one, which surfaces as `conditional directive: malformed
+    expression` at a line in a completely different file. PasProbeSaveLexState
+    saves eighteen kinds of lexer state and not this, because when it was
+    written the probe was the only re-entry and nobody had pointed it at a
+    corpus unit that conditionalises.
+
+    ONE save slot, not a stack, and that is sufficient rather than lucky:
+    PasCondProbeUsedUnits refuses to run at ProbeDepth > 0, so probes do not
+    nest, and the only nesting is probe-inside-expression, which is one deep.
+    A second level would need a stack and would also mean the ProbeDepth guard
+    had gone. }
+  SaveCondValues: array[0..63] of Boolean;
+  SaveCondValKind: array[0..63] of Integer;
+  SaveCondInt: array[0..63] of Int64;
+  SaveCondOps: array[0..63] of Char;
+  SaveCondValName: array[0..63] of AnsiString;
+  SaveCondValueCount, SaveCondOpCount: Integer;
+  SaveCondExprText: AnsiString;
+  SaveCondExprPos: Integer;
+  SaveCondQuiet, SaveCondUnresolved: Boolean;
+  { ...AND THE {$if} NESTING STACK ITSELF, which is the one that produces the
+    most confusing symptom. PasCondCount/Parent/Active/Taken are per-FILE state
+    in globals, and a probe lexes another file through the same lexer: the
+    probed unit's directives push and pop on the OUTER file's stack, and the
+    outer file then ends with a depth that has nothing to do with its own text.
+    Measured 2026-09-09 on FPC's entfile.pas -- 175 openers and 175 `{$endif}`,
+    perfectly balanced, refused as `unterminated conditional directive` at its
+    last line. }
+  SaveCondParent, SaveCondActive, SaveCondTaken:
+    array[0..MAX_PAS_CONDS-1] of Boolean;
+  SaveCondCount: Integer;
+
+{ THE PRE-PASS MUST NOT PROBE, and this is a rule about RE-ENTRY rather than
+  about cost. A probe answers by calling LexAppend on another unit's source,
+  and LexAppend runs that unit's own include expansion -- so a probe launched
+  from inside ExpandIncludes re-enters ExpandIncludes. Measured 2026-09-09:
+  an unresolvable `{$if}` in a USED UNIT then died with `unterminated
+  conditional directive during include expansion`, a complaint about the
+  OUTER expansion's bookkeeping, from a file whose own conditionals balance
+  perfectly. With the probe skipped, the same file reports the real
+  diagnostic at the real line.
+
+  Losing nothing matters here: the pre-pass only decides which `{$i}` files to
+  expand, every conditional is evaluated AGAIN by the real lexer with the
+  token stream present, and that second evaluation probes. The answer the
+  pre-pass gives up is one it was already giving up whenever the compile
+  started from a PROGRAM, where TokCount is 0 at that point and the probe has
+  no `uses` clause to walk.
+
+  It also removes a latent corruption from `declared()`, which has probed
+  unconditionally since it was written: from a used unit's pre-pass, TokCount
+  is NOT zero, so `{$if declared(X)}` there was already re-entering the
+  expander. Nothing had pointed a corpus at it. }
+procedure PasCondProbeEnter;
+{ Everything a probe disturbs, saved together: the lexer state PROBE-side and
+  the expression state EVALUATOR-side. Paired with PasCondProbeLeave, and the
+  three probing questions all go through this pair rather than through
+  PasProbeSaveLexState directly -- a fourth question added later gets the
+  expression save for free instead of rediscovering why it needs one. }
+var i: Integer;
+begin
+  PasProbeSaveLexState;
+  for i := 0 to 63 do
+  begin
+    SaveCondValues[i] := PasCondValues[i];
+    SaveCondValKind[i] := PasCondValKind[i];
+    SaveCondInt[i] := PasCondInt[i];
+    SaveCondOps[i] := PasCondOps[i];
+    SaveCondValName[i] := PasCondValName[i];
+  end;
+  SaveCondValueCount := PasCondValueCount;
+  SaveCondOpCount := PasCondOpCount;
+  SaveCondExprText := PasCondExprText;
+  SaveCondExprPos := PasCondExprPos;
+  { and the two pre-pass flags: the probe LEXES a unit, that unit's own include
+    expansion sets PasCondQuiet for its own conditionals and clears it on the
+    way out, and PasCondUnresolved is per-EXPRESSION -- so without these a
+    nested pre-pass silently answers for the outer one. }
+  SaveCondQuiet := PasCondQuiet;
+  SaveCondUnresolved := PasCondUnresolved;
+  for i := 0 to MAX_PAS_CONDS - 1 do
+  begin
+    SaveCondParent[i] := PasCondParent[i];
+    SaveCondActive[i] := PasCondActive[i];
+    SaveCondTaken[i] := PasCondTaken[i];
+  end;
+  SaveCondCount := PasCondCount;
+end;
+
+procedure PasCondProbeLeave;
+var i: Integer;
+begin
+  for i := 0 to 63 do
+  begin
+    PasCondValues[i] := SaveCondValues[i];
+    PasCondValKind[i] := SaveCondValKind[i];
+    PasCondInt[i] := SaveCondInt[i];
+    PasCondOps[i] := SaveCondOps[i];
+    PasCondValName[i] := SaveCondValName[i];
+  end;
+  PasCondValueCount := SaveCondValueCount;
+  PasCondOpCount := SaveCondOpCount;
+  PasCondExprText := SaveCondExprText;
+  PasCondExprPos := SaveCondExprPos;
+  PasCondQuiet := SaveCondQuiet;
+  PasCondUnresolved := SaveCondUnresolved;
+  for i := 0 to MAX_PAS_CONDS - 1 do
+  begin
+    PasCondParent[i] := SaveCondParent[i];
+    PasCondActive[i] := SaveCondActive[i];
+    PasCondTaken[i] := SaveCondTaken[i];
+  end;
+  PasCondCount := SaveCondCount;
+  PasProbeRestoreLexState;
+end;
+
 procedure SkipPasCondExprSpaces;
 begin
   while (PasCondExprPos <= Length(PasCondExprText)) and
@@ -1659,10 +1814,206 @@ begin
   end;
 end;
 
+
+{ ---- Two more questions over the SAME token range, for the same reason ----
+
+  `{$if MAXOPS > 2}` where MAXOPS is a source `const`, and `{$if sizeof(TBig)}`
+  where TBig is a source type ALIAS, are both things FPC answers and pxx could
+  not: FPC's scanner and parser are interleaved, so the symbol table is already
+  populated when a directive is scanned, while pxx decides conditionals during
+  LexAll with nothing but the define table to hand.
+
+  They are walks over a token range and not lookups because that is the only
+  thing that exists at this point in the compile -- exactly the argument
+  PasCondNameDeclaredIn above already makes, and they take `lo, hi` for exactly
+  its reason: a used unit's tokens live in a scratch region at the END of the
+  stream, and the probe points the same walk at it.
+
+  WHAT THEY DELIBERATELY DO NOT DO. Both accept only the SIMPLEST shape and
+  decline everything else, leaving the caller's existing diagnostic in place:
+
+  * a const must be `NAME = <integer literal>;`, optionally signed. `A = B`,
+    `A = B + 1`, `A = 'x'` and a TYPED const `A: Integer = 4` (which is a
+    writable variable in FPC, not a constant) all decline. A guessed value
+    picks a branch silently, and a conditional that takes the wrong branch does
+    not produce a wrong number -- it produces a different program. That
+    sentence is PasCondSizeOfTypeName's, and it governs here too.
+  * an alias must be `NAME = <one token>;`. `type A = array[...]`,
+    `= record`, `= ^B` and `= class` all decline, and a record is refused a
+    second time downstream anyway because its layout does not exist yet.
+
+  FIRST MATCH WINS, which is PasCondNameDeclaredIn's rule and carries its
+  limitation: a declaration nested in a record or a class is not distinguished
+  from a unit-level one, so a nested name declared EARLIER would answer. Left
+  as-is deliberately rather than fixed half-way -- the existing walk has the
+  identical exposure, and one shape of scope tracking in two routines that
+  disagree is worse than none.
+  bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares }
+
+function PasCondDeclStartsAt(k, lo: Integer): Boolean;
+{ IS Tokens[k] THE NAME AT THE HEAD OF A DECLARATION? A LOCAL anchor, and it
+  replaces a running const/type/var SECTION state that was the obvious way to
+  write the two walks below and is wrong on real source.
+
+  Measured 2026-09-09 against FPC's globtype.pas: a section tracker has to
+  decide what ENDS a section, `procedure`/`function` are on every such list, and
+  globtype declares PROCEDURAL TYPES (`TCallbackFunBoolParam = function(...)`)
+  a hundred lines above `TConstPtrUInt = PUint`. The tracker left the type
+  section at the first procedural type and never came back, so the alias was
+  invisible -- silently, answering "not an alias", which is indistinguishable
+  from a correct negative. `var` inside a parameter list is the same trap one
+  level down.
+
+  A declaration name follows `type` / `const`, a `;`, or an `end` -- that is
+  true wherever the declaration is, needs no state, and cannot be fooled by
+  anything INSIDE a declaration, because the tokens that could fool it never sit
+  in those positions: a default parameter value (`a: Integer = 5`) follows a
+  `(` or a `,`, and a parenthesised constant expression (`B = (A = 1)`) puts its
+  inner name after a `(`. }
+begin
+  Result := (k = lo) or
+            (Tokens[k - 1].Kind = tkType) or (Tokens[k - 1].Kind = tkConst) or
+            (Tokens[k - 1].Kind = tkSemicolon) or (Tokens[k - 1].Kind = tkEnd);
+end;
+
+function PasCondConstIntIn(const nm: AnsiString; lo, hi: Integer;
+                           var v: Int64): Boolean;
+{ `NAME = <integer literal> ;`, optionally signed. The pattern IS the type
+  check: no type declaration can have that shape -- a subrange (`TR = 1..5`)
+  puts `..` where this wants `;` -- and a TYPED const (`A: Integer = 4`), which
+  is a writable variable in FPC and not a constant at all, has a `:` where this
+  wants `=`. }
+var k: Integer;
+begin
+  Result := False;
+  if nm = '' then Exit;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < hi) and
+       (Tokens[k + 1].Kind = tkEq) and PasCondDeclStartsAt(k, lo) and
+       CaseEqual(PasCondTokText(k), nm) then
+    begin
+      if (Tokens[k + 2].Kind = tkInteger) and
+         (Tokens[k + 3].Kind = tkSemicolon) then
+      begin
+        v := Tokens[k + 2].IVal; Result := True; Exit;
+      end
+      else if (k + 4 < hi) and (Tokens[k + 2].Kind = tkMinus) and
+              (Tokens[k + 3].Kind = tkInteger) and
+              (Tokens[k + 4].Kind = tkSemicolon) then
+      begin
+        v := -Tokens[k + 3].IVal; Result := True; Exit;
+      end;
+    end;
+end;
+
+function PasCondTypeAliasIn(const nm: AnsiString; lo, hi: Integer;
+                            var target: AnsiString): Boolean;
+{ `NAME = <one token> ;`. The target is taken as TEXT and not as a token kind,
+  because a builtin type name may lex as a dedicated token (tkExtended_T,
+  tkDouble_T, ...) or as a plain identifier depending on the name, and the only
+  consumer is PasCondSizeOfTypeName, which takes a name. Everything with more
+  than one token on the right -- `= class(...)`, `= record`, `= array[...]`,
+  `= ^T`, `= function(...)` -- declines and keeps the caller's diagnostic. }
+var k: Integer;
+begin
+  Result := False;
+  target := '';
+  if nm = '' then Exit;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < hi) and
+       (Tokens[k + 1].Kind = tkEq) and (Tokens[k + 3].Kind = tkSemicolon) and
+       PasCondDeclStartsAt(k, lo) and CaseEqual(PasCondTokText(k), nm) then
+    begin
+      target := PasCondTokText(k + 2);
+      Result := target <> '';
+      if Result then Exit;
+    end;
+end;
+
 { How many units this file NAMED but the probe could not read. Set by
   PasCondNameDeclaredInUses, read once, immediately, by the caller below --
   it describes THE LAST PROBE and nothing else. }
 var PasCondUnitsUnread: Integer = 0;
+
+
+{ THE PROBE ANSWERS THREE QUESTIONS NOW, so it needs channels for two answers a
+  Boolean cannot carry. Globals rather than var parameters for the same reason
+  PasCondUnitsUnread is one: the probe crosses an include boundary through a
+  forward in compiler.pas, and every one of these describes THE LAST PROBE and
+  nothing else -- read them immediately, beside the call that set them. }
+const
+  PCQ_DECLARED  = 0;   { does a name exist -- the original question }
+  PCQ_CONSTINT  = 1;   { ...and what integer does it equal }
+  PCQ_TYPEALIAS = 2;   { ...and what one token does `type NAME = X;` name }
+var
+  PasCondProbeInt: Int64 = 0;
+  PasCondProbeStr: AnsiString = '';
+
+function PasCondConstInt(const nm: AnsiString; var v: Int64): Boolean;
+{ This file first, then the units it names -- the order PasCondNameDeclared
+  uses, and here it is also the cheap-first order: the in-file walk costs a scan
+  and the probe costs LEXING every used unit, so a constant declared beside the
+  directive never pays for one. }
+begin
+  Result := PasCondConstIntIn(nm, 0, TokCount, v);
+  if Result then Exit;
+  if PasCondQuiet then Exit;   { see PasCondProbeEnter's block: no probing here }
+  PasCondProbeEnter;
+  Result := PasCondProbeUsedUnits(nm, 0, PCQ_CONSTINT);
+  PasCondProbeLeave;
+  if Result then v := PasCondProbeInt;
+end;
+
+function PasCondTypeAlias(const nm: AnsiString; var target: AnsiString): Boolean;
+begin
+  Result := PasCondTypeAliasIn(nm, 0, TokCount, target);
+  if Result then Exit;
+  if PasCondQuiet then Exit;   { ditto }
+  PasCondProbeEnter;
+  Result := PasCondProbeUsedUnits(nm, 0, PCQ_TYPEALIAS);
+  PasCondProbeLeave;
+  if Result then target := PasCondProbeStr;
+end;
+
+function PasCondSizeOfNameOrAlias(const nm: AnsiString): Int64;
+{ sizeof(<name>) where the name may be an ALIAS the source declares.
+
+  PasCondSizeOfTypeName knows BUILTIN names and nothing else, by design -- it
+  holds no widths of its own and asks BuiltinTypeNameTk, so that there is one
+  source of size truth. This walks the alias chain until it reaches a name that
+  table knows: FPC's own compiler needs two hops (`TConstPtrUInt = PUint`,
+  `PUint = qword`, globtype.pas:53/130) and one of them crosses a unit
+  (`bestreal = extended`, x86_64/cpuinfo.pas:32, asked from globals.pas:740).
+
+  The token stream a walk sees has ALREADY had its conditionals resolved, so
+  only the arm this build selected is in it -- which is why one hop lands on
+  `qword` and not on the i8086 `LongWord` three lines above it.
+
+  THE CAP IS THE CYCLE GUARD. `type A = B; B = A;` is legal to write and would
+  not terminate; eight hops is far past anything real and turns a pathological
+  source into today's diagnostic rather than a hang.
+
+  AND THE ANSWER IS OURS, NOT FPC'S, WHICH IS THE POINT OF THE OPERATOR.
+  `{$if sizeof(bestreal)=sizeof(double)}` (globals.pas:740) is TRUE here and
+  FALSE under fpc, because fpc's Extended is 10 bytes and ours is 8
+  (feature-a-extended-is-an-alias-for-double). That is not a wrong branch: the
+  conditional exists to ask what THIS compiler's representation is, and both
+  answers are correct about their own. Measured 2026-09-09; the row it selects
+  only adds `inline`. }
+var hops: Integer;
+    cur, nxt: AnsiString;
+begin
+  Result := PasCondSizeOfTypeName(nm);
+  if Result >= 0 then Exit;
+  cur := nm;
+  hops := 0;
+  while (Result < 0) and (hops < 8) and PasCondTypeAlias(cur, nxt) do
+  begin
+    cur := nxt;
+    Result := PasCondSizeOfTypeName(cur);
+    Inc(hops);
+  end;
+end;
 
 function PasCondNameDeclared(const qname: AnsiString; arity: Integer): Boolean;
 { THE THIRD ANSWER IS A WARNING, NOT A REFUSAL, and that is the whole design of
@@ -1686,9 +2037,11 @@ function PasCondNameDeclared(const qname: AnsiString; arity: Integer): Boolean;
 begin
   Result := PasCondNameDeclaredIn(qname, arity, 0, TokCount);
   if Result then Exit;
-  PasProbeSaveLexState;
+  if PasCondQuiet then Exit;   { ditto -- and this one is a latent fix, not a
+                                 restriction: see PasCondProbeEnter's block }
+  PasCondProbeEnter;
   Result := PasCondNameDeclaredInUses(qname, arity);
-  PasProbeRestoreLexState;
+  PasCondProbeLeave;
   if (not Result) and (PasCondUnitsUnread > 0) then
     Warn('declared(' + qname + ') is False, and ' + AIntToStr(PasCondUnitsUnread) +
          ' unit(s) named in this file could not be read while the conditional was '
@@ -1749,7 +2102,15 @@ begin
         an invocation that had not applied the FPC define profile. The message
         sent the reader into the expression evaluator; the cause was one absent
         define, and the fix was a compiler FLAG. }
-      if PasCondValName[PasCondValueCount] <> '' then
+      if PasCondQuiet then
+      begin
+        { the pre-pass; see PasCondQuiet's block. Not an error here, and not a
+          guess either -- the expression is marked unresolved and answers False. }
+        PasCondUnresolved := True;
+        PasCondInt[PasCondValueCount] := 0;
+        PasCondInt[PasCondValueCount - 1] := 0;
+      end
+      else if PasCondValName[PasCondValueCount] <> '' then
         Error('conditional directive: `' + PasCondValName[PasCondValueCount] +
               '` has no integer value here, so it cannot be compared' +
               ' (an undefined symbol, or one defined without a value)')
@@ -1781,6 +2142,7 @@ var word, name: AnsiString;
   declArity: Integer;   { `declared(TFoo<,>)`: parameter slots, 0 for a bare name }
   expectValue, done: Boolean;
 begin
+  PasCondUnresolved := False;
   PasCondExprText := text;
   PasCondExprPos := 1;
   PasCondValueCount := 0;
@@ -1939,8 +2301,18 @@ begin
              (PasCondExprText[PasCondExprPos] <> ')') then
             Error('conditional directive: sizeof requires (TYPENAME)');
           Inc(PasCondExprPos);
-          intval := PasCondSizeOfTypeName(name);
-          if intval < 0 then
+          { ...through any ALIAS the source declares, not only builtin names:
+            `bestreal = extended` and `TConstPtrUInt = PUint = qword` are how
+            FPC's own compiler asks this. The refusal below is unchanged for
+            everything the chain does not reach -- a record, a frozen string, a
+            typo -- and that is still the right answer for them. }
+          intval := PasCondSizeOfNameOrAlias(name);
+          if (intval < 0) and PasCondQuiet then
+          begin
+            PasCondUnresolved := True;
+            intval := 0;
+          end
+          else if intval < 0 then
             Error('conditional directive: sizeof cannot size this type here: ' + name);
           PasCondPushInt(intval);
         end
@@ -1953,6 +2325,14 @@ begin
           PasCondPushInt(PasCondWordToInt(word));
         end
         else if PasDefineLookupValue(word, intval) then
+          PasCondPushInt(intval)
+        { A SOURCE-LEVEL `const` -- `{$if max_operands>2}`, aoptutils.pas:34,
+          where `max_operands = 4` lives in x86/cpubase.pas. Asked only AFTER
+          every define lookup has failed, so a define of the same name still
+          wins and nothing that resolved before resolves differently. A name
+          that is neither still pushes as "is it defined", which is what a bare
+          `{$if FOO}` means and must keep meaning. }
+        else if PasCondConstInt(word, intval) then
           PasCondPushInt(intval)
         else
           PasCondPushBoolNamed(PasDefineExists(word), word);
@@ -1968,7 +2348,26 @@ begin
     if PasCondOps[PasCondOpCount - 1] = '(' then Error('conditional directive: expected )');
     PasCondApplyOp;
   end;
-  if PasCondValueCount <> 1 then Error('conditional directive: malformed expression');
+  if PasCondValueCount <> 1 then
+  begin
+    if PasCondQuiet then
+    begin
+      { the pre-pass cannot halt on an expression it could not reduce -- the
+        real pass evaluates the same text and will say so with a position. }
+      PasCondUnresolved := True;
+      EvalPasCondExprText := False;
+      Exit;
+    end;
+    Error('conditional directive: malformed expression');
+  end;
+  { AN OPERAND WE HAD TO INVENT MAKES THE WHOLE EXPRESSION FALSE, whatever
+    arithmetic it then survived: `0 = 0` is True and means nothing. Only the
+    pre-pass can reach this (PasCondQuiet). }
+  if PasCondUnresolved then
+  begin
+    EvalPasCondExprText := False;
+    Exit;
+  end;
   { Top-level bare integer is FPC-truthy (0=false, nonzero=true); covers the
     legacy {$IF 1}/{$IF 0} forms. Comparisons/idents already reduced to bool. }
   if PasCondValKind[0] = 1 then

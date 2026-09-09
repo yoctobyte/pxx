@@ -5357,7 +5357,8 @@ begin
 
 end;
 
-function PasCondNameDeclaredInUses(const nm: AnsiString; arity: Integer): Boolean;
+function PasCondProbeUsedUnits(const nm: AnsiString;
+                               arity, question: Integer): Boolean;
 { `{$if declared(X)}` WHERE X LIVES IN A USED UNIT.
 
   PasCondNameDeclared scans the token stream, and a used unit is not in it:
@@ -5392,8 +5393,21 @@ function PasCondNameDeclaredInUses(const nm: AnsiString; arity: Integer): Boolea
     answer for the case this operator was written for (a profile with no such
     unit), so refusing would regress every defensive declared() in a program
     with any uses clause at all.
-  bug-p-declared-cannot-see-a-used-units-declarations }
+  bug-p-declared-cannot-see-a-used-units-declarations
+
+  THREE QUESTIONS THROUGH ONE WALK (2026-09-09). `question` selects the range
+  predicate applied to the lexed unit: PCQ_DECLARED is the original, PCQ_CONSTINT
+  asks what integer a source `const` equals and PCQ_TYPEALIAS what one token a
+  `type A = B;` names. Generalised rather than copied: the WALK is the expensive
+  and subtle half of this routine -- ResolveUsesUnitSource rather than a
+  Pascal-only file search, the ProbeDepth guard that makes a legal `a uses b,
+  b uses a` terminate, the per-unit reset to the command-line define baseline --
+  and none of that differs by question, while a second copy of it would drift
+  exactly the way this file's forwards each record. The answers that do not fit
+  in a Boolean come back in PasCondProbeInt / PasCondProbeStr.
+  bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares }
 var k, u, savedTC, unreadable: Integer;
+    savedQuiet: Boolean;
     unm, rPath, rEmsg: AnsiString;
     rIsC, rIsH, rIsPy, isPathForm: Boolean;
     ci: Integer;
@@ -5444,9 +5458,35 @@ begin
               CurUnitDir := GetFilePath(rPath);
               savedTC := TokCount;
               Inc(ProbeDepth);
+              { QUIET WHILE PROBING, for the reason the pre-pass is quiet: we
+                are lexing this unit to LOOK AT ITS DECLARATIONS, and its own
+                conditionals get evaluated on the way past with whatever the
+                probe can see, which is less than the real compile will see.
+                Without this, an unanswerable `{$if}` INSIDE the probed unit
+                raises a hard error from inside the probe and takes the whole
+                compile with it -- measured 2026-09-09 on FPC's globals.pas,
+                where probing it for `bestreal` re-entered its own
+                `{$if sizeof(bestreal)...}` one level down and died there
+                rather than answering. The real lex of that unit, when it
+                happens, evaluates the same directive with everything present
+                and reports it properly if it still cannot. }
+              savedQuiet := PasCondQuiet;
+              PasCondQuiet := True;
               LexAppend(UnitContent);
+              PasCondQuiet := savedQuiet;
               Dec(ProbeDepth);
-              if PasCondNameDeclaredIn(nm, arity, savedTC, TokCount) then Result := True;
+              if question = PCQ_CONSTINT then
+              begin
+                if PasCondConstIntIn(nm, savedTC, TokCount, PasCondProbeInt) then
+                  Result := True;
+              end
+              else if question = PCQ_TYPEALIAS then
+              begin
+                if PasCondTypeAliasIn(nm, savedTC, TokCount, PasCondProbeStr) then
+                  Result := True;
+              end
+              else if PasCondNameDeclaredIn(nm, arity, savedTC, TokCount) then
+                Result := True;
               TokCount := savedTC;
               if Result then
               begin
@@ -5463,6 +5503,13 @@ begin
     Inc(k);
   end;
   PasCondUnitsUnread := unreadable;
+end;
+
+function PasCondNameDeclaredInUses(const nm: AnsiString; arity: Integer): Boolean;
+{ The original name and the original question, kept because it is what
+  PasCondNameDeclared's header and its ticket both talk about. }
+begin
+  Result := PasCondProbeUsedUnits(nm, arity, PCQ_DECLARED);
 end;
 
 procedure ParseUsesUnitBody(const name: AnsiString;
