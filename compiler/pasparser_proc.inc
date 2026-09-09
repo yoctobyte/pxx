@@ -5329,7 +5329,7 @@ begin
 
 end;
 
-function PasCondNameDeclaredInUses(const nm: AnsiString): Boolean;
+function PasCondNameDeclaredInUses(const nm: AnsiString; arity: Integer): Boolean;
 { `{$if declared(X)}` WHERE X LIVES IN A USED UNIT.
 
   PasCondNameDeclared scans the token stream, and a used unit is not in it:
@@ -5418,7 +5418,7 @@ begin
               Inc(ProbeDepth);
               LexAppend(UnitContent);
               Dec(ProbeDepth);
-              if PasCondNameDeclaredIn(nm, savedTC, TokCount) then Result := True;
+              if PasCondNameDeclaredIn(nm, arity, savedTC, TokCount) then Result := True;
               TokCount := savedTC;
               if Result then
               begin

@@ -35,18 +35,32 @@ program test_declared_sees_a_used_units_declarations;
   is not also produced by some simpler mistake -- always-True gives 1/1/1/1,
   always-False gives 0/0/0/0, and a probe with no state discipline gives 1/1/1/0.
   bug-p-declared-cannot-see-a-used-units-declarations }
-uses decl_probe_unit;
+uses decl_probe_unit, decl_probe_gen;
 const
   {$if declared(TProbeSeenType)} A = 1; {$else} A = 0; {$endif}
   {$if declared(ProbeUnitFn)}    B = 1; {$else} B = 0; {$endif}
   {$ifdef DECL_PROBE_LEAKED}     C = 1; {$else} C = 0; {$endif}
   {$if declared(NoSuchNameAnywhereAtAll)} D = 1; {$else} D = 0; {$endif}
+  { THE ARITY SPELLING. `<>` is one parameter, `<,>` two, `<,,>` three, and a
+    BARE name asks for arity 0 -- a real question, not a wildcard, which is why
+    E is 0 where only TGenDelphi<T> and TGenDelphi<T,S,R> exist. }
+  {$if declared(TGenDelphi)}    E = 1; {$else} E = 0; {$endif}
+  {$if declared(TGenDelphi<>)}  F = 1; {$else} F = 0; {$endif}
+  {$if declared(TGenDelphi<,>)} G = 1; {$else} G = 0; {$endif}
+  {$if declared(TGenDelphi<,,>)} H = 1; {$else} H = 0; {$endif}
+  { …and the objfpc spelling, where `generic` is a plain identifier that ate the
+    scan's declaration slot. J is the row that separates a working scan from one
+    that never examined the name: I is False under both. }
+  {$if declared(TGenFpc)}       I = 1; {$else} I = 0; {$endif}
+  {$if declared(TGenFpc<,>)}    J = 1; {$else} J = 0; {$endif}
 var t: TProbeSeenType;
 begin
   WriteLn('type   ', A);
   WriteLn('fn     ', B);
   WriteLn('leak   ', C);
   WriteLn('absent ', D);
+  WriteLn('gen    ', E, F, G, H);
+  WriteLn('objfpc ', I, J);
   t := TProbeSeenType.Create;
   t.v := ProbeUnitFn;
   WriteLn('use    ', t.v);

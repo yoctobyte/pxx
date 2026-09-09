@@ -1498,6 +1498,47 @@ begin
   end;
 end;
 
+{ `declared(TFoo<,>)` -- the GENERIC ARITY SPELLING, and it is a count of commas
+  and nothing else: `<>` is one parameter, `<,>` two, `<,,>` three. FPC writes it
+  this way because a bare name and a generic of the same name are different
+  declarations that can coexist (ugeneric93a declares `TTest2Delphi` AND
+  `TTest2Delphi<T,S>`), so the arity is part of what is being asked about.
+
+  Returns the parameter count, or 0 when there is no `<...>` at all -- and 0 is
+  a real answer here, not a "don't know": a BARE name asks about a NON-generic
+  declaration, which is why fpc says False for `declared(TTestDelphi)` when only
+  `TTestDelphi<T>` and `TTestDelphi<T,S,R>` exist. -1 is the malformed case,
+  which the caller reports rather than guessing at.
+
+  ONLY EMPTY SLOTS ARE LEGAL between the brackets. `declared(TFoo<Integer>)` is
+  not the question this operator answers -- it asks whether a TEMPLATE of that
+  arity is declared, not whether an instantiation exists -- so anything that is
+  not a comma or space is refused instead of being counted as one parameter,
+  which is what a permissive scan would silently do. }
+function ReadPasCondGenericArity: Integer;
+var ch: Char;
+begin
+  Result := 0;
+  SkipPasCondExprSpaces;
+  if (PasCondExprPos > Length(PasCondExprText)) or
+     (PasCondExprText[PasCondExprPos] <> '<') then Exit;
+  Inc(PasCondExprPos);
+  Result := 1;
+  while PasCondExprPos <= Length(PasCondExprText) do
+  begin
+    ch := PasCondExprText[PasCondExprPos];
+    Inc(PasCondExprPos);
+    if ch = '>' then Exit;
+    if ch = ',' then Inc(Result)
+    else if ch <> ' ' then
+    begin
+      Result := -1;
+      Exit;
+    end;
+  end;
+  Result := -1;   { ran off the end with no '>' }
+end;
+
 { Text of an already-emitted token (from the TokChars pool). }
 function PasCondTokText(k: Integer): AnsiString;
 var i, off, len: Integer;
@@ -1518,11 +1559,44 @@ end;
   deferred to the dotted-unit-names work). A symbol behind an as-yet-unselected
   branch is not in the stream, so probes like Synapse's POSIX `Posix.StrOpts.*`
   (no such unit under the POSIX profile) correctly evaluate false. }
-function PasCondNameDeclaredIn(const qname: AnsiString; lo, hi: Integer): Boolean;
+{ How many generic parameters the declaration at token `k` carries: 0 for a
+  plain name, otherwise one more than the commas at depth 1 inside its `<...>`.
+  Reads the tokens AFTER the name, so `TFoo<T, S>` answers 2 whether the source
+  spelled it in Delphi or objfpc form. }
+function PasCondDeclArityAt(k: Integer; hi: Integer): Integer;
+var d: Integer;
+begin
+  Result := 0;
+  if (k + 1 >= hi) or (Tokens[k + 1].Kind <> tkLt) then Exit;
+  Result := 1;
+  d := 0;
+  Inc(k);
+  while k < hi do
+  begin
+    if Tokens[k].Kind = tkLt then Inc(d)
+    else if Tokens[k].Kind = tkGt then
+    begin
+      Dec(d);
+      if d = 0 then Exit;
+    end
+    else if (Tokens[k].Kind = tkComma) and (d = 1) then Inc(Result);
+    Inc(k);
+  end;
+end;
+
+function PasCondNameDeclaredIn(const qname: AnsiString; arity: Integer;
+                               lo, hi: Integer): Boolean;
 { The declaration scan, over an ARBITRARY token range. Split out of
   PasCondNameDeclared 2026-09-09 so the same walk can be pointed at a used
   unit's tokens, which live in a scratch region at the end of the stream rather
-  than in [0, TokCount). }
+  than in [0, TokCount).
+
+  `arity` is the generic parameter count the caller asked about, 0 for a bare
+  name. IT IS MATCHED, NOT IGNORED, AND IT DOES NOT STOP THE SCAN ON A NAME HIT:
+  one name can be declared at several arities in one unit -- ugeneric93a has
+  `TTestDelphi<T>` and `TTestDelphi<T,S,R>`, and `TTest2Delphi` beside
+  `TTest2Delphi<T,S>` -- so a walk that returned on the first name match would
+  answer about whichever came first and be right by accident half the time. }
 var i, dotPos, k, sect: Integer;
     nm, t: AnsiString;
     expectName, expectRoutine: Boolean;
@@ -1554,14 +1628,27 @@ begin
       tkIdent:
         begin
           t := PasCondTokText(k);
-          if expectRoutine then
+          { objfpc spells a generic `generic TFoo<T, S> = class`, and there is no
+            tkGeneric -- `generic` arrives as a plain tkIdent, so it CONSUMED the
+            declaration slot and TFoo was never examined at all. That made every
+            objfpc generic answer False, and `declared(TTestFPC)` answer False
+            for the RIGHT reason by accident, which is the shape that survives
+            review. Only skipped when what follows really is `<name> <` -- a unit
+            with `type generic = Integer` still declares a type called generic. }
+          if expectName and (sect = 1) and CaseEqual(t, 'generic') and
+             (k + 2 < hi) and (Tokens[k + 1].Kind = tkIdent) and
+             (Tokens[k + 2].Kind = tkLt) then
+            { leave expectName set: the NEXT identifier is the declaration }
+          else if expectRoutine then
           begin
-            if CaseEqual(t, nm) then begin Result := True; Exit; end;
+            if CaseEqual(t, nm) and (PasCondDeclArityAt(k, hi) = arity) then
+            begin Result := True; Exit; end;
             expectRoutine := False;
           end
           else if expectName and (sect = 1) then
           begin
-            if CaseEqual(t, nm) then begin Result := True; Exit; end;
+            if CaseEqual(t, nm) and (PasCondDeclArityAt(k, hi) = arity) then
+            begin Result := True; Exit; end;
             expectName := False;
           end
           else if CaseEqual(t, 'implementation') or CaseEqual(t, 'interface') or
@@ -1577,7 +1664,7 @@ end;
   it describes THE LAST PROBE and nothing else. }
 var PasCondUnitsUnread: Integer = 0;
 
-function PasCondNameDeclared(const qname: AnsiString): Boolean;
+function PasCondNameDeclared(const qname: AnsiString; arity: Integer): Boolean;
 { THE THIRD ANSWER IS A WARNING, NOT A REFUSAL, and that is the whole design of
   this arm.
 
@@ -1597,10 +1684,10 @@ function PasCondNameDeclared(const qname: AnsiString): Boolean;
   silently different program.
   bug-p-declared-cannot-see-a-used-units-declarations }
 begin
-  Result := PasCondNameDeclaredIn(qname, 0, TokCount);
+  Result := PasCondNameDeclaredIn(qname, arity, 0, TokCount);
   if Result then Exit;
   PasProbeSaveLexState;
-  Result := PasCondNameDeclaredInUses(qname);
+  Result := PasCondNameDeclaredInUses(qname, arity);
   PasProbeRestoreLexState;
   if (not Result) and (PasCondUnitsUnread > 0) then
     Warn('declared(' + qname + ') is False, and ' + AIntToStr(PasCondUnitsUnread) +
@@ -1691,6 +1778,7 @@ function EvalPasCondExprText(const text: AnsiString): Boolean;
 var word, name: AnsiString;
   op, c: Char;
   intval: Int64;
+  declArity: Integer;   { `declared(TFoo<,>)`: parameter slots, 0 for a bare name }
   expectValue, done: Boolean;
 begin
   PasCondExprText := text;
@@ -1805,12 +1893,21 @@ begin
             Error('conditional directive: declared requires (NAME)');
           Inc(PasCondExprPos);
           name := ReadPasCondQualifiedName;
+          { …and the optional GENERIC ARITY, `TFoo<,>`. A bare name asks arity 0
+            and that is a real question, not a wildcard: fpc answers False for
+            `declared(TTestDelphi)` when only `TTestDelphi<T>` exists. }
+          declArity := ReadPasCondGenericArity;
+          if declArity < 0 then
+            Error('conditional directive: declared(' + name + '<...>) takes only '
+                  + 'empty parameter slots -- `<>`, `<,>`, `<,,>` -- because it '
+                  + 'asks whether a TEMPLATE of that arity is declared, not '
+                  + 'whether an instantiation exists');
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> ')') then
             Error('conditional directive: declared requires (NAME)');
           Inc(PasCondExprPos);
-          PasCondPushBool(PasCondNameDeclared(name));
+          PasCondPushBool(PasCondNameDeclared(name, declArity));
         end
         else if CaseEqual(word, 'sizeof') then
         begin

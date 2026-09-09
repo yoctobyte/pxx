@@ -18,6 +18,14 @@ type
   TProbeSeenType = class
     v: Integer;
   end;
+  { ONE NAME, TWO ARITIES, AND NO ARITY 0. A name can be declared at several
+    arities in one unit, so a scan that stopped at the first name match would
+    answer about whichever came first and be right by accident half the time.
+    Deliberately no plain `TGenDelphi` -- that is what makes the bare row False. }
+  TGenDelphi<T> = class
+  end;
+  TGenDelphi<T, S, R> = class
+  end;
 function ProbeUnitFn: Integer;
 implementation
 function ProbeUnitFn: Integer; begin ProbeUnitFn := 7; end;

@@ -11756,10 +11756,18 @@ test-core: $(COMPILER)
 	# 0/0/0/0, and a probe with NO state discipline gives 1/1/1/0 -- that last is
 	# the one this fixture exists for, since lexing a unit runs its directives and
 	# decl_probe_unit's $DEFINE would otherwise escape into the program's own
-	# $ifdef. Measured at 1/1/1/0 with the save/restore pair removed. Byte-identical
-	# to fpc 3.2.2.
+	# $ifdef. Measured at 1/1/1/0 with the save/restore pair removed.
+	# `gen` and `objfpc` are the ARITY half: `<>` is one parameter, `<,>` two,
+	# `<,,>` three, and a BARE name asks arity 0 -- a real question, not a
+	# wildcard, so `gen` is 0101 where only TGenDelphi<T> and TGenDelphi<T,S,R>
+	# exist. objfpc writes `generic TFoo<T,S>` and there is no tkGeneric, so
+	# `generic` arrived as a plain identifier and ATE the scan's declaration slot:
+	# the name was never examined and every objfpc generic answered False. Note
+	# `objfpc 01` needs BOTH digits -- the first is False under a working scan and
+	# under a scan that never looked, so the `<,>` row is the only one that
+	# separates them. Byte-identical to fpc 3.2.2, all seven rows.
 	./$(COMPILER) -Futest/declared_units test/test_declared_sees_a_used_units_declarations.pas $(TESTTMP)/test_declared_uses26
-	tools/expect_same.sh test_declared_uses26 "$$($(TESTTMP)/test_declared_uses26)" "$$(printf 'type   1\nfn     1\nleak   0\nabsent 0\nuse    7')"
+	tools/expect_same.sh test_declared_uses26 "$$($(TESTTMP)/test_declared_uses26)" "$$(printf 'type   1\nfn     1\nleak   0\nabsent 0\ngen    0101\nobjfpc 01\nuse    7')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

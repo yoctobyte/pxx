@@ -3,8 +3,8 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: working
-summary: "FIXED 2026-09-09 for the UNIT half; the ARITY half is still open. `{$if declared(X)}` answered False for a name declared in a used unit -- silently taking the `{$else}` arm for a type the same program then constructs -- because `PasCondNameDeclared` scans the token stream and `LexAppend` puts a unit's tokens there at PARSE time, after every conditional in the main file is decided. NOW: `PasCondNameDeclaredInUses` asks `ResolveUsesUnitSource` for the source, LEXES it into a scratch region and scans the TOKENS, then truncates `TokCount` back. IT LEXES RATHER THAN SCANNING TEXT because 151 of 400 real FPC interfaces (38%) carry an `{$I}` include -- a text scan answers False for a name in an include it never opened, this ticket's own silent negative one level down, and `lib/rtl` is 0/111 on includes so a fixture built from our own RTL cannot sample it. THE THIRD ANSWER IS A WARNING, NOT A REFUSAL: refusing would regress every defensive declared() in a program with any `uses`, which is the Synapse shape the operator was written for, so an unreadable unit leaves False and says so. THE COST WAS A REINTRODUCED BUG AND IT IS MEASURED: lexing a unit RUNS ITS DIRECTIVES, so without the new save/restore pair a used unit's `$DEFINE` escaped into the main program -- [[bug-p-a-units-define-leaks-into-the-units-it-uses]] exactly. The pair is a second enumeration of the directive set, so `tools/probe_state_lists.py` (wired into gate.sh, positive control asserted) checks it against `PasSnapshotDirectiveBaseline` rather than trusting them to stay in step. Fixture byte-identical to fpc; its four rows are read TOGETHER because each is 0 or 1 -- 1/1/0/0 correct, always-True 1/1/1/1, always-False 0/0/0/0, no state discipline 1/1/1/0, that last measured on a control binary. STILL OPEN: transitive `uses` (only directly-named units are probed) and the arity spelling. Cost ~40ms per FAILING declared() per used unit; a hit never reaches the probe."
+status: done
+summary: "FIXED 2026-09-09, both halves. `{$if declared(X)}` answered False for a name declared in a used unit -- silently taking the `{$else}` arm for a type the same program then constructs -- because `PasCondNameDeclared` scans the token stream and `LexAppend` puts a unit's tokens there at PARSE time, after every conditional in the main file is decided. NOW: `PasCondNameDeclaredInUses` asks `ResolveUsesUnitSource` for the source, LEXES it into a scratch region and scans the TOKENS. IT LEXES RATHER THAN SCANNING TEXT because 151 of 400 real FPC interfaces (38%) carry an `{$I}` include -- a text scan answers False for a name in an include it never opened, this defect one level down, and `lib/rtl` is 0/111 on includes so a fixture built from our own RTL cannot sample it. THE THIRD ANSWER IS A WARNING, NOT A REFUSAL: refusing would regress every defensive declared() in a program with any `uses`, the Synapse shape the operator was written for. THE FIX REINTRODUCED A CLOSED BUG AND ITS OWN CONTROL CAUGHT IT -- lexing a unit RUNS ITS DIRECTIVES, so without the new save/restore a used unit's `$DEFINE` escaped into the main program ([[bug-p-a-units-define-leaks-into-the-units-it-uses]] exactly); that pair is a second enumeration of the directive set, so `tools/probe_state_lists.py` (in gate.sh, positive control asserted) checks it against `PasSnapshotDirectiveBaseline`. ARITY DONE TOO, and it turned out to be the GATE on `tgeneric93.pp` rather than its second half -- that file died at its first conditional, `declared(NotDeclared<>)`, before the unit question was asked. `<>`=1, `<,>`=2, `<,,>`=3, a bare name asks arity 0 as a real question (grepped: no real code asks a bare declared() of a generic, so the behaviour change has an empty population), only EMPTY slots are legal, and the scan no longer returns on a name match because one name can be declared at several arities. The objfpc trap was real: `generic` is a plain tkIdent that ATE the declaration slot, so every objfpc generic answered False while the row that would expose it agrees for the wrong reason -- fixture asserts two digits and a control binary gives `objfpc 00`. tgeneric93.pp now passes (harness: 1 pass 0 fail 0 skip), its pxx.skip entry removed; in-repo fixture byte-identical to fpc across all seven rows because library_candidates/ is gitignored. STILL OPEN: transitive `uses` only, which tgeneric93 does not need."
 owner: frankZ
 ---
 
@@ -234,30 +234,62 @@ RTL units: 1.6s against a 1.1s baseline). Only failing calls pay it — a hit in
 the main file's own stream never reaches the probe. Not cached; if a corpus run
 gets slow with many `declared()` guards over many units, this is the place.
 
-## Still open — this closes the unit half, not the ticket's arity half
+## Still open — transitive `uses`, and that is all
 
 - **TRANSITIVE `uses`.** Only units named in the file are probed, not units they
   name. FPC sees the transitive interface. The residual error is False-when-True,
   i.e. this same defect narrowed, and a probed unit's own conditionals do not
   probe (the depth guard) because `a uses b` and `b uses a` is legal and would
-  not terminate.
-- **ARITY**, the second half of the original report: `declared(TDel)` where only
-  `TDel<T>` exists answers True here and False under FPC, and the objfpc row
-  agrees for the wrong reason because `generic` is a plain `tkIdent` that eats
-  the scanner's `expectName` slot. Untouched. `tgeneric93.pp` needs both halves
-  plus the transitive one.
+  not terminate. `tgeneric93.pp` does not need it — both its units are named
+  directly — so nothing measured today is blocked on this.
 
-  **MEASURED 2026-09-09 rather than guessed, and the guess was wrong.** I was
-  about to write that the unit half might be enough for `tgeneric93.pp`, since
-  every name it probes lives in `ugeneric93a` / `ugeneric93b` and both are
-  DIRECTLY used. It gets nowhere: the file's very first conditional, line 9, is
-  `{$if declared(NotDeclared<>)}`, and we answer
-  `conditional directive: declared requires (NAME)` at line 0 — dead in the
-  preprocessor before the unit question is ever asked. **The arity spelling is
-  not the second half of that row, it is the gate on it**, and `<>` has to be
-  accepted by `ReadPasCondQualifiedName` before any amount of unit visibility
-  moves this corpus file. The parse of `<>`/`<,>`/`<,,>` described above is
-  therefore the next piece of work, not a follow-up.
+## The arity half — also fixed, 2026-09-09
+
+**I was about to rank this as a follow-up and the measurement said otherwise.**
+The plan was that the unit half might be enough for `tgeneric93.pp`, since every
+name it probes lives in `ugeneric93a` / `ugeneric93b` and both are directly
+used. It got nowhere: that file's FIRST conditional, line 9, is
+`{$if declared(NotDeclared<>)}`, and we answered `conditional directive:
+declared requires (NAME)` at line 0 — dead in the preprocessor before the unit
+question was ever asked. The arity spelling was not the second half of that row,
+it was the gate on it.
+
+`tgeneric93.pp` prints **OK** (all 11 rows), fpc prints OK, and
+`run_pascal_conformance.sh --only 'tgeneric93*'` reports `1 pass, 0 fail, 0
+skip`. Its `pxx.skip` entry is removed.
+
+`ReadPasCondGenericArity` reads the `<>` / `<,>` / `<,,>` suffix as a count of
+commas, and **only empty slots are legal** — `declared(TFoo<Integer>)` is
+refused by name rather than counted as one parameter, because the operator asks
+whether a TEMPLATE of that arity is declared, not whether an instantiation
+exists. A permissive scan would have answered that silently.
+
+**A bare name asks arity 0, and that is a real question rather than a
+wildcard** — which is the behaviour change the earlier section said to grep for
+before landing. Grepped: every `{$if declared(` in the tree and in the vendored
+corpora is `tgeneric93.pp` (11, eight of them with the arity spelling) plus this
+ticket's own fixture. **No real code asks a bare `declared(SomeGeneric)`**, and
+tgeneric93 expects FPC's semantics, so the population that could regress is
+empty.
+
+The scan does **not** return on a name match any more. One name can be declared
+at several arities in one unit — `ugeneric93a` has `TTestDelphi<T>` beside
+`TTestDelphi<T,S,R>`, and `TTest2Delphi` beside `TTest2Delphi<T,S>` — so a walk
+that stopped at the first name would answer about whichever came first and be
+right by accident about half the time.
+
+**And the objfpc trap the earlier section warned about was real.** `generic
+TFoo<T, S> = class` has no `tkGeneric`, so `generic` arrived as a plain
+identifier and CONSUMED the declaration slot; the type name was never examined
+and every objfpc generic answered False. The row that would have hidden it is
+`declared(TTestFPC)`, which is False under a working scan AND under a scan that
+never looked — so the fixture asserts `objfpc 01`, two digits, and the second is
+the only one that discriminates. Measured on a control binary with the slot fix
+removed: `objfpc 00`, with `gen 0101` unchanged, so the control isolates exactly
+that arm. The skip is guarded only where someone has fetched the suite —
+`library_candidates/` is gitignored — which is why the arity and objfpc rows are
+also in `test/test_declared_sees_a_used_units_declarations.pas`, byte-identical
+to fpc across all seven rows.
 
 Noticed while writing the fixture and NOT chased: fpc refuses a `{ }` comment
 containing `{$if declared(X)}` in Delphi mode (`illegal character`) because it
@@ -265,3 +297,6 @@ closes at the first `}`, while pxx compiles it. Us accepting what FPC rejects is
 not a defect by the rules, so it is recorded here rather than filed — but if it
 means `NestedComments` is on under `{$mode delphi}` where fpc has it off, that
 direction is worth someone's measurement.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
