@@ -2,20 +2,20 @@
 track: P
 prio: 65
 owner: frankS
-blocked-by: []
+blocked-by: [bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]
 status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, NO LONGER BLOCKED, and the frontier has moved a whole unit. Re-measured 2026-09-09 at binary 4a6207c05ba2: `generics.defaults` COMPILES AND RUNS (`uses Generics.Defaults` -> rc=0, prints `defaults ok`), the old wall defaults:2729 is PAST, and its blocker bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced is in done/. TWO DRIVERS, TWO WALLS, both real -- quote the driver beside the number. (a) `uses Generics.Collections` alone prints THREE errors, and the FIRST is the wall: `collections.pas:120 unknown type: PT` on `TEnumerator<T>.DoGetCurrent`, then :123, then `:119 duplicate class name TEnumerator$PT`. `$PT` is our own mangled specialization name on a type PARAMETER, so it fires during instantiation; PXXDBG=p.mint mints that name FOUR times and p.nspec shows the substitution set as `PT->PT`. (b) `uses Generics.Defaults, Generics.Collections` + specializing TList<LongInt> gives `generic template IEqualityComparer not found`. DO NOT AIM AT THAT REPORT'S LOCATION: it says generics.memoryexpanders.pas:67, and that file never mentions IEqualityComparer, uses only Classes and SysUtils, and has `const MAX_LOAD_FACTOR = 1;` on line 67 -- the filename and the line number come from different units; IEqualityComparer<T> is declared at defaults:77. THE OLD WALL TABLE IN THIS FILE IS COMPARABLE AFTER ALL and an earlier version of this summary said the opposite: generics.collections.pas is BYTE-IDENTICAL between the library_candidates staging and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes), so the line numbers are the same coordinates. Claimed by frankS 2026-09-09, handed over by frankZ."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked on anything unnamed, and the frontier has moved TWO whole units this morning. Measured 2026-09-09 at binary `417ee5636a72`: `generics.defaults` compiles and runs on its own driver, `collections.pas:120 unknown type: PT` is GONE, and the wall is now **`generics.defaults.pas:3250`, `undefined variable (TGOrdinalStringComparer)`** on `FOrdinal := TGOrdinalStringComparer<T, THashFactory>.Create`. READ THE NEAR-WINDOW, NOT THE MESSAGE: `T` is substituted to `string` and `THashFactory` is not, so the `<` is being read as less-than and the source line is fine. Diagnosed and filed as bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (three sites pick a method impl's template by NAME and take the last match, and rtl-generics declares `TGStringComparer<T, THashFactory>` beside `TGStringComparer<T>` in one unit). That ticket also records why it is NOT fixed yet: making attribution arity-aware corrects the substitution and exposes a second gap one layer down, and a 30-line unit that compiles today fails with only the first half applied. THE TWO STAGINGS ARE THE SAME FILE -- `generics.collections.pas` is byte-identical between `library_candidates/rtl-generics` and `/usr/share/fpcsrc/3.2.2` (md5 `1010a887c20dc546215749ca46c5a773`, 110423 bytes) -- so every wall line number in this file, the 2026-08-30 table included, is the same coordinate system. An earlier version of this summary claimed the opposite. Claimed by frankS, handed over by frankZ."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** claimed (frankS). Not blocked. Wall on driver (a):
-  `generics.collections.pas:120`, `unknown type: PT` -- the FIRST of three errors,
-  read the whole stream. Rungs 1+2 are green: fpcunit runs, fpjson's suite is
-  203/203.
+- **Status:** claimed (frankS). Wall: `generics.defaults.pas:3250`,
+  `undefined variable (TGOrdinalStringComparer)` — diagnosed, filed, and NOT
+  fixed on purpose; see the blocker. Rungs 1+2 are green: fpcunit runs, fpjson's
+  suite is 203/203.
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
 
@@ -1565,3 +1565,29 @@ The 2026-08-30 note warns this must not be assumed to be the same defect as the
 `TKey` one before it (`bug-p-the-rtl-generics-corpus-stops-on-tkey-in-a-tlist-body`,
 in `done/`) -- whose fix installed the `p.nspec` probe above, for this exact
 symptom. Still unmeasured, still stands.
+
+
+## 2026-09-09 (frankS) — the wall moved twice more in one morning, and the second one is diagnosed
+
+`collections.pas:120 unknown type: PT` is **gone** at binary `417ee5636a72`.
+frankZ measured it first and I confirmed it here; the credit is `1c16d4523`
+(frankH) and `2242a5903` (frankZ), and none of the three walls closed today was
+mine.
+
+The wall is now **`generics.defaults.pas:3250`** and it is the same class of
+defect as everything else on this rung: a name standing in for an identity.
+Three sites attribute a generic method IMPLEMENTATION to a template by name
+alone, and `TGStringComparer` names two templates of different arity in one
+unit. Full diagnosis, the `p.nspec` line that says it in one row, and the
+30-line repro:
+[[bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity]].
+
+**Filed rather than fixed, deliberately.** The first half is easy and makes some
+programs that compile today fail; both halves must land together. That is on the
+blocker, not here.
+
+**One thing for whoever attributes the next wall on this rung:** reverting
+`1c16d4523` makes `:3250` disappear, because the file then stops at `:120` and
+never reaches it. The commit is not the cause — the two name loops are dated
+2026-08-29 and 2026-08-20. An error vanishing under a revert is not an
+attribution; the code's age is.
