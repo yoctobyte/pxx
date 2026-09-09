@@ -6655,7 +6655,11 @@ begin
         begin
           CConstExprSawNonConst := False;
           vlaPos := TokPos;
+          { A call is a legal VLA bound and nothing else here is; see
+            CConstExprAllowCall in defs.inc for why the scope is the fix. }
+          CConstExprAllowCall := True;
           dimVal := CEvalConstExpr;
+          CConstExprAllowCall := False;
           if CConstExprSawNonConst then
           begin
             { A VARIABLE-LENGTH array — `int arr[n]` with a runtime n. Rewind and
@@ -14593,8 +14597,9 @@ begin
 end;
 
 function CEvalConstPrimary: Int64;
-var idx: Integer;
+var idx, callDepth: Integer; wasCall: Boolean;
 begin
+  wasCall := False;
   Result := 0;
   if CurTok.Kind = tkLParen then
   begin
@@ -14691,11 +14696,47 @@ begin
         ErrorRecover, not Error: Result is already 0, which is the well-formed
         stand-in the contract asks for, and ErrCount being nonzero suppresses
         all output. }
-      if (Length(CurTok.SVal) < 2) or (CurTok.SVal[1] <> '_') or (CurTok.SVal[2] <> '_') then
+      { A DECLARED FUNCTION IS NOT AN UNDECLARED IDENTIFIER, and FindSym cannot
+        see one -- C functions live in Procs, so every call in a constant
+        expression reached this arm and was reported as undeclared. The message
+        was wrong about the program and the refusal was wrong about the
+        language in exactly one place: an array DIMENSION, where a call is a
+        VLA bound. Found attempting busybox at 394 applets --
+        `char list_name[strlen(package_name) + 25]' (archival/dpkg.c:1442) is
+        the whole of it, and `pascal26: undeclared identifier `strlen''' was the
+        only thing anyone saw.
+
+        FindProc, not FindProcExactCase: it is what ParseCPrimary itself uses to
+        resolve a call, and a fold that judges by a different lookup than the
+        committed parse is the half-wired-door shape CLAUDE.md warns about.
+
+        The dimension site rewinds and re-reads the whole bracket with
+        ParseCExpr, so nothing here has to model the call -- it only has to (a)
+        say non-constant and (b) not error. The argument list is skipped
+        BALANCED rather than left to the folder, because a comma argument
+        (`f(a, b)') would otherwise error out before the rewind could happen. }
+      if (idx < 0) and (FindProc(CurTok.SVal) >= 0) then
+      begin
+        if not CConstExprAllowCall then
+          ErrorRecover('C: ''' + CurTok.SVal + ''' is a function — a constant'
+                       + ' expression cannot call one');
+        CConstExprSawNonConst := True;
+        wasCall := True;
+      end
+      else if (Length(CurTok.SVal) < 2) or (CurTok.SVal[1] <> '_') or (CurTok.SVal[2] <> '_') then
         ErrorRecover('undeclared identifier ''' + CurTok.SVal + ''' used as value');
       CConstExprSawNonConst := True;
     end;
     Next;
+    if wasCall and (CurTok.Kind = tkLParen) then
+    begin
+      callDepth := 0;
+      repeat
+        if CurTok.Kind = tkLParen then Inc(callDepth)
+        else if CurTok.Kind = tkRParen then Dec(callDepth);
+        Next;
+      until (callDepth = 0) or (CurTok.Kind = tkEOF);
+    end;
   end;
 end;
 

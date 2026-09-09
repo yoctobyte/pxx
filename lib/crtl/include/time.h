@@ -65,6 +65,27 @@ struct timespec {
 
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
+/* The rest of the family, transcribed from this box's
+   /usr/include/x86_64-linux-gnu/bits/time.h (lines 46-66). These are the
+   KERNEL's clockid_t numbers and are the same on every Linux architecture pxx
+   targets, so unlike the tty ioctls they need no per-arch fork.
+
+   Note 10 is deliberately absent -- the kernel skips it (CLOCK_SGI_CYCLE was
+   removed) and glibc skips it too; a contiguous-looking gap here is correct.
+
+   Found attempting busybox at 394 applets: miscutils/seedrng.c:211 calls
+   clock_gettime(CLOCK_BOOTTIME, ...) to mix uptime into the seed. Before
+   `a157e88ee' that read clock_gettime(0, ...) -- CLOCK_REALTIME -- so the two
+   timestamps it hashes were the same clock read twice. */
+#define CLOCK_PROCESS_CPUTIME_ID 2
+#define CLOCK_THREAD_CPUTIME_ID  3
+#define CLOCK_MONOTONIC_RAW      4
+#define CLOCK_REALTIME_COARSE    5
+#define CLOCK_MONOTONIC_COARSE   6
+#define CLOCK_BOOTTIME           7
+#define CLOCK_REALTIME_ALARM     8
+#define CLOCK_BOOTTIME_ALARM     9
+#define CLOCK_TAI                11
 
 /* The C name `time` collides case-insensitively with sysutils' Pascal `Time`
    when the RTL is linked next to crtl, and cfront's FindProc spans both

@@ -16191,7 +16191,18 @@ test-core: $(COMPILER)
 	# rows are the ones that used to print the POINTER size (8) - C evaluates
 	# sizeof on a VLA at RUN TIME, so a silent 8 was a wrong value, not a gap.
 	./$(COMPILER) test/c_vla.c $(TESTTMP)/c_vla26
-	tools/expect_same.sh c_vla26 "$$($(TESTTMP)/c_vla26)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')"
+	tools/expect_same.sh c_vla26 "$$($(TESTTMP)/c_vla26)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24\n9 7 6')"
+	# The last row is a CALL as the bound. FindSym cannot see a C function, so
+	# every call in an array dimension reached CEvalConstPrimary's
+	# not-declared-at-all arm and refused with `undeclared identifier `strlen''
+	# -- a false statement about a declared function. Found attempting busybox
+	# at 394 applets: archival/dpkg.c:1442 refused its whole TU on that one
+	# line. The comma column is the part a single-argument call cannot test:
+	# the fold has to skip the argument list BALANCED, or an argument comma
+	# errors before the dimension site can rewind and re-read the bracket.
+	@./$(COMPILER) test/c_vla_call_const_fail.c $(TESTTMP)/c_vla_call_const_fail26 2>&1 \
+	  | grep -q "is a function — a constant expression cannot call one" \
+	  || { echo 'c_vla_call_const_fail: FAIL - a call is a VLA bound and nothing else; a file-scope initializer must still refuse one, and must not call a declared function undeclared'; exit 1; }
 	@./$(COMPILER) test/c_vla_const_fail.c $(TESTTMP)/c_vla_const_fail26 2>&1 \
 	  | grep -q "sizeof of a variable-length array is not a constant expression" \
 	  || { echo 'c_vla_const_fail: FAIL - sizeof on a VLA must be refused in a constant expression, not answer a symbol index'; exit 1; }
@@ -19893,7 +19904,7 @@ test-core: $(COMPILER)
 	#
 	# NO EXPECTED VALUES: the same source is compiled by pxx against
 	# lib/crtl/include and by gcc against the host's headers, and the two
-	# outputs are diffed. 248 of 249 rows must match. The 249th, O_LARGEFILE,
+	# outputs are diffed. 304 of 305 rows must match. The 305th, O_LARGEFILE,
 	# is excluded on purpose and asserted as a relation instead -- glibc makes
 	# it 0 on a 64-bit userspace and the kernel makes it 0100000, crtl takes
 	# the kernel's because crtl's callers reach the kernel directly, and both
@@ -19904,7 +19915,7 @@ test-core: $(COMPILER)
 	  gcc -w -o $(TESTTMP)/c_hdrconst_gcc test/c_crtl_header_constants.c || { echo "c_hdrconst gcc FAIL"; exit 1; }; \
 	  tools/expect_same.sh c_hdrconst26 "$$($(TESTTMP)/c_hdrconst26 | grep -v O_LARGEFILE_NONZERO)" "$$($(TESTTMP)/c_hdrconst_gcc | grep -v O_LARGEFILE_NONZERO)" || exit 1; \
 	  tools/expect_same.sh c_hdrconst26/largefile "$$($(TESTTMP)/c_hdrconst26 | grep O_LARGEFILE_NONZERO)" "O_LARGEFILE_NONZERO            1" || exit 1; \
-	  echo "=== c_hdrconst: 248 constants identical to gcc, O_LARGEFILE ours by choice ==="; \
+	  echo "=== c_hdrconst: 304 constants identical to gcc, O_LARGEFILE ours by choice ==="; \
 	else \
 	  echo "=== c_hdrconst: gcc absent, constants NOT verified ==="; \
 	fi

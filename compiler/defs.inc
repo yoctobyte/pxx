@@ -5112,6 +5112,13 @@ var
     array DIMENSION above all — check it and reject, instead of silently taking
     the 0 the evaluator contributes (bug-cfront-vla-stack-corruption). }
   CConstExprSawNonConst : Boolean;
+  { Set ONLY around an array DIMENSION's fold (ParseCDecl's VLA site). A
+    declared FUNCTION in a constant expression is a hard error everywhere else
+    -- gcc's "initializer element is not constant" -- but in a dimension it is
+    simply a VLA bound, which the site re-parses as an expression. Without the
+    scope, `strlen(s) + 25' as a bound and `static int x = f();' at file scope
+    are the same token shape and the fix for one silently un-fixes the other. }
+  CConstExprAllowCall : Boolean;
 
   OverloadReport : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }

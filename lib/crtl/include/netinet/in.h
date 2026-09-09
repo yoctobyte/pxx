@@ -54,6 +54,38 @@ struct sockaddr_in {
 #define IN_EXPERIMENTAL(a) ((((uint32_t)(a)) & 0xF0000000U) == 0xF0000000U)
 #define IN_BADCLASS(a)     IN_EXPERIMENTAL(a)
 
+/* The classful ADDRESS-PART constants, transcribed from this box's
+   /usr/include/netinet/in.h (lines 175-208). The predicates above answer WHICH
+   class an address is in; these split an address of a known class into its
+   network and host halves, which is a different question and needs its own
+   numbers. Found attempting busybox at 394 applets: networking/zcip.c:121 picks
+   a link-local host part with `rand() & IN_CLASSB_HOST'.
+
+   _HOST is written as the complement of _NET rather than as a literal, exactly
+   as glibc writes it, because that is the relation a reader can check: a class
+   B network mask is the top 16 bits, so the host part is the bottom 16. A
+   literal 0x0000ffff would be equally correct and would not show its own
+   derivation.
+
+   WHY THIS MATTERED BEFORE IT WAS AN ERROR: until 2026-09-05 (`a157e88ee`) an
+   undeclared identifier used as a value folded to 0 with a warning, so
+   `rand() & IN_CLASSB_HOST' was `rand() & 0' -- zcip's address picker returned
+   one constant address forever, and the loop below it could not iterate. It
+   compiled, it linked, and it was in the 521-of-521 GREEN recorded on
+   2026-09-04. */
+#define IN_CLASSA_NET      0xff000000
+#define IN_CLASSA_NSHIFT   24
+#define IN_CLASSA_HOST     (0xffffffff & ~IN_CLASSA_NET)
+#define IN_CLASSA_MAX      128
+#define IN_CLASSB_NET      0xffff0000
+#define IN_CLASSB_NSHIFT   16
+#define IN_CLASSB_HOST     (0xffffffff & ~IN_CLASSB_NET)
+#define IN_CLASSB_MAX      65536
+#define IN_CLASSC_NET      0xffffff00
+#define IN_CLASSC_NSHIFT   8
+#define IN_CLASSC_HOST     (0xffffffff & ~IN_CLASSC_NET)
+#define IN_LOOPBACKNET     127
+
 #define IPPROTO_ICMP   1
 #define IPPROTO_IGMP   2
 #define IPPROTO_IPIP   4

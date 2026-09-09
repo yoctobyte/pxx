@@ -34,6 +34,7 @@
 #define MS_MOVE          8192         
 #define MS_REC           16384        
 #define MS_VERBOSE       32768        /* War is peace. Verbosity is silence.
+                                        MS_VERBOSE is deprecated. */
 #define MS_SILENT        32768        
 #define MS_POSIXACL      (1<<16)      /* VFS does not apply the umask */
 #define MS_UNBINDABLE    (1<<17)      /* change to unbindable */
@@ -69,6 +70,27 @@
 #define BLKFLSBUF    _IO(0x12, 97)
 #define BLKSSZGET    _IO(0x12, 104)
 #define BLKGETSIZE64 _IOR(0x12, 114, size_t)
+/* The read-only, read-ahead and sector-limit half of the same block, from the
+   same source. They are here rather than only in <linux/fs.h> because that is
+   where glibc puts them (/usr/include/x86_64-linux-gnu/sys/mount.h:145-172,
+   which #undefs the linux/fs.h spelling and redefines it) and therefore where
+   a program looks: busybox miscutils/hdparm.c includes <linux/hdreg.h> and
+   <sys/mount.h> and nothing else, and reaches for BLKRASET at :1674.
+
+   `lib/crtl/include/linux/fs.h' already defined BLKRASET -- so this was not a
+   missing NUMBER, it was a number in a header the caller never includes, which
+   is the harder version to notice: grepping the tree finds it and the compile
+   still refuses. */
+#define BLKROSET     _IO(0x12, 93)
+#define BLKROGET     _IO(0x12, 94)
+#define BLKRASET     _IO(0x12, 98)
+#define BLKRAGET     _IO(0x12, 99)
+#define BLKFRASET    _IO(0x12, 100)
+#define BLKFRAGET    _IO(0x12, 101)
+#define BLKSECTSET   _IO(0x12, 102)
+#define BLKSECTGET   _IO(0x12, 103)
+#define BLKBSZGET    _IOR(0x12, 112, size_t)
+#define BLKBSZSET    _IOW(0x12, 113, size_t)
 
 /* `data' is filesystem-specific and may be NULL; `source' may be NULL for a
    filesystem that needs none (proc, sysfs). 0 or -1/errno. */

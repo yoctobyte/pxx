@@ -100,6 +100,36 @@ extern int __pxx_ioctl(int fd, long request, void *argp);
 #define TIOCPKT_IOCTL      64
 #define TIOCSER_TEMT       0x01     /* Transmitter physically empty */
 
+/* THE LINE DISCIPLINES, transcribed from this box's
+   /usr/include/x86_64-linux-gnu/bits/ioctl-types.h (lines 51-65). They live in
+   <sys/ioctl.h> because that is the header glibc reaches them through, and
+   because TIOCSETD/TIOCGETD above are the only calls that take one -- a
+   constant and the ioctl that consumes it belong in the same place.
+
+   These are the kernel's numbers and are architecture-independent, like the
+   socket ioctls below and unlike the tty ioctls above.
+
+   Found attempting busybox at 394 applets: networking/slattach.c:107 is
+   `static const int int_N_SLIP = N_SLIP;', which it then hands to
+   ioctl(fd, TIOCSETD, &int_N_SLIP). Before `a157e88ee' that was the discipline
+   number 0 -- N_TTY -- so slattach installed the ordinary terminal discipline
+   and reported success, which is a SLIP interface that carries nothing. */
+#define N_TTY           0
+#define N_SLIP          1
+#define N_MOUSE         2
+#define N_PPP           3
+#define N_STRIP         4
+#define N_AX25          5
+#define N_X25           6     /* X.25 async */
+#define N_6PACK         7
+#define N_MASC          8     /* Mobitex module */
+#define N_R3964         9     /* Simatic R3964 module */
+#define N_PROFIBUS_FDL  10    /* Profibus */
+#define N_IRDA          11    /* Linux IR */
+#define N_SMSBLOCK      12    /* SMS block mode */
+#define N_HDLC          13    /* synchronous HDLC */
+#define N_SYNC_PPP      14    /* synchronous PPP */
+
 /* THE SOCKET IOCTLS, transcribed from this box's /usr/include/linux/sockios.h
    by a script rather than by hand -- 77 numbers is exactly the population where
    one recalled digit becomes a DIFFERENT ioctl on a real socket, and a wrong

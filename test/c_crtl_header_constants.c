@@ -42,6 +42,9 @@
 #include <netinet/ip_icmp.h>
 #include <linux/if_ether.h>
 #include <net/if_arp.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
+#include <time.h>
 
 #define P(x) printf("%-30s %ld\n", #x, (long)(x))
 
@@ -312,6 +315,97 @@ int main(void)
   P(ARPHRD_FDDI);
   P(ARPOP_REQUEST);
   P(ARPOP_REPLY);
+
+  /* The classful ADDRESS PARTS -- <netinet/in.h>. The IN_CLASSA..D predicates
+     were here and these were not, which is a distinction with no visible edge:
+     both spellings live in the same header and a program that has one expects
+     the other. busybox networking/zcip.c picks its link-local host part with
+     `rand() & IN_CLASSB_HOST', so the absent one was a 0 mask -- one constant
+     address, forever, in a build that was recorded GREEN. */
+  P(IN_CLASSA_NET);
+  P(IN_CLASSA_NSHIFT);
+  P(IN_CLASSA_HOST);
+  P(IN_CLASSA_MAX);
+  P(IN_CLASSB_NET);
+  P(IN_CLASSB_NSHIFT);
+  P(IN_CLASSB_HOST);
+  P(IN_CLASSB_MAX);
+  P(IN_CLASSC_NET);
+  P(IN_CLASSC_NSHIFT);
+  P(IN_CLASSC_HOST);
+  P(IN_LOOPBACKNET);
+
+  /* clockid_t -- <time.h>. Two of eleven were defined. CLOCK_BOOTTIME absent
+     is CLOCK_REALTIME asked for instead, and busybox miscutils/seedrng.c hashes
+     REALTIME and BOOTTIME together to seed the pool: with the second one 0 it
+     hashed the same clock twice and the entropy it thought it was mixing in
+     was not there. 10 is skipped by the kernel and by glibc; the gap is real. */
+  P(CLOCK_REALTIME);
+  P(CLOCK_MONOTONIC);
+  P(CLOCK_PROCESS_CPUTIME_ID);
+  P(CLOCK_THREAD_CPUTIME_ID);
+  P(CLOCK_MONOTONIC_RAW);
+  P(CLOCK_REALTIME_COARSE);
+  P(CLOCK_MONOTONIC_COARSE);
+  P(CLOCK_BOOTTIME);
+  P(CLOCK_REALTIME_ALARM);
+  P(CLOCK_BOOTTIME_ALARM);
+  P(CLOCK_TAI);
+
+  /* The block-device ioctls a program reaches through <sys/mount.h>. Every one
+     of these was already correct in <linux/fs.h>; five of fifteen were reachable
+     from the header glibc puts them in and that programs therefore include.
+     busybox miscutils/hdparm.c includes <linux/hdreg.h> and <sys/mount.h> and
+     asks for BLKRASET -- a NUMBER PRESENT IN THE TREE and absent from the
+     caller's view, which greps as fixed and compiles as missing. */
+  P(BLKROSET);
+  P(BLKROGET);
+  P(BLKRRPART);
+  P(BLKGETSIZE);
+  P(BLKFLSBUF);
+  P(BLKRASET);
+  P(BLKRAGET);
+  P(BLKFRASET);
+  P(BLKFRAGET);
+  P(BLKSECTSET);
+  P(BLKSECTGET);
+  P(BLKSSZGET);
+  P(BLKBSZGET);
+  P(BLKBSZSET);
+  P(BLKGETSIZE64);
+
+  /* THESE THREE ARE HERE BECAUSE OF A COMMENT, not because of a missing number.
+     crtl's <sys/mount.h> transcribed glibc's joke about MS_VERBOSE -- "War is
+     peace. Verbosity is silence." -- and dropped the second line it ends on, so
+     the comment ran unterminated through MS_SILENT and closed on MS_POSIXACL's
+     own trailing comment. Two mount flags were eaten by a pun. The compiler
+     said `warning: slash-star within comment' the whole time and nothing read
+     it -- and spelling that warning literally here would reproduce it. */
+  P(MS_VERBOSE);
+  P(MS_SILENT);
+  P(MS_POSIXACL);
+
+  /* Line disciplines -- <sys/ioctl.h> via bits/ioctl-types.h. TIOCSETD was
+     here and the numbers it takes were not. busybox networking/slattach.c
+     hands ioctl(fd, TIOCSETD, &N_SLIP) to make a serial line carry SLIP; with
+     N_SLIP absent that is discipline 0, N_TTY, which is an ordinary terminal
+     and reports success. */
+  P(N_TTY);
+  P(N_SLIP);
+  P(N_MOUSE);
+  P(N_PPP);
+  P(N_STRIP);
+  P(N_AX25);
+  P(N_X25);
+  P(N_6PACK);
+  P(N_MASC);
+  P(N_R3964);
+  P(N_PROFIBUS_FDL);
+  P(N_IRDA);
+  P(N_SMSBLOCK);
+  P(N_HDLC);
+  P(N_SYNC_PPP);
+
   /* Not diffed -- see the note at the top. */
   printf("%-30s %d\n", "O_LARGEFILE_NONZERO", O_LARGEFILE != 0);
   return 0;

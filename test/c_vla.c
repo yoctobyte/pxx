@@ -4,6 +4,7 @@
    clobbered the loop's own counter (bug-cfront-vla-stack-corruption).
    Every number here is gcc's answer on the same source. */
 #include <stdio.h>
+#include <string.h>
 
 struct pt { int x, y; };
 
@@ -63,6 +64,27 @@ int vla_in_loop(int n)
   return s;
 }
 
+/* A CALL IS A LEGAL VLA BOUND, and it was reported as an undeclared
+   identifier. FindSym cannot see a C function -- functions live in Procs -- so
+   every call in an array dimension reached the not-declared-at-all arm of
+   CEvalConstPrimary and refused with `undeclared identifier `strlen''. Found
+   attempting busybox at 394 applets: archival/dpkg.c:1442 is
+   `char list_name[strlen(package_name) + 25]', and that one line was the whole
+   of the TU's refusal.
+
+   THE COMMA ROW IS A SEPARATE SHAPE ON PURPOSE. The dimension site rewinds and
+   re-reads the bracket with ParseCExpr, so the fold only has to notice the
+   bound is non-constant -- but it must skip the argument list BALANCED to get
+   there, because an argument comma errors out inside the fold before any
+   rewind can happen. A single-argument call passes either way, which is what
+   makes `strlen(s)' alone an inadequate test of the fix. */
+static int twice(int a) { return a * 2; }
+static int addem(int a, int b) { return a + b; }
+
+int vla_call_bytes(const char *s)   { char b[strlen(s) + 5];  b[0] = 'a'; return (int)sizeof(b); }
+int vla_call_dims(int n)            { char b[twice(n) + 1];   b[0] = 'a'; return (int)sizeof(b); }
+int vla_call_commas(int n)          { char b[addem(n, 3) + 1]; b[0] = 'a'; return (int)sizeof(b); }
+
 /* a fixed-bound array must still be a real array: sizeof stays constant */
 int fixed_bytes(void)
 {
@@ -80,5 +102,6 @@ int main(void)
   printf("%d\n", vla_ptrs(4));
   printf("%d\n", vla_in_loop(4));
   printf("%d\n", fixed_bytes());
+  printf("%d %d %d\n", vla_call_bytes("abcd"), vla_call_dims(3), vla_call_commas(2));
   return 0;
 }
