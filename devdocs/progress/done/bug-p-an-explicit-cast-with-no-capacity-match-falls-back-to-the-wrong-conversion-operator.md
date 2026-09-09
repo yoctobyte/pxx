@@ -3,8 +3,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: open
-owner: frankS
+status: done
+owner: frankH
 found-by: frankS
 created: 2026-09-08
 summary: "RESOLVED 2026-09-09: there is no generic Explicit fallback in fpc at all -- toperator91 declares `Explicit(...): ShortString` and never calls it on ANY row. An Explicit operator serves a frozen-string destination only at its OWN capacity; a cast matching none of them is not an explicit conversion and retries the IMPLICIT lookup, where the generic exemption is real; nothing there refuses. toperator91 now matches fpc byte for byte, exit 0. This ticket's central caution was WRONG and is corrected in the resolution: it said a fallback must always exist, and fpc keeps none -- with only a non-matching Explicit declared it answers `Illegal type conversion`, where pxx ran the wrong operator. The segfault the old fallback guarded is closed by a diagnostic instead, narrowed to frozen-string destinations so a record cast to a pointer or another record still reinterprets. The named control had to change because its row 3 WAS this bug: it asserted the generic Explicit conversion while noting fpc refuses that cast; re-aimed to assert the implicit retry, with the refusal split into its own fixture."
