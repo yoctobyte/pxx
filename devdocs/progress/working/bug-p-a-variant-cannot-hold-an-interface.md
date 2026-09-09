@@ -5,8 +5,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankH
 created: 2026-08-26
 summary: "`v := ifc` for any interface does not compile (`Variant := this type not yet supported`). Reproduces at HEAD 2026-09-09 (923ac147a, compiler be9a7fbee4fa). **THE BLOCKER THIS TICKET WAS RANKED ON DOES NOT EXIST.** It said an interface is `a 16-byte fat pointer {IMT, instance}` needing `16 bytes of payload where the slot carries 8` -- taken from `UClsIsInterface`'s comment, which was stale. Measured: SizeOf(IIntf) = 8 in pxx and in fpc 3.2.2, in every aggregate context; an interface value is ONE WORD and a call recovers the IMT from the instance per call (PXXIntfIMTOf). So it fits the existing payload exactly, like VT_OBJECT's class instance pointer, and no payload widening is needed. What IS real: the LIFETIME half. A CORBA interface (pxx default) is not refcounted and needs none; a COM one needs _AddRef/_Release, and the slot has no room for the ifaceId that PXXIntfRelease takes -- which is the actual design question, and it is not the one the ticket asked. See [[refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds]] for the stale-comment group that produced the wrong premise."
 ---

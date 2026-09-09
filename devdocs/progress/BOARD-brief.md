@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:28 unfinished:21 blocked:6 backlog:20 backlog-umbrella:9 backlog-core:149 backlog-nilpy:103 backlog-tools:55 backlog-pascal:18 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3603 rejected:80`
+`working:30 unfinished:21 blocked:6 backlog:20 backlog-umbrella:9 backlog-core:149 backlog-nilpy:103 backlog-tools:55 backlog-pascal:16 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:74 known-incompat:4 float:25 done-followup:3 decided:149 done:3603 rejected:80`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
+- `bug-p-a-variant-cannot-hold-an-interface` [P] — owner: frankH
 - `bug-p-an-operator-enumerator-cannot-be-declared-for-an-array-type` [P] — owner: frankS
 - `bug-p-declared-cannot-see-a-used-units-declarations` [P] — owner: frankZ
 - `bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out` [P] — owner: frankD
@@ -37,6 +38,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
+- `refactor-p-the-fat-pointer-interface-representation-left-two-dead-node-kinds` [P] — owner: frankH
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
@@ -71,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 435, ranked
+## Ready — top 30 of 433, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -104,4 +106,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 
-_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_403 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -4,8 +4,8 @@ track: P
 prio: 25
 type: refactor
 blocked-by: []
-status: backlog
-owner: ""
+status: working
+owner: frankH
 found-by: frankD
 created: 2026-09-09
 summary: "An interface value used to be a 16-byte fat pointer {IMT, instance} and is now ONE WORD -- the instance pointer, with the IMT recovered per call from the instance's RTTI (PXXIntfIMTOf). Measured 2026-09-09: SizeOf(IIntf) = 8, a record of two is 16, an array of three is 24, and fpc 3.2.2 agrees on all three. The move left residue: `AN_INTF_FROM_CLASS` has ZERO references outside defs.inc, `IR_IMTADDR` is never created (four backend encoder arms plus an IRVerify arm for a node nothing emits), and about a dozen ir.inc lowering comments still narrate the fat pointer. Both constants are now marked dead in defs.inc with the census that would retire them; REMOVING them is node numbering, which CLAUDE.md says to coordinate by message rather than land alone, which is why this is a ticket and not a commit."
