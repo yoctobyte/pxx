@@ -205,6 +205,10 @@ order to read them in. Route by what you are holding:
   `make pxx-debug` profiles a different program and says nothing about it
 - `## Reading a NEGATIVE result` -- a change that measures as NO CHANGE is
   data about your model
+- `## A HIGH-WATER MARK OVER A POOL THAT IS ROLLED BACK IS NOT MONOTONIC` --
+  a bug that moves when you add an unrelated line in front of it is about node
+  numbering, not about your feature; grep where the count is ASSIGNED, not
+  where it is incremented
 - `## Prefer the version of the question that has an ON/OFF answer` -- when
   the box is noisy, look for the experiment that cannot be a margin
 - `## A canary nobody has watched fail is indistinguishable from one that is
@@ -22486,3 +22490,59 @@ not a step you take once the finding surprises you.
 Corollary worth its own sentence: **a `done/` ticket in front of you is evidence
 about the SOURCES, and your repro runs on the BINARY.** Watching a fix land is
 the moment you are least likely to suspect you are not running it.
+
+## A HIGH-WATER MARK OVER A POOL THAT IS ROLLED BACK IS NOT MONOTONIC — and the shape it produces is the shape that gets called flaky and closed
+
+Measured 2026-09-09, threadvar. The rewrite pass that turns a thread-local
+`AN_IDENT` into a `DEREF` of `AN_TLSBASE + offset` needs to see every node
+allocated since it last ran, so it banked a watermark on `ASTNodeCount` and
+swept forward from it:
+
+```pascal
+i := ThreadVarRewriteHigh;
+while i < ASTNodeCount do …
+ThreadVarRewriteHigh := ASTNodeCount;
+```
+
+That is the textbook shape, and it is wrong here, because **the AST arena is
+rolled back per statement** — `ASTNodeCount := ASTArenaFloor`, at twelve sites.
+Node indices are REUSED. So the watermark ratchets up to the largest tree any
+statement has needed, and the next statement whose tree is SMALLER is allocated
+entirely below it and never swept.
+
+**The symptom is what makes this worth a section.** Two adjacent statements
+reading the same threadvar printed:
+
+    A mine=0
+    B mine=8
+
+and inserting `dummy := 1;` in front of them made both correct. A defect that
+moves when you add an unrelated line, and whose two halves disagree about the
+same variable, reads as memory corruption or a race — and it is neither. It is
+arithmetic on an index space that does not increase.
+
+**The general form:** *a cursor is only a cursor if the thing it indexes into
+never moves backwards.* Arena, pool, freelist, ring buffer, slab, any allocator
+with a reset — a watermark over one of them is a claim about MONOTONICITY that
+nothing in the code states and the type system cannot see. Grep for where the
+count is ASSIGNED, not only where it is incremented; one `:=` that lowers it
+invalidates every watermark in the file.
+
+**The fix is to sweep the live window rather than a remembered one** — here
+`[ASTArenaFloor .. ASTNodeCount)`, banking only the floor, which is the one
+value the rollback does not move:
+
+```pascal
+if ThreadVarRewriteHigh > ASTArenaFloor then ThreadVarRewriteHigh := ASTArenaFloor;
+i := ThreadVarRewriteHigh;
+…
+ThreadVarRewriteHigh := ASTArenaFloor;
+```
+
+**And the reason this belongs in a debugging file rather than only in its two
+tickets:** the failure has no stable repro at the statement level. It depends on
+the size of the PREVIOUS statement's tree, so it appears and disappears when
+anything nearby is edited — including when you edit it to add a probe. **A
+finding that survives your `WriteLn` is a different finding.** Anything that
+starts behaving when you insert a line in front of it is about NODE NUMBERING,
+not about the feature, and the next place to look is what resets the counter.
