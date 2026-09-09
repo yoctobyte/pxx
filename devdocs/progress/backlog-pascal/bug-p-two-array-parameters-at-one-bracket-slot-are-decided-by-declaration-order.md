@@ -111,3 +111,23 @@ constructor half from scratch.
 
 **Still no real source wanting either answer**, on either path. That is the
 prio, and it has not moved.
+
+
+## Claimed and released without work (2026-09-09, frankS)
+
+Recorded so the next reader does not spend the same twenty minutes: I claimed
+this, read it, and put it back **because the ticket is already right about
+itself**.
+
+*"No real source is known that wants either answer — this shape came out of a
+control I wrote, not out of a corpus."* That is CLAUDE.md's own test (`ON PAR
+WITH THE LANGUAGE, NOT WITH FPC`) applied by the ticket's author to the ticket,
+and working it would be chasing fpc on a shape nobody writes. The cost is not
+small either: the residual is making `FindUMethOverloadAhead`'s speculative
+probe parameter-aware enough to parse a bracket argument, and I checked — **this
+is that limitation's only open consumer.**
+
+So the group is one ticket wide and its value is the record, not the fix.
+**Re-rank it upward when real source asks**, which is what the body already
+says; do not take it because it looks like a bug with a clean repro, which is
+exactly how it reads from the queue.

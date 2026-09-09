@@ -87,6 +87,11 @@ rtl-generics builds are correctly shaped for us; nothing can find them.
   (`RTTI_CLS_*` in defs.inc is name/parent/instSize/vmt/... with no signature),
   so "if the blob looks invalid, treat `[inst]` as the IMT" is a guess that
   cannot be checked and would mis-fire silently on a corrupted instance.
+  **And a fallback here is WORSE than no fallback** (frankH, 2026-09-09): on a
+  hand-built record, `[inst]` is a real VMT pointer and `[vmt-8]` is a real
+  `RefCount` word, so the walk does not fault — it walks. A guess that faults is
+  recoverable; a guess that dereferences plausible garbage is the class of bug
+  this repo spends its days on.
 - **The compile-time discrimination is real and does not survive.** At
   `IFoo(@s)` the operand's static type is a record pointer, not a class, so the
   cast site knows. The interface VALUE is one word with nowhere to carry the
