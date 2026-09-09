@@ -6,7 +6,7 @@ status: backlog
 found: 2026-09-04
 found-by: frankA (hit it); shape identified by frankuser
 owner: ""
-blocked-by: []
+blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]
 summary: "MEASURED 2026-09-04. `.claude/hooks/no-full-suite.sh` deliberately exempts a commit message that QUOTES a forbidden command -- its own comment says an un-exempted one was `silently deleting the message span` -- but the exemption is keyed on the command's FIRST WORD being `git`, and `git` is the only first word that survives a chain. Nobody writes a multi-paragraph commit message as `git commit -m`: the repo's own practice is to write it to a file with a quoted heredoc (CLAUDE.md requires the quoting) and then `git commit -F`. That command's first word is `cat`, or `cd`, and the heredoc BODY is what the hook scans. So the exempted shape is the one nobody uses and the used shape is unexempted. Cost here: a commit refused because its message explained that a census `used to run only in the test-core target`. The refusal is visible and reword-able; the failure mode the hook's own comment names -- a silently truncated message -- is not."
 ---
 

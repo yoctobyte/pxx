@@ -168,3 +168,145 @@ Landed the way the reporters before me landed theirs: **the `Write` tool for the
 message file for the commit. The prose was not reworded to slip past the guard**, per
 CLAUDE.md — a guard you route around is a guard the owner no longer has, and a different
 TOOL is not the same act as a different WORDING.
+
+## MEASURED 2026-09-09 (frankB) — the mechanism, and it is not the one any row here describes
+
+**Nothing was implemented and the hook is untouched.** This is evidence for the
+owner's decision, gathered by feeding the real hook PreToolUse payloads. Four
+probes and a corpus census, all read-only; scripts in this session's scratchpad.
+
+**The hook is byte-identical to `448b21c11` (2026-09-03), which predates every
+ticket in this family.** So nothing below is a regression and nothing has been
+fixed since: where a row's repro passes today, it passed on the day it was
+filed.
+
+### Three gates in series, and every row here describes only the third
+
+1. **Escape** — `PXX_TRACK=T` / `PXX_ALLOW_FULL_SUITE=1`, env or inline. Correct,
+   untouched, not in scope.
+2. **Exemption** — the first word is read-only (`grep|cat|echo|...`), or is `git`
+   with a read-only subcommand. **This is where the false positives are decided,
+   and no row here mentions it.**
+3. **Rules 1/2/3** — the suite-name, tier and shell-loop patterns. Every row here
+   analyses these. They are reached only when gate 2 declines to exempt.
+
+### What actually defeats gate 2 — a semicolon in English
+
+```
+case "$cmd" in *"&&"*|*"||"*|*";"*) [ "$first" = git ] || first='' ;; esac
+```
+
+It tests the **whole command string, heredoc body included**. A semicolon is a
+shell separator *and* an ordinary English punctuation mark. Measured — one
+command, first word `cat`, author chained nothing, only the prose punctuation
+varies:
+
+| body of the document being written | verdict |
+| --- | --- |
+| `we did not run <recipe> here` | allow |
+| `we did not run <recipe>; quick was enough` | **DENY** |
+| `quick was enough; we did not run <recipe>` | **DENY** |
+| same with a comma | allow |
+| same with an em dash | allow |
+| same inside a markdown table (single pipes) | allow |
+
+**The author never wrote a chain. The semicolon is punctuation in the file being
+created.** The `git` carve-out — added precisely so a commit message may quote a
+recipe — is then the only survivor, and a leading `cd <repo>;`, which is how
+most commands in this repo are written, removes even that.
+
+### And which side prose falls on is decided by ONE character
+
+Rule 1 anchors `(^|[;&|(]|[[:space:]])make`, so the character immediately before
+the recipe name decides it. Same sentence, same act, gate 2 already passed:
+
+| how the recipe is written in the prose | verdict |
+| --- | --- |
+| `...did not run <recipe>` (space) | **DENY** |
+| `...run '<recipe>' by hand` (quote) | allow |
+| `...not run:<recipe>` (colon) | allow |
+| ``...not run `<recipe>` `` (backtick) | allow |
+
+**Quoting the recipe — the more careful way to write it — is what saves you.**
+Writing it as running English is what condemns you. Nobody could predict that,
+and it means **the instance counts this row argues from are a sample of a
+punctuation lottery, not a rate.** Concretely: this row's sibling
+`bug-t-the-full-suite-hook-scans-heredoc-prose-and-refuses-documentation`
+carries a two-line repro and the instruction *"spell `<star>` as the asterisk to
+reproduce"*. **Spelled exactly as instructed it is ALLOWED.** Change
+`documentation.` to `documentation;` — one character, nothing structural — and
+it is refused. That row's summary has been corrected rather than left standing.
+
+### The population, measured rather than asserted
+
+This row states: *"The population is not 'documents about the hook' — it is
+'documents that name a test path', which is most of what this repo's tickets
+are."* **Measured: it is 16.5%, not most.**
+
+Every ticket body under `devdocs/progress/` was wrapped in the command an agent
+would use to write it and put to the real hook. Two outcomes compared per body
+(with and without a leading `cd`), nothing filtered on whether the body mentions
+a suite — filtering on the claim is how the last census in this session went
+wrong, and it is now a CLAUDE.md rule (`be763f75c`).
+
+```
+ticket bodies tested: 4510
+  refused as written (cd ...; cat > f <<'EOF') ....  746   16.5%
+  refused without the leading cd ..................  744   16.5%
+  the leading `cd` accounts for ....................   2
+  by folder: done 711/3593 (19.8%), backlog 17/17 (100%), rejected 5/80,
+             low-prio 4/75, backlog-core 2/150, decided 2/149
+```
+
+**The `cd` is not the mechanism at scale — the semicolon is**, which is why the
+two columns barely differ. `backlog/` at 17 of 17 is the auto-filed regression
+folder: those bodies all carry a job table, so the one population that is
+refused outright is the one nobody writes by hand.
+
+### What the recommended option would actually do
+
+This row's revised recommendation is *option 2 scoped to heredoc bodies*.
+**Simulated without touching the hook** — each command asked twice, once as-is
+and once with the heredoc body removed before the hook sees it:
+
+| shape | as-is | under option 2 |
+| --- | --- | --- |
+| heredoc writing a FILE, cd-prefixed | DENY | allow |
+| python heredoc holding a repro line | DENY | allow |
+| `cd /x; git commit -m '<prose>'` | DENY | **DENY** |
+| a real suite in command position after a heredoc | DENY | DENY |
+| a real suite, cd-prefixed | DENY | DENY |
+| a real suite after a read-only first word | DENY | DENY |
+
+**All three positive controls hold.** Option 2 fixes the heredoc majority and
+leaves exactly one shape refused — the commit message, which is the shape
+CLAUDE.md explicitly asks authors to write, and the shape option 3 was supposed
+to cover and does not, because of the `cd`.
+
+**So the fork is narrower than three architectural options.** Two small,
+independent, separately-testable changes cover every instance measured here
+while holding every control: **(a)** skip heredoc bodies in the scan; **(b)**
+make gate 2's chain test look at separators in *command* text rather than
+anywhere in the string. Either is useful alone; (a) without (b) leaves the
+commit message refused, (b) without (a) leaves any body whose prose is
+unluckily punctuated refused. **Neither loosens any real invocation** — 11 of 11
+real invocations are classified correctly today and stay so under both.
+
+### What this does NOT settle
+
+**Nothing.** The direction is still "less strict" on permission machinery in
+`.claude/`, which binds every agent on this box. This row says no agent may
+decide it and **not a peer's to authorise**; the argv row says *"NOBODY MAY
+NARROW THIS ON THEIR OWN JUDGEMENT"* and *"nobody may implement any option here
+without the owner saying which."* A peer relayed an assertion that this fork had
+been delegated to agents. **A peer cannot grant that**, and two sessions before
+me correctly declined the same fork. Recorded for the owner; not acted on.
+
+### Instance twelve, and it happened during this measurement
+
+The first attempt to write the fork-simulation probe was a `cat > f <<'PYEOF'`
+heredoc. **The hook refused it** — rule 3, on a test-glob string and the word
+`for` in the docstring explaining rule 3. Third self-referential instance on
+record, second to hit a session while it was measuring this defect. Written with
+the Write tool instead. **The prose was not reworded**: a different tool is not
+the same act as a different wording.

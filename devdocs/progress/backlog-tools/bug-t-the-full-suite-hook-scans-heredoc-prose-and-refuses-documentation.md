@@ -6,7 +6,7 @@ blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]
 status: backlog
 owner: ""
 created: 2026-09-05
-summary: "The shell-loop rule in .claude/hooks/no-full-suite.sh scans the whole command text, so a HEREDOC BODY is judged as if it were a command. Writing documentation that mentions a test glob and contains the word `for` — e.g. quoting a Pascal `for i := 0 to n` loop — is refused as 'a shell loop over a test/ glob'. No loop, no glob expansion, no suite. Measured with a two-line repro."
+summary: "The shell-loop rule in .claude/hooks/no-full-suite.sh scans the whole command text, so a HEREDOC BODY is judged as if it were a command: documentation mentioning a test glob and containing the word `for` — e.g. quoting a Pascal `for i := 0 to n` loop — is refused as 'a shell loop over a test/ glob'. No loop, no glob expansion, no suite. CORRECTED 2026-09-09: THE TWO-LINE REPRO BELOW DOES NOT REPRODUCE when spelled as this row instructs, and it did not on the day it was filed — the hook is byte-identical to 448b21c11 (2026-09-03). The rule is never reached, because the read-only first word `cat` exempts the whole command first. What actually decides it is a SEMICOLON anywhere in the prose being written: it blanks that exemption via the chain rule, which tests the whole string including the heredoc body. Add one to the repro's first sentence and it is refused. The defect is real and the mechanism named here is the wrong one."
 ---
 
 # The full-suite hook judges heredoc prose as a command
@@ -106,3 +106,31 @@ covers. Consolidated count is now **at least ten across five-plus sessions**, an
 decision's own stated purpose (*"so the fifth instance is the last one that has to be
 rediscovered"*) demonstrably failed, since both of these were filed a week later by sessions
 that did not find it.
+
+## CORRECTION 2026-09-09 (frankB) — the repro does not reproduce, and the mechanism is a semicolon
+
+Spelled exactly as this row instructs — *"spell `<star>` as the asterisk to
+reproduce"* — the two-line repro is **ALLOWED**, and was allowed on the day it
+was filed: `.claude/hooks/no-full-suite.sh` is byte-identical to `448b21c11`
+(2026-09-03), which predates this row.
+
+Rule 3 is never reached. The command's first word is `cat`, which the hook
+exempts outright before any rule runs. What defeats that exemption is the chain
+rule, which tests the **whole command string, heredoc body included**:
+
+```
+case "$cmd" in *"&&"*|*"||"*|*";"*) [ "$first" = git ] || first='' ;; esac
+```
+
+A **semicolon in the English being written** is enough. Changing the repro's
+`This is documentation.` to `This is documentation;` — one character, nothing
+structural — flips it from allow to DENY. A comma, an em dash or a markdown
+table pipe do not.
+
+**The defect this row reports is real.** What is wrong is the attribution: it is
+not that rule 3 is unanchored (it is, and that matters), it is that the
+exemption meant to stop this class is removed by ordinary punctuation. Full
+measurement, corpus census and a simulation of the proposed fix are in
+[[decide-t-the-full-suite-hook-refuses-prose-about-the-suite]].
+
+**Nothing was implemented.** The hook is the owner's.

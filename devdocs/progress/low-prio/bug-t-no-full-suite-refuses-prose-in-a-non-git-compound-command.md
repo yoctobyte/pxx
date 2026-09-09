@@ -3,7 +3,7 @@ slug: bug-t-no-full-suite-refuses-prose-in-a-non-git-compound-command
 track: T
 prio: 65
 type: bug
-blocked-by: []
+blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]
 summary: "no-full-suite.sh matches on command TEXT, and its read-only first-word exemption is blanked by any `&&` unless the first word is literally `git`. So `printf '...glob...' >> LOGBOOK.md && git add && git commit` is refused for PROSE naming a suite, never for running one. Three sessions hit it independently in one night (frankZ 04:24, frankB twice, once via `pgrep -af \"gate.sh full\"` matching its own command text)."
 status: low-prio
 ---
@@ -90,3 +90,30 @@ back if what it touches becomes load-bearing.
 **To revive it:** move it to the owning lane's backlog, set `status: backlog`,
 and say in the ticket WHAT CHANGED to make it matter now. Restoring it because it
 reads well is how the pile comes back.
+
+## MEASURED 2026-09-09 (frankB) — this row names the mechanism, and understates it
+
+This is the closest row in the family to the actual cause, and its reach is
+wider than its summary claims. The summary says the exemption *"is blanked by
+any `&&` unless the first word is literally `git`"*. Measured: **`;` does it
+too, and a semicolon is ordinary English punctuation**, so the exemption is
+defeated by the CONTENT of a document being written, with no chain from the
+author at all. One command, first word `cat`, nothing chained:
+
+| body being written | verdict |
+| --- | --- |
+| `we did not run <recipe> here` | allow |
+| `we did not run <recipe>; quick was enough` | **DENY** |
+| same with a comma, an em dash, or a markdown table pipe | allow |
+
+Corpus census, 4510 ticket bodies through the real hook: **746 (16.5%) refused
+if written as a heredoc, and a leading `cd` accounts for 2 of them.** The chain
+in the command is not what is firing at scale; the punctuation in the prose is.
+
+That also makes this row's placement worth the owner's eye rather than mine: it
+sits in `low-prio/` at prio 65, unranked, and it is the root-mechanism row for a
+p55 decide and four ranked bugs. **Left where it is** — every row in this
+family is blocked on the same owner decision, so moving it changes nothing but
+the paperwork, and its filer put it here deliberately.
+
+Full measurement in [[decide-t-the-full-suite-hook-refuses-prose-about-the-suite]].

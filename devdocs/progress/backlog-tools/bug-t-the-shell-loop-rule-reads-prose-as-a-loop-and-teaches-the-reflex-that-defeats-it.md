@@ -6,7 +6,7 @@ status: backlog
 found: 2026-09-04
 found-by: frankZ
 owner: ""
-blocked-by: []
+blocked-by: [decide-t-the-full-suite-hook-refuses-prose-about-the-suite]
 summary: "no-full-suite.sh rule 3 fires when a command contains BOTH a `test/*.pas`-shaped string and the bare word `for` — and both conditions are met by a python heredoc iterating in memory, and by a heredoc WRITING A TICKET whose prose happens to say `test/*.pas` and `for`. Hit twice in one session while doing neither. The same file already recognises this class and fixed it for rule 2c ('reading about the rule, not running it, and refusing that is pure noise — the first thing this rule did on the day it landed'); rule 3 did not get the treatment. The cost is not the retry: the documented escape is PXX_ALLOW_FULL_SUITE=1, so the lesson a agent learns is to prefix it reflexively, which is exactly how a guardrail the owner asked for twice stops guarding."
 ---
 

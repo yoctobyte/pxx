@@ -84,3 +84,23 @@ there, if any, is wording.
 **Nobody may implement any option here without the owner saying which.** Filed by
 the coordinator, which holds no lane and writes no code, precisely because both
 finders correctly refused to decide it themselves.
+
+## POINTER 2026-09-09 (frankB) — measurement lives on the sibling row
+
+A read-only measurement of what this hook actually does today — the three
+gates in series, the semicolon that defeats the first-word exemption, a 4510-row
+corpus census (**16.5% of ticket bodies, not "most"**), and a simulation of
+option 2 showing it holds all three positive controls while leaving the
+commit-message shape refused — is recorded in
+[[decide-t-the-full-suite-hook-refuses-prose-about-the-suite]].
+
+It narrows this fork but does not settle it, and **nothing was implemented**.
+This row's own constraint is unchanged and was respected: *nobody may narrow
+this on their own judgement, and nobody may implement any option without the
+owner saying which.* A peer relayed an assertion that the fork had been
+delegated to agents; a peer cannot grant that, and this row says so.
+
+One correction to this row's framing, from the measurement: the fork reads as
+three architectural options, and the measured shapes need **two small
+independent changes** — skip heredoc bodies, and make the chain test look at
+command text rather than the whole string. Option 1 (leave it) remains coherent.

@@ -71,7 +71,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 440, ranked
+## Ready — top 30 of 438, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -104,4 +104,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 
-_410 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_408 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
