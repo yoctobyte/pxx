@@ -250,3 +250,58 @@ down: rebuilding CORRECTLY, in the middle of a sweep, is still moving the
 instrument.** The rule reads as being about starting from a stale tree; the
 hazard is any rebuild inside the measurement, including the one the rule tells
 you to do.
+**So the ladder above is an independently-reproducible defect and NOT yet shown
+to be the rung's blocker.** Those are two claims and only the first is measured.
+
+## 2026-09-09 (frankS) — a TENTH variant: the same defect through INHERITANCE, and one arm of it already works
+
+Measured at binary `417ee5636a72`, HEAD `5acbe362b`. Two rows, and the pair is the
+boundary:
+
+```pascal
+{ F — the nested type is declared in the SAME template that is specialized }
+TEnum<T> = class abstract function Get: T; virtual; abstract; end;
+TWithPointers<T> = class abstract
+public type
+  PT = ^T;
+protected
+  function GetPtrEnum: TEnum<PT>; virtual; abstract;
+end;
+TIntList = class(TWithPointers<LongInt>) end;          { COMPILES }
+
+{ E — identical, except PT is INHERITED from an ancestor template }
+TEnumerable<T> = class abstract public type PT = ^T; end;
+TWithPointers<T> = class abstract(TEnumerable<T>)
+protected
+  function GetPtrEnum: TEnum<PT>; virtual; abstract;
+end;
+TIntList = class(TWithPointers<LongInt>) end;          { unknown type: PT }
+```
+
+fpc 3.2.2 `-Mdelphi` compiles both. One instantiation is enough — the corpus's
+four-way `TEnumerator$PT` collision was this defect counted again, not a
+multiplicity effect.
+
+**F is the arm that works, and WHY it works says where the fix is not.** It works
+through the HOIST path: `CollectHoistCandidates` scans the template being
+specialized for nested `type` declarations and re-declares each one under a name
+unique to the specialization (`TWithPointers$LongInt$PT`), so the argument is a
+real unit-level type by the time it is used. That path is a REWRITE, not a
+lookup — which is why your v1/v2 reading ("two lookups serve one question and
+only one walks the class") is the right layer and this is a third route to the
+same question rather than a fourth lookup.
+
+**I tried the obvious fix at the hoist layer and it is the wrong layer — do not
+repeat it.** Extending `CollectHoistCandidates` to walk the ancestor chain
+(collecting inherited nested types under the same specialization prefix) makes E
+and a two-instantiation variant compile and run correctly, and on the pre-`1c16d4523`
+tree it made `uses Generics.Collections` **hang** (>90s, no runaway minting —
+176 mint lines and then silence) and produced `unknown type: TList$UInt32$PT`:
+the hoisted NAME reaches the argument while its declaration does not reach the
+scope that needs it. The patch is stashed locally in the frankS checkout only —
+it is not on origin and nobody should plan on it — and its value is this
+paragraph, not the diff. Whoever fixes the lookup should re-check E; it may well
+fall out with v1 and needs no hoist change at all.
+
+**Not wired `blocked-by:` on the rung**, for the reason you filed it with: the
+corpus now stops earlier, at `generics.defaults.pas:3250`, on a different shape.
