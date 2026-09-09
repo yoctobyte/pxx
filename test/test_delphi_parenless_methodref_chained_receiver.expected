@@ -3,3 +3,5 @@ chain=42
 call=7
 deep=43
 deepcall=7
+field=44
+fieldcall=7

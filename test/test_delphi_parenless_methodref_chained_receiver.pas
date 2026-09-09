@@ -24,6 +24,7 @@ program test_delphi_parenless_methodref_chained_receiver;
 type
   TG = class
     X: Integer;
+    Inner: TG;                { a FIELD link, not a method-call link -- see row 6 }
     class var F: function(const aX: Integer): TG of object;
     function Foo(const aX: Integer): TG;
     function Bar: Integer;
@@ -61,4 +62,19 @@ begin
        at a length where an off-by-one would survive row 3. }
   n := g.Mk.Bar;
   WriteLn('deepcall=', n);
+
+  { 6. A FIELD LINK, symbol-rooted. Rows 4 and 5 reach the second link through a
+       method CALL (`g.Mk`); this one reaches it through a plain field, and the
+       pair is what says the discriminator is the ROOT and not the link kind.
+       Both fail identically when the selector walk runs past the stop dot, so
+       without this row a fix that handles only call-links would look complete.
+       refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers }
+  g.Inner := TG.Create;
+  g.Inner.X := 9;
+  TG.F := g.Inner.Foo;
+  WriteLn('field=', TG.F(44).X);
+
+  { 7. the rewind through a FIELD link -- row 3's assertion for row 6's shape. }
+  n := g.Inner.Bar;
+  WriteLn('fieldcall=', n);
 end.

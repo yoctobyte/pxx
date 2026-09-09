@@ -6321,7 +6321,17 @@ var
     a counter would need saving and restoring at every nested entry, which is
     the shape this kind of parser state gets wrong.
 
-    -1 = no stop, which is every path but the one `@` arm. }
+    -1 = no stop, which is every path but the THREE arms that set it:
+    pasparser_expr.inc's `@a.b.Foo` arm and its class-type sibling, and
+    pasparser_call.inc's TryParseParenlessMethodRef. Each resets it to -1
+    immediately after the walk it bounds. This line said "the one `@` arm" until
+    2026-09-09 and had been stale since the parenless arm landed -- the count is
+    what makes "safe by construction" checkable, so it is the part that must
+    stay true.
+
+    READ BY BOTH SELECTOR WALKERS since 2026-09-09: ParseClassRecordSelectors
+    and ParseLValueAST. It was read by only the first, which is why callers grew
+    a second hand-written route for a symbol-rooted receiver. }
   AtStopDotTok : Integer;
 
   BLabelLineNums : array[0..255] of Int64;

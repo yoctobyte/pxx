@@ -1858,7 +1858,27 @@ begin
   end;
   end;
 
-  while CurTok.Kind in [tkLBrack, tkDot, tkCaret] do
+  { THE STOP DOT, honoured here as it already is in ParseClassRecordSelectors.
+    AtStopDotTok names the one dot a bounded selector walk must leave in the
+    stream -- see its declaration in defs.inc. Only the OTHER walker consulted
+    it, so every caller that wanted a bounded walk carried two routes: hand-build
+    the receiver and call ParseClassRecordSelectors when the root is a symbol,
+    call ParseFactor when it is a class name. That is one fact encoded four
+    times.
+
+    Safe by construction: AtStopDotTok is -1 on every path but the three arms
+    that set it (pasparser_expr.inc's `@a.b.Foo` and its class-type sibling, and
+    pasparser_call.inc's TryParseParenlessMethodRef), each of which resets it
+    immediately, so this test cannot change any other parse.
+
+    The guard is on the DOT only, and deliberately so: this loop also walks
+    `[` and `^`, which ParseClassRecordSelectors does not, and a stop dot never
+    names either. The two walks are not the same job -- this one is a superset --
+    which is why the flag is read rather than the loops merged.
+    refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers }
+  while (CurTok.Kind in [tkLBrack, tkDot, tkCaret]) and
+        ((AtStopDotTok < 0) or (CurTok.Kind <> tkDot) or
+         (TokPos - 1 <> AtStopDotTok)) do
   begin
     if CurTok.Kind = tkCaret then
     begin

@@ -1839,37 +1839,16 @@ begin
     trialAst   := ASTNodeCount;
     savedCur   := CurASTNode;
     savedTk    := LastExprTk;
-    { TWO ROUTES TO THE RECEIVER, AND THE SPLIT IS NOT MINE -- it is the one the
-      `@` arms already carry, for a reason measured here again today. Only
-      ParseClassRecordSelectors consults AtStopDotTok; ParseLValueAST, which is
-      where ParseFactor sends a SYMBOL-rooted designator, has its own selector
-      handling and walks straight past the stop. So `TG.Create.Foo` (class-name
-      root, ParseFactor's other route) worked from the first build and
-      `g.Mk.Foo` did not -- and neither did `g.Inner.Foo`, which is the probe
-      that named the symbol ROOT rather than the method-call LINK as the
-      discriminator.
-
-      Hand-building the receiver node and calling the selector walker directly
-      is what the `@` arm at the head of ParseFactorCore does, for exactly this
-      reason. Copying it makes four sites that encode one fact about which
-      walker honours the stop; unifying them means teaching ParseLValueAST the
-      flag, which is safe by construction (AtStopDotTok is -1 on every other
-      path) and is too wide to fold into this fix.
+    { ONE ROUTE. This carried two until 2026-09-09 -- hand-build the receiver
+      node and call ParseClassRecordSelectors when the root is a SYMBOL, call
+      ParseFactor when it is a class name -- because only ParseClassRecordSelectors
+      consulted AtStopDotTok and ParseLValueAST, where ParseFactor sends a
+      symbol-rooted designator, walked straight past the stop. That was one fact
+      about the walkers encoded at four sites. ParseLValueAST now reads the flag
+      too, so ParseFactor serves both roots and the split is gone.
       refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers }
     AtStopDotTok := atLastDot;
-    rsym := FindSym(CurTok.SVal);
-    if (rsym >= 0) and (Syms[rsym].RecName >= REC_UCLASS_BASE) and
-       (not UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE]) then
-    begin
-      opNode := AllocNode(AN_IDENT);
-      ASTIVal[opNode] := rsym;
-      ASTTk[opNode] := Ord(tyClass);
-      Next;                { receiver name; CurTok = the first '.' }
-      chainTk := tyClass;
-      CurASTNode := ParseClassRecordSelectors(opNode, Syms[rsym].RecName, chainTk);
-    end
-    else
-      ParseFactor;
+    ParseFactor;
     AtStopDotTok := -1;
     rmmi   := -1;
     chainCi := -1;

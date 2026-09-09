@@ -443,7 +443,7 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (16)
+## backlog-pascal (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -461,7 +461,6 @@ _none_
 | feature-p-threadvar-is-not-supported-at-any-scope | P | 40 | feature | `threadvar t: LongInt;` at program or unit level is refused with `expected 'begin' before 'threadvar'`. FPC supports it, and it is the language's only spelling for thread-local storage -- so a program that wants per-thread state has no way to ask for it. Measured 2026-09-06 by probe while dispositioning tclass17 and terecs21, two `%FAIL` rows about `threadvar` INSIDE A CLASS whose refusals were being satisfied by this gap rather than by their own subject. | — |
 | feature-pascal-corpus-passrc | P | 30 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-on-a-class-field | P | 30 | feature | `c: TCls` where TCls has a field of a record with `class operator Initialize/Finalize`: pxx REFUSES it, naming feature-pascal-management-operators-nested-and-array. It was carved out of that ticket 2026-09-06 because it is a DIFFERENT MECHANISM, not a remaining case of the same one. Measured against fpc 3.2.2: a class field's Initialize runs inside Create and its Finalize inside Free -- an OBJECT lifetime, not a scope one. The desugar that serves records is `Initialize(v); try BODY finally Finalize(v)` around the declaring routine's body, and applying it here would finalize a live heap object at every scope exit and never run at all for one that outlives the scope, which is worse than the refusal. The insertion points are the constructor and destructor paths, so the shape is closer to how a class's ARC/interface fields are already handled than to anything in the record desugar. CORPUS: fpc testsuite tmoperator4 stops at line 81 on this refusal, and its TA/TB are CLASSES -- that row was mis-attributed to the record nested-field arm, which had no corpus row at all. | — |
-| refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers | P | 35 | refactor | `AtStopDotTok` names the one dot a selector walk must leave in the stream -- the mechanism behind every `a.b.Foo` method reference. Only ParseClassRecordSelectors consults it (pasparser_lval.inc, the `while CurTok.Kind in [tkDot, tkLBrack]` head). ParseLValueAST, which is where ParseFactor sends a SYMBOL-rooted designator, has its own selector handling and walks straight past the stop. So every caller that needs a bounded walk carries TWO routes: hand-build the receiver node and call ParseClassRecordSelectors when the root is a symbol, call ParseFactor when it is a class name. Four sites encode that one fact today. Teaching ParseLValueAST the flag is safe BY CONSTRUCTION -- AtStopDotTok is -1 on every path but these arms, so the check cannot change any other parse -- and would delete all four splits. Not a bug: every caller is correct today. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
 ## backlog-decide (45)
@@ -963,9 +962,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3605)
+## done (3606)
 
-3605 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3606 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (80)
 
@@ -1336,7 +1335,6 @@ _none_
 - [p 35] [W] feature-web-blog-bootstrap
 - [p 35] [A] idea-a-fold-the-asm-emit-harness-mock-preludes-into-one [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 35] [A] refactor-a-unify-the-five-remaining-pascal-postfix-suffix-walks
-- [p 35] [P] refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers
 - [p 35] [T] task-t-two-standalone-checks-are-written-and-unwired-price-them-together
 - [p 32] [A+O] feature-opt-rtti-emit-on-use
 - [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]

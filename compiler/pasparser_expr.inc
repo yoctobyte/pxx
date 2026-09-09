@@ -1236,14 +1236,17 @@ begin
         atLastDot := LastDotOfDesignator(TokPos - 1);
         if (atLastDot > TokPos) and IsMethodNameTokAt(atLastDot + 1) then
         begin
-          valNode := AllocNode(AN_IDENT);
-          ASTIVal[valNode] := idx;
-          ASTTk[valNode] := Ord(tyClass);
-          Next;            { consume obj name; CurTok is the first '.' }
-          tk := tyClass;
+          { THE SAME THREE LINES AS THE CLASS-TYPE SIBLING BELOW -- rewind
+            nothing, set the stop, recurse -- and they were a hand-built
+            AN_IDENT plus a direct ParseClassRecordSelectors call until
+            2026-09-09, because ParseLValueAST (where ParseFactor sends a
+            SYMBOL-rooted designator) did not read AtStopDotTok and walked past
+            the stop. It reads it now, so one route serves both roots.
+            refactor-p-atstopdottok-is-honoured-by-one-of-the-two-selector-walkers }
           AtStopDotTok := atLastDot;
-          node := ParseClassRecordSelectors(valNode, Syms[idx].RecName, tk);
+          ParseFactor;
           AtStopDotTok := -1;
+          node := CurASTNode;
           mmi := -1;
           atChainCi := -1;
           { The walk must have stopped exactly where it was told to. If it did
