@@ -4046,6 +4046,43 @@ begin
   end;
 end;
 
+function IsNodePWideChar(node: Integer): Boolean;
+{ Is this node a POINTER TO WideChar -- a PWideChar, one level deep?
+
+  The wide twin of IsNodePChar, and deliberately NOT a widened IsNodePChar: that
+  predicate answers "does this address NARROW, NUL-terminated bytes", and every
+  one of its ~10 callers acts on the answer by reaching for a narrow helper --
+  PCharToString, a byte strlen, a 1-byte stride. Admitting tyWideChar there
+  would route a UTF-16 pointer into a NARROW strlen, which stops at the first
+  zero BYTE and would make Length('abcd') answer 1: an obviously-wrong 4411480
+  replaced by a plausible 1, which is strictly worse than the defect. The
+  ticket's own body says do not do that, and this separate predicate is why it
+  does not have to be done.
+
+  ONE ARM, AND THE OMISSION IS DELIBERATE AND STATED. IsNodePChar has four (cast,
+  identifier, record field, call result); this has the IDENTIFIER arm only,
+  because that is the arm the two defects measured here go through and the other
+  three have no measured case yet. A predicate that claims coverage it has not
+  been measured for is the "80%-accurate name" this repo keeps paying for -- so
+  the missing arms are named here rather than left to be inferred from the code.
+  Add one when a repro needs it, with the repro.
+  bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow }
+var symId: Integer;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
+  if ASTKind[node] <> AN_IDENT then Exit;
+  symId := ASTIVal[node];
+  if (symId < 0) or (symId >= SymCount) then Exit;
+  { PtrDepth = 1 for the same reason IsNodePChar's identifier arm needs it:
+    SymTR carries the ULTIMATE base, so `PWideChar` and `^PWideChar` share a
+    tyWideChar base and differ only in depth. }
+  Result := (Syms[symId].TypeKind = tyPointer) and
+            (SymTR[symId].PtrDepth = 1) and
+            (SymTR[symId].PtrBaseTk = Ord(tyWideChar));
+end;
+
 function IsNodePChar(node: Integer): Boolean;
 var tk: TTypeKind; procIdx, recId, symId: Integer;
 begin
@@ -14755,8 +14792,36 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           Pascal does not permit a literal in a plain `p: Pointer` and pxx
           should not invent a meaning for it.
           refactor-c-string-literal-decay-belongs-at-the-producer }
+        { …AND THE SAME LITERAL BOUND TO A **WIDE** CHAR POINTER IS A UTF-16
+          PAYLOAD, TRANSCODED FIRST. `pw := 'abcd'` with `pw: PWideChar` read
+          `4 0 0 0 25185` as words -- a 64-bit length of 4, then 'ab' and 'cd'
+          NARROW, two characters per WideChar -- because neither half of this
+          ran for it: the destination is a pointer to tyWideChar, which
+          IsNodePChar does not and must not answer for, so the literal kept its
+          narrow payload AND kept pointing at the length prefix. A PChar to the
+          same literal in the same program was entirely correct, which is what
+          localises it to the wide side rather than to literal addressing.
+          AND THE WIDE CASE TAKES NO +8, WHICH IS NOT AN EXCEPTION TO THE RULE
+          ABOVE BUT THE RULE ITSELF READ CORRECTLY. A managed handle already
+          points AT the data -- the length lives at [data-8], which is why every
+          runtime path reads a negative offset. A string LITERAL is not a managed
+          handle: it is a static block whose address is the block START, so the
+          narrow case adds 8 to reach character 0. PXXWideFromStr hands back a
+          real managed handle, so the skip is already paid.
+          MEASURED, NOT REASONED, AND IT IS WHY THE +8 IS NOT SHARED: with the
+          skip applied to the transcoded handle the operand read `0 0 0 0 0`
+          (eight bytes into a four-unit payload); without it, `97 98 99 100 0`,
+          identical to fpc. The first version of this fix widened the existing
+          +8 guard to cover both pointers, which is the obvious edit and is
+          wrong -- the two cases differ in WHAT the value is, not in how wide its
+          characters are.
+          bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow }
         if (ASTKind[ASTRight[node]] = AN_STR_LIT) and (lhsTk = tyPointer) and
-           (not CProgramMode) and IsNodePChar(ASTLeft[node]) then
+           (not CProgramMode) and IsNodePWideChar(ASTLeft[node]) then
+          value := IRStrWidthConv(value, ASTRight[node], True, False);
+        if (ASTKind[ASTRight[node]] = AN_STR_LIT) and (lhsTk = tyPointer) and
+           (not CProgramMode) and
+           IsNodePChar(ASTLeft[node]) then
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));

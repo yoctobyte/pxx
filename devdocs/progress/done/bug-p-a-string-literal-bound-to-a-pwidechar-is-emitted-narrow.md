@@ -3,9 +3,9 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: frankZ
-summary: "TWO INDEPENDENT DEFECTS, NOT ONE, and the mechanism in the body below is wrong -- re-measured 2026-09-09 (frankD) at compiler `21ea7825000a`. (A) `Length` OF ANY PWideChar is broken with no literal in sight: a hand-built `p := @buf[0]` over a correct `array[0..4] of WideChar` INDEXES perfectly (97 98 99 100 0, identical to fpc) and `Length(p)` still answers 4411392, because `IsNodePChar` (ir.inc:4020) tests PtrBaseTk against tyChar/tyUInt8/tyInt8 and never tyWideChar, so the operand is not wrapped and Length takes the managed-string path that reads a [data-8] length header off the pointer. THAT is where every wild number in this ticket comes from -- not from a NUL scan overrunning. (B) The literal binding puts the pointer EIGHT BYTES EARLY, on a length header, and the payload after it is narrow: `pw as words` reads `4 0 0 0 25185 25699` = a 64-bit length of 4, then 'abcd' narrow. A `PChar` to the same literal in the SAME PROGRAM is entirely correct (97 98 99 100 0), so the header offset is wide-specific and is not a general literal-address problem. Both binding surfaces (initialiser and statement) behave identically. DO NOT 'FIX' THIS BY ADDING tyWideChar TO IsNodePChar: that routes a wide pointer into PCharToString, a NARROW strlen, which stops at the first zero BYTE and would make Length('abcd') answer 1 -- replacing an obviously-wrong number with a plausible one, which is strictly worse. There is no PWideCharToString in the tree; building one is the real (A) fix and it is separable from (B)."
+summary: "HALF (B) FIXED 2026-09-09; half (A) split out and still open. (B) `pw := 'abcd'` with `pw: PWideChar` read `4 0 0 0 25185` as UTF-16 units -- a 64-bit length of 4, then 'ab' and 'cd' NARROW, two characters per WideChar -- because TWO independent things both keyed off IsNodePChar, which does not and must not answer for a pointer to tyWideChar: the literal kept a narrow payload AND kept pointing at the block start instead of at character 0. Fixed by a separate IsNodePWideChar predicate plus a transcode; now `97 98 99 100 0`, identical to fpc, with the PChar row and the hand-built row as controls. THE WIDE CASE TAKES NO +8 AND THAT IS THE RULE, NOT AN EXCEPTION: a managed handle already points AT the data (length at [data-8]) while a literal is a static block whose address is the block START, so widening the existing +8 guard to cover both pointers -- the obvious edit -- reads `0 0 0 0 0`. Measured both ways. (A) `Length` of ANY PWideChar is a different defect, wrong for a hand-built pointer with no literal in sight, and this fix does not move it: split to bug-p-length-of-any-pwidechar-reads-a-managed-length-header with frankD's diagnosis and the do-not-widen-IsNodePChar trap intact."
 ---
 
 # A string literal bound to a PWideChar is emitted narrow, and only the cast surface refuses
@@ -149,3 +149,66 @@ assignment silent is not an improvement: that is the surface real code uses.
 Found chasing `tarray6.pp`, whose skip reason this corrects: that row now
 COMPILES and its remaining failure is this, not the local var-section
 initialisers it still names.
+
+
+## Resolution (2026-09-09, frankZ) — (B) fixed, (A) split, and the +8 is the interesting part
+
+frankD's re-measurement was right on every point: two independent defects, and
+the mechanism originally written in this body was wrong. (B) is fixed here; (A)
+is [[bug-p-length-of-any-pwidechar-reads-a-managed-length-header]] and this fix
+does not move it — measured, not assumed.
+
+### One missing predicate, two consumers
+
+There was no way to ask "is this node a pointer to WideChar". `IsNodePChar`
+answers "does this address narrow, NUL-terminated bytes", and all ~10 of its
+callers act on that by reaching for a narrow helper — so it must NOT be widened.
+Both halves of (B) key off it and both therefore did nothing:
+
+1. the literal kept its **narrow payload**, because the width transcode fires
+   only for a managed-string destination;
+2. the pointer kept pointing at the **block start**, because the `+8` skip that
+   reaches character 0 is guarded on `IsNodePChar`.
+
+`IsNodePWideChar` (ir.inc, identifier arm only, with the three missing arms named
+in its header rather than left to be inferred) answers it, and the assignment
+chain gains one transcode step before the existing skip.
+
+### The +8 is not shared, and the obvious edit is wrong
+
+The instinctive fix is `IsNodePChar(x) or IsNodePWideChar(x)` on the existing
+`+8` guard. **That reads `0 0 0 0 0`.** Measured both ways: with the skip
+applied to the transcoded value, eight bytes into a four-unit payload; without
+it, `97 98 99 100 0`.
+
+The reason is worth keeping, because it looks like an exception and is not:
+**a managed handle already points AT the data** — the length lives at `[data-8]`,
+which is why every runtime path reads a negative offset. A string **literal** is
+not a managed handle; it is a static block whose address is the block START, so
+the narrow case adds 8 to reach character 0. `PXXWideFromStr` returns a real
+handle, so the skip is already paid. The two cases differ in **what the value
+is**, not in how wide its characters are.
+
+### A trigger that could not be observed until now
+
+`pasparser_prog.inc` pulls `builtinwide` only when the program names
+`widestring`, `unicodestring` or one of four PXX transcoders. `pwidechar` was
+missing — and could not be noticed, because nothing ever synthesised a transcode
+for a PWideChar: the literal was emitted narrow, no helper was called, and the
+absent trigger had no observable. Fixing the binding makes `PXXWideFromStr`
+reachable from a program naming only `PWideChar`, so without the trigger the fix
+would turn a silently-wrong program into `compiler error: UTF-16 width conversion
+needs builtinwide`. `widechar` is deliberately NOT a trigger: a WideChar VALUE
+needs `__pxxWideCharToUTF8` from the ordinary builtin unit, and adding it would
+pull 4 KB into every program that declares one.
+
+### Controls
+
+Both are in the committed test and both are what make the claim wide-specific:
+the **PChar row** (same literal, same program, always correct — so this is not
+literal addressing) and the **hand-built row** (`p := @buf[0]` over an
+`array[0..4] of WideChar`, which indexed perfectly before the fix — so a wide
+pointer was never broken as a pointer). All three rows equal fpc 3.2.2.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

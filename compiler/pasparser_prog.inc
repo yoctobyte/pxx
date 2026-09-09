@@ -1014,7 +1014,21 @@ begin
       if Tokens[i].Kind = tkIdent then
       begin
         tnm := GetTokenStr(i);
+        { `pwidechar` is a THIRD trigger and it is a type name like the first two.
+          It was missing because nothing used to synthesise a transcode for it:
+          a string literal bound to a PWideChar was emitted NARROW and landed on
+          the length prefix, so no helper was ever called and the absent trigger
+          could not be observed. Fixing that binding makes PXXWideFromStr
+          reachable from a program that names only PWideChar -- and without this
+          the fix turns a silently-wrong program into `compiler error: UTF-16
+          width conversion needs builtinwide`, which is the link-failure half the
+          note above calls the expensive direction.
+          `widechar` is NOT here: a WideChar VALUE needs __pxxWideCharToUTF8 from
+          the ordinary builtin unit, not builtinwide, and adding it would pull
+          4 KB into every program that declares one.
+          bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow }
         if CaseEqual(tnm, 'widestring') or CaseEqual(tnm, 'unicodestring') or
+           CaseEqual(tnm, 'pwidechar') or
            CaseEqual(tnm, 'pxxwidealloc') or CaseEqual(tnm, 'pxxwideconcat') or
            CaseEqual(tnm, 'pxxwidefromutf8') or CaseEqual(tnm, 'pxxutf8fromwide') then
         begin needsWide := True; Break; end;

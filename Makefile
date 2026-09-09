@@ -15757,6 +15757,26 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_ws_lower26 | diff -u test/test_widestring_lowering.expected -
 	./$(COMPILER) test/test_widestring_transcode.pas $(TESTTMP)/test_ws_trans26
 	$(TESTTMP)/test_ws_trans26 | diff -u test/test_widestring_transcode.expected -
+	# A string literal bound to a PWideChar. It read `4 0 0 0 25185` as UTF-16
+	# units -- a 64-bit length of 4, then 'ab' and 'cd' NARROW, two characters per
+	# WideChar -- because two independent things both keyed off IsNodePChar, which
+	# does not and must not answer for a pointer to tyWideChar: the literal kept a
+	# narrow payload AND kept pointing at the block start instead of character 0.
+	# TWO CONTROLS IN THE FILE. The PChar row: the same literal in the same program
+	# was always correct, which is what makes this wide-side and not
+	# literal-addressing. The hand-built row (`p := @buf[0]` over an
+	# `array[0..4] of WideChar`): indexed perfectly before the fix too, so a wide
+	# pointer was never broken as a POINTER -- only the literal binding was.
+	# The wide handle takes NO +8 where the narrow literal does, and that is the
+	# rule rather than an exception: a managed handle already points AT the data
+	# (length at [data-8]) while a literal is a static block whose address is the
+	# block START. Widening the existing +8 guard to cover both pointers is the
+	# obvious edit and reads `0 0 0 0 0`.
+	# Length(pw) is NOT asserted here -- a separate defect on the same type, wrong
+	# for a hand-built pointer with no literal in sight, with its own ticket.
+	# bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow
+	./$(COMPILER) test/test_a_string_literal_bound_to_a_pwidechar.pas $(TESTTMP)/test_pwidechar_lit26
+	tools/expect_same.sh test_pwidechar_lit26 "$$($(TESTTMP)/test_pwidechar_lit26)" "$$(printf 'hand-built: 97 98 99 100 0\nliteral   : 97 98 99 100 0\npchar ctrl: 97 98 99 100 0')"
 	./$(COMPILER) test/test_widestring_element_positions.pas $(TESTTMP)/test_ws_elem26
 	$(TESTTMP)/test_ws_elem26 | diff -u test/test_widestring_element_positions.expected -
 	./$(COMPILER) test/test_widestring_assign_positions.pas $(TESTTMP)/test_ws_assign26
