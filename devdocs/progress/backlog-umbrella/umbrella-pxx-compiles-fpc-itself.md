@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]
+blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface, bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares, feature-p-legacy-value-object-types]
 summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS EMPTY ON PURPOSE AND MUST BE GROWN BY ATTEMPTING, NOT BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.'"
 ---
 
@@ -97,3 +97,95 @@ ones.
 `decide-how-a-hand-built-com-interface-becomes-callable`, now in `done/`. Do not
 rank anything here on exchanging objects with FPC-compiled code, sharing its
 representations, or linking against its output.
+
+## 2026-09-09, frankH — attempt 2: THE WHOLE CORPUS, and the invocation was wrong
+
+**READ THIS BEFORE ANY NUMBER IN ATTEMPT 1.** Attempt 1 was invoked as
+`pascal26 -Mobjfpc -Fu<compiler> -Fi<compiler>`, and that is not how FPC's
+compiler is built. Under it, `globtype.pas:115 unknown type: PInt` looked like a
+frontend bug and was on its way to being filed. It is not one: `PInt` is
+declared only inside `{$ifdef cpu64bitaddr}` arms, `fpcdefs.inc` derives that
+from the CPU define, and FPC's own `Makefile.fpc:381` passes `-d$(CPC_TARGET)`.
+**pxx already has the flag for exactly this** — `--mimic-fpc-compiler`
+(`feature-mimic-fpc-compiler-define-profile`), which supplies the FPC identity
+defines *plus* the one CPU define fpcdefs.inc derives the other forty from.
+
+**The corpus-attempt rule this produces, and it is the transferable half:**
+compile the corpus the way its own BUILD compiles it, and prove it by running
+that build's compiler as an ORACLE on the same invocation. Four of the ten first
+failures in attempt 1 were mine, not pxx's, and one of them (`ccharset`) fpc
+itself refuses under that invocation — a unit the oracle cannot compile can
+never be evidence about us. Every row below is therefore `fpc` first, `pxx`
+second, same flags:
+
+    fpc      -Mobjfpc -dx86_64 -Fu{C} -Fu{C}/x86_64 -Fu{C}/systems -Fu{C}/x86 \
+                                -Fi{C} -Fi{C}/x86_64 -Fi{C}/x86
+    pascal26 -Mobjfpc --mimic-fpc-compiler   <the same -Fu/-Fi set>
+
+Driver: one `program d; uses <unit>; begin end.` per unit, all 207 `.pas` in
+`fpc-trunk/compiler`. Script committed as `tools/fpc_compiler_corpus_probe.sh`, so the method is
+runnable rather than described; it refuses to run at all when `fpc` is absent,
+because without the oracle a PXX-FAIL row is not evidence.
+
+### The distribution, measured at `24dbb0b37`
+
+| | |
+| --- | --- |
+| units | 207 |
+| **compile under both** | **9** — compinnr dbgdwarfconst dwarfbase fpchash globtype macho symconst version wasmbase |
+| oracle refuses (not evidence about us) | 10 |
+| pxx stops | 188 |
+
+First failures, by count. **These are first-failure counts and therefore LOWER
+BOUNDS on nothing and UPPER BOUNDS on nothing** — a unit that stops on the cycle
+may stop on the next cause after it moves, and 144 units clearing does not mean
+144 units compiling. What the count IS good for is ORDER.
+
+| n | first failure | ticket |
+| --- | --- | --- |
+| 144 | `undefined variable (internalerrorproc)` | [[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]] |
+| 19 | `{$if}` over a source `const` or a source type alias | [[bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares]] |
+| 8 | `an object type cannot have a constructor` | [[feature-p-legacy-value-object-types]] |
+| 3 | `undefined variable (bitsizeof)` | none — see below |
+| 2 | `expected field name in record constant` | none yet |
+| 3 | `uses: unit source not found` (unixcp, heaptrc, charset) | RTL units, not frontend |
+| 2 | `conditional directive: malformed expression` / `expected operator` | none yet |
+| 1 each | `undefined variable (align)`, `undefined variable (IsATTY)` | none yet |
+
+### What moved this session, attributed rather than assumed
+
+Two fixes landed. `588f18717` folds FPC's `Sar*` intrinsics; `24dbb0b37` lets a
+subrange bound be a folded call (`low(TCGLoc)..pred(LOC_CREFERENCE)`,
+cgbase.pas:63). Re-running the whole probe before and after the second one, the
+diff is **exactly five rows and no others**: aasmcfi, cgbase, nbas, ncgmem and
+ncgnstmm move from `cgbase.pas:63 unknown type: low` to `cgbase.pas:381 an
+object type cannot have a constructor`, 318 lines further into the same file.
+**No unit newly compiles**, and saying that is the point: a corpus delta is easy
+to quote as progress and the honest unit of progress here is a wall, not a line
+number.
+
+### `bitsizeof`, banked rather than filed, with the whole answer
+
+`bitsizeof(x)` is an FPC intrinsic like `Sar*` — `compinnr.pas:85`,
+`in_bitsizeof_x` — and it stops constexp, cgobj and ppu. **It is exactly
+`SizeOf(x) * 8` for every type pxx can express**, and that is measured, not
+assumed: fpc answers 32/64/32/8 for `bitsizeof` of a LongInt, an Int64, the
+LongInt type name and Byte, and the one place the two would differ is a
+`bitpacked` field (fpc says 2 for `a: 0..3`), which **pxx has no `bitpacked` at
+all** to reach — `type T = bitpacked record` is `unknown type: bitpacked`.
+So the desugar has no wrong answer available today and WILL when bitpacked
+lands; whoever writes it should say so in the comment.
+
+It is not a one-line fix like `Sar*` for one reason worth recording: `SizeOf`'s
+arm in `pasparser_expr.inc` runs ~700 lines with **six** separate
+`AllocNode(AN_INT_LIT)` exits, so `* 8` is six edits, which is the shape this
+repo keeps finding a missed copy in. The honest version unifies those exits
+first.
+
+### What the attempt says about the two big walls
+
+The cycle is not merely the largest, it is 77% of the corpus, and it is
+structural: FPC splits `uses` into two clauses precisely so units can be
+mutually recursive. Nothing behind it can be measured. The conditional-directive
+family is second and is the one that is *shaped* like work already done here —
+two forwarded questions of exactly its kind already exist beside it.

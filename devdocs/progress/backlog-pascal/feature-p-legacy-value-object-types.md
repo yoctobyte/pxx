@@ -1,6 +1,6 @@
 ---
 slug: feature-p-legacy-value-object-types
-title: "`TFoo = object ... end` — the legacy value-object type is not parsed at all"
+title: "An `object` cannot have a constructor, a destructor, a virtual method or a parent"
 track: P
 prio: 15
 type: feature
@@ -9,7 +9,7 @@ gated-by: decide-old-style-object-types
 status: backlog
 owner: ""
 created: 2026-08-25
-summary: "Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone."
+summary: "SUPERSEDED IN HALF, 2026-09-09 -- re-measured at 24dbb0b37, and the symptom this ticket was written for is GONE. bug-p-object-value-types-standard-meaning (done, 2026-08-30) gave `object` its standard meaning, so `type TR = object X: Integer; procedure Show; end` now compiles and runs; the old `Expected: begin, but got: X` no longer reproduces and the rooted-reference claim on the keyword is retired. WHAT IS LEFT IS THE OTHER HALF, refused deliberately and by name: a CONSTRUCTOR, a DESTRUCTOR, a VIRTUAL method or INHERITANCE on an `object` -- pxx lowers it as a value type with no VMT and hard-errors, `an object type cannot have a constructor`. fpc compiles and runs all four. This is a corpus blocker, not a legacy curiosity: FPC's own compiler declares such objects (cgbase.pas:381) and three of 207 units stop here as their FIRST failure, with more behind the units that stop earlier. Wired to umbrella-pxx-compiles-fpc-itself, which is where its ranking now comes from; its own prio of 15 is left alone because effective_prio takes the max."
 ---
 
 # Measured, 2026-08-25 (HEAD, self-hosted fixedpoint)

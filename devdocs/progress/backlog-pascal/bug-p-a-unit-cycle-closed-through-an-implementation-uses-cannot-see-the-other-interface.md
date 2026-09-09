@@ -2,7 +2,7 @@
 slug: bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
 title: "A unit cycle closed through an `implementation` uses clause cannot see the other unit's interface"
 track: P
-prio: 60
+prio: 70
 type: bug
 status: open
 owner: ""
@@ -18,10 +18,12 @@ blocked-by: []
 IMPLEMENTATION uses `A`, is the legal and standard form of mutual unit
 recursion — it is the entire reason Pascal splits `uses` into two clauses. pxx
 refuses it: `B`'s implementation cannot see anything from `A`'s interface.
-**This is the FIRST failure compiling FPC's own compiler source**, and it is not
-an edge case there — **25 of 162 units** in `fpc-trunk/compiler` close such a
-cycle. fpc 3.2.2 compiles and runs the repro. Pre-existing: pin v399 gives the
-identical error, so it is not a recent regression.
+**This is the FIRST failure of 144 of the 207 units** in `fpc-trunk/compiler`
+(re-measured 2026-09-09 with `tools/fpc_compiler_corpus_probe.sh`, fpc as the
+oracle; the figure this ticket was filed with, 25 of 162, was a grep over
+DIRECT cycles and undercounted the ones reached transitively). fpc 3.2.2
+compiles and runs the repro. Pre-existing: pin v399 gives the identical error,
+so it is not a recent regression.
 
 - **Umbrella:** `umbrella-pxx-compiles-fpc-itself`
 - **FPC unit and line:** the attempt was `uses cutils`, and the first error is
@@ -63,25 +65,51 @@ Removing the cycle — `ua` no longer uses `ub`, everything else identical —
 unsupported"; implementation-uses works. It is specifically a cycle *closed*
 through one.
 
-## Hypothesis, not a diagnosis
+## The guard, read rather than guessed (2026-09-09, second pass)
 
-`ParseUsesUnit` (`compiler/pasparser_proc.inc`, around the
-`savedCurrentUnitIdx` save at :6165) loads a used unit **fully — interface and
-implementation — in one recursive pass**. So when `B`'s implementation reaches
-back to `A`, `A` is mid-parse: its interface section has been entered but not
-finished, and whatever already-registered guard stops the recursion also stops
-the symbols arriving. FPC's model parses **every interface first** and only then
-the implementations, which is what makes the cycle legal.
+The hypothesis this ticket was filed with is **confirmed, and the guard has a
+line**. `ParseUsesUnitBody` (`compiler/pasparser_proc.inc`) marks a unit
+compiled **BEFORE it parses it**:
 
-Not verified — the person who takes this should confirm it against the actual
-guard rather than inherit it from here.
+```pascal
+  isCompiled := False;
+  for i := 0 to CompiledUnitCount - 1 do
+    if CompiledUnitKey[i] = guardIdx then isCompiled := True;
+  if isCompiled then ... Exit;          { ~:5700 }
+  ...
+  CompiledUnits[CompiledUnitCount] := strIdx;    { ~:5742, then the parse }
+```
 
-## Why prio 60
+So in the repro the order is: `ua` marked → `ua`'s interface `uses ub` → `ub`
+marked → `ub`'s implementation `uses ua` → `ua` is already marked → `Exit`. The
+guard is doing the only thing it can: `ua`'s `var hookproc` is declared AFTER
+its own `uses ub`, so at that instant the symbol genuinely does not exist yet.
+**Nothing is being hidden — it has not been parsed.**
 
-Not from the backlog's ranking but from the corpus: 25 direct
-interface↔implementation cycles among 162 units of FPC's compiler, so this is
-structural in real Object Pascal rather than incidental. It is the first thing
-in the way of the umbrella and nothing behind it can be measured until it moves.
+That is why this is not a lookup fix. What makes the cycle legal in FPC is
+ORDER: every interface is complete before any implementation is parsed. The
+narrow version of that here is to defer a unit's IMPLEMENTATION SECTION when its
+implementation `uses` names a unit currently in progress, and replay it once the
+load chain unwinds — the state a replay needs (unit index, defines, per-file
+directives, modes) is already snapshotted around this call, so the machinery is
+half there. **It is still a loader change that affects every program, not only
+cyclic ones, and it should be treated as multi-session work rather than a fix
+to slip into a session doing something else.**
+
+## Scale, re-measured 2026-09-09 over the WHOLE corpus
+
+Filed on `25 of 162 units` from a grep. The differential probe
+(`tools/fpc_compiler_corpus_probe.sh`, fpc as the oracle, FPC's own build flags)
+says **144 of 207 units of FPC's compiler stop here as their first failure —
+77%**, against 19 for the second-largest cause. The grep undercounted because it
+saw only DIRECT cycles; the walls include units that reach one transitively.
+
+## Why prio 70 (was 60 when filed)
+
+Not from the backlog's ranking but from the corpus, and the corpus has since
+been measured properly: **144 of 207 units, 77%**, where the filing number was
+25 of 162 from a grep over direct cycles. It is the first thing in the way of
+the umbrella and nothing behind it can be measured until it moves.
 
 ## Adjacent, not filed separately
 

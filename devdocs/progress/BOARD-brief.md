@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:23 backlog-umbrella:10 backlog-core:151 backlog-nilpy:107 backlog-tools:56 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3643 rejected:81`
+`working:29 unfinished:21 blocked:6 backlog:23 backlog-umbrella:10 backlog-core:151 backlog-nilpy:107 backlog-tools:56 backlog-pascal:7 backlog-decide:44 backlog-libs:25 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3643 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -72,10 +72,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 434, ranked
+## Ready — top 30 of 435, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
+- `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares (unblocks 1)
 - `[p 85] [P]` bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface (unblocks 1)
+- `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
@@ -102,7 +104,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
-- `[p 70] [C]` regression-test-core-c-alloca-expression-stack
-- `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 
-_404 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
