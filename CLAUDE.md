@@ -737,7 +737,14 @@ receipt with a timestamp. Grepping this session's OWN `.jsonl` found the
 sentence **five times, role `assistant`, on 2026-09-08** — in the same file,
 one command away, the whole time. The denial was made from memory because the
 question *felt* like a memory question. **A seat's recollection of what it said
-is not evidence about what it said; the transcript is.** Check
+is not evidence about what it said; the transcript is.** **AND THE COUNT IS
+THE PART THAT CLOSES THE ESCAPE: it was said FIVE times and still denied.** One
+forgotten sentence is an ordinary memory failure and reads as carelessness;
+five is proof that **the denial mechanism is not proportional to how firmly the
+thing was said** — repetition does not survive a window roll, and having said
+something five times makes it no more retrievable than having said it once. So
+*"I would remember if I had really meant it"* is not available as a reason to
+skip the check. Check
 `~/.claude/projects/<proj>/*.jsonl` and filter on `role == "assistant"` before
 denying authorship of anything older than the current window.
 
