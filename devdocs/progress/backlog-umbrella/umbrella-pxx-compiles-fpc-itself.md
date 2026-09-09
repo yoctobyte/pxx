@@ -274,3 +274,19 @@ Filed as
 same directive through `uses nld`) and a const whose value is a folded call
 (`RS_INVALID = high(tsuperregister)`, `cgbase.pas:400`, asked by
 `rgobj.pas:1728`). Both are behind the unit cycle anyway.
+
+### `make test-fpc` IS NOT THIS TARGET, and it has never produced a verdict row
+
+Two separate traps, and the second is the one that will catch a later
+attempt. **`test-fpc` runs FPC's TEST SUITE; this umbrella compiles FPC's
+COMPILER.** They share a name and nothing else — the suite is thousands of
+small conformance programs, the compiler is 207 mutually-recursive units, and
+a green on one says nothing about the other. **And `test-fpc` is in NO TIER**
+(frankuser, 2026-09-09, filed as
+`bug-t-six-real-program-jobs-are-in-no-tier-so-they-never-run`, T p65, with
+duktape, quickjs, chess-perft, sqlite-parity and wasm32): it is not skipped
+and not failing, no tier invokes it, so it has produced zero rows ever. A
+green from running it by hand is a claim about that one run on that one tree.
+
+So: do not reach for `make test-fpc` to measure this umbrella, and do not read
+its absence from the tstate archive as a pass.

@@ -140,6 +140,17 @@ never expanded the probed unit's `{$I}` includes, so `PUint = qword` — inside
 `{$ifdef cpu64bitaddr}`, a define `fpcdefs.inc` sets — was invisible.
 `{$if declared(X)}` had both.
 
-**Gate:** quick GREEN on each commit; the full tier was run for the pair
+**Gate:** quick GREEN on each commit, and the FULL tier was run for the pair
 because this touches the conditional evaluator and the lexer's probe
-re-entrancy, which every file goes through.
+re-entrancy, which every file goes through — quick cannot bound that.
+**`gate: GREEN (exit 0)` at `ab1d60ab8`, 23 rows, 0 FAIL**, including
+`make test` (2008s) and `make test-nilpy` (2100s).
+
+The first attempt at that tier went RED, and **the red was not this change**:
+`9b0c07c2d` had grown `test/c_vla.c` by a row and updated the x86-64
+expectation beside it while the three CROSS copies of the same string still
+said what the file used to print. Fixed in `8cbe22841` after checking all
+three targets already print the new row correctly, so it was a stale
+expectation and not a codegen gap. Recorded here because "my change went RED
+on the tier" is the reading that terminates the search, and the discriminator
+was one `git log -S` on the expected string.
