@@ -4,7 +4,7 @@ title: "`Desc()` written bare inside its own class is accepted and reads a garba
 track: P
 prio: 35
 type: bug
-status: working
+status: done
 owner: frankH
 found-by: frankH
 created: 2026-09-09
@@ -150,3 +150,6 @@ five doors. It also segfaults on `Desc('a', 1)` and answers `n=0` to
 the four measured rows and the door/session table, and deliberately NOT folded
 into this commit: the right shape there is to extract the statement loop and
 call it from both, which is a different change from adding one more arm.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
