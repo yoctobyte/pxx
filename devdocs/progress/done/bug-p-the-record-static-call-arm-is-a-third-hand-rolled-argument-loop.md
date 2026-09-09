@@ -156,4 +156,4 @@ turns up, it will turn up the same way this one did: by someone asking whether
 a specific arm shares the loop, and measuring instead of reading.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2af86c169.
