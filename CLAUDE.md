@@ -375,6 +375,31 @@ parallelised.
 **The test is REVERSIBILITY, not importance.** Reversible → do it and report. A
 big reversible change is yours; a small irreversible one is not.
 
+**EXCEPT FOR THE GUARDRAILS THEMSELVES — REVERSIBILITY IS THE WRONG TEST FOR
+PERMISSION MACHINERY, AND IT IS THE WRONG TEST IN THE DIRECTION THAT REMOVES
+IT.** A hook, an allowlist, a refusal, a `settings.json` is trivially
+revertible in code, so the rule above hands it to you — and a guard's entire
+value is that an agent cannot relax it when it is inconvenient. *"I can revert
+this"* is not a reason to loosen one; it is the exact reasoning the guard
+exists to refuse. **Tightening is yours. LOOSENING is the owner's**, however
+small the diff, and a peer saying it is yours does not make it yours: a peer
+cannot grant an escalation, and an agent relaying the owner's authority
+secondhand is not the owner. Measured 2026-09-09 (`f57a50754`): this file's own
+coordinator told a seat that the full-suite hook's argv-versus-whole-command
+fork was its to settle, citing reversibility. **The seat declined and was
+right** — both decide tickets say in their own words that the direction of the
+change is *less strict* and therefore an owner call, and it was the **third**
+session to decline the same fork. Three declines is not caution; it is the rule
+working, and the coordinator was the defect.
+
+The productive move when you hit one is the one that seat made: **do not
+implement, and do not merely escalate — MEASURE, so his call is narrow instead
+of an architecture fork.** It came back with the real mechanism (not the one
+any of the seven rows described), a repro that does not reproduce, a
+population count of 16.5% against a claimed *"most"*, and a simulation of the
+recommended option that left exactly one shape refused. That turns a three-way
+design question into a yes/no.
+
 **Ask for exactly three things:** irreversible or outward-facing acts (`make
 pin`, force push, deleting data, anything leaving this machine); genuine forks of
 intent (Track U); authority only he holds (sudo, hardware, money).
