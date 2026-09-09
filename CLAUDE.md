@@ -574,6 +574,24 @@ not exist** — shards clearing in two groups reads exactly like one job flappin
 — so **a "finding" that falls out of a grep needs the same interrogation as one
 that falls out of a hypothesis.**
 
+**A SPECULATIVE PARSE AND THE COMMITTED ONE CAN DISAGREE, AND THEN NEITHER THE
+ERROR NOR THE ABSENCE OF ONE IS ABOUT THE TREE.** Measured 2026-09-09
+(`ad7c03b03`), a bare method name in argument position: the overload probe
+reached the reference door, built a correct `AN_METHODREF` **twice**, and
+discarded both with the probe — *that* is what made the call MATCH — and then
+the committed loop re-parsed the same argument as a CALL. **The verdict came
+from one reading and the tree from another**, so by the time anyone looks, the
+argument "is" a methodref, nothing is wrong with the match, and the only
+suspect left is the layer below. The handed-over diagnosis duly blamed the
+lowering and named a route that **had never run**. This is the house failure
+mode in its nastiest position: the instrument is a successful overload
+resolution, it is correct about the probe's reading, and it is silent about the
+tree. **Where a construct is resolved speculatively and then re-parsed, dump the
+AST — `PXXDBG=a.ast:<proc>` — before blaming anything below the parser.** A
+door wired into the probe but not into the committed loop is a HALF-WIRED DOOR,
+and it does not fail by refusing; it fails by agreeing and then building
+something else.
+
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
 SECTION.** 1.27MB, ~317k tokens, 365 sections (measured 2026-09-07). It has more
 than QUADRUPLED since this line first quoted 279KB/72 — and the 905KB/237 figure
