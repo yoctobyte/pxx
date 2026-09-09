@@ -1,0 +1,6 @@
+1 cast              twice(21)=42 destroyed=0
+2 in an expression  twice(4)=8 destroyed=0
+3 variant cleared   destroyed=0
+4 g dropped         destroyed=0
+5 empty slot        h=nil? TRUE destroyed=0
+6 after scope exit  destroyed=1

@@ -359,6 +359,7 @@ AN_ASSIGN Left fcLhs
 AN_ASSIGN Left fieldNode
 AN_ASSIGN Left fldNode
 AN_ASSIGN Left frIdn
+AN_ASSIGN Left icLhs
 AN_ASSIGN Left identN
 AN_ASSIGN Left identNode
 AN_ASSIGN Left idn
@@ -1113,7 +1114,9 @@ AN_SET_SIGNAL Left opNode
 AN_SET_SIGNAL Right valNode
 AN_SLICE Left indexNode
 AN_SLICE Right slicePair
+AN_STR_FROM_CHAR Left icAsg
 AN_STR_FROM_CHAR Left node
+AN_STR_FROM_CHAR Right icRd
 AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
 AN_TERNARY Left bfIsCall

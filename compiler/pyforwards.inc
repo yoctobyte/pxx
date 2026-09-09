@@ -143,6 +143,7 @@ function PyReprContainer(n: Integer): Integer; forward;   { repr() of a containe
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
 {$endif}
 function VariantCastToTemp(n: Integer; target: TTypeKind): Integer; forward;   { a typecast of a VARIANT is the CONVERSION, not a reinterpret of the record; defined beside PromoDemoteToInt64 }
+function VariantCastToIntfTemp(n, ci: Integer): Integer; forward;               { the INTERFACE twin of the above -- keyed on the rec id, because an interface is tyRecord to a kind test }
 function VariantBoxToTemp(n: Integer): Integer; forward;   { the mirror: `Variant(x)` boxes into a tyVariant temp, so the expression has a TYPE without the store punning }
 function TryScalarNamedCast(castTk: TTypeKind; semId, castCap: Integer): Boolean; forward;   { the shared CONSTRUCTION half of a named-type scalar cast: variant box, Explicit overload, ordinal narrow + SEMANTIC IDENTITY (an enum's, or a sized boolean's), float conversion. Declines tyPointer and the string kinds, whose continuation is door-specific }
 function ConstCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean; forward;   { the ONE const-cast width door: it owns the alias-before-builtin order so a call site cannot invert it }

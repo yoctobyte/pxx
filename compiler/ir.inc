@@ -14303,7 +14303,15 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if isComIntf and
            ((ASTKind[ASTRight[node]] = AN_IDENT) or (ASTKind[ASTRight[node]] = AN_FIELD) or
             (ASTKind[ASTRight[node]] = AN_INDEX) or (ASTKind[ASTRight[node]] = AN_DEREF) or
-            (ASTKind[ASTRight[node]] = AN_AS_CAST)) and
+            (ASTKind[ASTRight[node]] = AN_AS_CAST) or
+            { …and a sequencing node, whose result IS an lvalue — the same fact
+              IRLowerAddress and rhsIsLValue below already state about it. A
+              variant-to-interface CAST materialises its temp this way, and
+              without this row it took the raw record copy: the destination got
+              the pointer with NO retain while the temp's scope exit released
+              it, so the object died at the end of the statement.
+              bug-p-a-variant-typecast-to-an-interface-segfaults }
+            (ASTKind[ASTRight[node]] = AN_STR_FROM_CHAR)) and
            (ResolveNodeRec(ASTRight[node]) >= REC_UCLASS_BASE) and
            UClsIsInterface[ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE] then
         begin

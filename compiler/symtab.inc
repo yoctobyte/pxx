@@ -18277,6 +18277,16 @@ begin
   else if ASTKind[node] = AN_CLASS_CAST then
     { `TClass(obj)` hard cast yields type TClass — same record resolution. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
+  else if ASTKind[node] = AN_STR_FROM_CHAR then
+    { A SEQUENCING NODE'S RECORD IS ITS RESULT'S RECORD. AN_STR_FROM_CHAR is
+      `Left = the store into a hidden temp, Right = the read of that temp`, and
+      IRLowerAST, IRLowerAddress and the assignment's rhsIsLValue test each
+      already say so in their own terms. This is the fourth question asked about
+      the node and the first one it could not answer: it resolved REC_NONE, so a
+      conversion temp of RECORD type — `IFoo(v)` — reached the interface ARC
+      assign arm as "not an interface" and fell through to a raw record copy
+      with no retain. bug-p-a-variant-typecast-to-an-interface-segfaults }
+    Result := ResolveNodeRec(ASTRight[node])
   else if ASTNodeIsCall(node) and
           (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) then
     { A CALL's record is its return type's. A property GETTER is a call, so without this

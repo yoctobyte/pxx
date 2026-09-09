@@ -7017,6 +7017,24 @@ begin
         Expect(tkLParen, '(');
         ParseExpr;
         Expect(tkRParen, ')');
+        { `IFoo(v)` on a VARIANT converts instead of reinterpreting -- the
+          interface twin of the VariantCastToTemp arms above. Everything else,
+          `IFoo(p)` included, keeps the hard reinterpret below. }
+        vcNode := VariantCastToIntfTemp(CurASTNode, ci);
+        if vcNode >= 0 then
+        begin
+          { …and the SAME selector walk the reinterpret below runs, so
+            `IFoo(v).M(x)` works and not only `g := IFoo(v)`. Exiting before it
+            was the first version, and it failed as a PARSE error one token
+            later -- `near: IFoo ( v ) >>> . Twice (` -- which names the dot and
+            not the arm that declined to look at it. }
+          tk := tyRecord;
+          if CurTok.Kind in [tkDot, tkLBrack] then
+            vcNode := ParseClassRecordSelectors(vcNode, REC_UCLASS_BASE + ci, tk);
+          CurASTNode := vcNode;
+          LastExprTk := tk;
+          Exit;
+        end;
         node := AllocNode(AN_CLASS_CAST);
         ASTLeft[node] := CurASTNode;
         ASTIVal[node] := ci;
@@ -9687,6 +9705,48 @@ begin
   ASTRight[vcNd] := vcRd;
   ASTTk[vcNd] := Ord(Syms[vcTmp].TypeKind);
   VariantCastToTemp := vcNd;
+end;
+
+function VariantCastToIntfTemp(n, ci: Integer): Integer;
+{ `IFoo(v)` where v is a Variant: the INTERFACE twin of VariantCastToTemp.
+
+  Same shape and for the same reason -- a typecast of a variant is the
+  CONVERSION, not a reinterpret of the 16-byte record -- but it cannot reuse
+  that routine, which allocates a temp by TTypeKind and asks IRVariantUnboxKind.
+  An interface is tyRecord to both, indistinguishable from a plain record, which
+  must keep reinterpreting. So the temp is allocated by REC ID and the store is
+  an ordinary interface-target assignment, which ir.inc's lowering already turns
+  into PXXIntfFromVariant (nil for an EMPTY slot, Halt 220 for a payload that is
+  not an interface).
+
+  WITHOUT THIS, `IFoo(v)` SEGFAULTED. The cast site builds AN_CLASS_CAST typed
+  tyClass -- correct for `IFoo(p)`, a hard reinterpret of a pointer-shaped
+  container, which is how FPC spells recovering an interface and is only
+  expressible because an interface value is one word. A VARIANT is not
+  pointer-shaped: the reinterpret handed the tag word to the ARC path as an
+  instance. `g := v` was already correct, so the two spellings of one operation
+  disagreed. bug-p-a-variant-typecast-to-an-interface-segfaults }
+var icTmp, icAsg, icLhs, icRd, icNd: Integer;
+begin
+  VariantCastToIntfTemp := -1;
+  if n < 0 then Exit;
+  if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
+  if (ci < 0) or (ci >= UClsCount) or not UClsIsInterface[ci] then Exit;
+  icTmp := AllocRecVar('', REC_UCLASS_BASE + ci);
+  icLhs := AllocNode(AN_IDENT);
+  ASTIVal[icLhs] := icTmp; ASTTk[icLhs] := Ord(tyRecord);
+  icAsg := AllocNode(AN_ASSIGN);
+  ASTLeft[icAsg] := icLhs; ASTRight[icAsg] := n;
+  ASTTk[icAsg] := Ord(tyRecord);
+  icRd := AllocNode(AN_IDENT);
+  ASTIVal[icRd] := icTmp; ASTTk[icRd] := Ord(tyRecord);
+  { the sequencing node: Left = the store, Right = the read. See
+    AN_STR_FROM_CHAR's arms in IRLowerAST, IRLowerAddress and ResolveNodeRec. }
+  icNd := AllocNode(AN_STR_FROM_CHAR);
+  ASTLeft[icNd] := icAsg;
+  ASTRight[icNd] := icRd;
+  ASTTk[icNd] := Ord(tyRecord);
+  VariantCastToIntfTemp := icNd;
 end;
 
 function TryScalarNamedCast(castTk: TTypeKind; semId, castCap: Integer): Boolean;

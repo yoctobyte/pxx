@@ -8559,6 +8559,13 @@ test-core: $(COMPILER)
 	# and retain being hand-written and needing their own VT_INTF arm.
 	./$(COMPILER) test/test_variant_holds_interface.pas $(TESTTMP)/test_vintf26
 	tools/expect_same.sh test_vintf26 "$$($(TESTTMP)/test_vintf26)" "$$(cat test/test_variant_holds_interface.expected)"
+	# `IFoo(v)` CONVERTS instead of reinterpreting the variant record, in
+	# assignment and expression position, and an EMPTY slot yields nil. Also
+	# fpc-identical on all six rows including the destructor count -- see the
+	# file header for the lifetime shape that is NOT identical and why this file
+	# cannot see it. Ran on i386/aarch64/arm32/riscv32 under qemu.
+	./$(COMPILER) test/test_variant_cast_to_interface.pas $(TESTTMP)/test_vcast26
+	tools/expect_same.sh test_vcast26 "$$($(TESTTMP)/test_vcast26)" "$$(cat test/test_variant_cast_to_interface.expected)"
 	# A type helper's PROPERTY dispatches, not only its methods
 	# (bug-p-a-type-helper-cannot-declare-a-property). The record-property row in
 	# the same file is the CONTROL and must stay: properties on a record always
