@@ -6458,7 +6458,17 @@ begin
             would avoid that, at the cost of a second mechanism for one concept.)
             refactor-centralize-managed-string-pchar-conversion }
           if (not CProgramMode) and IsNodePChar(valNode) then
-            valNode := WrapPCharToString(valNode);
+            valNode := WrapPCharToString(valNode)
+          { …and the WIDE half of the same sentence. IsNodePChar is False for a
+            PWideChar deliberately -- every one of its callers reaches for a
+            NARROW helper on a True -- so widening THAT predicate would route a
+            UTF-16 pointer into PCharToString's strlen, which stops at the first
+            zero BYTE of 'abcd' and answers 1. An obviously-wrong 4415624 would
+            become a plausible 1, and this is a two-arm dispatch instead of a
+            one-character diff for exactly that reason.
+            bug-p-length-of-any-pwidechar-reads-a-managed-length-header }
+          else if (not CProgramMode) and IsNodePWideChar(valNode) then
+            valNode := WrapPWideCharToWideStr(valNode);
           { Length wants a STRING, an ARRAY or a PChar. `Length(i)` over an
             Integer reached this runtime path, which reads a [data-8] length
             header off the value, and answered 1 -- a plausible number, no

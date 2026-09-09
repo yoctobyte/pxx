@@ -727,6 +727,7 @@ procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean; vis: Integer
 var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/helper body }
 procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
+function IsNodePWideChar(node: Integer): Boolean; forward;  { ditto -- the wide sibling, and the Length operand dispatch asks both }
 procedure ParseSubroutine; forward;
 function NegWidensToInt64(tk: TTypeKind): Boolean; forward;  { FPC: unary minus yields Int64 for EVERY integer operand }
 function ASTConstIntValue(node: Integer; var v: Int64; depth: Integer): Boolean; forward;  { ...except a CONSTANT, which FPC types by its folded VALUE }

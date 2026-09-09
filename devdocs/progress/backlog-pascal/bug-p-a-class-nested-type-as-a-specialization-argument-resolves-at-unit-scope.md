@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: open
 owner: frankZ
-summary: "A class-nested type used as a SPECIALIZATION ARGUMENT is resolved at UNIT scope, not in the class that declares it. `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is class-nested visibility at the hoisted prerequisite, not the routine-local pass-order arm. Ten-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
+summary: "A type named as a SPECIALIZATION ARGUMENT inside a class body is resolved where the class does not yet exist. Class-nested is the case it was found through and NOT the boundary — frankH's `TEnum<TDerived>` inside `TDerived` fails on the class's own unit-scope name; the boundary is \"declared at or after the class's own declaration\". `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is the hoisted prerequisite's INSERTION POINT, not visibility and not the routine-local pass-order arm. Ten-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -157,6 +157,42 @@ exculpation with an owner: whatever this is, it is not the mechanism that
 `bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses`
 closed, and looking for it there is a dead end someone would otherwise take
 twice.
+
+## 2026-09-09 (frankH) — THE SLUG IS TOO NARROW: no nested type is required
+
+frankH built four rows against the same question and the discriminating one has
+no nested type in it at all:
+
+| case | specialization argument | pxx | fpc |
+| --- | --- | --- | --- |
+| ctl_pre | a unit type declared BEFORE the class | compiles, `ok` | ok |
+| ctl_out | the class itself, used OUTSIDE it | compiles, `ok` | ok |
+| **selfref** | **the class itself, used INSIDE its own body** | **`pascal26:10: unknown type: TDerived`** | ok |
+| base (this ticket) | a class-nested type, used inside | `pascal26:5: unknown type: PT` | ok |
+
+```pascal
+TDerived = class
+protected
+  function GetSelfEnum: TEnum<TDerived>;   { TDerived is a plain UNIT-scope name }
+end;
+```
+
+`TDerived` is not nested in anything and is not private to any scope. If the
+prerequisite were merely parsed with the class scope switched off, it would
+resolve — so this is the same conclusion v11 reaches, from a case where the
+visibility reading is not merely unlikely but impossible. Two independent
+routes to the same answer, which is why it is recorded rather than folded in.
+
+**And ctl_pre and ctl_out are what stop selfref being one broken row**:
+specializing on a class is fine from outside it, and a name declared before the
+class is fine from inside it. So the boundary is exactly **"declared at or after
+the class's own declaration"**, and every arm in this ticket sits past it.
+
+That WIDENS the ticket. The slug says class-nested and the population is larger:
+`AliasVisibleHere` is not the lever, and neither is the Alias table — whatever
+chooses the prerequisite's insertion point is. The slug is left alone because it
+is cited; this section is the correction, and a reader who stops at the title
+will under-scope the fix.
 
 ## Relationship to the three arms already open
 

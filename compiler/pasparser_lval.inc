@@ -6904,6 +6904,52 @@ begin
   Result := wCall;
 end;
 
+{ The WIDE sibling of WrapPCharToString: a raw PWideChar operand becomes a
+  managed wide string, so every consumer downstream sees an ordinary string and
+  needs to know nothing about pointers. Same normalisation, one width over.
+
+  THE TWO LINES THAT ARE NOT A COPY OF THE NARROW ONE, AND WHY EACH IS TRUE.
+
+  `ASTTk := tyAnsiString` rather than the callee's declared RetType. Every
+  managed-string constructor in builtinwide is declared `: Pointer`, because at
+  the level that file works at a managed string IS its handle -- and the
+  compiler already resolves that mismatch the same way one door over:
+  IRStrWidthConv calls PXXWideFromStr, also declared `: Pointer`, and stamps
+  its result `Ord(tyAnsiString)` into a hidden local. This is that stamp, at
+  AST level instead of IR level, because the consumer here reads the AST.
+
+  `ProcRetStrElemTk := Ord(tyWideChar)`, and it is a FACT about the callee, not
+  a fact about this call site -- PXXWideFromPWChar returns a block whose payload
+  is UTF-16 and whose header is PXX_KIND_WIDESTR, whatever the declaration says.
+  Writing it here rather than at registration is deliberate: the declaration is
+  what a reader of builtinwide sees, and giving that file a `: WideString`
+  return would make a builtin that implements UTF-16 depend on the type it
+  implements. Idempotent, so a second Length in the same unit rewrites the same
+  value.
+
+  It is what makes the halving fire: IRLowerAST's tkLength arm needs BOTH
+  ASTTk = tyAnsiString and ASTStrElemTkOf = tyWideChar, and for an AN_CALL the
+  second reads exactly this row. Without it the header's BYTE length reaches
+  the caller unhalved and `Length` answers 8 for 'abcd' -- a plausible number,
+  which is the failure mode this whole ticket is about.
+  bug-p-length-of-any-pwidechar-reads-a-managed-length-header }
+function WrapPWideCharToWideStr(argNode: Integer): Integer;
+var procIdx, wArg, wCall: Integer;
+begin
+  procIdx := FindProc('PXXWideFromPWChar');
+  if procIdx < 0 then
+    Error('PWideChar->widestring conversion needs builtinwide: name PWideChar, ' +
+          'WideString or UnicodeString in the program so the UTF-16 runtime is pulled');
+  wArg := AllocNode(AN_ARG);
+  ASTLeft[wArg] := argNode; ASTRight[wArg] := -1; ASTTk[wArg] := Ord(tyPointer);
+  wCall := AllocNode(AN_CALL);
+  ASTIVal[wCall] := procIdx;
+  ASTTk[wCall] := Ord(tyAnsiString);
+  ProcRetStrElemTk[procIdx] := Ord(tyWideChar);
+  ASTLeft[wCall] := wArg; ASTRight[wCall] := -1;
+  Result := wCall;
+end;
+
 { NodePtrElem was DELETED here 2026-09-01. It answered the pointee of a
   pointer-valued expression through six node kinds, and by then it was reached
   from exactly two places, both inside ResolveDerefShapeAt below: the final

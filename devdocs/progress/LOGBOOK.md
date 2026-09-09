@@ -2384,3 +2384,29 @@ repro. Nothing is pended and nothing is spliced — this is the `dgen` mint plus
 not spend an afternoon in the channel that cannot see it, which is the same trap
 that ticket's own author reported hitting from the other side.
 2026-09-09 | frankH | compiler/symtab.inc compiler/pasparser_proc.inc compiler/pasparser_generic.inc compiler/defs.inc | A generic template body resolved names in the SPECIALIZER's scope, so a class helper declared by the specializing program reached inside a template imported from another unit: `specialize DoTest<TTest2>` answered 4 where fpc answers 3. Fixed as a SCOPE rule in two halves, both already in the tree elsewhere, and nothing narrowed. Measured first with PXXDBG=p.specunit, which named the missing half: DoTest_TTest parsed at body-unit=-1, the PROGRAM, while the same unit's own methods carried body-unit=60 -- specialized METHOD bodies have parsed as their declaring unit since bug-p-a-generic-template-body-resolves-its-symbols-at-the-specialization-site and a generic ROUTINE's body never got it. Half one adds GenericFuncUnitIdx + NoteGFSpecBodyUnit and switches CurrentUnitIdx in ParseSubroutine like the method arm beside it. Half one alone changed NOTHING, which produced half two: FindHelperForType had no visibility test of any kind, a flat scan where any helper anywhere won; it now asks HelperRowVisibleHere, which is ClassRowVisibleHere minus the carve-out for rows minted by the specializing scope -- those are synthesized CLASS rows and a class helper is never one, so the exemption had no subject here. All eight fixture rows now match fpc; gen-TTest=2 and gen-TTest2=3 are one rule on two inputs, and plain-TTest2 still answers 4 because in the program's own scope the program's helper must apply. Corpus row tgenfunc19.pp burned, verified Ok/rc=0 under both compilers. Also recorded on the p55 ticket, verified myself by re-running the driver rather than taken from the peer: 1c16d4523's blast radius exceeds its repro -- `uses Generics.Collections` alone has NO circular implementation-uses and its collections.pas:120 `unknown type: PT` wall is gone (grep -c = 0), the whole TEnumerator$PT family with it; the cycle is one route to a specialized body materialising in the wrong stream, not the condition. Commit f0aca9c59.
+
+## 2026-09-09 | frankZ | compiler/builtin/builtinwide.pas, compiler/pasparser_lval.inc, compiler/pasparser_expr.inc, compiler/pasparser_prog.inc | Length over a raw PWideChar counts UTF-16 units — and the fix created a regression the ticket did not name
+
+`Length(p)` over a PWideChar answered a wild address-shaped number because the
+operand was never normalised and reached the runtime `tkLength` path, which
+reads a `[data-8]` header off a pointer that has none. Fixed with
+`PXXWideFromPWChar` in builtinwide (scan for a zero UTF-16 UNIT, alloc, copy)
+and a second arm at the Length operand dispatch — NOT by adding `tyWideChar` to
+`IsNodePChar`, which routes a wide pointer into a narrow strlen and answers 1
+for `'abcd'`: a plausible number replacing an obvious one.
+
+**The part worth carrying: the fix CREATED a regression and the fixture could
+not see it.** `^WideChar` and `PWideChar` are one type in two spellings and only
+the alias was a `needsWide` trigger. Before the fix both spellings were equally
+wrong, so the gap cost nothing visible; after it the caret spelling stopped
+COMPILING — legal code fpc accepts, refused on a spelling. The ticket's repro
+uses the alias, so every row was green throughout and this would have shipped.
+Found by writing the negative case out and running it. `needsWide` now triggers
+on `widechar` after a CARET, which leaves the reason `widechar` was excluded
+intact: a WideChar VALUE still pulls nothing, measured 159512B either way
+against 163608B with builtinwide in.
+
+Collision with frankH, who had an equivalent fix unpushed. My half of it was
+claiming into a tree nobody can see — `progress.sh claim` warns in its own
+output that an unpushed claim leaves `ready` correctly offering the ticket to
+everyone else, and I read that and moved on.

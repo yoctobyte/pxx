@@ -53,6 +53,19 @@ function PXXWideFromStr(h: Pointer): Pointer;
 function PXXStrFromWide(h: Pointer): Pointer;
 function PXXWideCat(a: Pointer; b: Pointer): Pointer;
 
+{ A RAW `PWideChar` -> a managed wide string. The wide half of PCharToString,
+  and it is a separate function from every transcoder above because its input
+  has NO LENGTH: a raw pointer carries only a terminator, so the scan is the
+  work and the copy is the easy part.
+
+  IT SCANS FOR A ZERO UTF-16 UNIT, NOT A ZERO BYTE, AND THAT IS THE WHOLE
+  POINT. UTF-16 'abcd' is `61 00 62 00 63 00 64 00`, so a narrow strlen stops
+  at index 1 and answers 1 -- a plausible number where the defect this replaces
+  answered an obviously-wild one. Routing a wide pointer into PCharToString
+  compiles, is one character of diff, and makes the bug invisible instead of
+  fixing it. bug-p-length-of-any-pwidechar-reads-a-managed-length-header }
+function PXXWideFromPWChar(p: Pointer): Pointer;
+
 implementation
 
 uses builtinheap;
@@ -358,6 +371,31 @@ end;
 function PXXWideCat(a: Pointer; b: Pointer): Pointer;
 begin
   Result := PXXWideConcat(PXXHandleBytes(a), a, b, PXXHandleBytes(b));
+end;
+
+{ Raw PWideChar -> managed wide handle. Header note above the declaration.
+
+  PXXWideAlloc already zero-fills and writes both NUL bytes, the byte length
+  and PXX_KIND_WIDESTR, so this adds only the scan and the payload copy and
+  cannot disagree with the rest of the file about the block layout -- which is
+  the reason it calls that rather than building a block of its own. nil in,
+  nil out, and an empty run (`p^` is already the terminator) is nil too: an
+  empty managed string IS the nil handle here, exactly as every constructor
+  above says.
+
+  The scan is unbounded, like a strlen and like PCharToString: a raw pointer
+  with no terminator is a caller error in both widths and there is no length
+  to bound it with. }
+function PXXWideFromPWChar(p: Pointer): Pointer;
+var n: Int64;
+begin
+  Result := nil;
+  if p = nil then Exit;
+  n := 0;
+  while PU16(Int64(p) + n * 2)^ <> 0 do n := n + 1;
+  if n = 0 then Exit;
+  Result := PXXWideAlloc(n);
+  PXXBlockCopy(Int64(Result), Int64(p), n * 2);
 end;
 
 

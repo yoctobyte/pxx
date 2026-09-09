@@ -15772,11 +15772,20 @@ test-core: $(COMPILER)
 	# (length at [data-8]) while a literal is a static block whose address is the
 	# block START. Widening the existing +8 guard to cover both pointers is the
 	# obvious edit and reads `0 0 0 0 0`.
-	# Length(pw) is NOT asserted here -- a separate defect on the same type, wrong
-	# for a hand-built pointer with no literal in sight, with its own ticket.
+	# Length(pw) is asserted by test_pwidechar_len26 below, not here -- a separate
+	# defect on the same type, wrong for a hand-built pointer with no literal in
+	# sight, fixed 2026-09-09 with its own fixture.
 	# bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow
 	./$(COMPILER) test/test_a_string_literal_bound_to_a_pwidechar.pas $(TESTTMP)/test_pwidechar_lit26
 	tools/expect_same.sh test_pwidechar_lit26 "$$($(TESTTMP)/test_pwidechar_lit26)" "$$(printf 'hand-built: 97 98 99 100 0\nliteral   : 97 98 99 100 0\npchar ctrl: 97 98 99 100 0')"
+	# Length over a raw PWideChar counts UTF-16 UNITS. Every expected number here
+	# is one a NARROW strlen cannot produce -- 4/3/4 against the 1/0/1 that adding
+	# tyWideChar to IsNodePChar would give -- because that one-character change is
+	# the trap this ticket names: it turns an obviously-wild number into a
+	# plausible one. The `high` row is the sharpest: U+0100's first BYTE is zero.
+	# bug-p-length-of-any-pwidechar-reads-a-managed-length-header
+	./$(COMPILER) test/test_length_of_a_pwidechar_counts_utf16_units.pas $(TESTTMP)/test_pwidechar_len26
+	tools/expect_same.sh test_pwidechar_len26 "$$($(TESTTMP)/test_pwidechar_len26)" "$$(printf 'index : 97 98 99 100 0\nascii  4\nhigh   3\nastral 4\nempty  0\nnil    0\ncaret  4')"
 	./$(COMPILER) test/test_widestring_element_positions.pas $(TESTTMP)/test_ws_elem26
 	$(TESTTMP)/test_ws_elem26 | diff -u test/test_widestring_element_positions.expected -
 	./$(COMPILER) test/test_widestring_assign_positions.pas $(TESTTMP)/test_ws_assign26

@@ -1023,12 +1023,23 @@ begin
           the fix turns a silently-wrong program into `compiler error: UTF-16
           width conversion needs builtinwide`, which is the link-failure half the
           note above calls the expensive direction.
-          `widechar` is NOT here: a WideChar VALUE needs __pxxWideCharToUTF8 from
-          the ordinary builtin unit, not builtinwide, and adding it would pull
-          4 KB into every program that declares one.
-          bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow }
+          `widechar` is NOT here BY ITSELF: a WideChar VALUE needs
+          __pxxWideCharToUTF8 from the ordinary builtin unit, not builtinwide,
+          and adding it would pull 4 KB into every program that declares one.
+          `^WideChar` IS here, and it is the same trigger as `pwidechar` written
+          the other way -- one type, two spellings, and a scan that sees only one
+          of them makes the compiler's answer depend on how the program spelled
+          its pointer. Measured 2026-09-09: with only the alias spelling, `var p:
+          ^WideChar; Length(p)` compiled to a wild number before the Length fix
+          and to `PWideChar->widestring conversion needs builtinwide` after it --
+          a legal program fpc accepts, refused on a spelling. The preceding token
+          is what separates the two, so a plain `c: WideChar` still pulls nothing
+          and the 4 KB argument above is untouched.
+          bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow,
+          bug-p-length-of-any-pwidechar-reads-a-managed-length-header }
         if CaseEqual(tnm, 'widestring') or CaseEqual(tnm, 'unicodestring') or
            CaseEqual(tnm, 'pwidechar') or
+           (CaseEqual(tnm, 'widechar') and (i > 0) and (Tokens[i - 1].Kind = tkCaret)) or
            CaseEqual(tnm, 'pxxwidealloc') or CaseEqual(tnm, 'pxxwideconcat') or
            CaseEqual(tnm, 'pxxwidefromutf8') or CaseEqual(tnm, 'pxxutf8fromwide') then
         begin needsWide := True; Break; end;
