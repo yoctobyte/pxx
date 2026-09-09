@@ -2,10 +2,10 @@
 track: P
 prio: 65
 owner: frankS
-blocked-by: []
+blocked-by: [bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]
 status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `2f5a0b2ac8ec`, two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` reaches `too many deferred specializations`, with `TEnumerator$PT` minted 55 times (MAX_SPECIALIZATIONS is 256, 872 mints in the run). THAT SECOND ONE IS NOT DIAGNOSED: `PT` is a nested type named as a specialization argument, which is bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope territory, but it may equally be an amplification of the 3250 fix that got us here. Measure which before quoting it. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` reaches `too many deferred specializations`, with `TEnumerator$PT` minted 55 times (MAX_SPECIALIZATIONS is 256, 872 mints in the run). THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and 110 mints whose alias carries more `$PT` segments than its own `args=`. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. Owned by bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
@@ -1621,3 +1621,44 @@ was the attempt, not any one fix: driving the target named each bug in the order
 it actually mattered, and every one of them was a name standing in for an
 identity — a method name for a reference, a type name for a scope, a template
 name for an arity, a copy for the stream it came from.
+
+
+## 2026-09-09 (frankS) — the second wall is DIAGNOSED: a name that never reaches a fixpoint
+
+frankH asked the right question about the paragraph above — *"55 mints of one
+alias is either a dedup you have not wired yet or a fixpoint that is not
+converging, and those two look identical at the `too many deferred
+specializations` readout."* It is the second, and the experiment that separates
+them is one edit.
+
+**Raising the cap is the discriminator, and it answers loudly.** With
+`MAX_SPECIALIZATIONS = 1024` (binary `860aca3da02e`, reverted, never landed) the
+driver does not get further — it reaches
+`pascal26:30: error: token character pool overflow` with a single alias carrying
+~120 `TEnumerable$` and ~130 `$PT`. A missing dedup would have converged at a
+higher cap. This one just ran until a different pool gave out.
+
+**And the ladder is visible at the LANDED cap too — the experiment confirmed it,
+it did not reveal it.** `PXXDBG=p.mint:*` at binary `5e00cec21466`:
+
+| rungs (count of `TEnumerable$` in the alias) | aliases at that rung |
+| --- | --- |
+| 0 | 109 |
+| 1 … 54 | 10 each |
+| 55 | 3 |
+
+with `tmpl=TEnumerable args=TEnumerable$TEnumerable$UInt32$PT$PT` minting
+`alias=TEnumerable$TEnumerable$TEnumerable$UInt32$PT$PT`. The pump is 110 mints
+whose alias carries more `$PT` than their own `args=` — 55 `TEnumerator`, 55
+`TCustomPointersEnumerator` — i.e. **the mangled name is not a function of the
+argument list**, so it cannot dedup against a prior registration by
+construction. Full diagnosis, the seed row, and the two things not to do:
+[[bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]].
+
+**So `too many deferred specializations` was a MASK, and the 256 cap was the
+thing making it look like a capacity problem.** The `TEnumerator$PT` count I
+flagged as unattributed above is neither of the two readings I offered: it is 55
+because there are 55 rounds, one per rung of a ladder that has no top.
+
+`gate.sh quick` GREEN at the reverted tree; the 1024 edit is not in the tree and
+is not proposed.

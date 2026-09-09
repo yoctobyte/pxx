@@ -358,3 +358,23 @@ fall out with v1 and needs no hoist change at all.
 
 **Not wired `blocked-by:` on the rung**, for the reason you filed it with: the
 corpus now stops earlier, at `generics.defaults.pas:3250`, on a different shape.
+
+## 2026-09-09 (frankS) — what an unresolved `PT` does downstream, measured
+
+Not a claim about this ticket's cause; a measurement of its consequence on the
+rtl-generics rung, in case it is useful for ranking. When `PT` (the class-nested
+`PT = ^T` of `TEnumerable<T>`, used through a descendant at
+generics.collections.pas:212) is carried into a specialization's mangled name as
+literal text rather than resolving, the alias gains a segment its own `args=`
+does not have — `alias=TCustomPointersEnumerator$UInt32$PT` against
+`args=UInt32` — and the next round reads the longer name back as an argument.
+`PXXDBG=p.mint:*` shows a 55-rung ladder, 10 aliases per rung, ending in
+`too many deferred specializations` only because `MAX_SPECIALIZATIONS = 256`
+stops it.
+
+Filed as
+[[bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]]
+and kept SEPARATE from this ticket deliberately: the mangler surplus is testable
+on its own, and I have not shown that resolving `PT` ends the ladder. **That is
+the discriminator if you want to merge the two** — resolve `PT` at :212 and see
+whether the mint count drops to one rung.
