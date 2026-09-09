@@ -223,4 +223,4 @@ Gate GREEN (20 PASS). `test_delphi_bare_method_name_in_argument_position` is
 wired beside the chained-receiver test; `.expected` is fpc's own output.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ad7c03b03.
