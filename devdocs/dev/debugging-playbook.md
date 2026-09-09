@@ -14053,6 +14053,48 @@ aperture, and its clean result is not evidence. That is true of an ordered
 array, a positional record initialiser, a fixed-column file, and a protocol
 whose field meaning is its offset.
 
+### AND THE CAUSE OF AN ABSENT COPY IS OFTEN A *NAME THAT CORRECTLY EXCLUDES THE THING* — an accurate narrow name is a filter, and it never fires a false positive to reveal itself
+
+Measured 2026-09-09 (frankH, `a4b9050f1`), and it explains the rung above rather
+than adding to it: sometimes the grep has an aperture and the READER's filter is
+what removed the site.
+
+`compiler/defs.inc:755` declares `AN_STR_FROM_CHAR = 55; { String(c) rvalue:
+materialise a 1-char string. }` — accurate about the use it was named for, and
+**the tree calls it "the generic assign-then-yield node" in four places, across
+four frontends** (`pasparser_expr.inc`, `pasparser_lval.inc`, `pyparser.inc`,
+`rparser.inc`; 29 references outside `defs.inc`). It is the general sequencing
+primitive: `Left` = a store into a hidden temp, `Right` = the read of it.
+
+So when a conversion materialised an *interface* through it, two consumers had
+never been asked about the node — `ResolveNodeRec`, which answered `REC_NONE`,
+and the interface ARC assign arm, whose kind list did not name it either. The
+temp arrived as "not an interface", took a raw record copy with no retain, and
+the object died at the end of the statement while the temp's scope exit still
+released it. **Fixing either one alone would have moved the failure without
+removing it** — which is the tell that the population was mis-drawn rather than
+one site being forgotten.
+
+**Nobody was careless.** An author scanning kind arms for *what could carry a
+record* reads "materialise a 1-char string" and correctly concludes: not this
+one. The comment is not stale and the name is not wrong — both are **true about
+the original use and silent about the general one**, which is this handbook's
+house failure mode (`## The name is not the thing`) in the direction nobody
+guards. The documented version of that rule is about a name trusted because it
+looked right, and the part you sample CONFIRMS it. This is the mirror: **a name
+that is accurate and narrow removes the thing from every population it belongs
+to, and because it never produces a false positive, nothing ever contradicts
+it.** An over-broad name eventually matches something absurd and gets caught; an
+under-broad one is only ever caught by the bug.
+
+**Two handles.** As a reader: when a node, flag or field is reached from more
+places than its name accounts for, count the CONSTRUCTION sites before trusting
+the declaration — four frontends building it is not what "String(c)" predicts.
+As an author: when a mechanism gets reused generically, **the declaration is the
+thing to fix, not the new call site** — it is the only text every future
+consumer reads, and leaving it narrow silently mis-draws every population
+downstream.
+
 
 ## A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO — three "works" rows that all called a CLASS function, and a one-field record that is green while the bug is live
 
@@ -14109,6 +14151,35 @@ the cheapest possible statement of the defect.
 that negative is what sent the search up a level.** CLAUDE.md already says a change measured
 as no change is data about your MODEL; this is the live case — **a fix that is obviously
 right and changes nothing is information about the model, not about the fix.**
+
+### AND THE SECOND INSTANCE IS AN *ORACLE* PROBE, WHERE ONE ROW'S SHAPE MAKES BOTH SIDES TAKE THE SAME PATH — the agreement is real and it is about the shared path
+
+Measured 2026-09-09 (frankH, `a4b9050f1`), and it is the same animal one axis
+over: there the safe path was the CALLEE's; here it is the probe row's SHAPE,
+and the instrument is a differential against fpc rather than an internal
+assertion.
+
+`test_variant_cast_to_interface` is byte-identical to fpc 3.2.2 on all six rows,
+destructor count included, and identical again on i386/aarch64/arm32/riscv32
+under qemu. **That agreement is partly masking, and the author said so in the
+file.** Its expression-position row materialises a temp under BOTH compilers —
+so both take the temp-owning path and agree there — while with that row removed
+the pure-assignment shape diverges: fpc destroys at `g := nil`, pxx at scope
+exit, because the conversion owns a temp the way `obj as IFoo` already does.
+The divergence is deliberate and argued (matching fpc for one of the two casts
+would give the two spellings of one operation different lifetime rules, which
+is the defect the ticket was filed about — longer, never shorter).
+
+**The point for a later reader is not the divergence, it is that a six-row green
+against a real oracle was not the claim it looks like.** A probe row whose shape
+forces both implementations down a common path is a row that cannot discriminate
+— and unlike a broken assertion it is not wrong about anything, so nothing in
+the run marks it. Ask of each row: **would this row still pass if the two
+implementations disagreed everywhere the row does not force them to agree?**
+Then say in the test file which rows carry the claim and which are along for the
+ride; the alternative is a future reader treating "byte-identical on six rows,
+five targets" as a stronger statement than it is, which is precisely how a
+correct green becomes a false premise.
 
 ## ONE CALL CANNOT TELL "NOT IMPLEMENTED" FROM "NOTHING HAPPENED YET" — the discriminator is a DELTA, and the ticket predicted its own reader's mistake
 
