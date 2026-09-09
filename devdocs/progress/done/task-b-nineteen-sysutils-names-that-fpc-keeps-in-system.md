@@ -210,4 +210,4 @@ which is the same criterion, read the other way round.
   makes those rows fail if the unit-level pull is ever dropped.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0ffe185bb.
