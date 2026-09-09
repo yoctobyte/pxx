@@ -308,4 +308,4 @@ this defect — stays retired until somebody runs the seven minutes; a fix landi
 is not evidence about a corpus nobody re-ran.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2b43c97d0.
