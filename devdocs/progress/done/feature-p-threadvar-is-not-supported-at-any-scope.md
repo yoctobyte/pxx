@@ -346,3 +346,6 @@ frontend-agnostic — `SymTlsOffset`, the user area, and an `AN_TLSBASE`-rooted
 deref — so what remains there is the C frontend's own rewrite site, not a new
 mechanism. Left for its own lane; not wired as an edge, because neither gates
 the other.
+
+## Log
+- 2026-09-09 — resolved; the implementation and the resolve rode one commit — commit 7a166c995. The rewrite site is `ThreadVarRewriteRange` in `compiler/ir_codegen.inc`, called from `CompileAST`; storage is `TLS_USER_BYTES` in `compiler/defs.inc`; the section parser is `ParseThreadVarSection` in `compiler/pasparser_decl.inc`.
