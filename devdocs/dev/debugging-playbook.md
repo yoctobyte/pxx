@@ -22241,3 +22241,54 @@ the wrong shape.
 **When you repair a guess, enumerate the OTHER guesses in the same tool before
 you re-run it.** A structural fix to one of them raises your confidence in all
 of them, and that confidence is not evidence.
+
+## A RULE THAT LIVES ON ONE SIDE OF A DECLARATION/IMPLEMENTATION PAIR FAILS BY AGREEING — four instances, one day, two seats
+
+A Pascal method is written down TWICE: once in the class, record or interface
+body, once as an out-of-line implementation header. Both spellings are parsed by
+different code, and every rule about the method — Self's type, whether the
+`<T>` group is stripped, what the qualified path means, which template it
+belongs to — has to be applied by BOTH or the two halves describe different
+routines. **Nothing in the compiler compares them.** They simply both succeed,
+and the program is built out of two descriptions of one thing.
+
+Measured 2026-09-09, four instances between frankS and frankZ:
+
+| the rule | the side that had it | what the other side did |
+| --- | --- | --- |
+| Self of a `static` method is the bare class reference | implementation | decl said "the record, by reference" -> two proc rows, one bodyless |
+| a method-impl header begins with `procedure`/`function`/`constructor`/`destructor` | `BufferTemplateMethodsAhead` | `ScanDelphiMethodImplsForNestedSpecs` matched a QUALIFIER and scanned a foreign body |
+| a class-nested type argument is rewritten to its hoisted name | class body | the impl header was not rewritten, so the two headers named different types |
+| a QUALIFIED argument is skipped, not rewritten | — | rewritten on both, minting a name the source never wrote |
+
+**The shared signature: silence, then a diagnostic about a third party.** None
+of the four refuses anything at the pair. Two of them surfaced in a file nobody
+wrote — `unresolved forward: TInst.Mk` in `compiler/builtin/builtinheap.pas`,
+raised by `ApplyCallFixups` at LINK time, and a template body's own line for a
+name the source never contained. **The diagnostic points at the
+materialisation, never at the pair**, so the search starts in the wrong file
+with a plausible reason to stay there.
+
+**Why they hide for so long.** A duplicate proc row costs nothing while every
+caller is parsed AFTER the implementation: the call binds to the row that has a
+body and the bodyless one is never called. It takes a caller parsed EARLY — a
+specialized body, materialised before the implementation is reached — to bind
+to the other row. So the defect is dormant for every ordinary program and fires
+the moment generics reach it, which reads as "a generics bug" and is not one.
+
+**What to do.** When a symptom involves a method that is declared in one place
+and implemented in another, **print both registrations before theorising**:
+`PXXDBG=p.proc` prints one line per `RegisterProc` with the name, arity and
+parameter kinds, and two rows with the same name and different `ptypes` IS the
+finding. `--debug`'s `Proc <n>: <name> at CodePos <addr>` is the second half —
+a `CodePos -1` beside a real one is the same pair seen from the other end.
+
+**And when you find the disagreement, ask which side the CALL SITES already
+agree with.** Both sides can be made to match, and only one of the two answers
+works: merging a record's static class function onto the declaration's
+record-by-reference Self also gives one proc row and one body, the unresolved
+forward goes away — and every call segfaults, because a static call site has no
+instance to pass. That is a green that is correct about a tree the program
+cannot execute. The rule this file already carries (*"a comment and code that
+disagree: one is wrong and you do not know which"*) has a parser twin: **two
+declarations that disagree, and the callers are the tiebreak.**
