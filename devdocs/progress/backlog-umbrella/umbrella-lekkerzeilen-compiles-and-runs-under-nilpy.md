@@ -16,7 +16,7 @@ blocked-by:
   - bug-n-collections-deque-is-missing
   - bug-n-str-join-rejects-an-argument-shape-cpython-accepts
   - feature-nilpy-math-module-twelve-absent-names-measured
-  - bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name
+  - feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
   - bug-n-a-chained-assignment-to-two-attributes-does-not-parse
 summary: "Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen, 14,297 LOC of Python, 26 runtime modules -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. Measured 2026-09-08 with compiler/pascal26 at a7b03135f504: 3 of 16 runtime modules compile clean, and the other 13 fail on SIX distinct causes, one of which blocks seven modules by itself. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
 ---
@@ -267,7 +267,7 @@ reading: this pass removed a blocker from `chart` without unblocking it, and
 | cause | modules | ticket |
 | --- | --- | --- |
 | `math.atan2` absent | hud, rig, sim, traffic, vessel (5) | feature-nilpy-math-module-twelve-absent-names-measured |
-| closed-world method dispatch | chart, environment, wind, `__main__` (4) | **bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name** (new) |
+| closed-world method dispatch | chart, environment, wind, `__main__` (4) | **feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver** — direction settled 2026-09-09, cost is a runtime name lookup |
 | `import array` | app, audio, world (3) | feature-n-the-array-module |
 | `import ctypes` | capture, gfx (2) | (ctypes) |
 | `import queue` | gauges (1) | (queue) |

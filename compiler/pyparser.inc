@@ -28875,6 +28875,71 @@ begin
   end;
 end;
 
+function PyModuleBindingsOf(const name: AnsiString;
+                           var sites: array of Integer): Integer;
+{ Every MODULE-LEVEL binding of `name`, in source order, as token indices: the
+  IDENT of `name = ...`, or the `def` of `def name(...)`. Result is how many
+  were found, capped at Length(sites).
+
+  ONE SCAN WHERE THERE WERE THREE. PyModuleGlobalLiteralType,
+  PyModuleGlobalCtorClass and PyModuleGlobalIsDef each carried a byte-identical
+  copy of this loop -- same depth counter, same `atStart` predicate, same
+  PyScanLo..MainProgramTokCount bounds -- and differed ONLY in the pattern they
+  matched at the head of a statement and in what they returned. Three paths for
+  one concept is the shape `devdocs/dev/normalise-dont-special-case.md` names,
+  and it had already produced the thing that rule predicts: the path nobody
+  extended is the one that stays broken, which here is a global bound to
+  another NAME (`FN = named`), still refused while the direct spelling works.
+
+  IT RETURNS EVERY SITE RATHER THAN THE FIRST, AND THAT IS NOT TIDINESS -- THE
+  THREE READERS DISAGREE ABOUT A REBOUND GLOBAL AND TODAY'S ANSWER IS AN
+  ACCIDENT OF THE ORDER THEY ARE CONSULTED IN. For `G = K()` then `G = 3`,
+  LiteralType keeps scanning so its LAST binding wins and answers int, and
+  because it is asked first CtorClass never runs -- correct, by luck. Reverse
+  the two lines and the luck runs the other way. A resolver that stopped at the
+  first binding would have typed that field as a K holding a 3: a wrong LAYOUT,
+  which compiles and prints a plausible large number. So each caller keeps its
+  own iteration over the sites, and this routine changes no answer. }
+var k, d: Integer;
+    atStart: Boolean;
+begin
+  Result := 0;
+  d := 0;
+  k := PyScanLo;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then Inc(d)
+    else if Tokens[k].Kind = tkDedent then Dec(d)
+    else if d = 0 then
+    begin
+      atStart := (k = PyScanLo) or
+                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent,
+                                         tkSemicolon]);
+      if atStart and (Result <= High(sites)) then
+      begin
+        if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = name) and
+           (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) then
+        begin
+          sites[Result] := k;
+          Inc(Result);
+        end
+        { tkFunction is what the lexer gives `def`. Depth 0 and at statement
+          start, so a def nested in a class or another def is not a
+          module-level binding and must not answer for this name. }
+        else if (Tokens[k].Kind = tkFunction) and
+                (k + 1 < MainProgramTokCount) and
+                (Tokens[k + 1].Kind = tkIdent) and
+                (GetTokenStr(k + 1) = name) then
+        begin
+          sites[Result] := k;
+          Inc(Result);
+        end;
+      end;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyModuleGlobalCtorClass(const name: AnsiString): Integer;
 { `G = K()` at MODULE level — the class index of K, or -1.
 
@@ -28890,36 +28955,27 @@ function PyModuleGlobalCtorClass(const name: AnsiString): Integer;
   So this returns the ci, and the call site sets fldRec from it exactly as the
   PyInferExprType arm above already does for a construction written inline.
   bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage }
-var k, d: Integer;
-    atStart: Boolean;
+var sites: array[0..PY_MAX_MODULE_BINDINGS-1] of Integer;
+    n, i, k: Integer;
 begin
   Result := -1;
-  d := 0;
-  k := PyScanLo;
-  while k < MainProgramTokCount do
+  n := PyModuleBindingsOf(name, sites);
+  for i := 0 to n - 1 do
   begin
-    if Tokens[k].Kind = tkIndent then Inc(d)
-    else if Tokens[k].Kind = tkDedent then Dec(d)
-    else if d = 0 then
+    k := sites[i];
+    if (Tokens[k].Kind = tkIdent) and (k + 3 < MainProgramTokCount) and
+       (Tokens[k + 2].Kind = tkIdent) and (Tokens[k + 3].Kind = tkLParen) then
     begin
-      atStart := (k = PyScanLo) or
-                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
-      if atStart and (Tokens[k].Kind = tkIdent) and
-         (k + 3 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
-         (GetTokenStr(k) = name) and (Tokens[k + 2].Kind = tkIdent) and
-         (Tokens[k + 3].Kind = tkLParen) then
-      begin
-        { the WHOLE right-hand side must be the construction — `G = K().wrap()`
-          holds whatever wrap returns, which is the lesson the literal shapes
-          next door record. A CALL needs PyBlkRhsEndsAfterCall, not
-          PyBlkRhsEndsAt: the latter asks whether ONE token ends the statement,
-          which `K()` never does, so it silently declined every instance. }
-        if PyBlkRhsEndsAfterCall(k + 3) then
-          Result := FindUClassNonRecord(GetTokenStr(k + 2));
-        Exit;
-      end;
+      { the WHOLE right-hand side must be the construction -- `G = K().wrap()`
+        holds whatever wrap returns, which is the lesson the literal shapes
+        next door record. A CALL needs PyBlkRhsEndsAfterCall, not
+        PyBlkRhsEndsAt: the latter asks whether ONE token ends the statement,
+        which `K()` never does, so it silently declined every instance.
+        Stops at the FIRST construction site, as the hand-written scan did. }
+      if PyBlkRhsEndsAfterCall(k + 3) then
+        Result := FindUClassNonRecord(GetTokenStr(k + 2));
+      Exit;
     end;
-    Inc(k);
   end;
 end;
 
@@ -28940,32 +28996,17 @@ function PyModuleGlobalIsDef(const name: AnsiString): Boolean;
   reason spelled out on PyModuleGlobalLiteralType — seeding a shared table from
   module scope collided with def-local inference.
   bug-n-a-field-assigned-a-module-level-def-has-no-inferable-type }
-var k, d: Integer;
-    atStart: Boolean;
+var sites: array[0..PY_MAX_MODULE_BINDINGS-1] of Integer;
+    n, i: Integer;
 begin
   Result := False;
-  d := 0;
-  k := PyScanLo;
-  while k < MainProgramTokCount do
-  begin
-    if Tokens[k].Kind = tkIndent then Inc(d)
-    else if Tokens[k].Kind = tkDedent then Dec(d)
-    else if d = 0 then
+  n := PyModuleBindingsOf(name, sites);
+  for i := 0 to n - 1 do
+    if Tokens[sites[i]].Kind = tkFunction then
     begin
-      atStart := (k = PyScanLo) or
-                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
-      { tkFunction is what the lexer gives `def` (see PyRegisterDefShells, which
-        scans for exactly this at exactly this depth). }
-      if atStart and (Tokens[k].Kind = tkFunction) and
-         (k + 1 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkIdent) and
-         (GetTokenStr(k + 1) = name) then
-      begin
-        Result := True;
-        Exit;
-      end;
+      Result := True;
+      Exit;
     end;
-    Inc(k);
-  end;
 end;
 
 function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
@@ -28998,25 +29039,20 @@ function PyModuleGlobalLiteralType(const name: AnsiString): TTypeKind;
   by carrying the identity, not by changing the store — an annotated
   `self.k: K = G` always worked, which is the control that proves it.
   bug-nilpy-a-field-assigned-from-a-class-instance-global-reads-garbage. }
-var k, d, rhs, rhsEnd: Integer;
-    atStart: Boolean;
+var sites: array[0..PY_MAX_MODULE_BINDINGS-1] of Integer;
+    n, i, k, rhs, rhsEnd: Integer;
 begin
   Result := tyUnknown;
-  d := 0;
-  k := PyScanLo;
-  while k < MainProgramTokCount do
+  n := PyModuleBindingsOf(name, sites);
+  { LAST binding wins, which is what the hand-written scan did by setting
+    Result and carrying on. Preserved deliberately rather than tidied to
+    first-wins: see PyModuleBindingsOf for the rebound-global case where
+    first-wins would type a field at the wrong LAYOUT and still compile. }
+  for i := 0 to n - 1 do
   begin
-    if Tokens[k].Kind = tkIndent then Inc(d)
-    else if Tokens[k].Kind = tkDedent then Dec(d)
-    else if d = 0 then
-    begin
-      atStart := (k = PyScanLo) or
-                 (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]);
-      if atStart and (Tokens[k].Kind = tkIdent) and
-         (k + 2 < MainProgramTokCount) and (Tokens[k + 1].Kind = tkAssign) and
-         (GetTokenStr(k) = name) then
-      begin
-        rhs := k + 2;
+    k := sites[i];
+    if Tokens[k].Kind <> tkIdent then Continue;   { a `def`, not an assignment }
+    rhs := k + 2;
         if (Tokens[rhs].Kind = tkString) and PyBlkRhsEndsAt(rhs) then
           { AnsiString, not the tyString PyTypeFromTokenIndex answers for a
             literal: this is a NAME holding a string, and that is what the
@@ -29075,9 +29111,6 @@ begin
               Result := tyVariant;
           end;
         end;
-      end;
-    end;
-    Inc(k);
   end;
 end;
 

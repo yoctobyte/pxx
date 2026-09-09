@@ -45,3 +45,35 @@ It sits at `chart.py:184`, behind `self.x0, self.z0 = cx - half, cz - half` at
 :191 was reported first and :184 was never reached. Fixing the pre-pass gap
 (bug-n-a-field-assigned-from-a-bare-local-has-no-inferable-type) unmasked it.
 The two are independent; neither is a cause of the other.
+
+---
+
+## Cause, measured 2026-09-09 — it is a STORE-PATH problem, not a chain problem
+
+The chain itself is implemented and correct: `pyparser.inc` builds a hidden
+temp, assigns the right-hand side to it ONCE, and stores it to each target left
+to right — which is why `a = b = f()` calls `f` once, as CPython does. Its own
+comment says what it covers and why:
+
+> *"PLAIN NAME targets only. `d[k] = d2[k2] = f()` has targets with side effects
+> of their own and is refused by name below rather than guessed at — the temp
+> would be right for it too, but the STORE path for a subscript target is a
+> different lowering and quietly getting it half-right is the failure mode this
+> frontend is trying to avoid."*
+
+An attribute target is the third such lowering, and there is not one of it:
+`obj.x = ...` is reached from an expression-suffix parser with **three** store
+arms — a declared field, an undeclared dynamic attribute (`PyMakeDynAttrSet`),
+and a class-attribute override slot — chosen by what the receiver's class
+declares. So the chain cannot simply "also accept `self.a`": it would have to
+re-enter that dispatch per target.
+
+**The fix is therefore one lvalue path, not a fourth arm on the chain** — the
+NilPy analogue of `refactor-p-one-lvalue-path-for-statements-and-expressions`,
+which is closed on the Pascal side. Filed alongside
+`refactor-n-the-field-type-pre-pass-asks-one-question-in-six-places`: same rule
+(`devdocs/dev/normalise-dont-special-case.md`), same evening, different
+subsystem, and in both the path nobody extended is the one that stayed broken.
+
+Deliberately NOT bundled into the inference-reader work: that commit changes
+which TYPE a field is given and this one would change how a STORE is emitted.

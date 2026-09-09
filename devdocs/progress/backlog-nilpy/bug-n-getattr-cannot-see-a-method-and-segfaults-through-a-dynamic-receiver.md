@@ -3,7 +3,7 @@ track: N
 prio: 50
 type: bug
 blocked-by: []
-summary: "`getattr(obj, \"name\")` sees FIELDS only. Asked for a method it raises `AttributeError: 'A' object has no attribute 'ping'` about a method the class plainly declares -- and through a DYNAMICALLY-typed receiver the same expression SEGFAULTS the produced binary instead of raising. CPython returns a bound method for both. Compiles clean either way, so the fault has no diagnostic. Reproduces on the pin and at the tip. Found while measuring whether getattr could stand in for open-world dispatch (bug-n-a-duck-typed-method-call-is-refused-when-no-class-in-the-unit-declares-the-name); it cannot, and it is a crash on its own account."
+summary: "`getattr(obj, \"name\")` sees FIELDS only. Asked for a method it raises `AttributeError: 'A' object has no attribute 'ping'` about a method the class plainly declares -- and through a DYNAMICALLY-typed receiver the same expression SEGFAULTS the produced binary instead of raising. CPython returns a bound method for both. Compiles clean either way, so the fault has no diagnostic. Reproduces on the pin and at the tip. Found while measuring whether getattr could stand in for open-world dispatch (feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver); it cannot, and it is a crash on its own account."
 status: backlog
 owner: —
 ---

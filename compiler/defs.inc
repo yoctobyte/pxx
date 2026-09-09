@@ -139,7 +139,8 @@ const
   HIDE_RANK_SELF = 100000;
   PY_MAX_NESTED = 512;  { queued nested defs per enclosing body (feature-nilpy-nested-defs); uforth registers ~100 native-word bodies in one setup function }
   PY_MAX_CAPS = 20;     { enclosing locals one nested def may capture }
-  PY_MAX_DEF_GLOBALS = 32;  { `global`/`nonlocal` names one def body may declare }
+  PY_MAX_DEF_GLOBALS = 32;
+  PY_MAX_MODULE_BINDINGS = 32;  { module-level bindings of ONE name the field pre-pass will look at (PyModuleBindingsOf); a name rebound more often than this at module scope keeps the first 32 }  { `global`/`nonlocal` names one def body may declare }
   { An AN_ARG whose value is a `*xs` operand SPLICED into a collecting callee's
     packing — `f(*xs)` where `f` itself declares `*args`. Rides ASTIVal, whose
     other meanings on an AN_ARG are 0 = positional, >0 = a parameter SLOT

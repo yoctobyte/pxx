@@ -72,3 +72,36 @@ print(c.lit)
 print(c.inst.z)
 print(c.fn(4))
 print(c.bare[1])
+
+
+# ---- a global REBOUND at module level: the ORDER hazard ----
+#
+# The three module-global readers used to carry three copies of one scan, and
+# they disagreed about this: the literal reader let the LAST binding win while
+# the constructor reader scanned past bindings that did not match its shape.
+# Both orders below happen to answer correctly today, and only because of the
+# order the two readers are CONSULTED in. A resolver that collapsed them to
+# "the first binding" would type RB2 as a J holding a 7 -- a wrong LAYOUT,
+# which compiles and prints a plausible number instead of failing.
+
+class J:
+    def __init__(self):
+        self.z = 4
+
+
+RB1 = 3
+RB1 = J()          # last wins: an instance
+
+RB2 = J()
+RB2 = 7            # last wins: an int
+
+
+class R:
+    def __init__(self):
+        self.a = RB1
+        self.b = RB2
+
+
+r = R()
+print(r.a.z)
+print(r.b)
