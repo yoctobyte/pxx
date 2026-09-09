@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: open
 owner: frankZ
-summary: "A class-nested type used as a SPECIALIZATION ARGUMENT is resolved at UNIT scope, not in the class that declares it. `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is class-nested visibility at the hoisted prerequisite, not the routine-local pass-order arm. Nine-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
+summary: "A class-nested type used as a SPECIALIZATION ARGUMENT is resolved at UNIT scope, not in the class that declares it. `TDerived = class public type TElem = Int64; function F: TBox<TElem>; end;` refuses with `unknown type: TElem` when no unit-scope namesake exists — and when one DOES exist it silently specializes on the WRONG type: measured `v=44` where fpc prints `v=300`, a 300 stored through a unit-scope `TElem = Byte` while the source meant the nested `Int64`. A plain use of the same nested name one line away resolves correctly, so the compiler knows which type is meant and the specialization does not ask. Fourth arm of the same sentence as bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling — the mechanism is class-nested visibility at the hoisted prerequisite, not the routine-local pass-order arm. Ten-row reduction ladder in the body, re-measured at compiler 417ee5636a72 / d47ae0762 AFTER 1c16d4523 landed; nothing moved, so this is not that fix's defect. NOT the rtl-generics rung's blocker: 1c16d4523 cleared `unknown type: PT` there (attributed by revert-rebuild) and that wall is now generics.defaults.pas:3250."
 ---
 
 # A class-nested type as a specialization argument resolves at unit scope
@@ -70,7 +70,7 @@ separates them. That is the "could the way I am printing this turn a
 disagreement into an agreement" trap in CLAUDE.md, hit here with a size probe
 that looked like the natural instrument. Assert the value, not the width.
 
-## THE LADDER — nine variants, all re-measured at `1c16d4523` / binary `417ee5636a72`
+## THE LADDER — ten variants, all re-measured at `1c16d4523` / binary `417ee5636a72`
 
 Re-measured after `1c16d4523` ("a specialized body now materialises where the
 specialization is visible") landed, because that fix is adjacent and every row
@@ -89,6 +89,7 @@ moved.
 | v8 | v6 plus a unit-scope namesake declared FIRST | ok | ok |
 | v9 | concrete argument `TEnum<Integer>` (control) | ok | ok |
 | v10 | v8 with the namesake a DIFFERENT type | ok, **v=44** | ok, v=300 |
+| v11 | v6 with the namesake declared AFTER the class | unknown type: TElem | ok |
 
 **What each row buys, because a table of passes is not an argument:**
 
@@ -112,6 +113,8 @@ moved.
   wrong table".
 - **v9 is the row that proves the harness can pass**, and v10 is the row that
   proves it can fail for the right reason.
+- **v11 names WHERE the wrong table is read** — see the mechanism section. It is
+  v8 with one line moved, and it is the only row that separates the two fixes.
 
 ## The mechanism, and the part of it that is a HYPOTHESIS
 
@@ -128,16 +131,32 @@ where those tokens are read, so `FindTypeAlias`'s `AliasVisibleHere` filter —
 which is keyed on exactly that variable — cannot see a row whose `AliasOwnerCi`
 is the class.
 
-**NOT MEASURED, and it is the half a fix turns on:** whether the prerequisite is
-hoisted ahead of the CLASS (so the nested type genuinely does not exist yet in
-token order) or merely parsed with the class scope switched off (so the row
-exists and the filter hides it). v4 is consistent with both — its `TBase` is
-fully closed before `TDerived`, and the nested type is still not found. Settle
-that before designing anything: the first reading needs the nested type hoisted
-too and drags its whole dependency graph along, and the second needs an owner
-column on the NSpec row and a scope window while those tokens are read. **They
-are not the same size of change.** `PXXDBG=p.specsplice` (frankH, `1c16d4523`)
-is the channel that separates them and it is already in the tree.
+**MEASURED, and it is the expensive answer.** The question was whether the
+prerequisite is hoisted ahead of the CLASS — so the nested type genuinely does
+not exist yet in token order — or merely parsed with the class scope switched
+off, so the row exists and the filter hides it. v4 is consistent with both. **v11
+separates them:** move the unit-scope namesake from before the class to AFTER it,
+same section, and v8's pass becomes a failure. So the emission point is EARLIER
+than a type declared later in the same section, and the argument is resolved
+ahead of the class rather than beside it with a scope flag cleared.
+
+That kills the cheap fix. An owner column on the NSpec row plus a scope window
+while those tokens are read would answer the second reading and cannot answer
+this one: at the moment the argument is resolved, there is no row to make
+visible. What is left is the same shape the routine arm already costed and
+refused as a one-liner — hoist the nested type too, and with it whatever it
+references — or instantiate at the USE site instead, which avoids the dependency
+graph entirely and is the direction worth costing first. That is the same
+conclusion the routine arm reached from the other end, which is a reason to
+believe it and also a reason to fix the two together rather than twice.
+
+**And it does NOT go through the splice path.** `PXXDBG=p.specsplice` (frankH,
+`1c16d4523`) prints nothing at all on v6 — no splice event, because this route is
+the `dgen` mint plus `EmitSpecDecl` and never pends anything. Recorded as an
+exculpation with an owner: whatever this is, it is not the mechanism that
+`bug-p-a-specialized-method-body-splices-into-an-illegal-place-under-circular-uses`
+closed, and looking for it there is a dead end someone would otherwise take
+twice.
 
 ## Relationship to the three arms already open
 

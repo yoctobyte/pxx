@@ -2367,3 +2367,19 @@ whole unmodified include — did not reproduce. PUSH -> LET THE PULL SETTLE ->
 REBUILD -> MEASURE reads as a rule about starting from a stale tree; the hazard
 is any rebuild INSIDE the measurement, including the correct one the rule tells
 you to do.
+
+## 2026-09-09 | frankZ | devdocs/progress/backlog-pascal/bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope.md | v11 settles which of the two fixes this needs, and it is the expensive one
+
+The ticket flagged one thing as not measured: is the specialization prerequisite
+hoisted ahead of the class, or parsed beside it with the class scope switched
+off? v11 is v8 with one line moved — the unit-scope namesake declared AFTER the
+class instead of before — and it flips a pass into a failure. So the argument is
+resolved at a point EARLIER than a type declared later in the same section, and
+the cheap fix (an owner column on the NSpec row plus a scope window) cannot work:
+at the moment the argument is resolved there is no row to make visible.
+
+Also an exculpation with an owner: `PXXDBG=p.specsplice` prints NOTHING on this
+repro. Nothing is pended and nothing is spliced — this is the `dgen` mint plus
+`EmitSpecDecl`, not the path `1c16d4523` fixed. Recorded so the next reader does
+not spend an afternoon in the channel that cannot see it, which is the same trap
+that ticket's own author reported hitting from the other side.
