@@ -124,4 +124,4 @@ fpc 3.2.2. Fixture `test/test_conv_op_rank_literal_by_value.pas` (24 rows,
 `converged after 1 round(s)`; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0a4fc1c31.
