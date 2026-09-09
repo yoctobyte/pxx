@@ -4,13 +4,13 @@ title: "`{$if}` cannot read a constant or a type alias the source declares"
 track: P
 prio: 60
 type: bug
-status: open
+status: done
 owner: ""
 found-by: frankH
 created: 2026-09-09
 tags: [conditional-directives, lexer, fpc-corpus]
 blocked-by: []
-summary: "`{$if MAXOPS > 2}` where `MAXOPS` is a source-level `const`, and `{$if sizeof(TBig) = 8}` where `TBig` is a source-level type ALIAS, are both refused -- in the same file and through a `uses` clause alike. fpc compiles all four. This is the SECOND-LARGEST blocker of umbrella-pxx-compiles-fpc-itself, 24 of 207 units behind the unit-cycle bug's 144, and the two questions are one mechanism: the `{$if}` evaluator is answered at LEX time and has no door to the declarations. Two doors of exactly the right shape already exist beside it -- PasCondSizeOfTypeName and PasCondNameDeclaredInUses, both forwarded from compiler.pas so the answer stays with the parser -- so this is a third question through the same hatch, not a new architecture."
+summary: "RESOLVED 2026-09-09 (abc681636 + fcbe280b7). `{$if MAXOPS > 2}` over a source-level `const` and `{$if sizeof(TBig) = 8}` over a source-level type ALIAS both work now, in the file that declares them and through a `uses` clause. Fixture test_p_a_conditional_directive_can_read_a_source_const.pas is 23 rows BYTE-IDENTICAL to fpc 3.2.2, every value row paired with a mirror row that must take the other arm, and the PIN refuses the file on its first row. Corpus: the conditional-directive family of umbrella-pxx-compiles-fpc-itself went from 26 of 207 units to 3 -- attributed per unit, the first commit moved exactly 25 rows and every one was in this family. NO UNIT NEWLY COMPILES: everything behind these rows queues on the unit-cycle bug. The residual 3 (set membership over a set-valued const; a const whose value is a folded call) is bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, and it is the constraint THIS ticket set being kept, not a regression."
 ---
 
 # `{$if}` over a declared constant or type
@@ -96,3 +96,50 @@ here, second only to
 [[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]]
 at 144. Both numbers are first-failure counts and therefore lower bounds --
 a unit that stops on the cycle may stop here next.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Resolved 2026-09-09, frankH — abc681636 + fcbe280b7
+
+**Both halves work and are fpc-verified.** A source-level `const` is readable
+by `{$if}` in the file that declares it and through a `uses` clause, and
+`sizeof` follows a type ALIAS up to eight hops before giving up. Fixture:
+`test/test_p_a_conditional_directive_can_read_a_source_const.pas` +
+`test/condsrc_unit.pas`, 23 rows, **byte-identical to fpc 3.2.2**, and the
+PIN refuses the file on its first row.
+
+`PasCondNameDeclaredInUses` became `PasCondProbeUsedUnits(nm, arity, question)`
+with `PCQ_DECLARED` / `PCQ_CONSTINT` / `PCQ_TYPEALIAS` dispatched inside the
+walk — generalised rather than copied, because the WALK is the subtle half
+(`ResolveUsesUnitSource` rather than a Pascal-only file search, the
+`ProbeDepth` guard, the per-unit reset to the command-line define baseline)
+and none of it differs by question.
+
+**The constraint this ticket set was kept.** A name the `sizeof` door still
+cannot size is a diagnostic, not a default; a const whose value is not an
+integer literal keeps the old error. The two shapes FPC's compiler actually
+asks for there are filed as
+[[bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]]
+(3 units: set membership over a set-valued const, and `high(T)` as a const
+value).
+
+**Corpus, per-unit diff both times** (`tools/fpc_compiler_corpus_probe.sh`,
+fpc as the oracle): the family went **26 units of 207 to 3**. On the first
+commit exactly 25 rows moved and every one of them was in this family; on the
+second, 12 more moved and `ALU not defined` (5) and `unterminated conditional
+directive` (1) cleared. **No unit newly compiles** — 9 of 207 before and after
+— because everything behind these rows queues on
+[[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]].
+
+**Two probe defects were found underneath and fixed in `fcbe280b7`**, both
+predating this work: a probe launched inside a conditional re-lexed the file
+it was inside (it scans the whole token stream for `uses` and finds the
+parent's `uses <thisunit>`) and unbalanced the `{$if}` stack; and the probe
+never expanded the probed unit's `{$I}` includes, so `PUint = qword` — inside
+`{$ifdef cpu64bitaddr}`, a define `fpcdefs.inc` sets — was invisible.
+`{$if declared(X)}` had both.
+
+**Gate:** quick GREEN on each commit; the full tier was run for the pair
+because this touches the conditional evaluator and the lexer's probe
+re-entrancy, which every file goes through.

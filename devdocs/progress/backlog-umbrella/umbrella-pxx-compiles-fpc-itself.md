@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface, bug-p-a-conditional-directive-cannot-read-a-constant-or-a-type-the-source-declares, feature-p-legacy-value-object-types]
+blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface, feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]
 summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS EMPTY ON PURPOSE AND MUST BE GROWN BY ATTEMPTING, NOT BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.'"
 ---
 
@@ -189,3 +189,88 @@ structural: FPC splits `uses` into two clauses precisely so units can be
 mutually recursive. Nothing behind it can be measured. The conditional-directive
 family is second and is the one that is *shaped* like work already done here —
 two forwarded questions of exactly its kind already exist beside it.
+
+## 2026-09-09, frankH — attempt 3: the conditional-directive family, and what it uncovered
+
+Two commits, `abc681636` (read a source `const`, follow a type ALIAS through
+`sizeof`) and `fcbe280b7` (the two probe defects underneath it). **The whole
+probe was re-run before and after each**, so both deltas below are per-unit
+diffs and not category arithmetic.
+
+| | 24dbb0b37 | abc681636 | fcbe280b7 |
+| --- | --- | --- | --- |
+| compile under both | **9** | **9** | **9** |
+| oracle refuses | 10 | 10 | 10 |
+| pxx stops | 188 | 188 | 188 |
+| — of those, the conditional-directive family | **26** | 3 | **3** |
+| — of those, the unit cycle | 144 | 155 | **158** |
+
+**NO UNIT NEWLY COMPILES, across both commits.** That is the third time this
+umbrella has had to say it and it stays the honest unit of progress: a corpus
+delta is a wall moving, not a program building, and everything behind the
+26 rows was standing in the unit cycle's queue.
+
+**`abc681636` — 25 units changed and every one of them was a
+conditional-directive first failure.** No row moved that was not in that
+family, which is what an attributed delta looks like. 11 went to the unit
+cycle, 5 to `ALU not defined` (a wall further into the same files), 5 to
+`Unsupported tcompilerwidechar size`, 2 to `bitsizeof`, 1 to `unterminated
+conditional directive` and 1 (ncnv) from one conditional row to another.
+
+**`fcbe280b7` — 12 units changed, all forward.** `ALU not defined` (5 units)
+and `unterminated conditional directive` (1) cleared entirely.
+
+### The two probe defects, because they are the transferable half
+
+Neither was new with the const/alias questions; both are older and
+`{$if declared(X)}` had the first one first.
+
+- **A probe launched inside a conditional unbalanced the `{$if}` stack.** The
+  walk scans the WHOLE token stream for `uses`, so a unit being lexed through
+  `LexAppend` finds its PARENT's `uses <thisunit>` and **re-lexes the file it
+  is currently inside**, from the outer file's conditional depth. At depth 0
+  the arithmetic balances and nothing shows; one conditional deep, the outer
+  file is refused at its own last line. FPC's `entfile.pas` — 2131 lines, 170
+  openers, 170 `{$endif}`, perfectly balanced — reduced to 14+5+3 lines.
+- **The probe never expanded the probed unit's `{$I}` includes**, which its own
+  header said it did and is the reason it LEXES rather than scanning text.
+  `ParseUsesUnitBody` calls `ExpandIncludes` before the real `LexAppend`; the
+  probe called `LexAppend` alone. So a name in an `.inc` was invisible, and so
+  was every name behind a define an `.inc` SETS: `globtype.pas` declares
+  `PUint = qword` inside `{$ifdef cpu64bitaddr}`, `fpcdefs.inc` derives
+  `cpu64bitaddr`, and the walk `TConstPtrUInt -> PUint -> qword` therefore
+  stopped one hop short. The 18 `sizeof` rows of the 26 named five different
+  types -- 11 `bestreal`, 3 `TConstPtrUInt`, 2 `tcompilerwidechar`, 1
+  `aintmax`, 1 `bestrealrec` -- and only the `TConstPtrUInt` chain needed the
+  includes; the rest were answered by the const/alias commit alone. Said that
+  way because "18 rows of one kind" is exactly the summary that would have hidden
+  the split.
+
+### `Unsupported tcompilerwidechar size` is the `charset` row, not a frontend bug
+
+7 units stop there and they are ONE cause, measured rather than inferred:
+`ncon.pas:968` is FPC's own `{$error}` in the `{$else}` arm of
+`{$if sizeof(tcompilerwidechar) = 2}`; `tcompilerwidechar = word` lives in
+`widestr.pas:35`; `widestr` uses **`charset`**, which is an FPC **RTL** unit
+and is not on the probe's unit path. Two controls:
+
+- a local stand-in unit declaring the identical `tcompilerwidechar = word`
+  answers `two`, so the alias walk is not the problem; and
+- with `fpc-trunk/rtl/inc` added to `-Fu`, the `{$if}` resolves and the first
+  failure moves INTO `charset.pp`, at `DirectorySeparator` — an FPC `System`
+  constant that appears nowhere in pxx's `lib/` or `compiler/`.
+
+So these 7 belong on the same row as `uses: unit source not found: charset`,
+and the next measurable step for them is not the frontend: it is whether pxx
+compiles FPC's RTL at all. **That is a different corpus and it should be
+decided as one before anybody starts adding System constants one error at a
+time.**
+
+### What is left of the conditional-directive family: 3 units, 2 shapes
+
+Filed as
+[[bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]]
+— set membership over a set-valued const (`nld.pas:700`, and ncnv reaches the
+same directive through `uses nld`) and a const whose value is a folded call
+(`RS_INVALID = high(tsuperregister)`, `cgbase.pas:400`, asked by
+`rgobj.pas:1728`). Both are behind the unit cycle anyway.
