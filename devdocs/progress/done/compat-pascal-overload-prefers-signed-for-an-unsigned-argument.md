@@ -60,7 +60,7 @@ An integer-arithmetic differential, while confirming that
 rather than a resolution failure. It is a resolution failure — just not that one.
 
 ## Log
-- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 25e518dc9.
 
 
 ## CORRECTION (frankS, 2026-09-09) — the title names a preference the compiler does not have
