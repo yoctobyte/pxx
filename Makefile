@@ -5412,6 +5412,15 @@ test-core: $(COMPILER)
 	# bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves
 	./$(COMPILER) test/test_a_nested_class_method_impl_is_not_the_unit_level_template_of_that_name.pas $(TESTTMP)/test_nestedmethimpl26
 	$(TESTTMP)/test_nestedmethimpl26 | diff -u test/test_a_nested_class_method_impl_is_not_the_unit_level_template_of_that_name.expected -
+	# A record's `class function ...; static;` is ONE proc, not two. The decl side
+	# had no static arm and typed Self as the record BY REFERENCE against the
+	# impl side's bare class reference, so the impl minted a second proc row.
+	# Only a SPECIALIZED caller sees it: its body is materialised before the
+	# implementation is parsed, binds to the bodyless row, and fails at LINK time
+	# with `unresolved forward`. Without the fix this file does not compile.
+	# bug-p-a-records-static-class-function-has-no-body-when-the-call-is-in-a-specialized-body
+	./$(COMPILER) test/test_a_records_static_class_function_binds_from_a_specialized_body.pas $(TESTTMP)/test_recstaticspec26
+	$(TESTTMP)/test_recstaticspec26 | diff -u test/test_a_records_static_class_function_binds_from_a_specialized_body.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

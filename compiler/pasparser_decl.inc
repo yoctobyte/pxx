@@ -5035,6 +5035,7 @@ procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean; vis: Integer
   what makes `r.Method(...)` resolve through the ordinary member-call path. }
 var
   isFunc, byref, sawConst, isCtor: Boolean;
+  rmSelfClassRef: Boolean;   { a plain record's `class` method: Self is the bare class-reference DUMMY -- see the arm below }
   mname, recNm, fullNm: AnsiString;
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;   { ...and the depth + ultimate base beside it: feature-a-typeref-migrate-consumers }
@@ -5102,6 +5103,7 @@ begin
     reference to the TARGET type instead (s.ToLower reads Self as the string). }
   nP := 1;
   pn[0] := 'Self';
+  rmSelfClassRef := False;
   if RecordMethodClassPrefix and (UClsHelperTk[ci] = Ord(tyClass)) then
   begin
     { A CLASS HELPER'S `class function`: Self is the METACLASS, exactly as it is
@@ -5148,6 +5150,38 @@ begin
       instance is already a pointer, so by-ref would hand the method the
       address OF the reference. The impl side forks on the same question. }
     pRef[0] := (not RecordMethodClassPrefix) and (pt[0] <> tyClass);
+  end
+  else if RecordMethodClassPrefix then
+  begin
+    { A plain RECORD's `class` method -- which is STATIC by construction here,
+      UMthIsStatic below is set from this same flag. Self is a DUMMY the body may
+      not use, and it is registered exactly as the IMPLEMENTATION side registers
+      it: the bare class-reference shape, tyPointer / REC_NONE / by value with
+      PtrElemTk = tyClass (pasparser_proc.inc's `class method: Self is the
+      metaclass` arm, which fires for every static method and has no record
+      fork).
+
+      A record has no metaclass and neither side pretends the value means
+      anything. What matters is that the two AGREE, and they did not: this arm
+      did not exist, so the declaration registered Self as tyRecord BY REFERENCE
+      against the impl's tyPointer, FindProcOverloadRec could not match them, and
+      the implementation minted a SECOND proc row instead of filling this one.
+      Invisible while every caller is parsed AFTER the implementation -- it binds
+      to the row that has the body and the bodyless one is never called. A
+      SPECIALIZED body is materialised early, before a later implementation is
+      parsed, so it binds to THIS row and gets `unresolved forward: TInst.Mk` out
+      of ApplyCallFixups at link time, naming the appended builtin unit and not
+      the call. That is the rtl-generics `uses Generics.Defaults` wall.
+
+      Making the IMPL side adopt the record-by-reference shape is the other way
+      to make the two agree and it is the wrong one -- measured: the row binds,
+      and every such call then segfaults, because a static call site has no
+      instance to pass.
+      bug-p-a-records-static-class-function-has-no-body-when-the-call-is-in-a-specialized-body }
+    pt[0] := tyPointer;
+    ptRec[0] := REC_NONE;
+    pRef[0] := False;
+    rmSelfClassRef := True;
   end
   else
   begin
@@ -5397,6 +5431,12 @@ begin
       ProcParamDynDepth[mpi * MAX_PROC_PARAMS + i] := rmDynA[i];
     if (pt[i] = tyRecord) or (pt[i] = tyClass) then
       ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := ptRec[i];
+    { the bare class-reference Self of a record `class` method: PtrElemTk is
+      part of the signature FindProcOverloadRec compares, so the impl's
+      `ptypesPtrElemTk[0] := tyClass` has to be met here or the two rows still
+      do not match. See the Self arm above. }
+    if (i = 0) and rmSelfClassRef and (i < MAX_PROC_PARAMS) then
+      ProcParamPtrElemTk[mpi * MAX_PROC_PARAMS + i] := Ord(tyClass);
     if rmHasDef[i] then
     begin
       ProcParamHasDefault[mpi * MAX_PROC_PARAMS + i] := True;

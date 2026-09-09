@@ -13557,6 +13557,12 @@ var i: Integer;
 begin
   if ProcCount >= MAX_PROCS then Error('too many procedures');
   if nParams > MAX_PROC_PARAMS then Error('too many procedure parameters');
+  if PxxDbgEnabled('p.proc') then
+  begin
+    write('PXXDBG p.proc reg idx=', ProcCount, ' name=', name, ' nparams=', nParams, ' ptypes=');
+    for i := 0 to nParams - 1 do write(Ord(ptypes[i]), ' ');
+    writeln;
+  end;
   EnsureProcCapacity(ProcCount + 1);
   Procs[ProcCount].Name       := name;
   ProcHashInsert(ProcCount);

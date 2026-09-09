@@ -5,7 +5,7 @@ owner: frankS
 blocked-by: [bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves]
 status: working
 type: feature
-summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` reaches `unresolved forward: TInstance.CreateSelector`; `uses Generics.Collections` NOW reaches `unknown type: PT` at collections.pas:120/123 (872 mints -> 203) since the runaway was fixed; before that it reached `too many deferred specializations`, with `TEnumerator$PT` minted 55 times. THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and `p.nspec` naming the pump: rung N+1's substitution IS rung N's alias. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. FIXED (bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves, done): the cycle was a nested class's method impl matched by the LAST component of its qualified path, so specializing the unit-level TEnumerator<T> scanned TQueue's nested body and minted a TQueue nobody asked for. The wall left is frankZ's unresolved PT. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
+summary: "Rung 3 of the Pascal OOP corpus: `generics.collections` (rtl-generics, FPC release_3_2_2) must COMPILE. Not done, not blocked, and the frontier moved THREE times on 2026-09-09: defaults:2729 -> defaults:224 -> collections:120 -> defaults:3250 -> past it. Measured at binary `5e00cec21466` (`bab3814ad`), two drivers, two walls -- QUOTE THE DRIVER BESIDE THE NUMBER: `uses Generics.Defaults` COMPILES AND RUNS as of 2026-09-09 (it printed `defaults ok`, rc 0, at binary 4b5ee0c8e11e) -- the wall was a record's static class function registering Self differently at its declaration and its implementation, so the impl minted a second proc row and a specialized body bound to the bodyless one; `uses Generics.Collections` NOW reaches `unknown type: PT` at collections.pas:120/123 (872 mints -> 203) since the runaway was fixed; before that it reached `too many deferred specializations`, with `TEnumerator$PT` minted 55 times. THAT SECOND ONE IS NOW DIAGNOSED and it is not the older `PT` defect on its own: it is a NON-CONVERGING SPECIALIZATION-NAME FIXPOINT -- `p.mint` shows a strict ladder of 10 aliases at each of 55 rungs, rung N+1 taking rung N's mangled alias as its argument, and `p.nspec` naming the pump: rung N+1's substitution IS rung N's alias. Raising MAX_SPECIALIZATIONS to 1024 does not help: it reaches `token character pool overflow` instead. FIXED (bug-p-a-specialization-alias-grows-one-segment-per-round-when-an-argument-never-resolves, done): the cycle was a nested class's method impl matched by the LAST component of its qualified path, so specializing the unit-level TEnumerator<T> scanned TQueue's nested body and minted a TQueue nobody asked for. The wall left is frankZ's unresolved PT. Closed on the way here: bug-p-a-bare-method-name-in-argument-position (frankH), a forward `^T` in a nested type section (frankZ), a specialized body materialising where it is visible (frankH), and bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity (frankS). THE TWO STAGINGS ARE THE SAME FILE -- generics.collections.pas is byte-identical between library_candidates/rtl-generics and /usr/share/fpcsrc/3.2.2 (md5 1010a887c20dc546215749ca46c5a773, 110423 bytes) -- so every wall line number here, the 2026-08-30 table included, is the same coordinate system. Rungs 1+2 green: fpcunit runs, fpjson 203/203. Claimed by frankS."
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
@@ -1697,3 +1697,29 @@ frankZ's, who has a 17-line reduction that produces exactly this error with no
 corpus at all.
 
 `uses Generics.Defaults` is unchanged: `unresolved forward: TInstance.CreateSelector`.
+
+## 2026-09-09 (frankS) — the Defaults driver is THROUGH
+
+`uses Generics.Defaults` compiles and runs. `defaults ok`, rc 0, binary
+`4b5ee0c8e11e`.
+
+The wall was not generics at all, and the message named a file nobody wrote:
+`unresolved forward: TInstance.CreateSelector` in `compiler/builtin/builtinheap.pas`,
+raised by `ApplyCallFixups` at LINK time. `generics.defaults.pas` declares
+`TComparerService.TInstance` with two `static` class functions and calls them 62
+times from `class constructor THashService<T>.Create`. A record's static class
+function registered Self as the record BY REFERENCE at its declaration and as the
+bare class reference at its implementation, so the impl minted a SECOND proc row;
+a specialized body materialises early, binds to the declaration's bodyless row,
+and the diagnostic arrives at link time pointing at the appended builtin unit.
+[[bug-p-a-nested-records-static-class-function-has-no-body-when-it-is-called-from-a-specialized-body]].
+
+| driver | wall |
+| --- | --- |
+| `uses Generics.Defaults` | **none — compiles and runs** |
+| `uses Generics.Collections` | `unknown type: PT` at collections.pas:120/123 (frankZ's) |
+
+**Both of today's fixes on this rung were a rule living on ONE side of a
+declaration/implementation pair**, and so were two of frankZ's. All four are
+silent on arrival: nothing refuses, the two sides simply build different things
+and the diagnostic surfaces somewhere else entirely.
