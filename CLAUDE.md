@@ -435,6 +435,18 @@ dont know fpc's internals."* The ticket was competent and the fork was real; it
 was **addressed in the wrong terms**, and relaying it cost him a turn and
 returned nothing. Restated in one sentence about what we want, he answered it
 immediately and completely.
+**AND THIS IS NOT A LICENCE TO WITHHOLD THE MECHANISM — LEARNING COMPILER
+INTERNALS IS A STATED SIDE GOAL OF THIS PROJECT** (owner, from week one and
+restated 2026-09-09): *"agentic coding knows a hell lot more than me. but also
+overlooks the most trivial stuff ... i don't know all and/or some stuff takes
+days to study. i'm not ashamed to not know all."* So the rule is about **what
+he must ANSWER**, never about what he may READ. Put the decision in goal terms
+so it is decidable; then explain the mechanism plainly beside it, because he
+wants it. A seat that answers *"that's internal, don't worry about it"* has
+obeyed the letter of this rule and defeated one of the project's own aims.
+**And do not treat an "I don't know" as a problem to route around** — it is an
+ordinary, precise report from a specialist about the edge of their
+specialisation, offered so you will answer rather than assume. Answer it.
 
 **The test before it goes up: can you state the fork as a sentence about what
 we WANT, with no implementation noun in it?** *"Do we want pxx and FPC binaries
