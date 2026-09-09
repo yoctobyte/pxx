@@ -13,6 +13,21 @@ because every session paid the history at startup.
 **Never cite a big reference file as "read this".** Name the section and its
 cost. The three that were wrong cost ~470k tokens between them, obeyed literally.
 
+**WHAT EARNS A LINE HERE: RECURRENCE, NOT QUALITY.** Merit decides whether a
+finding is BANKED — a ticket, the logbook, `debugging-playbook.md`. **A second
+independent subsystem** decides whether it is promoted to the file every
+session pays for at startup. Running those two together is how an excellent
+playbook entry gets argued up on how good it is, and it is how this file grew
+to 72KB the first time. Measured 2026-09-09: six rules landed here in one
+evening on one seat's unwritten judgement, and two findings of comparable
+quality were deliberately left in the playbook and the logbook by the same
+test — a sharp sentence about guards, and a silent-negative class whose guard
+half was already covered here. **Say the decision out loud to the author**: an
+author reads "not promoted" as "not valued" unless told which test it met and
+which it did not. And prefer STRENGTHENING an existing rule to adding a
+neighbour — three of tonight's six were extensions, and an extension costs a
+sentence where a new rule costs a paragraph.
+
 ## The goal — what makes work on-target
 
 **`devdocs/dev/the-goal-cross-cross.md`.** pxx runs under linux/bsd/minix/gnu/
