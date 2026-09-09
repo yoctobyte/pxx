@@ -76,3 +76,9 @@ if baseCi < 0 then
 
 Plain-spelling-first means a unit that really exports the bare name keeps it, so
 this can only add a resolution and never redirect an existing one.
+
+## Log
+
+- 2026-09-09 — fixed and closed in the same change; the fix and its test row are
+  in commit d1efd1dee (the base-class arm of `PyMapReservedMember`, plus the
+  `class Grid(array.array)` rows in `test/test_nilpy_the_array_module.npy`).

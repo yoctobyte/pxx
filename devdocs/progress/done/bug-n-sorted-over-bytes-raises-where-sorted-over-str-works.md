@@ -48,3 +48,10 @@ Found by grepping for siblings after fixing
 `bug-n-str-join-rejects-an-argument-shape-cpython-accepts`; not reached by
 lekkerzeilen, so it blocked nothing and was fixed because it was one line from
 a defect already in hand.
+
+## Log
+
+- 2026-09-09 — fixed and closed in the same change; the fix and its test row are
+  in commit d1efd1dee (the `TPyBytes` lexicographic arm of `pyvar_gt` in
+  `compiler/builtin/pylib.pas`, asserted by
+  `test/test_nilpy_bytes_join_and_bytes_n.npy`).
