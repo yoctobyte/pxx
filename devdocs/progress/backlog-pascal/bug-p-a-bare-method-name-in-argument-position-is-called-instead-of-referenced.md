@@ -96,3 +96,48 @@ because overload resolution has not run. The question available there is the
 free-routine one: can this be called parenless at all? A paramless function can,
 and Delphi calls it; a routine that REQUIRES arguments cannot, so the reference
 is the only reading that compiles.
+
+# 2026-09-09 — the parse half is SOLVED and it is not enough (frankuser)
+
+Attempted, measured, **not landed**. `TryDelphiBareProcArg` in
+`compiler/pasparser_lval.inc` asks `FindProc`, which sees free routines only,
+so inside a method body the reference reading was never reached at all. Adding a
+method arm — mirroring `TryParseParenlessMethodRef`'s implicit-Self arm in
+`pasparser_call.inc` verbatim, `ASTRight := UMthVirSlot` included — makes the
+repro COMPILE. It then **segfaults at the indirect call**:
+
+```
+ok: bare  [code=69400B data=3504B bss=43532B procs=140]
+took            <- prints the literal, dies calling h(41)
+Segmentation fault (core dumped)
+```
+
+So the ticket's own warning holds and this is the same wall the earlier attempt
+hit: **the parser is now right and something downstream is not.** What that
+changes is the search area — it is no longer 'find the third site that decides
+the reading'. The reading is decided correctly; the defect is in lowering the
+`AN_METHODREF` argument to a method-pointer temp, or in the temp's layout at the
+call. `ir.inc:5659` already routes `AN_METHODREF` to `IRMethodRefToTemp` when the
+param is `tyRecord`, so the route exists and the value it produces is wrong —
+check the `Self` operand actually reaches the temp, and check the two-word
+method-pointer layout against what the `of object` call site reads.
+
+**Do not land the parser arm alone.** Today's `no overload of Take matches` is an
+honest refusal; a segfault is not, and the arm converts one into the other.
+
+Three measured facts worth keeping, all cheap to get wrong:
+
+- `Params[0]` of a method is the implicit `Self`, so the free-routine precedence
+  tests must read slot 1 and compare `ParamCount = 1`. Reading slot 0 asks
+  whether `Self` has a default — always false, and false in the direction that
+  silently takes an address where Delphi would have called.
+- `ASTRight := UMthVirSlot[rmmi]` is load-bearing. Omit it and a **virtual**
+  method binds the base rather than the override — a silently wrong target that
+  no repro in this ticket exercises.
+- `FindUMethOverloadAhead` probes arguments with a bare `ParseArgExpr` and no
+  hook. That is a real second gap, and it is NOT this bug's cause: the repro has
+  a single `Take`.
+
+The working arm is reproducible from this description in about ten minutes; it
+was deliberately not committed, because a patch that turns a diagnostic into a
+crash is worse to inherit than a description of one.
