@@ -3688,16 +3688,44 @@ end;
       TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)
 
   -- so the two-parameter body is streamed for a one-parameter specialization
-  under a substitution binding only `T`. THREE sites take the last name match:
-  this one, EmitLateNestedSpecDecls, and ParseSubroutine's `X.M` branch. The
-  convention is inherited here rather than introduced, and the fix is one
-  ticket for all three, because the header's arity is recoverable --
+  under a substitution binding only `T`. FOUR sites take the last name match,
+  and THIS ROUTINE IS ONE OF THEM -- the loop below matches on
+  Templates[ti].Name and nothing else:
+
+      EmitLateNestedSpecDecls              pasparser_generic.inc
+      ScanDelphiMethodImplsForNestedSpecs  pasparser_generic.inc
+      ParseSubroutine's `X.M` branch       pasparser_proc.inc
+      BufferTemplateMethodsAhead           HERE
+
+  The convention is inherited rather than introduced, and the fix is one ticket
+  for all four, because the header's arity is recoverable --
   DelphiRewriteGenericUses deletes the group and can record it.
-  Found by frankS, who also established that it does not land alone: fixing
-  arity exposes a second gap one layer down, where a `specialize NAME<args>`
-  group in expression position inside a streamed body is never collapsed to its
-  minted alias, and a 30-line unit that compiles at HEAD then fails.
+  Found by frankS. This list said THREE until 2026-09-09 and named the wrong
+  three -- it counted this routine and omitted
+  ScanDelphiMethodImplsForNestedSpecs, which sits fifty lines above it in this
+  same file. With all four made arity-aware
+  (via a DelphiGenMethImplHdrOfTemplate that answers True when no arity was
+  recorded, so objfpc is untouched) the ticket's 30-line repro compiles again,
+  so the "half the fix breaks a compiling unit" warning is about a THREE-site
+  patch specifically, not about arity work in general.
   bug-p-a-generic-method-implementation-is-attributed-by-name-not-arity
+
+  THE COPY THIS FUNCTION TAKES IS A SNAPSHOT, AND THAT IS A SECOND DEFECT ON
+  THE SAME TICKET. `DelphiRewriteGenericUses` runs to a fixed point PER
+  TEMPLATE, so "the stream has been rewritten" is only ever true of the
+  templates declared SO FAR. Buffering ahead exists precisely to get in front
+  of the parser, which is the same thing as getting in front of later
+  declarations -- so any copy taken here is correct about the rewrite state at
+  its moment and silently stale about every template declared after it.
+  Measured by frankS in generics.defaults: the body at :3247 is copied while
+  the parser sits at line 994, `TGOrdinalStringComparer` is not declared until
+  line 1002, and its `specialize` marker is then injected into the MAIN stream
+  at :3250 with nothing revisiting the arena copy. NestedSpecGroup needs that
+  marker, returns gEnd=-1, the group is never collapsed, and the surviving `<`
+  reaches the expression parser as less-than.
+  DO NOT AIM AT THE EXPRESSION PARSER. It is behaving correctly on the tokens
+  it is handed; the ticket said "a group in expression position is never
+  collapsed" for a day and that was the symptom.
 
   The alternative attribution -- matching on parameter SHAPE -- stays refused
   for the reason ScanDelphiMethodImplsForNestedSpecs gives: `T` is the commonest
