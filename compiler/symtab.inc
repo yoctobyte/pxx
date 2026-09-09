@@ -2467,9 +2467,23 @@ function ClassHelperRecFor(recId: Integer; const memberName: AnsiString): Intege
 
   Guarded on the member actually existing on the helper, so a class with a
   helper in scope resolves every one of its own members exactly as before.
-  There are two member-lookup loops in the Pascal parser (the ParseLValueAST
-  designator loop and ParseClassRecordSelectors); both ask this, rather than
-  growing a redirect apiece that could drift. }
+  THERE ARE FOUR MEMBER-LOOKUP LOOPS IN THE PASCAL PARSER, and this comment said
+  TWO until 2026-09-09 -- which is not a documentation slip, it is the defect
+  itself written down. The two it named, the ParseLValueAST designator loop
+  (:2699) and ParseClassRecordSelectors (:5478), are the INSTANCE loops and both
+  asked this unconditionally, in front of every lookup. The two it did not name
+  are the CLASS-LEVEL ones and neither did: ParseLValueAST's metaclass arm
+  (:1486) asked only as a FALLBACK, when the class had no member of that name, so
+  a helper could ADD a class method and never OVERRIDE one; ParseFactorCore's
+  type-name arm (pasparser_expr.inc, the `TClassName.Member` factor) never asked
+  at all. Observable: helper INSTANCE methods dispatched and helper CLASS-LEVEL
+  methods never did, with `static` innocent. All four ask now, all four ask
+  FIRST -- which is free, because this returns recId unchanged when the class's
+  own member wins.
+  ANY FIFTH LOOP MUST ASK IT TOO. That is the whole reason this is one function
+  and not a redirect per site, and a count in a comment is exactly the kind of
+  name that goes stale while reading as verified: the two loops it named were
+  correct, so the sentence sampled true. bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper }
 var ci, hci: Integer;
 begin
   Result := recId;

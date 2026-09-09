@@ -1,42 +1,59 @@
 program test_a_class_helper_on_a_class_level_method;
 {$mode objfpc}{$H+}
-{ THIS FILE PINS A DEFECT. Five of its seven rows record what pxx answers TODAY
-  and today's answer is WRONG; the expected file is a snapshot, not a
-  specification. Read the table below before changing it.
+{ Class-helper dispatch on CLASS-LEVEL members, reached through the type name.
 
-  A class helper's CLASS-LEVEL members are never applied: `TTest.CS` answers the
-  class's own 1 where fpc 3.2.2 answers the helper's 2, and the same for the
-  non-static `CN` (10 vs 20). INSTANCE members dispatch correctly (400 in both).
-  So the discriminator is the RECEIVER -- a class-level member reached through
-  `TClass.Method` -- and not `static`, and not generics.
+  Until 2026-09-09 a class helper's class-level members were never applied:
+  `TTest.CS` answered the class's own 1 where fpc 3.2.2 answers the helper's 2,
+  the non-static `CN` the same at 10 vs 20, while INSTANCE members dispatched
+  correctly (400 in both). The discriminator was the RECEIVER -- a class-level
+  member reached through `TClass.Method` -- and never `static`, and never
+  generics: five of these eight rows contain no generics at all.
 
-  WHY IT IS PINNED BEFORE THE FIX RATHER THAN WITH IT. One row, `gen-TTest2`,
-  currently agrees with fpc at 3, and it agrees FOR THE WRONG REASON: pxx applies
-  no class-level helper in any scope, so there is no exclusion rule doing the
-  work. The row beneath it settles that -- `plain-TTest2` is the same class, the
-  same helper and the same program with the generics removed, and pxx answers 3
-  there too where fpc answers 4. A dispatch fix will therefore flip `gen-TTest2`
-  to 4 with nothing to stop it. Committed here first so that flip reads as a
-  defect REVEALED and not one caused.
+  ONE QUESTION, FOUR COPIES, and ClassHelperRecFor's own comment said "two
+  member-lookup loops" while there were four. The two INSTANCE loops asked it
+  unconditionally, in front of every lookup. The metaclass loop in
+  pasparser_lval.inc asked it only as a FALLBACK, when the class had no member of
+  that name -- so a helper could ADD a class method and never OVERRIDE one. The
+  fourth, ParseFactorCore's type-name arm, never asked at all. Both now ask, and
+  ask FIRST: ClassHelperRecFor returns its input unchanged when the class's own
+  member wins, so asking early is free and is the only order that answers both
+  directions.
 
-  | row                | pxx now | fpc 3.2.2 | what it means                     |
-  | ------------------ | ------: | --------: | --------------------------------- |
-  | gen-TTest          |       1 |         2 | WRONG -- helper in template's own unit |
-  | gen-TTest2         |       3 |         3 | agrees, FOR THE WRONG REASON      |
-  | inunit             |       1 |         2 | WRONG -- no generics in this row  |
-  | plain-TTest        |       1 |         2 | WRONG -- no generics, no unit boundary |
-  | plain-TTest2       |       3 |         4 | WRONG -- and this is what makes gen-TTest2 accidental |
-  | classfn-nonstatic  |      10 |        20 | WRONG -- so `static` is not the discriminator |
-  | instance           |     400 |       400 | CORRECT -- instance helper members do dispatch |
+  THE LAST TWO ROWS ARE TWO DIFFERENT PARSER ARMS AND EACH NEEDS ITS OWN. Every
+  expression row goes through ParseFactorCore; `TTest.Touch;` in statement
+  position goes through ParseLValueAST. Measured: with only the expression arm
+  fixed, seven rows were correct and `stmt-touch` still answered 1. A test made
+  of expressions alone certifies half a fix.
 
-  WHEN THE DISPATCH FIX LANDS, five rows become correct (1->2, 1->2, 1->2, 3->4,
-  10->20) and `gen-TTest2` becomes WRONG at 4 against fpc's 3. That is not a
-  regression to undo. fpc gives 4 for `plain-TTest2` and 3 for `gen-TTest2` on
-  the same class, helper and program, which is the actual evidence that fpc binds
-  a template body in the TEMPLATE's declaration context -- a real second defect
-  that is not measurable until helpers are applied at all. Split it out then.
+  | row                | pxx | fpc 3.2.2 |
+  | ------------------ | --: | --------: |
+  | gen-TTest          |   2 |         2 |
+  | **gen-TTest2**     | **4** |     **3** |  <- KNOWN DIVERGENCE, see below
+  | inunit             |   2 |         2 |
+  | plain-TTest        |   2 |         2 |
+  | plain-TTest2       |   4 |         4 |
+  | classfn-nonstatic  |  20 |        20 |
+  | instance           | 400 |       400 |
+  | stmt-touch         |   2 |         2 |
 
-  bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper }
+  THE ONE DIVERGENCE IS A SECOND DEFECT, REVEALED AND NOT CAUSED. Before this
+  fix pxx answered `gen-TTest2` = 3 and that MATCHED fpc -- for the wrong reason:
+  it applied no class-level helper in any scope, so no exclusion rule was doing
+  the work. The `plain-TTest2` row is what settles it: same class, same helper,
+  same program, generics removed, and pxx answered 3 there too where fpc answers
+  4. The row was pinned at 3 in its own commit (17a0e4bd6) BEFORE dispatch was
+  touched, precisely so this flip would read as a defect revealed.
+
+  What it reveals: fpc answers 4 for `TTest2.CS` and 3 for `specialize
+  DoTest<TTest2>` -- same class, same helper, same program -- so fpc resolves a
+  template body's names in the TEMPLATE's declaration context and a helper
+  declared by the SPECIALIZING program does not reach it. pxx has no such rule.
+  That is two-phase name lookup for generics, it was not measurable until helpers
+  were applied at all, and it is its own ticket. Do NOT "fix" this row by
+  narrowing helper dispatch; the other seven rows are the constraint.
+
+  bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper
+  bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own }
 uses uclshelperdispatch;
 type
   { TTest2 declares its OWN CS (3) as well as having a helper (4). Both must be
@@ -60,5 +77,13 @@ begin
   WriteLn('classfn-nonstatic = ', TTest.CN);
   o := TTest.Create;
   WriteLn('instance          = ', o.Inst);
+  { STATEMENT POSITION, and it is a SECOND parser arm -- the six rows above are
+    all expressions and none of them can see it. `TTest.Touch;` goes through
+    ParseLValueAST's metaclass lookup; `TTest.CS` inside a WriteLn goes through
+    ParseFactorCore's type-name arm. Measured: with only the expression arm fixed
+    this row still answered 1 while every other row was already correct, which is
+    exactly the one-armed double case normalise-dont-special-case names. }
+  TTest.Touch;
+  WriteLn('stmt-touch        = ', Trace);
   o.Free;
 end.

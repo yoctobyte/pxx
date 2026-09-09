@@ -6452,20 +6452,29 @@ test-core: $(COMPILER)
 	# second. Every row is oracled against FPC 3.2.2 -Mobjfpc.
 	./$(COMPILER) test/test_class_helper_for_a_class.pas $(TESTTMP)/test_class_helper26
 	tools/expect_same.sh test_class_helper26 "$$($(TESTTMP)/test_class_helper26)" "$$(printf 'a 42\ne 63\nd 42\ni  22\ni2 7\nb helper\nf helper\nf2 helper\nh  derived\ng  shout:helper\nc T2')"
-	# THIS ROW PINS A DEFECT AND ITS .expected IS A SNAPSHOT, NOT A SPECIFICATION.
-	# A class helper's CLASS-LEVEL members are never applied -- `TTest.CS` gives the
-	# class's own 1 where fpc gives the helper's 2, non-static `CN` the same at
-	# 10/20 -- while INSTANCE members dispatch correctly (400 in both). The
-	# receiver is the discriminator, not `static` and not generics: three of the
-	# seven rows contain no generics at all.
-	# Committed BEFORE the dispatch fix on purpose. `gen-TTest2` currently agrees
-	# with fpc at 3 and agrees FOR THE WRONG REASON -- pxx applies no class-level
-	# helper in any scope, so no exclusion rule is doing the work, which the
-	# `plain-TTest2` row beneath it (3 here, 4 in fpc, generics removed) settles.
-	# A dispatch fix flips gen-TTest2 to 4 with nothing to stop it; pinning it
-	# first is what makes that flip read as a defect REVEALED, not one caused.
-	# The header of the .pas carries the full table and what each row becomes.
+	# Class-helper dispatch on CLASS-LEVEL members through the type name. A class
+	# helper's class methods were never applied -- `TTest.CS` gave the class's own
+	# 1 against fpc's 2, non-static `CN` 10 against 20 -- while INSTANCE members
+	# dispatched correctly (400 in both). The receiver was the discriminator, not
+	# `static` and not generics: five of the eight rows have no generics in them.
+	# ONE QUESTION, FOUR COPIES. ClassHelperRecFor's comment said "two member-lookup
+	# loops" and there were four: the two instance loops asked it unconditionally,
+	# the metaclass loop asked it only as a FALLBACK (so a helper could ADD a class
+	# method but never OVERRIDE one), and ParseFactorCore's type-name arm never
+	# asked at all.
+	# THE LAST TWO ROWS ARE TWO PARSER ARMS. Every expression row goes through
+	# ParseFactorCore; `TTest.Touch;` in statement position goes through
+	# ParseLValueAST. Measured: with only the expression arm fixed, seven rows were
+	# correct and `stmt-touch` still answered 1 -- a test of expressions alone
+	# certifies half a fix.
+	# ONE ROW DIVERGES ON PURPOSE: gen-TTest2 is 4 here and 3 in fpc. It was pinned
+	# at 3 in 17a0e4bd6 BEFORE dispatch was touched, because 3 was correct for the
+	# wrong reason (no helper applied anywhere -- see plain-TTest2, same class,
+	# helper and program, generics removed, 3 here and 4 in fpc). The flip is a
+	# SECOND defect revealed: fpc resolves a template body in the TEMPLATE's
+	# declaration context. Its own ticket; do not narrow dispatch to chase it.
 	# bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper
+	# bug-p-a-generic-template-body-is-resolved-in-the-specializers-scope-not-its-own
 	./$(COMPILER) -Futest test/test_a_class_helper_on_a_class_level_method.pas $(TESTTMP)/test_clshelper_classlevel26
 	$(TESTTMP)/test_clshelper_classlevel26 | diff -u test/test_a_class_helper_on_a_class_level_method.expected -
 	# v3: the TARGET TYPE'S OWN NAME as receiver — UInt32.GetSignMask, how

@@ -1,7 +1,8 @@
-gen-TTest         = 1
-gen-TTest2        = 3
-inunit            = 1
-plain-TTest       = 1
-plain-TTest2      = 3
-classfn-nonstatic = 10
+gen-TTest         = 2
+gen-TTest2        = 4
+inunit            = 2
+plain-TTest       = 2
+plain-TTest2      = 4
+classfn-nonstatic = 20
 instance          = 400
+stmt-touch        = 2

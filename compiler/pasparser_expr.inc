@@ -800,6 +800,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
+    mcHostCi, mcHelperRec: Integer;   { class-helper metaclass redirect on the TYPE-NAME arm: the class the call was SPELLED on, and the rec it redirected to }
     atLastDot, atChainCi: Integer;   { `@a.b.Foo`: where the value stops, and the class it lands on }
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
@@ -8212,7 +8213,39 @@ begin
         if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual STATICM name=', name,
           ' mem=', GetTokenStr(TokPos+1), ' qunit=', qUnit, ' flat=', FindUClass(name),
           ' -> ci=', ci);
+        { A CLASS HELPER standing in front of the extended class's own CLASS-LEVEL
+          members, exactly as it stands in front of the instance ones at
+          pasparser_lval.inc:2699 and :5478. THE FOURTH COPY of the lookup
+          ClassHelperRecFor exists to be the single answer to -- its own comment
+          said "two member-lookup loops" until 2026-09-09 and there are four, which
+          is how `TTest.CS` kept answering the class's own 1 against fpc's 2 while
+          `o.Inst` correctly answered the helper's 400. Not a generics defect and
+          not about `static`: the discriminator was always the RECEIVER.
+          Asked BEFORE FindUMeth, never as a fallback -- ClassHelperRecFor returns
+          recId unchanged when the class's own member wins, so it is free for a
+          class with no helper and it is the only order that answers both
+          directions. See its comment for why the walk interleaves.
+          bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper }
+        mcHostCi := -1;
+        if ci >= 0 then
+        begin
+          mcHelperRec := ClassHelperRecFor(REC_UCLASS_BASE + ci, GetTokenStr(TokPos+1));
+          if mcHelperRec <> REC_UCLASS_BASE + ci then
+          begin
+            mcHostCi := ci;
+            ci := mcHelperRec - REC_UCLASS_BASE;
+          end;
+        end;
         mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
+        { the helper claimed the NAME but this arm cannot serve it (a non-static
+          class method has no path here yet): give the class back rather than leave
+          a helper row -- which has no VMT -- standing in for a metaclass. }
+        if (mcHostCi >= 0) and ((mmi < 0) or (not UMthIsStatic[mmi])) then
+        begin
+          ci := mcHostCi;
+          mcHostCi := -1;
+          mmi := FindUMeth(ci, GetTokenStr(TokPos+1));
+        end;
         if (mmi >= 0) and (qUnit >= 0) and UMthIsCtor[mmi] and
            (not UMthIsStatic[mmi]) then
         begin
@@ -8256,7 +8289,12 @@ begin
             Expect(tkDot, '.');
             Next; { consume method name }
             mselfArg := AllocNode(AN_CLASSREF);
-            ASTIVal[mselfArg] := ci;
+            { hostCi, not ci, when a class helper claimed the name: ci is the
+              HELPER row, which has no VMT of its own, and Delphi passes the
+              metaclass of the class the call was SPELLED on. Same rule and same
+              reason as pasparser_lval.inc:1804. }
+            if mcHostCi >= 0 then ASTIVal[mselfArg] := mcHostCi
+            else ASTIVal[mselfArg] := ci;
             ASTTk[mselfArg] := Ord(tyPointer);
             GenVirtSlot := UMthVirSlot[mmi];
             mcallNode := GenMakeStaticMethodCall(mpi, mselfArg);

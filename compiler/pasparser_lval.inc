@@ -1455,14 +1455,7 @@ begin
             Next;
           end;
 
-          { Overload-aware: `TAssert.AssertNotNull(x)` and `TAssert.AssertNotNull(msg, x)`
-            are different methods. FindUMeth takes the first NAME match and ignored the
-            argument count, so the wrong overload was picked (and then complained about
-            the arguments it did not get). CountCallArgsAhead reads the call ahead --
-            the method name is already consumed here, so it is scanning from the '('. }
           mmi := -1;
-          if mmi < 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
-          if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 
           { A CLASS HELPER'S class method, reached through the extended class's
             NAME: `TA.Other` where `TH = class helper for TA` declares
@@ -1481,18 +1474,44 @@ begin
             VMT, so the arm below would otherwise hand it the by-value dummy that
             a record/type helper correctly gets, and the body would read nil.
             bug-p-a-class-helpers-class-method-is-refused-by-the-record-metaclass-rule }
-          if mmi < 0 then
+          { ...AND IT IS ASKED FIRST, NOT AS A FALLBACK. This was `if mmi < 0 then`
+            until 2026-09-09, i.e. only when the class had NO member of that name,
+            so a helper could add a class method and never override one:
+            `TTest.CS` found TTest's own CS and never asked. That is not FPC's
+            rule and ClassHelperRecFor's own comment says so three lines up --
+            the walk INTERLEAVES, consulting the helper for each class BEFORE
+            that class's own members, which is exactly why it returns recId
+            unchanged when the class's member wins. Asking it first therefore
+            costs nothing for a class with no helper and is the only order that
+            can answer both directions.
+            THE SIBLING SITES ALREADY DID THIS. Both instance loops
+            (:2699, :5478) call it unconditionally, in front of every lookup, and
+            say so in their comments; only this metaclass path guarded it. So the
+            observable was: helper INSTANCE methods dispatched and helper
+            CLASS-LEVEL methods never did, with `static` innocent -- one question,
+            three copies, and the copy added last added it wrong.
+            bug-p-a-generic-routine-body-does-not-see-its-own-units-class-helper }
+          helperRec := ClassHelperRecFor(REC_UCLASS_BASE + ci, fieldName);
+          if helperRec <> REC_UCLASS_BASE + ci then
           begin
-            helperRec := ClassHelperRecFor(REC_UCLASS_BASE + ci, fieldName);
-            if helperRec <> REC_UCLASS_BASE + ci then
-            begin
-              hostCi := ci;
-              ci := helperRec - REC_UCLASS_BASE;
-              mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
-              if mmi < 0 then mmi := FindUMeth(ci, fieldName);
-              if mmi < 0 then begin ci := hostCi; hostCi := -1; end;
-            end;
+            hostCi := ci;
+            ci := helperRec - REC_UCLASS_BASE;
+            mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+            if mmi < 0 then mmi := FindUMeth(ci, fieldName);
+            { the helper names it but not at this ARITY: fall back to the extended
+              class, which is what the redirect was standing in front of }
+            if mmi < 0 then begin ci := hostCi; hostCi := -1; end;
           end;
+
+          { The extended class's own member, reached when no helper claimed the
+            name. Overload-aware: `TAssert.AssertNotNull(x)` and
+            `TAssert.AssertNotNull(msg, x)` are different methods. FindUMeth takes
+            the first NAME match and ignores the argument count, so the wrong
+            overload was picked (and then complained about the arguments it did
+            not get). CountCallArgsAhead reads the call ahead -- the method name is
+            already consumed here, so it is scanning from the '('. }
+          if mmi < 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+          if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 
           { NilPy `Base.__init__(self, n)` — the pre-super() spelling of a
             base-class constructor call, and still ordinary Python. The ctor is
