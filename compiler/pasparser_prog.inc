@@ -1713,9 +1713,22 @@ begin
           CaseEqual(GetTokenStr(i), 'bsfword') or CaseEqual(GetTokenStr(i), 'bsrword') or
           CaseEqual(GetTokenStr(i), 'bsfdword') or CaseEqual(GetTokenStr(i), 'bsrdword') or
           CaseEqual(GetTokenStr(i), 'bsfqword') or CaseEqual(GetTokenStr(i), 'bsrqword') or
+          { FPC System names we had only in SysUtils, so a no-uses program could
+            not reach them at all -- task-b-nineteen-sysutils-names-that-fpc-keeps-in-system.
+            Declared in builtin and MOVED out of sysutils, so there is one copy;
+            any `uses` clause already pulls this unit, which is why existing
+            code is unaffected. }
+          CaseEqual(GetTokenStr(i), 'dynarraysize') or
+          CaseEqual(GetTokenStr(i), 'allocmem') or CaseEqual(GetTokenStr(i), 'setstring') or
+          CaseEqual(GetTokenStr(i), 'utf8decode') or CaseEqual(GetTokenStr(i), 'utf8encode') or
           CaseEqual(GetTokenStr(i), 'runerror') or CaseEqual(GetTokenStr(i), 'uniquestring') or
           CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
           CaseEqual(GetTokenStr(i), 'swap'))) or
+        { sLineBreak is the one BARE name of that group: FPC declares it as a
+          const and our spelling is a paramless function, so it is written
+          without parentheses and the call-shaped rule cannot see it. Same
+          exception randseed/randomize already are. }
+        CaseEqual(GetTokenStr(i), 'slinebreak') or
         CaseEqual(GetTokenStr(i), 'randseed') or CaseEqual(GetTokenStr(i), 'randomize')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;

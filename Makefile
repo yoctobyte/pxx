@@ -16001,8 +16001,30 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_frozen_concat_operand26 "$$($(TESTTMP)/test_frozen_concat_operand26)" "$$(printf 'a ab!\nb ab!\nc <ab>\nd abcd\ne abab\nf ab!|3\ng box!\nh 400\nOK')"
 	./$(COMPILER) test/test_shortstring_function_result.pas $(TESTTMP)/test_ss_func_result26
 	tools/expect_same.sh test_ss_func_result26 "$$($(TESTTMP)/test_ss_func_result26)" "$$(printf 'a ab\nb sized\nc q|qq\nd Xd\ne ab|2|2\nf TRUE|FALSE\ng boxed\nh |   ab|\nOK')"
+	# The PROGRAM half of the same class. The unit fixture below cannot fail if the
+	# program-level scan already pulled builtin, so the two are not redundant: this
+	# one names the six routines directly, that one names none of them.
+	# `alloc 0` is the row that separates AllocMem from a GetMem alias, and
+	# `dynnil 0` asserts DynArraySize(nil) rather than dereferencing -8 off nil.
+	# Every value is fpc 3.2.2's output for the identical source.
+	# task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
+	./$(COMPILER) test/test_b_system_names_reach_a_program_with_no_uses_clause.pas $(TESTTMP)/test_b_sysnames_noneuses26
+	tools/expect_same.sh test_b_sysnames_noneuses26 "$$($(TESTTMP)/test_b_sysnames_noneuses26)" "$$(printf 'alloc   0\ndynsize 5\ndynnil  0\nsetstr  abc|3\nsetstr0 <>|0\nlinebrk 1\nutf8dec 3\nutf8enc abc')"
+	# Rows a..c: the elementary math names FPC keeps in System, called from a
+	# UNIT with no uses clause -- the program-level ambient scan reads only the
+	# PROGRAM's tokens and this program names no math at all.
+	# Rows d..h, added 2026-09-09: the SAME CLASS A THIRD TIME, for the SysUtils
+	# side. AllocMem/DynArraySize/SetString/sLineBreak/UTF8Decode/UTF8Encode also
+	# live in FPC's System and lived only in lib/rtl/sysutils here, so a no-uses
+	# PROGRAM could not reach them and neither could a UNIT -- two holes, two
+	# scans, one class. The program still names none of them, which is what makes
+	# rows d..h fail if the unit-level pull is ever dropped.
+	# `d 0` asserts AllocMem ZEROES: an alias to GetMem answers whatever the heap
+	# held, so this row is the difference between the two and not a smoke test.
+	# Every value is fpc 3.2.2's output for the identical source.
+	# task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
 	./$(COMPILER) -Futest/units test/test_unit_ambient_system_surface.pas $(TESTTMP)/test_unit_ambient_sys26
-	tools/expect_same.sh test_unit_ambient_sys26 "$$($(TESTTMP)/test_unit_ambient_sys26)" "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nOK')"
+	tools/expect_same.sh test_unit_ambient_sys26 "$$($(TESTTMP)/test_unit_ambient_sys26)" "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nd 0\ne 5\nf abc\ng 1\nh abc\nOK')"
 	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas $(TESTTMP)/test_assert_raises26
 	# The HOOK gets the composed text, position included — passing the bare
 	# message would leave EAssertionFailed carrying LESS than the bare printer

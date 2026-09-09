@@ -459,6 +459,15 @@ function IntToHex(value: LongWord; digits: Integer): AnsiString; overload;
 function HexStr(Value: Int64; Digits: Integer): AnsiString;
 
 { A string of Count copies of ch (FPC SysUtils.StringOfChar; '' if Count<=0). }
+{ StringOfChar stays HERE, with LowerCase / StrLen / StrPas / SysBackTraceStr,
+  for one reason that is about the PIN and not about the names: something built
+  with $(PXX_STABLE) calls it -- test/lib_strpchar.pas, a lib-test row -- and
+  that build sees the PINNED compiler and a FROZEN copy of compiler/builtin, so
+  a name moved out of this unit vanishes from the only place it can look.
+  Measured: moving it made `make lib-test` fail with
+  `undefined variable (StringOfChar)` at lib_strpchar.pas:49.
+  The finishing trigger for all five is in compiler/builtin/builtin.pas.
+  task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 function StringOfChar(ch: Char; count: Integer): AnsiString;
 
 { 1-based substring; count clamped to the end; out-of-range index -> ''. }
@@ -525,7 +534,13 @@ function StrLen(P: PChar): Integer;
 { FPC's sLineBreak: the platform line terminator. `LineEnding` is a compiler-known constant
   in this dialect; sLineBreak is the SysUtils spelling of the same thing, which FPC code uses
   interchangeably (fpjson's pretty-printer builds its indentation with it). }
-function sLineBreak: AnsiString;
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 { FPC's Try* parsers: return False on malformed input and leave the out value untouched,
   rather than raising. }
@@ -561,8 +576,20 @@ function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
   that still holds for them, and needs to know what turning the define on would change:
   one element per CHARACTER instead of one per BYTE. For ASCII, which is what fpjson's escaping
   actually walks, the two agree exactly either way. }
-function UTF8Decode(const s: AnsiString): UnicodeString;
-function UTF8Encode(const s: UnicodeString): AnsiString;
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 { FPC SysUtils Int64/QWord parsers. StrToInt64/StrToQWord raise EConvertError on
   malformed input, like FPC; the *Def forms return the default instead. }
@@ -749,7 +776,13 @@ function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
   `FBucket := AllocMem(I * sizeof(PHashItem))` is a hash table of pointers then
   tested against nil, so an unzeroed block reads as fully populated with garbage
   addresses. A GetMem alias would compile everywhere and crash later. }
-function AllocMem(Size: PtrUInt): Pointer;
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 { Element count of the dynamic array whose handle is P, 0 for nil (FPC
   System.DynArraySize). The count is the managed-block header's length word at
@@ -757,7 +790,13 @@ function AllocMem(Size: PtrUInt): Pointer;
   untyped Pointer, which is what a generic comparer has: rtl-generics'
   TCompare._DynArray is handed two `constref ... : Pointer` and must size them
   without knowing the element type. See devdocs/dev/managed-block-header.md. }
-function DynArraySize(P: Pointer): Int64;
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
@@ -1136,14 +1175,22 @@ function AdjustLineBreaks(const S: AnsiString; Style: TTextLineBreakStyle): Ansi
 
 { System.SetString (FPC): size S to Len and copy Len chars from Buf (when
   non-nil). Lives here until the compiler grows it as a builtin. }
-procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
+  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
+  fpc runs it and we answered `undefined variable`. Moved and not copied: a
+  second declaration would be two sources of truth for one routine, which is
+  the defect class this fixes rather than another instance of it. `uses
+  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
+  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 implementation
 
-function AllocMem(Size: PtrUInt): Pointer;
+function StringOfChar(ch: Char; count: Integer): AnsiString;
+var s: AnsiString; i: Integer;
 begin
-  Result := GetMem(Size);
-  if (Result <> nil) and (Size > 0) then FillChar(Result^, Size, 0);
+  s := '';
+  for i := 1 to count do s := s + ch;
+  Result := s;
 end;
 
 uses platform, platform_types, wideint, strings;
@@ -1180,11 +1227,6 @@ begin
     Result[i + 1] := P[i];
 end;
 
-function sLineBreak: AnsiString;
-begin
-  Result := LineEnding;
-end;
-
 function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
 var t: AnsiString; f: Double;
 begin
@@ -1213,16 +1255,6 @@ end;
 { Both bodies are a bare assignment ON PURPOSE -- see the declaration. The store carries the
   width conversion when the widths differ and is a plain copy when they do not, so there is one
   transcoder in this compiler and it lives in the runtime, not here. }
-function UTF8Decode(const s: AnsiString): UnicodeString;
-begin
-  Result := s;
-end;
-
-function UTF8Encode(const s: UnicodeString): AnsiString;
-begin
-  Result := s;
-end;
-
 { The sentinel trick these three share: parse with two DIFFERENT defaults. A malformed input
   yields whichever default was asked for, so the two runs disagree; a well-formed input parses
   to the same value both times. That is cheaper and more honest than duplicating each
@@ -1486,14 +1518,6 @@ end;
 function IntToHex(value: LongWord; digits: Integer): AnsiString;
 begin
   Result := IntToHex(Int64(value), digits);
-end;
-
-function StringOfChar(ch: Char; count: Integer): AnsiString;
-var s: AnsiString; i: Integer;
-begin
-  s := '';
-  for i := 1 to count do s := s + ch;
-  Result := s;
 end;
 
 function Copy(const s: AnsiString; index, count: Integer): AnsiString;
@@ -5344,16 +5368,6 @@ begin
   Result := AdjustLineBreaks(S, tlbsLF);
 end;
 
-procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
-var i: Integer;
-begin
-  if Len < 0 then Len := 0;
-  SetLength(S, Len);
-  if Buf = nil then Exit;
-  for i := 1 to Len do
-    S[i] := Buf[i - 1];
-end;
-
 { Raises ECONVERTERROR, not a bare Exception: `on E: EConvertError do` is the
   handler every FPC/Delphi caller writes around a parse, and a bare Exception
   walks straight past it — the catch is there, it just never fires. The rest of
@@ -5758,14 +5772,6 @@ begin
       if a[i] < b[i] then CompareMemRange := -1 else CompareMemRange := 1;
       Exit;
     end;
-end;
-
-function DynArraySize(P: Pointer): Int64;
-begin
-  if P = nil then
-    DynArraySize := 0
-  else
-    DynArraySize := PInt64(PtrUInt(P) - 8)^;
 end;
 
 function SysBackTraceStr(Addr: Pointer): string;

@@ -3,12 +3,12 @@ slug: task-b-nineteen-sysutils-names-that-fpc-keeps-in-system
 track: B
 type: task
 prio: 45
-status: working
+status: done
 found: 2026-09-06
 found-by: frankS
 owner: frankS
 blocked-by: []
-summary: "TWELVE names an FPC program uses with NO uses clause and a pxx program cannot: AllocMem DynArraySize Error LowerCase SetString sLineBreak StringOfChar StrLen StrPas SysBackTraceStr UTF8Decode UTF8Encode. They are the second sign of the unit-boundary class whose first sign frankD fixed at f5ad23c32 (a sysutils declaration SHADOWING dyn-array Delete/Insert; declarations removed by frankH at 475528dae) -- opposite directions, same root, same tell of one `uses` line changing the answer. Measured TWICE with probes that fail differently, agreeing name for name: 167 sysutils interface routines, 17 that fpc resolves ambiently, 5 of those ambiently reachable here too (Concat/Copy/Pos/UpCase parser intrinsics, HexStr a builtin export), 12 left. Reproduce with tools/rtl_unit_boundary_census.py. THIS IS A POPULATION TO CHECK, NOT TWELVE CONFIRMED BUGS -- only DynArraySize is shown to break a real program (frankS: tarray13 dies at line 23, one `uses sysutils` advances it to line 68). sLineBreak is a const not a routine, and Error is also a compiler-internal name; both need a look before being treated as RTL gaps."
+summary: "RESOLVED 2026-09-09: the classification the ticket asked for is done and six of the twelve are FIXED. A per-name no-uses probe (fpc 3.2.2 vs pxx, one program each, scratchpad ub/gen.py) ran ELEVEN of the twelve -- Error was not probed, it is also a compiler-internal name and needs sysutils' exception hierarchy -- and ALL ELEVEN were real: fpc runs them, pxx answered `undefined variable`. MOVED into compiler/builtin/builtin.pas with pre-scan triggers: AllocMem DynArraySize SetString sLineBreak UTF8Decode UTF8Encode, all six now matching fpc line for line in a no-uses PROGRAM and in a no-uses UNIT. HELD BACK, five: LowerCase StrLen StrPas SysBackTraceStr StringOfChar -- not on merit, on the PIN: lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name something in that build calls deletes it from the only place that build can look (measured twice: `make lib-test` failed every unit with `undefined variable (LowerCase)`, then again with StringOfChar). The split criterion is exactly \"does something built with $(PXX_STABLE) call it\", and the finishing trigger is a pin carrying the new unit-level pre-scan plus a refreshed frozen builtin -- carried forward as [[task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision]]. The unit-level hole was a SECOND scan and a second hole: the program-level pre-scan reads only the PROGRAM's tokens, so a unit calling AllocMem with no `uses` still failed after the program case worked -- third instance of [[bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units]]. tarray13 advances from line 23 to line 67: DynArraySize is supplied, DynArrayIndex/DynArraySetLength still are not."
 ---
 
 # Twelve names sit on the wrong side of our unit boundary — the second sign of a class whose first sign is fixed
@@ -131,3 +131,83 @@ control, the pxx-side half of the predicate and its three must-find rows, and
 the `sLineBreak`/`Error` caveats are frankH's. The committed census, its fpc-side
 oracle and the independent confirmation of the 17/5/12 split are this seat's, run
 at HEAD on fpc 3.2.2. **The classification of the twelve is nobody's yet.**
+
+## Resolution, 2026-09-09 (frankS)
+
+### What was measured, and it is the half the ticket refused to skip
+
+The census named a POPULATION. A per-name probe turned it into a defect list:
+one no-uses program per name, compiled against fpc 3.2.2 and against pxx, the
+discriminator being `undefined variable` on our side. Eleven of the twelve ran;
+**all eleven were real.**
+
+```
+name               fpc (no uses)   pxx, before      pxx, after
+AllocMem           ok 0            undefined var    ok 0
+DynArraySize       ok 5            undefined var    ok 5
+SetString          ok abc          undefined var    ok abc
+sLineBreak         ok 1            undefined var    ok 1
+UTF8Decode         ok 3            undefined var    ok 3
+UTF8Encode         ok abc          undefined var    ok abc
+LowerCase          ok abc          undefined var    undefined var   (pin)
+StrLen             ok 2            undefined var    undefined var   (pin)
+StrPas             ok ab           undefined var    undefined var   (pin)
+StringOfChar       ok xxxx         undefined var    undefined var   (pin)
+SysBackTraceStr    ok 19           undefined var    undefined var   (pin)
+Error              not probed      --               --              (deps)
+```
+
+`Error` is the twelfth and stays unprobed on purpose: it is a compiler-internal
+name here as well, and FPC's `Error` is tied into the runtime error path, so it
+needs sysutils' exception hierarchy before the question is even well posed.
+
+### There were TWO holes, not one, and the second is a different scan
+
+The program-level pre-scan in `pasparser_prog.inc` reads the **program's own
+tokens**. Adding the six triggers there made a no-uses PROGRAM work and left a
+no-uses UNIT still failing, because the unit's tokens are never in that scan.
+`pasparser_proc.inc` needed its own `unitNeedsBuiltinSys` clause. That is the
+**third instance** of the same shape — the math/thread surface was the first,
+the Classes enumerators the second — so the class is about the SCAN being
+per-file, not about any of the three name sets.
+
+### The five that stayed, and why it is not a ranking
+
+`lib/rtl` is built with the **pinned** compiler against a **frozen** copy of
+`compiler/builtin/` — `make lib-test` prints exactly that on its second line,
+*"isolates track A's compiler/builtin/ edits"*. So a name MOVED out of
+`lib/rtl/sysutils.pas` is gone from the only place that build can resolve it.
+With all eleven moved, `make lib-test` failed **every** unit with `undefined
+variable (LowerCase)`, raised from inside sysutils.pas itself.
+
+The consumer grep that produced the first four covered `lib/` and `examples/`
+and **not** the `test/lib_` rows, which are lib-test rows built the same way —
+so StringOfChar cost a second identical failure at `lib_strpchar.pas:49`. **The
+population for this question is everything the pinned build compiles**, not
+everything under `lib/`.
+
+### Inert until pinned — say it here rather than wait for it
+
+The six moved names work at HEAD and are invisible to anything building with
+`$(PXX_STABLE)` until the next pin carries them. Nothing in `lib/**` depends on
+that, because the moved six are exactly the ones nothing in that build calls —
+which is the same criterion, read the other way round.
+
+### Landed
+
+- `compiler/builtin/builtin.pas` — six declarations and bodies, with the class
+  note and the finishing trigger.
+- `compiler/pasparser_prog.inc` — program-level triggers (call-shaped group, plus
+  `slinebreak` in the bare-name group).
+- `compiler/pasparser_proc.inc` — `unitNeedsBuiltinSys`, the unit-level scan and
+  the `ParseUsesUnitAmbient('builtin')` pull.
+- `lib/rtl/sysutils.pas` — six declarations and bodies removed, each replaced by
+  a MOVED note; StringOfChar kept with its own note.
+- `test/test_b_system_names_reach_a_program_with_no_uses_clause.pas` — the
+  program half, 8 rows, fpc's output verbatim.
+- `test/units/uambientsys.pas` + `test/test_unit_ambient_system_surface.pas` —
+  rows d..h, the unit half. The program names none of the six, which is what
+  makes those rows fail if the unit-level pull is ever dropped.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

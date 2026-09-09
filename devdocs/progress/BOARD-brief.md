@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:107 backlog-tools:56 backlog-pascal:9 backlog-decide:45 backlog-libs:24 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3635 rejected:81`
+`working:29 unfinished:21 blocked:6 backlog:18 backlog-umbrella:9 backlog-core:150 backlog-nilpy:107 backlog-tools:56 backlog-pascal:9 backlog-decide:45 backlog-libs:25 backlog-cfront:13 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3636 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,7 +38,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
-- `task-b-nineteen-sysutils-names-that-fpc-keeps-in-system` [B] — owner: frankS
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
@@ -73,7 +72,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 430, ranked
+## Ready — top 30 of 431, ranked
 
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -106,4 +105,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [P]` regression-test-pascal-conformance-shard0-6-5
 
-_400 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_401 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

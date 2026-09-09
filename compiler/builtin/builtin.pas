@@ -311,6 +311,101 @@ function PXXEntropy64: Int64;
   bug-a-the-hw-entropy-intrinsics-are-unreachable-on-every-esp-target }
 
 
+{ ---- Names FPC keeps in SYSTEM and we kept only in SysUtils ----
+
+  An FPC program uses these with NO `uses` line. Ours could not: they were
+  declared in lib/rtl/sysutils.pas only, so `DynArraySize(Pointer(a))` in a
+  headerless program answered `undefined variable (DynArraySize)` and one
+  `uses sysutils` fixed it. That is the second sign of the unit-boundary class
+  whose FIRST sign -- a sysutils declaration SHADOWING dynamic-array
+  Delete/Insert -- was fixed at f5ad23c32 / 475528dae. Opposite directions,
+  same root, and the same tell: one `uses` line changing the answer.
+
+  MEASURED BOTH HALVES, 2026-09-09. tools/rtl_unit_boundary_census.py (which
+  carries its own in/out controls and a nonsense row rejected on both sides)
+  named twelve candidates; a per-name probe then compiled a no-uses program
+  against fpc 3.2.2 and against pxx for each, and ELEVEN are real -- fpc runs
+  them, pxx answers `undefined variable`. That reachability half is what turns
+  a population into a defect list, and the ticket refused to treat the census
+  alone as one.
+
+  MOVED, NOT COPIED, and that is the point rather than tidiness: leaving the
+  sysutils copy would make two sources of truth for one routine, which is the
+  defect class this fixes rather than a second instance of it. FPC's own layout
+  is the same -- System declares them, SysUtils does not re-declare. Code doing
+  `uses SysUtils` is unaffected because ANY `uses` clause already pulls this
+  unit (the tkUses arm of the pre-scan).
+
+  Each name also needs a PRE-SCAN TRIGGER in pasparser_prog.inc: this unit is
+  dragged in by a token scan, and a builtin that is declared but never dragged
+  in is `undefined variable` -- which is the very symptom being fixed.
+  task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+
+{ FPC System.AllocMem: GetMem plus a zero fill. NOT a GetMem alias -- FPC
+  guarantees the block is zeroed and callers rely on it, so an alias compiles
+  everywhere and crashes later on a pointer field read out of garbage. }
+function AllocMem(Size: PtrUInt): Pointer;
+
+{ FPC System.SetString(S, Buf, Len): set S's length and copy Len chars from Buf.
+  A nil Buf sets the length and copies nothing, which is FPC's behaviour and the
+  reason the length is set BEFORE the nil test. }
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+
+{ FPC's sLineBreak: the platform line terminator. `LineEnding` is a
+  compiler-known constant in this dialect and sLineBreak is the other spelling
+  of the same thing, which FPC code uses interchangeably. }
+function sLineBreak: AnsiString;
+
+{ FPC's UTF-8 <-> UnicodeString converters, which FPC keeps in System
+  (ustringh.inc / wstringh.inc).
+
+  THE BODIES ARE THE IDENTITY AND THAT IS NOT A STUB. `UnicodeString` is the
+  WIDE ELEMENT WIDTH of the one managed-string kind here, so `Result := s`
+  across a width boundary lowers to PXXWideFromStr / PXXStrFromWide
+  automatically. Writing the transcode out by hand would be a SECOND
+  implementation of it, and the second one is the one that stays broken. Under
+  {$define PXX_WIDE_PAYLOAD} UnicodeString is genuinely UTF-16 and these do the
+  real conversion; without it UnicodeString is still an alias for the byte
+  string and they are the identity -- in both cases they are exactly what the
+  sysutils copies were, moved. }
+function UTF8Decode(const s: AnsiString): UnicodeString;
+function UTF8Encode(const s: UnicodeString): AnsiString;
+
+{ FIVE OF THE ELEVEN ARE NOT HERE, AND THE REASON IS THE PIN, NOT THE NAMES.
+  LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar stay declared in
+  lib/rtl/sysutils.pas for now because lib/rtl is built with the PINNED compiler
+  against a FROZEN copy of this directory (`make lib-test` says so on its second
+  line: "frozen builtin RTL: stable_linux_amd64/default/builtin/ ... isolates
+  track A's compiler/builtin/ edits"). Moving a name that lib/rtl ITSELF calls
+  therefore removes it from the only place the pinned build can see -- measured
+  2026-09-09: with all eleven moved, `make lib-test` failed EVERY unit with
+  `undefined variable (LowerCase)` raised from inside sysutils.pas, which calls
+  two of the names it used to declare, and StrLen/StrPas have four more callers
+  across lib/.
+
+  StringOfChar is the fifth and it cost a SECOND round of exactly the same
+  failure, because the consumer grep that produced the first four covered lib/
+  and examples/ and not the `test/lib_` rows -- which are lib-test rows and are
+  therefore built the same way. `undefined variable (StringOfChar)` at
+  lib_strpchar.pas:49. The population for this question is everything the PINNED
+  build compiles, not everything under lib/.
+
+  So the split is not by importance and not by anything about the names: it is
+  exactly "does something built with $(PXX_STABLE) call it".
+  THE TRIGGER TO FINISH IT is a pin that carries the unit-level pre-scan added
+  with this change (pasparser_proc.inc) AND a refreshed frozen builtin. Verify
+  by compiling a UNIT that calls LowerCase with no `uses` under
+  stable_linux_amd64/default/pinned -- that fails today and is the whole test.
+  task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+
+{ Element count of the dynamic array whose handle is P, 0 for nil. The count is
+  the managed-block header's length word at P-8 -- the same slot Length() reads
+  -- so this is Length() reached through an untyped Pointer, which is what a
+  generic comparer has: rtl-generics' TCompare._DynArray is handed two
+  `constref ... : Pointer` and must size them without knowing the element type.
+  See devdocs/dev/managed-block-header.md. }
+function DynArraySize(P: Pointer): Int64;
+
 { FPC System.HexStr(Val, cnt): Val as cnt hex digits, truncating on the left
   (HexStr($1234, 2) = '34'), zero-padding on the right ('0012'). }
 function HexStr(Val: Int64; cnt: Integer): AnsiString;
@@ -486,6 +581,45 @@ end;
 procedure Randomize;
 begin
   RandSeed := Cardinal(PXXEntropy64);
+end;
+
+function AllocMem(Size: PtrUInt): Pointer;
+begin
+  Result := GetMem(Size);
+  if (Result <> nil) and (Size > 0) then FillChar(Result^, Size, 0);
+end;
+
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+var i: Integer;
+begin
+  if Len < 0 then Len := 0;
+  SetLength(S, Len);
+  if Buf = nil then Exit;
+  for i := 1 to Len do
+    S[i] := Buf[i - 1];
+end;
+
+function sLineBreak: AnsiString;
+begin
+  Result := LineEnding;
+end;
+
+function UTF8Decode(const s: AnsiString): UnicodeString;
+begin
+  Result := s;
+end;
+
+function UTF8Encode(const s: UnicodeString): AnsiString;
+begin
+  Result := s;
+end;
+
+function DynArraySize(P: Pointer): Int64;
+begin
+  if P = nil then
+    DynArraySize := 0
+  else
+    DynArraySize := PInt64(PtrUInt(P) - 8)^;
 end;
 
 function HexStr(Val: Int64; cnt: Integer): AnsiString;
