@@ -9939,6 +9939,54 @@ begin
   ASTTk[lit] := Ord(tyUInt64);
 end;
 
+{ A CONSTANT ADDITION THAT OVERFLOWS INTO THE SIGN BIT IS UNSIGNED, not a
+  negative Int64. `high(int64)+100` is 9223372036854775907, and fpc types it
+  QWord: `if (high(int64)+100) > 0` takes the POSITIVE arm there and took the
+  negative one here -- a silent wrong branch on a constant the programmer wrote
+  out in full.
+
+  THE VALUE WAS ALWAYS RIGHT AND THE TYPE WAS WRONG, which is why this hid so
+  well: `q := high(int64)+100` stores fpc's exact bytes, and only a question
+  that asks about the TYPE -- a comparison, an overload -- reads back the signed
+  view. Every store-and-print probe agrees.
+
+  The LITERAL half was already fixed (NormalizeWideUnsignedLiteral, at the
+  literal's creation site, so `9223372036854775907 > 0` is positive). A FOLD is
+  neither a literal nor a const-section entry: ConstEval returns a bare Int64
+  and this loop types the binop from the two operand KINDS, tyInt64 + tyInteger
+  = tyInt64, never looking at the result value. This arm is where the value gets
+  a vote.
+
+  `+` ONLY, DELIBERATELY, and the omission is stated rather than left to be
+  discovered. For `*` the true product can wrap PAST 2^64, where the value is
+  not representable in either 64-bit reading and `lv * rv < 0` no longer means
+  "landed in the unsigned band" -- detecting that needs a division guard whose
+  own overflow behaviour I have not measured. `high(int64) * 2` therefore stays
+  signed. That is narrower coverage, not an inconsistency: nothing here promotes
+  in one direction and fails to demote in the other, which is the pairing the
+  ticket warns about.
+
+  `-` needs nothing. Two non-negative operands cannot subtract INTO the sign
+  bit, and a left operand already tagged tyUInt64 is carried by the QWord arm
+  below -- so `high(int64)+100-200` stays unsigned and positive, which is the
+  control row in the fixture.
+  bug-p-a-constant-expression-that-overflows-int64-stays-signed }
+function ConstAddOverflowsIntoSignBit(op: TTokenKind; left, right: Integer): Boolean;
+var lv, rv: Int64;
+begin
+  Result := False;
+  if CProgramMode or PyExprMode then Exit;
+  if op <> tkPlus then Exit;
+  if not ASTConstIntValue(left, lv, 0) then Exit;
+  if not ASTConstIntValue(right, rv, 0) then Exit;
+  if (lv < 0) or (rv < 0) then Exit;
+  { Both non-negative, so the only way the Int64 sum can be negative is a carry
+    into bit 63 -- i.e. the true value is in [2^63, 2^64) and is exactly a
+    QWord. It cannot have wrapped further: two Int64-representable non-negative
+    values sum to less than 2^64. }
+  Result := (lv + rv) < 0;
+end;
+
 procedure PromoWidenBinopOperands(node: Integer);
 begin
   if node < 0 then Exit;
@@ -10816,6 +10864,12 @@ begin
         ASTTk[node] := Ord(TypeArithmeticResultOp(tyUInt64, tyUInt64, op))
       else if (ASTTk[right] = Ord(tyUInt64)) and (ASTKind[left] = AN_INT_LIT) and
               (ASTIVal[left] >= 0) then
+        ASTTk[node] := Ord(TypeArithmeticResultOp(tyUInt64, tyUInt64, op))
+      { ...and the same domain reached by VALUE rather than by an operand's tag:
+        a constant sum that carries into bit 63 is a QWord. See
+        ConstAddOverflowsIntoSignBit -- below the two arms above so an operand
+        already tagged tyUInt64 keeps taking them. }
+      else if ConstAddOverflowsIntoSignBit(op, left, right) then
         ASTTk[node] := Ord(TypeArithmeticResultOp(tyUInt64, tyUInt64, op))
       else
         ASTTk[node] := Ord(TypeArithmeticResultOp(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right]), op));

@@ -1,0 +1,10 @@
+stored  = 9223372036854775907
+fold    = positive
+lit     = positive
+plus1   = positive
+small   = positive
+backdown= positive
+neglit  = negative
+negsum  = negative
+ovl neg = int64
+ovl big = qword

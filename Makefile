@@ -15837,6 +15837,21 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_booleannn_family.pas $(TESTTMP)/test_boolnn26
 	tools/expect_same.sh test_boolnn26 "$$($(TESTTMP)/test_boolnn26)" "$$(cat test/test_booleannn_family.expected)"
+	# A CONSTANT ADDITION THAT CARRIES INTO BIT 63 IS UNSIGNED. `high(int64)+100`
+	# is 9223372036854775907 and was typed tyInt64, so `if (high(int64)+100) > 0`
+	# took the NEGATIVE arm where fpc takes the positive one -- a silent wrong
+	# branch on a constant written out in full. The literal spelling of the same
+	# value was already right, which is why the fold survived: `lit` and `stored`
+	# PASS BEFORE the fix and are kept as the rows that say so. A fixture built
+	# from stores alone would have been green throughout -- the value was always
+	# right and only the TYPE was wrong, so only a comparison or an overload can
+	# see it. Six must-not-promote rows guard the other direction (a small sum, a
+	# negative operand, and a fold that comes back down out of the band).
+	# The overload rows are fpc's own toperator6.pp shape, which halts(2) when
+	# the int64 operator is chosen for the unsigned value.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_const_fold_overflows_into_qword.pas $(TESTTMP)/test_cfoldq26
+	tools/expect_same.sh test_cfoldq26 "$$($(TESTTMP)/test_cfoldq26)" "$$(cat test/test_const_fold_overflows_into_qword.expected)"
 	# Two DEFAULTS bugs, found together: `inherited Create;` against a defaulted
 	# parent ctor was an arity mismatch (the check ran before defaults were
 	# filled), and a PARENLESS call to an all-defaulted method sent the call out

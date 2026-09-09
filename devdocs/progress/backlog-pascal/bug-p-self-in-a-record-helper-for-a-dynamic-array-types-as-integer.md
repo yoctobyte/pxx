@@ -78,6 +78,19 @@ than the body's type, so fixing `Self` need not open member access.
 the first, and do not close on the repro going green without re-running the
 corpus row.
 
+## A CHECKED NEGATIVE, so nobody spends a lead on it
+
+**This is NOT the same site as
+[[bug-p-a-string-literal-bound-to-a-pwidechar-is-emitted-narrow]]'s `Length`
+defect, and the two `Length` symptoms are a coincidence of the builtin's name.**
+Measured by frankS 2026-09-09: `IsNodePChar` (`ir.inc:4020`) exits on its third
+line unless the node is `tyPointer`, so a dynamic-array `Self` never reaches it
+at all. And per this ticket's own title the defect is `Self` typing as Integer —
+the RECEIVER's type — not `Length`'s dispatch.
+
+So a `PWideCharToString` fixes nothing here, and fixing this fixes nothing
+there. Two tickets, two sites, one builtin name in both error messages.
+
 ## Corpus
 
 `library_candidates/fpc-testsuite/tests/test/uthlp.pp:242`, `Result :=
