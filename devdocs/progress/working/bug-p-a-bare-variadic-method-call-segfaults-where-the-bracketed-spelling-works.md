@@ -2,8 +2,8 @@
 track: P
 prio: 40
 type: bug
-status: open
-owner: ""
+status: working
+owner: frankH
 created: 2026-09-09
 found-by: frankS
 tags: [array-of-const, methods, variadic]
