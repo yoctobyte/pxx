@@ -71,3 +71,36 @@ native `TThread` all exist (`lib/rtl/palthreadobj.pas`, `lib/rtl/cthreads.pas`,
 whole threading RTL missing and that was the probe's fault — it omitted the
 `uses` clause, so `unknown type: TThreadID` was about the program and not about
 the RTL. Filed as `feature-b-the-rtlevent-family-is-absent-from-the-threading-rtl`.
+
+
+## What a taker should know before starting (2026-09-09, frankS)
+
+Not an edge, deliberately — I have not established that this is blocked, and
+saying so in prose without the frontmatter edge is how a ticket lies to its
+reader. What I did establish is that **the mechanism this feature needs already
+partly exists**, which the ticket does not say:
+
+- `thread_emit.inc:142` installs a per-thread block via `arch_prctl(ARCH_SET_GS)`
+  — *"GS, not fs: fs belongs to libc, and a pxx program may link one"* — and a
+  pxx-native thread gets a DISTINCT non-zero GS base (measured 2026-09-06 by
+  frankC on a pxx `BeginThread`: main `42D110`, child `7BDB21FF7A80`).
+  `TLS_SLOT_*` / `TLS_BLOCK_SIZE = 1152` has three free map slots plus a 64-slot
+  tail, which `ir_codegen.inc:78` records as UNUSED rather than absent.
+- So a pure-pxx `threadvar` may be implementable on what is already there,
+  without touching ELF TLS at all.
+
+**And the thing that may or may not make it a fork:**
+[[decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative]]
+is open. It is about INTEROP — TLS relocations in gcc-built objects are
+fs-relative and ours is gs-relative — so it may leave a pxx-only `threadvar`
+entirely alone. **That is the question to settle first**, and it is one
+measurement, not a design discussion: does anything in the intended
+implementation emit or consume an ELF TLS relocation? If no, this ticket is
+unblocked and the decide ticket is about a different program. If yes, wire the
+edge.
+
+The sibling in C is [[bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared]],
+and the two frontends fail in OPPOSITE directions on the same missing feature —
+Pascal refuses loudly, C accepts and shares one `.bss` object. Whoever builds
+the mechanism should close both; the honest failure and the silent one have the
+same cause.
