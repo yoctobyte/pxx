@@ -70,7 +70,7 @@ owner: frankD
 > on both sides on purpose** — including `stored` and `lit`, because the VALUE
 > was always right and a fixture built from stores would have been green
 > throughout. `gate.sh quick` GREEN, `converged after 1 round(s)`, compiler
-> `2a9e5179428f`.
+> `2a9e5179428f`. Landed as commit 4a602ebb2.
 
 
 - **Found:** 2026-09-06 (frankS), on `toperator6.pp` from the FPC-testsuite
