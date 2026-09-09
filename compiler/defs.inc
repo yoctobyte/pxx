@@ -4293,6 +4293,11 @@ var
   BlockCount: Integer;
   CurBlockId: Integer;
   ProcExternal : array of Boolean;
+  { This proc row has NO Self parameter although it IS a method -- the `static`
+    directive. Read by GenMakeStaticMethodCall so that every call site building
+    a metaclass Self argument is corrected in ONE place rather than seven.
+    bug-p-a-static-class-functions-address-carries-a-hidden-self }
+  ProcNoSelf : array of Boolean;
   ProcObjRuntimeCopy : array of Boolean;   { this proc's BODY came from lib/crtl -- see SymObjRuntimeCopy }
   ProcCStaticLink : array of Boolean;   { C `static` on a FUNCTION: internal linkage, so a LOCAL symbol, never exported -- the proc-side twin of SymCStaticLink }
   ProcCModule : array of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
@@ -7067,6 +7072,18 @@ var
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
   UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
   UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
+  { The `static` DIRECTIVE, which is NOT what UMthIsStatic above means.
+    UMthIsStatic is set from `isClassMethod` / RecordMethodClassPrefix, i.e. it
+    answers "is this a CLASS method" -- and an ordinary FPC `class function` DOES
+    carry a hidden Self (the metaclass), which pxx passes as a real argument
+    because `class function TAssert.Suite` depends on seeing the runtime class.
+    FPC's `static` means the opposite: NO Self at all, and a body that may not
+    name one. Conflating them is invisible for every ordinary call -- the
+    compiler emits the Self it also expects -- and diverges the moment the
+    ADDRESS escapes into a plain function pointer, which is exactly how
+    rtl-generics dispatches its comparers.
+    bug-p-a-static-class-functions-address-carries-a-hidden-self }
+  UMthNoSelf : array[0..MAX_UMETH-1] of Boolean;
   { This method HIDES every inherited method of its name — Object Pascal's rule
     for a method declared in a descendant without `overload`. Set only at the
     Pascal CLASS-BODY declaration site, so it is False for the other frontends'

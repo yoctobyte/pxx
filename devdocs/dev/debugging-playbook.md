@@ -22406,18 +22406,26 @@ real. Adding it:
 | + `CollectHoistCandidates` | `unknown type: specialize` |
 | + that + `EmitHoistedDecls` | `expected 'begin' before 'TPtrs'` |
 
-Each step is further from working. The cause is not the fix: **registering a
-`specialize X<...>` group is what COLLAPSES it in the token stream**, and
-`ScanRangeForNestedSpecs` skips a group that is already `NestedSpecKnown`. With
-the WRONG name the group registered, and therefore collapsed. With the RIGHT
-name it is already known, does not register, and nothing collapses it — so the
-literal `specialize` keyword survives into the parse. A second mechanism had
-been depending on the first one being wrong.
+Each step is further from working.
+
+**The mechanism sentence that stood here for one hour was wrong, and how it got
+wrong is the second half of the lesson.** It read: *"registering a `specialize
+X<...>` group is what COLLAPSES it in the token stream"* — retracted by its own
+author within the hour. The collapse lives in `SpecializeToBuffer` and keys on
+`NestedSpecKnown(alias) or LateSpecEmittedName(alias) or alias = specName`, not
+on any scan having registered anything. There IS a coupling, and
+`pasparser_generic.inc:4899` documents a THIRD route to the same `specialize`
+symptom that involves neither. **With three routes to one symptom, no
+single-route explanation is measured until you say which one fired** — and "there
+is a coupling" and "this link fires" are different claims that read identically.
+The explanatory sentence was the part that got quoted precisely because it was
+the part that felt like understanding.
 
 **So "fix the pair" is not the end of the work.** When one operation serves two
-purposes — here registration and collapse — correcting its input moves both, and
-the one you were not thinking about is the one that regresses. The tell is a fix
-whose failure mode CHANGES SHAPE rather than improving: `unknown type: <a wrong
+purposes, correcting its input moves both, and the one you were not thinking
+about is the one that regresses. **The tell survives the retraction, which is
+why it is the part to carry:** a fix whose failure mode CHANGES SHAPE rather
+than improving — `unknown type: <a wrong
 mangled name>` becoming `unknown type: specialize` is not "closer", it is a
 different layer failing, which means the first layer stopped running. Ask what
 else the call you just corrected was ACHIEVING as a side effect before reading a

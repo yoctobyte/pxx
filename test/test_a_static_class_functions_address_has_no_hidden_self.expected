@@ -1,0 +1,7 @@
+direct   107
+plainptr 107
+selfptr  100
+rec direct   307
+rec plainptr 307
+nonstatic 207
+nonstatic via cast 207

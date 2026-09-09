@@ -1021,6 +1021,7 @@ var
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, isOut, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
+  implNoSelf: Boolean;   { the `static` directive, read off the declaration }
   isClassCtorImpl, isClassDtorImpl: Boolean;   { `class constructor`/`class destructor` IMPLEMENTATION header -- see where they are set }
   isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
@@ -1990,13 +1991,23 @@ begin
 
   { Inject implicit Self parameter at index 0 for methods (unless static) }
   isStaticMethod := False;
+  implNoSelf := False;
   if methOwnerCi >= 0 then
   begin
     { overloads: match by the impl's explicit param count, not first-name }
     mmi := FindUMethArity(methOwnerCi, methName, nparams);
     if mmi >= 0 then
+    begin
       if UMthIsStatic[mmi] then
         isStaticMethod := True;
+      { ...and the `static` DIRECTIVE, which is a different question from
+        UMthIsStatic and is answered on the DECLARATION side. Reading it from
+        the declaration rather than re-deriving it here is the whole point: the
+        two sides of this pair have produced two bugs in one day by each
+        deciding Self for themselves and agreeing on nothing.
+        bug-p-a-static-class-functions-address-carries-a-hidden-self }
+      implNoSelf := UMthNoSelf[mmi];
+    end;
   end;
 
   { Every method gets a Self at index 0 -- including a STATIC (class) method, whose
@@ -2007,7 +2018,7 @@ begin
     so the class is passed as a real argument. A class Self is a bare CLASS REFERENCE
     (tyPointer -> tyClass, no rec id) -- the same shape a TClass variable has, so
     ClassName / InheritsFrom / passing it to a TClass param all work on it unchanged. }
-  if methOwnerCi >= 0 then
+  if (methOwnerCi >= 0) and (not implNoSelf) then
   begin
     for i := nparams downto 1 do
     begin
@@ -2550,6 +2561,7 @@ begin
   else if declOverload then
     ProcOverloadDirective[procIdx] := True;
   if declFlexColumn then ProcFlexColumn[procIdx] := True;
+  if implNoSelf then ProcNoSelf[procIdx] := True;
   ProcRetRecId[procIdx] := retRecId;
       ProcRetProcSig[procIdx] := retProcSig;
   ProcRetIsDynArray[procIdx] := retIsDynArr;

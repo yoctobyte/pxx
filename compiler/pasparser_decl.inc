@@ -5069,6 +5069,77 @@ begin
   Result := True;
 end;
 
+function StaticDirectiveAheadInMethodHeader(atDirectives: Boolean): Boolean;
+{ Does the method header at CurTok carry the `static` DIRECTIVE?
+
+  Two entry points, because the two declaration parsers are at different places
+  when they need the answer. `atDirectives = False`: CurTok is the token straight
+  after the method NAME -- `(`, `:` or `;` -- so this skips the parameter list by
+  paren depth, then the return type, and reads the directive run after the
+  header's `;`. `atDirectives = True`: CurTok is already the first directive
+  (the class member loop has eaten the `;` by then).
+
+  It is a LOOKAHEAD and not a flag set while parsing because both declaration
+  parsers build Self at index 0 BEFORE they reach the directives: the record one
+  writes `pn[0] := 'Self'` immediately after the name, and the class member loop
+  registers the proc row roughly seventy lines before the directive loop runs.
+  Learning about `static` afterwards would mean shifting every one of ~30
+  per-param columns back down and re-registering -- which is the shape that has
+  already produced two bugs in this file by forgetting a column.
+
+  Only the KNOWN directive names continue the run. Stopping on anything else is
+  what keeps a following FIELD from being scanned: a record body is
+  `name: type;`, so the `:` ends it. }
+var i, depth, guard: Integer;
+    r, inDirs, isDir: Boolean;
+    ds: string;
+begin
+  r := False; inDirs := False; depth := 0; guard := 0; i := TokPos;
+  if atDirectives then
+  begin
+    inDirs := True;
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'static') then r := True;
+  end
+  else if CurTok.Kind = tkLParen then depth := 1
+  else if CurTok.Kind = tkSemicolon then inDirs := True;
+  while (not r) and (i < TokCount) and (guard < 512) do
+  begin
+    guard := guard + 1;
+    if inDirs then
+    begin
+      if (Tokens[i].Kind = tkSemicolon) or (Tokens[i].Kind = tkOverload) then
+        i := i + 1
+      else if Tokens[i].Kind = tkIdent then
+      begin
+        ds := GetTokenStr(i);
+        if CaseEqual(ds, 'static') then r := True
+        else
+        begin
+          isDir := CaseEqual(ds, 'virtual') or CaseEqual(ds, 'override') or
+                   CaseEqual(ds, 'abstract') or CaseEqual(ds, 'dynamic') or
+                   CaseEqual(ds, 'inline') or CaseEqual(ds, 'reintroduce') or
+                   CaseEqual(ds, 'final') or CaseEqual(ds, 'deprecated') or
+                   CaseEqual(ds, 'platform') or CaseEqual(ds, 'experimental') or
+                   CaseEqual(ds, 'overload') or CaseEqual(ds, 'cdecl') or
+                   CaseEqual(ds, 'stdcall') or CaseEqual(ds, 'register') or
+                   CaseEqual(ds, 'safecall') or CaseEqual(ds, 'pascal') or
+                   CaseEqual(ds, 'varargs') or CaseEqual(ds, 'noreturn');
+          if isDir then i := i + 1 else i := TokCount;
+        end;
+      end
+      else i := TokCount;   { not a directive -- the header is over }
+    end
+    else
+    begin
+      if Tokens[i].Kind = tkLParen then depth := depth + 1
+      else if Tokens[i].Kind = tkRParen then depth := depth - 1
+      else if (Tokens[i].Kind = tkSemicolon) and (depth <= 0) then inDirs := True;
+      i := i + 1;
+    end;
+  end;
+  StaticDirectiveAheadInMethodHeader := r;
+end;
+
 procedure ParseRecordMethodDecl(ci: Integer; isObjectType: Boolean; vis: Integer);
 { A method SIGNATURE inside an advanced record ({$modeswitch advancedrecords} in FPC; its
   own RTL leans on it — TPoint/TSize/TRect are all advanced records).
@@ -5114,6 +5185,7 @@ var
   rmDefIsStr, rmDefIsFloat, rmDefIsSet: Boolean;
   curTk, retTk: TTypeKind;
   rmSawStatic: Boolean;
+  rmNoSelf: Boolean;
   rmEnumRole: Integer;   { `enumerator MoveNext` on this record method: 1, 2 or 0 }
   rmClassCtorDtor: Boolean;   { `class constructor`/`class destructor` in a record -- inherently static, see the check below }
   rmMandatory: Integer;
@@ -5147,11 +5219,21 @@ begin
   mnLen := Tokens[TokPos-1].SLen;
   Next;
 
+  { THE `static` DIRECTIVE MEANS NO SELF AT ALL, and it is spelled on nearly
+    every one of rtl-generics' record class functions. Read here, from a
+    lookahead, because param 0 is written before the directives are parsed.
+    RecordMethodClassPrefix on its own is NOT this question -- it says "class
+    method", and a record's class method without `static` keeps the dummy Self
+    both sides already agree on.
+    bug-p-a-static-class-functions-address-carries-a-hidden-self }
+  rmNoSelf := StaticDirectiveAheadInMethodHeader(False);
+
   { Self at param 0: the record, by reference. For a TYPE HELPER, Self is a
     reference to the TARGET type instead (s.ToLower reads Self as the string). }
   nP := 1;
   pn[0] := 'Self';
   rmSelfClassRef := False;
+  if rmNoSelf then nP := 0 else
   if RecordMethodClassPrefix and (UClsHelperTk[ci] = Ord(tyClass)) then
   begin
     { A CLASS HELPER'S `class function`: Self is the METACLASS, exactly as it is
@@ -5432,6 +5514,7 @@ begin
   fullNm := recNm + '.' + mname;
 
   mpi := RegisterProc(fullNm, isFunc, retTk, nP, pn, pt);
+  ProcNoSelf[mpi] := rmNoSelf;
   Procs[mpi].BodyAddr := -1;
   if isFunc and (retTk = tyAnsiString) then
     ProcRetStrElemTk[mpi] := retStrElemTk;
@@ -5509,6 +5592,7 @@ begin
   else if rmEnumRole = 2 then
     Error('enumerator Current: expected on a property, not a method');
   UMthIsStatic[UMthCount - 1] := RecordMethodClassPrefix;
+  UMthNoSelf[UMthCount - 1] := rmNoSelf;
   UMthIsCtor[UMthCount - 1] := isCtor;
   UMthVirSlot[UMthCount - 1] := -1;   { no VMT — records have no inheritance }
   UMthPub[UMthCount - 1] := 0;
@@ -7208,6 +7292,7 @@ var
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   isClassCtorDtor: Boolean;   { `class constructor`/`class destructor` -- see the opener arm }
   isOverloadDir: Boolean;   { the `overload` directive on this declaration — its absence is what HIDES the inherited methods of the name }
+  mNoSelf: Boolean;         { the `static` directive: NO Self at all, unlike `class` }
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
   savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
@@ -8536,10 +8621,20 @@ begin
             end;
             Eat(tkSemicolon);
 
+            { ...unless the method is `static`, which in FPC means NO Self at
+              all -- read here by lookahead over the directive run, which the
+              loop seventy lines below has not reached yet, and which discards
+              `static` as parse-and-ignore on the reasoning that "`class`
+              already makes a method static". It does not: an ordinary `class
+              function` HAS a hidden Self (the metaclass) and depends on it.
+              bug-p-a-static-class-functions-address-carries-a-hidden-self }
+            mNoSelf := StaticDirectiveAheadInMethodHeader(True);
+
             { The DECL side's twin of the impl-side Self injection: every method carries a
               Self at index 0, and a CLASS method's Self is the metaclass -- a class
               reference (tyPointer), not an instance. The two sides must agree or the
               impl never binds to its declaration ("unresolved forward"). }
+            if not mNoSelf then
             begin
               for i := mNParams downto 1 do
               begin
@@ -8757,6 +8852,8 @@ begin
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
+            UMthNoSelf[mmi] := mNoSelf;
+            if UMthProc_[mmi] >= 0 then ProcNoSelf[UMthProc_[mmi]] := mNoSelf;
             { `enumerator MoveNext;` on a CLASS or RECORD method -- the sibling of
               the interface arm, and it had to be read HERE rather than at the top
               of the member loop: a class body has FIELDS, so an unconsumed

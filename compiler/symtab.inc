@@ -2846,6 +2846,7 @@ begin
       UMthProc_[dst+k] := UMthProc_[src];
       UMthVirSlot[dst+k] := UMthVirSlot[src];
       UMthIsStatic[dst+k] := UMthIsStatic[src];
+      UMthNoSelf[dst+k] := UMthNoSelf[src];
       UMthHidesInherited[dst+k] := UMthHidesInherited[src];
       UMthIsCtor[dst+k] := UMthIsCtor[src];
       UMthPub[dst+k] := UMthPub[src];
@@ -2859,6 +2860,7 @@ begin
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;
   UMthIsStatic[mi] := False;
+  UMthNoSelf[mi] := False;
   UMthHidesInherited[mi] := False;
   UMthIsCtor[mi] := False;
   UMthPub[mi] := 0;
@@ -11744,7 +11746,13 @@ begin
       if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
       begin
         want := nExplicitArgs;
-        want := want + 1;   { every method has Self at 0, class methods included }
+        { Self at 0 -- for every method EXCEPT one carrying the `static`
+          directive, which has none. Not a cosmetic exception: `Default` in
+          rtl-generics is a two-way overload of static class functions, so
+          getting this wrong drops both candidates to the name-match fallback
+          and picks whichever is declared first.
+          bug-p-a-static-class-functions-address-carries-a-hidden-self }
+        if not UMthNoSelf[base + i] then want := want + 1;
         if ProcArityMatches(UMthProc_[base + i], want) then
         begin Result := base + i; Exit; end;
       end;
@@ -11793,7 +11801,8 @@ begin
     begin
       if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
       begin
-        want := nExplicitArgs + 1;   { Self at 0, class methods included }
+        want := nExplicitArgs;
+        if not UMthNoSelf[base + i] then want := want + 1;   { see FindUMethArity }
         if ProcArityMatches(UMthProc_[base + i], want) then
         begin FindUMethArityStrict := base + i; Exit; end;
       end;
@@ -13509,7 +13518,7 @@ begin
   SetLength(ProcFrameSensitive, n);  SetLength(DceLive, n);  SetLength(DceWork, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);
@@ -13575,6 +13584,7 @@ begin
   Procs[ProcCount].ScopeBase  := 0;
   ProcLexParent[ProcCount]    := CurProc;   { -1 at top level; see the declaration }
   ProcExternal[ProcCount]     := False;
+  ProcNoSelf[ProcCount]       := False;
   ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCStaticLink[ProcCount] := False;      { set when the C definition said `static` }
   ProcCaseSensitive[ProcCount] := DeclCaseSensitive;

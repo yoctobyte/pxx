@@ -5447,6 +5447,16 @@ test-core: $(COMPILER)
 	# bug-p-an-address-of-element-in-a-const-array-is-counted-as-many
 	./$(COMPILER) test/test_an_address_of_element_in_a_const_array.pas $(TESTTMP)/test_constarrayaddr26
 	$(TESTTMP)/test_constarrayaddr26 | diff -u test/test_an_address_of_element_in_a_const_array.expected -
+	# The `static` DIRECTIVE means NO Self -- not "a class method", which is what
+	# UMthIsStatic answers and which DOES carry a hidden metaclass Self. The
+	# `direct` row was already correct before the fix and CANNOT fail: a call the
+	# compiler emits passes the Self it also expects. `selfptr` is the positive
+	# control -- an extra leading argument must give the WRONG answer, and before
+	# the fix pxx and fpc were exactly inverted there. Class and record hosts
+	# both, because two different declaration parsers write param 0.
+	# bug-p-a-static-class-functions-address-carries-a-hidden-self
+	./$(COMPILER) test/test_a_static_class_functions_address_has_no_hidden_self.pas $(TESTTMP)/test_staticnoself26
+	$(TESTTMP)/test_staticnoself26 | diff -u test/test_a_static_class_functions_address_has_no_hidden_self.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

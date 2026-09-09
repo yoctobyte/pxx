@@ -2711,7 +2711,7 @@ begin
 end;
 
 function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
-var callNode, lastArg, argSeq, exprNode, argIdx, ai: Integer;
+var callNode, lastArg, argSeq, exprNode, argIdx, ai, selfBase: Integer;
     mkw, kwHead, kwCount: Integer;
     brkArg: Integer;   { the shared bracket door's result -- see the delegation below }
 begin
@@ -2729,23 +2729,40 @@ begin
   end;
   GenVirtSlot := -1;   { consumed: never leaks into the next call built }
 
-  argSeq := AllocNode(AN_ARG);
-  ASTLeft[argSeq] := selfNode;
-  ASTLeft[callNode] := argSeq;
-  lastArg := argSeq;
+  { A `static` method has NO Self, so there is no head argument to hang the
+    chain off and parameter 0 is a REAL parameter. `selfNode = -1` is the
+    caller's way of saying so and `lastArg = -1` is the empty-chain convention
+    FillDefaultArgs already speaks. One place, because the alternative is
+    correcting seven call sites that each build a metaclass argument by hand.
+    bug-p-a-static-class-functions-address-carries-a-hidden-self }
+  if ProcNoSelf[mpi] then selfNode := -1;
+  if selfNode >= 0 then
+  begin
+    selfBase := 1;
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := selfNode;
+    ASTLeft[callNode] := argSeq;
+    lastArg := argSeq;
+  end
+  else
+  begin
+    selfBase := 0;
+    ASTLeft[callNode] := -1;
+    lastArg := -1;
+  end;
 
   if CurTok.Kind = tkLParen then
   begin
     Next;
-    ai := 1;                    { param 0 is Self }
+    ai := selfBase;             { param 0 is Self -- unless the method is static }
     { `obj.F()` -- EMPTY parens on a method whose parameters ALL have defaults. FPC accepts
       it (it is the ordinary way to call `FormatJSON()` in fcl-json's own test suite); the
       loop below would hand the `)` to ParseExpr and report "expected expression". A method
       with no parameters at all already worked, because the loop simply never ran. }
     if CurTok.Kind = tkRParen then
     begin
-      if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
-        FillDefaultArgs(mpi, 1, callNode, lastArg);
+      if (Procs[mpi].ParamCount > selfBase) and CanFillDefaultsFrom(mpi, selfBase) then
+        FillDefaultArgs(mpi, selfBase, callNode, lastArg);
       ai := Procs[mpi].ParamCount;    { nothing to parse; Expect(tkRParen) below consumes it }
     end;
     while ai <= Procs[mpi].ParamCount - 1 do
@@ -2795,7 +2812,8 @@ begin
       argSeq := AllocNode(AN_ARG);
       ASTLeft[argSeq] := exprNode;
       ASTIVal[argSeq] := mkw;
-      ASTRight[lastArg] := argSeq;
+      if lastArg = -1 then ASTLeft[callNode] := argSeq
+      else ASTRight[lastArg] := argSeq;
       lastArg := argSeq;
       if mkw <> 0 then
       begin
@@ -2822,8 +2840,8 @@ begin
     PyBindKwArgs(mpi, kwHead, lastArg, kwCount);
     ASTLeft[callNode] := kwHead;
   end
-  else if CanFillDefaultsFrom(mpi, 1) then
-    FillDefaultArgs(mpi, 1, callNode, lastArg)
+  else if CanFillDefaultsFrom(mpi, selfBase) then
+    FillDefaultArgs(mpi, selfBase, callNode, lastArg)
   else
     CheckMethodCallArity(mpi);
 
