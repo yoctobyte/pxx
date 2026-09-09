@@ -15164,7 +15164,7 @@
    "bad": "15de9cd799fdd8d9bcbd601ec64b7770d9c48cf0",
    "bad_untestable": true,
    "first_seen": false,
-   "good": "cc1057fe6af2ae37159a0ddf916c1275aa0b47ca",
+   "good": "73e05b3e1e3ddfc224ad63f0d78c63846796e5ea",
    "job": "size-canary#src:tools/size_canary.py",
    "name": "size-canary#00",
    "never_passed": false,
@@ -15173,7 +15173,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "73e05b3e1e3ddfc224ad63f0d78c63846796e5ea",
     "7a166c995bc802f416270a16dd5b6b5cd4753d39"
    ],
    "range_non_causal": false,

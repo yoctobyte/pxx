@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `96454497c72a` on seven, 2026-09-09T19:22:59Z (52m ago).**
+**Newest full tier in the fleet: `96454497c72a` on seven, 2026-09-09T19:22:59Z (54m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `96454497c72a` | RED | 52m | — (newest) |
+| seven | `96454497c72a` | RED | 54m | — (newest) |
 | plexus | `27424c927b65` | RED | 10d9h | 10d8h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -31,7 +31,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 ## Open regressions
 - **test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (seven): bad `bdfa9484f2f4`, last good `cbb03092bac6`, 1 commit(s) in range
-- **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `15de9cd799fd`, last good `cc1057fe6af2`, 2 commit(s) in range
+- **size-canary#src:tools/size_canary.py** — tools/size_canary.py (seven): bad `15de9cd799fd`, last good `73e05b3e1e3d`, 1 commit(s) in range
 - **lib-test#src:test/lib_synapse.pas** — test/lib_synapse.pas tools/expect_same.sh (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **lib-test#src:test/lib_synapse_ssl.pas** — test/lib_synapse_ssl.pas tools/expect_same.sh (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **lib-test#src:test/lib_synapse_transitive_unit.pas** — test/lib_synapse_transitive_unit.pas tools/expect_same.sh (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
