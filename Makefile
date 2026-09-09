@@ -5506,6 +5506,24 @@ test-core: $(COMPILER)
 	# compat-pascal-overload-prefers-signed-for-an-unsigned-argument
 	./$(COMPILER) test/test_a_an_integer_overload_pair_is_chosen_by_signedness.pas $(TESTTMP)/test_ovlsign26
 	$(TESTTMP)/test_ovlsign26 | diff -u test/test_a_an_integer_overload_pair_is_chosen_by_signedness.expected -
+	# The OTHER half of the `static` directive change: a record's static class
+	# function no longer HAS a Self, and the call site that hand-rolls its own
+	# argument loop was still prepending a by-value dummy. The chain was then one
+	# longer than the signature and the lowering pairs by POSITION, so the
+	# managed-argument temp was built for the dummy and the real string was
+	# passed as a bare literal. Only the MANAGED spellings show it: one
+	# AnsiString argument gave Length = 1073741824, a second argument after it
+	# segfaulted, and every unmanaged spelling stayed correct -- which is why the
+	# self-host fixedpoint and gate.sh quick both missed it and it surfaced in a
+	# GENERICS test three subsystems away.
+	# EVERY ROW ASSERTS VALUES, NOT rc: three of the eight exit 0 and print the
+	# wrong number. The `i` and `ii` rows cannot fail it and are the other guard
+	# -- the fix REMOVES an argument, and a wrong one would shift them.
+	# Expected output is fpc 3.2.2's, and the PINNED pre-regression compiler
+	# matches it too, which is what makes this a regression fixture.
+	# bug-p-a-record-static-class-function-is-called-with-a-dummy-self-it-no-longer-has
+	./$(COMPILER) test/test_p_a_record_static_class_function_takes_managed_arguments.pas $(TESTTMP)/test_recstatarg26
+	$(TESTTMP)/test_recstatarg26 | diff -u test/test_p_a_record_static_class_function_takes_managed_arguments.expected -
 	./$(COMPILER) test/test_interface_name_as_guid_initialiser.pas $(TESTTMP)/test_iface_guid_init26
 	$(TESTTMP)/test_iface_guid_init26 | diff -u test/test_interface_name_as_guid_initialiser.expected -
 	# Delphi mode, parenless method reference with a CHAINED receiver:

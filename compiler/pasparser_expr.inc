@@ -7909,9 +7909,40 @@ begin
           mcallNode := AllocNode(AN_CALL);
           ASTIVal[mcallNode] := rcPi;
           ASTTk[mcallNode] := Ord(Procs[rcPi].RetType);
-          rcSelf := AllocNode(AN_INT_LIT);
-          ASTIVal[rcSelf] := 0;
-          ASTTk[rcSelf] := Ord(ParamOwnKind(rcPi, 0));   { Self: never an array }
+          { NO Self at all when the method carries the `static` DIRECTIVE, and
+            this is a regression I introduced in b0d53c73a. Before it, such a
+            method still had a Self at index 0, so this dummy lined the argument
+            chain up with the parameter list. After it parameter 0 is the FIRST
+            REAL PARAMETER, and the chain was one longer than the signature --
+            so the lowering paired the dummy with parameter 0 and every real
+            argument with the parameter before it.
+
+            THE FAILURE IS ENTIRELY IN THE MANAGED-ARGUMENT TEMP, which is why
+            the unmanaged spellings stayed correct and nothing caught it. IR for
+            `TP.Make('three')` against `Make(const b: AnsiString)`:
+
+              pinned   const_int 0 tk=17 -> arg          (the dummy, a pointer)
+                       const_str -> store_sym tk=23 -> arg   (the STRING gets the temp)
+              HEAD     const_int 0 tk=23 -> store_sym tk=23 -> arg
+                       const_str -> arg                      (the string gets NONE)
+
+            The temp is built for the dummy because the dummy now pairs with the
+            AnsiString parameter, and the real string is passed as a bare
+            literal the callee then reads a length word behind: Length(b) came
+            back 1073741824, or segfaulted once a second argument followed.
+
+            Not fixable by retyping the dummy -- measured, the AST tk is not
+            what the lowering reads; it pairs by POSITION with the parameter
+            list. The chain has to be the right LENGTH.
+            bug-p-a-record-static-class-function-is-called-with-a-dummy-self-it-no-longer-has }
+          if UMthNoSelf[rcMmi] then
+            rcSelf := -1
+          else
+          begin
+            rcSelf := AllocNode(AN_INT_LIT);
+            ASTIVal[rcSelf] := 0;
+            ASTTk[rcSelf] := Ord(ParamOwnKind(rcPi, 0));   { Self: never an array }
+          end;
         end
         else
         begin
@@ -7929,10 +7960,19 @@ begin
           ASTIVal[rcSelf] := rcTmp;
           ASTTk[rcSelf] := Ord(tyRecord);
         end;
-        rcSelfArg := AllocNode(AN_ARG);
-        ASTLeft[rcSelfArg] := rcSelf;
-        ASTLeft[mcallNode] := rcSelfArg;
-        mlastArg := rcSelfArg;
+        if rcSelf >= 0 then
+        begin
+          rcSelfArg := AllocNode(AN_ARG);
+          ASTLeft[rcSelfArg] := rcSelf;
+          ASTLeft[mcallNode] := rcSelfArg;
+          mlastArg := rcSelfArg;
+        end
+        else
+        begin
+          { the empty-chain convention GenMakeStaticMethodCall already speaks }
+          ASTLeft[mcallNode] := -1;
+          mlastArg := -1;
+        end;
 
         if CurTok.Kind = tkLParen then
         begin
@@ -7942,7 +7982,8 @@ begin
             ParseExpr;
             margSeq := AllocNode(AN_ARG);
             ASTLeft[margSeq] := CurASTNode;
-            ASTRight[mlastArg] := margSeq;
+            if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
+            else ASTRight[mlastArg] := margSeq;
             mlastArg := margSeq;
             if CurTok.Kind = tkComma then Next
             else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
