@@ -3,9 +3,9 @@ track: P
 prio: 50
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: ""
-summary: "In {$MODE DELPHI} a bare method name passed as an ARGUMENT is read as a CALL, not as a method reference: `Take(HashIt)` answers `no overload of Take matches these arguments / argument types: (LongInt)` -- the method's RESULT type, one reading past the actual gap, so it reads as an overload defect and is nothing of the kind. fpc 3.2.2 -Mdelphi compiles it. 14-line repro, NO generics. The ASSIGNMENT arm already works (`F := HashIt`, `Result := HashIt`), so this is the sibling arm of the parenless-method-reference family that was never built: TryParseParenlessMethodRef has callers for a method-pointer CAST and for assignment, and argument position has TryDelphiBareProcArg, which asks FindProc and so cannot see a METHOD at all. This is the LIVE WALL of feature-pascal-corpus-generics at generics.defaults.pas:2729. A first fix was written, measured and REVERTED -- see below; it fixes the free-callee half and turns the method-callee half into a SEGFAULT, which is worse than today's honest refusal."
+summary: "FIXED 2026-09-09. `Take(HashIt)` inside a sibling method now REFERENCES the method — prints `took 42`, matching fpc 3.2.2 -Mdelphi byte for byte. The cause was NOT the lowering: ir.inc:5659 and IRMethodRefToTemp were correct and never ran, proved by PXXDBG=a.ast (the argument reached IR as AN_CALL/tyInt32, and the route tests AN_METHODREF/tyRecord). The bare-Self method-call loop in pasparser_stmt.inc asked TryParseBracketArgForSlot and not TryDelphiBareProcArg, so the reference reading was never offered; the free-proc loops ask both side by side. It presented as a lowering bug because the overload PROBES do reach TryDelphiBareProcArg and built a correct methodref twice — the match came from one reading and the tree from another. Two changes: a method arm in TryDelphiBareProcArg (FindProc sees free routines only) and the missing door in that loop. Test covers the virtual case (binds the override, 241 not 141 — previously unexercised) and both precedence directions (bare paramless and bare all-defaulted still CALL, which is where the Params[0]-is-Self off-by-one would silently pass an address). Gate GREEN."
 ---
 
 # A bare method name in argument position is called instead of referenced
@@ -141,3 +141,86 @@ Three measured facts worth keeping, all cheap to get wrong:
 The working arm is reproducible from this description in about ten minutes; it
 was deliberately not committed, because a patch that turns a diagnostic into a
 crash is worse to inherit than a description of one.
+
+## Resolved 2026-09-09 by frankH — the loop never offered the door; the lowering was never wrong
+
+`took 42`, matching fpc 3.2.2 `-Mdelphi` byte for byte. Two changes, and
+neither is in `ir.inc`.
+
+### The diagnosis above pointed one layer too deep, and the AST says so
+
+The handoff's reading was that `ir.inc:5659` routes `AN_METHODREF` to
+`IRMethodRefToTemp` "and the value it produces is wrong". **That route never
+ran.** With the parser arm in place and the repro compiling, `PXXDBG=a.ast:*`
+gives the argument as
+
+    #8202 kind=8 tk=11 ival=137     { AN_CALL of TC.HashIt, tyInt32 }
+      #8200 kind=9
+        #8201 kind=3 tk=6 ival=105  { AN_IDENT Self }
+
+`kind=8` is `AN_CALL` and `tk=11` is `tyInt32` — not `AN_METHODREF`/`tyRecord`.
+`ir.inc:5659` tests exactly those two things, so it could not fire, and the IR
+confirms it: `IRMethodRefCode` emits `IR_PROCADDR` (non-virtual) or
+`load_mem`/`binop`/`load_mem` (virtual) and **neither emits a call**, while
+`TC.Go` contained `call a=137` with `Self` as its only argument, its LongInt
+result stored into the 16-byte temp and then invoked as a code address.
+`IRMethodRefToTemp` and its route were correct throughout.
+
+### The actual defect: one arm of a double door
+
+`pasparser_stmt.inc`'s bare-`Self` method-call loop asked
+`TryParseBracketArgForSlot` and **not** `TryDelphiBareProcArg`. The free-proc
+loops at `pasparser_stmt.inc:8550` and `pasparser_expr.inc:8525` ask both, side
+by side. So the reference reading was never offered here at all and `ParseExpr`
+took the bare name under call-first precedence.
+
+That loop's own comment already records this shape, about the OTHER door:
+*"Every other call path asks; this one — the bare `Log(...)` inside a sibling
+method, implicit Self — hand-rolled its loop and asked nothing."* The fix for
+that added one of the two doors the other paths ask at. This is
+`normalise-dont-special-case.md`'s *"fixed one arm of a double case? Grep for
+the sibling before closing"*, with the sibling in the same five lines.
+
+### Why it presented as a lowering bug, which is the transferable part
+
+`TryDelphiBareProcArg` **is** reached — from the overload probes, which parse
+the argument speculatively. Instrumented, the new method arm fires **twice**,
+building a correct `AN_METHODREF` each time, and both are discarded with the
+probe. Those firings are what made `Take` match. This loop then re-parsed the
+argument as a call.
+
+**So the verdict came from one reading and the tree from another.** That is
+precisely why the symptom looked downstream: the overload match had already
+succeeded on a methodref, so the argument "was" a methodref by the time anyone
+asked, and the only wrong thing left to suspect was the lowering. The
+discriminator was dumping the AST rather than reasoning from the match.
+
+### The two changes
+
+1. `TryDelphiBareProcArg` (`pasparser_lval.inc`) gains a method arm for when
+   `FindProc` finds nothing: resolve the implicit `Self` exactly as
+   `TryParseParenlessMethodRef`'s no-receiver arm does and build its node.
+2. That loop (`pasparser_stmt.inc`) asks the door.
+
+Both of the handoff's warnings were load-bearing and are now under test rather
+than under comment:
+
+- **`ASTRight := UMthVirSlot` is exercised.** Row 2 of the new test references a
+  **virtual** method through a derived instance and prints `241` (the override),
+  not `141` (the base). Nothing exercised this before.
+- **The `ParamCount` off-by-Self is real and the tests discriminate.** Rows 3
+  and 4 pass a BARE paramless and a BARE all-defaulted function, which must
+  still CALL: they print `5` and `70`. Reading `Params[0]` would ask whether
+  `Self` has a default — always false — and silently pass an address into a
+  `LongInt` sink, so those rows print a garbage number under the wrong slot
+  rather than failing to compile.
+
+`FindUMethOverloadAhead`'s hookless `ParseArgExpr` probe is still a real second
+gap and is still not this bug's cause, exactly as the handoff said. It is why
+the arm fires twice; it is not why the tree was wrong.
+
+Gate GREEN (20 PASS). `test_delphi_bare_method_name_in_argument_position` is
+wired beside the chained-receiver test; `.expected` is fpc's own output.
+
+## Log
+- 2026-09-09 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

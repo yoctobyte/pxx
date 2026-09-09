@@ -6765,6 +6765,7 @@ end;
   -1 with nothing consumed. }
 function TryDelphiBareProcArg: Integer;
 var pi, node: Integer;
+    rsym, rci, rmmi, mpi, opNode: Integer;
 begin
   Result := -1;
   if not DelphiMode then Exit;
@@ -6772,7 +6773,53 @@ begin
   if not (Tokens[TokPos].Kind in [tkComma, tkRParen]) then Exit;
   if FindSym(CurTok.SVal) >= 0 then Exit;
   pi := FindProc(CurTok.SVal);
-  if pi < 0 then Exit;
+  { NO FREE ROUTINE OF THAT NAME -- inside a method body it may still be one of
+    the class's OWN methods, `Take(HashIt)`. FindProc sees free routines only,
+    so before this arm existed the reference reading was never reached at all
+    and the name fell through to call-first precedence: `HashIt` was CALLED and
+    its LongInt result offered to a method-pointer parameter, which is the
+    reported `no overload of Take matches these arguments / (LongInt)`.
+
+    The receiver is the implicit `Self`, resolved exactly as
+    TryParseParenlessMethodRef's no-receiver arm resolves it, and the node built
+    here is that arm's node: AN_METHODREF, tyRecord, with ASTRight carrying the
+    virtual slot. ASTRight is load-bearing rather than decorative -- omit it and
+    a VIRTUAL method binds the base instead of the override, which no repro in
+    the ticket exercises and which no diagnostic would catch.
+
+    PARAMCOUNT IS OFF BY ONE FROM THE FREE-ROUTINE TESTS ABOVE, because
+    Params[0] of a method is the implicit Self. So "paramless" is ParamCount = 1
+    and the defaults probe reads slot 1. Reading slot 0 here asks whether SELF
+    has a default -- always false, and false in the direction that silently
+    takes an address where Delphi would have called.
+    bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced }
+  if pi < 0 then
+  begin
+    rsym := FindSym('Self');
+    if rsym < 0 then Exit;
+    if Syms[rsym].RecName < REC_UCLASS_BASE then Exit;
+    if UClsIsRecord[Syms[rsym].RecName - REC_UCLASS_BASE] then Exit;
+    rci := Syms[rsym].RecName - REC_UCLASS_BASE;
+    rmmi := FindUMeth(rci, CurTok.SVal);
+    if rmmi < 0 then Exit;
+    mpi := UMthProc_[rmmi];
+    if mpi < 0 then Exit;
+    if Procs[mpi].IsFunc and (Procs[mpi].ParamCount = 1) then Exit;
+    if Procs[mpi].IsFunc and (Procs[mpi].ParamCount > 1) and
+       ProcParamHasDefault[mpi * MAX_PROC_PARAMS + 1] then Exit;
+    opNode := AllocNode(AN_IDENT);
+    ASTIVal[opNode] := rsym;
+    ASTTk[opNode] := Ord(tyClass);
+    node := AllocNode(AN_METHODREF);
+    ASTIVal[node] := mpi;
+    ASTLeft[node] := opNode;
+    ASTRight[node] := UMthVirSlot[rmmi];
+    ASTTk[node] := Ord(tyRecord);
+    LastExprTk := tyRecord;
+    Next;
+    Result := node;
+    Exit;
+  end;
   { …and an ALL-DEFAULTED function is paramless AT THE CALL SITE, so it is a
     value-producing call here too and belongs in the same fall-back: FPC prints
     6 for `Chk('x', F, 6)` under {$MODE DELPHI} with `F(k: Integer = 3)`, while

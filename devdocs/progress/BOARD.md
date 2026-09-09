@@ -439,12 +439,11 @@ _none_
 | task-t-a-makefile-recipe-that-is-not-valid-sh-passes-every-gate | T | 25 | task | Appending to a looped `test-core` recipe at an anchor INSIDE a `for arch ... done` continuation put a RED on origin for hours (`ebc0dcb4f`..`ca6b96843`: `sh: 17: Syntax error: \")\" unexpected (expecting \"done\")`), and five instruments were green because each is correct about something else -- `--job src:<file>` selects the recipe line for the file you NAME, `make compiler/pascal26` does not read test-core, `--tier quick` does not run it, and gate.sh quick's Makefile-assertion row checks that assertions can FAIL, not that a recipe is valid sh. The obvious mechanism was ATTEMPTED and measured not to work: `sh -n` over every logical recipe line gives 190 hits, essentially all regex mangling of `$(...)` across continuations -- a ~100% hit rate, as empty as a check that never fires. So the hard part is the CONTINUATION JOIN, not the `sh -n`. Filed as the residual frankB deliberately did not land, so the next person to have the idea starts from the 190 rather than from zero. | — |
 | task-t-two-standalone-checks-are-written-and-unwired-price-them-together | T | 35 | task | `tools/lowering_passthrough_census.py` (frankA, `c1961bc63`) is written, controlled and deliberately NOT wired into `gate.sh` -- a new fleet-wide gate step is Track T's to price, not a passing agent's to add. It finds AST kinds whose value arm is a pass-through but which have no arm in `IRLowerAddress`, the shape that made `v := Variant(y)` segfault, where a consumer asking for an address silently gets contents. It runs standalone, exits 1, carries two branched-on controls, and wiring it is one line. Its sibling landed (`ef96b48f8`, the HEAD-side lib/rtl sweep) so this is the remaining half. RECOMMENDED SHAPE, and the one `ef96b48f8` used: arm off the MERGE-BASE with origin/master, so committed-but-unpushed counts, and sort failures against the pin rather than keeping an exclusion list. | — |
 
-## backlog-pascal (32)
+## backlog-pascal (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-p-a-bare-inherited-does-not-forward-arguments | P | 40 | bug | A bare `inherited;` does not forward the caller's arguments | — |
-| bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced | P | 50→65 | bug | In {$MODE DELPHI} a bare method name passed as an ARGUMENT is read as a CALL, not as a method reference: `Take(HashIt)` answers `no overload of Take matches these arguments / argument types: (LongInt)` -- the method's RESULT type, one reading past the actual gap, so it reads as an overload defect and is nothing of the kind. fpc 3.2.2 -Mdelphi compiles it. 14-line repro, NO generics. The ASSIGNMENT arm already works (`F := HashIt`, `Result := HashIt`), so this is the sibling arm of the parenless-method-reference family that was never built: TryParseParenlessMethodRef has callers for a method-pointer CAST and for assignment, and argument position has TryDelphiBareProcArg, which asks FindProc and so cannot see a METHOD at all. This is the LIVE WALL of feature-pascal-corpus-generics at generics.defaults.pas:2729. A first fix was written, measured and REVERTED -- see below; it fixes the free-callee half and turns the method-callee half into a SEGFAULT, which is worse than today's honest refusal. | — |
 | bug-p-a-constant-expression-that-overflows-int64-stays-signed | P | 40 | bug | A constant EXPRESSION whose value lands between High(Int64) and High(QWord) keeps tyInt64, so `if (high(int64)+100) > 0` takes the NEGATIVE arm where fpc 3.2.2 takes the positive one — a silent wrong branch on a constant the programmer wrote out in full. The LITERAL half of this is fixed (10e670503: a decimal literal above High(Int64) is tagged tyUInt64 at its creation site); the FOLD half is not, because pxx has no signed/unsigned tag on constant arithmetic at all — ConstEval returns a bare Int64 and the expression path types `tyInt64 + tyInteger` as tyInt64 by kind. Blocks `toperator6.pp`, whose whole subject is that promotion: it declares `operator :=(qword)` beside `operator :=(int64)` and `value := high(int64)+100` must select the QWord one. Second, smaller half in the same area: conversion-operator ranking reads a literal's STATIC kind, not its by-value kind, so `b := 200` picks the Int64 overload where fpc picks the Byte one. | — |
 | bug-p-a-double-deref-in-fpcs-cclasses-is-refused-and-the-obvious-reduction-compiles | P | 45 | bug | The current wall on the FPC compiler-source march, and the first one this session that did NOT reduce. `cclasses` / `comphook` / `finput` / `cfileutl` stop at `cclasses.pas:2909 dereferenced value is not a pointer` — `Entry := @Entry^^.Next` inside `THashSet.Lookup`, where `Entry: PPHashSetItem` and the three types are declared forward (`PPHashSetItem = ^PHashSetItem` above `PHashSetItem = ^THashSetItem` above the record). A hand-written reduction with those exact declarations, that exact routine body and a class field of the same type COMPILES AND RUNS, so the discriminator is something else in the unit and the reduction is the work. Two separate small shapes DO fail and are recorded below; neither produces this diagnostic, so neither is established as the cause. | — |
 | bug-p-a-field-access-on-an-operator-result-does-not-lower | P | 30 | bug | `(x + y).v` — a field read directly off an overloaded operator's RESULT — fails with `IR_UNSUPPORTED: frontend could not lower AST node (kind 5)`, while the same value through a temporary (`z := x + y; z.v`) is correct. Not a diagnostic difference: fpc 3.2.2 compiles the expression and prints the right number, so this is a refusal on code someone meant to write, and the workaround is invisible until you hit it. Measured identically on the PINNED binary (v40x) and at HEAD, so it is old and not a regression. AN_FIELD over an AN_BINOP whose operands are records is the shape; the operator CALL itself lowers fine everywhere else. | — |
@@ -973,9 +972,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3575)
+## done (3576)
 
-3575 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3576 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (79)
 
@@ -1099,7 +1098,6 @@ _none_
 - [p 70] [T] regression-tools-devtest-00-4
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [P] bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced (unblocks 1)
 - [p 65] [A+S] bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
@@ -1108,6 +1106,7 @@ _none_
 - [p 65] [T] bug-t-the-job-map-cannot-be-asked-whether-a-given-source-was-exercised
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
+- [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 60] [U] decide-pxx-thread-local-storage-is-gs-relative-and-the-x86-64-psabi-is-fs-relative (unblocks 1)
@@ -1534,7 +1533,6 @@ _none_
 - **1** — bug-n-str-join-rejects-an-argument-shape-cpython-accepts
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
-- **1** — bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced
 - **1** — bug-t-the-documented-build-path-never-enumerates-what-it-needs
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-how-a-type-carries-an-identity-its-kind-cannot-hold

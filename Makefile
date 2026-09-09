@@ -5400,6 +5400,22 @@ test-core: $(COMPILER)
 	# bug-p-a-delphi-parenless-method-reference-cannot-have-a-chained-receiver
 	./$(COMPILER) test/test_delphi_parenless_methodref_chained_receiver.pas $(TESTTMP)/test_delphi_chainref26
 	$(TESTTMP)/test_delphi_chainref26 | diff -u test/test_delphi_parenless_methodref_chained_receiver.expected -
+	# A BARE method name in ARGUMENT position, `Take(HashIt)` inside a sibling
+	# method: referenced, not called. The bare-Self method call loop asked the
+	# bracket door and not the bare-proc one, so ParseExpr took the name under
+	# call-first precedence and offered HashIt's LongInt to a method-pointer
+	# parameter -- `no overload of Take matches / (LongInt)`.
+	# Row 2 is the load-bearing one and nothing exercised it before: the
+	# reference is to a VIRTUAL method through a derived instance, so it prints
+	# 241 (the override) and not 141 (the base) only if ASTRight carries the
+	# virtual slot. Rows 3 and 4 are the other direction -- a BARE paramless
+	# and a BARE all-defaulted function still CALL, which is where reading
+	# Params[0] instead of [1] would silently take an address instead (Params[0]
+	# of a method is the implicit Self and never has a default).
+	# .expected is fpc 3.2.2 -Mdelphi's own output.
+	# bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced
+	./$(COMPILER) test/test_delphi_bare_method_name_in_argument_position.pas $(TESTTMP)/test_delphi_baremeth26
+	$(TESTTMP)/test_delphi_baremeth26 | diff -u test/test_delphi_bare_method_name_in_argument_position.expected -
 	# The enclosing function's BARE parameterless name read from inside a nested
 	# routine: the RESULT VARIABLE in objfpc, a recursive CALL in delphi. Both
 	# files or neither -- the objfpc one is the fix (it failed before it, calls=2

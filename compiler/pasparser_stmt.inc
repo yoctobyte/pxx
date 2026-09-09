@@ -8795,7 +8795,40 @@ begin
                     incremented it and never asked it anything.
                     bug-p-an-array-of-const-literal-is-a-set-at-a-bare-self-method-call }
                   smArgSeq := TryParseBracketArgForSlot(smpii, smMai);
-                  if smArgSeq >= 0 then CurASTNode := smArgSeq else ParseExpr;
+                  if smArgSeq >= 0 then CurASTNode := smArgSeq
+                  else
+                  begin
+                    { THE BARE-METHOD-NAME DOOR, and it is the SAME omission the
+                      bracket note above records, in the same loop, found the
+                      same way. That note says "every other call path asks; this
+                      one hand-rolled its loop and asked nothing" -- and the fix
+                      then added exactly one of the two doors the other paths
+                      ask at. pasparser_stmt.inc:8550 and pasparser_expr.inc:8525
+                      both ask TryDelphiBareProcArg right beside their bracket
+                      call; this loop still did not.
+
+                      `Take(HashIt)` inside a sibling method therefore never had
+                      the reference reading offered to it: ParseExpr took the
+                      bare name under call-first precedence, CALLED HashIt, and
+                      offered its LongInt to a method-pointer parameter.
+
+                      WHY IT LOOKED LIKE A LOWERING BUG. TryDelphiBareProcArg is
+                      reached from the overload PROBES, which parse the same
+                      argument speculatively -- so a methodref really was built,
+                      twice, and really did decide that Take matched. Both were
+                      discarded with the probe, and this loop then re-parsed the
+                      argument as a call. The verdict came from one reading and
+                      the tree from another, which is why the match succeeded
+                      and the AST that reached ir.inc held an AN_CALL of tyInt32
+                      where AN_METHODREF/tyRecord was expected. ir.inc:5659 and
+                      IRMethodRefToTemp were correct throughout and never ran.
+
+                      smMai is already the callee slot (it counts from 1 because
+                      param 0 is the implicit Self), so it needs no adjustment.
+                      bug-p-a-bare-method-name-in-argument-position-is-called-instead-of-referenced }
+                    smArgSeq := TryDelphiBareProcArg;
+                    if smArgSeq >= 0 then CurASTNode := smArgSeq else ParseExpr;
+                  end;
                   smArgSeq := AllocNode(AN_ARG);
                   ASTLeft[smArgSeq] := CurASTNode;
                   ASTRight[smLastArg] := smArgSeq;
