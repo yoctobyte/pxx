@@ -6528,6 +6528,29 @@ test-core: $(COMPILER)
 	# compat-pascal-distinct-type-declaration
 	./$(COMPILER) test/test_distinct_type_decl.pas $(TESTTMP)/test_distinct_type26
 	tools/expect_same.sh test_distinct_type26 "$$($(TESTTMP)/test_distinct_type26)" "$$(printf '5 120\n100 9 abcd hi 7 42\n1 4 8')"
+	# A forward `^T` inside a CLASS's or RECORD's nested `type` section. This
+	# resolved for a nested CLASS, RECORD, ARRAY or ENUM target and was refused for
+	# a nested plain ALIAS, POINTER alias or SUBRANGE, while the identical
+	# declarations at UNIT level compiled. FIVE KINDS PASSING AND THREE FAILING IS A
+	# PER-TABLE SHAPE: the drain asked FindNestedType (class-like only) and then the
+	# FLAT FindTypeAlias, which filters through AliasVisibleHere and so reads
+	# ParsingClassBodyCi -- and the drain runs at the unit's closing `end.` where
+	# that is -1. Every arm answered correctly about a scope that was not the row's.
+	# The three that passed did so only because IsRecordType / FindArrayType /
+	# FindEnumType carry no owner column and are asked UNSCOPED.
+	# THE DECLARATION ORDER IS THE DISCRIMINATOR, so both orders are in the file:
+	# the same three types with PRec written BEFORE PPRec compiled throughout, and a
+	# probe that happened to use that order measured nothing.
+	# The class half is oracled against fpc 3.2.2 -Mobjfpc (7 and 18); the RECORD
+	# half has no fpc oracle, because fpc refuses `type` inside a record in objfpc.
+	# bug-p-a-forward-pointer-in-a-class-type-section-is-not-resolved
+	./$(COMPILER) test/test_a_forward_pointer_in_a_nested_type_section.pas $(TESTTMP)/test_fwd_nested26
+	tools/expect_same.sh test_fwd_nested26 "$$($(TESTTMP)/test_fwd_nested26)" "$$(printf 'class-chain  7\nclass-others 18\nrecord-chain 11')"
+	# ...and the control that makes it CORRECT rather than merely working: a nested
+	# type section is a SCOPE. The easy wrong fix is an unscoped alias scan, which
+	# compiles this file. fpc refuses it too, so this is parity and not our own rule.
+	! ./$(COMPILER) test/test_a_nested_forward_pointer_does_not_see_another_classes_type_fail.pas $(TESTTMP)/test_fwd_nested_oos26 > $(TESTTMP)/test_fwd_nested_oos.log 2>&1
+	grep -q "forward type not resolved" $(TESTTMP)/test_fwd_nested_oos.log
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas $(TESTTMP)/test_macros_rot_b33026

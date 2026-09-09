@@ -510,8 +510,29 @@ var nm: AnsiString;
 begin
   nm := GetTokenStrFromRaw(PendPtrNOff[i], PendPtrNLen[i]);
   PendingPtrTargetResolved := True;
-  if (PendPtrClassCi[i] >= 0) and (FindNestedType(PendPtrClassCi[i], nm) >= 0) then Exit;
-  if (PendPtrMethCi[i] >= 0) and (FindNestedType(PendPtrMethCi[i], nm) >= 0) then Exit;
+  { ClassDeclaresTypeNamed and NOT FindNestedType, which is what these two arms
+    asked until 2026-09-09. AddNestedType registers only CLASS-LIKE nested types,
+    so FindNestedType answers -1 for a nested plain alias, pointer alias,
+    subrange or procedural type -- and the flat arms below cannot cover them
+    either, because FindTypeAlias filters candidates through AliasVisibleHere,
+    which reads ParsingClassBodyCi. THIS DRAIN RUNS AT THE UNIT'S CLOSING `end.`,
+    where ParsingClassBodyCi IS -1, so FindTypeAlias correctly reports that a
+    nested alias is not visible FROM HERE and the row was refused. Every arm was
+    working; none of them was asking the question this row is about.
+    Observable: inside a class or record `type` section, `PA = ^PB; PB = ^LongInt;`
+    was refused with `forward type not resolved: PB` while the identical pair at
+    unit level compiled, and so did a forward to a nested RECORD, ARRAY or ENUM --
+    those three resolve through IsRecordType / FindArrayType / FindEnumType, which
+    carry no owner column and are therefore asked UNSCOPED. Five kinds passing and
+    three failing is the per-table shape ClassDeclaresTypeNamed's own header
+    describes, from the other side.
+    That predicate is exactly this question -- "does this class, or an ancestor,
+    declare a type of this name" -- it consults FindNestedType FIRST so nothing
+    that resolved before can stop resolving, and it walks the ancestor chain,
+    which these arms did not.
+    bug-p-a-forward-pointer-in-a-class-type-section-is-not-resolved }
+  if (PendPtrClassCi[i] >= 0) and ClassDeclaresTypeNamed(PendPtrClassCi[i], nm) then Exit;
+  if (PendPtrMethCi[i] >= 0) and ClassDeclaresTypeNamed(PendPtrMethCi[i], nm) then Exit;
   if IsClassType(nm) then Exit;
   if FindUClass(nm) >= 0 then Exit;
   if IsRecordType(nm) <> REC_NONE then Exit;
