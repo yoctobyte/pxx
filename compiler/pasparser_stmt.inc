@@ -6477,6 +6477,7 @@ var
   slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
   slCastTk: TTypeKind;   { ...and the kind that decided it }
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
+  smArityBad: Boolean;   { the bare implicit-Self site already reported arity by NAME -- see its call tail }
   castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind;
   { aliasIdx / fieldNode / indexNode / castRec / castElemTk / castElemRec /
@@ -8778,9 +8779,10 @@ begin
               and that is a different defect, left exactly as it is rather than
               converted into a diagnostic by a fix aimed at something else.
               bug-p-a-bare-method-call-inside-its-own-class-ignores-arity }
-            if (smmii >= 0) and
+            smArityBad := (smmii >= 0) and
                (FindUMethArityStrict(smci, name, CountCallArgsAhead) < 0) and
-               (not UMethNameCanAbsorbVarRecTail(smci, name)) then
+               (not UMethNameCanAbsorbVarRecTail(smci, name));
+            if smArityBad then
               ErrorRecover('wrong number of parameters in call to ' + name);
             if smmii >= 0 then
             begin
@@ -8811,7 +8813,44 @@ begin
               begin
                 Next;
                 smMai := 1;
-                while CurTok.Kind <> tkRParen do
+                { THE THIRD DOOR, and the loop is now BOUNDED like every other
+                  method-argument loop in the frontend rather than swallowing to
+                  the `)`.
+
+                  Unbounded, it appended every token group it found as one more
+                  AN_ARG. For a call whose arity already matched that is the
+                  same thing -- the loop stops at `)` either way -- and for a
+                  call whose arity did NOT match, the strict check above has
+                  already errored. There is exactly ONE shape left in between:
+                  variadic bracket-elision, `Desc('a', 1)` against
+                  `Desc(const a: array of const)`, which the arity check
+                  deliberately carves out (UMethNameCanAbsorbVarRecTail) because
+                  the extension is SUPPOSED to pass more arguments than the
+                  signature has. Those surplus arguments were being appended as
+                  separate slots, so the callee's open-array descriptor was
+                  whatever the second one happened to be: `Length(a)` itself
+                  segfaulted, having compiled clean.
+
+                  The single-element spelling `Desc('a')` had the same crash by
+                  the other route -- arity MATCHES, so nothing was carved out
+                  and nothing was surplus, and a scalar was handed to a slot
+                  that wants a vector. That is why the tail below is called
+                  unconditionally and not only when a comma is in sight; its own
+                  comment records the first cut of the method version making
+                  exactly that mistake.
+
+                  So: bound the loop at the declared parameter count and hand
+                  the rest to ExpectCallRParen, which is where the other seven
+                  loops absorb an elided `array of const` tail. This is the
+                  THIRD omission found in this one hand-rolled loop -- the
+                  bracket door and the bare-method-name door are the two notes
+                  below -- and all three are the same sentence: *every other
+                  call path asks; this one hand-rolled its loop and asked
+                  nothing.* Being able to write that three times is the argument
+                  for the shared tail, not for a fourth patch here.
+                  bug-p-a-bare-variadic-method-call-segfaults-where-the-bracketed-spelling-works }
+                while (CurTok.Kind <> tkRParen) and
+                      ((smpii < 0) or (smMai < Procs[smpii].ParamCount)) do
                 begin
                   { THE BRACKET DOOR, which this loop did not have. `[...]` at an
                     argument position is a SET to ParseExpr and an `array of
@@ -8873,9 +8912,64 @@ begin
                   ASTRight[smLastArg] := smArgSeq;
                   smLastArg := smArgSeq;
                   Inc(smMai);
-                  if CurTok.Kind = tkComma then Next;
+                  { THE COMMA IS LEFT IN PLACE ONCE THE DECLARED SLOTS ARE FULL,
+                    and that is load-bearing rather than tidy: the loop used to
+                    eat it unconditionally, so bounding the loop alone would have
+                    exited with CurTok on the first SURPLUS EXPRESSION instead of
+                    on the comma -- and AbsorbVariadicTailArgs reads
+                    `while CurTok.Kind = tkComma`. It would then have wrapped
+                    element 0 only, and the arity tail would have reported a
+                    "wrong number of parameters" for a call that is exactly what
+                    the extension exists to accept. }
+                  if (CurTok.Kind = tkComma) and
+                     ((smpii < 0) or (smMai < Procs[smpii].ParamCount)) then Next;
                 end;
-                Expect(tkRParen, ')');
+                { ...and the shared tail, which absorbs the elided `array of
+                  const` tail, reports arity in the frontend's one wording, and
+                  consumes the `)`. It replaces a bare Expect here.
+
+                  -1 WHEN NO EXPLICIT ARGUMENT WAS PARSED, and that is not
+                  tidiness. smLastArg still being smselfArg means `Desc()` --
+                  empty parens -- and handing THAT to the absorber wraps the
+                  implicit SELF POINTER as element 0: measured, `Desc()` against
+                  `Desc(const a: array of const)` printed `n=1` with a garbage
+                  element. -1 is the absorber's own "no meaningful last argument"
+                  convention (`if lastArg < 0 then Exit`), so the empty-parens
+                  shape is left exactly as it was before this change rather than
+                  being given a new and more confident wrong answer. It is still
+                  wrong -- the qualified spelling `c.Desc()` refuses it with
+                  `Desc() requires 1 argument(s), none given` and this one
+                  accepts it -- but that is a DIFFERENT defect at this site (the
+                  loop has no FillDefaultArgs and no all-defaulted test, which is
+                  what `Def()` needs to keep working), and a fix aimed at the
+                  segfault must not quietly reshape it. Recorded in the ticket. }
+                if smArityBad then
+                begin
+                  { ONE MISTAKE, ONE DIAGNOSTIC. The pre-check above is this
+                    site's arity authority and it has already spoken -- by the
+                    name AS WRITTEN, which is the wording the test that guards
+                    it asserts. Bounding the loop means the surplus is now still
+                    in the token stream when the tail is reached, and the tail
+                    would report the SAME mistake a second time under the
+                    qualified spelling (`call to TC.Plain`), so `Plain(1.5,2,3)`
+                    printed two errors for one call.
+
+                    Which of the two to keep is settled by what each can SEE:
+                    the tail fires only on a surplus, because a call that is
+                    short of arguments leaves CurTok on `)` and is invisible to
+                    it, while the pre-check catches BOTH directions. Handing the
+                    surplus direction to the tail would have split one site's
+                    arity reporting across two wordings depending on which way
+                    the count was wrong. So the pre-check keeps both, and all
+                    that is owed here is the resync the tail would have done.
+                    bug-p-a-bare-variadic-method-call-segfaults-where-the-bracketed-spelling-works }
+                  SkipSurplusCallArgTail;
+                  Expect(tkRParen, ')');
+                end
+                else if smLastArg = smselfArg then
+                  ExpectCallRParen(smpii, -1)
+                else
+                  ExpectCallRParen(smpii, smLastArg);
               end;
               node := smcallNode;
             end;

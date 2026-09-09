@@ -1,0 +1,11 @@
+elided-2  n=2 t0=2 t1=0
+bracket-2 n=2 t0=2 t1=0
+elided-1  n=1 t0=2
+bracket-1 n=1 t0=2
+elided-5  n=5 t0=2 t1=0 t2=1 t3=2 t4=0
+bracket-5 n=5 t0=2 t1=0 t2=1 t3=2 t4=0
+def 34
+def 74
+def 78
+noarg 99
+noarg 99

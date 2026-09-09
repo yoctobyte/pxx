@@ -2656,6 +2656,29 @@ end;
                          so `TMyTest.Suite` reaches TAssert.Suite with Self = TMyTest
                          and the class propagates down the chain;
     in an INSTANCE method the runtime class of Self -> __pxxRttiOf(Self). }
+{ Walk a surplus argument tail to the `)` that closes THIS call, counting
+  nested parens so a surplus that is itself a call (`P(1, Q(2), 3)`) does not
+  stop at Q's. Lifted out of ExpectCallRParen because a caller that has ALREADY
+  reported the arity itself still needs the resync: without it the parser is
+  left on a comma and Expect(tkRParen) adds a second, differently-worded
+  diagnostic for one mistake. See the bare implicit-Self site in
+  pasparser_stmt.inc, which is its only other caller and says why. }
+procedure SkipSurplusCallArgTail;
+var depth: Integer;
+begin
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkLParen then Inc(depth)
+    else if CurTok.Kind = tkRParen then
+    begin
+      if depth = 0 then Break;
+      Dec(depth);
+    end;
+    Next;
+  end;
+end;
+
 { Close a METHOD call's argument list, reporting a surplus instead of dying on
   the paren.
 
@@ -2677,8 +2700,7 @@ end;
   driver halts on ErrCount before any emission.
   feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
 procedure ExpectCallRParen(mpi: Integer; lastArg: Integer);
-var depth: Integer;
-    absorbed: Boolean;
+var absorbed: Boolean;
 begin
   { An elided `array of const` tail is absorbed HERE rather than in each of the
     seven argument loops, for the same reason this tail is shared at all: the
@@ -2722,17 +2744,7 @@ begin
         + ' parameter binds a VARIABLE, not an expression')
     else
       ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
-    depth := 0;
-    while CurTok.Kind <> tkEOF do
-    begin
-      if CurTok.Kind = tkLParen then Inc(depth)
-      else if CurTok.Kind = tkRParen then
-      begin
-        if depth = 0 then Break;
-        Dec(depth);
-      end;
-      Next;
-    end;
+    SkipSurplusCallArgTail;
   end;
   Expect(tkRParen, ')');
 end;

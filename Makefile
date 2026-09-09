@@ -2884,6 +2884,22 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_p_a_bare_method_call_arity_still_valid.pas $(TESTTMP)/test_bare_arity_ok26
 	@$(TESTTMP)/test_bare_arity_ok26 | diff -u test/test_p_a_bare_method_call_arity_still_valid.expected - \
 	  || { echo 'test_p_a_bare_method_call_arity_still_valid: FAIL - a legitimate bare method call was refused'; exit 1; }
+	@# ...and that carve-out's OWN state at this site, which was separately
+	@# broken: `Desc('a', 1);` -- variadic bracket-elision, bare, in statement
+	@# position -- SEGFAULTED while `Desc(['a', 1]);` in the same program ran
+	@# correctly. The hand-rolled loop swallowed to the `)` and appended each
+	@# surplus expression as its own AN_ARG, so the callee read whatever the
+	@# second one left in the descriptor slot. Every elided row is PAIRED with
+	@# its bracketed twin: the bracketed spelling always worked, so an
+	@# unpaired row could be green against a wrong-but-stable descriptor.
+	@# The single-element row `Desc('a')` crashed by the OTHER route (arity
+	@# matches, nothing surplus, a scalar into a vector slot) and is the reason
+	@# the absorbing tail is called unconditionally. Positive control: the
+	@# PINNED compiler segfaults on the very first row.
+	@# bug-p-a-bare-variadic-method-call-segfaults-where-the-bracketed-spelling-works
+	@./$(COMPILER) test/test_p_a_bare_variadic_method_call.pas $(TESTTMP)/test_bare_variadic26
+	@$(TESTTMP)/test_bare_variadic26 | diff -u test/test_p_a_bare_variadic_method_call.expected - \
+	  || { echo 'test_p_a_bare_variadic_method_call: FAIL - elided and bracketed spellings disagree, or a bounded-loop control broke'; exit 1; }
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
