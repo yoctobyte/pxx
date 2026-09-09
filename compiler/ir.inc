@@ -3132,6 +3132,35 @@ begin
         (aggregates are returned by-reference), so use it directly rather than
         trying to take the address of a call node. }
       baseAddr := IRLowerAST(baseNode)
+    else if (ASTKind[baseNode] = AN_BINOP) and (ASTTk[baseNode] = Ord(tyRecord)) and
+            (FindOpOverload2(Integer(ASTIVal[baseNode]),
+                             ASTTk[ASTLeft[baseNode]], ResolveNodeRec(ASTLeft[baseNode]),
+                             ASTTk[ASTRight[baseNode]], ResolveNodeRec(ASTRight[baseNode])) >= 0) then
+      { ...AND AN OVERLOADED OPERATOR'S RESULT, WHICH IS THE SAME THING WEARING
+        A DIFFERENT NODE KIND. `(x + y).v` answered `IR_UNSUPPORTED ... (kind
+        5)` while `z := x + y; z.v` was correct, and the two are the same
+        expression -- the message named an internal node kind, so a reader hit
+        it, added the temporary and never learned there was a rule.
+
+        The parser leaves an overloaded operator as an AN_BINOP and only
+        retypes it to the operator's result type; IRLowerAST turns it into
+        IRAppendCall, the very node the arm above is talking about. So its IR
+        value is that same hidden aggregate-result temp address and needs no
+        materialising of its own -- this arm is a NAME the existing mechanism
+        was missing, not a new mechanism.
+
+        MEASURED, both halves: a CLASS-returning operator was always fine (the
+        result is a pointer, so no address is needed) and this is records only;
+        and `(p - q).a[0]` failed identically, because an index over an
+        operator result reaches this same field/base walk. Both were the
+        ticket's open questions and neither had been probed.
+
+        The FindOpOverload2 guard is what keeps it honest: a tyRecord-tagged
+        AN_BINOP with no registered operator is the garbage-arithmetic case
+        that IRLowerAST rejects by name a few thousand lines down, and it must
+        keep reaching that refusal rather than being handed an address here.
+        bug-p-a-field-access-on-an-operator-result-does-not-lower }
+      baseAddr := IRLowerAST(baseNode)
     else
       baseAddr := IRLowerAddress(baseNode);
 

@@ -17298,6 +17298,24 @@ test-core: $(COMPILER)
 	# bug-p-the-operator-predefined-check-is-an-aggregate-approximation
 	./$(COMPILER) test/test_operator_overload_on_scalar_operands.pas $(TESTTMP)/test_opscalar26
 	$(TESTTMP)/test_opscalar26 | diff -u test/test_operator_overload_on_scalar_operands.expected -
+	# A field read directly off an overloaded operator's RESULT: `(x + y).v`
+	# answered IR_UNSUPPORTED (kind 5) while `z := x + y; z.v` was correct, and
+	# they are the same expression. Row 3 is an INDEX over an operator result,
+	# which failed identically -- both were the ticket's open questions and
+	# neither had been probed. A class-returning operator was always fine (its
+	# result is a pointer), so this is records only.
+	# bug-p-a-field-access-on-an-operator-result-does-not-lower
+	./$(COMPILER) test/test_field_access_on_an_operator_result.pas $(TESTTMP)/test_opfield26
+	$(TESTTMP)/test_opfield26 | diff -u test/test_field_access_on_an_operator_result.expected -
+	# ...and the negative control, which is the one way that arm could go wrong:
+	# a tyRecord AN_BINOP with NO operator behind it reaches the same base walk,
+	# and handing it an address would make "add two records' first qwords and
+	# read a field off the garbage" compile and print. Reads WHICH refusal.
+	if ./$(COMPILER) test/test_field_access_on_an_operator_result_no_overload_refused.pas $(TESTTMP)/test_opfield_neg26 >/dev/null 2>&1; then \
+	  echo "FAIL: a field read off a record + with no operator declared compiled -- the base walk is handing garbage an address"; exit 1; \
+	fi
+	./$(COMPILER) test/test_field_access_on_an_operator_result_no_overload_refused.pas $(TESTTMP)/test_opfield_neg26 2>&1 \
+	  | grep -q "no operator overload found for record operands"
 	./$(COMPILER) test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.pas $(TESTTMP)/test_forinpick26
 	tools/expect_same.sh test_forinpick26 "$$($(TESTTMP)/test_forinpick26)" "$$(cat test/test_for_in_picks_the_enumerator_that_fits_the_loop_variable.expected)"
 	./$(COMPILER) test/test_for_in_lowers_class_record_and_interface_enumerators_alike.pas $(TESTTMP)/test_foringrid26
