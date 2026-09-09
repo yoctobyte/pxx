@@ -11684,6 +11684,19 @@ test-core: $(COMPILER)
 	# path that already took its pair from one indexed carrier.
 	./$(COMPILER) test/test_sizeof_of_a_frozen_string_type_name.pas $(TESTTMP)/test_sizeof_frozen_name26
 	tools/expect_same.sh test_sizeof_frozen_name26 "$$($(TESTTMP)/test_sizeof_frozen_name26)" "$$(printf 'fwd   11 201\nrev   201 11\nmix   11 12 201\nplain 12 4\nfile  3 cc 3\nbytes 33 12')"
+	# THE UNIT SEARCH CHAIN IS AN ORDER, and this pins its one deliberate
+	# inversion: a .c beside the source outranks a .pas reached by -Fu, which is
+	# what bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+	# left alone when it moved the SEARCH-ROOT C probe behind the Pascal chain.
+	# TWO NAMES ON PURPOSE: `pick 111` alone is equally consistent with "the
+	# search root was never searched", so `root 333` -- a unit that exists ONLY
+	# in the root -- is what makes the first row an ordering result rather than a
+	# missing-stage result. Measured in both directions 2026-09-09: with
+	# test/csrcwins.c moved aside the same command answers 222, and the pinned
+	# compiler (which predates the ResolveUsesUnitSource extraction) answers
+	# 111/333 exactly as this does.
+	./$(COMPILER) -Futest/csrcwins_units test/test_a_c_beside_the_source_outranks_a_pas_in_a_search_root.pas $(TESTTMP)/test_csrcwins26
+	tools/expect_same.sh test_csrcwins26 "$$($(TESTTMP)/test_csrcwins26)" "$$(printf 'pick 111\nroot 333')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

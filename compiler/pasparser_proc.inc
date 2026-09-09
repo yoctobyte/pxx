@@ -4639,292 +4639,62 @@ begin
   end;
 end;
 
-procedure ParseUsesUnitBody(const name: AnsiString;
-  diagLine: Integer; const diagSpell: AnsiString);
-{ DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
-  the thing the user wrote. Zero means "there is none" and every message falls
-  back to CurTok, which is right for a Pascal `uses` -- CurTok is still ON the
-  unit name when the loader fails, so that path reported the correct line all
-  along and is deliberately left alone.
+{ THE UNIT SOURCE SEARCH CHAIN, AND IT IS ONE COPY ON PURPOSE.
 
-  The C caller is the one that needs this. CParsePascalUnitMarker consumes the
-  marker identifier, both string tokens and the semicolon BEFORE it calls, so
-  by the time a miss is raised CurTok is the first token of the NEXT line and
-  the error named a real, innocent line of the user's source. diagSpell is the
-  author's own spelling (`nosuch.pas`), which the loader has by then rewritten
-  into an absolute path with the extension stripped -- correct as input to the
-  loader, wrong as output to a human.
-  bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
+  Given a `uses`/`import` name already lowered (`lo`) and its C spelling
+  (`cName`), find the SOURCE TEXT for it -- returned in the global UnitContent,
+  as before -- and say what language it turned out to be. Every stage that was
+  inline in ParseUsesUnitBody is here in the same order, C and NilPy stages
+  included, because THE ORDER IS THE ANSWER: a `.c` or `.h` beside the source
+  (the SourceFileDir block) sets UnitContent and thereby BLOCKS the `-Fu` Pascal
+  stage below it, which is deliberate --
+  bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import
+  reordered the SEARCH-ROOT C probe behind the whole Pascal chain and left the
+  source-directory one alone, because a `.c` next to the program you are
+  compiling is an explicit local choice.
+
+  SO A "PASCAL-ONLY" VERSION OF THIS IS NOT A NARROWER ANSWER, IT IS A DIFFERENT
+  ONE. It reports a `.pas` in a search root that the compile never reads,
+  whenever a `foo.c` sits beside the program -- a valid answer with no
+  diagnostic anywhere, which is this repo's own "correct about something else".
+  That is why the extraction moves EVERY stage rather than the stages one caller
+  happens to want, and why a second copy is the thing to refuse rather than the
+  shortcut to take.
+
+  Extracted verbatim 2026-09-09: no reordering, no behaviour change, so that a
+  caller which is not the parser can ask the same question and get the compile's
+  own answer. The first such caller is `{$if declared(X)}`, evaluated during
+  LexAll -- before any `uses` has been parsed -- which is why it cannot see a
+  used unit's declarations at all today
+  (bug-p-declared-cannot-see-a-used-units-declarations).
+
+  WHAT STAYED BEHIND, and why it is not part of "resolve": the `mimic_` shim
+  mapping immediately below the call. It does not find a source; it RECURSES
+  into ParseUsesUnit and Exits its caller, so it is control flow rather than
+  lookup. The span moved here has no Exit and no recursion, and its only escapes
+  are two terminating Error() diagnostics, which raise from here exactly as they
+  raised from there. }
+procedure ResolveUsesUnitSource(const name, lo, cName: AnsiString;
+  isPath, isAmbientLoad: Boolean;
+  diagLine: Integer; const diagSpell: AnsiString;
+  pasLookupOK, pyLookupOK: Boolean;
+  const pyImportLang, pyDotted: AnsiString;
+  pyDottedIsPath: Boolean; pyRelLevel: Integer;
+  var path: AnsiString;
+  var isCUnit, isCHeader, isPyUnit: Boolean;
+  var emsg: AnsiString);
 var
-  lo, cName, path: AnsiString;
-  startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
-  aliasEdgeIdx: Integer;
-  savedCurTokKind: TTokenKind;
-  savedCurTokSVal: AnsiString;
-  savedCurTokIVal: Int64;
-  savedCurTokLine: Integer;
-  savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
-  savedUnitContent: AnsiString;
-  cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath, probeFile: AnsiString;
-  basePath, ext, emsg: AnsiString;
-  lastSlash, lastDot: Integer;
-  isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
-  { A C candidate found in a -I/-Fu search root, HELD BACK until the Pascal
-    chain has had its turn. See the deferral note at the search-root loop. }
-  deferredCPath, deferredCContent: AnsiString;
+  i, lastSlash, lastDot, pyRootIdx: Integer;
+  ext, basePath, probeContent, probePath, probeFile: AnsiString;
+  cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
+  deferredCPath, deferredCContent, pasRefusedPath: AnsiString;
   deferredCIsHeader: Boolean;
-  guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
-  gPath: AnsiString;   { …the normalised path a path-form reference keys on }
-  realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
-  { True when the compiler INJECTED this `uses`, not the source. Captured at
-    the ambience site below, because UsesInjected is cleared there and the
-    file search that needs the answer runs several hundred lines later. }
-  isAmbientLoad: Boolean;
-  { The RESOLVED FILE key, and the already-compiled entry holding it — what
-    makes one file one unit however it was spelled. }
-  pyFileIdx, pyDupIdx: Integer;
-  { leading-dot count of this relative import; see PyRelativeDir }
-  pyRelLevel: Integer;
-  { Which language THIS import named, claimed from PyImportLang on entry: ''
-    for anything that is not a NilPy import statement, 'py' for a bare one,
-    'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
-  pyImportLang: AnsiString;
-  pasLookupOK, pyLookupOK: Boolean;   { which chains this import may use }
-  { The Pascal source a BARE NilPy import was refused, kept for the diagnostic:
-    the name resolves, just not to a Python module, and saying so is the whole
-    point of the rule. Empty when nothing was refused. }
-  pasRefusedPath: AnsiString;
-  isPyUnit, savedPyExprMode: Boolean;
-  { The dotted module path this import was written with, claimed from the global
-    on entry so a nested unit parse cannot see a stale one. Empty unless it
-    re-mangles to exactly the unit name that arrived. }
-  pyDotted: AnsiString;
-  pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
-  pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
-  savedNestedComments, savedDelphiMode, savedUnitImplCU: Boolean;
-  unitAlias: AnsiString;   { pxxlib.cfg `unitalias` answer for a dotted name }
-  manBody: AnsiString;     { scratch for the "manifest present but not consulted" note }
-  manDotted: Boolean;      { the unresolved name has a dot, so a unitalias row could have answered it }
-  manDi: Integer;
-  unitNeedsText: Boolean;
-  unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
-  unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
-  unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
-  unitTnm: AnsiString;
-  savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
-  savedPackRecords, savedPackEnum, savedNChecks, savedMaxStackFrame: Integer;
-  savedHMinus, savedScopedEnums, savedQChecks, savedAssertions: Boolean;
-  savedRChecks, savedIChecks, savedInterfacesCom: Boolean;
-  savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
-  savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
-  savedPasDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
 begin
-  isPath := False;
-  isPyUnit := False;
-  for i := 1 to Length(name) do
-    if name[i] = '/' then isPath := True;
-  if isPath then
-    lo := LowerCase(GetFileBaseName(name))
-  else
-    lo := LowerCase(name);
-  if isPath then
-    cName := GetFileBaseName(name)
-  else
-    cName := name;
-  { Delphi dotted unit-scope names: `uses System.Classes` is `classes` when the
-    importing unit's pxxlib.cfg says so. Applied HERE, before anything records
-    an identity, so `System.Classes` and `Classes` dedupe as ONE compiled unit
-    rather than two — which they are. A dotted name with no alias falls straight
-    through to the existing chain and still fails with its own spelling in the
-    message, so nothing about a plain misspelling changes.
-    feature-p-resolve-delphi-dotted-unit-scope-names }
-  if not isPath then
-  begin
-    unitAlias := PxxUnitAliasFor(CurUnitDir, lo);
-    if Length(unitAlias) > 0 then
-    begin
-      lo := LowerCase(unitAlias);
-      cName := unitAlias;
-    end;
-  end;
-  { sysutils/baseunix/unix: FPC RTL units that PXX programs historically `uses`
-    purely to satisfy FPC source while relying on builtins. Load a real
-    lib/rtl/<name> source if one exists (the canonical home for the conversion
-    helpers); otherwise the miss is a graceful no-op (today's behavior), not an
-    error — see the not-found handler below. }
-  softMissOK := (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix');
-
-  { Claim the dotted spelling of THIS import and clear the global immediately —
-    the nested parse of whatever we resolve to must not inherit it. Kept only
-    when it re-mangles to the unit name we were called with, which is what makes
-    a value left behind by a consumed-and-ignored module path inert. }
-  pyDotted := PyDottedImport;
-  PyDottedImport := '';
-  if PyDottedMangled(pyDotted) <> lo then pyDotted := '';
-  { Same claim-and-clear for the relative LEVEL, and for the same reason: the
-    nested parse of whatever this resolves to must not inherit it. }
-  pyRelLevel := PyRelativeLevel;
-  PyRelativeLevel := 0;
-  { Same claim-and-clear for the LANGUAGE this import named, and for the same
-    reason: what we resolve to is parsed with a clean slate, so a Pascal unit
-    pulled in behind a NilPy import does not inherit Python's resolution rules. }
-  pyImportLang := PyImportLang;
-  PyImportLang := '';
-  { WHICH CHAINS THIS IMPORT MAY USE. An explicit extension pins the language,
-    so the other language's probes are closed rather than merely outranked — a
-    `import 'classes.pas'` that fell through to a same-named .py would be a
-    wrong answer, not a miss. Both default to open, so every non-NilPy `uses`
-    and every bare import behaves exactly as before. }
-  { A BARE NilPy import means PYTHON — .py/.npy, a mimic_ shim, or a C header
-    the frontend has always reached — so the Pascal chain is closed to it,
-    EXCEPT for the lib/rtl units that ARE the Python module of that name.
-    `from classes import Foo` used to bind lib/rtl/classes.pas and fail with
-    "no overload of Delete matches these arguments", naming a symbol inside a
-    unit the program never mentioned, with no path back to the import.
-    decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19. }
-  pasLookupOK := (pyImportLang <> 'c') and
-                 ((pyImportLang <> 'py') or PyRtlUnitServesPython(lo));
-  pyLookupOK := (pyImportLang <> 'pas') and (pyImportLang <> 'c');
-  pyDottedIsPath := False;
-  for i := 1 to Length(pyDotted) do
-    if pyDotted[i] = '.' then pyDottedIsPath := True;
-
-  { Check if already compiled }
-  strIdx := InternStr(lo);
-  { ...but a path-form C/H reference gets its OWN key space for that check.
-
-    `lo` for `uses './hello_ext.c'` is the file's BASE NAME with the extension
-    stripped — the very same key a bare `uses hello_ext` resolves to. So a unit
-    named hello_ext that pulls in its own C companion `./hello_ext.c` hit the
-    already-compiled guard against ITSELF (a unit registers its name before its
-    uses clause is parsed), the C file was never loaded, and every function it
-    defined survived only as an unresolved extern: a clean COMPILE and a
-    `symbol lookup error` at run time, with no diagnostic anywhere
-    (bug-c-uses-path-basename-collides-with-enclosing-unit-name).
-
-    Nothing about the path syntax suggests it shares a namespace with unit
-    names, and a C source is never importable by bare name the way a `.pas`
-    unit is — so the two spaces have no reason to share keys. Keyed on the path
-    TEXT, which also makes a genuine repeat of the same `uses './x.c'` still
-    dedupe. `strIdx` itself is untouched: it still tags the symbols this load
-    registers (CurrentUnitIdx below), so qualified access by base name is
-    unchanged. }
-  guardIdx := strIdx;
-  aliasEdgeIdx := -1;
-  if isPath then
-  begin
-    { The path a probe will actually open, derived the way the path branch below
-      derives it — CurUnitDir-relative unless absolute, then NormalizePath — so
-      `./r1/math.pas` and `r1/math.pas` are ONE identity rather than two, which
-      the raw-text `@cpath:` key could not say. Extension-less spellings resolve
-      to the same prefix and therefore still share a key; that is right, since
-      the .pas/.pp probe order makes them the same file. }
-    if name[1] = '/' then
-      gPath := name
-    else
-      ConcatThree(CurUnitDir, name, '', gPath);
-    NormalizePath(gPath);
-    guardIdx := InternStr('@path:' + LowerCase(gPath));
-  end;
-  { Record the edge for EVERY `uses X` clause, even one that hits the
-    already-compiled guard below — a warn/count pass over
-    bug-pascal-uses-is-transitive wants every clause, not just first-loads,
-    since visibility is per-importer, not per-load. }
-  RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
-  { ...and the RESOLVED edge, when the spelling is an alias for something else.
-    The edge above points at the SPELLING (`codecs`, `xml.dom`), but visibility
-    is per REAL unit and a shim's symbols live in `mimic_codecs`. Recording both
-    here, at the one site every `uses` passes through, is what makes visibility
-    correct by construction instead of by patches on the paths that happened to
-    be reported: this used to be fixed at the already-compiled early exit alone,
-    which is the arm the SECOND importer of a shim takes.
-
-    A no-op on a first load — the shim branch below registers the alias and
-    re-enters, so there is nothing to resolve yet and the recursion records the
-    real edge on its own way in. It only fires once an alias for this spelling
-    exists, which is exactly when the symbols live under another name.
-    bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
-    meta-a-lookups-that-ask-about-the-spelling-not-the-resolved-unit }
-  aliasEdgeIdx := FindUnitOrAlias(Strs[strIdx].Text);
-  if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) then
-    RecordUsesEdge(CurrentUnitIdx, aliasEdgeIdx, InInterface);
-  isAmbientLoad := UsesInjected or UnitIsAmbient(CurrentUnitIdx);
-  if UsesInjected then
-  begin
-    MarkUnitAmbient(strIdx);
-    { one level only for the FLAG: what this unit pulls in is an ordinary edge
-      as far as the source is concerned. The wrapper restores it when the whole
-      load returns. }
-    UsesInjected := False;
-  end
-  else if UnitIsAmbient(CurrentUnitIdx) then
-    { ...but ambience itself IS transitive, because the compiler's runtime is
-      one namespace it injected and the user never asked for any of it. pylib
-      `uses promocore`, and codegen emits calls to PXXPromoFromInt directly —
-      no source in a NilPy program could have declared that dependency, which
-      is exactly the argument that made pylib ambient in the first place. It
-      only worked before because an interface-section `uses` re-exported
-      everything; with that leak closed, the runtime graph has to say so
-      itself. Roots stay compiler-injected, so no user unit can acquire
-      ambience through this (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
-    MarkUnitAmbient(strIdx);
-  isCompiled := False;
-  for i := 0 to CompiledUnitCount - 1 do
-  begin
-    if CompiledUnitKey[i] = guardIdx then
-      isCompiled := True;
-  end;
-  if isCompiled then
-  begin
-    { The edge recorded above points at the SPELLING (`codecs`), but visibility
-      is per REAL unit and a shim's symbols live in `mimic_codecs`. On the FIRST
-      import that does not matter — the shim branch below re-enters through
-      `ParseUsesUnit('mimic_' + lo)`, which records the real edge on the way in.
-      A SECOND importer never gets there: `guardIdx` is the spelling, so it is
-      already marked compiled and exits here, leaving that module with an edge
-      to a name nothing is declared under.
-
-      The symptom was silent and shape-dependent. `codecs.lookup(...)` kept
-      working, because a qualified PROC names its unit and never consults the
-      visibility-filtered scan; only the flat class lookup did, so
-      `codecs.CodecInfo(...)` in the second module reported `undefined variable
-      (CodecInfo)` while the line above it resolved fine. Whichever module
-      imported the shim first was the one that worked, which is what says the
-      missing thing is the EDGE and not the alias.
-
-      Same defect, same fix, as the duplicate-.py arm below (search
-      `pyDupIdx`), whose comment records it the first time round: an alias
-      answers a QUALIFIER, it does not make a module's symbols VISIBLE.
-      bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim }
-    { The alias-resolved edge this arm used to record is now recorded for EVERY
-      `uses` at the single RecordUsesEdge site above, so the special case here
-      is redundant. Verified by removing it: the shim-visibility test that this
-      arm was written for stays green, as do the three later import tests.
-      Kept as a comment rather than deleted silently, because "the second
-      importer of a shim sees nothing" is a symptom worth being able to find
-      from here. }
-    Exit;
-  end;
-
-  { Mark as compiled. Remembered so a SOFT miss (the fallback-import probe
-    below) can take the mark back off: nothing was loaded, so a later import of
-    the same name must search again rather than be skipped as done. }
-  savedCUC := CompiledUnitCount;
-  if CompiledUnitCount < 256 then
-  begin
-    CompiledUnits[CompiledUnitCount] := strIdx;   { the NAME — what everyone else means }
-    CompiledUnitKey[CompiledUnitCount] := guardIdx; { …the identity it dedupes on }
-    CompiledUnitFile[CompiledUnitCount] := -1;  { filled in once resolved }
-    Inc(CompiledUnitCount);
-  end;
-
   isCUnit := False;
   isCHeader := False;
   deferredCPath := '';
   deferredCContent := '';
   deferredCIsHeader := False;
-  savedCurrentCLibrary := CurrentCLibrary;
-  CurrentCLibrary := '';
   UnitContent := '';
 
   if isPath then
@@ -5541,6 +5311,293 @@ begin
     Error(emsg);
   end;
 
+end;
+
+procedure ParseUsesUnitBody(const name: AnsiString;
+  diagLine: Integer; const diagSpell: AnsiString);
+{ DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
+  the thing the user wrote. Zero means "there is none" and every message falls
+  back to CurTok, which is right for a Pascal `uses` -- CurTok is still ON the
+  unit name when the loader fails, so that path reported the correct line all
+  along and is deliberately left alone.
+
+  The C caller is the one that needs this. CParsePascalUnitMarker consumes the
+  marker identifier, both string tokens and the semicolon BEFORE it calls, so
+  by the time a miss is raised CurTok is the first token of the NEXT line and
+  the error named a real, innocent line of the user's source. diagSpell is the
+  author's own spelling (`nosuch.pas`), which the loader has by then rewritten
+  into an absolute path with the extension stripped -- correct as input to the
+  loader, wrong as output to a human.
+  bug-c-a-missing-pascal-unit-diagnostic-points-at-the-wrong-line-and-leaks-an-internal-marker }
+var
+  lo, cName, path: AnsiString;
+  startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
+  aliasEdgeIdx: Integer;
+  savedCurTokKind: TTokenKind;
+  savedCurTokSVal: AnsiString;
+  savedCurTokIVal: Int64;
+  savedCurTokLine: Integer;
+  savedSrcBase, savedUnitDir, savedCurrentCLibrary: AnsiString;
+  savedUnitContent: AnsiString;
+  cdir, bdir, rtldir, lcldir, asmdir, probeContent, probePath, probeFile: AnsiString;
+  basePath, ext, emsg: AnsiString;
+  lastSlash, lastDot: Integer;
+  isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
+  { A C candidate found in a -I/-Fu search root, HELD BACK until the Pascal
+    chain has had its turn. See the deferral note at the search-root loop. }
+  deferredCPath, deferredCContent: AnsiString;
+  deferredCIsHeader: Boolean;
+  guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
+  gPath: AnsiString;   { …the normalised path a path-form reference keys on }
+  realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
+  { True when the compiler INJECTED this `uses`, not the source. Captured at
+    the ambience site below, because UsesInjected is cleared there and the
+    file search that needs the answer runs several hundred lines later. }
+  isAmbientLoad: Boolean;
+  { The RESOLVED FILE key, and the already-compiled entry holding it — what
+    makes one file one unit however it was spelled. }
+  pyFileIdx, pyDupIdx: Integer;
+  { leading-dot count of this relative import; see PyRelativeDir }
+  pyRelLevel: Integer;
+  { Which language THIS import named, claimed from PyImportLang on entry: ''
+    for anything that is not a NilPy import statement, 'py' for a bare one,
+    'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
+  pyImportLang: AnsiString;
+  pasLookupOK, pyLookupOK: Boolean;   { which chains this import may use }
+  { The Pascal source a BARE NilPy import was refused, kept for the diagnostic:
+    the name resolves, just not to a Python module, and saying so is the whole
+    point of the rule. Empty when nothing was refused. }
+  pasRefusedPath: AnsiString;
+  isPyUnit, savedPyExprMode: Boolean;
+  { The dotted module path this import was written with, claimed from the global
+    on entry so a nested unit parse cannot see a stale one. Empty unless it
+    re-mangles to exactly the unit name that arrived. }
+  pyDotted: AnsiString;
+  pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
+  pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
+  savedNestedComments, savedDelphiMode, savedUnitImplCU: Boolean;
+  unitAlias: AnsiString;   { pxxlib.cfg `unitalias` answer for a dotted name }
+  manBody: AnsiString;     { scratch for the "manifest present but not consulted" note }
+  manDotted: Boolean;      { the unresolved name has a dot, so a unitalias row could have answered it }
+  manDi: Integer;
+  unitNeedsText: Boolean;
+  unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
+  unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
+  unitNeedsThreads: Boolean;    { …and BeginThread/TThreadID/… }
+  unitTnm: AnsiString;
+  savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
+  savedPackRecords, savedPackEnum, savedNChecks, savedMaxStackFrame: Integer;
+  savedHMinus, savedScopedEnums, savedQChecks, savedAssertions: Boolean;
+  savedRChecks, savedIChecks, savedInterfacesCom: Boolean;
+  savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
+  savedPasDefineValue: array[0..MAX_PAS_DEFINES-1] of Int64;
+begin
+  isPath := False;
+  isPyUnit := False;
+  for i := 1 to Length(name) do
+    if name[i] = '/' then isPath := True;
+  if isPath then
+    lo := LowerCase(GetFileBaseName(name))
+  else
+    lo := LowerCase(name);
+  if isPath then
+    cName := GetFileBaseName(name)
+  else
+    cName := name;
+  { Delphi dotted unit-scope names: `uses System.Classes` is `classes` when the
+    importing unit's pxxlib.cfg says so. Applied HERE, before anything records
+    an identity, so `System.Classes` and `Classes` dedupe as ONE compiled unit
+    rather than two — which they are. A dotted name with no alias falls straight
+    through to the existing chain and still fails with its own spelling in the
+    message, so nothing about a plain misspelling changes.
+    feature-p-resolve-delphi-dotted-unit-scope-names }
+  if not isPath then
+  begin
+    unitAlias := PxxUnitAliasFor(CurUnitDir, lo);
+    if Length(unitAlias) > 0 then
+    begin
+      lo := LowerCase(unitAlias);
+      cName := unitAlias;
+    end;
+  end;
+  { sysutils/baseunix/unix: FPC RTL units that PXX programs historically `uses`
+    purely to satisfy FPC source while relying on builtins. Load a real
+    lib/rtl/<name> source if one exists (the canonical home for the conversion
+    helpers); otherwise the miss is a graceful no-op (today's behavior), not an
+    error — see the not-found handler below. }
+  softMissOK := (lo = 'sysutils') or (lo = 'baseunix') or (lo = 'unix');
+
+  { Claim the dotted spelling of THIS import and clear the global immediately —
+    the nested parse of whatever we resolve to must not inherit it. Kept only
+    when it re-mangles to the unit name we were called with, which is what makes
+    a value left behind by a consumed-and-ignored module path inert. }
+  pyDotted := PyDottedImport;
+  PyDottedImport := '';
+  if PyDottedMangled(pyDotted) <> lo then pyDotted := '';
+  { Same claim-and-clear for the relative LEVEL, and for the same reason: the
+    nested parse of whatever this resolves to must not inherit it. }
+  pyRelLevel := PyRelativeLevel;
+  PyRelativeLevel := 0;
+  { Same claim-and-clear for the LANGUAGE this import named, and for the same
+    reason: what we resolve to is parsed with a clean slate, so a Pascal unit
+    pulled in behind a NilPy import does not inherit Python's resolution rules. }
+  pyImportLang := PyImportLang;
+  PyImportLang := '';
+  { WHICH CHAINS THIS IMPORT MAY USE. An explicit extension pins the language,
+    so the other language's probes are closed rather than merely outranked — a
+    `import 'classes.pas'` that fell through to a same-named .py would be a
+    wrong answer, not a miss. Both default to open, so every non-NilPy `uses`
+    and every bare import behaves exactly as before. }
+  { A BARE NilPy import means PYTHON — .py/.npy, a mimic_ shim, or a C header
+    the frontend has always reached — so the Pascal chain is closed to it,
+    EXCEPT for the lib/rtl units that ARE the Python module of that name.
+    `from classes import Foo` used to bind lib/rtl/classes.pas and fail with
+    "no overload of Delete matches these arguments", naming a symbol inside a
+    unit the program never mentioned, with no path back to the import.
+    decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19. }
+  pasLookupOK := (pyImportLang <> 'c') and
+                 ((pyImportLang <> 'py') or PyRtlUnitServesPython(lo));
+  pyLookupOK := (pyImportLang <> 'pas') and (pyImportLang <> 'c');
+  pyDottedIsPath := False;
+  for i := 1 to Length(pyDotted) do
+    if pyDotted[i] = '.' then pyDottedIsPath := True;
+
+  { Check if already compiled }
+  strIdx := InternStr(lo);
+  { ...but a path-form C/H reference gets its OWN key space for that check.
+
+    `lo` for `uses './hello_ext.c'` is the file's BASE NAME with the extension
+    stripped — the very same key a bare `uses hello_ext` resolves to. So a unit
+    named hello_ext that pulls in its own C companion `./hello_ext.c` hit the
+    already-compiled guard against ITSELF (a unit registers its name before its
+    uses clause is parsed), the C file was never loaded, and every function it
+    defined survived only as an unresolved extern: a clean COMPILE and a
+    `symbol lookup error` at run time, with no diagnostic anywhere
+    (bug-c-uses-path-basename-collides-with-enclosing-unit-name).
+
+    Nothing about the path syntax suggests it shares a namespace with unit
+    names, and a C source is never importable by bare name the way a `.pas`
+    unit is — so the two spaces have no reason to share keys. Keyed on the path
+    TEXT, which also makes a genuine repeat of the same `uses './x.c'` still
+    dedupe. `strIdx` itself is untouched: it still tags the symbols this load
+    registers (CurrentUnitIdx below), so qualified access by base name is
+    unchanged. }
+  guardIdx := strIdx;
+  aliasEdgeIdx := -1;
+  if isPath then
+  begin
+    { The path a probe will actually open, derived the way the path branch below
+      derives it — CurUnitDir-relative unless absolute, then NormalizePath — so
+      `./r1/math.pas` and `r1/math.pas` are ONE identity rather than two, which
+      the raw-text `@cpath:` key could not say. Extension-less spellings resolve
+      to the same prefix and therefore still share a key; that is right, since
+      the .pas/.pp probe order makes them the same file. }
+    if name[1] = '/' then
+      gPath := name
+    else
+      ConcatThree(CurUnitDir, name, '', gPath);
+    NormalizePath(gPath);
+    guardIdx := InternStr('@path:' + LowerCase(gPath));
+  end;
+  { Record the edge for EVERY `uses X` clause, even one that hits the
+    already-compiled guard below — a warn/count pass over
+    bug-pascal-uses-is-transitive wants every clause, not just first-loads,
+    since visibility is per-importer, not per-load. }
+  RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
+  { ...and the RESOLVED edge, when the spelling is an alias for something else.
+    The edge above points at the SPELLING (`codecs`, `xml.dom`), but visibility
+    is per REAL unit and a shim's symbols live in `mimic_codecs`. Recording both
+    here, at the one site every `uses` passes through, is what makes visibility
+    correct by construction instead of by patches on the paths that happened to
+    be reported: this used to be fixed at the already-compiled early exit alone,
+    which is the arm the SECOND importer of a shim takes.
+
+    A no-op on a first load — the shim branch below registers the alias and
+    re-enters, so there is nothing to resolve yet and the recursion records the
+    real edge on its own way in. It only fires once an alias for this spelling
+    exists, which is exactly when the symbols live under another name.
+    bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
+    meta-a-lookups-that-ask-about-the-spelling-not-the-resolved-unit }
+  aliasEdgeIdx := FindUnitOrAlias(Strs[strIdx].Text);
+  if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) then
+    RecordUsesEdge(CurrentUnitIdx, aliasEdgeIdx, InInterface);
+  isAmbientLoad := UsesInjected or UnitIsAmbient(CurrentUnitIdx);
+  if UsesInjected then
+  begin
+    MarkUnitAmbient(strIdx);
+    { one level only for the FLAG: what this unit pulls in is an ordinary edge
+      as far as the source is concerned. The wrapper restores it when the whole
+      load returns. }
+    UsesInjected := False;
+  end
+  else if UnitIsAmbient(CurrentUnitIdx) then
+    { ...but ambience itself IS transitive, because the compiler's runtime is
+      one namespace it injected and the user never asked for any of it. pylib
+      `uses promocore`, and codegen emits calls to PXXPromoFromInt directly —
+      no source in a NilPy program could have declared that dependency, which
+      is exactly the argument that made pylib ambient in the first place. It
+      only worked before because an interface-section `uses` re-exported
+      everything; with that leak closed, the runtime graph has to say so
+      itself. Roots stay compiler-injected, so no user unit can acquire
+      ambience through this (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+    MarkUnitAmbient(strIdx);
+  isCompiled := False;
+  for i := 0 to CompiledUnitCount - 1 do
+  begin
+    if CompiledUnitKey[i] = guardIdx then
+      isCompiled := True;
+  end;
+  if isCompiled then
+  begin
+    { The edge recorded above points at the SPELLING (`codecs`), but visibility
+      is per REAL unit and a shim's symbols live in `mimic_codecs`. On the FIRST
+      import that does not matter — the shim branch below re-enters through
+      `ParseUsesUnit('mimic_' + lo)`, which records the real edge on the way in.
+      A SECOND importer never gets there: `guardIdx` is the spelling, so it is
+      already marked compiled and exits here, leaving that module with an edge
+      to a name nothing is declared under.
+
+      The symptom was silent and shape-dependent. `codecs.lookup(...)` kept
+      working, because a qualified PROC names its unit and never consults the
+      visibility-filtered scan; only the flat class lookup did, so
+      `codecs.CodecInfo(...)` in the second module reported `undefined variable
+      (CodecInfo)` while the line above it resolved fine. Whichever module
+      imported the shim first was the one that worked, which is what says the
+      missing thing is the EDGE and not the alias.
+
+      Same defect, same fix, as the duplicate-.py arm below (search
+      `pyDupIdx`), whose comment records it the first time round: an alias
+      answers a QUALIFIER, it does not make a module's symbols VISIBLE.
+      bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim }
+    { The alias-resolved edge this arm used to record is now recorded for EVERY
+      `uses` at the single RecordUsesEdge site above, so the special case here
+      is redundant. Verified by removing it: the shim-visibility test that this
+      arm was written for stays green, as do the three later import tests.
+      Kept as a comment rather than deleted silently, because "the second
+      importer of a shim sees nothing" is a symptom worth being able to find
+      from here. }
+    Exit;
+  end;
+
+  { Mark as compiled. Remembered so a SOFT miss (the fallback-import probe
+    below) can take the mark back off: nothing was loaded, so a later import of
+    the same name must search again rather than be skipped as done. }
+  savedCUC := CompiledUnitCount;
+  if CompiledUnitCount < 256 then
+  begin
+    CompiledUnits[CompiledUnitCount] := strIdx;   { the NAME — what everyone else means }
+    CompiledUnitKey[CompiledUnitCount] := guardIdx; { …the identity it dedupes on }
+    CompiledUnitFile[CompiledUnitCount] := -1;  { filled in once resolved }
+    Inc(CompiledUnitCount);
+  end;
+
+  savedCurrentCLibrary := CurrentCLibrary;
+  CurrentCLibrary := '';
+  ResolveUsesUnitSource(name, lo, cName, isPath, isAmbientLoad, diagLine, diagSpell,
+                        pasLookupOK, pyLookupOK, pyImportLang, pyDotted,
+                        pyDottedIsPath, pyRelLevel, path, isCUnit, isCHeader,
+                        isPyUnit, emsg);
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
     name — `mimic_<module>` — so no file in the tree carries an upstream package
     name and the tree says what each shim is. The mapping is consulted only
