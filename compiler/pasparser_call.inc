@@ -1567,18 +1567,26 @@ end;
   bug-p-empty-parens-at-a-bare-method-call-reads-a-garbage-argument
 
   argIdx is set PAST the arity loop either way: there is nothing to parse, and
-  the caller's Expect/ExpectCallRParen consumes the `)`. }
+  the caller's Expect/ExpectCallRParen consumes the `)`.
+
+  selfBase IS 1 FOR AN ORDINARY METHOD AND 0 FOR A `static` ONE, and it is the
+  reason this takes a parameter rather than a constant: a static method has NO
+  Self, so `Procs[].Params[0]` is a REAL parameter and "how many arguments does
+  this require" is off by one between the two. `GenMakeStaticMethodCall` carries
+  the same quantity under the same name. Hardcoding 1 here would tell a
+  no-argument static that it requires one fewer than it does -- and for a
+  one-parameter static, that it requires none. }
 procedure ApplyEmptyCallParens(mpi: Integer; const calleeName: AnsiString;
                                callNode: Integer; var lastArg: Integer;
-                               var argIdx: Integer);
+                               var argIdx: Integer; selfBase: Integer);
 begin
   if (mpi < 0) or (mpi >= ProcCount) then Exit;
-  if (Procs[mpi].ParamCount > 1) and CanFillDefaultsFrom(mpi, 1) then
-    FillDefaultArgs(mpi, 1, callNode, lastArg)
-  else if (Procs[mpi].ParamCount > 1) and
+  if (Procs[mpi].ParamCount > selfBase) and CanFillDefaultsFrom(mpi, selfBase) then
+    FillDefaultArgs(mpi, selfBase, callNode, lastArg)
+  else if (Procs[mpi].ParamCount > selfBase) and
           (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) then
     Error(calleeName + '() requires ' +
-          AIntToStr(Procs[mpi].ParamCount - 1) +
+          AIntToStr(Procs[mpi].ParamCount - selfBase) +
           ' argument(s), none given');
   argIdx := Procs[mpi].ParamCount;   { nothing to parse; the caller consumes the `)` }
 end;
@@ -2840,15 +2848,30 @@ end;
   the pre-check catches BOTH directions and the shared tail structurally cannot
   see the too-few one, so the pre-check is the site's single arity authority
   and all that is owed here is the resync. }
-procedure ParseBareSelfCallArgs(mpi: Integer; const calleeName: AnsiString;
-                                callNode: Integer; var lastArg: Integer;
-                                var mai: Integer;
-                                arityAlreadyReported: Boolean);
+procedure ParseSharedCallArgs(mpi: Integer; const calleeName: AnsiString;
+                              callNode: Integer; var lastArg: Integer;
+                              var mai: Integer;
+                              arityAlreadyReported: Boolean;
+                              selfBase: Integer);
 var argSeq, entryLastArg: Integer;
+
+  { THE ARGUMENT CHAIN CAN BE EMPTY, which is the one structural difference
+    between the implicit-Self arms and the record-static one. A `static` method
+    has no Self, so there is no head AN_ARG to hang the chain off and the FIRST
+    argument goes into ASTLeft[callNode] -- the empty-chain convention
+    GenMakeStaticMethodCall already speaks, and the reason lastArg is allowed to
+    arrive as -1. Written once here rather than as an `if` at each append. }
+  procedure AppendArg(argSeq: Integer);
+  begin
+    if lastArg < 0 then ASTLeft[callNode] := argSeq
+    else ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+  end;
+
 begin
   entryLastArg := lastArg;
   if (CurTok.Kind = tkRParen) and (not arityAlreadyReported) then
-    ApplyEmptyCallParens(mpi, calleeName, callNode, lastArg, mai);
+    ApplyEmptyCallParens(mpi, calleeName, callNode, lastArg, mai, selfBase);
   { NilPy `d.update(**e)` / `dict(a=1)`: this callee's keywords are dict KEYS,
     so the whole run is one argument. Inert outside NilPy -- PyKwDictArgsHere
     is guarded on isNilPy, which is why it can live in the shared routine
@@ -2858,8 +2881,7 @@ begin
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := PyBuildKeywordDictHere;
     ASTIVal[argSeq] := 0;
-    ASTRight[lastArg] := argSeq;
-    lastArg := argSeq;
+    AppendArg(argSeq);
     Inc(mai);
   end;
   { BOUNDED at the declared parameter count, like every other method-argument
@@ -2892,8 +2914,7 @@ begin
     end;
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := CurASTNode;
-    ASTRight[lastArg] := argSeq;
-    lastArg := argSeq;
+    AppendArg(argSeq);
     Inc(mai);
     { THE COMMA IS LEFT IN PLACE ONCE THE DECLARED SLOTS ARE FULL, and that is
       load-bearing rather than tidy: AbsorbVariadicTailArgs reads

@@ -3406,7 +3406,7 @@ begin
               receiver goes through PyParseClassMethodCall, which asks the same
               question itself. }
             if CurTok.Kind = tkRParen then
-              ApplyEmptyCallParens(mpi, fieldName, mcallNode, mlastArg, mai);
+              ApplyEmptyCallParens(mpi, fieldName, mcallNode, mlastArg, mai, 1);
             { `d.update(a=1)` / `d.update(**e)` on a plain NAME receiver — the
               route this shape actually takes. Same builder as the other loops
               (four of them ask it now; that they are four is the shape
@@ -3577,7 +3577,7 @@ begin
               receiver goes through PyParseClassMethodCall, which asks the same
               question itself. }
             if CurTok.Kind = tkRParen then
-              ApplyEmptyCallParens(mpi, fieldName, mcallNode, mlastArg, mai);
+              ApplyEmptyCallParens(mpi, fieldName, mcallNode, mlastArg, mai, 1);
             { `d.update(**e)` — before the star branches below, because for
               `update` a `**` is not a kwargs pack to bind: its keys ARE the
               dict to merge. The plain-keyword form is caught in the loop, and

@@ -808,6 +808,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
     rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
+    rcMai, rcSelfBase: Integer;   { ...and its argument slot / Self-offset, for the shared loop }
+    rcArityBad: Boolean;          { ...and its arity pre-check verdict }
     rcNm: AnsiString;   { the record method's name, captured before the cursor moves past it }
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, sci: Integer;
@@ -7890,6 +7892,21 @@ begin
           No ticket: fixed on sight, logged in LOGBOOK.md. }
         rcMmi := FindUMethOverloadAhead(rcCi, rcNm, CountCallArgsAhead);
         if rcMmi < 0 then rcMmi := FindUMeth(rcCi, rcNm);
+        { ARITY, THE THIRD DOOR THIS ARM DID NOT ASK. Same shape as the two
+          implicit-Self arms: FindUMethOverloadAhead is a SELECTOR and falls
+          through to the first name match at ANY arity, so `TR.One(1, 2, 3)`
+          bound and the loop appended whatever it parsed. FindUMethArityStrict
+          accounts for UMthNoSelf itself, so CountCallArgsAhead -- the count of
+          EXPLICIT arguments -- is the right thing to pass for a static too.
+          The varrec carve-out is carried for symmetry; it cannot fire here yet
+          because `array of const` is refused outright as a record method's
+          parameter (`unknown type: const`), which is noted in the ticket.
+          bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop }
+        rcArityBad := (rcMmi >= 0) and
+           (FindUMethArityStrict(rcCi, rcNm, CountCallArgsAhead) < 0) and
+           (not UMethNameCanAbsorbVarRecTail(rcCi, rcNm));
+        if rcArityBad then
+          ErrorRecover('wrong number of parameters in call to ' + rcNm);
         rcPi := UMthProc_[rcMmi];
 
         if (UClsHelperTk[rcCi] >= 0) or UMthIsStatic[rcMmi] then
@@ -7979,18 +7996,27 @@ begin
         if CurTok.Kind = tkLParen then
         begin
           Next;
-          while CurTok.Kind <> tkRParen do
-          begin
-            ParseExpr;
-            margSeq := AllocNode(AN_ARG);
-            ASTLeft[margSeq] := CurASTNode;
-            if mlastArg = -1 then ASTLeft[mcallNode] := margSeq
-            else ASTRight[mlastArg] := margSeq;
-            mlastArg := margSeq;
-            if CurTok.Kind = tkComma then Next
-            else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
-          end;
-          Expect(tkRParen, ')');
+          { THE THIRD HAND-ROLLED COPY, and it had none of the doors either:
+            `while CurTok.Kind <> tkRParen do ParseExpr` with a bare Expect for
+            a tail. Measured 2026-09-09 on
+            `TR = record class function One(x: Integer): Integer; static; end`:
+            `TR.One(1, 2, 3)` answered 3 -- the arguments shifted one slot --
+            and `TR.One()` answered 12, uninitialised memory, exit 0, no
+            diagnostic. fpc 3.2.2 refuses both.
+
+            THIS ARM IS WHY ParseSharedCallArgs TAKES A selfBase AND TOLERATES
+            AN EMPTY CHAIN. A `static` method has no Self, so `Params[0]` is a
+            REAL parameter and there is no head AN_ARG to append to -- the two
+            implicit-Self arms have both and could assume both. Deriving
+            selfBase from whether a Self arg was actually hung, rather than from
+            UMthIsStatic, keeps the three cases above (no Self, a dummy
+            INT_LIT Self for a static/helper that still has the slot, and a
+            lifted record temp for a ctor) answering for themselves.
+            bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop }
+          if rcSelf >= 0 then rcSelfBase := 1 else rcSelfBase := 0;
+          rcMai := rcSelfBase;
+          ParseSharedCallArgs(rcPi, rcNm, mcallNode, mlastArg, rcMai,
+                              rcArityBad, rcSelfBase);
         end;
 
         if (UClsHelperTk[rcCi] >= 0) or UMthIsStatic[rcMmi] then
@@ -9115,8 +9141,8 @@ begin
                 fixes, and a grep for any of those rules returns the correct
                 copy and is silent about this one.
                 bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors }
-              ParseBareSelfCallArgs(mpi, name, mcallNode, mlastArg, i,
-                                    exprArityBad);
+              ParseSharedCallArgs(mpi, name, mcallNode, mlastArg, i,
+                                  exprArityBad, 1);
             end;
             { A SUFFIX ON THE RESULT — and the RETURN-TYPE LIST HERE WAS THE BUG.
               This asked `RetType = tyClass or tyRecord` and dropped the suffix

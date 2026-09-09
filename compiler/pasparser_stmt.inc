@@ -8815,13 +8815,13 @@ begin
                 smMai := 1;
                 { THE FIVE DOORS -- the bracket door, the bare-method-name door,
                   the arity bound, the elided `array of const` tail and empty
-                  parens -- all live in ParseBareSelfCallArgs now, together with
+                  parens -- all live in ParseSharedCallArgs now, together with
                   the reasoning for each. They were added here one at a time by
                   five sessions while the EXPRESSION copy of this same loop got
                   none of them, which is what the shared routine is for.
                   bug-p-the-bare-self-call-in-expression-position-has-none-of-the-doors }
-                ParseBareSelfCallArgs(smpii, name, smcallNode, smLastArg,
-                                      smMai, smArityBad);
+                ParseSharedCallArgs(smpii, name, smcallNode, smLastArg,
+                                    smMai, smArityBad, 1);
               end;
               node := smcallNode;
             end;

@@ -2958,6 +2958,32 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: Desc() requires 1 argument(s), none given' \
 	   && test ! -e $(TESTTMP)/test_bare_emptyparen26 \
 	  || { echo "test_p_empty_parens_at_a_bare_method_call_fail: FAIL - rc=$$rc (want rc=1, the refusal on line 43 = the BARE call, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and the THIRD hand-rolled argument loop, the advanced-record ctor /
+	@# `static` arm, which had no arity check at all. Measured pre-fix:
+	@# `TR.One(1, 2, 3)` answered 3 (arguments shifted one slot) and `TR.One()`
+	@# answered 12 -- uninitialised memory, exit 0, no diagnostic. fpc refuses
+	@# all four rows. THE COUNT IS PART OF THE ASSERTION: these come from
+	@# ErrorRecover, not Error, so all four are found in one pass, and a change
+	@# that made one row halt would take the other three with it where a bare
+	@# `!` on the compiler could not see it. POSITIVE CONTROL: the PINNED
+	@# compiler compiles this file clean, exit 0, no diagnostics.
+	@# bug-p-the-record-static-call-arm-is-a-third-hand-rolled-argument-loop
+	@rm -f $(TESTTMP)/test_recstatic_fail26
+	@out=$$(./$(COMPILER) test/test_p_a_record_static_call_arity_fail.pas $(TESTTMP)/test_recstatic_fail26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && test "$$(printf '%s\n' "$$out" | grep -c '^pascal26:4[0123]: error: wrong number of parameters in call to')" = "4" \
+	   && test ! -e $(TESTTMP)/test_recstatic_fail26 \
+	  || { echo "test_p_a_record_static_call_arity_fail: FAIL - rc=$$rc (want rc=1, four arity diagnostics on lines 40-43, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and its must-NOT-break side. This one CANNOT fail for the defect --
+	@# it is byte-identical on the pin, because the broken loop got the good
+	@# calls right -- and it is here for selfBase: a `static` has no Self, so
+	@# Params[0] is a REAL parameter, and `Opt()`/`Opt(9)` on a one-parameter
+	@# static are the rows an off-by-one in that offset breaks. Byte-identical
+	@# to fpc -Mobjfpc on every row.
+	@./$(COMPILER) test/test_p_a_record_static_call_is_checked_like_every_other_call.pas $(TESTTMP)/test_recstatic26
+	@$(TESTTMP)/test_recstatic26 | diff -u test/test_p_a_record_static_call_is_checked_like_every_other_call.expected - \
+	  || { echo 'test_p_a_record_static_call_is_checked_like_every_other_call: FAIL - a legitimate record static/ctor call broke, most likely selfBase'; exit 1; }
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
