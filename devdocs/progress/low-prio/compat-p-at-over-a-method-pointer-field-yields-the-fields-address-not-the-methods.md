@@ -4,12 +4,12 @@ title: "`@o.Ev` where `Ev` is a method-pointer FIELD yields the field's address;
 track: P
 prio: 30
 type: compat
-status: backlog
+status: low-prio
 owner: ""
 created: 2026-09-06
 found-by: frankA
 blocked-by: []
-summary: "CENSUS DONE 2026-09-09 (frankH) — the stated blocker is cleared and it inverts the conclusion. Blast radius in this tree is ZERO: all 14 `@X.OnY` sites are METHOD references (life.pas:30 declares OnPaint as a procedure, so the name says field and the declaration says method), and lib/pcl — named in this ticket as the thing that would silently change meaning — declares events as `FOnPaint: TMethod` RECORDS behind properties, so it is not in the population at all. Two further measurements reshape the work: (1) `@@` is REFUSED by pxx today (`expected identifier after @`) while fpc carries the full Delphi pair, so `@` is currently the only spelling for the address and adopting FPC`s rule for `@` alone would leave none — this is a TWO-PART change, `@` retargeted AND `@@` added, and half of it is worse than none. (2) The divergence is not about FIELDS: a local method-pointer diverges identically, while a PLAIN procedural local already matches FPC. So pxx already implements Delphi`s rule and is inconsistent with itself only for `of object`. STILL OPEN, and now the only question: whether any real corpus program (rtl-generics, the Pascal corpora) wants the address meaning — nothing in this tree does, and CLAUDE.md ranks compat by how much real code uses it."
+summary: "MODE-ONLY, and every table here compared two different languages. Measured 2026-09-09 with BOTH compilers in BOTH modes across three operand shapes: under {$mode objfpc} pxx and fpc 3.2.2 agree EXACTLY -- `@` yields the address for an of-object field, an of-object local and a plain procedural local alike. The divergence exists only under {$mode delphi}, where fpc yields the VALUE for all three while pxx yields the value for a plain procvar and the ADDRESS for the two of-object shapes. Earlier tables compared pxx in its DEFAULT mode against `fpc -Mdelphi`, which is not a comparison; so frankH's `pxx is inconsistent with itself` is correct but holds only inside delphi mode, and objfpc -- what this project targets -- has no defect at all. Corpus census done: the only reachable-corpus code writing `@<of object procvar>` for the value sits under fpc-testsuite/tests/test/jvm/ (tpvardelphi.pp, unsupported.pp), JVM-target files outside any population we build, and the one non-JVM delphi-mode hit (tprocvar3.pp) uses `@Class.Method` and `@objectvar`, neither of which diverges. Real, delphi-mode only, needs a two-part change (`@` retargeted AND `@@` added, refused today), ZERO reachable consumers -- moved to low-prio on CLAUDE.md's rule that compat ranks by how much real code uses it. Reopen with a delphi-mode program we actually compile."
 ---
 
 # `@` over a method-pointer field: address or value?
@@ -197,3 +197,76 @@ Not fixed here deliberately: the census was the stated blocker, the census is
 what was missing, and the remaining decision is a compat change whose sole
 justification is FPC parity — which CLAUDE.md ranks by *how much real code uses
 it*, and that is the one number still absent.
+
+
+## 2026-09-09 (frankD) — THE MODE WAS NEVER STATED FOR PXX, AND IT IS THE WHOLE ANSWER
+
+Every table in this ticket compares **pxx in its default mode** against **`fpc
+-Mdelphi`**. Those are two different languages, and the comparison is what made
+the divergence look unconditional. Measured with both compilers in both modes,
+one source, three operand shapes, using the `nil` probe (`@x = nil` is TRUE for
+the VALUE of an unassigned procvar, FALSE for the address of the variable):
+
+| mode | operand | fpc 3.2.2 | pxx |
+| --- | --- | --- | --- |
+| **objfpc** | of-object FIELD | address | address |
+| **objfpc** | of-object LOCAL | address | address |
+| **objfpc** | plain procedural LOCAL | address | address |
+| delphi | of-object FIELD | **value** | address |
+| delphi | of-object LOCAL | **value** | address |
+| delphi | plain procedural LOCAL | value | value |
+
+**In objfpc mode there is no divergence at all** — nine of nine cells agree, and
+objfpc is what this project targets. `ir.inc`'s `IRProcVarAutoCall` states that
+policy in as many words: *"this project targets FPC, with Delphi behaviour only
+under {$MODE DELPHI}"*. frankH's "pxx is inconsistent with itself" is correct and
+is a statement about delphi mode only; the section above presents it
+unconditionally.
+
+The plain-procvar cell really is the VALUE and not a collision: with `pl :=
+Real_` assigned, pxx and fpc both answer `@pl = @Real_` TRUE and `@pl` non-nil,
+and both answer nil after `pl := nil`. The nil row alone could not separate "the
+value" from "a broken address", which is why the assigned row is here.
+
+### The corpus census this ticket called its only remaining question
+
+Delphi-mode files using `@`: **21** in `library_candidates/fpc-testsuite`, 3 in
+`rtl-generics/src`. Those that take `@` of an `of object` operand:
+
+- `tests/test/jvm/tpvardelphi.pp:93` — `@shortpvar1 := @shortpvar2;` over two
+  `of object` vars, the file's own comment saying it must copy the procedure
+  pointer and not the instance. **Exactly the construct, wanting the Code half.**
+- `tests/test/jvm/unsupported.pp:57` — `if @m2 = nil` on an `of object` local.
+
+**Both sit under `tests/test/jvm/` — JVM-target tests, outside any population we
+compile.** That is the aperture and it is the whole result: the two files that
+prove Delphi-mode code really does write this are the two we will never build.
+
+The one non-JVM delphi-mode hit, `tests/test/tprocvar3.pp`, uses `@to1.test1`
+(`@Class.Method`, the AN_PROCADDR path) and `@o1` (the address of an object
+VARIABLE). Neither diverges. pxx refuses that file anyway, on old-style `object`
+constructors — an unrelated open ticket.
+
+### Ranking, and why this is a move rather than a fix
+
+Real, reproducible, delphi-mode only, needs `@` retargeted AND `@@` added in one
+commit (frankH measured that `@@` is refused today, and half the change is worse
+than none), and **zero reachable consumers**. CLAUDE.md ranks compat by how much
+real code uses it and the answer here is none that we can build. `low-prio/` —
+real, probably correct, not worth ranker attention — rather than `rejected/`,
+which would claim the report is wrong. It is not wrong; it is narrow.
+
+**Reopen it with a delphi-mode program we actually compile.** That is the one
+missing piece of evidence, and it is now precisely stated instead of being "the
+census".
+
+### One near-miss, recorded because it would have been a confident wrong fix
+
+`IRProcVarAutoCall`'s comment carries a measured FPC table whose last row reads
+`Assigned(fp), @fp | address | address`, which against the table above looks
+flatly wrong for delphi mode. It is not. That table's columns contrast **CALL**
+against **address** — "is the bare procvar auto-called" — so "address" there
+means "yields a pointer rather than calling", not "the address of the variable".
+Read as the latter it becomes a bug report against a correct comment.
+**The disambiguator is the column header, two lines above the row**, and a row
+quoted without it reads as the opposite claim.
