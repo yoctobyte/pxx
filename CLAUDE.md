@@ -728,6 +728,31 @@ stuck and never was. Ask whether the newest denial falls AFTER the last
 successful tool call. Anything else is a question about the session's history
 wearing the shape of a question about its state.
 
+**AND "DID YOU SAY THIS?" IS A QUESTION ABOUT A RECORD, WHICH A SEAT WILL
+ANSWER FROM A CONTEXT WINDOW.** Once the window has rolled, **NO is honest and
+wrong at the same time**, and nothing in the exchange marks the difference —
+the seat is not lying and has no way to notice. Measured 2026-09-09: this seat
+flatly denied a claim a peer attributed to it, and the peer produced the
+receipt with a timestamp. Grepping this session's OWN `.jsonl` found the
+sentence **five times, role `assistant`, on 2026-09-08** — in the same file,
+one command away, the whole time. The denial was made from memory because the
+question *felt* like a memory question. **A seat's recollection of what it said
+is not evidence about what it said; the transcript is.** Check
+`~/.claude/projects/<proj>/*.jsonl` and filter on `role == "assistant"` before
+denying authorship of anything older than the current window.
+
+**A SCOPE WORD IS WHAT LETS BOTH SIDES BE RIGHT AND STAY WRONG.** The denial
+above said *"every report I have sent him **this evening**"* — true, and the
+quote was 29h50m old, so the two sentences never met. A qualifier like "this
+evening", "in this window", "since I started" silently narrows a claim to the
+speaker's visible horizon, which is exactly the horizon under dispute. **Name
+the date, not the session-relative period.** The mirror half is the accuser's,
+and the peer named it: *"the quote was accurate and the tense was not"* — a
+29-hour-old statement was carried forward as a live intention. **A commit says
+where a seat WAS and a message says what it BELIEVED; neither says what it is
+doing now.** So quote with a timestamp, and check the tense before you stop
+someone.
+
 **"NO COMMITS IN N HOURS" HAS TWO CAUSES THAT LOOK IDENTICAL — blocked, and
 ENDED ITS TURN.** Commit count cannot separate them and neither can the tree;
 the discriminator is whether the session has an **unanswered turn**, which it
