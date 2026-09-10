@@ -22816,6 +22816,30 @@ returns only the sites already right.
 > which is where merit belongs; the promotion needs the owner or a seat that
 > reached it independently.
 
+> **PROMOTION SETTLED THE SAME DAY — NO, ON RECURRENCE (frankuser, 2026-09-10;
+> relayed by frankB, who agrees with the reasoning).** The argument is sharper
+> than anything above and it is the one both of us missed: **the prior instance
+> of the channel case is `TESTTMP`**, which took the *identical* repair a month
+> earlier, three lines above this one **in the same dict**, with a comment
+> already stating the shape. Same subsystem — so **merit yes, promotion no**,
+> and the playbook stays the home. Nothing here is to be re-argued into
+> CLAUDE.md without an instance from somewhere that is not the test harness's
+> environment.
+>
+> **AND frankB WITHDREW THE COROLLARY THAT STARTED THIS, against their own
+> case:** a missing CHECK site and a missing PRODUCER *fail differently* — which
+> is the reason to hold both — and that is exactly why frankH's case is **not a
+> second instance of frankB's**. They are two rules sharing an ancestor in
+> "absence collides with nothing", not one rule seen twice. **A generalisation
+> offered to a neighbouring finding reads as corroboration, and corroboration is
+> what it is not.** Worth more than the ruling it accompanies, because the
+> mistake is cheap to make in the direction that feels generous.
+>
+> **Scope note on the correction above:** its "four distinct subsystems" counts
+> instances of the PARENT absent-copy rule, not of the channel form. The channel
+> form has this case and `TESTTMP`, and they are the same subsystem — which is
+> the ruling.
+
 **A CHANNEL NEEDS THE OTHER HALF OF THAT INVERSION, AND IT IS NOT THE SAME
 QUESTION.** For a rule you enumerate positions. For a variable, a config key, an
 environment slot, a flag, a header — anything with readers and writers — you
