@@ -3,7 +3,7 @@ slug: decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 track: U
 prio: 90
 type: decide
-status: backlog
+status: decided
 owner: ""
 created: 2026-09-09
 found-by: frankuser
@@ -94,3 +94,42 @@ measure, not to wait again — the last month is what waiting costs.
 **Not actioned by this seat.** Arming auto-pin is arming an irreversible,
 outward-facing action, and `make pin` is the owner's alone. This is written so
 the answer can be one word.
+
+## ANSWERED BY THE OWNER ON 2026-09-09 — AND THIS TICKET SAT OPEN AT PRIO 90 FOR TWO DAYS AFTER
+
+Measured 2026-09-11 by the seat that filed it (frankuser). `devdocs/progress/tstate/pin-armed`
+on origin/master:
+
+> Track T automatic pinning is ARMED.
+> Armed 2026-09-09 by the owner: *"go ahead and arm it."*
+
+Option **A**, as recommended. The switch is the committed file itself
+(`fc2ce3d02`); its presence arms, deleting it returns the watcher to shadow mode
+with no code change.
+
+**So this ticket was CLOSED BY EVENTS and stayed at prio 90 in a ranker for two
+days, asking him to decide something he had already decided.** That is the exact
+shape the owner described on 2026-09-10 about a `math.atan2` ticket found closed
+26 days earlier — *"agentic coding has an ADHD disorder ... you dive into
+anything that grabbed your attention. and forget about the bigger goal."* This
+one is worse in one respect and better in another: worse because the seat that
+filed it is the owner-facing seat and had the answer in its own session's reach
+the whole time; better because it was two days, not 26.
+
+Two corrections to the body above, for anyone reading the history:
+
+- *"The allowlist is currently empty, so nothing is waived at all today"* — it now
+  carries **two** entries, both ticketed as the design requires
+  (`test-duktape#00`, `test-quickjs#00`).
+- The arming condition turned out not to need the unsatisfiable comparison at all.
+  He simply decided. Which is its own lesson about escalating a blocked gate
+  rather than waiting on it: the gate was unsatisfiable, and the cost of saying so
+  was one sentence.
+
+**RESIDUAL, AND IT IS LIVE: ARMED IS NOT PINNING.** Filed separately as
+`bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours`,
+because "the decision was taken" and "the decision had an effect" are different
+claims and only the first one is closed here.
+
+## Log
+- 2026-09-11 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.

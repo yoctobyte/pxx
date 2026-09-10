@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:29 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:55 backlog-pascal:7 backlog-decide:45 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:150 done:3680 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:29 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:56 backlog-pascal:7 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3680 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -79,10 +79,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [N]` bug-n-a-module-bound-by-an-import-is-not-a-value (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
-- `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
+- `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [A]` feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc (unblocks 2)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
