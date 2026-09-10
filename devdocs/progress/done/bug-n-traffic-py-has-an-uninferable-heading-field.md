@@ -4,16 +4,18 @@ title: lekkerzeilen/traffic.py — self.heading has no inferable type
 track: N
 type: bug
 prio: 60
-status: open
+status: done
 summary: >
-  CAUSE FOUND (frankB, 2026-09-10), fix in flight with them — do not duplicate.
-  A field initialised from a qualified module CONSTANT cannot be typed:
-  `self.h = math.pi` refuses while `self.h = math.sqrt(2.0)` and
-  `t = math.pi; self.h = t` both work. lib/rtl/math.pas declares
-  `function Pi: Double`, and in Pascal a parameterless function IS its own
-  call, so there is no `(` for the call arm of PyInferExprType to key on and
-  every arm declines. Reached in lekkerzeilen/traffic.py:402 only after the
-  vessel.py SIGSEGV in front of it was fixed (c18f92f48).
+  RESOLVED 2026-09-10 (frankB) — TWO causes, and the second is the one nobody
+  could see. (1) a qualified module CONSTANT had no arm in PyInferExprType:
+  `math.pi` is a parameterless Pascal function and therefore its own call, so it
+  carries no `(` for the call arm to key on. (2) PyJoinInferTk's unknown
+  handling was ASYMMETRIC against its own comment, so `self.h = math.pi if d
+  else r` compiled while `self.h = r if d else math.pi` refused — same value
+  set, arms swapped. Line 402 is the second spelling and needed BOTH fixes. The
+  "what it is NOT" table below is correct and structurally blind to (2): every
+  reduced ternary in it has both arms unknown, the one combination where an arm
+  asymmetry cannot show.
 ---
 
 ## The wall
@@ -61,7 +63,10 @@ them against binary 458767f38926):
 | `self.h = math.sqrt(2.0)` | ok |
 | `t = math.pi; self.h = t` | ok |
 
-It is `math.pi` alone. `lib/rtl/math.pas:44` and `:280` declare
+It is `math.pi` alone **for the isolated field** — and line 402 needed a
+SECOND fix as well; see the resolution at the foot of this ticket. That
+sentence was frankB's and it was theirs to correct.
+`lib/rtl/math.pas:44` and `:280` declare
 **`function Pi: Double`** — in Pascal a parameterless function IS its own call,
 so the expression has no `(` for the call arm of `PyInferExprType` to key on,
 and every arm declines. The last two rows are the control: the VALUE is fine
@@ -99,3 +104,46 @@ mechanisms serving one concept is past the point CLAUDE.md calls a design flaw,
 and several closed `bug-n-a-field-assigned-from-*` tickets are the same shape
 fixed one arm at a time. If the sixth mechanism is why this refuses, the fix is
 that refactor and not a seventh arm.
+
+## Resolved 2026-09-10 (frankB) — TWO causes, and the ticket's own table could not see the second
+
+1. **`PyInferExprType` had no arm for a qualified module CONSTANT.**
+   `lib/rtl/math.pas` declares `function Pi: Double`, and in Pascal a
+   parameterless function IS its own call, so `math.pi` carries no `(` for the
+   call arm to key on and every arm declined. New arm resolves
+   `<unit>.<name>` through `FindUnitOrAlias` + `FindProcInUnit` and splits on
+   `ParamCount`: 0 gives the RETURN type, anything else gives `tyVariant`,
+   because `self.f = math.sqrt` is a function VALUE and typing it as its
+   return type is the widening that passes every test anyone would write.
+
+2. **`PyJoinInferTk`'s unknown handling was ASYMMETRIC** — against its own
+   comment, which promised that an unknown "leaves the other standing".
+   `Result := ta` then `if (ta = tyUnknown) or (tb = tyUnknown) then Exit`
+   only did that when the unknown was on the RIGHT:
+
+   | shape | before | after |
+   | --- | --- | --- |
+   | `self.h = math.pi if d else r` | ok | ok |
+   | `self.h = r if d else math.pi` | **refused** | ok |
+
+   Same value set, arms swapped, opposite verdicts. Line 402 is the second
+   spelling. `and` / `or` go through the same join and carried it too.
+
+**The "What it is NOT" table above is correct and structurally blind to (2).**
+Its row `ternary over a tuple-unpacked name: ok` has BOTH arms unknown, which
+is the one combination where an asymmetry between the arms cannot show. It
+takes one KNOWN arm and one UNKNOWN one, **in that order**. That is worth more
+than the fix: the table was built by reducing the failing line, and reducing
+towards simplicity removes exactly the mixedness the bug needs.
+
+Neither the ternary nor the tuple unpack was ever the defect. Both are asserted
+WITHOUT the module constant in `test/test_nilpy_a_field_from_a_module_constant.npy`
+as negative controls, so a later change aimed at either has something to fail.
+
+`648` (`self.heading = state.heading`) was the suspect named above and was not
+involved.
+
+traffic.py now walls at **:277**, `nearest() takes exactly 2 argument(s), got 3`
+— unrelated, and a separate ticket if it is still there after a census.
+
+Resolved in `PENDING-COMMIT`.
