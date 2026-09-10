@@ -3,8 +3,8 @@ slug: feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory
 track: N
 prio: 45
 type: feature
-status: backlog
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, ffi, headers, imports, lekkerzeilen]

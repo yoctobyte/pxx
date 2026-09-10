@@ -3168,6 +3168,17 @@ def no_measurement(report):
 # testmgr's own TESTTMP, because a reading of a different filesystem than the
 # one that ran out is worse than no reading -- it is a confident wrong answer.
 TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
+# TWO VOCABULARIES ON PURPOSE, AND THE AXIS IS TENSE, NOT UNITS.
+# `fs_*` here is a READING AT A MOMENT and always carries `fs_at` saying which
+# moment ("start" or "after"). `scratch_*` on the HOST row (host_hardware(), and
+# so hosts.json) is a PROPERTY OF THE VOLUME -- its totals, which do not move
+# between runs and are not a measurement of anything that happened. Same
+# filesystem, same units, different question, so they are not merged and neither
+# name is a typo for the other.
+# Said here as well as there because a reader polling the archive meets THIS row
+# first and has no reason to expect the other spelling; frank-seven lost a poll
+# loop to the mismatch on 2026-09-10 and asked that whichever row you hit first
+# say so.
 FS_KEYS = ("fs_path", "fs_bytes_free_mb", "fs_bytes_total_mb",
            "fs_inodes_free", "fs_inodes_total", "fs_at")
 
@@ -7855,6 +7866,10 @@ def host_hardware():
     # these are recorded without moving any host's fingerprint. Adding them
     # there would have made every box in the fleet look like new hardware on the
     # first run after this landed.
+    #
+    # SPELLED `scratch_*`, NOT `fs_*`, and that is the tense: these are the
+    # volume's TOTALS, a property of the box, while the run row's `fs_*` is a
+    # reading at a moment and carries `fs_at` to say which. See FS_KEYS.
     sc = fsheadroom.probe(TESTTMP)
     hw["scratch"] = TESTTMP
     hw["scratch_bytes_total_mb"] = (sc["bytes_total"] // (1024 * 1024)

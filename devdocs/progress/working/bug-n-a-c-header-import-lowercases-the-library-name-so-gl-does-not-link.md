@@ -3,8 +3,8 @@ slug: bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
 track: N
 prio: 50
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, ffi, headers, linking, lekkerzeilen]
