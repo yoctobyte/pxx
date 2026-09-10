@@ -19790,6 +19790,45 @@ end;
 
 function PyParseStatement: Integer; forward;
 procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
+{ Consume an optional `as <name>` after an imported MODULE and register the
+  alias, answering whether one was there. `realKey` is the unit's key, which for
+  a quoted import is the basename and not the spelling written.
+
+  EXTRACTED FROM THREE COPIES, two of which had silently dropped the alias. The
+  plain `import X as Y` arm registered it; both `from . import X as Y` arms
+  consumed the two tokens and threw them away, so the name was simply never
+  bound and the first use said `undefined variable (Y)` — a diagnostic naming
+  the alias with nothing to connect it to the import three lines up.
+  lekkerzeilen/environment.py:10 is `from . import wind as _wind`, and this was
+  the whole of that module's wall.
+
+  The two neighbouring spellings both worked, which is what kept this invisible:
+  `from . import wind` binds and `from .wind import Wind` binds. Only the
+  aliased form of the bare-dot spelling fell through, so any file that happened
+  not to rename its sibling module compiled.
+
+  Extracted rather than copied a third time (normalise-dont-special-case): the
+  copies had already diverged once, in the direction of doing nothing. }
+function PyBindImportUnitAlias(const realKey: AnsiString): Boolean;
+var aStrIdx, realStrIdx: Integer;
+begin
+  Result := False;
+  if not PyIsIdent('as') then Exit;
+  Next;
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: expected a name after `as` in an import');
+  aStrIdx := InternStr(LowerCase(CurTok.SVal));
+  realStrIdx := InternStr(LowerCase(realKey));
+  if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
+  begin
+    UnitAliasName[UnitAliasCount] := aStrIdx;
+    UnitAliasReal[UnitAliasCount] := realStrIdx;
+    Inc(UnitAliasCount);
+  end;
+  Next;
+  Result := True;
+end;
+
 procedure PyParseOneImport; forward;   { ONE import statement, inside a block (pyparser.inc) }
 
 { PyEmitStoreRaxWidth / PyEmitParamSpills lived here: a private, raw-x86-64
@@ -37716,7 +37755,7 @@ end;
   parser ON the terminating newline. Shares the resolver with PyParseImportRun;
   see the note at the statement-level call site for why the newline matters. }
 procedure PyParseOneImport;
-var impName, impAlias, impRoot: AnsiString; aStrIdx, realStrIdx: Integer;
+var impName, impAlias, impRoot: AnsiString;
     impLevel: Integer;
     { the unit key and language of a quoted import; see PyConsumeQuotedModule }
     impKey, impLang: AnsiString;
@@ -37745,13 +37784,10 @@ begin
       while CurTok.Kind = tkIdent do
       begin
         PyRelativeLevel := impLevel;
-        PyParseImportUnit(CurTok.SVal);
+        impAlias := CurTok.SVal;
+        PyParseImportUnit(impAlias);
         Next;
-        if PyIsIdent('as') then
-        begin
-          Next;
-          if CurTok.Kind = tkIdent then Next;
-        end;
+        PyBindImportUnitAlias(impAlias);
         if not Eat(tkComma) then Break;
       end;
       Exit;
@@ -37821,24 +37857,10 @@ begin
         PyImportPending := False;
       end;
       end;
-      if PyIsIdent('as') then
-      begin
-        Next;
-        if CurTok.Kind <> tkIdent then
-          Error('Nil Python: expected a name after `as` in an import');
-        aStrIdx := InternStr(LowerCase(CurTok.SVal));
-        { impKey, not impName: a quoted import's name is a path or carries an
-          extension, while the unit is keyed on its basename. Identical to
-          impName for every unquoted import. }
-        realStrIdx := InternStr(LowerCase(impKey));
-        if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
-        begin
-          UnitAliasName[UnitAliasCount] := aStrIdx;
-          UnitAliasReal[UnitAliasCount] := realStrIdx;
-          Inc(UnitAliasCount);
-        end;
-        Next;
-      end;
+      { impKey, not impName: a quoted import's name is a path or carries an
+        extension, while the unit is keyed on its basename. Identical to
+        impName for every unquoted import. }
+      PyBindImportUnitAlias(impKey);
       if not Eat(tkComma) then Break;
     end;
   end;
@@ -37876,13 +37898,10 @@ begin
         while CurTok.Kind = tkIdent do
         begin
           PyRelativeLevel := impLevel;
-          PyParseImportUnit(CurTok.SVal);
+          impAlias := CurTok.SVal;
+          PyParseImportUnit(impAlias);
           Next;
-          if PyIsIdent('as') then
-          begin
-            Next;
-            if CurTok.Kind = tkIdent then Next;
-          end;
+          PyBindImportUnitAlias(impAlias);
           if not Eat(tkComma) then Break;
         end;
         PySkipNewlines;

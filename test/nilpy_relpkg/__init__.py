@@ -4,7 +4,13 @@
 from .two import A, B
 from . import two
 from .two import A as RENAMED
+# ...and the MODULE-alias spelling. `from . import two` and
+# `from .two import A as RENAMED` both worked while this one bound nothing --
+# both `from . import` arms consumed the `as <name>` and threw it away, so
+# _two read as an undefined variable. See PyBindImportUnitAlias.
+from . import two as _two
 
 S = A + B + two.B
 T = two.bump(A)
 U = RENAMED + 100
+V = _two.bump(_two.B)

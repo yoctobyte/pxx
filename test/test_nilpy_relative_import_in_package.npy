@@ -31,9 +31,14 @@
 #
 # One level only, on purpose: `from .subdir import X` where subdir is a
 # DIRECTORY with its own __init__.py is still unresolved and has its own ticket.
-from nilpy_relpkg import S, T, U, A, B, RENAMED
+#
+# `from . import mod as ALIAS` is asserted through V, and it is the third of the
+# three relative spellings: the other two bound their name and this one silently
+# bound nothing.
+from nilpy_relpkg import S, T, U, V, A, B, RENAMED
 
 print("sum", S)
 print("through-func", T)
 print("through-alias", U)
 print("re-exported", A, B, RENAMED)
+print("module-alias", V)
