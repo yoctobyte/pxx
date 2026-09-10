@@ -393,3 +393,44 @@ is "unresolved" — so the zero is recorded here deliberately, not apologised fo
 their measured surfaces. Neither needs a compiler change; both are shims, and
 `queue`'s real question is the BLOCKING semantics, not the container — pylib's
 new `TPyDeque` is already the right storage for it.
+
+## FIFTH CENSUS, 2026-09-10 (frankuser) — 9 of 28, and the DENOMINATOR moved
+
+Re-measured at HEAD, compiler `61f8a78f8aae`, tree `31dad27bd`, same instrument
+as every census before it: every `lekkerzeilen/*.py` compiled alone, first error
+only, so every count is a LOWER BOUND.
+
+**9 of 28 compile clean** — figure, geometry, `__init__`, lines, math3d, rd,
+shaders, text, wake.
+
+**The denominator is the headline, not the numerator.** Previous censuses said
+*of 23*; the tree has 28 runtime modules now. lekkerzeilen is the owner's own
+actively developed project — five modules were ADDED since the last census
+(`bindings`, `figure`, `lines`, `session`, `ui`) and `scenery.py` was edited
+today at 10:50. **So the ratio's denominator moves under the measurement, and a
+numerator compared across censuses is comparing two different populations.**
+Quote this as "9 of 28 at tree X on date Y", never as a trend against 8 of 23.
+
+Of the original 23, `text` newly passes (its `str.join` ticket closed) and
+`scenery` newly FAILS — and that is not a regression on our side: the owner's
+`7da065e` added `_sin = math.sin`, filed as
+[[bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value]].
+Attributed before reporting, because a number moving in the unfavourable
+direction invites exactly the self-blaming reading that terminates a search.
+
+| cause | modules | ticket |
+| --- | --- | --- |
+| `math` surface | hud, rig, sim, traffic, vessel (`atan2`), scenery (`sin` as a value) — **6** | feature-nilpy-math-module-twelve-absent-names-measured + the new value ticket |
+| open-world dispatch on a dynamic receiver | audio `.queued`, chart `.read_grid`, environment / `__main__` / wind `.contains` — **5** | feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver |
+| `queue` | app, gauges — 2 | feature-n-the-queue-module |
+| `ctypes` | capture, gfx — 2 | (bind natively, settled) |
+| `struct` | world — 1 | feature-n-the-struct-module |
+| `os` data attributes | session — 1 | bug-n-os-environ-and-os-sep-are-not-values |
+| `platform.KEY_ESCAPE` | bindings — 1 | NEW, unfiled — qualifier resolves, member does not |
+| generator expression as sole argument | ui — 1 | NEW, unfiled — `" ".join(x for x in ...)` at ui.py:576, `expected ')' before 'for'` |
+
+**Two new causes this census, both in modules that did not exist before**, which
+is the clearest statement of what attempting a moving target costs: the backlog
+does not converge on a fixed 23, it tracks whatever the owner writes next. The
+`ui` one is a PARSE error and therefore the cheapest-looking of the lot — a bare
+generator expression passed as a function's only argument.
