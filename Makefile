@@ -2439,6 +2439,11 @@ test-nilpy: $(COMPILER)
 	# widens instead of claiming the then-arm's type.
 	./$(COMPILER) test/test_nilpy_variant_receiver_method_dispatch.npy $(TESTTMP)/test_nilpy_vardispatch26
 	$(TESTTMP)/test_nilpy_vardispatch26 | diff -u test/test_nilpy_variant_receiver_method_dispatch.expected -
+	# ...and the same run-time class decision for a FIELD, on the WRITE side. The
+	# read already dispatched; the write went through the read's ternary and the
+	# IR refused it (kind 67) in a program with no conditional expression in it.
+	./$(COMPILER) test/test_nilpy_variant_field_write_dispatch.npy $(TESTTMP)/test_nilpy_vfwrite26
+	$(TESTTMP)/test_nilpy_vfwrite26 | diff -u test/test_nilpy_variant_field_write_dispatch.expected -
 	# startswith/endswith with a TUPLE of prefixes answered False silently.
 	./$(COMPILER) test/test_nilpy_startswith_tuple.npy $(TESTTMP)/test_nilpy_swtuple26
 	$(TESTTMP)/test_nilpy_swtuple26 | diff -u test/test_nilpy_startswith_tuple.expected -

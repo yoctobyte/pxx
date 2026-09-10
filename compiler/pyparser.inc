@@ -72,6 +72,16 @@ const
                             it is exactly why field(default_factory=...) has to exist.
                             feature-nilpy-dataclass-expression-field-default }
 
+const
+  { How many declared classes one field NAME may be dispatched over at run time
+    (PyVariantFieldCands). A cap on the DISPATCH, not on the program: past it
+    the extra candidates are not scanned and the name resolves as it did before
+    run-time dispatch existed. }
+  PY_MAX_FIELD_CANDIDATES = 16;
+
+type
+  TPyFieldCands = array[0..PY_MAX_FIELD_CANDIDATES - 1] of Integer;
+
 var
   PyLocals: array[0..PY_MAX_LOCALS-1] of TPyLocalConstraint;
   PyLocalCount: Integer;
@@ -13600,34 +13610,49 @@ end;
 
   Arms are boxed to Variant when the candidates' field types differ, so the
   expression has ONE type whichever class turns up. }
-function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
-                            var tk: TTypeKind; var recName: Integer): Integer;
-const MAX_FIELD_CANDIDATES = 16;
-var ci, fi, i, n, armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
-    cands: array[0..MAX_FIELD_CANDIDATES - 1] of Integer;
-    candFi: array[0..MAX_FIELD_CANDIDATES - 1] of Integer;
-    sameShape: Boolean;
+{ Every declared CLASS (records excluded) that has a field named fname, in class
+  order, with that field's index. sameShape reports whether the candidates agree
+  on both OFFSET and TYPE -- when they do one layout serves them all and nothing
+  has to be decided at run time.
+
+  Shared by the READ (PyMakeVariantField) and the WRITE
+  (PyMakeVariantFieldSet), because the two must agree on which names are
+  ambiguous and on which candidate is the fallback. When they disagreed the
+  write went through the read's dispatch and the IR refused the result. }
+function PyVariantFieldCands(const fname: AnsiString;
+                             var cands, candFi: TPyFieldCands;
+                             var sameShape: Boolean): Integer;
+var ci, fi, i, n: Integer;
 begin
-  Result := -1;
   n := 0;
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsIsRecord[ci] then Continue;
     fi := FindUField(ci, fname);
     if fi < 0 then Continue;
-    if n < MAX_FIELD_CANDIDATES then
+    if n < PY_MAX_FIELD_CANDIDATES then
     begin
       cands[n] := ci;
       candFi[n] := fi;
       Inc(n);
     end;
   end;
-  if n = 0 then Exit;
-
   sameShape := True;
   for i := 1 to n - 1 do
     if (UFldTk[candFi[i]] <> UFldTk[candFi[0]]) or
        (UFldOff_[candFi[i]] <> UFldOff_[candFi[0]]) then sameShape := False;
+  PyVariantFieldCands := n;
+end;
+
+function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
+                            var tk: TTypeKind; var recName: Integer): Integer;
+var i, n, armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
+    cands, candFi: TPyFieldCands;
+    sameShape: Boolean;
+begin
+  Result := -1;
+  n := PyVariantFieldCands(fname, cands, candFi, sameShape);
+  if n = 0 then Exit;
 
   if sameShape then
   begin
@@ -13672,6 +13697,95 @@ begin
   end;
   tk := tyVariant;
   recName := REC_NONE;
+end;
+
+{ One arm of a dispatched variant-field WRITE: `C(pyvarobj(v)).name := val`, or
+  `C(pyvarobj(v)).name := C(pyvarobj(v)).name op val` for an augmented one. The
+  twin of PyVariantFieldArm, which builds the same place as a READ; the
+  augmented form reads through its OWN cast so the two halves cannot disagree
+  about the class. augOp is Ord(the binary token), or -1 for a plain store. }
+function PyVariantFieldStore(baseNode, ci, fi: Integer; const fname: AnsiString;
+                             valNode, augOp: Integer): Integer;
+var rhs, binN: Integer;
+begin
+  rhs := valNode;
+  if augOp >= 0 then
+  begin
+    binN := AllocNode(AN_BINOP);
+    ASTIVal[binN] := augOp;
+    ASTLeft[binN] := PyVariantFieldArm(baseNode, ci, fi, fname);
+    ASTRight[binN] := valNode;
+    ASTTk[binN] := UFldTk[fi];
+    rhs := binN;
+  end;
+  Result := AllocNode(AN_ASSIGN);
+  ASTLeft[Result] := PyVariantFieldArm(baseNode, ci, fi, fname);
+  ASTRight[Result] := rhs;
+end;
+
+{ `v.name = val` / `v.name op= val` where v is a VARIANT and SEVERAL declared
+  classes have a field of that name with DIFFERENT layouts.
+
+  The read path answers such a name with a run-time class-dispatch TERNARY,
+  which is a VALUE. Storing through it built an AN_ASSIGN whose TARGET was that
+  ternary, and the IR refused to lower it: `IR_UNSUPPORTED: frontend could not
+  lower AST node (kind 67)`, reported at the assignment with nothing in the
+  source to point at -- the ternary is entirely synthetic, and a program with no
+  conditional expression in it got an error about one.
+
+  So dispatch the WRITE the way the read dispatches, but as a STATEMENT: one
+  `if pyvarobj(v) is C then C(pyvarobj(v)).name := val` per candidate, with the
+  LAST candidate as the else arm -- the same fallback the read picks, for the
+  same reason.
+
+  Returns -1 when the name needs no dispatch (no class declares it, or they all
+  agree on one layout). Both are cases the ordinary path already gets right, and
+  the code it emits for them is untouched.
+
+  valNode is shared across the arms. Exactly one arm runs, so a side effect in
+  the value happens exactly once -- the same sharing the read path already does
+  with the receiver.
+
+  Found by attempting lekkerzeilen (2026-09-10): `Environment.level` and
+  `wind.Wind.level` are two unrelated classes with one field name, and
+  `breeze.level = level` on a parameter that defaults to None is the write. }
+function PyMakeVariantFieldSet(baseNode: Integer; const fname: AnsiString;
+                               valNode, augOp: Integer): Integer;
+var i, n, condN, pairN, ifN, asgN, unboxArg, unboxCall: Integer;
+    cands, candFi: TPyFieldCands;
+    sameShape: Boolean;
+begin
+  Result := -1;
+  n := PyVariantFieldCands(fname, cands, candFi, sameShape);
+  if (n < 2) or sameShape then Exit;
+
+  Result := PyVariantFieldStore(baseNode, cands[n - 1], candFi[n - 1], fname,
+                                valNode, augOp);
+  for i := n - 2 downto 0 do
+  begin
+    asgN := PyVariantFieldStore(baseNode, cands[i], candFi[i], fname,
+                                valNode, augOp);
+    { cond: pyvarobj(v) is <candidate> -- the test isinstance lowers to }
+    unboxArg := AllocNode(AN_ARG);
+    ASTLeft[unboxArg] := baseNode;
+    unboxCall := AllocNode(AN_CALL);
+    ASTIVal[unboxCall] := FindProc('pyvarobj');
+    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+    ASTTk[unboxCall] := Ord(tyPointer);
+    ASTLeft[unboxCall] := unboxArg;
+    condN := AllocNode(AN_IS_TEST);
+    ASTLeft[condN] := unboxCall;
+    ASTIVal[condN] := cands[i];
+    ASTTk[condN] := Ord(tyBoolean);
+
+    pairN := AllocNode(AN_PAIR);
+    ASTLeft[pairN] := asgN;
+    ASTRight[pairN] := Result;
+    ifN := AllocNode(AN_IF);
+    ASTLeft[ifN] := condN;
+    ASTRight[ifN] := pairN;
+    Result := ifN;
+  end;
 end;
 
 { A synthetic call signature: nArgs Variant params, Variant result, no body.
@@ -40338,6 +40452,7 @@ var
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
   tk: TTypeKind;
   fieldName: AnsiString;
+  fldSetSave, fldSetOp: Integer;   { rewind point for a variant-field WRITE probe }
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
   mkwIdx, mkwCount: Integer;   { keyword binding for the UNBOUND `A.m(self, k=v)` spelling }
   methName: AnsiString;
@@ -42499,6 +42614,37 @@ begin
       if (tk = tyVariant) then
       begin
         Next;   { consume the field name, as the call branch above does }
+        { A WRITE is taken first, and only when the name needs run-time
+          dispatch. The read below answers an ambiguous name with a ternary,
+          which is not an assignable place -- see PyMakeVariantFieldSet, which
+          returns -1 for every name the ordinary path already stores correctly. }
+        if CurTok.Kind = tkAssign then
+        begin
+          fldSetSave := TokPos;
+          Next;
+          PyParseBoolExpr;
+          indexNode := PyMakeVariantFieldSet(node, fieldName, CurASTNode, -1);
+          if indexNode >= 0 then
+          begin
+            node := indexNode; tk := tyUnknown; Result := node; Exit;
+          end;
+          { not ambiguous: rewind and let the ordinary store path have it }
+          TokPos := fldSetSave - 1; Next;
+        end
+        else if PyAugBinTok(CurTok.Kind) <> tkEOF then
+        begin
+          fldSetSave := TokPos;
+          fldSetOp := Ord(PyAugBinTok(CurTok.Kind));
+          Next;
+          PyParseBoolExpr;
+          indexNode := PyMakeVariantFieldSet(node, fieldName, CurASTNode,
+                                             fldSetOp);
+          if indexNode >= 0 then
+          begin
+            node := indexNode; tk := tyUnknown; Result := node; Exit;
+          end;
+          TokPos := fldSetSave - 1; Next;
+        end;
         indexNode := PyMakeVariantField(node, fieldName, tk, recName);
         if indexNode >= 0 then begin node := indexNode; Continue; end;
         { No FIELD of that name — but a CLASS ATTRIBUTE that is written through

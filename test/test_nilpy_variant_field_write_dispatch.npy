@@ -1,0 +1,65 @@
+# A field WRITE on a dynamically-typed receiver, where two declared classes
+# share the field name.
+#
+# A field READ on a dynamically-typed receiver already decides the class at run
+# time when several declared classes have that field name with different
+# layouts -- one `pyvarobj(v) is C ? ... : ...` arm per candidate. That value is
+# a TERNARY, so a WRITE through the same path built an assignment whose TARGET
+# was a ternary and the IR refused it:
+#
+#   IR_UNSUPPORTED: frontend could not lower AST node (kind 67)
+#
+# reported at the assignment, in a program with no conditional expression
+# anywhere in it -- the ternary is entirely synthetic. Found by attempting
+# lekkerzeilen, where `Environment` and `wind.Wind` each declare `level` and
+# `breeze.level = level` is the write.
+#
+# Three classes on purpose: the fix chains one `if` per candidate and makes the
+# LAST one the else arm, so two candidates would not tell a working chain from a
+# working single guard. Each `level` has a DIFFERENT type and a different offset
+# -- that is what makes the name ambiguous in the first place, and the values
+# written match each field's own type so CPython is an exact oracle (a NilPy
+# field is typed; storing 7 in a float field is 7.0 here and 7 there, which is a
+# different question and not this test's).
+#
+# `put`'s parameter is untyped, so the receiver really is a variant at the write
+# -- annotating it would take the statically-typed path and assert nothing.
+
+
+class A:
+    def __init__(self):
+        self.pad = "x"
+        self.level = 1
+
+
+class B:
+    def __init__(self):
+        self.level = 2.5
+
+
+class C:
+    def __init__(self):
+        self.a = 0
+        self.b = 0
+        self.level = "s"
+
+
+def put(o, v):
+    o.level = v
+    return o
+
+
+def bump(o):
+    # ...and the augmented form, which is a read and a write through one name:
+    # each arm reads through its own cast, so the two halves cannot land in
+    # different classes.
+    o.level += 1
+    return o
+
+
+print("write", put(A(), 7).level, put(B(), 7.5).level, put(C(), "seven").level)
+print("aug", bump(A()).level, bump(B()).level)
+
+# A second write to the FIRST candidate, read back through the same ambiguous
+# name: the guard chain has to reach arm 0 and the read has to agree with it.
+print("read-back", put(A(), 9).level)

@@ -332,6 +332,7 @@ AN_ASSIGN Left PyMakeIdent(vSym)
 AN_ASSIGN Left PyMakeIdent(vtTmpSym)
 AN_ASSIGN Left PyMakeIdent(xSym)
 AN_ASSIGN Left PyMakeIdent(ySym)
+AN_ASSIGN Left PyVariantFieldArm(baseNode, ci, fi, fname)
 AN_ASSIGN Left RArrIndexNode(RMakeIdent(symIdx), k, Ord(tyRecord))
 AN_ASSIGN Left RArrIndexNode(fieldNode, k, ASTTk[fieldNode])
 AN_ASSIGN Left RMakeIdent(Procs[CurProc].RetSymIdx)
@@ -516,6 +517,7 @@ AN_BINOP Left PyMakeIdent(rngStepSym)
 AN_BINOP Left PyMakeIdent(symIdx)
 AN_BINOP Left PyMakeTruthy(left)
 AN_BINOP Left PyMakeVariantGetItem(node, indexNode)
+AN_BINOP Left PyVariantFieldArm(baseNode, ci, fi, fname)
 AN_BINOP Left Result
 AN_BINOP Left a
 AN_BINOP Left acc
@@ -983,6 +985,7 @@ AN_PAIR Left WriteLit('true')
 AN_PAIR Left ZFieldNode(RMakeIdent(symIdx), '__val', elemTk)
 AN_PAIR Left armN
 AN_PAIR Left arms[i].BodyNode
+AN_PAIR Left asgN
 AN_PAIR Left bfCall
 AN_PAIR Left blk
 AN_PAIR Left bodies[i]
