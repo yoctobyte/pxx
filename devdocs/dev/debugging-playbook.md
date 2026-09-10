@@ -23113,3 +23113,56 @@ Companion to "A GUARD THAT CANNOT FAIL IS NOT A GUARD" in CLAUDE.md, which
 covers a control drawn from the wrong population. This is the neighbouring
 failure: a control drawn from the right population, differing from the subject
 in a dimension nobody enumerated.
+## A REFUSAL WHOSE STATED REASON IS A CLAIM ABOUT MACHINERY — GO LOOK AT THE MACHINERY, IT IS OFTEN ALREADY THERE
+
+Four instances in `compiler/pyparser.inc` and its neighbours, 2026-09-09/10.
+Each cost ONE probe to refute and each had stood for weeks or months. Banked,
+**not promoted to CLAUDE.md**: three of the four are one seat's, so the
+second-independent-subsystem test is not met. Counted honestly here so a fifth
+from a different subsystem has somewhere to be counted from.
+
+The shape: a construct is refused, or a fast path declines, and the stated
+reason is not "this is hard" or "nobody asked for it" but **an assertion about
+what some other part of the compiler can or cannot do**. That assertion is a
+FACT ABOUT THE TREE, so it is checkable in minutes — and it is the thing nobody
+checks, because a refusal that explains itself reads as one somebody thought
+about.
+
+1. **Open-world method dispatch was refused on a cost estimate.** The runtime
+   lookup the estimate said would have to be built (`PyFindMethCI`,
+   `GetInstanceRTTI`, both `compiler/builtin/pyeval.pas`) already existed, and
+   that file's own comment at line 325 calls `PyHostCall` "a complete by-name
+   invoker over it". The undeclared-NAME path a few lines away already used it.
+2. **Keyword arguments through a dynamic receiver were refused as
+   "slots-not-names".** `PyHostCall` binds `kwNames` BY NAME against RTTI
+   parameter names — `TMethInfo.ParamKinds` (`lib/rtl/typinfo.pas:85`) carries
+   `Arity` param-NAME pointers after the kinds, and had for months.
+3. **`*args` unpacking into a callee with defaults was refused because the
+   expansion "cannot preserve defaults".** `DefaultArgValueNode` was sitting at
+   `compiler/pasparser_call.inc:1353` and is what the ordinary call path already
+   uses.
+4. **A Variant function-value wrapper was built only when every parameter was
+   already a Variant** — and the else arm was not "no wrapper", it boxed the RAW
+   ADDRESS and called it through the Variant ABI. The precondition was never
+   needed: the wrapper body is `return realproc(a0)` and the ordinary
+   Variant→AnsiString coercion runs on the way IN exactly as the return coercion
+   does on the way OUT. (frankB, `PyMakeFuncValueFor`.)
+
+**The fourth is the dangerous one and it is why this entry exists.** In the
+first three the false claim was in an ERROR MESSAGE, which a reader meets while
+something is already going wrong, and a reader in that state interrogates what
+they are told. In the fourth it was in a COMMENT — the code's own words,
+"possibly-unsafe", next to code that works, met by a reader with no reason to
+suspect anything. **A comment is the harder one to disbelieve**, because
+disbelieving it means disbelieving a colleague who appears to have looked, where
+disbelieving an error message only means suspecting a machine.
+
+And its symptom class matches: `f = string.capwords` printed an EMPTY LINE where
+CPython prints `A B`; the CALL spelling was right the whole time. **A construct
+that is only wrong when you do NOT call it is invisible to every natural test of
+the thing** — which is why nothing in this family was ever filed.
+
+**The check, and it is the whole entry:** when a refusal or a guard names a
+mechanism, grep for that mechanism before believing the sentence. Two of these
+four name a routine that is in the same file. The refusal is not evidence about
+the machinery; it is evidence about what one author believed on one afternoon.
