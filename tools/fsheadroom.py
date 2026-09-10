@@ -107,9 +107,20 @@ def row(path, prefix="fs_"):
         # Present-and-null, never absent. An absent key reads as "this version
         # did not record it"; an explicit null reads as "it was asked and could
         # not answer", and only the second is true here.
-        return {prefix + k: None for k in
-                ("bytes_free_mb", "bytes_total_mb", "inodes_free", "inodes_total")}
+        return dict({prefix + k: None for k in
+                     ("bytes_free_mb", "bytes_total_mb",
+                      "inodes_free", "inodes_total")},
+                    **{prefix + "path": path})
     return {
+        # WHICH filesystem these numbers are about. Added 2026-09-10 after
+        # frank-seven, reading a real run row on seven, had to ask -- the row
+        # said `fs_inodes_free` and the host record said `scratch_inodes_total`,
+        # and nothing on either connected the two. The prefixes are deliberately
+        # different because the QUANTITIES are: `fs_*` on a run row is free
+        # space at one moment, `scratch_*` in hosts.json is the size of the box.
+        # Naming them alike would have implied they were interchangeable. This
+        # field is what links them, and it costs one string.
+        prefix + "path": path,
         prefix + "bytes_free_mb": h["bytes_free"] // (1024 * 1024),
         prefix + "bytes_total_mb": h["bytes_total"] // (1024 * 1024),
         prefix + "inodes_free": h["inodes_free"],

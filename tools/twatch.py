@@ -3168,7 +3168,7 @@ def no_measurement(report):
 # testmgr's own TESTTMP, because a reading of a different filesystem than the
 # one that ran out is worse than no reading -- it is a confident wrong answer.
 TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
-FS_KEYS = ("fs_bytes_free_mb", "fs_bytes_total_mb",
+FS_KEYS = ("fs_path", "fs_bytes_free_mb", "fs_bytes_total_mb",
            "fs_inodes_free", "fs_inodes_total", "fs_at")
 
 
@@ -8063,7 +8063,30 @@ def record_host_epoch(clone, host):
         doc = {}
     epochs = doc.setdefault(host, [])
     if epochs and epochs[-1].get("fp") == fp:
-        return False                       # unchanged: the common case
+        # A FIELD THAT IS NOT IN THE FINGERPRINT ONLY EVER LANDS HERE, so a
+        # descriptive field added to host_hardware() and deliberately kept OUT
+        # of HW_KEYS reaches this file exactly never -- the mint path below is
+        # the only writer, and keeping it out of the hash is what guarantees the
+        # mint never happens. Those two decisions cancel, and I made both.
+        #
+        # Found by frank-seven on 2026-09-10, on the box that runs tiers: the
+        # scratch totals landed on the run row and never on the host record, and
+        # the clean epoch result would have read as "the whole change is
+        # verified" if it had not said which half it covered.
+        #
+        # Refreshing IN PLACE is not rewriting history: the last epoch is the
+        # OPEN one (no `to`), and these fields describe the box NOW rather than
+        # the epoch's identity. A filesystem can be remounted larger without
+        # that being new hardware, which is precisely why they are not in the
+        # hash. Written only when something actually differs, so a quiet box
+        # publishes nothing.
+        cur = epochs[-1]
+        extra = {k: v for k, v in hw.items() if k not in HW_KEYS}
+        if any(cur.get(k) != v for k, v in extra.items()):
+            cur.update(extra)
+            doc[host] = epochs
+            write_json_atomic(path, doc)
+        return False                       # not a new epoch: the common case
     now = utcnow()
     if epochs:
         epochs[-1]["to"] = now

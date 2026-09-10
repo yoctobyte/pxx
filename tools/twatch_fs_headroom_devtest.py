@@ -110,7 +110,13 @@ def case_probe_and_row_agree_and_null_is_explicit():
     # about the software, and the true claim is about the filesystem.
     dead = fsheadroom.row("/proc/self/no/such/path")
     assert set(dead) == set(row), (set(dead), set(row))
-    assert all(v is None for v in dead.values()), dead
+    # The four MEASUREMENTS are null; `fs_path` is not a measurement, it is the
+    # question that was asked, and it is known whether or not the answer came
+    # back. Recording which filesystem could not be probed is strictly more
+    # useful than recording that some filesystem could not be.
+    measured = {k: v for k, v in dead.items() if k != "fs_path"}
+    assert all(v is None for v in measured.values()), measured
+    assert dead["fs_path"] == "/proc/self/no/such/path", dead
 
 
 def case_the_run_row_carries_it_in_all_three_writers():
@@ -185,6 +191,56 @@ def case_the_host_fingerprint_gains_disk_without_moving():
     # the same machine", and free space is a property of the minute.
     assert not any("free" in k for k in hw), (
         [k for k in hw if "free" in k])
+
+
+def case_the_scratch_totals_reach_hosts_json_without_a_new_epoch():
+    """The half the epoch check does NOT cover, and it was broken on arrival.
+
+    Keeping the scratch fields out of HW_KEYS means no fingerprint change; the
+    epoch record was only ever written on the MINT path, which a fingerprint
+    change is the only thing that triggers. So the two decisions cancelled and
+    the fields reached the run row and never the host record. Found by
+    frank-seven on the box that runs tiers, 2026-09-10, hours after it landed —
+    on plexus the epoch check passed and said nothing about this, because a
+    clean fp is exactly what makes the bug invisible.
+
+    The control is therefore NOT "the field appears": on a box with no stored
+    epoch the mint path runs and it appears for the wrong reason. It is "the
+    field appears on the SECOND call, the one where the fingerprint is
+    unchanged and nothing is minted".
+    """
+    import types
+    spec = importlib.util.spec_from_file_location(
+        "twatch_epoch", os.path.join(HERE, "twatch.py"))
+    tw = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tw)
+
+    root = tempfile.mkdtemp(prefix="hostsjson-devtest-")
+    try:
+        clone = types.SimpleNamespace(path=root)
+        assert tw.record_host_epoch(clone, "boxa") is True, "first call minted nothing"
+        doc = json.load(open(os.path.join(root, tw.HOSTS_REL)))
+        # Simulate the real fleet state this bug lived in: a host whose epoch
+        # predates the change, so the descriptive fields are simply absent.
+        for k in list(doc["boxa"][-1]):
+            if k.startswith("scratch"):
+                del doc["boxa"][-1][k]
+        with open(os.path.join(root, tw.HOSTS_REL), "w") as f:
+            json.dump(doc, f)
+
+        assert tw.record_host_epoch(clone, "boxa") is False, (
+            "an unchanged fingerprint minted a new epoch — the scratch fields "
+            "must NOT be in HW_KEYS")
+        doc = json.load(open(os.path.join(root, tw.HOSTS_REL)))
+        assert len(doc["boxa"]) == 1, (
+            "a second epoch was minted: %d" % len(doc["boxa"]))
+        cur = doc["boxa"][-1]
+        for k in ("scratch", "scratch_bytes_total_mb", "scratch_inodes_total"):
+            assert k in cur, (
+                "%s never reaches hosts.json on a box whose hardware has not "
+                "changed — which is every box, almost always" % k)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def case_tmpdir_is_pinned_and_beats_the_parent():
