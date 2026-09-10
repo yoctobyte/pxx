@@ -1643,6 +1643,24 @@ test-nilpy: $(COMPILER)
 	# [1, 2] while both printed `7 7`.
 	./$(COMPILER) test/test_nilpy_a_chained_assignment_stores_left_to_right.npy $(TESTTMP)/test_nilpy_chainasg26
 	$(TESTTMP)/test_nilpy_chainasg26 | diff -u test/test_nilpy_a_chained_assignment_stores_left_to_right.expected -
+	# staticmethod(f) as a VALUE -- the class-as-namespace idiom that is the whole
+	# portability seam of lekkerzeilen (platform/_pxx.py:31-35, five in a row).
+	# The lowering is the IDENTITY, which is a claim about THIS frontend and not a
+	# shortcut: the instance-read rows are what say so, since a staticmethod must
+	# not take the receiver and here it does not.
+	./$(COMPILER) test/test_nilpy_staticmethod_as_a_value.npy $(TESTTMP)/test_nilpy_staticm26
+	$(TESTTMP)/test_nilpy_staticm26 | diff -u test/test_nilpy_staticmethod_as_a_value.expected -
+	# ...and its POSITIVE CONTROL, which is a different assertion class: classmethod
+	# is NOT the identity (CPython binds the class as the first argument), so the
+	# compiler must REFUSE it by name rather than approximate it. Asserted as a
+	# compile failure plus the word, because an arm that accepted both would pass
+	# every row of the file above.
+	@out=$$(./$(COMPILER) test/test_nilpy_classmethod_as_a_value_is_refused.npy $(TESTTMP)/test_nilpy_clsm26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'classmethod(f) as a value is not supported' \
+	   && test ! -e $(TESTTMP)/test_nilpy_clsm26 \
+	  || { echo "test_nilpy_classmethod_as_a_value_is_refused: FAIL - rc=$$rc (want 1, the classmethod diagnostic, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	# ...and the other two spellings, in their own file so the qualified one
 	# cannot mask a regression in them.
 	./$(COMPILER) test/test_nilpy_collections_deque_from_import.npy $(TESTTMP)/test_nilpy_deque_fi26

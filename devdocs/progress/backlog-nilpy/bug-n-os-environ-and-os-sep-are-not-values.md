@@ -5,7 +5,7 @@ prio: 60
 type: bug
 status: backlog
 blocked-by: []
-summary: "`os.environ` and `os.sep` are not first-class values: `os.environ.get('X')` compiles but `'X' in os.environ` is `error: undefined variable (os)`. PyIsStdlibMemberValue recognises exactly three os members (seek_set/cur/end), so every DATA attribute of os fails while its functions work. Measured cost: it is the single largest wall in the reportlab probe — one 7-line file blocks 30 of 159."
+summary: "`os.environ` is not a first-class value: `'X' in os.environ` is `error: undefined variable (os)`, while `os.environ.get('X')` compiles. RE-MEASURED 2026-09-10 at compiler `98b6545b4652` and THE SLUG IS HALF STALE: `os.sep` WORKS -- it prints `/` -- and so does `os.linesep`. `PyIsStdlibMemberValue` gained both at `996bcf5a8` on 2026-08-29 -- the DAY AFTER this ticket was filed -- and this summary was never updated, so a reader picking this up would spend the first measurement discovering that half of it is done. What is left is `environ` specifically, which is not a constant string but a MAPPING, so it needs a value the `in` operator and `.get`/`[]` can both reach -- a different job from adding a name to that gate's list. Sibling of bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (an uncalled stdlib FUNCTION) through the same gate; the third door frankuser grouped with them, `staticmethod`, turned out NOT to share it -- a builtin name is a separate mechanism and was fixed separately on 2026-09-10. Original measured cost stands: it is the single largest wall in the reportlab probe, one 7-line file blocking 30 of 159."
 ---
 
 # `os.environ` and `os.sep` are not values

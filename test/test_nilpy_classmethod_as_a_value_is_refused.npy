@@ -1,0 +1,16 @@
+# The POSITIVE CONTROL for the staticmethod arm: `classmethod(f)` must NOT be
+# accepted. It is not the identity — CPython binds the class as f's first
+# argument — so treating it as f would silently drop `cls` and shift every
+# remaining argument by one. This file must FAIL to compile, naming classmethod.
+# bug-n-staticmethod-is-not-a-value
+
+
+def f(cls, a):
+    return a
+
+
+class gl:
+    clear = classmethod(f)
+
+
+print(gl.clear(1))

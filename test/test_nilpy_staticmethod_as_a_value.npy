@@ -1,0 +1,61 @@
+# `staticmethod(f)` as a VALUE — a class used as a NAMESPACE whose members are
+# plain module-level functions. lekkerzeilen/platform/_pxx.py:31-35 is five of
+# these in a row, and it is the whole portability seam of that app.
+#
+# DELIBERATELY ABSENT, and each for its own reason:
+#
+#   `classmethod(f)` — NOT the identity: CPython binds the class as f's first
+#   argument, so it is refused BY NAME in the compiler rather than
+#   approximated. The Makefile asserts that refusal separately, because a row
+#   here would need a compile failure this file cannot express.
+#
+#   `plain = f` (an UNWRAPPED function as a class attribute) read through an
+#   INSTANCE. That is the control the identity claim would most like to have,
+#   and it is a KNOWN DIVERGENCE: CPython's plain-function-becomes-method rule
+#   binds the receiver (`c.plain(7)` passes the instance), and we do not — we
+#   raise TypeError. Asserting it against a CPython-generated oracle would be
+#   a row that is red by construction. It is filed, not tested here, and it is
+#   precisely the rule `staticmethod` exists in the language to opt out of.
+#   Read through the CLASS, `gl.plain(1)`, the two agree, so that half stays.
+# bug-n-staticmethod-is-not-a-value
+
+
+def add_one(a):
+    return a + 1
+
+
+def negate(a):
+    return -a
+
+
+class gl:
+    # the corpus shape: several members, one shared implementation
+    clear = staticmethod(add_one)
+    flush = staticmethod(add_one)
+    invert = staticmethod(negate)
+    # the unwrapped control — read through the CLASS only, see the header
+    plain = add_one
+
+
+# ---- read through the CLASS ------------------------------------------------
+print(gl.clear(1), gl.flush(2), gl.invert(3))
+print(gl.plain(1))
+
+# ---- read through an INSTANCE, which is the door that binds a receiver ------
+# This is the row that says the lowering is right rather than merely quiet: a
+# staticmethod must NOT take the instance, and here it does not.
+g = gl()
+print(g.clear(1), g.flush(2), g.invert(3))
+
+# ---- at module scope, where CPython 3.10+ made staticmethod objects callable -
+solo = staticmethod(negate)
+print(solo(5))
+
+# ---- a user def SHADOWS the builtin, which Python allows --------------------
+def shadowed():
+    def staticmethod(x):
+        return x * 10
+    return staticmethod(4)
+
+
+print(shadowed())

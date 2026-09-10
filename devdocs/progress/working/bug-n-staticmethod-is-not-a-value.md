@@ -75,3 +75,48 @@ Also measured on the way past: `bug-n-os-environ-and-os-sep-are-not-values` is
 2026-08-29, the day after it was filed. What remains is `environ`, and it is a
 different job: a MAPPING that both `in` and `.get`/`[]` must reach, not another
 name in a list.
+
+## THE FIX AS LANDED (frankB)
+
+`compiler/pyparser.inc`, in the builtin-name chain beside `eval` / `setattr`:
+`staticmethod(X)` is the IDENTITY, `classmethod(X)` is refused by name.
+
+**Why identity is a measurement and not a shortcut.** `clear = f` in a class
+body already worked before this landed, and dispatched correctly through both
+doors — `gl.clear(1)` and `gl().clear(1)` each answer 2. So wrapping the same
+function value is exactly what CPython's descriptor does when it is READ. The
+only remaining difference is `gl.__dict__['clear'] is not f`, and NilPy exposes
+no `__dict__` for that to be visible through.
+
+**Why classmethod is refused rather than approximated.** CPython binds the
+class as the first argument, so identity would silently drop `cls` and shift
+every remaining argument by one — a wrong answer replacing a loud diagnostic.
+The `@classmethod` DECORATOR is supported and the message says so.
+
+Two tests, deliberately of different assertion classes:
+
+| file | asserts |
+| --- | --- |
+| `test_nilpy_staticmethod_as_a_value.npy` | class door, instance door, module scope, and a user def shadowing the builtin |
+| `test_nilpy_classmethod_as_a_value_is_refused.npy` | rc=1, the message, and no binary |
+
+The instance-door rows are what say the lowering is right rather than merely
+quiet: a staticmethod must NOT take the receiver, and there it does not.
+
+### Recorded, not fixed, and both found while building the CONTROL
+
+- [[bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver]] —
+  the unwrapped `plain = f` row was going to be this fix's control, and
+  CPython's own oracle refused it (`c.plain(7)` binds the instance there; we
+  raise TypeError). Which is the point: binding the receiver is the rule
+  `staticmethod` exists to opt out of. The test file's header says why that row
+  is exercised through the class only.
+- [[bug-n-a-lambda-stored-in-a-class-attribute-is-not-callable]] — pre-existing,
+  established by the control WITHOUT the wrapper failing identically.
+
+### The remaining walls, from the same 33-module census
+
+`math.atan2` / `math.sin` is 7 modules and the largest single cause; `ctypes` 5;
+`.contains()` / `.read_grid()` / `.queued()` 5, which is one error shape and
+worth reading as a group before assuming it is one bug; `threading` 2; `os` 1;
+`*unpack` 1.

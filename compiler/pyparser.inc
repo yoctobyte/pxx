@@ -45666,6 +45666,46 @@ begin
         LastExprTk := tyUnknown;
         Exit;
       end
+      else if ((name = 'staticmethod') or (name = 'classmethod')) and
+              (FindSym(name) < 0) and (not PyUserShadowsProc(name)) and
+              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        { `clear = staticmethod(_unimplemented)` in a class body — a class used
+          as a NAMESPACE whose members are plain module functions. It was
+          `undefined variable (staticmethod)`, and it is the wall that stops
+          lekkerzeilen's whole `platform/` package compiling.
+
+          STATICMETHOD IS THE IDENTITY HERE, and that is a measured claim about
+          this frontend rather than a shortcut. `clear = f` in a class body
+          already works and dispatches correctly through BOTH doors — `gl.clear(1)`
+          and `gl().clear(1)` each answer 2 — so wrapping the same function value
+          is exactly what CPython's descriptor does when it is read. The one
+          thing that differs is `gl.__dict__['clear'] is not f`, and NilPy
+          exposes no `__dict__` for that to be visible through.
+
+          CLASSMETHOD IS NOT THE IDENTITY and is refused BY NAME rather than
+          approximated: CPython binds the class as the first argument, so
+          treating `classmethod(f)` as `f` would silently drop `cls` and shift
+          every remaining argument by one — a wrong answer where the diagnostic
+          it replaces was at least loud. The `@classmethod` DECORATOR is
+          supported and is the spelling that works, because there the receiver
+          is declared; a module-level def has nowhere to put one.
+          bug-n-staticmethod-is-not-a-value }
+        if name = 'classmethod' then
+          Error('Nil Python: classmethod(f) as a value is not supported — it '
+                + 'would have to bind the class as f''s first argument, and a '
+                + 'module-level def has no receiver to bind. Write the method '
+                + 'in the class and decorate it with @classmethod, which is '
+                + 'supported. (staticmethod(f) IS supported.)');
+        Next; Expect(tkLParen, '(');
+        { The argument reaches PyMakeFuncValue through the ordinary argument
+          position, so a bare def NAME becomes a function VALUE here exactly as
+          it does in `cb = handler`. }
+        ParseExpr;
+        Expect(tkRParen, ')');
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        Exit;
+      end
       else if (name = 'eval') and (FindSym(name) < 0) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin

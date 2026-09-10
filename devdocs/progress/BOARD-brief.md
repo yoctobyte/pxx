@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:152 backlog-nilpy:109 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3655 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:152 backlog-nilpy:111 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3655 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-n-staticmethod-is-not-a-value` [N] — owner: unrecorded
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
@@ -72,10 +73,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 438, ranked
+## Ready — top 30 of 440, ranked
 
 - `[p 90] [A]` bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register (unblocks 2)
-- `[p 90] [N]` bug-n-staticmethod-is-not-a-value (unblocks 2)
 - `[p 90] [N]` feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym (unblocks 2)
 - `[p 90] [N]` bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
 - `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
@@ -104,5 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard2-12
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 
-_408 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_410 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
