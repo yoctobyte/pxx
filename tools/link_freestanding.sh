@@ -68,3 +68,15 @@ ldd "$OUT" 2>&1 | grep -q 'not a dynamic executable' \
 
 printf 'link-freestanding: %s objects + the entry stub -> %s (%s bytes, static, no libc)\n' \
   "$N" "$OUT" "$(stat -c%s "$OUT")"
+
+# IF THE RESULT IS A BUSYBOX, ITS NAME DECIDES WHETHER IT WORKS. The multiplexer
+# dispatches on argv[0], and it only treats argv[1] as an applet name when
+# argv[0] is PREFIXED WITH "busybox" -- so `./out ash -c ...` answers
+# "applet not found" while `./busybox_anything ash -c ...` runs the shell. That
+# refusal is indistinguishable from a broken link, and it cost two diagnoses on
+# 2026-09-10, once on a freshly linked binary and once on the control it was
+# being compared against. Name busybox output `busybox*`.
+case "$(basename "$OUT")" in
+  busybox*) ;;
+  *) printf 'link-freestanding: note -- if these objects are busybox, rename the output to busybox* or its multiplexer will answer "applet not found" (it dispatches on argv[0])\n' ;;
+esac
