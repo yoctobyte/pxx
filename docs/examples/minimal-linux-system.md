@@ -129,6 +129,31 @@ nothing on what you build. The two third-party components are both GPL — the
 Linux kernel, and BusyBox 1.36.1, which is GPL-2.0-**only**. See
 [Licensing](../reference/licensing.md) for PXX's own terms.
 
+## What it needs to run
+
+Measured 2026-09-10 against this ISO under `qemu-system-x86_64 -m <N>`:
+
+| Guest RAM | Result |
+| --- | --- |
+| **320 MB** and up | boots to the shell, and the compiler compiles and runs a program |
+| 288 MB | PID 1 dies before printing anything: `pxx: out of memory (heap arena mmap failed)`, then a kernel panic |
+| under 128 MB | `Initramfs unpacking failed: write error` — the payload is 45,445,948 bytes uncompressed and lives in RAM |
+
+**The 320 MB is a reservation, not consumption, and it is a defect rather than a
+property of the system.** The PXX runtime maps 256 MiB in a single anonymous
+request on its first heap allocation and does not pass `MAP_NORESERVE`, so a
+small guest refuses a mapping whose pages would never be touched. That applies
+to everything PXX compiles, which here includes BusyBox itself: at 288 MB `ash`
+cannot start, so the system dies before `/init` runs a single line — the panic
+you see is the kernel correctly reporting that PID 1 exited, four lines after the
+real cause.
+
+Actual use is nowhere near the reservation. The compiler peaks at about 15 MB of
+resident memory compiling a program, and a small allocating program at under
+400 KB. So the footprint of this system is a few tens of megabytes; one constant
+is what currently demands ten times that. It is tracked as a bug with its fix
+candidates, and recorded in [Limits](../reference/limits.md#general-use).
+
 ## Reproducing it under VirtualBox
 
 The ISO is a BIOS+EFI hybrid, so one file boots either firmware. Both paths are
