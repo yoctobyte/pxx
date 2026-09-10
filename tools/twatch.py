@@ -4931,6 +4931,7 @@ takes it from the repro line.*
 """ % (40 if job in advisory else 70,
                 "track: %s\n" % track,
                 track_note
+                + slug_note(job, j)
                 + (("> **This commit CANNOT be the cause.** The job builds "
                     "only with `$(PXX_STABLE)`, and this commit moved no "
                     "`stable_linux_amd64/**` — so the bytes that compiled it "
@@ -5274,6 +5275,52 @@ def step_note(j):
             % (i + 1, n, where,
                ("\n  ```\n  %s\n  ```" % line) if line
                else " (the line text was not recorded)"))
+
+
+def slug_note(sel, j):
+    """A warning that the SLUG names a file that did not break, or "".
+
+    reg_slug() derives the slug from the job's `#src:` selector, and that is
+    correct and deliberate: the slug is the dedupe key and the close key, so it
+    has to be stable against a job renumbering. But `src` says what a job is
+    ABOUT, and on a multi-source recipe the file that broke is usually a
+    different one -- which is the whole point of the `Failing step:` bullet and
+    of the track-guess warning above it.
+
+    The gap this closes: the frontmatter warns that the TRACK guess may be
+    wrong, and NOTHING warns about the slug, which is the field people
+    actually grep and the only part of a stub that survives into a board line
+    or a commit subject. Measured 2026-09-10 on
+    regression-test-nilpy-beside-the-source-wins: the row the slug names
+    compiled clean and diffed clean and had never failed; the failing step was
+    a different one of the recipe's three sources, nine lines and an assertion
+    away. A reader who greps the slug is reading about the wrong file.
+
+    Bounded to the case where it can actually mislead -- the step named a
+    source, and that source's stem is not the slug's. A single-source job has
+    no gap to warn about, and a step that named no source of its own is
+    already covered by step_note().
+    """
+    st = step_fields(j)
+    if not st:
+        return ""
+    ssrc = st[3]
+    if not ssrc:
+        return ""
+    if "#src:" not in (sel or ""):
+        return ""
+    slug_stem = os.path.splitext(os.path.basename(
+        sel.split("#src:", 1)[1]))[0]
+    step_stem = os.path.splitext(os.path.basename(ssrc.split()[0]))[0]
+    if slug_stem == step_stem:
+        return ""
+    return ("> **The SLUG names `%s`, and that is not what broke.** The slug "
+            "is derived from the job's `src:` selector so that it stays "
+            "stable across a renumbering — it is the dedupe key and the close "
+            "key — but `src:` says what the job is ABOUT. The failing step "
+            "names `%s`. Read the `Failing step:` bullet, not the file name "
+            "in the title, before you reproduce anything: the row the slug "
+            "names may be passing.\n\n" % (slug_stem, step_stem))
 
 
 STUB_MARKER = "auto-filed by twatch"
