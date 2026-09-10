@@ -170,6 +170,7 @@ AN_ARG Left itemNode
 AN_ARG Left keyNode
 AN_ARG Left kindNode
 AN_ARG Left kwDictNode
+AN_ARG Left kwLitNode
 AN_ARG Left kwNone
 AN_ARG Left kwVal
 AN_ARG Left l1
