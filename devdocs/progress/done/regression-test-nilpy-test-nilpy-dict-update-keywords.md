@@ -55,3 +55,6 @@ ok: /tmp/testmgr-scratch-775162/test_nilpy_dictupdkw26  [code=1380120B  data=848
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-10 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_dict_update_keywords.npy` passes at 8cc1b9a526b2 (tier full); it was red at 16993f9196cf. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
