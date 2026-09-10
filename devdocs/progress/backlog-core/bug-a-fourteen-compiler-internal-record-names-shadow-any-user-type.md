@@ -12,6 +12,15 @@ blocked-by: []
 summary: "`IsRecordType` (compiler/symtab.inc:2890) maps FOURTEEN type names to builtin rec ids by string compare, before it ever consults user-declared records. So `type TProc = record A: array[0..99] of Int64 end` in an ordinary user program silently gets the COMPILER'S OWN TProc layout -- SizeOf 1344 where the declaration says 800 -- with no error and no warning. All fourteen reproduce; two controls (TMyClass, which has a REC_ constant but is not in the chain, and TZZZControl) are correct. TProc and TSymbol are ordinary names in real Pascal (Delphi ships a TProc), so this is a silent wrong-layout bug reachable by correct code that never mentions the compiler."
 ---
 
+# Who found what, and who intends to take it
+
+The mechanism is frankZ's — proposed from the write-up of two WRONG diagnoses
+of mine, with no build and none of my context, on the observation that the only
+thing my working control and my failing case did not share was the NAME.
+frankZ has said (2026-09-10) they intend to take this but not immediately, and
+asked that it be recorded here rather than claimed and sat on. **`owner:` is
+empty deliberately — take it if you get there first, and check with frankZ.**
+
 # Repro — 5 lines, no compiler rebuild
 
 ```pascal

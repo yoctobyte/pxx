@@ -23068,3 +23068,48 @@ parsing a Python right-hand side would be in the Python file. It was in the
 C/Pascal expression parser, which is a file nobody greps when the construct is
 Python. **When "which site" is the question, stop reasoning about which file
 it ought to be in.**
+
+## Vary the dimension your control and your failing case do not share
+
+Measured 2026-09-10 (frankH, with the diagnosis supplied by frankZ). Symptom:
+`TProc.Params` in `compiler/defs.inc` kept 32 slots whatever its array bound
+said. I varied the bound five ways — `0..31`, `0..63`, `0..255`,
+`0..MAX_PROC_PARAMS-1`, and the constant at 16/32/64 — and wrote a standalone
+probe with the same record shape, the same 16384-element static array and the
+same 40-byte element type. The probe folded correctly (1312 -> 2592). The real
+record did not. **Two wrong diagnoses were filed and pushed from that pair.**
+
+The bound was never the variable. `IsRecordType` (`symtab.inc:2890`) maps
+fourteen type NAMES to builtin rec ids by string compare before it consults any
+user declaration, so `TProc` resolved to `REC_TPROC` and its declaration laid
+out nothing. **The only thing my working control and my failing case did not
+share was the name**, and the name was the one dimension I never varied,
+because a type's name obviously does not affect its layout.
+
+The test that settles it costs one build: declare the identical shape under a
+fresh name **in the same file**. `TFrankHProbeRec` gave 10280 where `TProc`
+gave 1344.
+
+**The generalisation.** A control that reproduces the working behaviour is only
+evidence about the dimensions it shares with the failing case. Enumerate what
+differs — file, name, scope, declaration order, the caller, the build flags —
+and note that the dimensions you did not think to list are exactly the ones you
+believe cannot matter. That belief is why they went unvaried, and a belief is
+what a control is supposed to test.
+
+**Why it survived so long:** every measurement I took was real and correctly
+performed, and each one confirmed that the bound did not matter. None of them
+could have revealed *what did*, because they all held the name fixed. A run of
+consistent, honest, correctly-controlled results is not evidence that you are
+varying the right thing.
+
+**The tell, and it is cheap:** when a standalone reproduction of "the same
+shape" behaves differently from the real code, do not conclude the difference
+is scale, context or the surrounding file. **Write down every literal
+difference between the two programs, including the identifiers.** The list is
+short and the answer is usually on it.
+
+Companion to "A GUARD THAT CANNOT FAIL IS NOT A GUARD" in CLAUDE.md, which
+covers a control drawn from the wrong population. This is the neighbouring
+failure: a control drawn from the right population, differing from the subject
+in a dimension nobody enumerated.
