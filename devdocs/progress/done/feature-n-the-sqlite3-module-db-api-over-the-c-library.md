@@ -240,4 +240,4 @@ sixth and seventh confirmed instances in this corpus. Neither new wall is
 sqlite3's and neither is filed here.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7e2a50150.
