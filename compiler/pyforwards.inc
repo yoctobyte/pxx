@@ -139,6 +139,12 @@ function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forwa
 function PyArgListHasStarElem: Boolean; forward;   { is any argument a `*`/`**` ELEMENT, wherever it sits? (pyparser.inc) }
 function PyStarMixedForwardCall(procIdx: Integer): Integer; forward;   { the one generic collector for a forwarded argument list (pyparser.inc) }
 function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;   { a hoisted, empty pylib container temp (pyparser.inc) }
+{ merge any mapping expression into a hoisted TPyDict. FORWARDED because
+  PyStarExpandKwArgs calls it ~2800 lines before its body: pxx resolves
+  across the unit and FPC resolves in source order, so the omission
+  self-hosts cleanly and breaks the bootstrap seed -- caught only by
+  gate.sh's FPC seed canary, never by `make compiler/pascal26`. }
+procedure PyHoistDictMergeAny(dstSym, srcNode: Integer); forward;
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
 {$endif}

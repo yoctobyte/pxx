@@ -1098,11 +1098,32 @@ case "$MODE" in
         # Say WHOSE break it is before saying what it might be. When there is
         # no local compiler/ change, the answer is not "what did I do" and an
         # agent reading a failure inside its own gate will assume it is.
+        #
+        # THE EXCULPATION USED TO SAY "NOT YOUR CHANGE ... do not bisect your
+        # own work", AND ITS PREMISE IS THE SIGNATURE OF HAVING JUST LANDED.
+        # A clean compiler/ means the break is not in the WORKING TREE; it says
+        # nothing about whose commit it is, and the one moment an agent gates
+        # right after touching compiler/ is the moment after `tools/sync.sh`
+        # returns -- clean tree, own change, on origin. Measured 2026-09-11
+        # (frankB): a missing `forward;` for PyHoistDictMergeAny was pushed and
+        # then gated, and this row told its own author to look elsewhere. That
+        # is CLAUDE.md's "a clean tree is the SIGNATURE OF HAVING JUST LANDED"
+        # arriving inside the instrument that is supposed to catch the thing.
+        # So name the SUSPECT RANGE instead of naming an innocent: the seed was
+        # last green at $seed_green, so everything that touched compiler/ since
+        # is a candidate and the reader's own commits may be in it.
         if [ "$seed_mine" = yes ]; then
           echo "        this tree has local compiler/ changes — likely yours"
         else
-          echo "        NOT YOUR CHANGE: no local compiler/ edits — this break is"
-          echo "        already on origin/master. Do not bisect your own work."
+          echo "        NOT IN YOUR WORKING TREE: no local compiler/ edits, so the"
+          echo "        break is committed. That does NOT mean it is not yours —"
+          echo "        a clean tree is what a checkout looks like right after"
+          echo "        tools/sync.sh pushes your own compiler/ change."
+          if [ -n "$seed_green" ] && git cat-file -e "$seed_green^{commit}" 2>/dev/null; then
+            echo "        SUSPECT RANGE (seed last green at ${seed_green:0:12}):"
+            git log --oneline "$seed_green..HEAD" -- compiler/ 2>/dev/null \
+              | head -8 | sed 's/^/          /'
+          fi
         fi
         echo "        two shapes both fail only under FPC (pxx accepts both):"
         echo "          - MISSING forward: a routine called from an include EARLIER"
