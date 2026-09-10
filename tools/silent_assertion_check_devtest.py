@@ -29,11 +29,32 @@ from devtest_report import fail_detail  # noqa: E402
 import silent_assertion_check as sac    # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAKEFILE = os.path.join(os.path.dirname(HERE), "Makefile")
+REPO = os.path.dirname(HERE)
+MAKEFILE = os.path.join(REPO, "Makefile")
 
 
 def scan(body):
-    return sac.scan("target:\n" + body + "\n")
+    """The first two rules only -- most cases below predate STALE-PIN."""
+    silent, vac, _ = sac.scan("target:\n" + body + "\n")
+    return silent, vac
+
+
+def scan_pins(body):
+    """STALE-PIN reads files from the CWD, as gate.sh does at the repo root.
+
+    The first draft of these cases passed an ABSOLUTE fixture path, which the
+    scanner's own path regex cannot match (it anchors on `test/`, `lib/` or
+    `examples/`), so nothing was named, nothing was compared, and THREE of the
+    four negative cases passed without the rule ever running. Two positive
+    cases failing is what exposed it -- which is the argument for having them.
+    """
+    cwd = os.getcwd()
+    os.chdir(REPO)
+    try:
+        _, _, stale = sac.scan("target:\n" + body + "\n")
+    finally:
+        os.chdir(cwd)
+    return stale
 
 
 def t_a_silent_output_comparison_is_caught():
@@ -144,12 +165,123 @@ def t_the_real_makefile_is_clean():
     """The regression half: this is what makes the conversion a property of the
     file rather than a one-time cleanup."""
     with open(MAKEFILE) as fh:
-        silent, vac = sac.scan(fh.read())
-    assert not silent and not vac, \
-        "Makefile has %d silent and %d vacuous assertion(s); first: %s" % (
-            len(silent), len(vac),
-            (silent + vac)[0][1][:120] if (silent or vac) else "")
+        silent, vac, stale = sac.scan(fh.read())
+    assert not silent and not vac and not stale, \
+        "Makefile has %d silent, %d vacuous and %d stale-pin assertion(s); first: %s" % (
+            len(silent), len(vac), len(stale),
+            (silent + vac + [(s[0], s[1]) for s in stale])[0][1][:120]
+            if (silent or vac or stale) else "")
     return "the repo's own Makefile is clean"
+
+
+# --- STALE-PIN -------------------------------------------------------------
+# The rule's founding case, kept as data rather than as prose: a NINE-line
+# fixture whose row pinned `pascal26:10:`. Both halves landed in one commit and
+# the row passed for eight hours, because the compiler was reporting the wrong
+# line too and the two wrong numbers agreed.
+
+# REPO-RELATIVE on purpose -- see scan_pins. It is also the real fixture and
+# not a synthetic one, so if it ever grows past nine lines these cases go red
+# and say so, rather than silently testing a different question.
+NINE_LINE_FIXTURE = ("test/test_nilpy_a_referenced_symbol_from_a_library"
+                     "_that_cannot_exist.npy")
+
+
+def t_a_pin_past_the_end_of_the_file_is_caught():
+    stale = scan_pins(
+        '\t@out=$$(./$(COMPILER) %s $(T)/x 2>&1); \\\n'
+        '\t  test "$$rc" = "1" \\\n'
+        '\t  && printf \'%%s\\n\' "$$out" | grep -q \'^pascal26:10: error: x\''
+        % NINE_LINE_FIXTURE)
+    assert len(stale) == 1, \
+        "a pin past the end of a nine-line fixture was not caught: %r" % (stale,)
+    return "`pascal26:10:` against a 9-line file is rejected"
+
+
+def _row(pin, extra=""):
+    return ('\t@out=$$(./$(COMPILER) %s $(T)/x 2>&1); \\\n'
+            '\t  && printf \'%%s\\n\' "$$out" | grep -q \'^pascal26:%d: error: x\'%s'
+            % (NINE_LINE_FIXTURE, pin, extra))
+
+
+def t_a_pin_inside_the_file_is_accepted():
+    """The rule must not fire on the ordinary case, or it is noise and gets
+    switched off. Line 9 of a 9-line file is legal and is the boundary.
+
+    AND THE TWIN IS THE POINT: the identical row one line further on MUST fire.
+    Without it this case passes whenever the rule fails to run at all, which is
+    precisely how it passed while the fixture path was unmatchable."""
+    assert not scan_pins(_row(9)), "a legal in-range pin was flagged"
+    assert scan_pins(_row(10)), \
+        "the same row at line 10 did not fire -- the rule never ran, so the " \
+        "in-range case above proves nothing"
+    return "line 9 of a 9-line file is in range; line 10 is not"
+
+
+def t_the_line_count_is_not_off_by_one():
+    """THE BUG THE POSITIVE CONTROL CAUGHT, PINNED. The first draft counted
+    lines as `content.count(chr(10)) + 1`, which is right only for a file with
+    no trailing newline. The nine-line fixture measured 10, the pin was 10,
+    `10 > 10` is False -- so the rule looked straight at the defect it was
+    written from and reported the file clean. This case is the reason the
+    positive control above can fail."""
+    n = sac._line_count(NINE_LINE_FIXTURE)
+    assert n == 9, ("the nine-line fixture measured %r lines; a +1 on a "
+                    "newline-terminated file disarms the whole rule" % (n,))
+    return "a newline-terminated 9-line file counts as 9, not 10"
+
+
+def t_a_row_asserting_an_in_line_is_not_flagged():
+    """A diagnostic that names another file indexes THAT file. Three such rows
+    are live (the incdiag family) and all are correct."""
+    stale = scan_pins(
+        '\t@out=$$(./$(COMPILER) %s $(T)/x 2>&1); \\\n'
+        '\t  echo "$$out" | grep -q \'^pascal26:63: error:\' \\\n'
+        '\t  && echo "$$out" | grep -q \'^  in: .*badinc\\.inc$$\''
+        % NINE_LINE_FIXTURE)
+    assert not stale, "a row asserting an `in:` line was flagged: %r" % (stale,)
+    assert scan_pins(_row(63)), \
+        "the same pin without the `in:` assertion did not fire -- the rule " \
+        "never ran, so the acceptance above proves nothing"
+    return "asserting `in:` says the pin indexes another file"
+
+
+def t_the_marker_suppresses_the_rule():
+    """For the rows that pipe through `head -1` and so have no `in:` line to
+    assert. One live row needs it."""
+    stale = scan_pins(
+        '\t@# PIN NAMES ANOTHER FILE -- line 18 is in the used unit.\n'
+        '\t@tools/expect_same.sh lbl "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
+        '\t  "pascal26:18: error: x"' % NINE_LINE_FIXTURE)
+    assert not stale, "the opt-out marker did not suppress the rule: %r" % (stale,)
+    assert scan_pins(
+        '\t@tools/expect_same.sh lbl "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
+        '\t  "pascal26:18: error: x"' % NINE_LINE_FIXTURE), \
+        "the same row without the marker did not fire -- the rule never ran"
+    return "PIN NAMES ANOTHER FILE in the comment block above opts out"
+
+
+def t_the_marker_only_covers_the_row_below_it():
+    """The marker must not be a file-wide switch: a second row further down
+    with its own stale pin still fires. Same shape as the repo's other
+    per-instance markers."""
+    stale = scan_pins(
+        '\t@# PIN NAMES ANOTHER FILE -- line 18 is in the used unit.\n'
+        '\t@tools/expect_same.sh a "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
+        '\t  "pascal26:18: error: x"\n'
+        '\t@tools/expect_same.sh b "$$(./$(COMPILER) %s $(T)/y 2>&1 | head -1)" \\\n'
+        '\t  "pascal26:40: error: x"' % (NINE_LINE_FIXTURE, NINE_LINE_FIXTURE))
+    assert len(stale) == 1, \
+        "the marker leaked past its own row: %r" % (stale,)
+    return "the marker covers one row, not the rest of the file"
+
+
+def t_a_row_naming_no_source_file_is_skipped():
+    """A row asserting against a LOG has no line count to compare with. Silence
+    here is a deliberate absence of evidence, not a pass."""
+    stale = scan_pins('\t@grep -q "pascal26:3: error: requested failure" $(T)/foo.log')
+    assert not stale, "a row naming no source file was flagged: %r" % (stale,)
+    return "no named source means no comparison, so no verdict"
 
 
 # EVERY t_* below must appear in this list -- a case defined and not listed is a
@@ -170,7 +302,14 @@ TESTS = [t_a_silent_output_comparison_is_caught,
          t_an_if_then_else_is_not_vacuous,
          t_expect_same_suppresses_the_silent_rule,
          t_a_comment_is_not_scanned,
-         t_the_real_makefile_is_clean]
+         t_the_real_makefile_is_clean,
+         t_a_pin_past_the_end_of_the_file_is_caught,
+         t_a_pin_inside_the_file_is_accepted,
+         t_the_line_count_is_not_off_by_one,
+         t_a_row_asserting_an_in_line_is_not_flagged,
+         t_the_marker_suppresses_the_rule,
+         t_the_marker_only_covers_the_row_below_it,
+         t_a_row_naming_no_source_file_is_skipped]
 
 
 def main():

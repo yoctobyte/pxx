@@ -8431,6 +8431,14 @@ test-core: $(COMPILER)
 	@# half of the split (the RTL staying OUT of the line table) is asserted by
 	@# tools/dwarf_smoke.sh T5, which counted 6 rows with the guard and 3663
 	@# without.
+	@# PIN NAMES ANOTHER FILE. `pascal26:18:` indexes the USED UNIT
+	@# (test/pascal_units/unit_a_semantic_error_in_a_unit.pas, 21 lines), not the
+	@# three-line driver on the command line, and `head -1` drops the `in:` line
+	@# that would otherwise say so. Without this marker
+	@# tools/silent_assertion_check.py's STALE-PIN rule reads the row as a pin
+	@# past the end of every file it names -- which is exactly what it is, and
+	@# here it is correct. The second row below pins line 30 of the main file and
+	@# needs no marker.
 	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.unit \
 	  "$$(./$(COMPILER) -Futest/pascal_units test/pascal_units/driver_a_semantic_error_in_a_unit.pas $(TESTTMP)/test_unitdiagline26 2>&1 | head -1)" \
 	  "pascal26:18: error: incompatible types: cannot assign Pointer to record"

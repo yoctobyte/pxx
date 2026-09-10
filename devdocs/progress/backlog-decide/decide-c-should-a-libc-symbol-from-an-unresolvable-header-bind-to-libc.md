@@ -57,10 +57,26 @@ Note the wider rule is not "satisfy anything out of libc": a header
 synthesising `libfoo.so` and declaring `foo_init` still errors, because libc
 does not export it. Only names libc actually defines are absorbed.
 
-# Not urgent
+# Not urgent — but the green here has NO OWNER
 
 The one fixture that hit this (`test_nilpy_qualified_name_error_names_the_
 receiver`) was moved off `strings` in `0997c6088` for an unrelated and correct
-reason, so no row is red on it. Found while landing
+reason, so no row is red on it.
+
+**Read that as luck, not as evidence.** Nothing in the tree asserts the current
+behaviour. The row that would have caught a change to it left for reasons that
+had nothing to do with this question, so if the fork is decided the other way,
+or if someone moves a fixture back onto a top-level header, there is no
+instrument standing here to notice. The silence is an absence of coverage
+wearing the shape of a passing suite.
+
+Deliberately NOT fixed by writing a test now: the behaviour is the thing under
+question, and pinning it would pin one arm of the fork before it is decided —
+the assertion would then have to be deleted by whoever answers, which makes it
+an obstacle rather than a guard. Whoever settles this should land the test in
+the same commit, in whichever direction they choose.
+
+(frankB's observation, on reading the ticket. Recorded here rather than in a
+message because a message is not where the next reader looks.) Found while landing
 `bug-c-an-unresolvable-synthesised-soname-still-reaches-dt-needed`, whose fix
 does not touch this scope.
