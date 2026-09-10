@@ -9,7 +9,7 @@ created: 2026-09-10
 found-by: frankH
 tags: [cfront, inline-asm, x86-64, sdl, lekkerzeilen, encoder]
 blocked-by: []
-resolution: PENDING-COMMIT
+resolution: e1bab9e33
 summary: "bswapl/bswapq, pause and `int $3` were absent from the AT&T reader and the x86-64 encoder, and they are the last of SDL2's inline asm. Censused rather than walked: grepping __asm__ across every /usr/include/SDL2 header names twelve mnemonics, nine of them behind architecture guards this target never takes (rlwimi ppc, dmb/mcr/bkpt arm and aarch64, ebreak riscv), so the x86-64 surface is xchgb+%h0 -- landed at 642943118 -- plus exactly these four. All four land here, verified against gcc on identical source and against `as` byte-for-byte. `import \"/usr/include/SDL2/SDL.h\"` now clears every asm template and stops instead at MAX_PROC_PARAMS in an MMX intrinsic header, which is a different class and a different ticket."
 ---
 
