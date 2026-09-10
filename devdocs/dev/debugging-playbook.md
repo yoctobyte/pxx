@@ -23874,3 +23874,65 @@ already implements, **read how the Makefile asserts that row** rather than
 assuming every test in a directory is checked the same way: in this tree, some
 rows diff a `.expected` and some pass an inline string to `expect_same.sh`, and
 nothing in the filename says which.
+
+## A REDUCTION THAT PRESERVES THE FAILURE CAN DESTROY A *SECOND* FAILURE — AND THE "WHAT IT IS NOT" TABLE THEN READS AS AN EXCLUSION
+
+Measured 2026-09-10, Track N, two seats. frankB found the second cause and
+named this shape; written up here because the table it indicts is mine.
+
+`traffic.py:402` is `self.heading = run if downstream else run + math.pi`. It
+had **two independent causes**, and fixing the first left the line refusing:
+
+1. a field initialised from a qualified module CONSTANT cannot be typed —
+   `lib/rtl/math.pas` declares `function Pi: Double`, and a parameterless
+   Pascal function IS its own call, so there is no `(` for the call arm of
+   `PyInferExprType` to key on;
+2. `PyJoinInferTk` handled `tyUnknown` ASYMMETRICALLY, against its own comment,
+   which promises an unknown "leaves the other standing". It only did so when
+   the unknown was on the RIGHT.
+
+       self.h = math.pi if d else r     ok
+       self.h = r if d else math.pi     REFUSED
+
+   Same value set, arms swapped, opposite verdicts — and `traffic.py` is the
+   second spelling, so the arm-1 fix landed a Double in the else-arm and the
+   join threw it away.
+
+**Now the part that generalises.** Filing cause 1, this seat published a
+seven-row "what it is NOT" table, every row a true measurement, offered so the
+next reader would inherit the exclusions. **It is structurally incapable of
+seeing cause 2.** Its ternary rows were `two float literals`, `a float
+parameter`, `over a tuple-unpacked name`, `<elem> if d else <elem> + 3.0` — in
+every one, **both arms are the same KIND of thing**. An arm-order asymmetry is
+invisible unless the arms differ in KNOWNNESS: one typed, one not, in that
+order.
+
+**And the table got that way honestly, which is the whole problem.** It was
+built by reducing the failing line towards simplicity — and reducing is
+precisely what removes the mixedness. Replacing `math.pi` with `3.0` to test
+"is it the ternary?" makes both arms known and deletes the dimension the second
+bug lives in. The reduction preserved the failure it was chasing and destroyed
+the one nobody knew was there.
+
+**So a negative table proves absence only along the dimension it VARIED.** Mine
+varied shape and held knownness constant, then read as though it had excluded
+the shape entirely. Before publishing one, ask: **what property did every row
+share, and was that property the reduction's doing?** For any join or
+two-operand construct — a ternary, `and`, `or`, a binary operator, a merge of
+two branches' types — the properties worth deliberately varying are ORDER and
+ASYMMETRY between the operands, because those are exactly what a
+simplify-until-minimal pass normalises away.
+
+**The instrument that found it was not a probe.** It was comment-vs-code: the
+comment promised symmetry, the code delivered half of it, and CLAUDE.md's rule
+is that one is wrong and you must decide which before touching either. The
+comment won, on a reason rather than a preference — a join answers for a value
+that is one operand OR the other, and cannot depend on which was written first.
+
+Guard checked BEFORE loosening, and the right one: a typo is still caught.
+`self.h = nosuchname if d else math.pi` refuses with `undefined variable`,
+because name resolution fires independently of inference (re-verified here on
+binary `69c84acb1501`). The one shape where an infer error IS the typo guard is
+the bare `self.h = nosuchname`, which is a binding test and untouched.
+
+**Not promoted.** One instance.
