@@ -1614,6 +1614,21 @@ test-nilpy: $(COMPILER)
 	if ./$(COMPILER) $(TESTTMP)/nilpy_array_bare.npy $(TESTTMP)/nilpy_array_bare26 >/dev/null 2>&1; then \
 	  echo "FAIL: an UNQUALIFIED reserved-word name resolved to a shim class"; exit 1; \
 	fi
+	# struct: `import struct` -> lib/rtl/mimic_struct.pas, sharing mimic_array's
+	# typecode table (PyTypecode) rather than copying twelve rows and the
+	# divergence note attached to them. The load-bearing row is the endianness
+	# probe -- world.py's ONLY use of struct is `pack("<h",1) == pack("=h",1)`,
+	# so a shim treating `=` as `<` makes that a tautology and decodes every
+	# terrain file backwards on a big-endian host, silently and only there.
+	./$(COMPILER) test/test_nilpy_the_struct_module.npy $(TESTTMP)/test_nilpy_struct26
+	$(TESTTMP)/test_nilpy_struct26 | diff -u test/test_nilpy_the_struct_module.expected -
+	# queue: `import queue` -> lib/rtl/mimic_queue.pas, backed by pylib's
+	# TPyDeque. The blocking arms that CANNOT be satisfied single-threaded are
+	# deliberately not in the .npy -- they hang CPython, so there is no oracle
+	# to diff against -- but the SATISFIABLE blocking get()/put() are, because
+	# they are the common case and answer exactly as CPython does.
+	./$(COMPILER) test/test_nilpy_the_queue_module.npy $(TESTTMP)/test_nilpy_queue26
+	$(TESTTMP)/test_nilpy_queue26 | diff -u test/test_nilpy_the_queue_module.expected -
 	# collections.deque -- the QUALIFIED spelling, which is the one every real
 	# program writes and the one that was broken (`collections` has a backing
 	# Pascal unit, so the qualifier resolved against a generic TList).

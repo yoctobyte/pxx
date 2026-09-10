@@ -116,15 +116,58 @@ type
     property Items[i: Integer]: Variant read at write put; default;
   end;
 
+{ EXPORTED so mimic_struct can read the same twelve rows rather than carry its
+  own copy. See the implementation for why one table serves both modules: our
+  fixed widths ARE struct's standard sizes. }
+function PyTypecode(c: Char; var size: Integer; var isFloat: Boolean;
+                    var signed: Boolean): Boolean;
+
 implementation
 
+function PyTypecode(c: Char; var size: Integer; var isFloat: Boolean;
+                    var signed: Boolean): Boolean;
+{ The typecode table, in ONE place, and it is now shared with mimic_struct.
+
+  It was a `case` inside array_.SetTc until 2026-09-10, when the struct shim
+  needed the same twelve rows. Copying them would have been the obvious move
+  and would have put the DIVERGENCE NOTE below into two files that must agree
+  and have no way to notice when they stop.
+
+  CPython's sizes are the C ones, so `l`/`L` are 8 bytes on LP64 and 4 on
+  Windows; ours are fixed at 4. That is deliberate — a program that writes a
+  file with `l` and reads it back on another machine wants the width it wrote
+  — and `itemsize` reports what we actually use, so the `itemsize != 2` guard
+  real code writes still tells the truth about this buffer. It also happens to
+  be exactly what `struct` means by a STANDARD size, which is why one table
+  serves both: struct's standard `l` IS 4 bytes.
+
+  Returns False for a code it does not know, leaving the outputs untouched, so
+  each caller can raise the error ITS module's users expect — ValueError from
+  array, struct.error from struct. }
+begin
+  PyTypecode := True;
+  isFloat := False;
+  signed := True;
+  case c of
+    'b': size := 1;
+    'B': begin size := 1; signed := False; end;
+    'u': begin size := 4; signed := False; end;   { Py_UCS4 — array only }
+    'h': size := 2;
+    'H': begin size := 2; signed := False; end;
+    'i': size := 4;
+    'I': begin size := 4; signed := False; end;
+    'l': size := 4;
+    'L': begin size := 4; signed := False; end;
+    'q': size := 8;
+    'Q': begin size := 8; signed := False; end;
+    'f': begin size := 4; isFloat := True; end;
+    'd': begin size := 8; isFloat := True; end;
+  else
+    PyTypecode := False;
+  end;
+end;
+
 procedure array_.SetTc(const tc: AnsiString);
-{ The typecode table, in one place. CPython's sizes are the C ones, so `l`/`L`
-  are 8 bytes on LP64 and 4 on Windows; ours are fixed at 4. That is a
-  DIVERGENCE and it is deliberate — a program that writes a file with `l` and
-  reads it back on another machine wants the width it wrote — and `itemsize`
-  reports what we actually use, so the `itemsize != 2` guard real code writes
-  still tells the truth about this buffer. }
 begin
   typecode := tc;
   itemsize := 0;
@@ -134,21 +177,7 @@ begin
   FCap := 0;
   FData := nil;
   if Length(tc) = 1 then
-    case tc[1] of
-      'b': itemsize := 1;
-      'B': begin itemsize := 1; FSigned := False; end;
-      'u': begin itemsize := 4; FSigned := False; end;   { Py_UCS4 }
-      'h': itemsize := 2;
-      'H': begin itemsize := 2; FSigned := False; end;
-      'i': itemsize := 4;
-      'I': begin itemsize := 4; FSigned := False; end;
-      'l': itemsize := 4;
-      'L': begin itemsize := 4; FSigned := False; end;
-      'q': itemsize := 8;
-      'Q': begin itemsize := 8; FSigned := False; end;
-      'f': begin itemsize := 4; FIsFloat := True; end;
-      'd': begin itemsize := 8; FIsFloat := True; end;
-    end;
+    if not PyTypecode(tc[1], itemsize, FIsFloat, FSigned) then itemsize := 0;
   { CPython raises ValueError here, and so must we: an unknown typecode that
     quietly produced a zero-width buffer would turn a typo into an empty array
     and every later read into a bounds error far from the cause. }

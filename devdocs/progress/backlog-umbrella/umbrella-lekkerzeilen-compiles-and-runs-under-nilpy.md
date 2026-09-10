@@ -434,3 +434,46 @@ is the clearest statement of what attempting a moving target costs: the backlog
 does not converge on a fixed 23, it tracks whatever the owner writes next. The
 `ui` one is a PARSE error and therefore the cheapest-looking of the lot — a bare
 generator expression passed as a function's only argument.
+
+### Delta to the fifth census, 2026-09-10 (frankB) — struct and queue landed, and the total moved by zero AGAIN
+
+Not a sixth census: frankuser's numbers above were re-measured independently
+here after `mimic_struct` and `mimic_queue` landed, same instrument, same tree
+family, and the clean set is identical — figure, geometry, `__init__`, lines,
+math3d, rd, shaders, text, wake. **Still 9 of 28.** Recorded as corroboration
+rather than as a new figure, because two agreeing counts from the same method
+are one count, not two.
+
+What moved is WHICH wall each blocked module stops at:
+
+| cause | first-wall count; not measured as sufficient | change |
+| --- | --- | --- |
+| `math.<name>` — atan2, and `sin` in scenery | 7 — hud, rig, scenery, sim, traffic, vessel, **world** | +1 |
+| open-world dispatch on a dynamic receiver | 5 — audio, chart, environment, `__main__`, wind | — |
+| `ctypes` (settled: bind natively, do not shim) | 2 — capture, gfx | — |
+| **`threading`** | 2 — app, gauges | was `queue` |
+| `platform.KEY_ESCAPE` through a unit qualifier | 1 — bindings | — |
+| `undefined variable (os)` | 1 — session | — |
+| `*`-unpacking into a method with defaults | 1 — ui | — |
+
+`struct` and `queue` are gone from the table; `world` moved into the `math`
+group and `app`/`gauges` moved to `threading`.
+
+**THE NULL ROW, FOR THE SECOND CONSECUTIVE PASS.** Six first walls have now been
+cleared across two passes — array, deque, str.join, sorted-over-bytes, struct,
+queue — and the count of modules that compile has moved by **zero** both times.
+That is not a disappointing result to be apologised for; it is the measurement
+this census exists to produce, and two null rows in a row say something the
+first one could not: **clearing a module's first wall essentially never clears
+its last.** Every module behind a shim wall had at least one more behind it.
+
+The practical consequence for ranking: **an import-level wall is worth much less
+per ticket than its first-wall count suggests**, because imports sit at the top
+of a file and are therefore over-represented as first errors. `math` at 7 and
+open-world dispatch at 5 are the two that would actually move the numerator, and
+neither is a shim.
+
+`feature-n-the-threading-module` (prio 60) is filed with its measured surface —
+four names — and with the note that `mimic_queue` must gain a lock and a real
+wait in the same change. It is the LAST import-level wall in both `app` and
+`gauges`; every other import in both files resolves, measured per-import.
