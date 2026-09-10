@@ -176,3 +176,43 @@ should look like. Second, **my own first probe of these names manufactured a
 failure**: I took them as values (`x = math.atan2`), which is the one spelling
 the shim refuses, and read five "absent" names off it. A caller writes a call.
 Probe the construct the consumer actually writes.
+
+## The population this fix serves, measured
+
+lekkerzeilen's whole runtime import surface is 14 stdlib modules and no
+third-party anything (neo-dd, 2026-09-10). Each probed with a characteristic
+CPython call at 546d4dcbd305:
+
+| module | state | door |
+| --- | --- | --- |
+| `collections` `json` `math` `os` `sys` `time` | **works** | native / compiler shim |
+| `array` `queue` `struct` `urllib` | **works** | `mimic_array` `mimic_queue` `mimic_struct` `mimic_urllib_parse` |
+| `zlib` | broken — **collision** | system C header (`zlib.h`) |
+| `sqlite3` | broken — **collision** | system C header (`sqlite3.h`) |
+| `threading` | broken — **absent** | no header, no unit, no shim |
+| `ctypes` | broken — **absent** | ditto, and a different animal |
+
+So **10 of 14 work**, and of the four that do not, **two are this ticket and two
+are not.** `threading` already has [[feature-n-the-threading-module]] at p90.
+Do not let this ticket be read as gating all four.
+
+`platform` — the seam — is a fifth collision and takes the **Pascal** door, not
+the C one, because no `platform.h` exists.
+
+### Why the C-header door survived: it is right by accident for `sqlite3`
+
+The soname is derived from the header's stem, and that is wrong in general:
+
+| header | derived | real | outcome |
+| --- | --- | --- | --- |
+| `zlib.h` | `libzlib.so` | `libz.so` | dead at exec |
+| `sqlite3.h` | `libsqlite3.so` | `libsqlite3.so` | **loads** |
+
+One rule, one module where the stem happens to be the library name and one
+where it is not. `sqlite3.sqlite3_open` and `sqlite3.sqlite3_libversion` bind
+and would run; `zlib.crc32` binds and would not. That is very likely why the
+derivation is still in the tree — **the case anyone tried first worked.** The
+soname half belongs to frankH's existing derived-soname ticket (the SDL2
+blocker) and has been relayed there with this as the smaller repro; it is not
+part of this ticket, and fixing it does NOT give a Python caller CPython
+semantics — C `compress` still takes four arguments to CPython's one.
