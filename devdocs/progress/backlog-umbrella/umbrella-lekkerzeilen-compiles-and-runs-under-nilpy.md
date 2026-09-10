@@ -1,7 +1,7 @@
 ---
 slug: umbrella-lekkerzeilen-compiles-and-runs-under-nilpy
 track: N
-prio: 75
+prio: 90
 type: umbrella
 status: backlog
 owner: ""
@@ -9,14 +9,15 @@ created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
-  - feature-n-the-array-module
+  - task-b-write-the-lekkerzeilen-pxx-platform-backend
   - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
-  - bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link
-  - feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory
-  - bug-n-collections-deque-is-missing
-  - bug-n-str-join-rejects-an-argument-shape-cpython-accepts
+  - bug-n-staticmethod-is-not-a-value
   - feature-nilpy-math-module-twelve-absent-names-measured
   - feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
+  - feature-n-the-threading-module
+  - bug-n-os-environ-and-os-sep-are-not-values
+  - bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value
+  - bug-n-star-unpacking-is-rejected-at-a-method-call
   - bug-n-a-chained-assignment-to-two-attributes-does-not-parse
 summary: "Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen, 14,297 LOC of Python, 26 runtime modules -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. Measured 2026-09-08 with compiler/pascal26 at a7b03135f504: 3 of 16 runtime modules compile clean, and the other 13 fail on SIX distinct causes, one of which blocks seven modules by itself. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
 ---
@@ -477,3 +478,62 @@ neither is a shim.
 four names — and with the note that `mimic_queue` must gain a lock and a real
 wait in the same change. It is the LAST import-level wall in both `app` and
 `gauges`; every other import in both files resolves, measured per-import.
+
+## SIXTH CENSUS, 2026-09-10 — prio 90, and the seam is a STUB
+
+**Owner, 2026-09-10: *"well, this demo app has prio"*, and *"notice that we
+don't care compiling tooling right now"*.** Hence `prio: 90`, the top of the
+board — above `umbrella-pxx-compiles-fpc-itself` at 85.
+
+**His tooling caveat does not narrow the population, which is itself the
+finding.** The import closure from `__main__` reaches **every module in the
+package but `__init__`**. The tooling (`tools/import_nl.py` and friends) is
+outside it and was never in any census here. So there is nothing to exclude.
+
+**And the previous censuses were measuring too SMALL a population, not too
+large:** `lekkerzeilen/platform/` is a SUBPACKAGE, and every census including
+mine this morning globbed `*.py` and missed all five of its modules. The app is
+**32 modules**, not 23 or 28.
+
+### 8 of 32 at compiler `b7745aaf0a59`, tree `3bebb551e`
+
+Clean: `figure`, `geometry`, `lines`, `math3d`, `rd`, `shaders`, `text`, `wake`.
+**All five `platform/` modules fail.**
+
+| cause | modules | note |
+| --- | --- | --- |
+| `math.atan2` | hud, rig, sim, traffic, vessel, world — **6** | `world` arrived here from `struct` |
+| open-world dispatch | audio, chart, environment, `__main__`, wind — **5** | direction settled |
+| `ctypes` above/below the seam | capture, gfx, platform/_ctypes_backend, _gl, _sdl2 — **5** | three are the CPython backend and NOT needed under pxx |
+| `staticmethod` as a value | platform/`__init__`, platform/_pxx — **2** (+bindings by cascade) | [[bug-n-staticmethod-is-not-a-value]] |
+| `threading` | app, gauges — **2** | arrived from `queue` |
+| `math.sin` as a value | scenery — 1 | |
+| `os` data attributes | session — 1 | |
+| `*` unpack at a method call | ui — 1 | arrived from the generator-expression wall |
+
+### The null result, for the third census running
+
+`queue` and `struct` both landed (`1eb448030`) between my morning census and this
+one. **The total moved by zero.** `app`/`gauges` went `queue` -> `threading`,
+`world` went `struct` -> `atan2`, `ui` went generator-expression -> `*unpack`.
+Four walls cleared, four walls behind them. This is the fourth independent
+confirmation that a first-wall census cannot predict sufficiency, and it is now
+the expected behaviour of this umbrella rather than a surprise.
+
+### THE ACTUAL DISTANCE, WHICH NO RATIO SHOWS
+
+**`platform/_pxx.py` is a 39-line stub whose every entry point raises
+`NotImplementedError`.** The app's portability seam has two backends —
+`_ctypes_backend` (327 lines, CPython, works) and `_pxx` (not written). So **even
+with all 32 modules compiling, the demo would not run.** Filed as
+[[task-b-write-the-lekkerzeilen-pxx-platform-backend]], prio 85, and it is the
+headline item. Its real blocker is
+[[bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header]],
+which has sat in `backlog-cfront` while both of its sibling header bugs were
+fixed and closed, and is now on the critical path of the top-priority target.
+
+### Edges rewired this pass
+
+Five of the nine `blocked-by` entries were in `done/` — array, deque, str.join,
+the GL lowercasing bug, the subdirectory bug — so the umbrella's own ranking had
+gone stale in the direction that understates it. Replaced with the live set.

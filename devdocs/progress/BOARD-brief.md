@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:106 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:24 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3653 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:108 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3653 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,8 +73,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 435, ranked
+## Ready — top 30 of 437, ranked
 
+- `[p 90] [C]` bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header (unblocks 2)
+- `[p 90] [N]` bug-n-staticmethod-is-not-a-value (unblocks 2)
+- `[p 90] [N]` bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
+- `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
+- `[p 90] [N]` bug-n-star-unpacking-is-rejected-at-a-method-call (unblocks 1)
+- `[p 90] [N]` feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver (unblocks 1)
+- `[p 90] [N]` feature-n-the-threading-module (unblocks 1)
+- `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
@@ -83,10 +91,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [A]` feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
-- `[p 75] [C]` bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
-- `[p 75] [N]` feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver (unblocks 1)
-- `[p 75] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
@@ -100,10 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
-- `[p 70] [C]` regression-test-core-c-alloca-expression-stack
-- `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
-- `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
-- `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
-- `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 
-_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_407 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

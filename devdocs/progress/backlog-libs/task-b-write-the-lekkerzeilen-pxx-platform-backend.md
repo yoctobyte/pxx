@@ -1,0 +1,56 @@
+---
+slug: task-b-write-the-lekkerzeilen-pxx-platform-backend
+track: B
+type: task
+prio: 85
+status: backlog
+owner: ""
+created: 2026-09-10
+found-by: frankuser
+tags: [lekkerzeilen, nilpy, sdl2, opengl, demo]
+blocked-by:
+  - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
+  - bug-n-staticmethod-is-not-a-value
+summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
+---
+
+# Why this is the headline and the module census is not
+
+`platform/__init__.py` selects a backend at import time (`_select_backend`,
+:95-97) and exposes `gl`, `open_window`, `probe`, audio and controller openers
+from whichever it picked. Under pxx it picks `_pxx`, and `_pxx`'s every name is
+`_unimplemented`, which raises. The seam is honest by design — its docstring
+says *"Kept as a stub so the seam in `__init__.py` stays honest: if anything
+above this package ever reaches for ctypes, this file is what will notice."*
+
+So the distance to a running demo is: compile the 32 modules **and write a
+327-line binding**. A census that reports 8 of 32 is true and does not say this.
+
+# What the work is, per the stub's own spec
+
+> *"this backend should be a translation of `_ctypes_backend` in which the
+> `ctypes` machinery simply disappears: no CDLL loading, no restype/argtypes
+> declarations, no create_string_buffer. The constants come from the headers'
+> `#define`s, and out-parameters are return-lifted by the compiler."*
+
+It is therefore a PROOF of the nilpy C-header-import story on a real program,
+not a shim — the same mechanism as the wrapper-free `import sqlite3`.
+
+# The blocker that is actually load-bearing
+
+`import SDL2/SDL.h` needs
+[[bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header]].
+That ticket has sat in `backlog-cfront` while the two sibling header bugs
+(lowercased library name, header in a subdirectory) were fixed and closed. It is
+now on the critical path of the priority target.
+
+# A source-side item, and it is the owner's own constraint being broken
+
+`gfx.py` reaches for ctypes ABOVE the seam — `ctypes.c_int`, `ctypes.byref`,
+`ctypes.create_string_buffer`, `(ctypes.c_char_p * 1)(encoded)` — which
+`docs/design.md` constraint C2 forbids and which `_pxx.py`'s docstring predicted
+would be noticed here. `capture.py` does the same. Those out-parameter and
+string-buffer idioms have to move below the seam (or be expressed as return-
+lifted calls) for `gfx` to compile under pxx at all. **Do NOT add a
+`mimic_ctypes`** — the settled direction on this target is to bind natively, and
+a ctypes shim would make the seam's whole purpose moot.
