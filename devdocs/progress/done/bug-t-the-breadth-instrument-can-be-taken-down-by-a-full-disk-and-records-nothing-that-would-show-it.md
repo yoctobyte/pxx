@@ -218,4 +218,4 @@ control above is drawn from the same population and is what makes the guard
 falsifiable today.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 54bdb27a1.

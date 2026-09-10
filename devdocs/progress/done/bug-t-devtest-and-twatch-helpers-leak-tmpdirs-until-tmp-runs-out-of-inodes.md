@@ -259,4 +259,4 @@ pin is a SET rather than a pass-through by driving a real subprocess through
 present would have passed on the pass-through that was already there.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 54bdb27a1.
