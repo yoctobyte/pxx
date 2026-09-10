@@ -309,4 +309,4 @@ the 1.33e300/1.34e300 pair as the positive control and the raw `struct` bytes
 printed beside the reprs so the claim does not rest on the formatter.
 
 **All five names in this ticket's title are now done.**
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8241847b2.
