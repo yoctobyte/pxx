@@ -65,8 +65,16 @@ trap 'rm -rf "$WORK"' EXIT
 # corpus moves under the fleet several times a day -- mimic_threading.pas landing
 # turned one wall into a flag between two runs on 2026-09-10.
 printf 'lz-census: compiler %s\n' "$(sha256sum "$PXX" | cut -c1-12)"
-printf 'lz-census: tree     %s\n' "$(cd "$ROOT" && git log --format=%h -1)"
-printf 'lz-census: corpus   %s\n' "$LZ"
+printf 'lz-census: tree     %s%s\n' "$(cd "$ROOT" && git log --format=%h -1)" \
+  "$(cd "$ROOT" && [ -n "$(git status --porcelain)" ] && printf ' (DIRTY)' || true)"
+# THE CORPUS'S OWN DIRTINESS IS THE HALF THAT GETS FORGOTTEN, and it is frankZ's
+# point from devdocs/progress/census/lz_census.py rather than mine. lekkerzeilen is
+# the owner's project and he edits it directly, so a census can be measuring a tree
+# that exists on nobody else's box -- and the number then cannot be reproduced or
+# compared with anyone's, while looking exactly like a number that can.
+printf 'lz-census: corpus   %s%s\n' "$LZ" \
+  "$(cd "$LZ" && [ -n "$(git status --porcelain 2>/dev/null)" ] && printf ' (DIRTY -- this run is not reproducible elsewhere)' || true)"
+printf 'lz-census: corpus@  %s\n' "$(cd "$LZ" && git log --format=%h -1 2>/dev/null || echo 'not a git tree')"
 
 if [ -n "$ONE" ]; then
   MODULES="$ONE"
@@ -116,18 +124,38 @@ done
 # This marks the suspicion; it does not resolve it. Confirming means grepping the
 # subject for the construct, which needs to know what the construct IS -- so the
 # row says `cascade?` and names its partners, and the reader does the one grep.
+# GROUPED BY MESSAGE, NOT BY MESSAGE-AND-LINE, and that is frankB's refinement
+# rather than mine. Keying on both means a pair only groups while its line numbers
+# agree -- so the moment a shared site becomes two real sites, the pair silently
+# stops being reported at all, and the most interesting transition in the whole
+# census produces no output. Keying on the MESSAGE and then printing the lines
+# shows both states: same line is the cascade, different lines are separate sites,
+# and you can watch one turn into the other across runs.
 mark_cascades() {
   while IFS= read -r row; do
     case "$row" in
       FAIL*)
-        sig="${row#*:: }"
-        n=$(grep -cF ":: $sig" "$WORK/rows" || true)
+        mod="$(printf '%s' "$row" | sed 's/^FAIL \([^ ]*\) .*/\1/')"
+        # The message with its line number removed, which is what identifies a
+        # wall CLASS; and the line number on its own, which is what identifies a
+        # SITE. The two questions need different keys.
+        msg="$(printf '%s' "$row" | sed 's/^FAIL [^ ]* :: //; s/^pascal26:[0-9]*: //')"
+        line="$(printf '%s' "$row" | sed -n 's/^FAIL [^ ]* :: pascal26:\([0-9]*\):.*/\1/p')"
+        group="$(grep -F ":: " "$WORK/rows" | grep '^FAIL' \
+                 | sed 's/^FAIL \([^ ]*\) :: pascal26:\([0-9]*\): /\1|\2|/' \
+                 | awk -F'|' -v m="$msg" 'NF>=3 { r=$0; sub(/^[^|]*\|[^|]*\|/, "", r); if (r == m) print $1 ":" $2 }')"
+        n=$(printf '%s\n' "$group" | grep -c . || true)
         if [ "${n:-0}" -gt 1 ]; then
-          peers="$(grep -F ":: $sig" "$WORK/rows" | sed 's/^FAIL \([^ ]*\) .*/\1/' \
-                   | grep -vxF "$(printf '%s' "$row" | sed 's/^FAIL \([^ ]*\) .*/\1/')" \
-                   | tr '\n' ' ')"
-          printf '%s\n      ^ cascade? %d subjects report this identical line; likely ONE site reached through an import (also: %s)\n' \
-            "$row" "$n" "$peers"
+          lines="$(printf '%s\n' "$group" | sed 's/.*://' | sort -u | tr '\n' ' ')"
+          nlines=$(printf '%s\n' "$group" | sed 's/.*://' | sort -u | grep -c . || true)
+          peers="$(printf '%s\n' "$group" | grep -v "^$mod:" | tr '\n' ' ')"
+          if [ "${nlines:-0}" -eq 1 ]; then
+            printf '%s\n      ^ cascade? %d subjects report this wall at the IDENTICAL line %s; likely ONE site reached through an import (also: %s)\n' \
+              "$row" "$n" "$line" "$peers"
+          else
+            printf '%s\n      ^ %d subjects share this wall class at DIFFERENT lines (%s); separate sites, one cause (also: %s)\n' \
+              "$row" "$n" "$lines" "$peers"
+          fi
         else
           printf '%s\n' "$row"
         fi ;;
