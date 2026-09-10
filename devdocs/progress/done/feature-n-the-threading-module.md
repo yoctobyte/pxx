@@ -3,13 +3,13 @@ slug: feature-n-the-threading-module
 track: N
 prio: 60
 type: feature
-status: backlog
-owner: ""
+status: done
+owner: "frankB"
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, stdlib, mimic, lekkerzeilen, threads, palthread]
 blocked-by: []
-summary: "`import threading` fails with `no unit named threading and no shim mimic_threading`. Measured 2026-09-10 at compiler 61f8a78f8aae: with mimic_queue landed the same day, threading is now the LAST import-level wall in lekkerzeilen's `app` and `gauges` -- every other import in both files resolves (array, math, os, json, queue, sqlite3, sys, time, urllib.request, urllib.error all measured RESOLVES). The measured surface is four names: Thread(target=, daemon=, args=, NAME=), .start(), .join(timeout=), and Event with .set()/.is_set()/.wait(timeout) -- `name=` added 2026-09-10 by frankZ and it is load-bearing: ALL FOUR Thread construction sites in the corpus pass it, so a shim without it refuses every one of them. NOT a fantasy ticket: pxx already has real clone-based threads at the RTL level -- lib/rtl/palthread.pas exports PalThreadCreate/PalThreadJoin/PalThreadSelf/PalThreadExit -- so this is a binding job, not a runtime one. TWO THINGS MUST LAND TOGETHER: mimic_queue's blocking get()/put() currently RAISE (nothing single-threaded could ever satisfy them) and must become real waits, and mimic_queue has no lock, deliberately, because an uncontended lock is also an untested one. A Queue reachable from two threads with no mutex is a data race in the one class most likely to be used across threads."
+summary: "DONE 2026-09-10 (frankB), landed with the mimic_queue work in ONE commit because neither is safe alone. `import threading` resolves to lib/rtl/mimic_threading.pas over the RTL's clone-based PAL (palthread/palfutex/palsync, all unchanged) -- a binding job, as the ticket said. Thread(target=, args=, daemon=, name=) with .start()/.join(timeout=)/.is_alive(), Event with .set()/.clear()/.is_set()/.wait(timeout)->flag, and Lock. mimic_queue's blocking arms are real condvar waits now and the class has a mutex. `daemon=True` MEASURED FREE: an unjoined thread does not keep the process alive (exit_group), which is exactly CPython's semantics; the NON-daemon thread is the one that needed work and is joined in finalization. The old refusal's DIAGNOSIS is kept via pythreadlive.pas -- a wait nothing can satisfy still raises rather than hanging, which is a deliberate divergence recorded in nilpy-semantics-divergences.md. --threadsafe is still REQUIRED (the lock defines are applied before lexing, so {$threadsafe on} is refused by the lexer itself); a NilPy-level diagnostic now names the flag, and implying it is feature-n-import-threading-should-imply-threadsafe."
 ---
 
 # The threading module
@@ -127,3 +127,73 @@ Thread.
 **Not started.** It is a two-part job by the ticket's own account — the
 `mimic_queue` blocking-wait and lock work must land with it — and half a door
 is worse than none. Left ranked and unowned.
+
+## RESOLVED 2026-09-10 (frankB) — `176b91802`
+
+Landed with the `mimic_queue` half in ONE commit, per this ticket's own
+requirement. Compiler `ccdbbcacb631`.
+
+### What the corpus surface turned out to be, and the lesson in it
+
+frankZ's `name=` correction above was the load-bearing one and it generalises:
+**an API surface is what a module OFFERS; a corpus surface is what the corpus
+ASKS FOR, and only the second is a specification for a shim.** The original
+surface here was read off `threading.Thread`'s documented signature and missed
+a kwarg that all four call sites pass — a shim built to it would have refused
+100% of them while looking complete. Re-measured from the call sites, the whole
+corpus surface is:
+
+    threading.Thread(target=, daemon=, name=)          x3
+    threading.Thread(target=, args=, daemon=, name=)    x1
+    threading.Event()                                   x1
+    .start()  .join(timeout=)  .set()  .is_set()  .wait(<float>)
+
+All four targets are BOUND METHODS; one site passes a 2-tuple.
+
+### The two things the ticket said must land together, both landed
+
+`WouldBlock` is a real wait on two condition variables — a `get` waiter and a
+`put` waiter are waiting for opposite events, and one condvar wakes the wrong
+sleepers, which with `maxsize=2` is the common case. The class has a mutex.
+
+### `daemon=True` is FREE — the one thing this ticket said to measure first
+
+Measured, not assumed: a program that spawns a thread and returns from main
+without joining exits immediately with rc=0, and the child's output never
+appears. The teardown is `exit_group`, which takes every thread with it —
+precisely CPython's daemon semantics. **The NON-daemon thread is the one that
+needed work**, since killing it mid-flight loses whatever it was doing with no
+diagnostic; those are registered and joined in `finalization`.
+
+### The diagnosis is not lost, and that is a deliberate divergence
+
+Blocking correctly would have thrown away the old refusal's message for every
+single-threaded program. `pythreadlive.PyThreadLiveAny` — one integer in a unit
+of its own — lets the wait ask whether anything could ever satisfy it, and the
+old text is raised verbatim when nothing can. Asked INSIDE the wait loop, not
+once before it: a queue can have a feeder when the wait begins and lose it.
+`devdocs/dev/nilpy-semantics-divergences.md` carries the argument.
+
+### What did NOT get done, and it is a real gap
+
+`--threadsafe` is still required on the command line. It cannot be implied by
+the shim: the lock-implementation defines (`PXX_TS_HARDLOCK`/`PXX_TS_SOFTLOCK`)
+are applied BEFORE lexing, and the lexer refuses `{$threadsafe on}` saying so
+in its own message. Implying it has to happen at option time from a pre-scan of
+the source, which is `feature-n-import-threading-should-imply-threadsafe`. A
+NilPy-level diagnostic now names the flag at the import, so the failure no
+longer points at `lib/rtl/palthread.pas` three units down.
+
+### Effect on lekkerzeilen, measured with --threadsafe
+
+The threading wall is CLEARED on all three modules that carried it.
+
+    gauges.py    :141  urllib.request.Request(url, headers=...) — a keyword
+                       argument to a stdlib dotted call, which is
+                       bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument
+    __main__.py  :141  the SAME number, and that line is PROSE there — the
+                       sixth same-line-number cascade in this corpus
+    app.py       :10   ctypes
+
+So the next wall on this path is a ticket that already exists and is one fix,
+not three.
