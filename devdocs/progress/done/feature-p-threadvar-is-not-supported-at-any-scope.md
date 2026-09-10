@@ -349,3 +349,26 @@ the other.
 
 ## Log
 - 2026-09-09 — resolved; the implementation and the resolve rode one commit — commit 7a166c995. The rewrite site is `ThreadVarRewriteRange` in `compiler/ir_codegen.inc`, called from `CompileAST`; storage is `TLS_USER_BYTES` in `compiler/defs.inc`; the section parser is `ParseThreadVarSection` in `compiler/pasparser_decl.inc`.
+- 2026-09-10 — **the fixed cap is also an UNCONDITIONAL cap, and the size canary
+  is what said so.** `ir_codegen.inc:1594` is `BSS_TLS_MAIN := BSSSize;
+  Inc(BSSSize, TLS_BLOCK_SIZE + 16)` with no guard, which is forced by the same
+  ordering this ticket already documents — the reservation is emitted before
+  parsing, so it cannot know whether a `threadvar` exists. **So a program with
+  zero threadvars pays the whole block too**, and the empty x86-64 image's bss
+  went 43524 -> 46596: **+3072, which is `TLS_USER_BYTES` exactly.** Measured
+  2026-09-10 from the tstate archive rather than by bisecting — the canary
+  prints every subject on every run, so the whole curve was already recorded:
+  one step, between reports `cc1057f` and `15de9cd`, i.e. inside this ticket's
+  own commit range. Same step: code +4096, data +96. (The further data +1256 is
+  not ours — `326448a3c`, the Classes enumerators.)
+  **The reason this is a re-baseline and not a defect is the target split:
+  the four ESP subjects moved by ZERO** (bss 103728, code unchanged), because
+  the feature is x86-64 only. The canary exists for a ~400 KB part where the
+  bss floor is a quarter of SRAM before the program does anything; the growth
+  landed entirely on the one target where that constraint does not exist.
+  Baseline retaken at `292c9eeb98d7`. **What would make this a defect is the
+  ESP rung**, not a bigger number here: whoever carries `threadvar` to xtensa
+  or riscv32 inherits an unconditional 3 KB of a budget that is already the
+  subject of `bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss`,
+  and should make the carve conditional on `TlsUserUsed > 0` — which needs the
+  reservation to move after parsing, the same restructure this ticket parked.

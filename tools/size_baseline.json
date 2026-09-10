@@ -1,35 +1,35 @@
 {
   "_comment": "Written by tools/size_canary.py --update. A DELTA baseline, not a target: it freezes today's sizes so growth becomes a red, and blesses none of them. See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.",
   "measured_at": {
-    "date": "2026-09-06T19:47:38+02:00",
-    "sha": "c69b52b6ea35",
-    "subject": "tickets(P): an interface name in a var initialiser stores the GUID's address, not the GUID"
+    "date": "2026-09-10T11:41:54+02:00",
+    "sha": "292c9eeb98d7",
+    "subject": "playbook: the absent-producer promotion is settled \u2014 no, on recurrence, and the corollary is withdrawn"
   },
   "subjects": {
     "esp32-bare": {
       "bss": 103728,
       "code": 46436,
-      "data": 576
+      "data": 608
     },
     "esp32c3-bare": {
       "bss": 103728,
       "code": 57900,
-      "data": 576
+      "data": 608
     },
     "esp32s2-bare": {
       "bss": 103728,
       "code": 46436,
-      "data": 576
+      "data": 608
     },
     "esp32s3-bare": {
       "bss": 103728,
       "code": 46436,
-      "data": 576
+      "data": 608
     },
     "x86_64-empty": {
-      "bss": 43524,
-      "code": 65304,
-      "data": 2792
+      "bss": 46596,
+      "code": 69400,
+      "data": 4144
     }
   }
 }
