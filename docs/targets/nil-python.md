@@ -277,15 +277,33 @@ carry a Python surface written for exactly this purpose. `ast`, `atexit`,
 
 ```python
 import math
-print(math.floor(3.7))           # 3
+print(math.gcd(12, 18))          # 6 — and gcd is not in C's math.h,
+                                 # so this proves which math was reached
 ```
 
 That is narrower than "any unit with a Python surface". The set is a list
 compiled into the compiler, so a unit that *grows* a Python surface without being
-added to it stays unreachable by a bare import — the import binds a host C header
-or fails instead, and nothing about the unit shows why. Those seventeen names are
-what the list holds as of 2026-09-11, all verified against the pinned compiler on
-that date; `import classes`, which is not on it, gives the error above.
+added to it stays unreachable by a bare import. Those seventeen names are what
+the list holds in the compiler source as of 2026-09-11; `import classes`, which
+is not on it, gives the error above.
+
+**Two consequences worth knowing before you debug one of these.** Because the
+list lives in the compiler rather than in the library, a name added to it is
+**inert until a compiler carrying it is pinned** — as of 2026-09-11, `zlib` is in
+that state: it is on the list in source, and the pinned compiler predates the
+entry. And because a name that misses the list can still resolve to a *host C
+header* of the same name, **the import itself compiles either way**. What fails
+is the first member call, with a confusing overload error rather than anything
+about imports:
+
+```
+error: no overload of crc32 matches these arguments
+```
+
+That is `/usr/include/zlib.h`'s three-argument `crc32`, reached because the
+Python route was not available. So a bare import that compiles is not evidence
+that you reached the PXX unit — only a call to a member the C header does not
+have distinguishes them.
 
 **To import another language, quote the file name and give it an alias:**
 
