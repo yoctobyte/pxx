@@ -9,7 +9,7 @@ created: 2026-09-11
 found-by: frankuser
 tags: [pin, track-t, autopin, owner-blocker, workflow]
 blocked-by: []
-summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 62 verdicts since, and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 62 of 62 verdicts, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 39 of 62, first seen 2026-08-16 and 2026-08-27/09-01. The MINIMUM red count across all 62 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should."
+summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 62 verdicts since, and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 62 of 62 verdicts, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 39 of 62. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 62 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should."
 ---
 
 # Measured 2026-09-11, from `devdocs/progress/tstate/pin-shadow.log` on origin/master
@@ -80,6 +80,41 @@ currently be met. The 19-day gap that the old rule was written to prevent (v354,
 He has answered a version of this before ("green or not") and then raised the bar
 ("full green expected"), and the two answers were given three days apart about
 different situations. This is the situation where they collide.
+
+# ALL FOUR lib-test ROWS ARE ONE CAUSE, AND TRACK T ALREADY BISECTED IT
+
+This is the part that changes the work. `TSTATE.md` gives every one of the four
+blocking lib-test rows the **same** range:
+
+```
+  bad fca28056d8ec, last good 0e3ba86d5208, 4 commit(s) in range
+    lib-test#src:test/lib_synapse.pas
+    lib-test#src:test/lib_synapse_ssl.pas
+    lib-test#src:test/lib_synapse_transitive_unit.pas
+    lib-test#src:tools/crtl_reachability.py
+    (and test-fpjson#src:tools/install_lib_candidates.sh, same range)
+```
+
+So it is **one cause in a four-commit window**, not four reds needing three
+lanes, and the header of this ticket listing them as separate owners was reading
+a symptom census as a work census — the thing CLAUDE.md warns about two sections
+apart. Five rows, one fix.
+
+**The strongest candidate in the window is `0ffe185bb`** — *"feat(B): six System
+names FPC keeps in `system` move out of sysutils, and the unit-level scan was a
+second hole"* — the only commit in the range that touches `lib/rtl/sysutils.pas`
+(106 lines). synapse leans on sysutils, and `crtl_reachability.py` walks the
+crtl/rtl surface, which is exactly what moving six names between units would
+perturb. The other three commits in range are Track P argument-loop fixes and a
+tstate row.
+
+**NOT CONFIRMED, and I could not confirm it from this box:** `external/synapse` is
+ABSENT on plexus, so `test/lib_synapse.pas` stops at `uses: unit source not found:
+synacode` and this host SKIPS rather than reproducing. It is present on seven,
+which is running the watcher — building there would be touching the instrument
+mid-measurement, so I did not. Whoever takes this should reproduce on a box with
+`external/synapse` fetched (`tools/install_externals.sh`), or on seven while its
+tier is idle.
 
 # What does NOT need him
 
