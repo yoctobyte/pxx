@@ -125,12 +125,29 @@ if [ "$ARCH" = x86_64 ]; then
   cp -r lib/asmcore "$R/opt/pxx/lib/"  # Makefile:22 names the full unit payload
   [ "$SELFHOST" = 1 ] && cp compiler/*.pas compiler/*.inc "$R/opt/pxx/compiler/"
 fi
-# NO COMPILER IN THE aarch64 IMAGE, and it is a measured gap rather than a
-# choice: `pascal26 --target=aarch64 compiler/compiler.pas` fails with
-#   cpreproc.inc:2105  target aarch64: LoadFile expects a managed-string destination
-# so there is no aarch64 pascal26 to ship. Ordinary programs cross-build and run
-# fine -- that is what the kiosk app in this image is. See
+# NO COMPILER IN THE aarch64 IMAGE, AND AS OF 2026-09-11 THAT IS A CHOICE NOT YET
+# MADE RATHER THAN A GAP. This block used to say it was a measured gap --
+# `pascal26 --target=aarch64 compiler/compiler.pas` failing in cpreproc.inc on
+# `LoadFile expects a managed-string destination` -- and cited
 # bug-a-the-compiler-cannot-cross-build-itself-for-aarch64.
+#
+# BOTH HALVES WERE STALE. Re-measured at 71cc6d89b954: that command is rc=0 and
+# produces a 17073012-byte `ELF 64-bit LSB executable, ARM aarch64, statically
+# linked` which RUNS under tools/run_target.sh aarch64 and prints its own
+# --version. And the ticket it cited is not in devdocs/progress at all, under any
+# folder.
+#
+# A STALE HAZARD BLOCK IS THE EXPENSIVE KIND, because obeying one produces no
+# signal: it is written to stop a reader, it succeeds, and a reader who stops
+# generates nothing that could reveal it was wrong. This one stopped two sessions
+# on 2026-09-10/11 -- one relayed it to Track D as current fact, and it was within
+# one edit of travelling into public docs as a documented limitation.
+#
+# WHAT IS STILL TRUE: this script does not PUT a compiler in the aarch64 image.
+# That is now a payload decision with a cost (a second compiler build per image),
+# not an impossibility -- and nobody has verified an aarch64 guest BOOTING with one,
+# which is the measurement to take before claiming it. Ordinary programs cross-build
+# and run fine, which is what the kiosk app in this image is.
 
 # The compiler resolves units RELATIVE TO ITS OWN BINARY (<bindir>/../lib/rtl),
 # so every stage must live beside the sources. A stage built into /tmp looks for
@@ -218,9 +235,11 @@ if [ -x "$PXX" ]; then
   printf 'program hello;\nbegin WriteLn(%s); end.\n' "'compiled inside the vm'" > /src/hello.pas
   $PXX /src/hello.pas /bin/hello && /bin/hello || echo "IN-VM COMPILE FAILED"
 else
-  echo "(no compiler in this image: it cannot cross-build itself for this arch yet"
-  echo " -- bug-a-the-compiler-cannot-cross-build-itself-for-aarch64. The kiosk"
-  echo " app below IS pxx-cross-compiled for $(uname -m) and is the real claim.)"
+  echo "(no compiler in this image -- this script does not ship one for $(uname -m)."
+  echo " NOT because it cannot be built: re-measured 2026-09-11, pascal26 DOES"
+  echo " cross-build itself for aarch64 and the result runs. It is a payload"
+  echo " decision nobody has taken. The kiosk app below IS pxx-cross-compiled"
+  echo " for $(uname -m) and is the real claim.)"
 fi
 if [ -f /opt/pxx/compiler/compiler.pas ]; then
   echo "--- self-host inside the vm ---"

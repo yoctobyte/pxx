@@ -136,3 +136,42 @@ booting DEBIAN's busybox as PID 1.
 `decide-install-qemu-system-and-a-freebsd-image-on-plexus` [p55] asked for this
 emulator **and** a FreeBSD image. **The emulator half is now done**; the
 multi-GB FreeBSD image is a separate call and stays open.
+
+## 2026-09-11 — rung 4's unmeasured half is MEASURED: the compiler DOES cross-build itself for aarch64
+
+Rung 4 above says, correctly and deliberately, that removing the phantom citation
+did not settle the question and that *"it is unmeasured, and saying so is the honest
+state."* Measured now, at compiler `71cc6d89b954`, tree `7203485eb`:
+
+```
+./compiler/pascal26 --target=aarch64 compiler/compiler.pas <out>     rc=0
+file <out>   ELF 64-bit LSB executable, ARM aarch64, statically linked   17073012 bytes
+tools/run_target.sh aarch64 <out> --version   prints generation 26 and its frontend list
+```
+
+It builds, and the result **runs and answers `--version` under the aarch64 runner**.
+So the compiler cross-building itself for aarch64 is **not a blocker on anything**,
+and the old `cpreproc.inc:2105 LoadFile expects a managed-string destination`
+failure is gone.
+
+**THE RANKING CHANGE, WHICH IS THE POINT:** rung 4's cross-CPU half was described as
+blocked on two things, one of which was the phantom ticket. It is blocked on **ONE**:
+[[feature-a-object-output-for-arm32-and-aarch64]] — no aarch64 `--emit-obj`, so no
+aarch64 busybox, so no aarch64 userland to self-host inside. A rung blocked on one
+known feature is a different proposition from one blocked on a compiler that
+allegedly cannot build itself.
+
+**WHERE THE STALE CLAIM WAS STILL LIVE, AND WHY THAT MATTERS MORE THAN THE
+MEASUREMENT.** This paragraph retired the citation; `tools/mkkiosk.sh` kept it, as a
+six-line hazard block at :128 asserting the failure as *"a measured gap rather than a
+choice"*, plus a runtime `echo` at :222 telling anyone who boots a non-x86-64 image
+the same thing. Fixed in this commit. A stale hazard block is the expensive kind
+because **obeying one produces no signal** — it exists to stop a reader, it succeeds,
+and a reader who stops generates nothing that could reveal it was wrong. It stopped
+two sessions on 2026-09-10/11: this seat read it and relayed it to Track D as current
+fact, and Track D declined to publish it on the grounds that the underlying ticket
+had resolved. It was one edit from entering public docs as a documented limitation.
+
+**What is still NOT measured, so this note does not create a new phantom:** nobody
+has booted an aarch64 guest with a pxx compiler in it. `tools/mkkiosk.sh` still ships
+none, which is now a payload decision with a cost rather than an impossibility.
