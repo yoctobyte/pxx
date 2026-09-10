@@ -4482,6 +4482,23 @@ begin
   else if CStemMatches(stem, 'dl') then soname := 'libdl.so.2'
   else if CStemMatches(stem, 'rt') then soname := 'librt.so.1'
   else if CStemMatches(stem, 'z') then soname := 'libz.so.1'
+  { ...AND THE HEADER IS NOT NAMED `z.h`, WHICH IS WHY THE ROW ABOVE NEVER
+    FIRED FOR IT. CStemMatches accepts `z` and `libz`; the stem of `zlib.h` is
+    `zlib`, so `import zlib` derived `libzlib.so`, found nothing in the cache,
+    and -- because zlib.h sits directly in /usr/include, where the directory
+    rule has no library to offer -- was REFUSED at compile time. Measured
+    2026-09-10 (frankuser): `import zlib` + `zlib.crc32` is a two-line repro
+    needing no SDL2 and no window.
+    THE STEM IS NOT THE LIBRARY NAME, and this table is where that keeps being
+    assumed. `sqlite3.h` -> `libsqlite3.so` is the shape where the assumption
+    happens to hold, and it holding is probably why the derivation survived --
+    the first case anyone tried worked. A row per library is a point fix and is
+    recorded as one on
+    decide-c-should-a-libc-symbol-from-an-unresolvable-header-bind-to-libc,
+    which now carries the measurement for the general answer: ask which library
+    on this box EXPORTS the symbol. That resolves crc32 to libz and nothing
+    else, out of 1439 native libraries. }
+  else if CStemMatches(stem, 'zlib') then soname := 'libz.so.1'
   else if CStemMatches(stem, 'sqlite3') then soname := 'libsqlite3.so.0'
   else soname := unver;
 end;

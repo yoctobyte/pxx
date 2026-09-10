@@ -522,6 +522,22 @@ test-nilpy: $(COMPILER)
 	  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
 	  *) echo "FAIL: sqlite3_libversion_number() gave '$$v', not a 3.x.y version"; exit 1;; \
 	esac
+	# ...AND ITS SIBLING, WHICH THE SAME DOOR REFUSED. The soname is derived
+	# from the header's FILE NAME, so `sqlite3.h` -> `libsqlite3.so` is right by
+	# luck and `zlib.h` -> `libzlib.so` is wrong; the real library is libz.so.1.
+	# The row above passing is why nobody noticed for as long as they did.
+	# Three assertions, three different instruments, and the last two are the
+	# ones that name the cause if this regresses: the VALUE proves the call
+	# reached libz, the ABSENCE of libzlib.so is the defect itself (a wrong
+	# DT_NEEDED cannot be produced by accident), and the PRESENCE of libz.so.1
+	# is what stops the absence row passing on a binary with no dynamic section.
+	./$(COMPILER) test/test_nilpy_import_zlib.npy $(TESTTMP)/test_nilpy_import_zlib26
+	tools/expect_same.sh test_nilpy_import_zlib26 "$$($(TESTTMP)/test_nilpy_import_zlib26)" "1013"
+	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libzlib\.so'; then \
+	  echo "FAIL: test_nilpy_import_zlib26 carries a DT_NEEDED on libzlib.so — the soname derived from the header FILE NAME reached the ELF. No such library exists; this binary cannot load"; exit 1; fi
+	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libz\.so\.1'; then \
+	  echo "ok: import zlib links libz.so.1, not the invented libzlib.so"; \
+	else echo "FAIL: test_nilpy_import_zlib26 has no libz.so.1 DT_NEEDED, so it is not importing from zlib at all — with this row inert the libzlib.so assertion above cannot fail and its silence means nothing"; exit 1; fi
 	# A mimic_<name>.py shim is found AS a shim. The module name deliberately
 	# collides with a host C header (/usr/include/search.h): that is the one
 	# case where "is there a shim?" is asked, and asking it about `.pas` alone

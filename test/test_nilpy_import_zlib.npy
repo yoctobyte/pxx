@@ -1,0 +1,20 @@
+# THE SIBLING OF test_nilpy_import_sqlite.npy, AND THE HALF THAT WAS BROKEN.
+#
+# Both go through the same door: `import <name>` resolves a C header out of
+# /usr/include and links the library dynamically. sqlite3 worked and zlib did
+# not, for one reason -- the compiler derives the soname from the header's file
+# NAME. `sqlite3.h` -> `libsqlite3.so` happens to be right; `zlib.h` ->
+# `libzlib.so` is not, the real library being libz.so.1. So `import zlib` was
+# a hard COMPILE error ("this build would die at exec: `crc32` is imported from
+# libzlib.so, which no library on this machine answers to") while its sibling
+# next door passed, which is why the derivation survived: the first case anyone
+# tried was the one where the stem is the library name.
+#
+# compressBound is the right call to assert on. It is a pure function of its
+# argument, so unlike sqlite3_libversion_number() there is no host version to
+# accidentally pin -- that mistake is recorded on the row next door
+# (bug-n-nilpy-import-sqlite-asserts-host-sqlite-version). zlib's own formula is
+# len + (len>>12) + (len>>14) + (len>>25) + 13, so 1000 -> 1013 on every zlib
+# ever shipped.
+import zlib
+print(compressBound(1000))
