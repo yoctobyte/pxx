@@ -240,4 +240,4 @@ The scope note above stands: `self.a = b = 7` no longer fails here, and the
 field-inference pre-pass is still a separate wall for other shapes.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b9071dcb7.
