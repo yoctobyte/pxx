@@ -33641,7 +33641,7 @@ endif
 	$(PXX_STABLE) examples/lisp/lispdemo.pas $(TESTTMP)/lib_lispdemo
 	tools/expect_same.sh lib_lispdemo "$$($(TESTTMP)/lib_lispdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas $(TESTTMP)/lib_zlib
-	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate')"
+	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas $(TESTTMP)/lib_base64
 	tools/expect_same.sh lib_base64.1 "$$($(TESTTMP)/lib_base64 | grep -c '=ok')" "14"
 	tools/expect_same.sh lib_base64.2 "$$($(TESTTMP)/lib_base64 | grep -c 'FAIL')" "0"

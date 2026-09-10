@@ -123,7 +123,7 @@ run_green() {
     $'5! = 120\n10! = 3628800\n20! = 2432902008176640000\n1000! digits      = 2568\n1000! first 10    = 4023872600\n1000! trailing 0s = 249' \
     "$ROOT/examples/bignum/factorial.pas"
   run_expect zlib \
-    $'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate' \
+    $'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored' \
     "$ROOT/test/lib_zlib.pas"
   run_expect png \
     $'86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc' \

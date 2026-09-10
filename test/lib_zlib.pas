@@ -191,6 +191,41 @@ begin
   else writeln('OK raw deflate');
 end;
 
+{ A RAW stored-block stream -- the cell this file's two raw/stored tests left
+  uncovered, and the one a real bug lived in.
+
+  TestStoredRoundtrip exercises stored blocks through the ZLIB wrapper, and
+  TestRawDeflate exercises the RAW entry point with a FIXED-HUFFMAN stream (its
+  first byte 203 = BTYPE 01). Full marginal coverage of both axes, and nothing at
+  their intersection. InflateStored bounded stored data by `Length(gData) - 4`,
+  assuming every stream ends in a 4-byte checksum -- correct for the wrapped case,
+  so TestStoredRoundtrip passed, and never reached through the raw case, so
+  TestRawDeflate passed. A valid raw stored stream was rejected as `truncated
+  stored data` for as long as both tests were green.
+
+  POSITIVE CONTROL: this case FAILS with `truncated stored data` against the
+  pre-fix unit and passes after, verified both ways rather than asserted. If it
+  ever cannot fail, it has stopped testing the bound.
+
+  'hello world' as one final stored block: BFINAL|BTYPE byte, LEN, NLEN, data. }
+procedure TestRawStored;
+var j: Integer;
+    lit: AnsiString;
+begin
+  lit := 'hello world';
+  SetLength(enc, 5 + Length(lit));
+  enc[0] := 1;                                   { BFINAL=1, BTYPE=00 stored }
+  enc[1] := Byte(Length(lit) and $FF);           { LEN  lo }
+  enc[2] := Byte((Length(lit) shr 8) and $FF);   { LEN  hi }
+  enc[3] := Byte((65535 - Length(lit)) and $FF);         { NLEN lo }
+  enc[4] := Byte(((65535 - Length(lit)) shr 8) and $FF); { NLEN hi }
+  for j := 1 to Length(lit) do enc[4 + j] := Byte(lit[j]);
+  good := InflateRawBytes(enc, outbuf, err);
+  if not good then Fail('raw stored inflate: ' + err)
+  else if not IsHelloWorld(outbuf) then Fail('raw stored data mismatch')
+  else writeln('OK raw stored');
+end;
+
 begin
   bad := 0;
   TestStoredRoundtrip;
@@ -203,4 +238,5 @@ begin
   TestGzip;
   TestGzipBadCrc;
   TestRawDeflate;
+  TestRawStored;
 end.
