@@ -12,11 +12,24 @@ unit zlib;
     InflateZlib(input, output, error) — unwrap zlib header, inflate all blocks,
       verify Adler32. Returns True on success.
     DeflateZlibStored(input, output) — wrap input in a zlib stream using only
-      uncompressed deflate blocks (valid zlib, trivial compression). }
+      uncompressed deflate blocks (valid zlib, trivial compression).
+
+  AND THIS UNIT IS ALSO PYTHON'S `zlib` MODULE, which is why it is named in
+  PyRtlUnitServesPython (pasparser_proc.inc). That list asks whether a unit was
+  WRITTEN TO BE the Python module of its name and says each unit's header answers
+  it — so the answer is recorded here rather than left to be inferred from the
+  Pascal prose above, which describes only half of what the unit is. base64.pas is
+  the same arrangement. See the Python surface in the interface below. }
 
 interface
 
-uses hashing;
+{ pylib for the Python spellings below: `zlib.crc32(b)` takes BYTES, and reading a
+  TPyBytes needs the NilPy runtime -- the same seam base64.pas opened, ruled in by
+  decide-pcl-may-use-pylib. Pascal callers of InflateZlib never touch it.
+  COST, since it is not free: png.pas `uses zlib`, so pylib enters png's closure
+  too. That is the price of one unit carrying both surfaces, which is the house
+  pattern (pxx-crash-course.md) rather than a mimic_zlib competing for the name. }
+uses hashing, pylib;
 
 function InflateZlib(const src: TByteArray; var dst: TByteArray;
                      var err: AnsiString): Boolean;
@@ -35,6 +48,72 @@ function InflateRawBytes(const src: TByteArray; var dst: TByteArray;
 
 procedure DeflateZlibStored(const src: TByteArray; var dst: TByteArray);
 
+{ ---- Python's `zlib` module surface ------------------------------------------
+
+  `import zlib` already resolved to this unit before these existed, so the wall a
+  NilPy program hit was `no member crc32 came of the qualifier zlib` -- a MISSING
+  MEMBER on a module that was otherwise found. Both checksums were already here in
+  `hashing`; only the Python spelling was absent.
+
+  RETURNS Int64, NOT LongWord, and that is the whole point of the signature.
+  CPython's zlib.crc32 returns an UNSIGNED int, so every value above 2^31 has to
+  survive the trip. An Int64 holds the unsigned 32-bit range exactly and cannot be
+  printed as a negative number; a LongWord return would be right or wrong
+  depending on how the frontend marshals an unsigned, and the failure would show
+  up only for inputs whose checksum happens to set the top bit -- which a hello
+  world test never produces.
+
+  `value` is CPython's running-checksum argument, for callers that feed data in
+  chunks. The defaults are CPython's own: 0 for crc32, 1 for adler32. A DEFAULT
+  PARAMETER rather than two overloads, deliberately: NilPy resolves overloads by
+  NAME and ignores argument type, so the two-overload spelling silently runs the
+  wrong body (mimic_array.pas:89, bug-n-an-overloaded-constructor-is-picked-by-
+  name-ignoring-argument-type).
+
+  STILL NOT IMPLEMENTED, stated rather than left to be discovered:
+  `compressobj`, `decompressobj` (the incremental objects) and the `Z_*`
+  constants. No program has asked for them. }
+function crc32(const data: Variant; const value: Variant = 0): Int64;
+
+{ NAME COLLISION, DELIBERATE AND DOCUMENTED: `adler32` differs from
+  hashing.Adler32 ONLY IN CASE, and PXX is case-insensitive. So in any unit whose
+  uses clause names both, `Adler32(someByteArray)` binds to THIS one, converts the
+  array to a Variant, and returns a checksum of its string rendering -- no
+  diagnostic, a plausible wrong number. Inside this unit the shadowing is
+  unconditional, which is why both internal call sites are spelled
+  `hashing.Adler32`. The Python spelling cannot be renamed: `zlib.adler32` is the
+  call an application writes. If you add a consumer that uses hashing AND zlib,
+  qualify. }
+function adler32(const data: Variant; const value: Variant = 1): Int64;
+
+{ `zlib.compress(data, level=-1)` -> bytes, and `zlib.decompress(data)` -> bytes.
+
+  COMPRESS DOES NOT COMPRESS, AND THE OUTPUT IS STILL CORRECT. It wraps the input
+  in a valid RFC 1950 stream built from STORED deflate blocks, so every
+  decompressor reads it and the bytes that come back out are the bytes that went
+  in -- it is simply larger than CPython's. That is the test CLAUDE.md sets for
+  FPC and it is the right one here: the VALUE round-trips, the intermediate
+  encoding is implementation latitude. A byte-diff of compress() against CPython
+  DIFFERS BY DESIGN and is not a defect to file.
+
+  This is not a shortcut taken for the shim's convenience -- it is what our own
+  PNG writer already does. png.pas:169 builds its IDAT with the same
+  DeflateZlibStored call, and the wall that prompted these members is
+  lekkerzeilen's capture.py writing a PNG screenshot: `zlib.compress(raw, 6)` for
+  the IDAT and `zlib.crc32(tag + payload)` for the chunk CRC. A real deflate
+  encoder is a separate piece of work, and when one lands both callers get it.
+
+  `level` is ACCEPTED AND IGNORED, which is honest for a stored-block encoder:
+  every level produces the same valid stream. Refusing a level would break the
+  call that motivated this for no gain. }
+type
+  { CPython raises `zlib.error`. Spelled to match, so `except zlib.error:` in an
+    application binds here. }
+  error = class(Exception) end;
+
+function compress(const data: Variant; const level: Variant = -1): TPyBytes;
+function decompress(const data: Variant): TPyBytes;
+
 implementation
 
 { ---- global inflate state ---- }
@@ -50,6 +129,15 @@ var
   gDst:     TByteArray;
   gDLen:    Integer;
   gDefDst:  TByteArray;   { module-global deflate output buffer }
+  { HOW MANY TRAILING BYTES OF gData ARE A CHECKSUM AND NOT DEFLATE DATA.
+    InflateStored used the literal 4 for this, which is right for zlib, WRONG for
+    a raw RFC 1951 stream (no trailer at all) and wrong for gzip (CRC32 + ISIZE =
+    8). The raw case is the one that broke: a valid stored-block stream was
+    rejected as `truncated stored data` because the reader believed its last four
+    bytes were a checksum it must not consume. Each entry point now states its own
+    trailer, so the bound is a fact about the stream rather than a constant that
+    happens to suit one of three callers. }
+  gTrailer: Integer;
 
 function Avail(n: Integer): Boolean;
 begin
@@ -451,7 +539,7 @@ begin
   Result := False;
   ByteAlign;
 
-  if BytePos + 4 > Length(gData) - 4 then
+  if BytePos + 4 > Length(gData) - gTrailer then
     begin err := 'truncated stored header'; Exit; end;
   len  := ReadBits(16);
   nlen := ReadBits(16);
@@ -459,7 +547,7 @@ begin
   if nlen <> (65535 - len) then
     begin err := 'bad stored block nlen'; Exit; end;
 
-  if BytePos + len > Length(gData) - 4 then
+  if BytePos + len > Length(gData) - gTrailer then
     begin err := 'truncated stored data'; Exit; end;
   for i := 0 to len - 1 do
     DstAppend(ReadBits(8));
@@ -522,6 +610,7 @@ begin
 
   gData   := src;
   gBitPos := 16;
+  gTrailer := 4;            { zlib: Adler32 }
   gOk     := True;
   gDLen   := 0;
   SetLength(gDst, 256);
@@ -545,7 +634,14 @@ begin
                (LongWord(src[endPos + 1]) shl 16) or
                (LongWord(src[endPos + 2]) shl 8) or
                LongWord(src[endPos + 3]);
-  gotAdler := Adler32(gDst);
+  { hashing.Adler32 QUALIFIED, and it must stay qualified. This unit now declares
+    a Python-surface `adler32(Variant)` of its own, PXX is case-insensitive, and a
+    unit's own declaration shadows an imported one -- so a bare `Adler32(gDst)`
+    here silently called the Variant shim, marshalled a TByteArray through
+    pystr_of, and produced a checksum of garbage. Measured: the writer and the
+    reader both did it, disagreed, and the round trip failed with `bad adler32`
+    while the decoded BYTES were provably correct. }
+  gotAdler := hashing.Adler32(gDst);
   if wantAdler <> gotAdler then
     begin err := 'bad adler32'; SetLength(gDst, 0); Exit; end;
 
@@ -600,6 +696,11 @@ begin
 
   gData   := src;
   gBitPos := hdr * 8;
+  gTrailer := 8;            { gzip: CRC32 + ISIZE, per RFC 1952 -- EIGHT, and the
+                              literal this replaced said 4, so the gzip bound was
+                              four bytes too permissive. A stored block could
+                              claim part of its own trailer; the CRC check then
+                              failed, which is why it never showed as truncation. }
   gOk     := True;
   gDLen   := 0;
   SetLength(gDst, 256);
@@ -646,6 +747,7 @@ begin
 
   gData   := src;
   gBitPos := 0;
+  gTrailer := 0;            { raw RFC 1951: no trailer }
   gOk     := True;
   gDLen   := 0;
   SetLength(gDst, 256);
@@ -699,7 +801,7 @@ begin
     pos := pos + blockLen;
   until pos >= srcLen;
 
-  ad := Adler32(src);
+  ad := hashing.Adler32(src);   { qualified -- see the note in InflateZlib }
   gDefDst[n] := Byte((ad shr 24) and $FF); n := n + 1;
   gDefDst[n] := Byte((ad shr 16) and $FF); n := n + 1;
   gDefDst[n] := Byte((ad shr 8) and $FF);  n := n + 1;
@@ -711,6 +813,130 @@ begin
   for i := 0 to n - 1 do
     dst[i] := gDefDst[i];
   SetLength(gDefDst, 0);
+end;
+
+
+{ ---- Python `zlib` surface ---------------------------------------------------- }
+
+{ bytes (TPyBytes) or a plain string -- an application may hand over either.
+  CPython REFUSES a str here; accepting one is deliberate, because NilPy is
+  upward compatible with CPython in one direction and accepting what CPython
+  rejects is a feature (nilpy-semantics-divergences.md).
+  `pyvar_is_objtag` rather than an open-coded `pyvartag(data) = 7`: pylib's own
+  comment at the declaration says copying the tag ENCODING into a lib/rtl unit
+  makes a second copy that stays wrong when the encoding moves. }
+function PyBytesToArray(const data: Variant): TByteArray;
+var o: TObject; by: TPyBytes; raw: AnsiString; i: Integer;
+begin
+  o := nil;
+  if pyvar_is_objtag(data) then o := TObject(pyvarobj(data));
+  if (o <> nil) and (o is TPyBytes) then
+  begin
+    { `o is TPyBytes` rather than an unchecked cast of anything obj-tagged --
+      DataToString in mimic_urllib_request.pas is the model, and the difference
+      matters for `zlib.crc32(some_list)`: the cast would read a length off
+      whatever object arrived. }
+    by := TPyBytes(o);
+    SetLength(Result, by.count);
+    for i := 0 to by.count - 1 do
+      Result[i] := by.at(i);
+    Exit;
+  end;
+  { bytes OR a plain string -- an application may hand over either. CPython
+    REFUSES a str here; accepting one is deliberate, because NilPy is upward
+    compatible with CPython in one direction and accepting what CPython rejects
+    is a feature (nilpy-semantics-divergences.md). }
+  raw := pystr_of(data);
+  SetLength(Result, Length(raw));
+  for i := 1 to Length(raw) do
+    Result[i - 1] := Byte(raw[i]);
+end;
+
+{ THE DECLARED DEFAULT IS NOT APPLIED ON THE NilPy CALL PATH, MEASURED, so this
+  absence test is load-bearing rather than defensive. At arity 1 an omitted
+  `value` arrives as pynone -- `pyvartag` 0, `pyvar_to_int` 0 -- and NOT as the
+  declared 0 or 1. The declaration keeps its default anyway, because that is the
+  correct Pascal signature and the test is harmless once the frontend honours it:
+  bug-n-a-pascal-default-parameter-is-ignored-when-the-call-comes-from-nilpy.
+
+  AND THIS IS WHY adler32 FOUND IT AND crc32 COULD NOT. crc32's CPython default
+  is 0, which is exactly the value an unsupplied argument already reads as, so
+  all four crc32 rows matched the oracle while the mechanism was broken --
+  the failure value collided with the expected one. adler32's default is 1, so
+  its `a` accumulator started at 0 and every row was wrong by a visible amount.
+  A probe whose right answer differs from the do-nothing answer is the only kind
+  that can see this class at all. }
+function ChecksumSeed(const value: Variant; whenAbsent: LongWord): LongWord;
+begin
+  if value = pynone then
+    Result := whenAbsent
+  else
+    Result := LongWord(pyvar_to_int(value));
+end;
+
+function crc32(const data: Variant; const value: Variant = 0): Int64;
+var crc: LongWord; b: TByteArray; i: Integer;
+begin
+  b := PyBytesToArray(data);
+  { THE CONTINUATION HAS TO UNDO CRC32Final's XOR, and getting this backwards
+    produces a checksum that is correct for every ONE-SHOT caller and wrong only
+    for a chunked one -- so a `crc32(b'abc')` test cannot see the mistake.
+    CRC32Init is $FFFFFFFF and CRC32Final xors with $FFFFFFFF, so the externally
+    visible value v corresponds to the internal register v xor $FFFFFFFF. With
+    CPython's default v=0 that is exactly CRC32Init, which is the check that the
+    two conventions have been lined up rather than merely assumed. }
+  crc := ChecksumSeed(value, 0) xor LongWord($FFFFFFFF);
+  for i := 0 to Length(b) - 1 do
+    crc := CRC32Update(crc, b[i]);
+  Result := Int64(CRC32Final(crc));
+end;
+
+function adler32(const data: Variant; const value: Variant = 1): Int64;
+var a, bsum, v: LongWord; b: TByteArray; i: Integer;
+begin
+  b := PyBytesToArray(data);
+  { Adler32 keeps two accumulators packed as (b shl 16) or a, so a continuation
+    unpacks the incoming value rather than reinitialising. CPython's default 1 is
+    a=1, b=0 -- hashing.Adler32's own starting state. }
+  v    := ChecksumSeed(value, 1);
+  a    := v and $FFFF;
+  bsum := (v shr 16) and $FFFF;
+  for i := 0 to Length(b) - 1 do
+  begin
+    a    := (a + LongWord(b[i])) mod ADLER_MOD;
+    bsum := (bsum + a) mod ADLER_MOD;
+  end;
+  Result := Int64((bsum shl 16) or a);
+end;
+
+{ TPyBytes rather than base64.pas's AnsiString-with-a-stated-divergence: these
+  two feed binary file writes and byte concatenation (`tag + payload`), where a
+  string would have to survive a round trip through text. Returning real bytes
+  costs one loop. }
+function ArrayToPyBytes(const a: TByteArray): TPyBytes;
+var i: Integer;
+begin
+  Result := TPyBytes.Create(Length(a));
+  for i := 0 to Length(a) - 1 do
+    Result.put(i, a[i]);
+end;
+
+function compress(const data: Variant; const level: Variant = -1): TPyBytes;
+var src, dst: TByteArray;
+begin
+  src := PyBytesToArray(data);
+  DeflateZlibStored(src, dst);
+  Result := ArrayToPyBytes(dst);
+end;
+
+function decompress(const data: Variant): TPyBytes;
+var src, dst: TByteArray; err: AnsiString;
+begin
+  src := PyBytesToArray(data);
+  err := '';
+  if not InflateZlib(src, dst, err) then
+    raise error.Create('zlib.error: ' + err);
+  Result := ArrayToPyBytes(dst);
 end;
 
 end.

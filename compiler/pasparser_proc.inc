@@ -4739,7 +4739,7 @@ begin
             (lo = 'io') or (lo = 'json') or (lo = 'markdown') or
             (lo = 'math') or (lo = 'pathlib') or (lo = 'random') or
             (lo = 're') or (lo = 'subprocess') or (lo = 'tempfile') or
-            (lo = 'tkinter');
+            (lo = 'tkinter') or (lo = 'zlib');
 end;
 
 { `mypkg.core.bus` -> `mypkg/core/bus`. A dotted absolute import names a
