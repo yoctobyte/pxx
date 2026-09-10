@@ -517,7 +517,16 @@ test-nilpy: $(COMPILER)
 	# machine it was written on, so it was permanently RED on every other box
 	# (bug-n-nilpy-import-sqlite-asserts-host-sqlite-version). Accept any
 	# well-formed 3.x.y: major*1000000 + minor*1000 + patch.
-	./$(COMPILER) test/test_nilpy_import_sqlite.npy $(TESTTMP)/test_nilpy_import_sqlite26
+	# --no-shims ON THIS ROW AND ON test_nilpy_sqlite_crud FURTHER DOWN, AND IT
+	# IS THE POINT OF THEM NOW. The two pin the C-HEADER import route -- /usr/include/sqlite3.h resolved
+	# by the unit resolver, out-param return lifting (`sqlite3_open(path)`
+	# answers the handle), char* returns as managed strings. Landing
+	# lib/rtl/mimic_sqlite3.pas made `import sqlite3` mean CPython's DB-API
+	# instead, which is what a Python program means by it and what
+	# pasparser_proc.inc's host-header probe already said would happen. So the
+	# header route moved to the flag that says "resolve as if no shim existed",
+	# which is what --no-shims claims and, until 2026-09-11, did not do.
+	./$(COMPILER) --no-shims test/test_nilpy_import_sqlite.npy $(TESTTMP)/test_nilpy_import_sqlite26
 	v=$$($(TESTTMP)/test_nilpy_import_sqlite26); case "$$v" in \
 	  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
 	  *) echo "FAIL: sqlite3_libversion_number() gave '$$v', not a 3.x.y version"; exit 1;; \
@@ -618,8 +627,11 @@ test-nilpy: $(COMPILER)
 	# bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails
 	./$(COMPILER) test/test_nilpy_shim_attr_name_collision.npy $(TESTTMP)/test_nilpy_shim_attr26
 	tools/expect_same.sh test_nilpy_shim_attr26 "$$($(TESTTMP)/test_nilpy_shim_attr26)" "$$(printf 'xyz\n0123456789\n0123456789\n6')"
+	# --no-shims: see test_nilpy_import_sqlite above -- `import sqlite3` means
+	# CPython's DB-API now that lib/rtl/mimic_sqlite3.pas ships, and the flag is
+	# what resolves the name as if no shim existed.
 	rm -f /tmp/test_nilpy_sqlite_crud.db
-	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
+	./$(COMPILER) --no-shims test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	tools/expect_same.sh test_nilpy_sqlite_crud26 "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" "$$(printf '1 alice\n2 bob')"
 	# re module over lib/rtl/regex.pas; expectation is CPython's own output
 	# collections.Counter (dict in Counter mode); expectation is CPython's output
@@ -1810,6 +1822,18 @@ test-nilpy: $(COMPILER)
 	# run would make them fire on the wrong row.
 	./$(COMPILER) test/test_nilpy_the_sqlite3_module.npy $(TESTTMP)/test_nilpy_sqlite26
 	PXX_SQLTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_sqlite26 2>&1 | diff -u test/test_nilpy_the_sqlite3_module.expected -
+	# `**mapping` at a call WITH A RECEIVER -- method, constructor, or a
+	# dynamically-dispatched member. `f(**d)` on a plain FUNCTION reaches a
+	# different implementation and has always worked, so THE PLAIN-FUNCTION ROWS
+	# ARE NEGATIVE CONTROLS: if they break, the fix went in the wrong door. The
+	# single-star rows are a positive control on the shared dispatcher, which
+	# now serves both spellings from one entry point. Two rows cannot fail on a
+	# value check and are why the file exists: the mapping must be evaluated
+	# ONCE (a per-slot rebuild passes every value row) and must not be ALIASED
+	# into the callee. Error TEXT is deliberately not asserted -- both runtimes
+	# raise TypeError and word it differently.
+	./$(COMPILER) test/test_nilpy_double_star_unpacking_at_a_receiver_call.npy $(TESTTMP)/test_nilpy_dstar26
+	$(TESTTMP)/test_nilpy_dstar26 2>&1 | diff -u test/test_nilpy_double_star_unpacking_at_a_receiver_call.expected -
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.

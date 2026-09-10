@@ -2,6 +2,13 @@
 # Exercises out-param return-lifting for sqlite3_open and sqlite3_prepare_v2,
 # along with auto-conversion of char* return values to managed strings for
 # sqlite3_column_text.
+#
+# COMPILED WITH --no-shims, AND THAT IS LOAD-BEARING. `import sqlite3` reaches
+# CPython's DB-API through lib/rtl/mimic_sqlite3.pas now, because a shim we ship
+# IS the Python module of that name and beats a same-named C header -- which is
+# what a Python program means by the line and what the resolver's host-header
+# probe always said it would do. --no-shims resolves the name as if no shim
+# existed, which is the door this route lives behind.
 import sqlite3
 
 db = sqlite3_open("/tmp/test_nilpy_sqlite_crud.db")

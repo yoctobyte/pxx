@@ -3424,7 +3424,7 @@ begin
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -3600,7 +3600,7 @@ begin
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -4026,7 +4026,7 @@ begin
       parameters; the star is on the CALL). A star is not an expression, so
       the arity loop below cannot parse it: hand the whole argument list to
       the NilPy path, which expands the list across the remaining slots. }
-    if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+    if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
       PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
     while mai <= Procs[mpi].ParamCount-1 do
     begin

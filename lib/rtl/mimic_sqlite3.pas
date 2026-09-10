@@ -202,9 +202,28 @@ function sqlite_version: AnsiString;
 implementation
 
 { ------------------------------------------------------------------ the C API }
-{ Only what is used. Every one of these is in libsqlite3.so.0's dynsym and in
-  /usr/include/sqlite3.h; the binding shape (`cdecl; external '<soname>';`) is
-  the same one lib/rtl uses for libc. }
+{ Only what is used, and PRIVATE — implementation section, not interface.
+
+  It was briefly public. `import sqlite3` used to resolve to
+  /usr/include/sqlite3.h through the NilPy import resolver, and a `mimic_` shim
+  WINS over that (pasparser_proc.inc says so at the host-header probe, and its
+  comment named sqlite3 as the case that would arrive), so landing this unit
+  took two tests with it — test_nilpy_import_sqlite and test_nilpy_sqlite_crud,
+  which pin out-param return lifting and char*-to-managed-string on that route.
+  Exporting these names put the first back and could never have put the second
+  back: `sqlite3_open(path)` returning a handle is the frontend LIFTING a C
+  out-parameter, which no Pascal declaration can express.
+
+  So the door is `--no-shims`, which now resolves a shimmed name the way it
+  would if the shim were absent instead of refusing the import outright, and
+  both tests run under it. That is the right split: one name, two meanings, and
+  the flag selects — rather than this unit growing a hand-maintained mirror of
+  a frontend transformation.
+  bug-n-no-shims-refuses-instead-of-resolving-what-the-shim-shadowed
+
+  Every one is in libsqlite3.so.0's dynsym and in /usr/include/sqlite3.h; the
+  binding shape (`cdecl; external '<soname>';`) is the one lib/rtl uses for
+  libc. }
 
 function sqlite3_libversion: PChar; cdecl; external 'libsqlite3.so.0';
 function sqlite3_open_v2(filename: PChar; var db: Pointer; flags: Integer;
@@ -213,7 +232,7 @@ function sqlite3_close_v2(db: Pointer): Integer; cdecl; external 'libsqlite3.so.
 function sqlite3_errmsg(db: Pointer): PChar; cdecl; external 'libsqlite3.so.0';
 function sqlite3_exec(db: Pointer; sql: PChar; cb: Pointer; arg: Pointer;
                       var errmsg: PChar): Integer; cdecl; external 'libsqlite3.so.0';
-function sqlite3_free(p: Pointer): Integer; cdecl; external 'libsqlite3.so.0';
+procedure sqlite3_free(p: Pointer); cdecl; external 'libsqlite3.so.0';
 function sqlite3_prepare_v2(db: Pointer; sql: PChar; nByte: Integer;
                             var stmt: Pointer; var tail: PChar): Integer;
                             cdecl; external 'libsqlite3.so.0';
@@ -524,7 +543,20 @@ end;
 { True when `parameters` actually carries a sequence. THE GUARD IS POSITIVE:
   an omitted `Variant = 0` parameter arrives as NONE, not as an int-tagged 0,
   so `not pyvar_is_inttag` would call this a sequence and pylen_v would raise
-  TypeError from inside the shim. }
+  TypeError from inside the shim.
+
+  MEASURED 2026-09-11 (786b88673e62), because "the default is ignored" was
+  reported wider than it is and the wide version would have condemned `uri`
+  below too: only a VARIANT default is dropped. A Pascal `Boolean = True`,
+  `Integer = 7` and `AnsiString = 'dflt'` all arrive intact from a NilPy call
+  that omits the argument; the Variant slot reads pyvartag 0 (NONE) where an
+  explicitly-passed 5 reads tag 1. So `uri: Boolean = False` is safe and this
+  one is not.
+  bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply
+
+  Being POSITIVE is also what makes this survive that bug being FIXED: an
+  int-tagged 0 is not objtag either, so `execute(sql)` still means "no
+  parameters" whichever value the slot ends up holding. }
 function HasParams(const parameters: Variant): Boolean;
 begin
   Result := pyvar_is_objtag(parameters);

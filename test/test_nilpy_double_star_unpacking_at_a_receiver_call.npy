@@ -1,0 +1,160 @@
+# `**mapping` at a call WITH A RECEIVER — a method, a constructor, a
+# dynamically-dispatched member.
+#
+# `f(**d)` on a plain function has worked since it was written, because it
+# reaches a DIFFERENT implementation (PyStarMixedForwardCall -> PyStarForwardCall,
+# which BUILDS the call and fills slots from 0). Anything with a receiver or a
+# class name in front of the parenthesis reached PyStarExpandCallArgs, which
+# fills an argument CHAIN and had no keyword half at all — so `**` was diverted
+# into ParseArgExpr and answered `expected expression`, a message about the
+# operand naming neither the form nor the callee.
+#
+# THE PLAIN-FUNCTION ROWS ARE THE NEGATIVE CONTROLS. They compiled before this
+# change and are here so a later edit to the forwarding path has something to
+# fail; if they ever break, the fix went in the wrong door.
+#
+# Found by attempting lekkerzeilen: world.py:447 is
+# `into.append(Furniture(**dict(zip(columns, row))))` — a CONSTRUCTOR, which is
+# neither of the two shapes the ticket's own repro names.
+
+
+class C:
+    def m(self, a=0, b=0, c=0):
+        return (a, b, c)
+
+
+class Required:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+
+class Furniture:
+    def __init__(self, name, x=0.0, z=0.0, rot=0.0):
+        self.name = name
+        self.x = x
+        self.z = z
+        self.rot = rot
+
+    def moved(self, x=0.0, z=0.0):
+        return Furniture(self.name, x, z, self.rot)
+
+
+def free(a=0, b=0, c=0):
+    return (a, b, c)
+
+
+o = C()
+
+# ---- NEGATIVE CONTROLS: the plain function, which already worked -----------
+print(free(**{'a': 1, 'b': 2, 'c': 3}))
+print(free(**{'b': 7}))
+
+# ---- the METHOD -------------------------------------------------------------
+print(o.m(**{'a': 1, 'b': 2, 'c': 3}))
+print(o.m(**{'a': 1}))
+print(o.m(**{'c': 9}))
+print(o.m(**{}))
+
+# a `**` after a positional: the expansion starts at the slot the positionals
+# left off, which is what `firstSlot` is for
+print(o.m(1, **{'b': 2}))
+print(o.m(1, 2, **{'c': 3}))
+
+# ---- the CONSTRUCTOR, which is the corpus's own shape ------------------------
+r = Required(**{'a': 1, 'b': 2})
+print(r.a, r.b)
+
+# world.py:447 verbatim in structure: a mapping BUILT at the call site
+columns = ['name', 'x', 'z']
+row = ['bollard', 3.5, -2.0]
+fu = Furniture(**dict(zip(columns, row)))
+print(fu.name, fu.x, fu.z, fu.rot)
+
+# ...and with a defaulted parameter left out entirely
+fu2 = Furniture(**{'name': 'cleat'})
+print(fu2.name, fu2.x, fu2.z, fu2.rot)
+
+# a method ON the constructed object, also through `**`
+fu3 = fu.moved(**{'x': 10.0})
+print(fu3.name, fu3.x, fu3.z, fu3.rot)
+
+# ---- THE MAPPING IS EVALUATED EXACTLY ONCE ----------------------------------
+# Every slot is read from a temp, not from the operand expression, so a mapping
+# with a side effect must not be built once per parameter. A shim rebuilding
+# the expression per slot passes every value row above and fails this one.
+calls = []
+
+
+def src():
+    calls.append(1)
+    return {'a': 1, 'b': 2}
+
+
+r2 = Required(**src())
+print(r2.a, r2.b, len(calls))
+
+# ---- ...AND IT IS NOT ALIASED INTO THE CALLEE -------------------------------
+held = {'a': 5, 'b': 6}
+r3 = Required(**held)
+held['a'] = 99
+print(r3.a, held['a'])
+
+# ---- the refusals, which are TypeErrors and not compile errors --------------
+# The TEXT is not asserted: CPython says "missing 1 required positional
+# argument" and this says "forwarded call got 1 arguments, expected 2 to 2".
+# Both are TypeError and both name the call; encoding either wording here would
+# make the file a record of a divergence rather than of the behaviour.
+try:
+    Required(**{'a': 1})
+    print("too few: no error, which is wrong")
+except TypeError:
+    print("too few: TypeError")
+
+try:
+    Required(**{'nosuch': 1, 'alsono': 2})
+    print("bad key: no error, which is wrong")
+except TypeError:
+    print("bad key: TypeError")
+
+try:
+    Required(**{'a': 1, 'b': 2, 'c': 3})
+    print("too many: no error, which is wrong")
+except TypeError:
+    print("too many: TypeError")
+
+# ---- AN UNKNOWN KEYWORD, AGAINST AN ALL-DEFAULTS CALLEE ---------------------
+# THE ROW THIS FILE MOST NEEDS. The arity guard counts and a count is not
+# enough: `o.m(**{'nosuch': 1})` supplies ONE argument, which is inside 0..3,
+# every slot then falls back to its own default, and the call answers (0, 0, 0)
+# where CPython raises. It is reachable ONLY when every unfilled parameter has a
+# default — which is the shape that cannot fail any value assertion written
+# about the working case, so nothing above this line can see it.
+try:
+    print(o.m(**{'nosuch': 1}))
+    print("unknown keyword: no error, which is wrong")
+except TypeError:
+    print("unknown keyword: TypeError")
+
+try:
+    print(o.m(**{'a': 1, 'nosuch': 2}))
+    print("unknown keyword beside a real one: no error, which is wrong")
+except TypeError:
+    print("unknown keyword beside a real one: TypeError")
+
+# ...and the same against a callee with a REQUIRED parameter, which was already
+# caught (pystar_arg_kw raises for a name it cannot find inside the supplied
+# count). Both spellings are here because they are caught by DIFFERENT
+# machinery and a later simplification could keep one and lose the other.
+try:
+    Furniture(**{'nosuch': 1})
+    print("unknown keyword, required callee: no error, which is wrong")
+except TypeError:
+    print("unknown keyword, required callee: TypeError")
+
+# ---- the SINGLE star still works, at all three doors ------------------------
+# One entry point now serves both spellings, so the `*` rows are a positive
+# control on the dispatcher rather than a courtesy.
+print(free(*[1, 2, 3]))
+print(o.m(*[4, 5, 6]))
+print(Required(*[7, 8]).a)

@@ -3,9 +3,9 @@ track: N
 prio: 60
 type: bug
 blocked-by: []
-summary: "`obj.m(**d)` is a parse error -- `expected expression` -- while the identical `f(**d)` on a plain function WORKS. A CONSTRUCTOR call `C(**d)` is refused the same way, so the subject is not the METHOD call but any call with a receiver or a class name in front of the parenthesis. Dict-unpacking into these is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. IT IS NOW A CORPUS WALL: lekkerzeilen/world.py:447 `Furniture(**dict(zip(columns, row)))` is the first error in world and, through `from . import world`, in atlas -- two modules."
-status: backlog
-owner: unassigned
+summary: "FIXED 2026-09-11 (786b88673e62). `obj.m(**d)`, `C(**d)` and the dynamic member call WERE a parse error -- `expected expression` -- while the identical `f(**d)` on a plain function worked, because the two spellings reach different implementations and only the plain-function one had a keyword dict. Not a missing production: five sites that divert a starred argument each tested `tkStar and the next token is NOT tkStar`, so `**` fell through to ParseArgExpr. Fixed by PyStarExpandKwArgs -- the twin of PyStarExpandCallArgs, taking firstSlot because the caller has already placed the receiver, reading the mapping by parameter NAME -- plus ONE dispatcher so the five sites ask one question. No new pylib entry point. Cleared the corpus wall at lekkerzeilen/world.py:447 and, through `from . import world`, atlas."
+status: done
+owner: frankB
 ---
 
 # `**` unpacking is rejected at a method call, but works at a function call
@@ -180,3 +180,80 @@ would leave world.py exactly where it is. Re-ranked 45 -> 60 on the two modules
 it now blocks; the ranker will carry that up the lekkerzeilen umbrella. Not
 taken — recorded so whoever takes it fixes both spellings and has a corpus line
 to verify against.
+
+---
+
+## 2026-09-11, frankB — fixed, both doors, plus the dynamic one nobody had named
+
+Compiler `786b88673e62`. `**mapping` now works at a method call, a constructor
+call and a dynamic member call, and the single-star form is unchanged at all
+three.
+
+### The mechanism
+
+`PyStarExpandKwArgs(procIdx, firstSlot; var headArg, lastArg)` — the twin of the
+existing `PyStarExpandCallArgs`, and it takes `firstSlot` for the reason the
+trace above gives: the caller has already placed the receiver, so the expansion
+must start at 1 for a method and 0 for a plain proc. It hoists the mapping into
+a `TPyDict` once (`PyHoistDictMergeAny`), hoists an EMPTY `TPyList` beside it —
+load-bearing, because every `pystar_*` entry point takes the pair — and then
+fills each declared slot by NAME with `pystar_arg_kw(l, d, i, '<param>')`.
+Optional slots get `DefaultArgValueNode` first and a guarded overwrite after;
+required slots get the unconditional read. Arity is checked by
+`pystar_check_arity_kw` before, and a second time after with `(nfound, nfound)`
+to reject unexpected keywords.
+
+**It needs no new pylib entry point, so it is inert-until-pinned in nothing.**
+Every function it calls (`pystar_check_arity_kw`, `pystar_arg_kw`, `pystar_has`)
+was already exported for the single-star work.
+
+### The parse error was ONE token of lookahead in FIVE places
+
+`expected expression` did not come from a missing production. Five sites divert a
+starred argument out of an arity-driven Pascal loop, and every one of them
+tested *"the current token is `tkStar` AND the next token is NOT `tkStar`"* — so
+`**` fell through to `ParseArgExpr`, which met `*` and said what it says. The
+fix is a dispatcher at the top of `PyStarExpandCallArgs` that asks the `**`
+question ONCE and forwards, and the five guards each collapse to
+`CurTok.Kind = tkStar`. Normalise, don't special-case: the second path is the
+one that stays broken, and here there were five of them.
+
+Three dispatch predicates upstream (`pasparser_lval.inc` x3,
+`pasparser_expr.inc` x1, plus three in `pyparser.inc`) asked `PyStarArgAhead`,
+which deliberately EXCLUDES `**`. They now ask `PyArgListHasStarElem`, which was
+already forward-declared for either spelling and had one caller.
+
+### Two mistakes worth keeping
+
+**The unknown-keyword case cannot fail a value assertion.** My first cut
+compiled `C().m(**{'nosuch': 1})` against an all-defaults callee and printed
+`(0, 0, 0)` where CPython raises `TypeError`. Every parameter had a default, so
+the wrong answer was WELL-FORMED — no `expect_same` row over any value can see
+it. The instrument had to be a COUNT of landed keys, which is a quantity no
+value comparison contains. Reachable only when every unfilled parameter has a
+default, which is why it survived the first three scenarios.
+
+**The guard I wrote to count them was dead, and a dead guard fails BOTH ways at
+once.** I chained the increment onto an `AN_IF` body through `AN_PAIR`'s right
+link, which is not a statement-list chain there. The counter never incremented,
+so the new check rejected a CORRECT call and accepted a WRONG one — two symptoms
+that read as two different bugs and make a bisect argue with itself. Two separate
+`if` nodes fixed it. (frankZ's phrasing, met in the wild an hour after they said
+it.)
+
+### Verified
+
+`test/test_nilpy_double_star_unpacking_at_a_receiver_call.npy` — 23 rows,
+byte-identical to CPython, wired into `make test-nilpy`. Covers: plain-function
+negative controls; method; constructor; dynamic member; `**dict(zip(...))`;
+mapping evaluated ONCE; the callee not aliasing the mapping; too-few / bad-key /
+too-many `TypeError`s; an unknown keyword against an all-defaults callee, beside
+a real one, and against a required callee; and single-star positive controls at
+all three doors.
+
+Corpus: `world.py:447` clears. Measured at `848d67a6757a`, world and atlas
+advance to `:524 undefined variable (pathname2url)` — a different wall, not a
+pass. Unfiled and unclaimed as of this writing.
+
+## Log
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

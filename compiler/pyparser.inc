@@ -7863,8 +7863,7 @@ begin
     bookkeeping to do, and an argument after the unpack is refused by the shared
     expander anyway.
     bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused }
-  if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-     (Tokens[TokPos].Kind <> tkStar) then
+  if CurTok.Kind = tkStar then
   begin
     ctorMi := FindUMeth(ci, 'create');
     if ctorMi < 0 then
@@ -16215,12 +16214,309 @@ begin
   ASTTk[PyStarOperandAsList] := Ord(tyClass);
 end;
 
+{ `pystar_has(pos, kw, k, '<the k-th python parameter>')` — was this slot
+  SUPPLIED, positionally or by name. Built here because PyStarExpandKwArgs asks
+  it twice per optional slot (once to take the value, once to count the key)
+  and two hand-built copies of a four-argument call is how they drift. }
+function PyStarKwHas(procIdx, firstSlot, k, listSym, dictSym: Integer): Integer;
+var hasArg, a2, a3, nameNode, argNode: Integer;
+begin
+  hasArg := AllocNode(AN_ARG);
+  ASTLeft[hasArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := PyMakeIdent(dictSym);
+  ASTRight[hasArg] := a2;
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a3]] := k;
+  ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTRight[a2] := a3;
+  nameNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[nameNode] := StoredName(Procs[procIdx].Params[firstSlot + k].Name);
+  ASTSLen[nameNode] := Length(Procs[procIdx].Params[firstSlot + k].Name);
+  ASTTk[nameNode] := Ord(tyString);
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := nameNode;
+  ASTRight[argNode] := -1;
+  ASTRight[a3] := argNode;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := FindProc('pystar_has');
+  if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pystar_has) not loaded');
+  ASTTk[Result] := Ord(tyBoolean);
+  ASTLeft[Result] := hasArg;
+end;
+
+{ `n := n + 1` as a statement node — the keyword-landed counter in
+  PyStarExpandKwArgs, written once because it is emitted from two arms. }
+function PyStarKwCount(sym: Integer): Integer;
+var oneNode, addNode: Integer;
+begin
+  oneNode := AllocNode(AN_INT_LIT);
+  ASTIVal[oneNode] := 1;
+  ASTTk[oneNode] := Ord(tyInteger);
+  addNode := AllocNode(AN_BINOP);
+  ASTIVal[addNode] := Ord(tkPlus);
+  ASTLeft[addNode] := PyMakeIdent(sym);
+  ASTRight[addNode] := oneNode;
+  ASTTk[addNode] := Ord(tyInteger);
+  Result := AllocNode(AN_ASSIGN);
+  ASTLeft[Result] := PyMakeIdent(sym);
+  ASTRight[Result] := addNode;
+end;
+
+{ `**mapping` at a call WITH A RECEIVER — a method, a constructor, or a
+  dynamically-dispatched member. THE TWIN OF PyStarExpandCallArgs BELOW IT, and
+  it exists because the two fill the same declared slots from different
+  containers: that one reads a positional LIST by index, this one reads a
+  keyword DICT by the parameter's own NAME.
+
+  WHY IT IS NOT PyStarForwardCall, which has taken a dict since it was written.
+  That routine BUILDS the call — it fills the callee's slots from 0, and a
+  method's slot 0 is Self, so handing it a method binds the receiver out of the
+  argument list. Making it receiver-aware means threading a firstSlot through
+  ten index expressions and hoisting a receiver into slot 0. Filling an
+  argument CHAIN instead, the way the single-star expander already does, needs
+  none of that: the caller has already placed the receiver and this appends
+  after it. One `firstSlot`, and the arithmetic stays in one place.
+
+  Every runtime helper it needs already existed for the plain-function path —
+  pystar_check_arity_kw, pystar_has, pystar_arg_kw — so nothing here touches
+  compiler/builtin/**, and this needs no pin to take effect.
+
+  THE EMPTY LIST IS LOAD-BEARING, not a placeholder. pystar_arg_kw takes both
+  halves and prefers the positional one, so passing an empty TPyList makes
+  every slot resolve by name — and, more usefully, keeps its "unexpected
+  keyword argument" arm armed: that arm fires when the slot index is below the
+  TOTAL supplied count, which with an empty list is the dict's key count. So
+  `C(**{"nosuch": 1, "alsono": 2})` on `def __init__(self, a, b)` raises
+  TypeError naming the parameter that got nothing, rather than silently
+  binding two Nones.
+
+  bug-n-double-star-unpacking-is-rejected-at-a-method-call }
+procedure PyStarExpandKwArgs(procIdx, firstSlot: Integer;
+                             var headArg, lastArg: Integer);
+var dictSym, listSym, asgn, total, required, wanted, lo, k: Integer;
+    slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
+    nameNode, hasArg, hasCall, ifNode, pairNode, dfltAsgn: Integer;
+    nfoundSym: Integer;
+begin
+  if FindUClass('TPyDict') < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
+  if FindUClass('TPyList') < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { A callee that DECLARES *args or **kwargs wants the container passed
+    through as its packed parameter, not spread over declared slots — a
+    different lowering, and the slot loop below would demand one key per
+    container and fail at run time with an arity message about a call the
+    program never wrote. Refused by name here, exactly as the constructor site
+    refuses the single-star spelling. }
+  if (ProcPyStarIdx[procIdx] >= 0) or (ProcPyKwIdx[procIdx] >= 0) then
+    Error('Nil Python: **unpacking into ' + Procs[procIdx].Name
+          + '() where the callee itself takes *args or **kwargs is not '
+          + 'supported yet — pass the keywords one by one');
+  Next;                          { the first '*' }
+  Next;                          { the second — `**` is two tkStar }
+  PyParseBoolExpr;
+  dictSym := PyNewContainerTemp('TPyDict', 'starkw');
+  { pydict_merge_any, not an assignment: `**` accepts ANY mapping in CPython,
+    and the operand here is commonly `dict(zip(...))` — a fresh dict — but may
+    equally be a variable somebody else still holds, which must not be aliased
+    into the callee. }
+  PyHoistDictMergeAny(dictSym, CurASTNode);
+  listSym := PyNewContainerTemp('TPyList', 'starkwpos');
+
+  total := Procs[procIdx].ParamCount;
+  required := total;
+  while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
+    Dec(required);
+  wanted := total - firstSlot;
+  if wanted <= 0 then
+    Error('Nil Python: **unpacking has no parameter left to fill in .'
+          + Procs[procIdx].Name + '()');
+  if wanted > 16 then
+    Error('Nil Python: cannot **unpack into a callee with more than 16 '
+          + 'parameters');
+  lo := required - firstSlot;
+  if lo < 0 then lo := 0;
+
+  { one guard: the mapping must hold between lo and wanted of the slots }
+  chkArg := AllocNode(AN_ARG);
+  ASTLeft[chkArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := PyMakeIdent(dictSym);
+  ASTRight[chkArg] := a2;
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[a3]] := lo;
+  ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTRight[a2] := a3;
+  idxArg := AllocNode(AN_ARG);
+  ASTLeft[idxArg] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTLeft[idxArg]] := wanted;
+  ASTTk[ASTLeft[idxArg]] := Ord(tyInteger);
+  ASTRight[a3] := idxArg;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pystar_check_arity_kw');
+  if ASTIVal[callNode] < 0 then
+    Error('Nil Python: pylib (pystar_check_arity_kw) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := chkArg;
+  PyHoistStmt(callNode);
+
+  { HOW MANY OF THE MAPPING'S KEYS ACTUALLY LANDED ON A PARAMETER. The arity
+    guard above counts and the count is not enough: `o.m(**{'nosuch': 1})` on
+    `def m(self, a=0, b=0, c=0)` supplies ONE argument, which is within 0..3,
+    every slot then falls back to its default, and the call returns (0, 0, 0)
+    where CPython raises `unexpected keyword argument`. Measured 2026-09-11 —
+    a silent wrong value, and the expensive kind: it is only reachable when
+    every unfilled parameter has a default, which is the shape that cannot fail
+    any value assertion written about the working case.
+    Counted here rather than checked in the runtime, because a per-key
+    membership test would be a new pylib entry point and pylib is
+    compiler/builtin/**, which needs a pin to take effect. }
+  nfoundSym := AllocVar(PyHiddenName('starkwn'), tyInteger);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := PyMakeIdent(nfoundSym);
+  ASTRight[asgn] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTRight[asgn]] := 0;
+  ASTTk[ASTRight[asgn]] := Ord(tyInteger);
+  PyHoistStmt(asgn);
+
+  for k := 0 to wanted - 1 do
+  begin
+    slotSym := AllocVar(PyHiddenName('starkwa'), tyVariant);
+    { An OPTIONAL slot starts at its declared default; the keyword read below
+      overwrites it only when the mapping actually carries that name. Same
+      shape and same reason as the single-star expander: DefaultArgValueNode
+      reads a non-constant default from the def-time global rather than
+      rebuilding it. }
+    if k >= lo then
+    begin
+      dfltAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[dfltAsgn] := PyMakeIdent(slotSym);
+      ASTRight[dfltAsgn] := PyForceVariant(DefaultArgValueNode(procIdx,
+                                                               firstSlot + k));
+      PyHoistStmt(dfltAsgn);
+    end;
+    elemNode := AllocNode(AN_ARG);
+    ASTLeft[elemNode] := PyMakeIdent(listSym);
+    a2 := AllocNode(AN_ARG);
+    ASTLeft[a2] := PyMakeIdent(dictSym);
+    ASTRight[elemNode] := a2;
+    idxArg := AllocNode(AN_ARG);
+    ASTLeft[idxArg] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[idxArg]] := k;
+    ASTTk[ASTLeft[idxArg]] := Ord(tyInteger);
+    ASTRight[a2] := idxArg;
+    { the parameter's NAME travels as a literal: the frontend knows it and the
+      runtime does not }
+    nameNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[nameNode] := StoredName(Procs[procIdx].Params[firstSlot + k].Name);
+    ASTSLen[nameNode] := Length(Procs[procIdx].Params[firstSlot + k].Name);
+    ASTTk[nameNode] := Ord(tyString);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := nameNode;
+    ASTRight[argNode] := -1;
+    ASTRight[idxArg] := argNode;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_arg_kw');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_arg_kw) not loaded');
+    ASTTk[callNode] := Ord(tyVariant);
+    ASTLeft[callNode] := elemNode;
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(slotSym);
+    ASTRight[asgn] := callNode;
+    if k >= lo then
+    begin
+      { `if pystar_has(pos, kw, k, 'name') then slot := pystar_arg_kw(...)` —
+        the read is INSIDE the guard, not merely its result, because
+        pystar_arg_kw is what raises for an unexpected keyword and an optional
+        slot that was simply not supplied is not one. }
+      hasCall := PyStarKwHas(procIdx, firstSlot, k, listSym, dictSym);
+      ifNode := AllocNode(AN_IF);
+      ASTLeft[ifNode] := hasCall;
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := asgn;
+      ASTRight[pairNode] := -1;
+      ASTRight[ifNode] := pairNode;
+      PyHoistStmt(ifNode);
+      { A SECOND `if`, not a second statement in the first one's body. Chaining
+        the counter onto the body through AN_PAIR's right link was tried and the
+        increment never ran — the pair chain there is not a statement list of
+        this shape — and the failure is the quiet kind: the count stayed 0, so
+        the check below fired on a CORRECT call and passed a wrong one, both
+        without any tell. Two ifs cost a second pystar_has per optional slot and
+        are provably the shape the arm above already uses. }
+      ifNode := AllocNode(AN_IF);
+      ASTLeft[ifNode] := PyStarKwHas(procIdx, firstSlot, k, listSym, dictSym);
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := PyStarKwCount(nfoundSym);
+      ASTRight[pairNode] := -1;
+      ASTRight[ifNode] := pairNode;
+      PyHoistStmt(ifNode);
+    end
+    else
+    begin
+      { A REQUIRED slot: pystar_arg_kw raises when the name is absent and the
+        index is inside the supplied count, and the guard above has already
+        made the index inside it — so reaching the next statement means this
+        key was there. }
+      PyHoistStmt(asgn);
+      PyHoistStmt(PyStarKwCount(nfoundSym));
+    end;
+
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(slotSym);
+    ASTIVal[argNode] := 0;
+    ASTRight[argNode] := -1;
+    if lastArg < 0 then headArg := argNode else ASTRight[lastArg] := argNode;
+    if headArg < 0 then headArg := argNode;
+    lastArg := argNode;
+  end;
+
+  { …and every key must have landed. The positional list is empty here, so
+    pystar_check_arity_kw's own count IS the mapping's key count, and asking
+    for exactly `nfound` is the unexpected-keyword test. It reports
+    `got N arguments, expected M to M` — a TypeError, which is the class
+    CPython raises, worded about the count rather than about the offending
+    name. Naming the key needs a pylib entry point and therefore a pin. }
+  chkArg := AllocNode(AN_ARG);
+  ASTLeft[chkArg] := PyMakeIdent(listSym);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := PyMakeIdent(dictSym);
+  ASTRight[chkArg] := a2;
+  a3 := AllocNode(AN_ARG);
+  ASTLeft[a3] := PyMakeIdent(nfoundSym);
+  ASTRight[a2] := a3;
+  idxArg := AllocNode(AN_ARG);
+  ASTLeft[idxArg] := PyMakeIdent(nfoundSym);
+  ASTRight[idxArg] := -1;
+  ASTRight[a3] := idxArg;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pystar_check_arity_kw');
+  if ASTIVal[callNode] < 0 then
+    Error('Nil Python: pylib (pystar_check_arity_kw) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := chkArg;
+  PyHoistStmt(callNode);
+end;
+
 procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
                                var headArg, lastArg: Integer);
 var listCi, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
     hasArg, hasIdx, hasCall, ifNode, pairNode, dfltAsgn: Integer;
 begin
+  { ONE entry point for both spellings, so the five sites that divert a starred
+    argument out of an arity-driven Pascal loop each ask ONE question. They used
+    to test `tkStar and the next token is NOT tkStar`, which is how `**` reached
+    ParseArgExpr and answered `expected expression` — a message about the
+    operand, naming neither the form nor the callee. }
+  if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkStar) then
+  begin
+    PyStarExpandKwArgs(procIdx, firstSlot, headArg, lastArg);
+    Exit;
+  end;
   listCi := FindUClass('TPyList');
   if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
   Next;                          { the '*' }
@@ -16395,8 +16691,7 @@ begin
   cnt := 1;                          { Self occupies parameter 0 }
   while CurTok.Kind <> tkRParen do
   begin
-    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind <> tkStar) then
+    if CurTok.Kind = tkStar then
     begin
       PyStarExpandCallArgs(mpi, cnt, head, mlastArg);
       cnt := Procs[mpi].ParamCount;
@@ -16443,8 +16738,7 @@ var argNode, kwIdx, n: Integer;
 begin
   while CurTok.Kind <> tkRParen do
   begin
-    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind <> tkStar) then
+    if CurTok.Kind = tkStar then
     begin
       PyStarExpandCallArgs(procIdx, nArgs, argsHead, lastArg);
       if CurTok.Kind = tkComma then
@@ -16764,8 +17058,7 @@ begin
       method path does. }
     { `c.setStrokeColorRGB(*rgb)` — a starred argument is not an expression, so
       it is diverted before ParseArgExpr ever sees the '*'. }
-    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[mpi] < 0) then
+    if (CurTok.Kind = tkStar) and (ProcPyStarIdx[mpi] < 0) then
     begin
       k := selfArg;
       PyStarExpandCallArgs(mpi, n + 1, k, lastArg);
@@ -17822,8 +18115,7 @@ begin
     end;
     { a starred argument on a dynamically-dispatched receiver — same expansion
       as the statically-bound method path above }
-    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind <> tkStar) and (ProcPyStarIdx[hitPi] < 0) then
+    if (CurTok.Kind = tkStar) and (ProcPyStarIdx[hitPi] < 0) then
     begin
       kwIdx := selfArg;
       PyStarExpandCallArgs(hitPi, i + 1, kwIdx, lastArg);
@@ -44173,7 +44465,7 @@ begin
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -44305,7 +44597,7 @@ begin
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -45263,7 +45555,7 @@ begin
                 parameters; the star is on the CALL). A star is not an expression, so
                 the arity loop below cannot parse it: hand the whole argument list to
                 the NilPy path, which expands the list across the remaining slots. }
-              if (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+              if (mai <= Procs[mpi].ParamCount-1) and PyArgListHasStarElem then
                 PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
               while mai <= Procs[mpi].ParamCount-1 do
               begin

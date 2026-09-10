@@ -1,5 +1,12 @@
 # Nil Python `import` maps onto the Pascal unit resolver, so a C header in
 # /usr/include is imported and dynamically linked. Here sqlite3.h is imported
 # and sqlite3_libversion_number() is called straight from libsqlite3.so.0.
+#
+# COMPILED WITH --no-shims, AND THAT IS LOAD-BEARING. `import sqlite3` reaches
+# CPython's DB-API through lib/rtl/mimic_sqlite3.pas now, because a shim we ship
+# IS the Python module of that name and beats a same-named C header -- which is
+# what a Python program means by the line and what the resolver's host-header
+# probe always said it would do. --no-shims resolves the name as if no shim
+# existed, which is the door this route lives behind.
 import sqlite3
 print(sqlite3_libversion_number())

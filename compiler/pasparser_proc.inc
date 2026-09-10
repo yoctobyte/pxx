@@ -5820,11 +5820,27 @@ begin
 
   { …and NOW the host headers for a NilPy import — but only when no mimic_ shim
     of that name exists, since a shim we ship IS the Python module and must beat
-    a same-named C header. `import sqlite3` still reaches sqlite3.h (nothing
-    ships a mimic_sqlite3), and `import string` will reach mimic_string the
-    moment it is written. }
+    a same-named C header. `import string` reaches mimic_string, not string.h.
+
+    THE EXAMPLE THAT USED TO STAND HERE HAS COME TRUE AND IS KEPT AS THE WORKED
+    CASE. It read *"`import sqlite3` still reaches sqlite3.h (nothing ships a
+    mimic_sqlite3)"*, and on 2026-09-11 lib/rtl/mimic_sqlite3.pas landed, so the
+    shim now answers and the header does not. That is this rule DECIDING, not
+    breaking: a Python program writing `import sqlite3` means CPython's DB-API,
+    and a same-named header in /usr/include is an accident of this machine's
+    include path. Two tests were written against the header route
+    (test_nilpy_import_sqlite, test_nilpy_sqlite_crud — out-param return
+    lifting, char* to managed string) and they went red on exactly this line.
+
+    `--no-shims` IS THE DOOR THEY MOVED TO, and making it one is the clause
+    below. The flag's own refusal says it *"refuses the mimic_ substitution"*,
+    so resolving as if no shim existed is what it already claims to do; before
+    this it fell out of the resolver early and refused the IMPORT, which turned
+    "do not substitute" into "do not import" and left no spelling at all
+    reaching a header a shim shadows.
+    bug-n-no-shims-refuses-instead-of-resolving-what-the-shim-shadowed }
   if (Length(UnitContent) = 0) and isNilPy and (pyImportLang <> 'pas') and
-     (not PyMimicShimExists(lo, rtldir, lcldir)) then
+     (NoShims or (not PyMimicShimExists(lo, rtldir, lcldir))) then
     PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
 
   { THE COLLISION, NAMED. A bare import found a Pascal unit of that name and was
@@ -5837,7 +5853,7 @@ begin
     mimic_ shim IS the Python module of that name, so if one exists it answers
     and there is no collision to report. }
   if (Length(UnitContent) = 0) and isNilPy and (pasRefusedPath <> '') and
-     (not PyMimicShimExists(lo, rtldir, lcldir)) then
+     (NoShims or (not PyMimicShimExists(lo, rtldir, lcldir))) then
   begin
     emsg := 'import: ' + lo + ' is the Pascal unit ' + pasRefusedPath +
             ', not a Python module — a bare NilPy import resolves to Python '
@@ -6554,10 +6570,15 @@ begin
   if (Length(UnitContent) = 0) and isNilPy and pyLookupOK and (not isPath) and
      (not softMissOK) and (Copy(lo, 1, 6) <> 'mimic_') then
   begin
+    { Reached only when NOTHING ELSE answered — the host-header probe above now
+      runs under --no-shims too, so a name a shim shadows is resolved the way it
+      would be if the shim were absent. This refusal is therefore what the flag
+      has always meant: no shim, and nothing else of that name either. }
     if NoShims then
     begin
       ConcatThree('import: no unit named ', lo,
-                  ' (--no-shims refuses the mimic_ substitution)', emsg);
+                  ' (--no-shims refuses the mimic_ substitution, and nothing'
+                  + ' else of that name resolved)', emsg);
       Error(emsg);
     end;
     CurrentCLibrary := savedCurrentCLibrary;
