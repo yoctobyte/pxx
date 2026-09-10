@@ -139,12 +139,37 @@ have now confirmed identical output.
 
 ## 2026-09-10 (frankuser) — third instance, and a MOVE is worse than an ADD
 
-Recurred at pin v407 (`51901941e`, tree `04559b9d`, 2026-09-06). Track T's full
-tier at `2026-09-10T08:40:21Z` is RED on four rows, `new_red: []`,
-`still_red: [lib-test#src:test/lib_synapse.pas, lib_synapse_ssl.pas,
-lib_synapse_transitive_unit.pas, tools/crtl_reachability.py]`, first appearing
-`2026-09-09T16:32:24Z` — the first full tier after the last of four `lib/rtl`
-commits that landed that afternoon (frank-seven, measured on seven).
+Recurred at pin v407 (`51901941e`, tree `04559b9d`, 2026-09-06).
+
+**CORRECTED 2026-09-10 — the tier is 7 red rows, 5 of them this cause, 2
+unrelated.** The first figures here said four rows and one cause; both came from
+a `[:4]` slice in a throwaway print, reported as the tier's state (frank-seven's
+own catch). The five that went NEW-RED in a single run at
+`2026-09-09T16:32:24Z`, the first full tier after `0ffe185bb` at 15:57Z:
+
+```
+lib-test#src:test/lib_synapse.pas
+lib-test#src:test/lib_synapse_ssl.pas
+lib-test#src:test/lib_synapse_transitive_unit.pas
+lib-test#src:tools/crtl_reachability.py
+test-fpjson#src:tools/install_lib_candidates.sh
+```
+
+**The two a pin will NOT clear**, and they matter because otherwise a post-pin
+tier showing red reads as the pin having failed:
+`size-canary#src:tools/size_canary.py` (still-red since 2026-08-30) and
+`test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh` (2026-09-09 11:49Z —
+**four hours BEFORE** `0ffe185bb`, so it cannot be this cause).
+
+Attribution strength differs across the five and is stated rather than rounded:
+the three synapse rows were reproduced by hand against the pinned binary;
+`crtl_reachability.py` carries the same identifiers as the 2026-09-06 instance;
+`install_lib_candidates.sh` is attributed on **co-occurrence in the same run
+only**, which is weaker.
+
+The box was GREEN on most full tiers through 09-08 and has been continuously RED
+since 09-09 06:23 — a two-day-old break, not a long degradation, which makes the
+pin more urgent rather than less.
 
 Cause is `0ffe185bb`, and it is the documented shape with one difference that
 makes it sharper. Previous instances ADDED a builtin and used it from `lib/rtl`;
