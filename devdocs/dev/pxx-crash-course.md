@@ -183,6 +183,19 @@ not a slogan: the first run that tested the dual-surface pattern found a bug in
 it inside ten minutes (`base64.b64encode` returns a string where CPython returns
 bytes — values identical, type wrong, so every value assertion passed).
 
+**THE FREE ORACLE HAS ONE TRAP AND IT IS FLOATS.** Measured 2026-09-10, on the
+owner's suggestion, by sweeping `math.sin` over 0..1 in 0.001 steps and diffing
+`repr()` against CPython: **70 of 1001 rows differ**, max |delta| 1.11e-16 —
+one ULP. `sin` is *correct* and *not bit-identical*. So a conformance fixture
+that diffs the printed form of a float against CPython will redden on ~7% of
+rows for no defect at all, and whoever writes it will spend an evening on it.
+Diff floats against a **tolerance**; byte-exact diffs are for bytes, strings and
+integers, where they are unanswerable. (There is no blessed ULP threshold. A
+seat wrote one into CLAUDE.md the same evening, attributed to the owner, from a
+remark that was a joke — see the F-lane bullet there for what the joke was
+actually about, which is that a last-ulp ticket is cheap to write and a missing
+module is not.)
+
 **And NilPy compiles.** A plain-Python shim is native code. Pick a shim's
 implementation language by **which one can express the job**, never by speed —
 `mimic_struct.pas` is Pascal because reinterpreting bytes needs a pointer cast;

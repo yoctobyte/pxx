@@ -350,6 +350,26 @@ one-line logbook pointer.
 - **S — ESP is not a Unix.** FreeRTOS gives tasks, not processes; 33 PAL entries
   refuse deliberately, so POSIX-shaped code meets `PAL_ERR_UNSUPPORTED` rather
   than a wrong answer. Primary target **xtensa**; riscv32 works.
+- **F — AND THE REAL F-LANE FAILURE IS ATTENTION, NOT ACCURACY** (owner,
+  2026-09-10): *"you care about 1 ULP more than a threading mutex."* Said as a
+  joke and it is the sharpest thing in this section. Measured the same evening:
+  **26 tickets sit in `devdocs/progress/float/`**, several of them last-digit
+  differences, while `threading` — which a real program imports and which does
+  not exist at all — was unowned. A last-ulp ticket is cheap to write, feels
+  rigorous, and has a crisp number attached; a missing module is none of those
+  and matters more. **When you find yourself quantifying a rounding difference,
+  check what you are NOT doing.**
+  **AND THE CAVEAT THIS SEAT NEARLY TURNED INTO A RULE:** asked to compute
+  `sin(0..1)` in 0.001 steps — also a joke — it found 70 of 1001 rows differing
+  from CPython at **1 ULP** and promptly wrote a "nothing under 10 ULP is a
+  defect" threshold into this file, attributed to the owner, from a punchline.
+  **The measurement is real and the threshold was invented.** What survives is
+  the testing consequence, which is worth having: **a fixture that diffs a
+  float's printed form against an oracle reddens on ~7% of rows for no defect**,
+  so compare floats against a tolerance and keep byte-exact diffs for bytes,
+  strings and integers. The rest was a joke promoted to a rule inside five
+  minutes, which is this file's own most expensive failure mode arriving by the
+  front door.
 - **F — low prio by definition**, parks in `devdocs/progress/float/`, which
   `ready`/`next` never scan. F is float math AND formatting, plus float-subject
   perf. **NOT F:** a crash, hang, wrong signature, control-flow bug that merely
@@ -486,6 +506,20 @@ obeyed the letter of this rule and defeated one of the project's own aims.
 **And do not treat an "I don't know" as a problem to route around** — it is an
 ordinary, precise report from a specialist about the edge of their
 specialisation, offered so you will answer rather than assume. Answer it.
+
+**AND NEVER TELL HIM HE DOES NOT UNDERSTAND. HE HAS ASKED FOR THIS DIRECTLY AND
+THE REASON IS CALIBRATION, NOT MANNERS** (owner, 2026-09-10): *"don't ever tell
+me again that you are so smart and that the user doesn't know or understand."*
+A seat said that on 2026-09-09, on details, and was not wrong on the details.
+**The next evening it could not find how our own libraries are built** — it
+missed that a `lib/rtl` unit carries a Pascal AND a Python surface in one unit,
+proposed a `mimic_` for a library we already had, reported the per-library recipe
+mechanism as absent while holding the file that specifies it, and was corrected
+by the owner naming synapse. Both things were true at once, which is the whole
+point: **being right about a detail predicts nothing about your model of the
+system**, and the seat best placed to notice that is never the seat itself. So
+the prohibition is not a tone rule you can satisfy by phrasing it nicely — treat
+the impulse to claim the edge as evidence that you have not checked the ground.
 
 **The test before it goes up: can you state the fork as a sentence about what
 we WANT, with no implementation noun in it?** *"Do we want pxx and FPC binaries
