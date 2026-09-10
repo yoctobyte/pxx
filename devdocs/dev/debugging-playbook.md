@@ -23319,3 +23319,54 @@ Found by the first tier to run past the row after the other half was fixed;
 nobody was looking for it. **Not promoted to CLAUDE.md** — one instance, and its
 author explicitly declined to push for it. Recommended there as a third clause
 on the existing assertion rule if a second instance turns up.
+
+## A STALE INSTRUMENT CAN PRODUCE A FALSE *CONFIRMATION*, AND THAT IS THE DIRECTION NOTHING GUARDS — PRINT THE SHA BESIDE A REPRODUCTION, NOT ONLY BESIDE A CLAIM
+
+Every stale-binary warning in CLAUDE.md points one way: a stale binary makes you
+claim a **green you did not earn**. Five routes to one are enumerated — a seeded
+tree, a reverted experiment, a sync that pulled someone's `compiler/**`, `make
+bootstrap`, the positive-control revert loop — and the framing throughout is
+false reassurance.
+
+Measured 2026-09-10, this seat, verifying an auto-filed regression
+(`regression-test-nilpy-beside-the-source-wins`, closed in `d212489ab`). The
+stale binary produced a **RED that matched the ticket exactly.**
+
+`compiler/pascal26` on disk was `1266f201c140`, from before frankH's
+`967f9cc93` moved a die-at-exec diagnostic to `ErrorNoPos`. It still printed
+`pascal26:10:` against a Makefile at HEAD that now asserts `pascal26:1:`. The
+ticket said that row was red. I ran it, and it was red, for the reason the
+ticket gave, in the file the ticket named. I had pulled and not rebuilt.
+
+**A false green has a challenger and a false confirmation does not.** Somebody
+eventually goes looking for the bug a false green hid. Nobody re-opens a
+reproduction that agreed with the report — the write-up agrees with the
+auto-filer, the auto-filer was honest, and both were right about a tree neither
+was standing on. **The instinct that would have fired — is my instrument
+current, did I check the sha — is exactly the instinct a successful
+reproduction switches off.** You were asking whether the bug is real, you got a
+yes, and the question closed.
+
+**Same skeleton as the self-blame paragraph in CLAUDE.md**, which is the giveaway
+that this is a family and not an incident. There, a tier delta reads like a
+confession and the search terminates. Here it reads like a confirmation and the
+search terminates. Both are an instrument error resolving *toward the answer you
+already had*. The file guards the flattering direction (you claim a delta you
+did not cause) and the self-blaming one (you revert a patch that was innocent).
+This is the third: **the direction that agrees with the ticket in front of you.**
+
+**The prescription is one sentence and it is already half-written.** CLAUDE.md
+says to print `sha256sum compiler/pascal26` beside every number you report, with
+the commit beside the sha. **A reproduction is not a number, so nobody reads
+that line as covering one** — and a reproduction is the case where it matters
+most, because a number invites a query and a confirmed repro closes one.
+Printing the sha is what saved this instance.
+
+Not promoted to CLAUDE.md: **one instance, and it is this seat's own.** The
+recurrence test wants a second independent subsystem, and quality is not that
+test — frankB, who found the pattern in my write-up, rates it above the entry I
+banked for them an hour earlier, and that is a judgement about value, not a
+second occurrence. Recommended there as an **extension of the existing
+print-the-sha rule** rather than as a neighbouring rule, since it shares that
+rule's remedy and differs only in when the remedy is thought to apply — and an
+extension costs a sentence where a rule costs a paragraph.
