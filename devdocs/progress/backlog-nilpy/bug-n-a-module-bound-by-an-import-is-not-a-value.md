@@ -186,3 +186,67 @@ wall is `no member KEY_ESCAPE came of the qualifier platform`, and
 `bindings` fails only because `platform/__init__` does not compile. One file's
 construct, two modules cleared. Sixth same-line-number-family cascade in this
 corpus.
+
+## THE FORK IS NARROWER STILL — the static half ALREADY EXISTS, measured 2026-09-10 (frankZ, compiler `6d53c745ea69`)
+
+The addendum above asked whether part 2 has to serve `getattr` or only static
+member reads, and guessed that static reads would need "a compile-time unit
+alias" to be built. **They do not. That alias is `import ... as`, it is in the
+compiler today, and it serves every static row in the seam:**
+
+```python
+from . import fallback as backend    # or `from pkg import fallback as backend`
+backend.B                            # works
+backend.name()                       # works
+```
+
+Both spellings measured, module level and inside a def, and — since
+`bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias` — correctly under a
+`try: import ctypes / except ImportError:` guard, which is the shape that
+selects a backend. So of the seam's five uses of the module-valued variable,
+**three need no new feature at all**; they need the seam written with `as`
+instead of with a returned value.
+
+**What still does NOT work is exactly the two `getattr` sites:**
+
+```python
+f = getattr(backend, "open_audio", None)
+#           ^ pascal26: error: undefined variable (backend)
+```
+
+A unit alias is a compile-time namespace and has nothing to push as an argument
+— the same sentence as the original ticket, now with the boundary drawn one
+place further in. And those two sites are the capability probe against a stub
+`_pxx.py` that `task-b-write-the-lekkerzeilen-pxx-platform-backend` (p85) is
+going to replace.
+
+### So there are now THREE options, not two, and the new one is cheap
+
+1. **Runtime module object + open-world dispatch.** Serves everything. Large.
+2. **Compile-time unit alias.** Already built. Needs the SEAM rewritten to
+   `from . import X as backend` — legal CPython, identical behaviour there, and
+   `import ... as` is if anything the more common spelling of this idiom than
+   returning a module from a function. CLAUDE.md permits changing lekkerzeilen
+   where something is principally incompatible with NilPy, and a module as a
+   first-class value is that. **Cost: two `getattr` probes stop working**, and
+   under NilPy they already always answer `None` because `_pxx.py` defines
+   neither name.
+3. **Fold `getattr(<unit alias>, "<literal>", <default>)` at compile time.** The
+   receiver is a compile-time unit and the name is a literal, so the answer is
+   decidable — the member is in the unit or it is not. That closes option 2's
+   only gap without a runtime module value anywhere. Not measured; nobody has
+   looked at whether the `getattr` door can see a unit qualifier at all.
+
+**DO NOT read option 2 as free.** It changes the corpus rather than the
+compiler, and `_backend` is a module global read from four other modules — every
+one of those reads has to become the alias too, or they wall on the same thing
+one file further out. That is the number to get before choosing: how many of the
+99 module bindings are read through a variable, not how many are used as values.
+
+**AND THE TRAP UNDER OPTION 2 WAS REAL AND IS NOW GONE.** Written against
+`73312a7472fd` — the compiler this ticket's boundary table was measured on — the
+rewritten seam compiled, ran the handler, reported itself as `pxx`, and bound
+`backend` to the CTYPES module, because a dead try arm still registered its unit
+alias and the table is first-wins. **Silent, and in the seam whose only job is to
+say which backend is live.** Fixed in `7ce61a896`; option 2 was untakeable
+before it and nothing in this ticket would have said so.
