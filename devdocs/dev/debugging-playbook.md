@@ -23408,3 +23408,77 @@ Belongs with the instrument rules: the shell did exactly what it is specified to
 do, reported the fault to a stream nobody reads on success, and the artefact it
 produced is well-formed. Same family as every other entry here — **it did not
 error, it answered.**
+
+## A LOG ECHOES THE PROGRAM THAT PRODUCED IT — COUNT WHAT THE INSTRUMENT PRODUCED, NEVER WHAT THE LOG CONTAINS
+
+CLAUDE.md already carries this mechanism, and only about transcripts: *a grep
+for a denial cannot tell a denial from a search for one, because the search is
+in the file by the time you read it.* Measured 2026-09-08, two seats, counts
+inflated 3x and 4x.
+
+**It is not a transcript property.** Measured 2026-09-10 in a completely
+different subsystem — a Track N tier log. Two seats compared ok-line counts
+across a range and the delta came out ZERO where the recipe had provably grown
+by two rows:
+
+    grep -c 'ok:'   -> 863      (unanchored)
+    grep -c '^ok:'  -> 861      (anchored)
+
+The two extra lines are the recipe's own text, echoed by make:
+
+1. `Makefile:1069` — an `expect_same` EXPECTED STRING whose literal content is
+   `match ok: C# C #`. A test's expected output, quoted in the recipe.
+2. `Makefile:2495` — a `!`-prefixed row piping a compile into `grep -q 'ok:'`.
+
+**Row 2 is the sharp one and it is why this deserves an entry rather than a
+pointer.** In the transcript case the contaminant is a NEUTRAL search. Here the
+row is an assertion that a program must **NOT** report success — so the count of
+successes was inflated by the one row whose entire purpose is to check that a
+success does not happen. **The instrument counted the row asserting the opposite
+of what it was tallying**, and it moved the number in the direction that hides
+the failure it was watching for.
+
+The general shape, which the transcript wording is too specific to reach: **any
+log that echoes the program which produced it contains that program's text.**
+Build logs, CI output, `set -x` traces, a REPL session, a harness that prints
+its own commands.
+
+**AND THE REMEDY IS PROVENANCE, NOT PATTERN — anchoring is a heuristic that
+happened to work here.** `^ok:` saved this instance only because recipe echoes
+begin with a tab or a command name, and nothing prevents an echoed heredoc, a
+`printf` payload or a `.expected` fixture from carrying the exact marker at
+column zero. A rule that prescribes anchoring will read as SATISFIED by the next
+log that bites through a shape anchoring cannot see. **Count what the instrument
+PRODUCED, never what the log CONTAINS**: a machine-readable stream the recipe
+text cannot reach, a marker no source file would ever contain, or a count taken
+from the process rather than from the transcript of it. Anchoring is worth a
+clause as a cheap first cut; it is not the sentence.
+
+That also EXPLAINS the transcript case rather than merely restating it: there,
+`is_error: true` on a `tool_result` beat the string search, and it won for
+exactly this reason. **It picked provenance over pattern, and nobody named that
+as the principle** — which is why the existing rule reads as being about
+transcripts. Making the principle explicit is what lets someone counting a build
+log recognise themselves in it.
+
+**And the count was never the right instrument anyway.** The same tree had 912
+`$(COMPILER)` invocations against 861 anchored ok-lines — ~74 rows deliberately
+fail or capture output, and some compile more than once for cross targets. A
+re-derivation from the Makefile gave 838, wrong in the other direction. **The
+completion marker answers "did it finish"; the count answers "roughly how much
+ran."** It was asked for single-unit precision and it obliged with a wrong
+answer.
+
+Found by frankB, who produced the inflated baseline, checked their own grep when
+the delta was queried, reported the mechanism rather than the number, and then
+corrected this entry's first remedy from anchoring to provenance. **Both lines
+were independently reproduced in this seat's tree before the correction was
+accepted** — 863 unanchored, 861 anchored, same two rows.
+
+**Recurrence is MET** — two independent subsystems (session transcripts, build
+logs), four seats across the two instances — which is CLAUDE.md's stated
+promotion test, and it wants the existing transcript rule STRENGTHENED rather
+than a neighbour added. **Not promoted from here**: the finding is a peer's, and
+this seat does not edit CLAUDE.md on a peer's finding. Recommended to the owner
+as one of three standing items, with the recurrence status stated for each so he
+meets them as a single decision.

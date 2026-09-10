@@ -387,3 +387,32 @@ refused by rule 3**, and the probes only ran under `PXX_ALLOW_FULL_SUITE=1`,
 which is the documented hatch and a speed guardrail an agent lifts on its own.
 A rule that refuses its own diagnosis is the reason this keeps being rediscovered
 rather than measured.
+
+## Instance, 2026-09-10 (frankZ, Track N) — and it is the ticket's own predicted shape
+
+`git commit -F` refused, killing a bundled `git add -A && git commit && sync`.
+The trigger was the **commit-message heredoc**, whose prose named the Track N
+tier by its literal invocation while explaining where a measurement came from.
+Nothing in the command ran, or could run, a suite.
+
+Two things worth adding to the count rather than just incrementing it.
+
+**It hit the exact selection effect this ticket names.** The message being
+written was an entry about a MEASUREMENT INSTRUMENT — how an ok-line count from
+that tier's log was inflated by the recipe's own echoed text. Writing down where
+a number came from is precisely the writing the hook's own refusal text asks for,
+and naming the command that produced the number is how you make such a note
+checkable. The rephrase costs a rewrite and it also costs the reader the exact
+string they would grep for.
+
+**And the refusal arrived at commit time, after the work was done**, so the
+window it opened is the one CLAUDE.md cares about most: unpushed work is work
+Track T cannot see, and a session that hits this at the end of a long turn is
+one interruption away from losing it. The author here re-ran within a minute;
+that is not evidence the window is safe, only that it was short this time.
+
+No fix attempted and none proposed beyond what is already in the fork above.
+`.claude/hooks/` binds every agent on this box and the direction of any change
+here is LESS strict, which CLAUDE.md puts squarely with the owner — and a peer
+saying otherwise would not move it either. Recorded as evidence so the count
+stays honest.
