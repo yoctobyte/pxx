@@ -45,3 +45,33 @@
 #
 # Example of the required shape (commented out — not an active entry):
 # test-zlib#00	bug-t-zlib-oracle-breaks-on-gcc-14
+
+# ---- first active entries, 2026-09-10 ----------------------------------------
+# Added on the owner's answer, enrolling the six real-program jobs that were in
+# no tier at all (bug-t-six-real-program-jobs-are-in-no-tier-so-they-never-run).
+# Four of the six measure GREEN; these two do not, and the choice he made was
+# visible-but-not-blocking over held-back-until-fixed -- a red that runs and
+# reports is worth more than a job nobody can see.
+#
+# Both are ONE missing C declaration, both are statements about our tree rather
+# than about any host, and neither is "add the declaration":
+#   * __builtin_inf travels with a family (__builtin_inff/infl/nan/nans/
+#     huge_val*). Declaring only the one duktape names greens this job and stops
+#     the next corpus at the same wall.
+#   * malloc_usable_size is worse. quickjs uses it for memory ACCOUNTING, so a
+#     stub returning the requested size compiles, links, runs, and silently
+#     under-reports whenever the allocator rounds up -- surfacing much later as
+#     an engine memory limit behaving oddly under load, arbitrarily far from the
+#     stub. No output comparison can catch that, the way none catches a leak.
+#
+# Selectors verified against testmgr.generate() rather than guessed: both
+# targets decompose to exactly one job, `<target>#00`. The loader matches by
+# exact dict membership with no globbing, so a misspelled selector would be a
+# line that waives nothing and says nothing -- and both jobs classify as
+# testmgr's `selfhost` CLASS, which is a scheduling bucket and is NOT what the
+# unwaivable self-host check reads (that keys on the `selfhost-fixedpoint`
+# name prefix). Checked, because a guard that cannot fire prints PASS.
+#
+# These leave the file the moment their tickets close.
+test-duktape#00	bug-c-builtin-inf-is-undeclared-so-duktape-cannot-compile
+test-quickjs#00	bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile
