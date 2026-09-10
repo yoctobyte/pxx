@@ -1014,3 +1014,50 @@ distorts its ranking upward for the wrong reason, and this one would.
 with no extents there is nothing for the linker to garbage-collect, whatever the
 section layout. So step 2 needs SIZES as much as it needs per-function sections,
 and the 168 number stops being a puzzle.
+
+## 2026-09-10 — the multiplier is 279x, and the remaining work is SECTION GRANULARITY
+
+Measured at compiler `69c84acb1501`, tree `907015c58`, on the 19-applet
+busybox-with-ash set (86 TUs, `--dce`) that `tools/mkminimal.sh` ships:
+
+| artefact | bytes |
+| --- | --- |
+| Alpine `vmlinuz-virt`, the whole compressed Linux kernel | 11695104 |
+| **busybox, upstream's own build, gcc, the SAME 19 applets, stripped** | **116848** |
+| pxx objects, gcc-linked | 32638304 |
+| pxx objects, linked freestanding | 32553944 |
+
+**279x upstream, and 2.8x the entire kernel.** The owner put it in one question:
+*"how large is the linux kernel itself?"*
+
+**THE LINKER DEDUPLICATES NOTHING, and that is the whole finding:**
+
+* sum of all 86 objects' `.text`: **30165025**
+* the linked binary's `.text`: **30165849**
+
+The difference is 824 bytes — the entry stub. Every one of the 86 private crtl
+copies is in the final image. `ld --gc-sections` recovers **16 bytes**.
+
+**WHY, AND IT IS NOT ABOUT WEAK SYMBOLS.** `ld` resolves duplicate weak
+*symbols* to one definition, but it keeps or drops *sections*. Each object emits
+ONE monolithic `.text` holding both the busybox code and its private crtl, so the
+section is live (something in it is referenced) and the other ~443 crtl functions
+ride along as unreachable bytes that nothing can collect. `coreutils_echo.o` is
+**352423 bytes** of `.text` for an applet whose own code is about a kilobyte, and
+443 of its 916 defined symbols are weak.
+
+**`--function-sections` IS HALF OF THIS AND ITS HELP TEXT ALREADY SAYS SO** —
+*"a prerequisite for letting a linker drop or share runtime code"*. Measured on
+`coreutils_echo`: it does the relocation half correctly (`relocated 5, baked 0`)
+and the object still has exactly **one** `.text`, so `.text` total is unchanged at
+352423. The name is honest; the job is half done.
+
+**ASKED FOR: one ELF section per function (`.text.<name>`)**, which makes
+`ld --gc-sections` able to drop the 85 redundant copies. Expected result is one
+crtl copy (~350 KB) plus the busybox code (~116 KB) — call it **~0.5 MB against
+32.5**, which would take the minimal ISO from 34 MB to roughly the kernel plus
+change. That is a much smaller change than deduplicating crtl by hand, and it is
+the standard mechanism rather than a new one.
+
+This is now the ranking reason: it is not tidiness, it is the only thing between
+the minimal image and a size a person would call minimal.
