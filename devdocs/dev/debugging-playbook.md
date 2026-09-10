@@ -23166,3 +23166,48 @@ the thing** — which is why nothing in this family was ever filed.
 mechanism, grep for that mechanism before believing the sentence. Two of these
 four name a routine that is in the same file. The refusal is not evidence about
 the machinery; it is evidence about what one author believed on one afternoon.
+
+## THE GUARD AND THE HUMAN READ THE SAME FILE AND DISAGREE BY DESIGN — `MemFree` VS `MemAvailable`
+
+A backgrounded NilPy tier died at 870 lines of ~4378 with
+`make: *** [Makefile:1232: test-nilpy] Terminated`. SIGTERM, not SIGKILL — the
+harness's own background-task memory guard, not the kernel. (A kernel OOM sends
+SIGKILL and make prints `Killed`, not `Terminated`. That one word is the whole
+difference between "the box ran out" and "something decided".)
+
+Two readings of `/proc/meminfo`, taken minutes apart on a 60 GB box, both true:
+
+| | at the kill (frankB) | twenty minutes later (frankZ) |
+| --- | --- | --- |
+| `MemFree` | ~3 GB | 7.4 GB |
+| `MemAvailable` | ~41 GB | 37 GB |
+
+**A factor of thirteen, then a factor of five.** Neither number is stale, wrong,
+or lying. `MemAvailable` was ADDED to `/proc/meminfo` precisely because
+`MemFree` misleads people about reclaimable page cache — so the kernel ships
+both on purpose, a human correctly quotes the newer one, and a guard correctly
+uses the older one. **The disagreement is designed in.**
+
+The consequence is that the box looks completely healthy by the reading anyone
+would take, and is critically low by the reading that decides. Nobody
+investigating "why was my job terminated" will find an explanation in the number
+they quote, and `free -g` puts both on the same line where the eye lands on
+`available`.
+
+This is the house failure mode with a number attached, and it is a stronger
+example than the usual stale-instrument story: **nothing here is stale and
+nothing is broken**. Every other entry in this file has a wrong or outdated
+reading somewhere. This one has two correct readings and a job that still dies.
+
+**What actually killed it, measured rather than assumed:** the OWNER's own
+`python3 -m tools.import_nl --tiles` at 5.4 GB and climbing — 8.7 GB twenty
+minutes later — plus `python3 -m lekkerzeilen` and ~8 GB of browser. Not another
+agent. **The biggest consumer on this box is not something the agents can
+serialise by message**, which retires the "two tiers contend" story that had been
+passed between seats and never checked. Nobody knows what killed the earlier run
+that story came from.
+
+**So before serialising agent work to avoid a memory kill, read `ps -eo
+rss --sort=-rss | head` and find out whether an agent is the consumer at all.**
+And when quoting headroom, say WHICH number: `MemAvailable` for whether a human
+should worry, `MemFree` for whether a background task is about to be terminated.
