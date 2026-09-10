@@ -102,7 +102,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
-- `[p 70] [P]` regression-test-core-test-header-static-body-ffi-control
+- `[p 70] [A]` regression-test-core-test-header-static-body-ffi-control
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
 
 _406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

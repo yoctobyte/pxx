@@ -97,7 +97,7 @@ _none_
 | regression-test-c-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-c-abi-mixed-link#src:tools/compiler_srchash.sh at 95fc8aff2016 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-core-c-alloca-expression-stack | C | 70 | regression | regression: test-core#src:test/c_alloca_expression_stack.c at 9b0c07c2d5a8 in step 9/37, `if command -v qemu-riscv32 >/dev/null 2>&1; then \ ./compiler/pascal26 --target=riscv32 test/c_alloca_expression_stack.…` (auto-filed by twatch) | — |
 | regression-test-core-c-cross-time-and-exit-through-the-pal | T | 70 | regression | regression: test-core#src:test/c_cross_time_and_exit_through_the_pal.c at a8179a73ea84 in step 5/5, `overall=0; ran=0; want=0; \ for t in i386 aarch64 arm32 riscv32; do \ want=$((want+1)); \ case $t in i386) q=qemu-i386;…` (auto-filed by twatch) | — |
-| regression-test-core-test-header-static-body-ffi-control | P | 70 | regression | regression: test-core#src:test/test_header_static_body_ffi_control.pas at 7e4f69a34350 in step 1/107, `./compiler/pascal26 -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas /tmp/hdrstatic_ff…` (auto-filed by twatch) | — |
+| regression-test-core-test-header-static-body-ffi-control | A | 70 | regression | regression: test-core#src:test/test_header_static_body_ffi_control.pas at 7e4f69a34350 in step 1/107, `./compiler/pascal26 -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas /tmp/hdrstatic_ff…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
@@ -1090,7 +1090,7 @@ _none_
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash-2
 - [p 70] [C] regression-test-core-c-alloca-expression-stack [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-c-cross-time-and-exit-through-the-pal
-- [p 70] [P] regression-test-core-test-header-static-body-ffi-control [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [A] regression-test-core-test-header-static-body-ffi-control
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
