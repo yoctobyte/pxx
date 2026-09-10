@@ -122,4 +122,4 @@ worth reading as a group before assuming it is one bug; `threading` 2; `os` 1;
 `*unpack` 1.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4ddf1e137.
