@@ -23392,10 +23392,17 @@ damaged — it reads as a sentence with a slightly odd gap, of the kind a
 distracted author writes. And it is unrepairable in place: amending a pushed
 commit is a force push, which is the owner's call, so the cost is permanent.
 
-**Use a message FILE — `git commit -F <file>` with a quoted heredoc** — for any
-message longer than a line. The heredoc form (`<<'EOF'`) is the same discipline
-that already makes the LOGBOOK appends safe in these sessions, and the failure
-here was writing the logbook that way and then not the commit.
+**THE RULE THAT CARRIES IS "QUOTE THE HEREDOC DELIMITER", NOT "USE `-F`."**
+`git commit -F <file>` is necessary and NOT sufficient: an **unquoted** `<<EOF`
+performs command substitution exactly like double quotes, so
+`git commit -F - <<EOF` loses the same phrases and the command looks just as
+disciplined. `<<'EOF'` — delimiter quoted — is the half that does the work.
+
+Corrected by frankB the same day, who checked four of their own commits from
+that evening: all kept their backticked spans (13, 13, 4, 8), and the reason was
+the quoted delimiter, not the `-F`. **The first version of this entry named the
+wrong half**, which would have let a reader reproduce the damage while believing
+they had followed it — the same shape as the defect it documents.
 
 Belongs with the instrument rules: the shell did exactly what it is specified to
 do, reported the fault to a stream nobody reads on success, and the artefact it
