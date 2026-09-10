@@ -363,3 +363,54 @@ CLOSED and REPLACED, so it is still one module and still one cause:
 **`threading` is now the largest single lever in the corpus** — three modules,
 two sites, and two of the three are the app's own entry points (`__main__.py`,
 `app.py`). Nothing else here is worth more than one or two.
+
+## DIFF 2 — `--threadsafe`, PARTIAL, binary ccdbbcacb631, 2026-09-10, frankZ
+
+**Partial and labelled so, because the box killed three full runs.** The owner
+was importing map tiles at 7.4-9.5G RSS all evening and the harness memory
+guard SIGTERMed every whole-corpus attempt. What is here was measured; what is
+not here was not run.
+
+The census now takes `LZ_FLAGS`, because **a run without `--threadsafe`
+measures the HARNESS rather than the tree** once `import threading` works: the
+flag cannot be declared by the shim (lock-implementation defines are applied
+before lexing) and the requirement is TRANSITIVE — `__main__.py` has no
+threading reference and needs the mode because it imports `app`.
+
+It also prints each row as it lands. Two kills produced ZERO lines between
+them before that change and 7 usable rows after it. **A partial census is
+useful; a zero-line file is not.**
+
+### What was measured
+
+**Threading is cleared on all three modules, and each advances to the wall
+frankB predicted:**
+
+| module | plain | `--threadsafe` |
+| --- | --- | --- |
+| `app.py` | *(was: threading)* | `no unit named ctypes` |
+| `__main__.py` | *(was: threading)* | `expected ')' before ','` |
+| `gauges.py` | `import threading requires --threadsafe` | `expected ')' before ','` |
+
+`expected ')' before ','` is a keyword argument in a dotted stdlib call —
+`urllib.request.Request(url, headers=...)` — i.e.
+`bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument`. **One fix moves
+two modules.** The `gauges` plain row also confirms the new NilPy-level
+diagnostic: it names the flag at the import instead of pointing at
+`palthread.pas` three units down.
+
+**The null row, and the quantifier is the claim:** of **ten** modules with no
+threading in them — `audio`, `chart`, `math3d`, `sim`, `vessel`, `rig`,
+`scenery` compiled both ways plus `atlas`, `bindings`, `capture` from the
+partial run — **not one changed outcome under `--threadsafe`.** That is ten
+sampled, not thirty-five. It is *evidence for* and not *proof of* "the flag is
+free at compile time".
+
+### What this is worth to `feature-n-import-threading-should-imply-threadsafe`
+
+That ticket (p55) says the measurement collapsing its three-way fork is what
+`--threadsafe`-by-default costs. **This is one leg of it and not the whole
+thing:** compile OUTCOMES are unchanged on every module sampled, which is the
+leg that had to be clear first — a flag that changed an unrelated module's
+outcome could not be defaulted on. The runtime cost is a separate measurement
+and is still unmade.
