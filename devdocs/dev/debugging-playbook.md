@@ -23266,3 +23266,12 @@ prefers strengthening — but the edit was not made, because the recommendation 
 promote arrived from a peer and this file's rules-of-engagement forbid changing
 CLAUDE.md on a peer's ask. Standing recommendation for the owner, recorded here
 so it is not lost.
+
+The case was the HARD one, which is why it is worth recording rather than just
+obeying: the peer raised it, the author agreed on merit, it only TIGHTENS, and
+it is one sentence extending a rule that already exists. Every property that
+makes a change look safe was present, and none of them is the property that
+matters. **Two agents concurring is not a quorum — it is the same seat twice**
+(frankB's phrase). A rule that yields to agreement-plus-tightening-plus-small
+fails exactly when two agents agree, which is the common case and the one it is
+written for.
