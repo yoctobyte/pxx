@@ -10752,22 +10752,49 @@ test-core: $(COMPILER)
 	@if readelf -d $(TESTTMP)/hdrstatic_stdio26 2>/dev/null | grep -q 'libhdrstatic_stdio\.so'; then \
 	  echo "FAIL: hdrstatic_stdio26 links a DT_NEEDED on libhdrstatic_stdio.so, which cannot exist"; exit 1; \
 	else echo "ok: hdrstatic_stdio26 has no invented libhdrstatic_stdio.so"; fi
-	# POSITIVE CONTROL FOR BOTH SONAME ASSERTIONS ABOVE. They assert a pattern
-	# is ABSENT, and on a fixed compiler these binaries have no dynamic section
-	# at all -- so "no match" is correct AND indistinguishable from a grep that
-	# could never match. Validating that in the other direction used to need a
-	# PRE-FIX compiler; the pin now postdates the fix, so that control had
-	# become uncheckable and the two assertions above were inherited-control
-	# rows: one refactor from being rows that cannot fail.
-	# A bare declaration is the FFI surface and MUST stay an external import, so
-	# calling it legitimately produces the same artefact the bug produced. This
-	# row asserts the pattern IS present, on the same compiler, from a header
-	# reached the same way. If it stops firing, the two rows above prove nothing.
+	# POSITIVE CONTROL FOR BOTH SONAME ASSERTIONS ABOVE — NOW TWO ROWS, because
+	# e53eff428 split the question they were answering together.
+	#
+	# The assertions grep for a pattern they expect to be ABSENT, and on a fixed
+	# compiler those binaries have no dynamic section at all -- so "no match" is
+	# correct AND indistinguishable from a grep that could never match. Until
+	# e53eff428 one row covered both halves: it reached an invented soname
+	# through a header and asserted the ELF carried it. That commit made the
+	# compiler REFUSE a header-derived soname this host cannot resolve, which is
+	# precisely that shape, so the single control stopped building. The recipe
+	# had predicted it in its own words: "one refactor from being rows that
+	# cannot fail." It was, and this is that refactor arriving.
+	#
+	# The repair is not to expect the error and move on -- that clears the red
+	# and leaves the two greps standing with nothing behind them. Each half now
+	# has its own row, and each can fail.
+	#
+	# HALF 1 — the derived-soname path is still LIVE, and a regression would be
+	# seen. Asserted at the compiler instead of in the ELF, which is strictly
+	# more direct: the diagnostic NAMES the invented soname, so this row proves
+	# the machinery that would invent libhdrstatic.so is running. It also means
+	# the regression these rows guard now stops at COMPILE time -- if a static
+	# body were dropped and imported again, test_header_static_body.pas above
+	# would fail to build, naming libhdrstatic.so, before any grep ran. Measured
+	# 2026-09-10.
+	@out=$$(./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas $(TESTTMP)/hdrstatic_ffi26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'die at exec:.*imported from libhdrstatic_ffi\.so' \
+	   && test ! -e $(TESTTMP)/hdrstatic_ffi26 \
+	  || { echo "FAIL: the header-derived soname path did not refuse libhdrstatic_ffi.so (rc=$$rc). That path is what would invent libhdrstatic.so if the static-body bug regressed, so with this row inert the two assertions above have nothing behind them"; printf '%s\n' "$$out"; exit 1; }
+	@echo "ok: the derived-soname path is live and refuses libhdrstatic_ffi.so — a regression would be named at compile time"
+	# HALF 2 — `readelf -d | grep lib<stem>.so` CAN match on this compiler.
+	# Something must still produce the pattern the two greps look for, or they
+	# are rows that cannot fail. An EXPLICIT `external` clause does it, and is
+	# the right instrument precisely because e53eff428 does not touch it: a
+	# soname the user WROTE is intent, and the refusal is scoped to names the
+	# compiler invented. Same route test_c_argspill and test_c_lazycasing rely on.
 	# NEVER RUN -- the binary cannot load, libhdrstatic_ffi.so does not exist.
-	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas $(TESTTMP)/hdrstatic_ffi26
-	@if readelf -d $(TESTTMP)/hdrstatic_ffi26 2>/dev/null | grep -q 'libhdrstatic_ffi\.so'; then \
-	  echo "ok: hdrstatic_ffi26 DOES carry libhdrstatic_ffi.so — the soname assertions can fail"; \
-	else echo "FAIL: hdrstatic_ffi26 has no libhdrstatic_ffi.so DT_NEEDED. This is the POSITIVE CONTROL for the two assertions above; with it inert they cannot fail and their silence means nothing. Fix this before believing them"; exit 1; fi
+	./$(COMPILER) test/test_header_static_body_ffi_control_explicit.pas $(TESTTMP)/hdrstatic_ffix26
+	@if readelf -d $(TESTTMP)/hdrstatic_ffix26 2>/dev/null | grep -q 'libhdrstatic_ffi\.so'; then \
+	  echo "ok: hdrstatic_ffix26 DOES carry libhdrstatic_ffi.so — the soname greps above can match, so their silence means something"; \
+	else echo "FAIL: hdrstatic_ffix26 has no libhdrstatic_ffi.so DT_NEEDED. This is the grep-pipeline control for the two assertions above; with it inert they cannot fail and their silence means nothing. Fix this before believing them"; exit 1; fi
 	# A C diagnostic names the MODULE it is in, and stays silent about the main
 	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
 	# SILENT half is the one that needs the test: the C answer is consulted only

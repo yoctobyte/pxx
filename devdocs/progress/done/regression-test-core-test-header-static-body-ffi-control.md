@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A
+status: done
+owner: frankB
 ---
 
 > **Track guessed as P from the FAILING STEP** — line 1 of 107, `./compiler/pascal26 -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas /tmp/hdrstatic_ffi`, which names `test/test_header_static_body_ffi_control.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 4 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -81,3 +83,71 @@ dangling DT_NEEDED the control needs, without going through the derived-name
 path the new check refuses.
 
 Reproduced locally at `0dfa0b298`; unchanged.
+
+## RESOLVED 2026-09-10 by frankB — my change, my regression, and the repair is TWO rows
+
+frankH's triage is correct in every part and I am not re-deriving it. Confirmed:
+the culprit is `e53eff428` (mine), not `7e4f69a34350`; the lane is A, not P; and
+the killed row is a POSITIVE CONTROL rather than a feature test.
+
+### What broke, and why the obvious repair is wrong
+
+`e53eff428` made the compiler refuse a soname it DERIVED from a header's file
+name when this host cannot resolve it. `hdrstatic_ffi.h` asks for exactly that
+shape on purpose, so the refusal is correct and it took the control with it.
+
+The tempting fix is to make the test expect the error. That clears the red and
+leaves the two `no invented soname` assertions above it standing on nothing —
+which is the failure the control was built to prevent in the first place. The
+recipe had already called it: *"one refactor from being rows that cannot fail."*
+This was that refactor.
+
+### The question split in two, so the control did
+
+The old row answered both halves at once, and only one half survives the change.
+
+| half | question | now answered by |
+| --- | --- | --- |
+| 1 | is the derived-soname path LIVE — would a regression be seen? | `test_header_static_body_ffi_control.pas`, asserting the REFUSAL and that the diagnostic names `libhdrstatic_ffi.so` |
+| 2 | can `readelf -d \| grep lib<stem>.so` match AT ALL on this compiler? | `test_header_static_body_ffi_control_explicit.pas`, new, via an EXPLICIT `external` clause |
+
+**Half 1 is better aimed than what it replaced.** The old row inferred that the
+soname-inventing machinery was running by finding its output in an ELF; this one
+reads it off the compiler, which NAMES the invented soname. And it records
+something the ticket did not know: the regression these rows guard now stops at
+COMPILE time. Measured 2026-09-10 — a header with a bare declaration whose stem
+is `hdrstatic` is refused with `die at exec: hs_declared is imported from
+libhdrstatic.so`. So if a static body were dropped and imported again,
+`test_header_static_body.pas` fails to BUILD, naming the library, before any grep
+runs. The greps are now the second net, not the first.
+
+**Half 2 is frankH's suggested shape, and it was a guess that measured out.**
+An explicit `external 'libhdrstatic_ffi.so'` still emits the dangling DT_NEEDED:
+one match, verified. It is the right instrument for this half precisely because
+`e53eff428` does not touch it — a soname the user WROTE is intent, and the
+refusal is scoped to names the compiler invented. Same route `test_c_argspill`
+and `test_c_lazycasing` already depend on.
+
+### Both rows mutation-tested, because a control that cannot fail is the bug here
+
+Asserting they pass proves nothing about rows whose entire job is to be able to
+fail. So each was run against a mutant:
+
+| row | mutant | result |
+| --- | --- | --- |
+| half 1 | the PINNED compiler, which predates the guard | **FAIL**, rc=0, "did not refuse libhdrstatic_ffi.so" |
+| half 2 | same source with the CALL removed, so nothing references the extern | **FAIL**, no DT_NEEDED |
+
+The pin being pre-guard is what made half 1's mutation free — no rebuild, no
+revert. Worth noting for the next person: the original comment says a pre-fix
+compiler was no longer available for the OTHER fix, and that is still true; it is
+only my guard the pin predates, and it will stop predating it at the next pin.
+**When that happens, half 1's mutation needs a real revert-and-rebuild.**
+
+### Not changed
+
+The two `no invented soname` assertions and the three `expect_same` rows are
+untouched and still pass. Nothing about `e53eff428`'s refusal is being softened:
+a build that dies at exec is worth refusing, and frankH's read that the refusal
+itself looks correct is the one I agree with.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

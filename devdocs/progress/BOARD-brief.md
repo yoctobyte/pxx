@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:107 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:24 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3651 rejected:81`
+`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:107 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:24 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3652 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -102,7 +102,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
-- `[p 70] [A]` regression-test-core-test-header-static-body-ffi-control
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
+- `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 
 _406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

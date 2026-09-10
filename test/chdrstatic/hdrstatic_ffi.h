@@ -22,7 +22,25 @@
  * nothing and should not be believed.
  *
  * THE BINARY IS NEVER RUN. It cannot load -- libhdrstatic_ffi.so does not
- * exist and is not meant to. Only readelf reads it. */
+ * exist and is not meant to. Only readelf reads it.
+ *
+ * SINCE e53eff428 (2026-09-10) NO BINARY IS PRODUCED HERE AT ALL, and this file
+ * now serves the other half of the same control. That commit made the compiler
+ * REFUSE a soname it derived from a header's file name when the host cannot
+ * resolve it -- which is exactly what this file asks for, so the refusal is
+ * correct and it took this control's original job with it.
+ *
+ * What this file proves now is BETTER AIMED than what it proved before: the
+ * compile is refused with a diagnostic that NAMES libhdrstatic_ffi.so, so the
+ * machinery which would invent libhdrstatic.so if the static-body bug regressed
+ * is demonstrably running. The old row inferred that from an ELF; this one reads
+ * it off the compiler.
+ *
+ * The half this can no longer answer -- "can `readelf -d | grep` match the
+ * pattern the two assertions look for AT ALL" -- moved to
+ * test_header_static_body_ffi_control_explicit.pas, which reaches the same
+ * soname through an EXPLICIT `external` clause. e53eff428 deliberately does not
+ * touch those: a soname the user wrote is intent. */
 #include <stdio.h>
 
 int hs_ffi_declared_only(int v);
