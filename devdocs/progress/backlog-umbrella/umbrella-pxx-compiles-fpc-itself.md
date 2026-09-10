@@ -425,3 +425,37 @@ Filed from this attempt:
 NOT a `builtin.pas` job like the last two looked: 275 call sites in the corpus
 and some are assignment targets, so a function-shaped fix clears all 150 units
 and still fails on `ogomf`, `owomflib` and `entfile` for the identical spelling.
+
+## 2026-09-10, frankH — attempt 6: the prediction, tested the same hour it was written
+
+`b9c8fc160` landed `unaligned`. Probe #10, whole corpus re-run, per-unit join:
+
+**exactly 150 units changed their row, every one `unaligned` -> `Finalize(x, n)`,
+nothing else moved, BOTH-OK byte-identical at 15 for the third run running.**
+
+That is the FOURTH consecutive null row, and it is the sharpest one, because
+the section above predicted it in this form: the walls are stacked inside
+`cclasses.pas` and the count measures queue position rather than size. Three
+consecutive walls, one file:
+
+| probe | wall | line in `cclasses.pas` | units |
+| --- | --- | --- | --- |
+| #8 | `undefined variable (IndexQWord)` | 895 | 96 |
+| #9 | `undefined variable (unaligned)` | 1327 | 150 |
+| #10 | `Finalize(x, n)` — the element-count form | 1726 | 150 |
+
+`TFPHashList.Clear` calls `Finalize(FItems^, FCount)`. Each fix delivered its
+entire population intact to a wall a few hundred lines further down the same
+file.
+
+**This is now the umbrella's most reliable finding and it should shape how the
+next seat works it.** Fixing the top of the histogram is nearly free of value
+per fix while `cclasses` is unfinished — the honest unit of work is *"make
+`cclasses.pas` compile"*, not *"clear the 150"*. The instrument that would say
+how far that is reports EVERY failure per unit rather than the first, and it
+still does not exist; building it is worth more than the next four walls.
+
+Promoted to CLAUDE.md from here, on the recurrence test: frankB's lekkerzeilen
+umbrella produced the same shape independently (six import walls across two
+passes, modules-compiling moved by zero both times) — two corpora, no shared
+code, five null rows between them.

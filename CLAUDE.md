@@ -106,6 +106,23 @@ An **umbrella** is a GOAL: a real program that must work. `backlog-umbrella/`,
 - **Grow an umbrella by ATTEMPTING THE TARGET, never by triaging the backlog.**
   Each failure names a ticket in the order it actually matters. What the attempt
   never touches was not blocking real-world usage.
+  **BUT A FIRST-FAILURE CENSUS RANKS BY QUEUE POSITION, AND A COUNT OF UNITS
+  BLOCKED IS NOT A COUNT OF WORK.** The attempt reports the FIRST error per
+  subject, so the walls behind it are invisible and a single call site in one
+  shared dependency shows up as a huge number. Measured 2026-09-10, two
+  umbrellas with no code in common and five null rows between them: on the FPC
+  corpus, clearing the four largest walls in a row (158 units, 150, 96, 150)
+  moved units-compiling by ZERO every time, and **three of those walls were
+  the same FILE** — `cclasses.pas` at line 895 (`IndexQWord`), then 1327
+  (`unaligned`), then 1726 (`Finalize`), each fix delivering its whole
+  population to the next one a few hundred lines further down. The histogram
+  was a picture of one file's contents; on lekkerzeilen, six import
+  walls across two passes moved modules-compiling by zero, because imports sit
+  at the top of a file and are structurally over-represented as first errors.
+  **So do not rank a blocker on how many subjects name it**, and record the
+  expectation BEFORE the re-run — a null row is only information to someone who
+  said what they expected. The instrument that would answer the size question
+  reports EVERY failure per subject, and on both umbrellas nobody had built it.
 - **An umbrella with no blockers means nobody has attempted that cell** — that is
   information, not missing paperwork.
 - `next` will not hand you an umbrella; take something it blocks.
@@ -649,9 +666,11 @@ re-measured after a fix looked like it had begun resolving, to a scratch file
 the same seat's OWN earlier probe step had left in that directory. Both were
 correct behaviour and contaminated measurements, and in both the contaminant
 was the measurer's previous step — which is why neither seat suspected it.
-**A whole-family test is the exact shape that certifies the broken half**, so
-test the at-risk members in a file naming none of the working ones and let the
-asymmetry be the control. The question that catches it: **would this row still
+**A whole-family test is the exact shape that certifies the broken half.** The
+general remedy is to ISOLATE the at-risk case from everything the run has
+already produced — a fixture naming none of the working members, a probe in a
+directory an earlier step did not write to — and let the asymmetry be the
+control. The question that catches every form of it: **would this row still
 pass if it were the ONLY thing in the run?**
 
 **A positive control is not enough on its own — a guard must also be AIMED and
