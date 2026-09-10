@@ -4,11 +4,28 @@
 # that actually failed, so the message pointed at the wrong half of the line.
 # It was the first wall on four html5lib files, where it read as a typo.
 #
-# `strings` is a Pascal RTL unit wearing a Python module's name. The companion
-# test test_nilpy_bare_name_error_stays_short is the control: a genuinely bare
-# undefined name must KEEP the short message, because there is no receiver to
-# name and inventing one would be the same defect pointing the other way.
+# `zlib` is a Pascal RTL unit wearing a Python module's name, and it is on the
+# curated bare-import list in pasparser_proc.inc — which is what makes it
+# resolve to the unit rather than to a host C header.
+#
+# THIS FIXTURE USED `strings` AND THAT WAS WRONG FROM THE START. Its comment
+# claimed `strings` was "a Pascal RTL unit wearing a Python module's name"; it
+# is not reached that way at all. `strings` is DELIBERATELY absent from that
+# list (an ordinary Pascal unit that happens to share a Python name), so the
+# bare import falls through to /usr/include/strings.h, synthesises
+# `libstrings.so` from the header's own file name, and produced a binary with a
+# DT_NEEDED no loader can satisfy — verified against the PINNED compiler, whose
+# build of `import strings` links and then dies at exec with
+# `libstrings.so: cannot open shared object file`. The test never ran its
+# binary, so it never saw that. Six of the seven RTL/header name collisions on
+# this box (math, menu, netdb, png, regex, zlib) resolve to the unit; strings
+# was the one that did not.
 # bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
+#
+# The companion test test_nilpy_bare_name_error_stays_short is the control: a
+# genuinely bare undefined name must KEEP the short message, because there is
+# no receiver to name and inventing one would be the same defect pointing the
+# other way.
 
-import strings
-print(strings.Foo)
+import zlib
+print(zlib.Foo)

@@ -1308,9 +1308,9 @@ test-nilpy: $(COMPILER)
 	@out=$$(./$(COMPILER) test/test_nilpy_qualified_name_error_names_the_receiver.npy $(TESTTMP)/test_nilpy_qualrecv26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:14: error: no member Foo came of the qualifier strings .* (strings\.Foo)$$' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:31: error: no member Foo came of the qualifier zlib .* (zlib\.Foo)$$' \
 	   && test ! -e $(TESTTMP)/test_nilpy_qualrecv26 \
-	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line 14 naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line 31 naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@out=$$(./$(COMPILER) test/test_nilpy_bare_name_error_stays_short.npy $(TESTTMP)/test_nilpy_barename26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
