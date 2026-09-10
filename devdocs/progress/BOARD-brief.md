@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:109 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:25 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3659 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:110 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3658 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-n-math-trunc-and-log-need-frontend-intercepts` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
@@ -72,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 439, ranked
+## Ready — top 30 of 441, ranked
 
 - `[p 90] [N]` bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
 - `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
@@ -105,4 +106,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 
-_409 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_411 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
