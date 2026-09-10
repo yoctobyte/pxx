@@ -46,3 +46,6 @@ expect_same: MISMATCH [test_threadvar_pt26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-10 — the seven watcher saw `test-threads#src:test/test_a_threadvar_is_per_thread.pas` GREEN at dafc9b2f4d88 (tier full) and did NOT close this: the green is at the SAME sha the red was found at (`dafc9b2f4d88`), so no tree change separates them — the job returned two different answers about one tree, which is nondeterminism rather than evidence of a fix. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
