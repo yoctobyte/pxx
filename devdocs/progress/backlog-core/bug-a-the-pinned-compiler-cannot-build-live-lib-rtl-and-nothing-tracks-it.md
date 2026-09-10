@@ -177,10 +177,9 @@ answer differs from its failure answer in both directions, and it does not touch
 **The part worth keeping: the author's own correctness check was HEAD-shaped.**
 `0ffe185bb` says *"any `uses` clause already pulls the builtin unit, so existing
 code is unaffected"* — true, and true only of a compiler built from that tree.
-The commit was green by every measure its author had, because no per-fix gate
-compiles anything with `$(PXX_STABLE)`. That is not carelessness; it is the
-instrument. Three instances this week landed green under `quick` and red only in
-a tier nobody's per-fix gate runs.
+The commit was green by every measure its author had. **I first wrote that this
+was because no per-fix gate compiles anything with `$(PXX_STABLE)`. That is
+false, and the truth is more useful** — see the section below.
 
 **Resolution is unchanged and is still not dispatchable: only a pin clears it**,
 and the reds clear as a CONSEQUENCE of pinning rather than needing a waiver —
@@ -195,3 +194,53 @@ fix is INERT UNTIL PINNED"*, with two dated casualties — and this is a third
 instance in the SAME subsystem, so it meets the merit test and not the
 second-independent-subsystem test. The move-versus-add distinction is banked
 here instead.
+
+## 2026-09-10 — the guard EXISTS, and it is aimed one step short of the defect
+
+Correcting my own claim above. `tools/gate.sh` has `pinned_rtl_canary()` (:327),
+stepped as **`pinned builds live lib/rtl`** (:519) — and it is invoked **before**
+the `case "$MODE"` block, with its own comment saying why: *"Before the case, so
+it covers quick, lib and full alike from ONE place. The three-branch version of
+this was the first draft; a check that has to be remembered in each new mode is
+the check that will be missing from the next one."* So `gate.sh quick` runs it,
+and the gate even auto-locates this very ticket by grepping for the step's name
+(:439-444). The machinery is mature and correctly placed. The earlier sentence
+here was wrong and would have sent someone to build a guard that exists.
+
+**Why it did not catch `0ffe185bb`, measured:** the canary's population is
+`lib/rtl`'s own units, and **no `lib/rtl` unit USES any of the six moved names.**
+
+| name | `lib/rtl` units referencing it in code |
+| --- | --- |
+| SetString | 0 — the only hit, `lib/rtl/sysutils.pas:1176`, is a COMMENT |
+| AllocMem, DynArraySize, sLineBreak, UTF8Decode | 0 in code, same shape |
+| UTF8Encode | 0 |
+
+So the pinned compiler still builds `lib/rtl` cleanly, the canary is honestly
+GREEN, and the breakage lands entirely in code **outside** `lib/rtl` that
+consumes its surface — `external/synapse/synautil.pas` via
+`$(PXX_STABLE) --mimic-fpc -Fulib/rtl`.
+
+**The hole stated once:** the guard asks *can the pin build `lib/rtl`?* The
+defect class is *can the pin build code that DEPENDS on `lib/rtl`'s surface?*
+**Removing a name from `lib/rtl` is structurally invisible to a guard whose
+population is `lib/rtl` itself**, because the consumers are elsewhere by
+definition. The guard is not weak and it is not misplaced; it is scoped to the
+wrong population for this one class, and a MOVE is the only edit that exercises
+the difference — which is why two ADDs were caught and this did not need to be.
+
+**Fix, and it is small:** `test/test_uses_sysutils.pas` is already the canary's
+fixture and is already outside `lib/rtl`. Extend it to reference the names that
+have moved into `compiler/builtin`, so the canary's population includes a
+consumer. The five-line `setstring_probe` above is the proven shape: no `uses`
+clause needed, no corpus, and its right answer differs from its failure answer.
+
+**DELIBERATELY NOT LANDED YET, and the reason is sequencing rather than doubt.**
+Arming it today makes `pinned builds live lib/rtl` RED in every session's
+`gate.sh quick` until the pin moves — correct, and badly timed: the owner has
+been asked to pin, `gate.sh quick` is REQUIRED before a pin, and a fresh red
+reading *"pinned cannot build this"* is exactly the shape that makes someone
+hesitate at the moment they should not. The fixedpoint gates and this would
+grade, but that is a distinction a red does not announce. **Land it after the
+pin**, when it is green, and it then catches the NEXT instance instead of
+arguing with the current one.
