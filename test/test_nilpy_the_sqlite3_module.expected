@@ -1,0 +1,29 @@
+built 3
+name Vecht
+Vecht 3
+hull 1 2.5 3 None
+mast 2 0.5 0 top
+str int float bytes NoneType
+str int float bytes str
+True
+top
+[0, 1, 255]
+hull [1, 2.5] 3
+True
+True
+False
+['blob', 'kind', 'name', 'note', 'w']
+['hull', 'mast']
+3
+5
+bad sql: near "SELEC": syntax error
+no table: no such table: no_such_table
+bad param refused
+ro missing: unable to open database file
+False
+1
+1
+2
+[1, 4]
+2
+readonly: attempt to write a readonly database

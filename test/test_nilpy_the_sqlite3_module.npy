@@ -1,0 +1,166 @@
+# The sqlite3 module: the DB-API surface over the system libsqlite3.
+#
+# `import sqlite3` bound NOTHING, so `sqlite3.connect(path)` was
+# `no member connect came of the qualifier sqlite3` -- the wall on
+# lekkerzeilen/world.py:188, atlas.py:104, gauges.py:174 and app.py:878.
+#
+# THE ROWS THAT MATTER ARE THE ROW-MACHINERY ONES. A test that opens a
+# connection and closes it passes with none of this working, which is the whole
+# of what the ticket is for: every shape below is one the corpus actually
+# writes, and each is here because a shim can be "finished" and fail it.
+#
+#   iterate-and-unpack   world.py:191   `for name, kind, ... in db.execute(...)`
+#   dict(cursor)         world.py:190   `dict(db.execute("SELECT key, value ..."))`
+#   fetchone() is None   world.py:530   the row that may not be there
+#   bool(fetchone())     world.py:221   truthiness, not identity
+#   row[1:]              world.py:201   a row SLICES, so it is a sequence
+#   {row[1] for ...}     world.py:442   a set comprehension over a cursor
+#   executemany          gauges.py:183  a list of tuples, bound per row
+#   total_changes        gauges.py:188  an ATTRIBUTE, not a call
+#   uri=True             atlas.py:104   a keyword, and it changes what opens
+#   except sqlite3.Error world.py:525   and `"%s" % exc` at app.py:878
+#
+# The DIRECTORY comes in through the environment and is freshly made per run,
+# because the transaction rows assert what is NOT in a reopened file and a
+# database left from a previous run would make them fire on the wrong row. No
+# path is ever printed, so the expectation does not name either runtime's
+# temporary.
+
+import os
+import sqlite3
+
+d = os.environ.get("PXX_SQLTEST_DIR")
+
+db = sqlite3.connect(":memory:")
+db.executescript(
+    "CREATE TABLE meta (key TEXT, value TEXT);"
+    "CREATE TABLE t (name TEXT, kind INTEGER, w REAL, blob BLOB, note TEXT);")
+
+db.execute("INSERT INTO meta VALUES (?, ?)", ("name", "Vecht"))
+db.execute("INSERT INTO meta VALUES (?, ?)", ("built", "3"))
+db.execute("INSERT INTO t VALUES (?, ?, ?, ?, ?)",
+           ("hull", 1, 2.5, b"\x00\x01\xff", None))
+db.execute("INSERT INTO t VALUES (?, ?, ?, ?, ?)",
+           ("mast", 2, 0.5, b"", "top"))
+db.commit()
+
+# ---- dict(cursor): the cursor IS a mapping source ---------------------------
+meta = dict(db.execute("SELECT key, value FROM meta"))
+# printed key by key, not as `sorted(meta.items())`: NilPy has no tuple type,
+# so a pair renders `['k', 'v']` where CPython renders `('k', 'v')`. That is a
+# dialect property, not a sqlite3 one, and an oracle-generated expectation
+# would bake it in here where it does not belong.
+for k in sorted(meta):
+    print(k, meta[k])
+print(meta["name"], meta["built"])
+
+# ---- iterate and UNPACK, five names at once ---------------------------------
+for name, kind, w, blob, note in db.execute(
+        "SELECT name, kind, w, blob, note FROM t ORDER BY name"):
+    print(name, kind, w, len(blob), note)
+
+# ---- the column TYPES come back as Python types, not all strings ------------
+for row in db.execute("SELECT name, kind, w, blob, note FROM t ORDER BY name"):
+    print(type(row[0]).__name__, type(row[1]).__name__, type(row[2]).__name__,
+          type(row[3]).__name__, type(row[4]).__name__)
+
+# a NULL is None, and it is not the empty string
+print(db.execute("SELECT note FROM t WHERE name = 'hull'").fetchone()[0] is None)
+print(db.execute("SELECT note FROM t WHERE name = 'mast'").fetchone()[0])
+
+# a BLOB keeps its bytes, INCLUDING an embedded zero -- a shim that read the
+# buffer as a C string answers 0 here and never errors
+print(list(db.execute("SELECT blob FROM t WHERE name = 'hull'").fetchone()[0]))
+
+# ---- a row SLICES, because it is a sequence ---------------------------------
+row = db.execute("SELECT name, kind, w FROM t ORDER BY name").fetchone()
+print(row[0], list(row[1:]), len(row))
+
+# ---- fetchone() on no row is None, and a present row is TRUTHY --------------
+print(db.execute("SELECT 1 FROM t WHERE name = 'nope'").fetchone() is None)
+print(bool(db.execute("SELECT 1 FROM t WHERE name = 'hull'").fetchone()))
+print(bool(db.execute("SELECT 1 FROM t WHERE name = 'nope'").fetchone()))
+
+# ---- a PRAGMA is an ordinary query, and a comprehension walks it ------------
+cols = {r[1] for r in db.execute("PRAGMA table_info(t)")}
+print(sorted(cols))
+
+# ---- fetchall -------------------------------------------------------------
+print([r[0] for r in db.execute("SELECT name FROM t ORDER BY name").fetchall()])
+
+# ---- executemany and total_changes -----------------------------------------
+before = db.total_changes
+db.executemany("INSERT INTO t VALUES (?,?,?,?,?)",
+               [("boom", 3, 1.0, b"x", "a"),
+                ("keel", 4, 1.5, b"yz", "b"),
+                ("sail", 5, 2.0, b"", None)])
+print(db.total_changes - before)
+print(db.execute("SELECT COUNT(*) FROM t").fetchone()[0])
+db.commit()
+
+# ---- a bad statement raises sqlite3.Error, with sqlite's own wording --------
+try:
+    db.execute("SELEC nothing FROM t")
+except sqlite3.Error as exc:
+    print("bad sql: %s" % exc)
+
+try:
+    db.execute("SELECT * FROM no_such_table")
+except sqlite3.Error as exc:
+    print("no table: %s" % exc)
+
+# a parameter of a type sqlite has no column for
+try:
+    db.execute("INSERT INTO t VALUES (?,?,?,?,?)", ([1, 2], 1, 1.0, b"", None))
+except sqlite3.Error:
+    print("bad param refused")
+
+db.close()
+
+# ---- uri=True: the flag decides whether a URI is a URI ----------------------
+# Without SQLITE_OPEN_URI, sqlite takes the whole string as a FILENAME and
+# CREATES a file called `file:...?mode=ro` -- a wrong answer with no error,
+# which is why atlas.py:104 and world.py:524 pass the keyword.
+missing = os.path.join(d, "not-here.lzi")
+try:
+    ro = sqlite3.connect("file:%s?mode=ro" % missing, uri=True)
+    print("ro opened, which is wrong")
+except (sqlite3.Error, OSError) as exc:
+    print("ro missing: %s" % exc)
+print(os.path.exists(missing))
+
+# ---- the implicit transaction: close() does NOT commit ----------------------
+# CPython's legacy isolation_level opens a transaction before the first write
+# and holds it until commit(). A shim running in autocommit passes every row
+# above and fails these two.
+p = os.path.join(d, "tx.db")
+a = sqlite3.connect(p)
+a.executescript("CREATE TABLE x (v INTEGER);")
+a.execute("INSERT INTO x VALUES (1)")
+a.commit()
+a.execute("INSERT INTO x VALUES (2)")
+a.close()
+
+b = sqlite3.connect(p)
+print(b.execute("SELECT COUNT(*) FROM x").fetchone()[0])
+b.execute("INSERT INTO x VALUES (3)")
+b.rollback()
+print(b.execute("SELECT COUNT(*) FROM x").fetchone()[0])
+b.execute("INSERT INTO x VALUES (4)")
+b.commit()
+print(b.execute("SELECT COUNT(*) FROM x").fetchone()[0])
+b.close()
+
+c = sqlite3.connect(p)
+print([r[0] for r in c.execute("SELECT v FROM x ORDER BY v")])
+c.close()
+
+# ---- a URI that DOES resolve, read-only ------------------------------------
+ro = sqlite3.connect("file:%s?mode=ro" % p, uri=True)
+print(ro.execute("SELECT COUNT(*) FROM x").fetchone()[0])
+try:
+    ro.execute("INSERT INTO x VALUES (9)")
+    print("wrote to a read-only database, which is wrong")
+except sqlite3.Error as exc:
+    print("readonly: %s" % exc)
+ro.close()

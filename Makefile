@@ -1779,6 +1779,17 @@ test-nilpy: $(COMPILER)
 	# run would make it fire on the wrong row.
 	./$(COMPILER) test/test_nilpy_a_keyword_argument_to_a_stdlib_call.npy $(TESTTMP)/test_nilpy_stdkw26
 	PXX_KWTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_stdkw26 2>&1 | diff -u test/test_nilpy_a_keyword_argument_to_a_stdlib_call.expected -
+	# The sqlite3 module -- the DB-API over the system libsqlite3. THE ROW
+	# MACHINERY IS WHAT THIS ASSERTS: a shim that opens a connection and closes
+	# it passes nothing here, because every shape is one the corpus writes --
+	# iterate-and-unpack, dict(cursor), fetchone() is None, a row that SLICES, a
+	# set comprehension over a PRAGMA, executemany, total_changes as an
+	# ATTRIBUTE, `uri=True`, and `except sqlite3.Error` with `"%s" % exc`.
+	# Fresh `mktemp -d` per run and no path is ever printed: the last rows
+	# assert what is NOT in a reopened database, so a file left from a previous
+	# run would make them fire on the wrong row.
+	./$(COMPILER) test/test_nilpy_the_sqlite3_module.npy $(TESTTMP)/test_nilpy_sqlite26
+	PXX_SQLTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_sqlite26 2>&1 | diff -u test/test_nilpy_the_sqlite3_module.expected -
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.

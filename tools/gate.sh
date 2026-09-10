@@ -373,15 +373,30 @@ pinned_rtl_canary() {
 
   # A unit that fails under BOTH compilers is not this seam and never was: it
   # is ordinary breakage, or a unit no Pascal program can `uses` standalone at
-  # all. Two are exactly that today -- mimic_string and mimic_urllib_request
-  # reach NilPy frontend builtins (`pyvar_is_objtag`) and fail identically
-  # against a compiler built from this very tree. Absolute failure would pin
-  # this row RED forever, after a pin fixes the thing it is watching, and a
-  # gate that cannot pass is not a gate. So ask the question the row actually
-  # means: does the PIN fail where HEAD succeeds. That needs no exclusion list
-  # (the part that rots), it costs nothing on a healthy tree because only
-  # already-failing units are retried, and it sorts the two classes for
-  # whoever reads the log instead of merging them.
+  # all. Absolute failure would pin this row RED forever, after a pin fixes the
+  # thing it is watching, and a gate that cannot pass is not a gate. So ask the
+  # question the row actually means: does the PIN fail where HEAD succeeds.
+  # That needs no exclusion list (the part that rots), it costs nothing on a
+  # healthy tree because only already-failing units are retried, and it sorts
+  # the two classes for whoever reads the log instead of merging them.
+  #
+  # THE EXAMPLE THAT USED TO BE HERE WAS STALE AND SAID "TWO ARE EXACTLY THAT
+  # TODAY": mimic_string and mimic_urllib_request, said to reach NilPy frontend
+  # builtins (`pyvar_is_objtag`) and fail under both compilers. Measured
+  # 2026-09-10 with this row's own probe -- `printf 'program probe;\nuses
+  # <u>;\nbegin end.\n'` then `compiler/pascal26 --threadsafe -Fulib/rtl` --
+  # BOTH compile cleanly, and `pyvar_is_objtag` is in pylib's INTERFACE, so it
+  # was never the mechanism it was named as. The bucket is EMPTY at this date.
+  # It is worth knowing what fills it, because the shape recurs: a lib/rtl unit
+  # naming a pylib function that is implementation-only (the string and float
+  # `pyvar_is_*tag` predicates are; objtag and inttag are exported) compiles
+  # fine inside a NilPy program and fails HERE, which is the only row that
+  # looks. mimic_sqlite3 did exactly that for twenty minutes on 2026-09-10 and
+  # this row is what caught it.
+  #
+  # RETIRING MEASUREMENT: run the probe above over the roots list. If nothing
+  # lands in "$both", the paragraph above is still true; if something does,
+  # name it and say what it reaches for.
   if [ -s "$fails" ]; then
     local seam="$work/seam.txt" both="$work/both.txt"
     : > "$seam"; : > "$both"

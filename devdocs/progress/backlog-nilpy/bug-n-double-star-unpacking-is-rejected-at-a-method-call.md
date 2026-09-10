@@ -1,9 +1,9 @@
 ---
 track: N
-prio: 45
+prio: 60
 type: bug
 blocked-by: []
-summary: "`obj.m(**d)` is a parse error — `expected expression` — while the identical `f(**d)` on a plain function WORKS. Dict-unpacking into any METHOD call is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule."
+summary: "`obj.m(**d)` is a parse error -- `expected expression` -- while the identical `f(**d)` on a plain function WORKS. A CONSTRUCTOR call `C(**d)` is refused the same way, so the subject is not the METHOD call but any call with a receiver or a class name in front of the parenthesis. Dict-unpacking into these is rejected, pure-Python classes included, so it is not a shim or binding issue but the call parser. CPython runs all of these, so it is an upward-compatibility break by Track N's own rule. IT IS NOW A CORPUS WALL: lekkerzeilen/world.py:447 `Furniture(**dict(zip(columns, row)))` is the first error in world and, through `from . import world`, in atlas -- two modules."
 status: backlog
 owner: unassigned
 ---
@@ -146,3 +146,37 @@ compiler already builds for every short ordinary call, plus the run-time length
 probe next door — and it landed as a contained change to one function. `**` is the larger job of the two: it needs a
 receiver-aware forwarder. Left standing rather than edited, because the
 prediction being wrong is the useful part.
+
+
+---
+
+## 2026-09-10, frankB — it is a CORPUS wall now, and the population is wider than "method"
+
+Measured at compiler `8ea6cf9845db`, after `mimic_sqlite3` cleared the wall in
+front of it:
+
+```
+lekkerzeilen/world :: pascal26:447: error: expected expression
+lekkerzeilen/atlas :: pascal26:447: (the same, through `from . import world`)
+```
+
+world.py:447 is `into.append(Furniture(**dict(zip(columns, row))))` — a
+**constructor** call, not a method call. Reduced:
+
+```python
+class Furniture:
+    def __init__(self, a, b): ...
+def f(a, b): ...
+d = {"a": 1, "b": 2}
+print(f(**d))            # compiles
+print(Furniture(**d).a)  # pascal26:11: error: expected expression
+print(c.m(**d))          # pascal26:7:  error: expected expression
+```
+
+So the title understates it: a plain function takes `**`, and **anything with a
+receiver or a class name in front of the parenthesis does not** — method and
+constructor are two doors of one gap, and a fix aimed at the method call alone
+would leave world.py exactly where it is. Re-ranked 45 -> 60 on the two modules
+it now blocks; the ranker will carry that up the lekkerzeilen umbrella. Not
+taken — recorded so whoever takes it fixes both spellings and has a corpus line
+to verify against.
