@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:154 backlog-nilpy:112 backlog-tools:55 backlog-pascal:7 backlog-decide:45 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3667 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:154 backlog-nilpy:112 backlog-tools:55 backlog-pascal:7 backlog-decide:45 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3668 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -75,7 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 446, ranked
 
-- `[p 90] [N]` bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved (unblocks 2)
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` feature-n-the-threading-module (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
@@ -89,6 +88,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
+- `[p 75] [N]` bug-n-a-module-bound-by-an-import-is-not-a-value
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic

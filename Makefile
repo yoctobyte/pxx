@@ -1208,6 +1208,39 @@ test-nilpy: $(COMPILER)
 	# the oracle here, and agrees.
 	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
 	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
+	# Code made dead by a FAILED guarded import must not have its imports
+	# resolved. `try: import X / except ImportError: <fallback>; return` is the
+	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
+	# writes it verbatim; the statements after the try/except run only when the
+	# try body COMPLETED, so when X is missing they cannot run at all.
+	# CPython IS the oracle and the guarded module is a name NOTHING has --
+	# `import ctypes` would succeed there and fail here, so the two runtimes
+	# would take different branches and the row would assert our divergence.
+	# Positive control MEASURED, not assumed: the PINNED compiler answers
+	# `pascal26:27: error: import: no unit named also_no_such_module_9f2a`,
+	# which is the dead tail import in select(), so this row is red pre-fix.
+	./$(COMPILER) test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy $(TESTTMP)/test_nilpy_deadimp26
+	tools/expect_same.sh test_nilpy_deadimp26 "$$($(TESTTMP)/test_nilpy_deadimp26)" "$$(python3 test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy)"
+	# THE TWO ARMS THAT MUST STILL FAIL, and they are what keeps the fix from
+	# being "stop resolving imports after a try". Neither is expressible as a
+	# runtime row: both are compile errors, so they are asserted here.
+	# (a) THE HANDLER FALLS OFF ITS END. Control resumes after the try, so the
+	# tail is genuinely reachable and a missing module there is a real error.
+	@printf 'try:\n    import definitely_no_such_module_9f2a\nexcept ImportError:\n    x = 1\nimport also_no_such_module_9f2a\nprint(x)\n' > $(TESTTMP)/nilpy_deadctl_fall.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_deadctl_fall.npy $(TESTTMP)/test_nilpy_deadfall26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'no unit named also_no_such_module_9f2a' \
+	  || { echo "test_nilpy_dead_path_control_handler_falls_through: FAIL - rc=$$rc (want 1: the handler does not exit, so the tail IS reachable and its missing import must still be an error)"; printf '%s\n' "$$out"; exit 1; }
+	# (b) THE GUARDED IMPORT RESOLVES. Then the handler is dead and the tail is
+	# live, which is the opposite branch -- a skip keyed on the try statement
+	# rather than on the MISS would wrongly swallow this one.
+	@printf 'def sel():\n    try:\n        import math\n    except ImportError:\n        return "no"\n    import also_no_such_module_9f2a\n    return "yes"\nprint(sel())\n' > $(TESTTMP)/nilpy_deadctl_hit.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_deadctl_hit.npy $(TESTTMP)/test_nilpy_deadhit26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'no unit named also_no_such_module_9f2a' \
+	  || { echo "test_nilpy_dead_path_control_guard_resolves: FAIL - rc=$$rc (want 1: the guarded import RESOLVED, so the tail is the live branch and its missing import must still be an error)"; printf '%s\n' "$$out"; exit 1; }
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no

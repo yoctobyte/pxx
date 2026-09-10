@@ -21174,6 +21174,60 @@ begin
   end;
 end;
 
+{ Does the block whose INDENT is at `k` END in a statement that leaves the
+  enclosing routine — `return` or `raise`?
+
+  Asked of an `except ImportError:` handler, and the answer decides whether the
+  code AFTER the whole try/except is reachable. If the handler falls off its
+  end, control resumes after the try and the tail must still resolve; if it
+  returns or raises, the tail is reached only when the TRY body completed — and
+  when the guarded import missed, that never happens.
+
+  TOKENS, not AST, and deliberately: the caller has to know this BEFORE it
+  parses the handler, because parsing is what makes the tail unskippable. Only
+  depth-1 statement starts are recorded, so a `return` inside a nested `if` in
+  the handler does not count — that block does not always exit.
+
+  CONSERVATIVE IN THE SAFE DIRECTION. `if cond: return` / `else: return` exits
+  on every path and is not recognised, so its tail is still resolved and still
+  errors, exactly as today. A false NO costs the caller nothing it had; a false
+  YES would silently drop live code. }
+function PyBlockEndsInExit(k: Integer): Boolean;
+var depth, lastStmt: Integer; stmtStart: Boolean;
+begin
+  PyBlockEndsInExit := False;
+  if (k >= TokCount) or (Tokens[k].Kind <> tkIndent) then Exit;
+  depth := 0;
+  lastStmt := -1;
+  stmtStart := False;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind = tkIndent then
+    begin
+      Inc(depth);
+      stmtStart := True;
+    end
+    else if Tokens[k].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        PyBlockEndsInExit := (lastStmt >= 0) and
+                             (Tokens[lastStmt].Kind in [tkExit, tkRaise]);
+        Exit;
+      end;
+      stmtStart := True;
+    end
+    else if Tokens[k].Kind = tkNewline then stmtStart := True
+    else
+    begin
+      if stmtStart and (depth = 1) then lastStmt := k;
+      stmtStart := False;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyIsFallbackImportTry: Boolean;
 var i, blockAt: Integer;
 begin
@@ -21328,6 +21382,7 @@ function PyParseFallbackImportTry: Integer;
   stays loaded — an unused unit in the binary, since the handler rebinds whatever
   it needs. feature-nilpy-fallback-import. }
 var body, savedHoist: Integer;
+    handlerExits: Boolean;
 begin
   savedHoist := PyHoistHead;
   Next;                                { `try` }
@@ -21357,9 +21412,31 @@ begin
     Expect(tkColon, ':');
     Expect(tkNewline, 'newline');
     PySkipNewlines;
+    { ASKED BEFORE THE HANDLER IS PARSED, because parsing the tail is what makes
+      it unskippable — and the tail is the whole point. `from . import _pxx;
+      return _pxx` in the handler means the statements AFTER the try/except run
+      only when the try body completed, and the try body is what just failed to
+      resolve. So they are dead, and resolving their imports reports a missing
+      module from a path the program cannot take.
+
+      This is the same argument PySkipRestOfBlock is already trusted with one
+      indent level in: a failed guarded import kills the code that depended on
+      it. It stopped at the try block's own DEDENT; the seam idiom puts the
+      dependent code one level out.
+
+      lekkerzeilen/platform/__init__.py:90 is the shape, and it is the standard
+      Python backend-selection idiom rather than one app's habit:
+        try: import ctypes
+        except ImportError: from . import _pxx; return _pxx, "pxx"
+        from . import _ctypes_backend        <- reached only if ctypes existed
+      bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved }
+    handlerExits := (CurTok.Kind = tkIndent) and PyBlockEndsInExit(TokPos - 1);
     Expect(tkIndent, 'indent');
     body := PyParseBlock;
     Expect(tkDedent, 'dedent');
+    { The tail is dead. Consume it WITHOUT parsing — parsing is what resolves an
+      import, so skipping is the fix and not merely an optimisation. }
+    if handlerExits then PySkipRestOfBlock;
   end
   else
   begin
@@ -38830,13 +38907,35 @@ end;
   other thing an import run leaves behind.
   regression-test-core-test-nilpy-star-methods-and-targets }
 procedure PyPreScanImports;
-var i, depth, savedTok, tryAt, j: Integer;
-    savedSoft, savedMissed: Boolean;
+{ THIS WALK HAS NO NOTION OF REACHABILITY, and that is the whole of
+  bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved.
+  It visits every import token in the file and resolves it, with exactly one
+  exemption — lexically inside a `try:`, where the module may legitimately be
+  absent. So `if False: import ctypes`, an import after a `return`, and an
+  import in a function nobody calls all fail identically to live code. The
+  ticket read the symptom as a dominance problem and there is no dominance
+  machinery here to be wrong.
+
+  Only ONE unreachable shape is repaired, because only one has a consumer and a
+  decidable answer: the code AFTER a fallback-import `try` whose guarded import
+  MISSED and whose handler EXITS. Both halves are known here — the miss because
+  this walk is what resolves it, the exit because PyBlockEndsInExit reads the
+  handler's tokens — and neither needs a call graph. Everything else stays as it
+  was; a widening with no caller is a second path that stays broken.
+
+  THE PARSER NEEDS THE SAME SKIP AND HAS ITS OWN (PyParseFallbackImportTry).
+  Two layers resolve imports and fixing either alone changes nothing: this walk
+  runs first and would report the missing module before the parser is reached,
+  and the parser would resolve the tail afterwards even if this walk skipped it. }
+var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
+    savedSoft, savedMissed, tryMissed: Boolean;
 begin
   savedTok := TokPos;
   i := PyScanLo;
   depth := 0;
   tryAt := -1;
+  tryHandlerAt := -1;
+  tryMissed := False;
   while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
@@ -38851,12 +38950,54 @@ begin
       begin
         j := i + 1;
         while (j < MainProgramTokCount) and (Tokens[j].Kind = tkNewline) do Inc(j);
+        if (j < MainProgramTokCount) and (Tokens[j].Kind = tkExcept) then
+        begin
+          { remember THIS handler's block, so the last one seen is the one the
+            reachability question is asked about }
+          tryHandlerAt := j;
+          while (tryHandlerAt < MainProgramTokCount) and
+                (Tokens[tryHandlerAt].Kind <> tkIndent) and
+                (Tokens[tryHandlerAt].Kind <> tkDedent) do Inc(tryHandlerAt);
+          if (tryHandlerAt >= MainProgramTokCount) or
+             (Tokens[tryHandlerAt].Kind <> tkIndent) then tryHandlerAt := -1;
+        end;
         if (j >= MainProgramTokCount) or
-           not (Tokens[j].Kind in [tkExcept, tkFinally, tkElse]) then tryAt := -1;
+           not (Tokens[j].Kind in [tkExcept, tkFinally, tkElse]) then
+        begin
+          { The try statement is over. If its guarded import missed and the
+            handler leaves the routine, everything from here to the end of the
+            ENCLOSING block is reached only when the try body completed — which
+            it cannot have. Skip it rather than resolve it. }
+          if tryMissed and (tryHandlerAt >= 0) and PyBlockEndsInExit(tryHandlerAt) then
+          begin
+            deadFrom := depth;
+            Inc(i);
+            while i < MainProgramTokCount do
+            begin
+              if Tokens[i].Kind = tkIndent then Inc(depth)
+              else if Tokens[i].Kind = tkDedent then
+              begin
+                { stop ON the dedent that closes the enclosing block and let the
+                  main loop account for it }
+                if depth <= deadFrom then Break;
+                Dec(depth);
+              end;
+              Inc(i);
+            end;
+            Dec(i);          { the main loop's Inc(i) puts us back on it }
+          end;
+          tryAt := -1;
+          tryHandlerAt := -1;
+          tryMissed := False;
+        end;
       end;
     end
     else if (Tokens[i].Kind = tkTry) and (tryAt < 0) then
-      tryAt := depth
+    begin
+      tryAt := depth;
+      tryHandlerAt := -1;
+      tryMissed := False;
+    end
     else if ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
               (i + 1 < MainProgramTokCount) and
@@ -38869,8 +39010,15 @@ begin
         leave the branch decision to the block parse }
       savedSoft := SoftUnitResolve;
       savedMissed := SoftUnitMissed;
-      if tryAt >= 0 then SoftUnitResolve := True;
+      if tryAt >= 0 then
+      begin
+        SoftUnitResolve := True;
+        SoftUnitMissed := False;      { read OUR run, not an earlier one's }
+      end;
       PyParseImportRun;
+      { Recorded before the restore, which is what makes the miss invisible to
+        everyone else and still usable here. }
+      if (tryAt >= 0) and SoftUnitMissed then tryMissed := True;
       SoftUnitResolve := savedSoft;
       SoftUnitMissed := savedMissed;
       i := TokPos - 2;

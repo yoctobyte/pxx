@@ -1,0 +1,90 @@
+# Code made dead by a FAILED guarded import must not have its imports resolved.
+#
+# `try: import X / except ImportError: <fallback>; return` is how every portable
+# Python program selects a backend, and the statements AFTER the try/except run
+# only when the try body COMPLETED. When X does not resolve, they cannot run --
+# so resolving their imports reports a missing module from a path the program
+# never takes. lekkerzeilen/platform/__init__.py:90 is the shape verbatim.
+#
+# CPython IS THE ORACLE HERE and that is why the guarded module is a name
+# nothing has: `import ctypes` would succeed under CPython and fail under pxx,
+# so the two would take DIFFERENT branches and the comparison would assert our
+# divergence instead of our agreement. With a module neither runtime has, both
+# take the handler and every row below is a real cross-check.
+#
+# DELIBERATELY ABSENT: `if False: import missing`, an import after a `return`,
+# and an import in a function nobody calls. All three are the same family --
+# this walk has no reachability at all -- and all three still fail. They have no
+# consumer and no decidable answer without a call graph; the repaired shape has
+# both. See the ticket.
+
+# ---- the seam, verbatim: handler RETURNS, so the tail is dead ---------------
+def select():
+    try:
+        import definitely_no_such_module_9f2a
+    except ImportError:
+        return "fallback"
+    import also_no_such_module_9f2a
+    return "primary"
+
+print(select())
+
+# ---- the handler's own import is LIVE and must really bind ------------------
+def select_binding():
+    try:
+        import definitely_no_such_module_9f2a
+    except ImportError:
+        import math
+        return "fallback %d" % int(math.floor(2.7))
+    import also_no_such_module_9f2a
+    return "primary"
+
+print(select_binding())
+
+# ---- a handler that RAISES kills the tail just as a return does -------------
+def select_raising():
+    try:
+        import definitely_no_such_module_9f2a
+    except ImportError:
+        raise ValueError("no backend")
+    import also_no_such_module_9f2a
+    return "primary"
+
+try:
+    select_raising()
+    print("no exception")
+except ValueError:
+    print("caught ValueError")
+
+# ---- THE CONTROL THAT MUST NOT MOVE: a handler that FALLS OFF ITS END -------
+# Control resumes after the try, so the tail is genuinely reachable and its
+# imports must still be resolved. Here the tail import RESOLVES, so this is a
+# working program under both runtimes -- the Makefile carries the arm where the
+# tail import is missing and the compile must still FAIL.
+def falls_through():
+    mod = None
+    try:
+        import definitely_no_such_module_9f2a
+        mod = definitely_no_such_module_9f2a
+    except ImportError:
+        mod = None
+    import math
+    return "%s %d" % (mod is None, int(math.floor(3.9)))
+
+print(falls_through())
+
+# ---- nesting: the dead tail is skipped at the RIGHT depth -------------------
+# The statement after the inner try/except is dead; the statement after the
+# OUTER `if` is not, and must still be compiled and run.
+def nested(flag):
+    if flag:
+        try:
+            import definitely_no_such_module_9f2a
+        except ImportError:
+            return "inner-fallback"
+        import also_no_such_module_9f2a
+        return "inner-primary"
+    return "outer"
+
+print(nested(True))
+print(nested(False))
