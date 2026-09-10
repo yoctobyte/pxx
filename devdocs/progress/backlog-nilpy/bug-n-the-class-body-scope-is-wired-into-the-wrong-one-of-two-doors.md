@@ -71,19 +71,80 @@ wrong value look like a widening.
 
 The divergences entry has been withdrawn.
 
+## MECHANISM — proven from the AST, no build needed
+
+`PXXDBG=a.ast:P.show` on the two body cases settles what the body door does:
+
+    MARGIN = 99 only          `return MARGIN` -> AN_IDENT(536)          <- module global
+    MARGIN = 99 AND class 14  `return MARGIN` -> AN_FIELD(AN_IDENT self, "MARGIN")
+
+So the bare name is **rewritten at COMPILE TIME into an implicit `self.MARGIN`**
+whenever the enclosing class has an attribute of that name, and only falls
+through to ordinary scope resolution when it does not. This is not the
+`FindVarSym`/`FindClassVar` class-var registry at all — that guess is dead.
+
+The precedence today, measured (locals/params/loop vars each in their own file):
+
+    local  >  parameter  >  loop var  >  CLASS ATTRIBUTE  >  module global
+
+CPython's, for a method BODY:
+
+    local  >  parameter  >  loop var  >  module global        (no class attribute anywhere)
+
+**Locals, parameters and loop variables all shadow the class attribute
+correctly** — so the defect is not "the rewrite is too eager" in general. It is
+precisely that the class attribute is inserted at ONE point in the chain where
+Python has nothing, between the locals and the module globals, and only the
+module global loses.
+
+## The repair this implies
+
+Move the implicit-self rewrite BELOW module-global resolution, making it a
+LAST-RESORT fallback rather than a precedence step. That gives:
+
+- name at both scopes -> module global wins -> **matches CPython**;
+- name at class scope only -> still resolves to the attribute -> **14, where
+  CPython raises NameError**, which is then a genuine upward-compatible widening
+  in the only case where it is safe, rather than a wrong value;
+- local/parameter/loop var -> unchanged, already correct.
+
+The DEFAULT-argument door needs its own addition and this does not supply it:
+defaults are evaluated where no `self` exists, so no implicit-self rewrite can
+apply there, and the class-body scope has to be consulted explicitly. One rule,
+two doors, and the two halves of the repair are not the same edit.
+
+## OUT OF SCOPE, recorded so it is not mistaken for this bug
+
+    def show(self):
+        v = MARGIN        # class MARGIN = 14
+        MARGIN = 3
+        return v          # pxx 16, CPython UnboundLocalError
+
+A name assigned later in the function is a local for the whole function in
+Python, so reading it first is an error CPython names. Our 16 is a wrong value
+rather than a wrong diagnostic, but the program is only produced by a mistake --
+CLAUDE.md: ask what the source MEANT, and where the two readings differ only
+when the program is already wrong, CPython's answer is not a specification.
+Not this ticket, and not obviously worth one; noted because it turned up in the
+same sweep and looks related.
+
 ## What is in the tree (measured), and what is NOT
 
 - `FindClassVar(ci, name)` — `compiler/pasparser_class.inc:106`, walks the parent
   chain.
 - `FindVarSym(name)` — same file, line 123: `FindSym` plus a class-var arm gated
-  on `(CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0)`. This is very likely
-  the BODY door, i.e. the one that should NOT be consulting the class.
+  on `(CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0)`. **NOT the body
+  door** — the AST proves the body door builds an AN_FIELD over `self`, not a
+  class-var symbol read. Left here because it was the obvious suspect and is
+  not the answer.
 - `PyClsEvalCi` — `compiler/pyparser.inc:276`. Method defaults are evaluated
   after `PyParseClass` returns, so the class ci IS available at that point.
 - `PyEvalParamDefault` — `compiler/pyparser.inc:7039`.
 
-NOT measured: which routine each door actually resolves through. Print it
-(`PXXDBG`) before writing a fix.
+NOT measured: which ROUTINE performs the implicit-self rewrite. The AST says
+what it produces (`AN_FIELD` over `AN_IDENT self`) and when (only when the class
+has that attribute), which is enough to name the repair but not enough to place
+the edit. Find the site that builds that node before writing anything.
 
 REFUTED, so nobody re-runs it: `PyEvalParamDefault`'s `savedCurProc := CurProc;
 CurProc := -1` looks like the cause because `FindVarSym`'s arm needs
