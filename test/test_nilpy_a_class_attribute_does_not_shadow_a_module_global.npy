@@ -1,0 +1,63 @@
+# A BARE NAME IN A METHOD BODY IS NOT `self.<name>` -- Python has no implicit
+# Self, so the enclosing class's attributes are NOT in scope there and the
+# module global wins.
+#
+# We took FPC's opposite rule (OwnFieldBeatsSym: the class's own field beats any
+# unit-level name of the same spelling) because the NilPy frontend shares that
+# resolution path. It produced a SILENT WRONG VALUE, not a diagnostic: with
+# MARGIN at both scopes we answered the class's 14 where CPython answers 99.
+#
+# Rows 3 and 6-8 are the positive controls, and they are the point: this fix
+# only removes a DEMOTION, so if it had gone too far and broken field access
+# they go red while row 1 stays green.
+
+MARGIN = 99
+
+class P:
+    MARGIN = 14
+    def show(self):
+        return MARGIN            # the module global -- CPython's answer
+    def viaself(self):
+        return self.MARGIN       # the class attribute, spelled the Python way
+    def loc(self):
+        MARGIN = 7
+        return MARGIN            # a genuine local still shadows everything
+    def par(self, MARGIN):
+        return MARGIN            # so does a parameter
+    def bump(self):
+        global MARGIN
+        MARGIN = MARGIN + 1
+        return MARGIN            # the WRITE half resolves the same way
+
+p = P()
+print('both', p.show())
+print('viaself', p.viaself())
+print('local', p.loc())
+print('param', p.par(5))
+print('write', p.bump())
+print('module', MARGIN)
+
+# A NAME AT CLASS SCOPE ONLY still resolves to the attribute. CPython raises
+# NameError here, so this row is a deliberate upward-compatible widening --
+# track N accepts what CPython rejects -- and it is ALSO the control proving
+# the implicit-Self path was gated, not deleted.
+class Q:
+    ONLYCLS = 14
+    def show(self):
+        return ONLYCLS
+print('classonly', Q().show())
+
+# AN INSTANCE FIELD from __init__ colliding with a module global: same rule,
+# and this is the shape that is common in real code rather than contrived.
+WIDTH = 40
+
+class R:
+    def __init__(self):
+        self.WIDTH = 3
+    def bare(self):
+        return WIDTH             # module global
+    def dotted(self):
+        return self.WIDTH        # the field
+r = R()
+print('field bare', r.bare())
+print('field dotted', r.dotted())

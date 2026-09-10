@@ -1,0 +1,9 @@
+both 99
+viaself 14
+local 7
+param 5
+write 100
+module 100
+classonly 14
+field bare 40
+field dotted 3

@@ -5301,5 +5301,37 @@ begin
     never a class procedure (no Self) or a plain routine. }
   if (CurProc < 0) or (CurSelfClass < REC_UCLASS_BASE) then Exit;
   if Procs[CurProc].ParamCount <= 0 then Exit;
+  { PYTHON INVERTS THIS RULE, so NilPy user code must not take it. There is no
+    implicit Self in Python -- a member is spelled `self.x`, always -- so a BARE
+    name in a method body has no business reaching a field at all, and demoting
+    a perfectly good module global to make room for one produces a silently
+    wrong VALUE rather than a diagnostic.
+
+        MARGIN = 99
+        class P:
+            MARGIN = 14
+            def show(self): return MARGIN     # CPython 99; we answered 14
+
+    Measured 2026-09-10 on binary f45ed34d4012: FindSym returned the module
+    symbol 537 six times in a row and this routine handed the caller -1, which
+    is exactly what the doc comment above describes it doing, correctly, for
+    Pascal. The implicit-Self paths downstream all fire on `idx < 0`, so the
+    demotion IS the rewrite: `return MARGIN` came out as AN_FIELD over Self.
+
+    Gated here rather than at the two call sites because of this routine's own
+    rule -- every bare-name resolution site must agree, or reads and writes
+    diverge -- and the statement half lives in a SHARED path (ParseStatementAST)
+    that a NilPy assignment also goes through. One gate, both halves.
+
+    NilPyUserCode, not isNilPy: an .npy program's Pascal RTL units are parsed
+    with isNilPy true and PyExprMode false, and those units want FPC's rule.
+
+    What survives: a class attribute with NO module-level name of the same
+    spelling still resolves, because `idx` is already -1 there and this routine
+    exits at the top. CPython raises NameError for that program, so it stays an
+    upward-compatible widening -- which is what track N allows -- instead of a
+    wrong answer, which it is not.
+    bug-n-the-class-body-scope-is-wired-into-the-wrong-one-of-two-doors }
+  if NilPyUserCode then Exit;
   if FindUField(CurSelfClass - REC_UCLASS_BASE, nm) >= 0 then Result := -1;
 end;

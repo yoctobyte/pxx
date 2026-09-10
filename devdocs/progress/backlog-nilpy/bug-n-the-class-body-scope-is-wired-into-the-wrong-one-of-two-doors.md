@@ -6,11 +6,13 @@ type: bug
 prio: 60
 status: open
 summary: >
-  Two doors resolve a bare name for a method, and the class-body scope is wired
-  into precisely the wrong one of them. A DEFAULT ARGUMENT falls through to
-  module scope and never sees the class body; a method BODY sees the class body
-  and prefers it over module scope. CPython is the exact opposite on both. Two
-  of the four rows are SILENT WRONG ANSWERS, not refusals.
+  THE BODY DOOR IS FIXED; the DEFAULTS door is not. A method's default argument
+  still falls through to module scope and never sees the class body, so
+  `left=MARGIN` answers the module's 99 where CPython answers the class's 14 —
+  a SILENT WRONG ANSWER — and a class-only name is refused outright. The body
+  half was FPC's own-field-beats-a-unit-name rule reaching NilPy through a
+  shared resolution path; gated on NilPyUserCode and now byte-identical to
+  CPython on every row.
 ---
 
 ## The measurement
@@ -156,3 +158,95 @@ forces a BSS global, not the `PyParseBoolExpr` that resolves the name. Lines
 
 lekkerzeilen `ui.py:1376`, `def __init__(self, left=MARGIN, top=MARGIN, ...)`.
 First-wall position only — nothing here says ui.py is one fix from clean.
+
+## FOUND — the body door's mechanism, and the body half is FIXED
+
+Measured 2026-09-10. The routine is **`OwnFieldBeatsSym`,
+`compiler/pasparser_call.inc:5284`**, and it was not doing anything subtle: it
+implements FPC's scope order deliberately and says so in its own doc comment —
+*"the enclosing class's OWN field beats any unit-level name of the same
+spelling; only a genuine local or parameter shadows the field. A name that
+bound to a unit symbol is demoted to 'unbound' here, which is what lets the
+implicit-Self field paths — they all fire on `idx < 0` — resolve it instead."*
+
+It was **not gated on NilPy**, and the NilPy frontend shares that resolution
+path. So Python got Pascal's rule.
+
+**How the earlier reading went wrong, and it is worth keeping.** The AST said
+`AN_FIELD(AN_IDENT self, "MARGIN")`, which is built inside `PyParseLValueAST`
+under `if idx < 0`. Reading the source, that block is unreachable while a module
+global exists — so the mechanism looked like it had to be a scope or
+declaration-order effect. It was not: **`idx` was being forced to -1 by the
+caller.** Two probes settled it and neither needed a rebuild:
+
+- a module global assigned AFTER the class is still visible inside a method
+  (`OTHER` -> 99), so decl-order is not it;
+- `--debug` with a marker name in the SAME method body: `PROBEZ` reaches
+  `PyParseLValueAST` as idx 538 while `MARGIN` reaches it as -1, with
+  `FindSym: MARGIN -> 537` printed six times immediately before.
+
+**One name resolving and its neighbour not, in one body, at one instant, is what
+names a per-name demotion rather than a scope.** The AST was true and its
+implication — "the module global cannot have been found" — was false.
+
+### The fix
+
+`if NilPyUserCode then Exit;` immediately before the demotion, with the
+reasoning inline. **Gated inside the routine, not at its call sites**, because
+the routine's own comment demands that every bare-name resolution site agree or
+reads and writes diverge — and NilPy's statement half goes through the SHARED
+`ParseStatementAST` path, so a per-call-site gate would have fixed reads and
+left writes on FPC's rule. One gate, both halves.
+
+`NilPyUserCode`, not `isNilPy`: an .npy program's Pascal RTL units are parsed
+with `isNilPy` true and `PyExprMode` false, and those units want FPC's rule.
+
+**Nothing was deleted, only a demotion removed** — which is why the widening
+survives: a class attribute with no module-level name of the same spelling still
+resolves, because `idx` is already -1 there and the routine exits at the top.
+
+### Measured, binary `82a463377210`
+
+| | before (`f45ed34d4012`) | after | CPython |
+| --- | --- | --- | --- |
+| body, name at BOTH scopes | **14** | **99** | 99 |
+| body, module only | 99 | 99 | 99 |
+| body, class only | 14 | 14 | `NameError` (widening, kept) |
+| local shadows both | 7 | 7 | 7 |
+| parameter shadows both | 5 | 5 | 5 |
+| `self.MARGIN` | 14 | 14 | 14 |
+| bare write under `global` | 100 | 100 | 100 |
+| `self.WIDTH` field vs module `WIDTH`, read bare | 3 | **40** | 40 |
+
+`test/test_nilpy_a_class_attribute_does_not_shadow_a_module_global.npy`, wired
+into `test-nilpy`. Every row but `classonly` is byte-identical to CPython.
+`viaself`, `self.WIDTH` and `classonly` are the positive controls: the fix only
+removes a demotion, so if it had gone too far and broken field access those go
+red while the first row stays green.
+
+**The positive control for the fix itself is the `before` column** — measured on
+`f45ed34d4012` and printed with its sha, on the identical construct — not on the
+test file, which did not exist yet.
+
+## STILL OPEN — the DEFAULTS door
+
+    MARGIN = 99
+    class P:
+        MARGIN = 14
+        def __init__(self, left=MARGIN): ...   # pxx 99, CPython 14
+
+Unchanged, and still a silent wrong value. A class-scope-only name in a default
+is still refused (`undefined variable (MARGIN)`).
+
+**The two doors now AGREE** — both resolve to the module global — where before
+they disagreed with each other and one of them was silently wrong. That is a
+better position, not the new disagreement this ticket warned about: the
+remaining defect is one clean gap, the defaults door never consulting the class
+body, rather than two doors implementing opposite rules.
+
+The repair is genuinely a different edit, as recorded above: defaults are
+evaluated where no `self` exists, so no implicit-Self path can serve them and
+the class-body scope has to be consulted explicitly at `PyEvalParamDefault`
+(`compiler/pyparser.inc:7039`), whose class context is already carried in
+`PyClsEvalCi`/`PyClsEvalLo`/`PyClsEvalHi` (line 276). That is the next step and
+it is the whole of what is left.

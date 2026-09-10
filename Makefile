@@ -4514,6 +4514,16 @@ test-nilpy: $(COMPILER)
 	# failed identically. See the test's header.
 	./$(COMPILER) test/test_nilpy_lambda_sibling_def.npy $(TESTTMP)/test_nilpy_lamsib26
 	tools/expect_same.sh test_nilpy_lamsib26 "$$($(TESTTMP)/test_nilpy_lamsib26)" "$$(printf '%b' '11 15 16 11\n11 6 11\n11')"
+	# A BARE NAME IN A METHOD BODY IS NOT `self.<name>`: Python has no implicit
+	# Self, so the class's attributes are not in scope there and the MODULE global
+	# wins. We had FPC's opposite rule (OwnFieldBeatsSym demotes a unit-level name
+	# so the implicit-Self paths, which all fire on idx < 0, can claim it) because
+	# the NilPy frontend shares that resolution path -- a silent wrong VALUE, 14
+	# where CPython says 99. Every row but `classonly` is byte-identical to
+	# CPython; that one is a deliberate widening (CPython raises NameError) and is
+	# ALSO the control proving the implicit-Self path was gated, not deleted.
+	./$(COMPILER) test/test_nilpy_a_class_attribute_does_not_shadow_a_module_global.npy $(TESTTMP)/test_nilpy_clsattrscope26
+	$(TESTTMP)/test_nilpy_clsattrscope26 | diff -u test/test_nilpy_a_class_attribute_does_not_shadow_a_module_global.expected -
 	# The stdlib shim table builds a call by NAME (FindProc), which never consults
 	# overloads — so adding an overload for a case it got wrong did NOTHING,
 	# silently. The call site now re-targets by ARITY. See the test's header.
