@@ -23409,6 +23409,36 @@ do, reported the fault to a stream nobody reads on success, and the artefact it
 produced is well-formed. Same family as every other entry here — **it did not
 error, it answered.**
 
+### KNOWING THE RULE DID NOT PREVENT IT — same seat, same evening, second instance
+
+Banked above at ~19:00 on 2026-09-10, including frankB's correction that the
+remedy is the QUOTED HEREDOC DELIMITER and that `-F` alone is necessary but not
+sufficient. At ~23:00 the same seat, in the same session, used
+`git commit -q -m "..."` with a backticked error string in it and lost the
+phrase again — `` `no member KEY_ESCAPE came of the qualifier platform` `` ran
+as a command, bash said `no: command not found`, and the commit landed with
+`, and KEY_ESCAPE = 27` as a sentence opener.
+
+**The tell was in the tool output and not in git's**: `git` reported success,
+the push reported success, and the only complaint anywhere was one line of
+bash. Same silent-corruption shape as the `cut -c` em-dash.
+
+**So the durable form of this rule is not "remember the hazard" — it is "never
+type `-m` for a message with prose in it".** The seat that wrote the entry
+above, and quoted it to a peer, still reached for `-m` four hours later,
+because `-m` is what fingers do. Make the heredoc the default spelling for
+every commit that is more than a subject line, and the hazard cannot arise:
+
+    git commit -F - <<'EOF'
+    subject
+    ...
+    EOF
+
+The article content survived here — only the commit message was degraded, and
+amending a pushed commit is a force push and therefore the owner's call. That
+asymmetry is worth knowing: **the artefact is recoverable and the message never
+is.**
+
 ## A LOG ECHOES THE PROGRAM THAT PRODUCED IT — COUNT WHAT THE INSTRUMENT PRODUCED, NEVER WHAT THE LOG CONTAINS
 
 CLAUDE.md already carries this mechanism, and only about transcripts: *a grep
