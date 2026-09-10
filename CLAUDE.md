@@ -695,6 +695,17 @@ green a million iterations deep and was green throughout. **Ask what your
 assertion is PHYSICALLY able to observe before trusting it**; a positive control
 drawn from the right population still passes if the instrument reads the wrong
 quantity.
+**AND ORDER IS THE SECOND DOMAIN OF THIS, WHICH A LEAK EXAMPLE ALONE DOES NOT
+SHOW** — a reader with an ordering bug does not see themselves in a memory
+example. Measured 2026-09-10 (frankB, Track N): `PyParseLValueAST` read
+`X = Y = v` as the nested right-associative `X = (Y = v)`, so every VALUE landed
+correctly and the STORES happened backwards. `l[idx(1)] = m[idx(2)] = n[idx(3)]
+= rhs(7)` logged `['rhs', 3, 2, 1]` against CPython's `['rhs', 1, 2, 3]` **while
+printing identical values**, so no `expect_same` row could ever have failed —
+the same structural blindness as the leak, with a correct answer instead of a
+missing free. The instrument is a log of SIDE-EFFECT ORDER, which no value
+comparison contains. Whenever a construct has more than one effect, ask whether
+your assertion can see their SEQUENCE, not just their results.
 
 **AND CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT — an expected
 value that COLLIDES with the failure value is a guard that cannot fail, even
