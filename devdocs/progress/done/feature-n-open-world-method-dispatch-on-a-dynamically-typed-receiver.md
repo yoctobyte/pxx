@@ -79,4 +79,4 @@ and is separately broken: it sees FIELDS only, and segfaults through a dynamic
 receiver (bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver).
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 592a5e573.
