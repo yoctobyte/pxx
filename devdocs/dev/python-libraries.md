@@ -37,7 +37,12 @@ someone already built so the installing machine needs no compiler; it never
 removes the native code. Its only value to us is triage: the tag names the
 class for free.
 
-## 2. The strategy ladder — mimicking is the LAST resort
+## 2. The strategy ladder — mimicking is the LAST resort (FOR THIRD-PARTY PACKAGES; see 2b)
+
+**This section is about third-party packages. For the STDLIB, read 2b first** —
+the owner directed shims there on 2026-09-10 and the top rung of this ladder
+is unavailable for most stdlib modules. Obeying this heading literally is how
+a reader concludes the opposite of the current direction.
 
 | situation | strategy | why |
 | --- | --- | --- |
@@ -66,6 +71,85 @@ Two rules that DO carry over from the reportlab work:
   is not reportlab; it is the ~15% songformatter calls.
 - **Look, don't copy.** We never port their implementation, but we keep the
   real library installed and DIFF against it. Their behaviour is the spec.
+
+## 2b. THE STDLIB SITS DIFFERENTLY ON THAT LADDER (owner, 2026-09-10)
+
+Everything above was written about **third-party packages**, and read literally
+it tells you not to shim. The owner's direction tonight says the opposite, and
+both are right, because they are about different populations.
+
+His words, across three messages:
+
+> *"i think that we should build shims for those libraries. after all, library
+> work is cheap compared to compiler work."*
+>
+> *"and libraries implemented in pascal or C should have native speed, pretty
+> much ... and/or even if implemented in python."*
+>
+> *"on my command. i ordered lekkerzeilen to just use as it sees fit, just dont
+> use libraries unnecessary. up to pxx to get on par and mimic stuff (or compile
+> the original wheels)."*
+
+**Why "mimicking is the last resort" does not reach the stdlib.** The ladder's
+top rung — *compile their real source, unchanged* — is what makes mimicking
+look like a defeat, and it is **unavailable for most of the stdlib**, because
+much of the stdlib is class 3: `zlib`, `_struct`, `_json`'s accelerator,
+`_sqlite3`, `array`, `select` and `math` are C extensions against `Python.h` in
+CPython. There is no pure-Python upstream to track. So for those the choice is
+not *shim versus compile upstream*, it is **shim versus cpyext**, and a shim
+over machinery we already have (`lib/rtl/zlib.pas` is a complete inflater) is
+the cheap end of that.
+
+The ladder's reasoning still bites where it applies: a stdlib module that IS
+pure Python upstream (`bisect`, `copy`, `dataclasses`, `textwrap`) should be
+compiled rather than mimicked, and `mimic_bisect.py` / `mimic_copy.py` are in
+the tree as Python for exactly that reason.
+
+**"Library work is cheap" has a measurable second half, and it is the better
+argument.** A shim written in plain Python over stdlib primitives **comes with
+its own oracle**: run it on CPython, run it on pxx, diff the bytes
+(`tools/pydiff.py`). Compiler work has no such cheap oracle. neo-dd's
+`capture.py` — thirty lines of PNG encoding over `zlib.compress` and
+`zlib.crc32` — is that shape already and could be a conformance fixture as-is.
+
+**And the usual reason to write a library in C does not apply to us.** NilPy
+compiles to native code, so a plain-Python shim is native too. The owner's
+*"even if implemented in python"* is a statement about pxx's architecture, not
+an aspiration: pick the implementation language by **which one can express the
+job**, never by which one is faster. `mimic_struct.pas` is Pascal because
+reinterpreting bytes as fixed-width numbers needs a pointer cast; its
+neighbours are Python because they do not.
+
+### The direction of the obligation has flipped
+
+Consuming programs no longer contort to fit the frontend. lekkerzeilen was
+built under a self-imposed rule — no third-party CPython C extensions, SDL and
+GL hand-bound through ctypes — and the owner has lifted it: use what it sees
+fit, avoid unnecessary dependencies, and **it is pxx's job to get on par.** So
+a stdlib module a real program imports and we cannot serve is **our** ticket,
+filed in the frontend's lane, not a finding about the program.
+
+### Wheels — what "compile the original wheels" can and cannot mean
+
+A wheel is a zip plus metadata, so "compiling a wheel" is not one question:
+
+- **`py3-none-any` (class 1).** Unzip and compile the `.py` tree. Nothing about
+  the wheel format is in the way; the only question is whether NilPy swallows
+  the source, which is measurable per package and is the same question the
+  corpus work already asks. This is the rung where "compile the original
+  wheels" is literally true.
+- **`cp3XX-manylinux_*` (class 3).** The payload is a `.so` carrying
+  `Py_INCREF`, struct offsets and the GC header already inlined. Loading one is
+  **refused** above, with reasons, and nothing here reopens that. Its *C
+  source* is compilable — that is cpyext, rung 3 — and its *Python layer* over
+  a native library is rung 4.
+
+**numpy, concretely, since it was named.** Its Python layer is thin over a C
+core, so the viable path is rung 4 — bind or provide the array core natively
+and present numpy's Python surface over it — not loading its wheel. Scope it
+the way every mimic here is scoped: the surface a real program touches, and
+diff against the real library, which stays installed. Say which subset, and
+never imply the whole of numpy.
 
 ## 3. Per-library choices need a recipe
 
