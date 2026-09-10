@@ -235,6 +235,44 @@ The Pascal path is already right. **Only the NilPy import path puts a system C
 header ahead of our own unit**, so the fix is in that path and the blast radius
 is NilPy imports, not `uses`.
 
+### THE RULE IS A MEANS; PREDICTABILITY IS THE END (owner, same evening)
+
+> *"well, my ruling is not absolute. it's because mixing languages creates a big
+> mess where no-one can predict the outcome."*
+
+**Record this above the ordering, because it is the test that survives when the
+ordering is argued about.** The question to ask of any resolution change is not
+"is this the right precedence" but **"can a reader of the import site predict
+what it binds?"** An ordering is one way to buy that; it is not the goal, and
+the owner has said in his own words that it is not absolute.
+
+Measured, and it is worse than the language mixing he described — **the outcome
+depends on the MACHINE, not only on the languages present:**
+
+| | |
+| --- | --- |
+| `import zlib`, native | binds `/usr/include/zlib.h` |
+| `import zlib`, `--target=i386` | binds `/usr/include/zlib.h` |
+| `import zlib`, `--target=wasm32` | **binds `/usr/include/zlib.h`** |
+| `import zlib` on a box with no `zlib.h` | would fall through to `lib/rtl/zlib.pas` |
+
+So a **wasm32** build resolves a Python import against this Linux host's C
+headers and derives `libzlib.so` for a target that has no shared libraries at
+all. (riscv32 and xtensa could not be measured — they refuse earlier, on `a heap
+arena needs mmap`, which is upstream of resolution.)
+
+Nothing at the import site distinguishes any of these rows. The same four
+characters bind a Pascal unit, a C header or a Python shim depending on what is
+installed on the box doing the compiling — which makes the source's meaning a
+property of the build host. That is the unpredictability to fix, and an ordering
+that consults the host's `/usr/include` for a cross target is not fixed merely
+by being reordered: **a bare Python import should not reach the host's C headers
+at all**, on any target.
+
+The cross rows are also the cheapest positive control for whoever takes this: a
+wasm32 build binding a host glibc header cannot be correct under any precedence
+policy, so a fix that still does it has not worked.
+
 ### What "ours first" means for a PYTHON import
 
 `lib/rtl/mimic_*` are RTL files — the RTL's own Python face, not a third-party
