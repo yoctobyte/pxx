@@ -414,3 +414,33 @@ thing:** compile OUTCOMES are unchanged on every module sampled, which is the
 leg that had to be clear first — a flag that changed an unrelated module's
 outcome could not be defaulted on. The runtime cost is a separate measurement
 and is still unmade.
+
+## THE INSTRUMENT IS `tools/lekkerzeilen_census.sh` — one, not two, 2026-09-11
+
+`devdocs/progress/census/lz_census.py` is **deleted**. It was mine and folding
+it was my call; frankuser asked rather than acting on a relay of my position,
+which was the right instinct — the relay had me with no claim on the file and I
+had explicitly taken it the day before.
+
+**Theirs survives because it has two things mine did not, and I watched one of
+them bite me within the hour.** Picking the wall ERRORS-BEFORE-WARNINGS: my own
+`head -1` over a compile log reported `gauges.py` as walled on a
+`no class declares a method or callable field .at_rd()` warning while the module
+was **rc=0 CLEAN**. And CASCADE MARKING, grouped on the MESSAGE rather than
+message-and-line, so a pair stops being hidden at the moment it becomes
+interesting.
+
+**Carried across with credit, both frankuser's to keep:** classifying on the
+EXIT CODE rather than the log — a segfault prints no `error:` line, so a
+grep-based harness scores it CLEAN — and reporting whether the CORPUS tree is
+dirty, not only ours, because the owner edits lekkerzeilen directly and a census
+can be measuring a tree nobody else on the box has.
+
+**And a real defect of mine, confirmed rather than taken on report:** lines 26
+and 28 pinned `cwd='/home/neo/frankZ'` while `PX` was derived from the script's
+own location and overridable by `PXX=`, so running it against another checkout
+printed that checkout's compiler sha beside frankZ's tree sha. One correction to
+how it was reported: it was not *silent* — line 32 labelled the columns
+`frankZ tree` / `frankZ dirty=`, which is honest about the directory it read and
+wrong about the pairing, since the label is a fixed string. A label that cannot
+follow the thing it names is the weaker half of the same defect, not a defence.
