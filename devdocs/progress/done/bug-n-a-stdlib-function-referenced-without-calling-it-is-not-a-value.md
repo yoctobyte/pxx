@@ -195,4 +195,4 @@ could explain, and the variable there is now named `lower_fn` and says why.
   too and is a did-not-break control, not evidence.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit cd769a5b1.
