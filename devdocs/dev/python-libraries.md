@@ -37,12 +37,36 @@ someone already built so the installing machine needs no compiler; it never
 removes the native code. Its only value to us is triage: the tag names the
 class for free.
 
-## 2. The strategy ladder — mimicking is the LAST resort (FOR THIRD-PARTY PACKAGES; see 2b)
+## 2. The strategy ladder — AND ITS ORDER IS NOT A COST RANKING (owner, 2026-09-10)
 
-**This section is about third-party packages. For the STDLIB, read 2b first** —
-the owner directed shims there on 2026-09-10 and the top rung of this ladder
-is unavailable for most stdlib modules. Obeying this heading literally is how
-a reader concludes the opposite of the current direction.
+**OVERRULED BY THE OWNER, 2026-09-10. Re-implementing is not the last resort:**
+
+> *"mimicing is not last resort. it's actually.. it proven to be cheaper to just
+> re-implement than trying to jump hoops in a lot of cases. PNG was implemented
+> in a 20 minute session."*
+
+**And the record backs him, harder than the anecdote does.** `lib/rtl/png.pas`:
+first commit 2026-06-20 20:40, encoder/decoder complete at 21:46 — one evening
+— and in the **82 days since, not one functional change.** The only later
+commits touching it are a repo-wide SPDX sweep and a compiler-wide strict-flags
+change. A chunk parser, IDAT inflate, CRC32, all five filters and four colour
+types, written in a sitting and then silent.
+
+So read the table below as **a list of available strategies, not a ranking by
+cost.** The old framing — reproduced in full under "the argument it replaced"
+— assumed integration is cheap and re-implementation is expensive. Measured
+here, the hoops are frequently the expensive half: a build system to defeat,
+an ABI to match, a `.so` that pins a CPython minor version, versus a weekend
+of ordinary code with a free oracle.
+
+**What still stands, and it is most of the section:** never load a prebuilt
+`.so`; implement only the surface the compiled code touches; and look, don't
+copy — keep the real library installed and DIFF against it, because its
+behaviour is the spec. Those three are about CORRECTNESS and SCOPE, and nothing
+above weakens them.
+
+**For the STDLIB specifically, read 2b** — the top rung here is unavailable for
+most of it.
 
 | situation | strategy | why |
 | --- | --- | --- |
@@ -59,11 +83,24 @@ machine code has `Py_INCREF`, struct offsets and the GC header already inlined
 it yields nothing on any cross target. Shipping `.so`s beside the app gives
 back exactly what static linking bought.
 
-**Why mimicking is the last resort.** Every mimic is a private fork of someone
-else's API. It drifts, it is incomplete in ways only found at run time, and it
-is ours forever. Compiled real source has none of that: upstream fixes a bug,
-we recompile. Existing mimics (`lib/pcl/mimic_reportlab_*`) exist because
-reportlab had no borrowable engine, not because mimicking is the pattern.
+**The argument it replaced, kept because its reasoning is still worth having.**
+It ran: every mimic is a private fork of someone else's API; it drifts, it is
+incomplete in ways only found at run time, and it is ours forever, where
+compiled real source means upstream fixes a bug and we recompile.
+
+**Each clause is true and the weights were wrong.** Drift is real but it is
+proportional to how fast upstream moves, and a format with a published spec
+(PNG, zlib, struct) does not move at all — PNG has drifted by nothing in 82
+days. "Incomplete in ways only found at run time" is the one to keep, and the
+remedy is already below: implement only the surface the code touches, and diff
+against the real library so incompleteness is found by a test rather than by a
+user. "Ours forever" is a cost that gets paid once and then usually not again.
+
+What the clause got right is **where** it applies: a large, fast-moving,
+genuinely complex API (torch, scipy) is a bad thing to fork, and
+`lib/pcl/mimic_reportlab_*` exists because reportlab had no borrowable engine.
+Judge per library, on how fast upstream moves and how much surface the caller
+touches — not on a standing preference.
 
 Two rules that DO carry over from the reportlab work:
 
@@ -74,9 +111,10 @@ Two rules that DO carry over from the reportlab work:
 
 ## 2b. THE STDLIB SITS DIFFERENTLY ON THAT LADDER (owner, 2026-09-10)
 
-Everything above was written about **third-party packages**, and read literally
-it tells you not to shim. The owner's direction tonight says the opposite, and
-both are right, because they are about different populations.
+Section 2 is about **third-party packages**, and even with its ranking
+corrected it still puts *compile their real source* at the top. For the stdlib
+that rung is mostly not there at all, which is a different point from the cost
+one above and has to be said separately.
 
 His words, across three messages:
 
