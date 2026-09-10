@@ -23211,3 +23211,58 @@ that story came from.
 rss --sort=-rss | head` and find out whether an agent is the consumer at all.**
 And when quoting headroom, say WHICH number: `MemAvailable` for whether a human
 should worry, `MemFree` for whether a background task is about to be terminated.
+
+## A PROBE CAN COLLIDE ON AN ABSENT NAME, NOT ONLY ON A DEFAULT VALUE — AND ON TRACK N THE COLLISION FALLS TOWARDS "FEATURE"
+
+CLAUDE.md carries **CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE
+DEFAULT**, and every example under it is a REPRESENTATIONAL default:
+`sizeof(int)` colliding with `TypeStorageSize(tyUnknown)`, a zero, a pointer
+width. This is the same rule reaching a class of collision none of those
+describe — the colliding thing is not a default VALUE but a default OUTCOME,
+produced by a name that is ABSENT from the probe.
+
+Measured 2026-09-10, NilPy class scope. The probe:
+
+    class P:
+        MARGIN = 14
+        def show(self): return MARGIN      # pxx 14, CPython NameError
+
+read as **NilPy accepting what CPython rejects** — upward-compatible, a feature
+on track N — and was filed as a deliberate divergence in
+`nilpy-semantics-divergences.md`. Add one line:
+
+    MARGIN = 99                            # <- the name the probe omitted
+    class P:
+        MARGIN = 14
+        def show(self): return MARGIN      # pxx 14, CPython **99**
+
+and it is not a widening at all. A class body is not an enclosing scope for a
+function, so CPython resolves to the module global; we resolve to the class
+attribute and return a plausible wrong integer with no diagnostic. **With the
+module-level name absent, "we accept more than CPython" and "we resolve the
+wrong scope" produce the IDENTICAL observation**, and the probe cannot separate
+them.
+
+**The direction is the part worth having.** A rule that says a fall is possible
+is worth less than one that says which way a seat will fall. On track N the
+collision resolves toward *upward-compatible*, because that reading is
+sanctioned by the lane's own charter — it converts a bug into a feature, closes
+the question, and produces a documentation commit instead of a ticket. It is the
+most comfortable available misreading, which is exactly why it is the one to
+distrust.
+
+So: **when a probe's expected answer is an ERROR, an absence, or a refusal, ask
+what the probe left out.** An omitted binding is as capable of manufacturing a
+collision as an omitted type, and it does not look like a default while you are
+choosing it.
+
+Found by the seat that made the error, re-reading its own probe after a peer
+disputed the write-up's framing without building anything. That is the copyable
+part: the probe was re-examined, not the conclusion.
+
+**Not promoted to CLAUDE.md by its author.** Recommended there as a one-sentence
+EXTENSION to the existing probe rule rather than a neighbouring rule — the file
+prefers strengthening — but the edit was not made, because the recommendation to
+promote arrived from a peer and this file's rules-of-engagement forbid changing
+CLAUDE.md on a peer's ask. Standing recommendation for the owner, recorded here
+so it is not lost.
