@@ -30960,7 +30960,9 @@ begin
   PyHdrKwIdx := -1;
   while CurTok.Kind <> tkRParen do
   begin
-    if PyHdrNParams >= 32 then Error('Nil Python: too many parameters');
+    { the literal 32 was MAX_PROC_PARAMS spelled out; the method path now
+      guards at the same bound and all three should move together. }
+    if PyHdrNParams >= MAX_PROC_PARAMS then Error('Nil Python: too many parameters');
     { A bare `*` marks the parameters after it keyword-only (PEP 3102). It is a
       MARKER, not a parameter: consumed and dropped, so the ones after it are
       ordinary parameters here. The DIFFERENCE from CPython is laxity — a
@@ -34856,12 +34858,19 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
     isGenM: Boolean;   { this method's body contains a yield — see PyDefAtHasYield }
-    pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
-    pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
-    pdefIsNone: array[0..15] of Boolean; pdefIsFloat: array[0..15] of Boolean;
-    pdefIsBool: array[0..15] of Boolean;
-    pdefVal: array[0..15] of Int64;
-    pdefSOff: array[0..15] of Integer; pdefSLen: array[0..15] of Integer;
+    { MAX_PROC_PARAMS, not 16, and it must stay equal to the bound in
+      PyParseMethod -- the two build the same parameter list and the file's own
+      comments record what happens when they disagree by one slot: a silent ABI
+      mismatch. 16 was the bound here while the top-level def path
+      (PyParseDefHeader) guarded at 32, so a METHOD of 17 parameters wrote one
+      past the end of every array below and took the compiler out with SIGSEGV.
+      bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py }
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString; ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+    pdefHas: array[0..MAX_PROC_PARAMS - 1] of Boolean; pdefIsStr: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+    pdefIsNone: array[0..MAX_PROC_PARAMS - 1] of Boolean; pdefIsFloat: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+    pdefIsBool: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+    pdefVal: array[0..MAX_PROC_PARAMS - 1] of Int64;
+    pdefSOff: array[0..MAX_PROC_PARAMS - 1] of Integer; pdefSLen: array[0..MAX_PROC_PARAMS - 1] of Integer;
     tk: TTypeKind; defKind: Integer; defIVal: Int64; defSOff, defSLen: Integer;
     dcExprDef: Boolean;   { this field's default is an EXPRESSION, evaluated at the class statement }
 begin
@@ -35382,11 +35391,17 @@ begin
         pnames[0] := '$clsrecv'; ptypes[0] := tyPointer;
         nparams := 1;
       end;
-      for k := 0 to 15 do begin pdefHas[k] := False; pdefIsBool[k] := False; end;
+      for k := 0 to MAX_PROC_PARAMS - 1 do begin pdefHas[k] := False; pdefIsBool[k] := False; end;
       j := i + 3;
       mStarIdx := -1; mKwIdx := -1;
       while Tokens[j].Kind <> tkRParen do
       begin
+        { UNCONDITIONAL, and it was not. The only bound on this loop used to be
+          inside `if isGenM`, so a non-generator method overran the arrays in
+          silence; the guard below is the one PyParseDefHeader has always had
+          for a top-level def, at the same limit. }
+        if nparams >= MAX_PROC_PARAMS then
+          Error('Nil Python: too many parameters');
         { `*` / `*args` / `**kwargs` in a METHOD header. The top-level def path
           (PyParseDefHeader) has taken these since feature-nilpy-star-args-kwargs;
           the method path never did, so `def drawImage(self, ..., **kw)` failed
@@ -36081,9 +36096,12 @@ var isGenDef: Boolean;
     savedGenStateCtr, savedGenSlotNext, savedGenScopeBase, savedGenElemOff: Integer;
     savedHoist: Integer; clsAttrSeq: Integer;
     origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
-    savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
-    ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
-    psigs: array[0..15] of Integer;   { Callable signature per parameter, or -1 }
+    savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer;
+    { MAX_PROC_PARAMS -- must equal the bound in PyRegisterClassMembers above.
+      See the note there. }
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind; pcis: array[0..MAX_PROC_PARAMS - 1] of Integer;
+    psigs: array[0..MAX_PROC_PARAMS - 1] of Integer;   { Callable signature per parameter, or -1 }
     isCtor: Boolean; isKwP: Boolean; starCi: Integer;
     savedNest, savedTok, savedLam, savedSelf2: Integer; savedPfx, savedPfx2: AnsiString;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
@@ -36166,6 +36184,9 @@ begin
   isClsMeth := PyIsClassMethodAt(TokPos - 4) and (not isCtor);
   while CurTok.Kind <> tkRParen do
   begin
+    { UNCONDITIONAL — see the matching guard in the member pre-pass. }
+    if nparams >= MAX_PROC_PARAMS then
+      Error('Nil Python: too many parameters');
     { `*` / `*args` / `**kwargs` — mirrors the member pre-pass above; the two
       must produce the same parameter list or the frame and the registered
       signature disagree. }

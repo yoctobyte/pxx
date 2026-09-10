@@ -4582,6 +4582,17 @@ test-nilpy: $(COMPILER)
 	# no comparison of the values contains. Byte-identical to CPython.
 	./$(COMPILER) test/test_nilpy_a_method_default_is_evaluated_in_the_class_body.npy $(TESTTMP)/test_nilpy_mdefscope26
 	$(TESTTMP)/test_nilpy_mdefscope26 | diff -u test/test_nilpy_a_method_default_is_evaluated_in_the_class_body.expected -
+	# A METHOD's parameter list was bounded at 16 while a top-level def's was
+	# bounded at 32, and the only bound on either method fill loop lived inside
+	# `if isGenM` -- so a NON-generator method of 17 parameters wrote one past
+	# the end of an array[0..15] and took the compiler out with SIGSEGV. It is
+	# not an exotic count: lekkerzeilen's Vessel.__init__ has 23, and the crash
+	# also reached traffic.py, which merely imports it. The rows assert VALUES
+	# past index 16, not that it compiles -- an array overrun corrupts a
+	# parameter list as readily as it crashes -- and `free` is the control: the
+	# def path always guarded at 32 and that row was green throughout.
+	./$(COMPILER) test/test_nilpy_a_method_takes_more_than_sixteen_parameters.npy $(TESTTMP)/test_nilpy_wideparams26
+	$(TESTTMP)/test_nilpy_wideparams26 | diff -u test/test_nilpy_a_method_takes_more_than_sixteen_parameters.expected -
 	# The stdlib shim table builds a call by NAME (FindProc), which never consults
 	# overloads — so adding an overload for a case it got wrong did NOTHING,
 	# silently. The call site now re-targets by ARITY. See the test's header.

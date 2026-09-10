@@ -23593,3 +23593,161 @@ get interrogated.
 population sampled twice, which is the ground on which this pair has twice
 declined to promote a finding that would have flattered them. Banked here on
 merit.
+
+## A CRASH DETECTOR THAT CANNOT FIRE REPORTS "DOES NOT CRASH", AND IN A BUG-HUNT THE NEGATIVE IS THE RESULT THAT LOOKS LIKE A FINDING
+
+Measured 2026-09-10 (frankZ, Track N), twice in one hour, in one harness, while
+minimising the `vessel.py` segfault. Both bugs are the house failure mode — the
+instrument answers truthfully about something else — and neither errored.
+
+**One: there is no `-o` flag.** pxx takes its output path POSITIONALLY, and
+answers `output path may not start with "-"` with **rc=1**. The reducer passed
+`-o`, so every compile in the run was an argument error. Baseline included.
+
+**Two: `139` is unreachable from Python.** `subprocess.CompletedProcess.
+returncode` reports a signal death as **`-11`**; `139` (= 128 + 11) is the
+SHELL's spelling of the same event. The constant was lifted straight out of the
+census harness, which is shell and where it is correct. `rc == 139` evaluated
+from Python is a comparison that **cannot be true once**, for any input.
+
+**What it printed was not a failure — it was a result.** `blocks kept: 39 of 39`,
+`baseline crashes: False`. A guard that cannot fail prints PASS and that is
+already a rule; a *detector* that cannot fire prints **"the phenomenon is not
+there"**, and in a reduction that is spelled `does not reduce` — a sentence with
+the exact shape of a real, reportable finding about the subject. It would have
+gone into the ticket as *"vessel.py does not reduce by top-level block removal"*,
+which is a claim about the compiler, sourced entirely from a claim about `argv`.
+
+**The asymmetry to keep:** a broken instrument in a hunt for a POSITIVE (does the
+fix work, does the test pass) tends to fail loudly or flatter you, and either way
+someone queries it. A broken instrument in a hunt for a NEGATIVE has nothing to
+query — absence of evidence is what you were looking for, and the harness
+supplies it for free, in volume, fast. **The run that finds nothing is the run
+nobody audits**, and it is also the cheapest possible run, so it finishes first.
+
+**The remedy is one line and it is the only thing that caught either bug:**
+assert that the harness can observe the event on the UNMODIFIED input, and
+**branch on the assert**. `if not crashes(orig): abort`. That is the
+positive-control discipline aimed at a detector rather than a guard, and it costs
+one compile out of a hundred.
+
+**And the second bug is what the borrowed-mechanism rule looks like applied to a
+literal.** `139` is not a fact about the compiler; it is a fact about how a
+particular *observer* encodes a signal death. It travelled between two harnesses
+of mine, one shell and one Python, keeping its spelling and losing its meaning.
+Any constant that names an OUTCOME — an exit code, a signal number, a sentinel,
+an errno — is a property of the instrument that reads it, and re-deriving it in
+the new instrument costs one `print`. **Ask what this number is a fact ABOUT
+before carrying it across a language boundary.**
+
+Third, minor, same run: a "zero-indent line starts a top-level block" splitter
+shreds a module docstring into one block per line and emits variants that are not
+Python. Take statement boundaries from `ast`, which knows what a docstring is.
+
+**Not promoted.** The general rule it instantiates — a guard that cannot fail is
+not a guard — is already in CLAUDE.md, and this is a second door into it rather
+than a new room. What is new is the *direction*: the file's version says such a
+guard prints PASS, and this pair printed a finding. If a third instance arrives
+where the unfireable predicate produced a reported RESULT rather than a green,
+that is the sentence to extend, not this one to promote.
+
+## A TICKET'S BOUNDARY TABLE IS THE REPORTER'S INFERENCE, AND THE ROW IT REPORTS AS *WORKING* IS THE ONE NOBODY RE-DERIVES
+
+frankB's finding, Track N, 2026-09-10. Retitled when banked: the author's draft
+called this "the third door", which collides with their own entry above on
+assertions read off the defect. That one is about what an ASSERTION pins; this is
+about what a TICKET steers. Different rooms.
+
+**A boundary table is drawn from the row that failed, and it is unfalsifiable
+from that row alone** — so it arrives carrying the failing row's credibility and
+gets read as measurement. A prescribed row at least announces itself as a
+requirement; **a reported green reads as evidence already gathered**, which is
+what makes it the hardest of the three to see.
+
+Three tickets in one evening, two subsystems, two seats:
+
+- a ticket said imports were resolved on a path a failed guard had made
+  unreachable — reachability was never consulted, and `if False: import X` fails
+  identically to live code;
+- a ticket said a module alias resolves for CALLS but not ATTRIBUTES, measured on
+  `import sys as s`. For `sys` and `os` **neither** spelling works;
+  `import math as m; m.pi` worked all along. The variable was the MODULE, not the
+  syntax — `math` is a real RTL unit resolving through `FindUnitOrAlias`, which
+  chases the alias chain, while `sys` and `os` are compiler-provided doors keyed
+  on the literal base name at three sites;
+- an AST node built under `if idx < 0` said which BRANCH ran, and not why its
+  guard was satisfied.
+
+**The false half is not decoration — it steers the FIX.** "Calls work" would have
+left the dotted stdlib call gate unrepaired while the two attribute doors were
+fixed: a two-doors-disagree bug shipped under the belief it had been normalised,
+with no red behind it to catch it later.
+
+**HOLD THE SYNTAX AND VARY THE SUBJECT.** Every time, the discriminating probe
+was in the same family as the one already run and one step sideways. That is why
+it does not get run — the failing row already looks like an explanation, so the
+sideways probe feels like confirming something settled.
+
+**Not promoted; bundled for the owner as item four,** with recurrence stated:
+three instances, two independent subsystems, one evening, both seats. The form
+proposed is an extension to CLAUDE.md's existing *"an assertion written from a
+PREDICTION pins the prediction"* rather than a new paragraph — same sentence,
+pointed at the ticket's working row instead of its prescribed one. The author
+drafted it and declined to land it, which is the correct half of that split.
+
+## A COMPILE RESULT RANKED TWO BROKEN SHAPES AS ONE WORKING AND ONE BROKEN — AND IT PICKED THE WORSE ONE AS THE WORKING ONE
+
+frankB's finding and frankB's correction of it, Track N, 2026-09-10, inside an
+hour. Banked because the INVERSION is new; the general rule it instantiates
+(match the assertion class to the defect class) is already in CLAUDE.md.
+
+The reported boundary was: `h = sys.stderr; h.write("x")` works, and
+`sys.stderr.write("x")` does not — one concept, two shapes, the second stayed
+broken. **The second half held. The first half was a compile result standing in
+for a behaviour claim.** Run it:
+
+    h = sys.stderr
+    h.write("TO-STDERR\n")
+    -> compiles clean, rc=217, Unhandled exception: TypeError: object is not
+       callable, nothing on stdout, nothing on stderr
+
+**Neither spelling works.** The dotted one fails at COMPILE with a misleading
+message (`expected ':' before '.'`, which names nothing a reader could act on);
+the variable one fails at RUN having written nothing. `PyParseSysStream` builds
+`sys.stdout`/`sys.stderr` as a bare `AN_INT_LIT` holding the fd, and an Integer
+has no methods, so every method on a stream is broken by construction.
+
+**The inversion is the finding.** The shape a compile-only probe calls WORKING
+is the strictly worse of the two, because it gets past every gate a compile can
+be. The broken-at-compile sibling is loud, located, and cannot ship; the
+"working" one is silent, ships, and writes nothing. So a compile-only probe
+does not merely miss the second defect — **it reverses the severity ordering of
+the two**, and then the fix effort goes to the loud one.
+
+Ask, of any boundary table built by compiling: **would the row I am calling
+WORKING still look working if I ran it?** Wherever the subject is a value's
+behaviour rather than its acceptance, the answer is not knowable from `rc=0`.
+
+**Two things that only appeared on re-measurement, neither visible from a
+compile:**
+
+- `sys.stdin.isatty()` prints **`0`** where CPython prints **`False`** — a
+  wrong TYPE, not a wrong number, already in the tree and already in the table.
+  `if not sys.stdout.isatty()` is fine; `print(x.isatty())` diverges. That is
+  the collide-with-the-default shape: falsy `0` and `False` agree everywhere
+  except where you print them.
+- `sys.stdin` has three three-segment table entries (`read`, `readline`,
+  `isatty`); `sys.stdout` and `sys.stderr` have **none**. One arm wired, the
+  sibling never was — `normalise-dont-special-case`'s own instruction ("fixed
+  one arm of a double case? grep for the sibling before closing") landing on
+  the table that documents it.
+
+`print(..., file=sys.stderr)` genuinely does work, and was confirmed at RUN
+time, byte-identical to CPython on both streams — it survives only because
+`PyParsePrintFile` reads the integer literal straight back out of the AST.
+Which is also why the obvious normalisation (give a stream the `TPyFile` the
+`open()` path already has) cannot be smuggled into a table patch: that assert
+is `ASTKind = AN_INT_LIT` and value 1 or 2, so print's `file=` handling has to
+move in the same step or five working sites go red.
+
+**Not promoted.** One instance, and the parent rule is already in the file.

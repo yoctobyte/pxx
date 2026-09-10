@@ -1,0 +1,6 @@
+seventeen 136
+free 18
+defaults tail 16 17 18
+defaults head 1 8
+explicit tail 116 117 118
+widest [1, 16, 17, 30]

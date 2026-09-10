@@ -1,0 +1,59 @@
+# A METHOD's parameter list was bounded at 16 while a top-level def's was
+# bounded at 32.  The method arrays in PyRegisterClassMembers and PyParseMethod
+# were array[0..15] and the only bound on either fill loop lived inside
+# `if isGenM` -- so a NON-generator method of 17 parameters wrote one past the
+# end and took the compiler out with SIGSEGV.  lekkerzeilen's Vessel.__init__
+# has 23.
+#
+# The assertions are on VALUES, not on the fact that it compiles: the defect
+# was a fixed-size array overrun, and an overrun corrupts a parameter list
+# quite as easily as it crashes.  The rows past 16 are the ones that were
+# unreachable, so every one of them is printed by name.
+
+class Wide:
+
+    def seventeen(self, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p):
+        # 17 including self -- one past the old bound, and the exact shape
+        # that segfaulted.
+        return a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p
+
+    def defaulted(self, a, b, c, d, e, f, g, h,
+                  i=9, j=10, k=11, l=12, m=13, n=14, o=15, p=16, q=17, r=18):
+        # Defaults are irrelevant to the bug -- an all-plain and an all-
+        # defaulted method crossed the boundary at the same count -- so this
+        # row exists to keep them irrelevant.
+        return [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r]
+
+    def widest(self, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10,
+               p11, p12, p13, p14, p15, p16, p17, p18, p19, p20,
+               p21, p22, p23, p24, p25, p26, p27, p28, p29, p30):
+        # 31 including self: the last count the new bound accepts.
+        return [p01, p16, p17, p30]
+
+
+def free_seventeen(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q):
+    # The top-level def path always guarded at 32 and always worked here.
+    # It is the control: it proves the test is exercising the METHOD path,
+    # because this row was green throughout.
+    return a + q
+
+
+w = Wide()
+print("seventeen", w.seventeen(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
+print("free", free_seventeen(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17))
+
+d = w.defaulted(1, 2, 3, 4, 5, 6, 7, 8)
+print("defaults tail", d[15], d[16], d[17])
+print("defaults head", d[0], d[7])
+
+# Deliberately NOT the default values: passing 16/17/18 explicitly would make
+# this row print the same thing whether the argument or the default won, which
+# is a guard that cannot fail.
+e = w.defaulted(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 116, 117, 118)
+print("explicit tail", e[15], e[16], e[17])
+
+# The boundary itself: the parameter that used to be written out of bounds is
+# index 16, so name it and the one after it rather than trusting a sum.
+print("widest", w.widest(1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                         11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30))

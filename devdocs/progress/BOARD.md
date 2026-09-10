@@ -346,11 +346,11 @@ _none_
 | bug-n-pyparser-property-accessor-sites-do-not-know-an-interface-receiver | N | 30 | bug | `pyparser.inc` has ~9 hand-written copies of the property-accessor call decision, and each knows exactly two answers (AN_VIRTUAL_CALL / AN_CALL, Self at argument 0). The choice is three-way: an interface receiver needs AN_INTF_CALL, slot in ASTSOffset, Self from the fat pointer. The Pascal-side twins had the identical defect and were fixed by extracting one MakeAccessorCall (0f0fd6642); pyparser.inc was deliberately NOT touched because it is Track N's file and N is parked. NOT KNOWN TO BE REACHABLE from NilPy today -- this is the sibling half of a fixed double case, filed so it is not rediscovered, not a measured failure. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
-| bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py | N | 75 | bug | > | — |
 | bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch | N | 90 | bug | `./compiler/pascal26 lekkerzeilen/traffic.py` and `lekkerzeilen/vessel.py` SEGFAULT at tree 08d8d5170, compiler 546d4dcbd305 -- rc=139, core dumped, reproduced three times each. It is NEW: pinned v407 exits rc=1 on the same file (an ordinary error, because it stopped at math.atan2 long before this point). Both modules emit exactly 42 `dispatching on the receiver at run time` warnings before dying, and the identical count across two unrelated modules suggests ONE crash site reached through a shared import rather than two -- the same fan-in artefact that made five *unpacking rows look like five sites when they were three. A crash outranks every other wall on this target: it is the only failure mode on the board that produces no diagnostic at all. | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
 | bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point | N | 60 | bug | `'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
+| bug-n-traffic-py-has-an-uninferable-heading-field | N | 60 | bug | > | — |
 | bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values | N | 65 | bug | `a, b = X(), Y()` binds EVERY target to the whole right-hand list instead of unpacking it, when the values' type defines __iter__ or __getitem__. The swap idiom `p, q = q, p` is hit. A NAMED right-hand side (`a, b = tup`), a call (`a, b = f()`) and for-loop targets are all correct, and so is any class without __iter__/__getitem__ -- so it takes a container-ish class AND an inline tuple display to trigger. Silent: downstream sees a list, and a longer program segfaults. | — |
 | bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling | N | 40 | bug | Found by inspection, NOT reproduced: NodeEnumIdOf's call arm and PyEvalOnce's chained-receiver test both match AN_CALL without AN_VIRTUAL_CALL, so a VIRTUAL method call loses its enum result identity and a chained call receiver is re-evaluated per link. Both predate the dunder-dispatch fix that surfaced them. | — |
 | bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 45 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
@@ -983,9 +983,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3670)
+## done (3671)
 
-3670 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3671 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1090,7 +1090,6 @@ _none_
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [N] bug-n-a-module-bound-by-an-import-is-not-a-value
-- [p 75] [N] bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
@@ -1147,6 +1146,7 @@ _none_
 - [p 60] [N] bug-n-async-def-and-await-are-not-implemented
 - [p 60] [N] bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
+- [p 60] [N] bug-n-traffic-py-has-an-uninferable-heading-field
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [T] bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy
