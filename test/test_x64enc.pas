@@ -158,6 +158,32 @@ begin
   AssertBytes('mov imm8 -> reg4, flag set (ah, no REX)', [$B4, $7F]);
   AsmHigh8Operand := False;
 
+  { bswap = 0F C8+rd. The register is in the OPCODE, not a ModRM byte, so the
+    only thing carrying "which register" above 7 is REX.B -- and a dropped
+    prefix does not fail to assemble, it swaps a DIFFERENT register. Four rows
+    over the two independent bits, each pair differing in exactly one:
+      reg 0 -> 15 at the same width  isolates REX.B
+      32 -> 64 bit at the same reg   isolates REX.W
+    Expected bytes are `as`'s own, measured on this box:
+      bswap %eax  = 0f c8      bswap %r15d = 41 0f cf
+      bswap %rax  = 48 0f c8   bswap %r15  = 49 0f cf
+    SDL_endian.h's SDL_Swap32/SDL_Swap64. }
+  ClearMock;
+  x64_bswap_reg(4, 0);
+  AssertBytes('bswap eax (no prefix at all)', [$0F, $C8]);
+
+  ClearMock;
+  x64_bswap_reg(4, 15);
+  AssertBytes('bswap r15d (REX.B only)', [$41, $0F, $CF]);
+
+  ClearMock;
+  x64_bswap_reg(8, 0);
+  AssertBytes('bswap rax (REX.W only)', [$48, $0F, $C8]);
+
+  ClearMock;
+  x64_bswap_reg(8, 15);
+  AssertBytes('bswap r15 (REX.W and REX.B)', [$49, $0F, $CF]);
+
   ClearMock;
   x64_leave;
   AssertBytes('leave', [$C9]);

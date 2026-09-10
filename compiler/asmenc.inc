@@ -826,6 +826,12 @@ begin
 
   { ---- 0-operand ---- }
   if CaseEqual(mn,'nop')     then begin AsmB($90); Exit; end;
+  { pause = F3 90, a REP-prefixed nop. Named separately from `nop` because
+    the prefix is the entire instruction: it is what tells the core this is
+    a spin-wait, and dropping it leaves a correct-looking nop that burns a
+    pipeline flush on every loop exit. SDL_atomic.h's own comment says some
+    assemblers cannot spell REP NOP and it therefore writes `pause`. }
+  if CaseEqual(mn,'pause')   then begin AsmB($F3); AsmB($90); Exit; end;
   if CaseEqual(mn,'ret')     then begin AsmB($C3); Exit; end;
   if CaseEqual(mn,'leave')   then begin AsmB($C9); Exit; end;
   if CaseEqual(mn,'syscall') then begin AsmB($0F); AsmB($05); Exit; end;
@@ -1153,6 +1159,42 @@ begin
     AsmPrefixAndREX(opSize, ext, 0, 0);
     if opSize = 1 then AsmB($F6) else AsmB($F7);
     AsmModRM(ext, 0);
+    Exit;
+  end;
+  { ---- bswap: 0F C8+rd, register only ----
+    Not in the F6/F7 unary group above: the register is encoded IN the opcode,
+    so there is no ModRM byte and no ext digit. Delegated to x64enc's
+    x64_bswap_reg rather than spelled here, which is what puts it behind the
+    same REX funnel as everything else and gives it the byte-level paired
+    control in test/test_x64enc.pas.
+    SDL_endian.h's SDL_Swap32/SDL_Swap64. }
+  if CaseEqual(mn,'bswap') then
+  begin
+    if (nops <> 1) or (AsmOpKind[0] <> AOP_REG) then
+      Error('asm: bswap takes exactly one register operand');
+    EncToAsmBuffer := True;
+    x64_bswap_reg(AsmOpSizeOf(1), AsmOpReg[0]);
+    EncToAsmBuffer := False;
+    Exit;
+  end;
+  { ---- int $n ----
+    `int $3` is the one that matters (SDL_assert.h's SDL_TriggerBreakpoint) and
+    it is spelled CC rather than CD 03. That is not an optimisation copied from
+    `as` for tidiness: CD 03 raises the same vector but a debugger single-steps
+    it differently on some kernels, and CC is what every debugger and every
+    other compiler emits for a breakpoint. Verified against `as`, which
+    assembles `int $3` to exactly `cc`. }
+  if CaseEqual(mn,'int') then
+  begin
+    if (nops <> 1) or (AsmOpKind[0] <> AOP_IMM) then
+      Error('asm: int takes exactly one immediate operand');
+    if AsmOpVal[0] = 3 then AsmB($CC)
+    else
+    begin
+      if (AsmOpVal[0] < 0) or (AsmOpVal[0] > 255) then
+        Error('asm: int vector must be 0..255');
+      AsmB($CD); AsmB(Integer(AsmOpVal[0] and $FF));
+    end;
     Exit;
   end;
   { ---- rdrand / rdseed: 0F C7 /6 and /7, register destination only ----

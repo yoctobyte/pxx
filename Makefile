@@ -13016,6 +13016,45 @@ test-core: $(COMPILER)
 	# SDL_endian.h:166 verbatim. The previous compiler refuses %h by name.
 	./$(COMPILER) test/casm_high_byte_register.c $(TESTTMP)/casmhighbyte26
 	tools/expect_same.sh casmhighbyte26 "$$($(TESTTMP)/casmhighbyte26)" "$$(printf 'swap16 13330\nhighbyte 171\nsethigh 32564\naddhigh 2048')"
+	# bswapl/bswapq/pause -- the rest of what SDL2's headers ask the x86-64
+	# inline assembler for, censused from those headers rather than found one
+	# rebuild at a time. Values are gcc's on identical source.
+	./$(COMPILER) test/casm_bswap_and_pause.c $(TESTTMP)/casmbswap26
+	tools/expect_same.sh casmbswap26 "$$($(TESTTMP)/casmbswap26)" "$$(printf 'bswap32 2018915346\nbswap64 17279655951921914625\nbswap_r8plus 1144201758\nspin 7')"
+	@# THE PAUSE PREFIX, AS A PAIRED DELTA -- the value rows above cannot see it,
+	@# because a bare nop is a legal implementation of pause and the loop still
+	@# counts to 7. F3 90 must go 0 -> 1 between the same program with and
+	@# without the asm. The pairing IS the instrument: bare 90 moves 261 -> 265
+	@# across those two binaries, which is what an unframed byte count looks
+	@# like. Both counts are computed here rather than hardcoded, so the row
+	@# says nothing about absolute sizes.
+	@printf '#include <stdio.h>\nstatic unsigned int spin(unsigned int n)\n{ unsigned int i,k=0; for(i=0;i<n;i++){ k++; } return k; }\nint main(void){ printf("spin %%u\\n", spin(7)); return 0; }\n' > $(TESTTMP)/casm_nopause.c
+	./$(COMPILER) $(TESTTMP)/casm_nopause.c $(TESTTMP)/casmnopause26
+	@# tr '\n' ' ' and NOT tr -d, which would destroy the byte boundaries: with
+	@# the hex run together, 'f390' also matches ACROSS two bytes (…xf,39,0x…)
+	@# and the control binary answered 2 instead of 0. That is this row's own
+	@# unframed-count failure, in the guard written to demonstrate one.
+	@w=$$(od -An -tx1 -v $(TESTTMP)/casmbswap26   | tr '\n' ' ' | tr -s ' ' | grep -o 'f3 90' | wc -l); \
+	 wo=$$(od -An -tx1 -v $(TESTTMP)/casmnopause26 | tr '\n' ' ' | tr -s ' ' | grep -o 'f3 90' | wc -l); \
+	 test "$$wo" -eq 0 \
+	   || { echo "casm_bswap_and_pause: FAIL - the control binary already contains $$wo F3 90 sequences, so this delta cannot mean anything"; exit 1; }; \
+	 test "$$w" -eq 1 \
+	   || { echo "casm_bswap_and_pause: FAIL - expected exactly 1 F3 90 (pause) with the asm present, found $$w. A bare 90 is a legal-looking nop that the value rows cannot distinguish from pause"; exit 1; }; \
+	 echo "casm_bswap_and_pause: F3 90 delta 0 -> 1, the pause prefix is emitted"
+	@# int $$3 -- SDL_assert.h's SDL_TriggerBreakpoint. THE ASSERTION IS THE TRAP
+	@# AND THE SENSE IS INVERTED: a clean exit here is the failure. A byte count
+	@# was tried first and was useless -- the with- and without-asm binaries came
+	@# out at identical size with identical CC counts, CC being the padding
+	@# filler, while one traps and the other does not.
+	./$(COMPILER) test/casm_int3_traps.c $(TESTTMP)/casmint326
+	@if $(TESTTMP)/casmint326 >/dev/null 2>&1; then \
+	   echo "casm_int3_traps: FAIL - it exited cleanly, so no int3 was executed"; exit 1; \
+	 else \
+	   rc=$$?; \
+	   test "$$rc" -eq 133 \
+	     || { echo "casm_int3_traps: FAIL - died with rc=$$rc, expected 133 (SIGTRAP). Another signal means it crashed for some other reason and this row would have passed on it"; exit 1; }; \
+	   echo "casm_int3_traps: SIGTRAP as gcc does on identical source"; \
+	 fi
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# An `"m"` operand costs NO register: it is a frame slot, `[rbp+disp32]`,

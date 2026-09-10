@@ -737,7 +737,12 @@ begin
          or CaseEqual(b,'or')  or CaseEqual(b,'xor') or CaseEqual(b,'cmp')
          or CaseEqual(b,'mul') or CaseEqual(b,'imul') or CaseEqual(b,'neg')
          or CaseEqual(b,'not') or CaseEqual(b,'inc') or CaseEqual(b,'dec')
-         or CaseEqual(b,'test') or CaseEqual(b,'xchg') or CaseEqual(b,'lea');
+         or CaseEqual(b,'test') or CaseEqual(b,'xchg') or CaseEqual(b,'lea')
+         { bswapl/bswapq (SDL_endian.h's SDL_Swap32/SDL_Swap64) and `int $3`
+           (SDL_assert.h's SDL_TriggerBreakpoint). `pause` is NOT here: it
+           takes no operands, so it never reaches the suffix split -- the
+           zero-operand arm passes it to AttEmitInstr unchanged. }
+         or CaseEqual(b,'bswap') or CaseEqual(b,'int');
 end;
 
 { Split an AT&T mnemonic into its Intel base and the size its suffix names.

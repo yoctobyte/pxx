@@ -378,6 +378,39 @@ begin
   EncB($58 + (reg and 7));
 end;
 
+procedure x64_bswap_reg(size, reg: Integer);
+{ bswap = 0F C8+rd -- the register rides in the OPCODE's low three bits, like
+  push/pop above and unlike the F6/F7 unary group, which uses a ModRM ext.
+
+  32 and 64 bit ONLY, and the refusal is not pedantry. `bswap %ax` is not an
+  encoding error -- it assembles, and Intel's own manual documents the 16-bit
+  form as UNDEFINED. So the one width a caller might reach for by analogy is
+  the one that silently produces a wrong answer at runtime rather than a
+  diagnostic, which is why it is refused here at the only place that can see
+  the width. SDL_endian.h asks for bswapl and bswapq and never for a word;
+  the word swap it wants is spelled `rorw $8` and is a different instruction.
+
+  REX.B for a register >= 8 and REX.W for 64-bit both come from the shared
+  funnel rather than being spelled here -- 58 of its 60 call sites reach
+  EncPrefixAndREX directly, and putting a second prefix decision beside it is
+  precisely the wrong-layer mistake that shipped `mov $0x7f,%bpl` for %h0. }
+begin
+  if (size <> 4) and (size <> 8) then
+    { Deliberately no width in the message. AIntToStr lives in util.inc, which
+      x64enc.inc does not get to depend on: this file is included STANDALONE by
+      test/test_x64enc.pas and test/test_asm_emit_x64.pas, which mock defs.inc
+      rather than including it, and a new cross-file reference here breaks both
+      harnesses while the compiler builds clean. That is the exact drift
+      tools/standalone_inc_harnesses.sh exists to catch -- and it caught this
+      one on the first run, which is the cheapest that check has ever been. }
+    Error('asm: bswap has only 32- and 64-bit forms. The 16-bit encoding'
+          + ' assembles and is documented UNDEFINED, so it is refused here'
+          + ' rather than emitted; a 16-bit byte swap is `rorw $8`');
+  EncPrefixAndREX(size, 0, reg, False);
+  EncB($0F);
+  EncB($C8 + (reg and 7));
+end;
+
 procedure x64_push_imm(immVal: Integer);
 begin
   EncB($68);
