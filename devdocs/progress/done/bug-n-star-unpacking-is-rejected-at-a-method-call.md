@@ -136,4 +136,4 @@ rows, covering the doors that commit's own test has no row for:
   guard against a low bound widened all the way to zero.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b0519638e.
