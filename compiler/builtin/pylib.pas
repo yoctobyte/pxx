@@ -1442,6 +1442,22 @@ procedure pysys_exit(code: Integer);
 procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
+{ os.replace(src, dst) — rename that OVERWRITES an existing destination.
+  On POSIX that is rename(2) exactly, which is why this is one line and not a
+  copy of it: the difference CPython documents is a WINDOWS difference (its
+  os.rename refuses an existing dst, os.replace does not), and pxx reaching
+  Windows is what makes this a separate name rather than a table alias onto
+  pyos_rename. The day the PAL grows a Windows arm, this body changes and
+  os.rename's does not. }
+function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
+{ os.makedirs(path) — every missing component, CPython's own error policy: an
+  intermediate that already exists is FINE, and the LEAF already existing is a
+  FileExistsError. `exist_ok=` is not accepted here and cannot be: the dotted
+  stdlib-call table takes positional arguments only, so `os.makedirs(d,
+  exist_ok=True)` walls with `undefined variable (exist_ok)` — a message that
+  blames the keyword rather than the mechanism.
+  bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument }
+function pyos_makedirs(const path: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
 { os.environ.get(name[, default]) and os.getenv(name[, default]). The process
   environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
@@ -1482,10 +1498,42 @@ function pystdin_read(n: Integer): AnsiString;
 { sys.stdin.readline(): one line from fd 0 (keeping the trailing newline), '' at
   EOF. Reads a byte at a time so it stops at the newline like Python. }
 function pystdin_readline: AnsiString;
-{ sys.stdin.isatty(): 0 (a non-tty). The value that makes uforth's KEY? report
-  no type-ahead — the correct default for pipes/files and never wrong for the
-  native words, which run under the (stubbed) exec path. }
-function pystdin_isatty: Integer;
+{ sys.stdin.isatty() / sys.stdout.isatty() / sys.stderr.isatty().
+
+  BOOLEAN, and that is the fix rather than a style choice: this returned
+  Integer 0 and NilPy printed `0` where CPython prints `False`. The two agree
+  under every truthiness test — `if not sys.stdout.isatty():` was always right —
+  and disagree the moment anyone PRINTS one, which is the collide-with-the-
+  default shape: a wrong TYPE that the common use cannot observe.
+
+  REAL now, not the hardcoded 0 it was. The old comment said 0 was "the correct
+  default for pipes/files and never wrong for the native words"; that is true of
+  a pipe and false of a terminal, and PyPalIsatty answers both. A consumer that
+  depended on the constant was depending on a wrong answer on a tty. }
+function pystdin_isatty: Boolean;
+function pystdout_isatty: Boolean;
+function pystderr_isatty: Boolean;
+{ sys.stdout.write(s) / sys.stderr.write(s).
+
+  Through `write` / `write(StdErr, ..)` — the SAME door AN_WRITE uses for
+  print — and deliberately not through PyPalWrite, which is the obvious route
+  and the wrong one: two writers on one descriptor order their output by
+  whichever buffer drains first, so `print("a"); sys.stdout.write("b")` could
+  emit "ba". One door, one order.
+
+  Returns the character count CPython returns. }
+function pystdout_write(const s: AnsiString): Integer;
+function pystderr_write(const s: AnsiString): Integer;
+{ sys.stdout.flush() / sys.stderr.flush().
+
+  FUNCTIONS returning None, not procedures, and that was not the first cut:
+  as procedures, `print(sys.stdout.flush())` printed `1` where CPython prints
+  `None` -- a procedure in value position yields whatever is in the result slot,
+  which is a plausible wrong number rather than a refusal. Returning pynone
+  makes the value CPython's own and costs nothing at a statement call.
+  bug-n-a-procedure-shim-in-value-position-yields-a-number-not-none }
+function pystdout_flush: Variant;
+function pystderr_flush: Variant;
 function pystr_is_none(const s: AnsiString): Boolean;
 { The None value for a str-typed slot: a NIL managed handle (what
   pystr_is_none tests). Assigning the None literal to a str field/local must
@@ -13176,6 +13224,55 @@ begin
   Result := Integer(r);
 end;
 
+function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
+var cs, cd: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  cs := src + #0; cd := dst + #0;
+  r := PyPalRename(@cs[1], @cd[1]);
+  if r < 0 then
+    pyos_raise_ioerror(r, src, dst);
+  Result := Integer(r);
+end;
+
+function pyos_mkdir_one(const path: AnsiString; leaf: Boolean): Integer;
+var cs: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if path = '' then Exit;
+  cs := path + #0;
+  { 0o777, as CPython's default mode is; the process umask narrows it. }
+  r := PyPalMkdir(@cs[1], 511);
+  if r >= 0 then Exit;
+  { EEXIST on an INTERMEDIATE is the normal case -- makedirs('a/b/c') with 'a'
+    already there is not an error in CPython either. On the LEAF it is the
+    error, and it is the one os.makedirs is documented to raise. }
+  if (r = -17) and (not leaf) then Exit;
+  pyos_raise_ioerror(r, path, '');
+end;
+
+function pyos_makedirs(const path: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  if path = '' then Exit;
+  { Walk the separators left to right, creating each prefix. Index 1 is skipped
+    deliberately: a leading '/' names the root, whose "prefix" is the empty
+    string, and mkdir('') is EFAULT rather than the no-op it looks like. }
+  for i := 2 to Length(path) do
+    if path[i] = '/' then
+      pyos_mkdir_one(Copy(path, 1, i - 1), False);
+  { A trailing separator means the leaf was already made by the loop -- and
+    CPython treats makedirs('a/b/') as makedirs('a/b'), so the FileExistsError
+    it would raise for an existing 'a/b' must still fire. }
+  if path[Length(path)] = '/' then
+    pyos_mkdir_one(Copy(path, 1, Length(path) - 1), True)
+  else
+    pyos_mkdir_one(path, True);
+end;
+
 function pyos_stat(const path: AnsiString): TPyStat;
 var cs: AnsiString; r: Int64; buf: array[0..143] of Byte;
 begin
@@ -13207,9 +13304,65 @@ begin
   end;
 end;
 
-function pystdin_isatty: Integer;
+function pystdin_isatty: Boolean;
 begin
-  Result := 0;
+  Result := PyPalIsatty(0);
+end;
+
+function pystdout_isatty: Boolean;
+begin
+  Result := PyPalIsatty(1);
+end;
+
+function pystderr_isatty: Boolean;
+begin
+  Result := PyPalIsatty(2);
+end;
+
+function pystdout_write(const s: AnsiString): Integer;
+begin
+  { The count is of the string we were HANDED, which is what CPython reports:
+    its write returns len(s) for a text stream, not the byte count the OS
+    accepted. Our strings are byte strings, so on this path the two agree
+    anyway -- the distinction is recorded because it stops being true the day
+    NilPy grows a real text encoder. }
+  Result := Length(s);
+  if Length(s) > 0 then write(s);
+end;
+
+function pystderr_write(const s: AnsiString): Integer;
+begin
+  Result := Length(s);
+  if Length(s) > 0 then write(StdErr, s);
+end;
+
+{ NOTHING TO DO, and that is a measured fact about this writer rather than a
+  stub with a hopeful comment. `write` on the builtin path issues the syscall
+  per call -- there is no userspace buffer between a NilPy print and the fd --
+  so everything flush() could push is already gone. Read off the code
+  generator, not assumed: the IR_WRITE arm emits the write(2) syscall INLINE
+  (EmitwriteSyscall / int $80), with no buffer between it and the fd.
+
+  AND DO NOT "PROVE" THIS BY COMPARING THE TWO STREAMS INTERLEAVED AGAINST
+  CPython -- that row is RED BY CONSTRUCTION and it looks like our bug.
+  CPython block-buffers stdout when it is not a tty and leaves stderr
+  unbuffered, so redirecting both to one file puts ALL of CPython's stderr
+  first while ours stays in program order. Measured 2026-09-10: per-stream we
+  match byte for byte; interleaved we differ, and OURS is the order the program
+  wrote. Matching CPython there would mean ADDING a buffer to become less
+  correct. Compare the streams SEPARATELY.
+
+  Empty rather than absent: `sys.stdout.flush()` is written constantly in real
+  code and must not wall, and the day a buffer appears these two bodies are
+  where it drains. Leave them. }
+function pystdout_flush: Variant;
+begin
+  Result := pynone;
+end;
+
+function pystderr_flush: Variant;
+begin
+  Result := pynone;
 end;
 
 { `s is None` for a str-typed value: a NilPy str that is None has a nil handle,

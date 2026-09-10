@@ -1,0 +1,19 @@
+None
+False
+True
+True
+'a/b/c'
+c
+c
+False
+True
+True True
+True
+True
+caught FileExistsError
+caught FileExistsError on the trailing-slash spelling
+False True
+NEW-CONTENT
+False True
+NEW-CONTENT
+caught FileNotFoundError

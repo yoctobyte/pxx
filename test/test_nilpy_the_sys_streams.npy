@@ -1,0 +1,59 @@
+# sys.stdout / sys.stderr as CALLABLE streams -- write, flush, isatty.
+#
+# WHY THIS FILE EXISTS. sys.stdin had three dotted-call table entries (read,
+# readline, isatty) and sys.stdout and sys.stderr had NONE, so `sys.stdin.read()`
+# compiled and ran while `sys.stdout.isatty()` was `expected ')' before '.'`.
+# One arm of a double case wired, the sibling never was.
+#
+# TWO EXPECTED FILES, ONE PROGRAM, AND THAT IS DELIBERATE. The streams are
+# compared SEPARATELY (stdout in one row, stderr in the other) because an
+# INTERLEAVED comparison against CPython is red by construction and looks like
+# our bug: CPython block-buffers stdout when it is not a tty and leaves stderr
+# unbuffered, so redirecting both to one file puts every CPython stderr line
+# first, while ours stays in program order. Measured 2026-09-10 -- per stream we
+# match byte for byte, interleaved we differ, and OURS is the order the program
+# wrote. Matching CPython there would mean adding a buffer to become less
+# correct.
+#
+# DELIBERATELY ABSENT: `h = sys.stdout` then `h.write(x)`. That COMPILES and
+# dies at run time with "TypeError: object is not callable", because a stream is
+# still an fd INTEGER and an Integer has no methods. It is a real defect with a
+# real ticket -- and a row here would be asserting the crash, not the feature.
+# bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time
+
+import sys
+
+# ---- write, and the ORDER it lands in relative to print ---------------------
+sys.stdout.write("out-first\n")
+print("print-second")
+sys.stdout.write("out-third\n")
+
+sys.stderr.write("err-first\n")
+print("print-err-second", file=sys.stderr)
+sys.stderr.write("err-third\n")
+
+# ---- write RETURNS the character count, which is what CPython returns -------
+n = sys.stdout.write("12345")
+sys.stdout.write("\n")
+print(n)
+
+# an empty write is legal and returns 0
+print(sys.stdout.write(""))
+
+# ---- flush is a no-op here and must still be callable and return None -------
+# Real code writes it constantly; walling on it would be the whole cost.
+print(sys.stdout.flush())
+sys.stderr.flush()
+
+# ---- isatty: a BOOLEAN, not the integer 0 this used to answer ---------------
+# The harness runs both sides through a pipe, so all three are False on both.
+# This is the row that catches the wrong TYPE: `if not x.isatty()` cannot see
+# the difference between 0 and False, and printing it can.
+print(sys.stdout.isatty(), sys.stderr.isatty(), sys.stdin.isatty())
+print(type(sys.stdout.isatty()) is bool)
+
+# ---- the stream a write goes to is the one that was NAMED -------------------
+# Both halves of this pair matter: a shim that sent everything to fd 1 would
+# pass every stdout row above and this file's stderr expectation would be empty.
+sys.stdout.write("marker-stdout\n")
+sys.stderr.write("marker-stderr\n")

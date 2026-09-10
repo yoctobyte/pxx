@@ -1691,6 +1691,27 @@ test-nilpy: $(COMPILER)
 	# they are the common case and answer exactly as CPython does.
 	./$(COMPILER) test/test_nilpy_the_queue_module.npy $(TESTTMP)/test_nilpy_queue26
 	$(TESTTMP)/test_nilpy_queue26 | diff -u test/test_nilpy_the_queue_module.expected -
+	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
+	# table entries and these two had NONE, so `sys.stdin.read()` ran while
+	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.
+	# TWO diff rows, one program: the streams are compared SEPARATELY because an
+	# interleaved comparison against CPython is RED BY CONSTRUCTION (it
+	# block-buffers stdout to a pipe and leaves stderr unbuffered, so all its
+	# stderr lands first while ours stays in program order -- and ours is the
+	# order the program wrote). The stderr row is also what proves a write went
+	# to the stream it NAMED: a shim sending everything to fd 1 passes every
+	# stdout row above and leaves this expectation empty.
+	./$(COMPILER) test/test_nilpy_the_sys_streams.npy $(TESTTMP)/test_nilpy_streams26
+	$(TESTTMP)/test_nilpy_streams26 2>$(TESTTMP)/test_nilpy_streams.err | diff -u test/test_nilpy_the_sys_streams.expected -
+	diff -u test/test_nilpy_the_sys_streams.err.expected $(TESTTMP)/test_nilpy_streams.err
+	# os.altsep / os.makedirs / os.replace -- the three os members lekkerzeilen
+	# reaches that we did not have. The directory is handed in through the
+	# ENVIRONMENT and freshly made each run, because "the leaf already exists" is
+	# one of the assertions and a directory surviving from the last run would
+	# make it fire on the wrong row. No path is printed, so the expectation does
+	# not depend on which directory either runtime was given.
+	./$(COMPILER) test/test_nilpy_the_os_module_gaps.npy $(TESTTMP)/test_nilpy_osgaps26
+	PXX_OSTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_osgaps26 2>&1 | diff -u test/test_nilpy_the_os_module_gaps.expected -
 	# collections.deque -- the QUALIFIED spelling, which is the one every real
 	# program writes and the one that was broken (`collections` has a backing
 	# Pascal unit, so the qualifier resolved against a generic TList).

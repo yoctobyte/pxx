@@ -38,6 +38,11 @@ interface
 const
   PYPAL_AT_FDCWD = -100;
 
+  { ioctl(fd, TCGETS, &termios) -- what isatty(3) is. Arch-independent for
+    every target here: asm-generic/ioctls.h gives 0x5401 and only mips, alpha,
+    powerpc and sparc differ, none of which pxx targets. }
+  TCGETS = $5401;
+
   { O_* flags (Linux, arch-independent for the ones we use) }
   PYPAL_O_RDONLY = 0;
   PYPAL_O_WRONLY = 1;
@@ -58,9 +63,17 @@ function PyPalLseek(fd, offset, whence: Int64): Int64;
 function PyPalFtruncate(fd, size: Int64): Int64;
 function PyPalUnlink(path: Pointer): Int64;
 function PyPalRename(src, dst: Pointer): Int64;
+function PyPalMkdir(path: Pointer; mode: Int64): Int64;
 function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
 function PyPalStat(path, statbuf: Pointer): Int64;
 function PyPalAccessOk(path: Pointer): Boolean;
+{ isatty(3) is ioctl(fd, TCGETS, &termios) and nothing else -- 0 on a terminal,
+  -ENOTTY otherwise -- which is exactly what glibc does. A BOOLEAN, because the
+  only question anyone asks is the one CPython's sys.stdout.isatty() answers,
+  and returning the raw ioctl status would make a caller test the wrong sign.
+  TCGETS is 0x5401 on every target here (asm-generic/ioctls.h); the ones where
+  it differs -- mips, alpha, powerpc, sparc -- are not targets. }
+function PyPalIsatty(fd: Int64): Boolean;
 { ppoll(fds, nfds, timespec|nil, nil, 0) on ONE descriptor. Returns 1 when the
   requested events are ready, 0 on timeout, <0 on error / unsupported target.
   `ppoll` rather than `poll`: aarch64 and riscv32 have no plain poll(2) at all,
@@ -170,6 +183,8 @@ const
   NR_FTRUNCATE = 77;
   NR_UNLINKAT  = 263;
   NR_RENAMEAT  = 264;
+  NR_MKDIRAT   = 258;
+  NR_IOCTL     = 16;
   NR_GETCWD    = 79;
   NR_STAT      = 4;     { stat (x86-64 has the plain form) }
   NR_ACCESS    = 21;    { access }
@@ -189,6 +204,8 @@ const
   NR_FTRUNCATE = 46;
   NR_UNLINKAT  = 35;
   NR_RENAMEAT  = 38;
+  NR_MKDIRAT   = 34;
+  NR_IOCTL     = 29;
   NR_GETCWD    = 17;
   NR_STAT      = -1;     { no plain stat; fstatat only }
   NR_ACCESS    = -1;     { no plain access }
@@ -208,6 +225,8 @@ const
   NR_FTRUNCATE = 93;
   NR_UNLINKAT  = 301;
   NR_RENAMEAT  = 302;
+  NR_MKDIRAT   = 296;
+  NR_IOCTL     = 54;
   NR_GETCWD    = 183;
   NR_STAT      = -1;
   NR_ACCESS    = 33;
@@ -227,6 +246,8 @@ const
   NR_FTRUNCATE = 93;
   NR_UNLINKAT  = 328;
   NR_RENAMEAT  = 329;
+  NR_MKDIRAT   = 323;
+  NR_IOCTL     = 54;
   NR_GETCWD    = 183;
   NR_STAT      = -1;
   NR_ACCESS    = 33;
@@ -260,6 +281,8 @@ const
   NR_FTRUNCATE = -1;
   NR_UNLINKAT  = -1;
   NR_RENAMEAT  = -1;
+  NR_MKDIRAT   = -1;
+  NR_IOCTL     = -1;
   NR_GETCWD    = -1;
   NR_STAT      = -1;
   NR_ACCESS    = -1;
@@ -280,6 +303,8 @@ const
   NR_FTRUNCATE = 46;
   NR_UNLINKAT  = 35;
   NR_RENAMEAT  = 38;
+  NR_MKDIRAT   = 34;
+  NR_IOCTL     = 29;
   NR_GETCWD    = 17;
   NR_STAT      = -1;
   NR_ACCESS    = -1;
@@ -415,6 +440,14 @@ begin
                                  PYPAL_AT_FDCWD, Int64(dst), 0, 0);
 end;
 
+function PyPalMkdir(path: Pointer; mode: Int64): Int64;
+begin
+  PyPalMkdir := -1;
+  if NR_MKDIRAT < 0 then Exit;
+  PyPalMkdir := PyPalSys(NR_MKDIRAT, PYPAL_AT_FDCWD, Int64(path), mode,
+                                 0, 0, 0);
+end;
+
 function PyPalReadlink(path: Pointer; buf: Pointer; bufsz: Int64): Int64;
 begin
   PyPalReadlink := -1;
@@ -449,6 +482,19 @@ begin
   else if NR_FACCESSAT >= 0 then
     r := PyPalSys(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
   PyPalAccessOk := r = 0;
+end;
+
+function PyPalIsatty(fd: Int64): Boolean;
+var buf: array[0..63] of Byte;
+begin
+  { struct termios is 60 bytes on Linux (c_?flag x4, c_line, c_cc[19], then
+    c_ispeed/c_ospeed); 64 is that rounded up. The CONTENTS are never read --
+    only whether the call succeeded -- but the kernel writes the whole struct,
+    so the buffer has to be big enough or ioctl scribbles past it. }
+  PyPalIsatty := False;
+  if NR_IOCTL < 0 then Exit;
+  FillChar(buf[0], SizeOf(buf), 0);
+  PyPalIsatty := PyPalSys(NR_IOCTL, fd, TCGETS, Int64(@buf[0]), 0, 0, 0) = 0;
 end;
 
 { CLOCK_REALTIME, as seconds + nanoseconds. Boolean rather than an Int64 return

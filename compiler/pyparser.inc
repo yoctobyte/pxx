@@ -12563,7 +12563,7 @@ begin
       and why the error read `undefined variable (os)` rather than a missing
       member. feature-nilpy-stdlib-coverage-gaps-measured }
     Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') or
-              (nm = 'sep') or (nm = 'linesep');
+              (nm = 'sep') or (nm = 'linesep') or (nm = 'altsep');
 end;
 
 function PyIsSysStreamAhead: Boolean;
@@ -12630,6 +12630,29 @@ begin
     end;
     ASTTk[Result] := Ord(tyString);
     LastExprTk := tyString;
+    Exit;
+  end;
+  if (base = 'os') and (nm = 'altsep') then
+  begin
+    { os.altsep — the SECOND separator, on a platform that has one. POSIX has
+      none and CPython says None there, so this is None and not ''. The
+      difference is the whole point of the attribute: real code writes
+      `os.altsep and os.altsep in name` and `name.rstrip(os.sep + (os.altsep or
+      ""))`, both of which read the falsiness — and '' would satisfy those two
+      while making `os.sep + os.altsep` silently concatenate instead of raising
+      the TypeError CPython raises. A None str, not an empty one.
+      PyMakeNone and NOT pystr_none, and the difference is visible in one row:
+      a str-typed None is the nil AnsiString handle, so `print(os.altsep)`
+      printed an EMPTY LINE where CPython prints `None`. Every other row agreed
+      — the falsiness, the `or ""`, the rstrip — because those read the handle
+      and never format it. Measured, not reasoned: the first cut of this used
+      pystr_none and five of six probe rows matched.
+
+      Windows is where this becomes '/', at the same time os.sep becomes '\\'
+      and os.linesep becomes CRLF — one decision, three constants, and it is
+      recorded on all three so a Windows target cannot fix one and miss two. }
+    Result := PyMakeNone;
+    LastExprTk := IntToTypeKind(ASTTk[Result]);
     Exit;
   end;
   if (base = 'os') and
@@ -12741,10 +12764,29 @@ begin
   else if dotted = 'os.rename' then Result := 'pyos_rename'
   else if dotted = 'os.stat' then Result := 'pyos_stat'
   else if dotted = 'os.listdir' then Result := 'pyos_listdir'
+  else if dotted = 'os.replace' then Result := 'pyos_replace'
+  else if dotted = 'os.makedirs' then Result := 'pyos_makedirs'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
   else if dotted = 'sys.stdin.isatty' then Result := 'pystdin_isatty'
+  { sys.stdin had these three and sys.stdout/sys.stderr had NONE, which is why
+    `sys.stdin.read()` compiled and `sys.stdout.isatty()` did not: a dotted name
+    the table misses falls through to the VALUE door, which takes `sys.stdout`
+    and leaves `.isatty()` dangling as `expected ')' before '.'`. One arm wired,
+    the sibling never was.
+    A stream is still an fd INTEGER here rather than an object, so
+    `h = sys.stdout; h.write(x)` remains broken — it compiles and dies at run
+    time with "object is not callable". That needs sys.stdout to BE something,
+    and print's file= handling reads the integer literal straight back out of
+    the AST, so the two have to move together.
+    bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time }
+  else if dotted = 'sys.stdout.write' then Result := 'pystdout_write'
+  else if dotted = 'sys.stdout.flush' then Result := 'pystdout_flush'
+  else if dotted = 'sys.stdout.isatty' then Result := 'pystdout_isatty'
+  else if dotted = 'sys.stderr.write' then Result := 'pystderr_write'
+  else if dotted = 'sys.stderr.flush' then Result := 'pystderr_flush'
+  else if dotted = 'sys.stderr.isatty' then Result := 'pystderr_isatty'
   else if dotted = 'select.select' then Result := 'pyselect_select'
   else if dotted = 'textwrap.dedent' then Result := 'pytextwrap_dedent'
   { dict.fromkeys(iterable) — a CLASSMETHOD, so it reaches the same table: the

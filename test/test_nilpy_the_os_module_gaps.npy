@@ -1,0 +1,90 @@
+# The os members lekkerzeilen reaches that NilPy did not have: altsep,
+# makedirs, replace. Measured off the corpus rather than picked from the module
+# index -- every row here is a shape a real file writes, or a control for one.
+#
+# THE DIRECTORY COMES FROM THE ENVIRONMENT, and no path is ever PRINTED. The
+# Makefile row hands this a fresh `mktemp -d` each run, so makedirs meets a
+# genuinely empty tree every time -- which matters, because "the leaf already
+# exists" is one of the assertions and a directory left over from the last run
+# would make it fire on the wrong row. The output is booleans and exception
+# names only, so the expected file is identical whichever directory either
+# runtime was given.
+
+import os
+
+d = os.environ.get("PXX_OSTEST_DIR")
+
+# ---- os.altsep: None on POSIX, and the FALSINESS is the whole attribute -----
+# __main__.py:147-148 is the shape verbatim. `''` would satisfy both of those
+# lines while making `os.sep + os.altsep` concatenate instead of raising, so a
+# row that only tested truthiness would certify the wrong value.
+print(os.altsep)
+print(bool(os.altsep))
+print(os.altsep is None)
+
+name = "a/b/c"
+print(os.sep in name or (os.altsep and os.altsep in name))
+print(repr(name.rstrip(os.sep + (os.altsep or ""))))
+print(os.path.basename(name.rstrip(os.sep + (os.altsep or ""))))
+
+# a path that ENDS in a separator -- the arm the rstrip is actually there for
+trailing = "a/b/c/"
+print(os.path.basename(trailing.rstrip(os.sep + (os.altsep or ""))))
+
+# ---- os.makedirs: every missing component, session.py:216's shape -----------
+deep = d + "/a/b/c"
+print(os.path.isdir(deep))
+os.makedirs(deep)
+print(os.path.isdir(deep))
+# and the intermediates really were created, not just the leaf
+print(os.path.isdir(d + "/a"), os.path.isdir(d + "/a/b"))
+
+# an INTERMEDIATE that already exists is not an error -- 'a' and 'a/b' are there
+os.makedirs(d + "/a/b/c2")
+print(os.path.isdir(d + "/a/b/c2"))
+
+# a single component with no intermediates at all
+os.makedirs(d + "/solo")
+print(os.path.isdir(d + "/solo"))
+
+# ---- ...and the LEAF already existing IS the error CPython documents --------
+try:
+    os.makedirs(deep)
+    print("no exception")
+except FileExistsError:
+    print("caught FileExistsError")
+
+# a trailing separator names the same directory, so it raises the same way
+try:
+    os.makedirs(deep + "/")
+    print("no exception")
+except FileExistsError:
+    print("caught FileExistsError on the trailing-slash spelling")
+
+# ---- os.replace: rename that OVERWRITES, session.py:220's shape -------------
+# session.py writes `where + ".new"` and replaces the live file with it, so the
+# destination existing is the NORMAL case and not the edge one.
+p1 = d + "/one.txt"
+p2 = d + "/two.txt"
+with open(p1, "w") as f:
+    f.write("NEW-CONTENT")
+with open(p2, "w") as f:
+    f.write("OLD-CONTENT")
+os.replace(p1, p2)
+print(os.path.exists(p1), os.path.exists(p2))
+with open(p2) as f:
+    print(f.read())
+
+# replacing onto a destination that does NOT exist is a plain rename
+p3 = d + "/three.txt"
+os.replace(p2, p3)
+print(os.path.exists(p2), os.path.exists(p3))
+with open(p3) as f:
+    print(f.read())
+
+# ---- and it raises rather than returning a code, as CPython does ------------
+try:
+    os.replace(d + "/definitely_not_here_9f2a", d + "/anywhere")
+    print("no exception")
+except FileNotFoundError:
+    print("caught FileNotFoundError")

@@ -1,0 +1,4 @@
+err-first
+print-err-second
+err-third
+marker-stderr
