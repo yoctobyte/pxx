@@ -2540,6 +2540,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_vpropread26 | diff -u test/test_nilpy_variant_property_read_ambiguous.expected -
 	! ./$(COMPILER) test/test_nilpy_variant_property_store_ambiguous_fail.npy $(TESTTMP)/test_nilpy_vpropstore26 > $(TESTTMP)/test_nilpy_vpropstore.log 2>&1
 	grep -q "ambiguous (several unrelated classes declare that property)" $(TESTTMP)/test_nilpy_vpropstore.log
+	# a comprehension's loop variable must NOT be renamed inside THIS clause's
+	# OWN iterable -- Python evaluates the outermost iterable in the ENCLOSING
+	# scope. `[name for name in [name]]` gave undefined variable (__py_cvNN_0).
+	./$(COMPILER) test/test_nilpy_comprehension_own_iterable_scope.npy $(TESTTMP)/test_nilpy_cios26
+	$(TESTTMP)/test_nilpy_cios26 | diff -u test/test_nilpy_comprehension_own_iterable_scope.expected -
 	# `enumerate(<bare genexpr>)` in a for header: the fast path strips
 	# `enumerate(` and the container parse then saw `x for x in xs`, reporting
 	# the element expression as an undefined variable. Parenthesised always worked.

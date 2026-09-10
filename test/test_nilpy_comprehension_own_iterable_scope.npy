@@ -1,0 +1,39 @@
+# A comprehension's loop variable must not be renamed inside THIS clause's OWN
+# iterable. Python evaluates the outermost iterable in the ENCLOSING scope, so a
+# free variable there that happens to share the target's spelling is the outer
+# one -- `[name for name in [name]]` reads the outer `name` and yields it.
+#
+# The rename covered `forTokIdx .. closer` deliberately, to reach a SECOND
+# for-clause's iterable (`[c for r in rows for c in r]`, where the trailing `r`
+# IS this clause's binding). That is right for the tail after the next clause
+# begins and wrong for the stretch before it. The tail now starts at the second
+# `for` or at the filter, whichever comes first.
+#
+# It surfaced through an attribute: `[name for name in [t.name for t in ts]]`
+# renamed the MEMBER name too and raised AttributeError for a __py_cv name.
+
+name = "OUTER"
+print("free", [name for name in [name]])
+
+src = ["a", "b"]
+print("nested", [name for name in [name + x for x in src]])
+
+
+class T:
+    def __init__(self, n):
+        self.name = n
+
+
+ts = [T("a"), T("b")]
+print("attr", [name for name in [t.name for t in ts]])
+print("attr2", [name.upper() for name in (t.name for t in ts)])
+print("enum", [name for i, name in enumerate(t.name for t in ts)])
+
+# CONTROLS -- the shapes the tail rename exists for, which must not regress.
+rows = [[1, 2], [3, 4]]
+print("nestedfor", [c for r in rows for c in r])
+print("filter", [x for x in src if x != "a"])
+print("bothclauses", [c for r in rows if len(r) == 2 for c in r if c != 1])
+# ...and the leak guard it also exists for: an outer binding must survive.
+x = "KEEP"
+print("noleak", [x for x in src], x)

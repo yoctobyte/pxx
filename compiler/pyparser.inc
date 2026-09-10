@@ -22913,6 +22913,7 @@ var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, n
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN, closerPos: Integer;  { comprehension `if` filter }
+    tailStart, tj, tdepth: Integer;   { where this clause's OWN iterable ends }
     isStr, pairMode, isIter: Boolean; contTk, tk: TTypeKind;
     elemNode2, pairSym, plistSym, xi, nExtra, cci: Integer;
     extraSyms: array[0..5] of Integer;
@@ -22971,21 +22972,58 @@ begin
       also re-spells this clause's own target token, which is harmless: the
       header has already been read into `name`, and the hidden name is derived
       from the token INDEX, not the spelling. }
+    { …but the tail must NOT start at this clause's own `for`, because the
+      stretch between it and the NEXT clause is this clause's OWN ITERABLE, and
+      Python evaluates the outermost iterable in the ENCLOSING scope. A free
+      variable there that happens to share the target's spelling is the OUTER
+      one: `[name for name in [name]]` reads the outer `name` and yields it.
+      Renaming it produced `undefined variable (__py_cvNN_0)` — a comprehension
+      reporting its own hidden name as missing.
+
+      It surfaces most often through an ATTRIBUTE, which is what makes it read
+      as something else entirely: `[name for name in [t.name for t in ts]]`
+      re-spelled the MEMBER `name` too and raised
+      `AttributeError: 'T' object has no attribute '__py_cv41_0'` at run time.
+      lekkerzeilen ui.py:683 is that shape.
+
+      So the tail starts at whichever comes first of the SECOND for-clause and
+      the filter — both of which genuinely name this clause's binding — and the
+      own-iterable stretch before them is left alone. `[c for r in rows for c in
+      r]`, the case the tail was widened for, still has its trailing `r`
+      covered; `rows` no longer is. }
+    tailStart := closerPos;
+    if (filtIdx >= 0) and (closerPos > filtIdx) then tailStart := filtIdx;
+    tj := forTokIdx + 1;
+    tdepth := 0;
+    while (tj < TokCount) and (tj < closerPos) do
+    begin
+      if Tokens[tj].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(tdepth)
+      else if Tokens[tj].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(tdepth)
+      else if (tdepth = 0) and
+              ((Tokens[tj].Kind = tkFor) or
+               ((Tokens[tj].Kind = tkIdent) and
+                CaseEqual(GetTokenStr(tj), 'for'))) then
+      begin
+        if tj < tailStart then tailStart := tj;
+        Break;
+      end;
+      Inc(tj);
+    end;
     hName := PyCompHiddenLoopName(forTokIdx, 0);
     PyRenameIdentRange(PyCompExprStart, forTokIdx, name, hName);
-    if closerPos > forTokIdx then PyRenameIdentRange(forTokIdx, closerPos, name, hName);
+    if closerPos > tailStart then PyRenameIdentRange(tailStart, closerPos, name, hName);
     if name2 <> '' then
     begin
       hName2 := PyCompHiddenLoopName(forTokIdx, 1);
       PyRenameIdentRange(PyCompExprStart, forTokIdx, name2, hName2);
-      if closerPos > forTokIdx then PyRenameIdentRange(forTokIdx, closerPos, name2, hName2);
+      if closerPos > tailStart then PyRenameIdentRange(tailStart, closerPos, name2, hName2);
     end;
     for xi := 0 to PyForExtraCount - 1 do
     begin
       hExtraNames[xi] := PyCompHiddenLoopName(forTokIdx, 2 + xi);
       PyRenameIdentRange(PyCompExprStart, forTokIdx, PyForExtraName[xi], hExtraNames[xi]);
-      if closerPos > forTokIdx then
-        PyRenameIdentRange(forTokIdx, closerPos, PyForExtraName[xi], hExtraNames[xi]);
+      if closerPos > tailStart then
+        PyRenameIdentRange(tailStart, closerPos, PyForExtraName[xi], hExtraNames[xi]);
     end;
   end;
   { `d.items()`: hide the suffix behind a fake ':' so the expression parser stops

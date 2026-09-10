@@ -1,0 +1,9 @@
+free ['OUTER']
+nested ['OUTERa', 'OUTERb']
+attr ['a', 'b']
+attr2 ['A', 'B']
+enum ['a', 'b']
+nestedfor [1, 2, 3, 4]
+filter ['b']
+bothclauses [2, 3, 4]
+noleak ['a', 'b'] KEEP
