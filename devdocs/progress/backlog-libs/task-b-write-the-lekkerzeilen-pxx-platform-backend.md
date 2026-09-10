@@ -17,6 +17,34 @@ blocked-by:
 summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
 ---
 
+# CHAIN STATE 2026-09-10, after 967f9cc93
+
+`bug-c-an-unresolvable-synthesised-soname-still-reaches-dt-needed` is CLOSED, and
+it was the thing keeping SDL programs from executing. Re-measured over every
+header in `/usr/include/SDL2` (78 files, not the 23 sampled before):
+
+```
+0   emit an invented lib<headername>.so   (was 20 of 23 sampled)
+71  build AND RUN
+7   refused at compile time
+```
+
+The 7 are two known walls and neither is a library-naming problem:
+
+- `close_code.h` — an `#error`, by design; that header is only valid after
+  `begin_code.h`. Not a defect.
+- `SDL.h`, `SDL_cpuinfo.h` and the four `SDL_test*.h` — the AVX-512
+  `MAX_PROC_PARAMS` wall, reached only through gcc's `<immintrin.h>` via
+  `SDL_cpuinfo.h`/`HAVE_IMMINTRIN_H`, exactly as recorded below.
+
+So the remaining blocker on `import SDL2/SDL.h` is the `immintrin.h` route, and
+that is the same fork already written up: raise the limit (which needs
+`bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type` first), or
+ship a pxx-owned `immintrin.h` that declares nothing. Still not decided
+unilaterally.
+
+`import GL/gl.h` was already clean.
+
 # MEASURED 2026-09-10: SDL.h is not blocked on MAX_PROC_PARAMS
 
 `import "/usr/include/SDL2/SDL.h"` compiles **clean, rc=0**, with a stub
