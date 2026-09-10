@@ -290,7 +290,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (112)
+## backlog-nilpy (113)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -348,6 +348,7 @@ _none_
 | bug-n-pyparser-property-accessor-sites-do-not-know-an-interface-receiver | N | 30 | bug | `pyparser.inc` has ~9 hand-written copies of the property-accessor call decision, and each knows exactly two answers (AN_VIRTUAL_CALL / AN_CALL, Self at argument 0). The choice is three-way: an interface receiver needs AN_INTF_CALL, slot in ASTSOffset, Self from the fat pointer. The Pascal-side twins had the identical defect and were fixed by extracting one MakeAccessorCall (0f0fd6642); pyparser.inc was deliberately NOT touched because it is Track N's file and N is parked. NOT KNOWN TO BE REACHABLE from NilPy today -- this is the sibling half of a fixed double case, filed so it is not rediscovered, not a measured failure. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
+| bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py | N | 75 | bug | > | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
 | bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point | N | 60 | bug | `'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
@@ -1089,6 +1090,7 @@ _none_
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [N] bug-n-a-module-bound-by-an-import-is-not-a-value
+- [p 75] [N] bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic

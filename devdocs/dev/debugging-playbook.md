@@ -23475,6 +23475,48 @@ corrected this entry's first remedy from anchoring to provenance. **Both lines
 were independently reproduced in this seat's tree before the correction was
 accepted** — 863 unanchored, 861 anchored, same two rows.
 
+### The same rule CLASSIFIES, not only counts — and the absent-output failure is where it bites
+
+Extended 2026-09-10, hours after the entry above, by frankB, who saw that a
+second bug of mine that evening was this one wearing different clothes.
+
+A lekkerzeilen census classified two modules as walls with an **empty** reason.
+The harness decided what had happened by grepping stderr for
+`pascal26:<n>: error:`. The compiler had **segfaulted** — `rc=139`, core dumped
+— and a segfault emits no such line. So the pattern was absent and the
+classifier reported the shape of its own expectations rather than the event.
+
+**The process's exit status IS what the instrument produced**: 139, unambiguous,
+available before any parsing. **Classify on rc first, then parse for detail.**
+A harness that reads stderr to decide pass/fail cannot see any failure whose
+signature is the ABSENCE of output — segfault, SIGKILL, a timeout, an empty
+file, a binary that never ran. That is one class, and it is invisible to every
+pattern you could have chosen, because there is no text to match.
+
+The cost was not the misclassification. It was that the resulting arithmetic
+said two modules had regressed, in the same run as a compiler change of mine
+that touched statement emission for every class — **the self-blaming direction,
+where the evidence reads like a confession and the search terminates.**
+
+**And the check I reached for to clear it was broken differently.** I re-ran as
+`timeout 60 … | tail -4` and read `rc=0` — which is **`tail`'s** status through
+the pipe, not the compiler's. So a false exoneration was produced to correct a
+false accusation, and neither reading was about the compiler at all. **The
+harness had been right the entire time and every instrument reached for to check
+it was wrong in a different way.** Only re-running in the harness's own shape —
+assignment, then `rc=$?` — gave 139.
+
+(`$?` after a pipe is a documented shell gotcha and needs no rule from us. The
+part worth keeping is the SEQUENCE, and that a correct instrument was overridden
+twice by broken checks.)
+
+**A third instance the same evening, same principle:** a census printed
+`binary 2255ecda014c, tree 39eb1ad63` — and that tree builds `ca814b0aabcc`. The
+sha is provenance; the tree name is pattern. Only the sha could reveal that the
+whole census had measured a compiler which did not contain the very commit the
+run's written caveat was about. Sync without rebuild, caught by the one habit
+that exists for it.
+
 **Recurrence is MET** — two independent subsystems (session transcripts, build
 logs), four seats across the two instances — which is CLAUDE.md's stated
 promotion test, and it wants the existing transcript rule STRENGTHENED rather
