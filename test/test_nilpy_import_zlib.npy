@@ -16,5 +16,23 @@
 # (bug-n-nilpy-import-sqlite-asserts-host-sqlite-version). zlib's own formula is
 # len + (len>>12) + (len>>14) + (len>>25) + 13, so 1000 -> 1013 on every zlib
 # ever shipped.
-import zlib
+# THE IMPORT IS SPELLED WITH THE HEADER'S EXTENSION, AND THAT IS THE WHOLE POINT
+# OF THIS ROW NOW. On 2026-09-11 (80d71d782) `zlib` was added to
+# PyRtlUnitServesPython, so a BARE `import zlib` correctly reaches
+# lib/rtl/zlib.pas -- our own pure-Pascal inflate plus the Python checksum
+# surface -- and no longer reaches /usr/include/zlib.h at all. That is the
+# resolver deciding, not breaking: a Python program writing `import zlib` means
+# Python's zlib, and a same-named header is an accident of this machine's include
+# path.
+#
+# So this row asks for the C door BY NAME. An explicit extension pins the
+# language, which is the documented way to say "I mean the header" -- and it is
+# the only spelling that still exercises the soname derivation, because
+# --no-shims cannot help here: the door that closed is the LIST door, not the
+# shim door, and no flag reopens it.
+#
+# Its sibling test_nilpy_import_zlib_ours.npy asserts the OTHER door, and the two
+# are each other's control: this binary must carry libz.so.1, that one must carry
+# no dynamic dependency at all.
+import 'zlib.h' as zlib
 print(compressBound(1000))

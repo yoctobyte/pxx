@@ -540,6 +540,11 @@ test-nilpy: $(COMPILER)
 	# reached libz, the ABSENCE of libzlib.so is the defect itself (a wrong
 	# DT_NEEDED cannot be produced by accident), and the PRESENCE of libz.so.1
 	# is what stops the absence row passing on a binary with no dynamic section.
+	# THE IMPORT IS NOW SPELLED `import 'zlib.h' as zlib`, and the reason is
+	# 80d71d782: `zlib` joined PyRtlUnitServesPython, so a BARE import correctly
+	# reaches lib/rtl/zlib.pas and the header door has to be asked for by name.
+	# --no-shims does NOT reopen it -- the door that closed is the LIST door, not
+	# the shim door, which is what separates this from the sqlite row above.
 	./$(COMPILER) test/test_nilpy_import_zlib.npy $(TESTTMP)/test_nilpy_import_zlib26
 	tools/expect_same.sh test_nilpy_import_zlib26 "$$($(TESTTMP)/test_nilpy_import_zlib26)" "1013"
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libzlib\.so'; then \
@@ -547,6 +552,22 @@ test-nilpy: $(COMPILER)
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libz\.so\.1'; then \
 	  echo "ok: import zlib links libz.so.1, not the invented libzlib.so"; \
 	else echo "FAIL: test_nilpy_import_zlib26 has no libz.so.1 DT_NEEDED, so it is not importing from zlib at all — with this row inert the libzlib.so assertion above cannot fail and its silence means nothing"; exit 1; fi
+	# THE OTHER DOOR, and it is this row's control. A BARE `import zlib` must reach
+	# lib/rtl/zlib.pas. Before 80d71d782 it reached /usr/include/zlib.h, and the
+	# cost was not a refusal: C's crc32 takes THREE arguments, so CPython's one-
+	# and two-argument spellings were refused while the three-argument spelling
+	# COMPILED, LINKED libz AND RETURNED A WRONG NUMBER.
+	# Two instruments, and the second cannot pass by accident: the VALUE proves
+	# our implementation ran, and the ABSENCE OF ANY DT_NEEDED proves it was ours
+	# rather than the header's -- our unit is pure Pascal, so a dynamic dependency
+	# of any kind here means the header answered and the value agreed by luck.
+	# The pair is mutually validating: that binary MUST carry libz.so.1, this one
+	# MUST carry nothing.
+	./$(COMPILER) test/test_nilpy_import_zlib_ours.npy $(TESTTMP)/test_nilpy_import_zlib_ours26
+	tools/expect_same.sh test_nilpy_import_zlib_ours26 "$$($(TESTTMP)/test_nilpy_import_zlib_ours26)" "907060870"
+	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib_ours26 2>/dev/null | grep -q 'NEEDED'; then \
+	  echo "FAIL: a bare \`import zlib\` produced a binary with a DT_NEEDED — it resolved to a C header, not lib/rtl/zlib.pas. Check PyRtlUnitServesPython in compiler/pasparser_proc.inc"; exit 1; \
+	else echo "ok: bare import zlib reaches lib/rtl/zlib.pas — zero dynamic dependencies"; fi
 	# A mimic_<name>.py shim is found AS a shim. The module name deliberately
 	# collides with a host C header (/usr/include/search.h): that is the one
 	# case where "is there a shim?" is asked, and asking it about `.pas` alone

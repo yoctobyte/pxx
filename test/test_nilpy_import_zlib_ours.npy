@@ -1,0 +1,20 @@
+# THE SIBLING OF test_nilpy_import_zlib.npy, AND THE OTHER DOOR.
+#
+# A BARE `import zlib` must reach lib/rtl/zlib.pas, not /usr/include/zlib.h.
+# Before 80d71d782 it reached the header, and the cost was not a refusal: C's
+# crc32 is crc32(uLong, const Bytef*, uInt) -- THREE arguments -- so CPython's
+# one- and two-argument spellings were refused, and the three-argument spelling
+# COMPILED, LINKED SYSTEM libz AND RETURNED A WRONG NUMBER (1577690842 where the
+# answer is 907060870). A plausible wrong value with no diagnostic.
+#
+# crc32 is the right call to assert on: it is a pure function of its input with
+# no host version in it, and the expected value has the TOP BIT CLEAR for
+# b"hello" while b"helloworld" does not -- the unsigned range is covered by the
+# lib_zlib rows rather than here.
+#
+# THE DT_NEEDED HALF IS THE ASSERTION THAT CANNOT PASS BY ACCIDENT, and the
+# Makefile makes it: our unit is pure Pascal, so this binary must carry NO
+# dynamic dependency whatsoever. A libz.so.1 here means the header answered and
+# the value row agreed with it by coincidence.
+import zlib
+print(zlib.crc32(b"hello"))
