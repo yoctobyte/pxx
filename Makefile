@@ -29372,7 +29372,8 @@ test-duktape: $(COMPILER)
 	echo "compiling duktape smoke ..."; \
 	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -I$(DUKTAPE_SRC) \
-	  test/duktape/duk_smoke.c "$$wd/duk_smoke" > /dev/null || exit 1; \
+	  test/duktape/duk_smoke.c "$$wd/duk_smoke" > "$$wd/compile.log" 2>&1 \
+	  || { echo "test-duktape: FAIL — compile"; tail -12 "$$wd/compile.log"; exit 1; }; \
 	"$$wd/duk_smoke" > "$$wd/got.txt" 2>&1; rc=$$?; \
 	if [ "$$rc" != "42" ]; then \
 	  echo "test-duktape: FAIL — exit $$rc (want 42)"; tail -5 "$$wd/got.txt"; exit 1; \
@@ -29406,7 +29407,8 @@ test-quickjs: $(COMPILER)
 	echo "compiling quickjs runner ..."; \
 	wd="$$(mktemp -d)"; trap 'rm -rf "$$wd"' EXIT; \
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src -I$(QUICKJS_SRC) \
-	  test/quickjs/runner.c "$$wd/qjs" > /dev/null || exit 1; \
+	  test/quickjs/runner.c "$$wd/qjs" > "$$wd/compile.log" 2>&1 \
+	  || { echo "test-quickjs: FAIL — compile"; tail -12 "$$wd/compile.log"; exit 1; }; \
 	"$$wd/qjs" "$$(cat test/quickjs/smoke.js)" > "$$wd/got.txt" 2>&1; rc=$$?; \
 	if [ "$$rc" != "0" ]; then \
 	  echo "test-quickjs: FAIL — exit $$rc"; tail -5 "$$wd/got.txt"; exit 1; \
