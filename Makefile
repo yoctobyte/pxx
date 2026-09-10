@@ -33438,6 +33438,15 @@ lib-test: pxx-stable-check
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_mimic_urllib_request_server.pas $(TESTTMP)/lib_urllib_server
 	$(PXX_STABLE) test/lib_mimic_urllib_request.npy $(TESTTMP)/lib_urllib_client
 	$(PXX_STABLE) test/lib_mimic_urllib_request_refusals.npy $(TESTTMP)/lib_urllib_refusals
+	# pathname2url / url2pathname need NO server -- they are pure string work --
+	# and their expectation is PINNED rather than diffed against the host
+	# python3. CPython's answer changed in 3.13 (an absolute path gained the
+	# empty authority: `/tmp/a` -> `///tmp/a`), so an oracle diff would be
+	# permanently RED on any box whose CPython sits on the other side of that
+	# line, which is the shape test_nilpy_import_sqlite had when it asserted the
+	# host's sqlite version. Frozen against CPython 3.14.4, 2026-09-11.
+	$(PXX_STABLE) test/lib_mimic_urllib_request_pathname.npy $(TESTTMP)/lib_urllib_pathname
+	$(TESTTMP)/lib_urllib_pathname 2>&1 | diff -u test/lib_mimic_urllib_request_pathname.expected -
 	# The refusals have no oracle by construction (CPython does these things
 	# rather than refusing), so they run on their own, with no server needed.
 	tools/expect_same.sh lib_urllib_refusals.1 "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" "MIMIC-URLLIB-REQUEST REFUSALS OK"

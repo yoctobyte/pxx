@@ -1,0 +1,50 @@
+--- pathname2url
+'/tmp/a.db' -> '///tmp/a.db'
+'rel/path.db' -> 'rel/path.db'
+'a.db' -> 'a.db'
+'' -> ''
+'/' -> '///'
+'/tr/ai/l/' -> '///tr/ai/l/'
+'/a b/c.db' -> '///a%20b/c.db'
+'/a#b?c/d.db' -> '///a%23b%3Fc/d.db'
+'/perc%20ent' -> '///perc%2520ent'
+'/a+b' -> '///a%2Bb'
+'/a&b=c' -> '///a%26b%3Dc'
+'//dbl' -> '////dbl'
+'/a~b' -> '///a~b'
+"/a!b*c'd(e)" -> '///a%21b%2Ac%27d%28e%29'
+'/back\\slash' -> '///back%5Cslash'
+'.' -> '.'
+'..' -> '..'
+'./a' -> './a'
+'///a' -> '/////a'
+--- url2pathname
+'///tmp/a' -> '/tmp/a'
+'/tmp/a' -> '/tmp/a'
+'tmp/a' -> 'tmp/a'
+'' -> ''
+'///' -> '/'
+'///a%20b' -> '/a b'
+'///a%2Fb' -> '/a/b'
+'///a%2fb' -> '/a/b'
+'//localhost/x' -> '/x'
+'//localhost' -> ''
+'//' -> ''
+'///a+b' -> '/a+b'
+'///a%2Bb' -> '/a+b'
+'///a%zz' -> '/a%zz'
+'///a%2' -> '/a%2'
+'file:///x' -> 'file:///x'
+--- round trip
+'/tmp/a.db' -> '/tmp/a.db' True
+'/a b/c.db' -> '/a b/c.db' True
+'/a#b?c/d.db' -> '/a#b?c/d.db' True
+'/perc%20ent' -> '/perc%20ent' True
+'/a+b' -> '/a+b' True
+'rel/path.db' -> 'rel/path.db' True
+'/' -> '/' True
+--- the corpus line
+file:///tmp/lekkerzeilen%20world.db?mode=ro
+--- a non-localhost authority raises URLError
+URLError
+URLError

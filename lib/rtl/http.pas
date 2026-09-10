@@ -101,9 +101,19 @@ function HttpBasicAuth(const user, pass: AnsiString): AnsiString;
 function HttpResolveUrl(const base, location: AnsiString): AnsiString;
 
 { Percent-encode for URLs (RFC 3986 unreserved A-Za-z0-9-_.~ kept; everything
-  else -> %XX, space -> %20). Decode reverses it and also maps '+' -> space. }
-function HttpUrlEncode(const s: AnsiString): AnsiString;
-function HttpUrlDecode(const s: AnsiString): AnsiString;
+  else -> %XX, space -> %20). Decode reverses it and, in the one-argument form,
+  also maps '+' -> space.
+
+  The two-argument forms exist because Python's `urllib` splits these two
+  questions where HTTP form encoding does not: `quote(s, safe='/')` keeps the
+  separators of a PATH, and `unquote` leaves a literal '+' alone because a path
+  is not a form body. Passing safe='' and plusIsSpace=True is the form-encoding
+  behaviour and is what the one-argument forms do, unchanged.
+  `safe` is a set of extra characters to leave alone, spelled as a string. }
+function HttpUrlEncode(const s: AnsiString): AnsiString; overload;
+function HttpUrlEncode(const s, safe: AnsiString): AnsiString; overload;
+function HttpUrlDecode(const s: AnsiString): AnsiString; overload;
+function HttpUrlDecode(const s: AnsiString; plusIsSpace: Boolean): AnsiString; overload;
 
 { Append `name=value` (both percent-encoded) to a query/form string q, inserting
   '&' when q is non-empty. Serves both `?query` strings and
@@ -448,7 +458,7 @@ begin
   else Result := Chr(Ord('A') + n - 10);
 end;
 
-function HttpUrlEncode(const s: AnsiString): AnsiString;
+function HttpUrlEncode(const s, safe: AnsiString): AnsiString;
 var i, o: Integer; c: Char; r: AnsiString;
 begin
   r := '';
@@ -456,7 +466,8 @@ begin
   begin
     c := s[i];
     if ((c >= 'A') and (c <= 'Z')) or ((c >= 'a') and (c <= 'z')) or
-       ((c >= '0') and (c <= '9')) or (c = '-') or (c = '_') or (c = '.') or (c = '~') then
+       ((c >= '0') and (c <= '9')) or (c = '-') or (c = '_') or (c = '.') or (c = '~') or
+       ((Length(safe) > 0) and (Pos(c, safe) > 0)) then
       r := r + c
     else
     begin
@@ -467,22 +478,48 @@ begin
   Result := r;
 end;
 
-function HttpUrlDecode(const s: AnsiString): AnsiString;
+function HttpUrlEncode(const s: AnsiString): AnsiString;
+begin
+  Result := HttpUrlEncode(s, '');
+end;
+
+{ True when c is a hex digit. Spelled out here rather than reusing HttpHexVal,
+  which is DELIBERATELY lenient: it stops at the first non-hex character so that
+  a chunked-encoding size line can carry a `;` extension. That leniency is right
+  there and wrong here -- `HttpHexVal('zz')` is 0, so `%zz` used to decode to a
+  NUL BYTE instead of staying the three characters it is. Measured 2026-09-11
+  against CPython's unquote, which leaves a malformed escape alone (`'/a%zz'`,
+  `'/a%2'`), and against RFC 3986, which says a `%` not followed by two hex
+  digits is not an escape. A silent NUL in decoded form data is the wrong-value
+  class this project ranks above a crash. }
+function HttpIsHexDigit(c: Char): Boolean;
+begin
+  Result := ((c >= '0') and (c <= '9')) or ((c >= 'a') and (c <= 'f')) or
+            ((c >= 'A') and (c <= 'F'));
+end;
+
+function HttpUrlDecode(const s: AnsiString; plusIsSpace: Boolean): AnsiString;
 var i, n: Integer; c: Char; r: AnsiString;
 begin
   r := ''; i := 1; n := Length(s);
   while i <= n do
   begin
     c := s[i];
-    if (c = '%') and (i + 2 <= n) then
+    if (c = '%') and (i + 2 <= n) and
+       HttpIsHexDigit(s[i + 1]) and HttpIsHexDigit(s[i + 2]) then
     begin
       r := r + Chr(HttpHexVal(Copy(s, i + 1, 2)));
       i := i + 3;
     end
-    else if c = '+' then begin r := r + ' '; i := i + 1; end
+    else if plusIsSpace and (c = '+') then begin r := r + ' '; i := i + 1; end
     else begin r := r + c; i := i + 1; end;
   end;
   Result := r;
+end;
+
+function HttpUrlDecode(const s: AnsiString): AnsiString;
+begin
+  Result := HttpUrlDecode(s, True);
 end;
 
 function HttpQueryAdd(const q, name, value: AnsiString): AnsiString;

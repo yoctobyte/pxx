@@ -1,0 +1,49 @@
+# urllib.request's pathname2url / url2pathname, the local-path <-> file-URL pair.
+#
+# lekkerzeilen/world.py:14 does `from urllib.request import pathname2url` and
+# line 524 builds `"file:%s?mode=ro" % pathname2url(path)` for a read-only
+# sqlite open, which is what put this on the list.
+#
+# THE EXPECTED FILE IS PINNED RATHER THAN DIFFED AGAINST THE HOST python3, AND
+# THAT IS DELIBERATE. CPython's answer here CHANGED in 3.13: up to 3.12
+# `pathname2url` was `quote(pathname)` and an absolute path came back as
+# `/tmp/a`; from 3.13 it emits an empty authority, `///tmp/a`. Diffing against
+# whatever python3 the box happens to ship would make this test permanently RED
+# on any machine whose CPython is on the other side of that line -- the same
+# shape as test_nilpy_import_sqlite asserting the host's sqlite version. These
+# rows were MEASURED against CPython 3.14.4 on 2026-09-11 and then frozen.
+from urllib.request import pathname2url, url2pathname
+
+print("--- pathname2url")
+for p in ["/tmp/a.db", "rel/path.db", "a.db", "", "/", "/tr/ai/l/",
+          "/a b/c.db", "/a#b?c/d.db", "/perc%20ent", "/a+b", "/a&b=c",
+          "//dbl", "/a~b", "/a!b*c'd(e)", "/back\\slash", ".", "..", "./a",
+          "///a"]:
+    print(repr(p), "->", repr(pathname2url(p)))
+
+print("--- url2pathname")
+for u in ["///tmp/a", "/tmp/a", "tmp/a", "", "///", "///a%20b", "///a%2Fb",
+          "///a%2fb", "//localhost/x", "//localhost", "//", "///a+b",
+          "///a%2Bb", "///a%zz", "///a%2", "file:///x"]:
+    print(repr(u), "->", repr(url2pathname(u)))
+
+print("--- round trip")
+for p in ["/tmp/a.db", "/a b/c.db", "/a#b?c/d.db", "/perc%20ent", "/a+b",
+          "rel/path.db", "/"]:
+    back = url2pathname(pathname2url(p))
+    print(repr(p), "->", repr(back), back == p)
+
+print("--- the corpus line")
+print("file:%s?mode=ro" % pathname2url("/tmp/lekkerzeilen world.db"))
+
+print("--- a non-localhost authority raises URLError")
+try:
+    url2pathname("//host/x")
+    print("NO RAISE")
+except Exception as e:
+    print(type(e).__name__)
+try:
+    url2pathname("//LOCALHOST/x")
+    print("NO RAISE (case-folded, which CPython does not do)")
+except Exception as e:
+    print(type(e).__name__)

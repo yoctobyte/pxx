@@ -240,6 +240,31 @@ function urlopen(const url: Variant; const data: Variant = 0;
 function urlretrieve(const url: Variant): TPyList; overload;
 function urlretrieve(const url: Variant; const filename: AnsiString): TPyList; overload;
 
+{ `pathname2url(p)` / `url2pathname(u)` — the local-path <-> file-URL pair.
+
+  These are urllib.request's, not urllib.parse's, which is why they are here
+  and not in mimic_urllib_parse. POSIX only: this RTL has no Windows path
+  layer, and CPython's own implementation is a different function per os.name.
+
+  MEASURED AGAINST CPython 3.14.4, AND THE ANSWER MOVED IN 3.13 — say the
+  version or a later reader will call this wrong. Up to 3.12 `pathname2url` was
+  literally `quote(pathname)`, so an absolute path came back as `/tmp/a`. It now
+  emits an EMPTY AUTHORITY for an absolute path, `///tmp/a`, so that prefixing
+  `file:` yields the `file:///tmp/a` form rather than `file:/tmp/a`. Both are
+  legal file URLs and sqlite accepts either; the point is that the two CPythons
+  disagree and this file follows the current one.
+
+  Two things measured rather than assumed, because the obvious guess is wrong
+  in both:
+    * the authority check is CASE-SENSITIVE. `//localhost/x` yields `/x`;
+      `//LOCALHOST/x` RAISES. Folding the case here would accept a URL CPython
+      rejects, which is the wrong direction for a compatibility shim.
+    * `unquote` leaves a literal `+` alone -- `///a+b` is `/a+b`, not `/a b`.
+      That is why these call HttpUrlDecode's two-argument form. The
+      one-argument form is FORM decoding and would be silently wrong here. }
+function pathname2url(const pathname: AnsiString): AnsiString;
+function url2pathname(const url: AnsiString): AnsiString;
+
 { Re-exports of the mimic_urllib_error classes. CPython's `urllib.request`
   namespace carries these names too (`urllib.request.HTTPError` is the same
   object as `urllib.error.HTTPError`), and code catches them off either module.
@@ -251,6 +276,41 @@ type
   ContentTooShortError = mimic_urllib_error.ContentTooShortError;
 
 implementation
+
+{ ---- pathname2url / url2pathname ----------------------------------------- }
+
+function pathname2url(const pathname: AnsiString): AnsiString;
+begin
+  { `quote(p, safe='/')` -- the separators of a path stay separators. An
+    absolute path additionally gets the empty authority, so `/tmp/a` is
+    `///tmp/a` and `/` is `///`. The empty-string guard is load-bearing:
+    `pathname[1]` on '' is not a question with an answer. }
+  if pathname = '' then
+    Result := ''
+  else if pathname[1] = '/' then
+    Result := '//' + HttpUrlEncode(pathname, '/')
+  else
+    Result := HttpUrlEncode(pathname, '/');
+end;
+
+function url2pathname(const url: AnsiString): AnsiString;
+var auth, rest: AnsiString; k: Integer;
+begin
+  rest := url;
+  if (Length(url) >= 2) and (url[1] = '/') and (url[2] = '/') then
+  begin
+    { everything from the third character to the next '/' is the authority,
+      and it must be empty or exactly `localhost`. No LowerCase: measured,
+      CPython refuses `//LOCALHOST/x`. }
+    k := 3;
+    while (k <= Length(url)) and (url[k] <> '/') do k := k + 1;
+    auth := Copy(url, 3, k - 3);
+    if (auth <> '') and (auth <> 'localhost') then
+      raise URLError.Create('file:// scheme is supported only on localhost');
+    rest := Copy(url, k, Length(url) - k + 1);
+  end;
+  Result := HttpUrlDecode(rest, False);
+end;
 
 { ---- HTTPMessage --------------------------------------------------------- }
 
