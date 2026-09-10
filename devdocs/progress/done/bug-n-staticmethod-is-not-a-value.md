@@ -3,7 +3,7 @@ slug: bug-n-staticmethod-is-not-a-value
 track: N
 type: bug
 prio: 80
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankuser
@@ -120,3 +120,6 @@ quiet: a staticmethod must NOT take the receiver, and there it does not.
 `.contains()` / `.read_grid()` / `.queued()` 5, which is one error shape and
 worth reading as a group before assuming it is one bug; `threading` 2; `os` 1;
 `*unpack` 1.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
