@@ -1273,6 +1273,32 @@ test-nilpy: $(COMPILER)
 	 test "$$rc" = "1" \
 	   && printf '%s\n' "$$out" | grep -q 'no unit named also_no_such_module_9f2a' \
 	  || { echo "test_nilpy_dead_path_control_guard_resolves: FAIL - rc=$$rc (want 1: the guarded import RESOLVED, so the tail is the live branch and its missing import must still be an error)"; printf '%s\n' "$$out"; exit 1; }
+	# A `try:` arm killed by a failed guarded import must not leave its unit
+	# ALIAS behind. The alias table is FIRST-WINS, so a surviving row from the
+	# dead arm beat the handler's binding of the same name: the handler ran,
+	# said "fallback", and every member came off the module of the branch that
+	# was SKIPPED. The seam idiom is the whole population --
+	# lekkerzeilen/platform/__init__.py is this file with SDL2 in it -- and a
+	# build reporting itself as one backend while linking the other is the
+	# expensive shape, not a crash.
+	# CPython is the oracle; the guarded module is a name NEITHER runtime has,
+	# so both take the handler and every row is a cross-check.
+	./$(COMPILER) test/test_nilpy_a_dead_guarded_import_arm_still_binds_its_unit_alias.npy $(TESTTMP)/test_nilpy_deadalias26
+	tools/expect_same.sh test_nilpy_deadalias26 "$$($(TESTTMP)/test_nilpy_deadalias26)" "$$(python3 test/test_nilpy_a_dead_guarded_import_arm_still_binds_its_unit_alias.npy)"
+	# THE CONTROL, and it covers the one registration site the rows above
+	# cannot: plain `import X as Y`. It also needs no package, which is why it
+	# is a printf and not a file.
+	# POSITIVE CONTROL MEASURED: the PINNED compiler compiles this and prints
+	# `fallback 3.141592653589793` -- it says the handler ran AND reads `pi` off
+	# a module only the dead arm bound. CPython raises `NameError: name
+	# 'deadonly' is not defined`, so refusing the name is AGREEMENT with the
+	# oracle and not a divergence; we merely refuse it earlier.
+	@printf 'try:\n    import definitely_no_such_module_4c71\n    import math as deadonly\n    n = "primary"\nexcept ImportError:\n    n = "fallback"\nprint(n, deadonly.pi)\n' > $(TESTTMP)/nilpy_deadalias_only.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_deadalias_only.npy $(TESTTMP)/test_nilpy_deadaliasonly26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'undefined variable (deadonly)' \
+	  || { echo "test_nilpy_dead_arm_alias_control: FAIL - rc=$$rc (want 1: a name bound ONLY by the arm a failed guarded import killed must not resolve -- CPython raises NameError for it)"; printf '%s\n' "$$out"; exit 1; }
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no

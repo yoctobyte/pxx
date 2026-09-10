@@ -21590,8 +21590,10 @@ end;
 
   A module that DID resolve before the missing one stays loaded. Python would
   have discarded that binding; here it costs an unused unit in the binary and
-  nothing else, because unit scope is flat and the fallback branch rebinds the
-  names it needs. }
+  nothing else, because unit scope is flat. Its unit ALIAS does not survive: it
+  is rolled back with the block, because the alias table is first-wins and a
+  surviving row from the dead arm would beat the handler's own binding of the
+  same name (see the rollback in PyParseFallbackImportTry). }
 function PyParseFallbackImportTry: Integer;
 { `try: <imports> ... except ImportError: ...` resolved at COMPILE time. An
   unresolvable module is not a runtime condition that could be caught — there is
@@ -21606,10 +21608,11 @@ function PyParseFallbackImportTry: Integer;
   in the block runs at all), and a module that resolved before the failing one
   stays loaded — an unused unit in the binary, since the handler rebinds whatever
   it needs. feature-nilpy-fallback-import. }
-var body, savedHoist: Integer;
+var body, savedHoist, savedAliases: Integer;
     handlerExits: Boolean;
 begin
   savedHoist := PyHoistHead;
+  savedAliases := UnitAliasCount;
   Next;                                { `try` }
   Expect(tkColon, ':');
   Expect(tkNewline, 'newline');
@@ -21628,6 +21631,29 @@ begin
       allocated (render_backend's PIL guard did exactly this: a stray IR_LEA of
       a rolled-back temp, reported at the module's last line). }
     PyHoistHead := savedHoist;
+    { AND THE UNIT ALIASES GO WITH IT, for the same reason and one the comment
+      on this routine used to ASSERT was not needed: it said the fallback branch
+      "rebinds the names it needs". It cannot. FindUnitOrAlias scans the table
+      from index 0 and takes the FIRST row for a name, so a second registration
+      of the same alias is appended and never reached -- a rebind is silently
+      ignored. So `try: import ctypes; from . import one as backend` / `except
+      ImportError: from . import two as backend` bound `backend` to ONE: the
+      handler ran, `backend_name` said "pxx", and every `backend.member` came
+      off the module of the branch that was skipped. No diagnostic, and the two
+      halves of one seam disagreeing is the expensive shape -- a plausible
+      wrong value far from the cause.
+
+      ROLLED BACK RATHER THAN GUARDED AT EACH SITE. Two of the three
+      registration sites already carry `not SoftUnitMissed`; the third is
+      PyBindImportUnitAlias, the extracted `from . import X as Y` arm, which is
+      exactly the spelling the seam writes. A per-site guard cannot cover the
+      import that resolved BEFORE the failing one either -- SoftUnitMissed is
+      still False there -- and the comment above PyBindImportUnitAlias records
+      that these copies have already diverged once, in the direction of doing
+      nothing. One rollback says the true thing once: the block is not being
+      compiled, so nothing it registered survives it.
+      bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias }
+    UnitAliasCount := savedAliases;
     PySkipRestOfBlock;
     Expect(tkDedent, 'dedent');
     PySkipNewlines;
@@ -38666,9 +38692,29 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
                                   from-import STATEMENT created a moment earlier }
     aliasStmtTok: Integer;      { THIS from-import statement's token index --
                                   the stamp the scan below matches on }
+    runMissed: Boolean;         { did ANY import in this run miss? see below }
 begin
+  { SoftUnitMissed DESCRIBES ONE IMPORT, AND THIS RUN HAS MANY. PyParseOneImport
+    has cleared it per statement since `from tkinter import ttk` lost its alias
+    to a miss recorded by an earlier import; the identical bug lived on here,
+    where the flag simply accumulated across the whole run. So in
+    `try: import ctypes; from pkg import fallback as backend`, the second import
+    saw a miss that was not its own: its alias registration was skipped and its
+    name bound to None as an optional-missing name. The handler then rebound
+    `backend` correctly and lost anyway — a None GLOBAL shadows a unit alias at
+    every use, so the seam read `AttributeError: 'NoneType' object has no
+    attribute ...` from the branch that DID run.
+
+    The run still has to answer its callers' question — PyPreScanImports and
+    PyParseFallbackImportTry both read the flag after the run to decide the
+    branch — so the answer is accumulated here and restored on the way out.
+    ANY import missing kills the block; WHICH one missed is per-import.
+    bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias }
+  runMissed := SoftUnitMissed;
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
+    if SoftUnitMissed then runMissed := True;
+    SoftUnitMissed := False;
     if PyIsIdent('from') then
     begin
       Next;
@@ -39112,6 +39158,9 @@ begin
       PySkipNewlines;
     end;
   end;
+  { restore the run's answer: ANY import missing kills the block }
+  if SoftUnitMissed then runMissed := True;
+  SoftUnitMissed := runMissed;
 end;
 
 { Every TOP-LEVEL import in the file, wherever it sits. The leading run handles
@@ -39174,6 +39223,7 @@ procedure PyPreScanImports;
   runs first and would report the missing module before the parser is reached,
   and the parser would resolve the tail afterwards even if this walk skipped it. }
 var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
+    savedAliases: Integer;
     savedSoft, savedMissed, tryMissed: Boolean;
 begin
   savedTok := TokPos;
@@ -39256,6 +39306,7 @@ begin
         leave the branch decision to the block parse }
       savedSoft := SoftUnitResolve;
       savedMissed := SoftUnitMissed;
+      savedAliases := UnitAliasCount;
       if tryAt >= 0 then
       begin
         SoftUnitResolve := True;
@@ -39264,7 +39315,24 @@ begin
       PyParseImportRun;
       { Recorded before the restore, which is what makes the miss invisible to
         everyone else and still usable here. }
-      if (tryAt >= 0) and SoftUnitMissed then tryMissed := True;
+      if (tryAt >= 0) and SoftUnitMissed then
+      begin
+        tryMissed := True;
+        { AND THE ALIASES THIS RUN REGISTERED GO WITH THE BRANCH. The block is
+          dead; a `from . import one as backend` sitting in it must not bind,
+          because FindUnitOrAlias takes the FIRST row for a name and the
+          handler's own `from . import two as backend` is appended after it and
+          never reached. Left alone, the seam ran its handler, said "pxx", and
+          read every member off the module of the branch it skipped.
+
+          THE TWIN ROLLBACK IS IN PyParseFallbackImportTry AND ALONE IT
+          MEASURED AS NO CHANGE — this walk runs first and is what registers
+          the alias, which is the same two-layer shape the dead-path fix
+          recorded one paragraph up. Patching the parser only is the mistake
+          this comment exists to stop the next reader repeating.
+          bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias }
+        UnitAliasCount := savedAliases;
+      end;
       SoftUnitResolve := savedSoft;
       SoftUnitMissed := savedMissed;
       i := TokPos - 2;

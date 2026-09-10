@@ -1,0 +1,66 @@
+# A `try:` arm killed by a failed guarded import must not leave its unit ALIAS
+# behind. It did, and the alias table is FIRST-WINS, so the dead arm's binding
+# beat the handler's binding of the same name.
+#
+# The shape is the portability seam every real application writes:
+#
+#     try:
+#         import ctypes
+#         from . import _ctypes_backend as backend     <- dead when ctypes is absent
+#     except ImportError:
+#         from . import _pxx as backend                <- what actually ran
+#
+# The handler ran, `backend_kind` said "fallback", and every `backend.member`
+# came off the module of the branch that was SKIPPED. No diagnostic. Two halves
+# of one seam disagreeing about which backend is live is the expensive failure
+# shape -- a plausible wrong value a long way from its cause -- and here it
+# would have linked the CPython bindings into a build that reports itself as
+# the native one.
+#
+# WHY IT SURVIVED THE GUARDS THAT EXIST. Two of the three alias registration
+# sites already carry `not SoftUnitMissed`. The third is PyBindImportUnitAlias,
+# the extracted `from . import X as Y` arm -- which is exactly the spelling a
+# seam writes. And a per-site guard could not have covered it anyway: an import
+# standing BEFORE the failing one in the same run registers with SoftUnitMissed
+# still False. The repair is a rollback of the whole run's registrations, in
+# BOTH layers that resolve imports (PyPreScanImports and
+# PyParseFallbackImportTry); the parser alone measured as no change, which is
+# the same two-layer trap the dead-path fix recorded.
+#
+# CPYTHON IS THE ORACLE and that is why the guarded module is a name nothing
+# has. `import ctypes` succeeds under CPython, so the two runtimes would take
+# DIFFERENT branches and the comparison would assert our divergence instead of
+# our agreement.
+#
+# NOT ASSERTED HERE, deliberately: a straight-line rebind of the same alias
+# (`from . import a as x` then `from . import b as x`) still answers the FIRST,
+# where CPython answers the second. Same table, different question -- the shim
+# substitutions live in it too, so last-wins is a change with its own blast
+# radius. bug-n-a-unit-alias-rebind-is-silently-ignored.
+
+from nilpy_seampkg import backend, backend_kind, chosen, chosen_kind
+
+# The row the fix is about: the handler ran, so the handler's module must be
+# the one the alias names. `name()` is a CALL and not a constant, because a
+# constant read is the one readout that could not tell the two modules apart if
+# they ever came to agree on a value.
+print("dead-arm", backend_kind, backend.B, backend.name())
+
+# The mirror, and it is what keeps the fix from degenerating into "the handler
+# always wins": here the guarded import RESOLVES, the try arm is live, and its
+# alias is the one that must survive.
+print("live-arm", chosen_kind, chosen.B, chosen.name())
+
+# The absolute spelling of the same door. PyBindImportUnitAlias serves the
+# relative `from . import X as Y` (above, inside the package) and this one, and
+# the comment on that routine records that its three copies had already
+# diverged once -- in the direction of doing nothing.
+try:
+    import definitely_no_such_module_4c71
+    from nilpy_seampkg import primary as abs_backend
+    abs_kind = "primary"
+except ImportError:
+    from nilpy_seampkg import fallback as abs_backend
+    abs_kind = "fallback"
+
+print("absolute", abs_kind, abs_backend.B, abs_backend.name())
