@@ -5977,7 +5977,30 @@ begin
     if InUnitImpl and (CurrentUnitIdx >= 0) and (CurrentUnitIdx <> strIdx) then
     begin
       i := UnitLoadSlot(strIdx);
-      if (i >= 0) and (not UnitLoadIfaceDone[i]) then CycleWaitUnit := strIdx;
+      if (i >= 0) and (not UnitLoadIfaceDone[i]) then
+      begin
+        { ONE CLAUSE CAN NAME SEVERAL OPEN UNITS, and the one to wait for is the
+          OUTERMOST -- the lowest slot, not the last entry read. Stack order is
+          completion order reversed: an inner unit's whole ParseUnit, its
+          `implementation` keyword included, finishes before the outer unit's
+          interface resumes, so the lowest slot is the interface that completes
+          LAST and therefore the only one that makes every name in this clause
+          available.
+
+          THIS IS A COST RULE, NOT A CORRECTNESS ONE, and the measurement said
+          so against the comment that used to stand here. Waiting on the
+          innermost is not wrong: the replay re-walks the clause from the head
+          of the section, the outer unit is still open, and the section simply
+          PARKS AGAIN -- on a candidate set that has shrunk by exactly the unit
+          just drained on, so it converges in at most one hop per level. The
+          three-unit fixture passes either way, which is how the claim got
+          checked. What the wrong choice costs is a table SLOT per hop, and
+          with 158 units of FPC's compiler in cycles that is the difference
+          between one park per unit and a table that fills and silently
+          degrades to the old diagnostic. }
+        if (CycleWaitUnit < 0) or (i < UnitLoadSlot(CycleWaitUnit)) then
+          CycleWaitUnit := strIdx;
+      end;
     end;
     Exit;
   end;
@@ -7467,6 +7490,19 @@ begin
     end
     else
       Inc(k);
+  end;
+
+  { COMPACT WHEN NOTHING IS OUTSTANDING. Slots are never reused otherwise, so
+    the table would count every park a compile ever took rather than the ones
+    live at once -- and a full table does not fail loudly, it declines to park
+    and hands the unit back the original error. Resetting only when every slot
+    is done keeps the never-replayed guard in compiler.pas honest: it has
+    nothing left to report at that moment by construction. }
+  if DefImplCount > 0 then
+  begin
+    for k := 0 to DefImplCount - 1 do
+      if not DefImplDone[k] then Exit;
+    DefImplCount := 0;
   end;
 end;
 

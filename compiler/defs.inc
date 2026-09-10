@@ -133,10 +133,14 @@ const
     build, so the push degrades to "not tracked" -- which costs a cycle
     diagnosis at that depth and nothing else. }
   MAX_UNIT_LOAD_DEPTH = 64;
-  { Parked implementation sections. One per unit in a cycle, live only while
-    the cycle's other half is still parsing its interface, so this bounds
-    CONCURRENT cycles rather than total ones. }
-  MAX_DEFERRED_IMPLS  = 32;
+  { Parked implementation sections. DrainDeferredImpls compacts the table back
+    to zero whenever nothing is outstanding, so this bounds the parks live AT
+    ONE MOMENT rather than the parks a compile takes -- but the moment can be
+    wide: FPC's compiler has 158 of its 207 units in cycles and a `uses` graph
+    deep enough that many are open together. Sized for that with room, because
+    a full table does not fail loudly -- DefImplPark declines and the unit gets
+    the pre-fix error back. }
+  MAX_DEFERRED_IMPLS  = 512;
   { The per-unit modes a deferred implementation replay must put back, indexed
     off slot * DEFIMPL_MODE_STRIDE. Booleans travel as 0/1. Named rather than
     numbered so a reader can see at the save site which slot is which; the

@@ -6,6 +6,9 @@
 unit ucycle_b;
 interface
 
+uses ucycle_c;                    { deepens the chain: see ucycle_c's header }
+
+function BThroughC(x: LongInt): LongInt;
 function BCall(x: LongInt): LongInt;
 function BUsesAType(x: LongInt): LongInt;
 function BReadsAConst: LongInt;
@@ -18,6 +21,11 @@ function BCall(x: LongInt): LongInt;
 begin
   HookProc(x);                    { a VAR from A's interface }
   BCall := x + 1;
+end;
+
+function BThroughC(x: LongInt): LongInt;
+begin
+  BThroughC := CReadsBoth(x);
 end;
 
 function BUsesAType(x: LongInt): LongInt;

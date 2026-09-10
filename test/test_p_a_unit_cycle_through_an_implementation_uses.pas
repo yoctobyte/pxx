@@ -40,6 +40,9 @@ begin
   Chk('R02 type-from-A', BUsesAType(21), 42);
   Chk('R03 const-from-A', BReadsAConst, 41);
   Chk('R04 A-calls-B', ACallsB(7), 8);
+  { A -> B -> C, with C's implementation naming BOTH open units in one clause.
+    41 (ACONST, from the OUTER unit) + BCall(7) = 41 + 8 = 49. }
+  Chk('R05 three-unit-chain', BThroughC(7), 49);
   WriteLn('fails=', fails);
   WriteLn('UCYCLE OK');
 end.
