@@ -2196,6 +2196,49 @@ you believe the finding — and note that the reverse (it appears, ranked
 plausibly) has no such tell, which is why the control has to be asserted rather
 than eyeballed.
 
+## TWO OBSERVERS WITH ONE SAMPLE EACH ARE NOT A SERIES
+
+Everything above is about how to sample one instrument. This is about the case
+where nobody thinks they are sampling at all, because each side has exactly one
+reading and the two readings are HONEST.
+
+Measured 2026-09-10, plexus, two seats watching the owner's `import_nl.py`:
+
+```
+frankB   8.8 GB RSS
+frankuser  18.1 GB RSS, 24 minutes later
+```
+
+frankuser reported it as *"up from your 8.8 GB ... and still growing"* and was
+about to tell the owner the process was heading for an OOM kill. Six samples
+from one hand, minutes apart, showed a **sawtooth** — 20.1, 19.1, 20.3, 21.7,
+15.6, 15.5 GB, swap flat at 8 G throughout — and frankuser's own next reading
+came back at 17.2 GB, BELOW its own previous one. There was no trend. There was
+a working set that rises and falls, sampled twice, near the top both times.
+
+**Neither number was wrong and neither observer owned the series**, which is
+the whole trap: a difference between two people's readings looks like a
+measurement of change, and it is a measurement of two moments. frankuser's own
+phrasing of what went wrong is the sharpest form of it: *"I read the quantity
+that moved and not the one that decides"* — RSS moved, and the thing that
+decides an OOM kill is swap plus the box's headroom, which had not moved at
+all.
+
+**A number handed to you is a READING, not a trend, however careful the hand it
+came from.** The credibility of the source is exactly what makes this one
+survive review: you check a stranger's number and you compose with a
+colleague's. So:
+
+- Before quoting a delta between two observers' readings, ask **who took both**.
+  If the answer is "nobody", it is one reading and one reading.
+- **Take the second sample yourself**, from the same instrument, before saying
+  "growing", "climbing" or "still". It costs one command.
+- **Name the quantity that DECIDES**, not the one that is easiest to read. For
+  a memory scare that is available headroom and swap, not RSS.
+
+Escalating a non-trend to the owner is the expensive half — see CLAUDE.md on
+human attention — and the retraction costs a second turn on top of the first.
+
 ## Min-of-N tells you HOW to sample. It does not tell you your RESOLUTION — run a null
 
 The rule above is necessary and **not sufficient**, and the gap is where most of

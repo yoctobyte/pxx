@@ -1,0 +1,93 @@
+# Chained assignment: `t1 = t2 = ... = RHS`.
+#
+# THE ORDER ROWS ARE THE POINT OF THIS FILE. Every value row below also
+# passed BEFORE the fix on the shapes that parsed at all -- the nested
+# right-associative reading gets the values right and the STORE ORDER
+# backwards, so a value-only test cannot fail for the defect this file was
+# written for. `order` is the only reader that can see it.
+# bug-n-a-chained-assignment-to-two-attributes-does-not-parse
+
+order = []
+
+def idx(tag):
+    order.append(tag)
+    return 0
+
+def rhs(v):
+    order.append("rhs")
+    return v
+
+class C:
+    def __init__(self):
+        self.a = 0
+        self.b = 0
+
+# ---- the RHS is evaluated ONCE, before any target ---------------------------
+calls = []
+
+def once():
+    calls.append(1)
+    return 4
+
+p = q = once()
+print(p, q, len(calls))
+
+# ---- plain names, two and three -------------------------------------------
+a = b = 3
+print(a, b)
+a = b = c = 5
+print(a, b, c)
+
+# ---- subscripts ------------------------------------------------------------
+l = [0, 0]
+m = [0, 0]
+l[0] = m[0] = 7
+print(l[0], m[0])
+
+# ---- the mixed shapes, each of which used to pick a different arm -----------
+d = l[1] = 9
+print(d, l[1])
+
+o = C()
+o.a = o.b = 11
+print(o.a, o.b)
+
+z = o.b = 12
+print(z, o.b)
+
+l[0] = o.a = 13
+print(l[0], o.a)
+
+o.a = w = 14
+print(o.a, w)
+
+# ---- an attribute holding a list, subscripted ------------------------------
+class H:
+    def __init__(self):
+        self.xs = [0, 0]
+
+h = H()
+h.xs[0] = h.xs[1] = 21
+print(h.xs)
+
+# ---- STORE ORDER: left to right, after the RHS -----------------------------
+n = [0, 0]
+order = []
+l[idx(1)] = m[idx(2)] = n[idx(3)] = rhs(7)
+print(order)
+print(l[0], m[0], n[0])
+
+# ---- ...and the same with a mix of target kinds ----------------------------
+order = []
+o2 = C()
+l[idx("sub")] = o2.a = m[idx("sub2")] = rhs(31)
+print(order)
+print(l[0], o2.a, m[0])
+
+# ---- a dict target, where the KEY expression is the observable -------------
+order = []
+dd = {}
+ee = {}
+dd[idx("k1")] = ee[idx("k2")] = rhs(2)
+print(order)
+print(dd[0], ee[0])

@@ -1634,6 +1634,15 @@ test-nilpy: $(COMPILER)
 	# Pascal unit, so the qualifier resolved against a generic TList).
 	./$(COMPILER) test/test_nilpy_collections_deque.npy $(TESTTMP)/test_nilpy_deque26
 	$(TESTTMP)/test_nilpy_deque26 | diff -u test/test_nilpy_collections_deque.expected -
+	# chained assignment `t1 = t2 = ... = RHS`. THE ORDER ROWS ARE WHY THIS FILE
+	# EXISTS: before the fix the shapes that parsed at all already printed the
+	# right VALUES -- the nested right-associative reading stores every target,
+	# just backwards -- so every value row here passed on the broken compiler
+	# and only `order` can fail for the defect. Measured 2026-09-10 at
+	# b7745aaf0a59: `l[idx(1)] = m[idx(2)] = 7` gave [2, 1] against CPython's
+	# [1, 2] while both printed `7 7`.
+	./$(COMPILER) test/test_nilpy_a_chained_assignment_stores_left_to_right.npy $(TESTTMP)/test_nilpy_chainasg26
+	$(TESTTMP)/test_nilpy_chainasg26 | diff -u test/test_nilpy_a_chained_assignment_stores_left_to_right.expected -
 	# ...and the other two spellings, in their own file so the qualified one
 	# cannot mask a regression in them.
 	./$(COMPILER) test/test_nilpy_collections_deque_from_import.npy $(TESTTMP)/test_nilpy_deque_fi26

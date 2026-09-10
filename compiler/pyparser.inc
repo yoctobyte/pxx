@@ -27073,8 +27073,175 @@ begin
   end;
 end;
 
+{ Step over ONE assignment target starting at token index i, answering the
+  index just past it, or -1 when what sits there is not a target shape the
+  store machinery can take. The set is exactly the one PyParseUnpackAssign
+  already collects: NAME, NAME.field, and either of those followed by one or
+  more `[...]` groups. Written as a token skip rather than a trial parse
+  because it has to run BEFORE the statement commits to an arm.
+  bug-n-a-chained-assignment-to-two-attributes-does-not-parse }
+function PySkipChainTarget(i: Integer): Integer;
+begin
+  Result := -1;
+  if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
+  Inc(i);
+  if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+     (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+  Result := PySkipTargetSubscripts(i);
+end;
+
+{ `T1 = T2 [= T3 ...] = RHS` — a CHAINED assignment with two or more targets,
+  every one of them a shape PyParseChainAssign can store into. Counts the
+  targets; answers False (and nTgts 0) for everything else, which leaves the
+  statement on whatever arm it takes today.
+
+  Deliberately shaped as "an lvalue token run IMMEDIATELY followed by `=`",
+  repeated — not as "count the depth-0 `=` on this line". The counting form
+  claims `g = lambda x=1: x`, which has two `=` at depth 0 and exactly one
+  target; this form stops at `lambda` because the run after the first `=` is
+  not followed by an `=`. `==` cannot be mistaken for `=` either: the NilPy
+  lexer emits tkEq for it (pylexer.inc), never two tkAssign. }
+function PyChainAssignAhead(var nTgts: Integer): Boolean;
+var i, j: Integer;
+begin
+  Result := False;
+  nTgts := 0;
+  if CurTok.Kind <> tkIdent then Exit;
+  i := TokPos - 1;                 { CurTok is Tokens[TokPos - 1] }
+  while nTgts < 8 do
+  begin
+    j := PySkipChainTarget(i);
+    if j < 0 then Break;
+    if (j >= TokCount) or (Tokens[j].Kind <> tkAssign) then Break;
+    Inc(nTgts);
+    i := j + 1;
+  end;
+  Result := nTgts >= 2;
+  if not Result then nTgts := 0;
+end;
+
+{ `T1 = T2 = RHS`. Python binds every target to ONE evaluation of the
+  right-hand side, so `a = b = f()` calls f once — which is why this cannot
+  desugar to `b = f(); a = f()`. It goes through a hidden temp instead,
+  assigned once and then stored to each target LEFT TO RIGHT, which is
+  CPython's order.
+
+  Before this the statement was read as `a = (b = RHS)` and reported
+  "undefined variable (b)" — a diagnostic that names the wrong thing entirely
+  (bug-nilpy-chained-assign-power-assign-and-semicolon-statements).
+
+  THIS USED TO ADMIT PLAIN NAMES ONLY, and the comment here used to say that a
+  subscript chain was "refused by name below". It was not: measured 2026-09-10,
+  `d[k] = d2[k2] = f()` compiled, ran, and called f exactly once. What actually
+  happened is that a target this arm declined fell through to the ordinary
+  assignment path, where PyParseLValueAST reads `X = Y = v` as the NESTED,
+  RIGHT-ASSOCIATIVE `X = (Y = v)` — a genuine second implementation of one
+  concept, built for `xs[0] = xs[1] = 3` (see PyMakeVariantSetItem).
+
+  That second reading gets the VALUES right and the ORDER backwards, and no
+  value assertion can see the difference:
+
+      l[idx(1)] = m[idx(2)] = 7      CPython [1, 2]   nested reading [2, 1]
+
+  Both print `7 7`. So the parse errors on `self.a = self.b = n` were the
+  visible half of one defect whose other half was silent. Widening this arm to
+  every target shape the store machinery already handles closes both, because
+  a target that reaches HERE never reaches the nested reading.
+
+  Target parsing is deliberately the same walk PyParseUnpackAssign does — the
+  two are the same question ("which lvalues does a statement bind?") and a
+  third private copy is how the first divergence happened. The index
+  expressions are built here but EMITTED inside their store, after the RHS
+  temp, which is what puts the whole thing in CPython's order.
+
+  RESIDUAL, and it is named rather than hidden: a target whose receiver is not
+  a NAME (`f()[k] = g()[j] = v`) is not one of these shapes, so it still takes
+  the nested reading and still stores right to left. }
+function PyParseChainAssign(nTgts: Integer): Integer;
+var names: array[0..7] of AnsiString;
+    flds: array[0..7] of AnsiString;      { attribute target, or '' for a name }
+    subBase: array[0..7] of Integer;      { -1 unless the target ends in [...] }
+    subIdx: array[0..7] of Integer;
+    i, symIdx, node, seq, chainTmp, tgtBase: Integer;
+begin
+  for i := 0 to nTgts - 1 do
+  begin
+    names[i] := CurTok.SVal;
+    flds[i] := '';
+    subBase[i] := -1;
+    subIdx[i] := -1;
+    Next;
+    if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkIdent) then
+    begin
+      Next;
+      flds[i] := CurTok.SVal;
+      Next;
+    end;
+    { Only the LAST bracket is a store; the ones before it are ordinary reads
+      that build the base (`m[i][j]` stores into `m[i]`) — the same rule the
+      unpack path states. }
+    if CurTok.Kind = tkLBrack then
+    begin
+      symIdx := PyProgSym(names[i]);
+      if symIdx < 0 then
+        Error('Nil Python: ' + names[i] + ' is not defined, so ' + names[i]
+              + '[...] cannot be assigned');
+      tgtBase := PyMakeIdent(symIdx);
+      if flds[i] <> '' then tgtBase := PyMakeAttrLoad(tgtBase, flds[i]);
+      while CurTok.Kind = tkLBrack do
+      begin
+        Next;                            { consume '[' }
+        PyParseBoolExpr;
+        node := CurASTNode;
+        Expect(tkRBrack, ']');
+        if subIdx[i] >= 0 then
+          tgtBase := PyMakeSubscriptLoad(tgtBase, subIdx[i]);
+        subBase[i] := tgtBase;
+        subIdx[i] := node;
+      end;
+    end;
+    Expect(tkAssign, '=');
+  end;
+  PyParseBoolExpr;
+  chainTmp := AllocVar(PyHiddenName('chain'), IntToTypeKind(ASTTk[CurASTNode]));
+  Syms[chainTmp].RecName := ResolveNodeRec(CurASTNode);
+  SymSyncTypeRef(chainTmp);
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := PyMakeIdent(chainTmp);
+  ASTRight[node] := CurASTNode;
+  seq := PySeqAppend(-1, node);
+  for i := 0 to nTgts - 1 do
+  begin
+    if subIdx[i] >= 0 then
+      node := PyMakeSubscriptStore(subBase[i], subIdx[i], PyMakeIdent(chainTmp))
+    else if flds[i] <> '' then
+      node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(chainTmp),
+                                  Syms[chainTmp].TypeKind, Syms[chainTmp].RecName)
+    else
+    begin
+      symIdx := PyAssignTargetSym(names[i]);
+      if symIdx < 0 then
+      begin
+        symIdx := AllocVar(names[i], Syms[chainTmp].TypeKind);
+        Syms[symIdx].RecName := Syms[chainTmp].RecName;
+        SymSyncTypeRef(symIdx);
+      end;
+      if PyTypingPass then
+        PyNoteLocalType(names[i], Syms[chainTmp].TypeKind,
+                        ResolveNodeRec(PyMakeIdent(chainTmp)));
+      node := AllocNode(AN_ASSIGN);
+      ASTLeft[node] := PyMakeIdent(symIdx);
+      ASTRight[node] := PyMakeIdent(chainTmp);
+    end;
+    seq := PySeqAppend(seq, node);
+  end;
+  Result := seq;
+end;
+
 function PyParseStatement: Integer;
-var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
+var chainN: Integer;   { targets in a chained assignment `a = b = v` }
+    name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     unpStar: Boolean;   { the unsupported-unpack diagnostic below }
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
     augTk: TTokenKind;
@@ -27082,8 +27249,6 @@ var name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integ
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
     cmpExisted: Boolean;
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
-    chainN, chainI, chainTmp, chainSeq: Integer;   { chained assignment a = b = v }
-    chainNames: array[0..7] of AnsiString;
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
@@ -27610,6 +27775,17 @@ begin
     Result := PyMakeSuperCall(name);
     Exit;
   end;
+  { A CHAINED assignment, ahead of every target-shaped arm below it. It has to
+    come first because those arms commit: `self.a = self.b = n` reaches the
+    member-store arm on its leading `self.`, parses one target, and dies on the
+    second `=` — which is the parse error this ticket was filed for. See
+    PyParseChainAssign for why widening it also closes a silent one.
+    bug-n-a-chained-assignment-to-two-attributes-does-not-parse }
+  if PyChainAssignAhead(chainN) then
+  begin
+    Result := PyParseChainAssign(chainN);
+    Exit;
+  end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      ((Tokens[TokPos].Kind = tkDot) or PySubscriptThenMemberAhead) then
   begin
@@ -28104,65 +28280,6 @@ begin
       Result := node;
       Exit;
     end;
-  end;
-  { CHAINED assignment `a = b = RHS`. Python binds every target to ONE
-    evaluation of the right-hand side, so `a = b = f()` calls f once — which is
-    why this cannot desugar to `b = f(); a = f()`. It goes through a hidden temp
-    instead, assigned once and then stored to each target LEFT TO RIGHT, which
-    is also CPython's order.
-
-    Before this the statement was read as `a = (b = RHS)` and reported
-    "undefined variable (b)" — a diagnostic that names the wrong thing entirely
-    (bug-nilpy-chained-assign-power-assign-and-semicolon-statements).
-
-    PLAIN NAME targets only. `d[k] = d2[k2] = f()` has targets with side effects
-    of their own and is refused by name below rather than guessed at — the temp
-    would be right for it too, but the STORE path for a subscript target is a
-    different lowering and quietly getting it half-right is the failure mode
-    this frontend is trying to avoid. }
-  if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
-     (Tokens[TokPos].Kind = tkAssign) and
-     (Tokens[TokPos + 1].Kind = tkIdent) and
-     (Tokens[TokPos + 2].Kind = tkAssign) then
-  begin
-    chainN := 0;
-    while (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-          (Tokens[TokPos].Kind = tkAssign) do
-    begin
-      if chainN >= 8 then
-        Error('Nil Python: at most 8 targets in a chained assignment');
-      chainNames[chainN] := CurTok.SVal;
-      Inc(chainN);
-      Next;
-      Expect(tkAssign, '=');
-    end;
-    PyParseBoolExpr;
-    chainTmp := AllocVar(PyHiddenName('chain'), IntToTypeKind(ASTTk[CurASTNode]));
-    Syms[chainTmp].RecName := ResolveNodeRec(CurASTNode);
-    SymSyncTypeRef(chainTmp);
-    node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := PyMakeIdent(chainTmp);
-    ASTRight[node] := CurASTNode;
-    chainSeq := PySeqAppend(-1, node);
-    for chainI := 0 to chainN - 1 do
-    begin
-      symIdx := PyAssignTargetSym(chainNames[chainI]);
-      if symIdx < 0 then
-      begin
-        symIdx := AllocVar(chainNames[chainI], Syms[chainTmp].TypeKind);
-        Syms[symIdx].RecName := Syms[chainTmp].RecName;
-        SymSyncTypeRef(symIdx);
-      end;
-      if PyTypingPass then
-        PyNoteLocalType(chainNames[chainI], Syms[chainTmp].TypeKind,
-                        ResolveNodeRec(PyMakeIdent(chainTmp)));
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := PyMakeIdent(symIdx);
-      ASTRight[node] := PyMakeIdent(chainTmp);
-      chainSeq := PySeqAppend(chainSeq, node);
-    end;
-    Result := chainSeq;
-    Exit;
   end;
   if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkAssign) then

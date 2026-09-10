@@ -167,3 +167,74 @@ ticket and leave the silent half exactly where it is.
 (`cannot infer the type of field self.a` when `b` is a known local), which is
 [[refactor-n-the-field-type-pre-pass-asks-one-question-in-six-places]]'s
 territory and is a second, independent wall behind this one. Not bundled.
+
+## FIXED 2026-09-10 (frankB) — both halves, one arm
+
+`compiler/pyparser.inc`: `PySkipChainTarget` + `PyChainAssignAhead` +
+`PyParseChainAssign`, hooked in FRONT of the member-store arm (which is the arm
+that was eating `self.a = self.b = n` and dying on the second `=`). The old
+names-only chain arm is deleted, not left beside the new one — it is subsumed,
+and a dead arm that looks live is how this ticket got a stale cause section in
+the first place.
+
+**Targets are parsed by the same walk `PyParseUnpackAssign` does** — NAME,
+NAME.field, either followed by `[...]` groups — and stored through the same two
+builders, `PyMakeSubscriptStore` and `PyUnpackTargetStore`. That is deliberate:
+"which lvalues does a statement bind?" is one question, and a third private
+answer to it is exactly how the two readings diverged. The index expressions
+are built while the targets are parsed but EMITTED inside their store, after
+the RHS temp, which is what puts the whole statement in CPython's order.
+
+The detection is "an lvalue token run IMMEDIATELY followed by `=`", repeated —
+NOT "count the depth-0 `=` on this line". The counting form claims
+`g = lambda x=1: x`, which has two and one target. `==` is tkEq in the NilPy
+lexer, never two tkAssign, so a comparison cannot be mistaken for a chain
+either. Both are controls in the measurement below.
+
+### Measured, against the fixed compiler
+
+| shape | before | after |
+| --- | --- | --- |
+| `a = b = 3`, `a = b = c = 5` | OK | OK |
+| `l[0] = m[0] = 7` | OK (order wrong) | OK |
+| `a = l[0] = 7` | OK (order wrong) | OK |
+| `self.a = l[0] = 7` | OK (order wrong) | OK |
+| `self.a = self.b = n` | **parse error** | OK |
+| `a = self.b = n` | **parse error** | OK |
+| `l[0] = self.a = 7` | **parse error** | OK |
+| `self.a = b = 7` | `undefined variable (b)` | OK |
+| `h.xs[0] = h.xs[1] = 21` | not measured before | OK |
+| `l[idx(1)] = m[idx(2)] = n[idx(3)] = rhs(7)` | `['rhs', 3, 2, 1]` | `['rhs', 1, 2, 3]` |
+
+Every row diffed against CPython; the whole file is the test.
+
+### The positive control, and it is drawn from the right population
+
+`test/test_nilpy_a_chained_assignment_stores_left_to_right.npy` against the
+PINNED compiler (which predates this change) dies at line 52 with
+`expected expression / near: . a = o . b >>> = 11` — the ticket's own parse
+error. And the ORDER rows alone, extracted so they get past the parse errors,
+print `['rhs', 3, 2, 1]` there against CPython's `['rhs', 1, 2, 3]`. So the two
+halves fail SEPARATELY on the pre-fix compiler: the value rows would all have
+passed, and only `order` can see the silent one.
+
+### False-positive controls, all measured green and matching CPython
+
+`lambda x=5: x + 1`, `f(x=3)` / `f(y=4)` keyword arguments, `d["a"] == 1`,
+`e = d["a"] == d["b"]`, `s += 1`, `h["k"] = "v"`, the tuple swap
+`xs[0], xs[1] = xs[1], xs[0]`, and `v: int = 4`.
+
+### RESIDUAL, named rather than closed over
+
+A target whose receiver is not a NAME — `f()[k] = g()[j] = v` — is not one of
+the shapes this arm takes, so it still falls through to `PyParseLValueAST`'s
+nested right-associative reading and still stores RIGHT TO LEFT. It is silent
+there for the same reason it was silent here. Not fixed because the receiver
+grammar is a different piece of machinery
+([[bug-n-a-subscript-store-whose-receiver-is-a-call-result-does-not-parse]]'s
+territory), and because a chain whose targets are call results is not a shape
+the corpus writes. Filed as its own row rather than left implicit:
+[[bug-n-a-chained-assignment-through-a-call-result-target-still-stores-right-to-left]].
+
+The scope note above stands: `self.a = b = 7` no longer fails here, and the
+field-inference pre-pass is still a separate wall for other shapes.
