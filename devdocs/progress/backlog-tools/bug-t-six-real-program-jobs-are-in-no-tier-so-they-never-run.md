@@ -69,3 +69,37 @@ Found while checking why six jobs had no archive rows before writing them into
 an owner-facing summary — the check was "what would this be if it were false".
 Corpora presence verified on seven directly (`library_candidates/`), tier
 membership by parsing `TIERS` out of `tools/testmgr.py`.
+
+## Measured 2026-09-10: the six are 56 jobs, and tier sizes are TARGET counts
+
+Verdicts on seven at `89f5a6c8d` (frank-seven, watcher stopped — a wall time
+taken while a tier holds 19 of 24 cores is wrong in the direction that decides
+tier placement): `test-chess-perft` 10s, `test-fpc` 40s, `test-sqlite-parity` 7s,
+`test-wasm32` 34s all GREEN; `test-duktape` and `test-quickjs` RED on one missing
+C declaration each (`__builtin_inf`, `malloc_usable_size` — now
+`bug-c-builtin-inf-is-undeclared-so-duktape-cannot-compile` and
+`bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile`).
+
+**Five of the six decompose to exactly one job. `test-wasm32` decomposes to 51**
+— `#00` selfhost, `#42` selfhost, `#49` unit, the other 48 qemu — asked of
+`testmgr.generate()` rather than reasoned about. So the numbers this ticket and
+its discussion both used (`quick 1, native 6, limited 19, full 40`) are **target**
+counts, and enrolling all six takes `full` from 40 targets to 46 while adding
+**56 jobs**. Nothing in the tier dict says which unit it is counting, and the
+~95s figure is six serial `make` runs, which is a true answer to a different
+question than "what does the tier now cost".
+
+Consequence for whoever enrolls: 50 of those rows have never run under testmgr,
+so none has trusted timeout metrics and all arrive under the unproven-job budget
+grant — where a qemu job timing out under 24-way parallelism reads as a red
+rather than as a missing calibration. The allowlist covers duktape and quickjs
+and covers none of these, so any red among them is unbaselined and freezes
+pinning exactly as duktape would have.
+
+Does not change this ticket's argument. The guard it asks for — subtract the
+tier union from the Makefile's `^test-[a-z0-9-]+:` targets, explicit opt-out
+list, positive control that must FAIL on a fixture carrying an unlisted target —
+is still the class fix, and six instances is well past where naming them one at
+a time is the remedy. It does mean the guard should report what it found in
+both units, because a reviewer reading "6 targets missing" will not picture 56
+jobs.
