@@ -8222,8 +8222,22 @@ begin
   else if CaseEqual(nm, 'pcardinal') or CaseEqual(nm, 'plongword') or CaseEqual(nm, 'pdword') or CaseEqual(nm, 'puint32') then Result := tyUInt32
   else if CaseEqual(nm, 'pint64') then Result := tyInt64
   else if CaseEqual(nm, 'pqword') or CaseEqual(nm, 'puint64') then Result := tyUInt64
-  else if CaseEqual(nm, 'pnativeint') or CaseEqual(nm, 'pptrint') then Result := tyNativeInt
-  else if CaseEqual(nm, 'pnativeuint') or CaseEqual(nm, 'pptruint') then Result := tyNativeUInt
+  { `psizeint`/`psizeuint` are here because THIS TABLE WAS THE THIRD ONE TO BE
+    MISSING THEM, and the drift is documented two doors down in this same file:
+    BuiltinScalarTypeKind carried `sizeuint` and BuiltinTypeNameTk did not, and
+    the comment there says the two tables serve DIFFERENT DOORS so nothing
+    failed loudly. Same shape again -- both scalar tables now know SizeInt and
+    SizeUInt, and the POINTER table knew neither, so `SizeUInt(v)` worked while
+    `PSizeUInt` was `unknown type`. Measured 2026-09-10: it is the first failure
+    of most of FPC's compiler units once bitsizeof is out of the way, and
+    PSizeUInt is FPC's System-unit `^SizeUInt` and nothing more.
+    (Adding a name here is safe only because this table is consulted AFTER
+    FindTypeAlias misses -- see the note at the head of this function, and the
+    self-host break that established it.) }
+  else if CaseEqual(nm, 'pnativeint') or CaseEqual(nm, 'pptrint')
+       or CaseEqual(nm, 'psizeint') then Result := tyNativeInt
+  else if CaseEqual(nm, 'pnativeuint') or CaseEqual(nm, 'pptruint')
+       or CaseEqual(nm, 'psizeuint') then Result := tyNativeUInt
   else if CaseEqual(nm, 'psingle') then Result := tySingle
   else if CaseEqual(nm, 'pdouble') or CaseEqual(nm, 'pextended') then Result := tyDouble
   else if CaseEqual(nm, 'pboolean') then Result := tyBoolean

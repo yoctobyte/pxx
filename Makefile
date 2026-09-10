@@ -3119,6 +3119,16 @@ test-nilpy: $(COMPILER)
 	@# diverge from fpc is a `bitpacked` field, which pxx has no way to spell.
 	@./$(COMPILER) test/test_p_bitsizeof_is_sizeof_times_eight.pas $(TESTTMP)/test_bitsizeof26
 	@tools/expect_same.sh test_bitsizeof26 "$$($(TESTTMP)/test_bitsizeof26 | tail -n 2)" "$$(printf 'fails=0\nBITSIZEOF OK')"
+	@# PSizeInt / PSizeUInt -- FPC's System-unit ^SizeInt / ^SizeUInt. A THIRD
+	@# copy of the sizeint/sizeuint alias list nobody counted: both scalar
+	@# tables knew the names and the builtin POINTER table knew neither, so
+	@# `SizeUInt(v)` worked and `PSizeUInt` was `unknown type`. First failure of
+	@# 150 of FPC's 207 compiler units once bitsizeof landed. Widths asserted as
+	@# a RELATION to SizeOf(Pointer), so the rows are true on the 32-bit targets
+	@# too; SizeOf(PSizeUInt) is deliberately not a row (SizeOf(PByte) is
+	@# refused identically -- a family-wide gap, not this one).
+	@./$(COMPILER) test/test_p_psizeint_and_psizeuint_are_builtin_pointer_types.pas $(TESTTMP)/test_psizeint26
+	@tools/expect_same.sh test_psizeint26 "$$($(TESTTMP)/test_psizeint26 | tail -n 2)" "$$(printf 'fails=0\nPSIZEINT OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
