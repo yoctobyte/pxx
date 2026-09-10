@@ -15407,6 +15407,7 @@
     "967f9cc932c2f2c3a05502beeea13de53402ce4f",
     "3a594228bdeaf4db3b0adcf4de3edebe17b9d226"
    ],
+   "range_non_causal": false,
    "src": "test/ffi_local/beside_the_source_wins.npy test/ffi_local/beside_the_source_wins.expected +1",
    "status": "fail"
   }
