@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-10T09:09:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-   "tier": "opt",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-10T09:41:40Z",
    "fixed": [],
    "new_red": [],
@@ -490,6 +481,15 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-10T17:51:43Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "seven",
@@ -709,17 +709,17 @@
   "lib-test#src:test/test_tlist_notify.pas": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "lib-test#src:tools/crtl_reachability.py": "0e3ba86d520815bc8351c39404cceb6054bdb4b3",
   "optdiff#shard0/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard1/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+  "optdiff#shard1/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "optdiff#shard10/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard11/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+  "optdiff#shard11/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "optdiff#shard2/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard3/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "optdiff#shard4/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+  "optdiff#shard3/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "optdiff#shard4/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "optdiff#shard5/12": "cf9b14600039c2f62d7251b0e05330fb74827be9",
-  "optdiff#shard6/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "optdiff#shard7/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "optdiff#shard8/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "optdiff#shard9/12": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+  "optdiff#shard6/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "optdiff#shard7/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "optdiff#shard8/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "optdiff#shard9/12": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "size-canary#src:tools/size_canary.py": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-aarch64#src:compiler/.pascal26.fixedpoint": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -4856,11 +4856,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-nilpy#src:tools/compiler_srchash.sh": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
-  "test-opt#src:compiler/compiler.pas@1": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "test-opt#src:compiler/compiler.pas@2": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "test-opt#src:compiler/compiler.pas@3": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "test-opt#src:test/test_atomic64.pas": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
-  "test-opt#src:tools/compiler_srchash.sh": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+  "test-opt#src:compiler/compiler.pas@1": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "test-opt#src:compiler/compiler.pas@2": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "test-opt#src:compiler/compiler.pas@3": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "test-opt#src:test/test_atomic64.pas": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
+  "test-opt#src:tools/compiler_srchash.sh": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-pascal-conformance#shard0/6": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-pascal-conformance#shard1/6": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
   "test-pascal-conformance#shard2/6": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
@@ -5490,10 +5490,10 @@
   "lib-test#src:test/lib_synapse_ssl.pas": "pascal26:2077: error: undefined variable (SetString) | in: external/synapse/synautil.pas | near: do begin SearchForLineBreak ( APtr , >>> AEtx , bol | pascal26:2178: error: undefined variable (SetString) | in: external/synapse/synautil.pas | near: <= AEtx ) and ( SynaFpc >>> . strlcomp (",
   "lib-test#src:test/lib_synapse_transitive_unit.pas": "pascal26:2077: error: undefined variable (SetString) | in: external/synapse/synautil.pas | near: do begin SearchForLineBreak ( APtr , >>> AEtx , bol | pascal26:2178: error: undefined variable (SetString) | in: external/synapse/synautil.pas | near: <= AEtx ) and ( SynaFpc >>> . strlcomp (",
   "lib-test#src:tools/crtl_reachability.py": "crtl-map: OK -- 613 crtl functions mapped to 63 headers | lib-units: FAIL mimic_queue | pascal26:78: error: unknown type: TPyDeque | pascal26:113: error: undefined variable (TPyDeque) | pascal26:113: error: a statement cannot start with '.' | ... 6 more line(s) not shown",
-  "optdiff#shard0/12": "OPT DIFF -O3: test/test_double_to_integer_lvalue_rounds.pas (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_field_get_by_name.pas | optdiff skip TIMEOUT-O0: devtest_tls_native_seam.pas test_emit_obj.pas test_halt_from_worker_thread.pas | optdiff skip BUILD-FAIL: c_obj_fnptr_a.c case_sensitive_unit.pas kwarg_overload_unit.pas lib_synapse_tls_loopback.pas shadow_b.pas strhelperprobe.pas test_a_call_\u2026",
+  "optdiff#shard0/12": "OPT DIFF -O3: test/test_double_to_integer_lvalue_rounds.pas (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_field_get_by_name.pas | optdiff skip TIMEOUT-O0: devtest_tls_native_seam.pas test_emit_obj.pas test_halt_from_worker_thread.pas test_header_static_body_ffi_control_explicit.pas | optdiff skip BUILD-FAIL: c_obj_fnptr_a.c case_sensitive_unit.pas kwarg_overload_unit.pas lib_synapse_tls_loopback\u2026",
   "optdiff#shard10/12": "OPT DIFF -O3: test/c_crtl_glob.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_rtti_kind_numbering.pas | optdiff skip TIMEOUT-O0: c_unsigned_const_guard_folds.c test_qplus_narrowing_store.pas | optdiff skip BUILD-FAIL: c_ir_unsupported_reports_the_real_line.c c_obj_data_only.c c_obj_runtime_state_a.c c_pasunit_ansistring_result_fail.c c_unclosed_unsized_2d_init_fail.c c_undeclared_in_file_scope_init_\u2026",
   "optdiff#shard2/12": "OPT DIFF -O3: test/c_crtl_glob_no_leak.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_thread_writeln_interleave.pas | optdiff skip TIMEOUT-O0: test_target_name_in_external_refusal.pas | optdiff skip BUILD-FAIL: aoc_ovl_unit_fmt.pas c_cpp_macro_arg_shapes.c c_pasunit_two_overloads_fail.c cabi_bridge.c cabi_intra.c csqlite_layout_probe.c cxtensa_obj.c isas_b325_base.pas lib_klondike.pas library_export\u2026",
-  "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti.pas test_rtti_method_reflection_b254.pas | optdiff skip TIMEOUT-O0: test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: c_obj_data_dup_a.c c_obj_data_import.c c_obj_import_pascal.pas c_pas\u2026",
+  "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti.pas test_rtti_method_reflection_b254.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: c_obj_data_dup_a.c c_obj_data_import.c c_obj_impor\u2026",
   "test-fpjson#src:tools/install_lib_candidates.sh": "pascal26:3944: error: undefined variable (UTF8Encode) | in: testjsondata.pp | near: ( O , '{ \"A\" : \"' + UTF8Encode >>> ( S ) | pascal26:3963: error: undefined variable (UTF8Encode) | in: testjsondata.pp | near: ( O , '{ \"A\" : \"' + UTF8Encode >>> ( W )",
   "test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), ca814b0aabcc (stamp read back; sources match it) | test-sqlite-threads: building threadsafe sqlite (aarch64) ... | ok: $TMP  [code=7274264B  data=87056B  bss=126996B  procs=4594] | test-sqlite-threads: FAIL aarch64 (TIMED OUT after 189s; TESTMGR_TIME_SCALE=1.00 TESTMGR_LOAD_SCALE=1.58 cap=200s) | partial output: []",
   "tools-devtest#00": "FAIL: tools/npy_cross_target_expectation_devtest.py | ok   t_the_population_is_still_there          4499 blocks, 119 cross-target .npy sources, 4135 expectations | ok   t_no_cross_target_expectation_drift      119 sources asserted identically in every target | FAIL t_no_new_binary_name_collision           1 NEW $(TESTTMP) binary name(s) written by two different sources: test_nilpy_staticm26. Two \u2026"
@@ -15159,14 +15159,14 @@
  },
  "last": {
   "code_fp": "883da23adb0a",
-  "date": "2026-09-10T17:26:13Z",
+  "date": "2026-09-10T17:51:43Z",
   "deadline": 4547.4,
   "sha": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 217.1
+  "verdict": "RED",
+  "wall": 1514.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15205,15 +15205,15 @@
    "wall": 187.8
   },
   "opt": {
-   "code_fp": "01dfa7863dc1",
-   "date": "2026-09-10T09:09:36Z",
+   "code_fp": "883da23adb0a",
+   "date": "2026-09-10T17:51:43Z",
    "deadline": 4547.4,
-   "sha": "53dc6c586a929d91ee41d0a5e33a82c8d700aee3",
+   "sha": "6cf032a4dbe04d49ce044791e19708c55c0a4e68",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 1515.2
+   "wall": 1514.7
   },
   "slow": {
    "code_fp": "883da23adb0a",
