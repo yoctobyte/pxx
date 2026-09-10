@@ -83,6 +83,15 @@ BusyBox's own build compiles it. The test is differential —
 compares both binaries' output across 132 cases, and PXX's is byte-identical.
 This is a claim about a configuration, not about all 394 applets.
 
+The wider configuration has been compiled and checked too, and it is a **separate
+axis rather than a bigger version of this one**: on 2026-09-04, a 394-applet
+BusyBox built as 521 translation units on both x86-64 and i386, each binary
+byte-identical to a GCC oracle *of its own width* across 938 differential cases.
+That build is linked with GCC, so it is dynamic. Breadth is therefore proved with
+a conventional link, and the libc-free link is proved at 19 applets — the two
+have not yet been combined, and that is why this image ships the smaller set
+rather than the larger one.
+
 **The userland links no external library.** `tools/link_freestanding.sh` links
 those objects with `ld` and a small entry stub into a static executable with no
 `PT_INTERP`; `ldd` reports *not a dynamic executable*, and the assembled image
