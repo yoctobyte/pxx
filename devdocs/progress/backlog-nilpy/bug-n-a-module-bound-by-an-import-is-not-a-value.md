@@ -9,7 +9,7 @@ created: 2026-09-10
 found-by: frankB
 tags: [nilpy, imports, lekkerzeilen, values]
 blocked-by: []
-summary: "`from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against."
+summary: "`from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against. FORK ANSWERED 2026-09-11: NO runtime module object is required. The whole population is 5 sites in ONE file (3 static member reads, 2 getattr); `import ... as` already serves the 3, and the 2 getattr sites need a compile-time special form (measured: getattr on a unit alias fails at the ARGUMENT, not the lookup). The claim that `_backend` is read from four other modules is FALSE -- those read the public surface assigned from it. Recommended: getattr special form + seam rewritten with `as`."
 ---
 
 # Measured 2026-09-10, compiler `ca814b0aabcc`, tree at `5fb6e3d57` + the dead-path fix
@@ -250,3 +250,76 @@ rewritten seam compiled, ran the handler, reported itself as `pxx`, and bound
 alias and the table is first-wins. **Silent, and in the seam whose only job is to
 say which backend is live.** Fixed in `7ce61a896`; option 2 was untakeable
 before it and nothing in this ticket would have said so.
+
+## THE NUMBER THE FORK WAS WAITING ON — frankuser, 2026-09-11, compiler `35dce79343cd`, tree `bb8acc735`
+
+The addendum above names the measurement to get before choosing option 2: *"how
+many of the 99 module bindings are read through a variable, not how many are used
+as values."* Run. **Five sites, ONE file**, and they are exactly the five frankZ
+enumerated by hand — independent agreement from a written filter:
+
+```
+  lekkerzeilen/platform/__init__.py:102  _backend.gl              static
+  lekkerzeilen/platform/__init__.py:103  _backend.open_window     static
+  lekkerzeilen/platform/__init__.py:151  _backend.probe           static
+  lekkerzeilen/platform/__init__.py:112  getattr(_backend, ...)   RUNTIME
+  lekkerzeilen/platform/__init__.py:136  getattr(_backend, ...)   RUNTIME
+```
+
+The bare-value count came out at the same two sites frankB reported (`:95 _pxx`,
+`:97 _ctypes_backend`), from a filter written independently, which is the only
+reason I trust either number.
+
+**AND THE STATED REASON OPTION 2 IS "NOT FREE" IS FALSE.** The ticket says *"`_backend`
+is a module global read from four other modules — every one of those reads has to
+become the alias too, or they wall on the same thing one file further out."*
+Measured across the whole corpus: **`_backend` is read in exactly one file.**
+Nothing outside `platform/__init__.py` names it, and nothing reads
+`platform._backend` or imports it. The four other modules read the PUBLIC surface
+— `gl`, `open_window`, `probe()`, `backend_name()` — which are module-level names
+*assigned from* `_backend` at :102/:103 and returned at :142/:151. Those are
+ordinary module attributes and option 2 does not touch them. So option 2 is
+contained to one file and five sites, not spread across the corpus.
+
+I cannot tell whether the "four other modules" line was a prediction or a
+misreading of the public surface; either way it was the load-bearing objection
+and it does not hold.
+
+**OPTION 3's UNMEASURED HALF, MEASURED — and it does NOT work today.** The ticket
+says *"nobody has looked at whether the `getattr` door can see a unit qualifier at
+all."* It cannot, and it fails one step earlier than option 3 assumes:
+
+```python
+from . import two as backend
+f = getattr(backend, "B", None)
+#           ^ pascal26:3: error: undefined variable (backend)
+```
+
+The error is on the ARGUMENT, not on the lookup. A unit alias is not a resolvable
+name in expression position, so there is nothing for a `getattr` handler to
+receive — option 3 has to intercept `getattr(<name>, <literal>, <default>)` as a
+SPECIAL FORM, before generic argument evaluation, and ask whether `<name>`
+resolves to a unit alias. That is contained (one builtin call shape, receiver and
+name both compile-time) but it is not the table entry the option describes.
+
+**AND OPTION 2 ALONE DOES NOT CLEAR THE WALL, which the three-option list does not
+say.** Rewriting the seam with `as` fixes :102/:103/:151 and leaves :112 and :136
+failing on the same `undefined variable`. The only way to finish option 2 without
+option 3 is to rewrite those two sites as direct member reads — and **that is
+gated on task-b (p85)**, because a direct `backend.open_audio` cannot compile
+while `_pxx.py` is the selected backend and does not define it. So:
+
+- **option 2 + option 3** clears it now, in the compiler, no corpus dependency;
+- **option 2 alone** clears it only after task-b lands the openers in `_pxx.py`.
+
+**The yes/no the fork asked for, answered: NO runtime module object is required.**
+task-b's own summary says `_pxx` will expose *"`gl`, `open_window`, `probe`, audio
+and controller openers"* — so once it lands, both backends define both probed
+names and the two `getattr` capability probes are **vestigial**, detecting an
+absence that no longer exists. Building open-world dispatch over units for two
+probes of a stub that p85 is about to fill is the wrong trade in both directions.
+
+**Recommendation: option 3 (the `getattr` special form) in the compiler, plus the
+seam rewritten with `as`.** Five sites, one corpus file, and no value
+representation change. Not claimed: I have not looked at where the builtin-call
+path lives, so "contained" is about the SHAPE of the change and not a diff size.
