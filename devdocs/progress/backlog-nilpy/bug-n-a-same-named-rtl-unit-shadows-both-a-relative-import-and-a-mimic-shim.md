@@ -300,3 +300,94 @@ in the same breath. **If he reads it the other way, arm 1 of this ticket becomes
 a Track U question and lekkerzeilen's `platform/` package needs renaming
 instead** — which is the consequence to weigh, and it is a rename in a consuming
 program rather than a compiler change.
+
+## ARM 1'S MECHANISM IS WRONG AND ITS POPULATION IS TWO, NOT NINETEEN — frankZ, 2026-09-11, compiler `fe40bf55e141`
+
+Not a criticism of the ticket, which is the reason any of this was findable. But
+whoever takes arm 1 should not start from its stated cause, because I did and it
+cost a rebuild-and-measure cycle to find out.
+
+**THE DOT IS IRRELEVANT.** Arm 1 says *"a relative import (pyRelLevel > 0) must
+never consult the global unit namespace at all — the program said `.`"*. That is
+a true statement about intent and it is not this bug. A **bare** sibling import
+fails identically:
+
+```
+dir/platform.py + dir/main.py:  import platform          -> no member MARKER
+dir/pathlib.py  + dir/main.py:  import pathlib           -> sibling wins, 27
+```
+
+Same directory, same shape, no package and no dots. **I implemented arm 1 as
+written** — closed the Pascal chain and the host-header chain for
+`pyRelLevel > 0` — rebuilt, and it measured as **NO CHANGE on every name I
+could construct**, before and after, with the fix stashed and restored. Dropped
+rather than landed: a narrowing no probe can distinguish is speculative code.
+
+**THE POPULATION IS TWO.** The nineteen is a count of NAME collisions, not of
+the symptom. Measured, all nineteen, each with a sibling `<name>.py` defining
+`MARKER = 27`:
+
+| result | names |
+| --- | --- |
+| **sibling wins, correct** | ast atexit base64 collections configparser html http io json math pathlib re subprocess tempfile tkinter types zlib — **17** |
+| **shadowed** | **platform**, **random** — 2 |
+
+And the two fail **differently**, so they are probably not one mechanism:
+
+```
+platform   no member MARKER came of the qualifier platform
+random     undefined variable (random)
+```
+
+`PyRtlUnitServesPython` does not explain it either, which is the tell that sent
+me looking elsewhere: `platform` is NOT in that list and `random` IS, and both
+misbehave; `pathlib` is in it and `zlib` is not, and both are fine.
+
+## WHAT THE EVIDENCE POINTS AT INSTEAD — a hypothesis, stated as one
+
+**The door is the already-compiled guard, not the chain.** `ParseUsesUnit`
+scans `CompiledUnitKey` for the name and takes an early exit before any `.pas` /
+`.py` / header probe runs. Nothing in the chain can be reordered to beat it.
+
+What makes `platform` different from the seventeen: **the RTL pulls it in
+itself.** `grep` for units naming it in a `uses` clause —
+
+```
+platform  25      base64/http/json/math/random/zlib  2-3      the other 13  0
+```
+
+`lib/rtl/platform.pas` is the PAL facade and `baseunix.pas` and `classes.pas`
+are among the 25, so it is compiled in essentially every program before the
+program's own import is parsed. `platform.PAL_STDOUT` binds and prints `1`,
+which says the import reached the Pascal unit; `pathlib.PAL_STDOUT` does not.
+
+**Not established:** that the guard is where it is decided, and nothing about
+`random`, whose message says the name did not bind as a qualifier at all rather
+than binding to the wrong thing. Both want the same next step and it is one
+step: print what `ParseUsesUnit` resolves for these two names, rather than
+inferring it from which members bind.
+
+## THE COROLLARY THAT MATTERS FOR RANKING
+
+If the door is "already compiled", then **the fix cannot be a precedence table**
+in the general case — the owner's ruling (a hardcoded per-module preference
+table) is about arm 2 and stays right for arm 2, but a table consulted in the
+chain never runs for an ambient unit. Whatever lands has to act at or before the
+guard.
+
+## THE CORPUS SHAPE, ISOLATED, WITH ITS OWN CONTROL IN THE SAME RUN
+
+lekkerzeilen's `platform/` is a package DIRECTORY, not a flat module, and that
+was worth checking separately rather than assuming:
+
+```python
+# pkg/__init__.py
+from . import platform          # pkg/platform/__init__.py: KEY_ESCAPE = 27
+from . import seam              # pkg/seam/__init__.py:     KEY_ESCAPE = 27
+print("pkgdir", platform.KEY_ESCAPE, seam.KEY_ESCAPE)
+```
+
+CPython: `pkgdir 27 27`. pxx: `no member KEY_ESCAPE came of the qualifier
+platform`, with `seam` — the identical package one line down — fine. **The
+control is inside the run**, so it cannot pass by having been dragged in by
+something the failing half needed.
