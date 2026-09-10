@@ -24168,6 +24168,62 @@ adler32` **while the decoded bytes were provably correct** — which is the one
 place nobody looks, because the checksum is what you trust to tell you the bytes
 are wrong.
 
+### AND THE OTHER HALF: A FIX THAT CHANGES NOTHING HAS NOT BEEN PLACED WHERE THE THING IT REPAIRS HAPPENS
+
+Measured 2026-09-11 (frankZ, `c0601dcef`), and it is in this section rather than
+beside it because **a reader holding only the sentence above will search the
+right unit forever.** That one says: something else answers to that name — go
+find WHAT. This one says: the right code may be answering and you may be editing
+it at the wrong POINT — go find WHERE. Neither is reachable from the other, and
+the two failures are indistinguishable from the outside, because both look like
+a correct edit producing no change.
+
+**The case.** `from . import platform` beside a package's own `platform/` bound
+`lib/rtl/platform.pas`, and a member read answered `no member KEY_ESCAPE came of
+the qualifier platform`. The ticket prescribed the obvious repair and it is the
+one anybody would write: a relative import must not consult the global unit
+namespace, so close the Pascal and host-header chains when `pyRelLevel > 0`.
+Built, self-hosted, and measured as **exactly no change** — same message, same
+line, on every row of the population.
+
+It was the right unit, the right routine, and the right idea. `ParseUsesUnit`
+scans `CompiledUnitKey` for an already-compiled unit and **returns before any
+`.pas`, `.py` or host-header probe is attempted**, so reordering those probes
+cannot be observed by any input: `platform.pas` is named in the `uses` of 25 RTL
+units, so it is already compiled in essentially every program before the
+program's own import is ever parsed. The edit was fifty lines downstream of the
+decision.
+
+**What the negative result was actually telling me.** The playbook already says
+a no-change is data about your model. The specific thing it was data about here
+was not *what* answers — the unit was correctly identified from the first
+minute — but *when*. A guard that returns early is invisible to every experiment
+that varies what happens after it, and it is invisible in the direction that
+feels like progress: the code you edited is genuinely on the path, it is
+genuinely reached in other cases, and it is genuinely wrong.
+
+**The discriminator, and it is one command.** Put a probe on the line you edited
+and confirm it EXECUTES for the failing input before you conclude anything about
+the edit. `PXXDBG` exists for this. An edit whose line never runs and an edit
+whose line runs and is ineffective are the same observation from the outside and
+have nothing else in common.
+
+**And the disposal matters as much as the diagnosis.** The chain edit was
+**dropped, not landed**. It was defensible, it compiled, it self-hosted, and no
+probe could distinguish the tree with it from the tree without it — which makes
+it speculative code by definition, and speculative code in a resolver is how the
+next reader concludes the door is already closed. Landing it "since it is
+probably right anyway" would have left the real door open behind a plausible
+guard, which is strictly worse than leaving it open in the open.
+
+**Both halves of this section share a third failure and it is the one that made
+each expensive: the positive control passed.** `base64.b64encode` shared the
+marshalling shape and not the route; the chain edit shared the compiler, the
+self-host property and the resolver, and not the point in the control flow where
+the decision is taken. Neither control was weak and neither was drawn from the
+wrong population. **A control can only exonerate what it SHARES with the
+subject** — so before letting one narrow the search, name what it does NOT share.
+
 ## TWO TESTS WITH FULL MARGINAL COVERAGE AND AN EMPTY INTERSECTION — each one looks like the test that would have caught it
 
 Sibling of *"Do not read a green as coverage"* and of *"a comparison between two
