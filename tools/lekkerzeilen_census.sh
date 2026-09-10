@@ -99,7 +99,44 @@ for m in $MODULES; do
   fi
 done
 
-[ "$QUIET" = 1 ] || sed 's/^/  /' "$WORK/rows"
+# ---- cascade marking -------------------------------------------------------
+# AN ERROR RAISED INSIDE AN IMPORTED MODULE PRINTS THAT MODULE'S LINE NUMBER AND
+# NO FILE NAME, so the reader supplies the file they invoked and two subjects look
+# like two defects. The tell is free and it is the line number: when two subjects
+# report the SAME line with the SAME message, suspect one site reached through an
+# import before believing a shared cause.
+#
+# Measured on this corpus 2026-09-10 -- atlas.py and world.py both say 188, and
+# only world.py contains the construct; gauges.py and __main__.py both say 174,
+# and __main__.py has none of it. Four sqlite3 rows, TWO sites. An earlier ticket
+# ranked a one-site fix as gating two modules on exactly this reading, and
+# frankB, who was compiling the modules one at a time, flagged it here before the
+# number went anywhere.
+#
+# This marks the suspicion; it does not resolve it. Confirming means grepping the
+# subject for the construct, which needs to know what the construct IS -- so the
+# row says `cascade?` and names its partners, and the reader does the one grep.
+mark_cascades() {
+  while IFS= read -r row; do
+    case "$row" in
+      FAIL*)
+        sig="${row#*:: }"
+        n=$(grep -cF ":: $sig" "$WORK/rows" || true)
+        if [ "${n:-0}" -gt 1 ]; then
+          peers="$(grep -F ":: $sig" "$WORK/rows" | sed 's/^FAIL \([^ ]*\) .*/\1/' \
+                   | grep -vxF "$(printf '%s' "$row" | sed 's/^FAIL \([^ ]*\) .*/\1/')" \
+                   | tr '\n' ' ')"
+          printf '%s\n      ^ cascade? %d subjects report this identical line; likely ONE site reached through an import (also: %s)\n' \
+            "$row" "$n" "$peers"
+        else
+          printf '%s\n' "$row"
+        fi ;;
+      *) printf '%s\n' "$row" ;;
+    esac
+  done < "$WORK/rows"
+}
+
+[ "$QUIET" = 1 ] || mark_cascades | sed 's/^/  /'
 
 echo
 printf 'lz-census: %d of %d modules compile\n' "$NPASS" "$((NPASS+NFAIL))"
