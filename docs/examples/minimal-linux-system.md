@@ -95,6 +95,31 @@ checkout, and the running system loads nothing.
 distribution kernel, and "minimal Linux system" means a minimal *userland* on a
 stock kernel.
 
+## What it depends on
+
+The interesting part of this image is what is *not* in the list. To rebuild the
+userland you need PXX's source and BusyBox's source; to run it you need a kernel.
+
+| To | You need |
+| --- | --- |
+| **run the system** | the kernel and this image — no libc, no dynamic loader, no distribution userland, nothing fetched at boot |
+| **rebuild the userland from source** | PXX's own source, BusyBox's source, and `as` and `ld` from binutils |
+| **rebuild the kernel** | not us: the image boots a prebuilt distribution kernel |
+| **re-run the differential** | GCC, as the test's reference build — an oracle, not a build input |
+
+Binutils is on that list for one reason, worth naming rather than hiding: PXX
+cannot yet consume an object file, so the 86 BusyBox objects are combined by
+`ld`, and `as` assembles the entry stub (`tools/pxx_freestanding_start.s`, which
+is our own source). Everything *compiled* is compiled by PXX. Those two are
+tools rather than libraries — nothing from outside the checkout ends up inside
+the result, which is the claim the freestanding link asserts.
+
+On licensing, since a self-contained image invites the question: everything PXX
+contributes is MPL-2.0 (compiler) and zlib (runtime and libraries), so it imposes
+nothing on what you build. The two third-party components are both GPL — the
+Linux kernel, and BusyBox 1.36.1, which is GPL-2.0-**only**. See
+[Licensing](../reference/licensing.md) for PXX's own terms.
+
 ## Reproducing it under VirtualBox
 
 The ISO is a BIOS+EFI hybrid, so one file boots either firmware. Both paths are

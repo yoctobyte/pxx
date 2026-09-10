@@ -16,6 +16,15 @@ before treating a successful compile as a production-ready result.
   language or RTL behavior may compile incorrectly or not compile at all.
 - Error messages are improving, but some unsupported constructs still fail with
   compiler-internal wording.
+- **The runtime reserves a 256 MiB heap arena.** The first heap allocation in
+  any PXX program maps 256 MiB in a single `MAP_PRIVATE|MAP_ANONYMOUS` request.
+  Pages fault in lazily, so actual use stays small — a string-concatenating test
+  program peaks at 392 KB resident and the compiler at about 15 MB compiling it
+  — but the mapping is requested *without* `MAP_NORESERVE`, so a small VM,
+  container, or memory-capped environment can refuse it, and the program then
+  exits with `pxx: out of memory (heap arena mmap failed)` before doing any
+  work. A program that allocates nothing (a `writeln` of a literal) makes no
+  such request. Measured 2026-09-10 on x86-64 Linux.
 
 ## Language and compatibility
 
