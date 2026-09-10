@@ -3513,6 +3513,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-lua-cross-compiler-srchash | C | 70 | regression | regression: test-lua-cross#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ e` (auto-filed by twatch) | — |
 | regression-test-lua-cross-pascal26 | A | 70 | regression | regression: test-lua-cross#src:compiler/.pascal26.fixedpoint red at b695bcb4b192 (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
+| regression-test-nilpy-beside-the-source-wins | N | 70 | regression | regression: test-nilpy#src:test/ffi_local/beside_the_source_wins.npy at a33eb37b4b16 in step 9/12, `out=$(./compiler/pascal26 -Itest/ffi_headers/ test/test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist.npy …` (auto-filed by twatch) | — |
 | regression-test-nilpy-callbacks | N | 70 | regression | regression: test-nilpy#src:examples/tk/callbacks.npy red at 8f629af38632 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
