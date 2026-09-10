@@ -42,7 +42,7 @@ the same name in your program shadows the built-in version.
 | [`json`](./json.md) | JSON parser / serializer support. |
 | `httpjson` | HTTP helpers for JSON payloads. |
 | `base64` | Base64 encoding and decoding. |
-| `png` / `image` | Image decoding and simple bitmap support. |
+| `png` / `image` | PNG encoding **and** decoding for non-interlaced 8-bit RGBA (colour type 6), plus a simple RGBA bitmap type. Encoding needs no compression library; decoding accepts stored, fixed-Huffman and dynamic-Huffman deflate streams and all standard RGBA scanline filters. |
 | `zlib` | Compression support. |
 
 ## Networking and async

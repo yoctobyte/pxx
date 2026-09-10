@@ -79,7 +79,8 @@ The PXX RTL and standard libraries pass a broad smoke suite, including:
 
 - **Core**: strings, `sysutils`, `classes`, collections, streams, formatting,
   paths, big integers, fixed/rational numerics, bitsets, complex numbers.
-- **Data**: JSON, base64, a PNG encoder, an embedded VM / interpreter samples.
+- **Data**: JSON, base64, a PNG encoder *and* decoder (round-tripped in the
+  gate), an embedded VM / interpreter samples.
 - **Cryptography**: SHA-256/512, HMAC/HKDF, ChaCha20-Poly1305, X25519, AES-GCM,
   RSA and Ed25519 and ECDSA-P256 verification, X.509.
 - **Networking**: a full **TLS 1.3** stack (key schedule, record layer,
