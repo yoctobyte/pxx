@@ -12737,6 +12737,11 @@ begin
   else if dotted = 'math.asin' then Result := 'ArcSin'
   else if dotted = 'math.acos' then Result := 'ArcCos'
   else if dotted = 'math.atan' then Result := 'ArcTan'
+  { math.atan2 is the same pure rename and it was held out of this table for a
+    month on a measurement that was never a measurement -- see the note beside
+    math.pow below, which is where the claim lived. lekkerzeilen reaches it
+    from 7 of its 33 modules, more than any other single missing name. }
+  else if dotted = 'math.atan2' then Result := 'ArcTan2'
   { ...and the five that need a container or an exact algorithm rather than a
     rename. All of them are pure arithmetic, which is what lets them live in a
     builtin unit at all — see math.log's note. }
@@ -12787,10 +12792,24 @@ begin
     separate 1-ulp path (bug-nilpy-float-pow-loses-a-ulp-vs-libm) and is NOT
     what this resolves to.
 
-    math.atan2 is still absent, and stays absent: ArcTan2 is 1 ulp off CPython
-    for atan2(0.5, 1) (0.46364760900080615 vs ...09), so mapping it would be a
-    silently wrong value in the last place. Blocked on a correctly-rounded libm,
-    not on this table.
+    math.atan2 IS here now, a few lines up. THIS BLOCK USED TO SAY IT WAS
+    BLOCKED ON A 1-ULP GAP AND THE GAP DID NOT EXIST -- kept, dated and
+    corrected rather than deleted, because a hazard block that stops a reader
+    generates nothing that could reveal it was wrong, and this one stopped
+    every reader for a month. It said: "ArcTan2 is 1 ulp off CPython for
+    atan2(0.5, 1) (0.46364760900080615 vs ...09)". Those two figures are the
+    SAME double -- a repr beside a fixed-width :0:20 readout -- and the
+    instrument manufactured the disagreement. Re-measured 2026-09-10:
+    3FDDAC670561BB4F in both, which test/lib_math_correctly_rounded.pas had
+    already been asserting on the bits since the dd port landed.
+
+    What WAS wrong was something the ticket never mentioned: ArcTan2 answered
+    NaN whenever either operand passed 1.3393857490036326e300, because the
+    Dekker split inside Dd2Prod overflows there, and again for every infinite
+    operand. 904 of 6000 random pairs. Both are fixed in lib/rtl/math.pas and
+    the boundary rows are the positive control in
+    test/lib_math_correctly_rounded.pas.
+    bug-b-arctan-answers-nan-above-1e300-which-is-why-math-atan2-is-still-refused
     bug-n-math-trunc-and-log-need-frontend-intercepts }
   else if dotted = 'math.pow' then Result := 'Power'
   { exp/sinh/cosh are pure NAME matches — `import math` already reached the

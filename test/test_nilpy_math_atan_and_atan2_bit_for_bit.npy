@@ -1,0 +1,111 @@
+# math.atan / math.atan2 against CPython, BIT FOR BIT.
+#
+# The oracle is not a stored .expected: the Makefile row runs THIS file under
+# CPython and diffs, so it is regenerated on every run and cannot go stale.
+#
+# ## Why a printed comparison is a bit comparison here, and only because of
+# ## HOW it prints
+#
+# NilPy's float repr is the SHORTEST decimal that round-trips -- CPython's own
+# rule, pinned by test_nilpy_float_repr_roundtrip. Shortest-round-tripping repr
+# is a bijection with the bit pattern for every finite double, so two lines
+# agree exactly when the two doubles agree in all 64 bits.
+#
+# That is a property of THIS readout and not a general licence, and the
+# opposite readout is what kept math.atan2 out of the frontend's table for a
+# month: the ticket recorded atan2(0.5, 1) as 0.46364760900080615 against
+# CPython's 0.4636476090008060*9* and called it a 1-ulp gap. Those are the SAME
+# double printed two ways -- a repr beside a fixed-width :0:20 readout -- and
+# the instrument manufactured a disagreement out of one value. Re-measured
+# 2026-09-10: 3FDDAC670561BB4F in both.
+#
+# So the last section prints the RAW BYTES through struct as well. If float
+# printing ever changes, the repr rows go red for a formatting reason and the
+# struct rows stay honest.
+#
+# DELIBERATELY ABSENT: negating a float that a LIST or a PARAMETER holds, where
+# the value may be zero. `-x` for a local variable or a literal is correct, but
+# through a Variant -- `-lst[0]`, or `-a` inside a def -- +0.0 negates to +0.0
+# where CPython gives -0.0
+# (bug-a-unary-minus-on-a-variant-loses-the-sign-of-zero-because-the-correct-helper-is-not-wired). Every sign
+# below is therefore written out rather than computed, which is why the tables
+# list both signs instead of looping over one and negating it.
+
+import math
+import struct
+
+# ---- the positive control, and it is the whole reason this file exists ------
+# The Dekker split inside the RTL's Dd2Prod multiplies by 2^27+1, which is +Inf
+# for |a| > DBL_MAX/(2^27+1) = 1.3393857490036326e300. DdAtan inverts a large
+# argument through DdDiv, whose first step is that multiply, so ArcTan answered
+# NaN above the threshold while CPython answers pi/2.
+#
+# These rows are drawn from the population the defect is IN -- one below the
+# threshold, four above -- and under the unfixed RTL the four above print nan
+# against CPython's 1.5707963267948966. A sweep of ordinary-sized arguments
+# cannot fail here, however many rows it has.
+print(math.atan(1.33e300))
+print(math.atan(1.34e300))
+print(math.atan(1e301))
+print(math.atan(1.7976931348623157e308))
+print(math.atan(-1.7976931348623157e308))
+
+# ...the same threshold reached through atan2, either operand in turn. The
+# first row is the one whose right answer is NOT pi/2: a row whose correct
+# value collides with the value every other row gives cannot tell a working
+# reduction from a saturating one.
+print(math.atan2(1.0, 1e301))
+print(math.atan2(1e301, 1.0))
+print(math.atan2(1e301, 1e301))
+print(math.atan2(-1e308, 1e308))
+print(math.atan2(1e-301, 1e301))
+print(math.atan2(1e-301, -1e301))
+
+# ...and the second defect in the same function: |y|/|x| past DBL_MAX gave the
+# double-double divide an Inf to subtract from an Inf.
+print(math.atan2(1e301, -1e-301))
+print(math.atan2(-1e301, 1e-301))
+print(math.atan2(1.7976931348623157e308, 5e-324))
+
+# ---- atan over the whole magnitude range, both signs written out ------------
+xs = [0.0, -0.0, 1e-320, -1e-320, 1e-300, -1e-300, 1e-100, 1e-16, -1e-16,
+      0.0009765625, -0.0009765625, 0.1, -0.1, 0.25, 0.4999999999999999, 0.5,
+      0.5000000000000001, -0.5, 0.75, 0.9999999999999999, 1.0,
+      1.0000000000000002, -1.0, 1.5, -1.5, 2.0, 3.0, -3.0, 7.0, 16.0, 100.0,
+      1e6, 1e16, -1e16, 1e100, 1e200, 1e300, -1e300]
+for x in xs:
+    print(x, math.atan(x))
+
+# ---- a dense walk across both of DdAtan's seams -----------------------------
+# It takes a different route for t > 1 (inverting around pi/2) and a different
+# number of half-angle steps as t crosses 2^-4, so the seams are at 1.0 and
+# 0.0625. Both offsets are powers of two, so the arithmetic building v is exact
+# in either language and the walk itself cannot introduce a difference.
+i = 0
+while i < 64:
+    v = 0.03125 + i * 0.0625
+    print(v, math.atan(v))
+    i = i + 1
+
+# ---- atan2 across all four quadrants and both axes --------------------------
+ys = [0.0, -0.0, 1.0, -1.0, 0.5, -0.5, 3.0, -3.0, 1e-8, -1e-8, 1e8, -1e8]
+xs2 = [0.0, -0.0, 1.0, -1.0, 0.25, -0.25, 7.0, -7.0, 1e-8, -1e-8, 1e8, -1e8]
+for y in ys:
+    for x in xs2:
+        print(y, x, math.atan2(y, x))
+
+# ---- the value the retired hazard note was written about --------------------
+print(math.atan2(0.5, 1.0))
+print(math.atan2(1.0, 1.0))
+print(math.atan2(-1.0, -1.0))
+
+# ---- integer arguments, which is how a program actually writes it -----------
+print(math.atan2(1, 1), math.atan2(0, 1), math.atan2(3, 4), math.atan(1))
+
+# ---- RAW BYTES, so the claim does not rest on the repr rule alone -----------
+bits = [math.atan(1.34e300), math.atan(0.5), math.atan(2.0),
+        math.atan2(0.5, 1.0), math.atan2(1.0, 1e301),
+        math.atan2(-1e301, 1e-301), math.atan(1e-300),
+        math.atan2(-1e308, 1e308)]
+for b in bits:
+    print(struct.pack(">d", b))

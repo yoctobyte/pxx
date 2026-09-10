@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 summary: "math.trunc must return an int like CPython; math.log(x, base) must be CPython's unsnapped quotient rather than the FPC-faithful LogN; and math.pow/math.copysign cannot be RTL names at all because they hijack libc in every C program"
-status: working
+status: done
 owner: frankB
 ---
 
@@ -256,3 +256,57 @@ no re-pin.
 
 ## Log
 - 2026-08-14 — resolved, commit 8241847b2.
+
+## Resolved 2026-09-10 — the last of the five names, `math.atan2`, and the objection that held it was not a measurement
+
+This ticket's own 2026-08-14 resolution said:
+
+> **`math.atan2` stays absent, deliberately.** Measured on this box:
+> `ArcTan2(0.5, 1.0)` = 0.46364760900080615 against CPython's
+> 0.4636476090008060**9** — 1 ulp.
+
+**Those two figures are the same double.** `repr` prints
+`0.4636476090008061`; a 20-place fixed readout prints
+`0.46364760900080609352`. Re-measured on the bits: `3FDDAC670561BB4F` in
+both — and `test/lib_math_correctly_rounded.pas` has been asserting that exact
+constant, by name, since the double-double port landed. The objection was a
+readout collision, and it is the mirror of the one CLAUDE.md records under
+"could the way I am PRINTING this turn a disagreement into an agreement?" —
+here the printing manufactured a DISAGREEMENT out of one value.
+
+The cost of the mistake was not the ulp. It was that the note went into
+`compiler/pyparser.inc` as a hazard block, and **a reader who obeys a hazard
+block generates nothing that could reveal it was wrong.** It held `math.atan2`
+out of the table for a month while it was the largest single missing name in
+the lekkerzeilen corpus — 7 of 33 modules.
+
+### What WAS wrong, and this ticket never mentioned it
+
+`ArcTan2` answered NaN whenever either operand passed
+1.3393857490036326e300, and again for every infinite operand, and lost most of
+its precision for a subnormal first argument. 913 NaN rows plus 9 wrong rows in
+6000 random pairs. All three fixed in `lib/rtl/math.pas`; the account is in
+[[bug-b-arctan-answers-nan-above-1e300-which-is-why-math-atan2-is-still-refused]].
+After the fix: **0 of 6000** differ from glibc on `atan2`, `atan(y)` and
+`atan(x)` alike.
+
+So the ticket was right that `math.atan2` should not have been mapped in August
+and wrong about every part of why. A rounding gap that did not exist stood in
+for three real defects that did.
+
+### What landed here
+
+`else if dotted = 'math.atan2' then Result := 'ArcTan2'`, beside `math.atan`.
+No domain guard and no overflow guard: `atan2` has no domain error and cannot
+overflow, which is why it is a plain rename and not a `pymath_*` intercept like
+`trunc`, `log(x, base)`, `pow` or `copysign`. The hazard block is corrected in
+place and dated rather than deleted, so the next reader sees what it claimed
+and why that was wrong.
+
+Guarded by `test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy`, oracled
+against live CPython on the same file rather than a stored `.expected`, with
+the 1.33e300/1.34e300 pair as the positive control and the raw `struct` bytes
+printed beside the reprs so the claim does not rest on the formatter.
+
+**All five names in this ticket's title are now done.**
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

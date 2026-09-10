@@ -25,6 +25,7 @@ uses math, sysutils;
 
 type
   PI64 = ^Int64;
+  PDbl = ^Double;
 
 var
   failures: Integer;
@@ -32,6 +33,15 @@ var
 function Bits(x: Double): string;
 begin
   Result := IntToHex(PI64(@x)^, 16);
+end;
+
+{ A double named by its BITS. The decimal spelling of an extreme or subnormal
+  value cannot be trusted through Val, and writing one here would make this
+  file measure the parser as much as the function -- see the note beside the
+  subnormal rows below. }
+function FromBits(v: Int64): Double;
+begin
+  Result := PDbl(@v)^;
 end;
 
 procedure CheckBits(got: Double; const want, what: string);
@@ -44,7 +54,7 @@ begin
 end;
 
 var
-  x, y2: Double;
+  x, y2, inf: Double;
 begin
   failures := 0;
 
@@ -300,6 +310,117 @@ begin
   CheckBits(ArcTan2(x, y2), '8000000000000000', 'ArcTan2(-0, 1) = -0');
   x := -0.0; y2 := 0.0;
   CheckBits(ArcTan2(x, y2), '8000000000000000', 'ArcTan2(-0, +0) = -0');
+
+  { ---- ArcTan / ArcTan2 AT THE EXTREMES ----
+
+    THE DEKKER SPLIT OVERFLOWS LONG BEFORE THE PRODUCT DOES. Dd2Prod multiplied
+    by 2^27+1, which is +Inf for |a| > DBL_MAX/(2^27+1) =
+    1.3393857490036326e300, so `sa - (sa - a)` was Inf - Inf = NaN for an
+    ordinary argument whose product is finite and small. DdAtan inverts a large
+    argument through DdDiv, whose first step is that multiply, so ArcTan and
+    ArcTan2 answered NaN above the threshold -- 904 of 6000 random pairs,
+    measured 2026-09-10. It is fixed by scaling by 2^-28 before the split and
+    scaling the PRODUCT back, not the halves.
+
+    THE FIRST TWO ROWS ARE THE CONTROL AND THEY ARE THE POINT. 1.33e300 is
+    below the threshold and was always right; 1.34e300 is the first value past
+    it and was NaN. A sweep of ordinary-sized arguments cannot fail here,
+    however many rows it has -- the population this defect lives in is
+    arguments above 1.34e300, and nothing else in this file drew from it.
+
+    Every want-value below is glibc's, read off the bits through CPython. }
+  CheckBits(ArcTan(1.33e300), '3FF921FB54442D18', 'ArcTan(1.33e300) — BELOW the split threshold, the control');
+  CheckBits(ArcTan(1.34e300), '3FF921FB54442D18', 'ArcTan(1.34e300) — first value PAST it; was NaN');
+  CheckBits(ArcTan(1e301), '3FF921FB54442D18', 'ArcTan(1e301)');
+  CheckBits(ArcTan(1.7976931348623157e308), '3FF921FB54442D18', 'ArcTan(DBL_MAX)');
+  CheckBits(ArcTan(-1.7976931348623157e308), 'BFF921FB54442D18', 'ArcTan(-DBL_MAX)');
+
+  { ArcTan2 through the same threshold. The FIRST row is the one that is not
+    pi/2 -- a row whose right answer collides with the answer every other row
+    gives cannot tell a working reduction from a saturating one. }
+  x := 1.0; y2 := 1e301;
+  CheckBits(ArcTan2(x, y2), '017124E63593F5E0', 'ArcTan2(1, 1e301) — a real value, not pi/2');
+  x := 1e301; y2 := 1.0;
+  CheckBits(ArcTan2(x, y2), '3FF921FB54442D18', 'ArcTan2(1e301, 1)');
+  x := 1e301; y2 := 1e301;
+  CheckBits(ArcTan2(x, y2), '3FE921FB54442D18', 'ArcTan2(1e301, 1e301) = pi/4');
+  x := -1e308; y2 := 1e308;
+  CheckBits(ArcTan2(x, y2), 'BFE921FB54442D18', 'ArcTan2(-1e308, 1e308) = -pi/4');
+  x := 1e-301; y2 := 1e301;
+  CheckBits(ArcTan2(x, y2), '0000000000000000', 'ArcTan2(1e-301, 1e301) = +0');
+  x := 1e-301; y2 := -1e301;
+  CheckBits(ArcTan2(x, y2), '400921FB54442D18', 'ArcTan2(1e-301, -1e301) = pi');
+
+  { THE QUOTIENT OVERFLOWS BEFORE THE SPLIT DOES, which is a second defect in
+    the same function: |y|/|x| past DBL_MAX gave DdDivD an Inf to subtract from
+    an Inf, and the NaN it returned carried no sign to recover the answer from.
+    pi/2 is correctly rounded for the whole region -- a ratio beyond DBL_MAX
+    puts the angle within 5.6e-309 of pi/2 and one ulp of pi/2 is 2.2e-16. }
+  x := 1e301; y2 := -1e-301;
+  CheckBits(ArcTan2(x, y2), '3FF921FB54442D18', 'ArcTan2(1e301, -1e-301) — ratio past DBL_MAX');
+  x := -1e301; y2 := 1e-301;
+  CheckBits(ArcTan2(x, y2), 'BFF921FB54442D18', 'ArcTan2(-1e301, 1e-301) — ratio past DBL_MAX');
+  x := 1.7976931348623157e308; y2 := 5e-324;
+  CheckBits(ArcTan2(x, y2), '3FF921FB54442D18', 'ArcTan2(DBL_MAX, DBL_MIN_SUB)');
+
+  { INFINITE OPERANDS, which ArcTan2 had no answer for at all: the ratio is
+    Inf, 0/Inf or Inf/Inf and every one of them came back NaN. C99 F.10.1.4
+    gives all twelve combinations a value and only the two SIGNS decide.
+    Ten of the nineteen infinite pairs in the 6000-pair sweep were right by
+    accident, which is why the sweep alone would have called this fixed --
+    these rows are the table, asserted. }
+  inf := 1.0e308 * 10.0;
+  CheckBits(ArcTan2(1.0, inf), '0000000000000000', 'ArcTan2(1, +Inf) = +0');
+  CheckBits(ArcTan2(-1.0, inf), '8000000000000000', 'ArcTan2(-1, +Inf) = -0');
+  CheckBits(ArcTan2(1.0, -inf), '400921FB54442D18', 'ArcTan2(1, -Inf) = pi');
+  CheckBits(ArcTan2(-1.0, -inf), 'C00921FB54442D18', 'ArcTan2(-1, -Inf) = -pi');
+  CheckBits(ArcTan2(inf, 1.0), '3FF921FB54442D18', 'ArcTan2(+Inf, 1) = pi/2');
+  CheckBits(ArcTan2(-inf, 1.0), 'BFF921FB54442D18', 'ArcTan2(-Inf, 1) = -pi/2');
+  CheckBits(ArcTan2(inf, -1.0), '3FF921FB54442D18', 'ArcTan2(+Inf, -1) = pi/2');
+  CheckBits(ArcTan2(-inf, -1.0), 'BFF921FB54442D18', 'ArcTan2(-Inf, -1) = -pi/2');
+  CheckBits(ArcTan2(inf, inf), '3FE921FB54442D18', 'ArcTan2(+Inf, +Inf) = pi/4');
+  CheckBits(ArcTan2(-inf, inf), 'BFE921FB54442D18', 'ArcTan2(-Inf, +Inf) = -pi/4');
+  CheckBits(ArcTan2(inf, -inf), '4002D97C7F3321D2', 'ArcTan2(+Inf, -Inf) = 3pi/4');
+  CheckBits(ArcTan2(-inf, -inf), 'C002D97C7F3321D2', 'ArcTan2(-Inf, -Inf) = -3pi/4');
+  CheckBits(ArcTan2(0.0, inf), '0000000000000000', 'ArcTan2(+0, +Inf) = +0');
+  CheckBits(ArcTan2(-0.0, -inf), 'C00921FB54442D18', 'ArcTan2(-0, -Inf) = -pi');
+  CheckBits(ArcTan2(inf, 0.0), '3FF921FB54442D18', 'ArcTan2(+Inf, +0) = pi/2');
+  CheckBits(ArcTan2(-inf, -0.0), 'BFF921FB54442D18', 'ArcTan2(-Inf, -0) = -pi/2');
+  CheckBits(ArcTan(inf), '3FF921FB54442D18', 'ArcTan(+Inf) = pi/2');
+  CheckBits(ArcTan(-inf), 'BFF921FB54442D18', 'ArcTan(-Inf) = -pi/2');
+
+  { A SUBNORMAL FIRST ARGUMENT, which is the OTHER end of the same range and a
+    different mechanism. DdDivD refines its quotient by multiplying it back, so
+    the product it forms is a.Hi again -- and when a.Hi is subnormal that
+    product underflows, the Dekker residual is noise instead of the exact
+    error, and dividing the noise by b amplifies it by 1/b. Nine of the same
+    6000 pairs were out by up to ~450000 ulp, and on every one of them the
+    PLAIN DOUBLE quotient was already the correctly rounded answer: the
+    double-double refinement is what made them worse. More precision, applied
+    where the representation cannot hold it, is less precision.
+
+    Arguments are given as BITS and not as decimals on purpose. `Val` is not a
+    correctly-rounded parser -- 1574 of 6000 ordinary 17-digit decimals reach a
+    different double than CPython's float() does
+    ([[bug-b-val-of-a-float-is-not-correctly-rounded-while-strtofloat-of-the-same-string-is]])
+    -- and it was a sweep built on decimals that first reported 2569 of 6000
+    ArcTan values "wrong". The harness was wrong, not ArcTan. Compile-time
+    literals ARE correctly rounded, so the constants above are safe; a value
+    read at run time is not, and these came from a run-time table. }
+  CheckBits(ArcTan2(FromBits($000000043FC1A1EA), FromBits($2BC2AA6688D8CAD2)),
+            '131D2350F96D049B', 'ArcTan2(9.0e-314 subnormal, 6.8e-98)');
+  CheckBits(ArcTan2(FromBits($000000C34A8405B5), FromBits($2A2157E8FAC30D4D)),
+            '15168540070AB184', 'ArcTan2(4.1e-312 subnormal, 9.5e-106)');
+  CheckBits(ArcTan2(FromBits($800000006CEB20EB), FromBits($1348511DB3EB62AC)),
+            'AB61EAA2179C1899', 'ArcTan2(-9.0e-315 subnormal, 8.8e-216)');
+  CheckBits(ArcTan2(FromBits($0000225C671CEEE7), FromBits($25C05E5419E8B58B)),
+            '19D0CB3185910413', 'ArcTan2(1.9e-310 subnormal, 7.6e-127)');
+  { ...and one that is NORMAL and still needed the scaling, which is why the
+    guard is a loop and not a single 2^64 lift: the product is representable
+    and its RESIDUAL, another 2^53 down, is not. A one-step guard left exactly
+    this row 1 ulp out. }
+  CheckBits(ArcTan2(FromBits($002ECBF5CEFA6130), FromBits($3C2A0D78FE513901)),
+            '03F2E9DE027069BC', 'ArcTan2(8.6e-308 NORMAL, 7.1e-19) — one 2^64 step is not enough');
 
   if failures = 0 then writeln('MATHROUND OK')
   else writeln('MATHROUND ', failures, ' FAILURES');

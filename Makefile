@@ -2823,6 +2823,15 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_frozenset26 | diff -u test/test_nilpy_frozenset.expected -
 	./$(COMPILER) test/test_nilpy_math_log.npy $(TESTTMP)/test_nilpy_mathlog26
 	$(TESTTMP)/test_nilpy_mathlog26 | diff -u test/test_nilpy_math_log.expected -
+	# math.atan2 and math.atan against CPython, BIT FOR BIT. The oracle is
+	# CPython run on the SAME file, not a stored .expected, so it cannot go
+	# stale -- and the file's own header says why a repr comparison is a bit
+	# comparison here (shortest round-tripping repr is a bijection with the
+	# bits) and prints the raw struct bytes as well, since it was a
+	# fixed-width readout that manufactured the 1-ulp "gap" keeping
+	# math.atan2 out of the table for a month.
+	./$(COMPILER) test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy $(TESTTMP)/test_nilpy_atan226
+	tools/expect_same.sh test_nilpy_atan226 "$$($(TESTTMP)/test_nilpy_atan226)" "$$(python3 test/test_nilpy_math_atan_and_atan2_bit_for_bit.npy)"
 	./$(COMPILER) test/test_nilpy_callable_builtin.npy $(TESTTMP)/test_nilpy_callable26
 	$(TESTTMP)/test_nilpy_callable26 | diff -u test/test_nilpy_callable_builtin.expected -
 	# __file__ / sys.executable from the RESOLVED executable (freezer

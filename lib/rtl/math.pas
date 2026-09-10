@@ -522,16 +522,60 @@ begin
   Result.Lo := (a - (Result.Hi - bb)) + (b - bb);
 end;
 
-{ Dekker two-product, no FMA. Exact while |a|,|b| < 2^995. }
+{ Dekker two-product, no FMA. Exact for every finite a, b whose PRODUCT is
+  finite. The old header said "exact while |a|,|b| < 2^995" and that limit was
+  real: it belonged to the SPLIT, not to the product, and nothing enforced it.
+
+  THE SPLIT OVERFLOWS LONG BEFORE THE PRODUCT DOES. 2^27+1 times a is +Inf for
+  |a| > DBL_MAX/(2^27+1) = 1.3393857490036326e300, so `sa - (sa - a)` came back
+  Inf - Inf = NaN for an ordinary argument whose product with the other operand
+  is finite and small. Measured 2026-09-10: ArcTan(1.33e300) was correct and
+  ArcTan(1.34e300) was NaN -- DdAtan inverts a large t through DdDiv, whose
+  first step is this multiply -- and so was every ArcTan2 with either operand
+  past the threshold, including small-angle pairs like ArcTan2(1e-301, 1e301)
+  whose answer is exactly zero. Ln/Log10/Log2/Sqrt/Sin/Cos/ArcSinh/Power all
+  reduce the exponent before they reach this kernel and were unaffected;
+  measured, not assumed.
+
+  SqrtSoft, a few hundred lines up, hit the identical trap on gh*gh and its
+  comment already prescribes the answer: one exact power-of-two scaling
+  "removes the special case instead of adding a second one". This is that
+  scaling. 2^-28 and 2^28 are powers of two, so a' = a*2^-28 is exact and no
+  bit of a is lost; the product is formed in the scaled space and scaled back
+  by the same power of two, which is exact again.
+
+  IT IS THE PRODUCT THAT IS SCALED BACK, NOT THE HALVES, and that is the part
+  that took a second measurement. Scaling ah and al back individually is the
+  obvious spelling and it still answered NaN for DBL_MAX itself: ah is a
+  rounded UP to 26 bits, so ah*2^28 is 2^1024 = +Inf while a is finite -- the
+  exact failure SqrtSoft's comment describes, reintroduced one line later.
+  Keeping everything scaled until the end has no such edge. }
 function Dd2Prod(a, b: Double): TDd;
-var sa, sb, ah, al, bh, bl: Double;
+const
+  { just under 2^996. The true overflow point of the split is
+    DBL_MAX/(2^27+1) = 1.3393857490036326e300, so this threshold is a full
+    factor of two clear of it and the scaled arm is never taken speculatively. }
+  SplitThresh = 6.69692879491417e+299;
+  Down = 3.7252902984619140625e-09;   { 2^-28, exact }
+  Up   = 268435456.0;                 { 2^28,  exact }
+var sa, sb, ah, al, bh, bl, p, back: Double;
 begin
-  sa := 134217729.0 * a;        { 2^27 + 1 split }
+  back := 1.0;
+  if (a > SplitThresh) or (a < -SplitThresh) then
+  begin a := a * Down; back := back * Up; end;
+  if (b > SplitThresh) or (b < -SplitThresh) then
+  begin b := b * Down; back := back * Up; end;
+  sa := 134217729.0 * a;        { 2^27 + 1 split, now certainly finite }
   sb := 134217729.0 * b;
   ah := sa - (sa - a); al := a - ah;
   bh := sb - (sb - b); bl := b - bh;
-  Result.Hi := a * b;
-  Result.Lo := ((ah * bh - Result.Hi) + ah * bl + al * bh) + al * bl;
+  p := a * b;
+  { back is 1.0 on every ordinary call and the two multiplies are exact, so the
+    common path pays two cycles rather than a branch. Underflow cannot bite:
+    the scaled arm needs |a| > 1.3e300, and the smallest b that is not zero is
+    5e-324, so p is never nearer zero than 1e-24. }
+  Result.Hi := p * back;
+  Result.Lo := (((ah * bh - p) + ah * bl + al * bh) + al * bl) * back;
 end;
 
 function DdAdd(a, b: TDd): TDd;
@@ -566,18 +610,63 @@ begin
   Result := DdFast2Sum(p.Hi, p.Lo);
 end;
 
+{ Both divisions refine the quotient by MULTIPLYING IT BACK, so the product
+  they form is a.Hi again -- and if a.Hi is SUBNORMAL that product underflows,
+  the Dekker residual is noise rather than the exact error, and dividing the
+  noise by b amplifies it by 1/b. Measured 2026-09-10 over 6000 random pairs:
+  9 ArcTan2 rows were out by up to ~450000 ulp and every one had a subnormal
+  first argument. The plain double quotient was the CORRECT answer on all nine;
+  the double-double refinement is what made them worse, which is the shape
+  worth remembering -- more precision, applied where the representation cannot
+  hold it, is less precision.
+
+  Scaling a up by powers of 2^64 first is exact and lifts the product clear of
+  the floor; the answer scales back by the same factor. Same one-exact-scaling
+  answer as Dd2Prod's split guard and SqrtSoft's, at the other end of the
+  range. It is a LOOP and not one step because being normal is not the bar --
+  the residual sits another 2^53 below the product, so a dividend just above
+  DBL_MIN is still one ulp out after a single 2^64 lift. Measured: one step
+  took the 6000-pair sweep from 9 disagreements to 1, the loop to 0. }
 function DdDivD(a: TDd; b: Double): TDd;
-var p: TDd; q1, q2: Double;
+const
+  Up64 = 18446744073709551616.0;      { 2^64,  exact }
+  Dn64 = 5.42101086242752217e-20;     { 2^-64, exact }
+  { Scale until a.Hi is far enough above the underflow floor that the RESIDUAL
+    of the two-product below is still representable -- the product itself being
+    normal is not enough, its low half is another 2^53 down. 1e-270 is a
+    comfortable 2^53 above DBL_MIN with room to spare; four 2^64 steps reach it
+    from the smallest subnormal and cannot overflow anything (the arm only runs
+    below 1e-270, and 1e-270 * 2^256 is 1e-193). }
+  DdTiny = 1.0e-270;
+var p: TDd; q1, q2: Double; sc: Integer;
 begin
+  sc := 0;
+  while (a.Hi <> 0.0) and (a.Hi > -DdTiny) and (a.Hi < DdTiny) and (sc < 4) do
+  begin a.Hi := a.Hi * Up64; a.Lo := a.Lo * Up64; sc := sc + 1; end;
   q1 := a.Hi / b;
   p := Dd2Prod(q1, b);
   q2 := ((a.Hi - p.Hi) - p.Lo + a.Lo) / b;
   Result := DdFast2Sum(q1, q2);
+  while sc > 0 do
+  begin
+    Result.Hi := Result.Hi * Dn64;
+    Result.Lo := Result.Lo * Dn64;
+    sc := sc - 1;
+  end;
 end;
 
+{ The dd/dd twin of the guard on DdDivD above, for the same reason: p is
+  a.Hi again, and a subnormal a.Hi makes the residual noise. }
 function DdDiv(a, b: TDd): TDd;
-var p, e, q: TDd; q1, q2, q3: Double;
+const
+  Up64 = 18446744073709551616.0;      { 2^64,  exact }
+  Dn64 = 5.42101086242752217e-20;     { 2^-64, exact }
+  DdTiny = 1.0e-270;                  { see DdDivD }
+var p, e, q: TDd; q1, q2, q3: Double; sc: Integer;
 begin
+  sc := 0;
+  while (a.Hi <> 0.0) and (a.Hi > -DdTiny) and (a.Hi < DdTiny) and (sc < 4) do
+  begin a.Hi := a.Hi * Up64; a.Lo := a.Lo * Up64; sc := sc + 1; end;
   q1 := a.Hi / b.Hi;
   p := DdMulD(b, q1);
   e := DdAdd(a, DdMulD(p, -1.0));
@@ -587,6 +676,12 @@ begin
   q3 := e.Hi / b.Hi;
   q := DdFast2Sum(q1, q2);
   Result := DdAddD(q, q3);
+  while sc > 0 do
+  begin
+    Result.Hi := Result.Hi * Dn64;
+    Result.Lo := Result.Lo * Dn64;
+    sc := sc - 1;
+  end;
 end;
 
 { Square root of a dd: one Newton correction on top of the double sqrt, which
@@ -1654,7 +1749,7 @@ end;
   leaves undefined with a note citing atan2(0.5, 1) being a ulp out — that note
   is now stale, and the name is Track N's to add. }
 function ArcTan2(y, x: Double): Double;
-var q, w: TDd; sy, xneg: Boolean;
+var q, w: TDd; sy, xneg, yinf, xinf: Boolean;
 begin
   if (x <> x) or (y <> y) then begin Result := x + y; Exit; end;    { NaN }
   sy := SignBitD(y);
@@ -1675,6 +1770,59 @@ begin
     Exit;
   end;
   if x = 0.0 then
+  begin
+    w := DdPio2;
+    Result := w.Hi + w.Lo;
+    if sy then Result := -Result;
+    Exit;
+  end;
+
+  { INFINITE OPERANDS, which this function had no answer for at all. C99
+    F.10.1.4 gives every combination a value and the magnitudes drop out
+    entirely -- only the two SIGNS decide -- so this is a table, not a
+    computation. Without it the ratio is Inf, 0/Inf or Inf/Inf and DdDivD
+    turns all three into NaN. Measured 2026-09-10 over 6000 random pairs: 19
+    carried an infinite operand and 9 of them answered NaN where glibc and
+    CPython answer a number. The other 10 were right by accident, which is why
+    a smaller sweep would have called this fixed.
+
+    The y = 0 and x = 0 arms above already cover the mixed zero/infinity cases
+    correctly -- atan2(0, +Inf) is 0 and atan2(Inf, 0) is pi/2 -- so this block
+    sits after them and never sees a zero. }
+  yinf := Abs(y) > 1.7976931348623157e308;
+  xinf := Abs(x) > 1.7976931348623157e308;
+  if yinf or xinf then
+  begin
+    if not yinf then
+    begin                                     { finite y over infinite x }
+      if xneg then begin w := DdPi; Result := w.Hi + w.Lo; end
+      else Result := 0.0;
+    end
+    else if not xinf then
+    begin                                     { infinite y over finite x }
+      w := DdPio2;
+      Result := w.Hi + w.Lo;
+    end
+    else
+    begin                                     { the diagonals: pi/4 and 3pi/4 }
+      if xneg then w := DdMulD(DdPi, 0.75) else w := DdMulD(DdPi, 0.25);
+      Result := w.Hi + w.Lo;
+    end;
+    if sy then Result := -Result;
+    Exit;
+  end;
+
+  { |y|/|x| PAST DBL_MAX HAS TO BE CAUGHT BEFORE THE QUOTIENT IS FORMED, not
+    after. DdDivD would compute q1 = Inf, then Dd2Prod(Inf, |x|) = Inf, then
+    a.Hi - p.Hi = -Inf, and hand back a NaN that carries no sign and no
+    magnitude to recover the answer from. Measured 2026-09-10:
+    ArcTan2(1e301, -1e-301) answered NaN where glibc and CPython answer pi/2.
+
+    pi/2 is the correctly rounded answer for the whole overflowing region and
+    not an approximation of one: a ratio beyond DBL_MAX puts the angle within
+    5.6e-309 of pi/2, and one ulp of pi/2 is 2.2e-16. The negative-x arm needs
+    no separate case either -- pi - pi/2 is pi/2. }
+  if Abs(y) / Abs(x) > 1.7976931348623157e308 then
   begin
     w := DdPio2;
     Result := w.Hi + w.Lo;
