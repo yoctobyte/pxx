@@ -4889,7 +4889,22 @@ function PyJoinInferTk(ta: TTypeKind; ca: Integer;
 begin
   ciOut := ca;
   Result := ta;
-  if (ta = tyUnknown) or (tb = tyUnknown) then Exit;
+  { The unknown arms, and they must be SYMMETRIC — this read
+    `if (ta = tyUnknown) or (tb = tyUnknown) then Exit` above a comment
+    promising that an unknown "leaves the other standing", and it only did so
+    when the unknown was on the RIGHT. Measured 2026-09-10: for a tuple-unpack
+    element `r`, `self.h = math.pi if d else r` compiled and
+    `self.h = r if d else math.pi` did not. Same value set, arms swapped,
+    opposite verdicts. A join is the answer for a value that is one operand OR
+    the other, so it cannot depend on which one was written first.
+    (lekkerzeilen traffic.py:402 is the second spelling.) }
+  if ta = tyUnknown then
+  begin
+    Result := tb;
+    ciOut := cb;
+    Exit;
+  end;
+  if tb = tyUnknown then Exit;
   if (ta = tyClass) and (tb = tyClass) then
   begin
     if ca <> cb then
@@ -5056,6 +5071,7 @@ end;
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
+    qcUnit, qcProc: Integer; qcTk: TTypeKind;   { a qualified module MEMBER -- see the arm }
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
     ctorCi, ctorEnd, ctorSelCi: Integer; ctorTk: TTypeKind;  { `Foo().m().f` chase }
@@ -5780,6 +5796,68 @@ begin
             Result := PyWiden(Result, tk);
             Inc(i);
             Continue;
+          end;
+        end;
+        { A QUALIFIED MODULE CONSTANT read as a VALUE -- `math.pi`, `math.e`,
+          `math.tau`, `math.inf`. THERE IS NO '(' TO FIND, and that is the
+          whole reason every arm above declined: lib/rtl/math.pas declares
+          these as ZERO-ARGUMENT FUNCTIONS (`function Pi: Double`), because in
+          Pascal a parameterless function IS its own call. So the call arm --
+          which keys on a following tkLParen -- never sees them, and the name
+          is not a local, not a parameter, not a module global and not a field,
+          so nothing else does either.
+
+          The symptom was a compile error on ordinary Python:
+          `self.heading = run + math.pi` in a constructor gave "cannot infer
+          the type of field self.heading - annotate it (self.heading: int =
+          ...)", and the suggested annotation was `int` for a Double. Reached
+          by attempting lekkerzeilen (traffic.py:402).
+
+          THE TICKET WOULD HAVE NAMED THE WRONG CAUSE. That line is a
+          tuple-unpack element inside a CONDITIONAL EXPRESSION, and neither
+          matters: `self.h = math.pi` alone fails and `self.h = r if d else r +
+          3.0` on the same unpacked element passes. Narrowed by varying the
+          shape, not by reading the line.
+
+          AFTER the class-receiver arms deliberately: a LOCAL named `math`
+          must win over the unit of that name, and those arms gate on a known
+          local (`ci >= 0`) while this one gates on FindUnitOrAlias. Ordering
+          is the whole guard -- there is no shadow check here for the same
+          reason the value door beside it has none, and putting one in only
+          here would make the two doors disagree about the same rebinding.
+
+          PARAMCOUNT DECIDES WHICH OF TWO THINGS THIS IS, and both were
+          broken here. A parameterless member IS its own call, so `math.pi` has
+          the function's RETURN type. A member WITH parameters is a function
+          VALUE — `self.f = math.sqrt` — and travels as a variant, exactly as
+          the local spelling already does: `f = math.sqrt` compiles today and
+          calls correctly (1.4142135623730951, CPython's own digits) while the
+          FIELD spelling walled. One concept, two shapes, and only the local
+          one was wired. Typing the with-params case as its RETURN type instead
+          would say `self.f = math.sqrt` is a Double, which is the widening
+          that passes every test anyone would think to write.
+          bug-n-a-field-from-a-qualified-module-member-has-no-inferable-type }
+        if (Tokens[i].Kind = tkIdent) and (i + 2 < endIdx) and
+           (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
+           not ((i + 3 < endIdx) and (Tokens[i + 3].Kind = tkLParen)) then
+        begin
+          qcUnit := FindUnitOrAlias(LowerCase(GetTokenStr(i)));
+          if qcUnit >= 0 then
+          begin
+            qcProc := FindProcInUnit(GetTokenStr(i + 2), qcUnit);
+            if qcProc >= 0 then
+            begin
+              if Procs[qcProc].ParamCount = 0 then
+                qcTk := Procs[qcProc].RetType     { `math.pi` — its own call }
+              else
+                qcTk := tyVariant;                { `math.sqrt` — a callable }
+              if qcTk <> tyUnknown then
+              begin
+                Result := PyWiden(Result, qcTk);
+                i := i + 3;
+                Continue;
+              end;
+            end;
           end;
         end;
         { Plain `.field` chain on a class-typed name (no call parens): follow it

@@ -1,0 +1,157 @@
+# A field initialised from a QUALIFIED MODULE CONSTANT.
+#
+# `self.h = math.pi` was "cannot infer the type of field self.h - annotate it
+# (self.h: int = ...)" -- a compile error on ordinary Python, suggesting `int`
+# for a Double. lib/rtl/math.pas declares `function Pi: Double`, and in Pascal a
+# parameterless function IS its own call, so there is no '(' for PyInferExprType's
+# call arm to key on and every arm declined.
+#
+# THE ROWS THAT MATTER ARE THE NEGATIVE CONTROLS AT THE BOTTOM. Found by
+# attempting lekkerzeilen (traffic.py:402), whose line reads
+# `self.heading = run if downstream else run + math.pi` -- a conditional
+# expression over a tuple-unpack element. NEITHER IS THE CAUSE, and a fix aimed
+# at either would have been a fix to something that was never broken. Both
+# shapes are asserted here WITHOUT the module constant, so the next reader can
+# see that they were already working.
+
+import math
+
+
+class Bare:
+    def __init__(self):
+        self.h = math.pi
+
+
+class InArithmetic:
+    def __init__(self, r):
+        self.h = r + math.pi
+
+
+class FromUnpack:
+    def __init__(self):
+        a, b, r, z = quad()
+        self.h = r + math.pi
+
+
+class TrafficShape:
+    # traffic.py:402 verbatim in structure: unpack, then a conditional
+    # expression whose else-arm carries the constant.
+    def __init__(self, downstream):
+        x, z, run, _ = quad()
+        self.heading = run if downstream else run + math.pi
+        self.course = self.heading
+
+
+class OtherConstants:
+    def __init__(self):
+        self.e = math.e
+        self.t = math.tau
+
+
+def quad():
+    return (1.0, 2.0, 3.0, 4.0)
+
+
+print(round(Bare().h, 6))
+print(round(InArithmetic(1.0).h, 6))
+print(round(FromUnpack().h, 6))
+print(round(TrafficShape(True).heading, 6), round(TrafficShape(False).heading, 6))
+print(round(TrafficShape(False).course, 6))
+o = OtherConstants()
+print(round(o.e, 6), round(o.t, 6))
+
+# ---- the value is not merely typed, it is the RIGHT value ------------------
+# A field that inferred as Integer would hold 3 here, and a field that inferred
+# as a function object would print something with an address in it. Rounding to
+# six places is what makes this comparable to CPython at all -- the last bits of
+# pi are not a claim either implementation makes.
+print(Bare().h > 3.14159 and Bare().h < 3.1416)
+
+
+# ---- NEGATIVE CONTROLS: the two decoys, WITHOUT the module constant ---------
+# Both of these compiled before the fix. They are here so that a later change
+# aimed at conditional expressions or tuple unpacking has something to fail.
+class TernaryOnly:
+    def __init__(self, d):
+        r = 2.0
+        self.h = r if d else r + 3.0
+
+
+class UnpackOnly:
+    def __init__(self):
+        a, b, r, z = quad()
+        self.h = r + 3.0
+
+
+class UnpackAndTernaryNoConstant:
+    def __init__(self, d):
+        a, b, r, z = quad()
+        self.h = r if d else r + 3.0
+
+
+print(round(TernaryOnly(True).h, 6), round(TernaryOnly(False).h, 6))
+print(round(UnpackOnly().h, 6))
+print(round(UnpackAndTernaryNoConstant(True).h, 6),
+      round(UnpackAndTernaryNoConstant(False).h, 6))
+
+
+# ---- the SIBLING: a qualified function as a VALUE, not a constant ----------
+# `math.sqrt` with no parentheses is a FUNCTION OBJECT, and it must NOT infer as
+# its return type -- that would say self.f is a Double and is the widening that
+# passes every test anyone would think to write. It infers as a callable
+# variant instead, which is what the LOCAL spelling has always produced:
+# `f = math.sqrt; f(2.0)` compiled and printed CPython's own digits while the
+# FIELD spelling walled. One concept, two shapes, one arm wired.
+class HeldFunction:
+    def __init__(self):
+        self.f = math.sqrt
+        self.g = math.floor
+
+
+hf = HeldFunction()
+print(round(hf.f(2.0), 6))
+print(hf.g(3.7))
+
+# and calling it through a local taken off the field, which is the shape a
+# render loop writes
+fn = hf.f
+print(round(fn(9.0), 6))
+
+print(round(math.sqrt(2.0), 6))
+
+
+# ---- THE ARM ORDER, which is the second bug and the one traffic.py hits -----
+# PyJoinInferTk's own comment promised that "an unknown on either side leaves
+# the other standing", and the code only did that when the unknown was on the
+# RIGHT: `Result := ta` then `if (ta = tyUnknown) or (tb = tyUnknown) then Exit`.
+# So these two rows -- the SAME value set with the arms swapped -- had opposite
+# verdicts, and lekkerzeilen/traffic.py:402 is the failing spelling. A join
+# answers for a value that is one operand OR the other; it cannot depend on
+# which one was written first. Both orders are asserted, or the fix is only
+# half-pinned and the half that regresses is the one nobody writes by hand.
+class ArmOrder:
+    def __init__(self, d):
+        a, b, r, z = quad()
+        self.then_known = math.pi if d else r
+        self.else_known = r if d else math.pi
+
+
+ao_t = ArmOrder(True)
+ao_f = ArmOrder(False)
+print(round(ao_t.then_known, 6), round(ao_t.else_known, 6))
+print(round(ao_f.then_known, 6), round(ao_f.else_known, 6))
+
+
+# `and` / `or` hand back an OPERAND too and go through the SAME join, so they
+# carried the same asymmetry. One spelling, three constructs -- the rows are
+# here because a later reader fixing the ternary alone would not think to look.
+class ShortCircuit:
+    def __init__(self):
+        a, b, r, z = quad()
+        self.o = r or math.pi
+        self.a = r and math.pi
+        self.o_rev = math.pi or r
+
+
+sc = ShortCircuit()
+print(round(sc.o, 6), round(sc.a, 6), round(sc.o_rev, 6))

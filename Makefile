@@ -1728,6 +1728,8 @@ test-nilpy: $(COMPILER)
 	# not depend on which directory either runtime was given.
 	./$(COMPILER) test/test_nilpy_the_os_module_gaps.npy $(TESTTMP)/test_nilpy_osgaps26
 	PXX_OSTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_osgaps26 2>&1 | diff -u test/test_nilpy_the_os_module_gaps.expected -
+	./$(COMPILER) test/test_nilpy_a_field_from_a_module_constant.npy $(TESTTMP)/test_nilpy_fieldmodconst26
+	$(TESTTMP)/test_nilpy_fieldmodconst26 | diff -u test/test_nilpy_a_field_from_a_module_constant.expected -
 	# collections.deque -- the QUALIFIED spelling, which is the one every real
 	# program writes and the one that was broken (`collections` has a backing
 	# Pascal unit, so the qualifier resolved against a generic TList).
