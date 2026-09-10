@@ -17,12 +17,31 @@
 # it. Authority: decide-track-t-autopin-criteria (option A, reopened and chosen
 # 2026-08-08 after the baseline cleared from 18 permanent reds to 2 of 2182).
 #
-# STATUS: shadow mode. Nothing moves `pinned` yet — twatch logs the decision it
-# WOULD have made to tstate/pin-shadow.log so a week of them can be compared
-# against what a human actually blessed. Empty is the correct contents today:
-# plexus is 2180/2182 with both remaining reds being harness artifacts already
-# fixed, so nothing needs waiving. If this file is still empty when shadow mode
-# ends, that is the strongest possible argument the automation is safe.
+# STATUS: ARMED since 2026-09-09 (`fc2ce3d02`; the switch is the committed file
+# tstate/pin-armed). A `would_pin` now RUNS `make pin` — it no longer only logs to
+# tstate/pin-shadow.log. So an entry here is LIVE: it decides whether a red stops
+# the fleet's ground from moving.
+#
+# The paragraph this replaces said "shadow mode. Nothing moves `pinned` yet", and
+# it was true when written. Left in place it tells a reader that adding a line is
+# inert — the most expensive kind of stale row, because a reader who believes it
+# does nothing and so generates nothing that could reveal the error. What retires
+# THIS line in turn: tstate/pin-armed ceasing to exist.
+#
+# Empty is still correct as of 2026-09-10, and that is evidence rather than
+# paperwork — the automation has never needed a waiver. The original note said a
+# file still empty when shadow mode ended would be "the strongest possible
+# argument the automation is safe"; shadow mode ended with it empty, so that
+# argument was earned. The first entry spends some of it.
+#
+# So do not add a line to get past an inconvenient red. The one deadlock it
+# legitimately resolves: a red that is NEW is by definition unbaselined, so
+# `unexpected` is non-empty, so no pin fires, so `pinned` never moves, so the
+# baseline never re-seeds — `seed_baseline` runs only on a pin CHANGE
+# (twatch.py, pin_shadow: `if pin_id and base.get("pin") != pin_id`). Without a
+# waiver that state cannot clear itself. With one, the job still runs and still
+# goes red in every report; only its power to freeze pinning is suspended, and
+# the ticket it names is what unsuspends it.
 #
 # Example of the required shape (commented out — not an active entry):
 # test-zlib#00	bug-t-zlib-oracle-breaks-on-gcc-14
