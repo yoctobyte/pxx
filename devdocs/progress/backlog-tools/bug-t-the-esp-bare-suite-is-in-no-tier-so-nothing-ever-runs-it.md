@@ -341,3 +341,35 @@ would spend a lot of it. That is a cost T owns.
 What this note is FOR: enrolling a suite that is red injects a permanent red into
 T's tier, and nobody had checked recently. Two of the three are green at this sha,
 so that risk is now measured rather than assumed.
+
+## 2026-09-11 — the SECOND suite is green too, so enrolment covers both
+
+`test-esp-idf` completed (it had only ever been abandoned on a caller's timeout,
+never observed failing). At tree `09976a4e8`:
+
+```
+test-esp-idf rc=0      all nine examples/esp32 projects
+  esp32c3 gpio-c3   ok (PROBE: VERDICT qemu-delivers-NO-gpio-edges)
+  esp32c3 net-c3    ok (PXX-net-smoke status=0)
+  esp32c3 dns-c3    ok (PXX-dns-smoke status=0)
+  esp32c3 fs-c3     OK -- ESP PAL file I/O works on target; EXCL and errno gaps pinned
+  esp32c3 esp_timer callback   ok
+  esp32s3 esp_timer callback   ok
+```
+
+So BOTH ESP suites are green at HEAD and NEITHER is in a tier. That is the fact
+this ticket was filed to carry, and it is now true of the pair rather than of one.
+
+**A GUARD IN THAT RUN WHOSE PASS AND SKIP PRINT THE SAME THING.** While reading
+the bare suite's skip I hit this line:
+
+```
+# did not crash" — a check whose pass and whose skip print the same thing.
+```
+
+Someone had already noticed and written it down in place. Worth naming here
+because it bears on enrolment rather than on the suite: a row that cannot
+distinguish "ran and passed" from "was skipped" contributes nothing to a tier, so
+enrolling the suite without fixing it buys a green that means less than it reads.
+That is a separate, smaller ticket for whoever takes the enrolment; 35 assertions
+in the bare suite, one of them this shape.
