@@ -766,6 +766,39 @@ begin
   LastExprTk := tyInteger;
 end;
 
+procedure EmitSizeOfResult(bytes: Int64; bitScale: Int64);
+{ THE ONE PLACE A SizeOf-FAMILY ANSWER BECOMES A NODE.
+
+  It used to be six, and they were identical to the line: allocate an
+  AN_INT_LIT, store the byte count, tag it tyInteger, hand it to CurASTNode.
+  Six copies of a four-line shape is the arrangement this repo keeps finding a
+  missed copy in (devdocs/dev/normalise-dont-special-case.md), and it is what
+  made `bitsizeof` -- which is SizeOf times eight and nothing else -- read as
+  six edits rather than one.
+
+  bitScale is 1 for `SizeOf` and 8 for `bitsizeof`. It is a PARAMETER and not a
+  global, and the shape that proves it had to be hunted for: the obvious guess,
+  an inner SizeOf in an INDEX (`bitsizeof(a[SizeOf(b)])`), answers 32 either
+  way. The one that separates them is an EXPRESSION operand --
+  `bitsizeof(li + SizeOf(by))`, which parses through the factor chain and
+  re-enters this dispatch: 64 with a parameter and fpc, 8 with shared state,
+  because the inner SizeOf resets it before the outer answer is built. Measured
+  by building the shared-state variant. The callers hold it in a local of their
+  own ParseFactorCore invocation, which recursion gives them for free; test row
+  R21 of test_p_bitsizeof_is_sizeof_times_eight.pas is the standing control.
+
+  LastExprTk is DELIBERATELY NOT SET HERE. Five of the six sites set it and the
+  sixth did not; whether that sixth is an omission is a separate question with
+  its own answer, and folding it in silently would change behaviour in a commit
+  about something else. The sites keep their own line. }
+var n: Integer;
+begin
+  n := AllocNode(AN_INT_LIT);
+  ASTIVal[n] := bytes * bitScale;
+  ASTTk[n] := Ord(tyInteger);
+  CurASTNode := n;
+end;
+
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
@@ -788,6 +821,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
       local, because it is state of the WALK and never of the factor parser.
       refactor-p-three-hand-rolled-postfix-loops }
     exprArityBad: Boolean;  { the bare implicit-Self call's arity pre-check verdict -- see its arm }
+    szBitScale: Int64;   { 1 for SizeOf, 8 for bitsizeof -- see the dispatch }
     pcMovedOff: Boolean;    { the pointer-alias cast walk has left the CAST -- see its loop }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
@@ -3606,6 +3640,26 @@ begin
         end;
       end;
       { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
+      { `bitsizeof(x)` IS `SizeOf(x) * 8` AND NOTHING ELSE, and that is measured
+        rather than assumed: fpc 3.2.2 answers 32 / 64 / 32 / 8 for a LongInt
+        variable, an Int64, the type name LongInt and a Byte. It is an FPC
+        intrinsic (compinnr.pas:85, in_bitsizeof_x) and FPC's own compiler uses
+        it throughout, which is how it got here -- after the unit-cycle fix it
+        became the FIRST failure of most of the 207 units of that corpus.
+
+        THE ONE INPUT WHERE THE TWO WOULD DIVERGE IS UNREACHABLE TODAY: a
+        `bitpacked` field, where fpc says 2 for `a: 0..3` while SizeOf-times-8
+        would say 8 or 32. pxx has no `bitpacked` at all -- `type T = bitpacked
+        record` is `unknown type: bitpacked` -- so no wrong answer is reachable
+        from any program pxx compiles. WHOEVER LANDS `bitpacked` OWNS THIS LINE:
+        this desugar becomes wrong the day that type exists, and nothing else
+        will say so. }
+      szBitScale := 1;
+      if CaseEqual(name, 'bitsizeof') then
+      begin
+        szBitScale := 8;
+        name := 'sizeof';
+      end;
       if CaseEqual(name, 'sizeof') then
       begin
         Next; { consume 'SizeOf' }
@@ -3678,10 +3732,7 @@ begin
           prevTok := SizeOfLiteralToken(TokPos - 1, szLitNeg);
           Next;                               { the literal }
           Expect(tkRParen, ')');
-          node := AllocNode(AN_INT_LIT);
-          ASTIVal[node] := prevTok;
-          ASTTk[node] := Ord(tyInteger);
-          CurASTNode := node;
+          EmitSizeOfResult(prevTok, szBitScale);
           LastExprTk := tyInteger;
           Exit;
         end;
@@ -3745,16 +3796,13 @@ begin
           if DerefPtrArrayInfo(szExprNode, dpaCount, dpaLo, dpaFlat) then
           begin
             Expect(tkRParen, ')');
-            node := AllocNode(AN_INT_LIT);
             { a RECORD element is sized by its record id, not by TypeSlotSize(tyRecord) }
             { the FLAT count: SizeOf is the whole aggregate's width, so a
               multi-dim pointee is every element, not the first dimension. }
             if szExprTk = tyRecord then
-              ASTIVal[node] := dpaFlat * RecSize(ResolveNodeRec(szExprNode))
+              EmitSizeOfResult(dpaFlat * RecSize(ResolveNodeRec(szExprNode)), szBitScale)
             else
-              ASTIVal[node] := dpaFlat * TypeSlotSize(szExprTk);
-            ASTTk[node] := Ord(tyInteger);
-            CurASTNode := node;
+              EmitSizeOfResult(dpaFlat * TypeSlotSize(szExprTk), szBitScale);
             LastExprTk := tyInteger;
             Exit;
           end;
@@ -3783,10 +3831,7 @@ begin
             begin
               prevTok := RecFieldByteSize(szFldRec, szFldName);
               Expect(tkRParen, ')');
-              node := AllocNode(AN_INT_LIT);
-              ASTIVal[node] := prevTok;
-              ASTTk[node] := Ord(tyInteger);
-              CurASTNode := node;
+              EmitSizeOfResult(prevTok, szBitScale);
               LastExprTk := tyInteger;
               Exit;
             end;
@@ -3808,10 +3853,7 @@ begin
             begin
               prevTok := RecSize(szFldRec);
               Expect(tkRParen, ')');
-              node := AllocNode(AN_INT_LIT);
-              ASTIVal[node] := prevTok;
-              ASTTk[node] := Ord(tyInteger);
-              CurASTNode := node;
+              EmitSizeOfResult(prevTok, szBitScale);
               LastExprTk := tyInteger;
               Exit;
             end;
@@ -3849,10 +3891,7 @@ begin
           { The operand subtree is DROPPED, so nothing in it is ever lowered and
             `SizeOf(F(x))` cannot call F -- FPC discards the expression too and
             keeps only its type. }
-          node := AllocNode(AN_INT_LIT);
-          ASTIVal[node] := prevTok;
-          ASTTk[node] := Ord(tyInteger);
-          CurASTNode := node;
+          EmitSizeOfResult(prevTok, szBitScale);
           LastExprTk := tyInteger;
           Exit;
         end;
@@ -4270,10 +4309,7 @@ begin
         if not szNameConsumed then
           Next; { consume type token — ParseTypeKind already did when it ran }
         Expect(tkRParen, ')');
-        node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := prevTok;
-        ASTTk[node] := Ord(tyInteger);
-        CurASTNode := node;
+        EmitSizeOfResult(prevTok, szBitScale);
         Exit;
       end;
 

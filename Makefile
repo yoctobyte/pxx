@@ -3107,6 +3107,18 @@ test-nilpy: $(COMPILER)
 	@# bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
 	@./$(COMPILER) test/test_p_a_unit_cycle_through_an_implementation_uses.pas $(TESTTMP)/test_ucycle26
 	@tools/expect_same.sh test_ucycle26 "$$($(TESTTMP)/test_ucycle26 | tail -n 2)" "$$(printf 'fails=0\nUCYCLE OK')"
+	@# `bitsizeof(x)` is SizeOf(x) * 8 and nothing else -- an FPC intrinsic
+	@# (compinnr.pas:85, in_bitsizeof_x) that FPC's own compiler uses
+	@# throughout. After the unit-cycle fix it became the FIRST failure of 163
+	@# of that corpus's 207 units, 79% (umbrella-pxx-compiles-fpc-itself).
+	@# Value rows are PAIRED with a relation row (= SizeOf * 8), so the fixture
+	@# pins both the number and the rule and still prints a correct different
+	@# number per target. R21 is the standing control for holding the scale in
+	@# a parameter rather than shared state: 64 here and with fpc, 8 if a
+	@# nested SizeOf can reset it. The one input where the desugar would
+	@# diverge from fpc is a `bitpacked` field, which pxx has no way to spell.
+	@./$(COMPILER) test/test_p_bitsizeof_is_sizeof_times_eight.pas $(TESTTMP)/test_bitsizeof26
+	@tools/expect_same.sh test_bitsizeof26 "$$($(TESTTMP)/test_bitsizeof26 | tail -n 2)" "$$(printf 'fails=0\nBITSIZEOF OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
