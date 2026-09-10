@@ -44,6 +44,9 @@ import tempfile
 import threading
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fsheadroom            # noqa: E402  (after the path insert)
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Stable, unique per CLONE (not per run): build outputs must not collide with a
 # testmgr running in another checkout on the same box, but must still be reused
@@ -1296,9 +1299,40 @@ def sweep_orphan_tmp():
             pass
     logdirs.sort(reverse=True)                       # newest first
     cutoff = now - LOGDIR_KEEP_SECS
+    spent = 0
     for i, (mtime, p) in enumerate(logdirs):
+        # Age and count first: they are free, and on a quick-tier box they are
+        # the only bounds that ever bite.
         if i >= LOGDIR_KEEP_MAX or mtime < cutoff:
             shutil.rmtree(p, ignore_errors=True)
+            continue
+        # Newest-first means the budget is spent on the dirs most likely to be
+        # cited by a report still being read. A dir that alone exceeds the whole
+        # budget still survives as the newest, which is deliberate: the point is
+        # to stop forty of them accumulating, not to make the current run's logs
+        # unavailable.
+        spent += _count_inodes(p, LOGDIR_KEEP_INODES - spent + 1)
+        if spent > LOGDIR_KEEP_INODES and i > 0:
+            shutil.rmtree(p, ignore_errors=True)
+
+
+def _count_inodes(path, cap):
+    """Files+dirs under `path`, giving up once `cap` is passed.
+
+    Bounded because the caller only needs to know WHETHER a budget is exceeded,
+    and an unbounded walk of a full tier's log dir is ~9,000 stats per dir per
+    sweep -- paid on every run, to re-derive a number that stopped mattering the
+    moment it crossed the line.
+    """
+    n = 0
+    try:
+        for _root, dirs, files in os.walk(path):
+            n += len(dirs) + len(files)
+            if n > cap:
+                return n
+    except OSError:
+        pass
+    return n
 
 
 def start_heartbeat(tier):
@@ -1979,7 +2013,15 @@ CORPUS_GUARD_RE = re.compile(r"\[\s+-[a-z]\s+library_candidates/")
 # private per-run substitute for the recipes' literal /tmp/ paths (see
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
+# Sampled once, at run START, and read again by whatever ends up writing a
+# report -- including the INFRA path, which has no report to hang it on.
+HEADROOM = {}
 RUN_TMP = "%s/testmgr-scratch-%d" % (TESTTMP, os.getpid())
+# Where every JOB's own temp files go -- see the TMPDIR pin in BASE_ENV_KEEP.
+# Inside RUN_TMP so it inherits both teardowns already guarding that directory:
+# drop_run_tmp() at exit, and sweep_orphan_tmp()'s pid-keyed reclaim, which is
+# the one that survives the SIGKILL testmgr routinely sends its own jobs.
+JOB_TMP = os.path.join(RUN_TMP, "tmp")
 def repo_tree_state():
     """A short identity for the SOURCE TREE a run is testing against.
 
@@ -2070,6 +2112,21 @@ LOGDIR_KEEP_SECS = 24 * 3600
 # ...and a hard cap on how many, so a busy night cannot fill /tmp inside the age
 # window. Newest kept; a report older than this is triaged from git, not /tmp.
 LOGDIR_KEEP_MAX = 40
+# ...and a budget in the unit that actually ran out. THE COUNT BOUND ABOVE IS
+# NOT A BOUND ON INODES, because a log dir's inode cost varies by two orders of
+# magnitude with the TIER that produced it. Measured 2026-09-10: plexus runs
+# quick tiers and its 41 log dirs held 67 files each -- 2,747 inodes total,
+# nothing. seven runs fulls, ~9,070 files each: the SAME bound of 40 dirs is
+# ~190,000 inodes, 18% of that box's 1,048,576-inode tmpfs, held permanently and
+# entirely within budget.
+#
+# So this family was never leaking. It was sitting at its ceiling, and the
+# ceiling was priced in dirs by a comment that costed it in bytes ("128 dirs /
+# 392 MB observed"). Bytes were the binding resource when it was written and
+# inodes are the binding resource on a tmpfs, and a bound cannot see a resource
+# it is not denominated in -- the same mistake, one layer down, as a disk guard
+# that reads only f_bavail.
+LOGDIR_KEEP_INODES = 60000
 # Scratch from the ENDLESS idle paths (bench rounds, fuzz rounds). They carry no
 # pid, so age is the only liveness proxy — generous enough that a long bench
 # round in flight is never reaped out from under itself.
@@ -3656,6 +3713,13 @@ def job_env():
       * **There is an escape hatch.** TESTMGR_INHERIT_ENV=1 restores the old
         behaviour for one run, for when you are debugging this and not with it.
     """
+    # Cheap and unconditional: a pinned TMPDIR that does not exist turns every
+    # mkdtemp in every job into a FileNotFoundError, and job_env() is reached by
+    # devtests that import this module without ever creating RUN_TMP.
+    try:
+        os.makedirs(JOB_TMP, exist_ok=True)
+    except OSError:
+        pass            # the run is already failing for a better reason
     if os.environ.get("TESTMGR_INHERIT_ENV") == "1":
         env = dict(os.environ)
         env.update(BASE_ENV_KEEP)
@@ -3670,7 +3734,13 @@ def job_env():
 # Exact names every job gets. Deliberately short: this is the environment a
 # build-and-run needs, not the environment a login shell has.
 ENV_ALLOW = frozenset({
-    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TMPDIR",
+    # TMPDIR is NOT here: it is PINNED in BASE_ENV_KEEP below, and a name in
+    # both sets resolves differently depending on which branch of job_env()
+    # runs -- the allowlist loop assigns AFTER the BASE_ENV_KEEP copy, so the
+    # parent would win here while the pin wins under TESTMGR_INHERIT_ENV=1.
+    # No variable is in both today; keeping it that way is what stops that
+    # asymmetry from ever mattering.
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "PWD",
     "LANG", "LANGUAGE", "TERM",
     "CC", "CXX", "AR", "LD", "MAKEFLAGS", "MAKELEVEL", "MFLAGS",
     "LD_LIBRARY_PATH", "PKG_CONFIG_PATH", "SOURCE_DATE_EPOCH",
@@ -3701,6 +3771,24 @@ BASE_ENV_KEEP = {
     # abandoned scratch by globbing this root, and a per-checkout root would
     # scatter them where no run looks.
     "TESTTMP": TESTTMP,
+    # PIN the jobs' temp root too, for the same reason and with a bigger
+    # population: `TMPDIR` is read by ~20 tools/*.sh as `${TMPDIR:-/tmp}`,
+    # honoured natively by every tempfile.mkdtemp() in ~150 devtest sites, and
+    # preserved by the allowlist above -- and NOTHING IN THE REPO EVER SET IT.
+    # A channel wired end to end with no producer, so every one of those sites
+    # fell through to /tmp and left its directory there forever.
+    #
+    # That is what took seven dark for ten hours on 2026-09-07: ~40 families of
+    # never-reaped temp dirs, 1,048,561 inodes between them, `/tmp` at 8 free of
+    # 1,048,576 while bytes read 9% used. No single runaway -- which is why it
+    # arrives as a cliff rather than a slope, and why chasing the families one
+    # at a time was never going to converge.
+    #
+    # Setting it moves all of them at once into a directory that is ALREADY
+    # reaped twice over. It is the same repair as TESTTMP's above, one variable
+    # over, and the comment there names the shape exactly: reading the variable
+    # taught the matchers, it did not teach the producer.
+    "TMPDIR": JOB_TMP,
 }
 # The session/desktop family. A job gets these ONLY if its own recipe names one
 # of them -- see job_env_for(). Kept as an explicit set so the report can say
@@ -5046,16 +5134,39 @@ def report_build_failure(args):
     and honestly says so, which is the whole point: a broken box must not be
     able to say "master is broken".
     """
-    print("\n== testmgr report (tier %s) ==\n  INFRA    the compiler cannot be "
-          "built from these sources on this box — no verdict\n" % args.tier)
+    return write_infra_report(
+        args, "compiler build failed (see log); no test was run",
+        headline="the compiler cannot be built from these sources on this box")
+
+
+def write_infra_report(args, reason, headline=None, rc=1):
+    """Emit `verdict: INFRA` with NO jobs, for any run that did not happen.
+
+    Split out of report_build_failure() so a second INFRA condition cannot grow
+    a second emitter that drifts from this one -- an unbuildable compiler and a
+    scratch filesystem with no room left are the same claim about the box, and
+    the docstring above already named "a full disk" as an example while nothing
+    could actually detect one.
+
+    No jobs is the load-bearing part, and it is why this is worth sharing rather
+    than reproducing: nothing can be diffed, so no NEW-RED, no ledger entry and
+    no bisect can be manufactured out of a box that could not run.
+    """
+    print("\n== testmgr report (tier %s) ==\n  INFRA    %s — no verdict\n"
+          % (args.tier, headline or reason))
     if args.report_json:
         rep = {"tier": args.tier, "wall": 0.0, "scale": 1.0,
-               "verdict": "INFRA",
-               "reason": "compiler build failed (see log); no test was run",
+               "verdict": "INFRA", "reason": reason,
                "slow": [], "jobs": []}
+        # The headroom reading rides on the INFRA report too, and this is the
+        # case it exists for: an infra row has no jobs to assemble a report
+        # from, which is exactly why a patch that adds a field to the report
+        # assembly skips it -- and exactly the row where the number decides the
+        # diagnosis. See the ticket's own warning about this.
+        rep.update(HEADROOM.get("at_start") or fsheadroom.row(TESTTMP))
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
-    return 1
+    return rc
 
 
 def converge_seed(priv, max_rounds=4):
@@ -6432,9 +6543,40 @@ def main():
         print("total: %d jobs" % len(jobs))
         return 0
 
+    before = fsheadroom.probe(TESTTMP)
     sweep_orphan_tmp()                  # reclaim dead runs' scratch first
     os.makedirs(RUN_TMP, exist_ok=True)
+    os.makedirs(JOB_TMP, exist_ok=True)
     atexit.register(drop_run_tmp)       # ...and never become one ourselves
+    # SAY HOW MUCH ROOM THERE IS, on every run, before anything can consume any.
+    #
+    # At the START and not the end: a run that dies BECAUSE it filled the disk
+    # has usually had its artefacts reaped by the time it dies, so an end-of-run
+    # reading comes back healthy for exactly the run that was not. And on every
+    # run, healthy or not -- the number is only useful as a series, and a field
+    # that appears only when something is wrong cannot show an approach.
+    HEADROOM["at_start"] = fsheadroom.row(TESTTMP)
+    print("testmgr: scratch %s" % fsheadroom.describe(TESTTMP), flush=True)
+    if before and HEADROOM["at_start"]["fs_inodes_free"] is not None:
+        freed = (HEADROOM["at_start"]["fs_inodes_free"] or 0) - (before["inodes_free"] or 0)
+        if freed > 1000:
+            print("testmgr: the orphan sweep reclaimed %d inode(s)" % freed,
+                  flush=True)
+    why = fsheadroom.low(fsheadroom.probe(TESTTMP))
+    if why:
+        # INFRA, not a red, and it must SAY SO -- this is the whole point of the
+        # group. On 2026-09-07 this condition produced ~290 rows of
+        # `infra ... no report (rc=1)` over ten hours, each one indistinguishable
+        # from a code bug, and settling it took a human on the box with `df -i`.
+        # Refusing here costs the same ten hours of breadth and spends them
+        # saying why, which is the difference between an outage and a diagnosis.
+        print("testmgr: REFUSING to start — %s is too tight: %s"
+              % (TESTTMP, why), flush=True)
+        print("testmgr: this is an INFRA condition, not a verdict about the "
+              "sources; free space under %s and re-run (tools/reap_tmp.sh)"
+              % TESTTMP, flush=True)
+        write_infra_report(args, "scratch filesystem too tight: %s" % why)
+        return 2
     # Snapshot BEFORE calibrate(), so even calibration measures the binary the
     # jobs will actually use. repo_sha0 is kept only to report how often a
     # concurrent rebuild happens — the frequency is the signal that says whether
@@ -6812,6 +6954,12 @@ def main():
                # job's previous verdict, which is the honest answer for a job
                # this run never attempted.
                "jobs": [report_job(j) for j in reportable(jobs)] + carried}
+        # Room on the scratch filesystem, AS SAMPLED AT RUN START. On a green
+        # run this is one boring field; on the run that dies it is the whole
+        # diagnosis, and it has to be here for the boring ones or there is no
+        # series to see an approach in.
+        rep.update(HEADROOM.get("at_start") or fsheadroom.row(TESTTMP))
+        rep["fs_at"] = "start"
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
     return rc

@@ -2,13 +2,13 @@
 track: T
 prio: 80
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-07
 found-by: frank-seven
 tags: [twatch, testmgr, devtest, infra, tmpfs, inodes]
 blocked-by: []
-summary: "seven's ten-hour `infra ... no report (rc=1)` spin was /tmp INODE exhaustion: 8 free of 1048576, while bytes were only 9% used -- so `df -h` showed a healthy filesystem and `df -i` showed a dead one. The consumer is ~40 families of temp dirs created by devtests and twatch helpers that never clean up; tstate-at.* alone held 163,491 inodes in 241 dirs accumulated over ~31h. Cleaning stale entries took /tmp from 1,048,568 used to 834 and the tier ran again. One-time cleanup does not fix it: the leak refills."
+summary: "RESOLVED 2026-09-10. Seven's ten-hour `infra ... no report (rc=1)` spin was /tmp INODE exhaustion: 8 free of 1048576 while bytes were 9% used, so `df -h` showed a healthy filesystem and `df -i` a dead one. It was NOT ~40 leaking families needing ~40 fixes, which is what two correct censuses of this ticket concluded and why neither could converge: `TMPDIR` is read by ~20 tools/*.sh as ${TMPDIR:-/tmp}, honoured natively by all ~150 tempfile.mkdtemp() sites, and PRESERVED BY NAME in testmgr's own ENV_ALLOW -- and was set by nothing in the repository. A channel wired end to end with no producer, so every site fell through to /tmp correctly and forever. Fixed by pinning TMPDIR to RUN_TMP/tmp in BASE_ENV_KEEP (the identical repair TESTTMP got a month earlier, three lines above it) so every job's scratch inherits the two teardowns RUN_TMP already had. Also: twatch.py had no shutil.rmtree at all; and testmgr-* was never leaking -- LOGDIR_KEEP_MAX bounds DIRECTORIES, and 40 of them is 2,747 inodes on plexus and ~190,000 on seven, so it was sitting at a ceiling priced in the wrong unit. tools/reap_tmp.sh backstops what the pin cannot reach. NOT fixed and named: ~60 prefix-less mkdtemp sites landing on `tmp*`."
 ---
 
 # Measured on seven, 2026-09-07
@@ -168,3 +168,95 @@ the ~10k-per-run figure: roughly **60 more tier runs**, whenever those occur.
 Recorded because the per-hour number was relayed to the owner before this
 reading existed, and a prediction with the wrong denominator fails in the
 direction that looks like safety on exactly the quiet days when nobody checks.
+
+## RESOLVED 2026-09-10 (frankB) — it was never ~40 leaks; it was ONE absent producer
+
+**The census ranked FAMILIES, and families are the wrong axis.** Both readings
+above are correct and neither could show this, because ranking by family — by
+total, then corrected to per-run — answers "which directory names are piling
+up". Every answer to that question is a name, so every answer implies a fix per
+name, and ~40 fixes that must each be remembered is not a fix at all. The
+question that dissolves it is **what do these sites have in common**, and the
+answer is one line long:
+
+```
+$ grep -rn 'TMPDIR' tools/ Makefile          # ~20 readers, every one correct
+$ grep -rn 'TMPDIR *=\|export TMPDIR' .      # (nothing)
+```
+
+`TMPDIR` is read by ~20 `tools/*.sh` as `${TMPDIR:-/tmp}`, honoured natively by
+every one of the ~150 `tempfile.mkdtemp()` calls in `tools/*_devtest.py`, and
+**preserved by name in testmgr's own `ENV_ALLOW`** — and nothing in the entire
+repository has ever set it. A channel wired end to end with no producer, so
+every site fell through to `/tmp` and left its directory there.
+
+**Nothing was wrong at any of those ~40 sites.** They are all correct. That is
+why the census could not converge: it was enumerating symptoms of an absence,
+and an absence has as many symptoms as there are sites that would have used it.
+
+### The fix, and why it is one line where the census implied forty
+
+`"TMPDIR": JOB_TMP` in `testmgr.py`'s `BASE_ENV_KEEP`, with `JOB_TMP =
+RUN_TMP/tmp`. Every job a tier runs now writes its temp dirs inside `RUN_TMP`,
+which already had **two** teardowns nobody had to write: `drop_run_tmp()` at
+exit, and `sweep_orphan_tmp()`'s pid-keyed reclaim, which is the one that
+survives the SIGKILL testmgr routinely sends its own jobs.
+
+The repair has a precedent three lines above it in the same dict, and the
+precedent states this ticket's shape in its own words. `TESTTMP` had exactly
+this bug in 2026-08: *"Reading TESTTMP taught the MATCHERS the value; it did not
+teach the PRODUCER."* One variable over, one month later, same dict.
+
+`TMPDIR` was also **removed from `ENV_ALLOW`** in the same change. A name in
+both sets resolves differently depending on which branch of `job_env()` runs —
+the allowlist loop assigns *after* the `BASE_ENV_KEEP` copy, so the parent would
+have won there while the pin won under `TESTMGR_INHERIT_ENV=1`. No variable was
+in both before; keeping it that way is what stops that asymmetry from mattering.
+
+### Three more, all found by following the same question
+
+- **`tools/twatch.py` contains no `shutil.rmtree` at all.** 9,577 lines of
+  daemon, creating three families of temp dir, removing none. `materialize_tstate`
+  and the pin scratch now register an `atexit` reap of the directory *they*
+  created; a `dst` passed in stays the caller's. atexit is right here and would
+  be wrong in the daemon: both callers (`twatch_web.py`, `twatch_live_code.py`)
+  render once and exit, and the daemon itself never calls it.
+- **`testmgr-*` WAS NEVER LEAKING.** `LOGDIR_KEEP_MAX = 40`, and the census
+  counted 42. It was sitting at its ceiling, and **the ceiling is priced in
+  directories by a comment that costed it in bytes** (*"128 dirs / 392 MB
+  observed"*). Measured 2026-09-10: 40 log dirs is **2,747 inodes on plexus**
+  (quick tiers, 67 files each) and **~190,000 on seven** (fulls, ~9,070 each) —
+  18% of that box's tmpfs, held permanently, entirely within budget. A bound
+  cannot see a resource it is not denominated in; `LOGDIR_KEEP_INODES` now sits
+  beside the count.
+- **`tools/reap_tmp.sh`**, committed with a `trap ... EXIT` as CLAUDE.md
+  prescribes, for the population the pin cannot reach: what is already standing,
+  a devtest run by hand, and a helper killed by SIGKILL. It derives its prefix
+  list from `tools/` source rather than hardcoding 96 of them, so it cannot
+  quietly stop covering the newest families — a hardcoded list would print a
+  confident `reaped 0` during the next outage.
+
+### Measured after, on plexus
+
+`tools/reap_tmp.sh -n` finds **252 directories, 142,933 inodes** standing here —
+the same leak, on a box nobody had looked at, at 3% inodes because ext4 gives it
+6,283,264 rather than a tmpfs's 1,048,576. **Not reaped:** plexus is under no
+pressure and other sessions hold checkouts on this box, so clearing 143k inodes
+buys nothing and could disturb a peer's in-flight scratch.
+
+### NOT fixed, and named rather than papered over
+
+~60 `mkdtemp()` calls pass **no prefix** and land on tempfile's default `tmp*` —
+101,200 inodes in the outage census. Under a tier the pin now covers them; run
+by hand they still leak, and `reap_tmp.sh` deliberately does not glob `tmp*`,
+which is far too broad to delete by pattern in a shared `/tmp`. The fix for
+those is a prefix at each call site, which is a real ~60-site edit and is not
+this ticket.
+
+Guarded by `tools/twatch_fs_headroom_devtest.py` (12 cases), which asserts the
+pin is a SET rather than a pass-through by driving a real subprocess through
+`job_env()` and asking where its `mkdtemp` landed — asserting the field is
+present would have passed on the pass-through that was already there.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

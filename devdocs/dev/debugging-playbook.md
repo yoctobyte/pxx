@@ -22695,3 +22695,110 @@ about something else" shape — the compiler is telling the truth about the
 parse state it is in. And prefer an edit anchored on unique TEXT to one
 anchored on a line RANGE: the text anchor fails loudly at patch time (`assert
 s.count(OLD) == 1`), which is where you want a structural mistake to surface.
+
+## A CONVENTION HONOURED AT EVERY READ SITE AND WRITTEN AT NONE — the leak with ~40 symptoms, one cause, and nothing wrong anywhere
+
+Measured 2026-09-10 (frankB), closing the two `/tmp`-inode tickets that took
+seven dark for ten hours on 09-07.
+
+**The symptom.** `/tmp` on the watcher box hit its inode ceiling — 8 free of
+1,048,576, with the filesystem **9% full by bytes**. Every `mkdir` returned
+ENOSPC, testmgr died before running a single job, and the watcher wrote ~290
+rows of `infra ... no report (rc=1)` at ~28/hour for ten hours, each one testing
+the tstate commit the previous one had just pushed.
+
+**The census, done twice and correct both times, could not converge.** It ranked
+the leaking directory families by inodes: `tstate-at.*` 163,491 across 241 dirs,
+`tmp*` 101,200, `stale-edge*` 44,428, `testmgr-*` ~192,000, ~40 families in all,
+totalling the whole filesystem. A second pass corrected the *denominator* —
+ranking by standing total answers "what is in there now" and the question is
+"what puts it there", which differ whenever families have different lifetimes —
+and re-ranked by inodes per run. Both readings were real. Neither could produce
+a fix, because **every answer to "which family" is a NAME, and every name
+implies its own repair.** Forty repairs that must each be remembered is not a
+fix; it is a maintenance obligation with a decay rate.
+
+**The cause was one absent line.**
+
+```
+$ grep -rn 'TMPDIR' tools/ Makefile          # ~20 readers, every one correct
+$ grep -rn 'TMPDIR *=\|export TMPDIR' .      # (nothing)
+```
+
+`TMPDIR` is read by ~20 `tools/*.sh` as `${TMPDIR:-/tmp}`, honoured natively by
+all ~150 `tempfile.mkdtemp()` calls in the devtests, and **preserved by name in
+testmgr's own environment allowlist** — and nothing in the repository had ever
+set it. A channel wired end to end with no producer. Every site fell through to
+its `/tmp` default, correctly, forever.
+
+The repair is `"TMPDIR": JOB_TMP` in one dict, and its precedent sits three
+lines above it in the same dict: `TESTTMP` had this exact bug a month earlier,
+and the comment left behind states the shape in its own words — *"Reading
+TESTTMP taught the MATCHERS the value; it did not teach the PRODUCER."*
+
+### The general form, and how to look for it
+
+This is frankH's absence rule one turn further on. His case (2026-09-09) was a
+**missing check site**: `Desc();` bare inside its own class read a garbage
+descriptor while `Self.Desc()` two lines away refused it correctly, and the
+reason was not drift between two copies but a third site where the check was
+never written — *"Nothing was wrong anywhere; something was absent, and absence
+collides with nothing."* His inversion: **enumerate the positions the rule
+should cover, then subtract the ones that have it**, because a grep for a rule
+returns only the sites already right.
+
+**A CHANNEL NEEDS THE OTHER HALF OF THAT INVERSION, AND IT IS NOT THE SAME
+QUESTION.** For a rule you enumerate positions. For a variable, a config key, an
+environment slot, a flag, a header — anything with readers and writers — you
+**grep for the READS and then ask who WRITES**. The two fail differently, which
+is why both are worth holding:
+
+- a missing CHECK site fails **loudly and locally** — one call reads garbage,
+  and the site that is wrong is the site that misbehaves;
+- a missing PRODUCER fails **silently and everywhere** — every reader takes its
+  default, every reader is correct, and the misbehaviour is distributed across
+  the whole population with no single site to blame.
+
+The second is the one a census cannot solve, because a census enumerates
+symptoms and the symptoms are the readers.
+
+**The tell to watch for, and it is what should have been suspicious here:** an
+identifier with **many readers, no writers, and a plausible default at every
+read**. `${TMPDIR:-/tmp}` is defensively written, works perfectly, and is
+exactly what hides the absence — the fallback is not a bug, it is the reason
+nobody notices. Where you find a `:-` default replicated across a codebase, ask
+once whether anything ever supplies the non-default.
+
+### Two more of the same shape found in the same afternoon
+
+- **`tools/twatch.py` contains no `shutil.rmtree` anywhere.** 9,577 lines of
+  daemon, three families of temp directory created, none removed. Not a wrong
+  teardown — an absent one.
+- **The INFRA emitter's own docstring listed "a full disk" as an example of the
+  condition**, while neither `twatch.py` nor `testmgr.py` contained a single
+  `statvfs`, `shutil.disk_usage` or `df`. The concept was documented; the
+  detection was absent. A reader who checks whether the case is *handled* finds
+  the docstring and stops.
+
+### A bound cannot see a resource it is not denominated in
+
+Same afternoon, same group, and it is the reason the biggest family looked like
+a leak and was not. `testmgr-*` log dirs are capped at `LOGDIR_KEEP_MAX = 40`
+and the census counted **42** — the family was sitting at its ceiling, working
+as designed. The ceiling is priced in **directories**, by a comment that costed
+it in **bytes** (*"128 dirs / 392 MB observed"*). A log dir is 67 inodes on a
+quick-tier box and ~9,070 on a full-tier one: the same bound of 40 is 2,747
+inodes on plexus and ~190,000 on seven, 18% of that box's tmpfs, held
+permanently and entirely within budget.
+
+That is the same error as a disk guard reading only `f_bavail`, one layer down —
+a *budget* denominated wrong rather than a *measurement*. So when a limit was
+sized against one resource and the binding resource has changed (a move to
+tmpfs, a change of tier, a different box), **the limit does not fail; it holds,
+in the wrong currency.** Ask what unit a cap is written in before concluding
+that something under it is leaking.
+
+**And a threshold that must travel between machines belongs in the unit the
+consumption is denominated in.** "10% free" is eleven more tier runs on seven's
+1,048,576-inode tmpfs and sixty-nine on plexus's 6,283,264-inode ext4. `~N more
+runs` means the same thing on both, which a percentage never can.

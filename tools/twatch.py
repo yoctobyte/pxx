@@ -65,6 +65,7 @@ harmless — next fetch resumes.  State marker for idempotence = <host>.json.
 """
 
 import argparse
+import atexit
 import calendar
 import datetime
 import fnmatch
@@ -79,6 +80,9 @@ import subprocess
 import sys
 import tempfile
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fsheadroom            # noqa: E402  (after the path insert)
 
 TSTATE_REL = "devdocs/progress/tstate"
 INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate file
@@ -3080,6 +3084,7 @@ def pin_now(clone, host, sha, report):
         record_pin_line(clone, host, sha, "AUTO-PIN DECLINED — %s" % why)
         return False
     tmp = tempfile.mkdtemp(prefix="twatch-pin-")
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
     try:
         for tgt in (["make", "stabilize-fast"], ["make", "pin"]):
             sh(tgt, cwd=clone.path, capture=False)
@@ -3159,7 +3164,34 @@ def no_measurement(report):
     return ""
 
 
-def mark_infra(clone, host, st, sha, tier, reason):
+# The scratch root testmgr writes into. Same default and same override as
+# testmgr's own TESTTMP, because a reading of a different filesystem than the
+# one that ran out is worse than no reading -- it is a confident wrong answer.
+TESTTMP = (os.environ.get("TESTTMP") or "/tmp").rstrip("/") or "/tmp"
+FS_KEYS = ("fs_bytes_free_mb", "fs_bytes_total_mb",
+           "fs_inodes_free", "fs_inodes_total", "fs_at")
+
+
+def fs_row(report=None):
+    """Scratch-filesystem headroom for an archive row, and WHEN it was read.
+
+    Prefer the report's own reading: testmgr samples at its START, before it can
+    have consumed anything, and that is the number that explains a run. Falling
+    back to sampling here is strictly worse and is labelled `fs_at: "after"` --
+    a run that died BECAUSE the filesystem was full has usually had its scratch
+    reaped by the time twatch looks, so this reading can come back healthy for
+    exactly the run that was not. Recording it anyway beats recording nothing,
+    which is the state this replaces; mislabelling it as a start-of-run reading
+    would not.
+    """
+    if report and "fs_at" in report:
+        return {k: report.get(k) for k in FS_KEYS}
+    row = fsheadroom.row(TESTTMP)
+    row["fs_at"] = "after"
+    return row
+
+
+def mark_infra(clone, host, st, sha, tier, reason, report=None):
     """Record that this box could not run — and keep it out of the ledger.
 
     PUBLISHES, and must: a bare save_state() leaves the clone dirty, and the
@@ -3174,6 +3206,12 @@ def mark_infra(clone, host, st, sha, tier, reason):
     st["infra"] = {"since": inf.get("since") or utcnow(), "last": utcnow(),
                    "sha": sha, "tier": tier, "reason": reason,
                    "count": int(inf.get("count") or 0) + 1}
+    # An infra record has NO report to assemble a field onto, which is exactly
+    # why a patch that adds one to the report assembly misses it -- and exactly
+    # the record where the number decides the diagnosis. ~290 of these were
+    # written over ten hours on 2026-09-07 and not one of them could say whether
+    # the box had any room left.
+    st["infra"].update(fs_row(report))
     save_state(clone, host, st)
     clone.publish("tstate(%s): infra %s %s — %s"
                   % (host, sha[:12], tier, reason))
@@ -3215,7 +3253,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         print("twatch: %s INFRA — %s; host degraded, publishing no verdict "
               "(the sha stays untested and will be retried)"
               % (sha[:12], why), flush=True)
-        mark_infra(clone, host, st, sha, tier, why)
+        mark_infra(clone, host, st, sha, tier, why, report)
         return False
 
     # Structural backstop, independent of the verdict label: refuse anything
@@ -3226,7 +3264,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         print("twatch: %s claims verdict %s but produced no measurement (%s) "
               "— refusing to publish it; host degraded"
               % (sha[:12], report.get("verdict"), empty), flush=True)
-        mark_infra(clone, host, st, sha, tier, empty)
+        mark_infra(clone, host, st, sha, tier, empty, report)
         return False
 
     # INVALID: the compiler changed underneath the run, so its PASS/FAIL cannot
@@ -3784,7 +3822,14 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # run — the web UI's history/regression-frequency source
     with open(os.path.join(clone.path, TSTATE_REL,
                            "runs-%s.ndjson" % host), "a") as f:
-        f.write(json.dumps({"sha": sha, "date": st["last"]["date"],
+        # Headroom on the scratch filesystem. Spread FIRST so an explicit key
+        # below always wins, and written as the same one-line expression in
+        # all three writers of this archive -- guarded by
+        # tools/twatch_fs_headroom_devtest.py, because the comments on the
+        # other two rows record a fix reaching one writer and not its
+        # siblings TWICE, which is how `new_red` sat as a literal [] on the
+        # pin row for weeks while every other row carried a measurement.
+        f.write(json.dumps({**fs_row(report), "sha": sha, "date": st["last"]["date"],
                             "tier": report["tier"], "full": full,
                             "verdict": report["verdict"],
                             # so the archive can tell a run that FAILED from one
@@ -6948,7 +6993,14 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
         # absent one, in a file whose other rows make the reader expect a
         # measurement. `still_red` is derived rather than re-measured -- the
         # reds that are NOT new -- so it cannot disagree with new_red.
-        f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
+        # Headroom on the scratch filesystem. Spread FIRST so an explicit key
+        # below always wins, and written as the same one-line expression in
+        # all three writers of this archive -- guarded by
+        # tools/twatch_fs_headroom_devtest.py, because the comments on the
+        # other two rows record a fix reaching one writer and not its
+        # siblings TWICE, which is how `new_red` sat as a literal [] on the
+        # pin row for weeks while every other row carried a measurement.
+        f.write(json.dumps({**fs_row(report), "sha": sha, "date": utcnow(), "tier": tier,
                             "full": True, "verdict": verdict,
                             "wall": report["wall"],
                             "new_red": sorted(new_red),
@@ -7185,7 +7237,14 @@ def verify_requested(clone, host, sha, tier, who, why, abort_check=None):
         # three requested rows in this archive (every host, all time) have
         # none, so this row is the ONLY record that the run happened, and
         # somebody asked for each one.
-        f.write(json.dumps({"sha": sha, "date": utcnow(), "tier": tier,
+        # Headroom on the scratch filesystem. Spread FIRST so an explicit key
+        # below always wins, and written as the same one-line expression in
+        # all three writers of this archive -- guarded by
+        # tools/twatch_fs_headroom_devtest.py, because the comments on the
+        # other two rows record a fix reaching one writer and not its
+        # siblings TWICE, which is how `new_red` sat as a literal [] on the
+        # pin row for weeks while every other row carried a measurement.
+        f.write(json.dumps({**fs_row(report), "sha": sha, "date": utcnow(), "tier": tier,
                             "full": tier == "full", "verdict": verdict,
                             "wall": report["wall"], "reds": sorted(reds),
                             # WHICH HARNESS answered. The thin row carried no
@@ -7779,6 +7838,28 @@ def host_hardware():
         "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
     no_turbo = _first("/sys/devices/system/cpu/intel_pstate/no_turbo")
     hw["turbo"] = (no_turbo != "1") if no_turbo else None
+    # The SIZE of the scratch filesystem, both ways. Totals only: a total is a
+    # property of the box, which is what this fingerprint is for, while free
+    # space is a property of the minute and belongs on the run row.
+    #
+    # This file already carries cpu, sockets, cores, threads, mhz_max,
+    # mem_total_kb, kernel, gcc, governor and turbo, and its silence about disk
+    # was read for months as "disk is not a variable here" rather than "nobody
+    # added it" -- the 80%-accurate-name failure, where the part you sample
+    # confirms the whole. The inode total is the half that matters and the half
+    # nobody would have thought to add: seven's /tmp is a tmpfs capped at
+    # 1,048,576 inodes and plexus's is ext4 with 6,283,264, a six-fold
+    # difference invisible in `df -h` and decisive in `df -i`.
+    #
+    # NOT in HW_KEYS, deliberately: fp_of_hardware() filters to that tuple, so
+    # these are recorded without moving any host's fingerprint. Adding them
+    # there would have made every box in the fleet look like new hardware on the
+    # first run after this landed.
+    sc = fsheadroom.probe(TESTTMP)
+    hw["scratch"] = TESTTMP
+    hw["scratch_bytes_total_mb"] = (sc["bytes_total"] // (1024 * 1024)
+                                    if sc else None)
+    hw["scratch_inodes_total"] = sc["inodes_total"] if sc else None
     return hw
 
 
@@ -8031,7 +8112,19 @@ def materialize_tstate(repo, ref=None, dst=None):
     back to the worktree deliberately rather than by accident.
     """
     ref = ref or origin_ref()
-    dst = dst or tempfile.mkdtemp(prefix="tstate-at.")
+    if dst is None:
+        # WE created it, so we own it. The caller of this helper receives a path
+        # and drops it -- three call sites, none of which ever removed one --
+        # and 241 of these accumulated on seven between 2026-09-05 and 09-07 at
+        # ~678 inodes each, ~163,000 in all, on the way to taking the box dark.
+        #
+        # atexit rather than a context manager because the return value IS a
+        # live directory the caller reads afterwards; converting the callers to
+        # `with` would be the tidier shape and would change three signatures for
+        # a helper whose whole purpose is that nobody has to think about it.
+        # A dst passed IN is the caller's, and is not touched.
+        dst = tempfile.mkdtemp(prefix="tstate-at.")
+        atexit.register(shutil.rmtree, dst, ignore_errors=True)
     try:
         with subprocess.Popen(["git", "archive", ref, TSTATE_REL], cwd=repo,
                               stdout=subprocess.PIPE,
