@@ -15285,8 +15285,8 @@
   "wall": 1016.0
  },
  "last_idle_tier_try": {
-  "date": "2026-09-10T20:23:52Z",
-  "sha": "e7378602ebcbc03804ef4b18199fb2f23fd6cd12",
+  "date": "2026-09-10T23:58:16Z",
+  "sha": "1c520914979b6e85299c185971c44dfb655aff9c",
   "tier": "full"
  },
  "last_opt": {
@@ -15482,6 +15482,7 @@
     "bb8acc735c61ae46de8bf6b2d3ec124e9ab1d1cd",
     "0c9291480af3ec8edf3d3c8edde103ecc363f5a0"
    ],
+   "range_non_causal": false,
    "src": "test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh",
    "status": "fail"
   }
