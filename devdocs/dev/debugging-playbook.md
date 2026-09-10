@@ -24056,3 +24056,60 @@ modules move when it lands; two files' worth of call sites have to be written.
 **Not promoted.** One subsystem (NilPy stdlib shims), one evening — but the
 two-directions-from-one-seat evidence is what would make a second instance
 decisive rather than confirmatory.
+
+## A FIRST-MATCH GREP OVER COMPILER OUTPUT PICKS A WARNING, AND REPORTS IT AS THE WALL
+
+**The shape.** You are sweeping N subjects through the compiler and recording, per
+subject, the diagnostic that stopped it. The obvious line is
+
+```sh
+err="$(grep -m1 -E '^(pascal26|[A-Za-z0-9_]+\.(pas|inc)):' "$log")"
+```
+
+and it is wrong, because the compiler emits **warnings before the error that
+stopped the compile**. The row you print then names a warning as a blocker. It
+does not error, the row looks perfectly well-formed, and the subject really did
+fail — so every check you might run on the harness passes.
+
+**Measured 2026-09-10, by two seats about an hour apart, from opposite ends.**
+`tools/lekkerzeilen_census.sh`'s first run reported `lekkerzeilen/__main__.py` and
+`traffic.py` as walled on
+`warning: Nil Python: no class declares a method or callable field .contains()`.
+Their real walls were `no member connect came of the qualifier sqlite3` and
+`Nil Python: nearest() takes exactly 2 argument(s), got 3` — a module-resolution
+problem and an arity problem, neither related to the warning, both further down
+the log. frankB independently read `__main__.py :141 warning` off a one-at-a-time
+compile and briefly recorded it as a wall.
+
+**Why it is worse than an ordinary wrong number.** A warning is, by construction,
+something the compiler is *content* about. So the row sends somebody to fix a
+non-problem, and when they find nothing wrong there the natural conclusion is that
+the warning is spurious — which adds a second false finding on top of the first.
+Two subjects whose reported walls are warnings also tend to share the warning
+text, so they group in the histogram and manufacture a shared cause.
+
+**The fix, and it is one line.** Errors first; warnings only when there is no
+error to find:
+
+```sh
+err="$(grep -m1 -E '(error|Error|Fatal):' "$log")"
+[ -n "$err" ] || err="$(grep -m1 -E '^(pascal26|[A-Za-z0-9_]+\.(pas|inc)):' "$log")"
+[ -n "$err" ] || err="(no diagnostic at all -- a segfault or a kill looks like this)"
+```
+
+**Three things to keep, not just the first one.** Decide pass/fail on the **exit
+code**, never on whether the log contains `error:` — a segfault prints no
+diagnostic at all, so a log-driven harness scores it CLEAN
+(`devdocs/progress/census/lz_census.py` is written around this, and its docstring
+is the clearest statement of it). Keep the third fallback above, so a subject that
+died without saying anything is reported as such rather than as blank. And when you
+classify the wall, strip the line number for the class and keep it for the
+**site** — the same message at the identical line across two subjects is a cascade,
+and at different lines is two real sites.
+
+**The general form, for the next sweep anyone writes:** a compiler's output is not
+a single verdict, it is a stream with several severities in it, and `-m1` asks for
+the first element of that stream rather than the decisive one. Any harness that
+extracts "the reason" from a log with a first-match grep has this bug; the question
+to ask is *"which of the lines that match could the compiler have printed while
+still succeeding?"* — every one of those is a line your grep must not select.
