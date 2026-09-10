@@ -23275,3 +23275,47 @@ matters. **Two agents concurring is not a quorum — it is the same seat twice**
 (frankB's phrase). A rule that yields to agreement-plus-tightening-plus-small
 fails exactly when two agents agree, which is the common case and the one it is
 written for.
+
+## AN ASSERTION WHOSE EXPECTED VALUE WAS READ OFF THE DEFECT — THE THIRD DOOR, AND "RE-DERIVE FROM THE BUILT THING" DOES NOT OPEN IT
+
+CLAUDE.md carries two ways an assertion can pin the wrong thing: one **written
+from a REPORT of the code** pins the report, and one **written from a
+PREDICTION** pins the prediction. Both have the same remedy — go and derive the
+expected value from the built thing.
+
+This is a third door and that remedy fails for it, because **the built thing was
+the defect.**
+
+Measured 2026-09-10 (frankB, `5fb6e3d57`). A Makefile row asserted
+
+    grep -q '^pascal26:10: error: this build would die at exec: ...'
+
+against `test/test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist.npy`,
+which is **nine lines long**. It pinned a line the file has never had. And it
+PASSED — because the diagnostic was reporting a wrong number too: `Error(` read
+the LEXER's position, which after the parse is parked inside the last builtin
+unit compiled. **Two wrong numbers, agreeing.** It went red only when
+`967f9cc93` moved that diagnostic to `ErrorNoPos` — correctly, since it is a
+whole-program elfwriter check with no source position, and `ErrorNoPos` prints
+line 1 by design.
+
+So the compiler change was right, the test was wrong, and the test had been
+wrong since the day it was born. This is not a guard that went stale. It is a
+guard that was **never able to fail for the right reason**, and it certified the
+bug it was written against for as long as that bug lived.
+
+**What would have caught it, and it was free the whole time: read the number
+against the FILE it claims to index.** Nine lines, line ten. Not a rebuild, not
+a re-derivation, not a second opinion — an internal consistency check between
+two halves of the same assertion, available to anyone reading the row.
+
+So when an assertion pins a coordinate — a line number, an offset, a column, an
+index — ask **whether the artefact it names can even hold it.** A coordinate is
+the one class of expected value that can be checked against something other than
+the program's own output, and that is exactly what makes it recoverable when the
+output is untrustworthy.
+
+Found by the first tier to run past the row after the other half was fixed;
+nobody was looking for it. **Not promoted to CLAUDE.md** — one instance, and its
+author explicitly declined to push for it. Recommended there as a third clause
+on the existing assertion rule if a second instance turns up.
