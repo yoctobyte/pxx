@@ -79,6 +79,15 @@ assembler, linker, or C compiler invoked during the build.
   (tested against real-world C, including SQLite and Lua sources), a
   statically-typed Python-like dialect (Nil Python, `.npy`), and an
   assembly-source frontend.
+- **It boots.** PXX compiles a BusyBox userland — as separate translation units,
+  matching a GCC build of the same sources over a differential case list — and
+  links it with no C library at all. `tools/mkminimal.sh` packages that shell, a
+  stock Linux kernel and the compiler itself into one BIOS+EFI ISO: a system
+  whose entire userland is PXX output, and on which the compiler compiles and
+  runs Pascal. Two things that image is not — the kernel is not ours, and it
+  ships no compiler sources, so the self-host fixed point is proved in a
+  separate, larger VM image rather than on the ISO. See
+  [A minimal Linux system](../examples/minimal-linux-system.md).
 
 <details markdown="1">
 <summary>Compilation pipeline</summary>

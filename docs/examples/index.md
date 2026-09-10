@@ -116,8 +116,17 @@ need an external network service:
 /tmp/httpdemo
 ```
 
+## A bootable minimal Linux system
+
+Not a program under `examples/` but a demonstration built from the checkout: a
+BIOS+EFI ISO carrying a stock Linux kernel, a BusyBox shell compiled by PXX and
+linked with no C library, and the PXX compiler itself — nothing else. See
+[A minimal Linux system](./minimal-linux-system.md) for the build, what it does
+and does not establish, and its limits.
+
 ## Next
 
 - [Getting started](../getting-started/)
 - [Standard library](../library/)
 - [Targets](../targets/)
+- [A minimal Linux system](./minimal-linux-system.md)

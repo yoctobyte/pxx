@@ -16,6 +16,19 @@ tools/link_freestanding.sh <that run's work dir>/obj -o /tmp/busybox
 tools/mkminimal.sh --busybox=/tmp/busybox --iso --boot
 ```
 
+Those three commands are a differential build of BusyBox, a freestanding link,
+and the image. The build is **x86-64 only** today, and that is an absence rather
+than a failure: no i386 or AArch64 image has been built.
+
+Besides the ISO tools [described below](#reproducing-it-under-virtualbox), the
+build needs a BusyBox source tree
+(`tools/install_lib_candidates.sh busybox`), `binutils` for `as` and `ld`,
+network access to fetch the kernel, and **GCC** — the first command is a
+differential against a GCC build of the same sources, so without it there is no
+reference and no result. Note also that `tools/mkminimal.sh` defaults to
+`compiler/pascal26`, the compiler in your own checkout, rather than the pinned
+stable one; pass `PXX=` to choose.
+
 What you get, booted:
 
 ```
@@ -108,17 +121,34 @@ bytes of the linked binary's. The fix is per-function sections, which lets
 relocation half of that work. Expect the binary to fall to well under a megabyte
 when that lands.
 
+Measured 2026-09-10, from an ISO built by `tools/mkminimal.sh` at commit
+`04b33cfad`; the BusyBox figure was read out of the image's own payload rather
+than off a build log. **Expect every figure here to move** — the ISO was rebuilt
+and changed size while this page was being written, and the BusyBox size is a
+defect under repair rather than a property of the design. Re-run the three
+commands above and read your own numbers; that is the check.
+
 ## Known limits
 
 - The applet set is the one the differential was measured on, so there is no
-  `test` or `[` builtin (use `case` for conditionals) and no `poweroff` — shut
-  down with `echo o > /proc/sysrq-trigger`. Line editing is off, so there is no
-  command history at the prompt.
-- **The system contains its compiler but cannot yet reproduce itself.** It can
-  compile and run Pascal, and `tools/mkkiosk.sh --selfhost` shows the compiler
-  rebuilding itself inside the guest to a byte-identical second stage. It cannot
-  rebuild its own BusyBox, because PXX cannot consume an object file and the
-  image carries no assembler or linker.
+  `test` or `[` builtin (use `case` for conditionals), no `head`, and no
+  `poweroff` — shut down with `echo o > /proc/sysrq-trigger`. Line editing is
+  off, so there is no command history at the prompt.
+- **No networking.** No `ip`, `ifconfig` or `udhcpc` applet is built in, and
+  `/init` configures no interface.
+- **The system contains its compiler but does not reproduce itself.** It
+  compiles and runs Pascal — measured both in batch and interactively at the
+  serial console — but there is no self-host fixed point on this ISO, because it
+  deliberately ships **no compiler sources**. `/opt/pxx/compiler` holds the
+  `pascal26` binary and its builtin units and *zero* `.pas` or `.inc` files.
+  Nor can it rebuild its own BusyBox: PXX cannot consume an object file, and the
+  image carries no assembler and no linker.
+- **The self-host fixed point in a VM is a different image.**
+  `tools/mkkiosk.sh --selfhost` builds a larger development image that *does*
+  carry the compiler's own sources, and there the compiler rebuilds itself
+  inside the guest to a byte-identical second stage. Keep the two apart: *the
+  compiler runs on the minimal ISO* and *the compiler reproduces itself in a VM*
+  are separate claims, proved on separate images. This page is only the first.
 - `/dev/console` is the serial port, which is what a headless `qemu -nographic`
   or `-cdrom` run wants. In a graphical VM window you will see kernel messages
   but the shell will be on the serial line.

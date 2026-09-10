@@ -52,6 +52,7 @@ The C frontend compiles standard C directly to native ELF in a single pass (see
 | **Lua** | The reference interpreter compiles and runs Lua programs. |
 | **cJSON** | Parses and serialises. |
 | **tcc** (Tiny C Compiler) | Compiles, and a PXX-built tcc in turn compiles tcc itself (self-compile converged). |
+| **BusyBox** | Compiles as separate translation units, BusyBox's own way, with output **matching a GCC build of the same sources** across a differential case list. A PXX-built BusyBox also boots as PID 1 under a real kernel — see [A minimal Linux system](../examples/minimal-linux-system.md). |
 
 ### Partial / in progress
 

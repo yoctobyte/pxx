@@ -30,6 +30,11 @@ PXX is a small native compiler with a direct frontend-to-ELF pipeline.
   output — a different claim from the output parity against gcc- and FPC-built
   references described in [Compatibility status](../reference/status.md).
 - DWARF debug info with `-g` on Linux targets.
+- It builds a bootable system: PXX compiles a BusyBox userland — matching a GCC
+  build of the same sources across a differential case list — and links it with
+  no C library, and `tools/mkminimal.sh` packages that shell, a stock Linux
+  kernel and the compiler itself into one BIOS+EFI ISO. See
+  [A minimal Linux system](../examples/minimal-linux-system.md).
 
 ## Language
 
