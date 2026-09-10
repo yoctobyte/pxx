@@ -37,3 +37,6 @@ pascal26:36: error: this build would die at exec: `memcmp` is imported from libs
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-10 — the seven watcher saw `test-nilpy#src:test/test_nilpy_attribute_off_a_virtual_call_result.npy` GREEN at 16993f9196cf (tier full) and did NOT close this: the job's class is `corpus`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
