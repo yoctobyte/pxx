@@ -11,7 +11,7 @@ tags: [lekkerzeilen, nilpy, sdl2, opengl, demo]
 blocked-by:
   - feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym
   - bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register
-  - bug-n-staticmethod-is-not-a-value
+  - bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
 summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
 ---
 

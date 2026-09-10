@@ -12,7 +12,7 @@ blocked-by:
   - task-b-write-the-lekkerzeilen-pxx-platform-backend
   - feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym
   - bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register
-  - bug-n-staticmethod-is-not-a-value
+  - bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
   - feature-nilpy-math-module-twelve-absent-names-measured
   - feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
   - feature-n-the-threading-module
