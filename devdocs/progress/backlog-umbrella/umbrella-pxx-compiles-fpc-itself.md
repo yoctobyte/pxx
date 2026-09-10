@@ -459,3 +459,44 @@ Promoted to CLAUDE.md from here, on the recurrence test: frankB's lekkerzeilen
 umbrella produced the same shape independently (six import walls across two
 passes, modules-compiling moved by zero both times) — two corpora, no shared
 code, five null rows between them.
+
+## 2026-09-10 — the ten ORACLE-NO units, named, because the category reads as a scandal
+
+The owner asked, reasonably, whether this umbrella was claiming *"fpc can't
+compile its own units"*. It is not, and the category name invites that reading.
+Measured by running only the oracle half of
+`tools/fpc_compiler_corpus_probe.sh` (207 fpc compiles, no pxx):
+
+| unit | fpc's own message | why |
+| --- | --- | --- |
+| `pp` | `Syntax error, "UNIT" expected but "PROGRAM" found` | **it is a PROGRAM** — FPC's compiler main. `uses pp` is meaningless |
+| `cg64f32` | `Identifier not found "tcg64"` | 32-bit codegen; `tcg64` exists only on a 32-bit target |
+| `ogomf` | `RELOC_ABSOLUTE16` | 16-bit x86 object format |
+| `ogrel` | `RELOC_ABSOLUTE_HI8` | AVR |
+| `ogwasm` | `TWasmBasicType` | wasm |
+| `oglx` | `tobjectinput` | platform-conditional |
+| `browcol` | `TCallbackFunBoolParam` | platform-conditional |
+| `impdef` | `dirstr` | platform-conditional |
+| `cepiktimer` | `Cannot open include file "../../epiktimer/epiktimer.pas"` | external package, not installed |
+| `ccharset` | `fpcdefs.inc(1,2) Mode switch "OBJFPC" not allowed here` | **the probe's own `-Mobjfpc` colliding with the include** |
+
+**Nothing here is fpc failing to build fpc.** The probe fixes `-dx86_64`; build
+FPC for i386 and `cg64f32` compiles, for AVR `ogrel`, for wasm `ogwasm`. The
+exclusion exists so a unit the ORACLE rejects under OUR flags can never be
+counted against us — which is the right design and is why attempt 1 had four
+false findings before it existed.
+
+### Two of the ten are OURS, not the corpus's
+
+`pp.pas` is a program and should be excluded **by name**: counting it inflates
+the denominator by one and it can never pass, so it is a permanent
+can-never-be-green row sitting in the corpus total. `ccharset` is a flag
+collision the probe creates itself — `-Mobjfpc` on the command line against an
+include that sets its own mode switch — and may well compile once the probe stops
+forcing the mode it is already getting from `fpcdefs.inc`.
+
+**So the honest shape is 206 units: 8 genuinely out of scope for an x86-64
+probe, 15 BOTH-OK, 182 PXX-FAIL.** Worth fixing in the probe rather than
+re-explaining every time someone reads the category — a number that needs a
+paragraph of defence each time it is quoted is a number with the wrong
+denominator.
