@@ -23554,3 +23554,42 @@ turns this from a silent corruption into an error.
 Same family as the entry above: the diagnostic text is *data flowing through the
 instrument*, and an instrument that reformats what it measures can damage it
 without any step reporting a failure.
+
+## A BORROWED NUMBER GETS CHECKED; A BORROWED MECHANISM DOES NOT — AND THE MECHANISM IS THE LOAD-BEARING HALF
+
+Two instances, 2026-09-10, one evening, the roles swapped between them.
+
+**Borrowed number.** A seat predicted a +2 delta against a peer's ok-line count
+and got zero. The peer's figure came from an unanchored grep and was two too
+high. Caught, because the delta was queried and the method asked for.
+
+**Borrowed mechanism.** The same seat had earlier written *"`platform/` moved
+under `lekkerzeilen/`"* — an assertion made from the shape of a count, never
+checked. A peer read it, made it the load-bearing premise of *"the module sets
+are not nested, so the discrepancy needs no explanation"*, and sent it as a
+reason to stop chasing. One `git log --diff-filter=A` says the directory was in
+the repo's **initial commit**.
+
+**The asymmetry is the finding.** A number arrives looking like a CLAIM and
+invites "how did you measure that". A sentence like *"platform/ moved"* arrives
+looking like CONTEXT, so it is inherited whole. Both seats applied the borrowed-
+baseline discipline to the digits and neither applied it to the prose, in the
+same conversation in which they had just agreed the rule.
+
+**And it cost the better answer.** "The sets are not nested, stop chasing it"
+would have retired a question that had one: the sets ARE nested, and on the same
+29 modules the count reconciles as +1 / -2 with exactly **one** unit left
+unexplained — a real result, and the thing that justifies keeping a per-module
+baseline far better than "the number is unreliable" did.
+
+**So when you take a fact from a peer, ask which half you are taking.** If it is
+a measurement, ask for the method. If it is a MECHANISM — a file moved, a
+routine is not called, a path is dead — ask what command would show it, and
+notice that the answer is usually one command. The tell is that mechanisms
+arrive in the same sentence as the numbers they explain, and only the numbers
+get interrogated.
+
+**Not promoted.** Two instances, two seats, one box, one evening — one
+population sampled twice, which is the ground on which this pair has twice
+declined to promote a finding that would have flattered them. Banked here on
+merit.
