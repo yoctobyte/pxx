@@ -1,0 +1,70 @@
+# Constructing a class through a DOTTED PACKAGE qualifier.
+#
+# `urllib.request.Request(url, headers={...})` refused with
+#
+#     pascal26:2: error: expected ')' before ','
+#
+# one argument in — which reads as a keyword-argument problem and is not one.
+# The qualified-construction arm was written for `tk.Frame(root, ...)` and looks
+# exactly two tokens ahead for the `(`. A dotted package puts a second `.`
+# there, so the arm declined and the call fell into the Pascal qualified-call
+# path, which resolves a qualified PROC and takes ONE argument.
+#
+# THE THREE NEIGHBOURS ARE THE POINT, and all three already worked, which is
+# what made this look like something else. They are asserted below so a later
+# change has to keep them working:
+#
+#   urllib.request.urlopen(a, b)              a PROC through the same qualifier
+#   from urllib.request import Request        the unqualified spelling
+#   import urllib.request as ur; ur.Request   an ALIAS, which is one segment
+#
+# Found by attempting lekkerzeilen (gauges.py:141).
+
+import urllib.request
+import queue
+import urllib.request as ur
+from urllib.request import Request
+
+# ---- the shape that walled: two segments, more than one argument -----------
+a = urllib.request.Request("http://example.invalid/one", None)
+print(a.get_full_url(), a.get_method())
+
+b = urllib.request.Request("http://example.invalid/two",
+                           headers={"User-Agent": "pxx"})
+print(b.get_full_url(), b.get_method())
+print(b.headers["User-agent"])
+
+# data makes CPython's get_method answer POST, which is a value that could not
+# have come from the default and so cannot be produced by the arm doing nothing.
+c = urllib.request.Request("http://example.invalid/three", b"payload")
+print(c.get_full_url(), c.get_method())
+
+
+# ---- the ONE-segment qualifier, which always worked and must keep working ---
+q = queue.Queue(maxsize=2)
+q.put(1)
+q.put(2)
+print(q.qsize(), q.full(), q.get())
+
+
+# ---- the three neighbours --------------------------------------------------
+d = ur.Request("http://example.invalid/alias", None)
+print(d.get_full_url())
+
+e = Request("http://example.invalid/bare", headers={"X": "y"})
+print(e.get_full_url(), e.headers["X"])
+
+
+# ---- a LOCAL of the module's name still wins -------------------------------
+# The arm stands down when the leading name resolves to a symbol, exactly as
+# the one-dot arm does. Without this, `m.zz()` where m is a variable would be
+# read as a construction — which is a real bug this file's ancestor fixed
+# (bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class), and
+# the multi-segment search must not reintroduce it.
+class Fake:
+    def Request(self, url, data):
+        return "the local won: " + url
+
+
+urllib_local = Fake()
+print(urllib_local.Request("http://example.invalid/local", None))

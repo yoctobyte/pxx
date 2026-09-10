@@ -44401,8 +44401,63 @@ end;
   Pascal original and are therefore left in place THERE — isNilPy still holds
   while an .npy program's Pascal RTL units are parsed, with PyExprMode false.
   --------------------------------------------------------------------------- }
+{ How many EXTRA dotted segments a qualified class construction's MODULE
+  qualifier has, or -1 when the cursor is not on one. `queue.Queue(` is 0;
+  `urllib.request.Request(` is 1.
+
+  It exists because the one-dot arm below was written for `tk.Frame(root, ...)`
+  and a DOTTED PACKAGE never reaches it: the tokens are
+  `urllib . request . Request (`, so the `(` the arm looks for two tokens along
+  is a `.`, the arm declines, and the call falls into the Pascal qualified-call
+  path -- which resolves a qualified PROC and cannot construct a class. The
+  symptom is not "cannot construct": it is **`expected ')' before ','`**, one
+  argument in, because that path takes a single argument. Measured 2026-09-10:
+  `urllib.request.urlopen(u, None)` (a PROC through the same two-segment
+  qualifier) works, `from urllib.request import Request` then `Request(u, None)`
+  works, and `import urllib.request as ur` then `ur.Request(u, None)` works --
+  three neighbours that make it look like a keyword-argument problem and are
+  each the arm this one is missing. lekkerzeilen/gauges.py:141.
+
+  The longest matching prefix wins, and the search extends the MODULE name
+  rather than the class name: a package `a.b` exporting `C` and a package `a`
+  exporting a class `b` cannot both be meant by `a.b.C(`, and the module
+  reading is the one Python gives it.
+
+  The unit ALIAS is what is consulted, not a unit on disk -- `import
+  urllib.request` registers the mangled `urllib_request`, which is the name the
+  segments join to. }
+function PyQualCtorSegs(var unitIdx: Integer): Integer;
+var k, ti: Integer; nm: AnsiString;
+begin
+  Result := -1;
+  unitIdx := -1;
+  if CurTok.Kind <> tkIdent then Exit;
+  { A LOCAL of that name wins, exactly as it does in the one-dot arm: `m.zz()`
+    where m is a variable is a method call and not a construction. }
+  if FindSym(CurTok.SVal) >= 0 then Exit;
+  nm := CurTok.SVal;
+  k := 0;
+  while k <= 4 do          { four segments is past anything real; a bound, not a policy }
+  begin
+    ti := TokPos + 2 * k;                  { the dot that follows segment k }
+    if ti + 2 >= TokCount then Exit;
+    if Tokens[ti].Kind <> tkDot then Exit;
+    if Tokens[ti + 1].Kind <> tkIdent then Exit;
+    if (Tokens[ti + 2].Kind = tkLParen) and (FindUnitOrAlias(nm) >= 0) and
+       PyIsExactCtorName(PyMapReservedMember(GetTokenStr(ti + 1))) then
+    begin
+      unitIdx := FindUnitOrAlias(nm);
+      Result := k;
+      Exit;
+    end;
+    nm := nm + '_' + GetTokenStr(ti + 1);
+    Inc(k);
+  end;
+end;
+
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+    qcSegs, qcUnitIdx, qcI: Integer;         { the qualified-construction arm }
     clsScopeSym: Integer;   { a class attribute visible in a method's DEFAULT }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
@@ -44515,19 +44570,23 @@ begin
     right — only the CALL was taken — which is what pins it to this guard rather
     than to qualified resolution.
     bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class }
-  if (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
-     (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
-     (Tokens[TokPos + 2].Kind = tkLParen) and
-     PyIsExactCtorName(PyMapReservedMember(GetTokenStr(TokPos + 1))) and
-     (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
+  qcSegs := PyQualCtorSegs(qcUnitIdx);
+  if qcSegs >= 0 then
   begin
     { Remember WHICH unit was named: two libraries may export the same class
       name (tkinter's `Canvas` and the reportlab shim's), and resolving by the
       bare name afterwards took whichever was registered first — silently, and
       then the keyword arguments did not match. }
-    PyCtorQualUnit := FindUnitOrAlias(CurTok.SVal);
-    Next;                 { the module name }
-    Expect(tkDot, '.');
+    PyCtorQualUnit := qcUnitIdx;
+    { Consume `<seg> .` once per segment, so the cursor lands on the CLASS
+      whether the qualifier was `queue.` or `urllib.request.`. Unit scope is
+      flat, so consuming the qualifier is all that is needed — the class then
+      resolves by its bare name, against the unit remembered above. }
+    for qcI := 0 to qcSegs do
+    begin
+      Next;
+      Expect(tkDot, '.');
+    end;
     CurASTNode := PyClassCreateExpr;
     PyCtorQualUnit := -1;
     LastExprTk := tyClass;

@@ -1,0 +1,8 @@
+http://example.invalid/one GET
+http://example.invalid/two GET
+pxx
+http://example.invalid/three POST
+2 True 1
+http://example.invalid/alias
+http://example.invalid/bare y
+the local won: http://example.invalid/local

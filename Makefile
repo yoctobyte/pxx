@@ -1733,6 +1733,17 @@ test-nilpy: $(COMPILER)
 	# and if any of them unwound with the queue's mutex held, it never returns.
 	./$(COMPILER) --threadsafe test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.npy $(TESTTMP)/test_nilpy_qdead26
 	$(TESTTMP)/test_nilpy_qdead26 | diff -u test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.expected -
+	# Constructing a class through a DOTTED PACKAGE qualifier --
+	# `urllib.request.Request(url, headers=...)`. It refused with
+	# `expected ')' before ','`, one argument in, which reads as a
+	# keyword-argument problem and is not one: the qualified-construction arm
+	# looked exactly two tokens ahead for the `(` and a second `.` sits there.
+	# The three neighbours that ALL worked -- a proc through the same
+	# qualifier, the `from ... import` spelling, and an `as` alias -- are
+	# asserted in the same file, because each of them is what made this look
+	# like something else.
+	./$(COMPILER) test/test_nilpy_a_class_through_a_dotted_package.npy $(TESTTMP)/test_nilpy_dotpkg26
+	$(TESTTMP)/test_nilpy_dotpkg26 | diff -u test/test_nilpy_a_class_through_a_dotted_package.expected -
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.
