@@ -321,3 +321,45 @@ CORPUS change — allowed here by the owner's standing rule — and belong to
 **Eight modules on four causes, not thirteen on five** — and the count that
 would have been quoted from the table alone is nearly double the work that
 exists.
+
+## Re-census 2026-09-10 ~22:30 (frankB) — compiler `69c84acb1501`, tree `6901193e9`
+
+**Prediction, written before the run and agreed by frankZ before it: ZERO.**
+Modules-compiling does not move. traffic.py was the only subject whose first
+wall was the field-infer message, and clearing that wall hands it the next one
+rather than the finish line.
+
+    CLEAN: 22   CRASH: 0   WALL: 13   of 35      (was 22 / 0 / 13)
+
+**Matched.** The one change is INSIDE the wall column, and it is exactly the
+one predicted:
+
+    traffic.py   was  cannot infer the type of field self.heading   (:402)
+                 now  nearest() takes exactly 2 argument(s), got 3  (:277)
+
+Which is the queue-position rule doing its job, stated as a number this time:
+a fix worth two compiler bugs and a full test fixture moved the headline
+metric by nothing at all, and it was not supposed to. **A null row is only
+information to someone who said what they expected**, so it is written here
+next to the prediction rather than reported as a disappointment.
+
+Corpus note: `lekkerzeilen/shaders.py` was DIRTY at census time. shaders.py is
+CLEAN in both runs, so the count is unaffected — but the corpus is not pinned
+and the next delta must check it again before attributing anything.
+
+### The arithmetic, updated
+
+The four-cause split above is unchanged except that traffic's cause is now
+CLOSED and REPLACED, so it is still one module and still one cause:
+
+     8  compiler work  on FOUR causes:
+          3 modules / 2 sites   threading      __main__, app, gauges
+          2 modules / 1 site    sqlite3        world, atlas
+          2 modules             a module as a VALUE   platform/__init__, bindings
+          1 module              nearest() arity on an unresolved receiver  traffic
+                                (was: a field from a qualified module constant —
+                                 fixed in 80a360e4c, and the module did not move)
+
+**`threading` is now the largest single lever in the corpus** — three modules,
+two sites, and two of the three are the app's own entry points (`__main__.py`,
+`app.py`). Nothing else here is worth more than one or two.
