@@ -1,0 +1,11 @@
+# Four positional arguments is the cap PyHostCall's marshalling carries, and it
+# is REFUSED past that rather than truncated: dropping the fifth argument
+# silently is how a call comes back with a plausible wrong value, which is the
+# failure mode this whole area keeps producing.
+
+
+def f(o):
+    return o.no_class_declares_this(1, 2, 3, 4, 5)
+
+
+print(1)

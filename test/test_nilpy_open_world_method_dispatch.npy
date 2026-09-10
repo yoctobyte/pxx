@@ -1,0 +1,65 @@
+# OPEN-WORLD METHOD DISPATCH on a dynamically-typed receiver.
+#
+# NilPy resolved `o.name(args)` on a receiver of unknown static type by scanning
+# the classes DECLARED IN THE COMPILATION UNIT, and REFUSED when none declared
+# the name. Ordinary cross-module duck typing therefore did not compile -- and
+# CLAUDE.md's N lane settles what that is: "NilPy is UPWARD compatible with
+# CPython, one direction", so refusing what CPython accepts is a defect.
+# feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
+#
+# WHY THE IMPORT ORDER IS LOAD-BEARING AND MUST NOT BE TIDIED. nilpy_openworld_
+# user is imported FIRST, so its bodies are parsed while no class in the unit
+# declares .contains / .zero / .one / .two / .three / .four -- the Canopy that
+# declares them arrives with the SECOND import. Swap the two lines and every
+# call in that module resolves statically and this file stops testing anything.
+# It is the same accident that made the defect so hard to see in the wild:
+# lekkerzeilen's wind.py had `canopy.contains(...)` refused and `canopy.at(...)`
+# accepted on the NEXT LINE, because the file happened to declare an unrelated
+# `at` of its own.
+#
+# THE POSITIVE CONTROL IS THE COMPILE ITSELF and it is free: every pinned
+# compiler REFUSES this file outright ("no class declares a method or callable
+# field .contains()"), so a build where the feature is absent cannot print a
+# wrong answer here -- it cannot produce a binary at all.
+#
+# Every expected value is CPython's own on this same source.
+
+import nilpy_openworld_user
+import nilpy_openworld_world
+
+
+# --- the real shape: a method the caller's module never sees ---------------
+c = nilpy_openworld_world.Canopy(10)
+print("cross", nilpy_openworld_user.blows(c, 1, 2), nilpy_openworld_user.blows(c, 20, 30))
+
+# --- every arity the runtime path marshals ---------------------------------
+print("arity", nilpy_openworld_user.a0(c), nilpy_openworld_user.a1(c),
+      nilpy_openworld_user.a2(c), nilpy_openworld_user.a3(c),
+      nilpy_openworld_user.a4(c))
+
+
+# --- a name NOTHING declares: the miss must be CPython's AttributeError, with
+#     CPython's wording, for an instance and for each non-object receiver. The
+#     message is asserted rather than just the exception type, because the
+#     runtime path borrows pylib's existing diagnostic instead of writing a new
+#     one and that borrowing is exactly what could go wrong quietly.
+def missing(o):
+    return o.no_such_name()
+
+
+for recv in [c, 7, "s", None]:
+    try:
+        missing(recv)
+        print("miss", "NO EXCEPTION")
+    except AttributeError as e:
+        print("miss", e)
+
+
+# --- a CONTAINER receiver reaches the same lookup: pylib's list and str are
+#     classes with RTTI, so a dynamically dispatched method on one resolves
+#     through the identical path rather than needing a second mechanism.
+def upper_of(o):
+    return o.upper()
+
+
+print("container", upper_of("hi"))

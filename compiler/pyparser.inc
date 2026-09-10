@@ -16382,6 +16382,98 @@ begin
   Result := callNode;
 end;
 
+function PyMakeDynMethCall(baseNode: Integer; const mname: AnsiString): Integer;
+{ OPEN-WORLD DISPATCH: `o.name(args)` on a dynamically-typed receiver where NO
+  class declared in this compilation unit declares `name`. Emits
+  pydyn_meth<n>(recv, 'name', args...), which looks the method up on the
+  receiver's own RTTI at run time.
+
+  Until 2026-09-10 this was a hard compile error, and that refused ordinary
+  cross-module duck typing -- CPython's model, not an edge of it. CLAUDE.md's N
+  lane settles the direction ("NilPy is UPWARD compatible with CPython, one
+  direction"), and the closed world was in any case already abandoned
+  conditionally: feature-nilpy-fallback-import drops it WHOLESALE for any
+  program containing an unresolved optional import, so the identical call site
+  compiled or refused depending on whether some unrelated `try: import X` had
+  failed.
+
+  THE TYPO PROTECTION MOVES RATHER THAN DISAPPEARING, which was the objection
+  the closed world existed to answer. The scan still runs and its diagnostic is
+  still emitted -- as a WARNING. A closed-world warning is compatible with
+  runtime lookup; a closed-world REFUSAL is not. The aperture was always narrow:
+  only a receiver whose static type is unknown reaches here, so a typo on a
+  statically-typed receiver is caught elsewhere and is untouched.
+
+  FOUR POSITIONAL ARGUMENTS, refused past that rather than truncated: it is the
+  cap PyHostCall's marshalling carries, and dropping arguments silently is how a
+  call returns a plausible wrong value. A KEYWORD argument is refused for the
+  same reason -- pydyn_meth takes positional slots, and binding `k=v` to a
+  position without the callee's parameter names is exactly the mis-binding
+  bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position was about. Both
+  refusals name the shape and say to annotate the receiver, which resolves the
+  call statically and has none of these limits. }
+const MAX_DYN_ARGS = 4;
+var procIdx, argsHead, lastArg, argNode, litNode, n, i: Integer;
+    argExpr: array[0..MAX_DYN_ARGS - 1] of Integer;
+begin
+  Expect(tkLParen, '(');
+  n := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkAssign) then
+      Error('Nil Python: .' + mname + '() is dispatched at run time (no class '
+        + 'here declares it), and that path takes POSITIONAL arguments only — '
+        + 'annotate the receiver with its class to use a keyword argument');
+    if n >= MAX_DYN_ARGS then
+      Error('Nil Python: .' + mname + '() is dispatched at run time (no class '
+        + 'here declares it), and that path takes at most '
+        + PyIntLiteralText(MAX_DYN_ARGS) + ' arguments — annotate the receiver '
+        + 'with its class to pass more');
+    ParseArgExpr;
+    argExpr[n] := CurASTNode;
+    Inc(n);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+
+  procIdx := FindProc('pydyn_meth' + PyIntLiteralText(n));
+  if procIdx < 0 then
+    Error('Nil Python: pyeval (pydyn_meth' + PyIntLiteralText(n)
+          + ') not loaded');
+
+  litNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[litNode] := StoredName(mname);
+  ASTSLen[litNode] := Length(mname);
+  ASTTk[litNode] := Ord(tyString);
+
+  argsHead := AllocNode(AN_ARG);
+  ASTLeft[argsHead] := baseNode;
+  ASTRight[argsHead] := -1;
+  lastArg := argsHead;
+
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := litNode;
+  ASTRight[argNode] := -1;
+  ASTRight[lastArg] := argNode;
+  lastArg := argNode;
+
+  for i := 0 to n - 1 do
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := argExpr[i];
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+  end;
+
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := argsHead;
+  ASTTk[Result] := Ord(tyVariant);
+  LastExprTk := tyVariant;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -16852,8 +16944,14 @@ begin
       Result := PyMakeOptionalMissingCall('.' + mname + ' (an optional module)');
       Exit;
     end;
-    Error('Nil Python: no class declares a method or callable field .'
-          + mname + '()');
+    { WAS a hard error until 2026-09-10. The scan found nothing, which is
+      still worth saying — it is how a typo on a dynamic receiver is caught —
+      but it is now a WARNING beside a runtime lookup rather than a refusal.
+      See PyMakeDynMethCall for the whole argument. }
+    Warn('Nil Python: no class declares a method or callable field .'
+         + mname + '() — dispatching on the receiver at run time');
+    Result := PyMakeDynMethCall(baseNode, mname);
+    Exit;
   end;
 
   { Which candidate does the CALL name? With several classes declaring the

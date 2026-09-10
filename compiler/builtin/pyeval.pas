@@ -309,6 +309,44 @@ function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
   call site takes the dynamic-call path at all. }
 function pyvar_of_callable(p: Pointer): Variant;
 
+{ OPEN-WORLD METHOD DISPATCH -- `o.name(args)` where the compiler could find NO
+  class declaring `name`, and the receiver's static type is unknown.
+
+  NilPy resolved such a call by scanning the classes DECLARED IN THE
+  COMPILATION UNIT and refused outright when none matched. That refuses
+  ordinary cross-module duck typing, which CPython compiles, and CLAUDE.md's N
+  lane settles the direction: NilPy is UPWARD compatible with CPython, so
+  refusing what CPython accepts is a defect. lekkerzeilen's own entry module is
+  one of five that could not compile for this reason alone.
+
+  THE MACHINERY WAS ALREADY HERE, which is the finding and not the design:
+  every NilPy class carries an RTTI blob whose method table holds each method's
+  NAME, code address, arity and parameter kinds (typinfo's GetInstanceRTTI plus
+  PyFindMethCI above), and PyHostCall is a complete by-name invoker over it --
+  the same one `hasattr` has been reading and the pyeval host bridge has been
+  calling. Nothing new is reflected here; this only makes compiled code reach
+  what the interpreter already reached.
+
+  A NAME THAT IS NOT A METHOD FALLS THROUGH TO pydynattr_get, which resolves a
+  dynamic attribute, a declared field, a @property and __getattr__ in CPython's
+  own order -- so a `Callable` field holding a dispatch-table entry is called,
+  and a genuine miss raises pylib's AttributeError with CPython's exact wording.
+  The miss diagnostic is therefore NOT rewritten here: there is one of it, in
+  one place, and this path borrows it.
+
+  Arity is capped at four positional arguments, the same cap PyClassRefNew
+  carries for the same marshalling reason. The compiler refuses a wider call
+  with a message rather than dropping arguments. }
+function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
+function pydyn_meth1(const recv: Variant; const name: AnsiString;
+                     const a0: Variant): Variant;
+function pydyn_meth2(const recv: Variant; const name: AnsiString;
+                     const a0, a1: Variant): Variant;
+function pydyn_meth3(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2: Variant): Variant;
+function pydyn_meth4(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2, a3: Variant): Variant;
+
 implementation
 
 const
@@ -5246,6 +5284,91 @@ begin
   end;
   f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
   Result := f3(a0, a1, a2);
+end;
+
+function PyDynMethN(const recv: Variant; const name: AnsiString;
+                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
+{ The worker behind pydyn_meth0..4. See the interface block for why it exists.
+
+  The VType 7 test is the whole receiver check: a NilPy instance, a TPyList, a
+  TPyDict and a pyeval closure are all VT_OBJECT, so a dynamically dispatched
+  `.append` on a list resolves through exactly the same lookup as a user
+  method -- pylib's containers ARE classes with RTTI. An int or a str receiver
+  is not an object and gets CPython's message naming its type. }
+var
+  obj: Pointer;
+  cls: PClassRTTI;
+  args: TPyList;
+  res, cb: Variant;
+begin
+  Result := pynone;
+  obj := nil;
+  if PPyRec(@recv)^.VType = 7 then
+    obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
+  { A None receiver reaches here as VT_NULL, not as a nil-payload object, and
+    either way there is no class to look in. PyVarTypeNameOf answers
+    'NoneType' for it, which is the name CPython puts in this message. }
+  if obj = nil then
+    raise AttributeError.Create('''' + PyVarTypeNameOf(recv) +
+      ''' object has no attribute ''' + name + '''');
+
+  cls := GetInstanceRTTI(obj);
+  if (cls <> nil) and (PyFindMethCI(cls, name) <> nil) then
+  begin
+    { PyHostCall marshals every parameter/return shape the RTTI records and
+      halts if the method is absent -- which is why the lookup above is a
+      GUARD and not a duplicate: it is what turns "absent" into a Python
+      exception instead of a process exit. }
+    args := TPyList.Create;
+    if nargs > 0 then args.append(a0);
+    if nargs > 1 then args.append(a1);
+    if nargs > 2 then args.append(a2);
+    if nargs > 3 then args.append(a3);
+    res := pynone;
+    PyHostCall(obj, name, args, TPyList(nil), res);
+    args.Free;
+    Result := res;
+    Exit;
+  end;
+
+  cb := pydynattr_get(obj, name);   { raises AttributeError on a genuine miss }
+  case nargs of
+    0: Result := pyvar_callv0(cb);
+    1: Result := pyvar_callv1(cb, a0);
+    2: Result := pyvar_callv2(cb, a0, a1);
+    3: Result := pyvar_callv3(cb, a0, a1, a2);
+  else
+    Result := pyvar_callv4(cb, a0, a1, a2, a3);
+  end;
+end;
+
+function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
+begin
+  Result := PyDynMethN(recv, name, 0, pynone, pynone, pynone, pynone);
+end;
+
+function pydyn_meth1(const recv: Variant; const name: AnsiString;
+                     const a0: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, 1, a0, pynone, pynone, pynone);
+end;
+
+function pydyn_meth2(const recv: Variant; const name: AnsiString;
+                     const a0, a1: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, 2, a0, a1, pynone, pynone);
+end;
+
+function pydyn_meth3(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, 3, a0, a1, a2, pynone);
+end;
+
+function pydyn_meth4(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2, a3: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, 4, a0, a1, a2, a3);
 end;
 
 function pyvar_of_callable(p: Pointer): Variant;

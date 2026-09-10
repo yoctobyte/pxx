@@ -1,0 +1,13 @@
+# The runtime dispatch path takes POSITIONAL arguments only, and refusing a
+# keyword there is deliberate: pydyn_meth has parameter SLOTS and not the
+# callee's parameter NAMES, so binding `k=v` to a position is precisely the
+# mis-binding bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+# was about -- a wrong value, silently, in the caller's own argument order.
+# Annotating the receiver resolves the call statically and has no such limit.
+
+
+def f(o):
+    return o.no_class_declares_this(k=1)
+
+
+print(1)

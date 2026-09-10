@@ -1,0 +1,7 @@
+cross True False
+arity z10 2 3 6 10
+miss 'Canopy' object has no attribute 'no_such_name'
+miss 'int' object has no attribute 'no_such_name'
+miss 'str' object has no attribute 'no_such_name'
+miss 'NoneType' object has no attribute 'no_such_name'
+container HI

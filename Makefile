@@ -4471,6 +4471,32 @@ test-nilpy: $(COMPILER)
 	# correct, so testing only that would have shown nothing.
 	./$(COMPILER) test/test_nilpy_builtin_over_variant_receiver.npy $(TESTTMP)/test_nilpy_bvrecv26
 	$(TESTTMP)/test_nilpy_bvrecv26 | diff -u test/test_nilpy_builtin_over_variant_receiver.expected -
+	# OPEN-WORLD METHOD DISPATCH: `o.name(args)` on a dynamically-typed receiver
+	# that NO class in the compilation unit declares. It was a hard compile
+	# error, which refused ordinary cross-module duck typing -- CPython's model,
+	# not an edge of it -- and CLAUDE.md's N lane makes refusing what CPython
+	# accepts a defect for this lane.
+	#
+	# THE IMPORT ORDER INSIDE THE .npy IS THE TEST. nilpy_openworld_user is
+	# imported FIRST so its bodies parse while nothing declares .contains; the
+	# Canopy that declares it arrives with the SECOND import. Swap those two
+	# lines and every call resolves statically and the file proves nothing.
+	#
+	# The positive control is free and was RUN, not assumed: the pinned compiler
+	# refuses this file outright and emits no binary, so a build without the
+	# feature cannot print a wrong answer here.
+	./$(COMPILER) test/test_nilpy_open_world_method_dispatch.npy $(TESTTMP)/test_nilpy_openworld26
+	$(TESTTMP)/test_nilpy_openworld26 | diff -u test/test_nilpy_open_world_method_dispatch.expected -
+	# ...and the two shapes that path REFUSES rather than mis-binds. A keyword
+	# argument has no parameter name to bind to at run time, and a fifth
+	# positional argument does not fit the marshalling -- both are wrong values
+	# rather than errors if accepted, which is why they are errors.
+	@./$(COMPILER) test/nilpy_open_world_kwarg_fail.npy $(TESTTMP)/nilpy_ow_kw26 2>&1 \
+	  | grep -q "takes POSITIONAL arguments only" \
+	  || { echo 'nilpy_open_world_kwarg_fail: FAIL - a keyword argument on a runtime-dispatched call must be refused, not bound by position'; exit 1; }
+	@./$(COMPILER) test/nilpy_open_world_arity_fail.npy $(TESTTMP)/nilpy_ow_ar26 2>&1 \
+	  | grep -q "takes at most 4 arguments" \
+	  || { echo 'nilpy_open_world_arity_fail: FAIL - a fifth positional argument must be refused, not dropped'; exit 1; }
 	# Absolute DOTTED imports resolve to SOURCE FILES in a package on disk --
 	# `from mypkg.core.bus import Bus` -- instead of only ever asking for a
 	# mimic_ shim. Compiled FROM the package root, because that is what puts

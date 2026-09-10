@@ -113,6 +113,7 @@ AN_ARG Left arg3
 AN_ARG Left argA
 AN_ARG Left argB
 AN_ARG Left argExpr
+AN_ARG Left argExpr[i]
 AN_ARG Left argExprs[k]
 AN_ARG Left argNode
 AN_ARG Left argNodes[i]
