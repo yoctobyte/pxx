@@ -130,4 +130,4 @@ A first-failure census cannot see the wall behind the one it reports, so "the
 last wall" was never a claim the instrument could support.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 708555fdb.
