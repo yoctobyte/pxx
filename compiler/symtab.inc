@@ -16432,8 +16432,130 @@ begin
 end;
 
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
+procedure ResolveSynthImportLibrary(procIdx: Integer);
+{ Settle the LIBRARY an external will be imported from, or refuse the build.
+
+  Called from ResolveSynthImportLibraries, once per entry of ExternalProc[],
+  immediately before the ELF writer turns those entries into DT_NEEDED.
+
+  IT USED TO LIVE INSIDE RegisterExternal, AND THAT IS NOT THE CHOKE POINT --
+  it only looks like one. RegisterExternal runs during parsing, and the C
+  parser writes ProcLibrary[procIdx] again on EVERY re-declaration it sees
+  (cparser.inc's prototype arm and its header-body arm both do), so a repair
+  made here was undone by the next declaration of the same name. Measured
+  2026-09-10 on `import "/usr/include/SDL2/SDL_version.h"`: ProcLibrary[2287]
+  (`memcmp`) was written libsdl_version.so, repaired to libc.so.6 by this
+  code, then written libsdl_version.so AGAIN by cparser.inc's header-body arm
+  -- glibc's string.h gives memcmp an extern-inline body, so it takes the
+  second arm. The binary linked clean, carried DT_NEEDED on libsdl_version.so,
+  and died with `cannot open shared object file`: the exact failure this guard
+  was written to make impossible, with the guard present, correct, and
+  overwritten.
+  bug-c-an-unresolvable-synthesised-soname-still-reaches-dt-needed
+
+  The population here is EXACTLY the one the emitter reads -- ExternalProc[0
+  ..ExternalCount-1], the same array the DT_NEEDED loops iterate -- so there is
+  no later write for it to miss, and no proc it checks that the emitter would
+  not have imported. ErrorNoPos, not Error: by this point the parse is over and
+  the current token is EOF, so a position would name the end of the file rather
+  than the import. The message names the symbol and the header instead. }
+var enm, synthHdr, dirLib, dirCand: AnsiString;
+begin
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  enm := Procs[procIdx].Name;
+    { THE SIBLING HALF OF THE GUARD ABOVE, AND IT WAS SIMPLY ABSENT.
+      That one asks whether the SYMBOL can come from any library. This asks
+      whether the LIBRARY exists at all. Same choke point, same failure — a
+      build that links clean and dies at exec — and the same argument in its
+      own words: "Every program this rejects was already broken; the change is
+      that it now says so at compile time."
+
+      It went unwritten because each instance was fixed on the PRODUCER side:
+      `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead`
+      removed one way to synthesise a lib<header>.so "that cannot exist, dead
+      at load", and
+      `bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import`
+      removed another whose own note reads "the binary carries a DT_NEEDED on
+      libstrings.so and dies at load. Nothing in the build says so." Two
+      authors wrote that sentence and neither added the check that says so.
+
+      Scoped to sonames the COMPILER INVENTED from a file name — see
+      CSynthMissingLibs in defs.inc. A name the user wrote is intent, and
+      LD_LIBRARY_PATH makes an absent-from-cache library a legitimate,
+      in-tree-tested configuration. }
+    if (ProcLibrary[procIdx] >= 0) and
+       CSynthMissingHeaderFor(Strs[ProcLibrary[procIdx]].Text, synthHdr) then
+    begin
+      { BEFORE REFUSING, ASK THE HEADER'S DIRECTORY — and require it to ANSWER.
+
+        The soname above was synthesised from the header's FILE name, which is
+        the wrong key for a header in a subdirectory: the subdirectory is
+        usually the package and the package is the library, while the file is
+        one component of it. `SDL2/SDL.h` synthesises `libsdl.so`; the library
+        is libSDL2-2.0.so.0, which no rule spelled over `SDL` reaches.
+
+        What makes the directory safe to use is that it is CHECKED rather than
+        trusted. CSynthDirAnswersFor requires a cache entry of this machine's
+        own architecture whose .dynsym DEFINES `enm` — the exact symbol about
+        to become a DT_NEEDED reference. `/usr/include/net/if.h` is why: its
+        directory names libnet.so.9, which IS installed here and exports none
+        of that header's symbols, so a directory rule without the export check
+        would link clean and die on `undefined symbol` — swapping this guard's
+        loud failure for a quiet one, which is a regression even though the
+        rule is right for every other directory on the box.
+
+        This runs ONLY on the path that is already a hard compile error, so
+        nothing that builds today can change: the sole effect is that some
+        builds which currently cannot succeed now do, each one having proved
+        the library answers. }
+      if CSynthDirAnswersFor(Strs[ProcLibrary[procIdx]].Text, enm, dirLib) then
+        ProcLibrary[procIdx] := InternStr(dirLib)
+      else
+      begin
+        { A candidate that was FOUND and did not answer is the more useful
+          message: it names the library the directory points at and says what
+          is wrong with it, instead of leaving the reader to rediscover it. }
+        if CSynthDirCandidateFor(Strs[ProcLibrary[procIdx]].Text, dirCand) then
+          ErrorNoPos('this build would die at exec: `' + enm + '` is imported from '
+                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
+                + 'machine answers to. The compiler derived that soname from the '
+                + 'name of the header you imported (' + synthHdr + '.h), and a '
+                + 'header file name is not a library name. Its DIRECTORY names '
+                + dirCand + ', which is installed here — but that library does '
+                + 'not export `' + enm + '`, so naming it would only move the '
+                + 'failure to load time. Name the right library explicitly, with '
+                + 'an `external ' + '''<soname>''' + '` clause carrying the '
+                + 'soname the loader wants.')
+        else
+          ErrorNoPos('this build would die at exec: `' + enm + '` is imported from '
+                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
+                + 'machine answers to. That soname was not declared anywhere — the '
+                + 'compiler derived it from the name of the header you imported ('
+                + synthHdr + '.h), and a header file name is not a library name. '
+                + 'Name the library explicitly instead, with an `external '
+                + '''<soname>''' + '` clause carrying the soname the loader wants.');
+      end;
+    end;
+end;
+
+procedure ResolveSynthImportLibraries;
+{ The choke point. Every DT_NEEDED builder calls this first -- PrepareDynamicData,
+  PrepareDynamicData32 and writeELFSharedX64, which are the only three readers of
+  ProcLibrary[ExternalProc[i]] in the tree. Idempotent: a library that resolved is
+  no longer one of CSynthMissingLibs, so a second pass finds nothing to do. }
+var i: Integer;
+begin
+  for i := 0 to ExternalCount - 1 do
+    ResolveSynthImportLibrary(ExternalProc[i]);
+end;
+
+
 function RegisterExternal(procIdx: Integer): Integer;
-var i, extIdx: Integer; enm, synthHdr, dirLib, dirCand: AnsiString;
+{ The library an external is imported FROM is not settled here -- see
+  ResolveSynthImportLibrary above, which runs once per entry of ExternalProc[]
+  just before the ELF writer reads it. What stays here is the guard about the
+  SYMBOL, which no later write can undo. }
+var i, extIdx: Integer; enm: AnsiString;
 begin
   { A `__pxx_p*` name is one of OUR OWN pthread PAL helpers (palpthread.pas),
     not anything a shared library can supply. Reaching this point means a C
@@ -16499,79 +16621,6 @@ begin
             + 'Something that should supply its body is not visible here — a '
             + 'missing `uses` of the unit that defines it, or a C translation '
             + 'unit compiled without its Pascal bridge.');
-    { THE SIBLING HALF OF THE GUARD ABOVE, AND IT WAS SIMPLY ABSENT.
-      That one asks whether the SYMBOL can come from any library. This asks
-      whether the LIBRARY exists at all. Same choke point, same failure — a
-      build that links clean and dies at exec — and the same argument in its
-      own words: "Every program this rejects was already broken; the change is
-      that it now says so at compile time."
-
-      It went unwritten because each instance was fixed on the PRODUCER side:
-      `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead`
-      removed one way to synthesise a lib<header>.so "that cannot exist, dead
-      at load", and
-      `bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import`
-      removed another whose own note reads "the binary carries a DT_NEEDED on
-      libstrings.so and dies at load. Nothing in the build says so." Two
-      authors wrote that sentence and neither added the check that says so.
-
-      Scoped to sonames the COMPILER INVENTED from a file name — see
-      CSynthMissingLibs in defs.inc. A name the user wrote is intent, and
-      LD_LIBRARY_PATH makes an absent-from-cache library a legitimate,
-      in-tree-tested configuration. }
-    if (ProcLibrary[procIdx] >= 0) and
-       CSynthMissingHeaderFor(Strs[ProcLibrary[procIdx]].Text, synthHdr) then
-    begin
-      { BEFORE REFUSING, ASK THE HEADER'S DIRECTORY — and require it to ANSWER.
-
-        The soname above was synthesised from the header's FILE name, which is
-        the wrong key for a header in a subdirectory: the subdirectory is
-        usually the package and the package is the library, while the file is
-        one component of it. `SDL2/SDL.h` synthesises `libsdl.so`; the library
-        is libSDL2-2.0.so.0, which no rule spelled over `SDL` reaches.
-
-        What makes the directory safe to use is that it is CHECKED rather than
-        trusted. CSynthDirAnswersFor requires a cache entry of this machine's
-        own architecture whose .dynsym DEFINES `enm` — the exact symbol about
-        to become a DT_NEEDED reference. `/usr/include/net/if.h` is why: its
-        directory names libnet.so.9, which IS installed here and exports none
-        of that header's symbols, so a directory rule without the export check
-        would link clean and die on `undefined symbol` — swapping this guard's
-        loud failure for a quiet one, which is a regression even though the
-        rule is right for every other directory on the box.
-
-        This runs ONLY on the path that is already a hard compile error, so
-        nothing that builds today can change: the sole effect is that some
-        builds which currently cannot succeed now do, each one having proved
-        the library answers. }
-      if CSynthDirAnswersFor(Strs[ProcLibrary[procIdx]].Text, enm, dirLib) then
-        ProcLibrary[procIdx] := InternStr(dirLib)
-      else
-      begin
-        { A candidate that was FOUND and did not answer is the more useful
-          message: it names the library the directory points at and says what
-          is wrong with it, instead of leaving the reader to rediscover it. }
-        if CSynthDirCandidateFor(Strs[ProcLibrary[procIdx]].Text, dirCand) then
-          Error('this build would die at exec: `' + enm + '` is imported from '
-                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
-                + 'machine answers to. The compiler derived that soname from the '
-                + 'name of the header you imported (' + synthHdr + '.h), and a '
-                + 'header file name is not a library name. Its DIRECTORY names '
-                + dirCand + ', which is installed here — but that library does '
-                + 'not export `' + enm + '`, so naming it would only move the '
-                + 'failure to load time. Name the right library explicitly, with '
-                + 'an `external ' + '''<soname>''' + '` clause carrying the '
-                + 'soname the loader wants.')
-        else
-          Error('this build would die at exec: `' + enm + '` is imported from '
-                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
-                + 'machine answers to. That soname was not declared anywhere — the '
-                + 'compiler derived it from the name of the header you imported ('
-                + synthHdr + '.h), and a header file name is not a library name. '
-                + 'Name the library explicitly instead, with an `external '
-                + '''<soname>''' + '` clause carrying the soname the loader wants.');
-      end;
-    end;
   end;
   extIdx := -1;
   for i := 0 to ExternalCount-1 do

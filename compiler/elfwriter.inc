@@ -150,6 +150,7 @@ begin
   { Emit each distinct library soname once (one DT_NEEDED per library, not
     per imported symbol). InternStr dedups library names, so identical
     libraries share a Strs[] index — compare by index. }
+  ResolveSynthImportLibraries;
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
@@ -259,6 +260,7 @@ begin
 
   DynamicStrOff := DataLen;
   DataPutB(0);
+  ResolveSynthImportLibraries;
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
@@ -4806,6 +4808,7 @@ begin
 
   { DT_NEEDED: one per distinct imported library (Strs[] index dedup, same
     as PrepareDynamicData). }
+  ResolveSynthImportLibraries;
   neededCount := 0;
   for i := 0 to ExternalCount - 1 do
   begin

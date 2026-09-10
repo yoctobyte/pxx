@@ -11070,6 +11070,30 @@ test-core: $(COMPILER)
 	@if readelf -d $(TESTTMP)/hdrstatic_ffix26 2>/dev/null | grep -q 'libhdrstatic_ffi\.so'; then \
 	  echo "ok: hdrstatic_ffix26 DOES carry libhdrstatic_ffi.so — the soname greps above can match, so their silence means something"; \
 	else echo "FAIL: hdrstatic_ffix26 has no libhdrstatic_ffi.so DT_NEEDED. This is the grep-pipeline control for the two assertions above; with it inert they cannot fail and their silence means nothing. Fix this before believing them"; exit 1; fi
+	# A LIBRARY RESOLVED FOR AN EXTERNAL MUST SURVIVE EVERY LATER DECLARATION OF
+	# THE SAME NAME. The rows above prove the refusal fires; this one proves the
+	# other outcome of the same guard -- the UPGRADE -- is not silently undone.
+	#
+	# The three assertions are deliberately different instruments. The binary
+	# RUNNING is the one that matters and is what regressed: before the fix this
+	# built with no diagnostic at all and died with `libsynthclob.so: cannot open
+	# shared object file`. The ABSENCE grep names the cause; absence is the right
+	# instrument here because a stray DT_NEEDED cannot be produced by accident.
+	# And the PRESENCE grep is what stops the absence row from passing vacuously
+	# -- a binary with no dynamic section at all satisfies "no libsynthclob.so"
+	# and proves nothing. See test/chdrsynth/m/synthclob.h for why each line of
+	# the fixture is needed; all three were ablated against the pre-fix compiler.
+	# bug-c-an-unresolvable-synthesised-soname-still-reaches-dt-needed
+	./$(COMPILER) -Itest/chdrsynth/m -Futest/chdrsynth/m test/test_synth_soname_survives_redeclaration.pas $(TESTTMP)/synthclob26
+	@if readelf -d $(TESTTMP)/synthclob26 2>/dev/null | grep -q 'libsynthclob\.so'; then \
+	  echo "FAIL: synthclob26 carries a DT_NEEDED on libsynthclob.so — a soname the compiler invented from a header file name reached the ELF. The library was resolved to libc.so.6 while the header was being parsed and a later re-declaration of memcmp overwrote it; this binary links clean and dies at exec"; exit 1; fi
+	@if readelf -d $(TESTTMP)/synthclob26 2>/dev/null | grep -q 'libc\.so\.6'; then \
+	  echo "ok: synthclob26 imports memcmp from libc.so.6, not from the invented libsynthclob.so"; \
+	else echo "FAIL: synthclob26 has no libc.so.6 DT_NEEDED. memcmp is supposed to be a dynamic import here, so this binary is not exercising the path — with it inert the libsynthclob.so row above cannot fail and its silence means nothing"; exit 1; fi
+	@out=$$($(TESTTMP)/synthclob26 2>&1); rc=$$?; \
+	 test "$$rc" = "0" && test "$$out" = "0" \
+	  || { echo "FAIL: synthclob26 did not run (rc=$$rc, out=$$out). rc=127 with a loader message is the original bug: the binary was built without a diagnostic and could not be executed"; exit 1; }
+	@echo "ok: a resolved import library survives a later re-declaration of the same external"
 	# A C diagnostic names the MODULE it is in, and stays silent about the main
 	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
 	# SILENT half is the one that needs the test: the C answer is consulted only
