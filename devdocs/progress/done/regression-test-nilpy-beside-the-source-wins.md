@@ -79,4 +79,4 @@ dropping it here manufactures exactly the failure under investigation.
 Closing as fixed. The `track: N` guess in the frontmatter was right by accident —
 it was derived from the failing step's file name, and the fix was in the C/FFI
 diagnostic path plus the Makefile.
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d212489ab.
