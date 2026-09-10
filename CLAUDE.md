@@ -384,7 +384,7 @@ one-line logbook pointer.
 ### Design north stars
 
 - **`devdocs/dev/pxx-crash-course.md` — READ THIS FIRST IF YOU ARE TOUCHING A
-  LIBRARY, A FRONTEND OR AN IMPORT.** 12.7KB / ~3.2k tokens, measured
+  LIBRARY, A FRONTEND OR AN IMPORT.** 15.7KB / ~3.9k tokens, measured
   2026-09-10. Added at the owner's direction the same day, because a seat with
   full repo access spent an evening rediscovering settled design, proposed a
   mechanism that already existed under another name, and relayed two wrong
@@ -397,8 +397,13 @@ one-line logbook pointer.
   `TPyBytes`/`TPyList`/`Variant`; imports resolve OURS FIRST and the reason is
   PREDICTABILITY, not precedence; shims are NOT a last resort (owner, overruling
   `python-libraries.md` §2); and pxx writes its own ELF with no external linker
-  but cannot CONSUME an object. **Before proposing a mechanism, grep for it** —
-  one `grep -l TPyBytes lib/rtl/*.pas` would have saved that evening.
+  but cannot CONSUME an object; and a library is configured by a RECIPE (pinned
+  commit, `--mimic-fpc`, `-Fu` roots, and a SKIP when absent — synapse is the
+  worked example, and the declarative `.ini` in `python-libraries.md` §3 is
+  specified but NOT built). **Before proposing a mechanism, grep for it, and
+  when the grep returns prose, READ the prose** — one
+  `grep -l TPyBytes lib/rtl/*.pas` would have saved that evening, and I reported
+  the recipe mechanism as missing while holding the file that specifies it.
 
 - **`devdocs/dev/ir-as-substrate.md`** — push generality down into the IR, keep
   frontends thin. Track A is the one gate and the one multiplier.

@@ -1,6 +1,6 @@
 # The pxx crash course — design and goals
 
-**Read this before you touch a library, a frontend, or an import.** 12.7KB / ~3.2k tokens, measured 2026-09-10.
+**Read this before you touch a library, a frontend, or an import.** 15.7KB / ~3.9k tokens, measured 2026-09-10.
 It exists because a seat with full access to this repo spent an evening in
 2026-09-10 rediscovering settled design from first principles, proposed a
 mechanism that already existed under another name, and told a peer two wrong
@@ -216,6 +216,61 @@ exactly the error this document exists to prevent.
 
 ---
 
+## 4b. A LIBRARY IS CONFIGURED BY A RECIPE — synapse is the worked example
+
+The owner, 2026-09-10: *"that's why we invented a configuration per library or
+application, in case of such. for compiler defines, import paths, etc."*
+
+**The pattern is real and in use; the declarative file format for it is designed
+and NOT built.** Both halves matter, and the first version of this document
+recorded the whole thing as "could not find it", which was wrong — I had
+`python-libraries.md` open and stopped one section short of §3.
+
+### What exists: a per-library recipe, held in shell + Makefile
+
+`tools/install_externals.sh` and the `lib-test` rules are the live example.
+Synapse — the third-party Pascal TCP/IP library — carries all four parts:
+
+| part | where | synapse's value |
+| --- | --- | --- |
+| **pinned source identity** | `install_externals.sh:27` | `SYNAPSE_REPO` + `SYNAPSE_COMMIT = b3224c3d…` (a commit, not a branch), both env-overridable |
+| **location convention** | `:23` | `external/`, gitignored, fetched on demand |
+| **the build line** | `Makefile:33388` | `--mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix` |
+| **graceful absence** | `Makefile:33385` | prints `SKIP … external/synapse absent` and records it, rather than failing |
+
+That last row is the part to copy rather than the part to skim: a library nobody
+fetched must **SKIP, never fail and never silently pass** — the repo already paid
+for getting that wrong once
+(`bug-b-lib-test-unrunnable-in-a-fresh-clone-no-synapse-fetch`).
+
+### The knobs a recipe sets
+
+- `-Fu<dir>` — add a Pascal unit search root. `PXX_LIBPATH=a:b` for extra roots
+  (after `-Fu`, before the defaults).
+- `-d<NAME>` / `-u<NAME>` — define / undefine a conditional symbol.
+- `--mimic-fpc` — adopt FPC's define set for identity-probing headers. This is
+  what lets a library written for FPC compile unchanged.
+- `--strict-fpc` — the FPC-parity umbrella (`--strict-case`, `--strict-overload`,
+  `--strict-operator`, `--strict-python`, `--strict-visibility`). Note the
+  direction: **Synapse IS what `--strict-fpc` is for** (`Makefile:19252`), so a
+  third-party FPC library is the subject of the flag, not an exception to it.
+
+### What is NOT built
+
+`python-libraries.md` §3 specifies a declarative per-library recipe —
+`lib/pyrecipes/<name>.ini`, with `[library]` class/strategy/status,
+`[source]`, `[oracle]` (how to run the real library under CPython for
+differential testing) and `[surface]` (what a mimic actually implements, *"so
+incompleteness is declared rather than discovered at run time"*).
+
+It says **"Proposed shape"**, and `lib/pyrecipes/` does not exist. Measured
+2026-09-10: no `.ini` under the repo but `songformatter_settings.ini`, which is
+an application's own settings and unrelated.
+
+**So do not cite §3 as a thing to put a file in.** The live mechanism is the
+shell-plus-Makefile recipe above. If you need the declarative one, that is a
+feature to build, and §3 is already its specification.
+
 ## 5. The design north stars, and what each one is for
 
 - **`ir-as-substrate.md`** — push generality down into the IR, keep frontends
@@ -231,13 +286,13 @@ exactly the error this document exists to prevent.
 
 ## Known gaps in this document
 
-- **Per-library / per-application configuration.** The owner referred to it
-  (2026-09-10: *"that's why we invented a configuration per library or
-  application ... for compiler defines, import paths, etc."*). **I could not
-  find it** — no config file format turned up, only prose references in
-  `c-linking-and-crtl-autopull.md` and `python-libraries.md`. Either it exists
-  somewhere I did not look, or it is decided and unbuilt. **Do not assume from
-  this document that it exists**, and if you find it, write the pointer here.
+- ~~Per-library configuration — could not find it.~~ **CLOSED 2026-09-10, see
+  §4b.** It exists as a shell+Makefile recipe (synapse is the worked example);
+  the declarative `.ini` format in `python-libraries.md` §3 is specified and
+  unbuilt. Recording the failure rather than deleting it: I reported "could not
+  find" while holding the file that describes it, having stopped one section
+  short. **A `grep` that returns prose references is not evidence of absence** —
+  it is a hint to read the prose.
 - The dual-surface counts in §1 come from a crude heuristic, not a census.
 - §2's cross-target rows are measured for i386 and wasm32 only. riscv32 and
   xtensa refuse earlier (`a heap arena needs mmap`), upstream of resolution, so
