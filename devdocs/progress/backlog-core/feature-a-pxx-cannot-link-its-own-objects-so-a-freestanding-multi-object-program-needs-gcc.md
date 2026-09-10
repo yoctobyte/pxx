@@ -219,3 +219,52 @@ here is known to scale with object count.
    measure the size.
 3. **Then** route 2 (a pxx `--link` mode), which removes the `ld` call. A
    convenience now, not an enabler.
+
+## 2026-09-10 — the `ld` route is PROVEN, with a shell, and the missing compiler piece is the ENTRY, not the link
+
+Compiler `69c84acb1501` at `907015c58`. 19 applets **including `ash`**, 86
+translation units, `tools/busybox_diff.sh --separate --keep --targets x86_64`:
+
+| link | libc | result |
+| --- | --- | --- |
+| `gcc` (what the harness does) | glibc, dynamic PIE | GREEN — byte-identical to the gcc oracle over 132 cases |
+| `ld -static -e _start` + entry stub | **none** | static, `ldd`: *not a dynamic executable*, 38444672 bytes; ash, cat, cp, date, dmesg, echo, grep, ls, mkdir, mount, mv, ps, pwd, rm, sleep, sync, umount, uname, wc all run |
+
+So there is no duplicate-symbol wall and no `errno` TLS wall: **dropping glibc
+removes the conflict**, exactly as the summary predicted. `tools/link_freestanding.sh`
+performs this link and ASSERTS the result (no `PT_INTERP`, `ldd` agrees).
+
+**THE REAL MISSING PIECE IS THE ENTRY, AND IT IS FOUR THINGS, NOT ONE.** A
+6-instruction stub that reads argc/argv and calls `main` is enough for echo, ls,
+wc, grep and pwd — and produced **three** failures that look like three
+unrelated compiler bugs:
+
+* `ash` SIGSEGV in `hashvar` on a NULL `varinit` pointer
+* `date -u -d @0` SIGSEGV
+* `uname -a` printing `Linux` eight times — a plausible WRONG VALUE, no crash
+
+One cause: **the link has 84 function pointers in `.init_array` and glibc's
+`crt1.o` was running them.** A constructor that does not run leaves its
+subsystem's tables zeroed, which is why every symptom appears far from the cause
+and in a different subsystem. The other three duties are the `%gs` control block
+(`getrlimit(RLIMIT_STACK)`, `gettid`, `{self,tid,stack_low,stack_top}`,
+`arch_prctl(ARCH_SET_GS)` — transcribed off a pxx executable's own entry with
+gdb `starti`), `environ = argv + argc + 1`, and `.fini_array` via `exit`.
+
+**ASKED FOR: `--emit-obj --entry`** (or equivalent) that writes those bytes into
+an object. `elfwriter.inc` already emits all of it for executables; today it is
+hand-copied in `tools/pxx_freestanding_start.s`, and a hand copy of a codegen
+detail goes stale silently — with a segfault in somebody else's library as the
+symptom.
+
+**Residual is still SIZE and it is now measured against `--dce`:** 38444672 plain,
+32553944 with `--dce` — **15%, not the 6x** a single TU shows. So `--dce` does not
+touch this; the bulk is
+[[feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes]],
+which this puts on the critical path for image size (the ISO is 34 MB, of which
+the busybox is 32.5).
+
+Shipped in `tools/mkminimal.sh` — a bootable BIOS+EFI ISO whose entire userland
+is this binary. `MINIMAL-IMAGE OK` under qemu: kernel boots, shell launches,
+on-board pascal26 compiles and runs a Pascal program, **0 shared libraries in the
+image**.
