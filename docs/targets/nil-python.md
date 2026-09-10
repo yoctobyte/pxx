@@ -258,8 +258,9 @@ supported. Triple-quoted f-strings are not.
 
 **A bare import name means Python.** `import mymod` looks for `mymod.py` or
 `mymod.npy` and nothing else — it will not quietly load a Pascal unit that
-happens to share the name (One thing that is *not* an ordinary Pascal
-unit does import bare: a [Python extension module](#python-extension-modules-import-bare).) Where a name *does* collide with one of PXX's own
+happens to share the name. (Two things that are *not* ordinary Pascal
+units do import bare: a [Python extension module](#python-extension-modules-import-bare),
+and the RTL units listed below.) Where a name *does* collide with one of PXX's own
 RTL units, the compiler says so and names the spelling that reaches it:
 
 ```
@@ -267,6 +268,24 @@ error: import: classes is the Pascal unit …/lib/rtl/classes.pas, not a Python
 module — a bare NilPy import resolves to Python (.py/.npy) only. To reach the
 Pascal unit, name it with its extension: import 'classes.pas' as classes
 ```
+
+**A fixed list of RTL and PCL units is the deliberate exception**, because they
+carry a Python surface written for exactly this purpose. `ast`, `atexit`,
+`base64`, `collections`, `configparser`, `html`, `io`, `json`, `markdown`,
+`math`, `pathlib`, `random`, `re`, `subprocess`, `tempfile`, `tkinter` and
+`zlib` each import bare and resolve to the Pascal unit of that name:
+
+```python
+import math
+print(math.floor(3.7))           # 3
+```
+
+That is narrower than "any unit with a Python surface". The set is a list
+compiled into the compiler, so a unit that *grows* a Python surface without being
+added to it stays unreachable by a bare import — the import binds a host C header
+or fails instead, and nothing about the unit shows why. Those seventeen names are
+what the list holds as of 2026-09-11, all verified against the pinned compiler on
+that date; `import classes`, which is not on it, gives the error above.
 
 **To import another language, quote the file name and give it an alias:**
 
