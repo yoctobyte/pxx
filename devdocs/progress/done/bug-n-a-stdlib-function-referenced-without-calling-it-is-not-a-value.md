@@ -3,13 +3,13 @@ slug: bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value
 track: N
 type: bug
 prio: 65
-status: working
+status: done
 owner: frankB
 created: 2026-09-10
 found-by: frankuser
 tags: [nilpy, lekkerzeilen, stdlib, values]
 blocked-by: []
-summary: "FIXED 2026-09-10 (compiler binary `de51b67ba86b`). `_sin = math.sin` gave `no member sin came of the qualifier math`; lekkerzeilen/scenery is now clean. THE TICKET'S GUESS ABOUT THE MECHANISM WAS WRONG AND THAT IS THE USEFUL PART: it predicted the same gate as bug-n-os-environ-and-os-sep-are-not-values, and PyIsStdlibMemberValue knows only sys and os and was never consulted for math. Three unrelated mechanisms served one construct and TWO OF THEM WERE SILENT, not errors -- `f = string.capwords` printed an empty line where CPython prints `A B`, and `b = twinmod2.parse` answered a DIFFERENT MODULE'S function, because the all-Variant-overload scan searched every proc in the program by folded name. The CALL spelling of all of them was right throughout, which is why no probe of \"does an imported function work\" could see either. The compiler's own shim table (math.fabs, os.getcwd) stays a REFUSAL and now says why and what to write instead: the call site adds a domain guard, an overflow guard, an overload pick and an arity re-target that a bare reference has no arguments to apply."
+summary: "FIXED 2026-09-10 in `fe0905649` (compiler binary `893ce1ab4ca7` at that commit; `de51b67ba86b` was the binary the fix was first measured on, pre-push). `_sin = math.sin` gave `no member sin came of the qualifier math`; lekkerzeilen/scenery is now clean. THE TICKET'S GUESS ABOUT THE MECHANISM WAS WRONG AND THAT IS THE USEFUL PART: it predicted the same gate as bug-n-os-environ-and-os-sep-are-not-values, and PyIsStdlibMemberValue knows only sys and os and was never consulted for math. Three unrelated mechanisms served one construct and TWO OF THEM WERE SILENT, not errors -- `f = string.capwords` printed an empty line where CPython prints `A B`, and `b = twinmod2.parse` answered a DIFFERENT MODULE'S function, because the all-Variant-overload scan searched every proc in the program by folded name. The CALL spelling of all of them was right throughout, which is why no probe of \"does an imported function work\" could see either. The compiler's own shim table (math.fabs, os.getcwd) stays a REFUSAL and now says why and what to write instead: the call site adds a domain guard, an overflow guard, an overload pick and an arity re-target that a bare reference has no arguments to apply."
 ---
 
 # Measured 2026-09-10, compiler `61f8a78f8aae`, tree `31dad27bd`
@@ -193,3 +193,6 @@ could explain, and the variable there is now named `lower_fn` and says why.
   the twin row answers `twin 1` twice, and the shim row emits the old
   qualifier message so the grep fails. The lambda row passed BEFORE the change
   too and is a did-not-break control, not evidence.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
