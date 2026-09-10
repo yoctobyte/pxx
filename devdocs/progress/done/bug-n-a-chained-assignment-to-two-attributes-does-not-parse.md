@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`self.a = self.b = n` -- a chained assignment whose targets are ATTRIBUTES -- does not parse: `expected newline after statement`. RE-MEASURED 2026-09-10 and the 09-09 cause section below is STALE: it says the chain is \"plain NAME targets only\" and refuses `d[k] = d2[k2] = f()`, and that shape compiles, runs, and calls f exactly once. The real cause is the GUARD at pyparser.inc:28123, which admits the chain arm only for a literal `IDENT = IDENT =` token run -- so there is ONE chain implementation, it handles bare names, and every other shape falls through to the ordinary assignment path and is read as the NESTED `X = (Y = v)`. That reading is why subscript rows pass and attribute-after-first rows do not. AND IT CARRIES A SILENT DIVERGENCE NOTHING HAD REPORTED, which outranks the filed symptom: the nested reading stores RIGHT TO LEFT where CPython stores LEFT TO RIGHT. `l[idx(1)] = m[idx(2)] = 7` gives store order [2,1] against CPython's [1,2] while both print `7 7` -- the values agree and only the target subexpressions' side effects differ, so no value assertion can see it. A fix that clears the parse error without removing the nesting closes this ticket and leaves the silent half in place, so the ORDER probe must ship as a test alongside the parse repro."
-status: working
+status: done
 owner: frankB
 ---
 
@@ -238,3 +238,6 @@ the corpus writes. Filed as its own row rather than left implicit:
 
 The scope note above stands: `self.a = b = 7` no longer fails here, and the
 field-inference pre-pass is still a separate wall for other shapes.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

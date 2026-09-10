@@ -5,12 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:109 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3653 rejected:81`
+`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:109 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3654 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-n-a-chained-assignment-to-two-attributes-does-not-parse` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
