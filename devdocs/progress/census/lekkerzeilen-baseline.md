@@ -112,6 +112,11 @@ inflating a number. See bug-n-the-compiler-segfaults-on-lekkerzeilen-vessel-py.
 ## Remaining walls by cause, not by count
 
 - **ctypes** — capture, gfx, _ctypes_backend, _gl, _sdl2 (5)
+  — **CORRECTED BELOW, see "The 13 walls, by CAUSE rather than by module":
+  three of these five are the CPython arm of the app's own backend seam and
+  the compiler owes them nothing.** This line reads as the largest cause and
+  is not one. Left in place rather than edited away, because both later
+  sections are written as corrections OF it.
 - **threading** — app, gauges, __main__ (3)
 - **sqlite3.connect** — atlas, world (2)
 - **platform.KEY_ESCAPE** — bindings (1)
@@ -152,6 +157,11 @@ Walls by cause, updated — the SIGSEGV row is gone and a type-inference row
 takes its place:
 
 - **ctypes** — capture, gfx, _ctypes_backend, _gl, _sdl2 (5)
+  — **CORRECTED BELOW, see "The 13 walls, by CAUSE rather than by module":
+  three of these five are the CPython arm of the app's own backend seam and
+  the compiler owes them nothing.** This line reads as the largest cause and
+  is not one. Left in place rather than edited away, because both later
+  sections are written as corrections OF it.
 - **threading** — app, gauges, __main__ (3)
 - **sqlite3.connect** — atlas, world (2)
 - **platform.KEY_ESCAPE** — bindings (1)

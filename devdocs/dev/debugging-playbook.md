@@ -23751,3 +23751,99 @@ is `ASTKind = AN_INT_LIT` and value 1 or 2, so print's `file=` handling has to
 move in the same step or five working sites go red.
 
 **Not promoted.** One instance, and the parent rule is already in the file.
+
+## `sync.sh` PULLS BEFORE IT PUSHES, SO BANKING YOUR WORK RE-PARENTS IT — AND THE COMMIT THAT TOUCHED NO COMPILER FILE IS THE ONE THAT MOVES THE COMPILER
+
+Two instances, 2026-09-10, two seats, within an hour, reached by different
+routes. CLAUDE.md already says PUSH -> LET THE PULL SETTLE -> REBUILD ->
+MEASURE. Both of us had read that as covering work arriving in a pull we CHOSE
+to do. **It is the push itself that does it.**
+
+**frankZ's instance.** Built `fca3152289cc`, verified every row against it,
+committed, ran `tools/sync.sh`. The sync pulled frankB's `813c99cc7` and
+rebased mine on top — so `813c99cc7` became an ANCESTOR of my own commit, and
+the binary I had verified with predated my commit's own parent. I pushed a
+commit whose parent I had never compiled. Nothing errored; the tree was clean;
+`git log ... -- compiler/` from my own sha forward showed nothing, correctly,
+because the new work was BELOW me and not above.
+
+**frankB's instance, and it is the sharper one: the commit was DOCS-ONLY.**
+Their binary was built at `813c99cc7`; their next sync banked a documentation
+commit, pulled frankZ's rename pass, and rebased. A tier was running. **The
+push that had nothing to do with `compiler/` is the one that moved
+`compiler/`** — which is exactly why nobody looks: the trigger has no
+relationship to the subject, and "I only touched docs" is the reasoning that
+skips the check.
+
+**The tree ALWAYS moved. That is the wrong question.** The right one is
+frankB's:
+
+> **Did the INSTRUMENT'S INPUTS move, or only its SUBJECT?**
+
+- The compiler moved under a running or finished measurement -> **rebuild**,
+  then re-earn every row rather than carrying them.
+- You want to know whether you need to -> **a two-path diff**, one command:
+
+      git diff --stat <sha the binary was built from>..HEAD -- Makefile test/
+
+  Empty means the recipe and every test source are byte-identical between the
+  tree the binary came from and the tree it is reading. The verdict is then
+  ATTRIBUTABLE — "validates the binary built at `813c99cc7` over test sources
+  identical to HEAD's" — which is a sentence you can defend, where "green at
+  HEAD" is one you cannot.
+
+A rebuild costs 12s; the diff costs nothing. Both beat the third option, which
+is quoting a verdict about a tree that stopped existing the moment you banked
+your work. **And the feeling to distrust is that the tree seems settled — it
+does, because you just settled it.**
+
+**Not promoted.** Two instances, two seats, one box, one evening: one
+population sampled twice, which is the test this pair has now used three times
+to decline a finding of its own. The docs-only route is the half that would
+argue loudest for promotion, and it is still one instance of that route.
+
+## A FIRST-FAILURE CENSUS OVER A PACKAGE WITH A PORTABILITY SEAM OVER-REPORTS BY THE SIZE OF THE ARM THAT IS NOT TAKEN
+
+frankB's finding, 2026-09-10, verified here before being written in. **This is
+not the queue-position error CLAUDE.md already carries.** Those walls sit
+BEHIND something. These are not on the path at all.
+
+`lekkerzeilen/platform/__init__.py` selects a backend:
+
+    def _select_backend():
+        try:
+            import ctypes
+        except ImportError:
+            from . import _pxx
+            return _pxx, "pxx"
+        from . import _ctypes_backend
+        return _ctypes_backend, "ctypes"
+
+Under NilPy `import ctypes` misses, the handler returns `_pxx`, and **the tail
+is never reached** — measurably so since `708555fdb`. `_ctypes_backend` is
+imported from that dead tail and nowhere else; `_sdl2` and `_gl` are imported
+only from `_ctypes_backend`. So all three are walls **only because the census
+compiles every file DIRECTLY.** A run that followed imports from `__main__`
+would never open them.
+
+`ctypes` was the largest wall group in the baseline table at 5 modules. **The
+compiler owes three of them nothing.** The honest arithmetic is 13 walls = 3 by
+design + 2 corpus work (Track B) + **8 modules on FOUR causes** — nearly half
+what the table's own largest row implies.
+
+**The tell is only visible to someone who has read the seam.** The walled
+modules are the ones the DEAD branch names, and nothing in the error text says
+so — `no unit named ctypes` is identical whether the import is on the taken
+path or the abandoned one. A census cannot distinguish them and neither can a
+grep.
+
+**So before ranking an import wall, ask whether anything on the taken path
+reaches that file at all.** In a package with a portability seam — and any
+package that runs on more than one platform has one — the answer for a whole
+directory can be no.
+
+**And a substring grep will confirm the wrong answer.** Checking who imports
+`_gl`, this seat's own grep matched `app.py:2299`, which is
+`set_int("u_glyphs", 0)` — `_gl` inside `u_glyphs`. Read as an importer it
+would have broken the finding on a match that is not one. Match on the import
+FORM (`from . import X`, `import X`), never on the bare name.

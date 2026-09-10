@@ -6,13 +6,14 @@ type: bug
 prio: 60
 status: open
 summary: >
-  lekkerzeilen/traffic.py refuses with `cannot infer the type of field
-  self.heading - annotate it` at line 402. Newly VISIBLE rather than new: it was
-  behind the vessel.py SIGSEGV, which traffic.py inherited through
-  `from . import vessel`. CAUSE NOT ESTABLISHED — every isolated shape from
-  line 402 compiles cleanly, so the reported line is where the pre-pass gave up
-  and not necessarily where the untypeable store is. One of the last two walls
-  in the lekkerzeilen corpus that is not a missing shim.
+  CAUSE FOUND (frankB, 2026-09-10), fix in flight with them — do not duplicate.
+  A field initialised from a qualified module CONSTANT cannot be typed:
+  `self.h = math.pi` refuses while `self.h = math.sqrt(2.0)` and
+  `t = math.pi; self.h = t` both work. lib/rtl/math.pas declares
+  `function Pi: Double`, and in Pascal a parameterless function IS its own
+  call, so there is no `(` for the call arm of PyInferExprType to key on and
+  every arm declines. Reached in lekkerzeilen/traffic.py:402 only after the
+  vessel.py SIGSEGV in front of it was fixed (c18f92f48).
 ---
 
 ## The wall
@@ -44,7 +45,37 @@ So **the boundary was not read off the failing line**, and reading it off the
 failing line is what produced this list — recorded because the list is the
 useful part, not the hypothesis it killed.
 
-## Where to look instead
+## THE CAUSE — frankB's measurement, re-derived here before being written in
+
+`self.heading = run if downstream else run + math.pi` carries **two decoys in
+one line**: it reads as a conditional expression over a tuple-unpack element,
+and neither matters. Varying the shape (frankB's rows, plus my three confirming
+them against binary 458767f38926):
+
+| shape | result |
+| --- | --- |
+| `self.h = math.pi` | **WALL** |
+| `self.h = <unpack elem> + math.pi` | **WALL** |
+| `self.h = <unpack elem> + 3.0` | ok |
+| `self.h = <elem> if d else <elem> + 3.0` | ok |
+| `self.h = math.sqrt(2.0)` | ok |
+| `t = math.pi; self.h = t` | ok |
+
+It is `math.pi` alone. `lib/rtl/math.pas:44` and `:280` declare
+**`function Pi: Double`** — in Pascal a parameterless function IS its own call,
+so the expression has no `(` for the call arm of `PyInferExprType` to key on,
+and every arm declines. The last two rows are the control: the VALUE is fine
+and it is the scanner's view of that shape that is not.
+
+The diagnostic also suggests the wrong annotation — it offers
+`(self.heading: int = ...)` for a Double.
+
+**Owner: frankB**, who has the fix written and deliberately unapplied until
+their tier clears, in `PyInferExprType` after the class-receiver arms so a
+local named `math` still wins, gated on `ParamCount = 0` so `x = math.sqrt`
+does not become a typeable Double by accident. Not duplicating it here.
+
+## Where to look instead — SUPERSEDED, kept because the exclusions still hold
 
 `self.heading` is stored in **four** places, not one:
 
