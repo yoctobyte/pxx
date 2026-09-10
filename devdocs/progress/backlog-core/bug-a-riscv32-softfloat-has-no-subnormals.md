@@ -1,9 +1,9 @@
 ---
-track: A+F
+track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct."
+summary: "RE-LANED OUT OF float/ 2026-09-10: the MECHANISM is a missing capability in the target soft-float runtime, not an accuracy gap, and CLAUDE.md already excludes this from F (`NOT F: a crash, hang, wrong signature ... Rank the mechanism, never the datatype'). `Exp(-745) returns 0 where every other target gives a subnormal' is a WRONG ANSWER on a working cross target, and float/ is never scanned by ready/next, so it was unrankable. Dropped the +F tag for the same reason. --- riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct."
 ---
 
 # riscv32: soft-float drops subnormals

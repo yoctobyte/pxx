@@ -4,6 +4,7 @@ prio: 30
 type: feature
 blocked-by: []
 summary: "compiler/pyparser.inc deliberately leaves math.atan2 undefined, with a note citing ArcTan2 being 1 ulp off CPython for atan2(0.5, 1). That reason is gone as of 2026-08-15: ArcTan2 now forms the quotient in double-double, matches CPython on that exact value, and is correctly rounded where glibc is not. One table line, plus removing the stale note."
+status: done
 ---
 
 # NilPy: `math.atan2` can exist now
@@ -61,3 +62,6 @@ fixed in the same change and match FPC and CPython on all eight combinations
 CPython exactly — including a negative first argument, both signs of the second,
 and `atan2(0.5, 1)` — plus `make test-nilpy` green and self-host byte-identical,
 per Track N's gate.
+
+## Log
+- 2026-09-10 — resolved, commit Implemented and VERIFIED at HEAD (49489e5ca437): math.atan2(1.0,1.0) = 0.7853981633974483, byte-identical to CPython, and math.atan(1.0) likewise. The enabling fix (ArcTan2 in double-double) landed 2026-08-15 and THIS TICKET RECORDED THAT IN ITS OWN SUMMARY -- then sat in devdocs/progress/float/, which ready/next never scan, for 26 days. 0838c1be3 today says it outright: 'math.atan2 was never blocked on a ulp'. THE PARKING STRATEGY IS WHAT COST THE 26 DAYS, not the work: the ticket was mis-laned as float ACCURACY when its mechanism was a MISSING FUNCTION, which CLAUDE.md's F-lane rule already excludes ('NOT F: ... a missing function a working program calls. Rank the mechanism, never the datatype'). Closed by the owner's own observation, 2026-09-10, that we 'never looked back again at them'..

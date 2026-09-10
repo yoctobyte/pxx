@@ -30,7 +30,38 @@ sentence where a new rule costs a paragraph.
 
 ## The goal — what makes work on-target
 
-**`devdocs/dev/the-goal-cross-cross.md`.** pxx runs under linux/bsd/minix/gnu/
+**`devdocs/dev/the-goal-cross-cross.md`** — 9.6KB, and its FIRST SECTION is the
+owner's current goal list, stated 2026-09-10. Read that section if you read
+nothing else here:
+
+> *the goals are: making a full green pin as release. work application-focused
+> instead of bug-fix-focused from now on. have a nice list of working demo's.
+> have lekkerzeilen compile under nilpy as demo. have busybox compile as demo
+> without external libraries. work toward beta 0.1*
+
+**"APPLICATION-FOCUSED INSTEAD OF BUG-FIX-FOCUSED" IS A STANDING CHANGE TO HOW
+YOU PICK WORK, NOT A PREFERENCE.** It strengthens the umbrella rule below —
+attempt the target, let the failures name the tickets — and it adds the half that
+rule did not say: **the backlog is a consequence, never a queue.** The reason is
+measured and it is the owner's own: the float tickets were parked in a folder
+`ready`/`next` never scan and never revisited, and on 2026-09-10 a `math.atan2`
+ticket was found CLOSED BY EVENTS 26 DAYS EARLIER, sitting there, its own summary
+recording that its blocker was gone. His diagnosis of the mechanism covers every
+seat: *"agentic coding has an ADHD disorder. you dive into anything that grabbed
+your attention. and forget about the bigger goal."* **A session cannot fix that by
+intending to** — it loses the goal at each context boundary — so the goal lives in
+that file's first section and you re-read it rather than recalling it.
+
+**Two things the demos do NOT mean, both measured 2026-09-10:** lekkerzeilen's
+module count is not the measure (`ctypes` decides whether it runs at all, and the
+seam's backend is a 39-line `NotImplementedError` stub); and busybox's GREEN at
+394 applets is **not** "without external libraries" — its final link is
+`gcc -o out obj/*.o` against glibc, because pxx emits objects and cannot consume
+one. The **unity** build already meets the goal: pxx links it itself, static, no
+libc.
+
+The standing frame below is unchanged and is what the six goals are FOR:
+pxx runs under linux/bsd/minix/gnu/
 windows/wasm, compiles **DOSBox** for such a target, and runs a **minimal system
 with the compiler on it**. Languages × platforms, the product of both axes.
 Two proofs, both real programs: DOSBox runs; pxx hosts itself somewhere that is

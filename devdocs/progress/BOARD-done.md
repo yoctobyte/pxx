@@ -2789,6 +2789,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-list-sort-inplace-key-reverse | N | 62 | feature | `xs.sort(key=..., reverse=...)` — only the free function `sorted()` supports key/reverse | — |
 | feature-nilpy-list | N | 60 | feature | NilPy: list type v1 (pylib TPyList, literals, subscripts, methods, len) | — |
 | feature-nilpy-map-and-filter-over-a-lambda | N | 40 | feature | `map(lambda ...)` is unimplemented and `filter` does not exist | — |
+| feature-nilpy-math-atan2-now-that-arctan2-is-exact | N+F | 30 | feature | compiler/pyparser.inc deliberately leaves math.atan2 undefined, with a note citing ArcTan2 being 1 ulp off CPython for atan2(0.5, 1). That reason is gone as of 2026-08-15: ArcTan2 now forms the quotient in double-double, matches CPython on that exact value, and is correctly rounded where glibc is not. One table line, plus removing the stale note. | — |
 | feature-nilpy-min-max-over-a-string | N | 30 | feature | `min("cab")` / `max("cab")` do not compile | — |
 | feature-nilpy-min-max-variadic-more-than-two-args | N | 30 | feature | `min(a, b, c)` / `max(a, b, c)` — only the 2-argument and iterable forms exist | — |
 | feature-nilpy-missing-builtins | N | 45 | feature | NilPy: the remaining missing builtins — min/max, list(), reversed(), enumerate(), hex() | — |

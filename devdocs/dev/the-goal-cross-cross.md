@@ -1,5 +1,66 @@
 # The goal: cross-language × cross-platform, proved by real programs
 
+## THE GOALS, IN THE OWNER'S OWN WORDS, 2026-09-10 — THIS IS THE CURRENT LIST
+
+Asked point blank "so, what were our goals again?" and then answering it himself,
+which is the version that counts:
+
+> *the goals are: making a full green pin as release. work application-focused
+> instead of bug-fix-focused from now on. have a nice list of working demo's.
+> have lekkerzeilen compile under nilpy as demo. have busybox compile as demo
+> without external libraries. work toward beta 0.1*
+
+Six, and they are not a re-ranking of the matrix below — they are **what the
+matrix is for right now.** Read them as the standing list and everything below
+as the reasoning that produced it:
+
+1. **A full green pin, as a release.** Not a pin that grades `reds(N)` — green,
+   and shipped as the release. This is the one that makes the others visible to
+   anyone outside this fleet.
+2. **APPLICATION-FOCUSED, NOT BUG-FIX-FOCUSED, FROM NOW ON.** A standing change
+   to how every seat picks work, not a preference. Attempt the target; let the
+   failures name the tickets. The backlog is a consequence, never a queue.
+3. **A nice list of working demos.**
+4. **lekkerzeilen compiles under Nil-Python**, as a demo.
+5. **busybox compiles without external libraries**, as a demo.
+6. **Beta 0.1.**
+
+**Why this is at the top of this file and not in a ticket.** The owner's
+frustration the same evening: *"i'm a bit frustrated about our backlog and never
+get to a beta release if we keep hunting such ... that's also why we put all
+floating point tickets in its own backlog and never looked back again at them
+again. just to discover today we never implemented atan()."* And his diagnosis of
+the mechanism, which applies to every seat including the one that wrote this:
+*"agentic coding has an ADHD disorder. you dive into anything that grabbed your
+attention. and forget about the bigger goal."*
+
+**A session cannot fix that by intending to.** It loses the goal at every context
+boundary, so the only thing that works is the goal being written where the next
+one trips over it. That is what this section is for.
+
+### What goals 4 and 5 are measured against, so "done" is not arguable
+
+- **lekkerzeilen (goal 4).** 20 of 35 modules compiled at last count, and the
+  module ratio is NOT the measure: `ctypes` decides whether it runs at all (the
+  whole SDL2/GL layer is hand-bound through it), and the `platform/` seam's
+  backend is a 39-line stub raising `NotImplementedError`. A demo is the program
+  RUNNING, not a census.
+- **busybox (goal 5).** "Without external libraries" is **not** what the current
+  GREEN means. At 394 applets the separate build is byte-identical to the gcc
+  oracle over 938 cases — and its final link is `gcc -o out obj/*.o` against
+  **glibc** (`tools/busybox_diff.sh:1429`). pxx emits every object and **cannot
+  consume one**, so the link is borrowed. What already meets goal 5 is the
+  **unity** build: pxx links it itself, statically, no libc — measured
+  2026-09-10, 539008 bytes, `not a dynamic executable`, and it runs. The gate on
+  the real shape is
+  [[feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc]],
+  and its first experiment is one run: `ld` over the 521 objects plus crtl, no
+  glibc.
+  The owner's framing, same evening: *"busybox as gnu-library-free (kernel only)
+  pxx test. nothing against gnu. but the goal was: linux kernel + busybox
+  executable + pxx compiler as minimal system."*
+
+
 Owner, 2026-08-31, stated when the ticket system had become its own flaw:
 
 > *pxx should run under linux/bsd/minix/gnu/windows/wasm 'kernels'. And compile
