@@ -725,3 +725,25 @@ and leave it unwired.
 - **dict mutated while iterating** — runtime, same problem.
 - **dialect extensions** (`parallel for`) — the cheapest of the four, because
   each extension has exactly one parse site.
+
+## A bare class attribute is visible inside a method body
+
+    class P:
+        MARGIN = 14
+        def show(self):
+            return MARGIN        # pxx: 14      CPython: NameError
+
+CPython scopes a class body's names to the class body ONLY: a method body does
+not see them, and the interpreter says so with a hint ("Did you mean:
+'self.MARGIN'?"). NilPy resolves the bare name through the class-var registry
+and answers 14.
+
+Upward-compatible, so it stays: every program that is correct under CPython is
+correct here, and the extra spelling costs nothing. Recorded because it is the
+CONTROL that keeps getting mistaken for a neighbouring bug -- the same name used
+as a method's DEFAULT ARGUMENT is refused, and CPython accepts THAT, which is a
+real gap in the other direction
+(bug-n-a-class-level-name-is-not-visible-in-a-method-s-default-argument).
+The two rows look like one inconsistency and are two independent facts: one is a
+deliberate widening, the other is a missing scope. Measured 2026-09-10, binary
+1266f201c140.
