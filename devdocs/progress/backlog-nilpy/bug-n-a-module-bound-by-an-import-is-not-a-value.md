@@ -137,3 +137,52 @@ compile-time alias. **Whether a runtime module OBJECT is required, or whether
 an alias plus a folded `getattr` covers this corpus, is one probe** — and it is
 the probe that decides whether this is a table entry or a value-representation
 change. It has not been run.
+
+## THE DESIGN FORK, NARROWED TO A YES/NO — frankZ, 2026-09-10
+
+Not taken. The ticket says part 2 is the bigger half and that is right; what
+was missing is **which part 2**. Measured from the call sites rather than from
+the shape of the feature, it splits, and only one half is large.
+
+**Every use of the module-valued variable in the seam:**
+
+    gl = _backend.gl                            static member read
+    open_window = _backend.open_window          static member read
+    return _backend.probe()                     static method call
+    getattr(_backend, "open_audio", None)       RUNTIME getattr, with default
+    getattr(_backend, "open_controller", None)  RUNTIME getattr, with default
+
+**Three of five are statically resolvable.** A compile-time UNIT ALIAS — record
+on the symbol which unit a variable was bound from, resolve `var.member`
+through that unit — serves all three, is not a runtime value at all, and needs
+no module object. **Only the two `getattr` sites require a real runtime module
+value with dynamic attribute lookup**, and that is the large feature.
+
+**And those two are a capability probe against a stub.** `platform/_pxx.py`
+defines **neither** `open_audio` nor `open_controller`; `_ctypes_backend.py`
+defines both (`:220`, `:287`). So the idiom exists to detect that the pxx
+backend lacks audio and controller support, and under NilPy — where the ctypes
+arm is dead — both calls always return `None`. **`_pxx.py` is the stub that
+`task-b-write-the-lekkerzeilen-pxx-platform-backend` (p85) exists to write.**
+
+So the question for whoever takes this, and it is answerable yes or no:
+
+> **Does part 2 have to serve `getattr` on a module, or only static member
+> reads?**
+
+If only static reads: a compile-time unit alias, tractable, and it clears the
+wall. If `getattr` too: a runtime module object, which is a different and much
+larger feature, and one whose only two call sites in this corpus are probing a
+stub that another p85 ticket is going to replace. **Ask task-b what `_pxx` will
+define before building a runtime module value for two probes that may not
+survive it.**
+
+## CORRECTION — `bindings.py` is a CASCADE, not a second site
+
+The census arithmetic lists this cause as two modules, `platform/__init__` and
+`bindings`. That is correct about modules MOVED and wrong about work: `bindings`
+wall is `no member KEY_ESCAPE came of the qualifier platform`, and
+`KEY_ESCAPE = 27` is a **plain module constant at `platform/__init__.py:35`**.
+`bindings` fails only because `platform/__init__` does not compile. One file's
+construct, two modules cleared. Sixth same-line-number-family cascade in this
+corpus.
