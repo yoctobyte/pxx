@@ -172,3 +172,31 @@ everything it pulls in, and `/usr/include/<name>.h` is frequently a few lines of
 `#include`. This matters for the arity-agreement hazard specifically: the question
 "could a C function of this name accept the Python call" ranges over the whole
 include closure, not over the named file.
+
+## AND THE POPULATION FILTER ITSELF IS A SELECTION: `sys.stdlib_module_names`
+
+The 16 names were selected by intersecting host-header filenames with
+`sys.stdlib_module_names`. **Anything outside that set was removed before any
+assertion could see it**, and frankZ demonstrated on 2026-09-11 that this exact
+filter hides real members — on the neighbouring arm, not this one, which is why it
+is worth writing down here rather than assuming it cancels out.
+
+Their measurement: a ticket claimed nineteen colliding names, they measured two,
+and the answer is **four** — found only by dropping the CPython-name filter and
+testing all 117 `lib/rtl` unit names. Two of the four, `textfile` and `typinfo`,
+**are not CPython module names at all**, so every census that subject ever ran,
+theirs included, selected them out first.
+
+What this does and does not change here. It does NOT move the 16 rows: for a bare
+import to reach a host header the name must match a header filename, which is a
+fact about `/usr/include` and not about CPython. What it DOES mean is that the
+16 are the names a user would be **surprised** by, not the mechanism's extent —
+`import anything` where `/usr/include/anything.h` exists has the same shape,
+stdlib or not, and a local `foo.h` in an include path widens it again. So:
+
+**do not quote 16 as the size of the mechanism.** It is the size of the
+intersection someone chose to count, and the choice was mine.
+
+Combined with the include-chain caveat above, this ticket's numbers have two
+independent selections in them — which filenames, and which names. Both were made
+for readability and neither was measured as safe.
