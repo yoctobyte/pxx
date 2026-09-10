@@ -770,6 +770,22 @@ corroboration. The wide match also **synthesised a structural finding that did
 not exist** — shards clearing in two groups reads exactly like one job flapping
 — so **a "finding" that falls out of a grep needs the same interrogation as one
 that falls out of a hypothesis.**
+**AND A DIAGNOSTIC CAN MANUFACTURE THE EQUIVALENCE CLASS ITSELF — THEN THE
+SHARED CAUSE IS AN ARTEFACT OF THE MESSAGE FORMAT AND NOT OF THE CODE.** Above,
+a wide grep synthesised the grouping; here the COMPILER does, and it is the
+cheaper one to catch. Measured 2026-09-10 (Track N, this file's own
+coordinator): two unrelated modules of one package failed at **the identical
+line number, 31**, which read as one shared dependency and was written into a
+ticket at prio 80 as gating a whole package. Both rows were the SAME file's line
+31 — an error raised inside an IMPORTED module prints as `pascal26:<n>:` with
+that module's line number and **no file name**, so the reader supplies the file
+they invoked. One of the two modules did not contain the construct at all (0
+occurrences against 5). The fix was worth one module, not three. **The
+discriminator costs nothing: when two subjects fail at the SAME LINE NUMBER,
+suspect the diagnostic before believing the shared cause** — and grep the
+subject for the construct before ranking a ticket on how many subjects name it.
+The same omission burned ten more minutes an hour later, reporting a wall at a
+line that held only prose.
 
 **A SPECULATIVE PARSE AND THE COMMITTED ONE CAN DISAGREE, AND THEN NEITHER THE
 ERROR NOR THE ABSENCE OF ONE IS ABOUT THE TREE.** Measured 2026-09-09
