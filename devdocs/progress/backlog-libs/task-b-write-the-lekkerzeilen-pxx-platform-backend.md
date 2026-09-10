@@ -9,7 +9,8 @@ created: 2026-09-10
 found-by: frankuser
 tags: [lekkerzeilen, nilpy, sdl2, opengl, demo]
 blocked-by:
-  - bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header
+  - feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym
+  - bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register
   - bug-n-staticmethod-is-not-a-value
 summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
 ---
@@ -54,3 +55,37 @@ string-buffer idioms have to move below the seam (or be expressed as return-
 lifted calls) for `gfx` to compile under pxx at all. **Do NOT add a
 `mimic_ctypes`** — the settled direction on this target is to bind natively, and
 a ctypes shim would make the seam's whole purpose moot.
+
+## 2026-09-10 — the Q/q blocker cleared and SDL2 still does not import
+
+`366e0e8a9` landed `Q`/`q` (a register CLASS a/b/c/d, so it needed a third
+allocation phase between the fixed pins and the general pool — the ticket's own
+*"the difference is allocation"* was the accurate sentence) plus the `%b`/`%w`
+operand modifiers, whose absence was the next wall on the same line. frankH
+recorded the expectation first and it was wrong in the useful direction: **it
+expected `=Q` to unblock SDL2 and it did not.**
+
+**Two walls now in front of `import "/usr/include/SDL2/SDL.h"`, in order:**
+
+1. **The derived soname** — the import stops at `memcmp` coming from `libsdl.so`
+   **before** reaching any asm. That is
+   [[feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym]],
+   which was filed at prio 50 the same morning and is now the FRONT of this
+   chain. frankH's measurement confirms that ticket's own design rather than
+   contradicting it: `libSDL2-2.0.so.0` exports `SDL_Init` and
+   `SDL_CreateWindow`, while `libnet.so.9` exports **zero** of `net/if.h`'s
+   symbols (`if_nametoindex` is in libc). A dynsym check accepts the first and
+   rejects the second, which is exactly the distinction the ticket says makes the
+   directory-derived guess safe.
+2. **`%h0`, the high byte** —
+   [[bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register]]. The encoder
+   cannot name `ah/ch/dh/bh` at all: at byte width it forces a REX prefix for
+   register numbers 4..7 (in its vocabulary those are `spl/bpl/sil/dil`), and REX
+   is what makes the high-byte forms unencodable. Emitting one anyway assembles
+   quietly to `spl` — **a wrong register with no diagnostic**, which is why it is
+   refused by name now and filed with a disassembly control rather than patched
+   in passing from a C ticket.
+
+Both are wired into this task and into the umbrella, so `effective_prio` carries
+90 to them. The ordering matters: clearing `%h` alone does not make SDL2 import,
+because the soname wall is in front of it.

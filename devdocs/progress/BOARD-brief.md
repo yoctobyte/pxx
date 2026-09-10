@@ -74,7 +74,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 438, ranked
 
+- `[p 90] [A]` bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register (unblocks 2)
 - `[p 90] [N]` bug-n-staticmethod-is-not-a-value (unblocks 2)
+- `[p 90] [N]` feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym (unblocks 2)
 - `[p 90] [N]` bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
 - `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
 - `[p 90] [N]` bug-n-star-unpacking-is-rejected-at-a-method-call (unblocks 1)
@@ -102,7 +104,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard2-12
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
-- `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
-- `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 
 _408 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
