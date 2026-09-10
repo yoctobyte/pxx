@@ -122,4 +122,4 @@ filed). `capture.py` is unchanged — its first wall is `ctypes`, settled as
 bind-natively. So this clears one module's first wall and compiles no module.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1eb448030.

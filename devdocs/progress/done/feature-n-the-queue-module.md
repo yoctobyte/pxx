@@ -108,7 +108,7 @@ with two unknown walls each into two modules with ONE named wall, which is what
 makes `feature-n-the-threading-module` a rankable ticket instead of a guess.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1eb448030.
 
 ## INERT FOR `$(PXX_STABLE)` CONSUMERS UNTIL THE NEXT PIN — say it here, do not wait for it
 
