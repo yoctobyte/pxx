@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `6cf032a4dbe0` on seven, 2026-09-10T17:22:25Z (29m ago).**
+**Newest full tier in the fleet: `6cf032a4dbe0` on seven, 2026-09-10T17:22:25Z (46m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `6cf032a4dbe0` | RED | 29m | — (newest) |
+| seven | `6cf032a4dbe0` | RED | 46m | — (newest) |
 | plexus | `27424c927b65` | RED | 11d7h | 11d6h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -36,7 +36,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:test/lib_synapse_transitive_unit.pas** — test/lib_synapse_transitive_unit.pas tools/expect_same.sh (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **test-fpjson#src:tools/install_lib_candidates.sh** — tools/install_lib_candidates.sh test/fpjson/testutils.pas +1 (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
-- **tools-devtest#00** (seven): bad `6429431189e3`, last good `26f55911392c`, 7 commit(s) in range
+- **tools-devtest#00** (seven): bad `6429431189e3`, last good `366e0e8a99e0`, 4 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 

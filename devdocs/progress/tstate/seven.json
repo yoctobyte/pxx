@@ -15380,7 +15380,7 @@
    "bad": "6429431189e3994e914ec8a8c36f26c338e5f87d",
    "bad_untestable": false,
    "first_seen": false,
-   "good": "26f55911392ca6f1384097da7e7bea030c854650",
+   "good": "366e0e8a99e0020fef25179e713eb3a4e06c1808",
    "job": "tools-devtest#00",
    "name": "tools-devtest#00",
    "never_passed": false,
@@ -15389,9 +15389,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "0b1020c1b247a50218cff44e23635aac2115701f",
-    "4bde9de53e6fbc3636971a061b9597a7917eb721",
-    "366e0e8a99e0020fef25179e713eb3a4e06c1808",
     "1cafa51e4b6b3d05711ea49c3b1f9e426163c893",
     "539361a56c61dedee213a6de94d05fdcccfb4cbd",
     "6ff12ded7344ff4b4bfe78ec20852455a1a92a32",
