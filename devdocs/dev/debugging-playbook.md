@@ -24167,3 +24167,52 @@ and the reader both did it, disagreed, and the round trip failed with `bad
 adler32` **while the decoded bytes were provably correct** — which is the one
 place nobody looks, because the checksum is what you trust to tell you the bytes
 are wrong.
+
+## TWO TESTS WITH FULL MARGINAL COVERAGE AND AN EMPTY INTERSECTION — each one looks like the test that would have caught it
+
+Sibling of *"Do not read a green as coverage"* and of *"a comparison between two
+populations is not a completeness check"*, and the nastiest of the three,
+because the other two look suspicious once you know their shape and this one
+looks like diligence.
+
+**The case.** 2026-09-11, frankuser, `lib/rtl/zlib.pas`. `InflateStored` bounded
+stored data by `Length(gData) - 4` — "every stream ends in a 4-byte checksum" —
+which is false for the raw entry point. Two tests already existed in
+`test/lib_zlib.pas`:
+
+| test | axis it covers | why it cannot reach the defect |
+| --- | --- | --- |
+| `TestStoredRoundtrip` | STORED blocks | goes through the zlib *wrapper*, where the 4-byte trailer genuinely exists, so the bound is correct |
+| `TestRawDeflate` | the RAW entry point | carries a *fixed-Huffman* stream (first byte 203 = BTYPE 01), which never enters `InflateStored` |
+
+Both axes covered at the margin. Nothing at `raw × stored`, which is the only
+cell the defect lives in. **Both tests were honestly green for as long as the bug
+existed**, and neither was weak: each is a correct test of a real path.
+
+**Why it survives review, and this is the part worth carrying:** *the two tests
+each look like the one that would have caught it.* A reviewer asking "is the raw
+path tested?" gets yes. "Are stored blocks tested?" — yes. The question that
+finds it is neither of those, and nobody asks it, because **the axes were named
+in the test names and the absent cell had no name to be missing by**
+(frankuser's own refinement, and the sharpest part of the finding). An unnamed
+cell generates no absence anyone can notice: there is no `TestRawStored` to be
+missing until someone writes it.
+
+**How to look for it.** Not by counting tests or reading names — by writing the
+cross product down. For any function whose behaviour is selected by two or more
+independent inputs (an entry point AND a payload kind; a wrapper AND a block
+type; a target AND a width; a mode flag AND a shape), tabulate the cells and ask
+which ones a test actually reaches. Reaching is the operative word: `TestRawDeflate`
+names the raw axis and does not execute the branch under test, so the name is
+evidence of intent and not of coverage. Follow the call, or add a probe and watch
+it fire.
+
+**And the cell you find must be verified in both directions**, which frankuser
+did: `TestRawStored` fails with `truncated stored data` against the pre-fix unit
+and passes after. A new test that only passes proves it runs, never that it
+looks at the defect — see *"A guard that cannot fail is not a guard"*.
+
+**The general form:** two guards, each correct, each covering one axis
+completely, jointly covering every cell but one — and the defect is in the one
+they omit, because that is the only cell nothing was watching. The more
+carefully the marginal tests were written, the more the file reads as covered.
