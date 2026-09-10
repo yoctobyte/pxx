@@ -3654,6 +3654,36 @@ begin
         from any program pxx compiles. WHOEVER LANDS `bitpacked` OWNS THIS LINE:
         this desugar becomes wrong the day that type exists, and nothing else
         will say so. }
+      { `Unaligned(x)` IS `x`, and this is a PASSTHROUGH rather than a routine.
+        FPC's in_unaligned_x (compinnr.pas:77) yields its argument unchanged and
+        only relaxes the compiler's alignment assumption about the access.
+
+        WHY THAT IS EXACT HERE AND NOT A COMPROMISE: pxx carries no alignment on
+        a load or a store at all -- IR_LOAD_MEM and IR_STORE_MEM have no such
+        flag, so `p^` is one plain access on every target already. Making
+        `unaligned(p^)` mean `p^` therefore adds no behaviour and removes no
+        guarantee; it says out loud what every other dereference in this
+        compiler was already doing. Whether a strict-alignment target should
+        split a possibly-unaligned access into bytes is a real question and it
+        is about `p^`, not about this name -- it was open before this arm
+        existed and is untouched by it.
+
+        The rvalue half alone is a TRAP, and the lvalue half is in
+        pasparser_lval.inc: 275 call sites in FPC's compiler and several are
+        assignment targets (`unaligned(pqword(@b[2])^) := v`, entfile.pas:2003,
+        plus ogomf and owomflib). A function-shaped fix clears the 150 units
+        that read through it and still fails those three on the same spelling.
+        feature-p-unaligned-is-a-transparent-lvalue-not-a-function }
+      if CaseEqual(name, 'unaligned') and (FindSym(name) < 0) and (FindProc(name) < 0) then
+      begin
+        Next; { consume 'unaligned' }
+        Expect(tkLParen, '(');
+        ParseExpr;
+        Expect(tkRParen, ')');
+        { CurASTNode and LastExprTk are the operand's, untouched -- that IS the
+          intrinsic. Nothing is emitted and nothing is wrapped. }
+        Exit;
+      end;
       szBitScale := 1;
       if CaseEqual(name, 'bitsizeof') then
       begin

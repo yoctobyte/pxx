@@ -7309,6 +7309,35 @@ begin
         ASTRight[node] := opNode;
         end;
       end
+      { `unaligned(<lvalue>) := <expr>` — the WRITE half of FPC's in_unaligned_x.
+        The read half is in pasparser_expr.inc's name dispatch and explains what
+        the intrinsic is; this is the half that cannot be a function, because a
+        function result is not assignable. FPC's own compiler needs both:
+        cclasses.pas reads through it (150 of 207 units stop there) while
+        entfile.pas:2003, ogomf.pas and owomflib.pas assign through it, on the
+        identical spelling. Landing only the read half would clear the 150 and
+        leave those three failing on what looks like the same construct.
+
+        ParseExpr yields an ADDRESSABLE node for a cast-deref -- the Inc/Dec
+        target site above depends on exactly that -- so the wrapper needs no
+        machinery of its own: parse the operand, drop the parens, store into the
+        node the operand already produced.
+
+        SoftIntrinsicOpenSym, like every other soft intrinsic in this chain, so
+        a user routine or an in-scope symbol named `unaligned` shadows it.
+        feature-p-unaligned-is-a-transparent-lvalue-not-a-function }
+      else if CaseEqual(name, 'unaligned') and SoftIntrinsicOpenSym(name, qUnit) and
+              (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        Next; Expect(tkLParen, '(');
+        ParseExpr; valNode := CurASTNode;
+        Expect(tkRParen, ')');
+        Expect(tkAssign, ':=');
+        ParseExpr;
+        node := AllocNode(AN_ASSIGN);
+        ASTLeft[node] := valNode;
+        ASTRight[node] := CurASTNode;
+      end
       else if CaseEqual(name, 'SysWrite') and SoftIntrinsicOpenSym(name, qUnit) and
               (Tokens[TokPos].Kind = tkLParen) then
       begin

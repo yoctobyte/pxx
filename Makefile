@@ -3147,6 +3147,22 @@ test-nilpy: $(COMPILER)
 	@# magnitude, so these rows assert the value. FPC's compiler calls it 16x.
 	@./$(COMPILER) test/test_p_comparebyte_returns_the_signed_difference.pas $(TESTTMP)/test_cmpbyte26
 	@tools/expect_same.sh test_cmpbyte26 "$$($(TESTTMP)/test_cmpbyte26 | tail -n 2)" "$$(printf 'fails=0\nCMPBYTE OK')"
+	@# `Unaligned(x)` IS `x`, on BOTH sides of `:=`. Two arms, two files. The
+	@# read arm is pasparser_expr.inc and the write arm is pasparser_stmt.inc,
+	@# and reverting EITHER makes this row fail to COMPILE -- checked in both
+	@# directions, because they are separate paths and neither makes the
+	@# other's rows pass. A function cannot serve the write half at all, which
+	@# is why this is not a builtin.pas job like the Index family above it:
+	@# cclasses.pas only READS through it (150 of FPC's 207 units stop there)
+	@# while entfile/ogomf/owomflib ASSIGN through it, identical spelling.
+	@./$(COMPILER) test/test_p_unaligned_is_a_transparent_lvalue.pas $(TESTTMP)/test_unaligned26
+	@tools/expect_same.sh test_unaligned26 "$$($(TESTTMP)/test_unaligned26 | tail -n 2)" "$$(printf 'fails=0\nUNALIGNED OK')"
+	@# Separate file because the declaration shadows the whole program. Without
+	@# the guard the passthrough fires and the answer is 5 rather than 6 --
+	@# a silently wrong value from a program that compiles clean. fpc 3.2.2
+	@# compiles this and prints 6, so the shadow is FPC's behaviour.
+	@./$(COMPILER) test/test_p_a_user_routine_named_unaligned_shadows_the_intrinsic.pas $(TESTTMP)/test_unalshadow26
+	@tools/expect_same.sh test_unalshadow26 "$$($(TESTTMP)/test_unalshadow26 | tail -n 2)" "$$(printf 'fails=0\nUNALIGNEDSHADOW OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
