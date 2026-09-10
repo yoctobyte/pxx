@@ -277,8 +277,9 @@ carry a Python surface written for exactly this purpose. `ast`, `atexit`,
 
 ```python
 import math
-print(math.gcd(12, 18))          # 6 — and gcd is not in C's math.h,
-                                 # so this proves which math was reached
+print(math.gcd(12, 18))          # 6 — gcd is not declared through C's
+                                 # <math.h>, so this proves which math
+                                 # was reached
 ```
 
 That is narrower than "any unit with a Python surface". The set is a list
