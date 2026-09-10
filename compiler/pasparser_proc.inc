@@ -5552,6 +5552,145 @@ begin
   Result := PasCondProbeUsedUnits(nm, arity, PCQ_DECLARED);
 end;
 
+
+{ ===== The unit load stack, and parking an implementation section =====
+  See the block comment on UnitLoadIdx in defs.inc for what this is for and why
+  a snapshot rather than a re-load. These are the only readers of that state. }
+
+function UnitLoadSlot(unitIdx: Integer): Integer;
+{ Where `unitIdx` sits on the load stack, or -1 if it is not being loaded right
+  now. A unit that has FINISHED loading is not on the stack, which is exactly
+  the distinction the cycle test needs: "already compiled" and "still in
+  progress" are the same answer from CompiledUnitKey and different answers
+  here. }
+var i: Integer;
+begin
+  UnitLoadSlot := -1;
+  if unitIdx < 0 then Exit;
+  for i := UnitLoadCount - 1 downto 0 do
+    if UnitLoadIdx[i] = unitIdx then begin UnitLoadSlot := i; Exit; end;
+end;
+
+procedure UnitLoadPush(unitIdx: Integer);
+{ Overflow DEGRADES rather than aborts: past the depth limit a unit is simply
+  not tracked, so a cycle at that depth reports the old error instead of being
+  deferred. A build that would otherwise succeed must not fail on a
+  bookkeeping ceiling. }
+begin
+  if UnitLoadCount >= MAX_UNIT_LOAD_DEPTH then Exit;
+  UnitLoadIdx[UnitLoadCount] := unitIdx;
+  UnitLoadIfaceDone[UnitLoadCount] := False;
+  Inc(UnitLoadCount);
+end;
+
+procedure UnitLoadPop(unitIdx: Integer);
+{ Popping by IDENTITY, not blindly: UnitLoadPush declines past the ceiling, so
+  a blind Dec would unbalance the stack for every unit above that depth and
+  answer about the wrong unit afterwards -- silently, since the values are
+  plausible unit indices either way. }
+begin
+  if (UnitLoadCount > 0) and (UnitLoadIdx[UnitLoadCount - 1] = unitIdx) then
+    Dec(UnitLoadCount);
+end;
+
+procedure UnitLoadMarkIfaceDone(unitIdx: Integer);
+{ Called at the `implementation` keyword: from here on, everything this unit's
+  interface declares exists, so a parked implementation waiting on it can run. }
+var k: Integer;
+begin
+  k := UnitLoadSlot(unitIdx);
+  if k >= 0 then UnitLoadIfaceDone[k] := True;
+end;
+
+procedure DefImplSaveModes(slot: Integer);
+{ The per-unit modes that outlive lexing. Booleans as 0/1; see the DEFIMPL_M_*
+  constants for what each slot is. Everything NOT here is either restored by
+  the replay's caller (TokPos, CurTok) or was consumed at lex time and cannot
+  matter afterwards ({$define}, the conditional stack, NestedComments' effect
+  on comment scanning -- NestedComments is carried anyway because it is one
+  line in the {$mode} handler and scoping half a directive is how it leaked
+  the last time). }
+var b: Integer;
+begin
+  b := slot * DEFIMPL_MODE_STRIDE;
+  DefImplMode[b + DEFIMPL_M_CASE]       := Ord(CaseSensitiveMode);
+  DefImplMode[b + DEFIMPL_M_NESTED]     := Ord(NestedComments);
+  DefImplMode[b + DEFIMPL_M_DELPHI]     := Ord(DelphiMode);
+  DefImplMode[b + DEFIMPL_M_PACKREC]    := PackRecordsVal;
+  DefImplMode[b + DEFIMPL_M_PACKENUM]   := PackEnumVal;
+  DefImplMode[b + DEFIMPL_M_HMINUS]     := Ord(HMinusVal);
+  DefImplMode[b + DEFIMPL_M_SCOPEDENUM] := Ord(ScopedEnumsVal);
+  DefImplMode[b + DEFIMPL_M_QCHECKS]    := Ord(QChecksVal);
+  DefImplMode[b + DEFIMPL_M_ASSERT]     := Ord(AssertionsVal);
+  DefImplMode[b + DEFIMPL_M_RCHECKS]    := Ord(RChecksVal);
+  DefImplMode[b + DEFIMPL_M_NCHECKS]    := NChecksVal;
+  DefImplMode[b + DEFIMPL_M_ICHECKS]    := Ord(IChecksVal);
+  DefImplMode[b + DEFIMPL_M_INTFCOM]    := Ord(InterfacesComMode);
+end;
+
+procedure DefImplRestoreModes(slot: Integer);
+var b: Integer;
+begin
+  b := slot * DEFIMPL_MODE_STRIDE;
+  CaseSensitiveMode := DefImplMode[b + DEFIMPL_M_CASE] <> 0;
+  NestedComments    := DefImplMode[b + DEFIMPL_M_NESTED] <> 0;
+  DelphiMode        := DefImplMode[b + DEFIMPL_M_DELPHI] <> 0;
+  PackRecordsVal    := DefImplMode[b + DEFIMPL_M_PACKREC];
+  PackEnumVal       := DefImplMode[b + DEFIMPL_M_PACKENUM];
+  HMinusVal         := DefImplMode[b + DEFIMPL_M_HMINUS] <> 0;
+  ScopedEnumsVal    := DefImplMode[b + DEFIMPL_M_SCOPEDENUM] <> 0;
+  QChecksVal        := DefImplMode[b + DEFIMPL_M_QCHECKS] <> 0;
+  AssertionsVal     := DefImplMode[b + DEFIMPL_M_ASSERT] <> 0;
+  RChecksVal        := DefImplMode[b + DEFIMPL_M_RCHECKS] <> 0;
+  NChecksVal        := DefImplMode[b + DEFIMPL_M_NCHECKS];
+  IChecksVal        := DefImplMode[b + DEFIMPL_M_ICHECKS] <> 0;
+  InterfacesComMode := DefImplMode[b + DEFIMPL_M_INTFCOM] <> 0;
+end;
+
+procedure SkipToUnitTerminator;
+{ Walk to this unit's `end.` without parsing anything. `end` followed by `.` is
+  the unit terminator and nothing else in the grammar spells that pair, which
+  is the same test the implementation loop itself uses to stop.
+
+  IT CANNOT WALK INTO ANOTHER UNIT'S TOKENS: LexAppend gives each unit ONE
+  contiguous span, and a `uses` inside this unit appended its span AFTER this
+  one entirely, so the first `end.` at or after here is ours. }
+begin
+  while CurTok.Kind <> tkEOF do
+  begin
+    if (CurTok.Kind = tkEnd) and (TokPos < TokCount)
+       and (Tokens[TokPos].Kind = tkDot) then Exit;
+    Next;
+  end;
+end;
+
+function DefImplPark(const uname: AnsiString; waitOn, pendPtrMark, rewindTok: Integer): Boolean;
+{ Park the implementation section that starts at CurTok, to be replayed when
+  `waitOn`'s interface completes. False means the table is full and the caller
+  must carry on as before -- a ceiling degrades to today's diagnostic, it never
+  fails a build that would otherwise work. }
+var slot: Integer;
+begin
+  DefImplPark := False;
+  if DefImplCount >= MAX_DEFERRED_IMPLS then Exit;
+  slot := DefImplCount;
+  DefImplUnitIdx[slot] := CurrentUnitIdx;
+  DefImplWaitOn[slot]  := waitOn;
+  { The pass-2 idiom, so a replay restores exactly what a body replay does:
+    a token index re-entered with `TokPos := that; Next`. The caller supplies
+    it -- see the rewind note at sectionStartTok for why it is the head of the
+    section and not this token. }
+  DefImplTokPos[slot]  := rewindTok;
+  DefImplPendPtr[slot] := pendPtrMark;
+  DefImplName[slot]    := uname;
+  DefImplSrcBase[slot] := CurSrcBaseName;
+  DefImplUnitDir[slot] := CurUnitDir;
+  DefImplDone[slot]    := False;
+  DefImplSaveModes(slot);
+  Inc(DefImplCount);
+  DefImplPark := True;
+end;
+
 procedure ParseUsesUnitBody(const name: AnsiString;
   diagLine: Integer; const diagSpell: AnsiString);
 { DIAGNOSTIC ORIGIN, supplied by a caller whose CurTok has already moved past
@@ -5817,6 +5956,29 @@ begin
       Kept as a comment rather than deleted silently, because "the second
       importer of a shim sees nothing" is a symptom worth being able to find
       from here. }
+
+    { ===== The cycle test, and it is the ONLY thing this arm now decides =====
+      "Already marked" and "still being loaded" are different facts and this
+      guard can only see the first. If the unit we are being asked for is still
+      ON THE LOAD STACK with an incomplete interface, and we are asking from
+      inside an IMPLEMENTATION section, then this is the legal Pascal cycle --
+      `unit A` interface uses `B`, `unit B` implementation uses `A` -- and A's
+      declarations do not exist yet because A's interface has been read only as
+      far as its own `uses B`. Say so, and let the implementation section park
+      itself; the alternative is what happened before, which is a correct
+      "already in hand" followed by `undefined variable` on everything A
+      declares.
+
+      INTERFACE-side cycles are deliberately NOT reported here: a cycle closed
+      through two interfaces is illegal in FPC too and there is no order that
+      satisfies it, so leaving it to fail as it does today is the honest
+      answer rather than a deferral that can never be drained.
+      bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface }
+    if InUnitImpl and (CurrentUnitIdx >= 0) and (CurrentUnitIdx <> strIdx) then
+    begin
+      i := UnitLoadSlot(strIdx);
+      if (i >= 0) and (not UnitLoadIfaceDone[i]) then CycleWaitUnit := strIdx;
+    end;
     Exit;
   end;
 
@@ -6936,111 +7098,46 @@ begin
         + ' section: it starts no declaration (a mistyped section header?)');
 end;
 
-procedure ParseUnit;
+function ParseUnitImplSection(const uname: AnsiString; pendPtrMark: Integer): Boolean;
+{ A unit's IMPLEMENTATION section, from wherever CurTok stands to its `end.`
+  (which it leaves unconsumed, for the caller to Expect).
+
+  IT IS A SEPARATE ROUTINE FOR ONE REASON: it has to be enterable TWICE, at two
+  different token positions, in the same compile. The first entry is the
+  ordinary one from ParseUnit. The second is the replay of a section that
+  parked itself because its `uses` closed a cycle through another unit's
+  interface -- see DrainDeferredImpls and the block comment in defs.inc. The
+  loop below never knew where the section started, only where it ends, so
+  re-entry at an arbitrary token needed no change to it.
+
+  RETURNS True IF IT PARKED, which is not the same as failing: the section was
+  read as far as its `uses` clause and nothing after it. The caller must then
+  skip its DrainPendingPtrTargets, because the `^T` targets this section
+  supplies have not been parsed yet -- the replay drains them, against the mark
+  it is handed here.
+  bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface }
 var
-  uname: AnsiString;
-  savedInterface, savedUnitImpl, doneImp, savedPreScan, savedPass2Active: Boolean;
-  savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
-  savedPendPtr: Integer;   { this unit's mark in the deferred `^T` list }
+  doneImp, savedPass2Active, parked: Boolean;
+  savedBase, afterImpTok, ii, savedPass2BodyTok, sectionStartTok: Integer;
 begin
-  savedPendPtr := PendPtrCount;
-  { A used unit parses in its own normal (single-pass) mode: its interface is
-    already forward-visible, so the enclosing program's pre-scan must not leak in
-    and make ParseSubroutine skip the unit's bodies. }
-  savedPreScan := PreScanPass;
-  PreScanPass := False;
-  Expect(tkUnit, 'unit');
-  if CurTok.Kind <> tkIdent then Error('expected unit name');
-  uname := ReadDottedUsesName;   { accept dotted `unit Posix.SysSocket;` headers }
-  { `unit X deprecated 'use Y instead';` -- FPC and Delphi both accept a hint
-    directive on the unit declaration, and a DEPRECATED unit is exactly the kind
-    a real codebase keeps around for compatibility, so refusing it means the
-    unit cannot be compiled at all. Synapse's ssl_openssl.pas ends with one.
-    Same soft-identifier run every other declaration site already skips; the
-    directive is advisory, so parse-and-ignore is the whole behaviour.
-    compat-pascal-unit-deprecated-hint-directive }
-  SkipHintDirectives;
-  Expect(tkSemicolon, ';');
+  ParseUnitImplSection := False;
+  { WHERE A PARK REWINDS TO, and it is the head of the section rather than the
+    token after the `uses` clause. Restarting past the clause looks cheaper --
+    no re-walked imports, no duplicate edge in the leak table -- and it is
+    wrong in the one direction that is silent: anything declared BEFORE the
+    clause has been recorded in DeclItem* by then, the park discards those
+    entries with `DeclItemCount := savedBase`, and the replay starting after
+    the clause never records them again. The bodies would simply not be
+    emitted, with no diagnostic anywhere. Rewinding to the head can only
+    produce a DUPLICATE, which is loud. FPC requires the clause to come first
+    so neither case should arise -- which is exactly the reasoning that makes
+    a silent failure mode worth not choosing.
 
-  if CurTok.Kind <> tkIdent then Error('expected interface section');
-  if (CurTok.SVal <> 'interface') and (CurTok.SVal <> 'Interface') then
-    Error('expected interface section');
-  Next;
-
-  savedInterface := InInterface;
-  savedUnitImpl := InUnitImpl;
-  InInterface := True;
-  { An enclosing unit may be mid-implementation when its `uses` recursed in
-    here; this unit's INTERFACE is not private to it. Restored below with
-    InInterface. }
-  InUnitImpl := False;
-
-  while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
-  begin
-    case CurTok.Kind of
-      tkUses:     ParseUsesClause;
-      tkVar:      ParseVarSection;
-      tkConst:    ParseConstSection(-1, 0, False);
-      tkType:     ParseTypeSection;
-      tkClass,
-      tkProcedure,
-      tkFunction:
-        if IsGenericRoutineHeaderAhead then
-          { `function Add<T>(...);` in the INTERFACE -- the mode-Delphi spelling
-            of the `generic` arm below, and a header with no body for the same
-            reason. Consumed as a unit; the template is registered from the
-            implementation side.
-            feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
-          SkipDeclHeaderToSemicolon
-        else
-          ParseSubroutine;
-      tkIdent:
-        { `resourcestring` sections (FPC rtlconsts et al) register as plain
-          string constants — pxx has no resource tables; the format-arg
-          machinery lives in whoever consumes the string. }
-        if CaseEqual(CurTok.SVal, 'threadvar') then ParseThreadVarSection
-        else if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
-        else if CaseEqual(CurTok.SVal, 'operator') then
-          { An operator DECLARATION in the interface: a header with no body, and
-            it REGISTERS. It used to be consumed and discarded, on the stated
-            assumption that the implementation section's definition registers it
-            "before any importer's body" -- true for every straight `uses`, and
-            false under a CIRCULAR implementation-`uses`, where the second unit
-            is compiled while the first one's implementation is still pending.
-            The type resolved and only the operator was missing, so `c := a + b`
-            in the other unit failed with `no operator overload found for record
-            operands` (toperator1/2/3).
-
-            ParseOperatorDef handles a bodiless header the same way this loop's
-            tkFunction arm does -- it rewrites the header to a `function` and
-            lets ParseSubroutine make a FORWARD -- which only became possible
-            once the synthesised name became a scheme rather than a counter, so
-            the header and the definition are one proc rather than two. See the
-            name comment in ParseOperatorDef; registration is idempotent for the
-            same reason.
-            bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed }
-          ParseOperatorDef
-        else if CaseEqual(CurTok.SVal, 'generic') then
-          { `generic function F<T>(a: T): T;` in the INTERFACE: a header with no
-            body, exactly like the operator declaration above. The template is
-            registered from the IMPLEMENTATION section's definition (which is
-            parsed before any importer's body), so the header carries nothing
-            this side needs -- consume it as a unit.
-
-            Without this arm the header fell to UnitSectionStrayToken and the
-            unit would not compile at all, while FPC 3.2.2 accepts it and runs.
-            bug-p-a-generic-function-cannot-be-declared-in-a-unit }
-          SkipDeclHeaderToSemicolon
-        else
-          UnitSectionStrayToken('interface')
-      else
-        UnitSectionStrayToken('interface');
-    end;
-  end;
-
-  if CurTok.Kind = tkEOF then Error('expected implementation section');
-  Next; { Skip 'implementation' }
-
+    The replay is not a second park either: it runs only after the unit it was
+    waiting on has completed its interface, so the clause it re-walks answers
+    differently the second time. A third unit still open parks again, on that
+    one, which is correct. }
+  sectionStartTok := TokPos - 1;
   InInterface := False;
   { Everything registered from here to the unit's `end.` -- both the pre-scan
     below and the pass-2 body replay -- is private to this unit
@@ -7095,7 +7192,34 @@ begin
     else
     begin
       case CurTok.Kind of
-        tkUses:     ParseUsesClause;
+        tkUses:
+        begin
+          { THE PARKING SITE. CycleWaitUnit is cleared first so a stale answer
+            from an earlier clause cannot park this one; ParseUsesUnitBody sets
+            it only for an implementation-side cycle. }
+          CycleWaitUnit := -1;
+          ParseUsesClause;
+          if CycleWaitUnit >= 0 then
+          begin
+            { The rest of this section cannot be read yet -- the unit we are
+              waiting on has not finished declaring what this section is about
+              to reference. Park it AT THIS TOKEN (past the `uses` clause, so
+              the replay does not re-record its edges), walk to `end.` so our
+              caller's Expect(end)/Expect(dot) still balance, and hand back
+              True: the caller must NOT drain its pending `^T` targets, because
+              the declarations that supply them have not been parsed. }
+            parked := DefImplPark(uname, CycleWaitUnit, pendPtrMark, sectionStartTok);
+            CycleWaitUnit := -1;
+            if parked then
+            begin
+              SkipToUnitTerminator;
+              DeclItemCount := savedBase;
+              PreScanPass := False;
+              ParseUnitImplSection := True;
+              Exit;
+            end;
+          end;
+        end;
         tkVar:      ParseVarSection;
         tkConst:    ParseConstSection(-1, 0, False);
         tkType:     ParseTypeSection;
@@ -7235,6 +7359,234 @@ begin
   TokPos := afterImpTok;
   Next;
   DeclItemCount := savedBase;
+end;
+
+procedure DrainDeferredImpls(unitIdx: Integer);
+{ Replay every implementation section parked waiting on `unitIdx`, whose
+  interface has just completed.
+
+  CALLED AT THE `implementation` KEYWORD, which is the narrowest point that
+  restores FPC's order: every interface complete before any implementation is
+  parsed. Draining later (at the program's `uses`, say) would also work for
+  visibility and would move every cyclic unit's initialization section past
+  units that do not participate in the cycle; draining here keeps the
+  implementation order the source already had.
+
+  A REPLAY MAY PARK AGAIN, on a third unit whose interface is still open, and
+  that is why the slot is marked done BEFORE the call rather than after: a
+  fresh park appends a new slot with the new dependency, and the loop below --
+  which re-reads DefImplCount each turn, deliberately, because the table grows
+  under it -- will not spin on the old one. }
+var
+  k: Integer;
+  savedTokPos, savedUnitIdx, savedPendPtrDummy: Integer;
+  savedCurTokKind: TTokenKind;
+  savedCurTokSVal: AnsiString;
+  savedCurTokIVal: Int64;
+  savedCurTokLine: Integer;
+  savedSrcBase, savedUnitDir: AnsiString;
+  savedIface, savedImpl, savedPreScan: Boolean;
+  savedCase, savedNested, savedDelphi: Boolean;
+  savedPackRec, savedPackEnum, savedNCh: Integer;
+  savedHMin, savedScoped, savedQCh, savedAssert, savedRCh, savedICh, savedIntf: Boolean;
+begin
+  if unitIdx < 0 then Exit;
+  k := 0;
+  while k < DefImplCount do
+  begin
+    if (not DefImplDone[k]) and (DefImplWaitOn[k] = unitIdx) then
+    begin
+      DefImplDone[k] := True;
+
+      savedTokPos := TokPos;
+      savedCurTokKind := CurTok.Kind;
+      savedCurTokSVal := CurTok.SVal;
+      savedCurTokIVal := CurTok.IVal;
+      savedCurTokLine := CurTok.Line;
+      savedUnitIdx := CurrentUnitIdx;
+      savedSrcBase := CurSrcBaseName;
+      savedUnitDir := CurUnitDir;
+      savedIface := InInterface;
+      savedImpl := InUnitImpl;
+      savedPreScan := PreScanPass;
+      savedCase := CaseSensitiveMode;
+      savedNested := NestedComments;
+      savedDelphi := DelphiMode;
+      savedPackRec := PackRecordsVal;
+      savedPackEnum := PackEnumVal;
+      savedHMin := HMinusVal;
+      savedScoped := ScopedEnumsVal;
+      savedQCh := QChecksVal;
+      savedAssert := AssertionsVal;
+      savedRCh := RChecksVal;
+      savedNCh := NChecksVal;
+      savedICh := IChecksVal;
+      savedIntf := InterfacesComMode;
+
+      CurrentUnitIdx := DefImplUnitIdx[k];
+      CurSrcBaseName := DefImplSrcBase[k];
+      CurUnitDir := DefImplUnitDir[k];
+      DefImplRestoreModes(k);
+      TokPos := DefImplTokPos[k];
+      Next;
+
+      savedPendPtrDummy := DefImplPendPtr[k];
+      if not ParseUnitImplSection(DefImplName[k], savedPendPtrDummy) then
+        { the twin of ParseUnit's own call: the parked section's `^T` mark
+          travelled with it, and this is where it finally gets answered }
+        DrainPendingPtrTargets(savedPendPtrDummy);
+
+      InterfacesComMode := savedIntf;
+      IChecksVal := savedICh;
+      NChecksVal := savedNCh;
+      RChecksVal := savedRCh;
+      AssertionsVal := savedAssert;
+      QChecksVal := savedQCh;
+      ScopedEnumsVal := savedScoped;
+      HMinusVal := savedHMin;
+      PackEnumVal := savedPackEnum;
+      PackRecordsVal := savedPackRec;
+      DelphiMode := savedDelphi;
+      NestedComments := savedNested;
+      CaseSensitiveMode := savedCase;
+      PreScanPass := savedPreScan;
+      InUnitImpl := savedImpl;
+      InInterface := savedIface;
+      CurUnitDir := savedUnitDir;
+      CurSrcBaseName := savedSrcBase;
+      CurrentUnitIdx := savedUnitIdx;
+      TokPos := savedTokPos;
+      CurTok.Kind := savedCurTokKind;
+      CurTok.SVal := savedCurTokSVal;
+      CurTok.IVal := savedCurTokIVal;
+      CurTok.Line := savedCurTokLine;
+
+      { The table grew or a slot was marked; rescan from the start so a section
+        parked BY this replay on the same unit is not skipped. }
+      k := 0;
+    end
+    else
+      Inc(k);
+  end;
+end;
+
+procedure ParseUnit;
+var
+  uname: AnsiString;
+  savedInterface, savedUnitImpl, savedPreScan, implDeferred: Boolean;
+  savedPendPtr: Integer;   { this unit's mark in the deferred `^T` list }
+  myUnitIdx: Integer;      { …and its slot on the load stack, popped by identity }
+begin
+  savedPendPtr := PendPtrCount;
+  { CurrentUnitIdx was set to this unit by the loader before it called us, so
+    it is the identity to push. See defs.inc's UnitLoadIdx block. }
+  myUnitIdx := CurrentUnitIdx;
+  UnitLoadPush(myUnitIdx);
+  { A used unit parses in its own normal (single-pass) mode: its interface is
+    already forward-visible, so the enclosing program's pre-scan must not leak in
+    and make ParseSubroutine skip the unit's bodies. }
+  savedPreScan := PreScanPass;
+  PreScanPass := False;
+  Expect(tkUnit, 'unit');
+  if CurTok.Kind <> tkIdent then Error('expected unit name');
+  uname := ReadDottedUsesName;   { accept dotted `unit Posix.SysSocket;` headers }
+  { `unit X deprecated 'use Y instead';` -- FPC and Delphi both accept a hint
+    directive on the unit declaration, and a DEPRECATED unit is exactly the kind
+    a real codebase keeps around for compatibility, so refusing it means the
+    unit cannot be compiled at all. Synapse's ssl_openssl.pas ends with one.
+    Same soft-identifier run every other declaration site already skips; the
+    directive is advisory, so parse-and-ignore is the whole behaviour.
+    compat-pascal-unit-deprecated-hint-directive }
+  SkipHintDirectives;
+  Expect(tkSemicolon, ';');
+
+  if CurTok.Kind <> tkIdent then Error('expected interface section');
+  if (CurTok.SVal <> 'interface') and (CurTok.SVal <> 'Interface') then
+    Error('expected interface section');
+  Next;
+
+  savedInterface := InInterface;
+  savedUnitImpl := InUnitImpl;
+  InInterface := True;
+  { An enclosing unit may be mid-implementation when its `uses` recursed in
+    here; this unit's INTERFACE is not private to it. Restored below with
+    InInterface. }
+  InUnitImpl := False;
+
+  while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
+  begin
+    case CurTok.Kind of
+      tkUses:     ParseUsesClause;
+      tkVar:      ParseVarSection;
+      tkConst:    ParseConstSection(-1, 0, False);
+      tkType:     ParseTypeSection;
+      tkClass,
+      tkProcedure,
+      tkFunction:
+        if IsGenericRoutineHeaderAhead then
+          { `function Add<T>(...);` in the INTERFACE -- the mode-Delphi spelling
+            of the `generic` arm below, and a header with no body for the same
+            reason. Consumed as a unit; the template is registered from the
+            implementation side.
+            feature-p-generic-routines-in-a-class-body-and-in-delphi-spelling }
+          SkipDeclHeaderToSemicolon
+        else
+          ParseSubroutine;
+      tkIdent:
+        { `resourcestring` sections (FPC rtlconsts et al) register as plain
+          string constants — pxx has no resource tables; the format-arg
+          machinery lives in whoever consumes the string. }
+        if CaseEqual(CurTok.SVal, 'threadvar') then ParseThreadVarSection
+        else if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0, True)
+        else if CaseEqual(CurTok.SVal, 'operator') then
+          { An operator DECLARATION in the interface: a header with no body, and
+            it REGISTERS. It used to be consumed and discarded, on the stated
+            assumption that the implementation section's definition registers it
+            "before any importer's body" -- true for every straight `uses`, and
+            false under a CIRCULAR implementation-`uses`, where the second unit
+            is compiled while the first one's implementation is still pending.
+            The type resolved and only the operator was missing, so `c := a + b`
+            in the other unit failed with `no operator overload found for record
+            operands` (toperator1/2/3).
+
+            ParseOperatorDef handles a bodiless header the same way this loop's
+            tkFunction arm does -- it rewrites the header to a `function` and
+            lets ParseSubroutine make a FORWARD -- which only became possible
+            once the synthesised name became a scheme rather than a counter, so
+            the header and the definition are one proc rather than two. See the
+            name comment in ParseOperatorDef; registration is idempotent for the
+            same reason.
+            bug-p-an-operator-declared-in-a-unit-interface-is-not-registered-until-its-body-is-parsed }
+          ParseOperatorDef
+        else if CaseEqual(CurTok.SVal, 'generic') then
+          { `generic function F<T>(a: T): T;` in the INTERFACE: a header with no
+            body, exactly like the operator declaration above. The template is
+            registered from the IMPLEMENTATION section's definition (which is
+            parsed before any importer's body), so the header carries nothing
+            this side needs -- consume it as a unit.
+
+            Without this arm the header fell to UnitSectionStrayToken and the
+            unit would not compile at all, while FPC 3.2.2 accepts it and runs.
+            bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+          SkipDeclHeaderToSemicolon
+        else
+          UnitSectionStrayToken('interface')
+      else
+        UnitSectionStrayToken('interface');
+    end;
+  end;
+
+  if CurTok.Kind = tkEOF then Error('expected implementation section');
+  Next; { Skip 'implementation' }
+
+  { ===== THIS UNIT'S INTERFACE IS COMPLETE AS OF THIS TOKEN =====
+    Which is the whole event another unit's parked implementation was waiting
+    for. Marked before the drain, so a section that asks about US while it
+    replays gets the true answer. }
+  UnitLoadMarkIfaceDone(myUnitIdx);
+  DrainDeferredImpls(myUnitIdx);
+
+  implDeferred := ParseUnitImplSection(uname, savedPendPtr);
 
   InInterface := savedInterface;
   InUnitImpl := savedUnitImpl;
@@ -7247,7 +7599,14 @@ begin
     rather than directly (393fe0184, reverted d11b8a1a9). Down to the mark taken
     on entry, so nested `uses` -- this procedure recurses -- each answer for
     their own rows in their own scope. }
-  DrainPendingPtrTargets(savedPendPtr);
+  { …unless this unit PARKED its implementation: the declarations that answer
+    these `^T` are in the section that has not been read yet, and the replay
+    drains them against the same mark. Draining here would resolve nothing and
+    would move the mark, so the replay would find an empty list. }
+  if not implDeferred then
+    DrainPendingPtrTargets(savedPendPtr);
+
+  UnitLoadPop(myUnitIdx);
 
   Expect(tkEnd, 'end');
   Expect(tkDot, '.');

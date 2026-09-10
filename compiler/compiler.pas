@@ -2181,6 +2181,9 @@ begin
     first-class peer of RTL/PCL in ParseUsesUnit's own search chain — no
     AddPasUnitDir needed here, see compiler/pasparser_proc.inc (asmdir). }
   CompiledUnitCount := 0;
+  UnitLoadCount := 0;
+  DefImplCount := 0;
+  CycleWaitUnit := -1;
   UnitAliasCount := 0;
   InitProcCount := 0;
   FiniProcCount := 0;
@@ -2479,6 +2482,24 @@ begin
     if RtlOverLibc and (TargetArch = TARGET_X86_64) then EnsureLibcSyscallProcs;
     ParseProgram;
   end;
+
+  { ===== A PARKED IMPLEMENTATION SECTION THAT WAS NEVER REPLAYED =====
+    Deferring a unit's implementation is the fix for a cycle closed through an
+    `implementation uses` (defs.inc, UnitLoadIdx). Its failure mode if a drain
+    is ever missed is the worst shape this repo has a rule about: the section
+    is simply ABSENT -- no error, no missing symbol at parse time, and a
+    program that links and runs with a unit's bodies quietly not in it. So the
+    guard is here rather than in a comment, and it names the unit.
+
+    IT CAN FAIL, and that was checked rather than assumed: forcing DefImplPark
+    to record a waitOn no unit can supply makes this fire and names the unit,
+    which is the positive control for it.
+    bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface }
+  for i := 0 to DefImplCount - 1 do
+    if not DefImplDone[i] then
+      Error('internal: unit ' + DefImplName[i] + '''s implementation section was '
+            + 'parked waiting for another unit''s interface to complete and was '
+            + 'never replayed, so its bodies are not in this build');
 
   { Recovered diagnostics: the parse was allowed to continue past a name that
     did not resolve, so the file's other independent mistakes are reported in

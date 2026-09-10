@@ -127,6 +127,34 @@ const
     since 2026-09-06: the string table grows. The history is kept because the
     point of the note is the COUPLING, which was real, not the constant.) }
   MAX_UNITS   = 256;
+  { How deep `uses` may nest. ParseUnit recurses once per level, so this is a
+    property of the SOURCE graph, not of the machine: FPC's own compiler,
+    the deepest corpus here, reaches 14. Overflowing it must not abort a
+    build, so the push degrades to "not tracked" -- which costs a cycle
+    diagnosis at that depth and nothing else. }
+  MAX_UNIT_LOAD_DEPTH = 64;
+  { Parked implementation sections. One per unit in a cycle, live only while
+    the cycle's other half is still parsing its interface, so this bounds
+    CONCURRENT cycles rather than total ones. }
+  MAX_DEFERRED_IMPLS  = 32;
+  { The per-unit modes a deferred implementation replay must put back, indexed
+    off slot * DEFIMPL_MODE_STRIDE. Booleans travel as 0/1. Named rather than
+    numbered so a reader can see at the save site which slot is which; the
+    stride is the count, and adding one means adding it in both helpers. }
+  DEFIMPL_M_CASE       = 0;
+  DEFIMPL_M_NESTED     = 1;
+  DEFIMPL_M_DELPHI     = 2;
+  DEFIMPL_M_PACKREC    = 3;
+  DEFIMPL_M_PACKENUM   = 4;
+  DEFIMPL_M_HMINUS     = 5;
+  DEFIMPL_M_SCOPEDENUM = 6;
+  DEFIMPL_M_QCHECKS    = 7;
+  DEFIMPL_M_ASSERT     = 8;
+  DEFIMPL_M_RCHECKS    = 9;
+  DEFIMPL_M_NCHECKS    = 10;
+  DEFIMPL_M_ICHECKS    = 11;
+  DEFIMPL_M_INTFCOM    = 12;
+  DEFIMPL_MODE_STRIDE  = 13;
   { Compile-time-only identity keys (see KeyStrs). Bounded by the compiled-unit
     count, which CompiledUnitFile already caps at 256; 1024 leaves headroom for
     the other key classes without pretending to be a general string table. }
@@ -5477,6 +5505,61 @@ var
     refactor-a-one-resolved-file-identity-for-a-translation-unit. }
   CompiledUnitKey : array[0..255] of Integer;
   CompiledUnitCount : Integer;
+
+  { ===== THE UNIT LOAD STACK, and the deferred implementation sections it
+    makes possible =====
+
+    A unit cycle CLOSED THROUGH AN `implementation` uses clause is the legal
+    and standard form of mutual unit recursion -- it is the entire reason
+    Pascal splits `uses` in two. `unit A`'s INTERFACE uses `B`; `unit B`'s
+    IMPLEMENTATION uses `A`. Measured 2026-09-10 with
+    tools/fpc_compiler_corpus_probe.sh: this is the FIRST failure of 158 of
+    the 207 units of FPC's own compiler, 76% of the corpus, against 8 for the
+    second-largest cause.
+
+    NOTHING WAS BEING HIDDEN -- IT HAD NOT BEEN READ. The already-compiled
+    guard in ParseUsesUnitBody marks a unit BEFORE parsing it, so on reaching
+    `B`'s implementation `uses A` the loader correctly answers "A is already
+    in hand" and exits. At that instant A's interface has been parsed only as
+    far as its OWN `uses B` line, so A's declarations genuinely do not exist
+    yet. That is why this was never a lookup fix: what makes the cycle legal
+    in FPC is ORDER -- every interface is complete before any implementation
+    is parsed.
+
+    So B's implementation section is DEFERRED and replayed the moment A's
+    interface completes, which is the narrowest point that restores FPC's
+    order. UnitLoad* is the stack that answers "is A still in progress, and
+    is its interface done"; DefImpl* is the parked section.
+
+    WHY A SNAPSHOT AND NOT A RE-LOAD: by the time the replay runs, B's own
+    per-unit modes have been restored to its CALLER's -- case sensitivity,
+    Delphi mode, {$PACKRECORDS}, the range/overflow check flags -- and a body
+    emitted under the wrong ones is wrong SILENTLY. Lexing is already done
+    (the tokens are in the shared stream and B's own {$define}s were resolved
+    against them), so what a replay needs is exactly this: a token position
+    and the modes that outlive lexing. DefImplMode is one flat array with a
+    stride rather than sixteen parallel ones; DefImplSaveModes/RestoreModes
+    are its only readers.
+    bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface }
+  UnitLoadIdx       : array[0..MAX_UNIT_LOAD_DEPTH - 1] of Integer;
+  UnitLoadIfaceDone : array[0..MAX_UNIT_LOAD_DEPTH - 1] of Boolean;
+  UnitLoadCount     : Integer;
+  { Set by ParseUsesUnitBody when an ALREADY-MARKED unit turns out to still be
+    on the load stack with an incomplete interface, read (and cleared) by the
+    implementation-section `uses` arm in ParseUnit. -1 means no wait. It is a
+    global rather than an out-parameter because the two sites are separated by
+    ParseUsesClause, which parses a LIST and has no business carrying it. }
+  CycleWaitUnit     : Integer;
+  DefImplUnitIdx    : array[0..MAX_DEFERRED_IMPLS - 1] of Integer;
+  DefImplWaitOn     : array[0..MAX_DEFERRED_IMPLS - 1] of Integer;
+  DefImplTokPos     : array[0..MAX_DEFERRED_IMPLS - 1] of Integer;
+  DefImplPendPtr    : array[0..MAX_DEFERRED_IMPLS - 1] of Integer;
+  DefImplName       : array[0..MAX_DEFERRED_IMPLS - 1] of AnsiString;
+  DefImplSrcBase    : array[0..MAX_DEFERRED_IMPLS - 1] of AnsiString;
+  DefImplUnitDir    : array[0..MAX_DEFERRED_IMPLS - 1] of AnsiString;
+  DefImplDone       : array[0..MAX_DEFERRED_IMPLS - 1] of Boolean;
+  DefImplMode       : array[0..MAX_DEFERRED_IMPLS * DEFIMPL_MODE_STRIDE - 1] of Integer;
+  DefImplCount      : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
   { `uses 'name' as alias` table: a qualifier `alias.Sym` resolves to the real
     unit's symbols. UnitAliasName[k] = Strs[] idx of the (lowercased) alias,

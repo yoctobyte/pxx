@@ -3042,6 +3042,18 @@ test-nilpy: $(COMPILER)
 	@# ncon.pas:968 are the two named in the ticket.
 	@./$(COMPILER) test/test_p_a_conditional_directive_can_read_a_source_const.pas $(TESTTMP)/test_condsrc26
 	@tools/expect_same.sh test_condsrc26 "$$($(TESTTMP)/test_condsrc26 | tail -n 2)" "$$(printf 'fails=0\nCONDSRC OK')"
+	@# A unit cycle CLOSED THROUGH AN `implementation` uses clause -- the legal
+	@# and standard form of mutual unit recursion, and the reason Pascal splits
+	@# `uses` in two at all. ucycle_a's INTERFACE uses ucycle_b; ucycle_b's
+	@# IMPLEMENTATION uses ucycle_a and reads a var, a type AND a const back
+	@# from it (three tables, three chances for a fix to reach one and miss the
+	@# others). ucycle_a's declarations sit BELOW its own `uses` on purpose:
+	@# hoisting them makes every row pass while measuring nothing.
+	@# 158 of FPC's 207 compiler units -- 76% -- stopped here as their FIRST
+	@# failure (umbrella-pxx-compiles-fpc-itself). Byte-identical to fpc 3.2.2.
+	@# bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
+	@./$(COMPILER) test/test_p_a_unit_cycle_through_an_implementation_uses.pas $(TESTTMP)/test_ucycle26
+	@tools/expect_same.sh test_ucycle26 "$$($(TESTTMP)/test_ucycle26 | tail -n 2)" "$$(printf 'fails=0\nUCYCLE OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.
