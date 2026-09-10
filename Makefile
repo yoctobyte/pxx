@@ -2181,6 +2181,22 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_fstrings26 | diff -u test/test_nilpy_fstrings.expected -
 	./$(COMPILER) test/test_nilpy_exceptions.npy $(TESTTMP)/test_nilpy_exceptions26
 	tools/expect_same.sh test_nilpy_exceptions26 "$$($(TESTTMP)/test_nilpy_exceptions26)" "$$(printf 'none\nA\n10\nB\n20\nnone\nfin\nerr\nfin\ninner\nouter\n5\nbare')"
+	# An `except` arm's QUALIFIER is consumed WHOLE, not one dot deep.
+	# `except (urllib.error.URLError, OSError, ValueError):` died as
+	# `unknown exception class error` -- the MIDDLE segment -- because the
+	# qualifier eater was an `if`, in two copies, and the tuple copy got its
+	# qualifier support BY COPYING the single-class one. gauges.py:422 is that
+	# line, and urllib publishing its exceptions from a submodule makes two dots
+	# the standard spelling for any program that guards a fetch.
+	# The axis is dot DEPTH, not the tuple: all eight shapes are rows in the
+	# file so a later regression cannot fix depth by breaking depth-1.
+	# The catching rows RAISE and assert which arm caught, because a compile
+	# cannot see which class an arm resolved to; the ValueError row is the
+	# control against an over-broad resolution swallowing everything.
+	# POSITIVE CONTROL MEASURED: the PINNED compiler fails this file at line 42,
+	# `unknown exception class error`, the exact line and message of the bug.
+	./$(COMPILER) test/test_nilpy_an_except_class_qualifier_is_consumed_one_dot_deep.npy $(TESTTMP)/test_nilpy_excqual26
+	tools/expect_same.sh test_nilpy_excqual26 "$$($(TESTTMP)/test_nilpy_excqual26)" "$$(python3 test/test_nilpy_an_except_class_qualifier_is_consumed_one_dot_deep.npy)"
 	./$(COMPILER) test/test_nilpy_kwargs.npy $(TESTTMP)/test_nilpy_kwargs26
 	tools/expect_same.sh test_nilpy_kwargs26 "$$($(TESTTMP)/test_nilpy_kwargs26)" "$$(printf 'Hello, Ann!\nHi, Bob!\nHello, Cid?\nYo, Dee?!\nHey, Eve?\nHello, Fay!\nHello, Gus.\n111\n124\n130\n245')"
 	./$(COMPILER) test/test_nilpy_defaults.npy $(TESTTMP)/test_nilpy_defaults26

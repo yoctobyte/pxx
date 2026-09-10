@@ -1,0 +1,108 @@
+# An `except` arm's QUALIFIER must be consumed WHOLE, not one dot deep.
+#
+# `except (urllib.error.URLError, OSError, ValueError):` died as
+# `Nil Python: unknown exception class error` -- className had become `error`,
+# the MIDDLE segment, because the qualifier eater was an `if` and not a loop.
+# lekkerzeilen/gauges.py:422 is that line, and it is the standard spelling
+# rather than one program's habit: urllib publishes its exceptions from a
+# SUBMODULE, so every program that guards a fetch writes two dots.
+#
+# THE AXIS IS NOT THE ONE THE SYMPTOM SUGGESTS. It arrived as "a dotted class
+# in an except TUPLE", and the tuple is irrelevant -- measured, one dot works
+# bare and in a tuple, first or last; two dots failed bare and in a tuple,
+# first or last, and with `as e`. Dot DEPTH alone. Every one of those eight
+# shapes is a row below, so the next reader does not have to re-derive which
+# half mattered.
+#
+# TWO COPIES, AND THE SECOND WAS A COPY. The tuple arm's comment recorded that
+# it got qualifier support by copying the single-class arm, so the one-dot
+# limit was duplicated along with the feature: normalise-dont-special-case in
+# the variant where the second path is not stale but WRONG IN EXACTLY THE SAME
+# WAY, which is why fixing one and grepping for the sibling would have found a
+# sibling that already looked correct. One routine now, called from both.
+#
+# CPython runs this file unchanged and is the oracle. Both runtimes have
+# urllib.error.URLError and both can raise it, so the catching rows are a real
+# cross-check and not a compile-only assertion -- a compile cannot see WHICH
+# class an arm resolved to.
+
+import json
+import urllib.error
+
+
+def catches(which):
+    """Which arm caught it. The second arm is the control: an over-broad
+    resolution of the two-dot arm would swallow the ValueError too."""
+    try:
+        if which == 0:
+            raise urllib.error.URLError("boom")
+        if which == 1:
+            raise ValueError("val")
+        return "no-exception"
+    except (urllib.error.URLError, OSError):
+        return "two-dot-arm"
+    except ValueError:
+        return "value-arm"
+
+
+print(catches(0))
+print(catches(1))
+print(catches(2))
+
+
+def binds():
+    """`as e` on a two-dot class -- the binder is a separate code path from the
+    class list and the qualifier is eaten before it is reached."""
+    try:
+        raise urllib.error.URLError("bound")
+    except urllib.error.URLError as e:
+        return "bound %s" % (e is not None)
+
+
+print(binds())
+
+
+# ---- the eight shapes, all of which must now compile ------------------------
+# One dot never broke; it is here so a future regression that fixes depth by
+# breaking depth-1 cannot pass.
+def shape(fn):
+    try:
+        return fn()
+    except Exception:
+        return "raised"
+
+
+def one_dot_bare():
+    try:
+        raise ValueError("x")
+    except json.JSONDecodeError:
+        return "wrong"
+    except ValueError:
+        return "one-dot-bare ok"
+
+
+def one_dot_tuple():
+    try:
+        raise ValueError("x")
+    except (json.JSONDecodeError, ValueError):
+        return "one-dot-tuple ok"
+
+
+def two_dot_first():
+    try:
+        raise urllib.error.URLError("x")
+    except (urllib.error.URLError, OSError):
+        return "two-dot-first ok"
+
+
+def two_dot_last():
+    try:
+        raise urllib.error.URLError("x")
+    except (OSError, urllib.error.URLError):
+        return "two-dot-last ok"
+
+
+print(one_dot_bare())
+print(one_dot_tuple())
+print(two_dot_first())
+print(two_dot_last())

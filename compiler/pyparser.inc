@@ -21762,6 +21762,73 @@ begin
   PyBridgeRootCi := bridgeCi;
 end;
 
+{ The class name of one `except` arm, with any QUALIFIER consumed.
+
+  Unit scope is flat, so the member name alone resolves and the qualifier only
+  has to be eaten — but it has to be eaten WHOLE. This was an `if` and not a
+  loop, in TWO copies, so exactly one dot was consumed: `urllib.error.URLError`
+  became className `error`, the middle segment, and the arm died as
+  `unknown exception class error`. gauges.py:422 is
+  `except (urllib.error.URLError, OSError, ValueError)` and that is the standard
+  spelling — urllib publishes its exceptions from a SUBMODULE, so any program
+  guarding a fetch writes two dots.
+
+  MEASURED, and the axis is not the one the symptom suggests: the tuple is
+  irrelevant. One dot works bare, in a tuple, first or last; two dots fail bare,
+  in a tuple, first or last, and with `as e`. It is dot DEPTH alone.
+
+  EXTRACTED RATHER THAN FIXED TWICE. The tuple copy's own comment records that
+  it was added by copying the single-class arm ("The single form below has taken
+  this since tk.TclError; the tuple form did not"), so the one-dot limit was
+  duplicated along with the feature — normalise-dont-special-case, in the
+  variant where the second path is not merely stale but is a COPY and therefore
+  wrong in exactly the same way. One routine now, called from both arms.
+  bug-n-an-except-class-qualifier-is-consumed-one-dot-deep }
+function PyConsumeExceptClassName: AnsiString;
+var qual, joined: AnsiString; qualOk: Boolean;
+begin
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: except: expected an exception class');
+  Result := CurTok.SVal;
+  Next;
+  qual := '';
+  joined := '';
+  qualOk := False;                     { locals are NOT zeroed here }
+  while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+        (Tokens[TokPos].Kind = tkIdent) do
+  begin
+    { what we just held was a QUALIFIER segment, not the class }
+    if qual = '' then begin qual := Result; joined := LowerCase(Result); end
+    else begin qual := qual + '.' + Result; joined := joined + '_' + LowerCase(Result); end;
+    if not qualOk then qualOk := FindUnitOrAlias(joined) >= 0;
+    Next;
+    Result := CurTok.SVal;
+    Next;
+  end;
+  { AND THE QUALIFIER IS CHECKED, WHICH IT NEVER WAS. Resolving the last
+    segment flat is right -- unit scope IS flat here -- but discarding the
+    qualifier unexamined means the source's own words stop mattering:
+    measured 2026-09-11, `except zzz_nothing.Error:` COMPILED and CAUGHT a
+    `sqlite3.Error`, and `except urllib.error.URLError:` in a program that
+    never imports urllib bound to whatever class happens to be spelled
+    `error` or `URLError` in the flat namespace, case-insensitively. That is
+    not NilPy accepting more than CPython, which is a feature; it is a handler
+    binding to a class the program did not name, which is the plausible-wrong-
+    value class in an exception handler, where nobody is looking. It got
+    fleet-wide the moment `mimic_sqlite3` landed a class called `Error` --
+    about as generic a name as exists.
+    Accept if ANY dotted prefix names a unit, because a submodule import is
+    one unit under a joined name: `import urllib.error` gives `urllib_error`
+    (then chased to its shim), so the ROOT alone does not resolve and a
+    root-only check would refuse the corpus's own spelling.
+    bug-n-an-except-class-qualifier-is-neither-walked-nor-checked }
+  if (qual <> '') and (not qualOk) then
+    Error('Nil Python: except: `' + qual + '` names no module in scope, so `' +
+          qual + '.' + Result + '` cannot be the class it says it is — the ' +
+          'qualifier used to be discarded, which let this bind to any class ' +
+          'spelled `' + Result + '` anywhere in the program');
+end;
+
 function PyParseTry: Integer;
 var node, innerNode, trySeq, finSeq, handlerHead, lastHandler, handlerNode: Integer;
     actionSeq, handlerVar, ci, recId: Integer;
@@ -21798,20 +21865,12 @@ begin
         Next;
         while CurTok.Kind <> tkRParen do
         begin
-          if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
-          className := CurTok.SVal;
-          Next;
           { a QUALIFIED class inside the tuple too — `except (OSError,
-            json.JSONDecodeError):` is how a file read is guarded. The single
-            form below has taken this since tk.TclError; the tuple form did not,
-            and reported the MODULE name as an unknown exception class. }
-          if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
-             (Tokens[TokPos].Kind = tkIdent) then
-          begin
-            Next;
-            className := CurTok.SVal;
-            Next;
-          end;
+            json.JSONDecodeError):` is how a file read is guarded, and
+            `except (urllib.error.URLError, ...)` is how a fetch is. Both arms
+            call one routine now; they used to hold two copies of it, and the
+            copy carried the one-dot limit with it. }
+          className := PyConsumeExceptClassName;
           if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
           else ci := FindUClass(className);
           if ci < 0 then Error('Nil Python: unknown exception class ' + className);
@@ -21840,18 +21899,10 @@ begin
       end
       else
       begin
-        if CurTok.Kind <> tkIdent then Error('Nil Python: except: expected an exception class');
-        className := CurTok.SVal;
-        Next;
-        { `except tk.TclError:` — a QUALIFIED class. Unit scope is flat, so the
-          member name alone resolves; the qualifier just has to be consumed. }
-        if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
-           (Tokens[TokPos].Kind = tkIdent) then
-        begin
-          Next;
-          className := CurTok.SVal;
-          Next;
-        end;
+        { `except tk.TclError:` / `except urllib.error.URLError:` — a QUALIFIED
+          class, at any depth. Unit scope is flat, so the member name alone
+          resolves; the qualifier just has to be consumed, WHOLE. }
+        className := PyConsumeExceptClassName;
         if CaseEqual(className, 'Exception') then ci := PyEnsureExceptionClass
         else ci := FindUClass(className);
         if ci < 0 then Error('Nil Python: unknown exception class ' + className);
