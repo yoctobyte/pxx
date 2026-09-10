@@ -186,4 +186,4 @@ section above is still the better first move** — it needs no theory and it
 narrows the defect, where an age-bisect only narrows the blame.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c18f92f48.
