@@ -2788,12 +2788,25 @@ test-nilpy: $(COMPILER)
 	# is what `import "/usr/include/GL/gl.h"` did: stem `gl`, library libGL.so.1.
 	# Hermetic: no libnolib.so exists anywhere, so this asserts the guard without
 	# depending on which libraries this box has.
+	# THE LINE NUMBER IS 1 AND THAT IS THE POINT, not an accident to tolerate.
+	# This is a WHOLE-PROGRAM diagnostic raised in elfwriter.inc after the parse
+	# has finished, so it has no source position; `ErrorNoPos` (lexer.inc) prints
+	# 1 deliberately, because garin's builder.pas keys jump-to-error off the
+	# number between the first two colons and dropping it would make these
+	# invisible to the IDE. 1 opens the user's main file at the top, which is
+	# where you want to stand for a statement about the program as a whole.
+	# It asserted 10 until 2026-09-10, from `Error` reading the LEXER's position
+	# -- which by then was parked inside the last builtin unit parsed, not in the
+	# user's file at all. 967f9cc93 moved this call to ErrorNoPos and fixed that;
+	# the assertion was left pinned to the old coordinates and went red on the
+	# next full tier. The tell was free and nobody looked: the .npy is NINE lines
+	# long, so `pascal26:10:` named a line the test file has never had.
 	@out=$$(./$(COMPILER) -Itest/ffi_headers/ test/test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist.npy $(TESTTMP)/test_nilpy_ffinolib26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:10: error: this build would die at exec: `nolib_add` is imported from libnolib.so' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:1: error: this build would die at exec: `nolib_add` is imported from libnolib.so' \
 	   && test ! -e $(TESTTMP)/test_nilpy_ffinolib26 \
-	  || { echo "test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist: FAIL - rc=$$rc (want 1, the exec diagnostic on line 10, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	  || { echo "test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist: FAIL - rc=$$rc (want 1, the whole-program exec diagnostic at line 1, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	# ...and THE NEGATIVE CONTROL, which is what keeps the guard from being a
 	# blanket refusal: the same impossible header, imported and never referenced,
 	# emits no DT_NEEDED at all and is a working program.
