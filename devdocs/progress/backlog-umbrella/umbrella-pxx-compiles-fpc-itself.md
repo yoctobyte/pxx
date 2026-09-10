@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface, feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]
+blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]
 summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS EMPTY ON PURPOSE AND MUST BE GROWN BY ATTEMPTING, NOT BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.'"
 ---
 
@@ -290,3 +290,61 @@ green from running it by hand is a claim about that one run on that one tree.
 
 So: do not reach for `make test-fpc` to measure this umbrella, and do not read
 its absence from the tstate archive as a pass.
+
+## 2026-09-10, frankH — attempt 4: the two biggest walls, and neither bought a unit
+
+Two fixes, each with the WHOLE probe re-run before and after it, so both deltas
+below are per-unit joins and not category arithmetic.
+
+| | `590e7c100` | `6e8a821db` (cycle) | `7e4f69a34` (bitsizeof) |
+| --- | --- | --- | --- |
+| units | 207 | 207 | 207 |
+| **compile under both** | **9** | **9** | measured below |
+| oracle refuses | 10 | 10 | |
+| pxx stops | 188 | 188 | |
+
+| first failure | `590e7c100` | after the cycle fix |
+| --- | --- | --- |
+| `undefined variable (internalerrorproc)` — the unit cycle | **158** | **0** |
+| `undefined variable (bitsizeof)` | 5 | **163** |
+| `an object type cannot have a constructor` | 8 | 8 |
+| `Unsupported tcompilerwidechar size` | 7 | 7 |
+| `expected field name in record constant` | 2 | 2 |
+| `conditional directive: expected operator` | 2 | 2 |
+| `uses: unit source not found` (unixcp, heaptrc, charset) | 3 | 3 |
+| `undefined variable (align)` / `(IsATTY)` | 1 each | 1 each |
+| `RS_INVALID` has no integer value | 1 | 1 |
+
+**Exactly 158 units moved, every one of them from the cycle to `bitsizeof`, and
+nothing else moved at all.** A join on the unit name says so.
+
+### The number to distrust here is the one that did NOT move
+
+**BOTH-OK stayed at 9 across the largest single fix this umbrella has had.**
+76% of the corpus was standing behind the unit cycle and the next wall was
+immediately behind it, so a 158-row delta bought no unit. That is the shape to
+expect from a corpus attempt and it is why this file reports walls rather than
+line numbers: a per-unit diff of 158 rows is easy to quote as progress, and the
+honest unit of progress is a wall.
+
+### `bitsizeof` was banked here with its whole answer and it held up
+
+The banked note said `SizeOf(x) * 8`, no wrong answer reachable because pxx has
+no `bitpacked`, and not a one-liner only because SizeOf's arm has six
+`AllocNode(AN_INT_LIT)` exits — *"the honest version unifies those exits
+first"*. All three were right. The exits are now one (`EmitSizeOfResult`) and
+the multiply exists once.
+
+Banking the whole answer rather than filing a ticket was the right call for a
+five-line desugar behind a six-copy refactor, and it is worth saying why it
+worked: the note carried the MEASUREMENT (fpc's four answers), the BOUNDARY
+(`bitpacked`, and that it is unreachable) and the COST (six exits). A ticket
+saying "implement bitsizeof" would have carried none of them.
+
+### What the attempt says now
+
+The corpus is no longer dominated by one structural wall. After `7e4f69a34`
+the distribution is measured in the row below this section; whatever it says,
+the next causes are all SMALL — the largest before this attempt was 8 — which
+means the next rung of this umbrella is a different kind of work from the last
+two: several unrelated causes rather than one that everything queues behind.
