@@ -1,0 +1,82 @@
+# A METHOD'S DEFAULT ARGUMENT IS EVALUATED WHILE THE CLASS BODY EXECUTES, so
+# the class namespace is the CURRENT scope there and beats the module. That is
+# the exact opposite of the rule for a method BODY, where the class is not an
+# enclosing scope at all -- one Python rule, two doors, and we had it inverted
+# on both. The body half is
+# test_nilpy_a_class_attribute_does_not_shadow_a_module_global.npy; this is the
+# defaults half.
+#
+# Two defects, and only one of them a value check could see. There was NO class
+# lookup on this path (a class-only name was refused outright, a name at both
+# scopes silently took the module's) -- and once the lookup existed, the
+# initialisers still ran BEFORE the class body's own stores, so the default read
+# an unwritten slot and got the BSS zero. Rows `order *` are the ones that catch
+# the second: they assert SEQUENCE, which no comparison of the values contains.
+
+def mark(tag, v):
+    print(tag, v)
+    return v
+
+MARGIN = 99
+NAME = "mod"
+
+class P:
+    MARGIN = 14
+    NAME = "cls"
+    def __init__(self, left=MARGIN, n=NAME):
+        self.left = left
+        self.n = n
+    def show(self):
+        return MARGIN            # the BODY door: module scope, unchanged
+
+print('both scopes', P().left)
+print('string attr', P().n)
+print('explicit arg wins', P(5).left)
+print('body door still module', P().show())
+
+# A class attribute the class does NOT declare falls through to the module,
+# and a BASE class's attribute is not visible either: a class body's own name
+# lookup does not see inherited names in Python, because inheritance is a
+# property of the finished type and not of the namespace being built.
+class B:
+    MARGIN = 14
+
+class C(B):
+    def __init__(self, up=MARGIN):
+        self.up = up
+
+print('not from a base', C().up)
+
+# A computed attribute, which has no literal to fold and can only come from the
+# hidden per-class slot.
+class D:
+    LIMIT = 7 * 2
+    def __init__(self, v=LIMIT):
+        self.v = v
+
+print('computed attr', D().v)
+
+# ORDER. The class body executes top to bottom and a `def` -- defaults and all
+# -- is a statement IN that body, so an attribute assigned above it has already
+# been stored. Printing is the only instrument that sees this; every row above
+# would still pass with the two swapped, because the values would merely be
+# wrong rather than out of sequence.
+class E:
+    STEP = mark("order A attr-store", 3)
+    def __init__(self, v=mark("order B default-eval", STEP)):
+        self.v = v
+
+print('order C ctor', E().v)
+
+# A plain function's default is unaffected -- no class body is executing, so the
+# module scope is the only one there ever was.
+def f(left=MARGIN):
+    return left
+print('plain function', f())
+
+# ...and the shared-mutable-default idiom still accumulates, which is the proof
+# that a default is evaluated ONCE rather than per call.
+def acc(v, bucket=[]):
+    bucket.append(v)
+    return len(bucket)
+print('accumulates', acc(1), acc(2), acc(3))

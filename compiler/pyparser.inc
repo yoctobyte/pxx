@@ -268,6 +268,11 @@ var
     symbol and the second wins — which is a sufficient cause of two-class
     breakage on its own, independent of anything else. }
   PyDefaultClsName: AnsiString;
+  { The same class as a ci, for the DEFAULT-ARGUMENT scope lookup. Python
+    evaluates a method's defaults while the CLASS BODY executes, so the class
+    namespace is the current scope there and beats the module. -1 outside a
+    class's default-evaluation pass. }
+  PyDefaultClsCi: Integer;
   { The class statement just parsed, and its body token span, so the statement
     loop can evaluate METHOD defaults AFTER PyParseClass returns. Python
     evaluates a method default when the CLASS BODY executes, so the class
@@ -37276,6 +37281,7 @@ end;
   failure mode in this frontend. }
 procedure PyEvalMethodDefaults(ci, lo, hi: Integer);
 var j, depth, pIdx, mmi, mpi, savedTok: Integer;
+    savedClsCi: Integer;
     dSOff, dSLen: Integer;
     dVal: Int64;
     dIsStr: Boolean;
@@ -37286,8 +37292,10 @@ begin
   savedEval := PyDefaultEvalMode;
   savedHdr := PyHdrName;
   savedCls := PyDefaultClsName;
+  savedClsCi := PyDefaultClsCi;
   savedTok := TokPos;
   PyDefaultClsName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  PyDefaultClsCi := ci;
   j := lo;
   while j < hi do
   begin
@@ -37352,6 +37360,7 @@ begin
   end;
   TokPos := savedTok;
   PyDefaultClsName := savedCls;
+  PyDefaultClsCi := savedClsCi;
   PyHdrName := savedHdr;
   PyDefaultEvalMode := savedEval;
 end;
@@ -39257,6 +39266,7 @@ begin
   PyExprMode := True;
   PyDefInitHead := -1;
   PyDefaultClsName := '';
+  PyDefaultClsCi := -1;
   PyClsEvalCi := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
@@ -39295,8 +39305,22 @@ begin
       PyClsEvalCi := -1;
       { a METHOD default is evaluated when the CLASS BODY executes, so its
         initialiser belongs at the class statement — the same shape the def
-        branch below uses for its own }
-      stmt := PyFlushDefInit(-1);
+        branch below uses for its own.
+
+        THE HOIST CHAIN GOES FIRST, and it did not until 2026-09-10. The class
+        body's own statements — every `NAME = value` attribute store, which
+        PyClsAttrDecl puts on the hoist chain — were left for whatever statement
+        flushed next, i.e. AFTER these initialisers. That is harmless while a
+        default cannot see a class attribute and becomes a wrong value the
+        moment it can: `def __init__(self, left=MARGIN)` read the
+        `$clsattr.P.MARGIN` slot before anything had stored 14 into it and got
+        the BSS zero. A plausible number, no diagnostic.
+
+        Python's own order settles it and it is the same one: the class body
+        executes top to bottom, and a `def` — defaults and all — is a statement
+        IN that body, so an attribute assigned above it has already run. }
+      stmt := PyFlushHoist(-1);
+      stmt := PyFlushDefInit(stmt);
       if stmt >= 0 then
       begin
         if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
@@ -39336,7 +39360,11 @@ begin
       PyParseClass(True);
       PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
       PyClsEvalCi := -1;
-      stmt := PyFlushDefInit(-1);
+      { the class BODY's own stores first — see the note at the plain-class
+        branch above; a default that reads a class attribute must not run before
+        the attribute is stored }
+      stmt := PyFlushHoist(-1);
+      stmt := PyFlushDefInit(stmt);
       if stmt >= 0 then
       begin
         if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
@@ -39622,6 +39650,7 @@ begin
   PyDefInitHead := -1;
   PyDefaultEvalMode := False;
   PyDefaultClsName := '';
+  PyDefaultClsCi := -1;
   PyClsEvalCi := -1;
   PySkipNewlines;
   { A leading module docstring may precede the imports; consume it. }
@@ -39700,6 +39729,10 @@ begin
       PyClsEvalCi := -1;
       { as in the def branch below — a method default runs when the class body
         does, so its initialiser is queued at the class statement }
+      { the class BODY's own stores first — see the note at the plain-class
+        branch above; a default that reads a class attribute must not run before
+        the attribute is stored }
+      mainNode := PyFlushHoist(mainNode);
       mainNode := PyFlushDefInit(mainNode);
       ASTArenaFloor := ASTNodeCount;
     end
@@ -39730,6 +39763,10 @@ begin
       PyParseClass(True);
       PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
       PyClsEvalCi := -1;
+      { the class BODY's own stores first — see the note at the plain-class
+        branch above; a default that reads a class attribute must not run before
+        the attribute is stored }
+      mainNode := PyFlushHoist(mainNode);
       mainNode := PyFlushDefInit(mainNode);
       ASTArenaFloor := ASTNodeCount;
     end
@@ -44027,6 +44064,7 @@ end;
   --------------------------------------------------------------------------- }
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+    clsScopeSym: Integer;   { a class attribute visible in a method's DEFAULT }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; trialProcMark, trialLamMark, trialSymMark, trialFrameMark: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -48204,6 +48242,42 @@ begin
           In NilPy user code a pylib row must match EXACTLY: Python is
           case-sensitive and pylib IS its builtin namespace. }
         procIdx := FindProcNilPyBound(name);
+      end;
+
+      { A METHOD'S DEFAULT ARGUMENT IS EVALUATED IN THE CLASS BODY, so the
+        class namespace is the CURRENT scope there and beats the module — the
+        exact opposite of the method BODY rule two lines below, and the reason
+        this ticket needed two edits rather than one gate.
+
+            MARGIN = 99
+            class P:
+                MARGIN = 14
+                def __init__(self, left=MARGIN): ...    # CPython 14, we said 99
+
+        Not a scope that already existed and was consulted in the wrong order:
+        there was NO lookup here at all, so a class-only name was refused
+        outright (`undefined variable (MARGIN)`) and a name at both scopes
+        silently took the module's.
+
+        The class attribute's storage is the hidden `$clsattr.<Class>.<name>`
+        global, which exists for every attribute shape — literal, computed, with
+        or without a module twin (measured 2026-09-10 across all three).
+
+        NO PARENT WALK, deliberately. A class body's own name lookup does not
+        see base-class attributes in Python either — inheritance is a property of
+        the finished type, not of the namespace being built — and the mangled
+        name carries the DECLARING class, so restricting to `PyDefaultClsCi`
+        gives that behaviour with no extra code.
+
+        Known widening: we resolve an attribute declared LATER in the class body
+        than the def, where CPython raises NameError, because this pass runs
+        after the body is parsed. Accepting what CPython rejects is track N's
+        allowed direction.
+        bug-n-the-class-body-scope-is-wired-into-the-wrong-one-of-two-doors }
+      if (PyDefaultEvalMode and (PyDefaultClsCi >= 0) and (qUnit < 0)) then
+      begin
+        clsScopeSym := FindSym(PyClsAttrGlobalName(PyDefaultClsCi, name));
+        if clsScopeSym >= 0 then idx := clsScopeSym;
       end;
 
       { The EXPRESSION half of the own-field-beats-a-unit-name rule; the

@@ -1,18 +1,15 @@
 ---
-slug: bug-n-the-class-body-scope-is-wired-into-the-wrong-one-of-two-doors
-title: the class-body scope is consulted in the method BODY and not in the method's DEFAULTS — exactly inverted from Python
-track: N
-type: bug
-prio: 60
-status: open
+status: done
+---
+
 summary: >
-  THE BODY DOOR IS FIXED; the DEFAULTS door is not. A method's default argument
-  still falls through to module scope and never sees the class body, so
-  `left=MARGIN` answers the module's 99 where CPython answers the class's 14 —
-  a SILENT WRONG ANSWER — and a class-only name is refused outright. The body
-  half was FPC's own-field-beats-a-unit-name rule reaching NilPy through a
-  shared resolution path; gated on NilPyUserCode and now byte-identical to
-  CPython on every row.
+  FIXED, both doors, and they were TWO mechanisms rather than one scope
+  decision. A method BODY was taking FPC's own-field-beats-a-unit-name rule
+  through a shared path (`OwnFieldBeatsSym`), so a class attribute silently beat
+  the module global. A method's DEFAULT had no class lookup at ALL, and once one
+  existed the initialisers still ran before the class body's own stores and read
+  an unwritten slot. Both now byte-identical to CPython, evaluation ORDER
+  included.
 ---
 
 ## The measurement
@@ -250,3 +247,96 @@ the class-body scope has to be consulted explicitly at `PyEvalParamDefault`
 (`compiler/pyparser.inc:7039`), whose class context is already carried in
 `PyClsEvalCi`/`PyClsEvalLo`/`PyClsEvalHi` (line 276). That is the next step and
 it is the whole of what is left.
+
+## THE DEFAULTS DOOR IS FIXED TOO — and it was TWO defects, not one
+
+Binary `2255ecda014c`, 2026-09-10.
+
+### Defect 1 — there was no class lookup on this path at all
+
+Not a scope consulted in the wrong order: **nothing** consulted the class body
+while a default was evaluated. A class-only name was refused outright
+(`undefined variable (MARGIN)`) and a name at both scopes silently took the
+module's.
+
+Added in `PyParseFactorCore`, immediately after `idx := FindSym(name)` and
+before `OwnFieldBeatsSym`: while `PyDefaultEvalMode` is on and a class is in
+scope, prefer `FindSym(PyClsAttrGlobalName(PyDefaultClsCi, name))`. The class
+attribute's storage is that hidden `$clsattr.<Class>.<name>` global, and it
+exists for every attribute shape — literal, computed, string, list, with or
+without a module twin (measured across all of them before relying on it).
+
+`PyDefaultClsCi` is new, the ci companion to the existing `PyDefaultClsName`,
+saved and restored by `PyEvalMethodDefaults` exactly as that name already is.
+
+**No parent walk, deliberately.** A class body's own name lookup does not see
+base-class attributes in Python either — inheritance is a property of the
+finished type, not of the namespace being built — and the mangled name carries
+the DECLARING class, so restricting to the class's own ci gives that behaviour
+with no extra code and one test row proves it.
+
+### Defect 2 — ORDER, and this is the half a value check could not have found
+
+With the lookup in place the answer was **0**, not 14: the def-init queue was
+flushed at the class statement while the class body's OWN stores — every
+`NAME = value`, which `PyClsAttrDecl` puts on the hoist chain — were left for
+whatever statement flushed next. So the default read the `$clsattr` slot before
+anything had written it and got the BSS zero. A plausible number, no diagnostic.
+
+Python's own rule settles it and is the same one: the class body executes top to
+bottom, and a `def` — defaults and all — is a statement IN that body, so an
+attribute assigned above it has already run. `PyFlushHoist` now precedes
+`PyFlushDefInit` at **all four** class branches (two loops × plain/`@dataclass`).
+The `def` branches are untouched.
+
+**The probe that found it, and my first one was worthless.** I printed from the
+attribute initialiser and saw it land before the constructor — which proves
+nothing, because the constructor is the last statement and the def-init could be
+anywhere before it. Putting a `mark()` on BOTH sides is what named it:
+
+    pxx      B default-eval None / A attr-store 14 / C ctor None
+    CPython  A attr-store 14 / B default-eval 14 / C ctor 14
+
+**A side effect on one side of a suspected ordering bug measures nothing.** It
+tells you where that one event sits relative to the events you were already sure
+of. Both sides, or no claim.
+
+### Measured, `2255ecda014c`, every row against CPython
+
+| | before | after | CPython |
+| --- | --- | --- | --- |
+| default, both scopes | 99 | **14** | 14 |
+| default, class only | **refused** | **14** | 14 |
+| default, module only | 99 | 99 | 99 |
+| default, computed attr | refused | **14** | 14 |
+| default, string attr | refused | **"cls"** | "cls" |
+| default, list attr | refused | **[1, 2]** | [1, 2] |
+| default from a BASE class | 99 | 99 | 99 |
+| method BODY, both scopes | 14 | 99 | 99 |
+| plain function default | 99 | 99 | 99 |
+| explicit argument | 5 | 5 | 5 |
+| `@dataclass` field default | 3 | 3 | 3 |
+| shared-mutable accumulator | 1 2 3 | 1 2 3 | 1 2 3 |
+| **evaluation ORDER** | B, A, C | **A, B, C** | A, B, C |
+
+`test/test_nilpy_a_method_default_is_evaluated_in_the_class_body.npy`, wired
+into `test-nilpy`, **byte-identical to CPython including the order rows**.
+
+## CORRECTION — "one scope decision serving both doors" was wrong
+
+The ticket said the two observations were one fact and the repair was a single
+scope decision. **frankB, who proposed that framing, withdrew it once this fix
+measured it**, and they are right to: the body half was a shared FPC scope rule
+reaching NilPy through `OwnFieldBeatsSym`, and the defaults half was a lookup
+that did not exist plus an emission-order bug. Two mechanisms, three edits, no
+shared code between them.
+
+What DID hold from that reading is the narrow half — *a name is resolving
+somewhere it should not* — and the weak claim, that fixing one row alone would
+leave the doors disagreeing in a new way. Recorded because a plausible story
+that explains both observations and is wrong about the machinery is the failure
+this repo warns about most, and it was produced here in good faith from a tree
+nobody could build.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -4524,6 +4524,15 @@ test-nilpy: $(COMPILER)
 	# ALSO the control proving the implicit-Self path was gated, not deleted.
 	./$(COMPILER) test/test_nilpy_a_class_attribute_does_not_shadow_a_module_global.npy $(TESTTMP)/test_nilpy_clsattrscope26
 	$(TESTTMP)/test_nilpy_clsattrscope26 | diff -u test/test_nilpy_a_class_attribute_does_not_shadow_a_module_global.expected -
+	# THE OTHER DOOR, and Python's rule is the exact opposite here: a method's
+	# DEFAULT is evaluated while the class body executes, so the class namespace
+	# IS the current scope and beats the module. Two defects, and only one of them
+	# a value check could see -- there was no class lookup on this path at all,
+	# and once there was, the initialisers still ran BEFORE the class body's own
+	# stores and read an unwritten slot. The `order *` rows assert SEQUENCE, which
+	# no comparison of the values contains. Byte-identical to CPython.
+	./$(COMPILER) test/test_nilpy_a_method_default_is_evaluated_in_the_class_body.npy $(TESTTMP)/test_nilpy_mdefscope26
+	$(TESTTMP)/test_nilpy_mdefscope26 | diff -u test/test_nilpy_a_method_default_is_evaluated_in_the_class_body.expected -
 	# The stdlib shim table builds a call by NAME (FindProc), which never consults
 	# overloads — so adding an overload for a case it got wrong did NOTHING,
 	# silently. The call site now re-targets by ARITY. See the test's header.
