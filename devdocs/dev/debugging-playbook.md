@@ -23847,3 +23847,30 @@ directory can be no.
 `set_int("u_glyphs", 0)` — `_gl` inside `u_glyphs`. Read as an importer it
 would have broken the finding on a match that is not one. Match on the import
 FORM (`from . import X`, `import X`), never on the bare name.
+
+### The same fault with the sign flipped: a comparison against a file that does not exist
+
+Same session, hours later, verifying the fix rather than hunting it. A
+hand-rolled subset runner did:
+
+    ./compiler/pascal26 test/$n.npy $OUT && $OUT | diff -q test/$n.expected -
+
+`test_nilpy_inheritance` reported **FAILED**. It has no `.expected` file at all
+— the Makefile asserts it with `tools/expect_same.sh` and an inline string. So
+`diff` was comparing against a path that does not exist, and the harness read
+that as the compiler being wrong. Run the way the Makefile runs it, it passes.
+
+**A false RED is the safer direction and it is still the same defect.** It
+makes you look, where a false green does not — but it cost a cycle and pointed
+at this seat's own just-landed change, which is the self-blaming direction that
+TERMINATES a search rather than continuing it. Had the fix been less certain it
+would have been reverted.
+
+**The general remedy is the same one as above, moved one step earlier: assert
+the PRECONDITION.** `[ -f "$exp" ]` before the comparison, branching, not
+printing. A comparison whose inputs were never proven to exist cannot fail
+honestly — it can only fail. And when you rebuild a harness that the Makefile
+already implements, **read how the Makefile asserts that row** rather than
+assuming every test in a directory is checked the same way: in this tree, some
+rows diff a `.expected` and some pass an inline string to `expect_same.sh`, and
+nothing in the filename says which.
