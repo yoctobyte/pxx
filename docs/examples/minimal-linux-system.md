@@ -63,6 +63,15 @@ have. Measured inside the guest, because the host cannot answer it: a developer
 box resolves `<stdio.h>` from `/usr/include` and will tell you a half-installed
 image works.
 
+If you assemble your own image, ship **all** of `lib/crtl` rather than just its
+`include/`. There are three states and the middle one is a trap: with no `crtl`
+at all a header-free C program still builds, because part of the runtime is baked
+into the compiler; with `include/` only, the program compiles — with a
+`crtl does not define puts` warning — comes out *dynamic*, and then fails at run
+time with `ash: /tmp/u: not found`, which is an ENOENT about the missing
+interpreter and reads as a missing file. Only the whole tree gives you a static
+binary.
+
 ## What this does and does not establish
 
 These are three separate claims, and they are worth keeping apart.
@@ -121,12 +130,13 @@ bytes of the linked binary's. The fix is per-function sections, which lets
 relocation half of that work. Expect the binary to fall to well under a megabyte
 when that lands.
 
-Measured 2026-09-10, from an ISO built by `tools/mkminimal.sh` at commit
-`04b33cfad`; the BusyBox figure was read out of the image's own payload rather
-than off a build log. **Expect every figure here to move** — the ISO was rebuilt
-and changed size while this page was being written, and the BusyBox size is a
-defect under repair rather than a property of the design. Re-run the three
-commands above and read your own numbers; that is the check.
+Measured 2026-09-10 from the shipped image at commit `a3829fce2`. The three rows
+sum to the ISO byte for byte, and the BusyBox figure was read out of the image's
+own payload rather than off a build log. **Expect every figure here to move** —
+this table was rewritten within the hour of first being published, because
+shipping all of `lib/crtl` for the C frontend grew the initramfs by 439 KB. Only
+the kernel is fixed. Re-run the three commands above and read your own numbers;
+that is the check.
 
 ## Known limits
 
