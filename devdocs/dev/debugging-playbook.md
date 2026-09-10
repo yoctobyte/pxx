@@ -23370,3 +23370,34 @@ second occurrence. Recommended there as an **extension of the existing
 print-the-sha rule** rather than as a neighbouring rule, since it shares that
 rule's remedy and differs only in when the remedy is thought to apply — and an
 extension costs a sentence where a rule costs a paragraph.
+
+## A DOUBLE-QUOTED `git commit -m` EATS EVERY BACKTICKED PHRASE, SILENTLY, AND THE PUSHED COMMIT IS THE ONLY COPY
+
+Measured 2026-09-10 (`98ce0b129`). A commit message written inline as
+`git commit -m "…"` in bash lost four phrases — every one that had been quoted
+in backticks, which in a technical message is every identifier worth quoting:
+
+    Gated with  immediately before the demotion.
+    Every row but  is byte-identical to CPython.
+
+Bash ran each backticked phrase as a **command substitution** and inserted its
+(empty) output. `return MARGIN` and the rest went to stderr as
+`return: can only 'return' from a function`, **interleaved with `sync.sh`'s
+success lines**, and `git commit` exited 0 because it received exactly what bash
+handed it. The commit is correct, the push is correct, the code is correct, and
+the record is mutilated.
+
+**Nothing downstream can catch this.** The pushed message does not read as
+damaged — it reads as a sentence with a slightly odd gap, of the kind a
+distracted author writes. And it is unrepairable in place: amending a pushed
+commit is a force push, which is the owner's call, so the cost is permanent.
+
+**Use a message FILE — `git commit -F <file>` with a quoted heredoc** — for any
+message longer than a line. The heredoc form (`<<'EOF'`) is the same discipline
+that already makes the LOGBOOK appends safe in these sessions, and the failure
+here was writing the logbook that way and then not the commit.
+
+Belongs with the instrument rules: the shell did exactly what it is specified to
+do, reported the fault to a stream nobody reads on success, and the artefact it
+produced is well-formed. Same family as every other entry here — **it did not
+error, it answered.**
