@@ -208,3 +208,56 @@ invoked. Every instance found in this corpus, three of them frankB's:
 smaller than the number of walled modules**, and the gap is not visible from the
 error text. Grep the subject for the construct before ranking anything on how
 many modules name it.
+
+---
+
+# The first diff against this baseline — tree `813c99cc7` · binary `a812b9549413` · 2026-09-10 · frankB
+
+**CLEAN 22, CRASH 0, WALL 13 of 35.** Two modules moved to clean and one moved
+to a further wall. **Both moves were predicted in writing before the run, and
+the prediction named which one would be MINE and which would not** — a delta on
+a corpus two seats are working at once is not attributable by timing.
+
+    session   undefined variable (os) :216   ->  OK            frankB, 813c99cc7
+    vessel    SIGSEGV                        ->  OK            frankZ, c18f92f48
+    traffic   SIGSEGV                        ->  :402 cannot infer the type of
+                                                 field self.heading             frankZ, c18f92f48
+
+`session` is the whole of what the os/sys member-surface work bought in
+modules, and that was the prediction: `__main__` uses `os.altsep`, `app` uses
+`sys.stdout.isatty()`, `bindings` and `gauges` use `os.makedirs` — **and all
+four wall on something IN FRONT of those lines**, three of them on `import
+threading`. Four of five modules touching the fixed names moved by zero, which
+is this corpus's own version of the cclasses.pas finding and was written down
+before the run rather than explained after it.
+
+`traffic` is the reverse and is the more useful row: its WALL COUNT got worse
+and its position got better. It inherited the crash through `from . import
+vessel` with no wide method of its own, so it moved without a line of its own
+changing, and the diagnostic it now reaches was always there and unreachable
+behind the segfault.
+
+## The 13 walls, by CAUSE rather than by module
+
+    5   import: no unit named ctypes           capture, gfx, platform/{_ctypes_backend,_gl,_sdl2}
+    3   import: no unit named threading        __main__, app, gauges     -- 2 real sites
+    2   sqlite3.connect                        world, atlas              -- 1 real site
+    1   undefined variable (_pxx)              platform/__init__         -- a module as a VALUE
+    1   platform.KEY_ESCAPE                    bindings                  -- behind platform/__init__
+    1   cannot infer the type of self.heading  traffic
+
+**Five causes, thirteen modules.** `platform/__init__` and `bindings` are one
+cause (`bug-n-a-module-bound-by-an-import-is-not-a-value`, now wired to the
+umbrella and carrying a measured population: 2 sites in 1 file against 99
+module bindings corpus-wide).
+
+## What moved that is NOT visible here
+
+`platform/__init__` walls at `:95 undefined variable (_pxx)` in BOTH censuses
+above and in neither is that the same statement about the compiler. In the
+baseline it had just moved off `no unit named ctypes` because the dead-path
+import fix (`708555fdb`) stopped resolving the tail of a failed guarded import;
+`:95` is the wall behind it. **A module can hold its position in the wall count
+while the thing blocking it is replaced**, which no census that reports only a
+first error can show — and the reason this file lists per module is so the next
+reader can at least see the error text change.

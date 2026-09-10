@@ -90,3 +90,50 @@ wall on platform/__init__.py"; it was not, and the census could not have said so
 — a first-failure census reports one error per subject and everything behind it
 is invisible. Modules-compiling delta from clearing it: **0**, predicted before
 the re-run and matched.
+
+# The POPULATION, measured 2026-09-10 (frankB) — it is two sites, not a judgement
+
+An `ast` walk over the whole lekkerzeilen corpus for a name bound to a MODULE
+used in bare value position (not the base of an attribute access, not the func
+of a call):
+
+```
+  lekkerzeilen/platform/__init__.py:95   _pxx
+  lekkerzeilen/platform/__init__.py:97   _ctypes_backend
+
+  files: 1   sites: 2   module bindings in the corpus: 99
+```
+
+**Two sites, one file, against 99 module bindings.** That is the number to rank
+on, and it says the feature is narrow in this corpus even though it is broad in
+Python.
+
+THE FIRST CUT OF THAT CENSUS SAID 267 AND WAS WRONG, which is worth recording
+because the wrong number is the persuasive one. It counted every
+`from x import Vec3` name too — `Vec3(...)` is a Call whose func is a bare
+`Name`, and the filter only excluded `Attribute` bases. Vec3 is a CLASS and
+compiles fine. **The filter has to ask the FILESYSTEM which bound names are
+modules**; nothing in the AST distinguishes `from . import world` (a module)
+from `from .world import World` (a class).
+
+# Why its RANK moved without its cause changing
+
+This is now the FIRST WALL of `lekkerzeilen/platform/__init__.py`, because the
+wall in front of it — the dead-path import (`708555fdb`) — was cleared. It was
+never reachable before. `bindings.py` sits behind it too: `from . import
+platform` then `platform.KEY_ESCAPE`, which is the cascade and not a second
+instance.
+
+So one fix clears **two** modules, and `platform/` is the door to the graphics
+stack. The other four platform modules wall on `ctypes` independently and are
+NOT unlocked by this.
+
+# The measurement that would settle the DESIGN question
+
+Every site here is a compile-time selection between two modules with the same
+interface, which is what a unit alias is. But `getattr(_backend, "open_audio",
+None)` at :112 reads a member by STRING off the variable, and that cannot be a
+compile-time alias. **Whether a runtime module OBJECT is required, or whether
+an alias plus a folded `getattr` covers this corpus, is one probe** — and it is
+the probe that decides whether this is a table entry or a value-representation
+change. It has not been run.
