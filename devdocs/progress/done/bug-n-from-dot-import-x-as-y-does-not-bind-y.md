@@ -73,4 +73,4 @@ this one was right to insist, and closing it on the headline row alone would
 have left three spellings unexamined.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ce223b675.
