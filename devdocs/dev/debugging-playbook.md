@@ -24113,3 +24113,57 @@ the first element of that stream rather than the decisive one. Any harness that
 extracts "the reason" from a log with a first-match grep has this bug; the question
 to ask is *"which of the lines that match could the compiler have printed while
 still succeeding?"* — every one of those is a line your grep must not select.
+
+## WHEN EVERY EDIT TO A DECLARATION CHANGES NOTHING, SOMETHING ELSE ANSWERS TO THAT NAME
+
+Measured 2026-09-11 (frankuser, `80d71d782`). A NilPy `zlib.crc32(b"hello")` was
+refused with `no overload of crc32 matches these arguments`. The declaration was
+right there in `lib/rtl/zlib.pas`, and the error named it — so every instinct said
+fix the signature.
+
+Five experiments, none of which moved the error by a character: change the arity,
+make both parameters `Variant`, drop the default parameter, change the return type
+from `Int64` to `AnsiString`, call it from a plain `str` instead of `bytes`. A
+**positive control passed** throughout — `base64.b64encode`, a function with the
+byte-identical `(const data: Variant)` shape in a sibling unit, compiled and ran
+and matched CPython. That control is what made it expensive: it proved the shape
+was fine, so the fault had to be in the unit, and it was not.
+
+`import zlib` was binding **`/usr/include/zlib.h`**. A bare NilPy import closes
+the Pascal chain unless the unit is named in `PyRtlUnitServesPython`, and `zlib`
+was not on that list, so the host header won. None of the five edits was ever
+consulted by anything.
+
+**The probe that found it in one command was a three-argument call**, because C's
+`crc32(uLong, const Bytef*, uInt)` takes three and CPython's takes one or two:
+
+```python
+print(zlib.crc32(0, b"hello", 5))   # compiles, links system libz, prints 1577690842
+                                    # the answer is 907060870
+```
+
+A shape only the OTHER candidate can satisfy. It does not ask "is my declaration
+right", which is unfalsifiable while something else is answering; it asks "who is
+answering", and the answer arrives as a successful compile.
+
+**The tell, before any of that: an edit that changes nothing is data about your
+model, not about the code.** One edit producing no change is ordinary. Five,
+including a return-type change, means the thing you are editing is not in the
+path. At that point the cheap question is not "what else could be wrong with this
+declaration" but "what else in this process answers to this name" — a host
+header, a builtin, a sibling checkout's unit, an earlier unit in the uses clause.
+
+**And a positive control drawn from a working sibling certifies the SHAPE, never
+the ROUTE.** `base64` is on the curated list; `zlib` was not, and that difference
+is invisible in both units' source. A control can only exonerate what it shares
+with the subject. Ask what the control does NOT share before you let it narrow
+your search.
+
+The same shape bit the same session an hour later in the opposite direction: a
+bare `Adler32(src)` inside `zlib.pas` silently bound the unit's own new
+Python-surface `adler32(Variant)` instead of `hashing.Adler32`, because PXX is
+case-insensitive and a unit's own declaration shadows an imported one. The writer
+and the reader both did it, disagreed, and the round trip failed with `bad
+adler32` **while the decoded bytes were provably correct** — which is the one
+place nobody looks, because the checksum is what you trust to tell you the bytes
+are wrong.
