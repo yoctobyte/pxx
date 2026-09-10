@@ -16433,7 +16433,7 @@ end;
 
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 function RegisterExternal(procIdx: Integer): Integer;
-var i, extIdx: Integer; enm, synthHdr: AnsiString;
+var i, extIdx: Integer; enm, synthHdr, dirLib, dirCand: AnsiString;
 begin
   { A `__pxx_p*` name is one of OUR OWN pthread PAL helpers (palpthread.pas),
     not anything a shared library can supply. Reaching this point means a C
@@ -16521,13 +16521,57 @@ begin
       in-tree-tested configuration. }
     if (ProcLibrary[procIdx] >= 0) and
        CSynthMissingHeaderFor(Strs[ProcLibrary[procIdx]].Text, synthHdr) then
-      Error('this build would die at exec: `' + enm + '` is imported from '
-            + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
-            + 'machine answers to. That soname was not declared anywhere — the '
-            + 'compiler derived it from the name of the header you imported ('
-            + synthHdr + '.h), and a header file name is not a library name. '
-            + 'Name the library explicitly instead, with an `external '
-            + '''<soname>''' + '` clause carrying the soname the loader wants.');
+    begin
+      { BEFORE REFUSING, ASK THE HEADER'S DIRECTORY — and require it to ANSWER.
+
+        The soname above was synthesised from the header's FILE name, which is
+        the wrong key for a header in a subdirectory: the subdirectory is
+        usually the package and the package is the library, while the file is
+        one component of it. `SDL2/SDL.h` synthesises `libsdl.so`; the library
+        is libSDL2-2.0.so.0, which no rule spelled over `SDL` reaches.
+
+        What makes the directory safe to use is that it is CHECKED rather than
+        trusted. CSynthDirAnswersFor requires a cache entry of this machine's
+        own architecture whose .dynsym DEFINES `enm` — the exact symbol about
+        to become a DT_NEEDED reference. `/usr/include/net/if.h` is why: its
+        directory names libnet.so.9, which IS installed here and exports none
+        of that header's symbols, so a directory rule without the export check
+        would link clean and die on `undefined symbol` — swapping this guard's
+        loud failure for a quiet one, which is a regression even though the
+        rule is right for every other directory on the box.
+
+        This runs ONLY on the path that is already a hard compile error, so
+        nothing that builds today can change: the sole effect is that some
+        builds which currently cannot succeed now do, each one having proved
+        the library answers. }
+      if CSynthDirAnswersFor(Strs[ProcLibrary[procIdx]].Text, enm, dirLib) then
+        ProcLibrary[procIdx] := InternStr(dirLib)
+      else
+      begin
+        { A candidate that was FOUND and did not answer is the more useful
+          message: it names the library the directory points at and says what
+          is wrong with it, instead of leaving the reader to rediscover it. }
+        if CSynthDirCandidateFor(Strs[ProcLibrary[procIdx]].Text, dirCand) then
+          Error('this build would die at exec: `' + enm + '` is imported from '
+                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
+                + 'machine answers to. The compiler derived that soname from the '
+                + 'name of the header you imported (' + synthHdr + '.h), and a '
+                + 'header file name is not a library name. Its DIRECTORY names '
+                + dirCand + ', which is installed here — but that library does '
+                + 'not export `' + enm + '`, so naming it would only move the '
+                + 'failure to load time. Name the right library explicitly, with '
+                + 'an `external ' + '''<soname>''' + '` clause carrying the '
+                + 'soname the loader wants.')
+        else
+          Error('this build would die at exec: `' + enm + '` is imported from '
+                + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
+                + 'machine answers to. That soname was not declared anywhere — the '
+                + 'compiler derived it from the name of the header you imported ('
+                + synthHdr + '.h), and a header file name is not a library name. '
+                + 'Name the library explicitly instead, with an `external '
+                + '''<soname>''' + '` clause carrying the soname the loader wants.');
+      end;
+    end;
   end;
   extIdx := -1;
   for i := 0 to ExternalCount-1 do

@@ -2714,6 +2714,70 @@ test-nilpy: $(COMPILER)
 	     && { echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: FAIL - DT_NEEDED $$need cannot be resolved by this loader; that is the green-build-dead-at-exec shape the fix was for"; ldd $(TESTTMP)/test_nilpy_ffigl26; exit 1; }; \
 	   echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: DT_NEEDED $$need resolves on this loader"; \
 	 fi
+	@# THE DIRECTORY IS THE LIBRARY. `FLAC/stream_decoder.h` has the file stem
+	@# `stream_decoder`, so the compiler synthesised `libstream_decoder.so`; the
+	@# library name is in the DIRECTORY, which GetFileBaseName discards. SKIPPED
+	@# LOUDLY rather than silently when the box has no FLAC headers -- an absent
+	@# control is not a control that succeeded.
+	@if [ ! -f /usr/include/FLAC/stream_decoder.h ]; then \
+	   echo "test_nilpy_a_headers_directory_names_its_library: SKIP - no /usr/include/FLAC/stream_decoder.h on this box (needs libflac-dev); the directory-derived soname is NOT covered by this run"; \
+	 else \
+	   ./$(COMPILER) test/test_nilpy_a_headers_directory_names_its_library.npy $(TESTTMP)/test_nilpy_hdrdir26 >/dev/null 2>&1 \
+	     || { echo "test_nilpy_a_headers_directory_names_its_library: FAIL - it did not compile"; exit 1; }; \
+	   need=$$(readelf -d $(TESTTMP)/test_nilpy_hdrdir26 | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); \
+	   test -n "$$need" \
+	     || { echo "test_nilpy_a_headers_directory_names_its_library: FAIL - no DT_NEEDED at all, so every check below would have passed on an empty comparison"; exit 1; }; \
+	   echo "$$need" | grep -q '^libFLAC\.so\.' \
+	     || { echo "test_nilpy_a_headers_directory_names_its_library: FAIL - DT_NEEDED is [$$need], expected the DIRECTORY's libFLAC.so.<n> and not the file stem's libstream_decoder.so"; exit 1; }; \
+	   ldd $(TESTTMP)/test_nilpy_hdrdir26 2>&1 | grep -q 'not found' \
+	     && { echo "test_nilpy_a_headers_directory_names_its_library: FAIL - DT_NEEDED $$need cannot be resolved by this loader"; ldd $(TESTTMP)/test_nilpy_hdrdir26; exit 1; }; \
+	   $(TESTTMP)/test_nilpy_hdrdir26 | diff -u test/test_nilpy_a_headers_directory_names_its_library.expected - \
+	     || { echo "test_nilpy_a_headers_directory_names_its_library: FAIL - linked and ran, wrong output"; exit 1; }; \
+	   echo "test_nilpy_a_headers_directory_names_its_library: DT_NEEDED $$need, resolves, runs"; \
+	 fi
+	@# THE COUNTEREXAMPLE, AND ITS PRECONDITION IS THE POINT. `net/if.h` is a
+	@# glibc header; libnet is an unrelated packet-crafting library occupying the
+	@# name. Asserting "libnet.so.9 is not in the binary" is only evidence about
+	@# this feature ON A BOX WHERE libnet.so.9 IS INSTALLED -- everywhere else it
+	@# passes because the library is absent, certifying the check while testing
+	@# nothing. So presence is established FIRST and BRANCHED on, and the skip
+	@# says which half of the guard went unexercised.
+	@if [ ! -f /usr/include/net/if.h ]; then \
+	   echo "test_nilpy_a_headers_directory_names_the_wrong_library: SKIP - no /usr/include/net/if.h on this box"; \
+	 elif ! ldconfig -p 2>/dev/null | grep -q 'libnet\.so\.[0-9]'; then \
+	   echo "test_nilpy_a_headers_directory_names_the_wrong_library: SKIP - libnet.so.N is NOT installed here, so 'the binary does not name libnet' would pass by absence and certify nothing. The refusal half of the dynsym guard is NOT covered by this run"; \
+	 else \
+	   ./$(COMPILER) test/test_nilpy_a_headers_directory_names_the_wrong_library.npy $(TESTTMP)/test_nilpy_hdrwrong26 >/dev/null 2>&1 \
+	     || { echo "test_nilpy_a_headers_directory_names_the_wrong_library: FAIL - it did not compile"; exit 1; }; \
+	   need=$$(readelf -d $(TESTTMP)/test_nilpy_hdrwrong26 | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); \
+	   test -n "$$need" \
+	     || { echo "test_nilpy_a_headers_directory_names_the_wrong_library: FAIL - no DT_NEEDED at all, so the grep below would have passed on an empty comparison"; exit 1; }; \
+	   echo "$$need" | grep -q '^libnet\.so\.' \
+	     && { echo "test_nilpy_a_headers_directory_names_the_wrong_library: FAIL - the binary names libnet.so.N. That library is installed and exports none of net/if.h's symbols, so this links clean and dies at exec on 'undefined symbol' -- the quiet failure the dynsym check exists to prevent"; exit 1; }; \
+	   echo "$$need" | grep -q '^libc\.so\.' \
+	     || { echo "test_nilpy_a_headers_directory_names_the_wrong_library: FAIL - DT_NEEDED is [$$need]; if_nametoindex lives in libc and nothing else on this box defines it"; exit 1; }; \
+	   lo=$$(cat /sys/class/net/lo/ifindex 2>/dev/null || echo 1); \
+	   got=$$($(TESTTMP)/test_nilpy_hdrwrong26); \
+	   test "$$got" = "$$lo" \
+	     || { echo "test_nilpy_a_headers_directory_names_the_wrong_library: FAIL - linked against libc and returned [$$got] for lo where the kernel says [$$lo]"; exit 1; }; \
+	   echo "test_nilpy_a_headers_directory_names_the_wrong_library: libnet.so.N installed and correctly NOT named; DT_NEEDED $$need; lo index $$lo matches the kernel"; \
+	 fi
+	@# THE REFUSAL ARMS OF compiler/elfdynsym.inc, WHICH NO HEADER CAN REACH.
+	@# Every dual-architecture cache key on this box lists its x86-64 entry
+	@# first, so ElfIsNative64 never has to refuse anything the compiler asks it
+	@# about -- and the class byte is the only thing separating the libSDL2
+	@# twins. FPC-BUILT: pxx does not currently compile this harness
+	@# (`undefined variable` on its string consts, not isolated to a minimal
+	@# repro -- bug-p-a-standalone-test-harness-with-string-consts-does-not-compile-under-pxx),
+	@# so it is not in tools/standalone_inc_harnesses.sh and this row is what
+	@# catches elfdynsym.inc drifting into a defs.inc reference.
+	@if ! command -v $(FPC) >/dev/null 2>&1; then \
+	   echo "test_elfdynsym: SKIP - no $(FPC) on this box; the .dynsym reader's refusal arms are NOT covered by this run"; \
+	 else \
+	   $(FPC) -O2 -o$(TESTTMP)/test_elfdynsym test/test_elfdynsym.pas >$(TESTTMP)/test_elfdynsym.build.log 2>&1 \
+	     || { echo "test_elfdynsym: FAIL - the standalone harness did not compile; elfdynsym.inc has probably grown a reference to defs.inc"; tail -5 $(TESTTMP)/test_elfdynsym.build.log; exit 1; }; \
+	   $(TESTTMP)/test_elfdynsym || exit 1; \
+	 fi
 	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy $(TESTTMP)/test_nilpy_ctorkwf26
 	$(TESTTMP)/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	$(TESTTMP)/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -

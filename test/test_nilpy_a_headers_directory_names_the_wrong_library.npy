@@ -1,0 +1,23 @@
+# THE COUNTEREXAMPLE THAT MAKES THE DIRECTORY RULE NEED A DYNSYM CHECK.
+#
+# `/usr/include/net/if.h` is a glibc header -- its symbols are in libc. But
+# `libnet` is an unrelated packet-crafting library that occupies the name, and
+# on this box it is INSTALLED. So a directory-derived guess passes the
+# does-this-library-exist guard, links, loads, and dies on `undefined symbol`
+# in a library the user never named: a QUIET failure where there was a loud
+# one, which is a regression even though the directory rule is right for every
+# other directory here.
+#
+# The fix is not to special-case the name. libnet.so.9 exports NONE of this
+# header's symbols, so requiring the candidate to export the symbol being
+# imported refuses it on evidence, and the symbol is then attributed to the
+# library that really defines it. The Makefile row asserts the binary carries
+# no DT_NEEDED on libnet.so.9 -- and establishes that libnet.so.9 is installed
+# FIRST, because on a box without it this row would pass by absence and certify
+# nothing.
+#
+# 1 is cross-checked against the kernel by the Makefile row, which compares it
+# with `ip link`'s own index for lo rather than trusting a constant.
+import "/usr/include/net/if.h"
+
+print(if_nametoindex("lo"))

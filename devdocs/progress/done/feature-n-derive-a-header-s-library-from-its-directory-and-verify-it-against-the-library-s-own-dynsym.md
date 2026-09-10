@@ -3,8 +3,8 @@ slug: feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-again
 track: N
 prio: 50
 type: feature
-status: backlog
-owner: ""
+status: done
+owner: frankH
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, ffi, headers, linking, soname, lekkerzeilen, sdl]
@@ -118,3 +118,90 @@ branch on it, rather than inferring refusal from a failure of any kind.
 The population question stays open and is not settled by the counterexample: 617
 directory-derived resolutions is a large new surface, and dynsym is what makes
 the guess safe rather than what makes it correct.
+
+## 2026-09-10 — RESOLVED (frankH). Both halves landed; SDL2 now resolves
+
+The directory is used as the library key and the candidate must EXPORT the
+symbol before anything is accepted. `compiler/elfdynsym.inc` is a new minimal
+ELF64 `.dynsym` reader; `LdCacheDirCandidate` in `pasparser_proc.inc` generates
+the candidate; `RegisterExternal` in `symtab.inc` is the choke point that
+decides, on the path that today is already a hard compile error.
+
+**Measured outcomes, this box:**
+
+| subject | before | after |
+| --- | --- | --- |
+| `FLAC/stream_decoder.h` | `libstream_decoder.so`, refused | **`libFLAC.so.14`**, runs |
+| `net/if.h` | `libif.so`, refused | **`libc.so.6`**, and `libnet.so.9` is NOT in the binary |
+| `GL/gl.h` | `libGL.so.1` | `libGL.so.1`, unchanged |
+| `SDL2/SDL.h` | died on `libsdl.so` | past library resolution entirely |
+
+`import "/usr/include/SDL2/SDL.h"` now fails at
+`C: inline asm template has an unsupported instruction: bswapl`, in
+SDL_endian.h — the asm chain, not the soname chain. **This ticket's wall is
+gone and the next one is Track C/A's.**
+
+### The 617 number in the body above is RETIRED, not adjusted
+
+It was measured against `lib<key>.so.`, which is the rule the fix does NOT
+implement — `libSDL2-2.0.so.0` is unreachable under it, and that is the one
+library the chain was blocked on. Quoting it later would describe a rule that
+is not in the tree. Re-measured over every `.h` in a `/usr/include`
+subdirectory here, 7269 of them: **file stem resolves for 120, directory
+resolves for 1472 more.**
+
+### The loosening, and why it is nearly free
+
+Allowing a `-` where the strict rule demands the `.` is what reaches
+`libSDL2-2.0.so.0`. Compared as OUTCOMES per key rather than by filtering on
+"newly matches" — that filter restates the hypothesis and cannot see a row that
+moves:
+
+- directories that GAIN an answer: **exactly two**, `SDL` and `SDL2`
+- directories whose answer CHANGES: **zero**, so nothing that resolves today moves
+- run unconditionally it would cost 46 extra candidate entries box-wide, `xcb`
+  going from 1 candidate to 20, harfbuzz 1 to 5, cairo and pulse 1 to 3
+
+So the loosened pass runs **only on a strict miss**. Every one of those
+directories is answered strictly, which leaves the true added cost at two
+libraries. That ordering is the design, not an optimisation.
+
+### The re-declared-libc arm, which the ticket did not anticipate
+
+The first symbol `import SDL2/SDL.h` asks about is **`memcmp`** — SDL_stdinc.h
+re-declares it, and libSDL2 has never exported it and never should. A
+per-symbol reading of "does this library answer" refuses that, and refusing it
+is wrong. So the question asked is about the SYMBOL: which library on this box
+DEFINES it — the header's own when it exports it, else libc or libm. That is
+the same evidence standard one step wider, and it is why `net/if.h` now lands
+on `libc.so.6`, which is both true and where those symbols actually live.
+
+**This changes the counterexample's expected outcome, and for the better.** The
+ticket predicted `net/if.h` REFUSED. Measured, it is ACCEPTED-as-libc, and the
+assertion that carries the meaning is that the binary does **not** name
+`libnet.so.9`. That is what the row asserts.
+
+### Guards
+
+`test/test_elfdynsym.pas`, 14 rows, all paired over one variable — same key two
+paths, same symbol two libraries, same library two symbols. The reason it is a
+standalone harness rather than a compiled program: of 250 multi-entry cache
+keys on this box **every one lists its x86-64 entry first** (sole exception
+`ld-linux.so.2`, which no header directory can name), so `ElfIsNative64` never
+refuses anything reachable through the compiler's front door — while remaining
+the ONLY thing separating the libSDL2 twins, which both export `SDL_Init`.
+
+That harness caught its own instrument first: `Reset` on a typed file opens
+read/write, every library it reads is root-owned, so `LoadFile` returned empty
+and **every refusal row passed while every accept row failed** — a reader that
+refuses everything, which is exactly the shape the pairing exists to catch.
+
+### Open, and not closed by this
+
+The population question stands: 1472 directory-derived resolutions is a large
+new surface and dynsym makes the guess **safe**, not **correct**. A library
+that exports the symbol is a library that answers; it is not proof it is the
+library the author meant. No evidence of that shape has turned up yet.
+
+## Log
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

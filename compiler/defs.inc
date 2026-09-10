@@ -6021,7 +6021,31 @@ var
     bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link }
   CSynthMissingLibs  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CSynthMissingHdrs  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  { The DIRECTORY the header came out of, parallel to the two arrays above, and
+    the second chance this whole mechanism now gets. For a header in a
+    subdirectory the directory names the library far better than the file does
+    -- the subdirectory is usually the PACKAGE and the package is the library,
+    while the file is one component of it. Measured 2026-09-10 over every .h in
+    a /usr/include subdirectory on this box (7269 of them): the FILE stem
+    resolves for 120 and the DIRECTORY resolves for 1472 more.
+
+    EMPTY when the header was not in a subdirectory, which is the whole
+    population this may not touch. `CSynthDirState` is 0 until asked, then 1
+    (a native candidate was found, in CSynthDirLib/CSynthDirPath) or 2 (asked,
+    nothing) -- so the cache scan and the ELF class check happen once per
+    header rather than once per symbol. }
+  CSynthDirName      : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSynthDirLib       : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSynthDirPath      : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSynthDirState     : array[0..MAX_C_INCLUDE_DIRS-1] of Integer;
   CSynthMissingCount : Integer;
+  { One-entry memo for the .dynsym reader. A header that references fifty
+    symbols asks the same library fifty times, and the answer is a 1.5 MB file:
+    without this, `import SDL2/SDL.h` would re-read libSDL2-2.0.so.0 once per
+    referenced function. One entry is enough because the queries arrive grouped
+    by library -- they come from one header's externals in declaration order. }
+  DynSymMemoPath     : AnsiString;
+  DynSymMemoBody     : AnsiString;
   CrtlSrcPulled    : array[0..MAX_CRTL_PULLS-1] of AnsiString;
   CrtlSrcPulledCount : Integer;
   { Impl pulls DEFERRED to the top level, in the order they were requested.

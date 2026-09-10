@@ -4115,11 +4115,217 @@ begin
   LdCacheUsable := Integer(LdCacheU32(21)) > 0;
 end;
 
-procedure CNoteSynthLibIfMissing(const soname, header: AnsiString);
+{ ===== Does this library ANSWER? =============================================
+
+  Everything above answers "does this library EXIST", which is the guard
+  RegisterExternal has today. It is not enough for the one thing that would
+  make a header's DIRECTORY usable as the library key.
+
+  The directory is by far the better key: measured 2026-09-10 over every .h in
+  a /usr/include subdirectory on this box (7269 of them), the FILE stem
+  resolves for 120 and the DIRECTORY resolves for 1472 more. `SDL2/SDL.h` is
+  reduced to the stem `SDL` before anything gets here (GetFileBaseName, see
+  ResolveUsesUnitSource), so the compiler synthesises `libsdl.so`, which no
+  loader answers to.
+
+  It cannot ship as a plain fallback, and the counterexample is measured rather
+  than feared. `/usr/include/net/if.h` is a glibc header whose symbols are in
+  libc; `libnet.so.9` is an unrelated packet-crafting library that IS installed
+  here. A directory-derived guess there passes the exists check, links, loads,
+  and dies on `undefined symbol` in a library the user never named -- trading a
+  LOUD failure for a QUIET one, which is a regression even though the rule is
+  right for every other directory on the box.
+
+  So the guard is upgraded at the same choke point, from "does this library
+  exist" to "does this library export the symbol we are about to import from
+  it". That is a strictly stronger question, it needs no new capability -- a
+  .so's .dynsym is the same kind of plain-file read the ld.so.cache parser
+  already does -- and it is what makes the directory key safe rather than what
+  makes it correct. Measured on the two rows that matter:
+  libSDL2-2.0.so.0 exports SDL_Init / SDL_CreateWindow / SDL_GL_SwapWindow;
+  libnet.so.9 exports ZERO of net/if.h's four (if_nametoindex is in libc).
+
+  THE CACHE HOLDS MORE THAN ONE ARCHITECTURE UNDER ONE KEY, and this is the
+  first code that ever opens the path beside a key, so it is the first code
+  that can be wrong about it. Measured here: libSDL2-2.0.so.0, libGL.so.1,
+  libEGL.so.1, libFLAC.so.14 and libnettle.so.8 each appear TWICE, once
+  /usr/lib/x86_64-linux-gnu and once /usr/lib/i386-linux-gnu. Both twins export
+  the symbol, so the dynsym check alone cannot separate them and would happily
+  answer correctly about the wrong machine. The class byte is the only thing
+  that does. }
+
+function LdCacheNativePathFor(const key: AnsiString; var libpath: AnsiString): Boolean;
+{ The on-disk path for an EXACT cache key, of this machine's own architecture.
+
+  A hardcoded /usr/lib/x86_64-linux-gnu/libc.so.6 would be a name standing in
+  for the thing it names: multiarch layout is a distribution's choice, and on a
+  box that puts it elsewhere the hardcoded string does not error — it simply
+  reads as "libc does not export this", which is a wrong answer wearing the
+  shape of a right one. The cache is the loader's own index; ask it.
+
+  The class check is the same one and for the same reason: libc.so.6 has an
+  i386 twin under this key on any multiarch box. }
+var nlibs, i, entOff: Integer;
+    keyOff, valOff: Int64;
+    k, v: AnsiString;
+begin
+  LdCacheNativePathFor := False;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  nlibs := Integer(LdCacheU32(21));
+  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+  for i := 0 to nlibs - 1 do
+  begin
+    entOff := 49 + i * 24;
+    keyOff := LdCacheU32(entOff + 4);
+    valOff := LdCacheU32(entOff + 8);
+    if (keyOff < 0) or (valOff < 0) then Exit;
+    if not LdCacheStringAt(Integer(keyOff), k) then Exit;
+    if k <> key then Continue;
+    if not LdCacheStringAt(Integer(valOff), v) then Continue;
+    ElfLoadMemo(v);
+    if not ElfIsNative64(DynSymMemoBody) then Continue;
+    libpath := v;
+    LdCacheNativePathFor := True;
+    Exit;
+  end;
+end;
+
+function LdCacheDirCandidate(const dirName: AnsiString;
+                             var soname, libpath: AnsiString): Boolean;
+{ The cache entry a header's DIRECTORY names, with the PATH beside it -- the
+  field LdCacheFindSoname discards, because until now nothing opened the file.
+
+  TWO PASSES, STRICT FIRST, AND THE ORDER IS WHAT MAKES THE SECOND ONE FREE.
+  Pass 1 is exactly the existing rule, `lib<dir>.so.`. Pass 2 additionally
+  allows a `-` where that rule demands the `.`, which is the only way to reach
+  `libSDL2-2.0.so.0` -- no prefix rule spelled `SDL` or `SDL2` gets there, and
+  it is the library the whole SDL chain is blocked on.
+
+  Measured 2026-09-10 across all 110 header-bearing /usr/include
+  subdirectories on this box. Pass 2 gains an answer for exactly TWO of them,
+  SDL and SDL2, and CHANGES an answer for none -- so nothing that resolves
+  today can move. Its cost is real but is bought off by the ordering: run
+  unconditionally it would widen `xcb` from 1 candidate to 20 (libxcb-dri2,
+  -glx, -randr, ...), harfbuzz from 1 to 5, cairo and pulse from 1 to 3,
+  and 46 extra cache entries would become candidates box-wide. Every one of
+  those directories is answered by pass 1, so running pass 2 only on a pass-1
+  MISS leaves the true added cost at two libraries.
+
+  Exact case beats case-insensitive within a pass, the same property
+  LdCacheFindSoname states for itself. A key with no version (`libtcl8.6.so`,
+  the -dev symlink) is not an answer in either pass: it is what we would have
+  emitted anyway. }
+var nlibs, i, entOff, pass: Integer;
+    keyOff, valOff: Int64;
+    key, val, want, wantLo, body: AnsiString;
+    ok: Boolean;
+    j: Integer;
+begin
+  LdCacheDirCandidate := False;
+  if Length(dirName) = 0 then Exit;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  nlibs := Integer(LdCacheU32(21));
+  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+
+  want := 'lib' + dirName;
+  wantLo := LowerCase(want);
+  for pass := 0 to 1 do
+  begin
+    for i := 0 to nlibs - 1 do
+    begin
+      entOff := 49 + i * 24;
+      keyOff := LdCacheU32(entOff + 4);
+      valOff := LdCacheU32(entOff + 8);
+      if (keyOff < 0) or (valOff < 0) then Break;
+      if not LdCacheStringAt(Integer(keyOff), key) then Break;
+      if Length(key) <= Length(want) then Continue;
+      if LowerCase(Copy(key, 1, Length(want))) <> wantLo then Continue;
+      { pass 0: the existing rule. pass 1: a `-` where it wants the `.`. }
+      if pass = 0 then
+      begin
+        if Copy(key, Length(want) + 1, 4) <> '.so.' then Continue;
+      end
+      else
+      begin
+        if key[Length(want) + 1] <> '-' then Continue;
+        ok := False;
+        for j := Length(want) + 1 to Length(key) - 3 do
+          if Copy(key, j, 4) = '.so.' then ok := True;
+        if not ok then Continue;      { unversioned: not an answer }
+      end;
+      if not LdCacheStringAt(Integer(valOff), val) then Continue;
+      { THE CLASS BYTE, and it is load-bearing rather than defensive. The same
+        key appears once per architecture on a multiarch box, both twins export
+        the symbol, and this is the only thing that tells them apart. }
+      ElfLoadMemo(val);
+      if not ElfIsNative64(DynSymMemoBody) then Continue;
+      { An EXACT-case hit ends the search. A case-insensitive one is recorded
+        only if nothing is recorded yet -- FIRST in cache order, matching what
+        LdCacheFindSoname does -- and an exact hit later in the pass still
+        overwrites it. Without the guard the LAST case-insensitive entry would
+        win, which on a multiarch box is the i386 row for keys whose twins
+        differ, and that is the wrong answer arrived at silently. }
+      if Copy(key, 1, Length(want)) = want then
+      begin
+        soname := key;
+        libpath := val;
+        LdCacheDirCandidate := True;
+        Exit;
+      end;
+      if not LdCacheDirCandidate then
+      begin
+        soname := key;
+        libpath := val;
+        LdCacheDirCandidate := True;
+      end;
+    end;
+    if LdCacheDirCandidate then Exit;  { pass 0 answered: never widen }
+  end;
+end;
+
+function CHeaderDirName(const path: AnsiString): AnsiString;
+{ The immediate parent DIRECTORY of a resolved header path -- `SDL2` for
+  /usr/include/SDL2/SDL.h -- which is the key the file name threw away.
+
+  Not restricted to /usr/include, and that is deliberate rather than lax. A
+  `-I` root can put a package's headers anywhere (this box alone has
+  /usr/lib/x86_64-linux-gnu/... roots in the default list), so a path test
+  would refuse the very layouts the feature is for. A directory that names
+  nothing simply produces no cache candidate, and one that names a library by
+  coincidence still has to EXPORT the symbol before anything is accepted --
+  the guess is checked, not trusted. }
+var i, lastSlash, prevSlash: Integer;
+begin
+  CHeaderDirName := '';
+  lastSlash := 0; prevSlash := 0;
+  for i := 1 to Length(path) do
+    if path[i] = '/' then
+    begin
+      prevSlash := lastSlash;
+      lastSlash := i;
+    end;
+  if (lastSlash = 0) or (prevSlash = 0) then Exit;   { no subdirectory to speak of }
+  for i := prevSlash + 1 to lastSlash - 1 do
+    AppendChar(CHeaderDirName, path[i]);
+end;
+
+procedure CNoteSynthLibIfMissing(const soname, header, hdrDir: AnsiString);
 { Remember a soname the compiler INVENTED from a header's file name and that
   this host cannot resolve. Consumed by RegisterExternal, which is the choke
   point where an external actually becomes a DT_NEEDED. See CSynthMissingLibs
-  in defs.inc for why provenance decides membership. }
+  in defs.inc for why provenance decides membership.
+
+  `hdrDir` is the header's own directory, carried along unresolved. It is NOT
+  resolved here: an import whose symbols are never referenced emits no
+  DT_NEEDED and needs no library at all, so opening .so files at import time
+  would spend the I/O on programs that do not have the defect. RegisterExternal
+  asks for it when, and only when, a symbol actually needs a library. }
 var i: Integer;
 begin
   if Length(soname) = 0 then Exit;
@@ -4132,7 +4338,114 @@ begin
   if CSynthMissingCount >= MAX_C_INCLUDE_DIRS then Exit;
   CSynthMissingLibs[CSynthMissingCount] := soname;
   CSynthMissingHdrs[CSynthMissingCount] := header;
+  CSynthDirName[CSynthMissingCount] := hdrDir;
+  CSynthDirLib[CSynthMissingCount] := '';
+  CSynthDirPath[CSynthMissingCount] := '';
+  CSynthDirState[CSynthMissingCount] := 0;
   Inc(CSynthMissingCount);
+end;
+
+function CSynthDirAnswersFor(const soname, sym: AnsiString;
+                             var better: AnsiString): Boolean;
+{ THE UPGRADE, and the whole ticket lives in this one function.
+
+  `soname` is a name the compiler invented from a header's FILE name and that
+  this host cannot resolve -- so the build as it stands dies at exec, and
+  RegisterExternal is about to say so. Before it does: does the header's
+  DIRECTORY name a library on this box that actually EXPORTS `sym`?
+
+  Yes -> hand back that soname and let the import through. It is not a guess
+  that happens to look right; it is the loader's own index saying this machine
+  has a library, of the right architecture, that answers to this name and
+  defines this symbol.
+
+  No -> False, and the caller's diagnostic stands. `net/if.h` is the row that
+  makes this necessary: `libnet.so.9` IS installed here and exports none of
+  that header's symbols, so a directory rule without this check would link and
+  die on `undefined symbol` -- a quiet failure where there was a loud one.
+
+  The cache scan and the ELF class check are memoised per header (state 1/2);
+  the per-symbol .dynsym query is not, because it is the actual question and
+  each symbol deserves its own answer. Its file read is memoised instead. }
+var i: Integer;
+    cand, candPath: AnsiString;
+begin
+  CSynthDirAnswersFor := False;
+  for i := 0 to CSynthMissingCount - 1 do
+    if CSynthMissingLibs[i] = soname then
+    begin
+      if CSynthDirState[i] = 0 then
+      begin
+        if LdCacheDirCandidate(CSynthDirName[i], cand, candPath) then
+        begin
+          CSynthDirLib[i] := cand;
+          CSynthDirPath[i] := candPath;
+          CSynthDirState[i] := 1;
+        end
+        else
+          CSynthDirState[i] := 2;
+      end;
+      if CSynthDirState[i] <> 1 then Exit;
+      if ElfSoExportsSymbol(CSynthDirPath[i], sym) then
+      begin
+        better := CSynthDirLib[i];
+        CSynthDirAnswersFor := True;
+        Exit;
+      end;
+      { A SYMBOL THE HEADER'S OWN LIBRARY DOES NOT EXPORT IS NOT YET AN ERROR,
+        and assuming otherwise is what a per-symbol reading of "does this
+        library answer" gets wrong. System headers routinely RE-DECLARE libc's
+        own functions: SDL_stdinc.h declares memcmp, and memcmp is libc's, so
+        the first symbol `import SDL2/SDL.h` asks about is one libSDL2 has
+        never exported and never should. Measured — it is the exact symbol this
+        arm was written for.
+
+        So ask the honest question about the SYMBOL rather than a stricter one
+        about the library: which library on this box DEFINES it? The header's
+        own when it exports it, libc or libm when they do. That is the same
+        evidence standard one step wider, and it attributes memcmp to
+        libc.so.6, which is both true and what the loader would resolve anyway.
+
+        SCOPED to a header whose directory DID name a real library (state 1).
+        Without that, a header naming no library at all keeps today's error,
+        which is the right answer for it — this is not a general licence to
+        satisfy any unresolved symbol out of libc. }
+      if LdCacheNativePathFor('libc.so.6', candPath) and
+         ElfSoExportsSymbol(candPath, sym) then
+      begin
+        better := 'libc.so.6';
+        CSynthDirAnswersFor := True;
+        Exit;
+      end;
+      if LdCacheNativePathFor('libm.so.6', candPath) and
+         ElfSoExportsSymbol(candPath, sym) then
+      begin
+        better := 'libm.so.6';
+        CSynthDirAnswersFor := True;
+      end;
+      Exit;
+    end;
+end;
+
+function CSynthDirCandidateFor(const soname: AnsiString; var cand: AnsiString): Boolean;
+{ Purely for the DIAGNOSTIC: was there a directory-derived library that simply
+  did not answer? Naming it turns "no library answers to libsdl.so" into "and
+  libnet.so.9, which your header's directory names, does not export it either",
+  which is the difference between a dead end and a diagnosis. Never resolves
+  anything itself -- only reports what CSynthDirAnswersFor already found. }
+var i: Integer;
+begin
+  CSynthDirCandidateFor := False;
+  for i := 0 to CSynthMissingCount - 1 do
+    if CSynthMissingLibs[i] = soname then
+    begin
+      if CSynthDirState[i] = 1 then
+      begin
+        cand := CSynthDirLib[i];
+        CSynthDirCandidateFor := True;
+      end;
+      Exit;
+    end;
 end;
 
 function CSynthMissingHeaderFor(const soname: AnsiString; var header: AnsiString): Boolean;
@@ -6450,8 +6763,15 @@ begin
         ConcatThree('lib', LowerCase(cName), '.so', CurrentCLibrary);
       { The name above is DERIVED FROM A FILE NAME and may well not exist. Note
         it if this host cannot resolve it; RegisterExternal turns that into a
-        diagnostic if — and only if — a symbol from it is actually referenced. }
-      CNoteSynthLibIfMissing(CurrentCLibrary, cName);
+        diagnostic if — and only if — a symbol from it is actually referenced.
+
+        The header's own DIRECTORY rides along, because for a header in a
+        subdirectory it is the far better key: `SDL2/SDL.h` is reduced to the
+        stem `SDL` above, so the name this synthesises is `libsdl.so` while the
+        library is libSDL2-2.0.so.0. Recorded, not resolved — see
+        CSynthDirAnswersFor, which asks only when a symbol actually needs an
+        answer and requires the candidate to EXPORT it. }
+      CNoteSynthLibIfMissing(CurrentCLibrary, cName, CHeaderDirName(path));
     end;
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;

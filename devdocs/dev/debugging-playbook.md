@@ -22938,3 +22938,48 @@ that something under it is leaking.
 consumption is denominated in.** "10% free" is eleven more tier runs on seven's
 1,048,576-inode tmpfs and sixty-nine on plexus's 6,283,264-inode ext4. `~N more
 runs` means the same thing on both, which a percentage never can.
+
+### A reader that silently returns empty passes every REFUSAL row and fails every ACCEPT row
+
+Measured 2026-09-10 (frankH, Track N), writing `test/test_elfdynsym.pas` — a
+harness for the ELF `.dynsym` reader the header-to-library guard uses. Fourteen
+rows, every one a PAIR over a single variable: one cache key with two paths, one
+symbol in two libraries, one library with two symbols.
+
+The first run came back with **every REFUSED row green and every ACCEPT row
+red.** No crash, no diagnostic, rows in a plausible order.
+
+The cause was in the harness, not the reader:
+
+```pascal
+{$I-} Assign(f, path); Reset(f); {$I+}    { IOResult = 5 }
+```
+
+`Reset` on a typed file opens **read/write**. Every library it reads is
+root-owned, so all of them returned IOResult 5 and `LoadFile` handed back an
+empty string. `Length(body) < 64` then made the reader answer False to
+everything, correctly, about a string with nothing in it. `FileMode := 0`
+before the `Reset` fixes it.
+
+**The generalisable part is the signature, which is legible before you know the
+cause.** A reader that cannot read is indistinguishable, row by row, from a
+guard that is working — because refusing is what a guard is *supposed* to do.
+The tell is only visible ACROSS rows: an instrument that has stopped reading
+produces a **perfect anticorrelation** with the expected answer, not a
+scattering of failures. Every negative right, every positive wrong.
+
+So this is a case a one-sided suite cannot reach at all. A file of refusal rows
+would have printed PASS with the reader dead, and a file of accept rows would
+have read as "the feature does not work" and sent the author into the feature.
+The pair did not merely catch it; the pair is the only shape that *could*, and
+it caught it in under a minute on a defect neither the author nor the ticket
+predicted.
+
+Worth pairing with CLAUDE.md's "a guard that cannot fail is not a guard" from
+the other end: that rule is about a guard with no refusal arm, and this is a
+guard with **nothing but** one. Both print green.
+
+Practical check, cheap and general: when a run's failures line up exactly with
+its assertion polarity, suspect the reader before the subject — and assert that
+the input was actually read (`Length(body) > 0`) rather than only what was
+concluded from it.

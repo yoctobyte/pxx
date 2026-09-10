@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:110 backlog-tools:55 backlog-pascal:6 backlog-decide:44 backlog-libs:25 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3658 rejected:81`
+`working:29 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:151 backlog-nilpy:109 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:25 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3659 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -72,14 +72,14 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 438, ranked
+## Ready — top 30 of 439, ranked
 
-- `[p 90] [N]` feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym (unblocks 2)
 - `[p 90] [N]` bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
 - `[p 90] [N]` bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
 - `[p 90] [N]` bug-n-star-unpacking-is-rejected-at-a-method-call (unblocks 1)
 - `[p 90] [N]` feature-n-the-threading-module (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
+- `[p 90] [B]` task-b-write-the-lekkerzeilen-pxx-platform-backend (unblocks 1)
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
@@ -105,4 +105,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 
-_408 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_409 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

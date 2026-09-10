@@ -650,7 +650,21 @@ from a REPORT of the code pins the report, not the code**, so it fails on
 arrival and reads as a regression in whatever landed beside it. Both halves of
 that collision were correct fixes; only the guard was wrong. Before pinning a
 live line, `grep` for it in the tree you are committing to — not in the ticket
-that describes it.
+that describes it. **AND A PREDICTION IS THE SECOND DOOR INTO THE SAME ROOM,
+which matters because a ticket that PRESCRIBES a row reads as a requirement
+rather than as a claim to check.** Measured 2026-09-10 (frankH, Track N,
+`feature-n-derive-a-header-s-library-...-dynsym`): the ticket specified
+`net/if.h` **asserted as REFUSED** as the positive control, and the author
+concurred it was written from a prediction about what the mechanism would do.
+Built, the symbol is in libc, so the correct outcome is ACCEPTED-as-libc and
+the evidence is the ABSENCE of `libnet.so.9` from the binary — a row written
+to the specification would have been red on arrival for a feature that was
+working. **An assertion written from a PREDICTION pins the prediction**, and
+absence is the better instrument besides: a missing DT_NEEDED cannot be
+produced by accident, where a refusal can be produced by any of six failures.
+So re-derive a prescribed row's expected value from the built thing before
+writing it, even when — especially when — the prescription came from the
+person who found the bug.
 
 **AND A MEASUREMENT CAN CREATE THE CONDITION IT IS TESTING FOR — ITS OWN
 EARLIER STEPS ARE INSIDE THE POPULATION.** The two rules above cover a control

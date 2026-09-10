@@ -1,0 +1,17 @@
+# THE DIRECTORY IS THE LIBRARY; THE FILE IS ONE COMPONENT OF IT.
+#
+# `/usr/include/FLAC/stream_decoder.h` has the file stem `stream_decoder`, so
+# the compiler synthesised `libstream_decoder.so` -- a name no loader answers
+# to. The library is libFLAC.so.14 and its name is in the DIRECTORY, which
+# GetFileBaseName discards before any lookup runs.
+#
+# Measured 2026-09-10 over every .h in a /usr/include subdirectory on this box
+# (7269 of them): the FILE stem resolves for 120 and the DIRECTORY resolves for
+# 1472 more. What makes using it safe rather than merely lucky is that the
+# candidate has to EXPORT the symbol -- see the net/if.h row, which is the same
+# rule refusing an installed library that answers nothing.
+import "/usr/include/FLAC/stream_decoder.h"
+
+d = FLAC__stream_decoder_new()
+print(1 if d else 0)
+FLAC__stream_decoder_delete(d)
