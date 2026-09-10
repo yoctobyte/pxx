@@ -162,3 +162,4 @@ remaining candidates need the live box: a concurrent writer, the run's own
 `--force` path taken by a second testmgr, or something outside testmgr. The
 `/tmp` reaper is *not* a candidate for that date — it was still at 10 days then
 and only moved to 6h on 2026-09-06.
+- 2026-09-10 — the seven watcher saw `test-emit-obj#src:test/c_obj_data_import.c` GREEN at d53e34a50594 (tier full) and did NOT close this: this is a repeat stub (`regression-test-emit-obj-c-obj-data-import-2`, not `regression-test-emit-obj-c-obj-data-import`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
