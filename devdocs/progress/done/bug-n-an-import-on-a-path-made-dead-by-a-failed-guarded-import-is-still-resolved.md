@@ -131,3 +131,34 @@ last wall" was never a claim the instrument could support.
 
 ## Log
 - 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 708555fdb.
+
+## 2026-09-10, after the resolve — the fix is confirmed, and a DIFFERENT defect took the same line
+
+Confirming the close independently at compiler `546d4dcbd305`, tree `08d8d5170`:
+the ctypes error this ticket was filed for is **gone**. `platform/__init__.py` no
+longer reports `no unit named ctypes`, so the dead fall-through is no longer
+being resolved. Correctly closed.
+
+**But the module still does not compile, and the new error sits four lines away:**
+
+```
+platform/__init__.py   pascal26:95: error: undefined variable (_pxx)
+```
+
+Lines 94-95 are `from . import _pxx` / `return _pxx, "pxx"`, inside the
+`except ImportError:` arm of `_select_backend`. So what fails now is that **a
+relative import inside an `except` block inside a FUNCTION does not bind its
+name** — a different defect from the one this ticket fixed.
+
+It is also not
+[[bug-n-from-dot-import-x-as-y-does-not-bind-y]]: no alias is involved here, and a
+module-level `try: from . import X / except ImportError:` probe compiled and ran
+earlier today. The variable appears to be function scope or the `except` arm
+specifically, and that matrix has not been probed.
+
+**Recorded here rather than by reopening this ticket.** Two unrelated defects
+occupied one file four hours apart, which is precisely how a ticket's summary
+drifts away from what it actually measured — the close is sound and should stand.
+Whoever picks up the residual should file it fresh after probing module-vs-function
+scope and `try`-vs-`except` arm, because the boundary decides whether it is one
+bug or two.
