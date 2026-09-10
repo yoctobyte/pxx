@@ -1,0 +1,5 @@
+up 1 pos 42
+flip 0
+up 0 pos 22
+flip 1
+static 0 9

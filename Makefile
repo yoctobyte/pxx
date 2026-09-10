@@ -2482,6 +2482,14 @@ test-nilpy: $(COMPILER)
 	# IR refused it (kind 67) in a program with no conditional expression in it.
 	./$(COMPILER) test/test_nilpy_variant_field_write_dispatch.npy $(TESTTMP)/test_nilpy_vfwrite26
 	$(TESTTMP)/test_nilpy_vfwrite26 | diff -u test/test_nilpy_variant_field_write_dispatch.expected -
+	# ...and the same receiver, a @property TWO UNRELATED classes declare. The
+	# READ has a correct answer at run time and it is CPython's own (PyPropertyGet
+	# finds the getter of the class the object actually is); the STORE does not,
+	# because pydynattr_set is store-only, so that half stays a loud refusal.
+	./$(COMPILER) test/test_nilpy_variant_property_read_ambiguous.npy $(TESTTMP)/test_nilpy_vpropread26
+	$(TESTTMP)/test_nilpy_vpropread26 | diff -u test/test_nilpy_variant_property_read_ambiguous.expected -
+	! ./$(COMPILER) test/test_nilpy_variant_property_store_ambiguous_fail.npy $(TESTTMP)/test_nilpy_vpropstore26 > $(TESTTMP)/test_nilpy_vpropstore.log 2>&1
+	grep -q "ambiguous (several unrelated classes declare that property)" $(TESTTMP)/test_nilpy_vpropstore.log
 	# startswith/endswith with a TUPLE of prefixes answered False silently.
 	./$(COMPILER) test/test_nilpy_startswith_tuple.npy $(TESTTMP)/test_nilpy_swtuple26
 	$(TESTTMP)/test_nilpy_swtuple26 | diff -u test/test_nilpy_startswith_tuple.expected -

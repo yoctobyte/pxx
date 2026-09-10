@@ -13555,11 +13555,13 @@ end;
   the slot here, and guessing one is how a wrong layout gets read silently, so
   that is a diagnostic. }
 function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString;
-                               var ci: Integer): Integer;
+                               var ci: Integer; forStore: Boolean;
+                               var ambig: Boolean): Integer;
 var c, root, unboxArg, unboxCall: Integer;
 begin
   Result := -1;
   ci := -1;
+  ambig := False;
   root := -1;
   { A real FIELD of that name anywhere wins: the caller's field branch resolves
     it (with runtime dispatch across differing layouts), and that is the
@@ -13575,9 +13577,35 @@ begin
     if root < 0 then root := c
     else if IsSubclassOf(root, c) then root := c        { c is the more basic }
     else if not IsSubclassOf(c, root) then
+    begin
+      { Two UNRELATED classes declare it, so no single cast is right and the
+        slot cannot say which object is in it. THE TWO HALVES DIVERGE HERE.
+
+        A READ has a correct answer at run time and it is CPython's own:
+        pydynattr_get walks the store, the declared fields, then PyPropertyGet,
+        which finds `__prop_get_<name>` in the RTTI of the class the object
+        ACTUALLY is. Refusing it bought nothing -- the caller falls through to
+        exactly that path, which is what an unambiguous-but-undeclared name
+        already gets. rig.py's `(not sail.up) if up is None else up` is this,
+        with @property up on rig.Sail and on the sim body class.
+
+        A WRITE does NOT: pydynattr_set is STORE ONLY -- there is no
+        PyPropertySet -- so falling through would turn this loud refusal into
+        the silently-dropped write that
+        bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver
+        was filed for, and the getter would go on answering from the real
+        backing field as though nothing had happened. So the refusal survives
+        for a store and only for a store. }
+      ambig := True;
+      if not forStore then
+      begin
+        ci := -1;
+        Exit;
+      end;
       Error('Nil Python: .' + pname + ' on a dynamically-typed value is '
             + 'ambiguous (several unrelated classes declare that property) — '
             + 'assign to an annotated local first');
+    end;
   end;
   if root < 0 then Exit;
 
@@ -40619,6 +40647,7 @@ var
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   propRecvNode, propRecvCi: Integer;   { NilPy @property on a VARIANT receiver }
+  propIsStore, propRecvAmbig: Boolean;
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
@@ -42752,13 +42781,24 @@ begin
         wins, matching the field-then-dynattr precedence everywhere else). }
       if (tk = tyVariant) then
       begin
-        propRecvNode := PyMakeVariantPropRecv(node, fieldName, propRecvCi);
+        { The field name is deliberately NOT consumed above, so CurTok is still
+          on it and Tokens[TokPos] is the lookahead that tells a READ from a
+          STORE. That is the whole discriminator the ambiguity refusal needs:
+          see PyMakeVariantPropRecv for why only the store half is refused. }
+        propIsStore := (TokPos < TokCount) and
+                       ((Tokens[TokPos].Kind = tkAssign) or
+                        (PyAugBinTok(Tokens[TokPos].Kind) <> tkEOF));
+        propRecvNode := PyMakeVariantPropRecv(node, fieldName, propRecvCi,
+                                              propIsStore, propRecvAmbig);
         if propRecvNode >= 0 then
         begin
           node := propRecvNode;
           tk := tyClass;
           recName := REC_UCLASS_BASE + propRecvCi;
-        end;
+        end
+        else if propRecvAmbig then
+          Warn('Nil Python: several unrelated classes declare a .' + fieldName
+               + ' property — reading it through the receiver at run time');
       end;
 
       { Same receiver, no call: a plain FIELD READ off a variant — `x.name`

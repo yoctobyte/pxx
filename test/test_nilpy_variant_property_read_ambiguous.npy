@@ -1,0 +1,58 @@
+# Two UNRELATED classes declare a property of the same name, and the receiver is
+# a variant (a list element). No single cast is right, so the compiler cannot
+# resolve the slot -- and the READ still has a correct answer at run time:
+# pydynattr_get reaches PyPropertyGet, which finds `__prop_get_<name>` in the
+# RTTI of the class the object ACTUALLY is. That is CPython's own answer.
+#
+# The STORE half is deliberately not exercised here and is still refused --
+# pydynattr_set writes the side store and there is no PyPropertySet, so falling
+# through would silently drop the write while the getter went on reading the
+# real backing field (bug-nilpy-property-setter-is-skipped-on-a-dynamically-
+# typed-receiver). See test_nilpy_variant_property_store_ambiguous.npy.
+#
+# lekkerzeilen rig.py:245 is the live case: `sail.set((not sail.up) if up is
+# None else up)`, with @property up on rig.Sail and on the sim body class.
+
+class Sail:
+    def __init__(self, u, p):
+        # a leading field, so a wrong cast reads a DIFFERENT slot and is loud
+        self._pad = 111
+        self._up = u
+        self._pos = p
+
+    @property
+    def up(self):
+        return self._up
+
+    @property
+    def pos(self):
+        return self._pos
+
+
+class Mast:
+    def __init__(self, h):
+        self._h = h
+
+    @property
+    def up(self):
+        # a COMPUTED getter, so the row proves the accessor RAN
+        return self._h > 5
+
+    @property
+    def pos(self):
+        return self._h * 7 + 1
+
+
+def flip(x, up):
+    # rig.py:245's exact shape
+    return (not x.up) if up is None else up
+
+
+parts = [Sail(True, 42), Mast(3)]
+for p in parts:
+    print("up", 1 if p.up else 0, "pos", p.pos)
+    print("flip", 1 if flip(p, None) else 0)
+
+# control: a STATICALLY typed receiver never reaches the variant path at all
+s = Sail(False, 9)
+print("static", 1 if s.up else 0, s.pos)

@@ -247,7 +247,7 @@ procedure PyHoistRestore(saved: Integer); forward; { Nil Python: put a parked qu
 procedure PyHoistMerge(saved, trial: Integer); forward; { Nil Python: re-queue a parked trial parse's hoists (pyparser.inc) }
 function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python: is tk a genuine scalar/string result worth wrapping (pyparser.inc) }
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
-function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
+function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer; forStore: Boolean; var ambig: Boolean): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
 function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=1)` / `d.update(a=1)` keywords are KEYS (pyparser.inc) }
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }

@@ -1,0 +1,45 @@
+# The half of the ambiguity refusal that must SURVIVE. Two unrelated classes
+# declare `.up`, the receiver is a variant, and this is a STORE.
+#
+# The read half of the same shape now falls through to the run-time path
+# (test_nilpy_variant_property_read_ambiguous.npy) because pydynattr_get reaches
+# PyPropertyGet and the getter of the class the object ACTUALLY is. There is no
+# PyPropertySet, so pydynattr_set writes only the side store: falling through
+# here would drop the write silently while the getter went on answering from the
+# real backing field -- exactly
+# bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver, which is
+# the bug the refusal was added for. A loud error is the correct answer until a
+# setter path exists.
+
+
+class Sail:
+    def __init__(self):
+        self._up = False
+
+    @property
+    def up(self):
+        return self._up
+
+    @up.setter
+    def up(self, v):
+        self._up = v
+
+
+class Mast:
+    def __init__(self):
+        self._h = 0
+
+    @property
+    def up(self):
+        return self._h > 5
+
+    @up.setter
+    def up(self, v):
+        self._h = 9 if v else 0
+
+
+parts = [Sail(), Mast()]
+for p in parts:
+    p.up = True
+
+print("unreachable")
