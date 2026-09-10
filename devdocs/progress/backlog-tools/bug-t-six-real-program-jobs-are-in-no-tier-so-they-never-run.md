@@ -81,15 +81,26 @@ C declaration each (`__builtin_inf`, `malloc_usable_size` — now
 `bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile`).
 
 **Five of the six decompose to exactly one job. `test-wasm32` decomposes to 51**
-— `#00` selfhost, `#42` selfhost, `#49` unit, the other 48 qemu — asked of
-`testmgr.generate()` rather than reasoned about. So the numbers this ticket and
+— `#42` selfhost, `#49` unit, the other **49 qemu** (frank-seven, measured
+through `generate()`).
+
+The first version of this paragraph said 48 qemu and two selfhost rows, and said
+all six targets' jobs were `selfhost` class. Both wrong, from one cause worth
+recording because it is cheap to repeat: it was derived from
+`split_jobs(tgt, make_dry_run(tgt))` called directly, and **`make -n <target>`
+emits the `$(COMPILER)` prerequisite's entire self-host recipe before the
+target's own** — 85 lines for `test-duktape`, of which the target's share is the
+tail. So `classify()` read the build chain, not the target. The tell was visible
+and ignored: all six targets came back with an IDENTICAL class, which no real
+decomposition of six unrelated targets would produce. Both jobs are `corpus`.
+`generate()` is the instrument; a raw dry run is not. So the numbers this ticket and
 its discussion both used (`quick 1, native 6, limited 19, full 40`) are **target**
 counts, and enrolling all six takes `full` from 40 targets to 46 while adding
 **56 jobs**. Nothing in the tier dict says which unit it is counting, and the
 ~95s figure is six serial `make` runs, which is a true answer to a different
 question than "what does the tier now cost".
 
-Consequence for whoever enrolls: 50 of those rows have never run under testmgr,
+Consequence for whoever enrolls: 49 of those rows have never run under testmgr,
 so none has trusted timeout metrics and all arrive under the unproven-job budget
 grant — where a qemu job timing out under 24-way parallelism reads as a red
 rather than as a missing calibration. The allowlist covers duktape and quickjs
@@ -103,3 +114,16 @@ is still the class fix, and six instances is well past where naming them one at
 a time is the remedy. It does mean the guard should report what it found in
 both units, because a reviewer reading "6 targets missing" will not picture 56
 jobs.
+
+### And `corpus` is a retry class, so the two known reds cost 3x
+
+`RUN_RETRY_CLASSES = {qemu, corpus, conformance, opt}` with `RUN_RETRY_TRIES = 3`
+(testmgr.py:451). Both allowlisted jobs are `corpus`, so each is retried three
+times before being called red — and both fail **deterministically at compile**,
+on a missing declaration. The retries cannot change the outcome; they buy wall
+time only. Small (4s becomes ~12s each), and worth knowing before someone reads
+the tier's cost and concludes the measurement was wrong.
+
+Not a defect in the retry policy: the class is right about corpus jobs in
+general, and a compile failure that is deterministic is not something the class
+can know in advance. Noted so the number is explicable, not as a thing to fix.
