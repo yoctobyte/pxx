@@ -136,3 +136,62 @@ compiler feature, the feature landed, and the pin has never carried it.
 **Read for a session seeing this row RED:** check your diff for `lib/` and for a new
 builtin. If it has neither, the row is this ticket and not your change — six sessions
 have now confirmed identical output.
+
+## 2026-09-10 (frankuser) — third instance, and a MOVE is worse than an ADD
+
+Recurred at pin v407 (`51901941e`, tree `04559b9d`, 2026-09-06). Track T's full
+tier at `2026-09-10T08:40:21Z` is RED on four rows, `new_red: []`,
+`still_red: [lib-test#src:test/lib_synapse.pas, lib_synapse_ssl.pas,
+lib_synapse_transitive_unit.pas, tools/crtl_reachability.py]`, first appearing
+`2026-09-09T16:32:24Z` — the first full tier after the last of four `lib/rtl`
+commits that landed that afternoon (frank-seven, measured on seven).
+
+Cause is `0ffe185bb`, and it is the documented shape with one difference that
+makes it sharper. Previous instances ADDED a builtin and used it from `lib/rtl`;
+this one **MOVED six names out of `lib/rtl` into `compiler/builtin/builtin.pas`**
+— `AllocMem`, `DynArraySize`, `SetString`, `sLineBreak`, `UTF8Decode`,
+`UTF8Encode` — deliberately, and for a good reason stated in the commit: *"two
+homes for one routine is the defect class rather than a mitigation of it"*, and
+FPC's own layout agrees. An ADD leaves the old path working for a stale
+compiler. A MOVE removes it, so a `$(PXX_STABLE)` consumer loses the name
+outright.
+
+**Isolated from the corpus, so this needs no synapse tree to reproduce** — five
+lines, no `uses` clause:
+
+```pascal
+program setstring_probe;
+var s: AnsiString; buf: array[0..3] of Char;
+begin
+  buf[0] := 'a'; buf[1] := 'b'; buf[2] := 'c'; buf[3] := #0;
+  SetString(s, @buf[0], 3);
+  WriteLn(s);
+end.
+```
+
+HEAD-built compiler (`61f8a78f8aae`, tree `2d35cdbfc`): compiles, runs, prints
+`abc`. Pinned v407: `error: undefined variable (SetString)`. A probe whose right
+answer differs from its failure answer in both directions, and it does not touch
+`external/synapse`, which is absent on plexus and would have skipped.
+
+**The part worth keeping: the author's own correctness check was HEAD-shaped.**
+`0ffe185bb` says *"any `uses` clause already pulls the builtin unit, so existing
+code is unaffected"* — true, and true only of a compiler built from that tree.
+The commit was green by every measure its author had, because no per-fix gate
+compiles anything with `$(PXX_STABLE)`. That is not carelessness; it is the
+instrument. Three instances this week landed green under `quick` and red only in
+a tier nobody's per-fix gate runs.
+
+**Resolution is unchanged and is still not dispatchable: only a pin clears it**,
+and the reds clear as a CONSEQUENCE of pinning rather than needing a waiver —
+which is why this must not be routed through `pin-allowlist.tsv`. An allowlist
+entry would need a ticket and a lifecycle for a condition that self-resolves the
+moment the pin moves. Escalated to the owner 2026-09-10 as one act
+(`make stabilize-fast && make pin`), with the note that the four reds GRADE and
+the fixedpoint GATES, so they cannot block the pin that fixes them.
+
+Not promoted to CLAUDE.md. The rule it would strengthen is already there — *"a
+fix is INERT UNTIL PINNED"*, with two dated casualties — and this is a third
+instance in the SAME subsystem, so it meets the merit test and not the
+second-independent-subsystem test. The move-versus-add distinction is banked
+here instead.
