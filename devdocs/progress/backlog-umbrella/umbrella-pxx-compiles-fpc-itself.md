@@ -8,8 +8,8 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal]
-summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS EMPTY ON PURPOSE AND MUST BE GROWN BY ATTEMPTING, NOT BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.'"
+blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, feature-p-unaligned-is-a-transparent-lvalue-not-a-function]
+summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at dbb96cdb6 (attempt 5, probe #9): 15 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 182 fail. 150 of the 182 stop on ONE call site, `unaligned` at cclasses.pas:1327. FIVE walls have been cleared (unit cycle 158 units, bitsizeof 163, PSizeUInt 150, IndexQWord 96, and the conditional-directive family) and BOTH-OK has gone 9 -> 15 -> 15 -> 15: bitsizeof bought all six and the three largest bought none. THE WALLS ARE STACKED IN ONE SHARED UNIT, so a blocker's unit count is a QUEUE POSITION, not a size, and this umbrella must not be ranked on it."
 ---
 
 # Why this exists and what it replaces
@@ -348,3 +348,80 @@ the distribution is measured in the row below this section; whatever it says,
 the next causes are all SMALL — the largest before this attempt was 8 — which
 means the next rung of this umbrella is a different kind of work from the last
 two: several unrelated causes rather than one that everything queues behind.
+
+## 2026-09-10, frankH — attempt 5: the System routines, and a THIRD consecutive null row
+
+Two more walls cleared and **BOTH-OK did not move at all, for the third attempt
+running.** That is the number this section is about.
+
+### What landed
+
+| sha | wall | units it was the first failure of |
+| --- | --- | --- |
+| `959468420` / `0dfa0b298` | `unknown type: PSizeUint` | 150 |
+| `dbb96cdb6` | `undefined variable (IndexQWord)` | 96 |
+
+Both are FPC **System-unit surface**, not dialect features — the same class as
+`Prefetch`, which is already in `builtin.pas` for exactly this reason. The
+Index/Compare family went in beside it: `IndexByte`, `IndexWord`, `IndexDWord`,
+`IndexQWord`, `CompareWord`, `CompareDWord`. `TFPList.IndexOf`
+(`cclasses.pas:890-895`) selects the DWord or QWord arm by pointer width under
+a `{$if}`, so **both arms must resolve for either to compile** — a family with
+holes in it is not half-working, it is not working.
+
+### The measurement
+
+Whole probe re-run at each sha, `fpc` as oracle, per-unit join rather than
+category arithmetic.
+
+| | probe #8 @ `0dfa0b298` | probe #9 @ `dbb96cdb6` |
+| --- | --- | --- |
+| BOTH-OK | 15 | **15** |
+| ORACLE-NO | 10 | 10 |
+| PXX-FAIL | 182 | 182 |
+
+Join: **exactly 96 units changed their row, every one of them
+`IndexQWord` -> `unaligned`, and nothing else moved.** The BOTH-OK set is
+byte-identical between the two runs, not merely the same size:
+
+```
+cdynset compinnr constexp cstreams cutils dbgdwarfconst dwarfbase fpchash
+globtype macho optbase symconst systems version wasmbase
+```
+
+### First failures now
+
+| n | first failure |
+| --- | --- |
+| 150 | `undefined variable (unaligned)` — `cclasses.pas:1327` |
+| 6 | `Unsupported tcompilerwidechar size` |
+| 7 | `an object type cannot have a constructor` (two line numbers) |
+| 4 | `expected field name in record constant` |
+| 3 | `unknown type: d` |
+| 1 each | `IsATTY`, `align`, `swapendian`, `unixcp`, `RS_INVALID` |
+
+### The number to distrust, again, is the one that did NOT move
+
+Three attempts in a row have cleared the single largest wall and bought **zero**
+units: 158 units moved for the unit cycle, 96 for the Index family, and BOTH-OK
+went 9 -> 15 -> 15 -> 15. The 15 was bought by `bitsizeof` alone.
+
+The reading is not "the fixes did nothing". It is that **in this corpus the
+walls are STACKED, and the depth is what nobody has measured.** Every unit that
+cleared `IndexQWord` landed on `unaligned` — the same file, four hundred lines
+further down. Clearing wall N reveals wall N+1 in the same dependency, so the
+first-failure histogram is a picture of ONE unit's contents (`cclasses.pas`,
+which nearly everything uses) far more than of the corpus's difficulty.
+
+**So stop ranking this umbrella's blockers by how many units name them.** 150
+units naming `unaligned` is one call site in one shared unit; it says almost
+nothing about how much work stands between here and a compiling corpus. The
+honest instrument for that question is a probe that reports EVERY failure in a
+unit rather than the first, and nobody has built one. Until then, the count is
+a queue position, not a size.
+
+Filed from this attempt:
+[[feature-p-unaligned-is-a-transparent-lvalue-not-a-function]] — and note it is
+NOT a `builtin.pas` job like the last two looked: 275 call sites in the corpus
+and some are assignment targets, so a function-shaped fix clears all 150 units
+and still fails on `ogomf`, `owomflib` and `entfile` for the identical spelling.

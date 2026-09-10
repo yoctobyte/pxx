@@ -635,6 +635,25 @@ that collision were correct fixes; only the guard was wrong. Before pinning a
 live line, `grep` for it in the tree you are committing to — not in the ticket
 that describes it.
 
+**AND A MEASUREMENT CAN CREATE THE CONDITION IT IS TESTING FOR — ITS OWN
+EARLIER STEPS ARE INSIDE THE POPULATION.** The two rules above cover a control
+drawn from the wrong population and a filter that restates the hypothesis. This
+is the third and it is invisible to both, because here the population is right
+and the filter is honest: **one PASSING part of the run supplies what a FAILING
+part needs, so the failing part passes.** Measured twice on 2026-09-10, two
+seats, unrelated subsystems. A fixture exercising a seven-member builtin family
+passed while six of the seven were unreachable — the one member already wired
+into the builtin auto-include scan dragged the unit in, and every unwired name
+in the same file then resolved for free (`dbb96cdb6`). And a NilPy `import`
+re-measured after a fix looked like it had begun resolving, to a scratch file
+the same seat's OWN earlier probe step had left in that directory. Both were
+correct behaviour and contaminated measurements, and in both the contaminant
+was the measurer's previous step — which is why neither seat suspected it.
+**A whole-family test is the exact shape that certifies the broken half**, so
+test the at-risk members in a file naming none of the working ones and let the
+asymmetry be the control. The question that catches it: **would this row still
+pass if it were the ONLY thing in the run?**
+
 **A positive control is not enough on its own — a guard must also be AIMED and
 READ.** Assert that the thing under test actually RAN before you compare its
 output (a comparison whose inputs were never proven to exist cannot fail), and
