@@ -105,6 +105,28 @@ cp "$PXX" "$R/opt/pxx/compiler/pascal26"
 cp -r "$ROOT/compiler/builtin" "$R/opt/pxx/compiler/"
 cp -r "$ROOT/lib/rtl" "$R/opt/pxx/lib/"
 cp -r "$ROOT/lib/asmcore" "$R/opt/pxx/lib/"
+# lib/crtl/include IS PART OF "a pxx compiler", not an extra. Without it the C
+# frontend on the image compiles a program that includes no headers -- measured
+# in the guest, `int main(void){return 0;}` builds fine -- and then fails on the
+# first `#include <stdio.h>` with "C include file not found (searched:
+# /opt/pxx/lib/crtl/include/, <host system dirs>)". The image has no host system
+# dirs either, so there is no fallback. That is a half-installed compiler rather
+# than a smaller image, and it costs 253 KB compressed against a 9 MB initramfs.
+# DO NOT test this on the host and believe the answer: the same binary run
+# against this payload on a developer box resolves <stdio.h> from /usr/include
+# with a warning, so the host says it works and the guest says it does not.
+#
+# THE WHOLE TREE, NOT JUST include/. Shipping only the headers is worse than
+# shipping neither, and the guest proved it: `#include <stdio.h>` then resolves,
+# the program COMPILES, and the compiler warns `crtl does not define puts -- this
+# C program will import them from the system C library at run time`. The binary
+# comes out dynamic, the image has no libc, and running it says
+# `ash: /tmp/u: not found` -- an ENOENT about the missing interpreter that reads
+# as a missing FILE. crtl does define puts (lib/crtl/src/stdio.c:857); only the
+# implementation was absent. Part of crtl is baked into the compiler, which is why
+# a header-free C program builds on the image with no crtl present at all, and it
+# is exactly what makes the half-installed case look like it works.
+cp -r "$ROOT/lib/crtl" "$R/opt/pxx/lib/crtl"
 
 # ---- init -------------------------------------------------------------------
 # init is pid 1 and ash is the shell, so init IS an ash script ending in
