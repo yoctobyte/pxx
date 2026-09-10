@@ -240,15 +240,15 @@ var
   PyHdrIsProc: Boolean;
   PyHdrRetType: TTypeKind;
   PyHdrRetCi: Integer;
-  PyHdrPNames: array[0..31] of AnsiString;
-  PyHdrPTypes: array[0..31] of TTypeKind;
-  PyHdrPCis: array[0..31] of Integer;
-  PyHdrPSigs: array[0..31] of Integer;   { Callable signature per parameter, or -1 }
-  PyHdrDefHas: array[0..31] of Boolean;
-  PyHdrDefIsStr: array[0..31] of Boolean;
-  PyHdrDefIsNone: array[0..31] of Boolean;
-  PyHdrDefIsFloat: array[0..31] of Boolean;
-  PyHdrDefIsBool: array[0..31] of Boolean;
+  PyHdrPNames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+  PyHdrPTypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+  PyHdrPCis: array[0..MAX_PROC_PARAMS - 1] of Integer;
+  PyHdrPSigs: array[0..MAX_PROC_PARAMS - 1] of Integer;   { Callable signature per parameter, or -1 }
+  PyHdrDefHas: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+  PyHdrDefIsStr: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+  PyHdrDefIsNone: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+  PyHdrDefIsFloat: array[0..MAX_PROC_PARAMS - 1] of Boolean;
+  PyHdrDefIsBool: array[0..MAX_PROC_PARAMS - 1] of Boolean;
   PyDefaultWasNone: Boolean;   { set by PyParamDefaultAt — see there }
   PyDefaultWasFloat: Boolean;
   PyDefaultWasBool: Boolean;
@@ -287,14 +287,14 @@ var
     discards the hoist queue on the way out (a body's residue must not escape),
     and these are produced by the HEADER and must survive that. }
   PyDefInitHead: Integer;
-  PyHdrDefSym: array[0..31] of Integer;
+  PyHdrDefSym: array[0..MAX_PROC_PARAMS - 1] of Integer;
   { the interned NAME of PyHdrDefSym's global -- the key that survives a
     rolled-back trial parse recycling the symbol index (see
     ProcParamDefaultGName in defs.inc) }
-  PyHdrDefGName: array[0..31] of Integer;
-  PyHdrDefVal: array[0..31] of Int64;
-  PyHdrDefSOff: array[0..31] of Integer;
-  PyHdrDefSLen: array[0..31] of Integer;
+  PyHdrDefGName: array[0..MAX_PROC_PARAMS - 1] of Integer;
+  PyHdrDefVal: array[0..MAX_PROC_PARAMS - 1] of Int64;
+  PyHdrDefSOff: array[0..MAX_PROC_PARAMS - 1] of Integer;
+  PyHdrDefSLen: array[0..MAX_PROC_PARAMS - 1] of Integer;
   { parameter index of `*args` / `**kwargs` in the header just parsed, or -1 }
   PyHdrStarIdx: Integer;
   { Set by PyApplyGeneratorABI, read by PyMarkGeneratorProc: the header arrays
@@ -26773,7 +26773,7 @@ begin
     nOwn := PyHdrNParams;
     for j := 0 to nCaps - 1 do
     begin
-      if PyHdrNParams >= 32 then Error('Nil Python: too many parameters after capture');
+      if PyHdrNParams >= MAX_PROC_PARAMS then Error('Nil Python: too many parameters after capture');
       PyHdrPNames[PyHdrNParams] := capNames[j];
       PyHdrPTypes[PyHdrNParams] := capTypes[j];
       if (capTypes[j] = tyClass) and (capRecs[j] >= REC_UCLASS_BASE) then
@@ -31439,7 +31439,7 @@ end;
 procedure PyApplyGeneratorABI;
 var i: Integer;
 begin
-  if PyHdrNParams >= 31 then
+  if PyHdrNParams >= MAX_PROC_PARAMS - 1 then
     Error('Nil Python: too many parameters for a generator');
   if PyHdrNParams > SL_MAX_PARAMS then
     Error('Nil Python: a generator takes at most ' + AIntToStr(SL_MAX_PARAMS) +
