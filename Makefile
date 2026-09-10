@@ -8431,13 +8431,14 @@ test-core: $(COMPILER)
 	@# half of the split (the RTL staying OUT of the line table) is asserted by
 	@# tools/dwarf_smoke.sh T5, which counted 6 rows with the guard and 3663
 	@# without.
-	@# PIN NAMES ANOTHER FILE. `pascal26:18:` indexes the USED UNIT
-	@# (test/pascal_units/unit_a_semantic_error_in_a_unit.pas, 21 lines), not the
-	@# three-line driver on the command line, and `head -1` drops the `in:` line
-	@# that would otherwise say so. Without this marker
-	@# tools/silent_assertion_check.py's STALE-PIN rule reads the row as a pin
-	@# past the end of every file it names -- which is exactly what it is, and
-	@# here it is correct. The second row below pins line 30 of the main file and
+	@# PIN NAMES ANOTHER FILE: test/pascal_units/unit_a_semantic_error_in_a_unit.pas
+	@# `pascal26:18:` indexes that USED UNIT, not the three-line driver on the
+	@# command line, and `head -1` drops the `in:` line that would otherwise say
+	@# so. The marker does NOT excuse the row: tools/silent_assertion_check.py's
+	@# STALE-PIN rule adds the named file to the population and checks the pin
+	@# against IT, so this stays an assertion -- if the unit shrinks below 18
+	@# lines this goes red. Naming the file is what keeps the opt-out from being
+	@# a mute button. The second row below pins line 30 of the main file and
 	@# needs no marker.
 	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.unit \
 	  "$$(./$(COMPILER) -Futest/pascal_units test/pascal_units/driver_a_semantic_error_in_a_unit.pas $(TESTTMP)/test_unitdiagline26 2>&1 | head -1)" \

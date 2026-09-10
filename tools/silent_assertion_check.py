@@ -84,7 +84,19 @@ NAMES_OTHER_FILE = re.compile(r"\^\s*in:|'\s*in:|\"\s*in:")
 # `pascal26:10:` -- the defect this rule was built from -- stops being
 # flagged.  A guard that cannot catch its own founding case is not a guard.
 # Exactly one live row needs the marker today, so the burden is one comment.
-PIN_ELSEWHERE = re.compile(r'PIN NAMES ANOTHER FILE')
+#
+# THE MARKER MUST NAME THE FILE, AND IT IS CHECKED AGAINST IT.  The first
+# spelling was a bare `PIN NAMES ANOTHER FILE` that SKIPPED the row, and a skip
+# is a mute button: the next seat meeting an inconvenient red has a one-line way
+# to make it go away that is indistinguishable from the legitimate use, and
+# suppressions grow.  Naming the file keeps the opt-out an ASSERTION -- the row
+# is still checked, against the file whose lines the pin actually indexes -- so
+# silencing a red requires finding a file where the number is valid, which is
+# work rather than a keystroke.  frankB's, and it is strictly better than what
+# it replaced.  A marker naming a file that does not exist is itself a finding:
+# it reads as checked and checks nothing.
+PIN_ELSEWHERE = re.compile(r'PIN NAMES ANOTHER FILE:\s*(\S+)')
+PIN_ELSEWHERE_BARE = re.compile(r'PIN NAMES ANOTHER FILE(?!:)')
 
 
 def _line_count(path):
@@ -186,15 +198,34 @@ def scan(text):
                 vacuous.append((lineno, body.strip()))
                 break
         pins = [int(m.group(1)) for m in LINE_PIN.finditer(body)]
-        if (pins and not NAMES_OTHER_FILE.search(body)
-                and not PIN_ELSEWHERE.search(preceding_comment_block(lines, lineno))):
-            counts = [n for n in (_line_count(f) for f in
-                                  set(NAMED_SRC.findall(body))) if n is not None]
-            if counts:
-                longest = max(counts)
-                over = [n for n in pins if n > longest]
-                if over:
-                    stale.append((lineno, body.strip(), max(over), longest))
+        if not pins or NAMES_OTHER_FILE.search(body):
+            continue
+        block = preceding_comment_block(lines, lineno)
+        named = set(NAMED_SRC.findall(body))
+        marked = PIN_ELSEWHERE.search(block)
+        if marked:
+            # The marker is an assertion, not a skip: the file it names joins
+            # the population and the row is checked against it.
+            path = marked.group(1).rstrip(".,;")
+            if _line_count(path) is None:
+                stale.append((lineno, body.strip(), max(pins), 0,
+                              "PIN NAMES ANOTHER FILE names %r, which does not "
+                              "exist -- the marker reads as checked and checks "
+                              "nothing" % (path,)))
+                continue
+            named.add(path)
+        elif PIN_ELSEWHERE_BARE.search(block):
+            stale.append((lineno, body.strip(), max(pins), 0,
+                          "PIN NAMES ANOTHER FILE must name the file, as "
+                          "`PIN NAMES ANOTHER FILE: <path>` -- a bare marker "
+                          "skips the row, and a skip is a mute button"))
+            continue
+        counts = [n for n in (_line_count(f) for f in named) if n is not None]
+        if counts:
+            longest = max(counts)
+            over = [n for n in pins if n > longest]
+            if over:
+                stale.append((lineno, body.strip(), max(over), longest, None))
     return silent, vacuous, stale
 
 
@@ -211,7 +242,11 @@ def main(argv):
         for lineno, body in hits:
             print(f"{path}:{lineno}: {label} assertion: {why}")
             print(f"    {body[:200]}")
-    for lineno, body, pin, longest in stale:
+    for lineno, body, pin, longest, why in stale:
+        if why:
+            print(f"{path}:{lineno}: STALE-PIN assertion: {why}")
+            print(f"    {body[:200]}")
+            continue
         print(f"{path}:{lineno}: STALE-PIN assertion: pins pascal26:{pin}: but the "
               f"longest source file this row names is {longest} line(s) -- the pin "
               f"cannot be indexing it, so the row is asserting a line number "
@@ -221,8 +256,11 @@ def main(argv):
               f"makes the two wrong numbers agree and the row cannot fail for "
               f"the right reason. If the diagnostic legitimately names another "
               f"file -- a used unit, an include -- assert its `in:` line too, or "
-              f"write PIN NAMES ANOTHER FILE in the comment block directly above "
-              f"the row, and this rule steps aside")
+              f"write `PIN NAMES ANOTHER FILE: <path>` in the comment block "
+              f"directly above the row, which does not skip the row: it adds that "
+              f"file to the population and the pin is checked against IT. Note "
+              f"this rule only sees a pin past the END of a file; an in-range "
+              f"wrong pin is the same defect and only running the recipe finds it")
         print(f"    {body[:200]}")
     n = len(silent) + len(vacuous) + len(stale)
     if n:

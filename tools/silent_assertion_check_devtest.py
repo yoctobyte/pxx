@@ -246,19 +246,53 @@ def t_a_row_asserting_an_in_line_is_not_flagged():
     return "asserting `in:` says the pin indexes another file"
 
 
-def t_the_marker_suppresses_the_rule():
+USED_UNIT = "test/pascal_units/unit_a_semantic_error_in_a_unit.pas"   # 21 lines
+
+
+def _marked_row(marker, pin):
+    return ('\t@# %s\n'
+            '\t@tools/expect_same.sh lbl "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
+            '\t  "pascal26:%d: error: x"' % (marker, NINE_LINE_FIXTURE, pin))
+
+
+def t_the_marker_admits_a_pin_that_is_valid_in_the_file_it_names():
     """For the rows that pipe through `head -1` and so have no `in:` line to
-    assert. One live row needs it."""
-    stale = scan_pins(
-        '\t@# PIN NAMES ANOTHER FILE -- line 18 is in the used unit.\n'
-        '\t@tools/expect_same.sh lbl "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
-        '\t  "pascal26:18: error: x"' % NINE_LINE_FIXTURE)
-    assert not stale, "the opt-out marker did not suppress the rule: %r" % (stale,)
-    assert scan_pins(
-        '\t@tools/expect_same.sh lbl "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
-        '\t  "pascal26:18: error: x"' % NINE_LINE_FIXTURE), \
-        "the same row without the marker did not fire -- the rule never ran"
-    return "PIN NAMES ANOTHER FILE in the comment block above opts out"
+    assert. One live row needs it. The marker is NOT a skip -- the named file
+    joins the population and the pin is checked against it."""
+    stale = scan_pins(_marked_row("PIN NAMES ANOTHER FILE: " + USED_UNIT, 18))
+    assert not stale, "a pin valid in the named file was flagged: %r" % (stale,)
+    assert scan_pins(_marked_row("nothing here", 18)), \
+        "the same row without a marker did not fire -- the rule never ran"
+    return "a pin in range for the named file is accepted"
+
+
+def t_the_marker_still_checks_the_pin():
+    """THE WHOLE POINT OF NAMING THE FILE. A skip would let any number through;
+    this must still fire on a pin past the end of the file the marker names.
+    Otherwise the marker is a mute button and suppressions grow."""
+    stale = scan_pins(_marked_row("PIN NAMES ANOTHER FILE: " + USED_UNIT, 22))
+    assert len(stale) == 1, \
+        "a pin past the end of the file the MARKER names was not caught: %r" % (stale,)
+    return "the marker is an assertion, not an excuse -- 22 > 21 still fires"
+
+
+def t_a_marker_naming_a_missing_file_is_itself_a_finding():
+    """It reads as checked and checks nothing -- worse than no marker."""
+    stale = scan_pins(_marked_row("PIN NAMES ANOTHER FILE: test/no_such_file.pas", 18))
+    assert len(stale) == 1, "a marker naming a nonexistent file was accepted"
+    assert "does not exist" in stale[0][4], \
+        "the diagnosis did not name the real problem: %r" % (stale[0][4],)
+    return "a marker naming a file that is not there is rejected"
+
+
+def t_a_bare_marker_is_rejected():
+    """The first spelling skipped the row. A skip is a one-line way to silence
+    an inconvenient red that looks exactly like the legitimate use."""
+    stale = scan_pins(_marked_row("PIN NAMES ANOTHER FILE -- it is in the unit", 18))
+    assert len(stale) == 1, "a bare marker still suppresses the rule"
+    assert "must name the file" in stale[0][4], \
+        "the diagnosis did not say what to write: %r" % (stale[0][4],)
+    return "a bare marker without a path is refused"
 
 
 def t_the_marker_only_covers_the_row_below_it():
@@ -266,11 +300,12 @@ def t_the_marker_only_covers_the_row_below_it():
     with its own stale pin still fires. Same shape as the repo's other
     per-instance markers."""
     stale = scan_pins(
-        '\t@# PIN NAMES ANOTHER FILE -- line 18 is in the used unit.\n'
+        '\t@# PIN NAMES ANOTHER FILE: %s\n'
         '\t@tools/expect_same.sh a "$$(./$(COMPILER) %s $(T)/x 2>&1 | head -1)" \\\n'
         '\t  "pascal26:18: error: x"\n'
         '\t@tools/expect_same.sh b "$$(./$(COMPILER) %s $(T)/y 2>&1 | head -1)" \\\n'
-        '\t  "pascal26:40: error: x"' % (NINE_LINE_FIXTURE, NINE_LINE_FIXTURE))
+        '\t  "pascal26:40: error: x"'
+        % (USED_UNIT, NINE_LINE_FIXTURE, NINE_LINE_FIXTURE))
     assert len(stale) == 1, \
         "the marker leaked past its own row: %r" % (stale,)
     return "the marker covers one row, not the rest of the file"
@@ -307,7 +342,10 @@ TESTS = [t_a_silent_output_comparison_is_caught,
          t_a_pin_inside_the_file_is_accepted,
          t_the_line_count_is_not_off_by_one,
          t_a_row_asserting_an_in_line_is_not_flagged,
-         t_the_marker_suppresses_the_rule,
+         t_the_marker_admits_a_pin_that_is_valid_in_the_file_it_names,
+         t_the_marker_still_checks_the_pin,
+         t_a_marker_naming_a_missing_file_is_itself_a_finding,
+         t_a_bare_marker_is_rejected,
          t_the_marker_only_covers_the_row_below_it,
          t_a_row_naming_no_source_file_is_skipped]
 
