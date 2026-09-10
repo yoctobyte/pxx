@@ -111,4 +111,4 @@ additionally greps the log for `no-shims` so it cannot pass on some other
 refusal.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fcb55004f.
