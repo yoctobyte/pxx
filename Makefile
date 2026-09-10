@@ -775,6 +775,12 @@ test-nilpy: $(COMPILER)
 	# a `*`/`**` argument ELEMENT anywhere in the list, not only first
 	./$(COMPILER) test/test_nilpy_star_element_anywhere.npy $(TESTTMP)/test_nilpy_starelem26
 	tools/expect_same.sh test_nilpy_starelem26.1 "$$($(TESTTMP)/test_nilpy_starelem26)" "$$(printf '25\n23\n73\n21\n71\n73\n75\n75\n71\n43\n73\n120\n129\n129\n129\n123\n3\n3\n123\n[1, 2, 3]')"
+	# `f(*seq)` into a callee whose parameters have DEFAULTS -- refused outright
+	# until the length was asked at run time (pystar_has1) instead of assumed to
+	# be a compile-time fact. The accumulator row is the one that matters: a
+	# non-constant default must be READ from its def-time global, not rebuilt.
+	./$(COMPILER) test/test_nilpy_star_unpack_into_defaults.npy $(TESTTMP)/test_nilpy_stardflt26
+	$(TESTTMP)/test_nilpy_stardflt26 | diff -u test/test_nilpy_star_unpack_into_defaults.expected -
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy $(TESTTMP)/test_nilpy_starfwd26
 	tools/expect_same.sh test_nilpy_starfwd26.1 "$$($(TESTTMP)/test_nilpy_starfwd26)" "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"

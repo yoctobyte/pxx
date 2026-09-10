@@ -15885,8 +15885,9 @@ end;
 
 procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
                                var headArg, lastArg: Integer);
-var listCi, listSym, asgn, total, required, wanted, k: Integer;
+var listCi, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
+    hasArg, hasIdx, hasCall, ifNode, pairNode, dfltAsgn: Integer;
 begin
   listCi := FindUClass('TPyList');
   if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
@@ -15909,17 +15910,35 @@ begin
   if wanted <= 0 then
     Error('Nil Python: *unpacking has no parameter left to fill in .'
           + Procs[procIdx].Name + '()');
-  if required < total then
-    Error('Nil Python: *unpacking into ' + Procs[procIdx].Name
-          + ' is not supported — it has parameters with defaults, whose values '
-          + 'a compile-time expansion cannot preserve');
 
-  { one guard: the list must hold exactly the slots being filled }
+  { How SHORT the list may be. A slot whose parameter has a default does not
+    have to be in the list at all, so the arity guard's lower bound is the
+    required count and not `wanted`.
+
+    This was a flat refusal until 2026-09-10 -- "it has parameters with
+    defaults, whose values a compile-time expansion cannot preserve" -- and the
+    premise was that the expansion has to decide the LENGTH at compile time. It
+    does not: the length is a run-time fact and asking it is one call
+    (pystar_has1, which the forwarded-call desugaring already uses). Each
+    optional slot is filled with its declared default and then OVERWRITTEN from
+    the list when the list actually reaches that far, so the default's own value
+    is preserved exactly as an omitted argument preserves it -- including a
+    non-constant default, which DefaultArgValueNode reads from the def-time
+    global rather than rebuilding.
+
+    Found by attempting lekkerzeilen: `Vec3(*pivot)` on
+    `__init__(self, x=0.0, y=0.0, z=0.0)` -- every parameter defaulted, so the
+    refusal fired on the most ordinary constructor in the app. Four modules on
+    that one call shape and a fifth on Places.mark. }
+  lo := required - firstSlot;
+  if lo < 0 then lo := 0;
+
+  { one guard: the list must hold between lo and wanted of the slots }
   chkArg := AllocNode(AN_ARG);
   ASTLeft[chkArg] := PyMakeIdent(listSym);
   a2 := AllocNode(AN_ARG);
   ASTLeft[a2] := AllocNode(AN_INT_LIT);
-  ASTIVal[ASTLeft[a2]] := wanted;
+  ASTIVal[ASTLeft[a2]] := lo;
   ASTTk[ASTLeft[a2]] := Ord(tyInteger);
   a3 := AllocNode(AN_ARG);
   ASTLeft[a3] := AllocNode(AN_INT_LIT);
@@ -15937,6 +15956,16 @@ begin
   for k := 0 to wanted - 1 do
   begin
     slotSym := AllocVar(PyHiddenName('stara'), tyVariant);
+    { An OPTIONAL slot starts at its declared default; the read from the list
+      below then overwrites it only when the list reaches this far. }
+    if k >= lo then
+    begin
+      dfltAsgn := AllocNode(AN_ASSIGN);
+      ASTLeft[dfltAsgn] := PyMakeIdent(slotSym);
+      ASTRight[dfltAsgn] := PyForceVariant(DefaultArgValueNode(procIdx,
+                                                               firstSlot + k));
+      PyHoistStmt(dfltAsgn);
+    end;
     elemNode := AllocNode(AN_ARG);
     ASTLeft[elemNode] := PyMakeIdent(listSym);
     idxArg := AllocNode(AN_ARG);
@@ -15952,7 +15981,34 @@ begin
     asgn := AllocNode(AN_ASSIGN);
     ASTLeft[asgn] := PyMakeIdent(slotSym);
     ASTRight[asgn] := callNode;
-    PyHoistStmt(asgn);
+    if k >= lo then
+    begin
+      { `if pystar_has1(starl, k) then stara_k := pystar_arg(starl, k)` --
+        pystar_arg is inside the guard, not merely its result, because reading
+        past the end is what the guard exists to prevent. }
+      hasArg := AllocNode(AN_ARG);
+      ASTLeft[hasArg] := PyMakeIdent(listSym);
+      hasIdx := AllocNode(AN_ARG);
+      ASTLeft[hasIdx] := AllocNode(AN_INT_LIT);
+      ASTIVal[ASTLeft[hasIdx]] := k;
+      ASTTk[ASTLeft[hasIdx]] := Ord(tyInteger);
+      ASTRight[hasArg] := hasIdx;
+      hasCall := AllocNode(AN_CALL);
+      ASTIVal[hasCall] := FindProc('pystar_has1');
+      if ASTIVal[hasCall] < 0 then
+        Error('Nil Python: pylib (pystar_has1) not loaded');
+      ASTTk[hasCall] := Ord(tyBoolean);
+      ASTLeft[hasCall] := hasArg;
+      ifNode := AllocNode(AN_IF);
+      ASTLeft[ifNode] := hasCall;
+      pairNode := AllocNode(AN_PAIR);
+      ASTLeft[pairNode] := asgn;
+      ASTRight[pairNode] := -1;
+      ASTRight[ifNode] := pairNode;
+      PyHoistStmt(ifNode);
+    end
+    else
+      PyHoistStmt(asgn);
 
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := PyMakeIdent(slotSym);

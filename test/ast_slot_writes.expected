@@ -889,6 +889,7 @@ AN_IF Left condNode
 AN_IF Left conds[i]
 AN_IF Left exprNode
 AN_IF Left flGuardCall
+AN_IF Left hasCall
 AN_IF Left notNode
 AN_IF Left smGuardCall
 AN_IF Left smNotNode
@@ -987,6 +988,7 @@ AN_PAIR Left ZFieldNode(RMakeIdent(symIdx), '__val', elemTk)
 AN_PAIR Left armN
 AN_PAIR Left arms[i].BodyNode
 AN_PAIR Left asgN
+AN_PAIR Left asgn
 AN_PAIR Left bfCall
 AN_PAIR Left blk
 AN_PAIR Left bodies[i]

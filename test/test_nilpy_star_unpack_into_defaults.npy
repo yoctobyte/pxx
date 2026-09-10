@@ -1,0 +1,59 @@
+# `f(*seq)` where the callee has PARAMETERS WITH DEFAULTS.
+#
+# Refused outright until 2026-09-10 -- "*unpacking into Vec3.create is not
+# supported — it has parameters with defaults, whose values a compile-time
+# expansion cannot preserve" -- and the premise was that the expansion has to
+# know the sequence's LENGTH at compile time. It does not. The length is a
+# run-time fact and asking it is one call, pystar_has1, which the forwarded-call
+# desugaring has used all along. Each optional slot is initialised to its
+# declared default and then overwritten from the sequence only when the sequence
+# reaches that far, so an omitted slot keeps exactly the value an omitted
+# ARGUMENT would give it.
+#
+# Found by attempting lekkerzeilen: `Vec3(*pivot)` on
+# `__init__(self, x=0.0, y=0.0, z=0.0)`. Every parameter defaulted, so the
+# refusal fired on the most ordinary constructor in the app -- four modules on
+# that one call shape and a fifth on a two-parameter method.
+#
+# THE ACCUMULATOR ROW IS THE ONE THAT MATTERS. A NON-CONSTANT default is
+# evaluated ONCE, where the `def` stands, which is what makes the shared-mutable
+# -default idiom accumulate; a *unpacked call that REBUILT the default would
+# give a fresh list per call and print 1 1 rather than 1 2. It reads the def-time
+# global instead, through the same DefaultArgValueNode an omitted argument uses.
+#
+# CPython is the oracle for every row, the arity rows included: too many and too
+# few both raise, and both compilers raise TypeError (the wording differs, which
+# is a deferred difference and not asserted here).
+
+
+class Vec3:
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+
+    def show(self):
+        return "%g %g %g" % (self.x, self.y, self.z)
+
+
+def f(a, b=2, c=3):
+    return a * 100 + b * 10 + c
+
+
+def acc(v, bag=[]):
+    bag.append(v)
+    return len(bag)
+
+
+three = (7.0, 8.0, 9.0)
+two = (7.0, 8.0)
+one = (7.0,)
+none = ()
+
+# every slot defaulted, filled 3, 2, 1 and 0 deep
+print("ctor", Vec3(*three).show(), "|", Vec3(*two).show(), "|",
+      Vec3(*one).show(), "|", Vec3(*none).show())
+# a required first parameter with two optional ones behind it
+print("plain", f(*(1, 2, 3)), f(*(1, 2)), f(*(1,)))
+# the def-time default is READ, not rebuilt
+print("accumulator", acc(*(1,)), acc(*(2,)), acc(*(3, [])))
