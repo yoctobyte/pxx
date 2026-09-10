@@ -539,3 +539,34 @@ fixed and closed, and is now on the critical path of the top-priority target.
 Five of the nine `blocked-by` entries were in `done/` — array, deque, str.join,
 the GL lowercasing bug, the subdirectory bug — so the umbrella's own ranking had
 gone stale in the direction that understates it. Replaced with the live set.
+
+## `ctypes` IS THE GATE — from the consumer, 2026-09-10
+
+neo-dd, asked which of the four broken stdlib imports matters most:
+
+> *"of your real four: **`ctypes` is the one that decides whether lekkerzeilen
+> ever runs on PXX at all**, and it is not a library problem. Our entire graphics
+> and window layer is SDL2 and OpenGL hand-bound through `ctypes` — that is a
+> deliberate constraint, not an accident, and it is why we have no pygame and no
+> moderngl to port. `sqlite3` is second: the world tiles are a SQLite database.
+> `zlib` and `threading` we could live without in a pinch."*
+
+**So the module-count census is not the ranking.** Of the 14 stdlib modules this
+runtime imports, 10 work; of the four that do not, `ctypes` alone decides whether
+the program can run, and it is the one that is not shim work.
+
+**And the obligation has been lifted from their side** (their owner, 2026-09-10):
+*"it's up to pxx to get on par with cpython ... for now, we focus on zeilen
+functionality and should not limit ourselves too much."* They are not building
+shims and not shaping the program around our gaps. Read that as removing an
+obligation, not withdrawing interest: they stay a truthful corpus and answer
+measurements. **So a gap this umbrella finds is OUR ticket, and "lekkerzeilen
+could work around it" is no longer an argument for deprioritising one.**
+
+**An offered fixture nobody has taken.** `lekkerzeilen/capture.py` is a
+self-contained PNG encoder, ~90 lines of plain Python over `zlib.compress` and
+`zlib.crc32`, no third-party imports, deterministic output. Pointed at a fixed
+RGBA buffer on both runtimes it exercises `crc32` arity, `compress` arity,
+`bytes`/`bytearray` slicing and struct-free big-endian packing in one go, and
+fails loudly. neo-dd will produce the fixed input buffer on request. That is a
+conformance fixture with its own oracle for the cost of asking.

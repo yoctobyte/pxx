@@ -383,6 +383,23 @@ one-line logbook pointer.
 
 ### Design north stars
 
+- **`devdocs/dev/pxx-crash-course.md` — READ THIS FIRST IF YOU ARE TOUCHING A
+  LIBRARY, A FRONTEND OR AN IMPORT.** 12.7KB / ~3.2k tokens, measured
+  2026-09-10. Added at the owner's direction the same day, because a seat with
+  full repo access spent an evening rediscovering settled design, proposed a
+  mechanism that already existed under another name, and relayed two wrong
+  answers to a peer. **None of it was secret and none of it was anywhere a new
+  agent would look** — which is the definition of a documentation failure rather
+  than an agent one. Five things it covers, each one something that seat got
+  wrong: a `lib/rtl` unit carries a Pascal AND a Python surface in ONE unit
+  (`base64.pas`; `re.pas` has 42 Python-shaped entries) so there is no `mimic_`
+  to write for a library we already have; the marshalling types are
+  `TPyBytes`/`TPyList`/`Variant`; imports resolve OURS FIRST and the reason is
+  PREDICTABILITY, not precedence; shims are NOT a last resort (owner, overruling
+  `python-libraries.md` §2); and pxx writes its own ELF with no external linker
+  but cannot CONSUME an object. **Before proposing a mechanism, grep for it** —
+  one `grep -l TPyBytes lib/rtl/*.pas` would have saved that evening.
+
 - **`devdocs/dev/ir-as-substrate.md`** — push generality down into the IR, keep
   frontends thin. Track A is the one gate and the one multiplier.
 - **`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`** — the
@@ -830,7 +847,7 @@ thousand tokens, which is cheap, not free.
 
 ## "You are the coordinator"
 
-**Read `devdocs/dev/session-roster.md` — it is ~8KB and it is the whole job.**
+**Read `devdocs/dev/session-roster.md` — it is the whole job. IT IS 212KB / ~53k TOKENS, measured 2026-09-10, and this line claimed ~8KB** — a 26x understatement that charged every coordinator who obeyed it. `grep '^## '` it, or read the head; do not read it whole on the strength of a size in a pointer. The file this rule exists to prevent is the file this rule was describing.
 (It was 1.53MB / ~384k tokens until 2026-08-31; the 322 dated log sections moved
 to `session-roster-history.md`, which you `grep`, never read.)
 
