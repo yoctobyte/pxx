@@ -22701,6 +22701,11 @@ s.count(OLD) == 1`), which is where you want a structural mistake to surface.
 Measured 2026-09-10 (frankB), closing the two `/tmp`-inode tickets that took
 seven dark for ten hours on 09-07.
 
+**EVERY READER WAS CORRECT AND THE AGGREGATE WAS WRONG** (frankuser's phrasing,
+kept because it is the shortest true statement of this class). That is not a bug
+anyone can find by reading a call site, which is why the sections below are
+about how to look rather than about what to fix.
+
 **The symptom.** `/tmp` on the watcher box hit its inode ceiling — 8 free of
 1,048,576, with the filesystem **9% full by bytes**. Every `mkdir` returned
 ENOSPC, testmgr died before running a single job, and the watcher wrote ~290
