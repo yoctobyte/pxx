@@ -132,4 +132,4 @@ because "the decision was taken" and "the decision had an effect" are different
 claims and only the first one is closed here.
 
 ## Log
-- 2026-09-11 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — decided; this names the commit that carried the decision, which is not always the one that carried the change — commit 945d6c3de.
