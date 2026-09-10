@@ -1,0 +1,141 @@
+# `f(*xs)` into a target with DEFAULTS — the doors the sibling file does not
+# reach.
+#
+# THE FIX IS frankZ's, `f98fd53d7`, and `test_nilpy_star_unpack_into_defaults`
+# is its test. This file is not a second copy of that one: it was written
+# against the same defect from the other side of a race, it passes unchanged on
+# frankZ's implementation, and what it keeps is the coverage that implementation
+# has no row for.
+#
+# WHAT IS HERE THAT IS NOT THERE:
+#   * a METHOD with a trailing default. `self.mark(*keep)` on
+#     `def mark(self, region, place=None)` is lekkerzeilen/ui.py:414 and it is
+#     the shape the TICKET is named after; the sibling file has a constructor
+#     row and a plain-function row and no method row at all. A method is the one
+#     door where `firstSlot` is non-zero, so an off-by-one that counted the
+#     receiver would pass every row over there.
+#   * defaults that are NOT None and not all of one kind — an integer beside a
+#     string (`def sized(a, b=2, c="dflt")`). Filling an unreached slot with
+#     None passes any row whose default IS None; filling it with 0 passes any
+#     row whose defaults are numeric. Two kinds in one signature refuses both.
+#   * a COMPUTED default (`def off(a, b=BASE * 2)`) — an expression, not a
+#     literal, so the slot cannot be filled by copying a constant out of the
+#     header.
+#   * the operand as a LIST, as a TUPLE, and as the RESULT OF A CALL.
+#
+# The .expected is not a file: the Makefile row runs this under CPython and
+# diffs, so the oracle cannot go stale.
+#
+# WHICH ROWS THE FIX ACTUALLY OWNS, measured against the pre-fix compiler rather
+# than assumed. The pre-fix binary refuses this whole FILE at the FIRST
+# constructor row, so "it went from red to green" is true and says nothing at
+# all about the plain-function rows below it — the compile never got there. Cut
+# down to only those, the PRE-FIX compiler runs them green. They were never
+# broken: a plain `f(*xs)` takes PyStarMixedForwardCall, a RUN-TIME dispatch on
+# len(args) that has always honoured defaults, while a method or a constructor
+# takes PyStarExpandCallArgs, the COMPILE-TIME expansion that refused. Two
+# mechanisms for one concept, and only the second was broken
+# (devdocs/dev/normalise-dont-special-case.md).
+#
+# The plain-function rows stay as the control that says the fix did not disturb
+# the arm that already worked — but nobody may quote them as evidence for it.
+#
+# EVERY LENGTH FROM ZERO TO FULL IS WALKED, deliberately. A fix that filled the
+# optional tail with None instead of the declared default passes every row where
+# the list is FULL, and `Vec3(*angular)` with three elements is the row a corpus
+# site actually writes — so the short rows are the ones with anything to say.
+#
+# DELIBERATELY ABSENT: the arity errors. Both directions raise, and both
+# messages differ from CPython's wording ("forwarded call got 4 arguments,
+# expected 1 to 3" against "takes from 1 to 3 positional arguments but 4 were
+# given"), so a CPython-oracled row would be red by construction. They are
+# asserted in the Makefile instead, which is where the guard against an arity
+# check that stopped checking belongs — and neither this file nor the sibling
+# one asserts them any other way.
+#
+# ALSO ABSENT: `**` at a method call or a constructor, which is a DIFFERENT
+# defect and not this one, for a reason that falls straight out of the two
+# mechanisms above. Measured 2026-09-10 at `df4aebdbbf51`: `f(**d)` at a plain
+# function call WORKS — the run-time forwarder takes a positional LIST and a
+# keyword DICT, and has since it was written. At a method call or a construction
+# it is "expected expression": the compile-time expander has no dict half at
+# all, and PyStarForwardCall takes no firstSlot, so it cannot skip a receiver.
+# The two stars are NOT one fix at these doors.
+# bug-n-double-star-unpacking-is-rejected-at-a-method-call
+
+class Vec3:
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        self.x = x
+        self.y = y
+        self.z = z
+    def show(self):
+        return "(" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")"
+
+class Places:
+    def __init__(self):
+        self.last = "none"
+    def mark(self, region, place=None):
+        self.last = str(region) + "/" + str(place)
+        return self.last
+
+def sized(a, b=2, c="dflt"):
+    return str(a) + " " + str(b) + " " + str(c)
+
+# ---- a CONSTRUCTOR whose every parameter has a default ---------------------
+# lekkerzeilen/sim.py:239 `Vec3(*angular)` and vessel.py:711 `Vec3(*pivot)`.
+print(Vec3(*[1.0, 2.0, 3.0]).show())
+print(Vec3(*[1.0, 2.0]).show())
+print(Vec3(*[1.0]).show())
+print(Vec3(*[]).show())
+
+# ---- a METHOD with one trailing default ------------------------------------
+# lekkerzeilen/ui.py:414 `self.mark(*keep)`, where mark is (self, region,
+# place=None). The short row is the one that says None is the DECLARED default
+# here rather than pystar_arg's fallback.
+p = Places()
+print(p.mark(*["bow", "cleat"]))
+print(p.mark(*["stern"]))
+
+# ---- a plain FUNCTION, and the defaults are of different KINDS -------------
+# An integer default and a string default: filling the tail with None would
+# print None for c, and filling it with 0 would print 0 for b.
+print(sized(*[1, 2, "x"]))
+print(sized(*[1, 2]))
+print(sized(*[1]))
+
+# ---- a TUPLE operand, not only a list --------------------------------------
+t = (5.0, 6.0)
+print(Vec3(*t).show())
+
+# ---- NON-CONSTANT defaults, which Python evaluates ONCE where the def stands
+# This is the shared-mutable-default idiom and it is the row that says the
+# expansion reaches the def-time value rather than rebuilding one.
+def acc(x, bag=None, tag="t"):
+    if bag is None:
+        bag = []
+    bag.append(x)
+    return str(bag) + " " + tag
+
+print(acc(*[1]))
+print(acc(*[2, [9]]))
+print(acc(*[3, [9], "z"]))
+
+BASE = 10
+
+def off(a, b=BASE * 2):
+    return a + b
+
+print(off(*[1]))
+print(off(*[1, 5]))
+
+# ---- a target with NO defaults still behaves exactly as before -------------
+def strict(a, b):
+    return str(a) + "-" + str(b)
+
+print(strict(*[7, 8]))
+
+# ---- the operand computed rather than written out --------------------------
+def make():
+    return [2.5, 3.5]
+
+print(Vec3(*make()).show())

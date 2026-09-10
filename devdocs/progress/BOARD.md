@@ -79,7 +79,7 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (26)
+## backlog (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -103,6 +103,7 @@ _none_
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-fpjson-install-lib-candidates-2 | B | 70 | regression | regression: test-fpjson#src:tools/install_lib_candidates.sh at fca28056d8ec in step 2/2, `if [ ! -f "library_candidates/fcl-json/packages/fcl-json/src/fpjson.pp" ]; then \ echo "test-fpjson: SKIP — no fcl-json…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-attribute-off-a-virtual-call-result | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_attribute_off_a_virtual_call_result.npy at 7e4f69a34350 in step 5/8, `out=$(./compiler/pascal26 test/test_nilpy_qualified_name_error_names_the_receiver.npy /tmp/test_nilpy_qualrecv26 2>&1);…` (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-dict-update-keywords | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dict_update_keywords.npy at 16993f9196cf in step 2/5, `/tmp/test_nilpy_dictupdkw26 \| diff -u test/test_nilpy_dict_update_keywords.expected -` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
@@ -287,7 +288,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (113)
+## backlog-nilpy (112)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -343,7 +344,6 @@ _none_
 | bug-n-property-works-as-a-decorator-but-is-not-a-builtin-name | N | 30 | bug | @property compiles and works, but `property` as a plain builtin NAME does not exist: `v = property(getter)` and `v = property(getter, setter)` both give `undefined variable (property)`. Real CPython code uses the callable form for read/write properties, because @property.setter needs the decorator pair and the two-arg call is the older, shorter spelling. Blocks html5lib's treebuilders/base.py:321 and therefore the whole dom treebuilder. | — |
 | bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled | N | 45 | bug | MEASURED. `PyFixIterableArgs` (pyparser.inc:21694) can be disabled at its first line -- `Result := False; if True then Exit;` -- and `test/test_nilpy_user_iterable_in_builtins.npy`, the test that exists to cover it, emits a BYTE-IDENTICAL binary and identical 37-line output, still matching CPython. So does the rest of the NilPy corpus tried. Either the mechanism has been superseded by another path and is dead code, or it is entirely uncovered; both are defects and they need different fixes. Found while proving a DIFFERENT set of arms dead -- this one is a live call site whose removal nothing notices, which is the more dangerous shape. | — |
 | bug-n-pyparser-property-accessor-sites-do-not-know-an-interface-receiver | N | 30 | bug | `pyparser.inc` has ~9 hand-written copies of the property-accessor call decision, and each knows exactly two answers (AN_VIRTUAL_CALL / AN_CALL, Self at argument 0). The choice is three-way: an interface receiver needs AN_INTF_CALL, slot in ASTSOffset, Self from the fat pointer. The Pascal-side twins had the identical defect and were fixed by extracting one MakeAccessorCall (0f0fd6642); pyparser.inc was deliberately NOT touched because it is Track N's file and N is parked. NOT KNOWN TO BE REACHABLE from NilPy today -- this is the sibling half of a fixed double case, filed so it is not rediscovered, not a measured failure. | — |
-| bug-n-star-unpacking-is-rejected-at-a-method-call | N | 70→90 | bug | `self.mark(*keep)` gives `*unpacking into Places.mark is not supported`. This is the SINGLE-STAR SIBLING of bug-n-double-star-unpacking-is-rejected-at-a-method-call, which is already filed for `**` at the same position -- so the double-case rule applies: whoever fixes either must grep for the other before closing, because one arm fixed alone is exactly the shape that leaves the second path broken. Blocks lekkerzeilen/ui.py, one of the 32 modules of the priority demo app. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
@@ -980,9 +980,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3661)
+## done (3662)
 
-3661 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3662 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1075,7 +1075,6 @@ _none_
 - [p 90] [N] bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved (unblocks 2)
 - [p 90] [N] bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (unblocks 1)
 - [p 90] [N] bug-n-os-environ-and-os-sep-are-not-values (unblocks 1)
-- [p 90] [N] bug-n-star-unpacking-is-rejected-at-a-method-call (unblocks 1)
 - [p 90] [N] feature-n-the-threading-module (unblocks 1)
 - [p 90] [N] feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - [p 90] [U] decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
@@ -1108,6 +1107,7 @@ _none_
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [B] regression-test-fpjson-install-lib-candidates-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-attribute-off-a-virtual-call-result [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-dict-update-keywords [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
@@ -1538,7 +1538,6 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value
 - **1** — bug-n-os-environ-and-os-sep-are-not-values
-- **1** — bug-n-star-unpacking-is-rejected-at-a-method-call
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope

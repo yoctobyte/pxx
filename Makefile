@@ -1773,6 +1773,31 @@ test-nilpy: $(COMPILER)
 	# makes this a normalise-dont-special-case defect and not a missing feature.
 	./$(COMPILER) test/test_nilpy_star_over_any_static_iterable.npy $(TESTTMP)/test_nilpy_staticstar26
 	$(TESTTMP)/test_nilpy_staticstar26 | diff -u test/test_nilpy_star_over_any_static_iterable.expected -
+	# `f(*xs)` into a target with DEFAULTS -- the doors the row at the top of
+	# this tier (test_nilpy_star_unpack_into_defaults, f98fd53d7's own test)
+	# does not reach: a METHOD with a trailing default, which is the shape the
+	# ticket is named after and the only door where firstSlot is non-zero;
+	# defaults of two different KINDS in one signature, which refuses both a
+	# None-filler and a zero-filler; and a COMPUTED default. Not a second copy
+	# of that file -- see this one's header for what it is and is not evidence
+	# for. The oracle is live CPython on the same file, so it cannot go stale.
+	./$(COMPILER) test/test_nilpy_star_unpack_into_a_target_with_defaults.npy $(TESTTMP)/test_nilpy_starmthdflt26
+	tools/expect_same.sh test_nilpy_starmthdflt26 "$$($(TESTTMP)/test_nilpy_starmthdflt26)" "$$(python3 test/test_nilpy_star_unpack_into_a_target_with_defaults.npy)"
+	# ...and the ARITY guard in both directions, which NEITHER .npy can carry:
+	# our message differs from CPython's wording, so a CPython-oracled row
+	# would be red by construction, and nothing else in the tier asserts it.
+	# This is the row that fails if the range check stops checking -- the fix
+	# widened the LOW bound from `wanted` to `required`, and a widening that
+	# went all the way to zero would accept every short list silently and land
+	# a default-less slot's value from off the end of the sequence.
+	printf 'def sized(a, b=2, c="d"):\n    return a\nprint(sized(*[1, 2, 3, 4]))\n' > $(TESTTMP)/nilpy_stardflt_over.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_stardflt_over.npy $(TESTTMP)/nilpy_stardflt_over26 2>&1 && $(TESTTMP)/nilpy_stardflt_over26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'forwarded call got 4 arguments, expected 1 to 3' \
+	  || { echo "star-unpack arity: FAIL - a 4-element list into (a, b=2, c=\"d\") was not refused"; printf '%s\n' "$$out"; exit 1; }
+	printf 'class P:\n    def mark(self, region, place=None):\n        return region\nprint(P().mark(*[]))\n' > $(TESTTMP)/nilpy_stardflt_under.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_stardflt_under.npy $(TESTTMP)/nilpy_stardflt_under26 2>&1 && $(TESTTMP)/nilpy_stardflt_under26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'forwarded call got 0 arguments, expected 1 to 2' \
+	  || { echo "star-unpack arity: FAIL - an EMPTY list into a method with one REQUIRED parameter was not refused (the low bound must stop at `required`, not at zero)"; printf '%s\n' "$$out"; exit 1; }
 	# `self.__class__(...)` -- construct another one of the receiver's OWN type.
 	# Was a COMPILE error while `self.__class__.__name__` beside it read fine.
 	# Every `B` row is load-bearing: in a BASE method the class object must be

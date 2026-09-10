@@ -108,3 +108,41 @@ other:
 design boundary, its diagnostic misleads (it points at the argument, not at the
 unsupported form), and the `*` refusal shows the codebase already has a place to
 say "this form is not supported" properly when it must.
+
+# The mechanism, traced 2026-09-10 (frankB, compiler `df4aebdbbf51`)
+
+Recorded while fixing the single-star sibling
+([[bug-n-star-unpacking-is-rejected-at-a-method-call]], now closed by frankZ's
+`f98fd53d7`), because the trace answers this ticket's open question and would
+otherwise have to be done twice.
+
+**`f(**d)` at a plain function call works because it reaches a DIFFERENT
+implementation from the one a method call reaches**, not because the method
+parser lost a production it once had.
+
+| door | who parses the argument list | dict half |
+| --- | --- | --- |
+| plain function | `PyStarMixedForwardCall` → `PyStarForwardCall` — hoists a `TPyList` and a `TPyDict`, then dispatches on `len(args)` at RUN TIME | yes, since it was written |
+| method / constructor | `PyStarExpandCallArgs` — a COMPILE-TIME expansion, one `pystar_arg(l, i)` per declared slot | **none at all** |
+
+So `expected expression` is honest: at a method call nothing in the grammar
+admits `**`, because the machinery behind that door has no concept of a keyword
+dict to hand it to.
+
+**The blocker for routing method calls to the working implementation is one
+missing parameter.** `PyStarForwardCall(procIdx, listNode, dictNode)` fills the
+callee's slots from **0**. A method's slot 0 is `Self`. There is no `firstSlot`
+and no receiver node in the signature, so handing it a method today would bind
+the receiver's slot out of the argument list. The single-star expander already
+takes `firstSlot` for exactly this reason — that is the shape the forwarder
+needs, plus a hoisted receiver assigned into slot 0.
+
+**This ticket's own recommendation was written before either mechanism was
+traced and reads the wrong way round on the measurement.** It says *"the `**`
+half is the one to fix first"* on the grounds that `*` was a design boundary
+and `**` merely a parser gap. The `*` half turned out not to be a design
+boundary at all — it needed no runtime binding, only the default-value node the
+compiler already builds for every short ordinary call, plus the run-time length
+probe next door — and it landed as a contained change to one function. `**` is the larger job of the two: it needs a
+receiver-aware forwarder. Left standing rather than edited, because the
+prediction being wrong is the useful part.
