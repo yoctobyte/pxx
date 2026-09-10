@@ -1686,6 +1686,22 @@ begin
         CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
         CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
         CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar') or
+        { The rest of the Index/Compare family, at the widths FPC's System
+          declares them. `comparebyte` was here alone and the other six were
+          NOT, which is a half-wired door: the declarations existed in
+          builtin.pas and the names still answered `undefined variable`,
+          because nothing dragged the unit in. It hides especially well --
+          any program that also calls one of the names ALREADY on this list
+          pulls the unit and makes the missing ones resolve for free, so a
+          test exercising the whole family at once passes while every one of
+          these six is unreachable on its own. `TFPList.IndexOf`
+          (fpc cclasses.pas:885) picks IndexDWord or IndexQWord by pointer
+          width under a {$if}, so both arms must resolve for either to
+          compile. test_p_index_and_compare_family.pas deliberately names
+          none of the pre-existing entries, so reverting this hunk fails it. }
+        CaseEqual(GetTokenStr(i), 'indexbyte') or CaseEqual(GetTokenStr(i), 'indexword') or
+        CaseEqual(GetTokenStr(i), 'indexdword') or CaseEqual(GetTokenStr(i), 'indexqword') or
+        CaseEqual(GetTokenStr(i), 'compareword') or CaseEqual(GetTokenStr(i), 'comparedword') or
         { …and Prefetch, which is a System memory primitive of the same family:
           FPC declares it in systemh.inc as an internproc and its own compiler
           sources call it bare. Ours is a real (empty) procedure, so the unit has

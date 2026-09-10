@@ -3129,6 +3129,24 @@ test-nilpy: $(COMPILER)
 	@# refused identically -- a family-wide gap, not this one).
 	@./$(COMPILER) test/test_p_psizeint_and_psizeuint_are_builtin_pointer_types.pas $(TESTTMP)/test_psizeint26
 	@tools/expect_same.sh test_psizeint26 "$$($(TESTTMP)/test_psizeint26 | tail -n 2)" "$$(printf 'fails=0\nPSIZEINT OK')"
+	@# FPC's System Index/Compare family. TWO halves, and they are separate
+	@# files on purpose. The family file names NO routine that was already in
+	@# the builtin auto-include scan, because CompareByte WAS in it and the six
+	@# siblings were not: the declarations existed in builtin.pas and the names
+	@# still answered `undefined variable`. One wired name in a program pulls
+	@# the unit and every unwired name resolves for free, so the first draft --
+	@# which tested the whole family in one file -- passed while all six were
+	@# unreachable alone. Reverting the pasparser_prog.inc hunk makes this row
+	@# fail to COMPILE (verified); it still compiles the CompareByte file, and
+	@# that asymmetry is the control.
+	@./$(COMPILER) test/test_p_index_and_compare_family.pas $(TESTTMP)/test_idxfam26
+	@tools/expect_same.sh test_idxfam26 "$$($(TESTTMP)/test_idxfam26 | tail -n 2)" "$$(printf 'fails=0\nIDXFAM OK')"
+	@# CompareByte returns the signed DIFFERENCE of the first differing bytes,
+	@# not a sign: -5 and +5, measured against fpc. A <0/0/>0 implementation
+	@# passes every caller that writes `< 0` and breaks only one that uses the
+	@# magnitude, so these rows assert the value. FPC's compiler calls it 16x.
+	@./$(COMPILER) test/test_p_comparebyte_returns_the_signed_difference.pas $(TESTTMP)/test_cmpbyte26
+	@tools/expect_same.sh test_cmpbyte26 "$$($(TESTTMP)/test_cmpbyte26 | tail -n 2)" "$$(printf 'fails=0\nCMPBYTE OK')"
 	@# A cast to a METHOD-POINTER type reads `obj.M` as a REFERENCE, not a call.
 	@# Segfaults on the pre-fix compiler (compiles clean, then jumps to an
 	@# integer), so this is not a no-op test. Expectations came from FPC.

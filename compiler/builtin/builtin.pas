@@ -106,6 +106,34 @@ function InterLockedCompareExchange64(var Target: Int64;
 
   feature-pascal-corpus-expansion }
 procedure Prefetch(const mem);
+{ ===== FPC's System-unit ARRAY SEARCH AND COMPARE family =====
+
+  Same reason Prefetch above is here and the same shape of reason: FPC's own
+  compiler calls them, and that is the wall that put them here. `TFPList.IndexOf`
+  picks IndexDWord or IndexQWord by pointer width under a `{$if}`
+  (cclasses.pas:885) so BOTH halves have to exist for either arm to compile, and
+  CompareByte has 16 call sites in that corpus.
+
+  SEMANTICS MEASURED AGAINST fpc 3.2.2 RATHER THAN ASSUMED, and one of them is
+  not what a reasonable implementation would guess: **CompareByte returns the
+  signed DIFFERENCE of the first differing elements, not a sign.** Measured
+  20 vs 25 -> -5 and 25 vs 20 -> +5. A <0/0/>0 implementation passes every
+  comparison a caller writes as `< 0` and silently breaks any caller that uses
+  the magnitude. `len` counts ELEMENTS, not bytes; a miss and a zero length both
+  answer -1 for the Index family and 0 for the Compare family.
+
+  IndexByte/IndexWord and CompareWord/CompareDWord are included though this
+  corpus calls neither: a family with holes in it is the arrangement a missing
+  copy hides in, and each is four lines. They are the same routine at four
+  widths.
+  umbrella-pxx-compiles-fpc-itself }
+function IndexByte(const buf; len: SizeInt; b: Byte): SizeInt;
+function IndexWord(const buf; len: SizeInt; b: Word): SizeInt;
+function IndexDWord(const buf; len: SizeInt; b: DWord): SizeInt;
+function IndexQWord(const buf; len: SizeInt; b: QWord): SizeInt;
+function CompareByte(const buf1, buf2; len: SizeInt): SizeInt;
+function CompareWord(const buf1, buf2; len: SizeInt): SizeInt;
+function CompareDWord(const buf1, buf2; len: SizeInt): SizeInt;
 function FloatToStr(v: Double): AnsiString;
 function FloatToExpStr(v: Double): AnsiString;
 function StrFloat(v: Double; width: Integer; decimals: Integer): AnsiString;
@@ -1571,6 +1599,117 @@ end;
 procedure Prefetch(const mem);
 begin
   { deliberately empty -- see the declaration }
+end;
+
+{ The Index/Compare family. See the declaration block for the measured
+  semantics; the only thing worth repeating here is that CompareByte's result
+  is a DIFFERENCE and not a sign. }
+
+function IndexByte(const buf; len: SizeInt; b: Byte): SizeInt;
+var p: PByte; i: SizeInt;
+begin
+  IndexByte := -1;
+  p := PByte(@buf);
+  i := 0;
+  while i < len do
+  begin
+    if p[i] = b then begin IndexByte := i; Exit; end;
+    i := i + 1;
+  end;
+end;
+
+function IndexWord(const buf; len: SizeInt; b: Word): SizeInt;
+var p: PWord; i: SizeInt;
+begin
+  IndexWord := -1;
+  p := PWord(@buf);
+  i := 0;
+  while i < len do
+  begin
+    if p[i] = b then begin IndexWord := i; Exit; end;
+    i := i + 1;
+  end;
+end;
+
+function IndexDWord(const buf; len: SizeInt; b: DWord): SizeInt;
+var p: PDWord; i: SizeInt;
+begin
+  IndexDWord := -1;
+  p := PDWord(@buf);
+  i := 0;
+  while i < len do
+  begin
+    if p[i] = b then begin IndexDWord := i; Exit; end;
+    i := i + 1;
+  end;
+end;
+
+function IndexQWord(const buf; len: SizeInt; b: QWord): SizeInt;
+var p: PQWord; i: SizeInt;
+begin
+  IndexQWord := -1;
+  p := PQWord(@buf);
+  i := 0;
+  while i < len do
+  begin
+    if p[i] = b then begin IndexQWord := i; Exit; end;
+    i := i + 1;
+  end;
+end;
+
+function CompareByte(const buf1, buf2; len: SizeInt): SizeInt;
+var p1, p2: PByte; i: SizeInt;
+begin
+  CompareByte := 0;
+  p1 := PByte(@buf1);
+  p2 := PByte(@buf2);
+  i := 0;
+  while i < len do
+  begin
+    if p1[i] <> p2[i] then
+    begin
+      { the DIFFERENCE, widened before subtracting so a Byte pair cannot wrap }
+      CompareByte := SizeInt(p1[i]) - SizeInt(p2[i]);
+      Exit;
+    end;
+    i := i + 1;
+  end;
+end;
+
+function CompareWord(const buf1, buf2; len: SizeInt): SizeInt;
+var p1, p2: PWord; i: SizeInt;
+begin
+  CompareWord := 0;
+  p1 := PWord(@buf1);
+  p2 := PWord(@buf2);
+  i := 0;
+  while i < len do
+  begin
+    if p1[i] <> p2[i] then
+    begin
+      CompareWord := SizeInt(p1[i]) - SizeInt(p2[i]);
+      Exit;
+    end;
+    i := i + 1;
+  end;
+end;
+
+function CompareDWord(const buf1, buf2; len: SizeInt): SizeInt;
+var p1, p2: PDWord; i: SizeInt;
+begin
+  CompareDWord := 0;
+  p1 := PDWord(@buf1);
+  p2 := PDWord(@buf2);
+  i := 0;
+  while i < len do
+  begin
+    if p1[i] <> p2[i] then
+    begin
+      CompareDWord := SizeInt(p1[i]) - SizeInt(p2[i]);
+      Exit;
+    end;
+    i := i + 1;
+  end;
 end;
 
 {$ifndef CPURISCV32}
