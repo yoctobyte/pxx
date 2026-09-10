@@ -67,3 +67,26 @@ commit.
 `make test-nilpy` + self-host byte-identical, plus a `.npy` test covering the
 aliased spelling of both an attribute (`s.platform`, `o.sep`) and a constant
 (`o.SEEK_CUR`), against a CPython-generated `.expected`.
+
+# Re-measured 2026-09-10, frankB, compiler `ca814b0aabcc` — STILL LIVE, verbatim
+
+```python
+import sys as s
+print(s.platform)
+```
+```
+pascal26:2: error: no member platform came of the qualifier s — check what s
+resolves to; an import that bound nothing gives exactly this (s.platform)
+```
+
+Filed 2026-08-29, unchanged twelve days later. Recorded because a re-probe that
+finds a ticket still true is worth the same line as one that finds it stale —
+the next reader otherwise cannot tell an un-re-measured ticket from a
+re-measured one.
+
+Adjacent, and probably the same neighbourhood rather than the same cause:
+[[bug-n-a-module-bound-by-an-import-is-not-a-value]], filed the same day. Both
+are about a NAME THAT STANDS FOR A MODULE — here the alias resolves for a call
+and not for an attribute; there the module resolves for an attribute and not as
+a value. Neither is a missing feature in the resolver; both are doors that know
+about modules in one position and not another.

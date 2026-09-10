@@ -1,6 +1,7 @@
 ---
-prio: 55
+prio: 45
 track: N
+summary: "`from M import X as Y, X2 as Y2` -- the SOURCE name is resolved through flat unit scope, so an earlier alias in the SAME import shadows the next one's source. Cause CONFIRMED 2026-09-10 against `ca814b0aabcc`; SEVERITY CLAIM IS STALE and the prio moved 55 -> 45 because of it. Filed as a silent wrong value; it is now a compile error (`undefined variable (C)`), which is a different thing to rank. Only the colliding pair fails -- two aliases without a collision, one alias plus one plain, two plain and a single alias all answer correctly."
 ---
 
 # bug: a from-import alias resolves its SOURCE name through flat unit scope, not through the exporting module
@@ -91,3 +92,54 @@ the source.
 Every row is a wrong value rather than a failure to compile, but all three need
 a module that defines a name an alias also mentions — real packages do this
 when they re-export, which is why it is not lower.
+
+# Re-measured 2026-09-10, frankB, compiler `ca814b0aabcc`
+
+**THE CAUSE IS CONFIRMED AND THE SEVERITY CLAIM IS STALE — and this ticket is
+ranked partly on the severity claim.** It is filed as a *silent wrong value*
+("code compiles and runs, and prints the wrong thing with no diagnostic"). It no
+longer does that. Today the same source is a compile error:
+
+```
+from srcmod import A as B, B as C     # srcmod: A="srcmod-A", B="srcmod-B"
+print(B); print(C)
+-> pascal26:5: error: undefined variable (C)
+```
+
+CPython prints `srcmod-A` / `srcmod-B`. So we still get it wrong; we now get it
+LOUDLY wrong, which is a different ticket to rank.
+
+## The collision is the whole variable — alias-count and collision varied separately
+
+| shape | result |
+| --- | --- |
+| `from srcmod import A as X, B as Y` (two aliases, no collision) | correct |
+| `from srcmod import A as B, B as C` (two aliases, collision) | **error** |
+| `from srcmod import A as X, B` (one alias, one plain) | correct |
+| `from srcmod import A, B` (no alias) | correct |
+| `from srcmod import A as X` (single alias) | correct |
+
+Four negative shapes, one positive. That confirms the mechanism the ticket
+names — the source name is resolved through flat scope, so an earlier alias in
+the same import statement shadows the next one's SOURCE — while showing the
+observable has moved.
+
+## Why this is worth recording rather than just re-ranking
+
+A ticket's DIAGNOSIS can stay true while the thing it is RANKED on moves
+underneath it, and nothing re-reads a prio when a neighbouring fix changes an
+observable. This one decayed in the SAFE direction (wrong value -> refusal), so
+it is merely over-ranked. The mirror — a ticket filed as a refusal that quietly
+becomes a wrong value — is under-ranked, therefore never picked up, therefore
+never re-probed, and is invisible for exactly the reason it is dangerous.
+
+Prediction, stated as one and not as a measurement: severity decay accumulates
+hardest in whatever sits longest, because sitting is what prevents the re-probe.
+A ticket that has quietly become a silent wrong value ends up filed where the
+ranker never scans.
+
+The cheap remedy is not "re-probe the backlog". It is: **when you fix something,
+re-probe the neighbours that share its OBSERVABLE, not only the ones that share
+its cause.** Shared cause is what a working group is organised around; shared
+observable is a different neighbourhood, and it is the one severity decay
+travels through.

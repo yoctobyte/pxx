@@ -3,7 +3,7 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
-summary: "`from xml.dom import minidom` binds `minidom` to the PARENT package `xml.dom`, not the submodule. Member lookups then resolve the parent's names silently (`minidom.XHTML_NAMESPACE` returns a string) and fail for the submodule's own (`minidom.getDOMImplementation` -> no member). CPython binds the submodule. The other two spellings work, so this is submodule-as-imported-name specifically, not dotted imports generally."
+summary: "`from xml.dom import minidom` binds `minidom` to the PARENT package `xml.dom`, not the submodule. Member lookups then resolve the parent's names silently -- `minidom.XHTML_NAMESPACE` returns `http://www.w3.org/1999/xhtml` where CPython raises AttributeError. STILL LIVE at `ca814b0aabcc` (re-measured 2026-09-10) and still a silent wrong value. BOUNDARY NARROWED: a real filesystem package is CORRECT in all three spellings, measured against a parent and child that both define the same name with different values -- so this is the DOTTED SHIM path (`xml.dom` flattened to `mimic_xml_dom`, trailing name dropped) and not `from <package> import <submodule>` in general. `lib/rtl/mimic_xml_dom_minidom.py` already exists, so the right target is in the tree, unused."
 status: backlog
 owner: unassigned
 ---
@@ -116,3 +116,54 @@ This is why `lib/rtl/mimic_xml_dom.py` may be seen carrying a `_MinidomNamespace
 shim object binding `minidom` by hand. That is a workaround for this bug, it is
 tracked as one, and it should be deleted when this closes rather than left to rot
 — see `devdocs/dev/track-b-workarounds.md` for that lifecycle.
+
+# Re-measured 2026-09-10, frankB, compiler `ca814b0aabcc` — STILL LIVE, and the
+# boundary is narrower than the title
+
+Reproduces exactly, and the compiler says so itself in a note nobody was reading
+as a diagnosis:
+
+```
+$ pascal26 xmldom.npy
+note: xml_dom -> mimic_xml_dom (shim, subset)
+ok: ...
+```
+
+`from xml.dom import minidom` bound **`xml.dom`**. The proof that it is the
+parent and not a coincidence is a value only the parent has:
+
+| | pxx | CPython |
+| --- | --- | --- |
+| `minidom.EMPTY_NAMESPACE` | None | None |
+| `minidom.XHTML_NAMESPACE` | `http://www.w3.org/1999/xhtml` | **AttributeError** |
+
+CPython: *"module 'xml.dom.minidom' has no attribute 'XHTML_NAMESPACE'"*. We
+answer the PARENT's attribute through the CHILD's name, silently. Still a silent
+wrong value; the severity claim on this one has NOT decayed.
+
+**`lib/rtl/mimic_xml_dom_minidom.py` EXISTS.** The correct target is sitting in
+the tree unused, so this is a resolution bug and not a missing shim.
+
+## What a real filesystem package does — the control that nearly closed this
+## ticket wrongly
+
+A package with a parent and child that BOTH define `WHO` with different values,
+so a parent-binding cannot hide:
+
+| spelling | pxx | CPython |
+| --- | --- | --- |
+| `from parpkg import child` then `child.WHO` | child | child |
+| `import parpkg.child` then `parpkg.child.WHO` | child | child |
+| `import parpkg.child as c` then `c.WHO` | child | child |
+
+**All three correct.** So the defect is NOT in `from <package> import
+<submodule>` generally — it is in the DOTTED SHIM path, where `xml.dom` is
+flattened to `mimic_xml_dom` and the trailing name is dropped rather than
+carried into `mimic_xml_dom_minidom`.
+
+That distinction is the reason this ticket is still open. A green probe on the
+wrong path is indistinguishable, afterwards, from a green probe on the right
+one: three correct spellings against a discriminator built so a wrong binding
+could not hide is more evidence than most closes get, and it was evidence about
+a different mechanism. The title should say `shim` where it says `package`, and
+whoever takes it should re-derive that boundary rather than trust this table.
