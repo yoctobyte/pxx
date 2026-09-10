@@ -16,6 +16,28 @@ blocked-by:
 summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
 ---
 
+# MEASURED 2026-09-10: SDL.h is not blocked on MAX_PROC_PARAMS
+
+`import "/usr/include/SDL2/SDL.h"` compiles **clean, rc=0**, with a stub
+`immintrin.h` on `-I`. The parameter-limit wall
+(`bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment`)
+is reached only through gcc's AVX-512 intrinsic headers, which SDL pulls in via
+`SDL_cpuinfo.h`/`HAVE_IMMINTRIN_H` and does not otherwise need. That ticket's
+own fork asked *"measure which wall comes next before choosing"* — the answer
+is that there is no wall behind it for this header, so the cheap option (a
+pxx-owned `immintrin.h` that declares nothing and fails by NAME) unblocks SDL
+without raising the limit at all. Not shipped yet: whether pxx should carry
+such a header is a real choice and it is written up on the MAX_PROC_PARAMS
+ticket, not decided here.
+
+**The next real wall is library naming.** The binary links against `libsdl.so`
+— derived from the header NAME — where the installed library is
+`libSDL2-2.0.so.0` (`libSDL2-2.0.so` and a 32-bit twin also present). The
+directory is `SDL2/`, so the directory-derivation path
+(`feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym`,
+landed) should be the one answering here and is not. That is the thing standing
+between this ticket and a linking SDL program.
+
 # Why this is the headline and the module census is not
 
 `platform/__init__.py` selects a backend at import time (`_select_backend`,

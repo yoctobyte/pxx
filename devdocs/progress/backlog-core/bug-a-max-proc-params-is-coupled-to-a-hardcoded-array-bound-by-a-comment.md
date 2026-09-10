@@ -9,8 +9,8 @@ created: 2026-09-10
 found-by: frankH
 tags: [core, limits, cparser, sdl, lekkerzeilen]
 blocked-by:
-  - bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc
-summary: "CORRECTED 2026-09-10, and the correction is the finding: there is no const-expr gap, and there is also no coupling to fix. TProc.Params keeps 32 slots whatever its bound says -- `array[0..31]`, `array[0..255]` and `array[0..MAX_PROC_PARAMS-1]` all emit the same code/data/bss/procs with SizeOf(TProc)=1344 -- so writing the constant there only makes the two LOOK coupled. Split out as bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc, which is the real blocker. What landed and stands: the thirteen cparser.inc staging locals and argUndecl now derive (locals DO fold), pptrdims had a genuine 6-element overflow, and the overflow diagnostic no longer says 16 when the limit is 32. MAX_PROC_PARAMS stays 32; raising it is a SIGSEGV at exactly 33 until the layout bug is fixed."
+  - bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type
+summary: "CORRECTED 2026-09-10, and the correction is the finding: there is no const-expr gap, and there is also no coupling to fix. TProc.Params keeps 32 slots whatever its bound says -- `array[0..31]`, `array[0..255]` and `array[0..MAX_PROC_PARAMS-1]` all emit the same code/data/bss/procs with SizeOf(TProc)=1344 -- so writing the constant there only makes the two LOOK coupled. The real blocker is bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type: IsRecordType maps the NAME TProc to a builtin rec id before consulting any declaration, so defs.inc's TProc declaration is documentation and the bound never reaches the field offsets. What landed and stands: the thirteen cparser.inc staging locals and argUndecl now derive (locals DO fold), pptrdims had a genuine 6-element overflow, and the overflow diagnostic no longer says 16 when the limit is 32. MAX_PROC_PARAMS stays 32; raising it is a SIGSEGV at exactly 33 until the layout bug is fixed."
 ---
 
 # What was fixed
@@ -35,7 +35,10 @@ lines above -- and it folds there. In `defs.inc` the field keeps **32 slots
 whatever the bound says**, a bare `array[0..255]` included, so my change was a
 no-op that deleted a correct warning and left source that reads as coupled.
 Reverted to the literal with the measurements written beside it; the layout
-defect is now `bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc`.
+defect is now `bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type` —
+and it is a NAME-SHADOWING bug, not an array-bound one: fourteen internal record
+names shadow any user type of the same name, so `type TProc = record ... end` in
+an ordinary program silently gets the compiler's layout.
 
 The original author's comment was accurate about the SYMPTOM and wrong only
 about the mechanism (they said const-expr; it ignores a literal too). That is

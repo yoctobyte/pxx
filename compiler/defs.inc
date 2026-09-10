@@ -2667,29 +2667,31 @@ type
     RetType    : TTypeKind;
     ParamCount : Integer;
     Params     : array[0..31] of TParam;
-      { LITERAL 31, AND THE LITERAL IS NOT THE PROBLEM -- THIS FIELD'S DECLARED
-        BOUND DOES NOT SIZE IT. Measured 2026-09-10, three declarations built
-        and compared -- `0..31`, `0..255` and `0..MAX_PROC_PARAMS-1` -- all
-        emit the SAME code=7565080 data=555780 bss=86531556 procs=4641, and
-        SizeOf(TProc) stays 1344, exactly 32 slots of 40, at
-        MAX_PROC_PARAMS = 16, 32 and 64 alike. (The binaries are NOT byte
-        identical, so the bound does reach emitted code somewhere; it is the
-        LAYOUT that ignores it. Builds here are deterministic and
-        path-independent -- controlled.) So writing MAX_PROC_PARAMS-1 here
-        does NOT couple the two; it only makes them LOOK coupled, which is
-        worse than the literal, and that is why the literal is back.
-        It is not a general const-expr gap and it is not scale: the identical
-        shape in a standalone program (16384 elements, 40-byte TParam) folds
-        correctly, 1312 -> 2592, and a LOCAL `array[0..MAX_PROC_PARAMS-1]` in
-        pasparser_proc.inc folds to 64 elements in this very file. Only this
-        record field is frozen, and it is frozen against a literal too --
-        the same family as the project_tsymbol_field_landmine note on SymTR
-        a few hundred lines below.
-        CONSEQUENCE, MEASURED: the staging arrays DO widen, so raising
-        MAX_PROC_PARAMS makes RegisterProc's guard admit 33+ params and then
-        write Params[32] past a 32-slot field. That is the SIGSEGV at exactly
-        33 -- not a missing literal. Raising the constant needs the layout bug
-        fixed first: bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc }
+      { LITERAL 31, AND THIS DECLARATION IS NOT WHAT LAYS TProc OUT.
+        `IsRecordType` (symtab.inc:2890) maps the NAME `TProc` to REC_TPROC by
+        string compare, before it ever consults a declared record, so the
+        BUILTIN layout wins and these lines are documentation. Editing the
+        bound changes nothing measurable: `0..31`, `0..63` and `0..255` all
+        emit the same code=7565080 data=555780 bss=86531556 procs=4641 (three
+        DIFFERENT binaries, so the bound does reach bounds-check code -- it
+        just never reaches the field offsets), and SizeOf(TProc) stays 1344 at
+        MAX_PROC_PARAMS = 16, 32 and 64 alike.
+        Fourteen names are shadowed this way, TSymbol and TParam among them,
+        so a USER program declaring `type TProc = record ... end` silently
+        gets this layout too -- same family as the
+        project_tsymbol_field_landmine note on SymTR a few hundred lines below.
+        The literal stays because `MAX_PROC_PARAMS-1` here would make the two
+        LOOK coupled while changing nothing, which is worse than a literal
+        with this comment beside it.
+        CONSEQUENCE, MEASURED: the staging arrays DO widen (locals fold
+        normally), so raising MAX_PROC_PARAMS makes RegisterProc's guard admit
+        33+ params and then write Params[32] past a 32-slot record. That is
+        the SIGSEGV at exactly 33, from a bare `external` declaration with no
+        body and no call site, in both frontends. symtab.inc:3604 already
+        asserts the builtin's size as 288 + MAX_PROC_PARAMS * 296 + 32, so it
+        is MEANT to track the constant and measurably does not -- that gap is
+        the shortest thread. Raising MAX_PROC_PARAMS needs it fixed first:
+        bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }

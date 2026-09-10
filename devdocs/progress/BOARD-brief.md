@@ -77,7 +77,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 445, ranked
 
 - `[p 90] [N]` bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved (unblocks 2)
-- `[p 90] [A]` bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc (unblocks 1)
+- `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` feature-n-the-threading-module (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
