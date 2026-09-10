@@ -88,3 +88,33 @@ this is not on any hot path.
 `import "GL/gl.h"` works today and `import "SDL2/SDL.h"` gives a compile error
 that names the real problem instead of a binary that dies at exec. This makes the
 next tier of headers work rather than unblocking anything.
+
+## 2026-09-10 — front of the SDL chain, and the control's POPULATION is a row requirement
+
+`366e0e8a9` cleared the inline-asm `Q`/`q` blocker and SDL2 still does not
+import: `import "/usr/include/SDL2/SDL.h"` dies on `memcmp` from `libsdl.so`,
+this ticket's own guard firing correctly, **before** any asm is reached. So this
+is now the first thing between the fleet and a running lekkerzeilen. Wired to
+[[umbrella-lekkerzeilen-compiles-and-runs-under-nilpy]] (prio 90) and to
+[[task-b-write-the-lekkerzeilen-pxx-platform-backend]]; owner handed to frankH by
+frankB, which holds the SDL chain's other wall.
+
+The counterexample is now measured on both sides (frankH): `libSDL2-2.0.so.0`
+exports `SDL_Init` and `SDL_CreateWindow`; **`libnet.so.9` exports ZERO of
+`net/if.h`'s symbols** (`if_nametoindex` is in libc). A dynsym check accepts the
+first and rejects the second, which is exactly the `does this library answer`
+upgrade this ticket asks for.
+
+**A ROW REQUIREMENT, not just a body note (frankB):** the positive control is
+`net/if.h` asserted as REFUSED, and **it must be drawn from the population the
+617 resolutions come from** — a header whose directory-derived library genuinely
+EXISTS on the box and genuinely does not answer. `libnet.so.9` is installed
+here. **On a box where it is not installed, that control passes because the
+library is absent, certifying the check while testing nothing** — the
+wrong-population control, in the one place this ticket cannot afford it. The
+assertion must therefore establish the library's presence as a PRECONDITION and
+branch on it, rather than inferring refusal from a failure of any kind.
+
+The population question stays open and is not settled by the counterexample: 617
+directory-derived resolutions is a large new surface, and dynsym is what makes
+the guess safe rather than what makes it correct.
