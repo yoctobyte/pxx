@@ -1,0 +1,20 @@
+# A NilPy module declaring TWO routines whose names differ only in CASE.
+#
+# Python is case-sensitive and these are two different functions. This module
+# exists so that test_nilpy_a_module_member_as_a_value.npy can prove the
+# case-FOLDED fallback in the qualified-member value door does not leak into a
+# Python module: `casemod.pick` must reach `pick`, never `Pick`, even though a
+# Pascal-unit member of the same spelling deliberately WOULD fold.
+#
+# The two bodies must answer differently or the assertion is unfalsifiable.
+
+def pick(x):
+    return "lower " + str(x)
+
+
+def Pick(x):
+    return "upper " + str(x)
+
+
+def scale(x, by=2):
+    return x * by

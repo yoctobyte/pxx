@@ -1,0 +1,45 @@
+# The CASE-FOLDED fallback in the qualified-member value door must NOT reach
+# into a Python module.
+#
+# `test_nilpy_a_module_member_as_a_value.npy` relies on a claim this file is the
+# only thing that measures: a case-folded match is safe because only a
+# case-INSENSITIVE registration can produce one, and `DeclCaseSensitive` is
+# `CaseSensitiveMode or NilPyUserCode` — a NilPy def registers case-SENSITIVE, a
+# Pascal RTL or shim routine does not. Without this row that is a plausible
+# sentence about a flag rather than a fact about the compiler, and the whole
+# fix rests on it.
+#
+# test/nilpy_units/casemod.npy declares `pick` and `Pick` with DIFFERENT bodies
+# for exactly that reason: if the fold leaked, `casemod.pick` would answer
+# `upper` — whichever registration the chain reached first — and no diagnostic
+# would say so. Two routines with the same body would make this unfalsifiable.
+#
+# The expected output is a literal in the Makefile rather than live CPython:
+# CPython cannot import a `.npy`, which is why every cross-module row in this
+# tier is written that way.
+
+import casemod
+
+print(casemod.pick(1))
+print(casemod.Pick(1))
+
+# ...and the same names taken as VALUES, which is the door under test. The
+# call rows above pass through Pascal's own qualified-call lookup and would stay
+# green even if the value door folded.
+# NOT named `lo`/`hi`: a NilPy local holding a callable and spelled like a
+# Pascal intrinsic is answered by the INTRINSIC at the call — `lo = f; lo(2)`
+# prints 2 and `hi = f; hi(2)` prints 0 where CPython prints f's result, four
+# silent wrong values with no diagnostic. That is a different bug in a different
+# door, filed as bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-
+# intrinsic-at-the-call, and naming a variable `lo` here would have made THIS
+# row red for a reason that has nothing to do with what it measures.
+lower_fn = casemod.pick
+upper_fn = casemod.Pick
+print(lower_fn(2))
+print(upper_fn(2))
+
+# a member with a DEFAULT, reached as a value, so the fold question is asked of
+# something that is not one-argument-shaped
+scaler = casemod.scale
+print(scaler(3))
+print(scaler(3, 4))

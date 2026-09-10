@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:154 backlog-nilpy:111 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3662 rejected:81`
+`working:31 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:154 backlog-nilpy:112 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3663 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -92,6 +92,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
+- `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` regression-lib-test-crtl-reachability-9
 - `[p 70] [B]` regression-lib-test-lib-synapse-4
@@ -105,6 +106,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-asm-in-inline-body-3
-- `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 
 _416 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

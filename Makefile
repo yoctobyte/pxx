@@ -1780,6 +1780,56 @@ test-nilpy: $(COMPILER)
 	# makes this a normalise-dont-special-case defect and not a missing feature.
 	./$(COMPILER) test/test_nilpy_star_over_any_static_iterable.npy $(TESTTMP)/test_nilpy_staticstar26
 	$(TESTTMP)/test_nilpy_staticstar26 | diff -u test/test_nilpy_star_over_any_static_iterable.expected -
+	# A MODULE MEMBER IN VALUE POSITION -- `_sin = math.sin`, not `math.sin(x)`.
+	# Three doors reached one construct and answered differently; two of the
+	# three were SILENT. `f = string.capwords` printed an empty line where
+	# CPython prints `A B`, and `b = twinmod2.parse` answered twinmod's `parse`
+	# because the all-Variant-overload scan searched every proc in the program
+	# by folded name. The CALL spelling of each was right the whole time, which
+	# is why no probe of "does an imported function work" could see them.
+	# The math.pi rows are the control for the FIX: lib/rtl/math.pas declares
+	# `function Pi: Double`, a case-folded value lookup boxes it, and the first
+	# version of this change printed `<function at 0x...>` for math.pi.
+	./$(COMPILER) test/test_nilpy_an_rtl_module_member_as_a_value.npy $(TESTTMP)/test_nilpy_rtlmemval26
+	tools/expect_same.sh test_nilpy_rtlmemval26 "$$($(TESTTMP)/test_nilpy_rtlmemval26)" "$$(python3 test/test_nilpy_an_rtl_module_member_as_a_value.npy)"
+	# ...and the CASE control, which the file above cannot carry: CPython
+	# cannot import a `.npy`, so the expected value is a literal here as it is
+	# for every cross-module row in this tier. casemod declares `pick` and
+	# `Pick` with DIFFERENT bodies on purpose -- two identical bodies would make
+	# this unfalsifiable. It pins the claim the whole fix rests on: a NilPy def
+	# registers case-SENSITIVE (DeclCaseSensitive = CaseSensitiveMode or
+	# NilPyUserCode), so the case-folded fallback that lets `math.sin` reach the
+	# RTL's `Sin` cannot reach into a Python module.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_member_value_is_case_sensitive.npy $(TESTTMP)/test_nilpy_modmemcase26
+	tools/expect_same.sh test_nilpy_modmemcase26 "$$($(TESTTMP)/test_nilpy_modmemcase26)" "$$(printf 'lower 1\nupper 1\nlower 2\nupper 2\n6\n12')"
+	# ...and the two modules that each declare `parse`, which is the row the
+	# unit-scoping half of that fix exists for. Same reason for the literal.
+	printf 'import twinmod\nimport twinmod2\na = twinmod.parse\nb = twinmod2.parse\nprint(a(1))\nprint(b(1))\nprint(twinmod.parse(1), twinmod2.parse(1))\n' > $(TESTTMP)/nilpy_twinparse.npy
+	./$(COMPILER) -Futest/nilpy_units $(TESTTMP)/nilpy_twinparse.npy $(TESTTMP)/test_nilpy_twinparse26
+	tools/expect_same.sh test_nilpy_twinparse26 "$$($(TESTTMP)/test_nilpy_twinparse26)" "$$(printf 'twin 1\ntwin2 1\ntwin 1 twin2 1')"
+	# ...and the REFUSAL for a shim-table name in value position, which must
+	# stay a refusal: PyParseStdlibCall adds a domain guard, an overflow guard,
+	# an all-Double overload pick and an arity re-target once the arguments are
+	# parsed, and a value form has no arguments to apply them to. A callable
+	# built here would answer NaN where math.sqrt(-1) raises. The message has to
+	# carry the one-line workaround, because the diagnostic it replaced blamed
+	# the import for a name the CALL door compiles.
+	printf 'import math\nf = math.fabs\nprint(f(-1.0))\n' > $(TESTTMP)/nilpy_shimval.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_shimval.npy $(TESTTMP)/nilpy_shimval26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'math\.fabs is a compiler-provided shim and can only be CALLED' \
+	   && printf '%s\n' "$$out" | grep -q 'lambda x: math\.fabs(x)' \
+	   && test ! -e $(TESTTMP)/nilpy_shimval26 \
+	  || { echo "shim-name-as-a-value: FAIL - rc=$$rc (want 1, a refusal naming the shim AND the lambda workaround, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# ...and the workaround the message prescribes must actually work, or the
+	# refusal is sending people somewhere that does not exist. A lambda body
+	# goes through the ordinary call lowering, so it carries the domain guard:
+	# math.sqrt(-1.0) raises ValueError through it exactly as the direct call
+	# does, which is the whole reason a value form is refused rather than built.
+	printf 'import math\nf = lambda x: math.fabs(x)\ng = lambda x: math.sqrt(x)\nprint(f(-1.0))\ntry:\n    print(g(-1.0))\nexcept ValueError:\n    print("ValueError")\n' > $(TESTTMP)/nilpy_shimlam.npy
+	./$(COMPILER) $(TESTTMP)/nilpy_shimlam.npy $(TESTTMP)/nilpy_shimlam26
+	tools/expect_same.sh nilpy_shimlam26 "$$($(TESTTMP)/nilpy_shimlam26)" "$$(printf '1.0\nValueError')"
 	# `f(*xs)` into a target with DEFAULTS -- the doors the row at the top of
 	# this tier (test_nilpy_star_unpack_into_defaults, f98fd53d7's own test)
 	# does not reach: a METHOD with a trailing default, which is the shape the

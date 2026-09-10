@@ -1,0 +1,107 @@
+# AN RTL-OR-SHIM MODULE MEMBER IN VALUE POSITION — `_sin = math.sin`, not
+# `math.sin(x)`.
+#
+# The `.py`-module half of this construct has its own file,
+# test_nilpy_module_member_as_a_value.npy, and its own ticket
+# (bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable). This
+# file is the PASCAL-BACKED half — an RTL unit, a mimic_ shim, and the
+# compiler's own shim table — which reaches different machinery and failed for
+# three different reasons.
+#
+# The .expected is not a file: the Makefile row runs this under CPython and
+# diffs, so the oracle cannot go stale.
+#
+# Three doors reached one construct and each answered differently. All three
+# rows below are here because each was a DIFFERENT defect:
+#
+#   * `_sin = math.sin` was `no member sin came of the qualifier math — an
+#     import that bound nothing gives exactly this`, a diagnostic blaming the
+#     import, while `math.sin(0.5)` on the line above compiled and ran. The
+#     value door re-decided a case question FindProcInUnit had already answered
+#     correctly: the RTL spells it `Sin`, the CALL door folds case, and the
+#     value door alone insisted on an exact match. lekkerzeilen/scenery.py:296
+#     writes it, for the ordinary reason — math.sin is called a third of a
+#     million times there before the first frame.
+#
+#   * `f = string.capwords` COMPILED AND PRINTED AN EMPTY LINE where CPython
+#     prints `A B`, and `f = struct.calcsize` raised `bad char in struct
+#     format`. Silent wrong values: the callable wrapper was only built when
+#     every parameter was ALREADY a Variant, and the else arm boxed the RAW
+#     ADDRESS and called it through the Variant ABI. These are the rows that
+#     matter most — they were never an error, so nothing was going to find them.
+#
+#   * `math.pi` is the CONTROL FOR THE FIX ITSELF, and it is here because this
+#     change's first version broke it. lib/rtl/math.pas declares
+#     `function Pi: Double`, so a case-folded value lookup finds it and boxes
+#     it: `math.pi` printed `<function at 0x54bd57>`. **In Pascal a
+#     zero-argument function IS its own call** and in Python a bare reference is
+#     the function object — the two languages genuinely disagree, so a
+#     case-folded match must have PARAMETERS to be taken as a value. Every
+#     `math.<constant>` row below is that guard.
+#
+# DELIBERATELY ABSENT: `math.fabs`, `os.getcwd`, `time.time`,
+# `collections.deque` — the SHIM-TABLE names, which are refused with a message
+# naming the reason and the one-line workaround. They are asserted in the
+# Makefile because a refusal has no CPython output to diff against. The
+# refusal is deliberate: PyParseStdlibCall picks an all-Double overload, adds a
+# domain guard, adds an overflow guard, lowers `math.log(x, base)` to a
+# quotient, and re-targets by ARITY once the arguments are parsed. A value form
+# has no arguments and would answer NaN where `math.sqrt(-1)` raises and call
+# the two-argument `os.path.join` for a three-argument call.
+
+import math
+import string
+import struct
+
+# ---- an RTL unit member as a value: the scenery.py idiom -------------------
+_sin = math.sin
+_cos = math.cos
+_tan = math.tan
+print(_sin(0.5), _cos(0.5), _tan(0.5))
+print(_sin(0.0), _cos(0.0))
+
+# called more than once through the same binding, which is the whole point of
+# binding it
+print(_sin(1.0), _sin(2.0), _sin(3.0))
+
+# ---- the CALL form beside it, unchanged ------------------------------------
+print(math.sin(0.5), math.cos(0.5))
+
+# ---- the CONSTANTS, which are zero-argument Pascal functions here ----------
+# Each of these is `function <Name>: Double` in lib/rtl/math.pas. Read as a
+# callable value they print `<function at 0x...>`; read as Pascal reads them —
+# a zero-argument function is its own call — they print the number.
+print(math.pi)
+print(math.e)
+p = math.pi
+print(p)
+run = 0.0
+run += math.pi
+print(run)
+print(math.pi > 3.14 and math.pi < 3.15)
+
+# ---- a SHIM-unit member as a value: the silent rows ------------------------
+f = string.capwords
+print(f("a b"))
+print(f("hello there world"))
+print(string.capwords("a b"))
+
+sz = struct.calcsize
+print(sz("<i"), sz("<d"), sz("<h"))
+print(struct.calcsize("<i"))
+
+# ---- as an ARGUMENT, not only as an assignment -----------------------------
+def apply1(h, x):
+    return h(x)
+
+print(apply1(math.sin, 0.5))
+print(apply1(string.capwords, "a b"))
+
+# ---- through key=, which is where a callable value usually goes ------------
+print(sorted(["b c", "a d"], key=string.capwords))
+
+# ---- rebinding and passing the binding on ----------------------------------
+g = _sin
+print(g(0.5))
+hs = [math.sin, math.cos]
+print(hs[0](0.0), hs[1](0.0))

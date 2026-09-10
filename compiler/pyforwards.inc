@@ -237,7 +237,7 @@ begin
     end;
 end;
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward; { the same pair for a KNOWN proc (pyparser.inc) }
-function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
+function PyFindVariantParamOverload(const nm: AnsiString; wantArity, ofPi: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm, IN ofPi's OWN UNIT (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer; forward; { Nil Python: a callable VALUE heading for a Pointer parameter (pyparser.inc) }
 function PyClsAttrRedeclaredCi(ci: Integer; const nm: AnsiString): Boolean; forward; { Nil Python: is this class attribute redeclared down the chain? (pyparser.inc) }

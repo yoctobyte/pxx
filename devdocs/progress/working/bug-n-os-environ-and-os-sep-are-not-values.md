@@ -5,7 +5,7 @@ prio: 60
 type: bug
 status: working
 blocked-by: []
-summary: "`os.environ` is not a first-class value: `'X' in os.environ` is `error: undefined variable (os)`, while `os.environ.get('X')` compiles. RE-MEASURED 2026-09-10 at compiler `98b6545b4652` and THE SLUG IS HALF STALE: `os.sep` WORKS -- it prints `/` -- and so does `os.linesep`. `PyIsStdlibMemberValue` gained both at `996bcf5a8` on 2026-08-29 -- the DAY AFTER this ticket was filed -- and this summary was never updated, so a reader picking this up would spend the first measurement discovering that half of it is done. What is left is `environ` specifically, which is not a constant string but a MAPPING, so it needs a value the `in` operator and `.get`/`[]` can both reach -- a different job from adding a name to that gate's list. Sibling of bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value (an uncalled stdlib FUNCTION) through the same gate; the third door frankuser grouped with them, `staticmethod`, turned out NOT to share it -- a builtin name is a separate mechanism and was fixed separately on 2026-09-10. Original measured cost stands: it is the single largest wall in the reportlab probe, one 7-line file blocking 30 of 159."
+summary: "`os.environ` is not a first-class value: `'X' in os.environ` is `error: undefined variable (os)`, while `os.environ.get('X')` compiles. RE-MEASURED 2026-09-10 at compiler `98b6545b4652` and THE SLUG IS HALF STALE: `os.sep` WORKS -- it prints `/` -- and so does `os.linesep`. `PyIsStdlibMemberValue` gained both at `996bcf5a8` on 2026-08-29 -- the DAY AFTER this ticket was filed -- and this summary was never updated, so a reader picking this up would spend the first measurement discovering that half of it is done. What is left is `environ` specifically, which is not a constant string but a MAPPING, so it needs a value the `in` operator and `.get`/`[]` can both reach -- a different job from adding a name to that gate's list. SIBLING BUT NOT THE SAME GATE -- re-measured 2026-09-10 while taking both as a group: PyIsStdlibMemberValue is consulted for `sys` and `os` and nothing else, and was never in math.sin's path, so that ticket's fix (FindProcInUnit and the qualified-member value door) does nothing here. What DID land is the diagnostic: `f = os.getcwd` said `undefined variable (os)` and now names the shim and the workaround. `os.environ` as a mapping and the remaining os constants are untouched and are what is left; the third door frankuser grouped with them, `staticmethod`, turned out NOT to share it -- a builtin name is a separate mechanism and was fixed separately on 2026-09-10. Original measured cost stands: it is the single largest wall in the reportlab probe, one 7-line file blocking 30 of 159."
 owner: frankB
 ---
 
@@ -94,3 +94,42 @@ print('HOME' in os.environ, os.sep)
 compiles and matches CPython, and `library_candidates/reportlab/src/reportlab/lib/__init__.py`
 compiles — after which the probe's 30-file wall should collapse. Track N's gate
 (`test-nilpy` green + self-host byte-identical) plus an `.npy` regression row.
+
+# Re-measured 2026-09-10 at compiler `de51b67ba86b` — PARKED, not resolved
+
+Taken as a group with
+[[bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value]] on that
+ticket's own instruction (*"whoever takes either should look at both: a gate
+that enumerates members is the mechanism"*). **The shared-mechanism premise did
+not survive the measurement, so the two are not one fix.**
+
+`PyIsStdlibMemberValue` is consulted for `sys` and `os` and nothing else. It was
+never in `math.sin`'s path at all — that reaches the qualified-member value door
+and `FindProcInUnit`, which is where its fix landed. So this ticket's remaining
+work is genuinely its own.
+
+## What DID change here, and it is only the diagnostic
+
+`f = os.getcwd` said `undefined variable (os)` — a message blaming the import
+for a module that resolves perfectly, one line under a working `os.getcwd()`.
+It now says that `os.getcwd` is a compiler-provided shim reachable only as a
+CALL, and names the one-line lambda that works. That is the honest half of this
+ticket's complaint about the diagnostic (*"the message should say which member
+was not found"*), reached from the other side.
+
+## What did NOT change, and is what is left
+
+- **`os.environ` as a value.** Unchanged. It is a MAPPING, not a name in a
+  table: `in`, `[]` and iteration all have to reach it, so it needs a shape
+  built over the existing `PyEnvLoad` data, not an entry added to a list. This
+  ticket's own fix sketch already says so and is still right.
+- **The `os` CONSTANTS beyond `sep`/`linesep`** — `curdir`, `pardir`, `name`,
+  `extsep`, `altsep`. Still absent. Still the small mechanical half.
+
+The `reportlab` cost figure in the body above (30 of 159 files on one 7-line
+`__init__.py`) is untouched by anything here: `'RL_DEBUG' in os.environ` is the
+mapping half, not the diagnostic.
+
+Left in `working/` with `owner: frankB` as ATTRIBUTION for this measurement, not
+as a claim — free to take, and the measurement above is the part that saves the
+next reader a session.

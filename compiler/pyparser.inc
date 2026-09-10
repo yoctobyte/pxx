@@ -14841,13 +14841,45 @@ end;
   string as a TPyBytes handle. Only the return type may still be non-Variant
   (that half is what PyGetOrMakeCallableWrapper adapts).
   feature-nilpy-callable-value-unified-dispatch }
-function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer;
+{ SCOPED TO ofPi'S OWN UNIT, AND CASE-CORRECT. This scanned EVERY proc in the
+  program for a CaseEqual name match and took the first one, which made a
+  callable VALUE bind by spelling alone while the CALL beside it bound
+  correctly. Both halves were silent wrong values, measured 2026-09-10 at
+  `df4aebdbbf51` against CPython on the same sources:
+
+    two modules, each with `def parse(x)`     `b = twinmod2.parse; b(1)`
+                                              answered `twin 1`, twinmod's.
+    one module with `def pick` and `def Pick`  `zz = casemod.Pick; zz(2)`
+                                              answered `lower 2`, pick's.
+
+  `twinmod.parse(1)` and `casemod.Pick(2)` — the CALL spelling of each — were
+  right the whole time, so no probe of "does an imported function work" could
+  see either. Two doors, one construct, and only the value door was wrong.
+
+  The caller has already resolved the RIGHT proc in the RIGHT unit; this scan
+  exists only to prefer a same-arity all-Variant OVERLOAD of it (pylib's `len`
+  declares a TPyBytes arm first, and a wrapper over that misreads a string
+  argument as a bytes handle). An overload of a proc lives beside it, so the
+  search belongs in its unit and nowhere else. Falling back to a program-wide
+  scan when the unit has none would reinstate exactly the two rows above.
+
+  The name test is the pair-shaped one symtab.inc uses in a dozen places —
+  exact, or CaseEqual only when the candidate's OWN registration says it is
+  case-insensitive. `DeclCaseSensitive` is `CaseSensitiveMode or NilPyUserCode`,
+  so a NilPy def and a C import are case-sensitive and a Pascal routine is not,
+  which is the rule each language actually has. This lookup carried only the
+  FOLDED half, the mirror of the one CLAUDE.md records as carrying only the
+  exact half. bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
+function PyFindVariantParamOverload(const nm: AnsiString; wantArity, ofPi: Integer): Integer;
 var i, j: Integer; ok: Boolean;
 begin
   Result := -1;
+  if (ofPi < 0) or (ofPi >= ProcCount) then Exit;
   for i := 0 to ProcCount - 1 do
   begin
-    if not CaseEqual(Procs[i].Name, nm) then Continue;
+    if ProcUnitIdx[i] <> ProcUnitIdx[ofPi] then Continue;
+    if not ((Procs[i].Name = nm) or
+            ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, nm))) then Continue;
     if Procs[i].ParamCount <> wantArity then Continue;
     ok := True;
     for j := 0 to wantArity - 1 do
@@ -14872,6 +14904,23 @@ function PyScalarWrappableRetType(tk: TTypeKind): Boolean;
 begin
   Result := tk in [tyInteger, tyInt64, tyDouble, tySingle, tyExtended,
                    tyBoolean, tyAnsiString, tyString, tyChar];
+end;
+
+{ Can a PARAMETER of this kind be fed from the wrapper's own `const aN: Variant`
+  slot? The wrapper's body is a hand-built `return realproc(a0, ...)`, so the
+  question is whether the ORDINARY call-argument coercion Variant -> tk exists —
+  the same coercion a written `capwords(v)` gets. tyVariant is in the set
+  because an all-Variant callee still wants the RETURN side adapted, which is
+  the case this gate used to be restricted to.
+
+  Deliberately the same scalar/string family as the return side and not one item
+  wider: a class, a record, a set, a pointer or an open array has no Variant
+  coercion, and a wrapper built over one would be a compile error inside a
+  SYNTHESIZED body, reported against a proc the program never wrote. Those keep
+  the pre-existing unwrapped value, which is what they had. }
+function PyScalarWrappableParamType(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyVariant) or PyScalarWrappableRetType(tk);
 end;
 
 { realPi already has an all-Variant PARAMETER list (the caller found it via
@@ -15035,7 +15084,7 @@ begin
     parameter overload at all (or the wrong arity) is left exactly as
     before: still the pre-existing, unwrapped, possibly-unsafe value.
     feature-nilpy-callable-value-unified-dispatch }
-  altPi := PyFindVariantParamOverload(nm, Procs[pi].ParamCount);
+  altPi := PyFindVariantParamOverload(nm, Procs[pi].ParamCount, pi);
   if altPi >= 0 then pi := altPi;
   { The overload pick above IS the real callee, so it keeps the signature; the
     RETURN-side wrapper below does not -- see the note at the pybound_new_sig
@@ -15043,9 +15092,34 @@ begin
   origPi := pi;
   if Procs[pi].RetType <> tyVariant then
   begin
+    { WRAPPABLE, not ALREADY-VARIANT. This asked `TypeKind = tyVariant` of every
+      parameter, and the else of that gate is not "no wrapper" but "the RAW
+      ADDRESS is boxed and called through the Variant ABI" — the callee then
+      reads its arguments out of whatever the dispatcher staged.
+      `f = string.capwords; f("a b")` compiled clean and printed an EMPTY LINE
+      where CPython prints `A B`; `f = struct.calcsize` raised
+      `bad char in struct format`. Silent wrong values, from a gate whose own
+      comment called the else arm "possibly-unsafe" and left it.
+
+      The precondition was never needed. PyGetOrMakeCallableWrapper's body is
+      `return realproc(a0, ...)` with `const aN: Variant` parameters, so the
+      ORDINARY argument coercion runs on the way in exactly as it does for the
+      return value on the way out — its own header says so. An AnsiString
+      parameter is as reachable from a Variant as an AnsiString RESULT is.
+
+      What still declines is a parameter with no Variant coercion at all (a
+      class, a record, a set, a pointer, an open array) and a genuine `var`/`out`
+      slot, which needs write-back to an lvalue the wrapper does not have. Those
+      keep the unwrapped value they had — no worse than before, and the loud
+      alternative would be a compile error inside a synthesized body naming a
+      proc the program never wrote.
+      bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
     paramsAllVariant := True;
     for wpj := 0 to Procs[pi].ParamCount - 1 do
-      if Procs[pi].Params[wpj].TypeKind <> tyVariant then
+      if (not PyScalarWrappableParamType(Procs[pi].Params[wpj].TypeKind)) or
+         Procs[pi].Params[wpj].IsArray or
+         (ProcParamExplicitByRef[pi * MAX_PROC_PARAMS + wpj] and
+          (not ProcParamIsConst[pi * MAX_PROC_PARAMS + wpj])) then
       begin
         paramsAllVariant := False;
         Break;
@@ -45310,8 +45384,55 @@ begin
         if qvUnit >= 0 then
         begin
           qvMemb := GetTokenStr(TokPos + 1);
+          { ASK THE LOOKUP, DO NOT RE-DECIDE. This line used to be followed by
+            `if Procs[qvPi].Name <> qvMemb then qvPi := -1` — a blanket
+            exact-case override on an answer FindProcInUnit had already made
+            correctly. That lookup tries exact first and falls back to
+            CaseEqual only for a proc whose OWN registration says it is
+            case-INsensitive, and `DeclCaseSensitive` is `CaseSensitiveMode or
+            NilPyUserCode`: a NilPy def registers case-sensitive, a Pascal RTL
+            or shim unit's routine does not. So the override was a no-op for a
+            Python module — the case the comment below justifies it with — and
+            for a Pascal unit it threw away the only answer there is.
+
+            `import math` then `_sin = math.sin` was
+            `no member sin came of the qualifier math`, a diagnostic blaming
+            the import, while `math.sin(0.5)` on the line above compiled and
+            ran: the RTL spells it `Sin` and the CALL door resolves through
+            ordinary Pascal lookup, which folds case. ONE CONSTRUCT, TWO DOORS,
+            TWO ANSWERS — and the value door was the stricter one, so a
+            construct CPython accepts was refused because a Pascal unit
+            capitalises. Measured 2026-09-10: `math.SIN(0.5)`, `math.Sin(0.5)`
+            and `string.CAPWORDS("a b")` all compile as CALLS today, so this is
+            not a new laxness — it is the value door stopping being stricter
+            than the call door beside it, which is the direction Track N's
+            upward-compatibility rule already allows.
+
+            The ambush the exact-case guard exists to prevent
+            (bug-nilpy-a-global-collides-case-insensitively-with-a-builtin-proc,
+            where `print(Counter)` answered for a module global `counter`) is a
+            BARE-name problem and is unaffected: there the user wrote one name
+            and got another file's. Here the qualifier is written out, so
+            `math.sin` can only ever mean math's member, and a Python module's
+            own `Foo`/`foo` stay two routines because their registrations say
+            so.
+
+            A CASE-FOLDED match must still have PARAMETERS, and that clause is
+            not a heuristic — it is where the two languages genuinely disagree.
+            **In Pascal a zero-argument function IS its own call**: `Pi` in an
+            expression means `Pi()`, no parens. In Python `f = mod.zerofn` means
+            the function OBJECT. lib/rtl/math.pas declares `function Pi: Double`,
+            so `math.pi` fold-matches it and, taken as a value, printed
+            `<function at 0x54bd57>` where CPython prints 3.141592653589793 —
+            found by this change's own probe, not by reasoning: the paragraph
+            above argued the qualifier made an ambush impossible and it was
+            wrong about exactly this shape. An EXACT match is exempt because
+            only a case-SENSITIVE registration produces one, which is a NilPy
+            def or a lowercase-declared shim — code where Python's reading is
+            the author's. bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
           qvPi := FindProcInUnit(qvMemb, qvUnit);
-          if (qvPi >= 0) and (Procs[qvPi].Name <> qvMemb) then qvPi := -1;
+          if (qvPi >= 0) and (Procs[qvPi].Name <> qvMemb) and
+             (Procs[qvPi].ParamCount = 0) then qvPi := -1;
           if qvPi >= 0 then
           begin
             node := PyMakeFuncValueFor(qvPi, qvMemb);
@@ -45325,6 +45446,54 @@ begin
               Exit;
             end;
           end;
+        end;
+      end;
+
+      { The SHIM-TABLE half of the same construct, and it is a REFUSAL rather
+        than a value — deliberately, and the message says which.
+
+        `math.fabs`, `os.getcwd`, `time.time`, `collections.deque` are reached
+        by NAME through PyStdlibCallProc, not through a unit, so the arm above
+        cannot see them and they fell out as either
+        `no member fabs came of the qualifier math` or, worse for `os`,
+        `undefined variable (os)`. Both blame the import for a name the CALL
+        door on the line above compiles happily, which is the misleading half
+        and is what this fixes.
+
+        NOT turned into a value, and this is the part to re-measure before
+        changing it. PyParseStdlibCall does more than name a proc: it picks the
+        all-Double overload for Power/Exp/Sinh/Cosh, wraps argument 0 in a
+        DOMAIN guard for Sqrt/Ln/Log10/Log2/ArcSin/ArcCos/Power, applies an
+        OVERFLOW guard, lowers `math.log(x, base)` to a quotient of two Ln, and
+        re-targets by ARITY after the arguments are parsed. A value form knows
+        none of that — it has no arguments yet — so a callable built here would
+        answer NaN where `math.sqrt(-1)` raises ValueError and would call the
+        two-argument `os.path.join` for a three-argument call. That is a silent
+        wrong value, which is strictly worse than the refusal it would replace.
+        The workaround in the message is not a consolation: a lambda body goes
+        through the ordinary call lowering, so it carries every guard, and it is
+        one line. Measured 2026-09-10: `lambda x: math.sqrt(x)` applied to -1.0
+        raises ValueError exactly as the direct call does.
+
+        Cost, measured rather than asserted: the lekkerzeilen corpus writes this
+        shape ONCE, `_sin = math.sin` at scenery.py:296, and that one is a real
+        unit member handled by the arm above.
+        bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
+      if isNilPy and (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
+         (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
+         ((TokPos + 2 >= TokCount) or (Tokens[TokPos + 2].Kind <> tkLParen)) and
+         (FindSym(name) < 0) then
+      begin
+        qvMemb := GetTokenStr(TokPos + 1);
+        if PyStdlibCallProc(LowerCase(name) + '.' + LowerCase(qvMemb)) <> '' then
+        begin
+          ErrorIdent := name + '.' + qvMemb;
+          Error('Nil Python: ' + name + '.' + qvMemb + ' is a compiler-provided '
+                + 'shim and can only be CALLED, not taken as a value — the call '
+                + 'site adds the domain, overflow and arity handling that make '
+                + 'it match CPython, and a bare reference has no arguments to '
+                + 'apply them to. Write `lambda x: ' + name + '.' + qvMemb
+                + '(x)`, which carries all of it');
         end;
       end;
 
