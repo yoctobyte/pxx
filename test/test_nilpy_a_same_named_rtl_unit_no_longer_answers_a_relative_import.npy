@@ -1,0 +1,43 @@
+# An import that names a module the program itself supplies must not be answered
+# by an RTL unit that happens to share the name.
+#
+# `from . import platform` beside the package's own `platform/` bound
+# lib/rtl/platform.pas -- the PAL facade -- and the read of a member the real
+# module defines failed with `no member KEY_ESCAPE came of the qualifier
+# platform`. lekkerzeilen/bindings.py is exactly these three lines.
+#
+# WHERE THE DOOR ACTUALLY IS, and it is not where the shape suggests. It is not
+# the resolution CHAIN: ParseUsesUnit scans CompiledUnitKey for an
+# already-compiled unit and returns BEFORE any .pas, .py or header probe, so no
+# reordering of those probes can beat it. platform.pas is named in the `uses` of
+# 25 RTL units -- baseunix and classes among them -- so it is already compiled in
+# essentially every program by the time the program's own import is parsed. A
+# first attempt that closed the Pascal and host-header chains for a relative
+# import measured as NO CHANGE and was dropped, which is what pointed here.
+#
+# THE POPULATION IS FOUR, measured over all 117 lib/rtl unit names against this
+# compiler: platform, platform_types, textfile, typinfo. The other 113 already
+# took the program's own module, because their Pascal door is closed for a NilPy
+# import in the first place -- only a unit the RTL drags in ANYWAY reaches the
+# already-compiled guard. `random` is walled too and is a DIFFERENT mechanism
+# (`undefined variable (random)`, not a qualifier miss); it does not move with
+# this and must not be read as part of this population.
+#
+# CPython is the oracle and every row is a cross-check: under CPython a local
+# module shadows the stdlib by ordinary sys.path order, so agreement here is
+# agreement about what the source MEANT.
+
+from nilpy_rtlshadow import subject, control, flat_subject, flat_control
+
+# The row the fix is about, in the package spelling lekkerzeilen writes.
+print("pkg-subject", subject[0], subject[1])
+
+# THE CONTROL, and it is what stops this from certifying a change that simply
+# made every relative import take the sibling: `seam` has no RTL unit and was
+# ALREADY correct, before and after. It must be identical to the row above.
+print("pkg-control", control[0], control[1])
+
+# The flat spelling of the same collision. `textfile` moved with `platform`;
+# `probe` never needed to.
+print("flat-subject", flat_subject[0], flat_subject[1])
+print("flat-control", flat_control[0], flat_control[1])

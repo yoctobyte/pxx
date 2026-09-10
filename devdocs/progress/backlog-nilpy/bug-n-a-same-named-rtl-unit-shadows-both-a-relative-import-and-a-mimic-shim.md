@@ -1,6 +1,6 @@
 ---
 slug: bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
-title: "An RTL unit whose name matches defeats a relative import AND a mimic shim — 19 colliding names, one of them lekkerzeilen's seam"
+title: "ARM 1 FIXED 2026-09-11; ARM 2 OPEN — a same-named RTL unit no longer defeats a relative import, but a mimic shim under a colliding name is still unreachable"
 track: N
 prio: 85
 type: bug
@@ -10,7 +10,7 @@ created: 2026-09-10
 found: 2026-09-10
 found-by: frank-user, from neo-dd's zlib question
 owner: ""
-summary: "MEASURED 2026-09-10 at 546d4dcbd305. ONE ROOT CAUSE, TWO POPULATIONS: the NilPy unit lookup runs before both relative-module resolution and the mimic_ fallback, so any lib unit sharing a CPython module name wins and then binds NOTHING. 19 lib units collide: ast atexit base64 collections configparser html http io json math pathlib platform random re subprocess tempfile tkinter types zlib. ARM 1, AND IT IS A WALL ON THE TOP-RANKED TARGET: `from . import platform` is an EXPLICITLY RELATIVE import and lib/rtl/platform.pas (the PAL facade) takes it. THAT IS SUFFICIENT TO PRODUCE `pascal26:117: error: no member KEY_ESCAPE came of the qualifier platform` in lekkerzeilen/bindings.py AND I HAVE NOT ESTABLISHED IT IS THE CAUSE FIRING THERE: lekkerzeilen's own platform/__init__.py also fails on its own ([[bug-n-a-module-bound-by-an-import-is-not-a-value]], p90 -- a module is not a first-class value, so `return _pxx, "pxx"` cannot work), so in THAT tree two independent walls can each produce this message and I measured only that this one can. The shadow is proven independently sufficient by a repro containing neither a failing __init__ nor a backend selection; whoever fixes either arm should re-measure bindings.py rather than assume their fix is the one that clears it. Reproduced in four lines with no lekkerzeilen code (pkg/__init__.py, pkg/platform.py defining KEY_ESCAPE, pkg/sub.py doing `from . import platform`), and the POSITIVE CONTROL is the same four lines with the module renamed `seam`: `ok:` and it prints 27. So relative imports WORK and the name shadows. ARM 2, AND I GOT THE DOOR WRONG IN THE FIRST VERSION OF THIS TICKET -- CORRECTED SAME SESSION: `import zlib` does NOT reach lib/rtl/zlib.pas. It reaches the SYSTEM C HEADER /usr/include/zlib.h. Proof by which names bind: `zlib.uncompress`, `zlib.zlibVersion`, `zlib.deflateInit_` and `zlib.crc32` all resolve (C API), while `zlib.InflateZlib` -- Pascal-only -- answers `no member`. So there are THREE doors ahead of the shim, not one: a system C header, then a Pascal unit, then a sibling/relative .py, and mimic_ last (pasparser_proc.inc:6500, `consulted only after every ordinary lookup has failed'). The C-header door is the worst of the three because it binds a LOT and all of it is wrong for a Python caller: C `compress` takes four arguments to CPython's one, which is why `zlib.compress(b"x")` answers `no overload matches` rather than anything about a missing module. AND THE BINDING IS DEAD ON ARRIVAL: the compiler derives the soname from the HEADER name, giving `libzlib.so`, which no machine answers to -- its own diagnostic says `a header file name is not a library name`. Which collisions take which door is decided by whether a header exists: zlib.h and math.h are present, json.h/io.h/types.h are not, and platform.h is not -- so `platform` takes the PASCAL door, measured (`platform.PAL_STDOUT` binds). So a mimic_zlib COULD NOT BE REACHED IF SOMEONE WROTE ONE, which matters because the owner's standing instruction (2026-09-10) is to craft a shim for a missing lekkerzeilen library feature. TWO DIFFERENT FIXES, do not conflate them. Arm 1 is unambiguous and narrow: a relative import (pyRelLevel > 0) must never consult the global unit namespace at all -- the program said `.`, and no RTL unit can satisfy that. Arm 2 is a precedence call AND THE OWNER HAS RULED ON IT, 2026-09-10: `and importing preference whitelist we can just hardcode. 'zlib? -> rtl zlib unless...'` -- so the shape is an explicit per-module preference table in the compiler, not an inferred rule, and a table is the right answer precisely because the three doors are not rankable in general (math SHOULD take its shim, platform SHOULD take the relative module, and neither follows from a single global order). The machinery to key it on is already present: PyImportLang records that a `uses` was written as Python (pyparser.inc:38273, added for exactly this kind of keying). The quoted form `import 'zlib.pas' as z` stays as the explicit door to the unit -- it WORKS today and is how this was measured. AND THE PASCAL DOOR IS ITSELF HALF-OPEN: through the quoted import InflateZlib binds, then refuses every argument shape NilPy can build (bytes, bytearray, list-of-int, return-lifted) because it wants hashing.pas's `TByteArray = array of Byte`, so a Python caller cannot reach the unit even when the name resolves. That is why the shim must be PASCAL-side, as mimic_struct.pas already argues for itself."
+summary: "ARM 1 IS FIXED (2026-09-11, `fe40bf55e141` -> `cb278748efbf`, last section of this file) AND ARM 2 IS WHAT THIS TICKET NOW HOLDS. Read the rest of this summary as the 2026-09-10 report it was; two of its claims about arm 1 are now known wrong and are corrected there. The door was NOT the resolution chain but the ALREADY-COMPILED GUARD in ParseUsesUnit, which returns before any .pas/.py/header probe -- the narrow fix this summary prescribes for arm 1 (a relative import must not consult the global unit namespace) was built and measured as NO CHANGE and was dropped. And the population is FOUR of the 117 lib/rtl unit names -- platform, platform_types, textfile, typinfo -- not nineteen and not the two a later section claimed: 113 were already correct because their Pascal door is closed for a NilPy import anyway, so only a unit the RTL drags in regardless ever reaches that guard, which is why two of the four are not CPython module names at all. Corpus effect: bindings.py advanced off this wall onto platform/__init__.py:95, modules-compiling delta 0, predicted before the re-run. ARM 2, STILL OPEN AND STILL THE OWNER-SPECIFIED SHAPE: the C-header door, the per-module preference table, and the half-open Pascal door, all exactly as described below. ORIGINAL REPORT, MEASURED 2026-09-10 at 546d4dcbd305. ONE ROOT CAUSE, TWO POPULATIONS: the NilPy unit lookup runs before both relative-module resolution and the mimic_ fallback, so any lib unit sharing a CPython module name wins and then binds NOTHING. 19 lib units collide: ast atexit base64 collections configparser html http io json math pathlib platform random re subprocess tempfile tkinter types zlib. ARM 1, AND IT IS A WALL ON THE TOP-RANKED TARGET: `from . import platform` is an EXPLICITLY RELATIVE import and lib/rtl/platform.pas (the PAL facade) takes it. THAT IS SUFFICIENT TO PRODUCE `pascal26:117: error: no member KEY_ESCAPE came of the qualifier platform` in lekkerzeilen/bindings.py AND I HAVE NOT ESTABLISHED IT IS THE CAUSE FIRING THERE: lekkerzeilen's own platform/__init__.py also fails on its own ([[bug-n-a-module-bound-by-an-import-is-not-a-value]], p90 -- a module is not a first-class value, so `return _pxx, "pxx"` cannot work), so in THAT tree two independent walls can each produce this message and I measured only that this one can. The shadow is proven independently sufficient by a repro containing neither a failing __init__ nor a backend selection; whoever fixes either arm should re-measure bindings.py rather than assume their fix is the one that clears it. Reproduced in four lines with no lekkerzeilen code (pkg/__init__.py, pkg/platform.py defining KEY_ESCAPE, pkg/sub.py doing `from . import platform`), and the POSITIVE CONTROL is the same four lines with the module renamed `seam`: `ok:` and it prints 27. So relative imports WORK and the name shadows. ARM 2, AND I GOT THE DOOR WRONG IN THE FIRST VERSION OF THIS TICKET -- CORRECTED SAME SESSION: `import zlib` does NOT reach lib/rtl/zlib.pas. It reaches the SYSTEM C HEADER /usr/include/zlib.h. Proof by which names bind: `zlib.uncompress`, `zlib.zlibVersion`, `zlib.deflateInit_` and `zlib.crc32` all resolve (C API), while `zlib.InflateZlib` -- Pascal-only -- answers `no member`. So there are THREE doors ahead of the shim, not one: a system C header, then a Pascal unit, then a sibling/relative .py, and mimic_ last (pasparser_proc.inc:6500, `consulted only after every ordinary lookup has failed'). The C-header door is the worst of the three because it binds a LOT and all of it is wrong for a Python caller: C `compress` takes four arguments to CPython's one, which is why `zlib.compress(b"x")` answers `no overload matches` rather than anything about a missing module. AND THE BINDING IS DEAD ON ARRIVAL: the compiler derives the soname from the HEADER name, giving `libzlib.so`, which no machine answers to -- its own diagnostic says `a header file name is not a library name`. Which collisions take which door is decided by whether a header exists: zlib.h and math.h are present, json.h/io.h/types.h are not, and platform.h is not -- so `platform` takes the PASCAL door, measured (`platform.PAL_STDOUT` binds). So a mimic_zlib COULD NOT BE REACHED IF SOMEONE WROTE ONE, which matters because the owner's standing instruction (2026-09-10) is to craft a shim for a missing lekkerzeilen library feature. TWO DIFFERENT FIXES, do not conflate them. Arm 1 is unambiguous and narrow: a relative import (pyRelLevel > 0) must never consult the global unit namespace at all -- the program said `.`, and no RTL unit can satisfy that. Arm 2 is a precedence call AND THE OWNER HAS RULED ON IT, 2026-09-10: `and importing preference whitelist we can just hardcode. 'zlib? -> rtl zlib unless...'` -- so the shape is an explicit per-module preference table in the compiler, not an inferred rule, and a table is the right answer precisely because the three doors are not rankable in general (math SHOULD take its shim, platform SHOULD take the relative module, and neither follows from a single global order). The machinery to key it on is already present: PyImportLang records that a `uses` was written as Python (pyparser.inc:38273, added for exactly this kind of keying). The quoted form `import 'zlib.pas' as z` stays as the explicit door to the unit -- it WORKS today and is how this was measured. AND THE PASCAL DOOR IS ITSELF HALF-OPEN: through the quoted import InflateZlib binds, then refuses every argument shape NilPy can build (bytes, bytearray, list-of-int, return-lifted) because it wants hashing.pas's `TByteArray = array of Byte`, so a Python caller cannot reach the unit even when the name resolves. That is why the shim must be PASCAL-side, as mimic_struct.pas already argues for itself."
 ---
 
 # One shadow, two populations
@@ -391,3 +391,72 @@ CPython: `pkgdir 27 27`. pxx: `no member KEY_ESCAPE came of the qualifier
 platform`, with `seam` — the identical package one line down — fine. **The
 control is inside the run**, so it cannot pass by having been dragged in by
 something the failing half needed.
+
+## ARM 1 IS FIXED, AND THE POPULATION IS FOUR OF 117 — frankZ, 2026-09-11, `fe40bf55e141` -> `cb278748efbf`
+
+**Arm 2 is untouched and this ticket stays open for it.** The C-header door, the
+per-module preference table the owner specified, and the half-open Pascal door
+are all exactly as described above.
+
+### The door, confirmed by building it
+
+The hypothesis banked in `ea5fda6ba` held. It is the **already-compiled guard**
+in `ParseUsesUnit`, not the resolution chain: the routine scans
+`CompiledUnitKey` for the name and returns before any `.pas`, `.py` or header
+probe is attempted, so no reordering of those probes can beat it, and
+`platform.pas` is named in the `uses` of 25 RTL units. The first attempt —
+closing the Pascal and host-header chains for `pyRelLevel > 0`, which is what
+the "Arm 1 is unambiguous and narrow" sentence in the summary prescribes —
+**measured as no change and was dropped, not landed.**
+
+The fix records WHICH compiled unit matched (`compIdx`) and clears `isCompiled`
+when a NilPy import whose Pascal door is closed hits an already-compiled unit
+whose own file is Pascal source. Keyed on the compiled unit's FILE, so a `.py`
+module already compiled under this name still short-circuits exactly as before.
+
+### The population, and it corrects BOTH numbers this ticket has carried
+
+The census above says nineteen; my own section at line 304 says two. **It is
+four**, measured over all 117 `lib/rtl` unit names rather than over a
+hand-picked subset of CPython-shaped ones — each name given a sibling module
+defining `MARKER = 27`, each row in its own directory so no earlier row could
+supply what a later row needed:
+
+```
+before  fe40bf55e141   112 OK / 5 walled
+after   cb278748efbf   116 OK / 1 walled
+moved   platform  platform_types  textfile  typinfo
+```
+
+**Not `random`**, which walls before and after with `undefined variable
+(random)` — a different message, a different mechanism, and it must not be read
+as part of this population or as a regression of this fix.
+
+The reason the nineteen number was wrong is the reason the mechanism was wrong:
+**113 of the 117 were already correct**, because their Pascal door is closed for
+a NilPy import in the first place. Only a unit the RTL drags in ANYWAY ever
+reaches the already-compiled guard, and that is a much smaller set than "shares
+a name with a CPython module". `textfile` and `typinfo` are in it and are not
+CPython module names at all — they were invisible to every census this ticket
+ran, because every one of them selected on the hypothesis.
+
+### What it moves on the corpus, stated before the re-run
+
+Predicted: `bindings.py` stops naming `no member KEY_ESCAPE came of the
+qualifier platform` and advances to `platform/__init__.py:95 undefined variable
+(_pxx)`; nothing else moves; **modules-compiling delta 0.** Matched.
+
+So this clears the wall the summary called "a wall on the top-ranked target" and
+delivers zero modules, because [[bug-n-a-module-bound-by-an-import-is-not-a-value]]
+is directly behind it — which the summary's own caveat predicted and asked the
+fixer to re-measure rather than assume. Both walls were real; this was the outer
+one.
+
+Other rows moved in the same census and **are not mine** — `app.py`,
+`__main__.py` and `gauges.py` came off `threading` and `zlib` walls through
+other seats' work in the same range.
+
+Test: `test/test_nilpy_a_same_named_rtl_unit_no_longer_answers_a_relative_import.npy`
+with `test/nilpy_rtlshadow/`, package and flat spellings, `seam` and `probe` as
+same-file controls with non-colliding names. Positive control measured against
+pin `095ef4811a5b`.

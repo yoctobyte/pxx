@@ -6228,6 +6228,7 @@ var
   pyFileIdx, pyDupIdx: Integer;
   { leading-dot count of this relative import; see PyRelativeDir }
   pyRelLevel: Integer;
+  compIdx: Integer;    { which CompiledUnit row answered guardIdx, or -1 }
   { Which language THIS import named, claimed from PyImportLang on entry: ''
     for anything that is not a NilPy import statement, 'py' for a bare one,
     'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
@@ -6413,11 +6414,38 @@ begin
       ambience through this (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
     MarkUnitAmbient(strIdx);
   isCompiled := False;
+  compIdx := -1;
   for i := 0 to CompiledUnitCount - 1 do
   begin
     if CompiledUnitKey[i] = guardIdx then
+    begin
       isCompiled := True;
+      compIdx := i;
+    end;
   end;
+  { AND AN ALREADY-COMPILED *PASCAL* UNIT DOES NOT ANSWER A NILPY IMPORT WHOSE
+    PASCAL DOOR IS CLOSED. Everything below decides which door a name takes;
+    this exit runs BEFORE all of it, so for a unit the RTL happens to have
+    pulled in already there is no door at all and no reordering can reach one.
+    That is why `import platform` beside the program's own `platform.py` bound
+    lib/rtl/platform.pas -- the PAL facade, named in the `uses` of 25 RTL units,
+    baseunix and classes among them, so it is compiled in essentially every
+    program before the program's own import is parsed.
+    SEVENTEEN of the nineteen colliding names were already correct, because
+    nothing pulls them in; the collision list is a count of NAMES and not of the
+    symptom. `pasLookupOK` is the same predicate the chain below uses to refuse
+    a Pascal file for this import, applied one step earlier so that refusing
+    still leaves the Python probes something to do -- refusing AFTER them
+    (`pasRefusedPath`) cannot, because they were all skipped on a non-empty
+    UnitContent.
+    Keyed on the compiled unit's own FILE, so a `.py` module already compiled
+    under this name still short-circuits exactly as before; only Pascal source
+    steps aside.
+    bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim }
+  if isCompiled and isNilPy and pyLookupOK and (not pasLookupOK) and
+     (not isPath) and (compIdx >= 0) and (CompiledUnitFile[compIdx] >= 0) and
+     PathIsPascalSource(KeyStrs[CompiledUnitFile[compIdx]]) then
+    isCompiled := False;
   if isCompiled then
   begin
     { The edge recorded above points at the SPELLING (`codecs`), but visibility

@@ -1299,6 +1299,26 @@ test-nilpy: $(COMPILER)
 	 test "$$rc" = "1" \
 	   && printf '%s\n' "$$out" | grep -q 'undefined variable (deadonly)' \
 	  || { echo "test_nilpy_dead_arm_alias_control: FAIL - rc=$$rc (want 1: a name bound ONLY by the arm a failed guarded import killed must not resolve -- CPython raises NameError for it)"; printf '%s\n' "$$out"; exit 1; }
+	# An import that names a module the PROGRAM supplies must not be answered by
+	# an RTL unit that happens to share the name. `from . import platform`
+	# beside the package's own `platform/` bound lib/rtl/platform.pas, the PAL
+	# facade, and lekkerzeilen/bindings.py is exactly those three lines.
+	# THE DOOR IS THE ALREADY-COMPILED GUARD, not the resolution chain:
+	# ParseUsesUnit scans CompiledUnitKey and returns before any .pas, .py or
+	# header probe, and platform.pas is in the `uses` of 25 RTL units, so it is
+	# already compiled in essentially every program. Closing the Pascal and
+	# host-header chains instead measured as NO CHANGE and was dropped.
+	# POPULATION FOUR of the 117 lib/rtl unit names -- platform, platform_types,
+	# textfile, typinfo -- because only a unit the RTL drags in anyway ever
+	# reaches that guard. `random` is a DIFFERENT mechanism and does not move.
+	# `seam` and `probe` are the controls: no RTL unit, correct before and
+	# after, and identical rows to their subjects.
+	# POSITIVE CONTROL MEASURED against pin 095ef4811a5b: refuses with
+	# `no member KEY_ESCAPE came of the qualifier platform`, reported as
+	# `pascal26:8:` -- which is nilpy_rtlshadow/__init__.py line 8, NOT this
+	# file's line 8; an error inside an imported module prints no file name.
+	./$(COMPILER) test/test_nilpy_a_same_named_rtl_unit_no_longer_answers_a_relative_import.npy $(TESTTMP)/test_nilpy_rtlshadow26
+	tools/expect_same.sh test_nilpy_rtlshadow26 "$$($(TESTTMP)/test_nilpy_rtlshadow26)" "$$(python3 test/test_nilpy_a_same_named_rtl_unit_no_longer_answers_a_relative_import.npy)"
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no
