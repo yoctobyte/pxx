@@ -1,0 +1,66 @@
+# `import sys as s` / `import os as o` — the alias must reach the MODELLED
+# modules, not only the ones backed by a real RTL unit.
+#
+# THE TICKET'S BOUNDARY WAS BACKWARDS AND THE PROBE IS WHY. It read "a module
+# alias resolves for CALLS but not for ATTRIBUTES", measured on
+# `import sys as s; s.platform`. Varying the module instead of the syntax:
+#
+#   import math as m -> m.pi      ATTRIBUTE through an alias   WORKED
+#   import math as m -> m.floor() CALL      through an alias   WORKED
+#   import sys  as s -> s.platform                             failed
+#   import os   as o -> o.sep                                  failed
+#   import os   as o -> o.getcwd()   CALL                      failed
+#
+# So calls-vs-attributes was never the variable. `math` is a real RTL unit and
+# resolves through FindUnitOrAlias, which chases the alias chain; `sys` and `os`
+# name no unit and are compiler-provided doors keyed on the LITERAL base name,
+# which never consulted the alias table. Neither spelling worked for those two.
+#
+# CPython is the oracle for every row. Nothing here is host-specific: argv and
+# getcwd are asserted as predicates, and `platform` is whatever both runtimes
+# say it is on the box running the row.
+
+import sys as s
+import os as o
+import math as m
+
+# ---- sys through an alias: the modelled members -----------------------------
+print(s.platform)
+print(len(s.argv) > 0)
+print(len(s.executable) > 0)
+
+# ---- os through an alias: the constant ATTRIBUTES ---------------------------
+print(o.sep)
+print(o.linesep == "\n")
+print(o.SEEK_SET, o.SEEK_CUR, o.SEEK_END)
+
+# ---- os through an alias: the CALL forms, which were equally broken ---------
+print(len(o.getcwd()) > 0)
+print(o.path.join("a", "b"))
+print(o.path.basename("/x/y/z.txt"))
+
+# ---- the runtime arm survives: an absent sys attribute still raises ---------
+# `sys._MEIPASS` is the shape real code guards; it must stay an AttributeError
+# through the alias too, not become a silent value.
+try:
+    print(s.nosuchattribute)
+    print("no exception")
+except AttributeError:
+    print("caught AttributeError")
+
+# ---- CONTROLS: what already worked must still work --------------------------
+print(m.pi)
+print(m.e)
+print(m.floor(2.7))
+
+import os
+import sys
+print(os.sep, sys.platform)
+
+# ---- THE ONE THAT PROVES THE CHASE RUNS THE RIGHT WAY -----------------------
+# An alias to a REAL unit that shadows a modelled module name. Python's rule is
+# that the alias rebinds the name in this module's namespace, so `zz.pi` must be
+# math's -- a resolver that mapped toward the modelled door instead of away from
+# it would answer for `os` here and be wrong in the silent direction.
+import math as zz
+print(zz.pi)

@@ -12490,6 +12490,53 @@ end;
 { Does `<base>.<nm>` name a compiler-provided VALUE? Split out of the token
   predicate below so the bare-name form a from-import binds asks the SAME
   question — one membership test, two spellings. }
+{ The MODULE-alias root of a qualifier: `import sys as s` -> `sys`, `import
+  pkga.sub as ps` -> `pkga_sub`. Returns nm lowercased and unchanged when it
+  names no alias, so a caller can use it unconditionally.
+
+  WHY THIS EXISTS SEPARATELY FROM FindUnitOrAlias. That one answers with a
+  COMPILED UNIT's Strs index, which is exactly right for `import math as m`
+  (math is a real RTL unit, so `m.pi` and `m.floor()` have always worked) and is
+  -1 for `sys` and `os`, which name no unit at all — they are compiler-provided
+  doors keyed on the literal base name in PyIsStdlibMemberValue. So the two
+  families diverged: an alias worked for every module backed by a unit and for
+  none of the modelled ones, which reads as "aliases are broken for attributes"
+  and is not what is happening.
+
+  Chases the CHAIN and is bounded by the table size, for the same reason
+  FindUnitOrAlias chases it: the shim mapping registers `<module> ->
+  mimic_<module>` as an alias too, so stopping at the first hop can leave a
+  qualifier pointing at a name nothing answers to.
+
+  No FindSym shadow check, deliberately, and NOT because shadowing cannot
+  happen. FindUnitOrAlias — the path that already serves `import math as m` —
+  has none either, so adding one here would make the two doors disagree about
+  the same rebinding, which is the failure this repo keeps paying for. If a
+  rebound alias is ever worth refusing, both doors change together.
+  bug-n-a-module-alias-does-not-resolve-for-attribute-lookup }
+function PyUnitAliasRootName(const nm: AnsiString): AnsiString;
+var i, hops: Integer; cur: AnsiString; moved: Boolean;
+begin
+  cur := LowerCase(nm);
+  hops := 0;
+  repeat
+    moved := False;
+    i := 0;
+    while i < UnitAliasCount do
+    begin
+      if Strs[UnitAliasName[i]].Text = cur then
+      begin
+        cur := Strs[UnitAliasReal[i]].Text;
+        moved := True;
+        Break;
+      end;
+      Inc(i);
+    end;
+    Inc(hops);
+  until (not moved) or (hops > MAX_UNIT_ALIASES);
+  PyUnitAliasRootName := cur;
+end;
+
 function PyIsStdlibMemberValue(const base, nm: AnsiString; anyAttr: Boolean): Boolean;
 begin
   Result := False;
@@ -12534,7 +12581,8 @@ begin
   end;
   if TokPos + 1 >= TokCount then Exit;
   if Tokens[TokPos].Kind <> tkDot then Exit;
-  base := LowerCase(GetTokenStr(TokPos - 1));
+  { through the module-alias root: `import os as o` makes o.getcwd() this door too }
+  base := PyUnitAliasRootName(GetTokenStr(TokPos - 1));
   nm := LowerCase(GetTokenStr(TokPos + 1));
   Result := PyIsStdlibMemberValue(base, nm, True);
 end;
@@ -12559,7 +12607,8 @@ begin
   end
   else
   begin
-    base := LowerCase(GetTokenStr(TokPos - 1));
+    { through the module-alias root: `import os as o` makes o.getcwd() this door too }
+    base := PyUnitAliasRootName(GetTokenStr(TokPos - 1));
     nm := LowerCase(GetTokenStr(TokPos + 1));
     Next; Next; Next;            { base, '.', the member name }
   end;
@@ -12874,7 +12923,8 @@ begin
     pname := PyStdlibCallProc(base + '.' + aliasMem);
     if pname <> '' then begin nTok := 1; Result := True; Exit; end;
   end;
-  base := LowerCase(GetTokenStr(TokPos - 1));
+  { through the module-alias root: `import os as o` makes o.getcwd() this door too }
+  base := PyUnitAliasRootName(GetTokenStr(TokPos - 1));
   { This list and PyStdlibCallProc's table are ONE concept in two places: a
     dotted name not admitted here never reaches the table, so an entry added
     there alone is silently dead code. Adding a base costs a line; forgetting

@@ -1219,6 +1219,22 @@ test-nilpy: $(COMPILER)
 	# Positive control MEASURED, not assumed: the PINNED compiler answers
 	# `pascal26:27: error: import: no unit named also_no_such_module_9f2a`,
 	# which is the dead tail import in select(), so this row is red pre-fix.
+	# A MODULE ALIAS must reach the MODELLED modules, not only the ones backed by
+	# a real RTL unit. `import sys as s; s.platform` and `import os as o;
+	# o.getcwd()` both failed while `import math as m; m.pi` always worked --
+	# math is a unit and resolves through FindUnitOrAlias, which chases the alias
+	# chain, while sys and os are compiler-provided doors keyed on the LITERAL
+	# base name. The ticket read this as "aliases work for calls, not attributes"
+	# and that was backwards: for sys/os NEITHER spelling worked, and the row
+	# that looked like the working half was a different module family entirely.
+	# The last row is the one that proves the chase runs the right way -- an
+	# alias to a REAL unit shadowing a modelled name (`import math as zz`) must
+	# answer math's pi, which a resolver mapping toward the modelled door would
+	# get wrong in the SILENT direction.
+	# Positive control MEASURED: the PINNED compiler answers `pascal26:28:
+	# error: no member platform came of the qualifier s`, the first fixed row.
+	./$(COMPILER) test/test_nilpy_a_module_alias_reaches_the_modelled_modules.npy $(TESTTMP)/test_nilpy_modalias26
+	tools/expect_same.sh test_nilpy_modalias26 "$$($(TESTTMP)/test_nilpy_modalias26)" "$$(python3 test/test_nilpy_a_module_alias_reaches_the_modelled_modules.npy)"
 	./$(COMPILER) test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy $(TESTTMP)/test_nilpy_deadimp26
 	tools/expect_same.sh test_nilpy_deadimp26 "$$($(TESTTMP)/test_nilpy_deadimp26)" "$$(python3 test/test_nilpy_a_dead_path_after_a_failed_guarded_import.npy)"
 	# THE TWO ARMS THAT MUST STILL FAIL, and they are what keeps the fix from
