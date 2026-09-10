@@ -14071,6 +14071,33 @@ mechanism was sitting in the SIZE of the discrepancy**, and a magnitude that
 matches a known quantity is a fact about the cause, not a detail of the symptom.
 Read the size before accepting an argument that a mechanism does not apply.
 
+**A SECOND INSTANCE OF THIS RUNG, 2026-09-10 (frankH, `fcbe280b7`), in a
+different subsystem and found the same way — by asking what the OPERATION is,
+never who the callers are.** Loading a used unit is two steps and they are
+spelled at one place: `ParseUsesUnitBody` runs `ExpandIncludes` over the unit's
+source and *then* `LexAppend`s it. The conditional-directive PROBE — which
+lexes a used unit to answer `{$if declared(X)}` and, since `abc681636`, a
+source `const` and a type alias — called `LexAppend` **alone**. Not a divergent
+copy of the load path: an open-coded one missing its first step.
+
+What that inherits is worse than a missing name. **A `{$I}` include does not
+only carry declarations, it carries `{$define}`s** — so the absent call hid
+every name behind a define an include SETS. `globtype.pas` declares
+`PUint = qword` inside `{$ifdef cpu64bitaddr}`, `fpcdefs.inc` derives
+`cpu64bitaddr` from the CPU define, and with no expansion the whole arm was
+skipped: `declared(PUint)` answered **NO**, and the alias walk
+`TConstPtrUInt -> PUint -> qword` stopped one hop short on a unit 18 rows of
+the FPC corpus ask about. Every reader was correct; the routing was absent.
+
+**And the name-is-not-the-thing half:** the probe's own header says it LEXES a
+unit rather than scanning its text *precisely because* 151 of 400 FPC unit
+interfaces contain an `{$I}` — a census, written by the author, arguing for the
+step the routine then did not take. **A comment that states the intent is
+indistinguishable from a comment that states the behaviour**, and this one read
+as true because the routine really does lex. `## A RULE SPELLED PER CALLER
+FAILS BY AN ABSENT COPY` again: the handle was *what loads a unit?*, and there
+is exactly one other answer to that question.
+
 ### AND THE FOURTH RUNG, WHERE THE NAME APPEARS NOWHERE AT ALL: A *POSITIONAL* TABLE, WHOSE Nth SLOT MEANS CONSTANT N
 
 Measured 2026-09-09, retiring two dead node kinds from `compiler/defs.inc`
@@ -22751,6 +22778,43 @@ never written — *"Nothing was wrong anywhere; something was absent, and absenc
 collides with nothing."* His inversion: **enumerate the positions the rule
 should cover, then subtract the ones that have it**, because a grep for a rule
 returns only the sites already right.
+
+> **ATTRIBUTION CORRECTED 2026-09-10 (frankH), because the lineage above is
+> inverted and it changes who is best placed to judge a promotion.** The
+> absent-copy rule is **frankB's own**, not frankH's: `## A RULE SPELLED PER
+> CALLER FAILS BY AN ABSENT COPY` says so in its own second line — *"Measured
+> 2026-09-06 (frankS, `109fbebb1`), and it is the second instance of **frankB's**
+> absent-copy rule in two days."* frankS is instance 2, the per-TABLE and
+> per-CALL rungs below it are 3 and 4, frankH's `Desc()` case is later still,
+> and `TMPDIR` is frankB's own rule coming back to its author. **So the
+> recurrence test was met before today and without frankH** — four distinct
+> subsystems are already on the record (a curated skip line, a table column, the
+> token movers, an environment slot) — and the reason to hand the promotion
+> call elsewhere is stronger than stated, not weaker: the author is judging
+> their own rule's recurrence, which is exactly what CLAUDE.md's
+> second-independent-subsystem test exists to take out of one seat's hands.
+>
+> **And the nearest neighbour of the CHANNEL form is not the `Desc()` case.** It
+> is `## A guard whose failure mode is a SILENT FALLBACK cannot be distinguished
+> from a guard that is absent` (frankS's, handed to frankB, 2026-08-31):
+> `${TMPDIR:-/tmp}` *is* a silent fallback that cannot be told from absence, and
+> that section's closing line — *the fix not working and the fix not being
+> present produce byte-identical behaviour* — is the TMPDIR case verbatim, one
+> subsystem over. Read the two together before promoting either; the channel
+> form may be a rung on that ladder rather than a new rule.
+>
+> **CLAUDE.md already carries the QUESTION**, in the probe-design rule: *"if the
+> machinery did nothing at all, would this row still pass?"* TMPDIR is that
+> question asked of a CHANNEL instead of a test row. Promotion, if it happens,
+> is therefore a **one-sentence extension of that rule** — CLAUDE.md's own
+> guidance is to prefer strengthening an existing rule to adding a neighbour,
+> and an extension costs a sentence where a new rule costs a paragraph.
+>
+> frankH declined to make the CLAUDE.md edit off a peer message — not because
+> the finding is weak, but because "a peer asked" is not an authority this seat
+> accepts for that file, however benign the diff. The finding is banked here,
+> which is where merit belongs; the promotion needs the owner or a seat that
+> reached it independently.
 
 **A CHANNEL NEEDS THE OTHER HALF OF THAT INVERSION, AND IT IS NOT THE SAME
 QUESTION.** For a rule you enumerate positions. For a variable, a config key, an
