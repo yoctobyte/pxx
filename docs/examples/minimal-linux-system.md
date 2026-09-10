@@ -123,6 +123,13 @@ is our own source). Everything *compiled* is compiled by PXX. Those two are
 tools rather than libraries — nothing from outside the checkout ends up inside
 the result, which is the claim the freestanding link asserts.
 
+Nothing about this image is the limit of what such an image can hold. PXX
+compiles SQLite, Lua and zlib as zero-dependency binaries already — see
+[Compatibility status](../reference/status.md#c-frontend) — so putting one of
+them on a system like this needs no new mechanism, only a decision to package
+it. What is on this ISO is the *minimum* that demonstrates the claim, not a
+ceiling.
+
 On licensing, since a self-contained image invites the question: everything PXX
 contributes is MPL-2.0 (compiler) and zlib (runtime and libraries), so it imposes
 nothing on what you build. The two third-party components are both GPL — the
@@ -218,6 +225,14 @@ that is the check.
   inside the guest to a byte-identical second stage. Keep the two apart: *the
   compiler runs on the minimal ISO* and *the compiler reproduces itself in a VM*
   are separate claims, proved on separate images. This page is only the first.
+  **That image's check needs a current compiler as its seed.** It compares two
+  stages, so it converges only when the compiler building the image already
+  matches the sources being built. Seeded with the older pinned compiler it
+  prints `NO FIXEDPOINT: stage1 != stage2`, which is arithmetic and not a
+  regression: measured 2026-09-10 at `32fb438eb`, that chain converges one round
+  later — stage1 11,969,660 bytes, stage2 and stage3 both 8,140,060 and
+  byte-identical (`sha256 fe40bf55e141…`). The self-host property holds; the
+  two-stage comparison is what does not survive an older seed.
 - `/dev/console` is the serial port, which is what a headless `qemu -nographic`
   or `-cdrom` run wants. In a graphical VM window you will see kernel messages
   but the shell will be on the serial line.
