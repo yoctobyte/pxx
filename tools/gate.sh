@@ -752,6 +752,40 @@ else
   RC=1
 fi
 
+# A LIB UNIT WITH A PYTHON SURFACE MUST BE REACHABLE BY A BARE NilPy IMPORT.
+# A bare `import X` has three routes and only ONE is silent: mimic_X.pas is a
+# substitution and says so ("note: X -> mimic_X"), a name in
+# PyRtlUnitServesPython resolves to lib/rtl/X.pas, and neither case falls through
+# to the HOST's /usr/include/X.h with no note and no refusal. So a unit carrying
+# Python marshalling types that is neither mimic_ nor listed has a surface no
+# import can reach, and the import that should have reached it binds a C header.
+#
+# Wired here because the mistake is a recurring STEP rather than a list of names:
+# add the surface, forget the list entry. Measured 2026-09-11 -- `import zlib`
+# took /usr/include/zlib.h while lib/rtl/zlib.pas held the right answer; C's
+# crc32 is 3-arg against Python's 1-or-2, so the correct spellings were refused
+# and the 3-arg spelling COMPILED, LINKED SYSTEM libz AND RETURNED A WRONG
+# NUMBER. The author had both halves in hand and spent five experiments on the
+# wrong file, because nothing he was editing was ever consulted.
+#
+# ITS POPULATION IS EMPTY TODAY, which is exactly the shape CLAUDE.md warns about
+# -- a guard that cannot fail prints PASS forever. So --self-check runs the
+# CONTROLS FIRST and the control is drawn from the REAL population, not a
+# fixture: remove `zlib` from the list and lib/rtl/zlib.pas must be flagged,
+# which reconstructs the ~20 minutes the tree actually spent in that state. A
+# negative control follows, because a scan that flags everything would pass the
+# positive one. Costs ~0.1s and builds nothing.
+if [ -f tools/py_surface_is_reachable.py ]; then
+  step "a lib unit's Python surface is reachable" "$LOGDIR/py-surface.log" \
+       python3 tools/py_surface_is_reachable.py --self-check                    || RC=1
+else
+  say "  FAIL  Python-surface reachability — tools/py_surface_is_reachable.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree rather"
+  echo "        than a configuration, and skipping would pass green for a tree with"
+  echo "        no checker in it."
+  RC=1
+fi
+
 # ...and the OTHER hand-maintained list in the same file: every AST-indexed slot
 # AllocNode initialises must be one CloneAST carries. On 2026-09-06 CloneAST was
 # missing TWO at once -- ASTSemId (a cloned subtree lost its enum-or-sized-
