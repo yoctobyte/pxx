@@ -38,6 +38,23 @@ attention. and forget about the bigger goal."*
 boundary, so the only thing that works is the goal being written where the next
 one trips over it. That is what this section is for.
 
+### "WITHOUT EXTERNAL LIBRARIES" IS GOAL 5 ONLY — NOT GOAL 4 (owner, 2026-09-10)
+
+> *"i do realize lekkerzeilen will need external libraries (at least if we want
+> to stay sane). but minimal busybox system (bootable kernel+busybox+pxx) should
+> be possible."*
+
+**Do not read goal 5's constraint onto goal 4.** lekkerzeilen binds SDL2 and
+OpenGL and is SUPPOSED to — that is a sane dependency on a real graphics stack,
+and the `ctypes`/dynamic-loading path that reaches it is the thing that has to
+work, not the thing to eliminate. A seat that starts removing SDL2 from
+lekkerzeilen in the name of goal 5 has inverted the goal.
+
+The freestanding constraint belongs to **one** target: the minimal system —
+**bootable kernel + busybox + pxx compiler, and nothing else.** That is proof #2
+from the matrix below, with the vagueness removed, and the owner's word for its
+feasibility is *"should be possible"*, not aspirational.
+
 ### What goals 4 and 5 are measured against, so "done" is not arguable
 
 - **lekkerzeilen (goal 4).** 20 of 35 modules compiled at last count, and the
