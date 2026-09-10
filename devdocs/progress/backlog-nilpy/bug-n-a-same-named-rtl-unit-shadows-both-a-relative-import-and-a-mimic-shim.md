@@ -216,3 +216,49 @@ soname half belongs to frankH's existing derived-soname ticket (the SDL2
 blocker) and has been relayed there with this as the smaller repro; it is not
 part of this ticket, and fixing it does NOT give a Python caller CPython
 semantics — C `compress` still takes four arguments to CPython's one.
+
+## THE RULE, FROM THE OWNER, 2026-09-10 — and Pascal already obeys it
+
+> *"our import rules are like. native language first. built-in and rtl libraries
+> first. so zlib.pas has prio over /usr/include/zlib.h in case we specify 'zlib'
+> in pascal or python.."*
+
+**So this is a straightforward bug against a stated rule, and it is narrower
+than the rest of this ticket says.** Measured at 546d4dcbd305:
+
+| spelling | resolves to | verdict |
+| --- | --- | --- |
+| Pascal `uses hashing, zlib` | `lib/rtl/zlib.pas` — `InflateZlib` runs, answers `zlib stream too short` on empty input | **correct** |
+| NilPy `import zlib` | `/usr/include/zlib.h` — `zlibVersion` binds from `libzlib.so` | **violates the rule** |
+
+The Pascal path is already right. **Only the NilPy import path puts a system C
+header ahead of our own unit**, so the fix is in that path and the blast radius
+is NilPy imports, not `uses`.
+
+### What "ours first" means for a PYTHON import
+
+`lib/rtl/mimic_*` are RTL files — the RTL's own Python face, not a third-party
+fork — so a mimic IS "built-in and rtl". For `import zlib` the order that
+satisfies the rule and also produces something callable is:
+
+1. `mimic_zlib` — ours, CPython-shaped
+2. `lib/rtl/zlib.pas` — ours, Pascal-shaped (and in practice unreachable from
+   NilPy: it wants `hashing`'s `TByteArray` and NilPy has no spelling for one)
+3. **never** the system header for a bare name
+
+Rung 2 being effectively dead from Python is not an argument against the order —
+it is why the mimic has to exist. The explicit door to the unit stays
+`import 'zlib.pas' as z`, which works today.
+
+### The one case the rule does not cover, decided rather than escalated
+
+`from . import platform` carries a leading `.`, which is the program scoping the
+name to ITSELF. "Built-in and rtl first" is a rule for resolving a **bare**
+name; a dotted-relative import is not one. So the program's own module wins
+there, independent of this ordering — otherwise lekkerzeilen's seam stays broken
+by a rule written about something else. Recorded as decided, not asked, because
+it follows from what the spelling means; relayed to the owner for contradiction
+in the same breath. **If he reads it the other way, arm 1 of this ticket becomes
+a Track U question and lekkerzeilen's `platform/` package needs renaming
+instead** — which is the consequence to weigh, and it is a rename in a consuming
+program rather than a compiler change.
