@@ -1,0 +1,11 @@
+# A C header in a SUBDIRECTORY of an include root, reached by the spelling a C
+# programmer would already write. Compiled with `-Itest/ffi_headers/`.
+#
+# Before feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory the
+# only form that reached such a header was the ABSOLUTE
+# `import "/usr/include/SDL2/SDL.h"`, which hardcodes one distribution's layout
+# into the source -- so a showcase program stopped being portable in the act of
+# working. Every other spelling missed by construction, because a bare name is
+# reduced to its basename before any probe runs.
+import "sub/marker.h"
+print(FFI_MARKER)

@@ -2629,6 +2629,59 @@ test-nilpy: $(COMPILER)
 	# POSITION moved. This goes red immediately if that happens again.
 	./$(COMPILER) test/test_nilpy_import_c_header_still_works.npy $(TESTTMP)/test_nilpy_imphdr26
 	tools/expect_same.sh test_nilpy_imphdr26 "$$($(TESTTMP)/test_nilpy_imphdr26)" "$$(printf 'malloc/free ok\nabs         3')"
+	# ...and a header in a SUBDIRECTORY of an include root, which no spelling
+	# could reach: a bare name is cut to its basename before any probe runs, so
+	# `import SDL2/SDL.h`, `import SDL` and `import SDL2_SDL` all missed and only
+	# the ABSOLUTE `import "/usr/include/SDL2/SDL.h"` worked -- baking one
+	# distribution's layout into the source. The fixture is a #define, not a
+	# function, so this row asserts RESOLUTION and cannot be confused with a link.
+	./$(COMPILER) -Itest/ffi_headers/ test/test_nilpy_a_header_in_a_subdirectory_of_an_include_root.npy $(TESTTMP)/test_nilpy_ffisub26
+	$(TESTTMP)/test_nilpy_ffisub26 | diff -u test/test_nilpy_a_header_in_a_subdirectory_of_an_include_root.expected -
+	# THE ORDERING CONTROL, and the reason the row above cannot stand alone: a
+	# header BESIDE THE SOURCE must keep beating the include root. Both files are
+	# called sub/marker.h and they differ only in the constant, so a fallback that
+	# ran first would print a plausible wrong number and stay green everywhere
+	# else. Same -I as above on purpose.
+	./$(COMPILER) -Itest/ffi_headers/ test/ffi_local/beside_the_source_wins.npy $(TESTTMP)/test_nilpy_ffiloc26
+	$(TESTTMP)/test_nilpy_ffiloc26 | diff -u test/ffi_local/beside_the_source_wins.expected -
+	# A soname the compiler INVENTED from a header's file name, that this box
+	# cannot resolve, must be a COMPILE error once a symbol is referenced -- not a
+	# green build that dies at exec with `cannot open shared object file`, which
+	# is what `import "/usr/include/GL/gl.h"` did: stem `gl`, library libGL.so.1.
+	# Hermetic: no libnolib.so exists anywhere, so this asserts the guard without
+	# depending on which libraries this box has.
+	@out=$$(./$(COMPILER) -Itest/ffi_headers/ test/test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist.npy $(TESTTMP)/test_nilpy_ffinolib26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:10: error: this build would die at exec: `nolib_add` is imported from libnolib.so' \
+	   && test ! -e $(TESTTMP)/test_nilpy_ffinolib26 \
+	  || { echo "test_nilpy_a_referenced_symbol_from_a_library_that_cannot_exist: FAIL - rc=$$rc (want 1, the exec diagnostic on line 10, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# ...and THE NEGATIVE CONTROL, which is what keeps the guard from being a
+	# blanket refusal: the same impossible header, imported and never referenced,
+	# emits no DT_NEEDED at all and is a working program.
+	./$(COMPILER) -Itest/ffi_headers/ test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy $(TESTTMP)/test_nilpy_ffiunref26
+	$(TESTTMP)/test_nilpy_ffiunref26 | diff -u test/test_nilpy_an_unreferenced_header_import_needs_no_library.expected -
+	@readelf -d $(TESTTMP)/test_nilpy_ffiunref26 | grep -q NEEDED \
+	  && { echo "test_nilpy_an_unreferenced_header_import_needs_no_library: FAIL - it emitted a DT_NEEDED, so the negative control is not testing what it claims"; exit 1; } || true
+	# THE TICKET'S OWN REPRO. Not hermetic, so it SKIPS LOUDLY rather than
+	# passing when this box has no GL headers -- an absent prerequisite is a skip,
+	# never a pass.
+	# The assertion is a RELATION, not a constant: whatever soname comes out must
+	# be one THIS loader can resolve. That carries to a box whose GL is libGL.so.2
+	# and still fails on the pre-fix answer, because `libgl.so` resolves nowhere
+	# -- so the row is its own positive control and cannot pass on a revert.
+	@if [ ! -e /usr/include/GL/gl.h ]; then \
+	   echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: SKIP - no /usr/include/GL/gl.h on this box (needs libgl-dev); the case-insensitive soname lookup is NOT covered by this run"; \
+	 else \
+	   ./$(COMPILER) test/test_nilpy_a_header_whose_library_is_not_spelled_like_its_file.npy $(TESTTMP)/test_nilpy_ffigl26 >/dev/null 2>&1 \
+	     || { echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: FAIL - it did not compile"; exit 1; }; \
+	   need=$$(readelf -d $(TESTTMP)/test_nilpy_ffigl26 | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); \
+	   test -n "$$need" \
+	     || { echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: FAIL - no DT_NEEDED at all, so the check below would have passed on an empty comparison"; exit 1; }; \
+	   ldd $(TESTTMP)/test_nilpy_ffigl26 2>&1 | grep -q 'not found' \
+	     && { echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: FAIL - DT_NEEDED $$need cannot be resolved by this loader; that is the green-build-dead-at-exec shape the fix was for"; ldd $(TESTTMP)/test_nilpy_ffigl26; exit 1; }; \
+	   echo "test_nilpy_a_header_whose_library_is_not_spelled_like_its_file: DT_NEEDED $$need resolves on this loader"; \
+	 fi
 	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy $(TESTTMP)/test_nilpy_ctorkwf26
 	$(TESTTMP)/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	$(TESTTMP)/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -

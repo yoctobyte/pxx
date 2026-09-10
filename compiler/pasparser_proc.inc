@@ -3990,10 +3990,33 @@ end;
 function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString): Boolean;
 { `libz.so` -> `libz.so.1` when the host has one. Only a VERSIONED key counts:
   an exact `libz.so` hit is the -dev symlink, which is what we would have
-  emitted anyway, so it is not an answer worth preferring over the table. }
+  emitted anyway, so it is not an answer worth preferring over the table.
+
+  CASE-INSENSITIVE SECOND PASS, AND IT IS A FALLBACK, NOT A RELAXATION. The
+  stem we are handed comes from a header's FILE NAME, and a file name is not
+  the library's name: `/usr/include/GL/gl.h` gives the stem `gl` while the
+  library is `libGL.so.1`, because the capitals live in the DIRECTORY, which
+  the resolver strips before anything gets here. So an exact lookup asks the
+  host a question the host cannot answer, and the caller then emits `libgl.so`
+  -- a name no loader will ever find, in a binary that compiles GREEN and dies
+  at exec.
+
+  An EXACT hit always wins: this scans the whole table and only returns a
+  case-insensitive hit when no exact one was seen, so no answer that resolves
+  today can change. That is the property that makes this safe to add rather
+  than a policy to argue about.
+
+  Measured 2026-09-10 on this box: 1417 distinct cache keys, of which 176 carry
+  an uppercase letter (libGL, libGLU, libEGL, libFLAC, libICE, libLLVM,
+  libOpenCL, libSDL2-2.0, ...), and ZERO pairs differ only by case -- so the
+  fallback is unambiguous here and reaches a population two orders of magnitude
+  larger than the one library the ticket was filed about. Where a host DOES
+  hold two keys differing only in case and neither matches exactly, this takes
+  the first in cache order. That is a guess, and it is strictly better than
+  today's answer, which is a name that is not in the cache at all. }
 var nlibs, i, entOff: Integer;
     keyOff: Int64;
-    key, want: AnsiString;
+    key, want, wantLo, ciHit: AnsiString;
 begin
   LdCacheFindSoname := False;
   LdCacheLoad;
@@ -4003,18 +4026,36 @@ begin
   nlibs := Integer(LdCacheU32(21));
   if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
   want := unversioned + '.';          { the version suffix must be present }
+  wantLo := LowerCase(want);
+  ciHit := '';
   for i := 0 to nlibs - 1 do
   begin
     entOff := 49 + i * 24;            { 1-based start of entry i }
     keyOff := LdCacheU32(entOff + 4);
-    if keyOff < 0 then Exit;
-    if not LdCacheStringAt(Integer(keyOff), key) then Exit;
-    if (Length(key) > Length(want)) and (Copy(key, 1, Length(want)) = want) then
+    if keyOff < 0 then Break;
+    if not LdCacheStringAt(Integer(keyOff), key) then Break;
+    if Length(key) > Length(want) then
     begin
-      soname := key;
-      LdCacheFindSoname := True;
-      Exit;
+      if Copy(key, 1, Length(want)) = want then
+      begin
+        soname := key;
+        LdCacheFindSoname := True;
+        Exit;                         { exact: nothing later can beat it }
+      end;
+      { Only the PREFIX is lowered, not the whole key -- this runs once per
+        cache entry per header import and the tail is never compared. }
+      if (Length(ciHit) = 0) and (LowerCase(Copy(key, 1, Length(want))) = wantLo) then
+        ciHit := key;
     end;
+  end;
+  { A truncated cache Breaks out above rather than Exiting, so a case-insensitive
+    hit found before the truncation is still returned -- the alternative is
+    discarding a correct answer because of a defect further down a file we did
+    not write. }
+  if Length(ciHit) > 0 then
+  begin
+    soname := ciHit;
+    LdCacheFindSoname := True;
   end;
 end;
 
@@ -4027,6 +4068,84 @@ var found: AnsiString;
 begin
   ResolveHostSoname := unversioned;
   if LdCacheFindSoname(unversioned, found) then ResolveHostSoname := found;
+end;
+
+function LdCacheHasKey(const soname: AnsiString): Boolean;
+{ Is this EXACT name one the loader on this box can already resolve? Unlike
+  LdCacheFindSoname this accepts an unversioned key too: `libz.so` being present
+  as the -dev symlink is not the answer we PREFER, but it is an answer the
+  loader will accept, so a binary naming it is not broken. }
+var nlibs, i, entOff: Integer;
+    keyOff: Int64;
+    key: AnsiString;
+begin
+  LdCacheHasKey := False;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  nlibs := Integer(LdCacheU32(21));
+  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+  for i := 0 to nlibs - 1 do
+  begin
+    entOff := 49 + i * 24;
+    keyOff := LdCacheU32(entOff + 4);
+    if keyOff < 0 then Exit;
+    if not LdCacheStringAt(Integer(keyOff), key) then Exit;
+    if key = soname then
+    begin
+      LdCacheHasKey := True;
+      Exit;
+    end;
+  end;
+end;
+
+function LdCacheUsable: Boolean;
+{ Can this box answer the question at all? FALSE when cross-compiling (the host's
+  library set says nothing about a target's), when /etc/ld.so.cache is absent or
+  unreadable, or when it is not the glibc 1.1 format. Every caller treats FALSE
+  as "do not diagnose" -- an uninformed guard that fires is worse than one that
+  stays quiet, because it refuses builds it knows nothing about. }
+begin
+  LdCacheUsable := False;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  LdCacheUsable := Integer(LdCacheU32(21)) > 0;
+end;
+
+procedure CNoteSynthLibIfMissing(const soname, header: AnsiString);
+{ Remember a soname the compiler INVENTED from a header's file name and that
+  this host cannot resolve. Consumed by RegisterExternal, which is the choke
+  point where an external actually becomes a DT_NEEDED. See CSynthMissingLibs
+  in defs.inc for why provenance decides membership. }
+var i: Integer;
+begin
+  if Length(soname) = 0 then Exit;
+  if not LdCacheUsable then Exit;
+  if LdCacheHasKey(soname) then Exit;
+  for i := 0 to CSynthMissingCount - 1 do
+    if CSynthMissingLibs[i] = soname then Exit;
+  { Over the cap we simply stop recording: the consequence is a missing
+    diagnostic, never a wrong one, which is the safe direction for a guard. }
+  if CSynthMissingCount >= MAX_C_INCLUDE_DIRS then Exit;
+  CSynthMissingLibs[CSynthMissingCount] := soname;
+  CSynthMissingHdrs[CSynthMissingCount] := header;
+  Inc(CSynthMissingCount);
+end;
+
+function CSynthMissingHeaderFor(const soname: AnsiString; var header: AnsiString): Boolean;
+var i: Integer;
+begin
+  CSynthMissingHeaderFor := False;
+  for i := 0 to CSynthMissingCount - 1 do
+    if CSynthMissingLibs[i] = soname then
+    begin
+      header := CSynthMissingHdrs[i];
+      CSynthMissingHeaderFor := True;
+      Exit;
+    end;
 end;
 
 function CSonameForStem(const stem: AnsiString; var soname: AnsiString): Boolean;
@@ -4774,6 +4893,48 @@ begin
         LoadFile(path, UnitContent)
       else
         LoadFileCI(path, UnitContent);
+      { A RELATIVE `SDL2/SDL.h` THAT IS NOT BESIDE THE SOURCE FALLS BACK TO THE
+        C INCLUDE PATH — the one spelling that reached a header in a
+        subdirectory was the ABSOLUTE `/usr/include/SDL2/SDL.h`, which bakes a
+        distribution's layout into the source. Every bare form misses by
+        construction: a bare name is stripped to a basename before any probe
+        runs, so `SDL2/SDL.h`, `SDL`, `from SDL2 import SDL` and `SDL2_SDL` all
+        answer `no unit named ...` and no include root can help them.
+
+        SOURCE DIRECTORY FIRST, and that is not incidental: a header sitting
+        next to the program is an explicit local choice and must keep winning,
+        which is the same ordering AddDefaultCIncludeDirs' own callers use. The
+        search only runs once the authoritative path has genuinely missed, so
+        no reference that resolves today can move.
+
+        `.h` ONLY, and ABSOLUTE PATHS ARE UNTOUCHED. Extending this to `.pas`
+        would put Pascal unit resolution on a C search path, which is the
+        collision `bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-
+        dynamic-import` was filed for; an absolute path already names exactly
+        one file and searching after it would be answering a question the user
+        did not ask. Bare-name ordering (a Python stdlib name that also names a
+        C header must reach the Python module first,
+        test_nilpy_import_c_header_still_works.npy) is untouched too — that is
+        the NON-path arm, which nothing here reaches.
+        feature-n-a-c-header-import-cannot-name-a-header-in-a-subdirectory }
+      if (Length(UnitContent) = 0) and isCHeader and (name[1] <> '/') then
+      begin
+{$ifndef PXX_NO_CFRONT}
+        AddDefaultCIncludeDirs;
+        i := 0;
+        while (Length(UnitContent) = 0) and (i < CIncludeDirCount) do
+        begin
+          ConcatThree(CIncludeDirs[i], name, '', path);
+          LoadFile(path, UnitContent);
+          Inc(i);
+        end;
+{$endif}
+        if Length(UnitContent) = 0 then
+        begin
+          ConcatThree('/usr/include/', name, '', path);
+          LoadFile(path, UnitContent);
+        end;
+      end;
     end
     else
     begin
@@ -6287,6 +6448,10 @@ begin
         by default. }
       if not CSonameForHeader(cName, CurrentCLibrary) then
         ConcatThree('lib', LowerCase(cName), '.so', CurrentCLibrary);
+      { The name above is DERIVED FROM A FILE NAME and may well not exist. Note
+        it if this host cannot resolve it; RegisterExternal turns that into a
+        diagnostic if — and only if — a symbol from it is actually referenced. }
+      CNoteSynthLibIfMissing(CurrentCLibrary, cName);
     end;
     savedTokPos := TokPos;
     savedCurTokKind := CurTok.Kind;

@@ -16433,7 +16433,7 @@ end;
 
 { Ensure the external procIdx has a GOT slot; return its ExternalProc[] index. }
 function RegisterExternal(procIdx: Integer): Integer;
-var i, extIdx: Integer; enm: AnsiString;
+var i, extIdx: Integer; enm, synthHdr: AnsiString;
 begin
   { A `__pxx_p*` name is one of OUR OWN pthread PAL helpers (palpthread.pas),
     not anything a shared library can supply. Reaching this point means a C
@@ -16499,6 +16499,35 @@ begin
             + 'Something that should supply its body is not visible here — a '
             + 'missing `uses` of the unit that defines it, or a C translation '
             + 'unit compiled without its Pascal bridge.');
+    { THE SIBLING HALF OF THE GUARD ABOVE, AND IT WAS SIMPLY ABSENT.
+      That one asks whether the SYMBOL can come from any library. This asks
+      whether the LIBRARY exists at all. Same choke point, same failure — a
+      build that links clean and dies at exec — and the same argument in its
+      own words: "Every program this rejects was already broken; the change is
+      that it now says so at compile time."
+
+      It went unwritten because each instance was fixed on the PRODUCER side:
+      `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead`
+      removed one way to synthesise a lib<header>.so "that cannot exist, dead
+      at load", and
+      `bug-a-a-c-include-path-captures-a-pascal-uses-and-emits-a-dynamic-import`
+      removed another whose own note reads "the binary carries a DT_NEEDED on
+      libstrings.so and dies at load. Nothing in the build says so." Two
+      authors wrote that sentence and neither added the check that says so.
+
+      Scoped to sonames the COMPILER INVENTED from a file name — see
+      CSynthMissingLibs in defs.inc. A name the user wrote is intent, and
+      LD_LIBRARY_PATH makes an absent-from-cache library a legitimate,
+      in-tree-tested configuration. }
+    if (ProcLibrary[procIdx] >= 0) and
+       CSynthMissingHeaderFor(Strs[ProcLibrary[procIdx]].Text, synthHdr) then
+      Error('this build would die at exec: `' + enm + '` is imported from '
+            + Strs[ProcLibrary[procIdx]].Text + ', which no library on this '
+            + 'machine answers to. That soname was not declared anywhere — the '
+            + 'compiler derived it from the name of the header you imported ('
+            + synthHdr + '.h), and a header file name is not a library name. '
+            + 'Name the library explicitly instead, with an `external '
+            + '''<soname>''' + '` clause carrying the soname the loader wants.');
   end;
   extIdx := -1;
   for i := 0 to ExternalCount-1 do

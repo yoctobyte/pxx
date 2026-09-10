@@ -5988,6 +5988,31 @@ var
   CUseSystemLibs   : Boolean;
   CSystemLibs       : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CSystemLibCount   : Integer;
+  { Sonames the compiler SYNTHESISED from a header's file name and then could
+    not find on this host. A DT_NEEDED on one of these is a binary that compiles
+    green and dies at exec with `cannot open shared object file`.
+
+    PROVENANCE IS THE WHOLE POINT OF THE LIST, and it is why this is not simply
+    "every soname, checked against /etc/ld.so.cache". A name the USER wrote in
+    an `external 'libfoo.so'` clause carries intent the compiler must not
+    second-guess: `test_c_lazycasing.pas` and `test_c_argspill.pas` build their
+    own .so and reach it through LD_LIBRARY_PATH -- deliberately hermetic, and
+    deliberately absent from the cache -- and `lib/pcl/tk.pas` names
+    libtcl8.6.so.0 / libtk8.6.so.0, which are not installed on this box and
+    must still compile. Measured 2026-09-10: checking every soname would refuse
+    all four. A name derived from a FILE NAME carries no intent at all; it is
+    the compiler's own guess, and checking your own guess against the host is
+    not second-guessing anybody.
+
+    Recorded at import and consumed at RegisterExternal rather than checked at
+    the import itself, because an import whose symbols are never REFERENCED
+    emits no DT_NEEDED and runs fine -- `import "/usr/include/SDL2/SDL.h"` with
+    only a print() is a working program, and diagnosing it would be a guard
+    firing on a program that does not have the defect.
+    bug-n-a-c-header-import-lowercases-the-library-name-so-gl-does-not-link }
+  CSynthMissingLibs  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSynthMissingHdrs  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CSynthMissingCount : Integer;
   CrtlSrcPulled    : array[0..MAX_CRTL_PULLS-1] of AnsiString;
   CrtlSrcPulledCount : Integer;
   { Impl pulls DEFERRED to the top level, in the order they were requested.

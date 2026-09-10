@@ -1,0 +1,9 @@
+# THE ORDERING CONTROL for the include-path fallback.
+#
+# Compiled with `-Itest/ffi_headers/`, which also has a `sub/marker.h` -- with a
+# different value. This program sits next to its own, so its own must win. If the
+# fallback ever ran FIRST, this row prints 4242 and nothing else in the suite
+# would notice: both headers resolve, both compile, and the wrong constant is a
+# plausible number.
+import "sub/marker.h"
+print(FFI_MARKER)

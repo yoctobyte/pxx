@@ -1,0 +1,12 @@
+# THE TICKET'S OWN REPRO, and the one row that is not hermetic -- see the
+# Makefile, which SKIPS it loudly when this box has no GL headers.
+#
+# `/usr/include/GL/gl.h` has the file stem `gl` and the library is `libGL.so.1`:
+# the capitals live in the DIRECTORY, which the resolver discards before anything
+# looks at it, so an exact /etc/ld.so.cache lookup asks a question the host
+# cannot answer and the compiler emitted `libgl.so` -- a green build, dead at
+# exec. Written with the RELATIVE spelling, which needed the include-path
+# fallback to resolve at all, so this row exercises both halves of the group at
+# once.
+import "GL/gl.h"
+print(glGetError())

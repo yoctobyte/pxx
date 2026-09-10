@@ -1,0 +1,11 @@
+# THE NEGATIVE CONTROL for the missing-library guard, and it is the row that
+# makes the guard a guard rather than a blanket refusal.
+#
+# `nolib.h` names a library that cannot exist. Importing it and never touching
+# its functions emits no DT_NEEDED at all, so this is a working program and must
+# stay one -- diagnosing it would be a guard firing on a program that does not
+# have the defect. A #define costs no import, so the marker still proves the
+# header was really read.
+import "nolib.h"
+print("imported")
+print(NOLIB_MARKER)

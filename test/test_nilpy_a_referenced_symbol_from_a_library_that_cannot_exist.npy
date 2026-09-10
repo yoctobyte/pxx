@@ -1,0 +1,9 @@
+# THE POSITIVE CONTROL. Same header as the row above, but the function is
+# actually CALLED -- so a DT_NEEDED on `libnolib.so` is emitted and the binary
+# cannot load on any machine.
+#
+# This must be a COMPILE error. It used to build green and die at exec with
+# `cannot open shared object file`, which the ticket calls the worst of the three
+# outcomes: nothing in the build says anything is wrong.
+import "nolib.h"
+print(nolib_add(2, 3))
