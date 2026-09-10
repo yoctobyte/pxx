@@ -150,4 +150,4 @@ The two `no invented soname` assertions and the three `expect_same` rows are
 untouched and still pass. Nothing about `e53eff428`'s refusal is being softened:
 a build that dies at exec is worth refusing, and frankH's read that the refusal
 itself looks correct is the one I agree with.
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fd241a724.
