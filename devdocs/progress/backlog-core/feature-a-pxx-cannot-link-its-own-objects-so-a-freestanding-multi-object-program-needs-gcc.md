@@ -165,3 +165,57 @@ glibc anywhere in the link.**
   2 is the question, and at pin v399 `--separate --pinned` failed on exactly that
   (`multiple definition of abort, abs, accept, …`). A busybox-scale `ld` run is
   in flight.
+
+## AND IT SCALES TO A REAL PROGRAM: A FREESTANDING BUSYBOX RUNS (2026-09-10)
+
+`tools/busybox_diff.sh --separate --applets "cat echo"` produced **28 objects,
+one per translation unit, every one emitted by pxx.** Then, with no libc and no
+glibc crt files:
+
+```
+$ ld -static -e main -o bb obj/*.o
+LINKED — no duplicate symbol errors at all
+```
+
+**The collision hazard did not fire.** That is the specific thing that killed
+`--separate --pinned` at v399 (`multiple definition of abort, abs, accept, …`),
+and at 28 objects with a post-`static`-emits-LOCAL compiler, 28 weak copies of
+crtl resolve cleanly.
+
+With a six-line entry stub reading the kernel's stack (`argc` at `(%rsp)`, `argv`
+at `8(%rsp)`, then `call main`, `call exit`):
+
+```
+$ ld -static -e pxx_start -o bb_run start.o obj/*.o
+$ file bb_run  -> ELF 64-bit LSB executable, statically linked
+$ ldd bb_run   -> not a dynamic executable
+$ ./cat t.txt          -> hello from a freestanding busybox
+$ ./echo one two three -> one two three
+```
+
+**A multi-call busybox, built entirely by pxx, linked with no GNU library.** The
+only non-pxx artefact is that stub, and the logic in it already exists in the ELF
+writer for executables.
+
+### The residual is SIZE, not correctness, and it changed another ticket's value
+
+`bb_run` is **12327880 bytes** against roughly 1 MB for the gcc-linked
+equivalent, because every object carries its own full copy of crtl
+([[feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes]]).
+At 28 objects that is a curiosity. **At 521 it is the thing standing between this
+and a bootable initramfs**, which is goal 5's actual deliverable
+(*"linux kernel + busybox executable + pxx compiler as minimal system"*). That
+ticket has been carried as runtime-duplication tidiness; it is now on the
+critical path and should be ranked as such by whoever takes this group.
+
+**Still unmeasured:** 521 objects. 28 is not 521, and the thing that scales badly
+here is known to scale with object count.
+
+### What to build, in order
+
+1. **Emit the entry stub from pxx** — `--emit-obj --entry` or an equivalent, so
+   no hand-written `.s` is needed. Small; the ELF writer has the logic.
+2. **Run the 394-applet `--separate` set through `ld`** with that stub and
+   measure the size.
+3. **Then** route 2 (a pxx `--link` mode), which removes the `ld` call. A
+   convenience now, not an enabler.
