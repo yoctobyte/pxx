@@ -2666,7 +2666,14 @@ type
     IsFunc     : Boolean;
     RetType    : TTypeKind;
     ParamCount : Integer;
-    Params     : array[0..31] of TParam;   { literal 31: record-field bounds cannot use MAX_PROC_PARAMS-1 (const-expr gap); keep = MAX_PROC_PARAMS }
+    Params     : array[0..MAX_PROC_PARAMS-1] of TParam;
+      { This said `array[0..31]` with a comment claiming record-field bounds
+        cannot fold MAX_PROC_PARAMS-1 -- a "const-expr gap". Measured
+        2026-09-10 against the live compiler AND the pinned seed: both fold it
+        here exactly as they already do for CTypeFnRetPTypes and its eight
+        siblings a few thousand lines below, which have named the constant all
+        along. The gap did not exist; the comment did, and it is what made the
+        constant unraisable. }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }

@@ -1710,7 +1710,7 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaA64Tk: TTypeKind;
     vt: TTypeKind;
     name: AnsiString;
-    argUndecl: array[0..31] of Boolean;
+    argUndecl: array[0..MAX_PROC_PARAMS-1] of Boolean;
     argN: Integer;
 begin
   Result := -1;
@@ -2329,7 +2329,7 @@ begin
               function-pointer-parameter check below, once procIdx is known,
               can tell WHICH argument was an undeclared identifier —
               bug-c-undeclared-identifier-as-function-pointer-becomes-null. }
-            if argN <= 31 then argUndecl[argN] := CLastExprUndeclared;
+            if argN < MAX_PROC_PARAMS then argUndecl[argN] := CLastExprUndeclared;
             Inc(argN);
             { A plain-char ARGUMENT is promoted: prototyped params take the
               converted value and varargs take the default argument promotions
@@ -2547,7 +2547,7 @@ begin
             "undeclared identifier is always an error", which is a separate,
             wider dialect question the ticket explicitly leaves to Track U). }
           for vaK := 0 to argN - 1 do
-            if (vaK <= 31) and argUndecl[vaK] and (vaK < Procs[procIdx].ParamCount) and
+            if (vaK < MAX_PROC_PARAMS) and argUndecl[vaK] and (vaK < Procs[procIdx].ParamCount) and
                (Procs[procIdx].Params[vaK].TypeKind = tyPointer) then
               Error('undeclared identifier passed as argument ' + AIntToStr(vaK + 1) +
                     ' of ''' + name + ''', where a pointer is expected — ' +
@@ -13053,19 +13053,19 @@ var
   byValRec: Boolean;                        { step 2: register-classified struct param }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
-  ptypes: array[0..31] of TTypeKind;
-  pnames: array[0..31] of AnsiString;
-  pdepths: array[0..31] of Integer;
-  pbasetk: array[0..31] of Integer;
-  pbaserec: array[0..31] of Integer;
-  pelemtk: array[0..31] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
-  pelemrec: array[0..31] of Integer;
-  precid: array[0..31] of Integer;    { record id per tyRecord param (for isRef field access) }
-  pprocsig: array[0..31] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
-  pptrelemsig: array[0..31] of Integer;  { pointee fn-ptr sig for a `ft *pf` param (`(*pf)()`), else -1 }
-  pptrarrlen: array[0..31] of Integer;   { pointer-to-array param `elem (*q)[N]`: flattened pointee row length, else 0 }
-  pptrndims:  array[0..31] of Integer;   { pointer-to-array param: pointee array dim count (>1 -> multi-dim, spans in pptrdims) }
-  pptrdims:   array[0..31 * MAX_ARR_DIMS - 1] of Integer; { pointee per-dim spans for a `(*q)[A][B]..` param }
+  ptypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  pnames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  pdepths: array[0..MAX_PROC_PARAMS-1] of Integer;
+  pbasetk: array[0..MAX_PROC_PARAMS-1] of Integer;
+  pbaserec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  pelemtk: array[0..MAX_PROC_PARAMS-1] of Integer;   { pointed-at TTypeKind ordinal per pointer param }
+  pelemrec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  precid: array[0..MAX_PROC_PARAMS-1] of Integer;    { record id per tyRecord param (for isRef field access) }
+  pprocsig: array[0..MAX_PROC_PARAMS-1] of Integer;  { fn-pointer signature Procs[] index per param, else -1 }
+  pptrelemsig: array[0..MAX_PROC_PARAMS-1] of Integer;  { pointee fn-ptr sig for a `ft *pf` param (`(*pf)()`), else -1 }
+  pptrarrlen: array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array param `elem (*q)[N]`: flattened pointee row length, else 0 }
+  pptrndims:  array[0..MAX_PROC_PARAMS-1] of Integer;   { pointer-to-array param: pointee array dim count (>1 -> multi-dim, spans in pptrdims) }
+  pptrdims:   array[0..MAX_PROC_PARAMS * MAX_ARR_DIMS - 1] of Integer; { pointee per-dim spans for a `(*q)[A][B]..` param }
   savedSC, savedFS, node, savedCurProc, pmi: Integer;
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
@@ -13712,7 +13712,18 @@ begin
   end;
 
   if paramsOverflow then
-    Error('C function definition: more than 16 parameters not supported (MAX_PROC_PARAMS)');
+    { THE NUMBER IS DERIVED, AND IT USED TO BE WRONG. This said "more than 16"
+      while MAX_PROC_PARAMS was 32 -- correct when written, stale after the
+      constant moved, and it names the constant beside it so it reads as
+      authoritative. A reader hitting gcc's <immintrin.h> is told the limit is
+      16 and finds a 16-parameter function on the line the error points at
+      (_mm_avx512_set_epi8), which makes the diagnostic look right and the
+      compiler look broken; the function that actually overflows is
+      _mm512_set_epi8 with 64, nearly four thousand lines away in a different
+      file, because an error raised inside an imported module prints that
+      module's line number and no file name. }
+    Error('C function definition: more than ' + AIntToStr(MAX_PROC_PARAMS)
+          + ' parameters not supported (MAX_PROC_PARAMS)');
 
   { ...EXCEPT a bodied `static` from the header the user actually named, which
     falls through to ordinary compilation below: it has internal linkage, so

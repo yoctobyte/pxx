@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:152 backlog-nilpy:110 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3662 rejected:81`
+`working:31 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:153 backlog-nilpy:110 backlog-tools:55 backlog-pascal:7 backlog-decide:44 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:25 done-followup:3 decided:150 done:3662 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,9 +74,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 443, ranked
+## Ready — top 30 of 444, ranked
 
 - `[p 90] [N]` bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved (unblocks 2)
+- `[p 90] [A]` bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment (unblocks 1)
 - `[p 90] [N]` feature-n-the-threading-module (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [U]` decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written
@@ -105,6 +106,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-c-asm-in-inline-body-3
 - `[p 70] [T]` regression-test-core-c-cross-time-and-exit-through-the-pal
 - `[p 70] [N]` regression-test-core-test-nilpy-star-methods-and-targets-2
-- `[p 70] [A]` regression-test-debug-g-compiler-srchash-2
 
-_413 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_414 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
