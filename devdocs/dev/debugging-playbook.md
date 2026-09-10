@@ -23979,3 +23979,50 @@ CLAUDE.md. Match the message.
 
 **Not promoted.** One instance, and the population is agents who write a
 reducer, which is not a second subsystem.
+
+## AN API SURFACE IS WHAT THE MODULE OFFERS; A CORPUS SURFACE IS WHAT THE CORPUS ASKS FOR — ONLY THE SECOND IS A SPECIFICATION FOR A SHIM
+
+Measured 2026-09-10, Track N, and the evidence is better than one instance
+because **the same seat did it both ways within hours**, which is what says the
+distinction was not explicit rather than merely missed once.
+
+`feature-n-the-threading-module` recorded its surface as
+`Thread(target=, daemon=, args=)`, `.start()`, `.join(timeout=)`, `Event` with
+`.set()/.is_set()/.wait(timeout)`. Correct against `threading`'s documented
+signature. **Every one of the corpus's four Thread construction sites also
+passes `name=`:**
+
+    gauges.py:436   name="gauges"
+    app.py:785      name="lz-tiles"
+    app.py:1201     name="lz-tiles"
+    app.py:2284     name="lz-chart"
+
+A shim built to that list refuses **4 of 4 sites — 100%, uniformly.** The
+failure mode is the interesting half: because it is total and even, a
+spot-check finds it in one second, and **a reading of the surface never finds
+it at all**, because the surface is right about the module. The list was
+derived from what `threading` OFFERS; the requirement is what `app.py` and
+`gauges.py` ASK FOR.
+
+**The control is the same seat's sqlite3 ticket the same evening**, which was
+measured from call sites and came out NARROWER than the API — one module
+function and four connection members, no `Cursor` ever named, no `commit`, no
+`executemany`, no `row_factory`. Measured from the corpus, the surface shrinks;
+measured from the module, it is complete and wrong in the one direction that
+matters. Both errors are invisible to a reader who checks the list against the
+documentation, which is the check a reviewer will actually run.
+
+**So measure a shim's surface from the CALL SITES, and quote the sites.** An
+API-derived list is a plausible superset with a hole in it: too big where the
+corpus does not care, and missing exactly the arguments real code passes and
+docs treat as optional. `name=` is optional in CPython and mandatory in this
+corpus, and nothing but the call sites says so.
+
+Corollary for ranking, from the same pair: **count files with real sites, not
+census rows.** `__main__.py` appears as a third threading wall and contains no
+threading reference at all — a cascade through its import of `app`. Three
+modules move when it lands; two files' worth of call sites have to be written.
+
+**Not promoted.** One subsystem (NilPy stdlib shims), one evening — but the
+two-directions-from-one-seat evidence is what would make a second instance
+decisive rather than confirmatory.
