@@ -751,6 +751,53 @@ Both array shapes are kept above deliberately. The summary of this section is
 "use a non-zero low bound", and the summary loses the reason: the 0-based shape
 is not merely weaker, it is **indistinguishable from correct**.
 
+### A hazard block RELAYED between agents loses the one thing that dates it
+
+2026-09-10, frankD and frankuser, documenting the beta-0.1 minimal Linux image.
+CLAUDE.md already says a stale hazard block is the most expensive stale row,
+because obeying one produces no signal. This is the transport case, and it is
+worse in a way the existing paragraph does not cover.
+
+frankuser answered a documentation question with six lines stating that the
+compiler cannot be cross-built for aarch64 — `cpreproc.inc:2105`, `LoadFile
+expects a managed-string destination` — as a measured gap. It was a **quotation
+from `tools/mkkiosk.sh:128`**, written weeks earlier, and the failure was gone:
+measured the same night, `--target=aarch64 compiler/compiler.pas` is rc=0 and the
+17,073,012-byte static ELF it produces **runs** under `tools/run_target.sh` and
+prints its own `--version`. The ticket slug the comment cited had never existed.
+
+**What made it dangerous was the transport, not the content.** In the file it was
+a dated comment beside code, with provenance a reader could interrogate.
+Relayed, it arrived in a peer's voice, in a live answer to a question asked
+minutes earlier, with the credibility of a fresh measurement and **no visible
+provenance at all** — nothing in the message distinguished "I measured this" from
+"I am quoting a comment". It was one edit from entering `docs/` as a documented
+limitation, which is the point at which nothing in the repo could have caught it:
+prose has no gate.
+
+It was stopped by a rule that has nothing to do with hazards — that a public
+claim gets re-derived before it is published — and not by anything about the
+warning. The seat's own note: *"your decline was the only thing in the chain
+that worked."*
+
+**Two guards, and the first is free:**
+
+- **Name the file and line you are quoting from.** `mkkiosk.sh:128 says X` is
+  interrogable; *X* is not. This costs one clause and it restores the entire
+  provenance the relay strips.
+- **A hazard arriving as prose from a peer is a citation, not a measurement,
+  until it says which it is.** Ask before building on it — especially when it
+  arrives already shaped as a conclusion, and most of all when it would let you
+  skip work.
+
+The mirror error appeared in the same exchange and belongs here with it:
+frankuser attributed a `bad adler32` to the codebase when it was its own
+regression from two hours earlier, introduced and fixed inside one change.
+CLAUDE.md's tier-delta rule says to attribute a moving number to a range before
+crediting your own work; **it cuts both ways.** Self-blame terminates a search
+and so does blaming the tree, and the second is the one that gets written into a
+ticket about somebody else's code.
+
 ## In a self-hosting compiler, an internal data format is a BOOTSTRAP interface
 
 Measured 2026-09-07 (frankA), designing the record-operator half of
