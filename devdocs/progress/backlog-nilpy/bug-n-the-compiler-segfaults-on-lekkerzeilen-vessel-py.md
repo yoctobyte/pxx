@@ -76,3 +76,21 @@ reason, because it decided pass/fail by grepping stderr for
 `debugging-playbook.md` — classify on `rc` first, then parse for detail; a
 harness that reads output to decide pass/fail cannot see a failure whose
 signature is the ABSENCE of output.
+
+## OPEN QUESTION — how far back does it go?
+
+Established: it reproduces on `f45ed34d4012` (tree `5fb6e3d57`), so it predates
+everything landed on 2026-09-10 by this seat and by frankB's `708555fdb`.
+
+**NOT established: whether it predates `1266f201c140`**, the binary the previous
+lekkerzeilen census ran on. That matters, and not only for tidiness — the census
+reconciliation in `devdocs/progress/census/lekkerzeilen-baseline.md` shows
+`vessel.py` and `traffic.py` accounting for -2 clean modules against that older
+run. If the crash was introduced in `1266f201c140..f45ed34d4012` then it is a
+REGRESSION in a narrow, bisectable window and should be ranked as one; if it is
+older, it is a long-standing gap the corpus only just started exercising.
+
+Deliberately left open rather than guessed. Two builds would answer it and the
+box was a peer's at the time. **Whoever takes this: the file-bisection in the
+section above is still the better first move** — it needs no theory and it
+narrows the defect, where an age-bisect only narrows the blame.

@@ -23524,3 +23524,33 @@ than a neighbour added. **Not promoted from here**: the finding is a peer's, and
 this seat does not edit CLAUDE.md on a peer's finding. Recommended to the owner
 as one of three standing items, with the recurrence status stated for each so he
 meets them as a single decision.
+
+## `cut -c` IS BYTE-ORIENTED UNDER A NON-UTF-8 LOCALE — IT WILL SLICE A MULTI-BYTE CHARACTER AND HAND YOU AN INVALID FILE THAT COMMITS FINE
+
+Measured 2026-09-10. A census harness truncated diagnostics with `cut -c1-60`.
+Our diagnostics contain em-dashes. `—` is `e2 80 94`, the cut fell after `e2`,
+and the resulting TSV — and the markdown file generated from it, and the commit
+that landed it — contained a lone `\xe2`.
+
+**Nothing complained.** `cut` succeeded, the redirect succeeded, `git add` and
+`git commit` succeeded, the push succeeded. It surfaced only when a later script
+opened the file with Python's default strict UTF-8 and raised
+`UnicodeDecodeError: invalid continuation byte`. Had nothing re-read it, an
+invalid file would have sat in the repo indefinitely, rendering as a replacement
+glyph for every future reader.
+
+`cut -c` is specified to count CHARACTERS, and GNU coreutils honours that only
+when the locale says so. Under `LC_ALL=C` / `POSIX` — which is what a
+non-interactive tool shell usually has — `-c` and `-b` are the same operation.
+So the behaviour is correct, locale-dependent, and silent, which is the house
+failure mode: **it did not error, it answered.**
+
+**Truncate with something that knows what a character is.** Python slicing, or
+`awk` with a UTF-8 locale, or do not truncate at all and let the column be wide.
+And when a harness writes a file that something else will parse, **read it back
+in strict mode before committing it** — one line, and it is the only thing that
+turns this from a silent corruption into an error.
+
+Same family as the entry above: the diagnostic text is *data flowing through the
+instrument*, and an instrument that reformats what it measures can damage it
+without any step reporting a failure.
