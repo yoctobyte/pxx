@@ -29,6 +29,37 @@
 # at, and record what you expect a fix to move BEFORE you re-run -- a null row is
 # only information to someone who said what they expected.
 #
+# A ROW IS A PROPERTY OF THE (MODULE, ENTRY POINT) PAIR, NOT OF THE MODULE.
+# frankB measured this on capture.py 2026-09-11: compiled AS THE SUBJECT it walls
+# at `:10 no unit named ctypes`; reached as a DEPENDENCY of __main__.py it walled
+# at `:20 zlib.crc32` instead, because a bare `import ctypes` is fatal for a main
+# program and evidently not for a module arriving as a dependency. Same file, same
+# compiler, two different first walls, both correct.
+#
+# THIS CENSUS COMPILES EVERY MODULE AS A SUBJECT. So every row here is an
+# as-subject row, and two consequences follow. Two censuses that disagree about a
+# module may BOTH be right, so a diff between runs is not automatically a delta --
+# check the entry point before calling it one. And clearing a wall reported here
+# may not move that module when it is reached as a dependency, or the reverse.
+# Making the entry point part of a row's identity is the fix; it is not built.
+#
+# AND THE WALL MESSAGE DEPENDS ON WHAT ELSE IS LINKED, so grouping by message text
+# can split ONE construct across two buckets. frankZ measured it 2026-09-10 on
+# `except (urllib.error.URLError, OSError, ValueError)`: with mimic_sqlite3 linked
+# the qualifier's middle segment `error` RESOLVES, flat and case-insensitively, so
+# the parser accepted `urllib.error` as a complete class and then met `.URLError`
+# -- `expected ')' before '.'`. Without it nothing named `error` existed and it
+# stopped a token earlier -- `unknown exception class error`. Two messages, one
+# construct, and which one you get changes as the shim library grows. That is the
+# same-line-number rule one level up, with the MESSAGE as the manufactured
+# equivalence class instead of the line.
+#
+# A third form of it is the HOST: a bare NilPy import whose Pascal chain is closed
+# falls through to the host's C headers, so `import zlib` on a box with zlib-dev
+# installed reports `no overload of crc32 matches these arguments` (the C crc32 is
+# 3-arg) where a box without it reports `no member crc32`. Measured 2026-09-11.
+# A census compared across machines can see two walls for one cause.
+#
 # `--threadsafe` IS PASSED UNCONDITIONALLY, and that is a measurement decision
 # rather than a convenience. `import threading` is refused without it by design
 # (the default heap, ARC and console I/O are not thread-safe), so without the
@@ -64,9 +95,20 @@ trap 'rm -rf "$WORK"' EXIT
 # the binary that produced it cannot be compared with the next one, and this
 # corpus moves under the fleet several times a day -- mimic_threading.pas landing
 # turned one wall into a flag between two runs on 2026-09-10.
-printf 'lz-census: compiler %s\n' "$(sha256sum "$PXX" | cut -c1-12)"
-printf 'lz-census: tree     %s%s\n' "$(cd "$ROOT" && git log --format=%h -1)" \
-  "$(cd "$ROOT" && [ -n "$(git status --porcelain)" ] && printf ' (DIRTY)' || true)"
+# THE TREE SHA IS DERIVED FROM THE RESOLVED $PXX, NOT FROM THIS SCRIPT'S OWN
+# LOCATION, and that is a defect frankZ found in their census and confirmed in
+# mine. $PXX is overridable, so with PXX=/other/checkout/compiler/pascal26 the
+# old line printed ANOTHER checkout's compiler sha beside THIS tree's commit --
+# a pair that never existed. Worse in their version, and the half worth carrying
+# here: the column LABEL was a fixed string naming one checkout, and a label that
+# cannot follow the thing it names is the weaker half of the same defect rather
+# than a defence. Deriving the directory from $PXX makes the label follow.
+PXXDIR="$(CDPATH= cd -- "$(dirname -- "$PXX")/.." 2>/dev/null && pwd || echo "$ROOT")"
+printf 'lz-census: compiler %s  (%s)\n' "$(sha256sum "$PXX" | cut -c1-12)" "$PXX"
+printf 'lz-census: tree     %s%s  (the checkout $PXX came from: %s)\n' \
+  "$(cd "$PXXDIR" && git log --format=%h -1 2>/dev/null || echo 'not a git tree')" \
+  "$(cd "$PXXDIR" && [ -n "$(git status --porcelain 2>/dev/null)" ] && printf ' (DIRTY)' || true)" \
+  "$PXXDIR"
 # THE CORPUS'S OWN DIRTINESS IS THE HALF THAT GETS FORGOTTEN, and it is frankZ's
 # point from devdocs/progress/census/lz_census.py rather than mine. lekkerzeilen is
 # the owner's project and he edits it directly, so a census can be measuring a tree
@@ -86,7 +128,9 @@ NPASS=0; NFAIL=0
 : > "$WORK/rows"
 for m in $MODULES; do
   tag="$(printf '%s' "$m" | tr /. __ | sed 's/_py$//')"
-  if ( cd "$LZ" && "$PXX" --threadsafe "$m" "$WORK/$tag" ) > "$WORK/$tag.log" 2>&1; then
+  rc=0
+  ( cd "$LZ" && "$PXX" --threadsafe "$m" "$WORK/$tag" ) > "$WORK/$tag.log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ]; then
     NPASS=$((NPASS+1))
     printf 'ok   %s\n' "$m" >> "$WORK/rows"
   else
@@ -102,7 +146,23 @@ for m in $MODULES; do
     # So: errors first, warnings only when there is no error to find.
     err="$(grep -m1 -E '(error|Error|Fatal):' "$WORK/$tag.log" || true)"
     [ -n "$err" ] || err="$(grep -m1 -E '^(pascal26|[A-Za-z0-9_]+\.(pas|inc)):' "$WORK/$tag.log" || true)"
-    [ -n "$err" ] || err="(no diagnostic at all -- a segfault or a kill looks like this)"
+    # THE EXIT CODE IS CLASSIFIED, NOT JUST THE LOG -- frankZ's point, and the
+    # reason it matters is that a CRASH PRINTS NO `error:` LINE. A census that
+    # decides pass/fail by grepping for a diagnostic scores a segfault as CLEAN.
+    # This script has always branched on the compiler's exit status, so it could
+    # not score a crash as a pass; what it could not do is TELL YOU a crash from
+    # an ordinary refusal, because both landed in the same "no diagnostic" bucket.
+    # A signal death is a compiler bug and a refusal is usually the program's, so
+    # they must not read alike.
+    if [ "$rc" -ge 128 ]; then
+      sig=$((rc - 128))
+      signame="signal $sig"
+      [ "$sig" = 11 ] && signame="SIGSEGV"
+      [ "$sig" = 6 ]  && signame="SIGABRT"
+      [ "$sig" = 9 ]  && signame="SIGKILL (OOM or a timeout, not necessarily a compiler fault)"
+      err="CRASHED ($signame, rc=$rc) -- a COMPILER bug, not a program one${err:+ ; last diagnostic: $err}"
+    fi
+    [ -n "$err" ] || err="(rc=$rc, no diagnostic at all)"
     printf 'FAIL %s :: %s\n' "$m" "$err" >> "$WORK/rows"
   fi
 done
