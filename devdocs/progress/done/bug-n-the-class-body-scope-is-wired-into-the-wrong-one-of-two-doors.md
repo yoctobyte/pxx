@@ -339,4 +339,4 @@ this repo warns about most, and it was produced here in good faith from a tree
 nobody could build.
 
 ## Log
-- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-10 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f3cc8525a.
