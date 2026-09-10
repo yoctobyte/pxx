@@ -9,7 +9,7 @@ created: 2026-09-08
 found-by: frankuser
 tags: [cfront, inline-asm, sdl2, headers, lekkerzeilen]
 blocked-by: [bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register]
-summary: "DONE for the constraint, AND THE TITLE'S SECOND CLAUSE WAS WRONG. `Q` and `q` are supported now -- a restricted register class (a/b/c/d), allocated before the general pool, both letters honoured as the same four because SDL_endian.h declares SDL_Swap16 twice, \"=q\" under __i386__ and \"=Q\" under __x86_64__, so one letter compiles that header for one target and refuses it for the other. Also implemented the `%b` and `%w` operand modifiers, whose absence was the NEXT wall on the same line and which a comment in asmatt.inc claimed were already read. SDL2 STILL DOES NOT IMPORT, and the constraint was never the only reason: `%h0` needs a HIGH-byte register, which the x86-64 encoder cannot name at all -- filed as bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register. A second wall in front of it arrived independently: `import \"/usr/include/SDL2/SDL.h\"` now stops at the derived-soname guard (`libsdl.so`) before it reaches any asm. Measured: libSDL2-2.0.so.0 exports SDL_Init and SDL_CreateWindow, so a dynsym-verified directory heuristic would resolve it."
+summary: "DONE for the constraint, AND THE TITLE'S SECOND CLAUSE WAS WRONG. `Q` and `q` are supported now -- a restricted register class (a/b/c/d), allocated before the general pool, both letters honoured as the same four because SDL_endian.h declares SDL_Swap16 twice, \"=q\" under __i386__ and \"=Q\" under __x86_64__, so one letter compiles that header for one target and refuses it for the other. Also implemented the `%b` and `%w` operand modifiers, whose absence was the NEXT wall on the same line and which a comment in asmatt.inc claimed were already read. SDL2 STILL DOES NOT IMPORT, and the constraint was never the only reason: `%h0` needs a HIGH-byte register, which the x86-64 encoder cannot name at all -- filed as bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register. A second wall in front of it arrived independently: `import \"/usr/include/SDL2/SDL.h\"` now stops at the derived-soname guard (`libsdl.so`) before it reaches any asm. Measured: libSDL2-2.0.so.0 exports SDL_Init and SDL_CreateWindow while libnet.so.9 exports ZERO of net/if.h's symbols, which are the two numbers behind feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym (OPEN, backlog-nilpy) -- that ticket's design, confirmed, not reopened."
 ---
 
 # Repro
@@ -92,22 +92,31 @@ now says about first-failure censuses generally.
 
 ### A measurement for the soname wall, since it is now the front of the queue
 
+**CORRECTION, 2026-09-10, same day: an earlier version of this section said the
+dynsym ticket had been DECLINED and that its counterexample "does not survive".
+Both were wrong.**
 `feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym`
-was declined on a counterexample: `net/if.h` would derive `libnet.so.9`, which
-is a real installed library, so a presence check passes and the build dies on
-`undefined symbol` — a quiet failure traded for a loud one. That reasoning is
-right about a PRESENCE check and the ticket's own title names the discriminator
-the objection does not reach. Measured on this box:
+is OPEN in `backlog-nilpy`, and `net/if.h` / `libnet.so.9` is stated **inside
+it**, as the reason a plain directory fallback is unsafe and a dynsym check is
+what makes it safe. Its own summary: *"That upgrades the guard from `does this
+library exist` to `does this library answer`, catches net/if.h, and is what
+SDL2 ... needs."* There was no argument to win and I was preparing to win it.
+
+Where it came from: frankB wrote *"deliberately NOT landed and filed with its
+counterexample"*, meaning the naive fallback was not landed and a ticket was
+filed instead. I read "not landed" as applying to the ticket. **A verb about
+the CODE was carried over to the TICKET**, and the correction cost a peer a
+message.
+
+What the measurement is actually worth is confirmation with numbers, on this
+box:
 
 | header | derived | exports the header's symbols? |
 | --- | --- | --- |
 | `SDL2/SDL.h` | `libSDL2-2.0.so.0` | **yes** — `SDL_Init`, `SDL_CreateWindow` |
 | `net/if.h` | `libnet.so.9` | **no** — zero of them; `if_nametoindex` is in libc |
 
-A dynsym check accepts the first and rejects the second. That is not a
-recommendation to land it — whoever does owns the population question this
-table does not answer — but the declining counterexample does not survive the
-verification step the ticket is named for.
+Which is that ticket's central claim, now measured rather than reasoned.
 
 Test: `test/casm_byte_classes.c`, four rows against gcc on identical source.
 `b_wrap` is the row that separates a byte add from a 32-bit one (0x12FF + 1 is
