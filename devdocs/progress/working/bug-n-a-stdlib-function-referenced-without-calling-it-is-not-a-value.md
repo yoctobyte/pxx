@@ -3,8 +3,8 @@ slug: bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value
 track: N
 type: bug
 prio: 65
-status: backlog
-owner: ""
+status: working
+owner: frankB
 created: 2026-09-10
 found-by: frankuser
 tags: [nilpy, lekkerzeilen, stdlib, values]
