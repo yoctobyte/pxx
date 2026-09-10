@@ -37,10 +37,18 @@ hi
 | --- | --- |
 | Linux kernel | Alpine's prebuilt `vmlinuz-virt`, **not** built by PXX |
 | `/bin/busybox` | compiled by PXX, linked with no C library |
-| `/opt/pxx/compiler` | `pascal26`, its builtin units, the RTL and `asmcore` sources |
+| `/opt/pxx` | `pascal26`, its builtin units, and the `rtl`, `asmcore` and `crtl` library trees |
 
 Nothing else. No window system, no init system, no package manager, no libc.
 `/init` mounts `/proc`, `/sys` and `/dev` and execs the shell.
+
+The library trees are there because a compiler without them is half-installed
+rather than smaller. Both frontends work on the image: Pascal, and C —
+`#include <stdio.h>` resolves to PXX's own headers and links PXX's own C runtime,
+so a C program built on the image is static and needs nothing the image does not
+have. Measured inside the guest, because the host cannot answer it: a developer
+box resolves `<stdio.h>` from `/usr/include` and will tell you a half-installed
+image works.
 
 ## What this does and does not establish
 
@@ -87,8 +95,8 @@ The ISO is about 34 MB:
 | | bytes |
 | --- | --- |
 | kernel | 11,695,104 |
-| initramfs (compressed) | 9,292,142 |
-| GRUB and ISO padding | 13,202,066 |
+| initramfs (compressed) | 9,736,189 |
+| GRUB and ISO padding | 13,200,387 |
 
 The BusyBox binary is 31 MB of the uncompressed payload, and **that is a known
 defect rather than a cost of the approach.** BusyBox's own GCC build of the same
