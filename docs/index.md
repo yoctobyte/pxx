@@ -49,6 +49,12 @@ documentation first.
   assembly-source frontend. `aarch64` and `arm32` have no object writer. The
   [command-line reference](./reference/cli.md) has the exact target and
   source-kind rules.
+- **It builds a bootable system.** PXX compiles BusyBox — a 19-applet
+  configuration including the `ash` shell, byte-identical to a GCC build of the
+  same sources across a 132-case differential — and links it with no C library.
+  [A minimal Linux system](./examples/minimal-linux-system.md) is a bootable
+  BIOS+EFI ISO carrying a stock Linux kernel, that shell, and the PXX compiler,
+  with nothing else on it.
 
 ## Where to go next
 
@@ -60,7 +66,8 @@ documentation first.
   compatibility notes.
 - [Targets](./targets/) — native, cross, ESP32, and cross-language output.
 - [Standard library](./library/) — the RTL and PCL units.
-- [Examples](./examples/) — demo programs included in the checkout.
+- [Examples](./examples/) — demo programs included in the checkout, and
+  [a minimal bootable Linux system](./examples/minimal-linux-system.md).
 - [Reference](./reference/) — command line, configuration, limits, and glossary.
 
 > These docs are published at <https://pxxc.org> directly from the project's git
