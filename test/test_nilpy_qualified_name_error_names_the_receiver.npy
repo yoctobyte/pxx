@@ -6,7 +6,11 @@
 #
 # `zlib` is a Pascal RTL unit wearing a Python module's name, and it is on the
 # curated bare-import list in pasparser_proc.inc — which is what makes it
-# resolve to the unit rather than to a host C header.
+# resolve to the unit rather than to a host C header. THAT WAS A PREDICTION WHEN
+# THIS LINE WAS WRITTEN and is a fact now: `zlib` joined PyRtlUnitServesPython in
+# 80d71d782, nine hours AFTER this fixture landed (0997c6088). The fixture was
+# never red for it, because it asserts an ERROR that both doors produce — which
+# is exactly why the wrong comment survived.
 #
 # THIS FIXTURE USED `strings` AND THAT WAS WRONG FROM THE START. Its comment
 # claimed `strings` was "a Pascal RTL unit wearing a Python module's name"; it
@@ -20,6 +24,27 @@
 # binary, so it never saw that. Six of the seven RTL/header name collisions on
 # this box (math, menu, netdb, png, regex, zlib) resolve to the unit; strings
 # was the one that did not.
+#
+# THAT CENSUS IS WRONG FOR FOUR OF THE SIX, re-measured 2026-09-11 at 887b941bf.
+# Only `math` and `zlib` are on the list; `menu`, `netdb`, `png` and `regex` take
+# the HOST HEADER door exactly as `strings` did, and they are right to — all four
+# have ZERO marshalling hits, i.e. they are ordinary Pascal units that merely
+# share a C header's name, which is the distinction the curated list exists to
+# record. The list is not a collision table.
+#
+# The instrument that said otherwise: a bare `import X` + `print(1)` references
+# no symbol, so NO DT_NEEDED is synthesised under EITHER door and both doors read
+# identically. The discriminator is code size against an import-free baseline —
+# the header door costs +12288 bytes for every name (verified against an explicit
+# `import 'zlib.h'`), while a real unit links its own content and no two differ
+# by the same amount: math +90112, zlib +28672, and menu/netdb/png/regex all
+# +12288, byte-identical, which four distinct units cannot be.
+#
+# The unloadable-binary half is no longer reachable and that is NOT this fixture's
+# doing: symtab.inc now refuses at build time with `this build would die at exec`.
+# Verified the same day, referencing a member of each: png, netdb and regex are
+# REFUSED, and `menu` builds with a DT_NEEDED on libmenu.so.6, which is genuinely
+# on the box. So the four are a naming question now, not a safety one.
 # bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
 #
 # The companion test test_nilpy_bare_name_error_stays_short is the control: a

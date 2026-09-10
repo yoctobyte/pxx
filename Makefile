@@ -1462,12 +1462,19 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_virtcall26 | diff -u test/test_nilpy_attribute_off_a_virtual_call_result.expected -
 	# a member lookup through a qualifier that supplies nothing must name the
 	# QUALIFIER, not just the member — and a bare name must keep the short form
-	@out=$$(./$(COMPILER) test/test_nilpy_qualified_name_error_names_the_receiver.npy $(TESTTMP)/test_nilpy_qualrecv26 2>&1); \
+	# The expected LINE is derived from the fixture, not pinned: the subject of this
+	# test is that the error names the QUALIFIER, and the line number is incidental
+	# to that -- but it was hardcoded as 31, so editing the fixture's COMMENT broke
+	# the row (measured 2026-09-11, by me, doing exactly that). Deriving it keeps
+	# the line assertion, which is real, and fails safe: an empty $$ln yields
+	# `^pascal26:: error:`, which matches nothing.
+	@ln=$$(grep -n 'zlib \. Foo\|zlib\.Foo' test/test_nilpy_qualified_name_error_names_the_receiver.npy | head -1 | cut -d: -f1); \
+	 out=$$(./$(COMPILER) test/test_nilpy_qualified_name_error_names_the_receiver.npy $(TESTTMP)/test_nilpy_qualrecv26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:31: error: no member Foo came of the qualifier zlib .* (zlib\.Foo)$$' \
+	   && printf '%s\n' "$$out" | grep -q "^pascal26:$$ln: error: no member Foo came of the qualifier zlib .* (zlib\.Foo)$$" \
 	   && test ! -e $(TESTTMP)/test_nilpy_qualrecv26 \
-	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line 31 naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	  || { echo "test_nilpy_qualified_name_error_names_the_receiver: FAIL - rc=$$rc (want 1, one error on line $$ln naming the qualifier, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@out=$$(./$(COMPILER) test/test_nilpy_bare_name_error_stays_short.npy $(TESTTMP)/test_nilpy_barename26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
