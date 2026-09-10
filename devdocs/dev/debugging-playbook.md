@@ -22983,3 +22983,88 @@ Practical check, cheap and general: when a run's failures line up exactly with
 its assertion polarity, suspect the reader before the subject — and assert that
 the input was actually read (`Length(body) > 0`) rather than only what was
 concluded from it.
+
+## A HAZARD NOTE THAT NAMES A MECHANISM IS EVIDENCE ABOUT EVERY CONSUMER OF THAT MECHANISM, NOT ONLY THE ONE IT WAS WRITTEN FOR
+
+Measured 2026-09-10 (frankZ, `76eff4395`). `self.n += 1 if s > 0 else 2` in
+NilPy parsed as `(self.n += 1) if s > 0 else 2` — the assignment became the
+THEN ARM of a conditional the program never wrote. On int-typed arms it was a
+**silent wrong value**: 2 and 0 where CPython gives 1 and 2, both branches
+wrong, no diagnostic.
+
+The cause was one word in `pasparser_expr.inc`'s C compound-assignment tail:
+the right-hand side was parsed with `ParseExpr`, Pascal's precedence chain,
+which stops at `if`, `and`, `or` and `in`.
+
+**That tail already carried three long comments saying exactly what was
+needed to find this**, each of them dated, measured and correct:
+
+- a NilPy dotted target reaches this tail before pyparser's own augmented arm
+  can see it — variant field corrupted;
+- ...the same, for a class-typed field silently zeroed;
+- ...the same, for a list field segfaulting.
+
+Three statements of one mechanism — *a Python construct arrives in the C
+parser* — and **all three are about the STORE**. Nobody asked the same
+question about the VALUE. The bare-name and subscript spellings of the
+identical line take a different path and have always been correct, so every
+natural probe of "does `+=` work in NilPy" passed.
+
+**The transferable half is the reading rule, not the parse bug.** A note that
+says *"construct X reaches mechanism Y before Z can see it"* is a fact about
+mechanism Y. Its example is one consumer. Every other thing Y does to X is
+inside the same fact and has not been checked merely because the note exists.
+So when you find such a note, enumerate what the mechanism does — here: it
+takes an lvalue, it parses a value, it builds a store — and ask the note's
+question once per item.
+
+**The mirror is the hazard-block rule already in CLAUDE.md, from the other
+side.** There, obeying a stale warning produces no signal because the reader
+stops. Here, reading a live warning as scoped to its own example produces no
+signal either, because the reader is satisfied. Same silence, two directions,
+and neither one errors.
+
+Not promoted to CLAUDE.md: one instance, one seat. Say so out loud if you are
+the author (CLAUDE.md, "what earns a line here").
+
+## WHICH OF N CALL SITES BUILT *THIS* NODE — TRACE THE ALLOCATION INDEX, DO NOT READ
+
+Same session, and it is why the bug above took five reading passes and then
+one build.
+
+The AST dump (`PXXDBG=a.ast:<proc>`) prints node INDICES:
+
+```
+#8207 kind=67 (AN_TERNARY)
+  #8206 kind=20 (AN_PAIR)
+    #8201 kind=12 (AN_ASSIGN)     <- who built THIS one?
+```
+
+`AllocNode` is sequential, so an index is a unique name for one allocation
+event. The recipe, and it is mechanical:
+
+1. Rewrite every `<var> := AllocNode(AN_ASSIGN);` in the candidate files to
+   `<var> := AllocNode(AN_ASSIGN); WriteLn('@@<file><line> ', <var>);`
+   (one `sed`/python pass; 140 sites here).
+2. `rm -f compiler/.pascal26.fixedpoint && make compiler/pascal26` — the stamp
+   MUST go or `make` prints `verified` and builds nothing, and your traces are
+   not in the binary you then run.
+3. Compile a minimal repro and `grep '@@'`.
+4. Match the printed index against the one in the AST dump.
+5. `git checkout HEAD -- compiler/` to undo the whole instrumentation.
+
+Two traps, both hit here:
+
+- **`WriteLn(ErrOutput, ...)` does not compile in the compiler's own dialect**
+  — `undefined variable (ErrOutput)`. Plain `WriteLn` works.
+- **Tracing the CALL SITES of a parse routine answers a different question.**
+  The first attempt traced every `ParseExpr` and `PyParseBoolExpr`; none of
+  them fired for the mis-parsed expression, which was true and useless. The
+  node index is the question ("who built this") — the call trace is a
+  different one ("who ran").
+
+The five failed reading passes shared one assumption: that the routine
+parsing a Python right-hand side would be in the Python file. It was in the
+C/Pascal expression parser, which is a file nobody greps when the construct is
+Python. **When "which site" is the question, stop reasoning about which file
+it ought to be in.**
