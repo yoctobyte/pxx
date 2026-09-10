@@ -1,0 +1,39 @@
+# `enumerate(<bare generator expression>)` in a for header.
+#
+# The for-header fast path recognises `for i, v in enumerate(SEQ):` and STRIPS
+# `enumerate(`, letting the ordinary container parse read what is left -- which
+# works for every argument that is an expression, and `x for x in xs` is not
+# one. The element expression alone was parsed and reported as
+# `undefined variable (x)`, on a line whose x is bound two tokens later.
+#
+# Parenthesising it always worked (`enumerate((x for x in xs))`), which is what
+# localises this to the strip rather than to generator expressions.
+#
+# lekkerzeilen ui.py:683 is the live case:
+#   " ".join(... for index, name in enumerate(tab.name for tab in self.tabs))
+
+xs = ["a", "b", "c"]
+
+# the shape that was refused
+for i, v in enumerate(x for x in xs):
+    print("bare", i, v)
+
+# ...in a comprehension, which is the ui.py position
+print("comp", [v for i, v in enumerate(x for x in xs)])
+
+# a genexpr that actually TRANSFORMS, so a dropped element is loud
+for i, v in enumerate(x.upper() for x in xs):
+    print("upper", i, v)
+
+# controls: every spelling that already worked must still work
+for i, v in enumerate((x for x in xs)):        # parenthesised
+    print("paren", i, v)
+for i, v in enumerate(xs):                     # a plain container
+    print("plain", i, v)
+for i, v in enumerate(xs, 1):                  # ...with a start
+    print("start", i, v)
+g = (x for x in xs)                            # bound to a name first
+for i, v in enumerate(g):
+    print("named", i, v)
+for i, v in enumerate(list(x for x in xs), 2):  # genexpr behind a call, + start
+    print("both", i, v)

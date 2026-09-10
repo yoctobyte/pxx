@@ -2490,6 +2490,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_vpropread26 | diff -u test/test_nilpy_variant_property_read_ambiguous.expected -
 	! ./$(COMPILER) test/test_nilpy_variant_property_store_ambiguous_fail.npy $(TESTTMP)/test_nilpy_vpropstore26 > $(TESTTMP)/test_nilpy_vpropstore.log 2>&1
 	grep -q "ambiguous (several unrelated classes declare that property)" $(TESTTMP)/test_nilpy_vpropstore.log
+	# `enumerate(<bare genexpr>)` in a for header: the fast path strips
+	# `enumerate(` and the container parse then saw `x for x in xs`, reporting
+	# the element expression as an undefined variable. Parenthesised always worked.
+	./$(COMPILER) test/test_nilpy_enumerate_over_a_bare_genexpr.npy $(TESTTMP)/test_nilpy_enumgx26
+	$(TESTTMP)/test_nilpy_enumgx26 | diff -u test/test_nilpy_enumerate_over_a_bare_genexpr.expected -
 	# startswith/endswith with a TUPLE of prefixes answered False silently.
 	./$(COMPILER) test/test_nilpy_startswith_tuple.npy $(TESTTMP)/test_nilpy_swtuple26
 	$(TESTTMP)/test_nilpy_swtuple26 | diff -u test/test_nilpy_startswith_tuple.expected -

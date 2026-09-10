@@ -16741,6 +16741,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     kwDictNode: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
+    dictKwHit: Boolean;       { the keywords-are-KEYS arm already claimed this call }
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
       all declaring analyze(), and the cap of three turned that into "too many
@@ -17286,6 +17287,39 @@ begin
     if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
   end;
 
+  { keywords-are-KEYS on a DYNAMICALLY dispatched receiver — `def f(m):
+    m.update(a=1)` and `xs[0].update(r=1)`, both of which arrive here rather
+    than through FindUMethOverloadAhead. `update` is a name TPyList and TPySet
+    carry too, so the dynamic scan above answered with whichever class it met
+    first and the call was reported against `TPyList.setupdate`. A KEYWORD run
+    only ever means dict.update — CPython's list and set take no keywords —
+    so the dict arm is the one answer, exactly as the static path picks it. }
+  dictKwHit := False;
+  if isNilPy then
+  begin
+    i := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname);
+    if i >= 0 then
+    begin
+      hitCi := FindUClass('TPyDict');
+      hitMmi := i;
+      hitPi := UMthProc_[i];
+      dictKwHit := True;
+    end;
+  end;
+
+  { MOVED ABOVE THE OPEN-WORLD FALL-THROUGH, and the order is the whole fix.
+    That fall-through asks "does any candidate declare a parameter of this
+    name" and, on no, dispatches at run time — and for a keywords-are-KEYS
+    call the answer is correctly NO and the conclusion is wrong: `r` is a KEY,
+    not a parameter, so pydyn_methkw bound it by name against RTTI and died
+    with `host method update has no parameter named r`. Resolving the dict
+    overload FIRST is not on its own enough -- MEASURED: the overload it
+    picks does NOT have ProcPyKwIdx set, so the fall-through's existing
+    **kwargs exemption does not cover it and the warning still fired. The
+    claim has to be EXPLICIT, which is what dictKwHit is: this call is
+    already spoken for.
+    test_nilpy_dict_update_keywords line 66, `xs[0].update(r=1, s=2)`. }
+
   { ...and when every promotion above has run and NO candidate has a parameter
     of that name, the closed world has nothing to offer this call. hitPi is a
     GUESS the keyword itself has already refuted, and binding against it reports
@@ -17299,7 +17333,8 @@ begin
     declares Grid, so the one class in the unit with an `.at` is Wind.
 
     A callee with `**kwargs` takes any name and is not a miss. }
-  if (hitPi >= 0) and (CurTok.Kind = tkLParen) and (ProcPyKwIdx[hitPi] < 0) then
+  if (hitPi >= 0) and (CurTok.Kind = tkLParen) and (ProcPyKwIdx[hitPi] < 0)
+     and (not dictKwHit) then
   begin
     k := TokPos; kwDepth := 1; kwMissName := '';
     while (k < TokCount) and (kwDepth > 0) do
@@ -17320,24 +17355,6 @@ begin
            + 'receiver at run time');
       Result := PyMakeDynMethCall(baseNode, mname);
       Exit;
-    end;
-  end;
-
-  { keywords-are-KEYS on a DYNAMICALLY dispatched receiver — `def f(m):
-    m.update(a=1)` and `xs[0].update(r=1)`, both of which arrive here rather
-    than through FindUMethOverloadAhead. `update` is a name TPyList and TPySet
-    carry too, so the dynamic scan above answered with whichever class it met
-    first and the call was reported against `TPyList.setupdate`. A KEYWORD run
-    only ever means dict.update — CPython's list and set take no keywords —
-    so the dict arm is the one answer, exactly as the static path picks it. }
-  if isNilPy then
-  begin
-    i := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname);
-    if i >= 0 then
-    begin
-      hitCi := FindUClass('TPyDict');
-      hitMmi := i;
-      hitPi := UMthProc_[i];
     end;
   end;
 
@@ -24408,6 +24425,7 @@ function PyParseFor: Integer;
 var genPi, genMi, genRecv, genRecvNode, genProl: Integer;
     name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
+    enumSave: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
     rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
     rngStepSym, rngStopSym, rngChkPi, rngChkArg: Integer;
@@ -24637,8 +24655,31 @@ begin
          (not PyUserShadowsProc('enumerate')) then
       begin
         if name2 = '' then Error('Nil Python: enumerate() needs two loop variables');
-        enumMode := True;
+        enumSave := TokPos;
         Next; Expect(tkLParen, '(');
+        { …unless the argument is a BARE generator expression. enumMode's whole
+          trick is to STRIP `enumerate(` and let the container parse below read
+          what is left, which works for every argument that is an expression --
+          and `x for x in xs` is not one. PyParseBoolExpr took the element
+          expression alone and reported `undefined variable (x)`, on a line
+          whose x is plainly bound two tokens later. Parenthesising it
+          (`enumerate((x for x in xs))`) always worked, which is what localises
+          this to the strip rather than to genexprs.
+
+          So decline the fast path and let the ordinary route parse the WHOLE
+          call, exactly as the generator-desugar above says it does for a
+          generator consumed any other way. `enumerate(genexpr)` as an
+          expression has always been right, and the two-name target over a
+          container of pairs is the same path `for i, v in list_of_pairs` takes.
+          lekkerzeilen ui.py:683,
+          `enumerate(tab.name for tab in self.tabs)` inside a join(). }
+        if PyBareGenExprAhead then
+        begin
+          TokPos := enumSave - 1;
+          Next;                          { back to `enumerate` }
+        end
+        else
+          enumMode := True;
       end;
     Result := PyParseForIn(name, name2, enumMode, forTokIdx);
     Exit;

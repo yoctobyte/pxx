@@ -1,0 +1,22 @@
+bare 0 a
+bare 1 b
+bare 2 c
+comp ['a', 'b', 'c']
+upper 0 A
+upper 1 B
+upper 2 C
+paren 0 a
+paren 1 b
+paren 2 c
+plain 0 a
+plain 1 b
+plain 2 c
+start 1 a
+start 2 b
+start 3 c
+named 0 a
+named 1 b
+named 2 c
+both 2 a
+both 3 b
+both 4 c
