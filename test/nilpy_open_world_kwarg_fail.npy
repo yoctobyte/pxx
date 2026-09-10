@@ -1,13 +1,31 @@
-# The runtime dispatch path takes POSITIONAL arguments only, and refusing a
-# keyword there is deliberate: pydyn_meth has parameter SLOTS and not the
-# callee's parameter NAMES, so binding `k=v` to a position is precisely the
-# mis-binding bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
-# was about -- a wrong value, silently, in the caller's own argument order.
-# Annotating the receiver resolves the call statically and has no such limit.
+# The runtime dispatch path CARRIES a keyword now -- pydyn_methkw sends a kwspec
+# and PyHostCall binds it BY NAME against the parameter names the receiver's own
+# RTTI records, which is the same binder a statically-typed receiver uses. The
+# old refusal here assumed those names did not exist; they always did.
+#
+# What is still refused, and this is the case that has no names to bind against:
+# a CALLABLE FIELD. It is reached through pyvar_callv*, which takes positions,
+# so binding `k=v` to one is exactly the mis-binding
+# bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position was about -- a
+# wrong value, silently, in the caller's own argument order. Refused by name at
+# run time instead. CPython accepts this call, so the divergence is real and
+# recorded: bug-n-a-keyword-argument-through-a-callable-field-is-refused.
 
 
-def f(o):
-    return o.no_class_declares_this(k=1)
+class Holder:
+    def go(self, x, mode=1):
+        return x
 
 
-print(1)
+def call(o):
+    return o.zap(1, mode=2)
+
+
+class Box:
+    def __init__(self):
+        self.v = 0
+
+
+b = Box()
+b.zap = lambda n, mode=0: n + mode
+print(call(b))

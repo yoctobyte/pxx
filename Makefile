@@ -4565,13 +4565,22 @@ test-nilpy: $(COMPILER)
 	# feature cannot print a wrong answer here.
 	./$(COMPILER) test/test_nilpy_open_world_method_dispatch.npy $(TESTTMP)/test_nilpy_openworld26
 	$(TESTTMP)/test_nilpy_openworld26 | diff -u test/test_nilpy_open_world_method_dispatch.expected -
-	# ...and the two shapes that path REFUSES rather than mis-binds. A keyword
-	# argument has no parameter name to bind to at run time, and a fifth
-	# positional argument does not fit the marshalling -- both are wrong values
-	# rather than errors if accepted, which is why they are errors.
-	@./$(COMPILER) test/nilpy_open_world_kwarg_fail.npy $(TESTTMP)/nilpy_ow_kw26 2>&1 \
-	  | grep -q "takes POSITIONAL arguments only" \
-	  || { echo 'nilpy_open_world_kwarg_fail: FAIL - a keyword argument on a runtime-dispatched call must be refused, not bound by position'; exit 1; }
+	# ...and a KEYWORD argument on that path, which is dispatched rather than
+	# refused since 2026-09-10: the RTTI records parameter NAMES and PyHostCall
+	# binds against them, so nothing is bound by position. Both doors are
+	# exercised -- a method name no class declares, and a name declared here by a
+	# class that is not the receiver's.
+	./$(COMPILER) test/test_nilpy_open_world_keyword_dispatch.npy $(TESTTMP)/test_nilpy_owkw26
+	$(TESTTMP)/test_nilpy_owkw26 | diff -u test/test_nilpy_open_world_keyword_dispatch.expected -
+	# The one shape that still has no names to bind against is a CALLABLE FIELD,
+	# refused BY NAME at run time rather than bound by position. It compiles --
+	# the refusal is the program's exception, not the compiler's.
+	./$(COMPILER) test/nilpy_open_world_kwarg_fail.npy $(TESTTMP)/nilpy_ow_kw26
+	@$(TESTTMP)/nilpy_ow_kw26 2>&1 \
+	  | grep -q "takes positional arguments only" \
+	  || { echo 'nilpy_open_world_kwarg_fail: FAIL - a keyword through a CALLABLE FIELD must be refused, not bound by position'; exit 1; }
+	# ...and a fifth positional argument does not fit the marshalling, so it is an
+	# error rather than a silently dropped argument.
 	@./$(COMPILER) test/nilpy_open_world_arity_fail.npy $(TESTTMP)/nilpy_ow_ar26 2>&1 \
 	  | grep -q "takes at most 4 arguments" \
 	  || { echo 'nilpy_open_world_arity_fail: FAIL - a fifth positional argument must be refused, not dropped'; exit 1; }

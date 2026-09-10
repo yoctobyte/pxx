@@ -346,6 +346,22 @@ function pydyn_meth3(const recv: Variant; const name: AnsiString;
                      const a0, a1, a2: Variant): Variant;
 function pydyn_meth4(const recv: Variant; const name: AnsiString;
                      const a0, a1, a2, a3: Variant): Variant;
+{ ...and the same dispatch carrying KEYWORD bindings. kwspec is one '|'-separated
+  field per argument: the parameter's name for a keyword argument, EMPTY for a
+  positional one, so `f(a, b, outside=c)` sends '||outside'. Parallel to the
+  argument list because that is the shape PyHostCall's binder already takes, and
+  it binds by NAME against the parameter names the RTTI records -- the same
+  names a statically-typed receiver binds against. Positional-only dispatch goes
+  on using pydyn_meth<n>; these exist so a keyword argument does not have to be
+  a refusal. }
+function pydyn_methkw1(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0: Variant): Variant;
+function pydyn_methkw2(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1: Variant): Variant;
+function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2: Variant): Variant;
+function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2, a3: Variant): Variant;
 
 implementation
 
@@ -5286,7 +5302,7 @@ begin
   Result := f3(a0, a1, a2);
 end;
 
-function PyDynMethN(const recv: Variant; const name: AnsiString;
+function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
                     nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
 { The worker behind pydyn_meth0..4. See the interface block for why it exists.
 
@@ -5298,8 +5314,10 @@ function PyDynMethN(const recv: Variant; const name: AnsiString;
 var
   obj: Pointer;
   cls: PClassRTTI;
-  args: TPyList;
+  args, kwNames: TPyList;
   res, cb: Variant;
+  i, cut: Integer;
+  rest: AnsiString;
 begin
   Result := pynone;
   obj := nil;
@@ -5324,14 +5342,44 @@ begin
     if nargs > 1 then args.append(a1);
     if nargs > 2 then args.append(a2);
     if nargs > 3 then args.append(a3);
+    { kwspec's fields are parallel to args -- '' for a positional slot, which is
+      exactly what PyHostCall's binder skips. Split here rather than at the call
+      site so the emitted code carries one string constant per call. }
+    kwNames := nil;
+    if kwspec <> '' then
+    begin
+      kwNames := TPyList.Create;
+      rest := kwspec;
+      for i := 0 to nargs - 1 do
+      begin
+        cut := Pos('|', rest);
+        if cut > 0 then
+        begin
+          kwNames.append(Copy(rest, 1, cut - 1));
+          rest := Copy(rest, cut + 1, Length(rest) - cut);
+        end
+        else
+        begin
+          kwNames.append(rest);
+          rest := '';
+        end;
+      end;
+    end;
     res := pynone;
-    PyHostCall(obj, name, args, TPyList(nil), res);
+    PyHostCall(obj, name, args, kwNames, res);
     args.Free;
+    if kwNames <> nil then kwNames.Free;
     Result := res;
     Exit;
   end;
 
   cb := pydynattr_get(obj, name);   { raises AttributeError on a genuine miss }
+  { A CALLABLE FIELD is reached through pyvar_callv*, which has no parameter
+    names to bind against -- binding by position is the mis-binding this whole
+    path exists not to do. Refused by name rather than guessed. }
+  if kwspec <> '' then
+    raise TypeError.Create(name + '() is dispatched at run time through a '
+      + 'callable attribute, which takes positional arguments only');
   case nargs of
     0: Result := pyvar_callv0(cb);
     1: Result := pyvar_callv1(cb, a0);
@@ -5344,31 +5392,55 @@ end;
 
 function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
 begin
-  Result := PyDynMethN(recv, name, 0, pynone, pynone, pynone, pynone);
+  Result := PyDynMethN(recv, name, '', 0, pynone, pynone, pynone, pynone);
 end;
 
 function pydyn_meth1(const recv: Variant; const name: AnsiString;
                      const a0: Variant): Variant;
 begin
-  Result := PyDynMethN(recv, name, 1, a0, pynone, pynone, pynone);
+  Result := PyDynMethN(recv, name, '', 1, a0, pynone, pynone, pynone);
 end;
 
 function pydyn_meth2(const recv: Variant; const name: AnsiString;
                      const a0, a1: Variant): Variant;
 begin
-  Result := PyDynMethN(recv, name, 2, a0, a1, pynone, pynone);
+  Result := PyDynMethN(recv, name, '', 2, a0, a1, pynone, pynone);
 end;
 
 function pydyn_meth3(const recv: Variant; const name: AnsiString;
                      const a0, a1, a2: Variant): Variant;
 begin
-  Result := PyDynMethN(recv, name, 3, a0, a1, a2, pynone);
+  Result := PyDynMethN(recv, name, '', 3, a0, a1, a2, pynone);
 end;
 
 function pydyn_meth4(const recv: Variant; const name: AnsiString;
                      const a0, a1, a2, a3: Variant): Variant;
 begin
-  Result := PyDynMethN(recv, name, 4, a0, a1, a2, a3);
+  Result := PyDynMethN(recv, name, '', 4, a0, a1, a2, a3);
+end;
+
+function pydyn_methkw1(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 1, a0, pynone, pynone, pynone);
+end;
+
+function pydyn_methkw2(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 2, a0, a1, pynone, pynone);
+end;
+
+function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 3, a0, a1, a2, pynone);
+end;
+
+function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2, a3: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 4, a0, a1, a2, a3);
 end;
 
 function pyvar_of_callable(p: Pointer): Variant;

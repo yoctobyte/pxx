@@ -1,0 +1,40 @@
+# A KEYWORD argument on a method call whose receiver has no static type.
+#
+# feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver opened
+# the door for a method name NO declared class carries, and refused a keyword
+# argument on that path -- pydyn_meth takes positional slots, and binding `k=v`
+# to a position without the callee's parameter names is a mis-binding. The
+# premise was wrong: the RTTI method table records each parameter's NAME and
+# PyHostCall already binds a kwNames list against them, which is the same binder
+# a statically-typed receiver goes through. So the keyword travels as a kwspec
+# and nothing is bound by position.
+#
+# The other half is the one lekkerzeilen actually hit. The method name IS
+# declared here -- by a class that is not the receiver's -- and the keyword names
+# a parameter that class does not have. The compiler bound the keyword against
+# the candidate it had guessed and refused the program:
+#
+#   Nil Python: Wind.at has no parameter named 'outside'
+#
+# a true statement about a class the program never mentions, at a call site whose
+# receiver could be anything. The keyword is what refutes the guess, so a guess
+# it has refuted is not worth keeping: the call goes to run-time dispatch and
+# the keyword goes with it.
+#
+# THE IMPORT ORDER IS THE TEST, exactly as in the method-name fixture. `sample`
+# and `reach` are parsed while only nilpy_kwdispatch_early's own classes are
+# declared, so Breeze is the only `.at` in scope and nothing at all declares
+# `.reach`. Swap the two import lines and Grid and Span become candidates, every
+# call resolves statically, and the file proves nothing. That is not a hazard of
+# the fixture -- it is the wild shape: environment.py declares nothing with an
+# `.at` but imports wind, and the module holding Grid is never imported there.
+#
+# CPython is the oracle for both rows and agrees.
+from nilpy_kwdispatch_early import sample, reach, Breeze
+from nilpy_kwdispatch_late import Grid, Span
+
+print("declared-elsewhere", sample(Grid()))
+print("undeclared-name", reach(Span()))
+
+# The class the scan DID pick still works through its own door, statically.
+print("static", Breeze().at(1.0, 2.0))

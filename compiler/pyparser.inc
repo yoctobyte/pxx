@@ -16537,32 +16537,47 @@ function PyMakeDynMethCall(baseNode: Integer; const mname: AnsiString): Integer;
   only a receiver whose static type is unknown reaches here, so a typo on a
   statically-typed receiver is caught elsewhere and is untouched.
 
-  FOUR POSITIONAL ARGUMENTS, refused past that rather than truncated: it is the
-  cap PyHostCall's marshalling carries, and dropping arguments silently is how a
-  call returns a plausible wrong value. A KEYWORD argument is refused for the
-  same reason -- pydyn_meth takes positional slots, and binding `k=v` to a
-  position without the callee's parameter names is exactly the mis-binding
-  bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position was about. Both
-  refusals name the shape and say to annotate the receiver, which resolves the
-  call statically and has none of these limits. }
+  FOUR ARGUMENTS, refused past that rather than truncated: it is the cap
+  PyHostCall's marshalling carries, and dropping arguments silently is how a
+  call returns a plausible wrong value.
+
+  A KEYWORD argument was refused here too until 2026-09-10, on the grounds that
+  binding `k=v` to a POSITION without the callee's parameter names is exactly
+  the mis-binding bug-nilpy-pyeval-fallback-still-binds-host-kwargs-by-position
+  was about. The premise was wrong in the same way this ticket's own cost
+  estimate was: the RTTI method table records each parameter's NAME, and
+  PyHostCall already binds a kwNames list against those names -- it is the same
+  binder a statically-typed receiver goes through. So the keyword travels as a
+  kwspec string ('|'-separated, one field per argument, empty for a positional
+  one) to pydyn_methkw<n>, and nothing is bound by position. The refusal
+  survives only where there really are no names to bind against: a CALLABLE
+  FIELD, which PyDynMethN refuses at run time. }
 const MAX_DYN_ARGS = 4;
-var procIdx, argsHead, lastArg, argNode, litNode, n, i: Integer;
+var procIdx, argsHead, lastArg, argNode, litNode, kwLitNode, n, i: Integer;
     argExpr: array[0..MAX_DYN_ARGS - 1] of Integer;
+    argKw: array[0..MAX_DYN_ARGS - 1] of AnsiString;
+    kwspec: AnsiString;
+    anyKw: Boolean;
 begin
   Expect(tkLParen, '(');
   n := 0;
+  anyKw := False;
   while CurTok.Kind <> tkRParen do
   begin
-    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkAssign) then
-      Error('Nil Python: .' + mname + '() is dispatched at run time (no class '
-        + 'here declares it), and that path takes POSITIONAL arguments only — '
-        + 'annotate the receiver with its class to use a keyword argument');
     if n >= MAX_DYN_ARGS then
       Error('Nil Python: .' + mname + '() is dispatched at run time (no class '
         + 'here declares it), and that path takes at most '
         + PyIntLiteralText(MAX_DYN_ARGS) + ' arguments — annotate the receiver '
         + 'with its class to pass more');
+    argKw[n] := '';
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      argKw[n] := CurTok.SVal;
+      anyKw := True;
+      Next;      { the name }
+      Next;      { the '=' }
+    end;
     ParseArgExpr;
     argExpr[n] := CurASTNode;
     Inc(n);
@@ -16570,10 +16585,26 @@ begin
   end;
   Expect(tkRParen, ')');
 
-  procIdx := FindProc('pydyn_meth' + PyIntLiteralText(n));
-  if procIdx < 0 then
-    Error('Nil Python: pyeval (pydyn_meth' + PyIntLiteralText(n)
-          + ') not loaded');
+  kwspec := '';
+  if anyKw then
+  begin
+    for i := 0 to n - 1 do
+    begin
+      if i > 0 then kwspec := kwspec + '|';
+      kwspec := kwspec + argKw[i];
+    end;
+    procIdx := FindProc('pydyn_methkw' + PyIntLiteralText(n));
+    if procIdx < 0 then
+      Error('Nil Python: pyeval (pydyn_methkw' + PyIntLiteralText(n)
+            + ') not loaded');
+  end
+  else
+  begin
+    procIdx := FindProc('pydyn_meth' + PyIntLiteralText(n));
+    if procIdx < 0 then
+      Error('Nil Python: pyeval (pydyn_meth' + PyIntLiteralText(n)
+            + ') not loaded');
+  end;
 
   litNode := AllocNode(AN_STR_LIT);
   ASTSOffset[litNode] := StoredName(mname);
@@ -16590,6 +16621,19 @@ begin
   ASTRight[argNode] := -1;
   ASTRight[lastArg] := argNode;
   lastArg := argNode;
+
+  if anyKw then
+  begin
+    kwLitNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[kwLitNode] := StoredName(kwspec);
+    ASTSLen[kwLitNode] := Length(kwspec);
+    ASTTk[kwLitNode] := Ord(tyString);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := kwLitNode;
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+  end;
 
   for i := 0 to n - 1 do
   begin
@@ -16612,6 +16656,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     kwDictNode: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
+    kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
       all declaring analyze(), and the cap of three turned that into "too many
@@ -17155,6 +17200,43 @@ begin
   begin
     hitMmi := PyPromoteOverloadByKw(hitCi, hitMmi, mname);
     if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
+  end;
+
+  { ...and when every promotion above has run and NO candidate has a parameter
+    of that name, the closed world has nothing to offer this call. hitPi is a
+    GUESS the keyword itself has already refuted, and binding against it reports
+    `Wind.at has no parameter named 'outside'` -- a true statement about a class
+    the program never named, at a call whose receiver has no static type at all.
+    So dispatch on the receiver, exactly as an undeclared method NAME already
+    does; the scan's finding is still said, as a warning.
+
+    Found by attempting lekkerzeilen: environment.py writes
+    `self.bed.at(x, z, outside=...)` and does not import the module that
+    declares Grid, so the one class in the unit with an `.at` is Wind.
+
+    A callee with `**kwargs` takes any name and is not a miss. }
+  if (hitPi >= 0) and (CurTok.Kind = tkLParen) and (ProcPyKwIdx[hitPi] < 0) then
+  begin
+    k := TokPos; kwDepth := 1; kwMissName := '';
+    while (k < TokCount) and (kwDepth > 0) do
+    begin
+      if Tokens[k].Kind = tkLParen then Inc(kwDepth)
+      else if Tokens[k].Kind = tkRParen then Dec(kwDepth)
+      else if (kwDepth = 1) and (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount)
+              and (Tokens[k + 1].Kind = tkAssign)
+              and (not PyProcParamNamed(hitPi, GetTokenStr(k)))
+              and (kwMissName = '') then
+        kwMissName := GetTokenStr(k);
+      Inc(k);
+    end;
+    if kwMissName <> '' then
+    begin
+      Warn('Nil Python: no class here declares a .' + mname + '() with a '
+           + 'parameter named ''' + kwMissName + ''' — dispatching on the '
+           + 'receiver at run time');
+      Result := PyMakeDynMethCall(baseNode, mname);
+      Exit;
+    end;
   end;
 
   { keywords-are-KEYS on a DYNAMICALLY dispatched receiver — `def f(m):
