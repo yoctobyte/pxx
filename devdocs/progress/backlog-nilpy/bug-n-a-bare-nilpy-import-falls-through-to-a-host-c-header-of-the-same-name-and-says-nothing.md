@@ -145,3 +145,30 @@ header could produce: a three-argument call.
 
 **When every edit to a declaration changes nothing, stop editing the declaration
 and ask what else answers to that name.**
+
+## CAVEAT ON THIS TICKET'S OWN MEASUREMENT: A HEADER'S REACH IS ITS INCLUDE CHAIN
+
+The 16-name population above was computed against `/usr/include/<name>.h`
+FILENAMES. That is the right test for **which header a bare import binds**, and it
+is the wrong test for **which symbols that header provides**.
+
+Measured 2026-09-11, on this ticket's own subject: `grep -c '\bfloor\b'
+/usr/include/math.h` answers **0**. Glibc declares `floor` through `__MATHCALL` in
+`bits/mathcalls.h`, which `math.h` includes, so the word is not in the top file at
+all. Against the preprocessed header:
+
+```
+  printf '#include <math.h>\n' | cpp -P | grep -cE '\bfloor *\('     -> 1
+                                          grep -cE '\bgcd *\('       -> 0
+                                          grep -cE '\bfactorial *\(' -> 0
+```
+
+I ran the filename-level grep to CHECK someone else's claim that `floor` is
+ambiguous, got 0, and would have told them they were wrong. They were right.
+
+**So the 16 rows stand — those are the names whose import binds a host header — but
+any future sizing of WHICH MEMBERS collide must preprocess.** A header's surface is
+everything it pulls in, and `/usr/include/<name>.h` is frequently a few lines of
+`#include`. This matters for the arity-agreement hazard specifically: the question
+"could a C function of this name accept the Python call" ranges over the whole
+include closure, not over the named file.
