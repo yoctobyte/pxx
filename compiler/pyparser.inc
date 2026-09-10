@@ -13074,6 +13074,7 @@ end;
 
 function PyParseStdlibCall(const pname: AnsiString; nTok: Integer): Integer;
 var procIdx, callNode, argNode, lastArg, i, nArgs: Integer;
+    kwIdx, kwHead: Integer; anyKw: Boolean; dotted: AnsiString;   { keyword arguments }
     lnA, lnB, lnArg, divNode: Integer;   { math.log(x, base) — see below }
     domPi, domArg, domArg2, domCall: Integer;   { math domain guard — see below }
     domName: AnsiString;
@@ -13103,9 +13104,19 @@ begin
   if procIdx < 0 then procIdx := FindProc(pname);
   QualNameLookup := False;
   if procIdx < 0 then Error('Nil Python: pylib (' + pname + ') not loaded');
+  { The DOTTED spelling, rebuilt before the tokens are consumed, purely so a
+    keyword refusal can name what the program WROTE. `pyos_makedirs` is an
+    internal name the source never mentions, and this file already pays for
+    that mistake once — see math.log's intercept, which exists because the
+    generic arity error named the RTL's `Ln`. }
+  dotted := CurTok.SVal;
+  for i := 0 to nTok - 2 do
+    if Tokens[TokPos + i].Kind = tkIdent then
+      dotted := dotted + '.' + GetTokenStr(TokPos + i);
   for i := 1 to nTok do Next;          { the dotted name; CurTok = '(' }
   Expect(tkLParen, '(');
   lastArg := -1;
+  anyKw := False;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := procIdx;
   ASTTk[callNode] := Ord(Procs[procIdx].RetType);
@@ -13114,9 +13125,36 @@ begin
   if CurTok.Kind <> tkRParen then
     repeat
       if CurTok.Kind = tkRParen then Break;   { a trailing comma before ) }
+      { KEYWORD ARGUMENTS. This loop parsed every argument as an ordinary
+        expression, so `os.makedirs(d, exist_ok=True)` read `exist_ok` as a
+        NAME and refused with `undefined variable (exist_ok)` — a true
+        statement about what the parser did and a false lead about what is
+        wrong, which sent readers looking for a missing definition. The
+        mechanism was already here: PyKwArgIndex + PyBindKwArgs is what every
+        ordinary call and every class constructor uses, and this table was the
+        one door that did not ask.
+
+        A keyword binds by the PASCAL parameter's NAME, so a shim's parameters
+        must be spelled as CPython spells them — `pyos_makedirs(name, mode,
+        exist_ok)`, not `(path, ...)`. lib/rtl/mimic_queue.pas records the same
+        constraint from the other side, having been refused for calling its
+        parameter `n`.
+
+        firstParam is 0 and not 1: these are plain procs, with no Self in slot
+        zero. bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument }
+      if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign) and
+         (not PyProcParamNamedFrom(procIdx, CurTok.SVal, 0)) then
+        Error('Nil Python: ' + dotted + '() has no parameter named '''
+              + CurTok.SVal + '''. The shim is ' + Procs[procIdx].Name
+              + '; a keyword binds by the Pascal parameter name, so adding the'
+              + ' keyword means naming a parameter for it there');
+      kwIdx := PyKwArgIndex(procIdx, 0);
+      if kwIdx <> 0 then anyKw := True;
       PyParseBoolExpr;
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := CurASTNode;
+      ASTIVal[argNode] := kwIdx;
       ASTRight[argNode] := -1;
       if lastArg < 0 then ASTLeft[callNode] := argNode
       else ASTRight[lastArg] := argNode;
@@ -13124,6 +13162,23 @@ begin
       Inc(nArgs);
     until not Eat(tkComma);
   Expect(tkRParen, ')');
+  { Reorder into declaration order and fill the holes from the declared
+    defaults — the same procedure every other argument loop in this file ends
+    with. It is a no-op, and does not even walk the chain, when nothing was a
+    keyword, which is every call that works today.
+
+    Done BEFORE the arity re-target below, and that ordering is the whole
+    reason this is safe: after the bind, nArgs is the count of parameters
+    actually BOUND, so the overload chosen by arity is chosen against the same
+    number the callee will receive. Re-targeting first and binding afterwards
+    would resolve the keyword NAMES against one overload and the call against
+    another. }
+  if anyKw then
+  begin
+    kwHead := ASTLeft[callNode];
+    PyBindKwArgs(procIdx, kwHead, lastArg, nArgs);
+    ASTLeft[callNode] := kwHead;
+  end;
   { RE-TARGET BY ARITY. FindProc above answers by NAME and never consults
     overloads, so the shim it returned may simply be the wrong arity — and an
     ordinary Pascal `overload` added to fix that used to have no effect at all,

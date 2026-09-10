@@ -70,8 +70,18 @@ const
     forever is precisely what http.pas does, so the DEFAULT is honest and only
     an explicit timeout has to refuse. -1 rather than 0 because `timeout=0` is a
     real (if hostile) CPython request meaning "non-blocking", which we also
-    cannot honour and which must therefore reach the refusal. }
-  TIMEOUT_DEFAULT = -1;
+    cannot honour and which must therefore reach the refusal.
+
+    DOUBLE, not Integer. CPython's timeout is a float number of seconds and
+    real code writes one: lekkerzeilen/gauges.py's fetch defaults to
+    `timeout=20.0` and passes it straight through. With an Integer parameter
+    that call did not fail at the timeout's REFUSAL, where the reader would
+    have been told why -- it failed at overload selection, `no overload of
+    urlopen matches these arguments`, which says nothing about timeouts at all.
+    The test below is `< 0` rather than `= TIMEOUT_DEFAULT`, because comparing
+    a Double for equality against a sentinel is the kind of thing that works
+    until somebody writes the sentinel as an expression. }
+  TIMEOUT_DEFAULT = -1.0;
 
 type
   { `http.client.HTTPMessage` — what `response.headers` / `response.info()`
@@ -218,7 +228,7 @@ type
   redirects), URLError when no response arrives at all — which is CPython's
   split and the reason a caller catches them separately. }
 function urlopen(const url: Variant; const data: Variant = 0;
-                 timeout: Integer = TIMEOUT_DEFAULT): HTTPResponse;
+                 timeout: Double = TIMEOUT_DEFAULT): HTTPResponse;
 
 { `urlretrieve(url, filename=None)` -> `(filename, headers)`.
 
@@ -728,7 +738,7 @@ const
   MAX_REDIRECTS = 10;
 
 function urlopen(const url: Variant; const data: Variant;
-                 timeout: Integer): HTTPResponse;
+                 timeout: Double): HTTPResponse;
 var
   req: Request;
   o: TObject;
@@ -739,7 +749,7 @@ var
 begin
   { A non-default timeout cannot be honoured — see the unit header. Refusing
     here, at the call, is the whole point: the caller asked for a bound. }
-  if timeout <> TIMEOUT_DEFAULT then
+  if timeout >= 0.0 then
     raise URLError.Create(
       'urlopen(timeout=...) is not supported: the RTL HTTP client ' +
       '(lib/rtl/http.pas) has no request timeout, so honouring the argument ' +

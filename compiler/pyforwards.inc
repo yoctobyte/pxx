@@ -249,6 +249,7 @@ function PyScalarWrappableRetType(tk: TTypeKind): Boolean; forward; { Nil Python
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString; var tk: TTypeKind; var recName: Integer): Integer; forward; { Nil Python obj.field on a VARIANT receiver (pyparser.inc) }
 function PyMakeVariantPropRecv(baseNode: Integer; const pname: AnsiString; var ci: Integer; forStore: Boolean; var ambig: Boolean): Integer; forward; { Nil Python obj.PROPERTY on a VARIANT receiver: the unboxed class-cast receiver (pyparser.inc) }
 function PyKwArgIndex(mpi, firstParam: Integer): Integer; forward; { Nil Python `name=expr` call argument (pyparser.inc) }
+function PyProcParamNamedFrom(mpi: Integer; const nm: AnsiString; firstParam: Integer): Boolean; forward;   { does this proc declare a parameter of that name? — used by the stdlib-call table's keyword refusal (pyparser.inc) }
 function PyKwDictArgNode(mpi: Integer): Integer; forward; { Nil Python: `dict(a=1)` / `d.update(a=1)` keywords are KEYS (pyparser.inc) }
 function PyKeywordsAreKeys(mpi: Integer): Boolean; forward; { Nil Python: is this the dict()/update() callee? (pyparser.inc) }
 function PyDictKwArgsAhead: Boolean; forward; { Nil Python: at `name=` or `**expr` in an argument list? (pyparser.inc) }

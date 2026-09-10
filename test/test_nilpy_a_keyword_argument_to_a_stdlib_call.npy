@@ -1,0 +1,75 @@
+# A KEYWORD ARGUMENT to a dotted stdlib call — `os.makedirs(d, exist_ok=True)`.
+#
+# It refused with `undefined variable (exist_ok)`, which is a true statement
+# about what the parser did and a false lead about what is wrong: the table's
+# argument loop parsed every argument as an ordinary expression, so a keyword's
+# NAME was read as a variable and the `=` never got a chance to mean anything.
+# A reader greps for `exist_ok`, finds nothing, and concludes the PROGRAM is
+# broken.
+#
+# The mechanism was already in the file — PyKwArgIndex + PyBindKwArgs is what
+# every ordinary call and every class constructor uses. This table was the one
+# door that did not ask. `Queue(maxsize=2)` working while `os.makedirs(
+# exist_ok=)` did not is what said it was a table problem and not a NilPy
+# keyword problem.
+#
+# THE DIRECTORY COMES FROM THE ENVIRONMENT and no path is ever printed, so the
+# expected file does not depend on which directory either runtime was given.
+# The Makefile row hands this a fresh `mktemp -d`, which matters here more than
+# usual: "the leaf already exists" is the assertion, and a directory left from
+# a previous run would make it fire on the wrong row.
+
+import os
+import urllib.request
+
+d = os.environ.get("PXX_KWTEST_DIR")
+
+# ---- exist_ok, the corpus spelling (lekkerzeilen/gauges.py:173) ------------
+os.makedirs(d + "/one/two", exist_ok=True)
+print("first", os.path.isdir(d + "/one/two"))
+os.makedirs(d + "/one/two", exist_ok=True)
+print("again", os.path.isdir(d + "/one/two"))
+
+# ---- and WITHOUT it, the leaf must still raise -----------------------------
+# This is the row that proves exist_ok is being READ rather than defaulted:
+# with the keyword ignored, both spellings would answer the same way, and the
+# test would pass over a parser that dropped it on the floor.
+try:
+    os.makedirs(d + "/one/two")
+    print("NOT REACHED")
+except OSError:
+    print("without exist_ok: raised")
+
+# an INTERMEDIATE that exists is never an error, whatever exist_ok says
+os.makedirs(d + "/one/two/three")
+print("intermediate", os.path.isdir(d + "/one/two/three"))
+
+# ---- the FIRST parameter by keyword too ------------------------------------
+# CPython's signature is makedirs(name, mode=0o777, exist_ok=False), and a
+# keyword binds by the PASCAL parameter's name — so the shim's parameters are
+# spelled as CPython spells them and `name=` has to work.
+os.makedirs(name=d + "/four/five", exist_ok=True)
+print("by name", os.path.isdir(d + "/four/five"))
+
+# ---- a keyword on a QUALIFIED PROC through a dotted package ----------------
+# A different door from the table above, and it was NOT broken — it failed on
+# the parameter's TYPE. `timeout` was an Integer and CPython's is a float
+# number of seconds, which real code writes (gauges.py's fetch defaults to
+# 20.0). The symptom was `no overload of urlopen matches these arguments`,
+# which says nothing about timeouts, instead of the refusal that explains
+# there is no request timeout in the RTL HTTP client.
+#
+# The assertion is that it COMPILES and RAISES, not what it says: CPython
+# reaches the socket and reports connection-refused, while we refuse the
+# timeout itself before any socket exists. Both raise; the messages differ by
+# design, and asserting the text here would be asserting a divergence into the
+# oracle-generated file.
+try:
+    urllib.request.urlopen("http://127.0.0.1:1/", timeout=2.0)
+    print("NOT REACHED")
+except Exception:
+    print("float timeout compiles and raises")
+
+# ---- REGRESSION rows: the positional table still works ---------------------
+print(os.path.join("a", "b", "c"))
+print(os.environ.get("PXX_NO_SUCH_VARIABLE_HERE", "fallback"))

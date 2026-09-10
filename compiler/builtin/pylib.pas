@@ -1457,7 +1457,13 @@ function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
   exist_ok=True)` walls with `undefined variable (exist_ok)` — a message that
   blames the keyword rather than the mechanism.
   bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument }
-function pyos_makedirs(const path: AnsiString): Integer;
+{ `os.makedirs(name, mode=0o777, exist_ok=False)`. The parameter NAMES are
+  CPython's, not this file's usual `path`, because a NilPy keyword argument
+  binds by the PASCAL parameter's name — `os.makedirs(d, exist_ok=True)` is
+  the corpus spelling (lekkerzeilen/gauges.py:173) and it can only bind to a
+  parameter actually called `exist_ok`. }
+function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
+                       exist_ok: Boolean = False): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
 { os.environ.get(name[, default]) and os.getenv(name[, default]). The process
   environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
@@ -13236,41 +13242,52 @@ begin
   Result := Integer(r);
 end;
 
-function pyos_mkdir_one(const path: AnsiString; leaf: Boolean): Integer;
+{ `failIfExists` was called `leaf`, and once exist_ok landed the name became a
+  lie: the caller now passes `not exist_ok` for the last component, so a True
+  there no longer means "this is the leaf". A parameter whose name and meaning
+  disagree is the shape CLAUDE.md says to settle before touching either. }
+function pyos_mkdir_one(const path: AnsiString; failIfExists: Boolean;
+                        mode: Integer): Integer;
 var cs: AnsiString; r: Int64;
 begin
   Result := 0;
   if path = '' then Exit;
   cs := path + #0;
-  { 0o777, as CPython's default mode is; the process umask narrows it. }
-  r := PyPalMkdir(@cs[1], 511);
+  { The caller passes CPython's default 0o777 unless the program said
+    otherwise; the process umask narrows it either way. }
+  r := PyPalMkdir(@cs[1], mode);
   if r >= 0 then Exit;
   { EEXIST on an INTERMEDIATE is the normal case -- makedirs('a/b/c') with 'a'
     already there is not an error in CPython either. On the LEAF it is the
-    error, and it is the one os.makedirs is documented to raise. }
-  if (r = -17) and (not leaf) then Exit;
+    error CPython documents, unless the call said exist_ok=True. }
+  if (r = -17) and (not failIfExists) then Exit;
   pyos_raise_ioerror(r, path, '');
 end;
 
-function pyos_makedirs(const path: AnsiString): Integer;
+function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
+                       exist_ok: Boolean = False): Integer;
 var i: Integer;
 begin
   Result := 0;
   if not PyPalSupported then Exit;
-  if path = '' then Exit;
+  if name = '' then Exit;
   { Walk the separators left to right, creating each prefix. Index 1 is skipped
     deliberately: a leading '/' names the root, whose "prefix" is the empty
-    string, and mkdir('') is EFAULT rather than the no-op it looks like. }
-  for i := 2 to Length(path) do
-    if path[i] = '/' then
-      pyos_mkdir_one(Copy(path, 1, i - 1), False);
+    string, and mkdir('') is EFAULT rather than the no-op it looks like.
+
+    An intermediate is never a leaf whatever exist_ok says -- EEXIST there is
+    the normal case for makedirs and always was. exist_ok only decides the LAST
+    component, which is exactly what CPython documents. }
+  for i := 2 to Length(name) do
+    if name[i] = '/' then
+      pyos_mkdir_one(Copy(name, 1, i - 1), False, mode);
   { A trailing separator means the leaf was already made by the loop -- and
     CPython treats makedirs('a/b/') as makedirs('a/b'), so the FileExistsError
     it would raise for an existing 'a/b' must still fire. }
-  if path[Length(path)] = '/' then
-    pyos_mkdir_one(Copy(path, 1, Length(path) - 1), True)
+  if name[Length(name)] = '/' then
+    pyos_mkdir_one(Copy(name, 1, Length(name) - 1), not exist_ok, mode)
   else
-    pyos_mkdir_one(path, True);
+    pyos_mkdir_one(name, not exist_ok, mode);
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;

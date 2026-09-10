@@ -1744,6 +1744,15 @@ test-nilpy: $(COMPILER)
 	# like something else.
 	./$(COMPILER) test/test_nilpy_a_class_through_a_dotted_package.npy $(TESTTMP)/test_nilpy_dotpkg26
 	$(TESTTMP)/test_nilpy_dotpkg26 | diff -u test/test_nilpy_a_class_through_a_dotted_package.expected -
+	# A KEYWORD ARGUMENT to a dotted stdlib call. The table's argument loop
+	# parsed each argument as an ordinary expression, so `exist_ok=True` read
+	# as the NAME `exist_ok` and refused with `undefined variable` -- true
+	# about what the parser did, a false lead about what is wrong. Fresh
+	# `mktemp -d` per run and no path is ever printed: "the leaf already
+	# exists" is one of the assertions, so a directory left from a previous
+	# run would make it fire on the wrong row.
+	./$(COMPILER) test/test_nilpy_a_keyword_argument_to_a_stdlib_call.npy $(TESTTMP)/test_nilpy_stdkw26
+	PXX_KWTEST_DIR="$$(mktemp -d)" $(TESTTMP)/test_nilpy_stdkw26 2>&1 | diff -u test/test_nilpy_a_keyword_argument_to_a_stdlib_call.expected -
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.
