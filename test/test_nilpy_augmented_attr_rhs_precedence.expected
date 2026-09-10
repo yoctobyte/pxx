@@ -1,0 +1,8 @@
+tern 1 2
+tern-float 0.25 -2.5
+and 5 0
+or 5 3
+in 1 0
+minus -0.25 2.5
+control-bare 1 2
+control-subscript 1 2

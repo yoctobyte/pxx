@@ -781,6 +781,13 @@ test-nilpy: $(COMPILER)
 	# non-constant default must be READ from its def-time global, not rebuilt.
 	./$(COMPILER) test/test_nilpy_star_unpack_into_defaults.npy $(TESTTMP)/test_nilpy_stardflt26
 	$(TESTTMP)/test_nilpy_stardflt26 | diff -u test/test_nilpy_star_unpack_into_defaults.expected -
+	# `self.n += 1 if s > 0 else 2` -- a DOTTED augmented target reaches the
+	# shared C compound-assign tail, which parsed the RHS with Pascal precedence,
+	# so the assignment became the THEN ARM of a conditional the program never
+	# wrote. A silent wrong value on int arms (2 and 0 for CPython's 1 and 2) and
+	# a `Variant :=:` IR refusal on any other. Both arms exercised on every row.
+	./$(COMPILER) test/test_nilpy_augmented_attr_rhs_precedence.npy $(TESTTMP)/test_nilpy_augprec26
+	$(TESTTMP)/test_nilpy_augprec26 | diff -u test/test_nilpy_augmented_attr_rhs_precedence.expected -
 	# forwarding a collected *args into a callee with ordinary parameters
 	./$(COMPILER) test/test_nilpy_star_forward.npy $(TESTTMP)/test_nilpy_starfwd26
 	tools/expect_same.sh test_nilpy_starfwd26.1 "$$($(TESTTMP)/test_nilpy_starfwd26)" "$$(printf 'UI/size\n1/2\na/b/c\n3\n[1, 2, 3]\n3\n4.0\na-b\n11\n13\nTypeError')"

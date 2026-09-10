@@ -12010,7 +12010,31 @@ begin
   begin
     op := CurTok.Kind; Next;
     left := CurASTNode;
-    ParseExpr;                 { right-assoc: RHS may itself be a compound assign }
+    { PYTHON PRECEDENCE FOR A PYTHON RHS. This tail is C's, and a NilPy DOTTED
+      target reaches it before pyparser's own augmented arm can see it -- which
+      the notes below already say, three times, about the STORE. It is just as
+      true of the VALUE: ParseExpr is Pascal's chain, so it stops at `if`, `and`,
+      `or` and `in`, and `self.n += 1 if s > 0 else 2` parsed as
+      `(self.n += 1) if s > 0 else 2` -- the assignment became the THEN ARM of a
+      conditional the program never wrote.
+
+      It is a SILENT WRONG VALUE where the arms are int-typed (measured: 2 and 0
+      where CPython gives 1 and 2, both branches wrong) and a confusing IR
+      refusal where they are not: `Variant :=: this scalar type not yet
+      supported`, naming an AN_TERNARY in a program whose only conditional is the
+      one it mis-built.
+
+      Same rule, same reason, as ParseArgExpr's own: the shared parser knows
+      WHERE an expression is legal and the language's file decides what it MEANS.
+      Only a NilPy USER file switches -- Pascal, C and the pylib units compiled
+      into the same run keep ParseExpr and its right-associativity, which is what
+      `a += b += c` needs and Python does not have.
+      Found by attempting lekkerzeilen: rig.py:152,
+      `self.hoist += step if self.wanted > self.hoist else -step`. }
+    if NilPyUserCode then
+      PyParseBoolExpr
+    else
+      ParseExpr;               { right-assoc: RHS may itself be a compound assign }
     right := CurASTNode;
     { tkSlashEq means DIFFERENT operators in different frontends, which is the
       trap here: NilPy's lexer emits it for `//=` (floor division — `/=` gets

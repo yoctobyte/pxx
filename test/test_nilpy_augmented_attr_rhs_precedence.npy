@@ -1,0 +1,87 @@
+# `self.n += 1 if s > 0 else 2` — a SILENT WRONG VALUE, and it is the whole
+# reason this test exists rather than a compile-error fixture.
+#
+# NilPy's own augmented-assignment arm only ever sees a BARE NAME. A DOTTED
+# target reaches the shared expression parser's compound-assignment tail first
+# — pasparser_expr.inc says so three times, each time about the STORE (a
+# variant field corrupted, a class-typed field silently zero, a list field
+# segfaulting). It is just as true of the VALUE, and that half went unnoticed
+# because the tail parsed the right-hand side with ParseExpr: PASCAL's
+# precedence chain, which stops at `if`, `and`, `or` and `in`.
+#
+# So the statement above parsed as `(self.n += 1) if s > 0 else 2` — the
+# assignment became the THEN ARM of a conditional the program never wrote.
+# Measured before the fix: 2 and 0 where CPython gives 1 and 2. BOTH branches
+# wrong, no diagnostic, and the bare-name and subscript spellings of the same
+# line were correct all along, which is what made it invisible.
+#
+# It only announced itself when the arms were not int-typed, and then as
+# something else entirely: `Variant :=: this scalar type not yet supported`,
+# naming an AN_TERNARY in a program whose only conditional expression is the one
+# the parser invented. lekkerzeilen's rig.py:152 is that line —
+# `self.hoist += step if self.wanted > self.hoist else -step` — and it blocked
+# three modules through one import.
+#
+# Every row is diffed against CPython, and each is written so BOTH arms are
+# exercised: a mis-parse that happens to take the then-branch prints the right
+# answer, which is how the int case hid.
+#
+# The bare-name and subscript rows are DID-NOT-DISTURB controls, not evidence:
+# they took a different path before this change and still do.
+
+
+class R:
+    def __init__(self):
+        self.n = 0
+        self.h = 0.0
+
+    def tern(self, s):
+        self.n += 1 if s > 0 else 2
+        return self.n
+
+    def tern_float(self, s):
+        # the two arms must not agree in MAGNITUDE either: `s if s > 0 else -s`
+        # answers 0.25 for both 0.25 and -0.25, so it cannot tell the arms apart
+        self.h += s if s > 0 else s * 10
+        return self.h
+
+    def andop(self, a, b):
+        self.n += a and b
+        return self.n
+
+    def orop(self, a, b):
+        self.n += a or b
+        return self.n
+
+    def inop(self, a):
+        self.n += a in [1, 2]
+        return self.n
+
+    def minus(self, s):
+        self.h -= s if s > 0 else s * 10
+        return self.h
+
+
+print("tern", R().tern(5), R().tern(-5))
+print("tern-float", R().tern_float(0.25), R().tern_float(-0.25))
+print("and", R().andop(1, 5), R().andop(0, 5))
+print("or", R().orop(0, 5), R().orop(3, 5))
+print("in", R().inop(1), R().inop(9))
+print("minus", R().minus(0.25), R().minus(-0.25))
+
+
+# controls: the two spellings that never went through the C tail
+def bare(s):
+    n = 0
+    n += 1 if s > 0 else 2
+    return n
+
+
+def sub(s):
+    d = {"k": 0}
+    d["k"] += 1 if s > 0 else 2
+    return d["k"]
+
+
+print("control-bare", bare(5), bare(-5))
+print("control-subscript", sub(5), sub(-5))
