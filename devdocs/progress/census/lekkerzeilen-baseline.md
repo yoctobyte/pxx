@@ -261,3 +261,53 @@ import fix (`708555fdb`) stopped resolving the tail of a failed guarded import;
 while the thing blocking it is replaced**, which no census that reports only a
 first error can show — and the reason this file lists per module is so the next
 reader can at least see the error text change.
+
+## THREE OF THE THIRTEEN WALLS ARE BY DESIGN — read this before ranking ctypes
+
+`ctypes` is the largest wall group in the table above (5 modules) and **the
+compiler owes three of them nothing.**
+
+`platform/{_ctypes_backend,_gl,_sdl2}` are the CPython arm of the app's own
+two-backend portability seam:
+
+```python
+def _select_backend():
+    try:
+        import ctypes
+    except ImportError:
+        from . import _pxx
+        return _pxx, "pxx"
+    from . import _ctypes_backend
+    return _ctypes_backend, "ctypes"
+```
+
+Under NilPy `import ctypes` misses, the handler takes `_pxx`, and **the tail is
+never reached** — measurably so since `708555fdb`, which is why
+`platform/__init__` moved OFF the ctypes wall and onto `:95 undefined variable
+(_pxx)`. Those three files appear as walls only because this census compiles
+every file DIRECTLY. A run that follows imports from `__main__` would never
+open them.
+
+**So a census over a package with a portability seam over-reports by exactly
+the size of the arm that is not taken**, and nothing in the error text says so.
+The tell is that the walled modules are the ones the seam's DEAD branch names.
+
+`capture.py` and `gfx.py` are the other two ctypes modules and they are NOT
+this: both `import ctypes` at module level with no seam around it. They are a
+CORPUS change — allowed here by the owner's standing rule — and belong to
+[[task-b-write-the-lekkerzeilen-pxx-platform-backend]], not to the frontend.
+
+### The honest arithmetic
+
+    13 walls
+     3  by design      platform/{_ctypes_backend,_gl,_sdl2}
+     2  corpus work    capture.py, gfx.py            -> Track B
+     8  compiler work  on FOUR causes:
+          3 modules / 2 sites   threading      __main__, app, gauges
+          2 modules / 1 site    sqlite3        world, atlas
+          2 modules             a module as a VALUE   platform/__init__, bindings
+          1 module              a field from a qualified module constant  traffic
+
+**Eight modules on four causes, not thirteen on five** — and the count that
+would have been quoted from the table alone is nearly double the work that
+exists.
