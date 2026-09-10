@@ -96,3 +96,72 @@ Link the busybox `--separate` objects with `ld` and no glibc:
 `ld -static -o out obj/*.o <crtl objects> ` with our own entry. Whether that
 link resolves at all — and what it is missing — is one run, and it decides
 whether route 1 is a morning or a project.
+
+## MEASURED 2026-09-10: `ld` ALREADY DOES THIS. THE GAP IS A crt0, NOT A LINKER.
+
+Route 1 from the ticket above was run, and it works. At `49489e5ca437`:
+
+```
+$ pascal26 --emit-obj -Ilib/crtl/include -Ilib/crtl/src a.c a.o    # main(), calls twice()
+$ pascal26 --emit-obj -Ilib/crtl/include -Ilib/crtl/src b.c b.o    # twice()
+$ nm -u a.o
+                 U twice
+```
+
+**One undefined symbol in the whole object, and it is the other translation
+unit's function.** Nothing from libc. The runtime is already in there, exported
+weak — `exit`, `_exit`, `_Exit`, `atexit` all present as `W`.
+
+```
+$ ld -static -e main -o out a.o b.o      # no libc, no crt files, no -L
+$ file out   -> ELF 64-bit LSB executable, statically linked
+$ ldd out    -> not a dynamic executable
+$ ./out      -> 42          (correct), then SIGSEGV
+```
+
+The link succeeds and the program computes the right answer. The segfault is the
+whole remaining gap: entering at `main` leaves no exit path, so it returns into
+nothing. **pxx's ELF writer synthesises an entry stub for an EXECUTABLE (entry
+`0x4000e8` in `compiler/pascal26`) and does not emit one into an object.**
+
+### Three lines close it
+
+```c
+extern int main(int argc, char **argv);
+extern void exit(int);
+void pxx_entry(void) { exit(main(0, (char **)0)); }
+```
+
+compiled with `--emit-obj` like any other TU, then:
+
+```
+$ ld -static -e pxx_entry -o out crt0.o a.o b.o
+$ ./out   -> 42
+$ echo $? -> 0
+```
+
+**Statically linked, `not a dynamic executable`, correct output, clean exit, no
+glibc anywhere in the link.**
+
+### What this changes about the ticket
+
+- **Route 1 is not a project; it is done as a mechanism.** "pxx cannot link its
+  own objects" is true and **no longer the blocker it reads as** — `ld` links
+  them, and `ld` is an external *tool*, not an external *library*, which the
+  owner has said is fair game.
+- **The real work is a proper crt0**, which the probe above fakes: it passes
+  `argc=0, argv=NULL`. A real one must pass the kernel's stack arguments through
+  (argc, argv, envp) and should come from pxx rather than from a hand-written C
+  file — the ELF writer already contains this logic for executables.
+- **Route 2 (a pxx `--link` mode) stays the better end state** and is now clearly
+  a convenience rather than an enabler: it would remove the `ld` invocation and
+  the separate crt0 step, not unlock anything.
+- **SCALE IS UNMEASURED AND IS THE REAL RISK.** Two objects is not 521. The known
+  hazard has a name and a history in this repo: every `--emit-obj` object carries
+  its own full copy of crtl
+  ([[feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes]]),
+  exported weak, and the weak export is precisely what stopped 116 duplicate
+  symbol collisions at `243137302`. Whether 521 weak copies resolve as cleanly as
+  2 is the question, and at pin v399 `--separate --pinned` failed on exactly that
+  (`multiple definition of abort, abs, accept, …`). A busybox-scale `ld` run is
+  in flight.
