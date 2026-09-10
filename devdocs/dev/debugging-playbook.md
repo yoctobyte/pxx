@@ -23936,3 +23936,46 @@ binary `69c84acb1501`). The one shape where an infer error IS the typo guard is
 the bare `self.h = nosuchname`, which is a binding test and untouched.
 
 **Not promoted.** One instance.
+
+## A reducer that is merely SLOW and one that is BROKEN look identical from the log
+
+Measured 2026-09-10 (frankB, Track N), writing an ast-guided statement reducer
+for `traffic.py`'s `nearest() takes exactly 2 argument(s), got 3` — the ticket
+prescribed "reduce in place" and there was no tool.
+
+The first cut removed **exactly one statement per round**, every round:
+
+    round 20: removed 1, 747 lines
+    round 21: removed 1, 747 lines
+    round 22: removed 1, 747 lines
+
+which reads as a reducer grinding towards a fixpoint on a hard input, and is
+what a healthy reducer looks like in its LAST few rounds. It was broken. Each
+pass held a slot list from one `ast.parse` and re-found the slot in a second
+parse with `slots.index((holder, field, idx))` — **two parses of the same text
+produce different node OBJECTS**, so after the first successful removal the
+recomputed list never matched, `index()` raised `ValueError`, and the `except`
+skipped every remaining candidate in that pass. One removal per round, forever,
+with no error and a plausible-looking log.
+
+**The tell is the removal count that does not FALL.** A healthy reducer's count
+decays — dozens, then a few, then zero. A count pinned at a small constant is
+not slow convergence, it is a pass that ends early. Nothing else distinguishes
+them: both terminate, both shrink the file, both print progress.
+
+The fix is to address slots **by position in a freshly-parsed list**, never by
+node identity across parses. Corrected, round 1 alone went 1392 -> 744 lines.
+
+### And the interestingness test is the ERROR SUBSTRING, never the exit code
+
+A reduction keyed on `rc != 0` accepts **any** refusal, so it will happily
+converge on a *different, smaller* bug and hand you a minimal repro of
+something you were not chasing. That is a reducer **manufacturing its own
+equivalence class** — the same shape as a census grepping for `error:` and
+scoring a segfault CLEAN, and as the diagnostic-format collision already in
+CLAUDE.md. Match the message.
+
+`tools/pyreduce.py` carries both properties and both explanations.
+
+**Not promoted.** One instance, and the population is agents who write a
+reducer, which is not a second subsystem.
