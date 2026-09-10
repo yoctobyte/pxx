@@ -1,0 +1,14 @@
+False False
+True True
+False False
+counter True False
+waited True
+alive False n 1000
+args waited True
+n2 42
+plain waited True 99
+locked? False
+locked? True try False
+locked? False
+main is done; the non-daemon thread has not been joined yet
+non-daemon body ran to completion

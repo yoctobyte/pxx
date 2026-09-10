@@ -16,7 +16,15 @@ Two properties, both of them the point:
    not chasing -- a reducer manufacturing its own equivalence class, the same
    shape as a census that greps for `error:` and scores a segfault CLEAN.
 
-2. Slots are addressed by POSITION in a freshly-parsed list, never by node
+2. The best-known-good text is CHECKPOINTED to <rel>.reduced after every
+   successful removal.  A reducer holds a candidate in the file while it tests
+   it, so the file on disk is a FAILED candidate most of the time -- kill the
+   process and what is left does not reproduce, and the good state, which lived
+   only in memory, is gone with it.  Measured 2026-09-10: 35 minutes of
+   reduction lost to exactly that, and the loss was silent -- the file was
+   still there, still smaller, and simply no longer interesting.
+
+3. Slots are addressed by POSITION in a freshly-parsed list, never by node
    identity.  Two ast.parse() calls over the same text yield different node
    OBJECTS, so `slots.index(node)` raises and the pass silently ends after its
    first successful removal.  That was this script's first cut: it removed
@@ -76,6 +84,9 @@ while True:
         if interesting():
             cur = cand
             removed += 1
+            # Checkpoint: see (2) in the docstring. Written on every success,
+            # not once per round -- a round here can take twenty minutes.
+            open(SRC + '.reduced', 'w').write(cur)
         else:
             open(SRC, 'w').write(cur)
         k -= 1

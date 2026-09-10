@@ -1,0 +1,85 @@
+# A BOUNDED queue whose put really blocks, fed by one thread and drained by
+# another. This is the corpus shape verbatim: lekkerzeilen's `_ready` is
+# Queue(maxsize=2), filled by a loader thread and drained by the render loop.
+#
+# WHY THIS TEST EXISTS SEPARATELY FROM test_nilpy_the_queue_module.npy: that one
+# is single-threaded and stays that way, and it passed unchanged across this
+# change -- which is exactly the problem. Until threading landed, mimic_queue's
+# blocking arms RAISED, and a single-threaded test cannot tell a real wait from
+# a refusal, because nothing single-threaded can ever satisfy one. The lock
+# added in the same commit is invisible to it too: an uncontended lock is an
+# untested lock. Neither of the two things that changed has a positive control
+# in a one-thread file, by construction.
+#
+# Built with --threadsafe (see the Makefile row and the threading test's note).
+
+import queue
+import threading
+
+# ---- the hand-off, with a bound that FORCES the producer to wait ------------
+# maxsize=2 against 20 items means put() blocks at least eighteen times, so the
+# blocking arm is exercised rather than merely reachable. With an unbounded
+# queue this test would pass without ever waiting for anything.
+q = queue.Queue(maxsize=2)
+done = threading.Event()
+
+
+def loader():
+    i = 0
+    while i < 20:
+        q.put(i)
+        i = i + 1
+    done.set()
+
+
+t = threading.Thread(target=loader, daemon=True, name="loader")
+t.start()
+
+total = 0
+seen = 0
+while seen < 20:
+    total = total + q.get()
+    seen = seen + 1
+
+print("drained", seen, "sum", total)
+print("loader finished", done.wait(5.0))
+t.join(timeout=5.0)
+print("alive", t.is_alive(), "left", q.qsize())
+
+# ---- the non-blocking arms still raise what real code catches by name -------
+try:
+    q.get_nowait()
+except queue.Empty:
+    print("Empty caught")
+
+full = queue.Queue(maxsize=1)
+full.put("a")
+try:
+    full.put_nowait("b")
+except queue.Full:
+    print("Full caught")
+
+# ---- a BOUNDED wait that runs out --------------------------------------------
+# Not the same thing as a wait that CANNOT be satisfied. A thread is alive, so
+# the wait is legitimate; it simply expires, and CPython's get(timeout=) raises
+# Empty for that. The case where nothing could ever satisfy it is a deliberate
+# DIVERGENCE and lives in its own file, because CPython hangs there and a test
+# that hangs under the oracle cannot be compared against it:
+# test_nilpy_a_queue_wait_that_can_never_be_satisfied.npy
+alive = threading.Event()
+
+
+class Idle:
+    def body(self):
+        alive.wait(5.0)
+
+
+idler = threading.Thread(target=Idle().body, daemon=True, name="idle")
+idler.start()
+try:
+    q.get(True, 0.05)
+    print("NOT REACHED")
+except queue.Empty:
+    print("timed get raised Empty while a thread was alive")
+alive.set()
+idler.join(timeout=5.0)

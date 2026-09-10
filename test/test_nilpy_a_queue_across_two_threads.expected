@@ -1,0 +1,6 @@
+drained 20 sum 190
+loader finished True
+alive False left 0
+Empty caught
+Full caught
+timed get raised Empty while a thread was alive

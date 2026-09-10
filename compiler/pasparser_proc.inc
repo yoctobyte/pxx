@@ -6546,6 +6546,24 @@ begin
       { silently dropping one is how `ttk` stopped resolving in a program with
         enough imports — the failure then lands at RUN time, far away }
       Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
+    { The one shim with a BUILD-MODE requirement, diagnosed here so a Python
+      programmer is told about a Python import rather than about
+      lib/rtl/palthread.pas. Without this the refusal still happens and still
+      names the flag -- __pxxclone's own gate -- but it arrives pointing at a
+      Pascal file the program never mentioned, three units below the line that
+      caused it.
+
+      This is a DIAGNOSTIC and not a which-shim-needs-which-mode table: it
+      cannot turn the mode on, because the lock-implementation defines
+      (PXX_TS_HARDLOCK / PXX_TS_SOFTLOCK) are applied before lexing and the
+      lexer refuses `{$threadsafe on}` for exactly that reason. Making
+      `import threading` imply the flag has to happen at OPTION time, from a
+      pre-scan of the source, and is filed as its own ticket:
+      feature-n-import-threading-should-imply-threadsafe. }
+    if (lo = 'threading') and (not ThreadSafeMode) then
+      Error('import threading requires --threadsafe: a Python thread allocates '
+            + 'on its first statement and the default heap, ARC and console-I/O '
+            + 'runtime are not thread-safe. Rebuild with --threadsafe.');
     ParseUsesUnit('mimic_' + lo);
     if SoftUnitMissed then
       { the shim was not there either: this import is a soft miss too, and the

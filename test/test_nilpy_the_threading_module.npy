@@ -1,0 +1,108 @@
+# threading — Thread, Event and Lock, over the RTL's clone-based thread PAL.
+#
+# EVERY ROW HERE IS DETERMINISTIC, and that took writing twice. The first cut
+# started a counter thread and then set its stop flag from main, which passes
+# under CPython (the interpreter is slow to reach the set) and printed
+# `ticked False` here, because the child had not been scheduled before the flag
+# went up. A threading test whose expected output depends on which thread wins
+# is a test that will go red on a loaded box and be blamed on the change that
+# happened to land beside it. Every wait below is bounded and every assertion is
+# behind an Event the CHILD sets.
+#
+# Built with --threadsafe: __pxxclone refuses without it, because the heap, ARC
+# and console-I/O runtime are not thread-safe and a Python thread allocates on
+# its first statement. The Makefile row passes the flag; see the note there.
+
+import threading
+
+
+class Counter:
+    def __init__(self):
+        self.n = 0
+        self.done = threading.Event()
+
+    def work(self):
+        i = 0
+        while i < 1000:
+            self.n = self.n + 1
+            i = i + 1
+        self.done.set()
+
+    def work_with(self, a, b):
+        self.n = a * b
+        self.done.set()
+
+
+# ---- Event on its own, before any thread exists ----------------------------
+# The whole Event surface is exercised single-threaded first, so a failure here
+# is unambiguously the flag and not the scheduler.
+e = threading.Event()
+print(e.is_set(), e.wait(0.01))
+e.set()
+print(e.is_set(), e.wait(0.01))
+e.clear()
+print(e.is_set(), e.wait(0.01))
+
+# ---- a bound method as the target ------------------------------------------
+c = Counter()
+t = threading.Thread(target=c.work, daemon=True, name="counter")
+# name and daemon are attributes CPython exposes and real code reads.
+print(t.name, t.daemon, t.is_alive())
+t.start()
+print("waited", c.done.wait(5.0))
+t.join(timeout=5.0)
+print("alive", t.is_alive(), "n", c.n)
+
+# ---- args=, which is the one site in the corpus that passes them -----------
+c2 = Counter()
+t2 = threading.Thread(target=c2.work_with, args=(6, 7), daemon=True, name="args")
+t2.start()
+print("args waited", c2.done.wait(5.0))
+t2.join()
+print("n2", c2.n)
+
+# ---- a plain def, not a bound method ---------------------------------------
+# A NilPy callable value wears more than one representation; a def with no
+# receiver is a different one from a bound method, and the shim calls both
+# through the same dispatcher. Asserting only the bound-method row would
+# certify half the door.
+side = Counter()
+
+
+def plain():
+    side.n = 99
+    side.done.set()
+
+
+t3 = threading.Thread(target=plain, daemon=True, name="plain")
+t3.start()
+print("plain waited", side.done.wait(5.0), side.n)
+t3.join()
+
+# ---- Lock ------------------------------------------------------------------
+lk = threading.Lock()
+print("locked?", lk.locked())
+lk.acquire()
+print("locked?", lk.locked(), "try", lk.acquire(False))
+lk.release()
+print("locked?", lk.locked())
+
+# ---- a NON-daemon thread, joined at exit -----------------------------------
+# CPython joins non-daemon threads before the interpreter exits. Without that
+# the process teardown kills them mid-flight and whatever they were doing is
+# lost with NO diagnostic, which is the worst shape a divergence can take. The
+# body prints AFTER main's last line, and the order of those two lines is the
+# assertion.
+gate = threading.Event()
+
+
+class Tail:
+    def body(self):
+        gate.wait(5.0)
+        print("non-daemon body ran to completion")
+
+
+tail = threading.Thread(target=Tail().body, daemon=False, name="tail")
+tail.start()
+gate.set()
+print("main is done; the non-daemon thread has not been joined yet")

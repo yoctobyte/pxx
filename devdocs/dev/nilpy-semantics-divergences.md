@@ -749,3 +749,49 @@ produce the identical observation.
 Filed as bug-n-the-class-body-scope-is-wired-into-the-wrong-one-of-two-doors,
 together with the mirror row (a method's DEFAULT argument, where the class body
 SHOULD be visible and is not). One inverted rule, two doors.
+
+
+## A `queue` wait nothing can satisfy is REFUSED, where CPython hangs
+
+Measured 2026-09-10, landed with `mimic_threading`.
+
+```python
+import queue
+q = queue.Queue()
+q.get()          # CPython: hangs forever.  NilPy: raises, naming the reason.
+```
+
+`Queue.get()` on an empty queue and `Queue.put()` on a full one block until
+another thread satisfies them — the same as CPython, and that is what
+`mimic_threading` made possible. But when **no spawned thread is alive**, no
+arrival is possible and the wait is a guaranteed deadlock. CPython waits for it
+anyway; we raise, with the reason in the message.
+
+**This is not "accepting what CPython rejects", which is the shape every other
+entry here has.** It is refusing something CPython accepts, so it needs its own
+justification and here it is:
+
+* The program is already wrong. CLAUDE.md's "on par with the LANGUAGE, not with
+  the implementation" says an input produced only by a mistake is not a
+  specification, and **prefer the answer that leaves the mistake visible**.
+* Nothing correct is refused. A hang returns no value, satisfies no assertion
+  and terminates no program — there is no working program whose behaviour
+  depends on this call, because the call never returns in either implementation.
+* It is not an approximation of the wait. Every satisfiable wait blocks exactly
+  as CPython does; this fires only where the answer would have been "never".
+
+**The test is asked inside the wait loop, not once before it**, because a queue
+can have a feeder when the wait begins and lose it a moment later. A thread that
+exits mid-wait turns a legitimate wait into a deadlock, and that transition is
+the case worth diagnosing.
+
+`test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.npy` is the only NilPy
+test in this family with a **hand-written** `.expected`: run under python3 it
+exits 124 on a 60-second timeout, so there is no oracle output to diff against.
+Its assertions are on substrings — the wording may improve, the naming of a
+deadlock may not.
+
+The mechanism is one integer: `lib/rtl/pythreadlive.pas`, incremented by
+`Thread.start` and decremented when a thread's body returns. It is a unit of its
+own so that `import queue` does not drag `palthread` — and therefore
+`--threadsafe` — into a single-threaded program.

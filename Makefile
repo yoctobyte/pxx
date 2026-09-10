@@ -1707,6 +1707,32 @@ test-nilpy: $(COMPILER)
 	# they are the common case and answer exactly as CPython does.
 	./$(COMPILER) test/test_nilpy_the_queue_module.npy $(TESTTMP)/test_nilpy_queue26
 	$(TESTTMP)/test_nilpy_queue26 | diff -u test/test_nilpy_the_queue_module.expected -
+	# threading: `import threading` -> lib/rtl/mimic_threading.pas, over the
+	# RTL's own clone-based PAL (palthread/palfutex/palsync). --threadsafe is
+	# NOT optional and not a speed dial: __pxxclone refuses to compile without
+	# it, because the heap, ARC and console-I/O runtime are not thread-safe and
+	# a Python thread allocates on its first statement. Every row is bounded and
+	# every assertion sits behind an Event the CHILD sets -- a threading test
+	# whose output depends on which thread wins goes red on a loaded box and
+	# gets blamed on whatever landed beside it.
+	./$(COMPILER) --threadsafe test/test_nilpy_the_threading_module.npy $(TESTTMP)/test_nilpy_threading26
+	$(TESTTMP)/test_nilpy_threading26 | diff -u test/test_nilpy_the_threading_module.expected -
+	# A BOUNDED queue across two threads -- the corpus shape (lekkerzeilen's
+	# _ready is Queue(maxsize=2), filled by a loader and drained by the render
+	# loop). Separate from the queue row above because that one is
+	# single-threaded and CANNOT see either of the two things this change made:
+	# a blocking arm looks identical to a refusal when nothing could satisfy it,
+	# and an uncontended lock is an untested lock. maxsize=2 against 20 items
+	# forces at least eighteen real waits.
+	./$(COMPILER) --threadsafe test/test_nilpy_a_queue_across_two_threads.npy $(TESTTMP)/test_nilpy_qthreads26
+	$(TESTTMP)/test_nilpy_qthreads26 | diff -u test/test_nilpy_a_queue_across_two_threads.expected -
+	# The one row in this family with a HAND-WRITTEN .expected, because CPython
+	# HANGS on it: a blocking get() with no thread alive is a guaranteed
+	# deadlock and CPython waits for it forever. We name it instead. The last
+	# line is a positive control for the lock: three refusals are raised above,
+	# and if any of them unwound with the queue's mutex held, it never returns.
+	./$(COMPILER) --threadsafe test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.npy $(TESTTMP)/test_nilpy_qdead26
+	$(TESTTMP)/test_nilpy_qdead26 | diff -u test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.expected -
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.

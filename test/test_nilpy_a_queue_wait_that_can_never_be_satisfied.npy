@@ -1,0 +1,68 @@
+# A DELIBERATE DIVERGENCE, and the only NilPy test in this family that CANNOT
+# be compared against CPython — because under CPython it HANGS. That is the
+# whole subject: a blocking `q.get()` on an empty queue with no other thread
+# alive is a guaranteed deadlock, and CPython's answer to a guaranteed deadlock
+# is to wait for it forever.
+#
+# Measured 2026-09-10: running this file under python3 exits 124 under a 60s
+# timeout, having printed nothing after the first line.
+#
+# We raise instead, naming the reason. That is strictly better on a program
+# that is already wrong and identical on every program that is not, which is
+# the direction devdocs/dev/nilpy-semantics-divergences.md points. The
+# refusal's TEXT is the one mimic_queue carried before threading landed, kept
+# word for word because the situation has not changed — only the test for it
+# has: it used to be "NilPy has no threading", it is now "no thread is alive".
+#
+# The .expected here is HAND-WRITTEN and cannot be regenerated from the oracle.
+# Assertions are on SUBSTRINGS: the wording may improve, the fact that a
+# deadlock is named may not.
+
+import queue
+import threading
+
+q = queue.Queue()
+
+# 1. no thread has ever been started
+try:
+    q.get()
+    print("NOT REACHED: get")
+except Exception as bad:
+    print("get diagnosed:", "no other thread is alive" in str(bad))
+
+full = queue.Queue(maxsize=1)
+full.put("only")
+try:
+    full.put("second")
+    print("NOT REACHED: put")
+except Exception as bad:
+    print("put diagnosed:", "no other thread is alive" in str(bad))
+
+# 2. a thread STARTED and then FINISHED — the queue had a feeder and lost it.
+#    This is the row that makes the test worth having: the deadlock check is
+#    asked inside the wait loop and not once before it, so a feeder that dies
+#    mid-wait is diagnosed rather than waited on forever.
+ran = threading.Event()
+
+
+def brief():
+    ran.set()
+
+
+t = threading.Thread(target=brief, daemon=True, name="brief")
+t.start()
+ran.wait(5.0)
+t.join(timeout=5.0)
+print("feeder gone:", t.is_alive() is False)
+try:
+    q.get()
+    print("NOT REACHED: get after the feeder exited")
+except Exception as bad:
+    print("get diagnosed after exit:", "no other thread is alive" in str(bad))
+
+# 3. and the LOCK is still usable afterwards. A refusal raised while the
+#    queue's mutex was held would unwind past every unlock and deadlock the
+#    next caller — including the handler that just caught it. Three refusals
+#    have been raised above; if any of them leaked the lock, this line hangs.
+q.put("after")
+print("queue still usable:", q.get())
