@@ -12860,6 +12860,20 @@ test-core: $(COMPILER)
 	# pool, and cmc. The carry inputs are chosen so a dropped carry cannot pass.
 	./$(COMPILER) test/casm_gnu_operands.c $(TESTTMP)/casmgnuop26
 	tools/expect_same.sh casmgnuop26 "$$($(TESTTMP)/casmgnuop26)" "$$(printf 'add3 12\nadd8 0 0 0 0 0 0 0 0 carry=1\nmul1 4 18446744073709551614 0\nsubmod 1 18446744069414584320 18446744073709551615 4294967294')"
+	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
+	# Measured population, not a guessed family: across every header on this
+	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which
+	# declares SDL_Swap16 twice -- "=q" under __i386__ and "=Q" under
+	# __x86_64__, so one letter compiles that header for one target and
+	# refuses it for the other), and the only modifiers are %w, %b and %h.
+	# %h is REFUSED BY NAME and that is why SDL_Swap16 still does not compile:
+	# the high byte needs a register this backend cannot encode, since at byte
+	# width it forces REX for numbers 4..7 and REX is what makes %ah illegal.
+	# b_wrap is the row that separates a byte add from a 32-bit one: 0x12FF+1
+	# is 0x1200, and a 32-bit add carries into the second byte instead.
+	# The pre-fix compiler refuses this file by name, so it can fail.
+	./$(COMPILER) test/casm_byte_classes.c $(TESTTMP)/casmbyteclass26
+	tools/expect_same.sh casmbyteclass26 "$$($(TESTTMP)/casmbyteclass26)" "$$(printf 'qq_or 4660\nq_inc_low 65281\nw_add 65541\nb_wrap 4608')"
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# An `"m"` operand costs NO register: it is a frame slot, `[rbp+disp32]`,

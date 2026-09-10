@@ -7866,6 +7866,45 @@ begin
   else if cls = 'D' then Result := 7;
 end;
 
+{ `Q` and `q`: a register CLASS, not a fixed register, which is why they could
+  not be spelled as another row in CAsmFixedReg. `Q` is "a register whose HIGH
+  byte is addressable" -- on x86 that is exactly ax/bx/cx/dx, because only those
+  four have an %ah-style half. `q` is "a register whose LOW byte is
+  addressable": all sixteen on x86-64, but only those same four on i386.
+
+  BOTH LETTERS ARE HONOURED AS THE SAME FOUR, and the narrowing of `q` on
+  x86-64 is deliberate and legal for the same reason `g` is honoured as `r` --
+  a subset of what the constraint permits is a choice the constraint allows.
+  It also keeps one mechanism where the alternative is two that differ per
+  target, which is the shape that stays broken in one of them.
+
+  WHY BOTH, when a given compile only ever reaches one: SDL_endian.h declares
+  SDL_Swap16 twice, `"=q"` under __i386__ (:159) and `"=Q"` under __x86_64__
+  (:166). pxx targets both, so supporting one letter compiles that header for
+  one target and refuses it for the other, on the same source. Same structural
+  argument as FPC's TFPList.IndexOf needing IndexDWord and IndexQWord under a
+  pointer-width {$if}: a family with a hole in it is not half-working.
+
+  MEASURED POPULATION, not a guess at the family: `Q` and `q` are the ONLY
+  letters of this kind that occur in any header on this box -- four uses, all
+  of them these two lines in SDL/SDL_endian.h and SDL2/SDL_endian.h. `R` and
+  `l` were checked for in the same sweep and do not appear, so they are left
+  refused by name rather than built speculatively, which is this file's
+  standing rule.
+  bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header }
+function CAsmClassIsRestricted(const cls: AnsiString): Boolean;
+begin
+  Result := (cls = 'Q') or (cls = 'q');
+end;
+
+{ The four, caller-saved first so the common case needs no save/restore pair.
+  ebx is last and is reached only when the other three are spoken for; it is
+  callee-saved, so the caller takes the same push/pop treatment a fixed "=b"
+  already gets. }
+const
+  CASM_QPOOL_COUNT = 4;
+  CAsmQPool: array[0..CASM_QPOOL_COUNT-1] of Integer = (1, 0, 2, 3);  { c a d b }
+
 { True for a constraint class this frontend can honour. Deliberately short:
   the measured vocabulary of the four x86-64-reachable busybox blocks, and
   nothing speculative. Everything else refuses by name in CAsmRefuseUnsupported
@@ -7877,7 +7916,8 @@ begin
     reading of the constraint rather than an approximation of one. busybox's
     tls_pstm_montgomery_reduce.c spells five of them. }
   Result := (cls = 'r') or (cls = 'rm') or (cls = 'mr') or (cls = 'm')
-            or (cls = 'g') or (CAsmFixedReg(cls) >= 0);
+            or (cls = 'g') or (CAsmFixedReg(cls) >= 0)
+            or CAsmClassIsRestricted(cls);
 end;
 
 { Does this class want a register, as opposed to memory? `"rm"` lets gcc choose;
@@ -8017,8 +8057,9 @@ begin
     if CAsmOps[i].TiedTo >= 0 then Continue;   { class comes from its partner }
     if not CAsmClassSupported(CAsmOps[i].Cons) then
       Error('C: inline asm constraint "' + CAsmOps[i].Raw
-            + '" is not supported — this frontend reads "r", "rm", "m", "g"'
-            + ' and the fixed-register letters a b c d S D');
+            + '" is not supported — this frontend reads "r", "rm", "m", "g",'
+            + ' the byte-addressable classes Q and q, and the fixed-register'
+            + ' letters a b c d S D');
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
@@ -8090,6 +8131,37 @@ begin
       opReg[i] := fixed;
       used[fixed] := True;
     end;
+  end;
+
+  { ---- restricted classes, BEFORE the general pool ----
+    `Q`/`q` can only take one of four registers, so they must choose before the
+    unrestricted operands do; an `"r"` that grabbed ecx first would leave a `Q`
+    to fail on a pool that still had six entries in it. This is the same
+    ordering argument the fixed-register loop above makes, one step weaker:
+    fixed has no choice at all, restricted has four. }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
+    if not CAsmClassIsRestricted(CAsmOps[i].Cons) then Continue;
+    reg := -1;
+    for j := 0 to CASM_QPOOL_COUNT - 1 do
+      if not used[CAsmQPool[j]] then begin reg := CAsmQPool[j]; Break; end;
+    if reg < 0 then
+      Error('C: inline asm constraint "' + CAsmOps[i].Raw
+            + '" needs one of the four byte-addressable registers (a b c d)'
+            + ' and all four are already taken by another operand or a clobber');
+    { ebx is in that four and is callee-saved -- same push/pop pair a fixed
+      "=b" gets, for the same reason: pinning it without one is a wrong VALUE
+      in the caller with no diagnostic. }
+    if CAsmRegIsCalleeSaved(reg) then
+    begin
+      if saveCount >= MAX_CASM_OPERANDS then
+        Error('C: inline asm saves too many callee-saved registers');
+      saveReg[saveCount] := reg;
+      Inc(saveCount);
+    end;
+    opReg[i] := reg;
+    used[reg] := True;
   end;
 
   { ---- and the rest, pinned from the caller-saved pool ---- }

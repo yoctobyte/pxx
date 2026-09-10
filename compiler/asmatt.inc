@@ -563,7 +563,7 @@ begin
 end;
 
 procedure AttParseOperand(slot: Integer);
-var disp: Int64; n: Integer;
+var disp: Int64; n: Integer; modCh: Char;
 begin
   AsmOpKind[slot] := AOP_NONE;
   AsmOpReg[slot] := 0; AsmOpSize[slot] := 0; AsmOpVal[slot] := 0;
@@ -584,7 +584,50 @@ begin
     if AttExtended and (AttPeek2 <> '%') then
     begin
       Inc(AttPos);
-      { %N, or a modifier like %b0 / %w0 / %k0 / %l0 }
+      { %N, or a SIZE MODIFIER on it: %b0 is operand 0's low byte, %w0 its
+        16-bit half. gcc calls these operand modifiers and they select a
+        REGISTER WIDTH, not a different operand.
+
+        THIS COMMENT USED TO LIST %b0 / %w0 / %k0 / %l0 AND THE CODE READ NONE
+        OF THEM -- only a bare digit. The comment was the aspiration and the
+        code was the truth, which is the pairing CLAUDE.md says to decide
+        rather than reconcile. Decided by measuring: across every header on
+        this box the modifiers that actually occur are %w1 (12), %b0 (6),
+        %w0 (5) and %h0 (4), and no %k, %l, %q or %z at all. So b and w are
+        built and the rest stay refused by name.
+
+        %h IS DELIBERATELY NOT HERE and it is not an oversight -- it is the
+        high byte (%ah/%ch/%dh/%bh), which this backend cannot NAME. At size 1
+        EncPrefixAndREX FORCES a REX prefix for register numbers 4..7, because
+        in the encoder's vocabulary those are spl/bpl/sil/dil; a REX prefix is
+        also precisely what makes %ah unencodable. So emitting %h0 as
+        (reg 4, size 1) would assemble silently to spl -- a wrong REGISTER with
+        no diagnostic, which is the class this project treats as most
+        expensive. It needs a high-byte operand kind in the shared x86-64
+        encoder, which is Track A and is filed separately.
+        bug-c-inline-asm-constraint-q-is-unsupported-and-it-blocks-every-sdl-header }
+      if (AttPeek = 'b') or (AttPeek = 'w') then
+      begin
+        modCh := AttPeek;
+        Inc(AttPos);
+        if not AttIsDigit(AttPeek) then
+          Error('C: inline asm template has a size modifier %' + modCh
+                + ' that is not followed by an operand number');
+        n := AttReadOperandNumber;
+        if AttBindKind[n] <> ATTBIND_REG then
+          Error('C: inline asm template applies the size modifier %' + modCh
+                + ' to operand %' + AIntToStr(n) + ', which is a memory operand'
+                + ' — a width modifier selects a register half');
+        AsmOpKind[slot] := AOP_REG;
+        AsmOpReg[slot] := AttBindReg[n];
+        if modCh = 'b' then AsmOpSize[slot] := 1 else AsmOpSize[slot] := 2;
+        Exit;
+      end;
+      if AttPeek = 'h' then
+        Error('C: inline asm template uses %h — the high byte of a register'
+              + ' (%ah/%ch/%dh/%bh), which this backend cannot encode: at byte'
+              + ' width it emits a REX prefix for register numbers 4..7, and'
+              + ' REX is exactly what makes the high-byte forms unencodable');
       if AttIsDigit(AttPeek) then
       begin
         n := AttReadOperandNumber;
