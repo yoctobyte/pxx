@@ -12,6 +12,13 @@ var
     is about to rewrite went into Code or into AsmBytes. See
     tools/standalone_inc_harnesses.sh for why this file has to carry it. }
   EncToAsmBuffer: Boolean = False;
+  { Same reason as EncToAsmBuffer above: declared in defs.inc, which this
+    harness does not include. EncPrefixAndREX reads it to decide whether the
+    instruction names a HIGH-byte register (%ah/%ch/%dh/%bh), which must be
+    encoded with no REX prefix -- the same numbers 4..7 WITH a prefix are
+    spl/bpl/sil/dil. False here matches every non-inline-asm caller.
+    bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+  AsmHigh8Operand: Boolean = False;
 
 procedure EmitB(b: Byte);
 begin
@@ -121,6 +128,35 @@ begin
   ClearMock;
   x64_ret;
   AssertBytes('ret', [$C3]);
+
+  { --- HIGH-BYTE REGISTERS, and the pair is the point ---
+    Register numbers 4..7 at byte width mean spl/bpl/sil/dil WITH a REX prefix
+    and ah/ch/dh/bh WITHOUT one. The number is identical; the prefix is the
+    only thing that says which. So one row cannot test this -- what has to be
+    asserted is that AsmHigh8Operand CHANGES the output, and these two rows
+    differ in nothing else.
+
+    The first is the pre-existing behaviour and must keep it: reg 4, size 1,
+    flag clear -> REX, i.e. `mov $0x7f,%spl`. The second is the new one: same
+    call, flag set -> no REX, i.e. `mov $0x7f,%ah`, which is what `as` emits
+    for that mnemonic.
+
+    THIS PATH IS WHY THE ROWS ARE HERE. x64_mov_reg_imm reaches
+    EncPrefixAndREX directly, as 58 of its 60 call sites do; a first version of
+    the fix guarded one layer up in AsmPrefixAndREX and this exact call emitted
+    `40 b5 7f` -- `mov $0x7f,%bpl`, the low byte of the FRAME POINTER -- in a
+    program that then segfaulted.
+    bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+  ClearMock;
+  AsmHigh8Operand := False;
+  x64_mov_reg_imm(1, 4, $7F);
+  AssertBytes('mov imm8 -> reg4, flag clear (spl, REX)', [$40, $B4, $7F]);
+
+  ClearMock;
+  AsmHigh8Operand := True;
+  x64_mov_reg_imm(1, 4, $7F);
+  AssertBytes('mov imm8 -> reg4, flag set (ah, no REX)', [$B4, $7F]);
+  AsmHigh8Operand := False;
 
   ClearMock;
   x64_leave;

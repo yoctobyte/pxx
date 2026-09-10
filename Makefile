@@ -12918,6 +12918,17 @@ test-core: $(COMPILER)
 	# The pre-fix compiler refuses this file by name, so it can fail.
 	./$(COMPILER) test/casm_byte_classes.c $(TESTTMP)/casmbyteclass26
 	tools/expect_same.sh casmbyteclass26 "$$($(TESTTMP)/casmbyteclass26)" "$$(printf 'qq_or 4660\nq_inc_low 65281\nw_add 65541\nb_wrap 4608')"
+	# %ah/%ch/%dh/%bh via the %h modifier. These are register numbers 4..7 at
+	# byte width with NO REX prefix; the SAME numbers with one are
+	# spl/bpl/sil/dil, so the number alone cannot say which is meant and the
+	# encoder's default reading was the REX one. Every value row here is a
+	# control that cannot fail quietly: a wrongly-emitted REX selects the low
+	# byte of rsp/rbp/rsi/rdi. sethigh proved it -- an early version of the fix
+	# guarded one layer too high and emitted `40 b5 7f` (mov $0x7f,%bpl), which
+	# segfaulted while swap16 and highbyte still passed. swap16 is
+	# SDL_endian.h:166 verbatim. The previous compiler refuses %h by name.
+	./$(COMPILER) test/casm_high_byte_register.c $(TESTTMP)/casmhighbyte26
+	tools/expect_same.sh casmhighbyte26 "$$($(TESTTMP)/casmhighbyte26)" "$$(printf 'swap16 13330\nhighbyte 171\nsethigh 32564\naddhigh 2048')"
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# An `"m"` operand costs NO register: it is a frame slot, `[rbp+disp32]`,

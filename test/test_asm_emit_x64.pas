@@ -15,6 +15,13 @@ var
     is about to rewrite went into Code or into AsmBytes. See
     tools/standalone_inc_harnesses.sh for why this file has to carry it. }
   EncToAsmBuffer: Boolean = False;
+  { Same reason as EncToAsmBuffer above: declared in defs.inc, which this
+    harness does not include. EncPrefixAndREX reads it to decide whether the
+    instruction names a HIGH-byte register (%ah/%ch/%dh/%bh), which must be
+    encoded with no REX prefix -- the same numbers 4..7 WITH a prefix are
+    spl/bpl/sil/dil. False here matches every non-inline-asm caller.
+    bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+  AsmHigh8Operand: Boolean = False;
   { Backs the mocked PICRefsAreRipRelative below. A VARIABLE, not a constant
     True: `mov reg, @glob` has two encodings and pinning the mock to one
     would leave the other untested here -- and the absolute arm is the one

@@ -5958,6 +5958,15 @@ var
   AsmOpSize : array[0..3] of Integer;   { 1, 2, 4, 8 (bytes), 16 for xmm }
   AsmOpVal  : array[0..3] of Int64;     { immediate value, or mem disp for AOP_MEM/AOP_MEMR }
   AsmOpIndex: array[0..3] of Integer;   { AOP_MEMR index reg, -1 = none }
+  { Set while encoding ONE instruction that names a HIGH-byte register
+    (%ah/%ch/%dh/%bh, which are register numbers 4..7 at size 1 WITHOUT a REX
+    prefix). It exists because those four share their numbers with
+    spl/bpl/sil/dil, which are the same numbers at size 1 WITH one -- so the
+    number alone cannot say which register is meant, and the default reading is
+    the REX one. Read by AsmPrefixAndREX and by nothing else; cleared per
+    instruction by the AT&T operand loop, so it can never carry into the next.
+    bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+  AsmHigh8Operand : Boolean;
   AsmOpScale: array[0..3] of Integer;   { AOP_MEMR scale: 1/2/4/8 }
   AssignPath : AnsiString;
   IncExpanded : AnsiString;

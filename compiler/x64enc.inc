@@ -42,10 +42,41 @@ begin
   if EncToAsmBuffer then AsmI64(v) else EmitI64(v);
 end;
 
+{ A HIGH-byte operand (%ah/%ch/%dh/%bh) must be encoded with NO REX prefix, and
+  the rule below cannot express that: at size 1 it FORCES one for register
+  numbers 4..7, correctly, because in this encoder's vocabulary those four are
+  spl/bpl/sil/dil — the same numbers at the same width, told apart from the
+  high-byte forms by the presence of the prefix and by nothing else.
+
+  THE GUARD IS HERE, AT THE ONE PLACE EVERY PATH FUNNELS THROUGH, AND THAT IS
+  THE POINT. It was first written one layer up in AsmPrefixAndREX, which is
+  where the AT&T template parser's own instructions go — and `movb $0x7F,%h0`
+  reached x64_mov_reg_imm instead, which calls this directly. 58 of the 60 call
+  sites bypass that layer. The bug it produced is the one this whole ticket is
+  about, in its worst form: `40 b5 7f` is `mov $0x7f,%bpl`, the low byte of the
+  FRAME POINTER, so the program did not return a wrong number, it segfaulted.
+
+  AsmHigh8Operand is False for every caller that is not the AT&T template
+  parser, and it is cleared per instruction, so no codegen path can reach this.
+  bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
+procedure EncHigh8Check(size, regField, rmReg: Integer);
+begin
+  if (size = 8) or (regField >= 8) or (rmReg >= 8) then
+    Error('asm: a high-byte register (%ah/%ch/%dh/%bh) cannot share an'
+          + ' instruction with a REX-only register or 64-bit width — the'
+          + ' prefix that encodes one makes the other unspellable');
+end;
+
 procedure EncPrefixAndREX(size: Integer; regField, rmReg: Integer; force: Boolean);
 var
   w, r, x, b, rex: Integer;
 begin
+  if AsmHigh8Operand then
+  begin
+    EncHigh8Check(size, regField, rmReg);
+    if size = 2 then EncB($66);
+    Exit;
+  end;
   if size = 2 then EncB($66);
   w := 0; if size = 8 then w := 1;
   r := 0; if regField >= 8 then r := 1;
@@ -67,6 +98,16 @@ end;
 procedure EncPrefixAndREXMem(size, regField, baseReg: Integer; regIsByteOperand: Boolean);
 var w, r, b, rex: Integer;
 begin
+  { the memory-operand twin of the rule above — `movb %ah,(%rbx)` reaches here
+    rather than EncPrefixAndREX, and needs REX suppressed for the same reason.
+    The base register is checked too: a base >= 8 needs REX.B, which a
+    high-byte register makes unspellable. }
+  if AsmHigh8Operand then
+  begin
+    EncHigh8Check(size, regField, baseReg);
+    if size = 2 then EncB($66);
+    Exit;
+  end;
   if size = 2 then EncB($66);
   w := 0; if size = 8 then w := 1;
   r := 0; if regField >= 8 then r := 1;

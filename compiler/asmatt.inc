@@ -623,11 +623,43 @@ begin
         if modCh = 'b' then AsmOpSize[slot] := 1 else AsmOpSize[slot] := 2;
         Exit;
       end;
+      { %h<n>: the HIGH byte of operand n -- %ah/%ch/%dh/%bh. The encoder
+        numbers these 4..7 at size 1 with NO REX prefix, which is the same
+        numbering the disassembler already prints
+        ('al','cl','dl','bl','ah','ch','dh','bh', asmdisasm_x64.inc), so the
+        high form of base register r is simply r + 4.
+
+        ONLY a/b/c/d HAVE a high byte, and the refusal below is the whole
+        safety of this arm: an operand allocated to rsi or r10 has no %h form
+        at all, and r+4 would silently name a DIFFERENT register that does
+        exist. The Q constraint class exists precisely to guarantee the base is
+        one of the four, so a template pairing %h with a plain "r" is the shape
+        that reaches this error -- and it is a real mistake in the source, not
+        a gap here. AsmPrefixAndREX carries the matching ISA refusal for the
+        REX-only combinations.
+        bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register }
       if AttPeek = 'h' then
-        Error('C: inline asm template uses %h — the high byte of a register'
-              + ' (%ah/%ch/%dh/%bh), which this backend cannot encode: at byte'
-              + ' width it emits a REX prefix for register numbers 4..7, and'
-              + ' REX is exactly what makes the high-byte forms unencodable');
+      begin
+        Inc(AttPos);
+        if not AttIsDigit(AttPeek) then
+          Error('C: inline asm template has a size modifier %h that is not'
+                + ' followed by an operand number');
+        n := AttReadOperandNumber;
+        if AttBindKind[n] <> ATTBIND_REG then
+          Error('C: inline asm template applies %h to operand %'
+                + AIntToStr(n) + ', which is a memory operand — a high-byte'
+                + ' modifier selects a register half');
+        if (AttBindReg[n] < 0) or (AttBindReg[n] > 3) then
+          Error('C: inline asm template uses %h on operand %' + AIntToStr(n)
+                + ', which was pinned to a register that has no high byte —'
+                + ' only a, b, c and d do. Constrain that operand with "Q"'
+                + ' so it can only be one of those four');
+        AsmOpKind[slot] := AOP_REG;
+        AsmOpReg[slot] := AttBindReg[n] + 4;
+        AsmOpSize[slot] := 1;
+        AsmHigh8Operand := True;
+        Exit;
+      end;
       if AttIsDigit(AttPeek) then
       begin
         n := AttReadOperandNumber;
@@ -769,6 +801,10 @@ begin
   if not AttSplitMnemonic(mn, base, size) then
     Error('C: inline asm template has an unsupported instruction: ' + mn);
 
+  { Cleared per INSTRUCTION, which is what makes the flag safe to read from
+    AsmPrefixAndREX without knowing how many operands this instruction has:
+    a high-byte operand in one instruction can never colour the next. }
+  AsmHigh8Operand := False;
   nops := 0;
   while not AttAtSeparator do
   begin
@@ -880,6 +916,7 @@ begin
     AsmOpKind[i] := AOP_NONE; AsmOpReg[i] := 0; AsmOpSize[i] := 0;
     AsmOpVal[i] := 0; AsmOpIndex[i] := -1; AsmOpScale[i] := 1;
   end;
+  AsmHigh8Operand := False;   { these build operands without the operand loop }
   AsmOpKind[0] := AOP_REG;
   AsmOpReg[0] := regNum;
   AsmOpSize[0] := TARGET_PTR_SIZE;
@@ -900,6 +937,7 @@ begin
     AsmOpKind[i] := AOP_NONE; AsmOpReg[i] := 0; AsmOpSize[i] := 0;
     AsmOpVal[i] := 0; AsmOpIndex[i] := -1; AsmOpScale[i] := 1;
   end;
+  AsmHigh8Operand := False;   { these build operands without the operand loop }
   if load then
   begin
     AsmOpKind[0] := AOP_REG;  AsmOpReg[0] := regNum; AsmOpSize[0] := size;
