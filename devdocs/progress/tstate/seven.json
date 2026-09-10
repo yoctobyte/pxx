@@ -15242,8 +15242,8 @@
   "wall": 1013.5
  },
  "last_idle_tier_try": {
-  "date": "2026-09-10T12:25:20Z",
-  "sha": "9b84784b74adeb1fee68b983c130903290e7bd62",
+  "date": "2026-09-10T18:14:38Z",
+  "sha": "70f5a1a7023891c4001f3ab23fd21ccdcce2a4cd",
   "tier": "full"
  },
  "last_opt": {
@@ -15416,6 +15416,7 @@
    "range": [
     "549cd32f2e6c3d180f9d63e476c67fa5affc9921"
    ],
+   "range_non_causal": false,
    "src": "test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh",
    "status": "fail"
   }
