@@ -303,3 +303,41 @@ defect) are both wrong. Run its own `build.sh qemu-assert` and branch on that
 rc. Its verdict: `OK fs-c3 -- ESP PAL file I/O works on target`.
 
 Enrolment itself is still Track T's and still open — for three targets now.
+
+## 2026-09-11 — re-measured at HEAD: GREEN, which is the fact enrolment needs
+
+Compiler `71cc6d89b954`, tree `7203485eb`. Run from this seat because the owner
+named the ESP targets as due this weekend, and an unenrolled suite is a suite whose
+state nobody knows until somebody needs it.
+
+`make test-esp-bare`: **rc=0**, ~30 executed assertions, both chips
+(esp32c3=riscv32, esp32s3=xtensa Call0), **zero real skips** — both Espressif qemu
+builds are present on plexus, so the skip arms never fired. Coverage is much wider
+than the name suggests: atomics (S32C1I + SCOMPARE1 with ATOMCTL programmed at bare
+entry), inline asm on both chips, the ONE executed windowed-ABI row, classes and
+virtual dispatch, try/except/finally, the odd-word-index 64-bit argument ABI,
+record copy and by-value results, proc-var indirect calls, >6-word args, frozen
+`string[N]`, and `Assert` on the bare profile.
+
+The same invocation also printed `esp32c3 softfloat/int64 ok` and
+`esp32s3 softfloat/int64 ok`. **I did not invoke `test-esp-softfloat` separately**,
+so treat those two rows as observed-in-passing rather than as a verdict on that
+target; whoever enrols it should run it by name once.
+
+`make test-esp-idf` was started and is SLOW — a full ESP-IDF build per project. It
+cleared `timer-c3` and was inside `gpio-c3` when this seat's own 1200s cap expired.
+**That cap is mine, not the suite's**, and a timeout here must not be recorded as a
+failure. Budget for it properly before enrolling: nine projects is a different order
+of cost from the other two suites, and the cost is the whole reason this row needs a
+deliberate decision rather than a quick `+=`.
+
+**ENROLMENT IS STILL TRACK T'S AND THIS SEAT DELIBERATELY DID NOT DO IT** — the
+third session in a row to stop here, and stopping is right. `grep -n 'esp' tools/testmgr.py`
+still returns **nothing**, so the count of enrolled ESP suites is zero, not
+"one of three". Adding them spends Track T's cycle time, which buys the ~8-commit
+regression window every other lane depends on, and `test-esp-idf` in particular
+would spend a lot of it. That is a cost T owns.
+
+What this note is FOR: enrolling a suite that is red injects a permanent red into
+T's tier, and nobody had checked recently. Two of the three are green at this sha,
+so that risk is now measured rather than assumed.
