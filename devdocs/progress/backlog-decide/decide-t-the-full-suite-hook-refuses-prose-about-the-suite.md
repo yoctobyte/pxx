@@ -310,3 +310,80 @@ heredoc. **The hook refused it** — rule 3, on a test-glob string and the word
 record, second to hit a session while it was measuring this defect. Written with
 the Write tool instead. **The prose was not reworded**: a different tool is not
 the same act as a different wording.
+
+## 2026-09-10, frankB — a NEW instance, and it narrows option 2 to one anchor
+
+Eleventh instance, and it is rule **3** (the shell-loop rule), not the
+suite-name rules the body above is mostly about. Recording it here rather than
+as a fourth `decide` ticket: three already exist and this one is named for it.
+
+**Not implemented, and not because it looks hard.** Every option here refuses
+LESS than the hook refuses today, and `.claude/hooks/` binds every agent on this
+box — so the direction is the owner's whatever the diff size. A peer read this
+as *"a tightening question, not a loosening one, so it's ours to file"*; that is
+the reasoning CLAUDE.md's own `f57a50754` entry records **three** sessions
+declining, and the count is the point. Measured instead, so the call is a yes/no.
+
+### The instance
+
+A LOGBOOK line naming two sibling test files with a `*`, inside a `cat >>`
+heredoc, in a compound command that also committed and pushed. No loop anywhere.
+
+### Both discriminators isolated, and neither is a loop
+
+| command | verdict |
+| --- | --- |
+| compound; heredoc with `test/…*.pas` **and** the English word "for" | **DENIED** |
+| same, "for" removed from the prose | allowed |
+| same, "for" kept, both filenames spelled out | allowed |
+
+The single-command exemption is what is absent: `git commit -m "…test/…*.pas for
+…"` **on its own is allowed** — three probes, all allowed. It is the second
+command that puts the whole text back in scope, so the false positive needs an
+author who is writing prose *and* landing it in the same breath. That is the
+selection effect the body above already names, sharpened: it fires on the commit
+that banks the note, not on the note.
+
+### Rule 3 does not need option 2's quoting parser — it needs rule 2b's anchor
+
+Option 2 is rated as *"a real parser for shell quoting inside a hook, and a wrong
+one re-opens the hole it guards."* True in general. **Not true for rule 3**,
+whose keyword half is:
+
+```
+(^|[;&|(]|[[:space:]])(for|while|xargs|parallel)([[:space:]]|$)
+```
+
+`[[:space:]]` in the alternation means any English word qualifies. Rule 2b, in
+the same file, already solves exactly this and says so — *"Matched at a COMMAND
+position only … refusing that is pure noise"* — with:
+
+```
+(^|[;&|(]|&&|\|\|)[[:space:]]*
+```
+
+So the candidate is: give rule 3 the anchor rule 2b already uses, plus `|` for
+pipelines. One character class, in-file precedent, no quoting parser.
+
+### Simulated for LOSS, which is the half that decides it
+
+| population | current | candidate |
+| --- | --- | --- |
+| `for` at start / after `&&` / after `;` / after `(` | match | **match** |
+| `while` after `\|`, `xargs` after `\|` | match | **match** |
+| `find … -exec` | match | **match** |
+| English "for" / "while" / "parallel" mid-sentence | match | **no match** |
+
+7 of 7 real loop shapes still refused, 3 of 3 prose shapes released. **No loop
+shape was found that the candidate misses** — and that sentence is a quantifier,
+so read it as "none in the seven constructed here", not as a proof.
+
+### Not a fix, and one caveat the author of any fix should keep
+
+Rules 1, 2, 2b, 2c and the suite-name matches are untouched by this and the ten
+instances above mostly live there — so this narrows the fork, it does not close
+it. And the irony is load-bearing: **the command that measured this was itself
+refused by rule 3**, and the probes only ran under `PXX_ALLOW_FULL_SUITE=1`,
+which is the documented hatch and a speed guardrail an agent lifts on its own.
+A rule that refuses its own diagnosis is the reason this keeps being rediscovered
+rather than measured.
