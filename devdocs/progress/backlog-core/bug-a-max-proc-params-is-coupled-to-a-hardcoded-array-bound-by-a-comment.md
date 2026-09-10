@@ -8,8 +8,9 @@ owner: ""
 created: 2026-09-10
 found-by: frankH
 tags: [core, limits, cparser, sdl, lekkerzeilen]
-blocked-by: []
-summary: "The COUPLING is fixed: every parameter buffer now derives its bound from MAX_PROC_PARAMS (the `const-expr gap` the old comment blamed does not exist — both the live compiler and the pinned seed fold `MAX_PROC_PARAMS-1` in a record field bound, and nine sibling globals in defs.inc had named the constant all along). What remains is the part the coupling was hiding: with every literal widened and the constant at 64, a 33-parameter routine STILL segfaults the compiler — on a bare `external` DECLARATION, in the Pascal and C frontends alike, below RegisterProc. Cause not yet located. Until it is, MAX_PROC_PARAMS cannot be raised and `import SDL2/SDL.h` stays blocked at gcc's `_mm512_set_epi8` (64 params)."
+blocked-by:
+  - bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc
+summary: "CORRECTED 2026-09-10, and the correction is the finding: there is no const-expr gap, and there is also no coupling to fix. TProc.Params keeps 32 slots whatever its bound says -- `array[0..31]`, `array[0..255]` and `array[0..MAX_PROC_PARAMS-1]` all emit the same code/data/bss/procs with SizeOf(TProc)=1344 -- so writing the constant there only makes the two LOOK coupled. Split out as bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc, which is the real blocker. What landed and stands: the thirteen cparser.inc staging locals and argUndecl now derive (locals DO fold), pptrdims had a genuine 6-element overflow, and the overflow diagnostic no longer says 16 when the limit is 32. MAX_PROC_PARAMS stays 32; raising it is a SIGSEGV at exactly 33 until the layout bug is fixed."
 ---
 
 # What was fixed
@@ -24,7 +25,24 @@ Every parameter-indexed buffer now says `MAX_PROC_PARAMS`:
 pointer-to-multidimensional-array parameter in one of the last slots. Found by
 widening, not by a test.
 
-# The comment was the defect
+# CORRECTION (2026-09-10, same day): the comment was right and I was wrong
+
+I filed this saying record-field bounds cannot fold the constant, then
+"disproved" that with a two-line probe and landed `e9599a1b0` writing
+`array[0..MAX_PROC_PARAMS-1]` into the field. **The probe was drawn from the
+wrong population** -- a nine-line program with the constant declared eight
+lines above -- and it folds there. In `defs.inc` the field keeps **32 slots
+whatever the bound says**, a bare `array[0..255]` included, so my change was a
+no-op that deleted a correct warning and left source that reads as coupled.
+Reverted to the literal with the measurements written beside it; the layout
+defect is now `bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc`.
+
+The original author's comment was accurate about the SYMPTOM and wrong only
+about the mechanism (they said const-expr; it ignores a literal too). That is
+CLAUDE.md's "comment vs code" rule going the other way: I decided the comment
+was wrong, and the deciding evidence was a control that could not fail.
+
+# The old section, kept because its premise is what broke
 
 ```pascal
 Params : array[0..31] of TParam;   { literal 31: record-field bounds cannot
@@ -36,11 +54,12 @@ There is no const-expr gap. Measured 2026-09-10 with a two-line probe against
 field declared `array[0..MAXP-1] of TP` compiles and reports 32 elements on
 each. `defs.inc:4617-4625` — `CTypeFnRetPTypes` and eight siblings — have been
 written `array[0..MAX_PROC_PARAMS-1]` all along, a few thousand lines below the
-comment saying it cannot be done. The gap was never real; the comment was, and
-it is what kept the constant unraisable for as long as anyone believed it.
+comment saying it cannot be done.
 
-**This is CLAUDE.md's "comment vs code" rule with the comment winning for
-months.** The way out was a probe, not a reading.
+**Both halves of that paragraph are true and the conclusion drawn from them was
+wrong.** Vars and locals do fold the constant; this record field does not size
+itself from its bound at all, expression or literal. The siblings were a real
+observation about a different construct.
 
 # `{$if}` over a Pascal const does not survive the pinned seed — do not guard this way
 
@@ -63,11 +82,11 @@ caught it was `gate.sh quick`'s `self-host fixedpoint`, reporting
 defect class CLAUDE.md says that canary exists for. **A compile-time guard in
 `compiler/**` must be expressed in something the PIN accepts.**
 
-# What is still broken, and it is not what this ticket originally said
+# What is still broken
 
-The old body blamed the segfault on the un-widened literal. That was a
-hypothesis and it is **false**. With every literal derived and
-`MAX_PROC_PARAMS = 64`:
+The original body blamed the segfault on the field holding 32 slots. **That was
+right.** What was wrong was my belief that writing the constant into the bound
+would widen it. With every *staging* array derived and `MAX_PROC_PARAMS = 64`:
 
 | params | result |
 | --- | --- |
@@ -77,7 +96,11 @@ hypothesis and it is **false**. With every literal derived and
 
 Measured on two independently built compilers — one seeded from `pinned`, one
 from `compiler/pascal26` — so it is a source-level defect, not a miscompile.
-`bss` grows by 2848 bytes at 64, confirming `TProc.Params` really did widen.
+`bss` grows by only **2848 bytes** at 64, which is the `abi.inc`/codegen local
+vectors and nothing else: a widened `TProc.Params` would have added
+`16384 * 32 * 40` = **21MB**. That delta is the clearest single sign the field
+did NOT widen, and I read it as confirmation that it had — the number was in
+front of me from the first build.
 
 The crash needs **no body and no call site**. All three of these die:
 

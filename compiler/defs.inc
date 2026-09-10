@@ -2666,14 +2666,30 @@ type
     IsFunc     : Boolean;
     RetType    : TTypeKind;
     ParamCount : Integer;
-    Params     : array[0..MAX_PROC_PARAMS-1] of TParam;
-      { This said `array[0..31]` with a comment claiming record-field bounds
-        cannot fold MAX_PROC_PARAMS-1 -- a "const-expr gap". Measured
-        2026-09-10 against the live compiler AND the pinned seed: both fold it
-        here exactly as they already do for CTypeFnRetPTypes and its eight
-        siblings a few thousand lines below, which have named the constant all
-        along. The gap did not exist; the comment did, and it is what made the
-        constant unraisable. }
+    Params     : array[0..31] of TParam;
+      { LITERAL 31, AND THE LITERAL IS NOT THE PROBLEM -- THIS FIELD'S DECLARED
+        BOUND DOES NOT SIZE IT. Measured 2026-09-10, three declarations built
+        and compared -- `0..31`, `0..255` and `0..MAX_PROC_PARAMS-1` -- all
+        emit the SAME code=7565080 data=555780 bss=86531556 procs=4641, and
+        SizeOf(TProc) stays 1344, exactly 32 slots of 40, at
+        MAX_PROC_PARAMS = 16, 32 and 64 alike. (The binaries are NOT byte
+        identical, so the bound does reach emitted code somewhere; it is the
+        LAYOUT that ignores it. Builds here are deterministic and
+        path-independent -- controlled.) So writing MAX_PROC_PARAMS-1 here
+        does NOT couple the two; it only makes them LOOK coupled, which is
+        worse than the literal, and that is why the literal is back.
+        It is not a general const-expr gap and it is not scale: the identical
+        shape in a standalone program (16384 elements, 40-byte TParam) folds
+        correctly, 1312 -> 2592, and a LOCAL `array[0..MAX_PROC_PARAMS-1]` in
+        pasparser_proc.inc folds to 64 elements in this very file. Only this
+        record field is frozen, and it is frozen against a literal too --
+        the same family as the project_tsymbol_field_landmine note on SymTR
+        a few hundred lines below.
+        CONSEQUENCE, MEASURED: the staging arrays DO widen, so raising
+        MAX_PROC_PARAMS makes RegisterProc's guard admit 33+ params and then
+        write Params[32] past a 32-slot field. That is the SIGSEGV at exactly
+        33 -- not a missing literal. Raising the constant needs the layout bug
+        fixed first: bug-a-a-record-fields-array-bound-is-ignored-in-defs-inc }
     BodyAddr   : Integer;   { -1 = forward declared }
     FramePatch : Integer;   { code position of sub rsp imm32 }
     RetSymIdx  : Integer;   { Syms[] index for return value; -1 if proc }
