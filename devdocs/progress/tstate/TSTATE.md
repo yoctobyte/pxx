@@ -3,20 +3,20 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus **QUIET 11d1h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `2f5b0fdcba5a` | 2026-09-10T12:20:44Z | GREEN (native) | 187.5s | `26f55911392c` RED |
+| plexus **QUIET 11d2h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
+| seven | `9b84784b74ad` | 2026-09-10T12:25:13Z | GREEN (native) | 188.2s | `26f55911392c` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `26f55911392c` on seven, 2026-09-10T12:11:19Z (9m ago).**
+**Newest full tier in the fleet: `26f55911392c` on seven, 2026-09-10T12:11:19Z (13m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `26f55911392c` | RED | 9m | — (newest) |
-| plexus | `27424c927b65` | RED | 11d1h | 11d1h |
+| seven | `26f55911392c` | RED | 13m | — (newest) |
+| plexus | `27424c927b65` | RED | 11d2h | 11d1h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -42,12 +42,12 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **test-pascal-conformance#shard0/6** (plexus, quiet 11d1h): bad `e46dbffaa80d`, 217 commit(s) in range
-- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 11d1h): bad `27424c927b65`, 88 commit(s) in range
-- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 11d1h): bad `27424c927b65`, 88 commit(s) in range
-- **test-pascal-conformance#shard1/6** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard2/6** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard3/6** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard4/6** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard5/6** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
-- **tools-devtest#00** (plexus, quiet 11d1h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard0/6** (plexus, quiet 11d2h): bad `e46dbffaa80d`, 217 commit(s) in range
+- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 11d2h): bad `27424c927b65`, 88 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 11d2h): bad `27424c927b65`, 88 commit(s) in range
+- **test-pascal-conformance#shard1/6** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard2/6** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard3/6** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard4/6** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard5/6** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 11d2h): bad `27424c927b65`, 231 commit(s) in range
