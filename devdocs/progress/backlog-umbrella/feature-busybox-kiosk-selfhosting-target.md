@@ -4,7 +4,7 @@ title: "A bootable image: busybox userland + shell + the self-hosting compiler, 
 track: B
 prio: 80
 type: umbrella
-blocked-by: [feature-a-object-output-for-arm32-and-aarch64]
+blocked-by: [feature-a-object-output-for-arm32-and-aarch64, feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc]
 status: new
 created: 2026-08-30
 owner: ""
