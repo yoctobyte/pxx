@@ -857,7 +857,7 @@ end;
   `value` arrives as pynone -- `pyvartag` 0, `pyvar_to_int` 0 -- and NOT as the
   declared 0 or 1. The declaration keeps its default anyway, because that is the
   correct Pascal signature and the test is harmless once the frontend honours it:
-  bug-n-a-pascal-default-parameter-is-ignored-when-the-call-comes-from-nilpy.
+  bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply.
 
   AND THIS IS WHY adler32 FOUND IT AND crc32 COULD NOT. crc32's CPython default
   is 0, which is exactly the value an unsupplied argument already reads as, so

@@ -1,5 +1,5 @@
 ---
-slug: bug-n-a-pascal-default-parameter-is-ignored-when-the-call-comes-from-nilpy
+slug: bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply
 type: bug
 track: N
 prio: 55
@@ -9,10 +9,40 @@ owner: frankuser
 
 ## summary
 
-A Pascal `const x: Variant = 1` default is NOT applied when the call arrives from
-NilPy: the omitted argument comes through as `pynone` (`pyvartag` 0,
-`pyvar_to_int` 0) instead of the declared default. The same declaration honours
-its default correctly when called from Pascal.
+A **Variant** default parameter is not applied when the call arrives from NilPy:
+the omitted argument comes through as `pynone` (`pyvartag` 0, `pyvar_to_int` 0)
+instead of the declared default. **Boolean, Integer and AnsiString defaults are
+applied correctly**, so the default-value machinery works and only the Variant arm
+is wrong. The same Variant declaration honours its default when called from
+Pascal.
+
+## RE-TITLED 2026-09-11 — it was filed as "a Pascal default parameter is ignored"
+
+That was too wide and frankB caught it. The wide version tells every shim author
+their defaults are unreliable when three of four kinds are fine, and it points a
+fixer at the whole default machinery instead of at the one arm that special-cases
+Variant. Their probe, independently reproduced here at compiler `b092b705aacb`
+(frankB's at `786b88673e62`):
+
+```
+b omitted True   | given False      (Boolean = True)      APPLIED
+i omitted 7      | given 3          (Integer = 7)         APPLIED
+s omitted dflt   | given x          (AnsiString = 'dflt')  APPLIED
+v omitted 0      | given 5          (Variant = 1)          NOT APPLIED
+vtag omitted 0   | given 1          <- the omitted slot's tag is 0 (none)
+```
+
+**Their probe design is the lesson and it is the inverse of my mistake below.**
+Every default was chosen so an unapplied default could not produce it by accident:
+`Boolean = True` (absent reads False), `Integer = 7`, `AnsiString = 'dflt'`. In
+their words: had they written `Boolean = False` they would have reported the same
+green I did.
+
+Reaching such a unit from NilPy needs the extension form —
+`import 'mimic_dfltchk.pas' as d` — because a bare import resolves to Python only.
+The compiler says so itself, and says it well; see the contrast in
+[[bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing]],
+where the same frontend takes a wrong route silently.
 
 ## the measurement
 
@@ -72,6 +102,16 @@ signature -- and adds `ChecksumSeed(value, whenAbsent)`, which tests
 `DataToString`), not a new mechanism, and it is harmless once the frontend
 honours the declaration: the test simply stops firing. Delete it then, or leave
 it; it costs a comparison.
+
+## the idiom that is already correct, measured by frankB
+
+`mimic_sqlite3`'s `execute(sql; parameters: Variant = 0)` is the affected kind and
+is nonetheless safe, because its guard is spelled **positively**:
+`pyvar_is_objtag(parameters)`. That answers "no parameters" correctly whether the
+omitted slot holds NONE today or an int-tagged 0 after this is fixed. The negative
+spelling `not pyvar_is_inttag(...)` would call NONE a sequence and raise TypeError
+from inside the shim. So the rule for a shim with a Variant default is: **test for
+what you CAN handle, not for what you cannot** — it survives the fix either way.
 
 ## a second idiom exists and may be the intended one
 
