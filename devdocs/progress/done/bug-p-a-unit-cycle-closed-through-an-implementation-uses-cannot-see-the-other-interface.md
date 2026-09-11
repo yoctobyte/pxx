@@ -10,7 +10,7 @@ found-by: frankH
 created: 2026-09-09
 tags: [units, uses, scope, fpc-corpus]
 blocked-by: []
-summary: "FIXED 2026-09-10, d52831ed7 + 6e8a821db. `unit A` whose INTERFACE uses B and `unit B` whose IMPLEMENTATION uses A -- the legal, standard form of mutual unit recursion -- was refused, and it was the FIRST failure of 158 of the 207 units of FPC's own compiler, 76%. The guard was never hiding anything: a unit is marked compiled BEFORE it is parsed, so A's declarations genuinely did not exist yet. What makes the cycle legal in FPC is ORDER, so B's implementation section now PARKS and is replayed at A's `implementation` keyword. Corpus re-run per unit: those 158 move to `bitsizeof` and nothing else moves; NO UNIT NEWLY COMPILES, because the next wall was immediately behind this one. Two claims of mine were taken back by their own controls -- the outermost-unit rule is a cost rule and not a correctness one, and a never-replayed park is loud rather than silent except for a routine-less interface."
+summary: "FIXED 2026-09-10, d52831ed7 + 6e8a821db, AND REOPENED-AND-REFIXED 2026-09-11 for an ORDER-DEPENDENT RESIDUAL those two did not cover: `CycleWaitUnit` is a global and `ParseUnitImplSection` re-enters itself, so a unit named AFTER the cycle-closing one in the SAME clause cleared the pending park on its way past -- `uses a, t` failed where `uses t, a` compiled, from the same four units. The fixture below could not reach it: it names exactly one open unit with nothing after it. See the 2026-09-11 section at the end. `unit A` whose INTERFACE uses B and `unit B` whose IMPLEMENTATION uses A -- the legal, standard form of mutual unit recursion -- was refused, and it was the FIRST failure of 158 of the 207 units of FPC's own compiler, 76%. The guard was never hiding anything: a unit is marked compiled BEFORE it is parsed, so A's declarations genuinely did not exist yet. What makes the cycle legal in FPC is ORDER, so B's implementation section now PARKS and is replayed at A's `implementation` keyword. Corpus re-run per unit: those 158 move to `bitsizeof` and nothing else moves; NO UNIT NEWLY COMPILES, because the next wall was immediately behind this one. Two claims of mine were taken back by their own controls -- the outermost-unit rule is a cost rule and not a correctness one, and a never-replayed park is loud rather than silent except for a routine-less interface."
 ---
 
 # A unit cycle through `implementation uses` sees no interface
@@ -190,3 +190,39 @@ are recorded because the corrected version is the useful one.
    interface declares no routines — a const-only interface with an
    `initialization` body — so that is the shape the new guard in
    `compiler.pas` was proven against, and it names the unit.
+
+
+# 2026-09-11 — the residual: a unit named after the cycle-closer
+
+The fix above is correct for the shape this ticket's fixture has, and that
+shape is not the only one. `ucycle_b`'s implementation reads `uses ucycle_a;` —
+the cycle-closing unit is the LAST name in the clause, so nothing follows it.
+
+`CycleWaitUnit` is a global and `ParseUnitImplSection` re-enters itself. Walking
+an implementation `uses` loads each named unit in turn; loading one runs that
+unit's own implementation section through this same routine, whose `tkUses` arm
+opens with `CycleWaitUnit := -1`. **A unit named after the cycle-closer
+therefore wiped the pending wait**, `DefImplPark` was never reached, and the
+section fell through to the pre-fix `undefined variable` on everything the other
+interface declares. Fixed by saving and restoring it, in the same idiom as
+`Pass2Active` beside it.
+
+Found on FPC's `comphook.pas`, whose implementation reads
+`uses cutils, systems, globals, comptty` — `globals` closes the cycle and
+`comptty`, which has an implementation `uses` of its own, clears it one name
+later. A probe at the park site printed `CYCSITE unit=comphook cycleWait=-1`
+immediately after `CYCSITE unit=comptty`.
+
+**The new fixture family is `ucyctail_a` / `ucyctail_b` / `ucyctail_t`** and it
+is deliberately separate rather than an edit to `ucycle_b`: both orderings need
+pinning, and they differ by one token. `ucyctail_t` must keep its own
+implementation `uses` — that clause is the active ingredient, not decoration.
+Verified to fail before the fix while THIS ticket's row still passed, which is
+what says the old fixture could not reach the shape rather than merely missing
+it.
+
+Also worth recording: `6e8a821db` above notes that a full park table "does not
+fail loudly — DefImplPark declines and hands the unit back the pre-fix error".
+That is a real silent-degrade path and it is NOT what happened here;
+`MAX_DEFERRED_IMPLS` 512 -> 8192 changed nothing. A commit message naming a
+plausible failure mode is a hypothesis to test, not a diagnosis.
