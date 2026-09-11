@@ -1179,8 +1179,30 @@ begin
     else res := pyvar_of_int(pret);
     Exit;
   end;
+  { TOO FEW ARGUMENTS IS THE PROGRAM'S ERROR, SO IT IS THE PROGRAM'S EXCEPTION.
+    This was `writeln` + `Halt(1)` until 2026-09-11: an uncatchable process exit,
+    on stdout, with no traceback and no line number, where CPython raises a
+    TypeError a program can catch. It was always reachable -- every call the
+    open-world NAME fall-through defers lands here -- and the arity fall-through
+    added the same day (bug-n-a-method-call-is-refused-on-arity-from-the-
+    candidates-compiled-so-far-so-import-order-decides) deliberately routes a
+    class of calls here that used to be refused at COMPILE time. That trade is
+    right, and it makes this path's failure mode this frontend's problem rather
+    than an edge of it.
+    Every caller of PyHostCall is in this unit (five, checked), and a Halt is
+    unrecoverable, so nothing could have been relying on it to return.
+    THE COUNT IS DELIBERATELY NOT CALLED 'REQUIRED'. CPython says `analyze()
+    missing 1 required positional argument: 'fn'`; all this path knows is
+    mi^.Arity, which counts DEFAULTED parameters too, so the same call would
+    have it say 2. Defaults ARE already bound by the time this runs (measured:
+    `d.zqx(1)` against `zqx(self, a, b=5)` answers 6 here and in CPython), so
+    the gap is real -- it is the NUMBER that would be a false statement, and a
+    diagnostic that over-counts is the same defect as one that under-reports.
+    bug-n-a-too-few-args-runtime-dispatch-halts-the-process-where-cpython-raises-typeerror }
   if nargs < n then
-  begin writeln('pyeval: too few args to ', name, ' (need ', n, ', got ', nargs, ')'); Halt(1); end;
+    raise TypeError.Create(name + '() missing positional argument(s): its '
+            + 'parameter list holds ' + pystr_of(Int64(n)) + ' and only '
+            + pystr_of(Int64(nargs)) + ' could be bound');
 
   if n >= 1 then a0 := args.at(0);
   if n >= 2 then a1 := args.at(1);
