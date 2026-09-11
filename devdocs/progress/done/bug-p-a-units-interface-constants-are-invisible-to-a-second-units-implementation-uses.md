@@ -120,4 +120,4 @@ stopped here and all five now reach `unknown type: TDoubleRec`
 NEWLY COMPILES is a separate claim and is not made here.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e73ce1291.
