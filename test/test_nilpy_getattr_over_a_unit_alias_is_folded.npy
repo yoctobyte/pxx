@@ -1,0 +1,36 @@
+# `getattr(<unit alias>, "<literal>", <default>)` answered at compile time.
+#
+# A unit is a compile-time namespace, not a value, so the receiver died inside
+# ParseExpr as `undefined variable (backend)` BEFORE the getattr arm's own logic
+# ran -- the fold therefore has to sit above that ParseExpr, not inside the
+# field logic below it. Receiver, name and miss are all decidable there: the
+# unit is known, the name is a literal, and UnitDeclaresNameExactly answers
+# without erroring. No runtime module object is involved.
+#
+# WHY IT IS WORTH A FIXTURE. This is the construct lekkerzeilen's platform seam
+# uses to ask whether the selected backend can open audio and a controller, and
+# a capability probe is exactly the shape that must keep working when the answer
+# FLIPS: `_pxx.py` does not define those names today and
+# task-b-write-the-lekkerzeilen-pxx-platform-backend is going to add them. So the
+# absent arm and the present arm are both live rows, not one row and one
+# hypothetical, and a fixture covering only today's answer would go quietly
+# wrong the day that ticket lands.
+# bug-n-a-module-bound-by-an-import-is-not-a-value
+#
+# NOT COVERED, ON PURPOSE, and said here so it is not read as an oversight: a
+# member the unit declares as neither a proc nor a symbol -- a CLASS -- still
+# reports `undefined variable`, where CPython answers the class. Folding it from
+# a third route would be the second path that stays broken
+# (devdocs/dev/normalise-dont-special-case.md); it belongs in the qualifier
+# door. Residual recorded on the ticket above.
+import nilpy_unitgetattr as u
+
+print("g_absent", u.g_absent())
+print("g_proc", u.g_proc())
+print("g_sym", u.g_sym())
+print("g_sym_arith", u.g_sym_arith())
+print("g_dflt", u.g_dflt())
+print("h_absent", u.h_absent())
+print("h_proc", u.h_proc())
+print("h_sym", u.h_sym())
+print("local_wins", u.local_wins())

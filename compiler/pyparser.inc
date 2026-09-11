@@ -45276,6 +45276,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
     qvUnit, qvPi: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
+    gaUnit, gaPi, gaSi: Integer; gaMemb, gaRecv: AnsiString; gaDeclared: Boolean;   { getattr/hasattr over a UNIT ALIAS — bug-n-a-module-bound-by-an-import-is-not-a-value }
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
     derefNode: Integer;   { ...through its frame cell, when it has one (SymCellPtr) }
     capIdx: Integer;   { PXXDBG=n.caps probe cursor }
@@ -47307,6 +47308,158 @@ begin
           for why a compile-time answer is the right shape here. }
         atIsGet := name = 'getattr';
         Next; Expect(tkLParen, '(');
+        { A UNIT ALIAS RECEIVER, ANSWERED HERE OR NOT AT ALL. `getattr(backend,
+          "open_audio", None)` where `backend` came from `from . import X as
+          backend` reaches this door and dies one step EARLIER than the rest of
+          this arm assumes: the ParseExpr below compiles the receiver as a bare
+          name and raises `undefined variable (backend)`, because a unit is a
+          compile-time namespace and not a resolvable value. So there is nothing
+          for the field logic underneath to receive, and no amount of work down
+          there can see a unit -- the intercept has to be above the ParseExpr.
+
+          DECIDABLE, WHICH IS WHY IT IS FOLDED RATHER THAN DISPATCHED. The
+          receiver is a unit known now, the name is a string LITERAL, and
+          UnitDeclaresNameExactly answers without erroring. So this needs no
+          runtime module object: `getattr(<unit>, "<lit>", <default>)` is the
+          member if the unit declares it and the default if it does not, both
+          known at compile time. lekkerzeilen/platform/__init__.py writes
+          exactly this twice, to ask whether the selected backend can open audio
+          and a controller.
+          bug-n-a-module-bound-by-an-import-is-not-a-value
+
+          EVERY ARM IS DECIDED BEFORE A TOKEN IS CONSUMED, and that is the whole
+          shape of the guard: what this cannot answer, it does not touch, and
+          the existing path keeps today's behaviour. hasattr is always
+          answerable. getattr is answerable when the member is absent and a
+          default was written, or when it is present as a PROC or a SYMBOL --
+          and each of those is handed to the constructor that already builds it,
+          PyMakeFuncValueFor (the one `math.sqrt` as a value goes through) and
+          PyMakeIdent, rather than to a second copy of ParsePrimary's resolution.
+          A proc is what a capability probe is for and what the corpus calls:
+          `opener = getattr(...)` then `opener(rate, samples, channels) if opener
+          else None`, so that arm has to yield a CALLABLE.
+
+          A member declared as neither -- a CLASS is the live example, since
+          UnitDeclaresNameExactly says yes to one -- is deliberately left to fall
+          through to today's refusal rather than folded from a third route. Say
+          it rather than let a reader infer it from the code: `getattr(<unit>,
+          "<a class>", d)` still reports `undefined variable`, where CPython
+          answers the class. Residual, owned by
+          bug-n-a-module-bound-by-an-import-is-not-a-value; it needs the
+          qualifier door, not another sibling of it
+          (devdocs/dev/normalise-dont-special-case.md).
+
+          FindSym FIRST, for the reason ConsumeUnitQualifier gives: a local or
+          global spelled like a module shadows it, and the value door beside this
+          one gates the same way. }
+        gaUnit := -1; gaPi := -1; gaSi := -1; gaDeclared := False;
+        if isNilPy and (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
+           (Tokens[TokPos].Kind = tkComma) and
+           (Tokens[TokPos + 1].Kind = tkString) and
+           (Tokens[TokPos + 2].Kind in [tkComma, tkRParen]) and
+           (FindSym(CurTok.SVal) < 0) then
+        begin
+          gaRecv := CurTok.SVal;
+          gaUnit := FindUnitOrAlias(LowerCase(gaRecv));
+          if gaUnit >= 0 then
+          begin
+            gaMemb := GetTokenStr(TokPos + 1);
+            gaDeclared := UnitDeclaresNameExactly(gaMemb, gaUnit);
+            if gaDeclared then
+            begin
+              gaPi := FindProcInUnit(gaMemb, gaUnit);
+              { The value door's own rule, mirrored rather than re-reasoned: a
+                CASE-FOLDED match to a zero-parameter proc is not a value,
+                because in Pascal such a proc IS its own call -- `math.pi` taken
+                as a value printed a raw address. An exact match is exempt: only
+                a case-SENSITIVE registration produces one, which is NilPy
+                source or a lowercase-declared shim.
+                bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
+              if (gaPi >= 0) and (Procs[gaPi].Name <> gaMemb) and
+                 (Procs[gaPi].ParamCount = 0) then gaPi := -1;
+              if gaPi < 0 then gaSi := FindSymInUnit(gaMemb, gaUnit);
+              { A CLASS — declared, and the only member kind this cannot fold.
+                UnitDeclaresNameExactly checks classes, procs and syms in that
+                order, so "declared but neither a proc nor a sym" IS a class and
+                the message may say so.
+
+                AND IT MUST SAY SO, BECAUSE THE FOLD ABOVE CHANGED WHAT SILENCE
+                MEANS HERE. Before the fold, `undefined variable (backend)` was
+                uniformly true-ish: the receiver did not work for ANY member, so
+                the message was blunt rather than wrong. After it, the same file
+                can fold `getattr(backend, "B", None)` on one line and report
+                `backend` undefined two lines down — one construct, two doors,
+                two answers, which is the failure the class-scope pair on
+                2026-09-10 recorded and which repairing one door of two is
+                exactly how you produce. So the decline is NAMED. A note on the
+                ticket stops the next reader of the TICKET; this stops the next
+                reader of the CODE, and they are different people.
+                Found by frankB reviewing the fold rather than rebuilding it.
+
+                Erroring here rather than falling through costs nothing that
+                could have worked: the fall-through path is the ParseExpr this
+                whole intercept exists to get in front of, and a bare unit alias
+                in expression position has no reading there. }
+              if (gaPi < 0) and (gaSi < 0) then
+              begin
+                ErrorIdent := gaRecv + '.' + gaMemb;
+                { NO WORKAROUND IN THE TEXT, AND THAT IS MEASURED RATHER THAN
+                  MODEST. This message said "write <recv>.<memb> directly" for
+                  about ten minutes. That construct COMPILES and is silently
+                  WRONG: `w = backend.Widget` then `w.V` printed 5512600 against
+                  CPython's 1, a raw address, and `gl = backend.gl` at module
+                  scope reads a constant correctly but raises AttributeError on
+                  a method call. A diagnostic that recommends a silent wrong
+                  value is worse than one that recommends nothing -- it converts
+                  a refusal the reader can see into a number they cannot.
+                  bug-n-a-class-reached-through-a-unit-alias-is-not-a-value }
+                Error('getattr on the module ' + gaRecv + ' cannot answer ' +
+                      gaMemb + ' — it names a CLASS, and a class reached ' +
+                      'through a module alias is not a value here');
+              end;
+            end
+            else if atIsGet and (Tokens[TokPos + 2].Kind <> tkComma) then
+              gaUnit := -1;   { absent and no default: CPython raises. Not ours. }
+          end;
+        end;
+        if gaUnit >= 0 then
+        begin
+          Next;                          { the unit alias }
+          Expect(tkComma, ',');
+          Next;                          { the name literal }
+          atDflt := -1;
+          if CurTok.Kind = tkComma then
+          begin
+            Next;
+            ParseExpr;
+            atDflt := CurASTNode;
+          end;
+          Expect(tkRParen, ')');
+          if not atIsGet then
+          begin
+            node := AllocNode(AN_BOOL_LIT);
+            if gaDeclared then ASTIVal[node] := 1 else ASTIVal[node] := 0;
+            ASTTk[node] := Ord(tyBoolean);
+            CurASTNode := node;
+            LastExprTk := tyBoolean;
+          end
+          else if gaDeclared and (gaPi >= 0) then
+          begin
+            CurASTNode := PyMakeFuncValueFor(gaPi, gaMemb);
+            LastExprTk := tyVariant;
+          end
+          else if gaDeclared then
+          begin
+            CurASTNode := PyMakeIdent(gaSi);
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          end
+          else
+          begin
+            CurASTNode := atDflt;
+            LastExprTk := IntToTypeKind(ASTTk[atDflt]);
+          end;
+          Exit;
+        end;
         ParseExpr;
         atRecv := CurASTNode;
         { A COMPUTED name — `getattr(self, "do_" + verb)` — cannot be answered

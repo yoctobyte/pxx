@@ -1496,6 +1496,22 @@ test-nilpy: $(COMPILER)
 	# `guarded 27 quit`, with the control row unmoved in the same run.
 	./$(COMPILER) test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy $(TESTTMP)/test_nilpy_guardpoison26
 	tools/expect_same.sh test_nilpy_guardpoison26 "$$($(TESTTMP)/test_nilpy_guardpoison26)" "$$(python3 test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy)"
+	# `getattr(<unit alias>, "<literal>", <default>)`, folded at compile time. A
+	# unit is a compile-time namespace and not a value, so the RECEIVER died
+	# inside ParseExpr as `undefined variable` before the getattr arm's own logic
+	# ran; the fold sits above that ParseExpr. Receiver, name and miss are all
+	# decidable, so no runtime module object is involved.
+	# BOTH ANSWERS ARE LIVE ROWS, which is why the absent arm is not enough: this
+	# is lekkerzeilen's capability probe for audio and a controller, `_pxx.py`
+	# does not define those names today, and task-b is going to add them -- so a
+	# fixture covering only today's answer goes quietly wrong when that lands.
+	# THE CONTROL IS local_wins AND IT IS A CONTROL, not a participant: measured
+	# 2026-09-11 against c321b6466b86 (this fix reverted), every subject arm is
+	# individually REFUSED while local_wins compiles and answers 99 on both
+	# binaries. `present` exists in the module AND the Holder, so a fold that
+	# ignored the local shadow would move that row.
+	./$(COMPILER) test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy $(TESTTMP)/test_nilpy_unitgetattr26
+	tools/expect_same.sh test_nilpy_unitgetattr26 "$$($(TESTTMP)/test_nilpy_unitgetattr26)" "$$(python3 test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy)"
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no

@@ -438,3 +438,122 @@ thing one file further out."* Measured at corpus `9030d09`:
 
 Those reads are unaffected by how `_backend` was bound. **Option 2's cost is one
 file, not five.**
+
+## OPTION 3 IS BUILT — frankZ, 2026-09-11, compiler `16f9e6314ca0`
+
+`getattr(<unit alias>, "<literal>", <default>)` and the `hasattr` form are folded
+at compile time in `PyParseFactorCore`, at the `getattr`/`hasattr` arm, **above**
+the `ParseExpr` that was killing the receiver. That placement is the whole fix
+and this ticket predicted it correctly: a unit is a compile-time namespace, the
+bare name is not resolvable in expression position, so `undefined variable
+(backend)` was raised on the ARGUMENT and the arm's own logic never ran. Nothing
+below that `ParseExpr` could have been taught to see a unit.
+
+**Every arm is decided before a token is consumed**, which is what keeps it from
+becoming a second name-resolution path: what it cannot answer it does not touch,
+and the existing behaviour stands. It takes the fold only when
+
+- `hasattr` — always answerable, via `UnitDeclaresNameExactly`;
+- `getattr` absent, with a default written — the default;
+- `getattr` present as a PROC — `PyMakeFuncValueFor`, the same constructor
+  `math.sqrt`-as-a-value already goes through, including its case-folded
+  zero-parameter exclusion, mirrored rather than re-reasoned;
+- `getattr` present as a SYMBOL — `PyMakeIdent`.
+
+A local or global spelled like the module wins, gated on `FindSym` exactly as
+`ConsumeUnitQualifier` and the value door beside it gate.
+
+**Measured against CPython, nine rows, byte-identical** — the four folds above,
+`hasattr` on all three member kinds, the folded symbol used in ARITHMETIC (a
+variant that merely prints right would pass a bare print and fail this), and the
+shadow control.
+
+### CORRECTION TO THIS TICKET'S OWN "EVERY STATIC ROW ALREADY PASSES" — it is a COMPILE-only claim
+
+Both derivations above — site enumeration and wall-walking — conclude that under
+the alias spelling `gl = _backend.gl`, `open_window` and `_backend.probe()` all
+pass. **Both measured COMPILATION and neither ran the result.** Measured
+2026-09-11 at compiler `16f9e6314ca0`, a class reached through a unit alias:
+
+| row | pxx | CPython |
+| --- | --- | --- |
+| `gl = backend.gl` then `gl.VERSION` | 42 | 42 |
+| `gl = backend.gl` then `gl.clear()` | AttributeError at run time | `cleared` |
+| `w = backend.Widget` (local) then `w.V` | **5512600** — a raw address | 1 |
+
+`gl` in lekkerzeilen IS a class, and the four modules that import it call
+METHODS on it, so the arm that works is the one nobody uses. Filed as
+[[bug-n-a-class-reached-through-a-unit-alias-is-not-a-value]] at p80.
+
+Neither derivation was careless: the question both were asked is where the
+compile WALL goes, and a wall walk structurally cannot see past the wall it
+reports. But the sentence as written reads as a claim about the seam WORKING,
+and it is the summary line, which is the part everyone reads. **A compile is not
+a run.** The seam rewrite still clears the compile wall, which is what option 2 +
+option 3 claimed and all that it claimed.
+
+### The residual, named rather than left to be inferred
+
+A member the unit declares as **neither a proc nor a symbol — a CLASS** — is
+declined, and since 2026-09-11 it is declined BY NAME rather than by blaming the
+receiver: `getattr on the module backend cannot answer Widget — it names a
+CLASS, and a class reached through a module alias is not a value here`.
+
+**The rename was frankB's finding, on review of the fold rather than a rebuild
+of it, and it is a defect the fold ITSELF created.** Before the fold,
+`undefined variable (backend)` was uniformly true-ish here — the receiver did not
+work for any member, so the message was blunt rather than wrong. After it, one
+file can fold `getattr(backend, "B", None)` on one line and report `backend`
+undefined two lines down. One construct, two doors, two answers — which is
+precisely what repairing one door of two produces, and it is the class-scope pair
+this ticket already cites from 2026-09-10. A note on a ticket stops the next
+reader of the TICKET; the error stops the next reader of the CODE, and they are
+different people.
+`UnitDeclaresNameExactly` says yes to it, so the fold sees it and deliberately
+declines. Folding it from a third route is the second path that stays broken
+(`devdocs/dev/normalise-dont-special-case.md`); it belongs in the qualifier door.
+**This ticket owns that residual** — it is the "then what" and it has an owner.
+
+Related and separate, found while probing: **re-exporting a unit alias across a
+file boundary** (`from pkg import backend` where `pkg` did `from . import X as
+backend`) fails on its own account with `no member Cls came of the qualifier
+backend`. That is a DIFFERENT construct from the seam's, which creates and reads
+the alias in one file, and it is what a probe written the natural way measures
+instead of the one you meant. Not folded, not this ticket.
+
+### CORRECTION — the permission to change lekkerzeilen is the OWNER'S, not CLAUDE.md's
+
+The option list above says *"CLAUDE.md permits changing lekkerzeilen where
+something is principally incompatible with NilPy."* **CLAUDE.md contains no such
+sentence** — grepped, 2026-09-11, and the goal file does not either. The
+permission is real and it is stronger than the citation: it is the owner's own
+standing rule on this target, in his words, recorded in
+[[umbrella-lekkerzeilen-compiles-and-runs-under-nilpy]]:
+
+> *"this time we are allow to 'cheat' on the code base. if there's something
+> that's principally incompatible with nilpy, we could fix the source."*
+
+Worth correcting rather than leaving, because the two citations behave
+differently under challenge: a rule attributed to CLAUDE.md gets checked against
+CLAUDE.md, fails, and the whole permission then looks invented — when a seat
+re-derives it from the umbrella it is fine, and when a seat does not, a licensed
+change reads as a corpus bend. CLAUDE.md's own precedence rule makes the
+mis-citation worse than a missing one.
+
+### The seam, and the wall is CLEARED
+
+Measured in a scratch copy at corpus `9030d09`, compiler `16f9e6314ca0`:
+
+| seam | `lekkerzeilen/platform/__init__.py` |
+| --- | --- |
+| as shipped (`return _pxx, "pxx"`) | `:95 undefined variable (_pxx)` |
+| rewritten to `from . import X as _backend` | **compiles** |
+
+Both rows in the same run, the as-shipped one as the control. So **option 2 +
+option 3 clears it**, exactly as this ticket's recommendation said, and no
+runtime module object was built.
+
+**Copy the SUBTREE, not the repo.** The scratch copy cost 46G the first time and
+filled `/tmp` for every seat on the box: lekkerzeilen's package is 2.1M and its
+`world/` tile dataset is 46G. `cp -r /home/neo/lekkerzeilen/lekkerzeilen` is the
+whole corpus anyone measuring this needs.
