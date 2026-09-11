@@ -823,11 +823,8 @@ at all, would this row still pass?"** — wherever a type's default, a zero, an
 EMPTY AGGREGATE (`[]`, `{}`, `''`), a `nil`/`None` sentinel, a `sizeof(int)` or a
 pointer width is also the expected value, the answer is yes. Re-derive any row
 whose expected value is a default, an empty, or a width before trusting it.
-**The enumeration above was all WIDTHS until 2026-09-11, and the two seats who
-missed this rule that day were both holding a non-scalar** (frankS, a set-valued
-field where `[]` is the correct value AND what an unwritten slot reads as; and a
-NilPy binding where `None` is both) — so read the list as open, not exhaustive:
-an identity element is the same collision as a default width.
+**Read that list as open, not exhaustive** — an identity element is the same
+collision as a default width, and the list was all WIDTHS until 2026-09-11.
 
 **AND THE COLLISION CAN BE MANUFACTURED BY THE READOUT, WHICH THE QUESTION ABOVE
 DOES NOT CATCH** — there the machinery did nothing; here it does plenty and the
