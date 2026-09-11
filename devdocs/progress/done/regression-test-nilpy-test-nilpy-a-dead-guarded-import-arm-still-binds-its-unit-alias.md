@@ -40,3 +40,6 @@ expect_same: MISMATCH [test_nilpy_deadalias26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-11 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_a_dead_guarded_import_arm_still_binds_its_unit_alias.npy` passes at 840b21cfcf5d (tier full); it was red at 8b188a3beac3. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
