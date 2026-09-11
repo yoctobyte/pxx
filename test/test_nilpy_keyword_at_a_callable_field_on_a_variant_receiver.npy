@@ -1,0 +1,72 @@
+# A KEYWORD ARGUMENT AT A CALLABLE FIELD REACHED THROUGH A NON-TRIVIAL RECEIVER.
+#
+# THE RECEIVER IS THE DISCRIMINATOR, NOT THE FIELD, and getting that backwards is
+# what made this look like a callable-field bug for nine days. One field, five
+# receiver spellings: a plain name and a function call bind the name at COMPILE
+# time (the receiver has a static class, so PyKwArgIndex/PyBindKwArgs answer);
+# a list subscript, a dict subscript and a constructor call land in a VARIANT and
+# reach PyMakeVariantFieldCall, whose argument loop had no keyword arm at all --
+# so `room=2` was parsed as an ordinary expression and the call died as
+# `undefined variable (room)`, naming a variable the program never wrote.
+#
+# EVERY KEYWORD ROW IS WRITTEN OUT OF DECLARATION ORDER. `b(laden=5, room=2)`
+# and `b(5, 2)` agree, so an in-order row cannot tell a door that BINDS the names
+# from one that merely drops them and falls back on position. The two parameters
+# also take distinguishable values for the same reason.
+#
+# The corpus site is lekkerzeilen/traffic.py:375,
+# `KINDS[kind].build(laden=wanted, room=room)` where `build` is in
+# `Kind.__slots__` -- and hoisting `KINDS[kind]` to a local does NOT help, which
+# is the measurement that says the field is not the problem.
+# bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver
+
+def make(laden, room):
+    return ('made', laden, room)
+
+def other(width, depth):
+    return ('other', width, depth)
+
+class Kind:
+    __slots__ = ('build', 'cargo')
+    def __init__(self, b):
+        self.build = b
+        self.cargo = True
+
+h = Kind(make)
+kinds = [Kind(make), Kind(other)]
+byname = {'k': Kind(make), 'j': Kind(other)}
+
+def fresh():
+    return Kind(make)
+
+# the two receivers that always worked -- the positive control for the fix
+print(h.build(room=2, laden=5))
+print(fresh().build(room=2, laden=5))
+
+# the three that did not
+print(kinds[0].build(room=2, laden=5))
+print(byname['k'].build(room=2, laden=5))
+print(Kind(make).build(room=2, laden=5))
+
+# PER-CALLEE at run time: the same field name, two callees with DIFFERENT
+# parameter names, dispatched by value and not by the compiler's guess
+print(kinds[1].build(depth=7, width=6))
+print(byname['j'].build(depth=7, width=6))
+
+# mixed positional and keyword, still out of order where it can be
+print(kinds[0].build(5, room=2))
+print(byname['k'].build(5, room=2))
+
+# all positional through the same door, unchanged
+print(kinds[0].build(5, 2))
+
+# THE RECEIVER IS EVALUATED ONCE. A door that re-evaluated it per argument, or
+# once per runtime class arm, would print more than one 'pick'.
+def pick(i):
+    print('pick')
+    return i
+
+print(kinds[pick(0)].build(room=2, laden=5))
+
+# the conditional-expression shape the corpus actually writes
+print(byname['k'].build(laden=9, room=1) if byname['k'].cargo else byname['k'].build(0, 0))

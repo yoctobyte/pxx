@@ -1999,6 +1999,36 @@ test-nilpy: $(COMPILER)
 	printf 'def f(a=0, b=0):\n    return a + b\ng = f\nprint(g(*[1], **{"b": 2}))\n' > $(TESTTMP)/dstarcv_both.npy
 	! ./$(COMPILER) $(TESTTMP)/dstarcv_both.npy $(TESTTMP)/dstarcv_both26 > $(TESTTMP)/dstarcv_both.log 2>&1
 	grep -q 'no keyword channel' $(TESTTMP)/dstarcv_both.log
+	# ...and a keyword argument at a CALLABLE FIELD, where THE RECEIVER is the
+	# discriminator and not the field. A plain name and a function call bind the
+	# name at compile time (PyKwArgIndex/PyBindKwArgs) and always worked; a list
+	# subscript, a dict subscript and a constructor call land in a VARIANT and
+	# reach PyMakeVariantFieldCall, whose argument loop had no keyword arm at
+	# all -- `undefined variable (room)`, naming a variable the program never
+	# wrote. Corpus site: lekkerzeilen/traffic.py:375.
+	# The two WORKING receivers are in the fixture as the positive control, and
+	# every keyword row is OUT of declaration order for the usual reason.
+	./$(COMPILER) test/test_nilpy_keyword_at_a_callable_field_on_a_variant_receiver.npy $(TESTTMP)/test_nilpy_kwfld26
+	$(TESTTMP)/test_nilpy_kwfld26 2>&1 | diff -u test/test_nilpy_keyword_at_a_callable_field_on_a_variant_receiver.expected -
+	# THE SEVENTH `**` DOOR is the same loop, found by probing it rather than by
+	# grepping -- `kinds[0].build(**d)` answered `expected expression`, the same
+	# signature the other six had.
+	# `self` IS LOAD-BEARING IN THESE TWO printf FIXTURES and it is not style.
+	# Written with `s` as the receiver parameter they exercise a DIFFERENT bug
+	# (bug-n-a-method-receiver-parameter-must-be-literally-named-self-...): the
+	# field is never registered, the call falls to run-time member dispatch with
+	# a warning, and the `*` row COMPILES and segfaults instead of hitting the
+	# refusal below. Both rows then fail for a reason that has nothing to do with
+	# this door. Caught here before landing, on the first dry run.
+	printf 'def f(a, b):\n    return (a, b)\nclass K:\n    __slots__ = ("g",)\n    def __init__(self, v):\n        self.g = v\nks = [K(f)]\nd = {"b": 2, "a": 1}\nprint(ks[0].g(**d))\n' > $(TESTTMP)/kwfld_dstar.npy
+	./$(COMPILER) $(TESTTMP)/kwfld_dstar.npy $(TESTTMP)/kwfld_dstar26 > /dev/null
+	tools/expect_same.sh kwfld_dstar26 "$$($(TESTTMP)/kwfld_dstar26)" "(1, 2)"
+	# `*iterable` at that door is REFUSED rather than dropped: the positional
+	# half would need an expansion dispatcher through the field VALUE, which
+	# does not exist. Greps the PHRASE, never a line number.
+	printf 'def f(a, b):\n    return (a, b)\nclass K:\n    __slots__ = ("g",)\n    def __init__(self, v):\n        self.g = v\nks = [K(f)]\nprint(ks[0].g(*[1, 2]))\n' > $(TESTTMP)/kwfld_star.npy
+	! ./$(COMPILER) $(TESTTMP)/kwfld_star.npy $(TESTTMP)/kwfld_star26 > $(TESTTMP)/kwfld_star.log 2>&1
+	grep -q 'expansion dispatcher through the field' $(TESTTMP)/kwfld_star.log
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.

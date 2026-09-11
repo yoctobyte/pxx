@@ -14861,9 +14861,11 @@ end;
   Split out of PyMakeVariantFieldCall so several candidate classes can each get
   an arm over the same arguments — see there. }
 function PyVariantFieldCallArm(baseNode, ci: Integer; const fname: AnsiString;
-                               sigPi, argsHead, n: Integer): Integer;
+                               sigPi, argsHead, n: Integer;
+                               kwNamesSym, kwValsSym: Integer): Integer;
 var unboxArg, unboxCall, castNode, fieldNode: Integer;
     fldFi, fldTk, dispPi, dispArg: Integer;
+    kwLit, kwCnt, kwTail, kwN, kwPad, kwNone: Integer;
 begin
   fldFi := FindUField(ci, fname);
   fldTk := Ord(tyPointer);
@@ -14898,6 +14900,61 @@ begin
     variant receiver), which really does hold a bare address. }
   if IntToTypeKind(fldTk) = tyVariant then
   begin
+    { KEYWORDS THROUGH A VARIANT FIELD. The same channel a callable VALUE uses
+      (PyMakeDynCall), for the same reason and with the same carrier: this
+      receiver is a variant, so the field's contents are decided at run time and
+      there is no callee here to resolve `laden=` against at COMPILE time. The
+      names travel as strings beside their values and pyvar_callv_kw matches
+      them against the callee's own parameter names out of its signature record.
+      Positional slots are padded with None so the callee's own arity decides
+      how many are read.
+      bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver }
+    if kwNamesSym >= 0 then
+    begin
+      dispPi := FindProc('pyvar_callv_kw');
+      if (dispPi < 0) or (n > 4) then
+        Error('Nil Python: .' + fname + '() — a keyword argument through a '
+              + 'callable field on a dynamically-typed receiver needs '
+              + 'pyvar_callv_kw (pyeval) and at most 4 positional arguments');
+      dispArg := AllocNode(AN_ARG);
+      ASTLeft[dispArg] := fieldNode;
+      kwLit := AllocNode(AN_ARG);
+      kwCnt := AllocNode(AN_INT_LIT);
+      ASTIVal[kwCnt] := n; ASTTk[kwCnt] := Ord(tyInt64);
+      ASTLeft[kwLit] := kwCnt;
+      ASTRight[dispArg] := kwLit;
+      kwTail := kwLit;
+      kwN := argsHead;
+      while kwN >= 0 do
+      begin
+        ASTRight[kwTail] := kwN;
+        kwTail := kwN;
+        kwN := ASTRight[kwN];
+      end;
+      for kwPad := n to 3 do
+      begin
+        kwNone := AllocNode(AN_CALL);
+        ASTIVal[kwNone] := FindProc('pynone');
+        ASTLeft[kwNone] := -1;
+        ASTTk[kwNone] := Ord(tyVariant);
+        kwN := AllocNode(AN_ARG);
+        ASTLeft[kwN] := kwNone;
+        ASTRight[kwTail] := kwN;
+        kwTail := kwN;
+      end;
+      kwN := AllocNode(AN_ARG);
+      ASTLeft[kwN] := PyMakeIdent(kwNamesSym);
+      ASTRight[kwTail] := kwN; kwTail := kwN;
+      kwN := AllocNode(AN_ARG);
+      ASTLeft[kwN] := PyMakeIdent(kwValsSym);
+      ASTRight[kwN] := -1;
+      ASTRight[kwTail] := kwN;
+      Result := AllocNode(AN_CALL);
+      ASTIVal[Result] := dispPi;
+      ASTLeft[Result] := dispArg;
+      ASTTk[Result] := Ord(tyVariant);
+      Exit;
+    end;
     dispPi := -1;
     if n = 0 then dispPi := FindProc('pyvar_callv0')
     else if n = 1 then dispPi := FindProc('pyvar_callv1')
@@ -14921,6 +14978,16 @@ begin
     end;
   end;
 
+  { A POINTER-typed procedural field holds a bare code address and carries no
+    parameter NAMES at run time, so the channel above has nothing to match a
+    keyword against. Refused by name rather than bound positionally: a keyword
+    silently dropped binds the default and returns something plausible, which is
+    the failure this whole path exists to avoid. }
+  if kwNamesSym >= 0 then
+    Error('Nil Python: .' + fname + '() — a keyword argument needs a callable '
+          + 'that carries its parameter names, and this field is a typed '
+          + 'procedural pointer (a bare code address). Pass positionally, or '
+          + 'give the receiver a static type so the name binds at compile time');
   if sigPi < 0 then
     Error('Nil Python: .' + fname + '() — a callable field with no signature '
           + 'must be variant-typed to be called on a dynamically-typed value');
@@ -14968,6 +15035,8 @@ var argsHead, lastArg, argNode, n, i, nc: Integer;
     cands: array[0..MAX_FCALL_CANDS - 1] of Integer;
     sigs: array[0..MAX_FCALL_CANDS - 1] of Integer;
     c, fi: Integer;
+    kwNamesSym, kwValsSym, kwLit, kwDictSym: Integer;
+    kwName: AnsiString;
 begin
   { every class that declares this name as a CALLABLE field — a recorded
     procedural signature, or a variant slot (a plain class's Callable field) }
@@ -14992,8 +15061,83 @@ begin
 
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; n := 0;
+  kwNamesSym := -1; kwValsSym := -1;
   while CurTok.Kind <> tkRParen do
   begin
+    { `**mapping` AT THE SAME DOOR -- the SEVENTH member of the family, and it
+      failed the way the other six did, `expected expression`, because this loop
+      never looked at a star. Same channel as the explicit `name=value` beside
+      it: the mapping merges into a hoisted TPyDict (pydict_merge_any takes any
+      mapping, not only a literal) and its keylist/vallist EXTEND the two lists,
+      so source order is preserved and pyvar_callv_kw sees CPython's later-wins.
+      `*iterable` here is REFUSED by name below rather than accepted: the
+      positional half would need an expansion dispatcher through a field value
+      that does not exist yet, and a silently dropped argument is the failure
+      this whole path exists to avoid. }
+    if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkStar) then
+    begin
+      Next;                              { the first '*' }
+      Next;                              { the second '*' }
+      PyParseBoolExpr;
+      if kwNamesSym < 0 then
+      begin
+        kwNamesSym := PyNewContainerTemp('TPyList', 'fldkwn');
+        kwValsSym := PyNewContainerTemp('TPyList', 'fldkwv');
+      end;
+      kwDictSym := PyNewContainerTemp('TPyDict', 'fldkwd');
+      PyHoistDictMergeAny(kwDictSym, CurASTNode);
+      PyContainerCall1(kwNamesSym, 'TPyList', 'extend',
+                       PyContainerExprCall0(kwDictSym, 'TPyDict', 'keylist'), -1);
+      PyContainerCall1(kwValsSym, 'TPyList', 'extend',
+                       PyContainerExprCall0(kwDictSym, 'TPyDict', 'vallist'), -1);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    if isNilPy and (CurTok.Kind = tkStar) then
+      Error('Nil Python: `*iterable` at a callable field on a '
+            + 'dynamically-typed receiver is not supported — the positional '
+            + 'half would need an expansion dispatcher through the field '
+            + 'value, which does not exist, so the arguments would be '
+            + 'silently dropped. `**mapping` and `name=value` do work here');
+    { `hs[0].build(laden=5, room=2)`. THE RECEIVER IS THE DISCRIMINATOR HERE,
+      not the field: `h.build(laden=5)` on a statically-typed local binds the
+      name at compile time through PyKwArgIndex/PyBindKwArgs and always worked,
+      while a list subscript, a dict subscript or a constructor call lands in a
+      VARIANT and reaches this loop -- which had no keyword arm at all, so the
+      name was parsed as an ordinary expression and the call failed with
+      `undefined variable (room)`, naming a variable the program never wrote.
+      The name TRAVELS to run time as a string beside its value, the same
+      channel PyMakeDynCall opened for a callable held in a variable.
+      Real site: lekkerzeilen/traffic.py:375,
+      `KINDS[kind].build(laden=wanted, room=room)` -- `build` is in
+      `Kind.__slots__`, and hoisting the receiver to a local does NOT help,
+      because `KINDS[kind]` is still a subscript at the point that matters.
+      bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver }
+    if isNilPy and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      kwName := CurTok.SVal;
+      Next;                              { the name }
+      Next;                              { the '=' }
+      PyParseBoolExpr;
+      if kwNamesSym < 0 then
+      begin
+        kwNamesSym := PyNewContainerTemp('TPyList', 'fldkwn');
+        kwValsSym := PyNewContainerTemp('TPyList', 'fldkwv');
+      end;
+      kwLit := AllocNode(AN_STR_LIT);
+      ASTSOffset[kwLit] := StoredName(kwName);
+      ASTSLen[kwLit] := Length(kwName);
+      ASTTk[kwLit] := Ord(tyString);
+      PyContainerCall1(kwNamesSym, 'TPyList', 'append', kwLit, -1);
+      PyContainerCall1(kwValsSym, 'TPyList', 'append', CurASTNode, -1);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    if kwNamesSym >= 0 then
+      Error('Nil Python: positional argument after keyword argument in call to .'
+            + fname + '()');
     ParseArgExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
@@ -15004,24 +15148,30 @@ begin
   end;
   Expect(tkRParen, ')');
   { arity is checkable only against a recorded signature; a variant field has
-    none and the runtime dispatcher does not want one }
-  if (sigPi >= 0) and (n <> Procs[sigPi].ParamCount) then
+    none and the runtime dispatcher does not want one.
+    NOT with keywords: `n` is then the POSITIONAL count and the callee's own
+    arity is decided at run time by pyvar_callv_kw, so comparing it against a
+    recorded ParamCount would refuse every correct keyword call. }
+  if (sigPi >= 0) and (kwNamesSym < 0) and (n <> Procs[sigPi].ParamCount) then
     Error('Nil Python: .' + fname + '() takes ' +
           PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
 
   { one layout, one class: emit exactly what this used to emit }
   if nc = 1 then
   begin
-    Result := PyVariantFieldCallArm(baseNode, cands[0], fname, sigs[0], argsHead, n);
+    Result := PyVariantFieldCallArm(baseNode, cands[0], fname, sigs[0], argsHead, n,
+                                    kwNamesSym, kwValsSym);
     Exit;
   end;
 
   Result := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[nc - 1], fname,
-                                                 sigs[nc - 1], argsHead, n));
+                                                 sigs[nc - 1], argsHead, n,
+                                                 kwNamesSym, kwValsSym));
   for i := nc - 2 downto 0 do
   begin
     armN := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[i], fname,
-                                                 sigs[i], argsHead, n));
+                                                 sigs[i], argsHead, n,
+                                                 kwNamesSym, kwValsSym));
     unboxArg := AllocNode(AN_ARG);
     ASTLeft[unboxArg] := baseNode;
     unboxCall := AllocNode(AN_CALL);
