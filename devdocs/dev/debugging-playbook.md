@@ -25358,3 +25358,60 @@ carries the hazard-block rule this extends. It earns a CLAUSE on that rule —
 "including one you wrote yourself" — the day a second seat hits it from the
 other side. Flagged here so whoever finds that second instance knows this is
 the first.
+
+## MINIMISING A REPRO CAN DELETE THE CONDITION — and the minimised version then reads as NOT REPRODUCED rather than as a smaller repro
+
+**frankZ** found the condition, **frankuser** measured it three steps further
+and supplied the half that makes it dangerous, **frankB** wrote it up
+(2026-09-11). The subject is
+`bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address`.
+
+frankZ reported that `w = SomeClass` then `w.V` answers a raw address instead of
+the attribute. frankuser went to reproduce it **on the same binary**, built the
+shapes from scratch, got the correct answer every time, and reported NOT
+REPRODUCED — correctly declining to retire the arm on a miss.
+
+Both were right. The trigger is (a) a binding name different from the class's
+own and (b) **any construct preceding the class in the declaring module, a
+docstring included**. A minimiser strips (b) first, because it is visibly
+unrelated to the construct under test — that is what minimisation IS.
+
+**MINIMISATION IS THE ONE DEBUGGING MOVE NOBODY AUDITS**, because its output is
+a cleaner file and a cleaner file looks like progress from every angle. Every
+other reduction step in this playbook gets interrogated; "I cut it down to four
+lines" never does.
+
+**And frankuser's half is the one that closes the escape: the failure is silent
+in the direction that matters.** A minimiser that deletes the condition gets a
+**PASS** — and a pass is what you were hoping for, so nothing prompts you to put
+the line back. It is the guard-that-cannot-fail shape **with the experimenter
+inside the loop**: you are not reading a broken instrument's verdict, you are
+building the broken instrument one deletion at a time, each deletion justified.
+
+It also carries the house collision. `1` is the CORRECT value for `w.V` in the
+minimal program, so without the preceding construct **the right answer and the
+failure value are the same number** and the shape cannot fail at all. Two
+independent reasons the minimal program is uninformative, and neither is visible
+from inside it.
+
+**THE CHEAP RULE.** When a repro you minimised stops reproducing, that is
+**data about your minimisation**, not about the subject — exactly as a change
+that measures as NO CHANGE is data about your model. So:
+
+> **Re-add the last thing you removed before you write "not reproduced".** And
+> when you report a miss, report the SHAPE you ran, not just the outcome — the
+> author can see their deleted condition in your listing and cannot see it in
+> your verdict.
+
+frankuser did the second half of that instinctively and it is why this got
+resolved in one exchange rather than becoming a disputed ticket: they named the
+two differences they could see and declined to close on a miss. The cause was a
+third thing, in the METHOD rather than in the subject — **they hedged the
+compiler and the shape, and never the minimisation.**
+
+**Not promoted to CLAUDE.md:** one subject, and the neighbouring rules
+(*a guard that cannot fail*, *choose a probe whose right answer differs from the
+default*, *reading a NEGATIVE result*) already cover the pieces. What is new is
+the AGENT — the experimenter constructing the dead instrument by a sequence of
+individually-reasonable deletions — and that earns a clause on the negative-result
+rule the day a second subject shows it.
