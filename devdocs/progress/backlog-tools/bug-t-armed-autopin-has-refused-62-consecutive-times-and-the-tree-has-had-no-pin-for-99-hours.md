@@ -39,6 +39,36 @@ summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahea
 `optdiff#shard0/12` is the only universal blocker, but clearing it alone changes
 nothing — the floor is 4.
 
+# THE SURVIVING NUMBERS, RE-DERIVED UNDER A POSITIVE CONTROL — 2026-09-11
+
+Everything in this ticket came out of `pin-shadow.log`, and the retraction above is
+about misreading that exact file. So the numbers that SURVIVED were produced by
+the instrument I had just been shown to be misreading, and leaving them unchecked
+would be the same error with a better mood. frankZ named the control and it costs
+one line: **grep the file for a string you know IS in it.**
+
+```
+  positive control   WOULD PIN 123 · would NOT pin 558 · optdiff 214 · self-host clean 123
+  negative control   ZZnotarealjob 0
+```
+
+Re-derived whole-line, which is also the fix for the 39-vs-41 fragment-counting
+error:
+
+| | |
+| --- | --- |
+| verdicts since arming | **64** (was 62 when first measured) |
+| of those, WOULD PIN | **0** |
+| `lib-test#src:tools/crtl_reachability.py` blocks | **41** |
+| distinct blocking jobs | **13** |
+
+**THE COUNT IS LIVE AND GROWS; THE ZERO DOES NOT.** Two more verdicts arrived
+during the hour I spent writing this ticket, so any bare "62" here is correct-when-
+measured and stale by the next cycle. **State it as "zero of N, N still growing",
+never as a number** — a reader who re-derives 64 against a written 62 has no way to
+tell a stale figure from a wrong one, and this ticket has already produced one of
+each.
+
 # THE COMPLETE BLOCKER SET — 13 distinct jobs, and the census above named 7
 
 The ranked list above is by frequency and is not the whole population. Every
