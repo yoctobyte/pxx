@@ -84,3 +84,8 @@ the identical source.
 Attempt 7 of [[umbrella-pxx-compiles-fpc-itself]] reported 10 of 207 units
 stopping here. **That is a queue position, not a size** — FPC's `tokens.pas`
 does now compile under pxx, which is the claim that is actually measured.
+
+## Log
+
+- 2026-09-11 frankS — fixed and landed, commit 138604b5e. Filed and closed in the
+  same commit: found by running the corpus probe, reduced and fixed in one pass.
