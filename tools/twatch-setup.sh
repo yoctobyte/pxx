@@ -18,7 +18,7 @@ set -u
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
-missing=0; cross_ok=1; corpus_ok=1; sysroot_ok=1
+missing=0; cross_ok=1; corpus_ok=1; sysroot_ok=1; runner_ok=1
 
 say()  { printf '%s\n' "$*"; }
 # PRESENT AND NON-EMPTY. `[ -d ]` alone calls an empty directory a fetched
@@ -47,11 +47,50 @@ need make    hard make
 need git     hard git
 need cc      hard gcc "" # cc: zlib/conformance oracle + linker presence
 
-say "-- cross targets (full tier) --"
-need qemu-i386    cross qemu-user
-need qemu-aarch64 cross qemu-user
-need qemu-arm     cross qemu-user
-need qemu-riscv32 cross qemu-user
+# TEST RUNNERS. Absence here does NOT self-skip: tools/run_target.sh `exec`s
+# the runner, so a target whose runner is missing produces a FAIL that is
+# indistinguishable from a miscompile -- the same trade the sysroot section
+# below is written about.
+#
+# Derived from twatch.RUNNER_BINARIES and measured with twatch._tool_version,
+# never re-listed here. The list this replaced named four qemu binaries; the
+# constant names SEVEN, and the three it omitted were qemu-riscv64, qemu-xtensa
+# and WASMTIME. wasmtime is the one that has already cost something: its
+# absence produced six false regression tickets on 2026-09-04, every one of
+# them accusing the compiler, and this script called that box READY. It did so
+# again for borg on 2026-09-11 -- seven wasm32 jobs RUNNER-ABSENT in the
+# enrolment baseline. A readiness check that cannot name the condition its own
+# sister tool already diagnoses is checking the wrong list, not checking too
+# weakly.
+#
+# _tool_version is borrowed rather than reimplemented because wasmtime resolves
+# through PATH *and* ~/.local/bin: a second resolver here would report ABSENT
+# for a box that runs it fine, which is this defect pointing the other way.
+say "-- test runners (full tier; absent = RED, not SKIP) --"
+runners=$(python3 -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('tw', 'tools/twatch.py')
+m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+for b in m.RUNNER_BINARIES:
+    print('%s=%s' % (b, m._tool_version(b) or 'ABSENT'))") || {
+  say "  ERROR    cannot read RUNNER_BINARIES from tools/twatch.py"; exit 1; }
+for row in $runners; do
+  name=${row%%=*}; ver=${row#*=}
+  if [ "$ver" != ABSENT ]; then
+    say "  ok       $name $ver"
+  else
+    case $name in
+      qemu-*)   say "  missing  $name  (its target's jobs go RED; apt install qemu-user)"
+                cross_ok=0 ;;
+      wasmtime) say "  MISSING  wasmtime  (wasm32 jobs report RUNNER-ABSENT and score"
+                say "           RED, not SKIP; https://wasmtime.dev/install.sh, or drop"
+                say "           the binary in ~/.local/bin -- no root needed)"
+                runner_ok=0 ;;
+      *)        say "  MISSING  $name  (its target's jobs go RED, not SKIP)"
+                runner_ok=0 ;;
+    esac
+  fi
+done
 
 say "-- optional --"
 need xvfb-run nice xvfb "GTK smoke tests go RED without it"
@@ -157,6 +196,34 @@ else
   sysroot_ok=0
 fi
 
+# 32-BIT HOSTED BUILDS ON THE HOST ITSELF. Distinct from the loader above: that
+# one lets a qemu GUEST start, this one lets `gcc -m32` build a native binary
+# the recipes compare pxx against. libc6-i386 satisfies the first and NOT the
+# second -- the dev half (headers, Scrt1.o, 32-bit libgcc) is a separate
+# package, which is why two lines stand here instead of one.
+#
+# Absence is expensive in both directions at once, which is what hid it. Four
+# recipes probe with this exact command and self-SKIP -- scored passlike, so
+# invisible in a GREEN -- while test-emit-obj does not probe and goes RED on
+# `bits/libc-header-start.h: No such file`. Measured on borg 2026-09-11: 2
+# silent skips and 3 reds from one missing package, in an enrolment baseline
+# this script had already called READY.
+#
+# The probe is the recipes' own (Makefile:27147), verbatim, so this line can
+# never disagree with the thing it predicts.
+say "-- 32-bit hosted builds (gcc -m32; absent = 2 SKIP + 3 RED) --"
+m32_ok=1
+if echo 'int main(void){return 0;}' | gcc -m32 -x c - -o /dev/null >/dev/null 2>&1; then
+  say "  ok       gcc -m32 builds a hosted binary"
+else
+  say "  MISSING  gcc -m32 cannot build a hosted binary — the i386 half of"
+  say "           test-c-abi-mixed-link / test-record-abi-mixed-link /"
+  say "           test-packenum-gcc-oracle / test-packrecords-c-gcc-oracle"
+  say "           SKIPS, and test-emit-obj goes RED."
+  say "           apt install gcc-multilib libc6-dev-i386"
+  m32_ok=0
+fi
+
 # The uforth tree is named by the job's own SKIP line, which carries the exact
 # clone command; 13 jobs self-skip without it.
 say "-- uforth corpus (13 jobs self-skip when absent) --"
@@ -185,7 +252,14 @@ if [ "$missing" = 1 ]; then
   say "NOT READY — fix the MISSING lines above."
   exit 1
 fi
-if [ "$cross_ok" = 1 ] && [ "$sysroot_ok" != 1 ]; then
+if [ "$runner_ok" != 1 ] || [ "$m32_ok" != 1 ]; then
+  # Same rule as the sysroot arm, and for the same reason: these two conditions
+  # are reported by the box as RED jobs, so a verdict that merely qualifies
+  # READY would be describing a box that can report and cannot measure.
+  say "READY for --tier full EXCEPT the jobs named MISSING above, which will"
+  say "  FAIL or SKIP for want of a host package — not because of the tree."
+  say "  Fix those before trusting a red from this box."
+elif [ "$cross_ok" = 1 ] && [ "$sysroot_ok" != 1 ]; then
   # NOT "READY (with caveats)". The whole finding behind this section is that a
   # box able to report and unable to measure reads as ready from outside, so the
   # verdict has to change, not gain a parenthesis.
