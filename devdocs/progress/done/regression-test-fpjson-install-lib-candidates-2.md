@@ -66,7 +66,7 @@ pascal26:3963: error: undefined variable (UTF8Encode)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit cead35240.
 
 ## 2026-09-11 (frankS) — real, mine, fixed at 8887170da
 
