@@ -24353,6 +24353,51 @@ the decision is taken. Neither control was weak and neither was drawn from the
 wrong population. **A control can only exonerate what it SHARES with the
 subject** — so before letting one narrow the search, name what it does NOT share.
 
+## AN ABSENCE CANNOT BE ITS OWN EVIDENCE — WHEN A FIX WORKS BY NOT DOING SOMETHING, THE CONTROL HAS TO BE A THING THAT STILL HAPPENS
+
+Measured 2026-09-11 (frankZ and frankuser, three subsystems in one evening).
+This is the general form of several rules already here, and it is worth stating
+once because each instance looks like a different problem.
+
+**The shape.** A fix whose whole effect is that something no longer happens — a
+module no longer compiled, a DT_NEEDED no longer emitted, a name no longer
+bound, a probe no longer run — produces a world that is observationally
+identical to a world where the machinery never ran at all. Both are silent.
+Both pass. **The assertion "X did not happen" is satisfied just as well by "we
+never got as far as X".**
+
+So a fixture built only from absences certifies itself, and it does so while
+being honest, well-populated and correctly targeted. The remedy is not a better
+absence check. It is to **yoke the absence to a presence in the same run**: one
+row that must still happen, drawn as close to the suppressed thing as possible,
+so the two can only be satisfied together by machinery that is actually running.
+
+**Three instances, and they read as unrelated until you line them up:**
+
+| fix | the absence | the presence yoked to it |
+| --- | --- | --- |
+| a dead `try:` arm no longer compiles its module | the dead module's errors do not appear | a LIVE arm in the same fixture whose module must still be compiled and must win |
+| a bare `import zlib` stops binding the host header | the binary carries ZERO dynamic dependencies | a sibling binary from `import 'zlib.h'` that MUST carry `libz.so.1` |
+| a same-named RTL unit no longer answers a relative import | the RTL unit is not consulted | a same-file control with a NON-colliding name that was already correct and must not move |
+
+In every one, the absence row alone would pass against a compiler that had
+simply stopped doing the whole feature. The presence row is what makes that
+impossible, and in all three it cost one extra case in a fixture that already
+existed.
+
+**The corollary for reading someone else's green.** When a fix is described as
+"it no longer does X", the question is not whether X is gone; it is **what still
+does happen, and is it asserted.** A resolution that lists only things that
+stopped has not told you whether anything still starts.
+
+**And the same question catches a bad instrument, not just a bad fixture.** A
+grep returning zero is an absence; it is evidence only if you have established
+that the file contains the KIND of thing you grepped for. Measured the same
+evening: a search for an error string in a log that records only job
+IDENTIFIERS returned zero, did not error, and was read as "this failure is not
+in the floor" — the log had never contained error text at all. The presence
+control there is one line: grep the same file for a string you know is in it.
+
 ## `set -e` TURNS A TEST'S OWN NEGATIVE CONTROL INTO A HARNESS FAILURE, AND THE TELL IS THAT ONLY THE ROWS DESIGNED TO FAIL FAIL
 
 Measured 2026-09-11 (frankZ). A sibling of *"every instrument that lies, lies by

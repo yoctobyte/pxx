@@ -364,12 +364,15 @@ measurement of this seam that saw a line number past the end of
 
 ## THE FORK IS ANSWERED BY MEASUREMENT, NOT BY ARGUMENT — frankZ, 2026-09-11
 
-**Written before the two sections above landed, and they reached the option-2
-correction first and by a different route.** frankuser ran a written filter over
-the corpus; I read the seam and then walked the wall. The `_backend`-is-one-file
-finding below is therefore NOT mine to claim — it is the same answer from two
-filters that fail differently, which is the only reason either of us should
-quote it. What this section adds that an enumeration cannot is the WALL WALK.
+**Two instruments, and the reason to trust the number is that they FAIL
+DIFFERENTLY — not that one ran first.** frankuser ran a written filter over the
+corpus; this section rewrote the seam and watched where the wall went. Chronology
+is the weakest of the available orderings and it is not the one that matters
+here: an enumeration can only miss what nobody thought to enumerate, and a wall
+walk can only report a wall that is actually reached, so neither can produce the
+other's error. The `_backend`-is-one-file answer arrived independently on both
+routes within the hour. Read the two sections as one finding with two
+derivations.
 
 The question this ticket's earlier addendum posed —
 
