@@ -34420,6 +34420,21 @@ endif
 	# the same set.
 	tools/expect_same.sh lib_mimic_bisect.1 "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" "50"
 	tools/expect_same.sh lib_mimic_bisect.2 "$$($(TESTTMP)/lib_mimic_bisect | tail -1)" "MIMIC-BISECT OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_heapq.npy $(TESTTMP)/lib_mimic_heapq
+	# heapq -- bisect's sibling: an algorithm over a plain list, so it gets the
+	# same treatment. The rows assert THE WHOLE LIST after push, heapify and
+	# replace, not just the popped order, and that is deliberate: a heap only
+	# promises heap[0] == min(heap), so a textbook-correct heapify with a
+	# different sift order passes every pop-order assertion while producing a
+	# different array. Draining the heap one element at a time -- the obvious
+	# test -- is the single assertion that CANNOT see a layout divergence,
+	# because sorting the output discards exactly what is under test.
+	#
+	# Verified under the PIN as well as at HEAD before landing, so this row is
+	# not inert waiting for a `make pin`: the shim is a source file in lib/rtl,
+	# and the pinned compiler reads it the same way.
+	tools/expect_same.sh lib_mimic_heapq.1 "$$($(TESTTMP)/lib_mimic_heapq | grep -c '=ok')" "32"
+	tools/expect_same.sh lib_mimic_heapq.2 "$$($(TESTTMP)/lib_mimic_heapq | tail -1)" "MIMIC-HEAPQ OK"
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"

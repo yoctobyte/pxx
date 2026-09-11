@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_heapq.py against CPython's real `heapq`.
+
+A DIFFERENTIAL, not a spec: this file runs unmodified under CPython, where
+`import heapq` finds the stdlib module, and every expectation below was read off
+CPython rather than typed from the docs. That matters more here than for most
+shims because of what is being asserted -- see below.
+
+IT ASSERTS THE WHOLE LIST, NOT JUST THE POPPED ORDER, AND THAT IS THE POINT.
+A heap's contract is only `heap[0] == min(heap)`, so a textbook-correct heapify
+with a different sift order satisfies every pop-order assertion ever written
+while producing a different array. Draining the heap one element at a time --
+the obvious test -- is therefore the one assertion that CANNOT see a layout
+divergence, because sorting the output discards exactly the information under
+test. The rows below compare the list itself after push, heapify and replace.
+
+THE TIE ROWS ARE LOAD-BEARING. Equal keys are where a heap's freedom lives, so
+(1,'a') vs (1,'z') is where an implementation is free to differ and therefore
+where a shim has to not. Same for the run of equal ints in the heapify row.
+
+`merge` is deliberately absent from the shim (it has a laziness contract the
+cheap version breaks), so there is no row for it: a test that skipped it
+silently would read as coverage. Asserting its ABSENCE is also wrong -- that
+pins today's subset as intended, and adding `merge` later should not redden a
+test. The shim's own docstring is where that decision is recorded.
+"""
+import heapq
+
+N = 0
+
+
+def chk(name, got, want):
+    global N
+    if got == want:
+        N = N + 1
+        print(name + "=ok")
+    else:
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# --- heappush builds CPython's exact array, ties included -------------------
+h = []
+for v in [5, 3, 9, 1, 7, 3, 8, 2]:
+    heapq.heappush(h, v)
+chk("push.layout", h, [1, 2, 3, 3, 7, 9, 8, 5])
+chk("push.min", h[0], 1)
+
+# --- heappop returns the min AND leaves CPython's array --------------------
+chk("pop.value", heapq.heappop(h), 1)
+chk("pop.layout", h, [2, 3, 3, 5, 7, 9, 8])
+
+# --- heapify on an unsorted list, then the full drain ----------------------
+x = [9, 4, 7, 1, 8, 2, 6, 3, 5]
+heapq.heapify(x)
+chk("heapify.layout", x, [1, 3, 2, 4, 8, 7, 6, 9, 5])
+drained = []
+while len(x) > 0:
+    drained.append(heapq.heappop(x))
+chk("heapify.drain", drained, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+chk("heapify.empty", x, [])
+
+# --- heapify is linear-time over a list already in order, and in reverse ---
+a = [1, 2, 3, 4, 5]
+heapq.heapify(a)
+chk("heapify.sorted", a, [1, 2, 3, 4, 5])
+b = [5, 4, 3, 2, 1]
+heapq.heapify(b)
+chk("heapify.reversed", b, [1, 2, 3, 5, 4])  # READ OFF CPython: a reversed
+# input does NOT come out sorted. I typed [1,2,3,4,5] here from intuition first
+# and this row caught it -- which is the docstring's own point arriving early.
+c = []
+heapq.heapify(c)
+chk("heapify.empty_in", c, [])
+d = [7]
+heapq.heapify(d)
+chk("heapify.single", d, [7])
+
+# --- heapify over a run of EQUAL keys: where the freedom is ----------------
+e = [2, 2, 2, 1, 2, 2]
+heapq.heapify(e)
+chk("heapify.ties", e, [1, 2, 2, 2, 2, 2])
+
+# --- heapreplace vs heappushpop: the two orders, which differ -------------
+y = [4, 5, 6]
+heapq.heapify(y)
+chk("replace.value", heapq.heapreplace(y, 1), 4)
+chk("replace.layout", y, [1, 5, 6])
+chk("pushpop.smaller", heapq.heappushpop(y, 0), 0)
+chk("pushpop.layout", y, [1, 5, 6])
+chk("pushpop.larger", heapq.heappushpop(y, 9), 1)
+chk("pushpop.layout2", y, [5, 9, 6])
+
+# --- the one-element edge, where pop takes the last item off -------------
+z = []
+heapq.heappush(z, 42)
+chk("single.pop", heapq.heappop(z), 42)
+chk("single.empty", z, [])
+
+# --- TUPLES: what lekkerzeilen/world.py actually pushes ------------------
+t = []
+for p in [(3, "c"), (1, "a"), (2, "b"), (1, "z")]:
+    heapq.heappush(t, p)
+chk("tuple.layout", t, [(1, "a"), (1, "z"), (2, "b"), (3, "c")])
+tout = []
+while len(t) > 0:
+    tout.append(heapq.heappop(t))
+chk("tuple.drain", tout, [(1, "a"), (1, "z"), (2, "b"), (3, "c")])
+
+# --- nsmallest / nlargest, including the degenerate n -------------------
+src = [5, 1, 9, 3, 7]
+chk("nsmallest.3", heapq.nsmallest(3, src), [1, 3, 5])
+chk("nlargest.3", heapq.nlargest(3, src), [9, 7, 5])
+chk("nsmallest.all", heapq.nsmallest(99, src), [1, 3, 5, 7, 9])
+chk("nlargest.all", heapq.nlargest(99, src), [9, 7, 5, 3, 1])
+chk("nsmallest.zero", heapq.nsmallest(0, src), [])
+chk("nlargest.zero", heapq.nlargest(0, src), [])
+chk("nsmallest.src_intact", src, [5, 1, 9, 3, 7])
+chk("nsmallest.key", heapq.nsmallest(2, ["bbb", "a", "cc"], len), ["a", "cc"])
+chk("nlargest.key", heapq.nlargest(2, ["bbb", "a", "cc"], len), ["bbb", "cc"])
+
+# --- the private helpers keep CPython's names, because code reaches for them
+hp = [1, 5, 3]
+heapq._siftup(hp, 0)
+chk("siftup.private", hp, [1, 5, 3])
+
+print("checks=" + str(N))
+print("MIMIC-HEAPQ OK")

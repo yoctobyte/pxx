@@ -13,8 +13,11 @@ docs, they touch nothing outside the list handed to them, and the reference
 implementation is the pure-Python `Lib/bisect.py` this mirrors. There is no
 version drift to track and no backend to be wrong about -- so unlike a shim
 over an OS or XML facility, "complete" here is achievable and verifiable by
-comparing return VALUES against CPython, which test/test_nilpy_mimic_bisect.npy
-does.
+comparing return VALUES against CPython, which test/lib_mimic_bisect.npy does.
+(That path said `test/test_nilpy_mimic_bisect.npy` until 2026-09-11 and no such
+file has ever existed -- the test is real and only its NAME was wrong here, which
+is the worse of the two failures: a reader who checks finds nothing and cannot
+tell an unnamed test from an untested shim.)
 
 SCOPE. The corpus uses exactly one name: `html5lib/_trie/py.py` does
 `from bisect import bisect_left`. The other five are here anyway because they
