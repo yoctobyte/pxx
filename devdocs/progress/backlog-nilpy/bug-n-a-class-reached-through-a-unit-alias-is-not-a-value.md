@@ -10,7 +10,7 @@ found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, imports, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "`from . import mod as backend` then `backend.SomeClass` COMPILES and is silently WRONG. Bound to a LOCAL it yields a raw address -- `w = backend.Widget` then `w.V` printed 5512600 against CPython's 1. Bound at MODULE scope it reads a constant correctly (42) and then raises `AttributeError: 'type' object has no attribute 'clear'` on a METHOD call CPython answers. No diagnostic in either case. THIS IS THE SEAM'S OWN SHAPE: lekkerzeilen/platform/__init__.py does `gl = _backend.gl` and every caller calls METHODS on `gl`, so the whole OpenGL facade is on the failing arm. AND IT CORRECTS A CLAIM ON [[bug-n-a-module-bound-by-an-import-is-not-a-value]]: that ticket's `every static row in the seam already passes` was measured by COMPILING and is a compile-only claim -- `gl = _backend.gl` compiles, and calling through it does not work. Found while checking whether a diagnostic's suggested workaround was true; it was not."
+summary: "THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. NOT REPRODUCED: the raw-address arm (`w.V` printing 5512600 against CPython's 1). Attribute READS through a local came out correct in both shapes I built, import-free and unit-aliased, so that half needs frankZ's exact repro -- it was measured at 16f9e6314ca0, which predates 3662f8a8b. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
 ---
 
 # The measurement
@@ -90,3 +90,62 @@ was where the compile WALL goes, and a wall walk cannot see past the wall it is
 reporting. But the sentence as written reads as a claim about the seam WORKING,
 and the next reader would act on it. **A compile is not a run, and a fixture
 that only compiles is the same animal as an assertion that cannot fail.**
+
+## MEASURED INDEPENDENTLY 2026-09-11 (frankuser), compiler `c53cb51926a2`
+
+frankZ's finding that the seam COMPILES and does not WORK is correct and is the
+valuable half — a wall walk cannot see past the wall it reports, and two
+independent routes had both asserted "every static row passes" from a compile.
+What follows narrows the mechanism, because the slug currently sends a fixer to
+the import code.
+
+**THE METHOD-CALL ARM NEEDS NO IMPORT.** Four lines, no package, no alias:
+
+```python
+class gl:
+    @staticmethod
+    def s():
+        return "static"
+g = gl
+print(gl.s())   # static
+print(g.s())    # AttributeError: 'type' object has no attribute 's'
+```
+
+Same failure for `@classmethod`, for a class stored in a dict (`d["k"].s()`), and
+for one passed as a parameter (`def f(t): return t.s()`). The discriminator set
+that rules the alias out — all three of these PASS:
+
+| shape | result |
+| --- | --- |
+| `gl.s()` — class named by its own identifier | ok |
+| `from pkg.bcls import gl` then `gl.s()` | ok |
+| `import pkg.bcls` then `pkg.bcls.gl.s()` | ok |
+| **`g = pkg.bcls.gl` then `g.s()`** | **AttributeError** |
+
+So the axis is **binding the class to a variable**, not reaching it through a
+unit. An import is neither necessary nor sufficient.
+
+**THE BOUNDARY AGAINST THE DONE TICKET.** For `A = B`: `A()` instantiates
+correctly, `o.m()` instance methods work, `A.V` attribute reads are correct —
+`bug-n-a-type-name-is-not-a-first-class-value` delivered those. What is left is
+static and class method lookup on a class object held in a variable. That is a
+narrow, additive gap rather than a regression of the closed ticket, and it is
+worth saying which, because "the done ticket came undone" and "the done ticket
+stopped one step short" route differently.
+
+**NOT REPRODUCED, AND THE REASON MATTERS:** the raw-address arm. `w = backend.Widget`
+then `w.V` gave **1**, not an address, in both shapes I built — import-free, and via
+`from . import mod as backend` with the binding in a local and at module scope. Two
+differences from frankZ's run: compiler (`c53cb51926a2` vs `16f9e6314ca0`, and
+`3662f8a8b` landed between) and whatever their exact shape was. **This is not a
+claim that it was never real** — a silent wrong value is the most serious thing on
+this ticket and it should not be dropped on my failure to hit it. It needs frankZ's
+repro, or a note that `3662f8a8b` fixed it.
+
+**AND 3662f8a8b DOES NOT MOVE THE CENSUS, because the corpus was never rewritten.**
+`lekkerzeilen/platform/__init__.py` at corpus `5301e52` still reads
+`from . import _pxx` with no `as`. The `as _backend` spelling that clears the wall
+is a local edit, and we are allowed to change lekkerzeilen's source — but nobody
+has. Measured after the fold landed: **25 of 35, with `_pxx` still walling 4
+modules.** Anyone reading "the wall is cleared" should read it as "a workaround
+now exists and is unapplied".
