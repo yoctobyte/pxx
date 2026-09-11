@@ -119,3 +119,36 @@ the same imported file. A bare `pascal26:<n>:` with no `near:` window is the
 tell — and per the table above it is now known to be a NARROW class, so a corpus
 instrument meets it rarely rather than everywhere. That is why this dropped from
 p60 to p50.
+
+## The fixture hazard frankS flagged — the advice holds, the mechanism is `1`, not `0`
+
+frankS (2026-09-11) warned that `ASTFile = 0` is *"both a valid id and the
+absence of one, so a row asserting 'prints the right file' for a node whose
+ASTFile is 0 cannot fail — pick a fixture whose unit is not the first one
+stamped."* **Measured before relaying it, and the id is not 0:**
+
+- `dbg_filetable.inc:43,45` mint with `DbgFileId := i + 2`, so a real file id
+  starts at **2**. Zero is never handed out.
+- `DbgFileOfTok` (`:326-337`) returns **1** as its default — for `not DebugInfo`
+  AND for a token in no marked range. That is the value that means two things.
+- `ast_arena.inc:118-120` then collapses it: `if (ASTFile[n] <= 1) and (TokPos >
+  DbgMainTokEnd) then ASTFile[n] := 0`, so **both** sentinels become 0 for any
+  token past the main file.
+
+So the ambiguity is real and it is upstream of where the note put it: **1 is the
+overloaded value, 0 is the unambiguous "absent" it gets flattened into.**
+
+**The advice survives, for a sharper reason than the one given.** A fixture whose
+used unit was never MARKED produces `ASTFile = 0` by the ordinary path — with no
+bug present. So a row asserting "the diagnostic names no file" cannot separate
+*the diagnostic lost the file* from *the unit was never in a marked range*, and
+it would pass on a fixed compiler. **Establish that the unit is marked
+(`ASTFile >= 2`) first, or the fixture measures the marking and not the
+diagnostic.** That is this file's own six-class matrix applied to its test rather
+than to the compiler.
+
+Note also which mechanism this touches: the `in:` line comes from
+`WriteDiagSourceFile` → `PasSrcOfTok(t)` (`lexer.inc:186`), a TOKEN-INDEX path.
+ASTFile is the DWARF neighbour. They fail differently, so a fixture built to
+probe one says nothing about the other — worth keeping straight, because "line
+and file travel together" (`ir.inc:9629`) is a statement about the DWARF half.
