@@ -3367,3 +3367,30 @@ fails at HEAD (`no overload of open matches these arguments`) and adding `...` t
 glibc's variadic form does not fix it either, so a hand-written declaration is NOT equivalent
 to what fcntl.h produces and I did not establish why. Filed as its own ticket with the
 asymmetry named as the lead rather than guessed at. Cost: 17 host-header warnings per run.
+
+2026-09-11 | frankuser | devdocs/progress/backlog-nilpy/ | PARKED RATHER THAN LANDED, and the
+reason is the failure mode rather than the size. lekkerzeilen's last visible wall is
+`self.m(*xs, kw=v)`, refused on a method while every equivalent shape on a FREE FUNCTION
+works (measured 3 ways: star first, star later, trailing positional). Plain calls route to
+PyStarMixedForwardCall -> PyStarForwardCall, a run-time arity dispatch that takes positional,
+*iterable, name=value and **mapping in any order; the three method sites (17058 self.m,
+17426 obj.m, 18558 dynamic receiver) still use the compile-time PyStarExpandCallArgs, which
+fills `total - firstSlot` slots -- every remaining parameter -- so a trailing argument has
+nowhere to go BY CONSTRUCTION. Two different messages from two of those sites, so it reads
+as two bugs.
+WHY NOT FIXED TONIGHT: `k` inside PyStarForwardCall means BOTH the list position handed to
+pystar_arg AND the parameter index for Params[k].Name / ProcParamHasDefault /
+DefaultArgValueNode / PyStarParamTakesVariant. Identical for a free function, off by one for
+a method because ParamCount counts self. Splitting it is ~12 sites in a ~200-line generator,
+and a mistake there yields a PLAUSIBLE WRONG ARGUMENT AT RUN TIME -- no crash, no
+diagnostic -- which is the class CLAUDE.md says is expensive. Unattended is the wrong time.
+Ticket carries the index analysis, the 16-slot ceiling (15 for a method, self takes one) and
+the instruction to write the CPython differential FIRST.
+TWO TREE COMMENTS CORRECTED IN THE TICKET, both measured: pyparser.inc:17087 claims a star in
+FIRST position uses the run-time dispatch and later positions use the compile-time expansion
+-- `f(1, *xs, forced=7)` works and answers 13, so the live distinction is plain-vs-method,
+not first-vs-later; and the same comment's "refuses a callee with defaults in the starred
+range" was retired on 2026-09-10 by the code directly beneath it.
+AND I DID NOT TAKE THE CORPUS EDIT. The umbrella's standing rule from the owner permits
+editing lekkerzeilen, and one would clear this wall -- but this is ordinary Python that plain
+calls already accept, so the asymmetry is ours. Offered to him as an option, not taken as a fix.
