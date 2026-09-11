@@ -819,9 +819,15 @@ from a blank one**, because the unknown default equals `sizeof(int)`. Only
 `double (*dp)[4]` answering 4 rather than 8 separated them, and the umbrella's
 own example had asserted that row for a day while it was already stale. So the
 question is not only "can this guard fail" but **"if the machinery did nothing
-at all, would this row still pass?"** — wherever a type's default, a zero, a
-`sizeof(int)` or a pointer width is also the expected value, the answer is yes.
-Re-derive any size row expecting 4 or `sizeof(void*)` before trusting it.
+at all, would this row still pass?"** — wherever a type's default, a zero, an
+EMPTY AGGREGATE (`[]`, `{}`, `''`), a `nil`/`None` sentinel, a `sizeof(int)` or a
+pointer width is also the expected value, the answer is yes. Re-derive any row
+whose expected value is a default, an empty, or a width before trusting it.
+**The enumeration above was all WIDTHS until 2026-09-11, and the two seats who
+missed this rule that day were both holding a non-scalar** (frankS, a set-valued
+field where `[]` is the correct value AND what an unwritten slot reads as; and a
+NilPy binding where `None` is both) — so read the list as open, not exhaustive:
+an identity element is the same collision as a default width.
 
 **AND THE COLLISION CAN BE MANUFACTURED BY THE READOUT, WHICH THE QUESTION ABOVE
 DOES NOT CATCH** — there the machinery did nothing; here it does plenty and the
