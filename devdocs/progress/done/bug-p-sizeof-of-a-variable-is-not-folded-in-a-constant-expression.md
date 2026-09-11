@@ -132,4 +132,4 @@ What this does NOT claim: the four units of
 not that they compile. A first-failure census reports one wall per subject.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fdc70aced.
