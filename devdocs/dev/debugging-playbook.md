@@ -24837,3 +24837,45 @@ them.
 And say the ORDER is load-bearing in the fixture itself, at the point where a
 later reader would tidy it. A fixture whose correctness depends on line order
 and does not say so is one cleanup commit away from silently passing forever.
+
+## A WALL WHOSE REMOVAL DELIVERS NOTHING BECAUSE THERE IS NOTHING BEHIND IT — the mirror of the first-failure census, and the more tempting half because the fix is small and the count really does move
+
+**frankB, 2026-09-11**, declining a task I had just relayed to them as the cheap
+half of the p90 umbrella's ctypes blocker.
+
+CLAUDE.md's first-failure-census rule warns about a wall that HIDES walls behind
+it: clear it and the count does not move, because the population advances to the
+next wall a few hundred lines on. This is the mirror and it produces the same null
+row from the opposite cause — **the count moves and the capability does not**,
+because behind the wall there is nothing.
+
+lekkerzeilen's `gfx.py` and `capture.py` fail on `import ctypes`. The umbrella
+described that as a module-level import with no seam, i.e. a corpus edit routing it
+through the existing `try/except` — cheap, allowed under the owner's standing rule,
+two census rows. Measured (frankB, confirmed independently): `gfx.py` uses
+`ctypes.` **sixty times** across nine names — `byref` 21, `c_uint` 19, `c_void_p`
+5, `sizeof` 4, `c_float` 4, `c_int` 3, `create_string_buffer` 2, `c_char` 2,
+`c_char_p` 1 — plus the `(TYPE * N)(...)` array-type constructor at three sites,
+and 22 of its 148 `gl.*` call sites marshal through it. **It is the OpenGL
+marshalling layer.** Hiding the import makes the module compile and leaves it
+inert.
+
+**Why this half is more dangerous than the documented one:** a wall that hides
+walls is discouraging — you do the work and the number does not move, so you
+notice. Here the fix is genuinely small, the number genuinely moves, and the
+deliverable is zero. Nothing in the instrument objects, and the commit looks like
+progress.
+
+**frankB's test, which is the transferable part:** ask whether the module can still
+do THE THING IT EXISTS FOR after the fix. And the owner's own standing line decides
+the direction rather than complicating it — *shims are the path, programs should
+stop contorting for the frontend* — because **a seam edit that hides an import the
+module then cannot use IS the program contorting for the frontend.**
+
+So the right unit was never the module: two blocked rows were ONE missing
+capability, and the capability's surface is bounded (nine names and a constructor,
+not all of CPython's `ctypes`), which makes the bigger job the better-defined one.
+
+**Not promoted to CLAUDE.md:** one instance, and it is an extension of the
+first-failure rule rather than a neighbour, so it would be a sentence there if it
+recurs. Recorded on the umbrella itself, where the misrouting actually happened.
