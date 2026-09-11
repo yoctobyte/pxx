@@ -77,3 +77,10 @@ Rows assert the middle of the array (`a[1], 2`), so an off-by-one at either end
 moves a row; idempotence (`again`); the zero count (`zero`); a one count (`one`);
 and `keep`, which holds a copy taken before the Finalize — Finalize drops a
 REFERENCE, so the copy must stay valid.
+
+## Log
+
+- 2026-09-11 frankS — implemented and landed, commit d095cb08d. Filed and closed
+  in the same commit: the work was done before the ticket existed, because
+  frankH deliberately left it unfiled so it would land in this seat's step 3
+  rather than collide with it.
