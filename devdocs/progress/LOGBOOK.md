@@ -2711,3 +2711,21 @@ it compiles, runs, and answers a plausible number.
   spellings (10657 each), a shimmed name has three doors landing on TWO surfaces.
   Probe symbols now come off the shim's interface when a shim exists. 75a00b51f,
   c907cd384.
+
+2026-09-11 | frankuser | compiler/pasparser_proc.inc (measured, not changed) | `--no-shims`
+  is INERT for zlib, and the Makefile sentence saying so must survive: bare `import zlib`
+  prints 907060870 with AND without the flag (one-arg crc32, the Python spelling only
+  lib/rtl/zlib.pas answers), and the C three-arg spelling is refused identically either
+  way. The door that closed for zlib is the LIST door; --no-shims lifts only the SHIM
+  gate. Caught a peer about to retire that sentence as stale on the strength of the
+  sqlite3 row, which is a different cell. The three cells, which are what let two
+  correct-looking sentences coexist:
+    zlib     ON_LIST     no shim   bare -> lib/rtl/zlib.pas   flag inert    header via 'zlib.h'
+    sqlite3  not listed  SHIMMED   bare -> mimic_sqlite3.pas  flag reopens  header via abs path or flag
+    png      not listed  no shim   bare -> the host header    n/a           all three spellings
+  An unshimmed name's three doors all land on ONE surface, which is why the count looked
+  like a property of the name rather than of the surface. Also: `grep -c "'sqlite3'"` over
+  the whole file reported list membership 2 for a name that is NOT on the list -- the hits
+  are the soname table (:4502) and a stem matcher (:4526). Re-derived from the function
+  body with a positive control in both directions. Third instrument-answering-about-
+  something-else of the evening, all three mine.
