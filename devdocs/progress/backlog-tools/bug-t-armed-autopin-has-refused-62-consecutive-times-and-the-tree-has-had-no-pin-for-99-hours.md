@@ -9,32 +9,53 @@ created: 2026-09-11
 found-by: frankuser
 tags: [pin, track-t, autopin, owner-blocker, workflow]
 blocked-by: []
-summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 62 verdicts since, and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 62 of 62 verdicts, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 39 of 62. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 62 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should. AND THERE IS A CIRCULAR DEPENDENCY, confirmed 2026-09-11 after I wrongly denied it: `lib-test#src:tools/crtl_reachability.py` blocks 41 of 62 and its ACTUAL failure is the builtin cliff (`mimic_threading` / `__pxxclone requires --threadsafe`), clearable ONLY by a pin -- and `make pin` is owner-only. So the fleet cannot break the cycle by fixing tests; auto-pin cannot fire until a human pins once. I denied this by grepping pin-shadow.log for the error text; that log records job IDENTIFIERS (a source fingerprint), never failures."
+summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 64 verdicts and counting (the log is live -- quote it as 'zero of N, N still growing', never as a number), and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 64 of 64, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 41 of 64. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 64 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should. AND THERE IS A CIRCULAR DEPENDENCY, confirmed 2026-09-11 after I wrongly denied it: `lib-test#src:tools/crtl_reachability.py` blocks 41 of 64 and its ACTUAL failure is the builtin cliff (`mimic_threading` / `__pxxclone requires --threadsafe`), clearable ONLY by a pin -- and `make pin` is owner-only. So the fleet cannot break the cycle by fixing tests; auto-pin cannot fire until a human pins once. I denied this by grepping pin-shadow.log for the error text; that log records job IDENTIFIERS (a source fingerprint), never failures."
 ---
+
+> **THE SLUG SAYS 62 AND THAT NUMBER IS FROZEN.** It was 62 at filing and is 64 by
+> the next cycle. The slug is not renamed because `resolve` citations and tstate
+> rows key on it, so a reader must treat the number in the FILENAME as a timestamp,
+> not as a count. Everything in the body is re-derived; the title is not.
 
 # Measured 2026-09-11, from `devdocs/progress/tstate/pin-shadow.log` on origin/master
 
 | | |
 | --- | --- |
 | armed | 2026-09-09, `pin-armed` committed as `fc2ce3d02` |
-| verdicts since arming | **62** |
-| of those, WOULD PIN / did pin | **0** |
+| verdicts since arming | **64 and growing** |
+| of those, WOULD PIN / did pin | **0** — the only stable figure here |
 | last WOULD PIN of any kind | 2026-09-07T21:01Z (`285208414d3f`), BEFORE arming |
 | last actual pin | v407, `51901941e`, 2026-09-06T21:59 — **99 hours** |
 | pins in the 7 days before that | 10 (08-31 .. 09-06), ~1/day |
-| minimum red count across the 62 | **4** — no verdict was ever close |
+| minimum red count across the 64 | **4** — no verdict was ever close |
 
 # The red floor, ranked by how many verdicts each blocks
 
+Re-derived WHOLE-LINE 2026-09-11 under a positive control. The first cut of this
+table said 39 for the lib-test rows and 62 for the denominator; both were wrong,
+the 39 from counting fragments of a comma-split list:
+
 ```
-  62/62  optdiff#shard0/12                              first seen 2026-09-01
-  39/62  lib-test#src:tools/crtl_reachability.py        first seen 2026-08-16
-  39/62  lib-test#src:test/lib_synapse_transitive_unit.pas        2026-09-01
-  39/62  lib-test#src:test/lib_synapse_ssl.pas                    2026-09-01
-  39/62  lib-test#src:test/lib_synapse.pas                        2026-08-27
-  23/62  optdiff#shard5/12, shard2/12, shard10/12
-   7/62  test-core#src:test/test_generic_delphi_method_header_binds_to_the_generic.pas
+  64/64  optdiff#shard0/12                                        first seen 2026-09-01
+  41/64  lib-test#src:tools/crtl_reachability.py                  first seen 2026-08-16
+  41/64  lib-test#src:test/lib_synapse_transitive_unit.pas                  2026-09-01
+  41/64  lib-test#src:test/lib_synapse_ssl.pas                              2026-09-01
+  41/64  lib-test#src:test/lib_synapse.pas                                  2026-08-27
+  23/64  optdiff#shard5/12 · optdiff#shard2/12 · optdiff#shard10/12
+   7/64  test-core#src:test/test_generic_delphi_method_header_binds_to_the_generic.pas
+   5/64  test-core#src:test/test_generic_nested_inline_specialize.pas
+   4/64  size-canary#src:tools/size_canary.py
+   3/64  tools-devtest#00
+   2/64  test-core#src:test/test_libmanifest.pas
 ```
+
+**THE 41 IS THE TRAP AND IT HAS ALREADY CAUGHT TWO SEATS.** In all 41 verdicts
+that name the lib-test rows they are named FIRST, which reads as "they block
+everything" — and in the other 23 they are ABSENT, led by `optdiff#shard0/12`
+instead. `lib/rtl/sysutils.pas:549` states it as *"named first in every one of the
+62"*: the "named first" half is true without exception, the "every one" half is
+wrong by 23, and the conclusion it supports (this cliff was blocking the pin that
+would have ended it) is correct for 41 and not for the rest. Quantifier, not verb.
 
 `optdiff#shard0/12` is the only universal blocker, but clearing it alone changes
 nothing — the floor is 4.
