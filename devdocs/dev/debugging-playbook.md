@@ -25294,3 +25294,67 @@ explicitly a different mechanism, so this is a NEIGHBOUR and not an extension,
 which makes the bar higher rather than lower. The day a second independent
 subsystem loses a defect to its own minimiser, it earns the paragraph; point
 here for the first.
+
+## A TICKET'S OWN COST ESTIMATE IS A HAZARD BLOCK, AND THE AUTHOR IS NOT IMMUNE — I obeyed my own warning for eight hours and it was wrong in three places
+
+Found by **frankB, 2026-09-11**, taking
+`bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-so-far-so-import-order-decides`
+— a ticket I had written myself that morning. Fixed at `8de1fff93`.
+
+CLAUDE.md already has the hazard-block rule: a stale WARNING decays like a lock,
+silently, in the direction of doing nothing, because a reader who stops
+generates nothing that could reveal it was wrong. That rule is written about
+somebody else's warning. **This is the same mechanism with the author and the
+victim in the same chair, and nothing in the rule as written reaches it.**
+
+The ticket said, in bold:
+
+> *"This is NOT a quick fix and that is why it is filed rather than fixed."*
+
+and gave a prerequisite — runtime arity checking first, then narrow the
+compile-time refusal. Three claims held it up. **One tagged build falsified all
+three**, and every one of them was checkable the morning it was written:
+
+| the ticket said | measured |
+| --- | --- |
+| two arity-refusal sites in the file, identified | **three**, and the third is the one that matters |
+| relaxing this reinstates the too-few-args segfault | that segfault's own cases fire at a **different** site — `xs = [1,2,3]; xs.index()` at the field pair, `def f(xs): xs.index()` at this one |
+| a runtime arity check must be built first | it **already exists** — `PyHostCall` refuses `nargs < n`, so the deferred calls fail loudly with CPython's own diagnosis |
+
+The fix was ~70 lines beside an existing arm that already did the analogous
+thing for keywords.
+
+**WHY AUTHORSHIP MAKES IT WORSE RATHER THAN BETTER**, which is the part that
+earns a section. A warning from a stranger gets a moment of scepticism. A
+warning in your own voice arrives with its reasoning already accepted — you are
+not reading a claim, you are *remembering a conclusion*, and remembering does
+not trigger the check that reading does. The three claims were not sloppy; they
+were carefully reasoned from code I had read and had never run. **Reasoned
+carefully and measured never is exactly the shape that survives its own
+author.**
+
+And the cost is invisible by construction: I did not spend eight hours failing
+to fix it. I spent them on other work, because the ticket said this one was
+expensive. **A deferral produces no artefact.** There is nothing in the record
+to notice, which is why the population of these is unknown and probably large —
+every ticket carrying a cost estimate nobody re-derived is one.
+
+**THE CHEAP RULE.** A ticket's `Fix direction`, its cost estimate, and its
+"blocked on X" are CLAIMS, not findings, and they are the part least likely to
+have been measured — an author measures the DEFECT, because that is what makes
+the ticket true, and then reasons about the FIX, because that costs nothing at
+filing time. So when you pick up a ticket:
+
+> **Re-derive the cost before you accept it, and start with whatever the ticket
+> says already exists or does not exist.** Those are one grep each, and an
+> absence claim (`no ticket covers this`, `there is no runtime check`) is the
+> cheapest of all to check and the most expensive to have wrong.
+
+Your own ticket is not an exception to this. It is the case with the least
+resistance.
+
+**Not promoted to CLAUDE.md:** one instance, one seat, and the file already
+carries the hazard-block rule this extends. It earns a CLAUSE on that rule —
+"including one you wrote yourself" — the day a second seat hits it from the
+other side. Flagged here so whoever finds that second instance knows this is
+the first.
