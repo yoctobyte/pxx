@@ -25591,3 +25591,85 @@ instead of on position, so it cannot silently drop it. And when a binary's
 identity is what you are claiming, read `compiler/.pascal26.fixedpoint`, which
 carries `sha256` AND `srchash`, rather than inferring it from whichever line
 survived your filter.
+## A FULL DISK REDS A TIER WITH A SEGFAULT IN A TEST THAT IS FINE, AND THE COMPILER CERTIFIES IT
+
+Measured 2026-09-11 (frankuser). A full `make test-nilpy` reddened exactly one
+row — `test_nilpy_qualified_ctor_does_not_capture_its_args`, **`Segmentation
+fault`**, empty output, all six expected lines missing in the diff. The compile
+line directly above it read:
+
+```
+ok: /tmp/pxx-testtmp-.../test_nilpy_qualctorargs26  [code=1470232B  data=114772B  bss=88940B]
+```
+
+The binary on disk was **1,163,348 bytes**. A good build is **1,585,236**. It was
+421,888 bytes short. `/tmp` had gone to zero during the run.
+
+**No write in `compiler/elfwriter.inc` checks its result, and `sysclose` is
+unchecked too** (`bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write`).
+So the `ok:` line is a statement about what the compiler INTENDED to write. The
+three byte counts are printed unconditionally and are not read back off the file.
+
+### Why this is worth a section rather than a ticket alone
+
+The ticket is about the unchecked write. This is about **what the red looks like
+to the next reader**, which is the expensive half:
+
+- the failing test names an unrelated subsystem (codecs), so the obvious move is
+  to bisect whatever codecs work landed recently;
+- it is a SEGFAULT, which reads as a serious compiler bug, not as infrastructure;
+- the compile step above it says `ok:` with exact numbers, which actively
+  exculpates the compiler and points you downstream;
+- it is not reproducible, so the second run looks like a flake and the first
+  looks like a real intermittent.
+
+All four of those push you away from the cause. This instance was caught only
+because the same seat had caused the ENOSPC and recognised the timestamps, which
+is luck and not a method.
+
+### The method
+
+When a tier reds with a **crash in a test whose subject makes no sense**, before
+attributing it to a commit range:
+
+1. `df -h` **and** `df -i` on the filesystem the harness writes to — seven died
+   on inodes at 9% bytes-full on 2026-09-07, and a bytes-only check read green
+   through the whole outage.
+2. Compare the **size** of the failing test's binary against a fresh build of the
+   same source. A short write is the one cause that produces a crash with a clean
+   compile line.
+3. Re-run the single row. Passing at HEAD *and* under the pin is the discriminator
+   between a real defect and a corrupted artefact — and it costs one command,
+   where a bisect costs an hour.
+
+**`ok:` is not evidence that a file was written.** Until the write check lands,
+the only evidence is the file's size.
+
+### And the producer is standing occupancy, not the last copy
+
+The apportionment matters because it decides where the guard goes. 42G of the
+box's 44G of scratchpad was one seat's, and 41G of that was a full-tree `cp -a`
+of a corpus made hours earlier and never dropped; a second, small copy on top is
+what took the volume to zero. **That is why the box reads healthy right up to the
+cliff** — a slope would have been noticed. Same shape as the 159,442-file A/B
+loop CLAUDE.md records: a per-iteration or per-session artefact nobody reaps.
+Clean up inside the loop; and copy the PACKAGE you need, not the tree — the
+lekkerzeilen corpus is 2.1MB of Python under hundreds of MB of terrain per
+imported region.
+
+### `TESTTMP` existence is not a liveness signal — its mtime is
+
+Two sessions reasoned about this independently the same day, so it is worth
+stating: `TESTTMP` is `/tmp/pxx-testtmp-<uid>-<dirname>-<sha1 of CURDIR>`
+(`Makefile:88`), derived from the CHECKOUT PATH and therefore **stable across
+runs by design**. A finished tier leaves the directory exactly where a running
+one has it, with no marker file, so its existence says nothing about whether a
+suite is in flight. The directory's **mtime** does advance as test binaries are
+created:
+
+```sh
+find /tmp/pxx-testtmp-1000-<checkout>-<hash> -maxdepth 0 -mmin -2   # non-empty => live
+```
+
+Use that before concluding a peer's scratch is abandoned, and never clear another
+seat's.
