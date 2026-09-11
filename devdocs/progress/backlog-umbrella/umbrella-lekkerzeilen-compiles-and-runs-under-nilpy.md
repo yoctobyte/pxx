@@ -570,3 +570,68 @@ RGBA buffer on both runtimes it exercises `crc32` arity, `compress` arity,
 `bytes`/`bytearray` slicing and struct-free big-endian packing in one go, and
 fails loudly. neo-dd will produce the fixed input buffer on request. That is a
 conformance fixture with its own oracle for the cost of asking.
+
+## THE DEMO WOULD RUN WRONG EVEN WITH EVERY MODULE COMPILING — 4 SITES, SILENT None, IN THE PIN AND AT HEAD
+
+Measured 2026-09-11 (frankuser), from frankZ's `SoftUnitMissed` finding, with a
+control. **This is a silent wrong VALUE, not a compile error**, and it is on this
+umbrella's critical path rather than beside it.
+
+The mechanism, reproduced independently before relaying it:
+
+```python
+# pkg/__init__.py            # m.npy
+VALUE = 27                   # from pkg import VALUE
+try:                         # print("v", VALUE)
+    from no_such_module import Image
+    have = True
+except ImportError:
+    have = False
+```
+
+| | subject (package guards an import) | control (same package, no guard) |
+| --- | --- | --- |
+| CPython | **v 27** | v 27 |
+| pin `095ef4811a5b` (v407) | **v None** | v 27 |
+| HEAD `35dce79343cd` | **v None** | v 27 |
+
+The control is what makes it a finding rather than a broken fixture: remove the
+guarded import and the identical package gives 27 under both compilers. So the
+guard is the trigger. No diagnostic at any point.
+
+**WHY IT LANDS HERE: `lekkerzeilen/platform/__init__.py` IS THE ONLY PACKAGE IN
+THE CORPUS THAT GUARDS AN IMPORT** (`try: import ctypes / except ImportError`),
+and **four modules from-import names straight out of it**, the entry point among
+them:
+
+```
+  lekkerzeilen/__main__.py:43  from .platform import KEY_DOWN, KEY_ESCAPE, QUIT, RESIZE, gl
+  lekkerzeilen/app.py:26       from .platform import (ARROW_DOWN ... QUIT, RESIZE, gl)   23 names
+  lekkerzeilen/gfx.py:10       from .platform import gl
+  lekkerzeilen/capture.py:14   from .platform import gl
+```
+
+Every one of those names is a plain module-level constant on the other side —
+`KEY_ESCAPE = 27`, `QUIT = "quit"`, `KEY_DOWN = "key_down"`, `RESIZE = "resize"`.
+Under this defect they all bind to **None**, silently, in the demo's own entry
+point.
+
+**So the module count was never going to be the measure, for a second reason
+nobody had named.** The umbrella already records that `ctypes` and the unwritten
+SDL/GL backend gate whether it RUNS. This is a third gate and it is the nastiest
+of the three, because it produces no error at any stage: clear every wall, write
+the backend, and `KEY_ESCAPE` still compares against None.
+
+**NOT EXECUTED, and the distinction matters:** those four modules do not compile
+yet (the `ctypes` wall), so I have not OBSERVED None in lekkerzeilen. What is
+measured is the mechanism, the pin's behaviour, and the presence of the exact
+shape at four sites with plain constants on the other side. Treat it as certain in
+mechanism and unobserved in situ — and re-check it the moment `platform/` compiles,
+because that is the first opportunity to see it directly.
+
+frankZ has the fix at the same choke point (clear the flag before resolving, and
+again afterwards when `CompiledUnitCount` went up). **Until a pin carries it, this
+is a case where the pin is ACTIVELY WRONG about a construct portable Python
+packages write as a matter of course** — a different and stronger argument than
+"a fix is inert until pinned". Cross-referenced on
+`bug-t-armed-autopin-has-refused-62-consecutive-times-...`.

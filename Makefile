@@ -545,6 +545,17 @@ test-nilpy: $(COMPILER)
 	# reaches lib/rtl/zlib.pas and the header door has to be asked for by name.
 	# --no-shims does NOT reopen it -- the door that closed is the LIST door, not
 	# the shim door, which is what separates this from the sqlite row above.
+	# AND THIS SPELLING IS NOT A GENERAL IDIOM -- measured 2026-09-11 (frankB,
+	# confirmed here). The explicit-extension door is ASYMMETRIC:
+	#     import 'zlib.h'               -> resolves, 1013
+	#     import 'sqlite3.h'           -> error: uses: unit source not found: sqlite3
+	#     import '/usr/include/sqlite3.h' -> resolves, 3046001
+	# So the bare header NAME works for zlib and NOT for sqlite3, where only the
+	# absolute path does. Plausible (unchased) reading: the `.h` is stripped and
+	# the unit search never probes /usr/include, with zlib reaching the header
+	# through the soname table instead. The next person who copies this idiom for
+	# another header gets the sqlite3 answer, so do not read this row as
+	# documenting a general spelling. Unowned; whoever owns the resolver.
 	./$(COMPILER) test/test_nilpy_import_zlib.npy $(TESTTMP)/test_nilpy_import_zlib26
 	tools/expect_same.sh test_nilpy_import_zlib26 "$$($(TESTTMP)/test_nilpy_import_zlib26)" "1013"
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libzlib\.so'; then \
