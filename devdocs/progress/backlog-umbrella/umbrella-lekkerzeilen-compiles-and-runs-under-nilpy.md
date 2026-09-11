@@ -946,3 +946,50 @@ ctypes-using corpus. The second is the ~327-line native `platform/_pxx.py` this
 umbrella already names, and touches nothing else. **Both leave the four
 unreachable files unreachable, so NEITHER moves the census past what the native
 arm needs** — which is the part a reader of the wall histogram would get wrong.
+
+## 2026-09-11, frankZ — 28 of 35 HELD ACROSS THE SEAM REWRITE, which is the row that was open
+
+Independent re-measure at **compiler `465845b20d1e`, tree `3951695c8`, corpus
+`63adc17`** — a different compiler and a different corpus revision from the
+`f9fb672ee109` / `2a3d60e` run in the summary, so this is a second reading and
+not a repeat of that one.
+
+```
+28 of 35 modules compile
+walls, by modules hitting each FIRST:
+   6  import: no unit named ctypes and no shim mimic_ctypes
+   1  no member create_string_buffer came of the qualifier ctypes
+```
+
+**Expectation recorded BEFORE the run, per this file's own instruction:** 28 of
+35, unchanged, ctypes dominant. Matched.
+
+### What was actually at risk, and why the null row is the finding
+
+Corpus `63adc17` is *"platform: restore the try/except/else spelling now that
+pxx parses it"* — the seam has been put back on the faithful three-clause form
+it wanted all along, so **real application code now depends on
+`bug-n-try-except-else-does-not-parse-when-the-try-body-is-an-import`** (fixed
+`cc311ec6e`). That fix has two layers, and the second one exists because the
+first alone binds the DEAD arm's module through a first-wins alias table,
+silently, exit 0. The seam binds `_backend` in both arms, which is exactly that
+shape.
+
+So the question this run answered was not "did the count move" but **"does the
+faithful spelling select the right backend in real code, or only in my
+fixture?"** A regression here would have been mine, not the corpus's, and it
+would have shown up as a count BELOW 28. It did not: all seven remaining walls
+are ctypes, none is an arm-selection failure, and nothing that compiled before
+stopped compiling.
+
+A fixture asserts a construct in the shapes its author chose. This is the same
+construct in the shape the application writes, against a backend selection that
+matters. Recorded because a null row is only information to someone who said
+what they expected — and because "my fixture passes" and "the seam works" are
+different claims, which this corpus has already taught once (**a compile is not
+a run**, 2026-09-11).
+
+**Goal 4's remaining question is unchanged and is still the owner's**, stated in
+the summary: native-library access for NilPy programs, or this app reaching the
+native layer through pxx's own binding mechanism with its source changed to
+suit. Seven modules, one cause. No compiler ticket is blocking it.
