@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `8b11dc8c1df2` on borg, 2026-09-11T21:28:20Z (31m ago).**
+**Newest full tier in the fleet: `8b11dc8c1df2` on borg, 2026-09-11T21:28:20Z (34m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `8b11dc8c1df2` | RED | 31m | — (newest) |
+| borg | `8b11dc8c1df2` | RED | 34m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -28,7 +28,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
 
 ## Open regressions
-- **tools-devtest#00** (borg): bad `7739a09f09dc`, last good `e46dbffaa80d`, 115 commit(s) in range
+- **tools-devtest#00** (borg): bad `7739a09f09dc`, last good `cf68a947b17c`, 58 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **tools-devtest#00** (borg): bad `539361a56c61`, last good `1cafa51e4b6b`, 1 commit(s) in range
 - **optdiff#shard0/12** — tools/optdiff.sh (borg): bad `8b11dc8c1df2`, last good `unknown`, 0 commit(s) in range
