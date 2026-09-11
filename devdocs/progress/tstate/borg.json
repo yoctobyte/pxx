@@ -466,8 +466,5 @@
   "date": "2026-07-31T17:13:10Z",
   "sha": "7a935a711d492360d8bad2357319352d4c6f60c0"
  },
- "open_regressions": [],
- "retired_at": "2026-08-12T07:46:31Z",
- "retired_into": "plexus",
- "retired_kind": "migration"
+ "open_regressions": []
 }
