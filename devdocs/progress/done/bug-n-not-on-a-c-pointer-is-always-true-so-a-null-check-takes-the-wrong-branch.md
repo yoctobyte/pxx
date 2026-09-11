@@ -106,4 +106,4 @@ exactly the `not nonzero` row -- which is what makes it a regression test rather
 than a restatement. It will stay that way until someone pins.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 80e62b96c.
