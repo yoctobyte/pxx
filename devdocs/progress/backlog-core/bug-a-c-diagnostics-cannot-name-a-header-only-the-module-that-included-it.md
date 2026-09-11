@@ -4,7 +4,7 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not."
+summary: "An error inside an INCLUDED HEADER prints no `in:` line AND a WRONG LINE NUMBER THAT IS OFTEN IN RANGE for the .c you invoked — measured 2026-09-11 at 06f130b576f5: `inc.h:2` reports `pascal26:2:`, and m.c:2 is a real, innocent line, so there is no signal the location is false. Third arm of a class whose other two were fixed nine minutes apart (Pascal d3d5098a5, NilPy 584ca8ea8). THE BLOCKER THIS SUMMARY CARRIED UNTIL 2026-09-11 WAS FALSE: PasMarkTokFile is not a Pascal twin, it is the SHARED ungated per-token table, and clexer.inc:975 ALREADY CALLS IT (with an empty path). The missing piece is planting the real header path where CLexLineMarker already receives one — not building a table."
 status: backlog
 ---
 
@@ -128,3 +128,27 @@ cause across two modules and cost a documented evening; the C arm sits in front
 of **busybox**, which is a stated goal and whose errors live in headers.
 
 Not claimed.
+
+## THE LINE NUMBER IS THE HALF THAT MAKES THIS WORSE THAN ITS TWO SIBLINGS
+
+**Measured here 2026-09-11 at `06f130b576f5`** (frankuser, corroborating frankB's
+third-arm find rather than relaying it). The two fixed arms and this one do NOT
+fail the same way, and the difference decides how a reader experiences it:
+
+| arm | the diagnostic | what a reader sees |
+| --- | --- | --- |
+| NilPy (fixed `584ca8ea8`) | `pascal26:10:` against a **1-line** driver | **out of range** — self-evidently broken, so the reader distrusts it immediately |
+| C (**open**) | `pascal26:2:` for an error at `inc.h:2`, against a **2-line** `m.c` | **IN RANGE.** `m.c:2` is `int main(void){return f();}` — a real, innocent line with no `nope` in it. Nothing marks the location as false |
+
+**An in-range wrong line is strictly worse than an out-of-range one**, because
+out-of-range is its own warning and in-range is believable. This is the same
+mechanism CLAUDE.md already names for two subjects failing at an identical line
+number — **the diagnostic manufactures a plausible location and the reader supplies
+the file** — and it is an argument that this arm is worth more than its `prio: 40`,
+not less, now that the blocker is known to be a plant rather than a build.
+
+Unchanged from frankB's write-up and not re-measured here: the two unchecked
+consequences (planting into `PasSrcRange*` from C makes the C-module branch dead
+for those tokens, which changes existing `in:` output; and the
+`<crtl-prototype-pull>` synthetic marker is filtered in the C branch but would
+print as a filename from the Pascal one).

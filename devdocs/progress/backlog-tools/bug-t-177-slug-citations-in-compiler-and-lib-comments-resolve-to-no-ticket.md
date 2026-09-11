@@ -3,11 +3,11 @@ track: T
 prio: 45
 type: bug
 blocked-by: []
-summary: "~182 slug-shaped ticket citations in `compiler/**` and `lib/**` comments resolve to NO file under devdocs/progress/ (2107 DO resolve, which is the positive control). THE COUNT IS NOT THE DELIVERABLE AND IS NOT REPRODUCIBLE: this ticket first said 177 after four matcher corrections; a reimplementation from this ticket's own description gave 195, and three MORE corrections brought it to 182 — seven, not four. A checker MUST carry a baseline (a bare one is a gate that cannot pass) and MUST use SYNTHETIC controls: both real-row controls this ticket originally named went stale within 90 minutes. Two dangling shapes exist and the screen cannot separate them — a comment justifying a LIVE refusal, and a FIXED bug's slug left behind; one verified instance of each."
+summary: "A CENSUS IS NOT A FINDING, AND THAT IS THE TICKET. A citation that resolves to nothing cannot be checked off, so the ticket it fixes STAYS OPEN and gets worked twice — measured: frankB re-diagnosed and nearly re-fixed a bug fixed six hours earlier because compiler/pylexer.inc:1561 cited a slug that never existed. MY CENSUS CAUGHT THAT ROW AND IT DID NOT HELP: it was ROW 38 OF 182 and nobody read row 38, which retires the baseline design on its own evidence and argues FORWARD-ONLY. ~181 rows resolve to nothing of 2324 (2109 resolve, the positive control), but the count is not the deliverable and is not reproducible — this ticket said 177, a reimplementation from its own prose said 195, and EIGHT corrections later it is 181. Controls must be SYNTHETIC: both real rows named here went stale within 90 minutes. tools/slug_citation_census.py is the method, wired into nothing."
 status: backlog
 ---
 
-# ~182 slug citations in `compiler/**` and `lib/**` resolve to no ticket
+# A census is not a finding — ~181 slug citations resolve to no ticket, and the one that cost a seat's evening was row 38
 
 **Found by frankB 2026-09-11** (one instance, chased from a comment whose premise
 was false), **population measured here the same evening, twice, disagreeing.**
@@ -198,3 +198,16 @@ control** — the comment says why: both real rows originally named here went st
 within 90 minutes. A planted slug in a throwaway tree is the only positive control
 that cannot be fixed out from under the test, and that belongs with the checker,
 not with the census.
+
+## THE CHEAPEST REPAIR, AND IT NEEDS NO CONVENTION AND NOBODY'S AGREEMENT
+
+frankB's, after its own correct repair grew the dangling population by one
+(correction 8): **say what the dead citation was ABOUT; never respell it.**
+`7dcc128fe` removed the literal slug and kept the explanation, which survives
+without it — census verified, 182 → 181 and documented-dead 2 → 1.
+
+That is strictly cheaper than the windowed-marker prior art and it is available to
+anyone repairing a row today, with no convention to agree first. **The marker design
+in `tools/progress.py` still matters for the cases where the string genuinely has to
+stay** — a rename that must record the old spelling, say — but it is the fallback,
+not the default.
