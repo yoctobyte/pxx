@@ -141,3 +141,62 @@ expected `=Q` to unblock SDL2 and it did not.**
 Both are wired into this task and into the umbrella, so `effective_prio` carries
 90 to them. The ordering matters: clearing `%h` alone does not make SDL2 import,
 because the soname wall is in front of it.
+
+---
+
+## 2026-09-11, frankB — MEASURED: the "cheap half" of the ctypes work is COSMETIC, and I am not doing it
+
+This ticket's summary already says the important thing — even if all modules
+compiled the demo would not run. What follows is the number for the other half of
+the ctypes story, because the split is being read as "one cheap job and one big
+job" and the cheap one does not buy what its cost suggests.
+
+A per-module census at compiler d28aae4157c8 — each of the 28 runtime modules
+compiled ALONE as `import <mod>` — returns 22 compiling and 6 blocked. One of
+those six is an instrument error and not a wall: `traffic.py` reports
+`nearest() takes exactly 2 argument(s), got 3` at :277 because compiling it alone
+leaves world.py's 4-argument `nearest` out of the compilation, so the
+candidate-class scan picks one of traffic.py's own two same-named methods
+(:161 and :1035). `import world` + `import traffic` in ONE compilation is rc=0,
+confirmed by two seats. So the census's own unit of compilation manufactures that
+row, and the honest reading is 22 clear, FIVE real blockers, one mis-scored.
+
+Two of the five are `import ctypes`: `capture.py` and `gfx.py`. The umbrella's reading is that those two import ctypes
+at module level with no seam, so the fix is a corpus edit routing them through
+the existing try/except. That is true of `capture.py`. It is NOT true of
+`gfx.py`:
+
+| module | `ctypes.` uses | what it uses |
+| --- | --- | --- |
+| `capture.py` | **1** | `create_string_buffer` |
+| `gfx.py` | **60** | everything below |
+
+Nine distinct names between them: `byref`, `sizeof`, `create_string_buffer`,
+`c_int`, `c_uint`, `c_float`, `c_char`, `c_char_p`, `c_void_p` — plus the
+`(TYPE * N)(...)` array-type construction, which is a tenth thing and not a name.
+
+**gfx.py IS the OpenGL marshalling layer.** `ctypes.c_uint(0)` then
+`gl.GenBuffers(1, ctypes.byref(vao))`, `(ctypes.c_float * 16)(*mat.m)`,
+`ctypes.sizeof(data)` into `gl.BufferData`, `ctypes.c_void_p(offset)` as an
+attribute pointer. Routing its import through a seam makes the module COMPILE and
+leaves it unable to do the one thing it exists for. The census count would move
+by two and the demo would move by zero — which is this repo's own warning about
+first-failure censuses arriving from the other direction: not a wall hiding
+walls behind it, but a wall whose removal delivers nothing.
+
+The owner's standing line for this target (2026-09-10) points the same way:
+shims are the path, programs should stop contorting for the frontend, and a
+plain-Python shim counts as native code. A corpus edit that hides an import the
+module then cannot use is the program contorting for the frontend.
+
+So: **the two ctypes rows are one missing capability, not two module fixes.**
+Whoever takes them should take `mimic_ctypes` — nine names and an array-type
+constructor, which is a bounded surface, not the whole of CPython's ctypes — and
+NOT the seam edit. If the seam edit is done anyway for some other reason, say in
+the resolution that ctypes is not solved, or the next reader will read two
+cleared rows as the capability landing.
+
+`bindings.py`'s `undefined variable (_pxx)` is the fifth blocker and is the
+39-line stub this ticket is about, reached from the other side.
+
+Not claiming this ticket; recording the measurement so it is not re-derived.
