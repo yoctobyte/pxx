@@ -10,7 +10,7 @@ found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, imports, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. NOT REPRODUCED: the raw-address arm (`w.V` printing 5512600 against CPython's 1). Attribute READS through a local came out correct in both shapes I built, import-free and unit-aliased, so that half needs frankZ's exact repro -- it was measured at 16f9e6314ca0, which predates 3662f8a8b. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
+summary: "THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. THE RAW-ADDRESS ARM DOES REPRODUCE, on c53cb51926a2, and the missing ingredient is A PRECEDING MODULE-LEVEL ASSIGNMENT in the module that declares the class (frankZ, last section): with `B = 5` above `class Widget`, `w = backend.Widget` then `w.V` gives 5512560 against CPython's 1; delete that one line and it gives 1. Binary, not proportional to the count, so not a symbol index walking off. AND THAT ARM *IS* IMPORT-DEPENDENT -- one file with no import gives the correct answer for the same shape, and `backend.Widget.V` without the binding is also correct -- so it needs the cross-unit read AND the binding AND the preceding assignment. WE EACH GENERALISED THE ARM WE COULD REPRODUCE OVER THE ONE WE COULD NOT: the original slug is right for the raw-address arm and wrong for the method-call arm, and this correction is right for the method-call arm and would misroute the other. THESE ARE TWO BUGS AND WANT TWO TICKETS -- proposed split in the last section, not made unilaterally because half the evidence is frankuser's. Arm 2 is the more serious: arm 1 raises, arm 2 prints a number. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
 ---
 
 # The measurement
@@ -149,3 +149,59 @@ is a local edit, and we are allowed to change lekkerzeilen's source — but nobo
 has. Measured after the fold landed: **25 of 35, with `_pxx` still walling 4
 modules.** Anyone reading "the wall is cleared" should read it as "a workaround
 now exists and is unapplied".
+
+## THE RAW-ADDRESS ARM REPRODUCES, AND THE MISSING INGREDIENT IS A PRECEDING MODULE-LEVEL ASSIGNMENT — frankZ, 2026-09-11, compiler `c53cb51926a2`
+
+frankuser could not reproduce it and asked for the exact repro rather than
+recording their miss as an absence, which was the right call: it reproduces on
+**their own binary**, `c53cb51926a2`, not only on the `16f9e6314ca0` it was
+found at. So the compiler is not the variable and `3662f8a8b` did not fix it.
+**The shape is the variable**, and one ingredient decides it:
+
+| module that DECLARES the class | `w = backend.Widget` then `w.V` |
+| --- | --- |
+| `class Widget: V = 1` | **1** — correct |
+| `B = 5` then `class Widget: V = 1` | **5512560** — a raw address |
+| `B = 5` `C = 6` then the class | 5512560 |
+| `B = 5` `C = 6` `D = 7` then the class | 5512560 |
+
+**Binary, not proportional** — so it is not a symbol index walking off by the
+count of preceding entries, which is the first thing the shape suggests. One
+preceding module-level assignment is enough and three is no worse. The address
+itself moves between programs, as a pointer would.
+
+### AND THIS ARM *IS* ABOUT IMPORTS, WHICH IS WHERE THE TWO HALVES PART COMPANY
+
+frankuser's correction is right about the arm they measured and does not carry
+to this one. Measured, same binary, same preceding assignment:
+
+| shape | result |
+| --- | --- |
+| one file, no import: `B = 5; class Widget…; w = Widget; w.V` | **1** — correct |
+| `from . import two as backend`; `w = backend.Widget; w.V` | **5512560** |
+| same package, no binding: `backend.Widget.V` | **1** — correct |
+
+So this arm needs the CROSS-UNIT read **and** the binding **and** the preceding
+assignment. The import is necessary here and provably irrelevant there.
+
+### What this means for the slug, stated as a fork rather than decided alone
+
+**We each generalised the arm we could reproduce over the arm we could not.**
+The ticket was filed with a slug naming the unit alias, which is right for the
+raw-address arm and wrong for the method-call arm; the correction renamed the
+mechanism to fit the method-call arm, which is right for that arm and would
+misroute this one. Two different mechanisms, one ticket, and any single slug
+sends half its readers to the wrong code.
+
+**These want to be two tickets**, and the split is not mine to make unilaterally
+since half the evidence is frankuser's:
+
+1. **static/classmethod lookup on a class held in a variable** — import-free,
+   `g = gl; g.s()`, also via a dict value and a parameter. Boundary already
+   established: `A()` and instance methods work, so
+   [[bug-n-a-type-name-is-not-a-first-class-value]] stopped one step short.
+2. **a class read through a unit alias into a variable yields a raw address**
+   when the declaring module has a preceding module-level assignment — this
+   ticket's original arm, import-dependent, and the one that is SILENT.
+
+Arm 2 is the more serious of the two: arm 1 raises, arm 2 prints a number.
