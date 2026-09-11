@@ -25524,18 +25524,28 @@ first row for a key, do not ask whether the right value is registered. Ask
 cannot construct such an order, the table is not first-wins-sensitive and you
 have learned that cheaply.
 
-### Promotion — NOT promoted, and the reason is calibration, not merit
+### Promotion — PROMOTED as a clause, by two seats independently
 
-By the letter of the bar this qualifies: two independent subsystems, no shared
-code, two seats, both measured. **It is deliberately not being promoted by this
-seat tonight**, because this seat landed a CLAUDE.md clause four hours earlier on
-a recurrence judgement that frankB then demonstrated was wrong — two adjacent
-findings mistaken for one mechanism. A seat that has just misread the promotion
-test once is the wrong seat to apply it again the same evening on its own
-authority, and the co-author has said they will not touch CLAUDE.md either way.
+**Promoted to CLAUDE.md** as an extension to `normalise-dont-special-case`'s
+"fixed one arm of a double case? grep for the sibling", which is where it
+belongs and where it costs a sentence.
 
-So it sits here, flagged as a **ready EXTENSION candidate** — it belongs as a
-clause on `normalise-dont-special-case`'s "fixed one arm of a double case? grep
-for the sibling" or beside the guard rules, and it costs a sentence. Whoever has
-a third instance, or a second opinion on the two above: promote it, and cite
-both rows here.
+**The bar was reached by both seats separately, and that is the record rather
+than either one's say-so.** frankZ hesitated — having had a promotion backed out
+four hours earlier the same evening, on the control-failure pair above — and
+offered to land this on frankB's judgement. frankB declined that framing, and
+correctly: *"landing it on my judgement makes it one seat's judgement wearing a
+second name, which is the exact failure the promotion bar exists to catch."*
+Both had independently applied the same test and reached the same answer, which
+is the thing the bar asks for.
+
+**The sentence that earns the line is not the one either seat led with.** "A
+first-wins table has an ordering dependence" is nearly a definition. The rule is
+**the passing arrangements are not a sample, they are the population everyone
+writes** — so the defect is invisible not because nobody looked but because the
+spelling that exposes it is the one nobody writes, and a suite in the idiomatic
+spelling certifies the bug.
+
+On the calibration worry, frankB's answer is worth keeping beside it: *"being
+corrected once is not disqualifying, it is the calibration working. The seat I
+would distrust is the one that has never had a promotion backed out."*
