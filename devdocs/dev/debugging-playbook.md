@@ -25602,6 +25602,85 @@ this exact shape four hours earlier.
 one clause backed out (two mechanisms wearing one sentence), one promoted, one
 correctly declined by its own author and then re-decided on a different axis.
 frankB's closing note: that spread is the best evidence the test is real.
+## A FIXTURE THAT PUTS THE INTERESTING ELEMENT LAST IN A LIST CANNOT SEE AN ORDER BUG — AND THE FIXED TICKET'S OWN FIXTURE PASSED ON THE UNFIXED COMPILER
+
+**frankH, 2026-09-11**, Track P, `401c00f2b`. A sibling of the first-wins
+section above by CONSEQUENCE and not by mechanism — deliberately kept separate;
+see the promotion note at the end.
+
+A unit cycle closed through an `implementation uses` clause was refused whenever
+**another unit was named after the cycle-closing one in the same clause**.
+`CycleWaitUnit` is a global and `ParseUnitImplSection` re-enters itself: a
+`uses` clause loads each name in turn, loading one runs THAT unit's
+implementation section through the same routine, and that routine's `tkUses` arm
+opens with `CycleWaitUnit := -1`. So the wait one name had just set was wiped by
+the next, `DefImplPark` was never reached, and the section fell through to the
+pre-fix `undefined variable` on everything the other interface declares.
+
+    uses ucyctail_a, ucyctail_t;   { cycle-closer first  -> undefined variable (TAILCONST) }
+    uses ucyctail_t, ucyctail_a;   { cycle-closer last   -> compiles and runs }
+
+Four units, one token moved, and fpc 3.2.2 runs both.
+
+### The finding is the fixture, not the parser
+
+`bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface`
+was fixed on 2026-09-10 and its fixture is `ucycle_b`, whose implementation
+reads `uses ucycle_a;` — **one open unit, nothing after it.** That fixture
+**still passes on the unfixed compiler.** It is not a suite that missed a case;
+it is a suite that certifies the bug while looking like coverage, and it was
+written by someone who had the defect open in front of them.
+
+Then it happened four more times. Every reduction written against the live
+symptom — four in
+`bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses`,
+plus a fifth the next day — put the cycle-closer last and compiled clean, and
+each clean result was read as evidence that the cycle was not the cause. It was
+written into a ticket TITLE, an umbrella summary and two commit messages that
+this was some other defect.
+
+**This is "minimising a repro can delete the condition" arriving from its worst
+direction:** the minimiser is *hoping* for a pass, so the step that removes the
+trigger returns exactly the result that ends the search. A reduction that
+reproduces makes you keep cutting; one that stops reproducing is normally read
+as "I cut too far" — but when the symptom is `undefined variable` and the
+hypothesis under test is "is this the known bug", a clean compile reads as
+**answering the question** rather than as having broken the fixture.
+
+### The check
+
+**When the construct under test takes a LIST — a `uses` clause, an import list,
+an argument list, a registration order — put the interesting element somewhere
+other than last, and write a second row with it last.** If both behave the same,
+the construct is not position-sensitive and you learned it in one run. One
+sentence, discharged by a glance, and it is what six fixtures across two seats
+got wrong on one defect.
+
+The general fact this shares with the first-wins section is that **the
+arrangement everyone writes is the arrangement that passes** — so "my fixture is
+green" and "the defect is absent" are different claims whenever position can
+matter.
+
+### Promotion — see the WIDENED note on the section above; this row is why it moved
+
+Not repeated here. **What belongs with this row rather than with the clause is
+the reasoning that got it wrong first**, because it is the reusable part:
+
+Offered as an extension and **declined by frankH and frankB independently**, on
+the ground that the clause's instruction — *"ask which orders put the right
+entry SECOND"* — has no referent here: no registry, no key, no two writers, only
+a global clobbered by re-entrancy. That was sound reasoning **against the clause
+as written, and the clause was the thing that was wrong**: it had been scoped to
+a CAUSE while the sentence that earned its promotion was about a TEST. By
+cause-counting this row is unrelated to the other two — and so are those two to
+each other, which is the reductio that settled it.
+
+**The question to ask of a rule before measuring yourself against it is which of
+the two it IS.** I asked "is my mechanism the same as theirs", answered no
+correctly, and drew the wrong conclusion from a correct answer. Stretching the
+mechanism to fit would have landed a second wrong unification the same evening
+one had already been backed out — so the decline was still the right move from
+the information I had, and the fix was someone else re-scoping the clause.
 
 ## YOUR OWN `tail -N` CAN DELETE THE TELL A RULE TOLD YOU TO READ, AND A TRUNCATED SUCCESS LOOKS EXACTLY LIKE A SUCCESS
 
