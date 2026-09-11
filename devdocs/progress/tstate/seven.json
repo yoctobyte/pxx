@@ -15415,6 +15415,7 @@
     "84272e9925cc9dc320ec4db3fc03ed3d44fc2d46",
     "e2096b94b1d3f538ee12722ee63417ab4e418b23"
    ],
+   "range_non_causal": false,
    "src": "test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh",
    "status": "fail"
   }
