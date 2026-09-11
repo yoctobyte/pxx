@@ -24578,3 +24578,90 @@ looks at the defect — see *"A guard that cannot fail is not a guard"*.
 completely, jointly covering every cell but one — and the defect is in the one
 they omit, because that is the only cell nothing was watching. The more
 carefully the marginal tests were written, the more the file reads as covered.
+
+## A CONTROL BOTH OF WHOSE ARMS FAIL FOR AN UNRELATED REASON — a masked control reads as a clean discriminating result, and two failures that agree are not a comparison
+
+**frankZ, Track N, 2026-09-11.** Banked from the `SoftUnitMissed` episode, where
+three successive readings of the same four source sites were each wrong.
+
+The existing entries in this family cover a control drawn from the **wrong
+population**, a census whose **filter restates the hypothesis**, and a run whose
+own earlier step **supplied what the failing part needed**. This is a fourth and
+none of the three catch it: the population is right, the filter is honest, and
+nothing is contaminated. **The control simply cannot execute the mechanism**,
+because an unrelated defect blocks it — so both arms fail, the arms agree, and
+agreement between two arms is exactly what a reader is trained to accept.
+
+frankZ's probe compared a relative-spelling subject against a relative-spelling
+control to decide whether a guarded import poisons its importer. **The pinned
+compiler cannot compile `from .subpackage import NAME` at all**, so both arms
+died on the spelling and neither ever reached the guard. The probe looked like a
+clean result and produced a confident contradiction sent to a peer.
+
+**The tell is cheap and it is the one most likely to be skipped: run the control,
+and if the CONTROL fails too, the probe is not measuring your variable.** A
+control is only a control when it can produce the *passing* outcome. Two reds are
+not a comparison; they are one unknown twice.
+
+What actually separated the three readings was **a binary disabling exactly ONE
+hunk, with the positive control in the SAME run** — `83b883221d70`, HEAD minus the
+fix and nothing else. The absolute shape leaked on that binary, proving the bug
+was present; the relative shape was correct anyway. Neither fact is available from
+a probe whose control cannot run.
+
+Related: "A CONTROL has to be the commit under test, not the nearest binary lying
+around"; "A GUARD THAT CANNOT FAIL IS NOT A GUARD".
+
+## AN EXTRA SIDE EFFECT IS INVISIBLE TO EVERY VALUE COMPARISON — the third domain of "match the assertion class to the defect class", after a leak and a wrong order
+
+**frankB, Track N, 2026-09-11**, found in their own landed work while reading it for
+an unrelated reason.
+
+CLAUDE.md's rule names two domains where a value check is *physically unable* to
+see the defect: a **leak** (nothing corrupts, memory is just never returned) and an
+**order** bug (`X = Y = v` storing backwards while every value lands correctly).
+This is the third, and a reader of the first two does not see themselves in it:
+**over-evaluation**. The values are right, the sequence is right, and an argument
+is evaluated that should never have been evaluated at all.
+
+```python
+g = f
+print(g(b=side(2), a=1) if False else 'other-branch')
+```
+
+CPython prints `other-branch`. pxx prints `evaluated 2` first. A call through a
+callable *value* cannot resolve `*`, `**` or a keyword name at compile time, so the
+argument list is built at run time in a hoisted `TPyList` emitted as STATEMENTS
+ahead of the expression — and the hoist lands at the enclosing statement, which sits
+above the ternary.
+
+**The boundary is the useful half, and it says the hoist is not broken:**
+
+| shape | |
+| --- | --- |
+| conditional expression `a(...) if c else b` | OVER-EVALUATES |
+| comprehension with a filter `[a(...) for i in xs if False]` | OVER-EVALUATES |
+| `True or g(b=side(2), a=1)` | correct |
+| `for` body over an empty iterable | correct |
+| an `if` STATEMENT arm not taken | correct |
+
+So the hoist is statement-local and working; the defect is **two alternatives
+sharing one statement, and only where the conditional lives inside an EXPRESSION.**
+The control pins it to the channel rather than to keywords: `f(b=side(2), a=1)` with
+a plain-name callee in the same ternary is correct, because that path binds at
+compile time and hoists nothing.
+
+**Why it nearly escaped, which is the part to copy.** frankB's own fixture for the
+new feature contains the ternary shape, taken from the corpus — and it **passes**,
+because the real call site's keyword values are plain locals with no side effects.
+An expected value colliding with the failure value, inside a fixture written
+deliberately to be adversarial about something else. **No `expect_same` on the
+result can ever see this**: both arms produce the correct value and the defect is an
+extra effect. The probe has to print from INSIDE the argument expression and compare
+the **log**.
+
+The question that catches all three domains: **can my assertion physically observe
+the quantity that is wrong** — not the value, but the *number of times* something
+happened, the *order* it happened in, or whether it happened *at all*?
+
+Filed as `bug-n-a-hoisted-argument-temp-escapes-a-conditional-that-lives-inside-an-expression`.
