@@ -25636,6 +25636,26 @@ mechanism and one subsystem — piping the build's output. It earns a
 cross-reference the day the same intersection bites somewhere that is not
 `make`.
 
+### The same evening, the same shape, checking THIS claim: `grep trap` says there is one
+
+frankH went to verify the assertion "gate.sh has no trap" the fast way, and
+`grep -n 'trap' tools/gate.sh` **returns a hit** — line 89, matching `bootstrap`
+inside a prose comment. **The quick check answers the opposite of the truth**,
+and it answers confidently: a line number and a matching line. A word-boundary
+grep (`grep -nE '(^|[^a-z])trap[[:space:]]'`) returns nothing, which is correct.
+
+Worth having beside the truncation above because the two are mirror images.
+There, the filter REMOVED the discriminator. Here, the pattern MATCHED something
+that is not the subject — a substring, in a comment, in the file being asked
+about. Neither errors; both answer.
+
+**This is the `grep -L` case CLAUDE.md already names** ("a `grep -L` answering
+about a literal string"), reached through a different verb. The general form is
+that a text search is a claim about a STRING and gets read as a claim about the
+CODE, and the gap widens wherever the language embeds the string in comments,
+identifiers or unrelated words — `trap` in `bootstrap`, and every short verb has
+such a host.
+
 ### The cheap discharge
 
 Do not pipe a verdict you are about to quote. If you must, `grep -E
