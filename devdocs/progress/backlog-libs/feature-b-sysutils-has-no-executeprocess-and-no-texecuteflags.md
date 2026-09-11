@@ -73,3 +73,27 @@ attributed to `a4cbaa1de`. Four walls have now fallen in this unit in sequence
 (`TFPCHeapStatus`, the forward pointer-to-array, `Prefetch`, the double deref);
 each was invisible until the one in front of it cleared, which is why a march
 wall is worth a ticket only once it is the frontier.
+
+# 2026-09-11, frankS — it is the frontier again, and now it is the WHOLE frontier
+
+Attempt 7 of [[umbrella-pxx-compiles-fpc-itself]] (probe #11, whole corpus,
+`e013c4344`): **119 of 207 units stop here**, up from a handful when this was
+filed, because everything that used to stop earlier in `cclasses.pas` now walks
+past it. `cclasses.pas` itself compiles.
+
+**DO NOT RANK THIS ON 119.** The same attempt measured what clearing a wall of
+that size is actually worth: the `Finalize(x, n)` wall had 150 units stacked on
+it and clearing it moved BOTH-OK by **three** — the unit itself plus its two
+direct dependents. The walls are stacked in a few shared units, so a blocker's
+unit count is a queue position. Rank this on the fact that it is a small surface
+over machinery that already exists, which is what the section above says.
+
+Nothing in this ticket's diagnosis has changed and none of it needed re-deriving
+— including the part that matters most, and it is easy to skip on a reread: **a
+type-only stub is worse than nothing**, because `cfileutl`'s implementation
+calls `ExecuteProcess` and adding the type alone only moves the failure to link
+time. A second, smaller thing sits immediately behind it and is unmeasured
+because nothing reaches it today: `cfileutl` then writes
+`const ExecuteProcess = 'Do not use' deprecated '<msg>'` to hide the sysutils
+name — a const carrying a `deprecated` directive. Whoever clears the type should
+expect it and not read it as a regression.

@@ -82,6 +82,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal (unblocks 1)
 - `[p 85] [P]` bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all (unblocks 1)
+- `[p 85] [B]` feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
-- `[p 70] [T]` regression-test-core-c-asm-in-inline-body-3
 
 _427 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

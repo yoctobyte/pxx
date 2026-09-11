@@ -8,8 +8,8 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, feature-p-unaligned-is-a-transparent-lvalue-not-a-function, bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all, bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body, feature-p-the-element-count-form-of-initialize-and-finalize]
-summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at b9c8fc160 (attempt 6, probe #10): 15 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 182 fail. 150 of the 182 stop on ONE call site, `Finalize(x, n)` -- the element-count form -- at cclasses.pas:1726. THAT LINE HAS MOVED THREE TIMES AND THE COUNT HAS NOT: IndexQWord at 895 (96 units), unaligned at 1327 (150), Finalize at 1726 (150), each fix delivering its whole population intact to the next wall a few hundred lines down the SAME FILE. SIX walls cleared (unit cycle 158 units, bitsizeof 163, PSizeUInt 150, IndexQWord 96, unaligned 150, and the conditional-directive family); BOTH-OK has gone 9 -> 15 -> 15 -> 15 -> 15, so bitsizeof bought all six and the four largest bought none -- FOUR consecutive null rows. THE WALLS ARE STACKED IN ONE SHARED UNIT, so a blocker's unit count is a QUEUE POSITION, not a size, and this umbrella must not be ranked on it. THE HONEST UNIT OF WORK IS 'make cclasses.pas compile', not 'clear the 150', and the instrument that would say how far that is -- one reporting EVERY failure per unit rather than the first -- did not exist; frankS is building it 2026-09-11."
+blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, feature-p-unaligned-is-a-transparent-lvalue-not-a-function, bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all, bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body, feature-p-the-element-count-form-of-initialize-and-finalize, bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant, feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags]
+summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at 4c7c88d36 (attempt 7, probe #12): 20 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 177 fail. THE FOUR CONSECUTIVE NULL ROWS ENDED AND THEY ENDED CHEAPLY: cclasses.pas compiles, and the per-unit join says the +3 is exactly that unit plus its two direct dependents (crefs, rabase) -- so clearing the wall 150 units were stacked on was worth THREE, which is this umbrella's own queue-position finding confirmed rather than refuted. It took two bugs, both found by converting one halting diagnostic to ErrorRecover so a unit reports EVERY failure instead of the first: a method parameter typed through a forward pointer alias never matching its own body (ee560d0ad), and the element-count form of Initialize/Finalize (d095cb08d), which had been a DELIBERATE refusal. SEVEN walls cleared now; BOTH-OK has gone 9 -> 15 -> 15 -> 15 -> 15 -> 18. The top wall is now `unknown type: TExecuteFlags` at cfileutl.pas:136, 127 units, and it is NOT a parser gap -- sysutils has no ExecuteProcess, filed by frankH on 2026-09-09 as feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags and now carrying a dated note with the new count. DO NOT RANK IT ON 119: attempt 7 measured the conversion rate of a cleared wall at three units. A second row went the same evening -- a set-valued record field (138604b5e), which is how tokens.pas writes its ~400-row token table -- and probe #12 says it bought TWO (tokens, rescmn) while eight more moved up to the TExecuteFlags wall. THREE WALLS, THREE JOINS, YIELDS OF 3 AND 2: a wall's population says how many units are QUEUED behind it, and the units that turn BOTH-OK are the ones for which it was the LAST wall. Near-disjoint sets; only the second is worth a number."
 ---
 
 # Why this exists and what it replaces
@@ -500,3 +500,131 @@ probe, 15 BOTH-OK, 182 PXX-FAIL.** Worth fixing in the probe rather than
 re-explaining every time someone reads the category — a number that needs a
 paragraph of defence each time it is quoted is a number with the wrong
 denominator.
+
+## 2026-09-11, frankS — attempt 7: `cclasses.pas` compiles, and the null row ends at four
+
+Probe #11 at `e013c4344`, binary `79b76b2cc67f`, whole corpus, `fpc` as oracle.
+
+| | probe #10 @ `b9c8fc160` | probe #11 @ `e013c4344` |
+| --- | --- | --- |
+| BOTH-OK | 15 | **18** |
+| ORACLE-NO | 10 | 10 |
+| PXX-FAIL | 182 | 179 |
+
+**Join against attempt 6's BOTH-OK set, which was listed there by name: all
+fifteen are still present and the three added are `cclasses`, `crefs`,
+`rabase`.** `crefs` is `uses globtype, cclasses`; `rabase` is `uses cclasses,
+systems`. So the delta is exactly the unit that was unblocked plus its two direct
+dependents, and **nothing else moved** — the same per-unit join the earlier
+attempts used, and the reason it is worth the extra minute is that a +3 with a
+different membership would have meant something else entirely.
+
+### What it took, and it was two bugs in one file
+
+The instrument attempt 6 asked for — one that reports EVERY failure per unit
+rather than the first — turned out not to be a wrapper. `Finalize(x, n)` was
+raised through `Error()`, which HALTS, so every later wall in the same file was
+structurally invisible. Converting that one site to `ErrorRecover` took
+`cclasses` from ONE reported failure to THREE, and the second was real and
+pre-existing:
+
+1. **[[bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body]]**
+   (`ee560d0ad`) — a method parameter typed through a forward pointer alias never
+   matched its own body, so the body died at codegen with `unresolved forward`
+   naming a file the author never wrote.
+2. **[[feature-p-the-element-count-form-of-initialize-and-finalize]]**
+   (`d095cb08d`) — the wall itself, which was a DELIBERATE refusal recorded in
+   `done/feature-a-implement-initialize-and-finalize-over-the-arc-helpers`.
+   That refusal is right about *ignoring* the form and is not an argument against
+   implementing it.
+
+`ok: dpxx [code=536232B data=109348B bss=93392B procs=1487]`.
+
+### The four null rows were a queue and the queue emptied — but NOT for free
+
+Attempt 6's finding stands and this attempt is its confirmation, not its
+refutation. The 150 did **not** become 150 BOTH-OK; they became 119 units
+stopped at the next wall, in a different file. **Three of 150 is what "clearing
+the wall the 150 were on" was actually worth**, and that is the number to quote
+against any future proposal to rank a blocker on its unit count.
+
+### First failures now
+
+| n | first failure |
+| --- | --- |
+| 119 | `unknown type: TExecuteFlags` — `cfileutl.pas:136`, in its INTERFACE |
+| 18 | `an object type cannot have a constructor` |
+| 10 | `expected field name in record constant` — `tokens.pas:378` |
+| 10 | `Unsupported tcompilerwidechar size` |
+| 6 | `uses: unit source not found: charset` |
+| 4 | `unknown type: d` — `sizeof(d)` of a PARAMETER inside a local type decl |
+| 4 | `unknown type: TDoubleRec` — `x86_64/cpuinfo.pas:36` |
+| 2 | `conditional directive: expected operator` |
+| 1 each | `unixcp`, `heaptrc`, `swapendian`, `align`, `IsATTY`, `RS_INVALID` |
+
+**`TExecuteFlags` is not a parser gap** — it is `sysutils`, and it was already
+filed by frankH on 2026-09-09 as
+[[feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags]], back when it
+was the frontier for a handful of units rather than for 119. Every line of that
+diagnosis still holds and none of it needed re-deriving; it has a dated note
+with the new count and nothing else. The hard half (`ExecutePipeline` /
+`PalVforkAndExec`) is already written in the same unit, and **a type-only stub is
+worse than nothing** — `cfileutl`'s implementation calls `ExecuteProcess`, so the
+type alone just moves the failure to link time.
+**Do not rank it on 119**: this umbrella's own most reliable finding says that
+number is a queue position, and attempt 7 just measured the conversion rate at
+three units per wall.
+
+### One row is already gone, and it is recorded here so the next join is honest
+
+`expected field name in record constant` was reduced and fixed the same hour —
+[[bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant]]
+(`138604b5e`): FPC's `tokens.pas` writes `keyword:[m_none]` in ~400 record
+constants and the set arm of `TryParseInitValForm` had been written out by hand
+in the const-ARRAY loop and given to no other caller. `tokens.pas` compiles.
+**This table is probe #11's.** Probe #12 is below and it is the current one.
+
+### Probe #12 @ `4c7c88d36`, the same evening: 18 -> 20, and the ratio held a third time
+
+| | #10 @ `b9c8fc160` | #11 @ `e013c4344` | #12 @ `4c7c88d36` |
+| --- | --- | --- | --- |
+| BOTH-OK | 15 | 18 | **20** |
+| ORACLE-NO | 10 | 10 | 10 |
+| PXX-FAIL | 182 | 179 | 177 |
+
+Join again: **all eighteen of #11's BOTH-OK units are still there and the two
+added are `tokens` and `rescmn`** — the two units that carried a set-valued
+record field themselves. `rescmn` is `uses Systems` and opens with
+`res_elf_info : tresinfo = (...)`. The other **eight** of the ten that stopped at
+`expected field name in record constant` moved to `unknown type: TExecuteFlags`,
+which is why that row went 119 -> 127 while nothing about `TExecuteFlags`
+changed.
+
+**Three walls, three joins, three small numbers: 3, then 2.** A wall's unit
+count has now predicted its yield wrongly five times running, and the two
+measurements in this attempt are the first where the yield was positive at all —
+which makes them the strongest form of the same finding, not a counterexample to
+it. The useful reading: **a wall's population tells you how many units are
+QUEUED behind it; the units that become BOTH-OK are the ones for which it was
+the LAST wall.** Those are near-disjoint sets, and only the second is worth a
+number.
+
+### First failures now (probe #12)
+
+| n | first failure |
+| --- | --- |
+| 127 | `unknown type: TExecuteFlags` — `cfileutl.pas:136`, in its INTERFACE |
+| 18 | `an object type cannot have a constructor` |
+| 10 | `Unsupported tcompilerwidechar size` |
+| 6 | `uses: unit source not found: charset` |
+| 4 | `unknown type: d` — `sizeof(<a PARAMETER>)` in a const expression |
+| 4 | `unknown type: TDoubleRec` |
+| 2 | `conditional directive: expected operator` |
+| 1 each | `unixcp`, `heaptrc`, `swapendian`, `align`, `IsATTY`, `RS_INVALID` |
+
+`unknown type: d` is `entfile.pas:371`, `array[0..sizeof(d)-1]` where `d` is the
+enclosing function's PARAMETER. `ConstEvalFactor`'s `sizeof` arm resolves a TYPE
+NAME only and says so in its own comment; the expression path handles a variable
+and `SizeOf(d)` in a statement answers 8 correctly. Reduced to ten lines and
+left unfixed here rather than folded in — the honest fix is narrow but it is in
+a 300-line intrinsic and deserves its own pass.
