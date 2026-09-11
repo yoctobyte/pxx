@@ -873,3 +873,76 @@ Absolute-vs-relative was never examined because *from-import-ness* felt like the
 subject rather than a dimension — the same way package-ness had for me. **The count
 was right, the mechanism was right, the population was right, and the SPELLING was
 the variable nobody varied.**
+
+## ctypes MUST BE ALL-OR-NOTHING, AND A PARTIAL SHIM IS STRICTLY WORSE THAN NONE
+
+**Measured 2026-09-11 (frankuser), compiler `c53cb51926a2`, and it is a NEGATIVE
+result that closes a tempting path.** I wrote a minimal `lib/rtl/mimic_ctypes.py`
+— `create_string_buffer` plus the scalar width aliases, differential-clean against
+CPython on every row — on the reasoning that the only LIVE ctypes user is
+`capture.py`, 49 lines of screenshot code using exactly one name.
+
+**Recorded expectation before the re-run: 27 → 30. Measured: 27 → 25.**
+
+| | |
+| --- | ---: |
+| regressed (compiled before, fails now) | `bindings.py`, `platform/__init__.py` |
+| improved | **none** |
+
+**THE MECHANISM, AND IT IS THE WHOLE FINDING: `import ctypes` SUCCEEDING IS A
+SIGNAL THE APPLICATION USES TO CHOOSE ITS BACKEND.** `platform/__init__.py` is
+
+```python
+try:
+    import ctypes
+    from . import _ctypes_backend as _backend    # needs CDLL, POINTER, Structure, ...
+except ImportError:
+    from . import _pxx as _backend               # the native arm
+```
+
+so the moment `ctypes` resolves at all, the seam stops taking the native arm and
+commits to the arm that needs the **full FFI**. A partial shim therefore does not
+buy partial progress — it **moves the app onto the path it cannot walk**, and it
+takes the seam and `bindings.py` down with it. The shim was removed rather than
+landed.
+
+**The general shape, which is not about ctypes:** where a corpus uses
+`try: import X` as a CAPABILITY PROBE, a partial `mimic_X` is not an increment, it
+is a false answer to the probe. Shimming is the right default here (owner,
+2026-09-10) and this is the exception with a test attached: **before shimming a
+module, grep the corpus for `try: import <that module>` — if the import is a probe,
+the shim has to satisfy everything behind the arm it selects.**
+
+### What the ctypes surface actually is, which survives the negative result
+
+22 distinct `ctypes.<name>` uses, 180 sites, five files:
+
+| file | sites | reachable under pxx? |
+| --- | ---: | --- |
+| `platform/_sdl2.py` | 76 | **no** — backend arm not taken |
+| `gfx.py` | 60 | **no** — *nothing in the corpus imports it* |
+| `platform/_gl.py` | 27 | **no** — backend arm not taken |
+| `platform/_ctypes_backend.py` | 16 | **no** — backend arm not taken |
+| `capture.py` | 1 | **yes**, lazily from `app.py:4129` |
+
+14 of the 22 names are scalar width aliases. The machinery is eight: `CDLL`,
+`POINTER`, `Structure`, `byref`, `cast`, `sizeof`, `CFUNCTYPE`, and the
+`ctypes.util` submodule — **all eight used only by the four unreachable files.**
+
+### The fork, stated in goal terms because it is the owner's
+
+The pieces for a real `CDLL` exist — `lib/rtl/dynlibs.pas` has `LoadLibrary` and
+`GetProcedureAddress`, and the ELF writer emits `DT_NEEDED`. What is missing is
+what CPython uses libffi for: **calling a pointer with a signature chosen at run
+time**, where a Pascal call through a pointer needs a procedure type known at
+compile time. So the question is not "implement ctypes" but:
+
+> **Do we want pxx to be able to call any C library a Python program names at run
+> time, or only to run this demo natively?**
+
+The first is a bounded-signature call gateway (N integer/pointer/float arguments
+and a few return kinds would cover all of SDL and GL) and serves every future
+ctypes-using corpus. The second is the ~327-line native `platform/_pxx.py` this
+umbrella already names, and touches nothing else. **Both leave the four
+unreachable files unreachable, so NEITHER moves the census past what the native
+arm needs** — which is the part a reader of the wall histogram would get wrong.
