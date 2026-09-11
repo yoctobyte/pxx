@@ -317,3 +317,7 @@ both refusal rows it could have broken (`nilpy_open_world_kwarg_fail`,
 reaper every time, never by a test — 541 ok rows and zero failures at the
 furthest point (a 9GB `python3` belonging to another seat was resident). Stated
 as an unfinished tier, not as a green one.
+
+## Log
+- 2026-09-11 — resolved, commit 8de1fff93. The FIX is that commit; the ticket was
+  moved to `done/` in it too, so close and fix are the same sha here.
