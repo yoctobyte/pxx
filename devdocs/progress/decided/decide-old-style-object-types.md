@@ -146,3 +146,76 @@ Folded into the skip file's normal maintenance rather than given a ticket.
 
 ## Log
 - 2026-08-25 — decided, commit 28c19f214.
+
+---
+
+## RE-MEASURED 2026-09-11 (frankH) — the premise above is FALSE, and this decide's own trigger has FIRED
+
+**The decision is NOT changed here.** What follows is the measurement, so that
+whoever changes it has a narrow call rather than the architecture fork the text
+above describes. Re-measured at `fad09631f` against `compiler/pascal26`.
+
+### The premise is stale
+
+> `type TFoo = object ... end;` is **entirely unsupported**. Not partially: the
+> parser stops at the first field.
+
+That is no longer true, and the decide's OWN repro is the counterexample:
+
+```pascal
+type TO1 = object x: Integer; procedure Set1(v: Integer); end;
+```
+
+compiles, links and prints `7`. `bug-p-object-value-types-standard-meaning`
+landed 2026-08-30 and gave `object` its standard meaning.
+
+**This is the expensive kind of stale**: a reader who obeys a hazard generates
+nothing that reveals it was wrong. `feature-p-legacy-value-object-types` was
+corrected on 2026-09-09 and says so in its own summary; this file was not, and
+it is the one cited as the gate.
+
+### What is actually refused, and it is deliberate
+
+`constructor`, `destructor`, `virtual`, and inheritance. The diagnostic is not a
+parser stumble — it names the choice and the ticket behind it:
+
+```
+pascal26:2: error: an object type cannot have a constructor -- pxx lowers
+`object` as a value type with no VMT (bug-p-object-value-types-standard-meaning);
+use a plain method, or a class
+```
+
+So where we have landed is close to **option C**, which this decide named *"the
+bad middle"* and told us to avoid. Its stated reason for avoiding C was that a
+`virtual` program *"would then fail deeper in with a worse message than today's
+clean one."* **That specific worry did not materialise** — the message above is
+clean, is aimed at the exact construct, and cites the decision. The objection to
+C that survives is the other one: we accept the keyword while refusing the half
+of the feature that motivates it.
+
+### The trigger condition
+
+> **A for now, B when a real program asks for it.**
+
+A real program now asks. FPC's own compiler declares such objects at
+`cgbase.pas:381`, and three of the 207 units in the corpus stop there as their
+FIRST failure, with more behind the units that stop earlier —
+`umbrella-pxx-compiles-fpc-itself`, which the owner set as a target after this
+decide was written (2026-09-09: *"compiling FPC itself"*). When this file said
+"no code in any corpus we build uses it", that was true; the corpus changed.
+
+**Do not read three units as a size.** That umbrella's standing finding, now at
+its fifth null row, is that a wall's population is a queue position and not a
+count of work.
+
+### The question, in goal terms
+
+*Do we want the FPC-compiler proof to go all the way through, accepting that it
+needs a second object model — a value type that can carry a VMT — or is that
+where the proof stops?*
+
+That is the whole fork and it needs no compiler vocabulary to answer. Everything
+else on this page is engineering and belongs to whoever takes it.
+
+**What would retire THIS note:** a decision recorded below it, or a measurement
+showing the corpus no longer reaches `cgbase.pas:381`.
