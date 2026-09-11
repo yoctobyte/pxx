@@ -35,6 +35,7 @@
 # both take the handler and every row is a cross-check rather than a divergence.
 
 from nilpy_deadarm import kind, backend, other_kind, other, live_kind, live
+from nilpy_deadarm import have_image, image_probe
 
 # The corpus shape: the dead arm's module does not compile, and must never be
 # asked to. `who()` is a CALL, not a constant, because two modules that came to
@@ -47,3 +48,12 @@ print("dead-name", other_kind, other.SHARED, other.who())
 # The control: this arm's guarded import RESOLVES, so its module must be
 # compiled and must win.
 print("live-arm", live_kind, live.SHARED, live.who())
+
+# THE PRESENCE CONTROL. Everything above asserts that something STOPPED
+# happening, and an absence cannot be its own evidence: every row would pass
+# against a compiler that had simply stopped resolving guarded imports at all.
+# A module that is GENUINELY missing still binds its from-imported name, so the
+# guarded reference to `Image` in image_probe() must COMPILE -- that is the
+# feature the narrowing had to leave alone, and it is observable at compile time
+# rather than in this output.
+print("optional", have_image, image_probe())

@@ -38830,6 +38830,7 @@ end;
   on the bare call on purpose: they are not import statements and must keep
   resolving under the unchanged Pascal rules. }
 procedure PyParseImportUnitAs(const name, lang: AnsiString);
+var savedCUC: Integer;
 begin
   { AN IMPORT STANDING AFTER A FAILED ONE IN THE SAME GUARDED ARM IS NOT
     REACHED, AND RESOLVING IT COMPILES A MODULE CPYTHON NEVER IMPORTS. The arm
@@ -38864,8 +38865,42 @@ begin
     SoftUnitMissed := True;
     Exit;
   end;
+  { A MODULE THAT RESOLVED MAY HAVE SOFT-MISSED ON ITS OWN GUARDED IMPORTS, AND
+    SoftUnitMissed IS A GLOBAL, SO THE MISS CAME BACK OUT AND WAS READ AS OURS.
+    The importer then bound every name of THIS from-import to None as an
+    optional-missing name, and a plain module constant read as None with no
+    diagnostic:
+
+        # pkg/__init__.py
+        VALUE = 27
+        try:
+            from definitely_no_such_module import Image
+            have = True
+        except ImportError:
+            have = False
+
+        from pkg import VALUE     ->  VALUE is None
+
+    Present in pin 095ef4811a5b and in every binary before this one; found while
+    adding a presence control for the SoftArmDead narrowing above, which is the
+    only reason a package was ever given a guarded import of its own here.
+
+    PyParseOneImport already clears the flag per STATEMENT — the comment there
+    describes the same class one level out, an earlier import's miss leaking
+    into a later one. This is the nested-compile half, which that clear cannot
+    reach because the contaminating write happens DURING our own resolution.
+
+    ParseUsesUnit sets SoftUnitMissed in exactly one place (pasparser_proc.inc,
+    the empty-UnitContent arm under SoftUnitResolve) and restores
+    CompiledUnitCount on that path, so a unit that was actually compiled is
+    distinguishable: the count went UP. An already-compiled unit exits early,
+    writes nothing, and correctly leaves the flag clear. }
   PyImportLang := lang;
+  savedCUC := CompiledUnitCount;
+  SoftUnitMissed := False;
   ParseUsesUnit(name);
+  if (CompiledUnitCount > savedCUC) and SoftUnitMissed then
+    SoftUnitMissed := False;
 end;
 
 procedure PyParseImportUnit(const name: AnsiString);
@@ -39464,8 +39499,28 @@ begin
             RUNS. CPython raises NameError there; either way the failure is at
             use, not at import, which is the whole point of the guard the
             application wraps around such calls (`if not HAVE_PIL: return`).
-            A variant global is born VT_EMPTY, which IS None. }
-          if SoftUnitMissed then
+            A variant global is born VT_EMPTY, which IS None.
+
+            BUT `THE ARM IS DEAD` IS NOT `THE MODULE IS MISSING`, AND BINDING
+            None FOR IT RE-CREATES THE BUG PyParseImportRun's OWN HEADER
+            DESCRIBES. A None GLOBAL shadows a unit alias at every use, so the
+            handler's `from pkg import fallback as backend` would be rebound
+            correctly and lose anyway: the program takes the handler, says
+            "fallback", and then reads `AttributeError: 'NoneType' object has no
+            attribute 'B'`. Caught by test_nilpy_deadalias26's ABSOLUTE row,
+            which is the only one of its three that reaches this site -- the
+            relative spelling registers through PyBindImportUnitAlias and never
+            comes here, so two of the three rows passed throughout.
+
+            The name is left UNBOUND instead, which is agreement with the
+            oracle and not a divergence: CPython never executes the statement,
+            so the name does not exist and a later reference is a NameError.
+            The suite already asserts exactly that for the sibling spelling
+            (test_nilpy_dead_arm_alias_control: `undefined variable (deadonly)`
+            is the wanted answer). SoftArmDead is what tells the two apart --
+            a module this compilation genuinely cannot find still binds None.
+            bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports }
+          if SoftUnitMissed and (not SoftArmDead) then
           begin
             if PyProgSym(impAlias) < 0 then optSym := AllocVar(impAlias, tyVariant);
             PyNoteOptionalMissingName(impAlias);

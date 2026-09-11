@@ -24398,6 +24398,33 @@ IDENTIFIERS returned zero, did not error, and was read as "this failure is not
 in the floor" — the log had never contained error text at all. The presence
 control there is one line: grep the same file for a string you know is in it.
 
+**AND THE FOURTH INSTANCE IS THE ONE THAT PAYS FOR THE RULE, BECAUSE THE
+PRESENCE CONTROL FOUND A BUG THAT WAS NOT THE ONE UNDER TEST.** Writing the
+"a genuinely missing module must still bind None" row meant giving a test
+package a guarded import of its own. That fired a silent wrong-value bug present
+in the pin and in every binary before it: a module that RESOLVED left
+`SoftUnitMissed` set from its own `try:`, the importer read it as its own miss,
+and `from pkg import VALUE` answered **None** for a plain `VALUE = 27`
+([[bug-n-a-guarded-import-inside-a-module-makes-its-importer-bind-every-name-to-none]]).
+In the three rows above the presence control confirmed a fix; here it found
+something else, of higher severity, in a routine nobody was editing.
+
+**A SUITE CAN HAVE FULL COVERAGE OF ITS OWN FIXTURES' SHAPES AND ZERO COVERAGE
+OF THE CORPUS'S** (frankuser's sentence, and it is the real finding). **No
+fixture in the suite had a package that guards an import.** The corpus writes
+that construct as a matter of course — it is how portable Python selects a
+backend — and `lekkerzeilen/platform/__init__.py` is the only package in that
+corpus that does it, with four modules from-importing plain constants straight
+out of it. So the bug was not hiding behind a subtle condition; it was hiding in
+a **gap in the suite's shape distribution**, which no amount of care inside any
+individual test could have found, and which is invisible to coverage of any kind
+because every fixture that exists is fully exercised.
+
+The check is not a metric, it is a question to ask of the corpus rather than of
+the tests: **which constructs does real code write that no fixture contains?**
+Answering it once, per subsystem, is worth more than another assertion in a
+fixture that already passes.
+
 ## `set -e` TURNS A TEST'S OWN NEGATIVE CONTROL INTO A HARNESS FAILURE, AND THE TELL IS THAT ONLY THE ROWS DESIGNED TO FAIL FAIL
 
 Measured 2026-09-11 (frankZ). A sibling of *"every instrument that lies, lies by
