@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 12d5h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `ae2280f1aa46` | 2026-09-11T15:36:17Z | GREEN (native) | 188.8s | `e9ebcda33a34` RED |
+| seven | `ae2280f1aa46` | 2026-09-11T15:48:09Z | RED (full) | 685.6s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `e9ebcda33a34` on seven, 2026-09-11T15:28:29Z (7m ago).**
+**Newest full tier in the fleet: `ae2280f1aa46` on seven, 2026-09-11T15:48:09Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `e9ebcda33a34` | RED | 7m | — (newest) |
+| seven | `ae2280f1aa46` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 12d5h | 12d5h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -33,6 +33,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **tools-devtest#00** (seven): bad `539361a56c61`, last good `1cafa51e4b6b`, 1 commit(s) in range
 - **tools-devtest-sh#00** (seven): bad `dbd40ba3c706`, last good `dc6370d81280`, 1 commit(s) in range
+- **test-threads#src:test/test_a_threadvar_is_per_thread.pas** — test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh (seven): bad `ae2280f1aa46`, last good `e9ebcda33a34`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
