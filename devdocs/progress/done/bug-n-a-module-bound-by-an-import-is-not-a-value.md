@@ -3,13 +3,13 @@ slug: bug-n-a-module-bound-by-an-import-is-not-a-value
 track: N
 type: bug
 prio: 75
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, imports, lekkerzeilen, values]
 blocked-by: []
-summary: "THE DESIGN FORK IS ANSWERED (2026-09-11, frankZ, last section): under the `from . import X as _backend` spelling EVERY STATIC ROW IN THE SEAM ALREADY PASSES and `getattr` over a unit alias is the ONLY construct left in lekkerzeilen/platform/__init__.py -- measured by rewriting the seam and walking the wall (`:95 _pxx` -> `_ctypes_backend.py:181` -> `:108 getattr`), not by enumerating call sites. So this needs OPTION 3 (fold `getattr(<unit alias>, \"<literal>\", <default>)` at compile time; receiver, name and miss are all decidable) and NOT a runtime module object, which no site in this corpus requires. The getattr door cannot see a unit qualifier at all today: `pyparser.inc:46680` calls ParseExpr on the receiver first, so `undefined variable (backend)` is raised before its own logic runs -- the intercept goes before that ParseExpr and `UnitDeclaresNameExactly` (symtab.inc:1117) is the non-erroring existence test. The middle wall above was a COMPILER BUG, now fixed ([[bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports]]), so any earlier measurement of this seam reporting a line past the end of a 150-line file was reading a dead module. AND THIS TICKET OVERSTATED OPTION 2'S COST: `_backend` appears in ONE code file; the four other modules read the seam's EXPORTED names (`from .platform import gl`), which are ordinary attributes and are unaffected by how `_backend` was bound. One file, not five. ORIGINAL REPORT: `from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against."
+summary: "RESOLVED 2026-09-11 -- OPTION 3 IS BUILT (frankZ, 3662f8a8b) and this summary said \"needs\" until it was closed. Verified at 465845b20d1e on the ticket OWN acceptance shapes, byte-identical to CPython, INCLUDING the original report (a plain member read off a unit alias, not just getattr). Residual is two CLASS-member tickets, both filed, neither a module-as-a-value question. THE DESIGN FORK IS ANSWERED (2026-09-11, frankZ, last section): under the `from . import X as _backend` spelling EVERY STATIC ROW IN THE SEAM ALREADY PASSES and `getattr` over a unit alias is the ONLY construct left in lekkerzeilen/platform/__init__.py -- measured by rewriting the seam and walking the wall (`:95 _pxx` -> `_ctypes_backend.py:181` -> `:108 getattr`), not by enumerating call sites. So this needs OPTION 3 (fold `getattr(<unit alias>, \"<literal>\", <default>)` at compile time; receiver, name and miss are all decidable) and NOT a runtime module object, which no site in this corpus requires. The getattr door cannot see a unit qualifier at all today: `pyparser.inc:46680` calls ParseExpr on the receiver first, so `undefined variable (backend)` is raised before its own logic runs -- the intercept goes before that ParseExpr and `UnitDeclaresNameExactly` (symtab.inc:1117) is the non-erroring existence test. The middle wall above was a COMPILER BUG, now fixed ([[bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports]]), so any earlier measurement of this seam reporting a line past the end of a 150-line file was reading a dead module. AND THIS TICKET OVERSTATED OPTION 2'S COST: `_backend` appears in ONE code file; the four other modules read the seam's EXPORTED names (`from .platform import gl`), which are ordinary attributes and are unaffected by how `_backend` was bound. One file, not five. ORIGINAL REPORT: `from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against."
 ---
 
 # Measured 2026-09-10, compiler `ca814b0aabcc`, tree at `5fb6e3d57` + the dead-path fix
@@ -557,3 +557,51 @@ runtime module object was built.
 filled `/tmp` for every seat on the box: lekkerzeilen's package is 2.1M and its
 `world/` tile dataset is 46G. `cp -r /home/neo/lekkerzeilen/lekkerzeilen` is the
 whole corpus anyone measuring this needs.
+
+## RESOLVED 2026-09-11 — option 3 was BUILT the same day and this ticket did not say so
+
+The fix is **frankZ's**, `3662f8a8b` (fold `getattr`/`hasattr` over a unit alias
+at compile time, intercepting ABOVE the `ParseExpr` on the receiver, which is
+what this ticket had specified). Closed here by **frankB** after verifying the
+ticket's own acceptance shapes rather than re-deriving the design.
+
+Measured at compiler `465845b20d1e`, byte-identical to CPython in both:
+
+| shape | pxx | CPython |
+| --- | --- | --- |
+| `getattr(_backend, "VALUE", None)` / missing-with-default / `hasattr` | `42 default True` | `42 default True` |
+| **the ORIGINAL report** — `from . import two as _backend` then `_backend.VALUE` and `_backend.fn()` | `42 called` | `42 called` |
+
+The second row is the one worth running: the summary had moved on to `getattr`
+and the original report was a plain member read, so closing on the `getattr`
+rows alone would have left the reported shape unverified.
+
+### Why it needed closing by someone who did not write the fix
+
+The summary said, in the present tense, *"this needs OPTION 3"* — while option
+3 was already in the tree, landed hours earlier by the seat that wrote that
+sentence. Nothing was wrong with either half; a summary is written when the fork
+is decided and the fix lands under its own ticket's commit message, so the
+stale tense is the DEFAULT outcome rather than an oversight. It is the shape
+CLAUDE.md's goal section is about: a ticket whose own body records that its
+blocker is gone, sitting in a folder, ranked at **effective prio 90** and handed
+out by `next` as the top of the queue.
+
+### Residual, with an owner, because "not this" is half a finding
+
+Two shapes reached through a unit alias are still wrong and BOTH are filed:
+
+- a class MEMBER — `bug-n-a-class-reached-through-a-unit-alias-is-not-a-value`,
+  the method-call arm, which is import-free and is what blocks the demo;
+- an attribute READ off a class bound to a variable —
+  `bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address`,
+  silent, wrong value, split out on 2026-09-11.
+
+Neither is a module-as-a-value question, which is why they are not this ticket.
+**No site in lekkerzeilen requires a runtime module object**, which this
+ticket's own last section established and which the corpus now confirms:
+`undefined variable (_pxx)` has disappeared as a wall class entirely.
+
+## Log
+- 2026-09-11 — resolved, commit PENDING-COMMIT. The FIX is frankZ's 3662f8a8b;
+  this commit is the close.
