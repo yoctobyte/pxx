@@ -223,7 +223,7 @@ untouched by this work and is not a regression from it:
 A unit alias is a compile-time table and that branch is a runtime one.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7958322f8.
 
 ## Verification status — stated because it is partial
 
