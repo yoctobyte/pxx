@@ -25415,3 +25415,127 @@ default*, *reading a NEGATIVE result*) already cover the pieces. What is new is
 the AGENT — the experimenter constructing the dead instrument by a sequence of
 individually-reasonable deletions — and that earns a clause on the negative-result
 rule the day a second subject shows it.
+## TWO WAYS A CONTROL REPORTS ON SOMETHING THAT IS NOT YOUR SUBJECT — AND THEY ARE NOT THE SAME BUG, WHICH IS THE FINDING
+
+**frankZ and frankB, 2026-09-11.** Banked as TWO mechanisms that were briefly
+written up as one. The mis-merge is recorded here because it is more useful than
+either instance: **two seats hitting adjacent failures on one evening reads as
+RECURRENCE precisely because the seats are different**, and that is the mirror of
+the pgrep entry below (four instances, one mechanism, correctly not promoted).
+
+### Mechanism 1 — the control's SETUP was a no-op (frankZ)
+
+Proving the try/except/else fix by reverting it: `git stash push
+compiler/pyparser.inc`, rebuild, run the new fixture, expect a refusal. **The fix
+was already COMMITTED**, so the stash took nothing, the revert was a no-op, and
+the "pre-fix" binary was the post-fix one. The fixture passed — which is what a
+control that cannot fail does — and the comment citing it shipped.
+
+The tell was in the transcript and is already a house rule for a different
+reason: `make` printed **`verified`**, the stamp path, where a real rebuild
+prints **`converged`**. That rule is written for a stale binary arriving in a
+pull. A revert-based control is where it costs most, because the method IS
+rebuild-measure-restore-rebuild and **every step looks like it happened.**
+
+Guard: revert against the parent COMMIT (`git checkout <parent> -- <file>`), read
+the verb, and print the resulting binary's sha beside the verdict.
+
+### Mechanism 2 — the setup was PERFECT and the subject was unreachable (frankB)
+
+The pinned-versus-HEAD discriminator, used to attribute a corpus delta. The
+setup took effect completely: an older compiler really ran, really compiled the
+file, really printed an error. **The pin stops at an EARLIER WALL** —
+`math.atan2` in hud.py, `__mul__` in traffic.py — so it never reaches the
+construct under test.
+
+Guard, frankuser's and the sharp form of it: **the tell is that the pin's error
+names a DIFFERENT CONSTRUCT than the one under test.** If it does, you have
+learned nothing — which is not the same as "the pin disagrees". On a corpus that
+is mostly walls, this discriminator is **unavailable more often than it is
+available**, and that is a property of the corpus, not of the run.
+
+### Why they are not one entry
+
+The unifier first written was *"the control's setup silently did not take
+effect"*. True of mechanism 1, **false of mechanism 2** — frankB's setup worked.
+They share a shape only one level up — a control emitting a correctly-shaped
+verdict about something other than the subject — and **that level is already in
+CLAUDE.md**: *every instrument that lies, lies by being CORRECT ABOUT SOMETHING
+ELSE.* Narrowed to setup-identity the clause has one instance; widened to cover
+both it restates a rule that is already there. Neither is a promotion.
+
+### The one genuine gap, and it has ONE instance
+
+CLAUDE.md's aim-and-read rule says *assert the thing under test actually RAN*,
+and scopes that to EXISTENCE — *"a comparison whose inputs were never proven to
+exist cannot fail"*. In mechanism 1 the input existed and was **the wrong one**.
+Existence is not identity, and the rule does not reach that.
+
+**Not promoted: one subsystem, so it fails RECURRENCE rather than merit.** It
+earns the clause the day a second independent subsystem measures the right
+quantity on the wrong artefact. Whoever finds it: point here for the first.
+
+**The clause was landed in CLAUDE.md and then backed out the same evening**, on
+frankB's objection, after this seat had asked to be corrected on exactly that
+test. Recorded rather than quietly reverted, because the promotion bar failing
+in the *flattering* direction — a rule that looks earned because two seats found
+adjacent things — is the failure this file's own promotion rule exists to catch.
+
+## A FIRST-WINS TABLE IS EXPOSED ONLY BY THE ARRANGEMENT THAT PUTS THE CORRECT ENTRY LAST — EVERY OTHER ORDER PASSES, AND THE COMMON ORDER IS ONE OF THEM
+
+**frankZ and frankB, 2026-09-11**, two tables with no code in common, each seat
+holding its instance for a day without seeing it as an instance of anything.
+
+Where a lookup scans from index 0 and takes the FIRST row for a key, two writers
+registering the same key make correctness depend on **lexical order alone**. The
+bug is therefore invisible in every arrangement that happens to put the correct
+entry first — and in both cases below, the ordinary spelling is such an
+arrangement.
+
+| | table | the two writers | the exposing arrangement |
+| --- | --- | --- | --- |
+| frankZ | unit aliases, `FindUnitOrAlias` | the two arms of a guarded-import `try` both binding `impl` | an **`else:`**, which puts the LIVE arm after the dead handler |
+| frankB | the method-call candidate scan | classes compiled so far, arity-checked | import order **`narrow, caller, wide`** — the one that puts the fitting class last |
+
+frankB's measurement is the cleaner statement of the general fact: **all five
+import orders that put the fitting class earlier compiled.** One of six orders
+fails. A six-row table sat in that ticket for a day.
+
+Mine is the same fact reached from the other side. In the ordinary no-`else`
+backend-selection idiom the live arm is lexically FIRST in *both* outcomes — the
+try body's import when the guard resolves, the handler's when it misses — so
+first-wins gives the right answer **by position**, and a dead arm's binding is
+structurally invisible. Adding `else:` inverts the order and the dead handler's
+alias wins: `('else', 'fallback', 2)` against CPython's `selected`, exit 0, no
+diagnostic.
+
+### Why this is worth a section rather than two ticket lines
+
+Because the passing arrangements are not a sample — **they are the population
+everyone writes.** A first-wins defect does not present as "sometimes wrong"; it
+presents as *works everywhere, then one file is silently wrong*, and the one
+file is the one that used the less common construct or the unlucky import order.
+Neither seat's test suite could have caught its own case, because both suites
+were written in the spelling that passes.
+
+**The check, and it costs one run:** when you find a registry that takes the
+first row for a key, do not ask whether the right value is registered. Ask
+**which orders put it second**, and write the fixture in one of those. If you
+cannot construct such an order, the table is not first-wins-sensitive and you
+have learned that cheaply.
+
+### Promotion — NOT promoted, and the reason is calibration, not merit
+
+By the letter of the bar this qualifies: two independent subsystems, no shared
+code, two seats, both measured. **It is deliberately not being promoted by this
+seat tonight**, because this seat landed a CLAUDE.md clause four hours earlier on
+a recurrence judgement that frankB then demonstrated was wrong — two adjacent
+findings mistaken for one mechanism. A seat that has just misread the promotion
+test once is the wrong seat to apply it again the same evening on its own
+authority, and the co-author has said they will not touch CLAUDE.md either way.
+
+So it sits here, flagged as a **ready EXTENSION candidate** — it belongs as a
+clause on `normalise-dont-special-case`'s "fixed one arm of a double case? grep
+for the sibling" or beside the guard rules, and it costs a sentence. Whoever has
+a third instance, or a second opinion on the two above: promote it, and cite
+both rows here.
