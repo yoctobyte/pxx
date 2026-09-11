@@ -24879,3 +24879,63 @@ not all of CPython's `ctypes`), which makes the bigger job the better-defined on
 **Not promoted to CLAUDE.md:** one instance, and it is an extension of the
 first-failure rule rather than a neighbour, so it would be a sentence there if it
 recurs. Recorded on the umbrella itself, where the misrouting actually happened.
+
+## A LINE-SCOPED MATCHER OVER WRAPPED PROSE TRUNCATES SILENTLY — AND THE REPAIR OVER-JOINS
+
+**Measured 2026-09-11 (frankuser, T; frankB asked for it to be here rather than
+only in a ticket).** Censusing slug-shaped ticket citations in `compiler/**` and
+`lib/**`, the first answer was **345 dangling** and the true figure is ~182. The
+single largest error — **146 of 345** — was citations that WRAP across comment
+lines. A line-scoped regex captures the head of the slug, ending in `-`, and a
+truncated prefix **still looks like a plausible identifier**, so it resolves
+against nothing and is reported as dangling with full confidence.
+
+**The class is not about slugs.** Any line-scoped matcher over wrapped prose has
+it: an identifier, a path, a URL, a flag name, a sha split across a comment's
+line break. It **fails by producing a confident wrong row rather than by
+erroring**, which is the house failure mode — correct about the line, wrong about
+the text. The hyphen-boundary sibling is the same animal wearing `\b`:
+`\bcompat-philosophy` matches *inside* `frontend-compat-philosophy.md`, because a
+hyphen is not a word boundary, so a longer name donates a false short one.
+
+**THE REPAIR IS WHERE THE SECOND HALF OF THE DAMAGE LIVES, AND IT IS WORSE,
+BECAUSE IT FABRICATES A ROW THAT NEVER EXISTED IN THE SOURCE AT ALL.** Stitching
+the continuation on is correct and the guard on *when* to stitch is what goes
+wrong. Three ways, measured, and they COMPOUND:
+
+| | |
+| --- | --- |
+| **stitch on "ends at end-of-line"** instead of "ends in a hyphen that is the line's last non-space character" | glues the next PROSE WORD on. Manufactured `bug-a-managed-locals-leak-at-**for**`, `bug-a-sizeof-real-**for**`, `bug-a-promoint-shr-yields-nothing-**the**` — the `for`/`the` are the first word of the following line of code or comment |
+| **UPPERCASE inside the identifier** | an `[a-z0-9-]` body truncates `bug-a-managed-locals-leak-at-ORDINARY-scope-exit-...` at the hyphen, which then looks wrapped, which fires the stitcher, which glues prose on. One character class produced two downstream errors |
+| **the AUTHOR elided it** — `bug-a-promoint-shr-yields-nothing-...` | deliberate shorthand, not a truncation. 10 instances; **all 10 resolve by prefix**, which is the control proving the shorthand was honest. Stitching across the ellipsis invents a name |
+
+So the sequence is: character class truncates → truncation looks like a wrap →
+stitcher joins prose → a confident dangling row for a citation that is **perfectly
+correct in the source.** No step errors and each is individually defensible.
+
+**The diagnostic that separates all three costs nothing: print the SOURCE LINE
+beside every row.** Three rows read by hand found three distinct classes in under
+a minute; no amount of re-running the aggregate would have. A census that emits
+only counts cannot be debugged, and a census emitting `slug<TAB>file:line` can.
+
+**And the general lesson is about the deliverable.** A reimplementation written
+**from the ticket's own prose description** of the first run produced **195 where
+the ticket said 177** — same author, same evening, same tree. A census whose
+method lives in prose is not a census anyone can re-run, the corrections are the
+durable artefact, and **the number is not.** Quote the corrections; commit the
+script.
+
+**Prior art, which already decided the hard half:** `tools/progress.py:2143`'s
+DANGLING-LINK aperture does this for wiki-links in ticket bodies and deliberately
+refuses bare slugs — *"the bare-slug regex matches too much prose to carry this
+without noise"* (frankD, 2026-08-30). That judgement was correct and the seven
+corrections above are its measurement on a harder population. **Before building a
+bare-identifier matcher over prose, check whether a CONVENTION (`[[...]]`, a
+`see:` prefix) makes the matcher trivial instead** — it usually does, and the
+version that only covers citations written after the convention lands is the cheap
+intersection.
+
+**Not promoted to CLAUDE.md:** it is a measurement-hygiene instance of rules the
+file already carries (a guard that cannot fail; choose a probe whose right answer
+differs from the default; the quantifier is the clause to measure). It earns a
+line there only if a second, unrelated subsystem hits the wrap-truncation class.
