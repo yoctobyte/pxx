@@ -14694,7 +14694,7 @@
    "bad": "3a1c1dc73fcbf70edb991efbbc1518ca05770512",
    "bad_untestable": false,
    "first_seen": false,
-   "good": "21eaa0eb66f71b901ebcb65d4dc71561beaefaa3",
+   "good": "eefa85d70c64b7eb16dd212d0711b530cefa3abd",
    "job": "tools-devtest#00",
    "migrated_at": "2026-09-11T20:19:53Z",
    "migrated_from": "plexus",
@@ -14705,9 +14705,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "965fd4c42d5ccbd1d959fe0d89d68c9be5c86407",
-    "1a7658326493b0f8acb71ec3ce5cd020bcfb4a75",
-    "eefa85d70c64b7eb16dd212d0711b530cefa3abd",
     "47fedc80f0818648fa3fe042ffe76ed391037335",
     "25af93d7726c46041ea621eb5ba11776f797ec62",
     "ad4db86ed03183e6a879b8a7f9c3dfb9e1cd1b70",
