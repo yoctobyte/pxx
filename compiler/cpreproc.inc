@@ -74,6 +74,17 @@ var
                               a 3-line macro invocation is labelled with its
                               first line, as gcc does, not its last }
   CPMarkFile   : Integer;   { state of the last marker emitted }
+  CPMarkPath   : AnsiString;  { ...and its PATH, which is the identity that
+    survives a build without -g. CPMarkFile holds a DWARF file id, and
+    DbgFileId answers 1 for EVERY path when DebugInfo is off -- so keying the
+    suppression below on it made every file transition look like no transition
+    in an ordinary build, and no return marker was ever emitted -- so the marker
+    stream carried ENTER edges only and a header's range never closed. Found and
+    fixed under
+    bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it,
+    whose own diagnosis named the wrong layer: it said the missing piece was an
+    ungated per-token table for C, and that table (PasMarkTokFile) is shared and
+    already had a C caller. The missing piece was here. }
   CPMarkLine   : Integer;
   CPMarkOutLine: Integer;
   { Where the file currently being processed would look for an `#include`.
@@ -495,7 +506,10 @@ begin
     (bug-c-static-functions-in-different-crtl-modules-collide). One short line
     per file transition; the lexer already skips markers, and everything DWARF
     does with them stays gated on DebugInfo at the consuming end. }
-  if (CPCurFileId = CPMarkFile) and
+  { PATH, not CPCurFileId: see CPMarkPath. The id is a DWARF file id and is 1
+    for everything without -g, which made this test `1 = 1` at every include
+    boundary and silently turned the marker stream into enter-markers only. }
+  if (CPCurPath = CPMarkPath) and
      (CPStmtLine = CPMarkLine + (CPOutLine - CPMarkOutLine)) then Exit;
   { A SECOND quoted field: the innermost enclosing `.c`, or absent when there is
     none. The first field alone only ever moved the attribution FORWARD into a
@@ -512,6 +526,7 @@ begin
     CPrepOutAppendStr('# ' + CPSmallIntStr(CPStmtLine) + ' "' + CPCurPath + '"');
   CPrepOutAppendCh(#10);
   CPMarkFile := CPCurFileId;
+  CPMarkPath := CPCurPath;
   CPMarkLine := CPStmtLine;
   CPMarkOutLine := CPOutLine;
 end;
@@ -3497,7 +3512,7 @@ begin
   CPMUserBase := CPMCount;
   CPPathAtDepth[0] := DbgSrcName;      { -g: the translation unit itself }
   CPOutLine := 1;
-  CPMarkFile := -1; CPMarkLine := 0; CPMarkOutLine := 1;
+  CPMarkFile := -1; CPMarkPath := #1'none'; CPMarkLine := 0; CPMarkOutLine := 1;
   { `-include <file>`: run each one as a real `#include "<file>"` line of its
     OWN synthetic source, ahead of the primary one. Not prepended to `src` --
     that is the obvious spelling and it is wrong, because it shifts every line

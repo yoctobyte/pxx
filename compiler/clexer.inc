@@ -520,6 +520,28 @@ begin
     rather than as a wrong line of the .c file. }
   if path = DbgSrcName then DbgMarkTokFile(TokCount, 1)
   else DbgMarkTokFile(TokCount, DbgFileId(path));
+  { ...and the UNGATED twin of that, which is what a diagnostic reads. The line
+    above is the DWARF table and returns early without -g, so before this a C
+    error inside an included header had no way to name the header at all: it
+    printed the line number the header gave it against no file, and the reader
+    supplied the `.c` they invoked. That is the worst shape in this class,
+    because the number is usually IN RANGE for the `.c` and therefore believable
+    -- `inc.h:2` reads as `m.c:2`, an innocent line -- where the Pascal and
+    NilPy arms of the same bug produced an out-of-range line that warns the
+    reader on sight (d3d5098a5, 584ca8ea8 -- this is the third arm of that
+    class, and neither of those commits named it).
+
+    PLANTED UNCONDITIONALLY, the main source included: a marker returning from a
+    header to the `.c` must CLOSE the header's range, or every token after the
+    `#include` keeps the header's name. `WriteDiagSourceFile` then suppresses
+    `path = DbgSrcName` on its own, exactly as it does for the main `.pas`.
+
+    A synthetic marker is never a file. `<crtl-prototype-pull>` reaches the C
+    module table through CInsertTokModuleRange and not through this routine, so
+    it cannot arrive here -- the guard is the same defensive one the C arm of
+    WriteDiagSourceFile carries, kept in step deliberately rather than left to
+    the reader to prove unreachable twice. }
+  if (path <> '') and (path[1] <> '<') then PasMarkTokFile(TokCount, path);
 end;
 
 procedure CLexOne;

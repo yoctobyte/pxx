@@ -11837,6 +11837,38 @@ test-core: $(COMPILER)
 	 echo "$$out" | grep -q '^  in: ' \
 	  && { echo 'cdiag_main: FAIL - the MAIN .c must not be named; the user typed it'; echo "$$out"; exit 1; }; \
 	 echo 'ok: cdiag_main leaves the main source unnamed'
+	# ...and an error inside an INCLUDED HEADER names the HEADER, which is the
+	# third arm of the class d3d5098a5 (Pascal) and 584ca8ea8 (NilPy) fixed and
+	# neither commit named. It FAILED WORSE than either: the header's line number
+	# is usually IN RANGE for the .c, so `inc.h:2` reads as `m.c:2` -- a real,
+	# innocent line -- where the other two arms produced an out-of-range line that
+	# warns the reader on sight.
+	#
+	# THE ROOT CAUSE WAS NOT THE PRINTER, IT WAS THE MARKER STREAM. CPSyncLine
+	# suppressed a marker when CPCurFileId = CPMarkFile, and CPCurFileId is
+	# DbgFileId(path), which answers 1 for EVERY path when DebugInfo is off -- so
+	# in an ordinary build every include boundary tested `1 = 1` and no RETURN
+	# marker was ever emitted. Hence the second row here: it is the one that
+	# reddens if the returns go away again, and it cannot pass by accident,
+	# because without a return marker the header's range never closes and the
+	# main source is named.
+	@printf 'int f(void);\nnope q;\n' > $(TESTTMP)/cdiag_inc.h
+	@printf '#include "cdiag_inc.h"\nint main(void){return f();}\n' > $(TESTTMP)/cdiag_hdr.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_hdr.c $(TESTTMP)/cdiag_hdr26 2>&1); \
+	 echo "$$out" | grep -q '^  in: .*cdiag_inc\.h$$' \
+	  || { echo 'cdiag_header: FAIL - an error inside an included header must name the header'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_header names the included header'
+	# The RETURN edge: the same header, but the error is back in the .c AFTER the
+	# include. The main source must stay unnamed -- if the header's range is left
+	# open this row reports the header for a line the header does not contain.
+	@printf 'int f(void);\n' > $(TESTTMP)/cdiag_ok.h
+	@printf '#include "cdiag_ok.h"\nnope q;\nint main(void){return 0;}\n' > $(TESTTMP)/cdiag_ret.c
+	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_ret.c $(TESTTMP)/cdiag_ret26 2>&1); \
+	 echo "$$out" | grep -q 'error: stray token' \
+	  || { echo 'cdiag_return: FAIL - expected the deliberate error to be reported'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: ' \
+	  && { echo 'cdiag_return: FAIL - after returning from a header the main .c must not be named'; echo "$$out"; exit 1; }; \
+	 echo 'ok: cdiag_return closes the header range at the return marker'
 	# An unterminated C construct must stop at the end of the C text. There is one
 	# shared token array: the C program's tkEOF is DELETED when the pulled units
 	# are appended, so `while CurTok.Kind <> tkEOF` could not fire until the Pascal
