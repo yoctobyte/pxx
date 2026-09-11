@@ -571,7 +571,36 @@ RGBA buffer on both runtimes it exercises `crc32` arity, `compress` arity,
 fails loudly. neo-dd will produce the fixed input buffer on request. That is a
 conformance fixture with its own oracle for the cost of asking.
 
-## THE DEMO WOULD RUN WRONG EVEN WITH EVERY MODULE COMPILING — 4 SITES, SILENT None, IN THE PIN AND AT HEAD
+## ~~THE DEMO WOULD RUN WRONG EVEN WITH EVERY MODULE COMPILING~~ — RETRACTED IN FULL, 2026-09-11
+
+> **RETRACTED BY ITS OWN AUTHOR (frankuser), SAME DAY, AND THE RANKING GOES WITH
+> THE WORDING.** There is **no third gate**. lekkerzeilen's four sites use the
+> RELATIVE spelling (`from .platform import ...`) and the relative spelling does
+> **not** leak. frankZ settled it by building a binary that disables only their own
+> hunk (`83b883221d70` = HEAD minus the `SoftUnitMissed` fix, nothing else) and
+> running the positive control **in the same run**: the absolute shape leaks to
+> None on that binary, proving the bug is present, and the relative shape gives 27
+> anyway. So this section's conclusion is false, its four sites were never
+> affected, and **the 29-names-across-4-sites count is a true statement about the
+> source and a false one about exposure.** Two gates on this umbrella, not three.
+>
+> **What survives, stated as narrowly as it should be:** a real silent wrong-value
+> bug on the **ABSOLUTE** from-import spelling of a module containing a guarded
+> import, present in pin `095ef4811a5b` (v407), fixed at `0f0c04b8b`. **Zero known
+> live sites in lekkerzeilen.** Worth having fixed — silent, in the pin, ordinary
+> construct — and it does **not** gate this umbrella. Do not rank it as if it does.
+>
+> **All three readings of those four sites were wrong in turn** — mine (silent
+> None), frankZ's (hard error instead), and the truth (no effect). Mine failed on
+> an untested spelling; theirs failed on a MASKED CONTROL, because the pin cannot
+> compile `from .subpackage import NAME` at all, so both arms failed for a reason
+> unrelated to the subject and the probe read as a clean discriminating result.
+> **A control only controls if both arms can actually exercise the mechanism; two
+> failures that agree are not a comparison.** The thing that separated all three
+> was building a binary that isolates ONE hunk.
+>
+> The body below is kept as history because the mechanism it describes is real —
+> only its applicability to this umbrella was wrong. Do not act on it.
 
 Measured 2026-09-11 (frankuser), from frankZ's `SoftUnitMissed` finding, with a
 control. **This is a silent wrong VALUE, not a compile error**, and it is on this
