@@ -9029,6 +9029,37 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_has_a_line.main \
 	  "$$(./$(COMPILER) test/test_a_semantic_diagnostic_in_a_used_unit_has_a_line.pas $(TESTTMP)/test_maindiagline26 2>&1 | head -1)" \
 	  "pascal26:30: error: incompatible types: cannot assign Pointer to record"
+	@# ...AND THE SAME DIAGNOSTIC NOW NAMES ITS FILE. The rows above pin the LINE
+	@# and pass with no `in:` line at all -- `head -1` sees to that -- so a
+	@# diagnostic reading `pascal26:18:` against a three-line driver left the
+	@# reader supplying the filename they invoked. These two rows are the
+	@# coordinate's other half and they are a PAIR: the unit row asserts the path
+	@# appears, the main-file row asserts it does NOT. Without the second, a fix
+	@# that printed `in:` unconditionally would pass the first while telling every
+	@# reader the name of the file they just typed.
+	@# NO LINE NUMBER IS PINNED HERE, deliberately: the assertion is a PATH, so it
+	@# does not go stale when the fixture grows, and silent_assertion_check.py's
+	@# STALE-PIN rule has nothing to check.
+	@# IT IS NOT ASTFile, WHICH IS WHY THIS WORKS AT ALL -- measured 2026-09-11:
+	@# ASTFile is a DWARF file id and paslexer.inc's LexMarkDbgLines guard
+	@# deliberately gives a `uses`d Pascal unit none, so it is 0 here with AND
+	@# without -g. The token index answers through PasSrcOfTok instead, the same
+	@# table the 3119 Error( sites already print a correct `in:` from.
+	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_names_its_file.unit \
+	  "$$(./$(COMPILER) -Futest/pascal_units test/pascal_units/driver_a_semantic_error_in_a_unit.pas $(TESTTMP)/test_unitdiagfile26 2>&1 | sed -n '2p')" \
+	  "  in: test/pascal_units/unit_a_semantic_error_in_a_unit.pas"
+	@if ./$(COMPILER) test/test_a_semantic_diagnostic_in_a_used_unit_has_a_line.pas $(TESTTMP)/test_maindiagfile26 2>&1 | grep -q '^  in: '; then \
+	  echo "FAIL: a MAIN-FILE diagnostic grew an 'in:' line -- the reader is being told the name of the file they just typed"; exit 1; \
+	else echo "ok: a main-file diagnostic still prints no 'in:' line"; fi
+	@# A SECOND CLASS, so the pair above is not one call site passing for a fix --
+	@# AND IT WAS CHOSEN BY MEASURING THE PRE-FIX BINARY, which is the only way to
+	@# know a row here can fail. Five candidates were run against it: record
+	@# ordering and an undefined `goto` label ALREADY printed `in:` before the
+	@# fix, so a row on either would have been green on arrival for a bug it never
+	@# exercised. The element-count form of Initialize/Finalize did not.
+	@tools/expect_same.sh test_a_semantic_diagnostic_in_a_used_unit_names_its_file.second \
+	  "$$(./$(COMPILER) -Futest/pascal_units test/pascal_units/driver_a_second_lowering_error_in_a_unit.pas $(TESTTMP)/test_unitdiagfile2_26 2>&1 | sed -n '2p')" \
+	  "  in: test/pascal_units/unit_a_second_lowering_error_in_a_unit.pas"
 	@# A CLASS CONST IN A FIELD'S ARRAY BOUND. The const evaluator recovers a
 	@# class const from two contexts and a field declaration is in neither:
 	@# ParsingClassConstCi is live only inside a `const` SECTION, CurMethClass

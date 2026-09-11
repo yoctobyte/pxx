@@ -104,9 +104,54 @@ end;
 
 procedure ErrorAt(line: Integer; const msg: AnsiString);
 { Fatal error for a site the CURRENT TOKEN is nowhere near -- an IR-lowering
-  check. See the `withContext` note on ErrorPrintAt. }
+  check. See the `withContext` note on ErrorPrintAt.
+
+  PREFER ErrorAtTok WHERE A NODE IS IN HAND: this form can print a line and
+  nothing else, so a diagnostic from inside a `uses`d unit gives a bare
+  `pascal26:18:` and the reader supplies the file they invoked. }
 begin
   ErrorPrintAt(line, msg, False);
+  Halt(1);
+end;
+
+procedure WriteDiagSourceFileOfTok(tok: Integer);
+{ The `in:` line for a diagnostic that knows a TOKEN but is not standing on it.
+
+  WriteDiagSourceFile reads the LEXER's position, which after the parse is at
+  EOF inside the builtin units -- so for a post-parse check it names a file the
+  author never wrote, which is the failure ErrorNoPos's header records two
+  agents losing time to. Suppressing it was therefore right GIVEN A LINE AND
+  NOTHING ELSE, and this routine is what makes the `else` available: handed the
+  node's own token, PasSrcOfTok answers from PasSrcRange*, the same table the
+  3119 Error( sites already print a correct `in:` from for a used unit.
+
+  IT IS NOT ASTFile, AND THAT IS THE POINT -- MEASURED 2026-09-11. ASTFile is a
+  DWARF file id, and paslexer.inc's LexMarkDbgLines guard DELIBERATELY gives a
+  `uses`d Pascal unit none because the RTL would swamp the line table, so
+  ASTFile is 0 for exactly the nodes corpus work is made of: probed at the
+  assignment check, `astfile=0 dbgfiles=0` with AND without -g. A fix reading
+  ASTFile would have printed nothing and looked implemented.
+
+  `near:` stays suppressed and is not an oversight: that window is a run of
+  tokens around the LEXER's cursor, and moving it to an arbitrary token would
+  print a window the parse never stood in.
+
+  Empty path, or the main file, prints nothing -- the same two silences
+  WriteDiagSourceFile keeps, so a main-file diagnostic does not grow a line
+  saying what the reader already typed. }
+var path: AnsiString;
+begin
+  if (tok < 0) or (tok >= TokCount) then Exit;
+  path := PasSrcOfTok(tok);
+  if (path <> '') and (path <> DbgSrcName) then
+    writeln('  in: ', path);
+end;
+
+procedure ErrorAtTok(line, tok: Integer; const msg: AnsiString);
+{ ErrorAt plus the node's token, so the `in:` line can be printed. }
+begin
+  ErrorPrintAt(line, msg, False);
+  WriteDiagSourceFileOfTok(tok);
   Halt(1);
 end;
 
@@ -140,13 +185,27 @@ begin
   Halt(1);
 end;
 
+procedure ErrorAtRecoverTok(line, tok: Integer; const msg: AnsiString); forward;
+
 procedure ErrorAtRecover(line: Integer; const msg: AnsiString);
 { ErrorAt's recovering twin, and ErrorRecover's out-of-position twin: same
   contract as ErrorRecover -- a SEMANTIC failure whose caller leaves something
   well-formed behind -- reported against an AST node's line because the lowering
-  is past the parser's position. }
+  is past the parser's position.
+
+  PREFER ErrorAtRecoverTok WHERE A NODE IS IN HAND, for ErrorAt's reason. }
 begin
   ErrorPrintAt(line, msg, False);
+  CountRecoveredError;
+end;
+
+procedure ErrorAtRecoverTok(line, tok: Integer; const msg: AnsiString);
+{ ErrorAtRecover plus the node's token. The `in:` line goes BEFORE
+  CountRecoveredError, which can halt on a cascading file -- otherwise the last
+  diagnostic before the cutoff is the one that loses its file. }
+begin
+  ErrorPrintAt(line, msg, False);
+  WriteDiagSourceFileOfTok(tok);
   CountRecoveredError;
 end;
 

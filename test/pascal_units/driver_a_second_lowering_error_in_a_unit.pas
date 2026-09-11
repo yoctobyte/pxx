@@ -1,0 +1,3 @@
+program driver_a_second_lowering_error_in_a_unit;
+uses unit_a_second_lowering_error_in_a_unit;
+begin Go; end.

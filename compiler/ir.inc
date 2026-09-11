@@ -5230,7 +5230,7 @@ begin
      (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx] >= 0) and
      CallResultIsNotProcedural(argAST) then
-    ErrorAtRecover(ASTLine[argAST],
+    ErrorAtRecoverTok(ASTLine[argAST], ASTTok[argAST],
       'incompatible types: a procedural parameter cannot take the RESULT of a call'
       + ' -- write @' + CallResultProcName(argAST)
       + ' to pass the routine itself');
@@ -11966,7 +11966,7 @@ begin
           variants would need the same loop with a different per-element step
           and has no demand behind it yet.
           feature-p-the-element-count-form-of-initialize-and-finalize }
-        ErrorAtRecover(ASTLine[node],
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
           'Initialize/Finalize(x, n): the element-count form is implemented for'
           + ' a RECORD element type only')
       else if (miTk = tyAnsiString) or (miTk = tyString) then
@@ -12928,7 +12928,7 @@ begin
           The sibling arithmetic arm above still uses plain `Error` and reports
           the wrong line for the same reason; left as found rather than changed
           under a different ticket's gate. }
-        ErrorAt(ASTLine[node], 'no operator overload found for ordering a record operand '
+        ErrorAtTok(ASTLine[node], ASTTok[node], 'no operator overload found for ordering a record operand '
               + '(< > <= >= need an explicit `class operator`)'
               + ' — PXXDBG=a.opovl prints the lookup and every candidate')
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
@@ -13509,7 +13509,7 @@ begin
         a cast or a call result is left alone. A diagnostic, not a type system. }
       if (NodeSemIdOf(ASTLeft[node]) >= 0) and (NodeSemIdOf(ASTRight[node]) >= 0) and
          (NodeSemIdOf(ASTLeft[node]) <> NodeSemIdOf(ASTRight[node])) then
-        ErrorAt(ASTLine[node], 'cannot assign a value of enum type ' +
+        ErrorAtTok(ASTLine[node], ASTTok[node], 'cannot assign a value of enum type ' +
               GetTokenStrFromRaw(EnumTypeNOff[NodeSemIdOf(ASTRight[node])],
                                  EnumTypeNLen[NodeSemIdOf(ASTRight[node])]) +
               ' to a variable of enum type ' +
@@ -13539,7 +13539,7 @@ begin
            AssignSideKind(ASTRight[node], asgSrcTk) and
            AssignKindsIncompatible(asgDstTk, asgSrcTk) and
            not AssignHasConversionOperator(ASTRight[node], ASTLeft[node]) then
-          ErrorAtRecover(ASTLine[node],
+          ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
             'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
             ' to ' + TypeKindSpelling(asgDstTk));
       end;
@@ -13580,7 +13580,7 @@ begin
       if (not CProgramMode) and (not PyProgramMode) and
          ASTNodeIsWholeArray(ASTLeft[node]) and
          (not DbgWholeArrRhsShaped(ASTRight[node])) then
-        ErrorAtRecover(ASTLine[node],
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
           'incompatible types: cannot assign ' +
           Syms[ASTIVal[ASTRight[node]]].Name + ' (' +
           TypeKindSpelling(Syms[ASTIVal[ASTRight[node]]].TypeKind) +
@@ -13658,7 +13658,7 @@ begin
           destination's. REFUSED rather than left to the bare store, because the
           bare store is the address bug this whole arm exists for. }
         if asgFaCtor < 0 then
-          ErrorAtRecover(ASTLine[node],
+          ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
             'cannot assign this fixed-length array to a dynamic array: only a '
           + 'single-dimensional array of plain elements, or a 2-D array whose '
           + 'rows match the destination''s row length, is copied element by '
@@ -13700,7 +13700,7 @@ begin
       if (not CProgramMode) and (not PyProgramMode) and
          (NodeProcSlotSig(ASTLeft[node]) >= 0) and
          CallResultIsNotProcedural(ASTRight[node]) then
-        ErrorAtRecover(ASTLine[node],
+        ErrorAtRecoverTok(ASTLine[node], ASTTok[node],
           'incompatible types: a procedural slot cannot take the RESULT of a call'
           + ' -- write @' + CallResultProcName(ASTRight[node])
           + ' to store the routine itself');
@@ -13765,12 +13765,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       begin
         varIdx := ASTIVal[ASTRight[node]];   { the bodied target proc }
         if Procs[varIdx].ParamCount > 6 then
-          ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
+          ErrorAtTok(ASTLine[node], ASTTok[node], '@' + Procs[varIdx].Name +
             ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with more than 6 parameters is not C-callable yet; this works on x86-64, aarch64, arm32, i386 and riscv32 (feature-cdecl-bodied-sysv-prologue)');
         for varIdx2 := 0 to Procs[varIdx].ParamCount - 1 do
           if TypeIsFloat(Procs[varIdx].Params[varIdx2].TypeKind) and
              (not Procs[varIdx].Params[varIdx2].IsRef) then
-            ErrorAt(ASTLine[node], '@' + Procs[varIdx].Name +
+            ErrorAtTok(ASTLine[node], ASTTok[node], '@' + Procs[varIdx].Name +
               ' as a cdecl function pointer: on ' + TargetArchName(TargetArch) + ' a Pascal-bodied proc with a by-value float parameter is not C-callable yet; this works on x86-64, aarch64, arm32, i386 and riscv32 (feature-cdecl-bodied-sysv-prologue)');
       end;
 

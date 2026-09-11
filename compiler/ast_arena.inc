@@ -28,7 +28,7 @@ begin
   SetLength(ASTRight, n);      SetLength(ASTTk, n);        SetLength(ASTLiftedVar, n);
   SetLength(ASTCallParenless, n);
   SetLength(ASTSemId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
-  SetLength(ASTFile, n);
+  SetLength(ASTFile, n);       SetLength(ASTTok, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
   SetLength(ASTNilChk, n);
   SetLength(ASTPyUser, n);
@@ -118,6 +118,17 @@ begin
   ASTFile[ASTNodeCount] := DbgFileOfTok(TokPos);
   if (ASTFile[ASTNodeCount] <= 1) and (TokPos > DbgMainTokEnd) then
     ASTFile[ASTNodeCount] := 0;
+  { ...AND THE RAW TOKEN INDEX, WHICH IS A DIFFERENT QUESTION FROM ASTFile AND
+    SURVIVES THE ZEROING ABOVE. ASTFile is a DWARF file id and a `uses`d Pascal
+    unit deliberately has none (paslexer.inc's LexMarkDbgLines guard: the RTL
+    would swamp the line table), so it is 0 for precisely the nodes corpus work
+    consists of -- measured, `astfile=0 dbgfiles=0` with AND without -g. The
+    token index costs one Integer and lets a post-parse diagnostic ask
+    PasSrcOfTok, the same table the 3119 Error( sites already answer `in:` from
+    correctly. Stamped unconditionally and never zeroed: a token index has no
+    second meaning to collide with, which is the whole reason for a separate
+    slot rather than another reader of ASTFile. }
+  ASTTok[ASTNodeCount] := TokPos;
   Result := ASTNodeCount;
   Inc(ASTNodeCount);
 end;
@@ -226,6 +237,7 @@ begin
   ASTCallParenless[Result] := ASTCallParenless[node];
   ASTLine[Result]     := ASTLine[node];
   ASTFile[Result]     := ASTFile[node];
+  ASTTok[Result]      := ASTTok[node];
   ASTQChk[Result]     := ASTQChk[node];
   ASTRChk[Result]     := ASTRChk[node];
   ASTIChk[Result]     := ASTIChk[node];
@@ -854,8 +866,8 @@ procedure CaseLabelDiag(lab: Integer; const msg: AnsiString; recover: Boolean);
 { One label diagnostic, against the LABEL's own line — the caller may be the
   parser (position already past `end`) or the lowering (position meaningless). }
 begin
-  if recover then ErrorAtRecover(ASTLine[lab], msg)
-  else ErrorAt(ASTLine[lab], msg);
+  if recover then ErrorAtRecoverTok(ASTLine[lab], ASTTok[lab], msg)
+  else ErrorAtTok(ASTLine[lab], ASTTok[lab], msg);
 end;
 
 { Lexicographic 3-way compare; orders string labels exactly the way the

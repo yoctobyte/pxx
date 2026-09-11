@@ -2933,3 +2933,49 @@ it held again.
 precisely because no default, size or pointer width can produce it, and both
 directive rows are asserted in BOTH directions since an evaluator that resolved
 nothing answers False and would agree with a one-directional test.
+
+## 2026-09-11 | frankH | compiler/{defs,ast_arena,lexer,ir}.inc | a lowering diagnostic in a used unit names its file
+
+THE TICKET'S OWN CENTRAL CLAIM WAS FALSE AND THAT IS THE REUSABLE PART. It said
+the data already existed — "every AST node already records ASTFile[node] ... hand
+the lowering checks the id" — and that is a plausible mechanism, stated
+confidently, that nobody had run. Probed by printing what the node actually
+carries at the assignment check: `astfile=0 dbgfiles=0`, with AND without -g,
+with -g verified honoured independently (the binary carries .debug_line).
+
+The cause is in paslexer.inc's own comment at the marking site: the DWARF line
+table takes only sources that OPTED IN, and a `uses`d unit is deliberately absent
+because the RTL would swamp it (dwarf_smoke.sh T5: 6 rows with the guard, 3663
+without). So ASTFile is 0 for EXACTLY the nodes corpus work is made of, and a fix
+written to the ticket's instruction would have printed nothing and looked
+implemented — a green that means the opposite of what it says.
+
+THE NODE WAS MISSING A TOKEN INDEX, NOT A FILE ID. PasSrcOfTok answers from
+PasSrcRange*, which IS populated for used units — that is how the 3119 Error(
+sites already print a correct `in:` and why 5 of the 6 measured classes were fine
+all along. Added ASTTok to the arena, stamped with TokPos at allocation and NEVER
+zeroed: a token index has no second meaning to collide with, which is the whole
+argument for a separate slot instead of a second reader of ASTFile. That also
+makes frankS's ASTFile-collision warning moot here by construction rather than by
+care. WriteDiagSourceFileOfTok prints `in:` from a token; ErrorAtTok and
+ErrorAtRecoverTok take one; 11 lowering sites converted (9 ir.inc, 2
+ast_arena.inc). ir.inc:676 is left alone — it reports against IRLine[i], an IR
+instruction, which has no token. `near:` stays suppressed and that is not an
+oversight: it is a window around the LEXER's cursor and moving it to an arbitrary
+token would print a window the parse never stood in.
+
+THE SECOND-CLASS ROW WAS A GUARD THAT COULD NOT FAIL, AND ONLY THE CONTROL FOUND
+IT. I first asserted record ordering as the second class. Run against the PRE-FIX
+binary it already printed `in:` — so did an undefined goto label. Both rows would
+have been green on arrival for a bug they never exercised, and both look like
+perfectly good second classes from the source. Five candidates were measured
+against the pre-fix binary; the element-count form of Initialize/Finalize is the
+one that genuinely lacked the line, and the fixture is now that. The lesson is the
+cheap one: a second case picked for looking DIFFERENT is not a second case, and
+the pre-fix binary is right there while you still have it stashed.
+
+Three rows wired, and the third is the pair's other half — the MAIN-FILE control
+asserting `in:` does NOT appear. Without it a fix printing the line
+unconditionally passes the first two while telling every reader the name of the
+file they just typed. No row pins a line number; the assertion is a PATH, so it
+does not go stale as a fixture grows.

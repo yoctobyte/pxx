@@ -3,13 +3,13 @@ slug: bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all
 track: P
 type: bug
 prio: 50
-status: backlog
-owner: ""
+status: done
+owner: frankH
 created: 2026-09-11
 found-by: frankH
 tags: [diagnostics, uses, corpus, fpc-umbrella, srcmap]
 blocked-by: []
-summary: "The 71 `ErrorAt`/`ErrorAtRecover` call sites — the IR-lowering checks — print a line and NO `in:` file, so a diagnostic from inside a `uses`d unit gives a bare `pascal26:18:` and the reader supplies the file they invoked. THE FIX IS SMALLER THAN IT LOOKS AND THE DATA ALREADY EXISTS: `ErrorAt` takes a LINE and `WriteDiagSourceFile` derives the path from the CURRENT TOKEN (EOF by then), so suppressing it is correct given what `ErrorAt` is handed — but every AST node already records `ASTFile[node]`, a DWARF file id stamped at allocation one line below `ASTLine[node]`, and `DbgFileName[id-2]` is its path. Hand the lowering checks the id. NARROWED 2026-09-11 (frankS's counter-observation): this is NOT 'semantic diagnostics' as a class — 5 of 6 error classes measured inside a used unit DO name their file, `Error(` has 3119 call sites against `ErrorAt`'s 71, and the first version of this ticket asserted the wide claim from ONE fixture."
+summary: "FIXED — and THIS TICKET'S OWN CENTRAL CLAIM WAS FALSE, which is the part worth reading. It said the data already existed and the lowering checks need only be handed ASTFile. Probed 2026-09-11: `astfile=0 dbgfiles=0`, with AND without -g, because paslexer.inc's LexMarkDbgLines guard DELIBERATELY keeps a `uses`d unit out of the DWARF file table (the RTL would swamp it) — so ASTFile is 0 for exactly the nodes corpus work is made of, and a fix written to the instruction would have printed nothing and looked implemented. The node was missing a TOKEN INDEX, not a file id: PasSrcOfTok answers from PasSrcRange*, which IS populated for used units and is how the 3119 Error( sites already print `in:` correctly. Added ASTTok to the arena (stamped at alloc, never zeroed, carried by CloneAST), WriteDiagSourceFileOfTok, and ErrorAtTok/ErrorAtRecoverTok; 11 lowering sites converted. `near:` stays suppressed on purpose. 3 rows wired, one of them the main-file control that a fix printing `in:` unconditionally would fail. The second-class row was first written on record ordering, which the PRE-FIX binary already answered — caught by running the control, and repointed at a class measured to lack it."
 ---
 
 # The population, measured — and the first version of this ticket was wrong about it
@@ -152,3 +152,77 @@ Note also which mechanism this touches: the `in:` line comes from
 ASTFile is the DWARF neighbour. They fail differently, so a fixture built to
 probe one says nothing about the other — worth keeping straight, because "line
 and file travel together" (`ir.inc:9629`) is a statement about the DWARF half.
+
+## RESOLVED — and this ticket's own central claim was false
+
+**"THE FIX IS SMALLER THAN IT LOOKS AND THE DATA ALREADY EXISTS ... every AST
+node already records `ASTFile[node]` ... Hand the lowering checks the id."** It
+does not exist. Probed at the assignment check on 2026-09-11 by printing the
+value the node actually carries:
+
+```
+pascal26:10: error: PROBE astfile=0 dbgfiles=0 :: incompatible types: ...
+```
+
+**`astfile=0 dbgfiles=0`, with AND without `-g`** — `-g` verified honoured
+independently (the binary carries a `.debug_line` section). The cause is in
+`paslexer.inc:4070-4079`, in its own comment:
+
+> The DWARF line table is a different question ... only under -g, and only for a
+> source that was **opted in**. A `uses`d unit is **deliberately absent from it
+> (the RTL would swamp the table)**.
+
+So `ASTFile` is 0 for **exactly** the nodes corpus work consists of, and the
+exclusion is load-bearing — `tools/dwarf_smoke.sh` T5 counts 6 rows with the
+guard against 3663 without. A fix written to this ticket's instruction would
+have printed nothing and looked implemented. **This is the ticket's own hazard
+rule firing on the ticket**: a plausible mechanism, stated confidently, that
+nobody had run.
+
+### What actually carries the answer
+
+`PasSrcOfTok` → `PasSrcRange*`, which **is** populated for used units — that is
+how the 3119 `Error(` sites already print a correct `in:` line, and it is why 5
+of the 6 classes in the table above were fine all along. The node was missing a
+**token index**, not a file id.
+
+- `ASTTok` added to the arena beside `ASTLine`/`ASTFile`, stamped with `TokPos`
+  at allocation and **never zeroed** — a token index has no second meaning to
+  collide with, which is the whole reason for a separate slot rather than a
+  second reader of `ASTFile`. frankS's `ASTFile` collision warning is therefore
+  moot for this fix by construction, not by care.
+- `WriteDiagSourceFileOfTok(tok)` prints `in:` from a token rather than the
+  lexer's EOF position. `near:` stays suppressed and that is not an oversight:
+  it is a window around the LEXER's cursor, and moving it to an arbitrary token
+  would print a window the parse never stood in.
+- `ErrorAtTok` / `ErrorAtRecoverTok`, and **11 lowering sites** converted (9 in
+  `ir.inc`, 2 in `ast_arena.inc`). `ir.inc:676` is left alone on purpose — it
+  reports against `IRLine[i]`, an IR instruction, which has no token.
+
+### The second-class row was a guard that cannot fail, and the control caught it
+
+The first version of the test asserted record ordering as its second class.
+Run against the **pre-fix** binary, record ordering **already printed `in:`** —
+so would an undefined `goto` label. Both rows would have been green on arrival
+for a bug they never exercised. Five candidates were measured against the
+pre-fix binary and the element-count form of `Initialize/Finalize` is the one
+that genuinely lacked the line; the fixture is now that.
+
+### Measured
+
+| row | pre-fix | post-fix |
+| --- | --- | --- |
+| assignment check in a used unit | no `in:` | `in: test/pascal_units/unit_a_semantic_error_in_a_unit.pas` |
+| `Initialize/Finalize` element count in a used unit | no `in:` | names its unit |
+| the same diagnostic in the MAIN file | no `in:` | **still no `in:`** |
+
+The third row is the pair's other half: without it, a fix printing `in:`
+unconditionally would pass the first two while telling every reader the name of
+the file they just typed. No row pins a line number — the assertion is a PATH,
+so it does not go stale as a fixture grows.
+
+The two pre-existing rows that pin the LINE are unregressed; they use `head -1`
+and never saw the second line either way.
+
+## Log
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
