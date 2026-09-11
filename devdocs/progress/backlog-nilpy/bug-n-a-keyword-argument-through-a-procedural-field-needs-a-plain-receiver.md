@@ -63,3 +63,71 @@ All four receiver spellings above, positional and keyword, plus a field rebound
 to a different function (the reason the field carries no static signature), plus
 `test_nilpy_callable_field_all_shapes` and `test_nilpy_field_holding_a_def`
 green.
+
+---
+
+## 2026-09-11, frankB — it is a CORPUS wall, plus two rows this ticket did not have
+
+Measured at compiler `73219e9ca3b7`. I nearly filed this a second time under a
+WRONG generalisation; `tools/progress.sh check`'s NEAR-DUP row is what stopped
+it, and the correction is worth recording because the wrong framing is the
+tempting one.
+
+**I had it as "a callable FIELD does not take keywords, while a variable, a dict
+value and a list element do".** That is false, and this ticket's title had it
+right all along: the field is not the discriminator, the RECEIVER EXPRESSION is.
+One callable field, five receiver shapes:
+
+| receiver | `obj.b(room=2, laden=5)` |
+| --- | --- |
+| a plain name, `h.b(...)` | **correct** — `('made', 5, 2)` |
+| a function call, `g().b(...)` | **correct** |
+| a list subscript, `hs[0].b(...)` | `error: undefined variable (room)` |
+| a dict subscript, `hd['k'].b(...)` | `error: undefined variable (room)` |
+| a constructor call, `K(make).b(...)` | `error: undefined variable (room)` |
+
+The dict-subscript row is new here; the ticket named a subscript without saying
+which, and both spellings refuse. Written OUT of declaration order on purpose —
+`b(laden=5, room=2)` and `b(5, 2)` agree, so an in-order row cannot tell a
+working door from one that merely drops the names.
+
+### It is a corpus wall now
+
+`lekkerzeilen/traffic.py:375`, and it is the real remaining wall in that module:
+
+```python
+self.boat = (KINDS[kind].build(laden=wanted, room=room)
+             if KINDS[kind].cargo else KINDS[kind].build())
+```
+
+`build` is in `Kind.__slots__` (traffic.py:766) holding `vessel.spits`,
+`vessel.barge` and so on. Varied to find the boundary: positional arguments
+compile, hoisting the receiver to a local does NOT help, removing the
+conditional expression does NOT help. Which fits this ticket exactly — hoisting
+to a local would have helped if the field were the problem, and it does not,
+because `KINDS[kind]` is still a subscript at the point that matters.
+
+The `:277` arity error in front of it is a SUBJECT-ONLY artefact and not a bug:
+traffic.py does not import world, so exactly one class declares `nearest` and
+the compiler takes its statically-resolved arm. Compile traffic beside world and
+`:277` is gone and `:375` is the wall.
+
+### Two messages, one construct
+
+Worth knowing before anyone counts these as two walls:
+
+| context | message |
+| --- | --- |
+| the corpus, traffic.py:375 | `expected ')' before '='` |
+| a two-module reduction of the same shape | `undefined variable (laden)` |
+
+Same call, same door, discriminated by what else is linked — the message-level
+version of the cascade artefact.
+
+### Positive control for whoever fixes it
+
+The plain-name and function-call receivers must KEEP working, out of declaration
+order, and a dict of two functions with different parameter names must still
+bind per-callee (`alpha(laden, room)` and `beta(width, depth)` in one dict).
+`test/test_nilpy_double_star_at_a_callable_value_call.npy` pins the `**`
+spelling of the same family and is the file to extend.
