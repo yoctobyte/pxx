@@ -4,7 +4,7 @@ track: N
 prio: 75
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
@@ -72,3 +72,38 @@ all 18 rows: `True`/`False`, `0`/`1`/`-1`, `0.0`/`2.5`, `''`/`'x'`, `[]`/`[1]`,
 literal (so the constant folder is not what is being tested). So this is not a
 broken `not` — it is a `not` with **no C-pointer case**, and everything native
 is correct. Fix the missing case; do not touch the working ones.
+
+## RESOLVED 2026-09-11 by frankuser
+
+Fixed as the FOURTH instance of one bug, not as a pointer bug. `not` lowered to
+AN_NOT (Pascal's bitwise complement) whenever `PyNumeric` said the operand was
+numeric, and `PyNumeric` lists only `tyInteger`, `tyInt64` and the floats. So
+every sized/unsigned integer, `size_t`, and `tyPointer` got COMPLEMENTED, and a
+complement of a non-zero value is non-zero, i.e. TRUE. String, container and
+object each shipped as "always True" before this; the pointer was the fourth.
+
+`PyNotTestsAgainstZero` now names the widths explicitly and lowers `not x` to
+`x = 0` for all of them, `tyPointer` included.
+
+Verified against the ticket's own reported shape rather than a probe of my
+choosing:
+
+```python
+import "/usr/include/string.h"
+p = strchr("hello", 122)   # 'z' is absent -> NULL
+print("not p =", not p)    # True   (was True, correctly, by accident)
+q = strchr("hello", 101)   # 'e' is present -> non-NULL
+print("not q =", not q)    # False  (was TRUE -- the defect)
+```
+
+Both rows now correct. Note which row is load-bearing: the NULL row passed
+before the fix too, so a fixture asserting only `not <null>` would have
+certified the bug. The non-NULL row is the whole test.
+
+Regression test `test/test_nilpy_not_on_a_c_width_integer` wired against
+`$(COMPILER)` and NOT `$(PXX_STABLE)`, because the pinned compiler FAILS it on
+exactly the `not nonzero` row -- which is what makes it a regression test rather
+than a restatement. It will stay that way until someone pins.
+
+## Log
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

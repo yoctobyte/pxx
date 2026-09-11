@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
-summary: "`f(*seq)` is `error: expected expression`. 59 call sites in lekkerzeilen's entry-point closure, 35 of them the mixed `f(a, *seq)` form and one `f(**mapping)`; 38 of the 59 are in app.py alone. This is the wall the demo now stands at (app.py:626) after five earlier walls were cleared, and it is NOT patchable in the corpus the way the earlier ones were -- at 59 idiomatic sites the feature is cheaper than the edits."
+summary: "MOSTLY LANDED 2026-09-11 -- ONE SHAPE LEFT, and the original summary below was wrong about the scope. A 6-shape matrix showed five already worked before any fix; the real gap was an ARITY DEFERRAL on the runtime-dispatch path, fixed by PyCallHasStarArgAt (landed in 55981bc63). Re-measured at that commit against CPython: f(*xs), f(1,*xs), f(**d) and a statically-typed method's K().m(*xs) all compile and all match. THE ONE REMAINING SHAPE is a star-arg on a DYNAMICALLY-TYPED receiver -- `pick().m(*xs)` where pick()'s return type is not statically known -- which is `error: expected expression` with the caret on the `*` itself, so the star is not parsed at all on that arm. That is a DIFFERENT site from the arity deferral and is what is left to do; it is also narrow enough that the corpus can route around it where the feature cannot. SUPERSEDED ORIGINAL, and its counts were wrong too -- the 59 came from a grep that matched COUNT(*) inside an SQL string and missed f(**d) entirely; recount with ast, not grep, before quoting a population: `f(*seq)` is `error: expected expression`. 59 call sites in lekkerzeilen's entry-point closure, 35 of them the mixed `f(a, *seq)` form and one `f(**mapping)`; 38 of the 59 are in app.py alone. This is the wall the demo now stands at (app.py:626) after five earlier walls were cleared, and it is NOT patchable in the corpus the way the earlier ones were -- at 59 idiomatic sites the feature is cheaper than the edits."
 ---
 
 # A call cannot unpack a sequence into its arguments
@@ -71,3 +71,50 @@ here and wants keyword binding rather than positional expansion.
 first error in each file that names it, so what sits behind it in `app.py` is
 unmeasured — and 38 of the 59 being in one file is the same histogram shape the
 handbook warns reads as a big population when it is one file's contents.
+
+## 2026-09-11, frankuser: five of six shapes already worked, and the fix was elsewhere
+
+This ticket was filed from ONE failing call and a grep, and both were misleading.
+
+The grep said 59 sites. It matched `COUNT(*)` inside an SQL string literal and
+missed `f(**d)` altogether. Recounted with `ast` -- walking `ast.Starred` inside
+`ast.Call` -- the real figure is different, and the lesson is the reusable part:
+**count a syntax class with a parser, never with a grep.**
+
+Then the 6-shape matrix, which should have come before the ticket:
+
+| shape | before | after |
+| --- | --- | --- |
+| `f(*xs)` | worked | works |
+| `f(1, *xs)` | worked | works |
+| `f(**d)` | worked | works |
+| `K().m(*xs)`, receiver statically typed | worked | works |
+| `m(*xs)` where no class in the unit declares `m` | **refused** | works |
+| `pick().m(*xs)`, receiver dynamically typed | refused | **still refused** |
+
+So the feature largely existed and the ticket reported a symptom whose cause was
+one arm. `PyParseVariantMethod` deferred to the runtime dispatcher and then
+checked arity against the WRITTEN argument count, which for `m(*xs)` is one --
+so a 3-parameter method never matched. `PyCallHasStarArgAt` scans the argument
+list for a depth-1 star in argument-initial position and suppresses the arity
+check for exactly that case; the refusal is kept at every other.
+
+## What is left, and it is a different site
+
+```python
+class K:
+    def m(self, a, b, c):
+        return a + b + c
+def pick():
+    return K()
+print(pick().m(*[1, 2, 3]))      # error: expected expression, caret on the *
+```
+
+The caret is on the `*` itself, so the star is not PARSED on that arm at all --
+this is not the arity deferral wearing a second face. Whoever takes it should
+confirm that before reusing the fix above.
+
+And the reason this is not a demo blocker: unlike the 4-arg dispatch cap, a
+dynamically-typed receiver can be annotated at the call site, and the corpus rule
+for this umbrella explicitly permits editing lekkerzeilen where something is
+principally incompatible.
