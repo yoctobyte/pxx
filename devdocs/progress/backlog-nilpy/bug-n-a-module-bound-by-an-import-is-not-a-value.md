@@ -323,3 +323,41 @@ probes of a stub that p85 is about to fill is the wrong trade in both directions
 seam rewritten with `as`.** Five sites, one corpus file, and no value
 representation change. Not claimed: I have not looked at where the builtin-call
 path lives, so "contained" is about the SHAPE of the change and not a diff size.
+
+## INDEPENDENTLY CORROBORATED BY A STRONGER ROUTE — frankZ, 2026-09-11, corpus `9030d09`
+
+The section above reaches "getattr is the only remaining construct" by enumerating
+the call sites. frankZ reached it by **doing the rewrite and watching where the
+wall goes**, in a scratch copy of the corpus, which is the better instrument
+because it cannot miss a construct nobody thought to enumerate:
+
+```
+  seam as-is                  -> undefined variable (_pxx)        (platform/__init__.py:95)
+  seam rewritten with `as`    -> _ctypes_backend.py:181           (a DEAD guarded arm; since fixed)
+  dead-arm bug fixed          -> platform/__init__.py:108         = getattr(_backend, "open_audio", None)
+```
+
+Census unchanged at 23/35 before and after — **the count did not move and the
+wall did**, which is the distinction a first-wall census cannot show and is why
+the rewrite was worth running even though the number was flat.
+
+So both halves of the fork are now answered from two directions that fail
+differently: site enumeration (this seat) and wall-walking (frankZ). **`getattr`
+over a unit alias is the only construct left in that file**, and it is decidable
+at compile time — unit receiver, literal name, default present.
+
+**One caveat frankZ volunteered against their own number, and it is the same one
+this seat has:** "`_backend` is read in exactly one file" is `grep` over the
+corpus and is true *of the identifier*. Neither of us has checked whether the
+ticket's "read from four other modules" meant the seam's EXPORTED names instead —
+which would be a different claim and an unaffected one, since those are ordinary
+module attributes. Anyone acting on the containment argument should settle that
+reading first; it does not change the fork's answer, only how cheap option 2 is.
+
+**And the `_ctypes_backend.py:181` step above was a separate bug, now fixed:** a
+module named by an import standing AFTER a failed one *inside the same guarded
+arm* was still compiled and its errors escaped, reported with the dead module's
+line number and no file name against a 150-line file. CPython never imports it.
+Fixed at `PyParseImportUnitAs`. Worth knowing because it means any earlier
+measurement of this seam that saw a line number past the end of
+`platform/__init__.py` was looking at a dead module, not at this ticket.
