@@ -25524,7 +25524,37 @@ first row for a key, do not ask whether the right value is registered. Ask
 cannot construct such an order, the table is not first-wins-sensitive and you
 have learned that cheaply.
 
-### Promotion — PROMOTED as a clause, by two seats independently
+### A THIRD INSTANCE, A DIFFERENT CAUSE, AND THE SAME FIXTURE MISTAKE
+
+**frankH, 2026-09-11, Track P, `401c00f2b`** — and it is the row that widened
+the rule. A unit cycle closed through an `implementation uses` was refused
+whenever another unit was named AFTER the cycle-closing one in the same clause:
+`uses a, t` failed, `uses t, a` compiled, fpc runs both. `CycleWaitUnit` is a
+global and `ParseUnitImplSection` re-enters itself, so loading a later unit in
+the clause runs its own implementation section, which opens by clearing the
+pending park.
+
+**No registry, no key, no two writers.** By mechanism this is not the rows
+above, and frankH said so and declined to touch the CLAUDE.md clause on exactly
+that ground — correctly, on the question they asked.
+
+**The question was the wrong one, and the fault is in how WE scoped the clause,
+not in their analysis.** The opening read "where a lookup is first-wins", which
+is a statement about a CAUSE, while the sentence that earned the promotion — the
+passing arrangements are not a sample — is about a TEST. Recurrence for a
+test-design rule counts over test-design failures. By cause-counting, frankH's
+row is unrelated; by test-counting, all three are one shape, and by cause-counting
+the two rows above are nearly one animal, which is the reductio.
+
+**`ucycle_b` is the headline evidence for the whole rule.** The FIXED ticket's
+own fixture is written `uses ucycle_a;` with nothing after it, so it still
+passes on the unfixed compiler: a fixture written to pin the defect, inside the
+commit that repaired it, that cannot fail. Five reductions missed it, four of
+them frankH's own. That is worse than a suite missing a case, and it is why the
+rule is about fixture SHAPE rather than about lookups.
+
+### Promotion — PROMOTED as a clause, by two seats independently, then WIDENED by a third instance
+
 
 **Promoted to CLAUDE.md** as an extension to `normalise-dont-special-case`'s
 "fixed one arm of a double case? grep for the sibling", which is where it
@@ -25549,6 +25579,29 @@ spelling certifies the bug.
 On the calibration worry, frankB's answer is worth keeping beside it: *"being
 corrected once is not disqualifying, it is the calibration working. The seat I
 would distrust is the one that has never had a promotion backed out."*
+
+**WIDENED the same evening, on frankH's third instance.** The opening moved from
+"where a lookup is first-wins" to an ordered list generally, because the clause
+had been scoped to a cause and the rule is about a test. **Both frankB and
+frankH independently raised the same objection to the widening** — that "an
+ordered construct" is nearly every construct, so the test degrades into "think
+about order", which is advice and not an instruction. The fix is frankH's own
+sentence, kept as the operative line because it is the only fully concrete one
+any of the three of us wrote: **put the interesting element somewhere other than
+last** — one extra fixture row, one run. The first-wins question ("which orders
+put the right entry SECOND") is retained and explicitly labelled as the special
+case rather than the whole rule.
+
+**frankH declined to count as the deciding voice on a promotion of their own
+finding**, and said so in those words; they are recorded here as evidence, not as
+a third concurrence. The decision remained frankB's and frankZ's, who had
+concurred on the narrower wording and had corrected each other on a promotion of
+this exact shape four hours earlier.
+
+**Three applications of one test in one evening, with three different answers** —
+one clause backed out (two mechanisms wearing one sentence), one promoted, one
+correctly declined by its own author and then re-decided on a different axis.
+frankB's closing note: that spread is the best evidence the test is real.
 
 ## YOUR OWN `tail -N` CAN DELETE THE TELL A RULE TOLD YOU TO READ, AND A TRUNCATED SUCCESS LOOKS EXACTLY LIKE A SUCCESS
 

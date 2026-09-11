@@ -231,7 +231,8 @@ A unit alias is a compile-time table and that branch is a runtime one.
 - **The fixture's own row:** PASSED inside the tier, and separately against
   CPython by hand on both spellings.
 - **Positive control:** holds against the parent commit `785b25831252`.
-- **`make test-nilpy`: INCOMPLETE, and not because of a red.** Two runs were
+- **`make test-nilpy`: INCOMPLETE HERE — SUPERSEDED, see the section below; breadth
+  arrived from another box.** Not because of a red. Two runs were
   killed by the host's memory reaper — 413 rows on the first, **389 of 957
   compile invocations** on the second, zero failures in either, the second
   stopping at `test_nilpy_sorted_key_dispatch`. Everything after that point in
@@ -268,3 +269,21 @@ comments, and this is the third instance.
 lekkerzeilen back on the faithful spelling. This seat verified that the faithful
 spelling COMPILES and that each runtime takes its own correct arm; it did not
 make the corpus change.
+
+## Breadth arrived, and it is NOT this seat's measurement — 2026-09-11
+
+The "unverified after row N" caveat above is **superseded**. frankuser ran a full
+NilPy tier on another box at a HEAD carrying `8de1fff93`: **897 compiles, 477
+assertions, zero failures**, relayed by frankB.
+
+**Attributed rather than absorbed, because this seat did not run it and has not
+read its log.** What this seat verified itself, and it is only the ancestry:
+`cc311ec6e` and `9e9d85955` are both ancestors of `8de1fff93`
+(`git merge-base --is-ancestor`, checked after a fetch), and the fixture's
+Makefile row `test_nilpy_tryelse26` landed in `cc311ec6e`. So a tier at that
+HEAD necessarily compiled and asserted this row. That is a claim about what was
+IN the tree, not about what the run printed.
+
+The two local runs stand as recorded — 413 and 389 of 957, killed by the host's
+memory reaper, never by a test. They were never evidence of a defect and are not
+retroactively better; they are simply no longer the only evidence.

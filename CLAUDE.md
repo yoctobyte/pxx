@@ -465,23 +465,33 @@ one-line logbook pointer.
   reachable through two shapes, normalise rather than grow a second path; the
   second path is the one that stays broken. **Fixed one arm of a double case?
   Grep for the sibling before closing.**
-  **AND WHERE A LOOKUP IS FIRST-WINS, GREP FOR THE ARRANGEMENT THAT PUTS THE
-  LIVE ARM LAST — THE PASSING ARRANGEMENTS ARE NOT A SAMPLE, THEY ARE THE
-  POPULATION EVERYONE WRITES.** Two writers registering one key make correctness
-  depend on lexical order alone, so the defect is invisible in every arrangement
-  that puts the correct entry first — and that is the idiomatic spelling, which
-  means **a suite written the ordinary way certifies the bug.** Measured
-  2026-09-11, two subsystems with no shared code, two seats, found separately and
-  concurred independently: NilPy's method-call candidate scan refuses only on
-  import order `narrow, caller, wide` (all five orders putting the fitting class
-  earlier compile), and the unit-alias table binds the DEAD arm of a guarded
-  import only when an `else:` puts the live arm after the handler — in the
-  ordinary no-`else` idiom the live arm is lexically first in BOTH outcomes and
-  wins by position. Both silent, exit 0. Ask which orders put the right entry
-  SECOND and write the fixture in one of those; if you cannot construct one, the
-  table is not order-sensitive and you learned that cheaply. Worked, with both
-  rows: debugging-playbook.md, "A FIRST-WINS TABLE IS EXPOSED ONLY BY THE
-  ARRANGEMENT THAT PUTS THE CORRECT ENTRY LAST".
+  **AND WHERE A CONSTRUCT TAKES AN ORDERED LIST, THE POSITION OF THE
+  INTERESTING ELEMENT IS A VARIABLE — SO PUT IT SOMEWHERE OTHER THAN LAST.**
+  That is the whole discharge and it is one extra row: write the fixture with
+  the interesting element **last**, and run it. **The passing arrangements are
+  not a sample, they are the population everyone writes**, so a suite written
+  the ordinary way CERTIFIES the bug instead of catching it. Measured
+  2026-09-11, **three subsystems, three unrelated causes, one failure** — every
+  fixture had put the interesting element where it passes:
+  NilPy's method-call candidate scan refuses only on import order `narrow,
+  caller, wide`, the fitting class last (a first-wins scan; all five earlier
+  orders compile); the unit-alias table binds the DEAD arm of a guarded import
+  only when an `else:` puts the live arm after the handler (a first-wins table;
+  in the no-`else` idiom the live arm is lexically first in BOTH outcomes and
+  wins by position); and a Pascal unit cycle closed through an `implementation
+  uses` is refused only when another unit is named AFTER the cycle-closer —
+  `uses a, t` fails, `uses t, a` compiles (a re-entrant global, no lookup at
+  all: `CycleWaitUnit` is wiped by the nested `ParseUnitImplSection`).
+  **THE HEADLINE EVIDENCE IS `ucycle_b`: a fixture written to pin the defect,
+  inside the commit that repaired it, that still passes on the unfixed
+  compiler.** Five reductions missed that one.
+  **For the first-wins case specifically** the sharper question is which orders
+  put the right entry SECOND; if you cannot construct one, the table is not
+  order-sensitive and you learned that cheaply. **The rule is scoped to the
+  TEST, not to the cause** — recurrence here counts over test-design failures,
+  and counting causes instead is what nearly filed the third instance as
+  unrelated. Worked, all three rows: debugging-playbook.md, "A FIRST-WINS TABLE
+  IS EXPOSED ONLY BY THE ARRANGEMENT THAT PUTS THE CORRECT ENTRY LAST".
 - **`devdocs/dev/root-cause-over-microfix.md`** — a ticket reports a SYMPTOM and
   names a plausible cause, and 9 times in 10 the real fix is deeper. Reproduce,
   **vary the shape** to find the boundary, count how many mechanisms serve one
