@@ -9,7 +9,7 @@ owner: ""
 found-by: frankH
 created: 2026-09-11
 tags: [rtl, floats, fpc-corpus, type-visibility]
-blocked-by: [bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]
+blocked-by: [bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses]
 summary: "RE-LANED AND RE-PRICED 2026-09-11, HOURS AFTER FILING, BY ITS OWN AUTHOR -- the slug still says `rtl-has-no`, kept so citations resolve, and BOTH halves of the original framing were wrong. (1) NOT TRACK B: fpc declares `TDoubleRec` in `rtl/inc/mathh.inc`, which `systemh.inc` INCLUDES, so it is in the System unit and always in scope -- `x86_64/cpuinfo.pas:36` writes `bestrealrec = TDoubleRec` while its interface uses only `globtype`. Adding a record to a `lib/rtl` unit therefore cannot fix it; a type in `compiler/builtin/builtin.pas` is not globally visible either (measured: `var r: TVariantRecord` in a bare program answers `unknown type`). This is compiler-side type-name visibility, Track P/A. (2) IT BUYS ZERO UNITS TODAY, PROVED not predicted: cfileutl -- the only unit that reaches this wall -- has `implementation uses Comphook, Globals`, and `globals` alone already fails at `comphook.pas:251 undefined variable (V_Status)`. So cfileutl cannot compile whatever happens here. Dropped 40 -> 25 and blocked-by the unit cycle."
 ---
 
@@ -57,8 +57,9 @@ implementation
 `globals` on its own already fails —
 `comphook.pas:251 undefined variable (V_Status)`, where `V_Status` is declared
 inside the corpus at `globals.pas:149` — so cfileutl is behind
-[[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]]
-(p60, 158 units) no matter what happens to `TDoubleRec`. That is why this is
+[[bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses]]
+no matter what happens to `TDoubleRec`. (This ticket named the unit-cycle bug
+until the same evening; that one is DONE and its shape passes.) That is why this is
 `blocked-by` it and priced at 25.
 
 This did not need a build to settle: `globals` failing alone plus cfileutl

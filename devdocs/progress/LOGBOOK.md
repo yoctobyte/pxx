@@ -3154,3 +3154,37 @@ The defect needs the CYCLE, and it is the already-filed
 bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
 (p60), the umbrella's largest wall at 158 units. Both units cleared here were
 delivered into that queue — the queue-position finding a sixth time.
+
+## 2026-09-11 | frankH | devdocs/progress | CORRECTION: V_Status is not the unit-cycle bug
+
+I attributed `comphook.pas:251 undefined variable (V_Status)` to
+bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
+in two commit messages (d57a1efaa, e1c789fd0), a resolved ticket and the
+umbrella. **It is wrong.** That ticket is `status: done` — d52831ed7 +
+6e8a821db, both ancestors of origin/master — and its shape passes: a minimal
+A/B cycle where B's implementation uses A and reads A's interface const prints
+fpc's 8192 under pxx.
+
+WHY I GOT IT WRONG, because the mechanism is reusable: the symptom sentence —
+"a constant declared in the corpus is invisible across an `implementation
+uses`" — is a near-exact match for that ticket's TITLE. I matched the slug to
+the symptom and never opened the file, whose first ten lines say `done`.
+CLAUDE.md already warns that a STALE-PARK hit matches SLUGS, not questions;
+this is the same failure performed by hand, and the check costs one command:
+`git merge-base --is-ancestor <fix sha> origin/master`, then run the minimal
+shape.
+
+The real defect is filed as
+bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses
+(P, p60). Twenty errors compiling `globals`, every one `undefined variable` for
+a constant in globals' own interface, every one raised inside comphook's
+implementation. Neighbours `globtype`, `cutils`, `systems` compile clean;
+`comphook` entered directly stops earlier at TDoubleRec, and entered through
+`globals` that error never fires at all, so it is not a cascade either.
+
+**Four reductions do NOT reproduce it and are recorded in the ticket** — the
+plain cycle, the three-unit globals/cfileutl/comphook shape, an initialised
+`var` plus an out-of-range-int64 typed-const array in an interface, and the
+same typed const in a program. All four match fpc exactly. The non-reproducing
+set is the expensive part to rediscover, which is why it is written down rather
+than just the symptom.

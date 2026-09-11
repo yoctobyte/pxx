@@ -55,23 +55,20 @@ answers drift apart, and pxxcio's comment already carries the reasoning.
 
 rgobj and aasmbase both move past `comptty.pas:66` and both now stop at
 `comphook.pas:251 undefined variable (V_Status)` — the same line as each other
-again. **That one is NOT an RTL gap and it is NOT new**: `V_Status` is declared
-inside the corpus at `globals.pas:149` as `$2000`, and this is the already-filed
-[[bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface]]
-(p60) — the umbrella's largest wall, 158 units. `globals` and `comphook` are a
-cycle closed through `comphook`'s implementation `uses`.
+again. **That one is NOT an RTL gap**: `V_Status` is declared inside the corpus
+at `globals.pas:149` as `$2000`.
 
-**I nearly filed it as a duplicate**, and the thing that stopped me was a
-repro that did NOT reproduce: a unit whose implementation section `uses`
-another unit's const compiles correctly under pxx and prints the same 8192 fpc
-does. The defect needs the CYCLE, not merely the implementation-section clause
-— which is exactly what the existing ticket's title says and what my first
-reading of the diagnostic did not. Check the minimal repro before believing
-your own explanation of a wall.
-
-So both units cleared here have been delivered into the unit cycle's queue,
-which is the umbrella's own finding a sixth time: clearing a wall moves the
-population one place forward, not out.
+**CORRECTED 2026-09-11, SAME EVENING.** This section first said V_Status was the
+already-filed unit-cycle bug. **It is not.** That ticket
+(bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface)
+is `status: done` — fixed by d52831ed7 + 6e8a821db, both ancestors of
+origin/master — and its shape passes: a minimal A/B cycle prints fpc's 8192.
+I matched a SLUG to a symptom without opening the ticket, and wrote the wrong
+attribution into two commit messages (d57a1efaa, e1c789fd0) before checking.
+The real defect is filed as
+[[bug-p-a-units-interface-constants-are-invisible-to-a-second-units-implementation-uses]]
+with four reductions that do NOT reproduce it recorded, since those are the
+expensive part to rediscover.
 
 ### Verification
 
