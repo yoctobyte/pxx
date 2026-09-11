@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-07-31T12:53:16Z",
-   "fixed": [
-    "test-smoke#src:compiler/compiler.pas"
-   ],
-   "new_red": [],
-   "sha": "7285246b3d2a421a8d86b9aeda4d7df6411c31c5",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-07-31T12:59:36Z",
    "fixed": [],
    "new_red": [],
@@ -465,6 +455,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-11T21:30:11Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -4975,6 +4974,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
   "test-threads#src:tools/compiler_srchash.sh": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
+  "test-uforth#src:tools/compiler_srchash.sh": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
   "test-uforth#src:tools/compiler_srchash.sh@1": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
   "test-uforth#src:tools/compiler_srchash.sh@10": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
   "test-uforth#src:tools/compiler_srchash.sh@11": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
@@ -9674,6 +9674,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "full",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "full",
   "test-threads#src:tools/compiler_srchash.sh": "full",
+  "test-uforth#src:tools/compiler_srchash.sh": "slow",
   "test-uforth#src:tools/compiler_srchash.sh@1": "full",
   "test-uforth#src:tools/compiler_srchash.sh@10": "full",
   "test-uforth#src:tools/compiler_srchash.sh@11": "full",
@@ -14364,6 +14365,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-threads#src:tools/compiler_srchash.sh": "pass",
+  "test-uforth#src:tools/compiler_srchash.sh": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@1": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@10": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@11": "pass",
@@ -14540,14 +14542,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-11T21:28:20Z",
+  "date": "2026-09-11T21:30:11Z",
   "deadline": 3600.0,
   "sha": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 869.8
+  "verdict": "GREEN",
+  "wall": 95.7
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14582,6 +14584,17 @@
    "unreached": 0,
    "verdict": "RED",
    "wall": 291.4
+  },
+  "slow": {
+   "code_fp": "1d5c476a6328",
+   "date": "2026-09-11T21:30:11Z",
+   "deadline": 3600.0,
+   "sha": "8b11dc8c1df276060ff102e1f0c537a8d4215586",
+   "tier": "slow",
+   "timed_out": false,
+   "unreached": 0,
+   "verdict": "GREEN",
+   "wall": 95.7
   }
  },
  "last_full": {
