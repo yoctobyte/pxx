@@ -18394,11 +18394,26 @@ begin
     above cannot reject, and the default-fill below only fills parameters that
     HAVE defaults — leaving a required argument uninitialised
     (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults).
-    Guarded on hitCi >= 0: only there is the class known at compile time. When
-    dispatch is genuinely dynamic (hitCi < 0, or the dual/runtime arms below,
-    where distinct candidate classes may legitimately take different counts) a
-    compile error would reject valid programs, so those keep today's behaviour
-    and want a RUNTIME arity check instead — filed separately. }
+    Guarded on hitCi >= 0, and READ THAT GUARD CAREFULLY: it does NOT mean the
+    receiver's class is known at compile time, which is what this comment
+    claimed until 2026-09-11. It means SOME class compiled so far declares this
+    name. The two come apart exactly where it matters: `def f(w): w.probe(1,2,3)`
+    has a receiver with no static type whatsoever, and still lands on the
+    refusing side of this guard the moment any same-named method has been
+    compiled. So the case the next sentence sets out to protect is not in fact
+    protected.
+    When dispatch is genuinely dynamic (hitCi < 0, or the dual/runtime arms
+    below, where distinct candidate classes may legitimately take different
+    counts) a compile error would reject valid programs, so those keep today's
+    behaviour and want a RUNTIME arity check instead. That is now filed — it
+    was not, for as long as this comment said it was:
+    bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-so-far-so-import-order-decides
+    which measures the observable: the SAME program compiles or fails depending
+    on the order its modules are imported in, because the candidate scan sees
+    only what has been compiled SO FAR and is treated as exhaustive. Do not
+    simply relax the test below — it closed a segfault
+    (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults); the
+    runtime check has to come first. }
   if (hitCi >= 0) and (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0) and
      (not ProcArityMatches(mpi, i + 1)) then
   begin

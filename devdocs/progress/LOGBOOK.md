@@ -3025,3 +3025,38 @@ output is the `near:` window and the row goes red.
 Found by probing the NilPy side after fixing the Pascal one; handed over by
 frankZ, who was in pyparser.inc's getattr arm and declined it rather than divert
 from the demo path.
+2026-09-11 | frankB (Track N) | compiler/pyparser.inc, backlog-nilpy | a method call is
+arity-refused from the candidates compiled SO FAR, so IMPORT ORDER decides whether a
+correct program compiles. Found by my own lekkerzeilen census, then reduced to three
+files outside the corpus: `wide.py`/`narrow.py`/`caller.py`, six import orders, CPython
+prints 100 for all six, pascal26 refuses exactly one — `narrow, caller, wide`.
+
+The mechanism, and it fits all twelve cells I measured: the call is accepted iff some
+ALREADY-COMPILED same-named method fits the arity. Zero candidates seen at the call site
+defers to run time and is always correct; one or more with a fit is accepted and the
+runtime arm still picks the right class; one or more with NO fit is refused. Candidate
+COUNT is not the discriminator and neither is caller-in-the-same-file — I measured both,
+because my first reading ("one candidate hard-binds, several emit runtime arms") was
+WRONG and had already been written into a neighbouring ticket. Two wrong-arity candidates
+refuse a three-argument call whether the caller shares their file or not.
+
+No silent half, and that is measured rather than assumed: one candidate that FITS but
+belongs to the wrong class still dispatches correctly at run time (205 and 105, both
+CPython's answers). So this can only produce a refusal, never a wrong value — which is
+what makes it a false negative and not a correctness bug.
+
+It predicts the corpus exactly, including which order works: all 24 non-ctypes
+lekkerzeilen modules compile when `world` and `traffic` are imported first, and fail
+alphabetically. Reordering is NOT a fix and must not be applied to the corpus — it is
+the evidence, and per the no-compiler-appeasement rule the platonic import order stays.
+
+Two findings at the compiler site. The guard's own comment said it was safe because
+"only there is the class known at compile time" — FALSE: `hitCi >= 0` means some class
+declares the NAME, not that the receiver has a type, and my repro's receiver is an
+unannotated parameter. The comment's reasoning was right and its premise was wrong,
+which is why the guard has stayed mis-aimed. And it said the correct successor (a
+RUNTIME arity check) was "filed separately" — no such ticket existed; the comment
+asserted paperwork that was never done. Corrected the comment, filed the ticket, and
+did NOT relax the guard: it was added to close a segfault
+(bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults), so the runtime
+check has to land first.
