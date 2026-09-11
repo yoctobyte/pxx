@@ -1,0 +1,68 @@
+# `**mapping` at a call through a CALLABLE VALUE -- the sixth door of the `**`
+# lookahead, and the one the 2026-09-11 dispatcher missed.
+#
+# The other five sit in front of an arity-driven compile-time expansion and now
+# ask ONE question. This one is PyMakeDynCall, the RUN-TIME dispatcher: a
+# callable held in a variable, a dict value, a list element. It was never in
+# that family's grep because its own `*` arm spells the exclusion inline, and it
+# failed exactly as the other five did -- `**` fell through to the expression
+# parser, which met `*` and said `expected expression`.
+#
+# There is no callee to resolve names against at compile time here, so the names
+# TRAVEL to run time beside their values as two TPyLists. `**mapping` merges the
+# mapping into a hoisted TPyDict and extends both lists from its keys and
+# values, which is why this needs NO new pylib entry point.
+#
+# THE REVERSED ROWS ARE THE POINT. `f(laden=5, room=2)` and `f(5, 2)` agree, so
+# a door that merely dropped the names would pass every in-order row. Every
+# keyword row below is written OUT of declaration order.
+
+def make(laden=0, room=1):
+    return "made", laden, room
+
+def three(a=1, b=2, c=3):
+    return "three", a, b, c
+
+f = make
+dd = {"m": make, "t": three}
+xs = [make]
+
+print("var:            ", f(**{"laden": 5, "room": 2}))
+print("var reversed:   ", f(**{"room": 2, "laden": 5}))
+print("dict value:     ", dd["m"](**{"room": 2, "laden": 5}))
+print("list element:   ", xs[0](**{"laden": 7}))
+print("partial:        ", dd["t"](**{"c": 30, "a": 10}))
+print("name= then **:  ", dd["t"](b=20, **{"c": 30}))
+print("positional + **:", dd["t"](10, **{"c": 30}))
+print("empty mapping:  ", f(**{}))
+
+# The mapping is an EXPRESSION, not only a literal -- pydict_merge_any takes any
+# mapping, so a name works and so does a call that builds one.
+d = {"room": 9, "laden": 8}
+print("a named dict:   ", f(**d))
+print("dict(zip(...)): ", f(**dict(zip(["room", "laden"], [3, 4]))))
+
+# The callee is chosen at RUN TIME and the names are bound against ITS
+# signature, not against whichever function was declared first: `three` and
+# `make` share no parameter names.
+for key in ["m", "t"]:
+    print("dispatched", key, dd[key](**({"laden": 1} if key == "m" else {"c": 1})))
+
+# Evaluated ONCE, and not aliased: the callee mutating its own arguments cannot
+# reach the caller's mapping.
+calls = []
+def build():
+    calls.append(1)
+    return {"laden": 6}
+print("evaluated once: ", f(**build()), len(calls))
+
+# The error rows. Wording is ours; the CLASS is CPython's, which is what an
+# upward-compatibility rule asks for.
+try:
+    f(**{"nosuch": 2})
+except TypeError:
+    print("unknown keyword: TypeError")
+try:
+    f(laden=1, **{"laden": 2})
+except TypeError:
+    print("duplicate:       TypeError")

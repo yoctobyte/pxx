@@ -1894,6 +1894,22 @@ test-nilpy: $(COMPILER)
 	# raise TypeError and word it differently.
 	./$(COMPILER) test/test_nilpy_double_star_unpacking_at_a_receiver_call.npy $(TESTTMP)/test_nilpy_dstar26
 	$(TESTTMP)/test_nilpy_dstar26 2>&1 | diff -u test/test_nilpy_double_star_unpacking_at_a_receiver_call.expected -
+	# ...and the SIXTH door, which the same commit's dispatcher missed: a call
+	# through a callable VALUE (a variable, a dict value, a list element).
+	# PyMakeDynCall is the run-time dispatcher, so it was not in the
+	# arity-driven family's grep -- its own `*` arm spelled the exclusion
+	# inline. EVERY keyword row in the fixture is written OUT of declaration
+	# order, because `f(laden=5, room=2)` and `f(5, 2)` agree and a door that
+	# merely dropped the names would pass every in-order row.
+	./$(COMPILER) test/test_nilpy_double_star_at_a_callable_value_call.npy $(TESTTMP)/test_nilpy_dstarcv26
+	$(TESTTMP)/test_nilpy_dstarcv26 2>&1 | diff -u test/test_nilpy_double_star_at_a_callable_value_call.expected -
+	# The refusal has no oracle by construction -- CPython accepts `f(*xs, **d)`
+	# and we do not. It is REFUSED rather than dropped because the positional
+	# half leaves through PyStarDynCall, which has no keyword channel, so
+	# accepting it would silently discard every keyword.
+	printf 'def f(a=0, b=0):\n    return a + b\ng = f\nprint(g(*[1], **{"b": 2}))\n' > $(TESTTMP)/dstarcv_both.npy
+	! ./$(COMPILER) $(TESTTMP)/dstarcv_both.npy $(TESTTMP)/dstarcv_both26 > $(TESTTMP)/dstarcv_both.log 2>&1
+	grep -q 'no keyword channel' $(TESTTMP)/dstarcv_both.log
 	# sys.stdout / sys.stderr as CALLABLE streams. sys.stdin had three dotted-call
 	# table entries and these two had NONE, so `sys.stdin.read()` ran while
 	# `sys.stdout.isatty()` was a parse error -- one arm of a double case.

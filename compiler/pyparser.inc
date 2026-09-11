@@ -885,6 +885,10 @@ function PyStarOperandAsList(node, listCi: Integer): Integer; forward;
   duplicate, so ONLY the seed build catches this. }
 procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
                            argA, argB: Integer); forward;
+{ the same call as an EXPRESSION rather than a hoisted statement, no arguments:
+  `d.keylist()` / `d.vallist()` on a hoisted container temp. }
+function PyContainerExprCall0(tmpSym: Integer;
+                              const clsName, meth: AnsiString): Integer; forward;
 
 { Materialise the `from mod import NAME as ALIAS` bindings queued by
   PyParseImportRun (see PyImpAliasSym). Drains the queue, so whichever flush
@@ -14460,6 +14464,7 @@ var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
     starSym, starN: Integer;
     nmArg, nmLit, dispPi, dispArg: Integer; calleeNm: AnsiString;
     kwNamesSym, kwValsSym, kwLit, kwCnt, kwTail, kwN, kwPad, kwNone: Integer;
+    kwDictSym: Integer;
     kwName: AnsiString;
 begin
   { the callee code address = the variant's payload as a pointer }
@@ -14509,8 +14514,53 @@ begin
       arity is decided when the call runs (PyStarDynCall). The first star is
       what switches the loop over; arguments already parsed move into the list
       in order, so `fn(1, *xs, 9)` needs no separate handling. }
+    { `f(**mapping)` through a callable VALUE — THE SIXTH DOOR OF THE `**`
+      LOOKAHEAD, and the one the 2026-09-11 dispatcher missed. The other five
+      sit in front of an arity-driven expansion and now ask ONE question; this
+      one is the run-time dispatcher and was never in that family's grep,
+      because its own star arm spells the exclusion inline. It failed exactly
+      as they did — `**` fell through to the expression parser, which met `*`
+      and said `expected expression`.
+
+      No new pylib surface: the names/values channel that `name=value` already
+      builds is a pair of TPyLists, so a mapping is merged into a hoisted
+      TPyDict (pydict_merge_any, which takes ANY mapping and not only a dict
+      literal) and its keylist/vallist EXTEND those two. Source order is
+      preserved because the extends are hoisted where the `**` was written, so
+      `f(a=1, **d)` lands `a` first and CPython's later-wins is what
+      pyvar_callv_kw sees. }
     if isNilPy and (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind <> tkStar) then
+       (Tokens[TokPos].Kind = tkStar) then
+    begin
+      { `f(*xs, **d)` is legal Python and is NOT supported here, refused rather
+        than dropped: the positional half leaves through PyStarDynCall, which
+        has no keyword channel at all, so accepting this would silently discard
+        every keyword. }
+      if starSym >= 0 then
+        Error('Nil Python: `*iterable` and `**mapping` in the same call '
+              + 'through a callable value is not supported — the positional '
+              + 'half is dispatched by PyStarDynCall, which has no keyword '
+              + 'channel, so the keywords would be silently dropped');
+      Next;                              { the first '*' }
+      Next;                              { the second '*' }
+      PyParseBoolExpr;
+      if kwNamesSym < 0 then
+      begin
+        kwNamesSym := PyNewContainerTemp('TPyList', 'dynkwn');
+        kwValsSym := PyNewContainerTemp('TPyList', 'dynkwv');
+      end;
+      kwDictSym := PyNewContainerTemp('TPyDict', 'dynkwd');
+      PyHoistDictMergeAny(kwDictSym, CurASTNode);
+      PyContainerCall1(kwNamesSym, 'TPyList', 'extend',
+                       PyContainerExprCall0(kwDictSym, 'TPyDict', 'keylist'), -1);
+      PyContainerCall1(kwValsSym, 'TPyList', 'extend',
+                       PyContainerExprCall0(kwDictSym, 'TPyDict', 'vallist'), -1);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    { `*iterable`. The `**` arm above has already claimed the double spelling,
+      so this asks the single question the other five sites now ask. }
+    if isNilPy and (CurTok.Kind = tkStar) then
     begin
       Next;                              { the '*' }
       PyParseBoolExpr;
@@ -19012,6 +19062,24 @@ begin
   ASTTk[callNode] := Ord(tyClass);
   ASTLeft[callNode] := selfArg;
   PyHoistStmt(callNode);
+end;
+
+function PyContainerExprCall0(tmpSym: Integer;
+                              const clsName, meth: AnsiString): Integer;
+var ci, mmi, selfArg, callNode: Integer;
+begin
+  ci := FindUClass(clsName);
+  if ci < 0 then Error('Nil Python: pylib (' + clsName + ') not loaded');
+  mmi := FindUMeth(ci, meth);
+  if mmi < 0 then Error('Nil Python: ' + clsName + '.' + meth + ' not found');
+  selfArg := AllocNode(AN_ARG);
+  ASTLeft[selfArg] := PyMakeIdent(tmpSym);
+  ASTRight[selfArg] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := UMthProc_[mmi];
+  ASTTk[callNode] := Ord(tyClass);
+  ASTLeft[callNode] := selfArg;
+  Result := callNode;
 end;
 
 { `get(*args, **kwargs)` FORWARDED into a callee with ORDINARY parameters — the

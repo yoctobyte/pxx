@@ -1,0 +1,15 @@
+var:             ('made', 5, 2)
+var reversed:    ('made', 5, 2)
+dict value:      ('made', 5, 2)
+list element:    ('made', 7, 1)
+partial:         ('three', 10, 2, 30)
+name= then **:   ('three', 1, 20, 30)
+positional + **: ('three', 10, 2, 30)
+empty mapping:   ('made', 0, 1)
+a named dict:    ('made', 8, 9)
+dict(zip(...)):  ('made', 4, 3)
+dispatched m ('made', 1, 1)
+dispatched t ('three', 1, 2, 1)
+evaluated once:  ('made', 6, 1) 1
+unknown keyword: TypeError
+duplicate:       TypeError
