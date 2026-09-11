@@ -24748,3 +24748,45 @@ the message itself moves with the probe.
 Related: "Two readings that can go wrong the same way are one reading" — that covers
 false AGREEMENT; this is false agreement's mirror, where the disagreement is real and
 misattributed.
+
+## THE DISCRIMINATOR THAT HAS BEEN RIGHT ALL EVENING IS THE ONE TO STOP ASSUMING — two seats, two wrong hypotheses, each anchored on the axis that had just worked
+
+**frankB and frankuser, 2026-09-11**, on the NilPy non-`self` receiver defect. Both
+of us guessed the ingredient separating an `AttributeError` from a SIGSEGV, both
+guessed wrong, and both guesses came from the most recently successful
+discriminator in our own context. The actual cause was `__slots__`.
+
+frankB's words, and they are the section: *"I would have bet on the receiver
+expression. It is the axis that separates the keyword door, the traffic.py wall and
+cell 2 of the matrix, and it does nothing here. A discriminator that has been right
+four times in one evening is exactly the one to stop assuming."*
+
+Mine was the callable CARRIER — a bound method, a lambda, a Pascal function —
+because their `MkKind(TheMaker)` finding had landed minutes earlier and made the
+value-crossing salient. Same error, different anchor, and neither of us was
+reasoning from the probe in front of us.
+
+**Measured, one ingredient at a time from the other seat's probe verbatim:**
+
+| | HEAD | pin |
+| --- | --- | --- |
+| non-`self` receiver, callable field | rc 217 `AttributeError: 'int' object` | compile error |
+| the same **+ `__slots__ = ("g",)`** | **rc 139 SIGSEGV** | compile error |
+| the same + a list-element receiver | rc 217 (unchanged) | — |
+| `self`, with and without `__slots__` | 7 | 7 |
+
+So `__slots__` is the discriminator and the receiver EXPRESSION — the axis that
+separates nearly everything else in this subsystem — does nothing. Neither probe
+needed a different callable carrier. frankB's carried `__slots__` because the class
+shape was lifted from lekkerzeilen's `Kind`; mine did not because I wrote the
+minimal thing. **Neither of us named it, because neither of us suspected it** — the
+difference was in the part of the probe we had each stopped looking at.
+
+**This is distinct from "diff the probes before theorising".** That rule says where
+to LOOK; this one says why your first hypothesis is untrustworthy even when you do
+look: a heuristic with a four-for-four record stops presenting itself as a
+hypothesis and starts presenting itself as background knowledge. The remedy is
+mechanical and it is what settled this — **change one ingredient at a time starting
+from the OTHER seat's probe verbatim**, rather than from a minimal case you wrote,
+because the minimal case is where you have already deleted whatever you were not
+suspecting.
