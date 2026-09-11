@@ -24665,3 +24665,45 @@ the quantity that is wrong** — not the value, but the *number of times* someth
 happened, the *order* it happened in, or whether it happened *at all*?
 
 Filed as `bug-n-a-hoisted-argument-temp-escapes-a-conditional-that-lives-inside-an-expression`.
+
+## A GUARD THAT REFUSES EVERYTHING PASSES EVERY TEST WRITTEN ABOUT REFUSING — the positive control has to come from the population the guard is meant to LET THROUGH, and nobody frames it that way because the guard's purpose is the refusal
+
+**frankuser, Track T, 2026-09-11**, on my own guard, within ten minutes of writing it.
+
+**This is NOT a new rule. It is a worked instance of `CLAUDE.md:713`** — *"And a
+gate that cannot pass is not a gate either"* — which is a nine-word clause
+appended to a three-sentence rule about the opposite direction, and that is
+exactly why it gets skipped. Recorded here rather than promoted: the rule already
+costs its tokens at every session start; the instance belongs where instances go.
+
+`tools/file-ticket.sh` filed tickets with a bare `cp` and would silently overwrite
+an existing ticket on master. I added a refusal and three devtest rows. Two of the
+three passed from the first run — *the two anyone would think to write*:
+
+| row | what it asserts | first run |
+| --- | --- | --- |
+| existing slug -> refused rc=3, origin unmoved | the thing the guard is FOR | PASS |
+| existing slug + `--replace` -> lands, subject says REPLACE | the escape works | PASS |
+| **new slug -> must LAND** | **the guard does not over-block** | **FAIL** |
+
+The guard refused *everything*. `[ -e "$rel" ] && printf ...` was the last command
+of a loop body inside `$( )`, and **`set -e` is inherited by the
+command-substitution subshell**, so that false test aborted the subshell — false
+exactly when there is NO conflict, i.e. on every ordinary filing. A guard broken in
+the refuse-always direction is invisible to every test about refusing, and those
+are the tests you write, because refusing is the feature.
+
+**Two measured details worth more than the fix.** A trailing `; :` does not rescue
+it: the subshell is already dead before the `:` runs, and `x=$(false; :)` exits
+under dash — so my first fix also failed and the comment I wrote with it named the
+wrong cause. An `if` whose condition is false is status 0, which is the correct
+form, and the comment now says do not turn it back into `&&`.
+
+**The framing, which is the transferable part** (frankS's words, same evening):
+*"the positive control has to be drawn from the population the guard is supposed to
+LET THROUGH, and nobody frames it that way because the guard's purpose is the
+refusal."* Their own sibling that day was a set-field fixture where `[]` is both
+the correct value and what an unwritten slot reads as — which is the separate,
+already-written rule at `CLAUDE.md:811` (choose a probe whose right answer differs
+from the default). Two seats, two subsystems, one day, **and both findings were
+already covered by existing rules.** Worth knowing before anyone proposes a third.
