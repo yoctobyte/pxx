@@ -1417,6 +1417,20 @@ var
     so the type mix is the SYMPTOM and the missing define is the cause. Cost is
     one string store per operand, in the conditional evaluator only. }
   PasCondValName: array[0..63] of AnsiString;
+  { KIND 2 = NO VALUE, and this is the error it will raise IF IT SURVIVES.
+    `{$if declared(X) and (X <> Y)}` is FPC's portable idiom for "compare only
+    if it exists", and it is written that way BECAUSE `and` short-circuits --
+    FPC's own rgobj.pas:1728 uses it for RS_STACK_POINTER_REG, which several
+    targets do not declare. A shunting-yard applies the parenthesised `<>`
+    BEFORE the `and`, so erroring there refuses the idiom outright, which is
+    what pxx did.
+    The fix is to DEFER, not to weaken: a comparison over an operand with no
+    integer value yields a poisoned slot carrying the exact message it would
+    have printed, `and`/`or` may discard it on a decided left operand, and a
+    poison still standing at the top raises the message verbatim. So a genuine
+    missing define -- `{$if FPC_FULLVERSION < 20701}` -- reports exactly what it
+    always did, in the same words, with the same name in it. }
+  PasCondValWhy: array[0..63] of AnsiString;
   PasCondValueCount, PasCondOpCount: Integer;
   PasCondExprText: AnsiString;
   PasCondExprPos: Integer;
@@ -1476,6 +1490,7 @@ var
   SaveCondInt: array[0..63] of Int64;
   SaveCondOps: array[0..63] of Char;
   SaveCondValName: array[0..63] of AnsiString;
+  SaveCondValWhy: array[0..63] of AnsiString;
   SaveCondValueCount, SaveCondOpCount: Integer;
   SaveCondExprText: AnsiString;
   SaveCondExprPos: Integer;
@@ -1529,6 +1544,7 @@ begin
     SaveCondInt[i] := PasCondInt[i];
     SaveCondOps[i] := PasCondOps[i];
     SaveCondValName[i] := PasCondValName[i];
+    SaveCondValWhy[i] := PasCondValWhy[i];
   end;
   SaveCondValueCount := PasCondValueCount;
   SaveCondOpCount := PasCondOpCount;
@@ -1559,6 +1575,7 @@ begin
     PasCondInt[i] := SaveCondInt[i];
     PasCondOps[i] := SaveCondOps[i];
     PasCondValName[i] := SaveCondValName[i];
+    PasCondValWhy[i] := SaveCondValWhy[i];
   end;
   PasCondValueCount := SaveCondValueCount;
   PasCondOpCount := SaveCondOpCount;
@@ -2065,7 +2082,7 @@ begin
 end;
 
 procedure PasCondApplyOp;
-var op: Char; lhs, rhs, res: Boolean; li, ri: Int64;
+var op: Char; lhs, rhs, res: Boolean; li, ri: Int64; why: AnsiString;
 begin
   if PasCondOpCount <= 0 then Error('conditional directive: missing operator');
   Dec(PasCondOpCount);
@@ -2073,6 +2090,8 @@ begin
   if op = '!' then
   begin
     if PasCondValueCount < 1 then Error('conditional directive: missing operand');
+    { `not <poison>` is still unknown, and negating it must not invent True. }
+    if PasCondValKind[PasCondValueCount - 1] = 2 then Exit;
     PasCondValues[PasCondValueCount - 1] := not PasCondSlotAsBool(PasCondValueCount - 1);
     PasCondValKind[PasCondValueCount - 1] := 0;
   end
@@ -2080,6 +2099,40 @@ begin
   begin
     if PasCondValueCount < 2 then Error('conditional directive: missing operand');
     Dec(PasCondValueCount);
+    { SHORT-CIRCUIT, AND ONLY FROM THE LEFT. `False and <poison>` is False and
+      `True or <poison>` is True -- that is what lets FPC's
+      `declared(X) and (X <> Y)` compile where X is absent. It is deliberately
+      NOT symmetric: `<poison> and False` is also False arithmetically, but FPC
+      evaluates left to right and would raise, so answering it would accept a
+      directive FPC refuses -- and a conditional that takes a branch FPC does
+      not produce a DIFFERENT PROGRAM, not a different value. Left-only is
+      exactly short-circuit semantics and nothing more. }
+    if PasCondValKind[PasCondValueCount - 1] <> 2 then
+    begin
+      lhs := PasCondSlotAsBool(PasCondValueCount - 1);
+      if (op = '&') and (not lhs) then
+      begin
+        PasCondValKind[PasCondValueCount - 1] := 0;
+        PasCondValues[PasCondValueCount - 1] := False;
+        Exit;
+      end;
+      if (op = '|') and lhs then
+      begin
+        PasCondValKind[PasCondValueCount - 1] := 0;
+        PasCondValues[PasCondValueCount - 1] := True;
+        Exit;
+      end;
+    end;
+    { Undecided by the left operand, so the right one genuinely matters: a
+      poison on either side now propagates and will raise at the top. }
+    if PasCondValKind[PasCondValueCount - 1] = 2 then Exit;
+    if PasCondValKind[PasCondValueCount] = 2 then
+    begin
+      PasCondValKind[PasCondValueCount - 1] := 2;
+      PasCondValWhy[PasCondValueCount - 1] := PasCondValWhy[PasCondValueCount];
+      PasCondValName[PasCondValueCount - 1] := '';
+      Exit;
+    end;
     rhs := PasCondSlotAsBool(PasCondValueCount);
     lhs := PasCondSlotAsBool(PasCondValueCount - 1);
     PasCondValKind[PasCondValueCount - 1] := 0;
@@ -2105,21 +2158,39 @@ begin
       if PasCondQuiet then
       begin
         { the pre-pass; see PasCondQuiet's block. Not an error here, and not a
-          guess either -- the expression is marked unresolved and answers False. }
+          guess either -- the expression is marked unresolved and answers False.
+          LEFT EXACTLY AS IT WAS by the poison change below: the pre-pass is a
+          different question asked with less information, and making it more
+          decisive would change which branches it takes for reasons that have
+          nothing to do with the idiom being fixed. }
         PasCondUnresolved := True;
         PasCondInt[PasCondValueCount] := 0;
         PasCondInt[PasCondValueCount - 1] := 0;
       end
-      else if PasCondValName[PasCondValueCount] <> '' then
-        Error('conditional directive: `' + PasCondValName[PasCondValueCount] +
-              '` has no integer value here, so it cannot be compared' +
-              ' (an undefined symbol, or one defined without a value)')
-      else if PasCondValName[PasCondValueCount - 1] <> '' then
-        Error('conditional directive: `' + PasCondValName[PasCondValueCount - 1] +
-              '` has no integer value here, so it cannot be compared' +
-              ' (an undefined symbol, or one defined without a value)')
       else
-        Error('conditional directive: comparison requires integer operands');
+      begin
+        { DEFER, do not raise -- see PasCondValWhy. The wording and the operand
+          it names are chosen here, exactly as before, and merely carried
+          instead of printed. }
+        if PasCondValKind[PasCondValueCount - 1] = 2 then
+          why := PasCondValWhy[PasCondValueCount - 1]
+        else if PasCondValKind[PasCondValueCount] = 2 then
+          why := PasCondValWhy[PasCondValueCount]
+        else if PasCondValName[PasCondValueCount] <> '' then
+          why := 'conditional directive: `' + PasCondValName[PasCondValueCount] +
+                 '` has no integer value here, so it cannot be compared' +
+                 ' (an undefined symbol, or one defined without a value)'
+        else if PasCondValName[PasCondValueCount - 1] <> '' then
+          why := 'conditional directive: `' + PasCondValName[PasCondValueCount - 1] +
+                 '` has no integer value here, so it cannot be compared' +
+                 ' (an undefined symbol, or one defined without a value)'
+        else
+          why := 'conditional directive: comparison requires integer operands';
+        PasCondValKind[PasCondValueCount - 1] := 2;
+        PasCondValWhy[PasCondValueCount - 1] := why;
+        PasCondValName[PasCondValueCount - 1] := '';
+        Exit;
+      end;
     end;
     ri := PasCondInt[PasCondValueCount];
     li := PasCondInt[PasCondValueCount - 1];
@@ -2368,6 +2439,13 @@ begin
     EvalPasCondExprText := False;
     Exit;
   end;
+  { A POISON THAT SURVIVED TO THE TOP IS THE ERROR, RAISED HERE INSTEAD OF AT
+    THE COMPARISON. Nothing short-circuited it away, so the comparison really
+    was required to answer and really could not -- which is precisely the case
+    the message was written for. Same words, same named operand, same position;
+    only the moment moved. }
+  if PasCondValKind[0] = 2 then
+    Error(PasCondValWhy[0]);
   { Top-level bare integer is FPC-truthy (0=false, nonzero=true); covers the
     legacy {$IF 1}/{$IF 0} forms. Comparisons/idents already reduced to bool. }
   if PasCondValKind[0] = 1 then

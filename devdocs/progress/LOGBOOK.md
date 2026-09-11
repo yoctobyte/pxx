@@ -2836,3 +2836,49 @@ Test `test/test_sizeof_of_a_variable_in_a_const_expr.pas` in `test-core` asserts
 control by stashing the fix and rebuilding: the pre-fix binary, a different sha
 (`b1f2e97bf9a8` vs `c321b6466b86`), refuses the fixture at line 21.
 2026-09-11 | frankZ (Track N) | test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy + test/nilpy_guardpoison{,_ctl}/ + Makefile + devdocs/dev/debugging-playbook.md | THE FIXTURE FOR THE SoftUnitMissed LEAK, AND IT TOOK THREE TRIES TO BUILD ONE THAT CAN FAIL. Positive control is 83b883221d70 -- HEAD with only the PyParseImportUnitAs hunk removed and rebuilt -- where it prints `guarded None None` against `guarded 27 quit`, control row unmoved in the same run. Three ways a row written for this bug prints PASS while the bug is present, all three MEASURED on that binary and not reasoned about: (1) appended to the dead-arm fixture, which had already imported the package -- the leak fires only when the importer's resolution actually COMPILES the unit, so the appended rows were byte-identical with the fix disabled and were DROPPED, not kept as extra coverage; (2) `try: import ctypes` as the guard -- ctypes does miss under nilpy and the fixture still printed 27, because the shape that leaks is `try: from <absent> import X`; (3) THE CONTROL PLACED BESIDE THE SUBJECT, which is the expensive one and is now a playbook section. A clean import resolving anywhere LATER in the file clears the leaked flag before the binding is decided: subject-then-control prints 27, subject-print-control prints 27, control-print-subject prints None. So the control has to come FIRST, which is not where anyone writes one. CLAUDE.md already has "a measurement can create the condition it is testing for" and both its examples are the measurer's own earlier STEP; this is the third shape and it is invisible to that framing, because the contaminant is the NEGATIVE CONTROL -- the one component whose whole job is to be uninvolved. Every existing guard question returns a clean answer here: right population, honest filter, matching assertion class, real positive control. None of them is about the control's POSITION, and "would this row pass if it were the only thing in the run" is backwards for this case -- the subject ALONE fails correctly; subject plus control passes. The check that catches it costs one run: with the positive-control binary built, run the fixture with the control REMOVED as well as with it, and if deleting the control changes the subject's verdict the control is a participant. Order is declared load-bearing in the fixture's own header so a tidying commit does not silently retire it. NOT PROMOTED to CLAUDE.md and saying so out loud: it meets MERIT, it does not meet RECURRENCE -- one subsystem, one seat, one evening, and it is an instance of a rule CLAUDE.md already carries. It earns promotion the day a second independent subsystem finds its own control participating.
+
+## 2026-09-11 | frankH | compiler/paslexer.inc | `{$if}` now short-circuits `and`/`or`
+
+Found while reducing shape 2 of
+bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal,
+and it was a SECOND defect sitting in front of the one the ticket describes,
+filed nowhere. FPC writes `{$if declared(X) and (X <> Y)}` as its portable "compare
+it only if it exists" idiom — rgobj.pas:1728 does — and that idiom is written that
+way BECAUSE `and` short-circuits. pxx's evaluator is a shunting-yard, so the
+parenthesised `<>` is applied BEFORE the `and`: the comparison raised `has no
+integer value here` and no short-circuit could ever reach it. Seven-line repro
+with an undeclared name, nothing from shape 2 in it, and fpc compiles it.
+
+DEFER, DO NOT WEAKEN, which is the whole design. A relational over an operand
+with no integer value now yields a value-stack slot of a new kind carrying the
+exact message it would have printed; `and`/`or` may discard it on a decided LEFT
+operand; one still standing at the top raises it verbatim. That was the
+constraint worth protecting: the message it defers was built in response to a
+measured incident (2026-09-05, FPC's cfileutl.pas under an invocation with no
+define profile, where the cause was one absent define and the fix was a compiler
+FLAG), and it names the operand on purpose. Deferral keeps it byte-identical.
+
+LEFT-ONLY, AND FPC AGREES — MEASURED, NOT ASSUMED. `(X<>3) and declared(X)` is
+False arithmetically and fpc REFUSES it, because fpc evaluates left to right.
+Answering it would accept a directive fpc rejects, and in a conditional that is a
+different PROGRAM rather than a different value. Two must-not-compile fixtures pin
+both refusals and assert the message still NAMES the operand, because a later
+widening to "either operand may settle it" would look like an improvement and
+pass every other row in the tree.
+
+THE PRE-PASS IS DELIBERATELY UNTOUCHED. PasCondQuiet still marks unresolved and
+answers False exactly as before. It asks the same question with less information,
+and making it more decisive would change which branches it takes for reasons
+unrelated to the idiom being fixed.
+
+AND IT MOVES NO CORPUS UNIT — 17 of FPC's 18 cpubase files DO declare
+RS_STACK_POINTER_REG, x86_64/cpubase.inc:90 among them, so on the target
+tools/fpc_compiler_corpus_probe.sh uses the left operand is TRUE and the right
+side genuinely must answer. rgobj, nld and ncnv re-measured through the probe's
+own invocation: all three fail identically to before. This umbrella's
+queue-position finding from the other side — correct, oracle-verified, worth zero
+units. Landed on its own merits: fpc compiles it and pxx refused it.
+
+5 fixture rows byte-identical to fpc 3.2.2, every row using a name no define
+profile can define — a name something DOES define stops testing the poison path
+and starts testing a define lookup, while still printing `yes`.

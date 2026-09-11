@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:56 backlog-pascal:8 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3691 rejected:81`
+`working:31 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:56 backlog-pascal:7 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3691 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
+- `bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal` [P] — owner: frankH
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
 - `bug-p-a-specializations-concrete-argument-is-keyed-by-its-spelling-so-two-scopes-types-collide` [P] — owner: frankS
 - `bug-p-an-enum-or-array-type-cannot-be-named-as-an-operator-operand` [P] — owner: frankH
@@ -73,14 +74,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 459, ranked
+## Ready — top 30 of 458, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-module-bound-by-an-import-is-not-a-value (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
-- `[p 85] [P]` bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal (unblocks 1)
 - `[p 85] [P]` bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all (unblocks 1)
 - `[p 85] [B]` feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
@@ -105,5 +105,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
+- `[p 70] [T]` regression-test-core-c-asm-in-inline-body-3
 
-_429 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_428 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

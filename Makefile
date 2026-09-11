@@ -3715,6 +3715,35 @@ test-nilpy: $(COMPILER)
 	@# ncon.pas:968 are the two named in the ticket.
 	@./$(COMPILER) test/test_p_a_conditional_directive_can_read_a_source_const.pas $(TESTTMP)/test_condsrc26
 	@tools/expect_same.sh test_condsrc26 "$$($(TESTTMP)/test_condsrc26 | tail -n 2)" "$$(printf 'fails=0\nCONDSRC OK')"
+	@# ...AND `and` SHORT-CIRCUITS, which is the reason FPC can write
+	@# `{$if declared(X) and (X <> Y)}` at all -- its own rgobj.pas:1728 does, on
+	@# RS_STACK_POINTER_REG, which 1 of its 18 cpubase files does not declare.
+	@# A shunting-yard applies the parenthesised `<>` BEFORE the `and`, so the
+	@# comparison used to raise and no short-circuit could save it. The fix
+	@# DEFERS the error rather than weakening it. Byte-identical to fpc 3.2.2 on
+	@# all 5 rows, and every row uses a name no define profile can define -- a
+	@# name something DOES define stops testing the poison path and starts
+	@# testing a define lookup, while still printing `yes`.
+	@./$(COMPILER) test/test_p_a_conditional_directive_short_circuits_and.pas $(TESTTMP)/test_condshort26
+	@tools/expect_same.sh test_condshort26 "$$($(TESTTMP)/test_condshort26 | tail -n 2)" "$$(printf 'fails=0\nCONDSHORT OK')"
+	@# THE TWO CONTROLS, AND THEY MUST NOT COMPILE. fpc refuses both as well,
+	@# measured -- so answering either would accept a directive fpc rejects, and
+	@# a conditional taking a branch fpc does not take is a DIFFERENT PROGRAM.
+	@# Asserted on the MESSAGE because the refusal IS the feature, and it must
+	@# still NAME the operand: `comparison requires integer operands` describes
+	@# the value stack and not the program. Without these, widening the deferral
+	@# to "either operand may settle it" would look like an improvement and pass
+	@# every other row in this tree.
+	@if ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_right_only_poison.pas $(TESTTMP)/test_condright26 >/dev/null 2>&1; then \
+	  echo "FAIL: (X <> 3) and declared(X) COMPILED -- the deferral is no longer left-only, so pxx now takes a branch fpc refuses"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_right_only_poison.pas $(TESTTMP)/test_condright26 2>&1 | grep -q 'NOPE_RIGHT_ONLY'; then \
+	  echo "ok: a right-only poison is still refused, and the message names the operand"; \
+	else echo "FAIL: refused, but the message does not name NOPE_RIGHT_ONLY -- the deferral lost the operand it was carrying"; exit 1; fi
+	@if ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_surviving_poison.pas $(TESTTMP)/test_condsurv26 >/dev/null 2>&1; then \
+	  echo "FAIL: a bare undefined comparison COMPILED -- the fix stopped deferring and started guessing"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_surviving_poison.pas $(TESTTMP)/test_condsurv26 2>&1 | grep -q 'NOPE_SURVIVING'; then \
+	  echo "ok: a poison nothing discards still raises, naming the operand"; \
+	else echo "FAIL: refused, but the message does not name NOPE_SURVIVING"; exit 1; fi
 	@# A unit cycle CLOSED THROUGH AN `implementation` uses clause -- the legal
 	@# and standard form of mutual unit recursion, and the reason Pascal splits
 	@# `uses` in two at all. ucycle_a's INTERFACE uses ucycle_b; ucycle_b's
