@@ -24790,3 +24790,50 @@ mechanical and it is what settled this — **change one ingredient at a time sta
 from the OTHER seat's probe verbatim**, rather than from a minimal case you wrote,
 because the minimal case is where you have already deleted whatever you were not
 suspecting.
+
+## THE NEGATIVE CONTROL CAN BE THE CONTAMINANT, AND IT IS THE LAST THING ANYONE SUSPECTS
+
+Measured 2026-09-11, frankZ, Track N, building a fixture for
+`bug-n-a-guarded-import-inside-a-module-makes-its-importer-bind-every-name-to-none`
+against a binary with only that fix removed.
+
+CLAUDE.md already says a measurement can create the condition it is testing for,
+and both of its examples are the measurer's own EARLIER STEP — a scratch file a
+previous probe left behind, a wired-up family member dragging in a unit for the
+unwired ones. This is the third shape and it is invisible to that framing,
+because here the contaminant is **the negative control**: the one component of a
+fixture whose entire purpose is to sit beside the subject and not be involved.
+
+The fixture imports a package that guards an import (the subject) and an
+identical package that does not (the control). Measured on the fix-disabled
+binary:
+
+| order | subject's value |
+| --- | --- |
+| subject, then control | `27` — correct, **masked** |
+| subject, `print`, then control | `27` — correct, **masked** |
+| control, `print`, then subject | `None` — discriminates |
+
+The control's clean resolution clears the leaked global before the subject's
+binding is decided. Put the control where anybody would naturally put it — right
+beside the subject, or immediately after it — and the fixture certifies the bug
+as fixed while it is present.
+
+**Why this one gets past the existing rules.** The population is right. The
+filter is honest. The assertion class matches the defect. The positive control
+exists and is drawn from the right population. Every question CLAUDE.md tells
+you to ask returns a clean answer, because none of them is about the control's
+POSITION. "Would this row still pass if it were the only thing in the run" is
+the closest, and it is the wrong way round here: the subject alone **fails**
+correctly; it is the subject PLUS its control that passes.
+
+**The check that catches it, and it costs one run:** build the positive-control
+binary, then run the fixture with the control REMOVED as well as with it. If
+deleting the control changes the subject's verdict, the control is not a
+control — it is a participant. Do this before believing any fixture whose
+subject and control live in one file and touch one mechanism, which is most of
+them.
+
+And say the ORDER is load-bearing in the fixture itself, at the point where a
+later reader would tidy it. A fixture whose correctness depends on line order
+and does not say so is one cleanup commit away from silently passing forever.

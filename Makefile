@@ -1458,6 +1458,21 @@ test-nilpy: $(COMPILER)
 	# nilpy_deadarm/deadctypes.py line 7 and not this file's.
 	./$(COMPILER) test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy $(TESTTMP)/test_nilpy_deadarmcompile26
 	tools/expect_same.sh test_nilpy_deadarmcompile26 "$$($(TESTTMP)/test_nilpy_deadarmcompile26)" "$$(python3 test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy)"
+	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
+	# import -- the flag is a global -- and the importing from-import read it as
+	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None
+	# for `VALUE = 27`, with no diagnostic, in the pin and every binary before it.
+	# THE ORDER OF THE TWO IMPORTS IN THE FIXTURE IS THE FIXTURE: a clean import
+	# resolving anywhere LATER in the file clears the leaked flag before the
+	# binding is decided, so the control has to come FIRST or it masks the defect.
+	# And the package must be imported ONCE, here and nowhere else in the suite --
+	# an already-compiled unit exits early and cannot be poisoned, which is why
+	# these rows are their own file instead of an addition to the fixture above.
+	# POSITIVE CONTROL MEASURED 2026-09-11 against 83b883221d70 (HEAD with only
+	# the PyParseImportUnitAs hunk removed): `guarded None None` against
+	# `guarded 27 quit`, with the control row unmoved in the same run.
+	./$(COMPILER) test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy $(TESTTMP)/test_nilpy_guardpoison26
+	tools/expect_same.sh test_nilpy_guardpoison26 "$$($(TESTTMP)/test_nilpy_guardpoison26)" "$$(python3 test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy)"
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no

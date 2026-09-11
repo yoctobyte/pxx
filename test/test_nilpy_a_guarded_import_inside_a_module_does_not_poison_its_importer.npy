@@ -1,0 +1,46 @@
+# A module that RESOLVED could leave `SoftUnitMissed` set from its OWN guarded
+# import. The flag is a global; it came back out of ParseUsesUnit, and the
+# importing from-import read it as ITS OWN miss and took the optional-missing
+# path -- binding every name to a variant global, born VT_EMPTY, which IS None.
+#
+#     from nilpy_guardpoison import KEY_ESCAPE     ->  None, for `KEY_ESCAPE = 27`
+#
+# No diagnostic. A plain integer constant reads as None, the module is right
+# there, and the trigger is a construct the IMPORTED module wrote about itself,
+# so nothing at the use site points at it. Present in pin 095ef4811a5b and in
+# every binary before the fix.
+#
+# THE ORDER OF THESE TWO IMPORTS IS THE FIXTURE, NOT A STYLE CHOICE, AND THE
+# CONTROL MUST COME FIRST. Measured 2026-09-11 against a binary carrying every
+# other fix and not this one:
+#
+#     guarded, then control          ->  27   -- MASKED, no discrimination
+#     guarded, print, then control   ->  27   -- MASKED, no discrimination
+#     control, print, then guarded   ->  None -- discriminates
+#
+# The clean import resolving ANYWHERE LATER in the file clears the leaked flag
+# before the binding is decided, so a control written in the natural place --
+# right beside the subject -- supplies exactly what the subject needs and prints
+# PASS. It is the house failure mode: one passing part of the run satisfies the
+# failing part. Do not reorder these lines to read more naturally.
+#
+# AND THE GUARDED IMPORT MUST ACTUALLY MISS, AS A `from ... import`. With
+# `try: import ctypes` in the package instead, this fixture also printed the
+# correct value on the fix-disabled binary.
+#
+# WHY THIS IS ITS OWN FILE. The leak fires only when the importer's resolution
+# actually COMPILES the unit; an already-compiled one exits early and cannot be
+# poisoned. Rows appended to a fixture that has already imported the package are
+# a guard that cannot fail -- measured, with the fix disabled, as byte-identical
+# output. That is why the earlier rows added to the dead-arm fixture were
+# dropped rather than kept as extra coverage.
+
+# THE CONTROL: the same package, same constants, same spelling, WITHOUT the
+# guarded import. If this ever moves with the row below, the cause is not the
+# guard.
+from nilpy_guardpoison_ctl import KEY_ESCAPE as CTL_KEY, QUIT as CTL_QUIT
+print("control", CTL_KEY, CTL_QUIT)
+
+# The row the fix is about.
+from nilpy_guardpoison import KEY_ESCAPE, QUIT
+print("guarded", KEY_ESCAPE, QUIT)

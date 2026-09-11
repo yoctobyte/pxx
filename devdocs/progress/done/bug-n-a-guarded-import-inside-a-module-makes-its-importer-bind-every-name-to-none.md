@@ -69,3 +69,42 @@ because here the contaminating write happens DURING our own resolution.
 
 Inert for `$(PXX_STABLE)` consumers until a pin carries it, and `make pin` is
 owner-only.
+
+# The fixture, and it took three tries to build one that can fail
+
+`test/test_nilpy_a_guarded_import_inside_a_module_does_not_poison_its_importer.npy`
+with `test/nilpy_guardpoison/` and `test/nilpy_guardpoison_ctl/`. Wired into
+`make test-nilpy`. Positive control measured 2026-09-11 against `83b883221d70`
+— HEAD with only the `PyParseImportUnitAs` hunk removed and rebuilt — where it
+prints `guarded None None` against `guarded 27 quit`.
+
+Three ways a row written for this bug prints PASS while the bug is present, all
+three measured on that binary rather than reasoned about:
+
+1. **Appended to an existing fixture.** The first attempt added rows to
+   `test/nilpy_deadarm/`, which had already imported that package. The leak fires
+   only when the importer's resolution actually COMPILES the unit; an
+   already-compiled one exits early and cannot be poisoned. Output was
+   byte-identical with the fix disabled. The rows were dropped, not kept as extra
+   coverage — a guard that cannot fail is worse than no guard, because it prints
+   PASS.
+2. **`try: import ctypes` as the guard.** `ctypes` does miss under nilpy — the
+   probe says so — and the fixture still printed `27`. The shape that leaks is
+   `try: from <absent> import X`, which is the shape the ticket's own repro uses
+   and the shape portable packages write.
+3. **The control placed beside the subject.** This is the expensive one. A clean
+   import resolving ANYWHERE LATER in the file clears the leaked flag before the
+   binding is decided:
+
+   | fixture | result on `83b883221d70` |
+   | --- | --- |
+   | guarded, then control | `27` — masked |
+   | guarded, print, then control | `27` — masked |
+   | control, print, then guarded | `None` — discriminates |
+
+   So the control has to come FIRST, which is not where anyone writes one. It is
+   CLAUDE.md's own "a measurement can create the condition it is testing for" in
+   its nastiest position: the contaminant is not an earlier probe step, it is the
+   **negative control**, the one part of the fixture whose job is to be
+   uninvolved. The fixture says this in its own header so it is not reordered to
+   read more naturally.
