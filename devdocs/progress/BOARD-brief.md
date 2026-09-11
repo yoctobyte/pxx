@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:56 backlog-pascal:8 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3688 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:25 backlog-umbrella:11 backlog-core:157 backlog-nilpy:118 backlog-tools:56 backlog-pascal:8 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3690 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 458, ranked
+## Ready — top 30 of 457, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-module-bound-by-an-import-is-not-a-value (unblocks 1)
@@ -106,4 +106,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 - `[p 70] [T]` regression-test-core-c-asm-in-inline-body-3
 
-_428 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_427 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -20,6 +20,9 @@ function RegcallScalarType(tk: TTypeKind): Boolean; forward;
 function GenMakeSeq(stmt, next: Integer): Integer; forward;
 {$ifndef PXX_NO_CFRONT}function CNodeDecaysToPointer(node: Integer): Boolean; forward;{$endif}
 function IRLowerAddress(node: Integer): Integer; forward;
+{ TryParseInitValForm's set arm (pasparser_expr.inc) folds a set value through
+  it, and the body is in pasparser_decl.inc, which is included later. }
+function BakeSetConst: Integer; forward;
 function IRNodePointerBase(node: Integer): Boolean; forward;
 function IRPointerStride(node: Integer): Integer; forward;
 {$ifndef PXX_NO_CFRONT}function FindCTypedef(const name: AnsiString): Integer; forward;{$endif}

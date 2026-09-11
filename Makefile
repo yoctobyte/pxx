@@ -6514,6 +6514,29 @@ test-core: $(COMPILER)
 	# feature-p-the-element-count-form-of-initialize-and-finalize
 	./$(COMPILER) test/test_p_the_element_count_form_of_initialize_and_finalize.pas $(TESTTMP)/test_fincount26
 	$(TESTTMP)/test_fincount26 | diff -u test/test_p_the_element_count_form_of_initialize_and_finalize.expected -
+	# A SET-VALUED FIELD IN A RECORD CONSTANT -- how FPC's own tokens.pas writes
+	# its ~400-row token table, `(str:'';special:true;keyword:[m_none];op:NOTOKEN)`.
+	# Refused with `expected field name in record constant` POINTING AT THE `[`:
+	# the field name was fine, ConstEval cannot evaluate a set and does not CONSUME
+	# one either, so the field loop came back round with TokPos on the value.
+	# THREE SLOTS, because the gap was never "sets do not work" -- a const ARRAY of
+	# sets has worked since bug-p-a-const-array-of-sets-is-rejected-as-too-many-
+	# elements, and that was the ONE caller the set arm had been written out for.
+	# A set field in a const array of records, a set field in a scalar record
+	# constant, and a var initialiser of set type were all refused, the last with a
+	# different message again, which is why it read as a separate bug and is not.
+	# THE EMPTY SET IS ITS OWN ROW AND CANNOT CARRY THE TEST ALONE: a slot nothing
+	# ever wrote reads as `[]` too, so `miss` asserts a NON-empty neighbouring row
+	# in the same array -- "the bake did nothing" fails it.
+	# NOT ASSERTED, and measured rather than assumed: fpc 3.2.2 REFUSES a named set
+	# constant in either slot (`Illegal expression`), so the ident arm has no
+	# differential row it could ever have. pxx accepts it; that is not a defect.
+	# POSITIVE CONTROL, verified: the PINNED compiler refuses this file at the
+	# first table row -- `expected field name in record constant`.
+	# Every expected line is fpc 3.2.2's for the identical source.
+	# bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant
+	./$(COMPILER) test/test_p_a_set_valued_record_field_in_a_record_constant.pas $(TESTTMP)/test_setfld26
+	$(TESTTMP)/test_setfld26 | diff -u test/test_p_a_set_valued_record_field_in_a_record_constant.expected -
 	# The OTHER half of the `static` directive change: a record's static class
 	# function no longer HAS a Self, and the call site that hand-rolls its own
 	# argument loop was still prepending a by-value dummy. The chain was then one

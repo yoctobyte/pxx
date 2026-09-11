@@ -4309,54 +4309,11 @@ begin
                 Inc(PendingInitCount);
               end;
             end
-            else if (cElemTk = tySet) and
-                    ((CurTok.Kind = tkLBrack) or
-                     ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0))) then
-            begin
-              { A SET element -- `array[0..$0C] of TSetOfByte = ([], [0..255], ...)`,
-                fcl-xml's W3C naming tables, and the ordinary way a lexer writes a
-                table of character classes.
-
-                It needs its own arm for the reason the string-literal and PChar
-                elements above needed theirs, and this is the THIRD instance of that
-                one shape: the fallback calls ParseInitVal, which does not consume a
-                `[`, so the loop spun on the same token and `Inc(cElem)` counted it
-                once per declared slot until the length check tripped -- reporting
-                `too many array constant elements` with TokPos still on the FIRST
-                element, which reads as a size complaint about a correct size.
-
-                Nothing new is needed below the parser: BakeSetConst already folds
-                the literal (and `A + B` / `A - [x]` over named set consts) into a
-                32-byte mask in Data[], kind 9 rebuilds the AN_SET_CONST_REF from
-                that offset in both emitters, and `arr[i] := <set>` was already a
-                working assignment. TryBakeConstArrayIntoData sees a kind it does not
-                know and falls back to runtime stores, which is its documented
-                fail-closed behaviour and correct here.
-                bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements }
-              cSetOff := BakeSetConst;
-              if isLocalConst then
-              begin
-                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
-                LocalInitSym[LocalInitCount]  := cIdx;
-                LocalInitElem[LocalInitCount] := cLo + cElem;
-                LocalInitFOff[LocalInitCount] := -1;
-                LocalInitKind[LocalInitCount] := 9;      { AN_SET_CONST_REF }
-                LocalInitVal[LocalInitCount]  := cSetOff;
-                LocalInitTk[LocalInitCount]   := Ord(tySet);
-                Inc(LocalInitCount);
-              end
-              else
-              begin
-                EnsurePendingInitCapacity(PendingInitCount);
-                PendingInitSym[PendingInitCount]  := cIdx;
-                PendingInitElem[PendingInitCount] := cLo + cElem;
-                PendingInitFOff[PendingInitCount] := -1;
-                PendingInitKind[PendingInitCount] := 9;  { AN_SET_CONST_REF }
-                PendingInitVal[PendingInitCount]  := cSetOff;
-                PendingInitTk[PendingInitCount]   := Ord(tySet);
-                Inc(PendingInitCount);
-              end;
-            end
+            { THE SET ELEMENT ARM USED TO BE WRITTEN OUT HERE and is now one of
+              TryParseInitValForm's, below -- the fifth caller of that helper is
+              what showed it had to be: a set-typed RECORD FIELD had no arm at
+              all, and a hand-written copy here could never have given it one.
+              bug-p-a-const-array-of-sets-is-rejected-as-too-many-elements }
             else if TryParseInitValForm(cElemTk, Ord(Syms[cIdx].PtrElemTk),
                                         fvKind, fvVal, fvAux) then
             begin

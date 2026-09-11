@@ -1,0 +1,8 @@
+row0   n..
+row1   .od
+row2   ...
+solo   .od
+v      ..d
+both   .od
+miss   TRUE
+fields + FALSE 2 s 9

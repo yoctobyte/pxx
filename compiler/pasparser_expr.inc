@@ -13054,6 +13054,36 @@ begin
     end;
   end;
 
+  { A SET VALUE -- `[a, b]`, `[]`, `A + [x]`, or a named set constant -- in any
+    slot whose DESTINATION is a set. Kind 9 = AN_SET_CONST_REF over the 32-byte
+    mask BakeSetConst folds into Data[]; both flushes already rebuild it from
+    that offset, and `x := <set>` has always been a working assignment, so
+    nothing below the parser is new.
+
+    THIS IS THE ARM THAT MADE THE HELPER EARN ITS NAME. It was written out by
+    hand in the const-ARRAY element loop and nowhere else, so
+    `array of TSet = ([], [0..255])` worked while a set-typed RECORD FIELD --
+    `(special: true; keyword: [m_none])`, which is how FPC's own tokens.pas
+    spells its 400-row token table -- desynced the field loop and reported
+    `expected field name in record constant` pointing at the `[`. That is the
+    misleading message this helper's header paragraph exists to prevent, for the
+    fifth time and in the one caller that had never been given the arm.
+
+    THE DESTINATION DECIDES, NOT THE TOKEN, which matters here more than for the
+    string arm: `[` in a value slot is a set literal and nothing else, but an
+    IDENT is only a set when FindSetConst knows it, and taking an ordinary
+    enumeration constant that way would bake the wrong 32 bytes silently.
+    bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant }
+  if (tk = tySet) and
+     ((CurTok.Kind = tkLBrack) or
+      ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0))) then
+  begin
+    kind := 9;
+    val  := BakeSetConst;
+    TryParseInitValForm := True;
+    Exit;
+  end;
+
   { `@name` -- a link-time address. A routine wins over a variable of the same
     name here for the same reason MatchEligBase does: `@F` names the routine. }
   if (CurTok.Kind = tkAt) and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) then
