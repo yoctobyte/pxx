@@ -2,7 +2,7 @@
 track: N
 prio: 50
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-11
 found-by: frankuser
@@ -96,3 +96,30 @@ except arm.
 identical `pascal26:5: error: expected expression`, **whether the imported module
 exists or not**, which is the evidence that this is parse-time and not resolution:
 `import math` succeeds and still loses the else.
+
+## RESOLVED — fixed at `cc311ec6e`, VERIFIED HERE WITH THIS TICKET'S OWN CONTROLS
+
+Fixed by a peer who credited the filing. Verified at binary `465845b20d1e`, using
+the two controls written above rather than a fresh probe:
+
+| control | CPython | pxx |
+| --- | --- | --- |
+| `try: import nosuchmod / except ImportError: R="fallback" / else: R="present"` | `fallback` | **`fallback`** |
+| `try: import math / except ImportError: S="fallback" / else: S="present"` | `present` | **`present`** |
+
+**The second row is the one that matters** — it is the control this ticket named
+for catching an over-broad fix, because an implementation that always took the
+except arm would pass the first row alone. It takes the `else`.
+
+The mechanism, from the fix's own commit message: `PyParseFallbackImportTry` now
+consumes the `else` on both arms — **skipped unparsed** when the handler ran
+(parsing resolves imports, and that block sits on the branch the program does not
+take) and folded onto the tail of the try body when it did not. Which is why the
+ordinary try path had handled `else` correctly all along: this was never a general
+parser gap.
+
+**The consequence is banked, not merely noted.** The lekkerzeilen seam is back on
+the faithful spelling, so the behaviour difference this bug forced — an
+`ImportError` raised by `_ctypes_backend` itself being swallowed into the native
+fallback — is **gone** rather than documented. That was the whole reason this was
+prio 50 instead of a syntax curiosity.
