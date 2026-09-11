@@ -1,0 +1,31 @@
+# THE PAIR. Two fixes only fail TOGETHER here, and each one alone passes every
+# row a test of the other would write -- which is why this is one fixture and
+# not two.
+#
+#   1. DEAD-ARM SUPPRESSION. A guarded import binds the SAME alias in both arms,
+#      so the alias is a DOUBLE REGISTRATION. FindUnitOrAlias is first-wins
+#      (bug-n-a-unit-alias-rebind-is-silently-ignored), so the dead try arm's
+#      row is appended first and, unsuppressed, is what every later lookup
+#      reaches.
+#   2. THE getattr FOLD over that alias
+#      (bug-n-a-module-bound-by-an-import-is-not-a-value, option 3).
+#
+# WHY THE PAIR AND NOT EACH HALF. The fold resolves through FindUnitOrAlias, so
+# if suppression ever regresses the fold answers against the WRONG MODULE --
+# silently, with a real value, in the one file whose only job is to say which
+# backend is live. That is the 73312a7472fd trap one layer up: there it BOUND
+# the wrong module, here it FOLDS against it. A fold test on a single-arm alias
+# passes, and a suppression test without a getattr passes; neither can see it.
+#
+# THE GUARD IS A MODULE ABSENT UNDER BOTH CPython AND pxx, deliberately. Writing
+# `import ctypes` -- which is what lekkerzeilen's seam actually writes -- would
+# make CPython take the try arm and pxx the except arm, so oracle and subject
+# would execute different code and the differential could not fail. The
+# CONSTRUCT is what is under test, not which module is missing.
+#
+# Every name in the dead arm is spelled WRONG on purpose, so a regression cannot
+# accidentally produce a right answer.
+import nilpy_seampair as s
+
+print("probe_live", s.probe_live())
+print("probe_dead", s.probe_dead())

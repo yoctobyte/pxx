@@ -1512,6 +1512,33 @@ test-nilpy: $(COMPILER)
 	# ignored the local shadow would move that row.
 	./$(COMPILER) test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy $(TESTTMP)/test_nilpy_unitgetattr26
 	tools/expect_same.sh test_nilpy_unitgetattr26 "$$($(TESTTMP)/test_nilpy_unitgetattr26)" "$$(python3 test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy)"
+	# THE PAIR: dead-arm alias suppression AND the getattr fold, in ONE fixture,
+	# because each half alone passes every row a test of the other would write.
+	# The fold resolves through FindUnitOrAlias, which is FIRST-WINS
+	# (bug-n-a-unit-alias-rebind-is-silently-ignored), and a guarded seam binds
+	# the same alias in both arms -- so if suppression regresses the fold answers
+	# against the DEAD module. That is the 73312a7472fd trap one layer up: there
+	# it BOUND the wrong module, here it FOLDS against it.
+	# POSITIVE CONTROL, MEASURED 2026-09-11 -- and the first two attempts at it
+	# were both wrong, which is why the method is recorded and not just the
+	# verdict:
+	#   (a) reverting the rollback in PyParseFallbackImportTry (pyparser.inc
+	#       ~22181) changed NOTHING -- this fixture AND the sibling both stayed
+	#       green. That twin "alone measured as no change" and the compiler
+	#       comment at the OTHER site says so in those words; the load-bearing
+	#       rollback is the prescan walk's, ~40009. A control that cannot produce
+	#       the defect certifies the guard either way, so arm it against the
+	#       SIBLING's known-positive first.
+	#   (b) with the right site reverted, the fixture's FIRST draft went red on
+	#       `backend.NAME` -- a direct member read on a mis-bound alias fails
+	#       loudly and stops the compile before any getattr runs, so it was red
+	#       for a reason unrelated to the fold. This file therefore reads NO
+	#       member directly; the sibling covers that face.
+	# Armed correctly, the failure is SILENT: `probe_live` answers `absent` where
+	# CPython says `live`, exit 0, no diagnostic -- the fold resolving against the
+	# module of the branch that was skipped.
+	./$(COMPILER) -Futest test/test_nilpy_a_guarded_seam_alias_folds_against_the_live_arm.npy $(TESTTMP)/test_nilpy_seampair26
+	tools/expect_same.sh test_nilpy_seampair26 "$$($(TESTTMP)/test_nilpy_seampair26)" "$$(cd test && python3 test_nilpy_a_guarded_seam_alias_folds_against_the_live_arm.npy)"
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no
