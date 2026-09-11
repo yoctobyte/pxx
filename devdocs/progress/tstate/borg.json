@@ -14812,6 +14812,7 @@
     "7710927aab7719e4b5f69131e68539672feed0fe",
     "2d4ce55bfaa60b115e1ffc3d319ca4cc6c531106"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -14919,6 +14920,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "test/test_asm_emit_rv32.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15026,6 +15028,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "test/test_opt_store_reload.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15276,6 +15279,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -15526,6 +15530,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -15776,6 +15781,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -16026,6 +16032,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -16276,6 +16283,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
   },
@@ -16526,6 +16534,7 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "range_non_causal": false,
    "src": "",
    "status": "fail"
   },
