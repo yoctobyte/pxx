@@ -14691,7 +14691,7 @@
  ],
  "open_regressions": [
   {
-   "bad": "3a1c1dc73fcbf70edb991efbbc1518ca05770512",
+   "bad": "25af93d7726c46041ea621eb5ba11776f797ec62",
    "bad_untestable": false,
    "first_seen": false,
    "good": "eefa85d70c64b7eb16dd212d0711b530cefa3abd",
@@ -14706,9 +14706,7 @@
    "pin_built": false,
    "range": [
     "47fedc80f0818648fa3fe042ffe76ed391037335",
-    "25af93d7726c46041ea621eb5ba11776f797ec62",
-    "ad4db86ed03183e6a879b8a7f9c3dfb9e1cd1b70",
-    "3a1c1dc73fcbf70edb991efbbc1518ca05770512"
+    "25af93d7726c46041ea621eb5ba11776f797ec62"
    ],
    "range_non_causal": false,
    "src": "",
