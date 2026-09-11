@@ -732,3 +732,59 @@ So the rule is **any guarded import anywhere in a package's `__init__.py` poison
 every from-import of that package** — not "a module-level guard". Today that is one
 file; it is one `try:` in any `__init__.py` away from being more, which is why the
 census is a committed tool rather than a number in this ticket.
+
+### THE CRITERION TOOK THREE TRIES — and package-ness was never a dimension
+
+frankZ widened it a third time and was right a third time. Measured, both compilers,
+one no-guard control per row:
+
+| module kind | guard placement | CPython | pin `095ef4811a5b` | HEAD `f1817610c98e` |
+| --- | --- | --- | --- | --- |
+| package `__init__.py` | module level | 27 | **None** | 27 |
+| package `__init__.py` | inside a function | 27 | **None** | 27 |
+| **plain module** | module level | 27 | **None** | 27 |
+| **plain module** | inside a function | 27 | **None** | 27 |
+| either | *no guard* (control) | 27 | 27 | 27 |
+
+**So the rule is: any from-imported module containing a guarded import ANYWHERE
+poisons every name of that from-import.** Not a package, not module-level. The
+package-ness was an artefact of `platform/` being where both of us happened to look.
+
+The three criteria, because the tool is only as good as the criterion and **a
+widened filter is exactly when nobody questions it again**:
+
+1. `grep -rln 'except ImportError'` — TEXTUAL. Missed two of three guards here,
+   whose handlers are `Exception` and `platform.PlatformError | OSError`.
+2. `ast.Try` + "is it a package `__init__.py`" — encoded PACKAGE-NESS, which is not
+   a dimension at all.
+3. `ast.Try` at any depth in any module, cross-referenced against whether that
+   module is actually **from-imported**. The from-import side is what makes a site
+   live.
+
+`tools/lekkerzeilen_guarded_import_census.py` implements (3) with controls drawn
+from the two things criterion (2) got wrong: its positive control is a PLAIN module
+with a FUNCTION-LOCAL guard that is from-imported, so a tool that still filters on
+package-ness or placement fails it. Negative control: a guarded module nobody
+from-imports must NOT be reported live.
+
+**Result — the conclusion holds, now with an exact count:**
+
+```
+  SUSPECTS (contain a guarded import)                      3
+  LIVE (from-imported, so actually poisoned)               1  -> module `platform`
+      __main__.py:43    5 names   KEY_DOWN, KEY_ESCAPE, QUIT, RESIZE, gl
+      app.py:26        22 names   ARROW_DOWN ... QUIT, RESIZE, gl
+      capture.py:14     1 name    gl
+      gfx.py:10         1 name    gl
+                       ---------
+                       29 names across 4 sites
+  DORMANT (guarded, not from-imported)                     2  -> __main__, app
+```
+
+**29 names, not "four sites".** And the two dormant suspects are the forward-looking
+risk: `app.py:408` is `import shutil` inside a `try` in a plain module, one
+`from .app import ...` away from being live. That is why this is a committed tool
+with controls rather than a number in a ticket.
+
+*(Earlier revisions of this section said 23 names at `app.py:26`; the AST counts 22.
+Eyeballed from source the first time.)*
