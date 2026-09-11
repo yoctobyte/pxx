@@ -25005,3 +25005,59 @@ instance**. What would promote it: a second seat losing work to an already-fixed
 ticket that reproduced, in an unrelated subsystem. The pinned-versus-current
 discriminator is the part worth adopting now, and it needs no rule — it is one
 command.
+
+## A NAME-MATCHED PROCESS PREDICATE IS A WAIT ON THE FLEET, NOT ON YOUR JOB — and it fails in four directions, two of which look like something else entirely
+
+Found by **frankuser, 2026-09-11**, who spotted one of my wait loops blocked on
+*their* census; the other three instances are frankZ's, from the same evening,
+and none of the three had been connected to the others until they said so.
+
+`pgrep -f <name>` / `pkill -f <name>` match **every process on the box** whose
+command line contains the string — every checkout, every session, and **the
+shell running the pgrep itself**. On a twenty-checkout box with a fleet of
+sessions, that is almost never the question you meant to ask.
+
+| # | what was written | what it actually matched |
+| --- | --- | --- |
+| 1 | `until ! pgrep -f lekkerzeilen_census; do sleep 20; done` | **another session's** census, in another checkout |
+| 2 | `pgrep -cf 'make test-nilpy'` | **its own shell** — the pattern is in the command line of the command containing it. Answered `1` for a tier that had already exited |
+| 3 | `pkill -f 'make test-nilpy'` | its own **four watcher shells**, which were waiting on that very pattern. Four `exit 144`s that read as the box being in trouble |
+| 4 | the `cat log` *after* the wait released | a log **correct about an earlier run**, printed with the freshness the wait had just manufactured |
+
+**Rows 2 and 3 are row 1 with the target pointed at yourself, and that is why
+they are not recognised as the same bug.** A self-match reads as "the job is
+still running". A self-kill reads as a crash, or as memory pressure, or as the
+harness misbehaving. Neither presents as a predicate problem, so a seat can hit
+all three in one evening and file them as three unrelated oddities — which is
+exactly what happened here until someone outside the session pointed at the
+first one.
+
+**Row 4 is the one that corrupts a result rather than wasting time.** The others
+cost minutes; this one hands you a stale log at the precise moment the gating
+loop releases, which is when it feels most current. It is the house
+stale-instrument failure with a `sleep` in front of it, and the sleep is what
+supplies the false freshness.
+
+**The fix, and it is one line either way:**
+
+```sh
+cmd > log 2>&1 &  pid=$!          # capture YOUR pid
+until ! kill -0 $pid 2>/dev/null; do sleep 10; done
+```
+
+or match your own checkout rather than a bare name:
+
+```sh
+pgrep -f 'frankZ.*lekkerzeilen_census'
+```
+
+**And print something that proves the log is the run you waited for** — the
+binary sha, the start timestamp, the corpus revision — rather than trusting the
+ordering. A wait that released is evidence about a process, never about a file.
+
+**Not promoted to CLAUDE.md, and saying so out loud so the finding's author is
+not left inferring it:** four instances across two sessions in one evening is
+comfortably RECURRENCE and it met merit on the first reading. It is still **one
+mechanism** — process predicates — so it fails the second-independent-subsystem
+test that decides promotion. It earns the line the day the same shape shows up
+somewhere that is not `pgrep`.
