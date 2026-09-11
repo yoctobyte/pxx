@@ -184,4 +184,4 @@ line number is usually in range for the `.c`, so `inc.h:2` reads as `m.c:2` —
 a real, innocent line. The reader opens it and finds nothing wrong.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7e6d97826.
