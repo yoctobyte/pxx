@@ -1534,7 +1534,7 @@ end;
   and return the index of its first token. The importer parses from there and
   restores its own position afterwards — the same shape LexAppend gives a
   Pascal unit and CLexAppend a C one (feature-nilpy-py-module-loader). }
-function PyLexAppend(const src: AnsiString): Integer;
+function PyLexAppend(const src, path: AnsiString): Integer;
 var savedSource: AnsiString; savedLine: Integer;
 begin
   savedSource := Source;
@@ -1543,8 +1543,23 @@ begin
   PyExpandFStrings;            { operates on Source, like the main program's }
   Result := TokCount;
   { See the CLexAppend twin: end any open Pascal source range so a NilPy token
-    is never attributed to a Pascal unit's file by Error's `in:` line. }
-  PasMarkTokFile(TokCount, '');
+    is never attributed to a Pascal unit's file by Error's `in:` line.
+
+    IT USED TO PASS '' HERE, WHICH ENDED THE RANGE AND STARTED NO CORRECT ONE,
+    so an error inside an imported module printed a line number and NO `in:`
+    line -- and the reader has exactly one filename in hand, the one they
+    invoked, so the coordinate was not merely unattributed but actively
+    WRONG. Measured on lekkerzeilen: `platform/__init__.py` reported a wall at
+    line 181 of a 150-line file, and the only thing that contradicted the wrong
+    reading was 181 > 150. Had the imported module been the shorter one,
+    nothing in the output would have.
+    The same omission is what made two unrelated modules "fail at the identical
+    line 31" read as one shared dependency (CLAUDE.md, 2026-09-10) -- one
+    mechanism, a false LOCATION in one file and a false SHARED CAUSE across two.
+    Passing the real path ends the Pascal range exactly as '' did AND attributes
+    the tokens, so it is strictly the stronger form of the same guard.
+    bug-n-an-error-inside-an-imported-nilpy-module-names-no-file }
+  PasMarkTokFile(TokCount, path);
   PyLexAppending := True;
   PyLexAll(False);
   PyLexAppending := False;

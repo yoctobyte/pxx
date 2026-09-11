@@ -6837,7 +6837,7 @@ begin
     savedUnitImplCU := InUnitImpl;
     InUnitImpl := False;
 
-    startPos := PyLexAppend(UnitContent);
+    startPos := PyLexAppend(UnitContent, path);
     { -g: give the module its own .debug_line file entry, so a breakpoint
       inside it resolves and its frames show real lines instead of the line-0
       treatment every appended source otherwise gets. Registered BEFORE the

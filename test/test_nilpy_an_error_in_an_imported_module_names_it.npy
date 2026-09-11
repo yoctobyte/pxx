@@ -1,0 +1,11 @@
+# The importer. Its own compile MUST FAIL, inside nilpy_erroring_module.
+#
+# An error raised inside an imported NilPy module printed `pascal26:<n>:` with
+# that module's line number and NO `in:` line, and the reader has exactly one
+# filename in hand -- the one they invoked -- so the coordinate was not merely
+# unattributed, it was WRONG. Measured on lekkerzeilen: platform/__init__.py
+# reported a wall at line 181 of a 150-line file, and the only thing that
+# contradicted the wrong reading was 181 > 150. Had the imported module been
+# the shorter one, nothing in the output would have.
+import nilpy_erroring_module
+print(nilpy_erroring_module.boom())

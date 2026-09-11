@@ -2979,3 +2979,49 @@ asserting `in:` does NOT appear. Without it a fix printing the line
 unconditionally passes the first two while telling every reader the name of the
 file they just typed. No row pins a line number; the assertion is a PATH, so it
 does not go stale as a fixture grows.
+
+## 2026-09-11 | frankH | compiler/pylexer.inc, pasparser_proc.inc | an error inside an imported NilPy module names it
+
+`PyLexAppend` marked the appended module's token range with an EMPTY path. The
+empty string was deliberate and half right — its comment says it ends any open
+Pascal source range "so a NilPy token is never attributed to a Pascal unit's
+file" — but it ended the range and started no correct one, so an error inside an
+imported module printed a line number and NO `in:` line.
+
+THE MISSING LINE IS NOT AN IMPRECISION, IT IS A WRONG ANSWER, and that is the
+ranking argument. The reader has exactly one filename in hand, the one they
+invoked, so an unattributed line number is silently attributed to the wrong file.
+frankZ's corpus case, which cost real time today: lekkerzeilen's
+`platform/__init__.py` reported a wall at `_ctypes_backend.py:181` against a
+150-line `__init__.py`, and the ONLY thing contradicting the wrong reading was
+that 181 > 150. Had the imported module been the shorter one, nothing in the
+output would have. It was two bugs stacked and the missing `in:` is what made the
+first unattributable.
+
+ONE MECHANISM, TWO SHAPES, and a reader who has met only one will not recognise
+the other. CLAUDE.md records the false-SHARED-CAUSE shape (2026-09-10: two
+unrelated modules "failing at the identical line 31", read as a shared dependency
+and ticketed at p80, when it was one file's line 31). frankZ's is the
+false-LOCATION shape inside a single file. Same omission.
+
+THE INTERIM TELL, worth knowing because it is the only free signal and it is
+ONE-WAY: a reported line number that EXCEEDS the length of the file you invoked
+proves the error is in an imported module. It catches nothing when the imported
+module is the shorter one, so it is a tell, not a check.
+
+The fix passes the module's real path where '' went. That ends the Pascal range
+exactly as '' did AND attributes the tokens, so it is strictly the stronger form
+of the same guard — verified with a Pascal unit on the search path: the
+diagnostic names the .npy, never the .pas.
+
+Three rows wired into test-nilpy, and the pair matters: the importer row asserts
+the path appears, the main-module row asserts it does NOT, and a precondition row
+asserts the fixture still fails to compile (a comparison whose input was never
+proven to exist cannot fail). No line number is pinned anywhere — a line number
+with no file beside it is the entire bug, so pinning one would repeat it in the
+test. Positive control by stashing the fix and rebuilding: pre-fix, line 2 of the
+output is the `near:` window and the row goes red.
+
+Found by probing the NilPy side after fixing the Pascal one; handed over by
+frankZ, who was in pyparser.inc's getattr arm and declined it rather than divert
+from the demo path.

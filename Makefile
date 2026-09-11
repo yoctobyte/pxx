@@ -618,6 +618,29 @@ test-nilpy: $(COMPILER)
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libz\.so\.1'; then \
 	  echo "ok: import zlib links libz.so.1, not the invented libzlib.so"; \
 	else echo "FAIL: test_nilpy_import_zlib26 has no libz.so.1 DT_NEEDED, so it is not importing from zlib at all — with this row inert the libzlib.so assertion above cannot fail and its silence means nothing"; exit 1; fi
+	@# AN ERROR INSIDE AN IMPORTED MODULE NAMES THE MODULE. It printed
+	@# `pascal26:<n>:` with that module's line number and NO `in:` line, and the
+	@# reader has exactly one filename in hand -- the one they invoked -- so the
+	@# coordinate was not merely unattributed, it was WRONG. Measured on
+	@# lekkerzeilen: platform/__init__.py reported a wall at line 181 of a
+	@# 150-line file, and the ONLY thing contradicting the wrong reading was
+	@# 181 > 150. Had the imported module been the shorter one, nothing in the
+	@# output would have. The same omission made two unrelated modules "fail at
+	@# the identical line 31" read as one shared dependency (2026-09-10): one
+	@# mechanism, a false LOCATION in one file and a false SHARED CAUSE across two.
+	@# THE PAIR IS THE POINT. The second row asserts the path does NOT appear for
+	@# the file the reader invoked; without it, a fix printing `in:`
+	@# unconditionally passes the first while naming the file they just typed.
+	@# NO LINE NUMBER IS PINNED -- a line number with no file beside it is the
+	@# entire bug, so pinning one here would repeat it in the test.
+	@if ./$(COMPILER) -Futest test/test_nilpy_an_error_in_an_imported_module_names_it.npy $(TESTTMP)/test_nilpy_impdiag26 >/dev/null 2>&1; then \
+	  echo "FAIL: test_nilpy_an_error_in_an_imported_module_names_it COMPILED — the fixture stopped erroring, so the in: assertion below cannot fail"; exit 1; fi
+	@tools/expect_same.sh test_nilpy_an_error_in_an_imported_module_names_it \
+	  "$$(./$(COMPILER) -Futest test/test_nilpy_an_error_in_an_imported_module_names_it.npy $(TESTTMP)/test_nilpy_impdiag26 2>&1 | sed -n '2p')" \
+	  "  in: test/nilpy_erroring_module.py"
+	@if ./$(COMPILER) test/test_nilpy_an_error_in_the_main_module_names_nothing.npy $(TESTTMP)/test_nilpy_maindiag26 2>&1 | grep -q '^  in: '; then \
+	  echo "FAIL: an error in the MAIN .npy grew an 'in:' line — the reader is being told the name of the file they just typed"; exit 1; \
+	else echo "ok: an error in the main .npy still names no file, and an imported module names itself"; fi
 	# THE OTHER DOOR, and it is this row's control. A BARE `import zlib` must reach
 	# lib/rtl/zlib.pas. Before 80d71d782 it reached /usr/include/zlib.h, and the
 	# cost was not a refusal: C's crc32 takes THREE arguments, so CPython's one-
