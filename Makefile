@@ -1423,6 +1423,28 @@ test-nilpy: $(COMPILER)
 	# bug just fixed, which is why it is here and not asserted as a differential.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_reserved_member_still_maps_to_a_shim_underscore.npy $(TESTTMP)/test_nilpy_reservedshim
 	tools/expect_same.sh test_nilpy_reservedshim.1 "$$($(TESTTMP)/test_nilpy_reservedshim)" "$$(printf 'shim-end\nshim-text\n41\n42')"
+	# A unit-qualified member call was resolved through the GLOBAL FindProc by the
+	# NilPy return-type inference walk, so a C-declared function of the same name
+	# won: `m.open(...)` was typed by fcntl.h's `int open(...)` (tyInt32) instead
+	# of the module's own class-or-None `open`, and the join refused -- surfacing
+	# as `annotate the type / too dynamic` at the ASSIGNMENT, lines from the call
+	# that actually mis-resolved. Five reductions missed it; the sixth found it
+	# only after the diagnostic was taught to print tyInt32 instead of 11.
+	#
+	# THREE THINGS HERE ARE LOAD-BEARING and each was verified by removing it:
+	#  - the WRAPPER (load_region). Call m.open(...) straight from the method and
+	#    the PIN compiles it and prints identical output -- a guard that cannot
+	#    fail. It is this def's return-type inference that walks the qualified call.
+	#  - the HEADER IMPORT. Without a C `open` in scope there is no collision and
+	#    every row passes on the unfixed compiler. The C declaration IS the
+	#    positive control. (A C import with no `open` in it -- ctype.h -- also
+	#    compiles, so it is the NAME, not C headers in general.)
+	#  - the 407/408 pair. Both .get() rows answered 407 at first, which could not
+	#    tell the two classes apart; 408 is the Region arm.
+	# Verified to FAIL on the pin with exactly this error, so it is a regression
+	# test and not a restatement -- hence $(COMPILER), not $(PXX_STABLE).
+	./$(COMPILER) -Futest test/test_nilpy_a_qualified_member_loses_to_a_c_function_of_the_same_name.npy $(TESTTMP)/test_nilpy_cnamecollide
+	tools/expect_same.sh test_nilpy_cnamecollide.1 "$$($(TESTTMP)/test_nilpy_cnamecollide)" "$$(printf 'False\nTrue\n407\n408\n407')"
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

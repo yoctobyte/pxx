@@ -8432,6 +8432,68 @@ begin
   {$endif}
 end;
 
+{ The SPELLING of a TTypeKind, for diagnostics only. Beside IntToTypeKind
+  because they are the same concern -- the two directions across the one enum --
+  and keeping them together is why this is not a third partial copy. There were
+  already three: WasmTypeKindName (ir_codegen_wasm32.inc), RScalarTypeName
+  (rparser.inc) and DbgTypeDisplayName (elfwriter.inc), each covering only the
+  kinds its own backend emits, which is exactly the shape
+  devdocs/dev/normalise-dont-special-case.md warns about. This one is TOTAL, so
+  a caller never has to know whether its kind is covered.
+
+  Written because `annotate the type / too dynamic [a=11 b=22]` made every
+  reader open this file and COUNT ENUM MEMBERS to learn that 11 is tyInt32 and
+  22 is tyVariant. Measured cost: one evening, in
+  bug-n-a-field-assigned-a-class-or-none-in-two-methods-wont-widen.
+
+  Diagnostics only -- do NOT parse these back into kinds, and do not use them in
+  generated code or mangled names. The name-to-kind direction already has ONE
+  owner, BuiltinTypeNameTk in pasparser_lval.inc, whose own comment records
+  three separate fixes for having had more than one. }
+function TypeKindName(tk: TTypeKind): AnsiString;
+begin
+  case tk of
+    tyUnknown:     Result := 'tyUnknown';
+    tyInteger:     Result := 'tyInteger';
+    tyBoolean:     Result := 'tyBoolean';
+    tyChar:        Result := 'tyChar';
+    tyString:      Result := 'tyString';
+    tyRecord:      Result := 'tyRecord';
+    tyClass:       Result := 'tyClass';
+    tyInt8:        Result := 'tyInt8';
+    tyUInt8:       Result := 'tyUInt8';
+    tyInt16:       Result := 'tyInt16';
+    tyUInt16:      Result := 'tyUInt16';
+    tyInt32:       Result := 'tyInt32';
+    tyUInt32:      Result := 'tyUInt32';
+    tyInt64:       Result := 'tyInt64';
+    tyUInt64:      Result := 'tyUInt64';
+    tyNativeInt:   Result := 'tyNativeInt';
+    tyNativeUInt:  Result := 'tyNativeUInt';
+    tyPointer:     Result := 'tyPointer';
+    tySingle:      Result := 'tySingle';
+    tyDouble:      Result := 'tyDouble';
+    tyExtended:    Result := 'tyExtended';
+    tySet:         Result := 'tySet';
+    tyVariant:     Result := 'tyVariant';
+    tyAnsiString:  Result := 'tyAnsiString';
+    tyAuto:        Result := 'tyAuto';
+    tyShortString: Result := 'tyShortString';
+    tyFixedString: Result := 'tyFixedString';
+    tyPromoInt32:  Result := 'tyPromoInt32';
+    tyPromoInt64:  Result := 'tyPromoInt64';
+    tyBool8:       Result := 'tyBool8';
+    tyUCS4Char:    Result := 'tyUCS4Char';
+    tyWideChar:    Result := 'tyWideChar';
+  else
+    { Not reachable through the enum, and printed rather than raised on purpose:
+      a DIAGNOSTIC helper that halts turns a reportable error into a crash and
+      loses the message it was called to format. A new kind appended without a
+      row here lands as a visible '?' instead. }
+    Result := 'ty?';
+  end;
+end;
+
 { Case-insensitive string equality. Bails on the FIRST differing character —
   it used to set `match := False` and keep scanning to the end, which cost the
   full length on every miss, and misses are the common case: this is the

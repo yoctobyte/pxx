@@ -1954,7 +1954,18 @@ begin
 end;
 
 var
-  PyInferName: AnsiString;  { name under type inference, for diagnostics }
+  { Name under type inference, for diagnostics. SET IMMEDIATELY BEFORE a
+    PyWidenBinding call and cleared immediately after: Error() ends in Halt(1),
+    so the only way the clear is skipped is the way we want it skipped, and no
+    unrelated later diagnostic can inherit a stale name.
+    It was DECLARED AND READ AND NEVER ASSIGNED from the day it was written, so
+    `(inferring X)` was dead text and `annotate the type / too dynamic [a=11
+    b=22]` named no binding at all -- which is exactly the half a reader needs
+    and the half two ordinals cannot supply. Found while failing to reduce
+    bug-n-a-field-assigned-a-class-or-none-in-two-methods-wont-widen, where the
+    conflicting binding is a FIELD joined across two methods and nothing in the
+    message said so. }
+  PyInferName: AnsiString;
   PyWidenA, PyWidenB: TTypeKind;
   PyInferLastCi: Integer;   { class index of the last tyClass inference result }
   { Did the last PyInferDefRetType actually SEE a value-bearing return? It
@@ -1967,8 +1978,14 @@ var
 
 function PyWidenErr: AnsiString;
 begin
+  { The ORDINALS ARE KEPT beside the names, deliberately. Tickets, logbook rows
+    and compiler comments going back months quote this message as [a=11 b=22],
+    and a reader cross-referencing one of those needs the number to still be
+    there. Extend the vocabulary, do not replace it. }
   Result := 'Nil Python: annotate the type / too dynamic [a=' +
-            AIntToStr(Ord(PyWidenA)) + ' b=' + AIntToStr(Ord(PyWidenB)) + ']';
+            TypeKindName(PyWidenA) + '(' + AIntToStr(Ord(PyWidenA)) + ')' +
+            ' b=' + TypeKindName(PyWidenB) + '(' + AIntToStr(Ord(PyWidenB)) +
+            ')]';
   if PyInferName <> '' then Result := Result + ' (inferring ' + PyInferName + ')';
 end;
 
@@ -4190,7 +4207,9 @@ begin
     An integer-only accumulator is untouched: PyWidenBinding's redirect requires
     exactly one FLOAT side, so `x = x + 1` in a loop with no float in sight keeps
     the promo width it exists for. }
+  PyInferName := PyLocals[ci].Name;
   w := PyWidenBinding(PyLocals[ci].TypeKind, tk);
+  PyInferName := '';
   { A name already known to hold UNRELATED classes never narrows back out of the
     dynamic representation, whatever this one assignment says. }
   if PyLocals[ci].Poly then w := tyVariant;
@@ -5124,6 +5143,7 @@ function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
     qcUnit, qcProc: Integer; qcTk: TTypeKind;   { a qualified module MEMBER -- see the arm }
+    qmUnit, qmProc: Integer;   { ...and the UNIT-SCOPED lookup the bare-call arm owes it }
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
     ctorCi, ctorEnd, ctorSelCi: Integer; ctorTk: TTypeKind;  { `Foo().m().f` chase }
@@ -5704,9 +5724,33 @@ begin
           else
           begin
             { Every top-level def has a registered Proc by now
-              (PyRegisterDefShells), so FindProc is the whole answer — the old
-              PyDefReturnType token scan that stood in for it is gone. }
-            procIdx := FindProc(name);
+              (PyRegisterDefShells), so FindProc answers for a BARE call — but
+              it is a GLOBAL lookup, and this arm also fires on the MEMBER token
+              of a qualified one. `w.open(...)` then resolved to whatever global
+              is called `open`, and with any header declaring it in scope that is
+              C's `int open(...)`: tyInt32, where the module's own `open` returns
+              a class or None. The join refused, honestly and unhelpfully, as
+              `annotate the type / too dynamic` pointing at the ASSIGNMENT.
+              This arm was dot-aware only for a LOCAL root (PyDottedRootIsLocal
+              above); a UNIT root fell straight through, and the qualified arm
+              that would have answered correctly sits LATER in this same scan --
+              a first-wins ordering, exposed only because a C header happened to
+              declare the same name.
+              So ask the unit FIRST and fall back to the global, which leaves
+              every bare call resolving exactly as before.
+              bug-n-a-field-assigned-a-class-or-none-in-two-methods-wont-widen }
+            procIdx := -1;
+            if (i - 2 >= startIdx) and (Tokens[i - 1].Kind = tkDot) and
+               (Tokens[i - 2].Kind = tkIdent) then
+            begin
+              qmUnit := FindUnitOrAlias(GetTokenStr(i - 2));
+              if qmUnit >= 0 then
+              begin
+                qmProc := FindProcInUnit(name, qmUnit);
+                if qmProc >= 0 then procIdx := qmProc;
+              end;
+            end;
+            if procIdx < 0 then procIdx := FindProc(name);
             if procIdx >= 0 then tk := Procs[procIdx].RetType;
             { A call returning a CLASS has to record WHICH class, or the
               inferred local/field carries tyClass with no identity and
@@ -27384,7 +27428,9 @@ begin
   if not PyParamRebound(bodyStart, nm) then Exit;
   ci := PyFindConstraint(nm);
   if ci < 0 then Exit;
+  PyInferName := PyLocals[ci].Name;
   w := PyWidenBinding(declTk, PyLocals[ci].TypeKind);
+  PyInferName := '';
   if w <> declTk then PyReboundParamSlotType := w;
 end;
 
@@ -30445,7 +30491,9 @@ begin
       end
       else
       begin
+        PyInferName := PyLocals[si].Name;
         w := PyWidenBinding(PyLocals[si].TypeKind, tk);
+        PyInferName := '';
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;
@@ -31863,7 +31911,9 @@ begin
       end
       else
       begin
+        PyInferName := PyLocals[si].Name;
         w := PyWidenBinding(PyLocals[si].TypeKind, tk);
+        PyInferName := '';
         if w <> PyLocals[si].TypeKind then
         begin
           PyLocals[si].TypeKind := w;
@@ -35384,7 +35434,14 @@ begin
   k := PyFJFind(ci, nm);
   if k >= 0 then
   begin
+    { The field case, and the one that motivated wiring this at all: the join
+      is across ALL methods of the class, so a reader who sees only a line
+      number is looking at one of two or more assignments and cannot tell
+      which pair disagreed. Qualified as a field so it cannot be mistaken for
+      a local of the same spelling. }
+    PyInferName := 'field ' + nm;
     PyFJTk[k] := Ord(PyWidenBinding(IntToTypeKind(PyFJTk[k]), tk));
+    PyInferName := '';
     Exit;
   end;
   if PyFJCount >= PyFJCap then

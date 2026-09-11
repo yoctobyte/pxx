@@ -1,0 +1,55 @@
+# A unit-qualified member call was resolved through the GLOBAL FindProc by the
+# NilPy return-type inference walk, so a C-declared function of the same name won.
+#
+# `m.open(...)` was typed by fcntl.h's `int open(...)` -- tyInt32 -- instead of by
+# the module's own `open`, which returns a class or None. Joining tyInt32 against
+# the None arm refuses, so the whole thing surfaced as
+#   annotate the type / too dynamic [a=tyInt32(11) b=tyVariant(22)]
+# reported at the ASSIGNMENT, several lines from the call that mis-resolved. That
+# is why it took five reductions: the error names neither the call nor the C
+# function nor the module.
+#
+# The bare-call arm of that scan was dot-aware only for a LOCAL root
+# (PyDottedRootIsLocal); a UNIT root fell through, and the qualified arm that
+# would have answered correctly sits LATER in the same scan. A first-wins
+# ordering, exposed only because a C header happened to declare the same name.
+#
+# NOT RUNNABLE UNDER python3 -- `import "<header>"` is pxx syntax -- so the
+# expectations are written out rather than diffed against CPython.
+#
+# The import is what arms this test. Without it there is no global `open` and
+# every row below passes on the unfixed compiler: the C declaration IS the
+# positive control, and it is why the header import is load-bearing rather than
+# incidental. Declared only, never called, so nothing links against it.
+import "/usr/include/fcntl.h"
+import "/usr/include/unistd.h"
+import nilpy_cname_collision as m
+
+
+# THE WRAPPER IS LOAD-BEARING. Call m.open(...) directly from the method and the
+# test passes on the UNFIXED compiler -- measured against the pin, identical
+# output -- because it is the inference of THIS def's return type that walks the
+# qualified call and resolves it globally. Removing the indirection removes the
+# bug while leaving a test that looks like it covers it.
+def load_region(name=None):
+    return m.open("tiled" if name is None else name)
+
+
+class App:
+    def open_region(self, name):
+        scene = load_region(name)
+        self.world = scene if isinstance(scene, m.World) else None
+        return self.world is None
+
+
+# The World arm: m.open("tiled") returns World, so self.world is NOT None.
+print(App().open_region("tiled"))
+# The Region arm: not a World, so self.world IS None -- and this row is the one
+# that needs the None branch of the conditional to have a type at all.
+print(App().open_region("plain"))
+# Reached directly, the member must still be the module's and not C's.
+print(m.open("tiled").get())
+# ...and the OTHER class, so the two .get() rows cannot both pass by everything
+# having resolved to World. 407 and 408 differ; two 407s would not have.
+print(m.open("plain").get())
+print(m.close("tiled").get())

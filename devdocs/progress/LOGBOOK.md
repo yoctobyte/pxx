@@ -3333,3 +3333,37 @@ all. A fixture holding only the class helper would have passed and shipped it.
 AND A MISTAKE BACKED OUT RATHER THAN REASONED ABOUT: the classes were first appended
 beside the functions, where "class record" REBINDS "def record" in Python, so every
 function row would have passed while silently testing the class.
+
+2026-09-11 | frankuser | compiler/defs.inc compiler/pyparser.inc | THE INSTRUMENT FIX FOUND
+THE BUG, and that is the transferable part. `annotate the type / too dynamic [a=11 b=22]`
+had defeated five reductions of the lekkerzeilen closure wall. Added TypeKindName (defs.inc,
+beside IntToTypeKind, total over all 32 kinds, ordinals KEPT alongside the names so months
+of tickets quoting a=11 still cross-reference) and the message became
+[a=tyInt32(11) b=tyVariant(22)]. tyInt32 is a C `int` width and nothing in NilPy produces
+one -- which named the cause on sight, and the sixth reduction landed in minutes.
+THE CAUSE: PyInferExprType's bare-call arm did a GLOBAL FindProc, and that arm also fires on
+the MEMBER token of a qualified call, so `world.open(...)` was typed by fcntl.h's
+`int open(...)` instead of world.py's own class-or-None open. The arm was dot-aware only for
+a LOCAL root (PyDottedRootIsLocal); a UNIT root fell through, and the arm that resolves a
+qualified member correctly sits LATER in the same scan. First-wins, invisible until a C
+header happened to declare a name a Python module also uses.
+Discriminators: fcntl.h + module `open` FAILS; no C import compiles; ctype.h (a C import
+with no `open`) compiles, so it is the NAME not C imports; member renamed `openx` compiles.
+ALSO: PyInferName was DECLARED AND READ AND NEVER ASSIGNED since the day it was written, so
+`(inferring X)` was dead text. Now set at all five PyWidenBinding sites. It did NOT fix this
+bug -- the failing join is in PyWiden and carries no binding name -- and is logged as an
+improvement, not the fix.
+
+2026-09-11 | frankuser | test/ | A guard that could not fail, caught by running it against
+the PIN. The first version of the regression test called m.open(...) straight from the
+method, and the PIN compiled it and printed IDENTICAL output. The WRAPPER is the trigger: it
+is the wrapper def's own return-type inference that walks the qualified call. Simplifying the
+repro had removed the bug while leaving a test that looked like it covered it.
+TWO MORE LOAD-BEARING BITS, each verified by removal: without the header import there is no
+global `open`, so every row passes unfixed -- the C declaration IS the positive control; and
+both .get() rows first answered 407, which could not tell World from Region, so 408 was added.
+AND A HERMETIC FIXTURE WAS TRIED AND ABANDONED HONESTLY: a local `int open(const char *, int)`
+fails at HEAD (`no overload of open matches these arguments`) and adding `...` to match
+glibc's variadic form does not fix it either, so a hand-written declaration is NOT equivalent
+to what fcntl.h produces and I did not establish why. Filed as its own ticket with the
+asymmetry named as the lead rather than guessed at. Cost: 17 host-header warnings per run.
