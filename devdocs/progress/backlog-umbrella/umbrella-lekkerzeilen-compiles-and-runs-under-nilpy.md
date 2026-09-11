@@ -788,3 +788,59 @@ with controls rather than a number in a ticket.
 
 *(Earlier revisions of this section said 23 names at `app.py:26`; the AST counts 22.
 Eyeballed from source the first time.)*
+
+## RETRACTED — LEKKERZEILEN'S FOUR SITES WERE NEVER AFFECTED. THE "THIRD GATE" DOES NOT EXIST
+
+Settled 2026-09-11 by building the binary that discriminates. **Everything above
+about 29 names reading as None in this demo is WRONG**, and the error is mine: every
+leaking cell either of us measured used an **ABSOLUTE** from-import (`from pkg import
+X`). Lekkerzeilen's four sites are **RELATIVE** (`from .platform import gl`). Different
+spelling, never tested, and I wrote the conclusion as though it had been — the exact
+generalisation step I had made frankZ remove from their own table an hour earlier.
+
+frankZ caught it and their first probe could not settle it either: on the **pin**,
+lekkerzeilen's shape REFUSES with `undefined variable (KEY_ESCAPE)` — **and so does the
+same shape with no guard at all.** The pin cannot compile `from .subpackage import NAME`
+for a reason unrelated to guarded imports, so on the pin the guard is not the variable
+and neither reading is supported.
+
+**The binary that discriminates is HEAD with frankZ's fix reverted in place** — every
+later fix present, this one absent. Built it (`d53760a81f16`, reverse-applied the hunk,
+rebuilt, measured, restored, rebuilt, verified the fix back at 27):
+
+| | CPython | `d53760a81f16` = HEAD minus the fix |
+| --- | --- | --- |
+| **absolute** `from pkg import X`, guarded | 27 | **None** ← the defect, present |
+| absolute, no guard *(control)* | 27 | 27 |
+| **relative** `from .platform import X`, guarded — **lekkerzeilen's exact shape** | 27 | **27** |
+| relative, no guard *(control)* | 27 | 27 |
+
+The absolute row is the **positive control**: it proves this binary HAS the defect, so
+the relative row's 27 is a genuine negative and not a masked one. That is the whole
+reason the control binary was worth building — without it, "relative gives 27" is
+equally explained by a binary that never had the bug.
+
+**So: the defect is specific to the ABSOLUTE from-import spelling, and this demo does
+not use it.** No silent None, at any of the four sites, on any binary.
+
+**What survives, precisely:**
+
+- The defect is real and is in pin v407 — for `from pkg import X`. Worth fixing, fixed
+  at `0f0c04b8b`, still absent from the pin. That is a general-correctness argument and
+  no longer a lekkerzeilen one.
+- The **29 names across 4 sites** count stands as a property of the SOURCE. It is not,
+  and never was, a count of poisoned names. Read it as "how much crosses that seam".
+- A real pin-versus-HEAD gap on this demo remains and is LOUD, not silent: **the pin
+  cannot compile `from .subpackage import NAME` at all.** All four sites are that
+  spelling, so under `$(PXX_STABLE)` they are a hard error, and something between the
+  pin and HEAD fixed it. Loud beats silent, and it is still a reason the pin is behind.
+- `ctypes` and the unwritten SDL/GL backend remain the gates on whether the demo RUNS.
+  **Two gates, not three.** The third one was my error.
+
+**Why it survived four rounds of widening.** The chain was
+`except ImportError` → package-ness → placement → absolute-vs-relative, and each
+widening corrected a real error, which is what made the next assumption invisible.
+Absolute-vs-relative was never examined because *from-import-ness* felt like the
+subject rather than a dimension — the same way package-ness had for me. **The count
+was right, the mechanism was right, the population was right, and the SPELLING was
+the variable nobody varied.**
