@@ -156,4 +156,4 @@ unreachable for it. Against these declarations it does not refuse, it selects
 the WRONG overload silently. That is why no row here uses a `[...]` literal.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 70220c6f4.
