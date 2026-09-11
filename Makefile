@@ -1381,6 +1381,19 @@ test-nilpy: $(COMPILER)
 # matters: a parenthesised tuple in VALUE position must stay a value.
 	./$(COMPILER) test/test_nilpy_parenthesised_assignment_target_list.npy $(TESTTMP)/test_nilpy_parentgt26
 	$(TESTTMP)/test_nilpy_parentgt26 | diff -u test/test_nilpy_parenthesised_assignment_target_list.expected -
+	# `not` on a value whose WIDTH came from a C header. PyParseBoolNot gated
+	# AN_NOT (Pascal's bitwise complement) on PyNumeric, which lists only
+	# tyInteger, tyInt64 and the floats -- so size_t, every sized/unsigned int
+	# and a raw pointer were complemented, and a complement of a non-zero value
+	# is non-zero, i.e. TRUE. Fourth instance of one bug: string, container and
+	# object each shipped as "always True" before this.
+	#
+	# Built with $(COMPILER) and NOT $(PXX_STABLE) on purpose -- the pinned
+	# compiler FAILS this fixture, on exactly the `not nonzero` row, which is
+	# what makes it a regression test and not a restatement. Wiring it against
+	# the pin would red until someone pins.
+	./$(COMPILER) test/test_nilpy_not_on_a_c_width_integer.npy $(TESTTMP)/test_nilpy_notcwidth
+	$(TESTTMP)/test_nilpy_notcwidth | diff -u test/test_nilpy_not_on_a_c_width_integer.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
@@ -34581,6 +34594,20 @@ endif
 	# and the pinned compiler reads it the same way.
 	tools/expect_same.sh lib_mimic_heapq.1 "$$($(TESTTMP)/lib_mimic_heapq | grep -c '=ok')" "32"
 	tools/expect_same.sh lib_mimic_heapq.2 "$$($(TESTTMP)/lib_mimic_heapq | tail -1)" "MIMIC-HEAPQ OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_shutil.npy $(TESTTMP)/lib_mimic_shutil
+	# shutil -- get_terminal_size only, and the one shim here backed by a real
+	# ioctl (ansiterm.TerminalSize, TIOCGWINSZ) rather than by a constant.
+	# Asserted as a whole-output diff against CPython rather than as expect_same
+	# rows, because every line of it is a differential: this .npy runs unchanged
+	# under python3 and the .expected IS python3's output.
+	#
+	# The fallback values are 133x47 and 31x9, never 80x24. 80x24 is CPython's
+	# own default fallback AND what TerminalSize leaves behind when the ioctl
+	# fails, so asserting 80 cannot separate a fallback that was honoured from
+	# one that was ignored from a query that silently failed -- three outcomes,
+	# one number. Verified under the PIN as well as at HEAD before landing, so
+	# this row is not inert waiting for a `make pin`.
+	$(TESTTMP)/lib_mimic_shutil | diff -u test/lib_mimic_shutil.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"

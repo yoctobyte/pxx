@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_shutil.pas against CPython's real shutil.get_terminal_size.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `import shutil`
+finds the stdlib module, and produces identical output both ways. Run it as
+`python3 test/lib_mimic_shutil.npy` to see that.
+
+WHY THIS IS DETERMINISTIC, which a terminal-size query has no right to be.
+Both implementations resolve each dimension the same way: the environment
+first, then the real terminal, then the caller's fallback. Under the harness
+stdout is a pipe, so the terminal query fails on both sides and the fallback
+is what comes out -- the same fallback, because the caller supplies it. If the
+harness ever runs this on a tty the first two rows change together and the row
+below them does not, which is why the fallback row is the one that asserts.
+
+THE FALLBACK IS 133x47 AND NOT 80x24 ON PURPOSE. 80x24 is also CPython's
+DEFAULT fallback and the value ansiterm's TerminalSize leaves in its
+out-parameters when the ioctl fails, so a test asserting 80 cannot tell a
+fallback that was honoured from one that was ignored, or from a query that
+silently failed -- three different outcomes, one number. 133x47 is reachable
+only by actually reading the tuple that was passed in. (CLAUDE.md: "if the
+machinery did nothing at all, would this row still pass?")
+"""
+
+import shutil
+
+# The caller's own fallback, in values nothing else in the path produces.
+size = shutil.get_terminal_size((133, 47))
+print("fallback columns", size.columns)
+print("fallback lines", size.lines)
+
+# Read twice: the query is not supposed to cache or mutate anything.
+again = shutil.get_terminal_size((133, 47))
+print("stable", again.columns == size.columns, again.lines == size.lines)
+
+# A different fallback must give a different answer, which is what proves the
+# argument is read rather than a constant returned.
+other = shutil.get_terminal_size((31, 9))
+print("second fallback", other.columns, other.lines)
+
+# Both dimensions are positive whatever path was taken -- the one thing a
+# caller may assume on any runtime and any terminal.
+print("positive", size.columns > 0, size.lines > 0)

@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: 0BSD
+"""`not` on a value whose width came from a C header.
+
+Python's `not` is TRUTHINESS. PyParseBoolNot decided which operands were safe
+to hand to AN_NOT -- Pascal's BITWISE complement -- by asking PyNumeric, which
+lists only tyInteger, tyInt64 and the three float kinds. Every OTHER width
+therefore got complemented, and a complement of a non-zero value is non-zero,
+so `not x` was True for a live value. `strlen` returns size_t (tyNativeUInt),
+which is exactly such a width.
+
+THIS IS THE FOURTH INSTANCE OF ONE BUG and the reason the fixture exists rather
+than a one-line assertion: `not` on a string, on a pylib container, and on an
+object each shipped as "always True", each was found by a real program giving
+plausible wrong answers, and each was fixed for its own operand class. The
+shared cause is that AN_NOT is the DEFAULT for anything unrecognised, so the
+next operand kind is broken until someone names it.
+bug-n-not-on-a-c-pointer-is-always-true-so-a-null-check-takes-the-wrong-branch
+
+WHY NOT A PURE-NILPY FIXTURE: nothing written in plain NilPy can reach this. A
+Python literal or variable is tyInteger, which PyNumeric lists, so all 18 rows
+of a `not` table over the native types (bool, int, float, str, list, dict,
+None) agreed with CPython both before and after the fix. The operand has to
+come from a C declaration. That is also why this is NOT a differential -- it
+cannot run under CPython, which has no `import "<header>"`.
+
+WHY THE POINTER CASE IS NOT ASSERTED HERE, though it is what found the bug.
+It needs an OPAQUE pointer, and the cheap candidates are all wrong
+populations: `strchr` returns char*, which already had its own correct
+string-length arm and answers correctly even on the pinned compiler, so a row
+over it would pass while proving nothing; `memchr` handed a bytes object
+returns NULL, which collides both rows onto True; and time.h's `localtime`
+cannot be imported without an explicit `external '<soname>'`. The pointer repro
+lives in the ticket, against SDL_CreateWindow. Verified against the PINNED
+compiler before landing: it gets the `nonzero` row below WRONG (True), which is
+what makes this a regression test rather than a restatement.
+"""
+
+import "/usr/include/string.h"
+
+n = strlen("abc")
+print("size_t value   ", n)
+print("nonzero is true", n > 0)
+print("not nonzero    ", not n)
+
+z = strlen("")
+print("zero value     ", z)
+print("not zero       ", not z)
+
+# Through a comparison as well, so the row is not only about the unary form.
+print("not (n > 0)    ", not (n > 0))
+print("not (z > 0)    ", not (z > 0))

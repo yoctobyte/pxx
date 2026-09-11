@@ -3320,6 +3320,37 @@ begin
   end;
 end;
 
+{ An operand `not` can test by comparing against zero: every integer width,
+  signed or unsigned, plus a raw pointer. PyNumeric is NOT this set -- it holds
+  only tyInteger, tyInt64 and the three float kinds -- and PyParseBoolNot used
+  it to decide which operands were safe to hand to AN_NOT. Everything here that
+  PyNumeric omits therefore reached Pascal's BITWISE complement, which is
+  non-zero for every non-zero input, so `not x` was True for a live value.
+
+  Measured 2026-09-11, both against CPython and against C: `not p` for a
+  non-NULL pointer from SDL_CreateWindow answered True, and so did `not t` for
+  a non-zero Uint32 from SDL_GetTicks, while `not v` on a plain int was right.
+  A Python literal or variable is tyInteger, so NOTHING written in pure NilPy
+  can reach this -- all 18 rows of a `not` table over the native types agree
+  with CPython. It needs a value whose width came from a C header, which is why
+  it survived: the frontend's own corpus cannot produce the operand.
+
+  This is the FOURTH instance of one bug: `not` on a string, on a container and
+  on an object each shipped as "always True" and each was found by a real
+  program behaving plausibly and wrongly (see PyParseBoolNot's own comments).
+  They were fixed one operand class at a time. The shared cause is that AN_NOT
+  is the DEFAULT for anything unrecognised, so every new operand kind is broken
+  until someone names it -- the shape normalise-dont-special-case.md is about.
+  Naming the safe set positively, here, is what stops a fifth.
+  bug-n-not-on-a-c-pointer-is-always-true-so-a-null-check-takes-the-wrong-branch }
+function PyNotTestsAgainstZero(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInteger) or (tk = tyInt8) or (tk = tyUInt8) or
+            (tk = tyInt16) or (tk = tyUInt16) or (tk = tyInt32) or
+            (tk = tyUInt32) or (tk = tyInt64) or (tk = tyUInt64) or
+            (tk = tyNativeInt) or (tk = tyNativeUInt) or (tk = tyPointer);
+end;
+
 procedure PyParseBoolNot;
 var node, zeroNode, operand, lenNode, argNode, truthNode: Integer; opTk: TTypeKind;
 begin
@@ -3424,8 +3455,25 @@ begin
       ASTRight[node] := zeroNode;
       ASTTk[node] := Ord(tyBoolean);
     end
+    else if (opTk <> tyBoolean) and PyNotTestsAgainstZero(opTk) then
+    begin
+      { An integer of any width, or a pointer: truthiness is `<> 0`, so `not`
+        is `= 0`. Checked BEFORE the AN_NOT arm below, which would otherwise
+        claim every width PyNumeric does not list and complement it bitwise.
+        See PyNotTestsAgainstZero's note. }
+      zeroNode := AllocNode(AN_INT_LIT);
+      ASTIVal[zeroNode] := 0;
+      ASTTk[zeroNode] := Ord(opTk);
+      node := AllocNode(AN_BINOP);
+      ASTIVal[node] := Ord(tkEq);
+      ASTLeft[node] := operand;
+      ASTRight[node] := zeroNode;
+      ASTTk[node] := Ord(tyBoolean);
+    end
     else if (opTk = tyBoolean) or not PyNumeric(opTk) then
     begin
+      { tyBoolean, where AN_NOT is genuinely logical -- and variant / unknown
+        operands, which stay their own question as this routine's header says. }
       node := AllocNode(AN_NOT);
       ASTLeft[node] := operand;
       ASTTk[node] := Ord(tyBoolean);

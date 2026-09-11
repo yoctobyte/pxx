@@ -1,0 +1,7 @@
+size_t value    3
+nonzero is true True
+not nonzero     False
+zero value      0
+not zero        True
+not (n > 0)     False
+not (z > 0)     True
