@@ -39,6 +39,39 @@ summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahea
 `optdiff#shard0/12` is the only universal blocker, but clearing it alone changes
 nothing — the floor is 4.
 
+# THE COMPLETE BLOCKER SET — 13 distinct jobs, and the census above named 7
+
+The ranked list above is by frequency and is not the whole population. Every
+distinct job blocking at least one of the 62 verdicts:
+
+```
+  lib-test#src:test/lib_synapse.pas                 optdiff#shard0/12
+  lib-test#src:test/lib_synapse_ssl.pas             optdiff#shard2/12
+  lib-test#src:test/lib_synapse_transitive_unit.pas optdiff#shard5/12
+  lib-test#src:tools/crtl_reachability.py           optdiff#shard10/12
+  test-core#src:test/test_generic_delphi_method_header_binds_to_the_generic.pas
+  test-core#src:test/test_generic_nested_inline_specialize.pas
+  test-core#src:test/test_libmanifest.pas
+  size-canary#src:tools/size_canary.py
+  tools-devtest#00
+```
+
+# `pinned builds live lib/rtl` / TPyDeque IS NOT IN THIS FLOOR — checked, because the inference is the obvious one and it is wrong
+
+frankZ read that red as *"a red that only a pin can clear, sitting in the floor
+that is blocking the pin"*, which would be a genuine circular deadlock and would
+make this an owner emergency rather than a ticket. **It is not in the floor.**
+Zero occurrences of `TPyDeque`, `mimic_queue` or `pinned builds live lib/rtl`
+across the whole shadow log, and the reason is structural: it is a **`tools/gate.sh`
+step** (`gate.sh:533`), not a tier job, and auto-pin qualifies on the TIER.
+
+So there are two separate problems wearing one shape. The gate.sh row blocks every
+agent's LOCAL gate and is genuinely only clearable by a pin — an ordinary
+inert-until-pinned row, bad but bounded. The tier floor blocks auto-pin. Clearing
+either does nothing for the other. Recorded because the deadlock reading is the
+one a careful reader arrives at, and it would route this to the owner as urgent
+when the actionable half is five rows with one bisected cause.
+
 # NOT an environmental skip, and I checked because it would have been the cheap answer
 
 `Makefile:33568` has a loud SKIP for absent synapse
