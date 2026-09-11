@@ -15350,8 +15350,8 @@
   "sha": "6cf05c8717503eca771e545429524e19fb06c9d7"
  },
  "last_slow": {
-  "date": "2026-09-11T11:27:01Z",
-  "sha": "6cf05c8717503eca771e545429524e19fb06c9d7"
+  "date": "2026-09-11T14:00:03Z",
+  "sha": "cc311ec6e56c555fdf8a3a7b424ce176f4430168"
  },
  "open_regressions": [
   {
