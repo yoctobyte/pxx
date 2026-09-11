@@ -46,3 +46,6 @@ Unhandled exception: Exception: queue.Queue.put() would block forever: no other 
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-11 — auto-closed by the seven watcher: `test-nilpy#src:test/test_nilpy_a_queue_across_two_threads.npy` passes at 6cf05c871750 (tier full); it was red at 06b0e89ee9b0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
