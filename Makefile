@@ -565,8 +565,26 @@ test-nilpy: $(COMPILER)
 	# It is a mechanism rather than a story because it PREDICTED a cell nobody had
 	# run: `import 'sqlite3.h' as sqlite3` WITH --no-shims resolves. Verified --
 	# 3046001 with the flag, `unit source not found: sqlite3` without it.
-	# So a SHIMMED header has exactly two doors: an absolute path, and --no-shims.
-	# An unshimmed one has three. Do not read this row as a general spelling.
+	# DOOR COUNTS, MEASURED HERE 2026-09-11 RATHER THAN REASONED -- and note the
+	# count is per-SURFACE, not per-name, which is the distinction my own first
+	# summary of this lost. An UNSHIMMED, unlisted name reaches the C header by
+	# all three spellings: `import png`, `import 'png.h'` and the absolute path
+	# each print PNG_LIBPNG_VER = 10657. A SHIMMED name has three doors too, but
+	# they lead to TWO DIFFERENT SURFACES: bare `import sqlite3` reaches the
+	# PYTHON shim (it says so -- `note: sqlite3 -> mimic_sqlite3 (shim, subset)`)
+	# while the C header needs the absolute path (3046001) or --no-shims. The one
+	# spelling that reaches NEITHER is the bare explicit extension. So the rule is
+	# about reaching the HEADER: a shimmed name has two header doors, an unshimmed
+	# one has three. Do not read this row as a general spelling.
+	# 10657 and 3046001 are deliberate: neither collides with 0, 4 or a pointer
+	# width, so a row that printed nothing cannot pass for a row that worked.
+	# AND THE NEGATIVE CONTROL LIED FIRST, MINE, IN THE DIRECTION OF A FALSE BUG:
+	# I probed the shimmed name with SQLITE_VERSION_NUMBER, a C MACRO, got
+	# `undefined variable`, and read it as the bare door being shut. The door is
+	# open and the shim is right to lack that name -- asked for `connect`, which
+	# it does export, the same import compiles. Had I quoted that row I would have
+	# filed a bug against working code. When you probe a name that has a shim,
+	# pick the probe symbol off the SHIM's interface, never off the C header.
 	./$(COMPILER) test/test_nilpy_import_zlib.npy $(TESTTMP)/test_nilpy_import_zlib26
 	tools/expect_same.sh test_nilpy_import_zlib26 "$$($(TESTTMP)/test_nilpy_import_zlib26)" "1013"
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libzlib\.so'; then \
