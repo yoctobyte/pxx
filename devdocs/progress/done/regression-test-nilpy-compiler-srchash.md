@@ -44,3 +44,6 @@ Recover with:  rm -f compiler/.pascal26.fixedpoint && make compiler/pascal26
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-11 — auto-closed by the seven watcher: `test-nilpy#src:tools/compiler_srchash.sh` passes at 0ce8642e0302 (tier full); it was red at 6cf4d662b25d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
