@@ -2781,3 +2781,27 @@ it compiles, runs, and answers a plausible number.
   are: new slug must LAND, existing slug must be REFUSED with origin unmoved, --replace
   must work AND not be bland. Row 1 is the one that earned its keep.
 - 2026-09-11 | frankH | devdocs/progress/backlog-pascal | I OVERSTATED A CLASS FROM ONE FIXTURE AND A PEER'S COUNTER-OBSERVATION WAS INSIDE MY OWN EVIDENCE. Filed bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all saying "a SEMANTIC diagnostic in a used unit prints no file", measured on exactly one fixture. frankS read real corpus output and saw `unknown type: TExecuteFlags` arrive WITH `in: .../cfileutl.pas`, and labelled it one seat's observation rather than a retraction -- it is a retraction, and the counterexample was already on line 22 of MY OWN feature-b-sysutils ticket from 2026-09-09, which quotes `in: /usr/share/fpcsrc/3.2.2/compiler/cfileutl.pas` as its first line of evidence. I had written the refuting row myself two days earlier and did not look. MEASURED THE MATRIX INSTEAD OF THE CATEGORY: six error classes, same used unit, same line -- parse `expected expression`, `SizeOf: unknown type`, `undefined variable`, `no overload matches` all print `in:` AND `near:`; only `incompatible types: cannot assign` prints neither. So the discriminator is not semantic-vs-parse, it is WHICH ENTRY POINT: `Error(` passes withContext=True (3119 call sites), `ErrorAt(` passes False (71 sites, 5 of them ir.inc's lowering checks). Re-prioed 60 -> 50 because a corpus instrument meets this rarely rather than everywhere, which is the opposite of what my first version implied. AND THE REAL DIAGNOSIS IS SMALLER AND BETTER THAN THE ONE I FILED, which I only reached by reading the printer instead of theorising: WriteDiagSourceFile derives the path from a TOKEN INDEX (TokPos-1, EOF after the parse, i.e. inside the appended builtin units), so suppressing `in:` is CORRECT given that ErrorAt is handed only a line -- but ast_arena.inc stamps `ASTFile[n] := DbgFileOfTok(TokPos)` one line below `ASTLine[n] := CurTok.Line`, DbgFileName[id-2] is that id's path, and ir.inc:9629 already reads ASTFile for DWARF with the comment "line and file travel together". The lowering checks read the line and throw the file away. Fix shape: hand ErrorAt the file id; leave `near:` suppressed, since that one genuinely needs a token. THE TRAP IS IN THE SAME THREE LINES and is the collision this ticket's own predecessor was about: ASTFile = 0 is load-bearing for DWARF (it keeps the RTL and unit bodies out of the line table) and is not "file zero", so a fix must print nothing for 0 -- one field answering two questions is exactly what bug-a-a-semantic-diagnostic-in-a-used-unit-has-no-location-at-all fixed for ASTLine. ALSO VERIFIED RATHER THAN TRUSTED: frankS overwrote my feature-b-sysutils ticket with `cp`, noticed, and restored it with `git checkout HEAD -- <file>` -- the safe form, not the index form. My 99 lines are intact, sysutilh.inc declaration and the type-only-stub-is-worse-than-nothing sentence included. Checking cost one grep and the failure mode is CLAUDE.md's own: a cp-restore reverts everything that landed while the copy sat, as a clean commit no track letter sees.
+
+2026-09-11 | frankuser | CLAUDE.md (probe-collision enumeration) | EXTENDING AN ENUMERATION
+  IS NOT THE SAME ACT AS RESTATING THE RULE, and I conflated them against myself. Added
+  `[]`/`{}`/`''` and a nil/None sentinel to the list of values that collide with a default,
+  and generalised the closing imperative off "any size row expecting 4 or sizeof(void*)"
+  (048ba6c5e). Then found LOGBOOK:1723 — frankC, 2026-09-06, on this same paragraph:
+  "Did NOT touch CLAUDE.md: the rule there is the owner's and a wording change routes
+  through Track U" — and escalated on the basis that two seats had read one boundary
+  differently. frankS checked that quantifier and it does not hold. frankC was declining a
+  SUBSTITUTION: "the expected value must differ from WHAT THE BUG EMITS, not (only) from the
+  type's default", a competing formulation of the test, and their own entry says CLAUDE.md's
+  default form "stands and is the owner's sentence". Mine leaves the criterion untouched and
+  only extends what counts as a default — no rule added, no meaning changed, and the guard
+  catches MORE rows, which is the tightening direction CLAUDE.md puts on the agent's side.
+  So the reusable distinction is: SUBSTITUTING a rule's test is the owner's; EXTENDING its
+  enumeration in the stricter direction is not. Still escalated, but as the narrow question
+  (may an agent extend an enumeration?) rather than as an overstep.
+  WHAT IS GENUINELY MINE AND UNCHANGED BY ANY OF THAT: the edit carried a FABRICATED
+  example — "a NilPy binding where None is both" — asserting a seat had missed rule 811 with
+  a None expectation. Nobody did; I was thinking of SoftUnitMissed, where None is the wrong
+  VALUE, and wrote it as though it were an expected one. A fabrication in the one sentence
+  written to tell a future reader why the list was incomplete. Cut at cac4669c5. A
+  fabrication error, not a boundary error, and the two should not be bundled — bundling them
+  made my own report less accurate, which frankS flagged before it reached the owner.
