@@ -108,3 +108,44 @@ permits editing lekkerzeilen), and it is NOT recommended as the fix: this is
 ordinary Python that plain calls already support, so the asymmetry is ours, not
 the program's. Noted because it is the owner's call whether to unblock the demo
 that way in the meantime, not a seat's.
+
+## 2026-09-11, later: the differential this ticket asks for LARGELY EXISTS
+
+Checked before writing one, because writing a second would have been the
+duplication `normalise-dont-special-case.md` is about. There are ~25 star/unpack
+fixtures under `test/`, and they already cover the plain-call side that the fix
+must not break:
+
+- `test_nilpy_star_element_anywhere`, `test_nilpy_star_not_first_argument` — star
+  in any position.
+- `test_nilpy_star_unpack_into_defaults`,
+  `test_nilpy_star_unpack_into_a_target_with_defaults`,
+  `test_nilpy_default_before_star_args` — the defaults interaction, which is the
+  part of `PyStarForwardCall` the index split touches most.
+- `test_nilpy_star_forward`, `test_nilpy_star_unpack_into_a_collecting_callee`,
+  `test_nilpy_leading_double_star_call`, `test_nilpy_ctor_star_and_kwargs` — the
+  forwarding and `**` paths.
+
+**And the EVALUATION-ORDER claim is tested**, which is the one a value comparison
+cannot see and therefore the one most likely to be missing.
+`test_nilpy_star_element_anywhere.npy:74`:
+
+```python
+print(g(note(1), *[note(2)], z=note(3)))   # 123
+print(order)                               # [1, 2, 3]
+```
+
+That is exactly the property `PyStarMixedForwardCall`'s header asserts — source
+order across the element kinds — so a refactor that changes hoist order is caught.
+
+**What this means for the cost.** The regression risk on the working half is
+already instrumented; what is NOT covered is the method side, which cannot be
+tested until the fix exists. So the differential to write is the METHOD matrix
+only — the five rows in the table above, plus a method with defaults in the
+starred range, a method taking `**mapping`, and a method order-log mirroring the
+`note()` pattern above. That is a smaller job than this ticket first implied.
+
+**Still not attempted unattended**, and the reason is unchanged by the above: the
+off-by-one lives in a code generator and its failure mode is a plausible wrong
+argument at run time with no crash and no diagnostic. Better coverage of the half
+that already works does not make the half with no coverage safe.
