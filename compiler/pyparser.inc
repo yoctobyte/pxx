@@ -17539,6 +17539,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
     dictKwHit: Boolean;       { the keywords-are-KEYS arm already claimed this call }
+    arFits: Boolean;          { some candidate can accept the arity the call writes }
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
       all declaring analyze(), and the cap of three turned that into "too many
@@ -18150,6 +18151,75 @@ begin
       Warn('Nil Python: no class here declares a .' + mname + '() with a '
            + 'parameter named ''' + kwMissName + ''' — dispatching on the '
            + 'receiver at run time');
+      Result := PyMakeDynMethCall(baseNode, mname);
+      Exit;
+    end;
+  end;
+
+  { ...and the SAME question answered by ARITY rather than by a keyword name,
+    which is the other way the closed world turns out not to contain the call.
+    The arm above fires when no candidate declares a parameter the call names;
+    this one fires when no candidate can accept the NUMBER of arguments written.
+
+    WHY IT BELONGS HERE AND NOT AT THE REFUSAL FURTHER DOWN. The scan that
+    produced hitCi/nDual is over the classes compiled SO FAR, and it was being
+    treated as exhaustive: `def f(w): w.probe(1,2,3)` was refused outright when
+    the only `probe` compiled yet took two arguments, even though the module
+    declaring the three-argument one is imported later in the same program.
+    Reordering the imports — which cannot affect method resolution in Python —
+    turned the error into a clean build. Six orders of one three-file program,
+    CPython printing 100 for all six, pxx refusing exactly one of them:
+    bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-so-far-so-import-order-decides
+
+    THIS ARM CANNOT CHANGE A PROGRAM THAT COMPILES TODAY, and that is the
+    safety argument rather than a hope: it fires only where no candidate fits,
+    which is precisely where the refusal below calls Error(). A compile that
+    succeeds today never reaches it. It is deliberately NOT a relaxation of
+    that refusal — relaxing it would fall through to the default-fill and call
+    a proc with a required parameter left uninitialised, which is the segfault
+    it was added to close
+    (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults). The
+    runtime path has its own arity check (pyeval's PyHostCall refuses `nargs <
+    n` by name), so the deferral is loud rather than silent.
+
+    THE PRE-PARSE POSITION IS LOAD-BEARING. By the refusal below, the receiver
+    guard has already been HOISTED against the candidates compiled so far, so a
+    decision taken there would emit a runtime dispatch behind a guard that
+    rejects the very class the dispatch exists to find. PyCallArgCountAt reads
+    the count off the token stream, which is what makes deciding here possible.
+
+    FOUR THINGS IT DOES NOT CLAIM. A `*args`/`**kwargs` callee is variadic and
+    fits any count. A STR method of the same name and a fitting arity is
+    handled by the str arm at the refusal below, and must keep winning — the
+    runtime dispatcher is object-only and would raise AttributeError on a
+    string receiver. Beyond four arguments the dispatcher refuses anyway, so
+    today's diagnostic is the better one. And a class whose own OVERLOADS
+    include a fitting arity is not a miss, which is why the test is
+    FindUMethArityStrict rather than FindUMethArity — the latter falls back to
+    the first name match and can therefore never reject. }
+  if (hitPi >= 0) and (CurTok.Kind = tkLParen) and (not dictKwHit)
+     and (ProcPyStarIdx[hitPi] < 0) and (ProcPyKwIdx[hitPi] < 0) then
+  begin
+    smArgN := PyCallArgCountAt(TokPos - 1);
+    arFits := ProcArityMatches(hitPi, smArgN + 1);
+    if (not arFits) and (hitCi >= 0) and
+       (FindUMethArityStrict(hitCi, PyMethNameFor(hitCi, mname), smArgN) >= 0) then
+      arFits := True;
+    for di := 0 to nDual - 1 do
+      if not arFits then
+      begin
+        if (dualMmis[di] >= 0) and
+           ProcArityMatches(UMthProc_[dualMmis[di]], smArgN + 1) then arFits := True
+        else if FindUMethArityStrict(dualCis[di],
+                  PyMethNameFor(dualCis[di], mname), smArgN) >= 0 then arFits := True;
+      end;
+    if (not arFits) and PyStrMethodInfo(mname, smPName, smTk, smArgs)
+       and (smArgs <> -4) and PyStrMethodArityOk(mname, smArgN) then arFits := True;
+    if (not arFits) and (smArgN >= 0) and (smArgN <= 4) then
+    begin
+      Warn('Nil Python: no class here declares a .' + mname + '() taking '
+           + AIntToStr(smArgN) + ' argument(s) — dispatching on the receiver '
+           + 'at run time');
       Result := PyMakeDynMethCall(baseNode, mname);
       Exit;
     end;

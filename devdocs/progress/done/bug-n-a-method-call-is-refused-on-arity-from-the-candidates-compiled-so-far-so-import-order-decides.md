@@ -4,10 +4,18 @@ title: A method call is arity-checked against the candidates compiled SO FAR, so
 track: N
 type: bug
 prio: 75
-status: open
+status: done
 ---
 
 ## Summary
+
+**RESOLVED 2026-09-11** — the call is now deferred to the run-time dispatcher
+instead of refused, decided PRE-PARSE beside the existing open-world keyword
+fall-through. The repro prints 100 in all six import orders; lekkerzeilen goes
+to 28 of 35 with `ctypes` the only wall left. The ticket's own "NOT a quick fix"
+premise was measured false: the segfault it feared is caught by a DIFFERENT
+refusal site, and the runtime arity check it said had to come first already
+exists in `PyHostCall`. See the resolution below.
 
 `obj.m(args)` on a dynamically-typed receiver is arity-checked at compile time
 against the same-named methods **compiled so far**, and refused when none of
@@ -188,3 +196,124 @@ Nobody could have taken it. Censused when found: 7 open ranked tickets trip
 that marker and **6 genuinely mean it**, so the detector is right and this was
 the only false row. The repair is the same rule as the one above — describe
 the marker, never respell it — which is also why this note does not quote it.)
+
+## RESOLVED 2026-09-11 — deferred to the run-time dispatcher, pre-parse
+
+`compiler/pyparser.inc`, one new arm in `PyParseVariantMethod`, beside the
+existing open-world keyword fall-through and modelled on it. When no candidate
+compiled so far can accept the number of arguments the call writes, warn and
+emit `pydyn_meth<n>(recv, 'name', args...)` instead of refusing.
+
+The three-file repro prints **100** in all six import orders, which is
+CPython's answer. `hud.py` and `traffic.py` both compile.
+
+### The ticket's own "NOT a quick fix" was wrong, and here is what it got wrong
+
+It said relaxing the refusal reinstates
+`bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults`, and that
+the safe order is runtime arity checking FIRST. **Both halves were measured
+false, and the same measurement settles them.**
+
+**There are THREE arity-refusal pairs in this file, not two, and they print
+different text.** Tagged and rebuilt (2026-09-11) rather than read:
+
+| shape | site |
+| --- | --- |
+| `xs = [1,2,3]` then `xs.index()` — DIRECT receiver | the field/`requires N argument(s), none given` pair |
+| `def f(xs): xs.index()` — dynamic receiver | the `takes exactly N` pair, i.e. this ticket's |
+| the three-file repro | the same `takes exactly N` pair |
+
+The segfault ticket's own headline cases are caught by the **other** site,
+which this change does not touch. That was checkable in one build and the
+ticket asserted the opposite from reading.
+
+**And the runtime arity check the comment asks for already exists.** `pyeval`'s
+`PyHostCall` refuses `nargs < n` by name. So the deferred calls fail LOUDLY, at
+run time, with CPython's own diagnosis:
+
+| program | pxx after this change | CPython |
+| --- | --- | --- |
+| `def f(d): d.get()` | `pyeval: too few args to get (need 1, got 0)`, rc=1 | `TypeError: get expected at least 1 argument, got 0` |
+| `def f(xs): xs.index()` | `too few args to index (need 1, got 0)`, rc=1 | `TypeError: index expected at least 1 argument, got 0` |
+| `det.analyze(1)` vs `analyze(self,chords,fn,sections=None)` | `too few args to analyze (need 3, got 1)`, rc=1 | `TypeError: Det.analyze() missing 1 required positional argument: 'fn'` |
+
+No segfault, no uninitialised slot, no wrong value. The typo protection moves
+from a refusal to a warning plus a run-time error, which is the direction this
+frontend already took for an undeclared method NAME on 2026-09-10.
+
+### Why the arm is pre-parse, which is the part that is not obvious
+
+By the refusal site, the receiver guard has ALREADY been hoisted against the
+candidates compiled so far. A deferral decided there would emit a runtime
+dispatch sitting behind a guard that rejects the very class the dispatch exists
+to find — green in the compiler and wrong at run time. `PyCallArgCountAt` reads
+the count off the token stream, which is what makes deciding before the hoist
+possible, and the keyword arm next door was already doing exactly that.
+
+### The safety argument, stated so a reviewer can falsify it
+
+**This arm cannot change a program that compiles today.** It fires only where
+no candidate fits, which is precisely where the code below calls `Error()`. A
+compilation that succeeds today never reaches it. It is NOT a relaxation of
+that refusal, which still stands for everything the new arm declines to take:
+
+- a `*args`/`**kwargs` callee is variadic and fits any count;
+- a STR method of the same name at a fitting arity keeps the str arm, because
+  the runtime dispatcher is object-only and would raise `AttributeError` on a
+  string receiver — `s.find("b", 1)` must not become a dynamic dispatch;
+- above four arguments the dispatcher refuses anyway, so today's diagnostic is
+  the better one and the arm stands aside;
+- a class whose own OVERLOADS include a fitting arity is not a miss, which is
+  why the test is `FindUMethArityStrict` and not `FindUMethArity` — the latter
+  falls back to the first name match and therefore can never reject. The
+  comment at the refusal site says so and it is easy to use the wrong one.
+
+### One divergence NOT fixed here, and it is now more reachable
+
+`PyHostCall` reports too-few-args with `writeln` + `Halt(1)`. CPython raises a
+catchable `TypeError`. Deferring more calls to that path makes an uncatchable
+exit reachable where a program could have caught the error. Filed separately
+rather than changed in the same commit, because it is an RTL behaviour change
+with its own blast radius.
+
+### Corpus, and the delta attributed before it is quoted
+
+At compiler `f9fb672ee109`, corpus `2a3d60e`: **28 of 35 modules compile, and
+every one of the 7 remaining failures is `ctypes`.** `nearest` is gone as a wall
+class. My change accounts for `hud.py` and `traffic.py` and nothing else — both
+errored on `nearest()` arity at `c53cb51926a2` on this same tree and compile at
+`f9fb672ee109`, and the new warning fires at the failing call site in each (3
+occurrences in `hud`, 6 in `traffic`). The `_pxx` wall was cleared by frankZ's
+getattr fold plus frankuser's corpus seam rewrite, not by this.
+
+Counts on different corpus revisions are not comparable: frankuser measured 27
+of 35 at corpus `8fb873d`. Mine is `2a3d60e`.
+
+### The pinned compiler could NOT date this one, and that is worth writing down
+
+The pinned-versus-current discriminator has a precondition nobody had stated:
+**the pin has to get far enough to see the construct.** Pin `095ef4811a5b` stops
+`hud.py` at `math.atan2` and `traffic.py` at `undefined variable (__mul__)` —
+earlier walls — so it reports a failure that says nothing about arity. The
+control here is the tree itself, measured in both directions on it.
+
+(And the first attempt at that control was a guard that could not fail: an
+unset `$P` ran a bare `--threadsafe ...`, which is not a compiler, printed no
+`error:`, and read as "the pin compiles it cleanly". Same empty-command green
+frankuser hit with `$b` and no `./`.)
+
+### Gate
+
+`make compiler/pascal26` — `converged after 1 round(s)`, `f9fb672ee109`.
+`tools/gate.sh quick` — RED on **one** row, `pinned builds live lib/rtl`
+(`mimic_queue :: unknown type: TPyDeque`), which is another seat's builtin
+awaiting an owner-only pin and does not involve this diff; the canary's own text
+prescribes reporting it and carrying on.
+The open-world dispatch family — the rows this arm joins — is green, including
+both refusal rows it could have broken (`nilpy_open_world_kwarg_fail`,
+`nilpy_open_world_arity_fail`) plus `open_world_method_dispatch`,
+`open_world_keyword_dispatch` and `arity_four_dynamic_call`.
+`make test-nilpy` was attempted THREE times and killed by the box's memory
+reaper every time, never by a test — 541 ok rows and zero failures at the
+furthest point (a 9GB `python3` belonging to another seat was resident). Stated
+as an unfinished tier, not as a green one.

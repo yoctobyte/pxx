@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:157 backlog-nilpy:125 backlog-tools:57 backlog-pascal:10 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3699 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:157 backlog-nilpy:125 backlog-tools:57 backlog-pascal:10 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3700 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -93,7 +93,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
-- `[p 75] [N]` bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-so-far-so-import-order-decides
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
@@ -105,5 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard2-12
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 
 _438 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
