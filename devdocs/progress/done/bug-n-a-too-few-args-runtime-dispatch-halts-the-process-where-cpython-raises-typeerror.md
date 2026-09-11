@@ -105,4 +105,4 @@ not checked. CPython raises there too. Recorded as unverified in the body above
 and still unverified — establish it before fixing it.
 
 ## Log
-- 2026-09-11 — resolved, commit PENDING-COMMIT.
+- 2026-09-11 — resolved, commit a00d94926.
