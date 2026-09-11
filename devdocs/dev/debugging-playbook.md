@@ -25061,3 +25061,65 @@ comfortably RECURRENCE and it met merit on the first reading. It is still **one
 mechanism** — process predicates — so it fails the second-independent-subsystem
 test that decides promotion. It earns the line the day the same shape shows up
 somewhere that is not `pgrep`.
+
+## TWO INSTRUMENTS THAT FAIL DIFFERENTLY STILL SHARE A BLIND SPOT WHEN THE BLIND SPOT IS IN THE QUESTION
+
+**frankB and frankZ, 2026-09-11**, lekkerzeilen's platform seam. The sentence is
+frankB's, on reviewing a finding that landed against their own numbers as hard as
+against anyone's.
+
+CLAUDE.md already says a second source only counts if it **fails differently**,
+and that rule is sound and was obeyed here. Two routes reached the same
+conclusion about the same seam:
+
+- **site enumeration** — list every use of the module-valued variable and
+  classify each one;
+- **wall walking** — rewrite the seam, recompile, see where the error moves.
+
+They cannot produce each other's error. An enumeration misses what nobody
+thought to enumerate; a wall walk only reports a wall actually reached. Two
+independent derivations, agreeing within the hour, and the agreement was
+recorded as corroboration — correctly, by the rule as written.
+
+**Both were wrong in the same way, because both asked `where is the compile
+wall?` and neither asked `does it work?`** Under the alias spelling,
+`gl = _backend.gl` compiles; `gl.clear()` raises `AttributeError` at run time
+against CPython's answer. `gl` is the OpenGL facade and four modules call
+methods on it, so **the arm that works is the one nobody uses**, and the ticket
+carried "every static row in the seam already passes" in its summary — the part
+everyone reads.
+
+Neither derivation was careless. A wall walk structurally cannot see past the
+wall it is reporting, and that is not a defect in the method, it is the method.
+The defect is that the QUESTION was never varied.
+
+**So independence of METHOD does not buy independence of QUESTION**, and the
+fails-differently test silently assumes it does. Two instruments sharing a
+question share its blind spot however differently they fail, and the more
+independent they look, the more their agreement reads as confirmation.
+
+**The check, and it costs one run:** when two methods agree, ask what QUESTION
+each of them answered — out loud, in the same words — before recording the
+agreement. If the two sentences are identical, you have one instrument measured
+twice. Here both sentences were *"where does compilation stop?"* and the claim
+being written down was *"the seam works"*, which is a third sentence neither
+instrument had uttered.
+
+**The corollary that cost the most here: A COMPILE IS NOT A RUN.** Every
+lekkerzeilen census tonight — three seats, three methodologies, four numbers —
+measures *compiles*, not *works*, and all three of us reported it as
+distance-to-goal. The owner's question was whether it compiles, so no number is
+wrong; but "25 of 35 compile" and "the demo runs" are much further apart than
+the census makes them look, and the app's own backend stub is 39 lines of
+`NotImplementedError` underneath all of it. A fixture that only compiles is the
+same animal as an assertion that cannot fail.
+
+**Not promoted to CLAUDE.md, and the reason is RECURRENCE, not merit.** This is
+one subsystem — one corpus, one seam, one evening — and CLAUDE.md's promotion
+bar is a second independent subsystem, not quality. It is flagged here as an
+EXTENSION candidate rather than a new rule: CLAUDE.md's existing
+fails-differently sentence is where it belongs, as a clause, and an extension
+costs a sentence where a neighbour costs a paragraph. **The day a second
+subsystem produces two independent methods agreeing on a question neither was
+asked, it earns the clause.** Whoever finds it: point here for the first
+instance.
