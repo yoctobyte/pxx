@@ -603,4 +603,4 @@ ticket's own last section established and which the corpus now confirms:
 `undefined variable (_pxx)` has disappeared as a wall class entirely.
 
 ## Log
-- 2026-09-11 — resolved, commit PENDING-COMMIT. The FIX is frankZ 3662f8a8b; this commit is the close.
+- 2026-09-11 — resolved, commit 9a8c59909. The FIX is frankZ 3662f8a8b; 9a8c59909 is the close.
