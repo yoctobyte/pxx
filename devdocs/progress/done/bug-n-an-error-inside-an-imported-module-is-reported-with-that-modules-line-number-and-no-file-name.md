@@ -3,7 +3,7 @@ slug: bug-n-an-error-inside-an-imported-module-is-reported-with-that-modules-lin
 track: N
 prio: 55
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankB
@@ -60,3 +60,48 @@ and it reads exactly like a shared cause — which is the thing a census is for.
 The reported position needs the module's NAME beside the line, at least for a
 position that did not come from the file on the command line. `near:` already
 proves the compiler knows the right source text; only the label is missing.
+
+
+## CLOSED BY EVENTS — verified 2026-09-11 (frankB), compiler `06f130b576f5`
+
+Fixed at **`584ca8ea8`** (owner, 09-11 04:58, `fix(N): an error inside an
+imported NilPy module names the module`). `PyLexAppend` marked the appended
+module's token range with an EMPTY path — it ended the open Pascal range and
+started no correct one. It now passes the real path, so `PasSrcOfTok` answers
+and `Error`'s `in:` line names the module.
+
+Verified against this ticket's own repro and against the corpus instance:
+
+| case | before (pinned `095ef4811a5b`) | now |
+| --- | --- | --- |
+| one level: `m.npy` imports `inner.py`, bad name at `inner.py:7` | `pascal26:7:` and no file | `in: .../inner.py` |
+| nested: `from . import inner` inside `pkg/__init__.py` | `pascal26:7:` and no file | `in: .../pkg/inner.py` |
+| corpus: `bindings.py` | `pascal26:95:` and no file | `in: .../platform/__init__.py` |
+
+The corpus row is the one that matters: the line number is still 95 and 95 is
+still not a line of `bindings.py`, but the file is now named, so the reader is
+no longer supplying the wrong one.
+
+### How this ticket nearly got FIXED TWICE, which is the reusable part
+
+I re-measured it tonight as still broken and started on a fix. The measurement
+was made with a binary built from PRE-PULL sources: `584ca8ea8` arrived in the
+`tools/sync.sh` pull at my own previous commit, and I ran the repro without
+rebuilding. **`b00c6751b693` (pre-pull) prints no `in:`; `06f130b576f5` (same
+HEAD, post-pull) prints it.** Same tree identity, two binaries, opposite
+answers — and the stale one is the one that agrees with the ticket, which is
+what makes it convincing.
+
+This is CLAUDE.md's own sequence — PUSH, LET THE PULL SETTLE, **REBUILD**,
+MEASURE — with the rebuild dropped, and the failure mode is the one that rule
+does not spell out: a stale binary does not only make you claim a green you did
+not earn, **it makes an already-fixed ticket reproduce.** A ticket that
+reproduces is the strongest possible argument for working on it, so the stale
+reading does not merely mislead, it recruits.
+
+The discriminator that settled it cost one command and is the one to reach for:
+run the repro under the **pinned** compiler as well. Two binaries that disagree
+about a defect date it; a single binary can only confirm the ticket.
+
+## Log
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

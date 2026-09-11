@@ -1558,7 +1558,14 @@ begin
     mechanism, a false LOCATION in one file and a false SHARED CAUSE across two.
     Passing the real path ends the Pascal range exactly as '' did AND attributes
     the tokens, so it is strictly the stronger form of the same guard.
-    bug-n-an-error-inside-an-imported-nilpy-module-names-no-file }
+    The slug this comment carried until 2026-09-11 —
+    `bug-n-an-error-inside-an-imported-nilpy-module-names-no-file` — has no
+    ticket file and never did; the real one is
+    bug-n-an-error-inside-an-imported-module-is-reported-with-that-modules-line-number-and-no-file-name,
+    which sat OPEN in backlog-nilpy while this fix was already landed, and was
+    re-measured as reproducing by a seat holding a pre-pull binary. A citation
+    that resolves to nothing cannot be checked off, so the ticket it fixes stays
+    open and gets worked twice. }
   PasMarkTokFile(TokCount, path);
   PyLexAppending := True;
   PyLexAll(False);
