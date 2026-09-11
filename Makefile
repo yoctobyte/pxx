@@ -1526,17 +1526,32 @@ test-nilpy: $(COMPILER)
 	# the prescan and winning on FIRST-WINS. An `else:` is what exposes that: in
 	# the ordinary no-else idiom the LIVE arm is lexically first in both outcomes
 	# and wins by position, so the same defect is invisible. Silent, exit 0.
-	# THE ARMS BIND A UNIT ALIAS, NOT A SYMBOL, and that is deliberate -- see the
-	# header of test/nilpy_tryelse/__init__.py: a dead arm's imported SYMBOL still
-	# binds at module scope (the prescan resolves it, no else required), which is
-	# bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
-	# and would red this row for a defect it is not about.
+	# BOTH SPELLINGS ARE HERE -- `from . import mod as impl` (a unit alias) and
+	# `from .mod import N as impl` (a symbol) -- because they reach the arm skip by
+	# different doors: first-wins table versus flat unit scope. The arm skip
+	# repaired both, including a dead arm's symbol binding that reproduces with NO
+	# else in the file at all, which this comment claimed for one hour was
+	# pre-existing and out of scope. It was measured afterwards and it is not.
+	# WHAT IS STILL OUT OF SCOPE, and why the two arm modules must not name their
+	# members alike: `from .a import N as X` resolves N through FLAT unit scope, so
+	# two modules each declaring N collide and the later one answers for both --
+	# measured with no try/except in the file at all. That is
+	# bug-n-a-from-import-alias-resolves-its-source-through-flat-scope, re-ranked
+	# 45 -> 60 on this measurement. Let the MODULE carry the identity.
 	# NO ROW GUARDS ON ctypes: the construct's real use is backend selection,
 	# where CPython resolves ctypes and pxx does not -- oracle and subject would
 	# run DIFFERENT arms and the differential could never fail.
-	# POSITIVE CONTROL, measured 2026-09-11 against 785b25831252 (both halves
-	# reverted): `pascal26:29: error: expected expression`, in the fixture's own
-	# package, so the row cannot pass on the pre-fix compiler at all.
+	# POSITIVE CONTROL, measured 2026-09-11 against 785b25831252 (the parent of
+	# the fix, `git checkout <parent> -- compiler/pyparser.inc`):
+	#   pascal26:36: error: expected expression
+	#     in: test/nilpy_tryelse/__init__.py
+	#     near:  MISS_WHICH = "handler"   >>> else :
+	# so the row cannot pass on the pre-fix compiler at all. THE FIRST ATTEMPT AT
+	# THIS CONTROL DID NOT RUN: `git stash push compiler/pyparser.inc` had nothing
+	# to stash (the fix was already committed), so `make` took the STAMP path and
+	# printed `verified` rather than `converged` -- the two-verbs tell -- and the
+	# "pre-fix" binary was the post-fix one, which duly passed. Revert against the
+	# parent COMMIT, and read the verb.
 	./$(COMPILER) test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy $(TESTTMP)/test_nilpy_tryelse26
 	tools/expect_same.sh test_nilpy_tryelse26 "$$($(TESTTMP)/test_nilpy_tryelse26)" "$$(python3 test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy)"
 	# THE PAIR: dead-arm alias suppression AND the getattr fold, in ONE fixture,

@@ -8,6 +8,11 @@
 # there. The ordinary try path handled `else` correctly the whole time, which is
 # why the failure looks like a general parser gap and is not one.
 #
+# TWO LAYERS RESOLVE IMPORTS AND BOTH HAD TO LEARN IT. The parser consumes the
+# else; PyPreScanImports -- which walks every import token in the file with no
+# notion of reachability -- now knows which ARM is dead and skips it. With only
+# the parser taught, this file COMPILES and answers the dead arm's module.
+#
 # WHY THE SPELLING IS WORTH FIXING RATHER THAN WORKING AROUND. `else` is what
 # keeps the selected arm's own import OUT of the try's exception coverage: with
 # the second import inside the try, an ImportError raised by the module the try
@@ -15,16 +20,18 @@
 # rewriting lekkerzeilen's platform seam had to write the unfaithful spelling
 # and leave a comment explaining why, which is the cost this removes.
 # bug-n-try-except-else-does-not-parse-when-the-try-body-is-an-import
-#
-# NO ROW GUARDS ON `ctypes`, DELIBERATELY. The construct's real use is backend
-# selection, where CPython resolves ctypes and pxx does not -- oracle and
-# subject would run different arms and the comparison could never fail. Both
-# arms here are decided identically under both runtimes.
 import nilpy_tryelse as t
 
-# The handler ran: the else must not have.
+# ARM 1 -- the handler ran, so the else must NOT have. Both spellings.
 print("miss", t.miss())
 
-# The else ran: the handler must not have, and the else's own body -- including
-# a use of the module the try imported -- must be live.
+# ARM 2 -- the else ran, so the handler must NOT have, and the else's own body,
+# including a use of the module the try imported, must be live.
+#
+# THIS IS THE ROW A PARSER-ONLY FIX FAILS, and it is the reason the fixture has
+# an arm whose guard RESOLVES at all. A unit alias is first-wins, so in the
+# ordinary no-`else` idiom the live arm is lexically first in both outcomes and
+# wins by position; an `else:` puts the live arm AFTER the dead handler and the
+# dead handler's binding wins instead. Measured: `('else', 'fallback', ...)`
+# against CPython's 'selected', exit 0, no diagnostic.
 print("hit", t.hit())

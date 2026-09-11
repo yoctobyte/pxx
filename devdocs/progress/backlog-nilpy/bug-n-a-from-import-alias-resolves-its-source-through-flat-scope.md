@@ -1,7 +1,7 @@
 ---
-prio: 45
+prio: 60
 track: N
-summary: "`from M import X as Y, X2 as Y2` -- the SOURCE name is resolved through flat unit scope, so an earlier alias in the SAME import shadows the next one's source. Cause CONFIRMED 2026-09-10 against `ca814b0aabcc`; SEVERITY CLAIM IS STALE and the prio moved 55 -> 45 because of it. Filed as a silent wrong value; it is now a compile error (`undefined variable (C)`), which is a different thing to rank. Only the colliding pair fails -- two aliases without a collision, one alias plus one plain, two plain and a single alias all answer correctly."
+summary: "`from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis."
 ---
 
 # bug: a from-import alias resolves its SOURCE name through flat unit scope, not through the exporting module
@@ -143,3 +143,77 @@ re-probe the neighbours that share its OBSERVABLE, not only the ones that share
 its cause.** Shared cause is what a working group is organised around; shared
 observable is a different neighbourhood, and it is the one severity decay
 travels through.
+
+# Re-measured 2026-09-11, frankZ, compiler `8b0839edde8f` — THE SILENT ARM IS NOT GONE, AND THIS TICKET PREDICTED ITS OWN BLIND SPOT
+
+**The severity claim above is stale in the direction the section below it calls
+the dangerous one.** The 2026-09-10 re-measure found the observable had moved
+from a wrong value to `undefined variable (C)`, and this ticket was re-ranked
+55 → 45 on that. There is a shape where it is **still silent**, and it is not an
+exotic one:
+
+```python
+# a/__init__.py:  WHO = "fallback"
+# b/__init__.py:  WHO = "selected"
+from a import WHO as A
+from b import WHO as B
+print(A, B)
+```
+
+| | |
+| --- | --- |
+| CPython | `fallback selected` |
+| pxx | **`selected selected`** |
+
+Exit 0, no diagnostic. Both aliases answer the LATER module's member.
+
+## Why the 09-10 table could not see it, and the distinction is the finding
+
+Every row of that table varies **alias count and collision within ONE import
+statement**, against ONE source module. The variable this shape moves is a
+different one: **two source MODULES that each declare the same member name**,
+one alias per statement, no collision inside either statement. The 09-10 row
+*"two aliases, no collision — correct"* is true and does not cover it.
+
+It is the same cause the ticket names, with nothing added: `FindSym(impReal)` is
+flat, so `WHO` resolves to whichever `WHO` is in flat scope rather than to the
+one belonging to the unit `PyParseImportUnit` just pulled. The within-statement
+self-capture scan is irrelevant here — neither name was queued by the other's
+statement — which is why the guard cannot reach it and why the observable stays
+a value instead of becoming a refusal.
+
+**So the cause is single and the SEVERITY is two-valued**, depending on whether
+the shadowing name comes from the importer's own statement (loud) or from
+another module's export (silent). A ranking argument that reads only the loud
+half under-ranks the ticket.
+
+## Prio 45 → 60
+
+Not for the mechanism, which is unchanged and was correctly diagnosed a fortnight
+ago, but because the silent arm is alive and the population is ordinary: any two
+modules sharing a member name — `NAME`, `VERSION`, `WHO`, `main`, `parse`,
+`Error` — collide the moment both are aliased. Re-exporting packages are the
+named population above; this needs no re-export at all.
+
+## How it was found, which is worth more than the row
+
+Writing a fixture for an unrelated bug (`try/except/else` with an import in the
+try body). Its two arm modules each declared a constant, and I named both `NAME`
+**on purpose, to sharpen the differential** — one module answers "fallback", the
+other "selected", so any arm confusion shows up in one word. That naming is what
+created this collision, and the fixture duly reported the handler arm returning
+the else arm's value: a real defect, wearing the costume of the bug under test,
+in the row that was supposed to be the discriminator.
+
+**A fixture's own naming choices are inside the population it measures.** The
+house rule about a measurement creating the condition it tests for is written
+about a run's earlier STEPS supplying what a later one needs; this is the same
+shape one level earlier, in the fixture's DATA. The tell was that the control
+row moved too. The remedy was to name the two constants differently and let the
+MODULE, not the member, carry the identity — and then the arm bug reproduced on
+its own, at which point this one had to be split out rather than fixed in
+passing.
+
+Section above, on re-probing the neighbours that share an OBSERVABLE: this is an
+instance, and the observable moved twice — silent, then loud, then silent again
+in a shape nobody had varied.
