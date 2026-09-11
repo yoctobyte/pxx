@@ -4661,6 +4661,135 @@ Before concluding "a wrong CWD is loud", enumerate the directories that contain
 the thing being resolved — not the one directory you happened to try.
 
 
+## A CONTROL REVERTED INTO A SCRATCH DIRECTORY, WITH A SEARCH PATH THAT PREFERS THE LIVE TREE — the control was most convincing in the one configuration where it was lying
+
+**2026-09-11, frankS.** Four tstate rows were red and the accused commit was
+mine: `0ffe185bb` moved six System names out of `lib/rtl/sysutils.pas` into
+`compiler/builtin/builtin.pas`, and anything built with `$(PXX_STABLE)` — the
+PINNED compiler plus a FROZEN copy of `compiler/builtin/` predating the move —
+can no longer find them in either place. Before repairing it I wanted the
+positive control: revert `sysutils.pas`, reproduce the failure, then fix.
+
+**The control I wrote, which is the obvious one and which passed.** Copy
+`lib/rtl` to a scratch directory, overwrite one file with `git show
+HEAD:lib/rtl/sysutils.pas`, and point the compiler at it:
+
+    cp -a lib/rtl/. $D/rtlold/
+    git show HEAD:lib/rtl/sysutils.pas > $D/rtlold/sysutils.pas
+    ./stable_linux_amd64/default/pinned --mimic-fpc \
+        -Fuexternal/synapse -Fu$D/rtlold -Fu$D/rtlold/platform/posix \
+        test/lib_synapse.pas $D/out          # -> ok, compiles, no error
+
+Nothing about that output says "your control did not take effect". It says the
+accusation is wrong.
+
+**What it was actually measuring.** The pinned compiler resolves `lib/rtl`
+through an **exe-dir-relative path of its own** —
+`stable_linux_amd64/default/../../lib/rtl` — and reaches it before it consults
+`-Fu` for a unit pulled in TRANSITIVELY (here `sysutils`, via
+`external/synapse/synautil.pas`). Its own error messages print that path, which
+is how it was eventually visible. So the control compiled the LIVE tree, which
+already had the repair applied, while appearing to compile the reverted one.
+
+**The part that makes this worth a section: a second probe against the same
+scratch copy DID fail, and that is what made the shadow credible.** A program
+whose own `uses sysutils` names the unit directly resolves through `-Fu` and
+duly answered `undefined variable (SetString)`. Two probes, one scratch
+directory, one of them genuinely exercising the reverted file and one of them
+silently not — and the one that worked was the one I ran first, so by the time
+the real repro passed, the scratch copy had already been proven to be in
+effect. **The control was most convincing in exactly the configuration where it
+was lying.**
+
+**The remedy is to stop making a copy at all: revert IN PLACE.**
+
+    git diff lib/rtl/sysutils.pas > $D/restore.patch   # park it as a PATCH
+    git checkout HEAD -- lib/rtl/sysutils.pas          # revert in place
+    <run the job's own recipe>                         # -> the real failure
+    git apply $D/restore.patch                         # patch back
+
+Run that way the control fired immediately, with the exact error seven had
+reported. `git checkout HEAD --` (not `git checkout --`) and a parked patch are
+already this repo's prescribed shape for held work; this is the same shape used
+for a measurement, and the reason is the same — a copy has no step that can
+fail, so nothing tells you when it stopped being the thing under test.
+
+**Generalise past compilers.** Any tool with a built-in search path that it
+consults ahead of, or instead of, the one you passed will do this: a linker's
+default library path, `PYTHONPATH` versus an installed package, a `-I` against a
+framework's own include root, an interpreter that prefers the script's directory.
+The tell is not in the output. The tell is that **you redirected the input by
+adding a path rather than by changing the file the tool would have read anyway.**
+
+**Three questions that would each have caught it.**
+1. Does the tool print, anywhere, which file it actually read? (Here: yes, in an
+   unrelated error message, naming `stable_linux_amd64/default/../../lib/rtl`.)
+2. If I corrupt the scratch copy outright, does the run still succeed? (A blunt
+   version of the same check, and it costs one line. Put the garbage INSIDE the
+   unit — appending after `end.` proves nothing, which cost me one wasted
+   round.)
+3. Did my control pass, when I was expecting it to fail? **A positive control
+   that passes is not a result about the code.** It is a result about the
+   control, until proven otherwise — and the instinct to accept it is strongest
+   when it exonerates you.
+
+Sibling sections: "A CONTROL has to be the commit under test, not the nearest
+binary lying around"; "A 'WRONG CWD FAILS LOUDLY' CONTROL DRAWN FROM AN EMPTY
+DIRECTORY"; "A GUARD THAT CANNOT FAIL IS NOT A GUARD" in CLAUDE.md.
+
+
+## A GREEN THAT NAMES ITS OWN SKIPS IS STILL A GREEN ABOUT A SMALLER CORPUS — and the line that says so is written to be reassuring
+
+**2026-09-11, frankS, and it is the THIRD round of one error in one ticket.**
+The criterion for "may I move this name out of `lib/rtl`?" was right every time:
+*does anything built with `$(PXX_STABLE)` call it*. The POPULATION it was applied
+to was wrong every time, widening by exactly one group nobody had thought of:
+
+| round | missed group | how it announced itself | where |
+| --- | --- | --- | --- |
+| 1 | `lib/rtl` calling its own declarations | `undefined variable (LowerCase)`, every unit | the clearing run |
+| 2 | the `test/lib_` rows | `undefined variable (StringOfChar)` | the clearing run |
+| 3 | `external/` | `undefined variable (SetString)` in `external/synapse/synautil.pas` | **two days later, on another host** |
+
+Rounds 1 and 2 failed inside the very `make lib-test` written to clear the
+change, and cost minutes. Round 3 could not, and cost two days and four red
+tstate rows, for a reason that has nothing to do with the names: **`external/` is
+absent on this box, so the recipe SKIPS those rows and the run goes green having
+compiled a smaller corpus.**
+
+It is not silent about that. The last line of a green run says, in the Makefile's
+own words:
+
+    SKIPPED: synapse-ssl, tls-loopback -- green here does NOT cover them
+
+**That sentence is a SCOPE STATEMENT wearing the costume of bookkeeping**, and it
+arrives attached to the word `ok`. Everything around it is reassurance; it is the
+one clause that narrows the claim, and it is positioned where a reader has
+already decided the run passed. Whoever wrote it did the honest thing and it
+still did not work — which is the finding, because the instinct on being told
+about a skip is to note the skip, not to re-scope the green.
+
+**The remedy is not a better grep and not a louder message. It is to remove the
+skip.** One `tools/install_externals.sh` and there is nothing to skip; the local
+run then covers the population the claim is about. Generally: **before you use a
+green to clear a change, read what the run declined to do, and either do it or
+say out loud which part of your claim is unmeasured.**
+
+Two forms this takes elsewhere, so it is recognisable away from `lib-test`:
+
+* **An absent dependency.** The corpus is not there, so the row is skipped rather
+  than failed — indistinguishable from a pass in any summary that counts
+  failures.
+* **A skip-listed row whose behaviour CHANGED.** Same ticket, same week: a
+  conformance case advanced from failing at line 23 to failing at line 67, real
+  progress caused by the same commit, and because the row is skip-listed the
+  advance went into the skip REASON and the pass/fail counts did not move. The
+  corpus reported "per-row identical" and was right, and something had changed.
+
+Sibling sections: "An instrument that reports a RESULT should report its
+DENOMINATOR"; "A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT".
+
+
 ## A STALE MEASUREMENT — prose asserting a live state, written true, aged false by your own next commit, and afterwards indistinguishable from something that was checked
 
 Every stale-instrument tell in this file keys on **a run**. A stale binary, a

@@ -559,6 +559,13 @@ function sLineBreak: AnsiString;
   measured too: FloatToStr, FloatToExpStr and HexStr are declared in this unit
   AND in builtin.pas today, in the frozen copy as well as the live one, and
   have been for as long as lib-test has been green.
+  IF YOU FOUND THIS COLD AND IT LOOKS LIKE A REGRESSION TO CLEAN UP: deleting
+  either copy today re-breaks four tstate rows. Delete the BUILTIN copy and a
+  program with no `uses` line loses all six names again, which is the defect
+  0ffe185bb fixed. Delete THIS copy and external/synapse and fpjson stop
+  compiling under $(PXX_STABLE), which is the defect 0ffe185bb caused. Both
+  copies are load-bearing until the pin moves, and only then does one stop
+  being.
   RETIRE IT by deleting the copy here -- declaration AND body -- once a pin's
   stable_linux_amd64/default/builtin/builtin.pas carries the name. Grep it
   there; that is the whole test.
