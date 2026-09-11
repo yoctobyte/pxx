@@ -11105,7 +11105,8 @@
   "sha": "eb1b200ee92fdaeef2c60d1b90237a75beec739d"
  },
  "migrated_from": [
-  "borg"
+  "borg",
+  "seven"
  ],
  "open_regressions": [
   {
@@ -13037,6 +13038,71 @@
     "1ff974d9cea72d2a32eb33a5a82a4ec7c5da16db",
     "8f252aae17138a6d909e00b7316b59216914bf28"
    ],
+   "src": "",
+   "status": "fail"
+  },
+  {
+   "bad": "fca28056d8ec2483d3a9a1b0f064842164f92b46",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "0e3ba86d520815bc8351c39404cceb6054bdb4b3",
+   "job": "lib-test#src:tools/crtl_reachability.py",
+   "migrated_at": "2026-09-11T16:29:49Z",
+   "migrated_from": "seven",
+   "name": "lib-test#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-09T16:32:24Z",
+   "pin_axis": 2,
+   "pin_built": true,
+   "range": [
+    "0ffe185bbdb9a9140b8bb53a2e377b688f51e582",
+    "b41f78b4e7b3b04ffae66dd2399a1624a76f9303",
+    "de32508d3ba5c02ef1dddca1528f83e1b1051d80",
+    "2af86c16965d59ba25e10c1ef4a019a9715b94a7"
+   ],
+   "src": "tools/crtl_reachability.py tools/gen_crtl_map.py +50",
+   "status": "fail"
+  },
+  {
+   "bad": "539361a56c61dedee213a6de94d05fdcccfb4cbd",
+   "bad_untestable": false,
+   "first_seen": false,
+   "good": "1cafa51e4b6b3d05711ea49c3b1f9e426163c893",
+   "job": "tools-devtest#00",
+   "migrated_at": "2026-09-11T16:29:49Z",
+   "migrated_from": "seven",
+   "name": "tools-devtest#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-10T12:48:25Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "539361a56c61dedee213a6de94d05fdcccfb4cbd"
+   ],
+   "range_non_causal": false,
+   "src": "",
+   "status": "fail"
+  },
+  {
+   "bad": "dbd40ba3c70673886e142fadd0e624a84f73e7d2",
+   "bad_untestable": false,
+   "first_seen": false,
+   "good": "dc6370d812807dddd8afb30ab174d1d09a825379",
+   "job": "tools-devtest-sh#00",
+   "migrated_at": "2026-09-11T16:29:49Z",
+   "migrated_from": "seven",
+   "name": "tools-devtest-sh#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-11T02:09:23Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "dbd40ba3c70673886e142fadd0e624a84f73e7d2"
+   ],
+   "range_non_causal": false,
    "src": "",
    "status": "fail"
   }
