@@ -1893,6 +1893,11 @@ begin
             (Tokens[k - 1].Kind = tkSemicolon) or (Tokens[k - 1].Kind = tkEnd);
 end;
 
+function PasCondOrdBoundOfNameOrAlias(const nm: AnsiString; wantHigh: Boolean;
+                                     var v: Int64): Boolean; forward;
+{ ^ declared below beside the other alias walks; forwarded here because the const
+  walk needs it and the alias walks need PasCondTypeAlias, which needs the probe. }
+
 function PasCondConstIntIn(const nm: AnsiString; lo, hi: Integer;
                            var v: Int64): Boolean;
 { `NAME = <integer literal> ;`, optionally signed. The pattern IS the type
@@ -1919,6 +1924,29 @@ begin
               (Tokens[k + 4].Kind = tkSemicolon) then
       begin
         v := -Tokens[k + 3].IVal; Result := True; Exit;
+      end
+      { ...AND `NAME = high(<type>);` / `low(...)`, which is how FPC declares
+        RS_INVALID (cgbase.pas:400) and therefore the shape the whole
+        `{$if declared(RS_STACK_POINTER_REG) and (RS_STACK_POINTER_REG<>RS_INVALID)}`
+        directive at rgobj.pas:1728 turns on.
+        STILL NOT A GUESS, which is this walk's governing rule: the bound comes
+        from OrdinalNameToTk + OrdinalTypeBound through
+        PasCondOrdBoundOfNameOrAlias, so a name those do not know DECLINES and
+        leaves the caller's diagnostic in place. An enum, a subrange and a
+        record all decline here exactly as they decline from sizeof. }
+      else if (k + 6 < hi) and (Tokens[k + 2].Kind = tkIdent) and
+              (Tokens[k + 3].Kind = tkLParen) and
+              (Tokens[k + 4].Kind = tkIdent) and
+              (Tokens[k + 5].Kind = tkRParen) and
+              (Tokens[k + 6].Kind = tkSemicolon) and
+              (CaseEqual(PasCondTokText(k + 2), 'high') or
+               CaseEqual(PasCondTokText(k + 2), 'low')) then
+      begin
+        if PasCondOrdBoundOfNameOrAlias(PasCondTokText(k + 4),
+             CaseEqual(PasCondTokText(k + 2), 'high'), v) then
+        begin
+          Result := True; Exit;
+        end;
       end;
     end;
 end;
@@ -1938,10 +1966,23 @@ begin
   if nm = '' then Exit;
   for k := lo to hi - 1 do
     if (Tokens[k].Kind = tkIdent) and (k + 3 < hi) and
-       (Tokens[k + 1].Kind = tkEq) and (Tokens[k + 3].Kind = tkSemicolon) and
+       (Tokens[k + 1].Kind = tkEq) and
        PasCondDeclStartsAt(k, lo) and CaseEqual(PasCondTokText(k), nm) then
     begin
-      target := PasCondTokText(k + 2);
+      if Tokens[k + 3].Kind = tkSemicolon then
+        target := PasCondTokText(k + 2)
+      { ...AND THE DISTINCT-TYPE FORM, `NAME = type X;`, which is FOUR tokens and
+        so fell outside the shape above. It is not an exotic spelling: FPC's own
+        cgbase.pas:317 declares `TSuperRegister = type word`, and `RS_INVALID =
+        high(tsuperregister)` at cgbase.pas:400 cannot be answered without it.
+        `type X` and `X` differ in ASSIGNMENT COMPATIBILITY and in nothing this
+        walk reports -- the width and the ordinal bounds are the base type's, so
+        following the hop is exact here rather than an approximation. }
+      else if (k + 4 < hi) and (Tokens[k + 2].Kind = tkType) and
+              (Tokens[k + 4].Kind = tkSemicolon) then
+        target := PasCondTokText(k + 3)
+      else
+        target := '';
       Result := target <> '';
       if Result then Exit;
     end;
@@ -1966,7 +2007,7 @@ var
   PasCondProbeInt: Int64 = 0;
   PasCondProbeStr: AnsiString = '';
 
-function PasCondConstInt(const nm: AnsiString; var v: Int64): Boolean;
+function PasCondConstIntDirect(const nm: AnsiString; var v: Int64): Boolean;
 { This file first, then the units it names -- the order PasCondNameDeclared
   uses, and here it is also the cheap-first order: the in-file walk costs a scan
   and the probe costs LEXING every used unit, so a constant declared beside the
@@ -2028,6 +2069,73 @@ begin
   begin
     cur := nxt;
     Result := PasCondSizeOfTypeName(cur);
+    Inc(hops);
+  end;
+end;
+
+function PasCondOrdBoundOfNameOrAlias(const nm: AnsiString; wantHigh: Boolean;
+                                     var v: Int64): Boolean;
+{ high(<name>)/low(<name>) where the name may be an ALIAS the source declares --
+  the value twin of PasCondSizeOfNameOrAlias above, hop for hop, cap and all.
+
+  ONE HOP IS THE CASE THIS EXISTS FOR AND IT IS NOT A HYPOTHETICAL:
+  `RS_INVALID = high(tsuperregister)` (FPC cgbase.pas:400) over
+  `TSuperRegister = type word` (cgbase.pas:317). The distinct-type form is why
+  PasCondTypeAliasIn had to learn a four-token shape; without that hop this walk
+  reaches a name OrdinalNameToTk does not know and correctly refuses.
+
+  THE CAP IS THE CYCLE GUARD, for the same reason and with the same number as
+  its sibling: `type A = B; B = A;` is legal to write and would not terminate. }
+var hops: Integer;
+    cur, nxt: AnsiString;
+begin
+  Result := PasCondOrdBoundOfTypeName(nm, wantHigh, v);
+  if Result then Exit;
+  cur := nm;
+  hops := 0;
+  while (not Result) and (hops < 8) and PasCondTypeAlias(cur, nxt) do
+  begin
+    cur := nxt;
+    Result := PasCondOrdBoundOfTypeName(cur, wantHigh, v);
+    Inc(hops);
+  end;
+end;
+
+function PasCondConstInt(const nm: AnsiString; var v: Int64): Boolean;
+{ ...AND A CONST MAY NAME ANOTHER CONST. `RS_STACK_POINTER_REG = RS_RSP`
+  (FPC x86_64/cpubase.inc:90) over `RS_RSP = $07` (x86/cpubase.pas:84) -- the two
+  sit in DIFFERENT UNITS, which is why the hop goes through PasCondConstIntDirect
+  (this file, then the units it names) rather than through a single range walk.
+
+  THE HEADER ABOVE PasCondDeclStartsAt SAYS `A = B` DECLINES, AND THAT SENTENCE
+  IS NOW HALF RIGHT -- worth saying plainly rather than quietly contradicting,
+  because it was a deliberate refusal and not an oversight. What it refuses is
+  GUESSING: a name whose value the walk cannot establish must keep the caller's
+  diagnostic rather than get a plausible number. Resolving `A = B` by looking B
+  up is not a guess, it is the resolution, and it either lands on an integer or
+  declines exactly as before. `A = B + 1`, `A = 'x'` and the typed-const form
+  still decline, untouched.
+
+  THE HOP REUSES PasCondTypeAlias ON PURPOSE. At token level `NAME = OTHER ;` is
+  the same four tokens whether OTHER is a type or a const, and this walk has no
+  section tracking by design -- PasCondDeclStartsAt's header records why a
+  const/type section tracker is wrong on real source. So one shape matcher
+  serves both, and a second that differed only in what it BELIEVED it was
+  matching would be the two-tables defect one scope down.
+
+  CAP AND CYCLE GUARD as its siblings, same number: `const A = B; B = A;` is
+  legal to write and would not terminate. }
+var hops: Integer;
+    cur, nxt: AnsiString;
+begin
+  Result := PasCondConstIntDirect(nm, v);
+  if Result then Exit;
+  cur := nm;
+  hops := 0;
+  while (not Result) and (hops < 8) and PasCondTypeAlias(cur, nxt) do
+  begin
+    cur := nxt;
+    Result := PasCondConstIntDirect(cur, v);
     Inc(hops);
   end;
 end;

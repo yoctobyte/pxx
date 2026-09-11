@@ -2884,3 +2884,52 @@ profile can define — a name something DOES define stops testing the poison pat
 and starts testing a define lookup, while still printing `yes`.
 
 2026-09-11 | frankB (Track N) | compiler/pasparser_proc.inc + compiler/compiler.pas + compiler/pyparser.inc + test + Makefile | TWO LANDINGS AND THREE TICKETS, AND THE TICKETS CAME OUT OF A POSITIVE CONTROL I EXPECTED TO BE BORING. (1) `--no-shims` now lifts BOTH ours-first substitutions — the `mimic_<name>` shim AND the curated lib/rtl unit that IS the Python module of that name — so the flag stopped meaning something different for `sqlite3` than for `zlib`. One condition in pasLookupOK. The asymmetry beside it (`import 'zlib.h'` resolves, `import 'sqlite3.h'` does not) was recorded in two places with an explicitly UNCHASED guess — that the unit search never probes /usr/include — and I was one keystroke from copying it into a compiler comment, which is where a guess stops being labelled as one. Chased: both headers ARE in /usr/include and PyTryHostHeader probes it; the discriminator is that its call site is gated on `NoShims or (not PyMimicShimExists(...))` and an explicit extension pins the LANGUAGE without lifting that gate, so a shimmed name's extension spelling reaches NEITHER route. It is a mechanism and not a story because it predicted a cell neither seat had run — `import 'sqlite3.h' --no-shims` resolves, 3046001. The flag KEEPS ITS NAME and the widening is deliberate: lib/rtl/zlib.pas's Python surface IS a CPython shim, and the only thing separating it from mimic_zlib.pas is which directory we put it in, so "no shims" was the broad claim and the implementation was the narrow half — the name-is-not-the-thing shape with the name in the right. `--no-shims` is now in `--help` for the first time, naming both gates. (2) A keyword argument at a callable field on a VARIANT receiver: THE RECEIVER IS THE DISCRIMINATOR AND NOT THE FIELD — a plain name and a function call bind at compile time, a list subscript, a dict subscript and a constructor call reach PyMakeVariantFieldCall, whose argument loop had no keyword arm at all, so `room=2` parsed as an expression and the call died naming a variable the program never wrote (lekkerzeilen/traffic.py:375). Routed to pyvar_callv_kw, the channel the `**` work already built. Probing the same loop found a SEVENTH `**` door with the identical `expected expression` signature. (3) THE CONTROL THAT DID NOT PASS: "positional through a typed procedural field still works" — it segfaults, in the pin, and unpicking it produced three tickets. A Pascal function handed from NilPy to a Pascal procedural PARAMETER is not a code address (wired inside Pascal with `@TheMaker`: 502 both ways; wired from NilPy: segfault even when Pascal makes the call). A method's receiver parameter must be literally named `self` — two distinct defects that my first eight-name sweep CONFOUNDED by varying `__init__` and the method together, which is the two-variable error I had been corrected on four hours earlier and logged the lesson for; a sweep feels rigorous and eight rows of one configuration is one configuration. And the hoisted argument temp escapes a conditional that lives inside an expression, which is a defect in my OWN `**` door landed an hour before. Two things worth keeping from the thread with frankuser: `'int' object` appears in exactly ONE of eight cells, and cells that differ only in call shape print DIFFERENT messages for the same two live defects, so a one-cell probe cannot name a mechanism even in principle — the message is partly a property of the probe. And a discriminator that has been right four times in one evening is exactly the one to stop assuming: the receiver expression separates the keyword door, the traffic.py wall and cell 2 of that matrix, and it is NOT what separates the callable-field failure modes — `__slots__` is, isolated by changing one ingredient at a time starting from the OTHER seat's probe verbatim, because your own minimal case is where you have already deleted whatever you were not suspecting.
+## 2026-09-11 | frankH | compiler/paslexer.inc, pasparser_lval.inc | `{$if}` reads a const that is not a literal
+
+The other half of the conditional-directive ticket, after the short-circuit fix
+above. `{$if}` could read a source const only when its value was an INTEGER
+LITERAL, and FPC's rgobj.pas:1728 turns on a directive whose BOTH operands are
+something else.
+
+IT NEEDED FOUR HOPS, NOT THE ONE THE TICKET DESCRIBED. The ticket traced the
+right operand (`RS_INVALID = high(tsuperregister)`) and nobody had traced the
+left, which chains too: `RS_STACK_POINTER_REG = RS_RSP` (x86_64/cpubase.inc:90)
+to `RS_RSP = $07` (x86/cpubase.pas:84) — a const naming another const, in a
+DIFFERENT UNIT. And `TSuperRegister = type word` (cgbase.pas:317) is the
+distinct-type form, four tokens, outside the one-token alias shape the walk
+matched.
+
+NOTHING NEW HAD TO LEARN TO EVALUATE ANYTHING, which is why it stayed small.
+PasCondOrdBoundOfTypeName asks OrdinalNameToTk + OrdinalTypeBound — the same pair
+TryConstHighLowValueInner asks — so no range table was written into paslexer.inc.
+That is PasCondSizeOfTypeName's own rule and its header records three fixes paid
+for a second source of size truth. The const-to-const hop REUSES PasCondTypeAlias:
+at token level `NAME = OTHER ;` is the same four tokens whether OTHER is a type or
+a const, and this walk has no section tracking by design (PasCondDeclStartsAt's
+header records why a section tracker is wrong on real source). Both new walks copy
+PasCondSizeOfNameOrAlias hop for hop, cap and all.
+
+SAID OUT LOUD RATHER THAN QUIETLY CONTRADICTED: the `A = B declines` rule in
+PasCondDeclStartsAt's header was deliberate, not an oversight, and it is now half
+retired. What it refuses is GUESSING; resolving `A = B` by looking B up is the
+resolution, not a guess, and it either lands on an integer or declines as before.
+`A = B + 1`, `A = 'x'` and the typed-const form are untouched.
+
+THE CYCLE CONTROL IS THE ONE THAT MATTERS AND IT NEEDED A TIMEOUT. `const A = B;
+B = A;` is legal to write, and a walk that follows a const to another const can
+follow that pair forever — a failure mode no output assertion anywhere can
+observe, because it is a HANG rather than a wrong answer. The hop cap turns it
+into today's diagnostic; the Makefile row wraps the compile in `timeout 60` so a
+lost cap goes RED instead of wedging the suite. Refuses in 0.00s.
+
+CORPUS: rgobj CLEARS this wall and stops at cfileutl.pas:136 (TExecuteFlags, the
+umbrella's 127-unit wall). nld and ncnv are unchanged — they are shape 1, the `in`
+over a set constant, now split out as its own ticket because the two halves are
+work of very different sizes and one summary could not be true about both. A wall
+cleared is a unit moved to the next wall; that is this umbrella's own finding and
+it held again.
+
+7 new fixture rows byte-identical to fpc 3.2.2; 65535 is the expected value
+precisely because no default, size or pointer width can produce it, and both
+directive rows are asserted in BOTH directions since an evaluator that resolved
+nothing answers False and would agree with a one-directional test.

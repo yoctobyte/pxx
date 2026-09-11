@@ -3774,6 +3774,29 @@ test-nilpy: $(COMPILER)
 	elif ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_surviving_poison.pas $(TESTTMP)/test_condsurv26 2>&1 | grep -q 'NOPE_SURVIVING'; then \
 	  echo "ok: a poison nothing discards still raises, naming the operand"; \
 	else echo "FAIL: refused, but the message does not name NOPE_SURVIVING"; exit 1; fi
+	@# ...AND A CONST WHOSE VALUE IS NOT AN INTEGER LITERAL. FPC's rgobj.pas:1728
+	@# needs four hops for one directive: a const naming another CONST across two
+	@# UNITS (x86_64/cpubase.inc:90 -> x86/cpubase.pas:84), and high() over a
+	@# DISTINCT-TYPE alias (`TSuperRegister = type word`, cgbase.pas:317), which
+	@# is four tokens and fell outside the one-token alias shape. Byte-identical
+	@# to fpc 3.2.2 on all 7 rows. 65535 cannot be produced by a default, a size
+	@# or a pointer width, and both directive rows are asserted in BOTH
+	@# directions -- an evaluator that resolved nothing answers False and would
+	@# agree with a one-directional test. rgobj now clears this wall and stops at
+	@# TExecuteFlags instead; nld and ncnv still stop on the set-membership shape.
+	@./$(COMPILER) test/test_p_a_conditional_directive_reads_a_const_that_is_not_a_literal.pas $(TESTTMP)/test_condnonlit26
+	@tools/expect_same.sh test_condnonlit26 "$$($(TESTTMP)/test_condnonlit26 | tail -n 2)" "$$(printf 'fails=0\nCONDNONLIT OK')"
+	@# THE CYCLE CONTROL, AND ITS FAILURE MODE IS A HANG. `const A = B; B = A;`
+	@# is legal to write, and a walk that follows a const to another const can
+	@# follow that pair forever -- which no output assertion anywhere can
+	@# observe. The hop cap turns it into today's diagnostic; this row is what
+	@# proves the cap is still there. timeout, not just a failure check: if the
+	@# cap ever goes, this row must go RED rather than wedge the suite.
+	@if timeout 60 ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_const_cycle.pas $(TESTTMP)/test_condcyc26 >/dev/null 2>&1; then \
+	  echo "FAIL: a const cycle COMPILED -- the walk invented a value for a const that has none"; exit 1; \
+	elif timeout 60 ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_const_cycle.pas $(TESTTMP)/test_condcyc26 2>&1 | grep -q '`A`'; then \
+	  echo "ok: a const cycle terminates at the hop cap and names the operand"; \
+	else echo "FAIL: the const cycle did not refuse naming A -- either the cap is gone (timeout) or the message lost the operand"; exit 1; fi
 	@# A unit cycle CLOSED THROUGH AN `implementation` uses clause -- the legal
 	@# and standard form of mutual unit recursion, and the reason Pascal splits
 	@# `uses` in two at all. ucycle_a's INTERFACE uses ucycle_b; ucycle_b's

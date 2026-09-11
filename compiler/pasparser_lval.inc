@@ -8873,6 +8873,38 @@ begin
   else Result := tyUnknown;
 end;
 
+function PasCondOrdBoundOfTypeName(const nm: AnsiString; wantHigh: Boolean;
+                                  var v: Int64): Boolean;
+{ `high(<type name>)` / `low(...)` inside a `{$if}`, and the value twin of
+  PasCondSizeOfTypeName below -- same door, same reason, same refusal.
+
+  IT HOLDS NO BOUNDS OF ITS OWN. OrdinalNameToTk and OrdinalTypeBound are
+  already the one place that answers this question for the constant evaluator
+  (TryConstHighLowValueInner asks exactly this pair), and they take a NAME and a
+  KIND rather than a CurTok, which is the whole reason this door can exist at
+  all -- conditionals are resolved during LexAll, before anything is parsed, so
+  nothing that needs the symbol table or the token cursor is reachable from
+  here. A bound table written into paslexer.inc would be the second source of
+  range truth, which is the defect PasCondSizeOfTypeName's own header records
+  three separate fixes for.
+
+  WHAT IT DELIBERATELY CANNOT ANSWER, and refuses rather than guessing: an ENUM
+  (its members are declared, not builtin, and their count is a parse away), a
+  SUBRANGE, a named ARRAY's index bounds, and the sized booleans -- all of which
+  the parser-level twin does answer, because it has a symbol table and this does
+  not. False makes the caller keep its existing diagnostic, which names the
+  operand; a plausible bound would steer a branch, and a conditional that takes
+  the wrong branch does not produce a wrong number, it produces a different
+  program.
+  bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal }
+var tk: TTypeKind;
+begin
+  Result := False;
+  tk := OrdinalNameToTk(nm);
+  if tk = tyUnknown then Exit;
+  Result := OrdinalTypeBound(tk, wantHigh, v);
+end;
+
 function PasCondSizeOfTypeName(const nm: AnsiString): Int64;
 { `sizeof(<type name>)` inside a `{$if}` -- FPC's ordinary idiom for guarding a
   platform-dependent arm, and unanswerable here until now, so the file died in

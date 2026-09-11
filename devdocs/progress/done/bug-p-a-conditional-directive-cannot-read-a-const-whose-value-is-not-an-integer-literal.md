@@ -4,13 +4,13 @@ title: "`{$if}` cannot read a `const` whose value is a set or a folded call"
 track: P
 prio: 35
 type: bug
-status: working
+status: done
 owner: frankH
 found-by: frankH
 created: 2026-09-09
 tags: [conditional-directives, lexer, fpc-corpus]
 blocked-by: []
-summary: "PARTIALLY FIXED 2026-09-11: shape 2 was TWO defects and the one in front of it was not filed anywhere. FPC's `{$if declared(X) and (X<>Y)}` idiom needs `and` to SHORT-CIRCUIT, and pxx did not -- a shunting-yard applies the parenthesised `<>` before the `and`, so the comparison raised and nothing could save it. Fixed by DEFERRING that error (a no-value stack kind carrying the exact message; `and`/`or` discard it on a decided LEFT operand; one surviving to the top raises it verbatim), so the genuine absent-define diagnostic is byte-identical. Left-only, and fpc REFUSES the right-only form too -- measured, and pinned by two must-not-compile fixtures. IT MOVES NO CORPUS UNIT and the number says why: 17 of FPC's 18 cpubase files DO declare RS_STACK_POINTER_REG (x86_64/cpubase.inc:90), so on the probe's target the right side must still answer. STILL OPEN: `RS_INVALID = high(tsuperregister)` needs three named pieces, and shape 1 (`in` over a set const folded from three set consts) is bigger than all of them and should be split out."
+summary: "FIXED, and it was TWO defects plus a fourth hop nobody had traced. (1) pxx did not SHORT-CIRCUIT `and` in a `{$if}`, so FPC's portable `declared(X) and (X<>Y)` idiom was refused outright -- a shunting-yard applies the parenthesised `<>` before the `and`. Fixed by DEFERRING that error, so the genuine absent-define diagnostic stays byte-identical; left-only, and fpc refuses the right-only form too (measured, pinned). (2) The const door now reads a const naming another CONST across units, `high()`/`low()` as a const value, and the DISTINCT-TYPE alias form `NAME = type X;` -- four hops, which is what FPC rgobj.pas:1728 actually needs, since the LEFT operand chains as well. No new table and no new evaluator: it reuses OrdinalNameToTk + OrdinalTypeBound and PasCondTypeAlias. 12 fixture rows byte-identical to fpc 3.2.2, plus 3 must-refuse controls, one of them timeout-guarded because a const cycle fails by HANGING. rgobj CLEARS this wall and stops at TExecuteFlags; nld/ncnv are shape 1, split out as bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant."
 ---
 
 # `{$if}` over a const that is not an integer literal
@@ -128,3 +128,67 @@ Shape 1 (`in` over a set const folded from three set consts) is bigger than all
 of that together — a third value kind on the stack, set-union folding, and enum
 member resolution — and should be split into its own ticket rather than carried
 here.
+
+## RESOLVED for shape 2 — four hops, and rgobj clears the wall
+
+Shape 1 is split out as
+[[bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant]], because
+the two halves turned out to be work of very different sizes and one summary
+could not be true about both.
+
+Shape 2 needed **four** hops, not the one the ticket described — the left operand
+chains too, which nobody had traced:
+
+| hop | FPC source | what it needed |
+| --- | --- | --- |
+| `RS_STACK_POINTER_REG = RS_RSP` | x86_64/cpubase.inc:90 | a const naming another CONST, **across units** |
+| `RS_RSP = $07` | x86/cpubase.pas:84 | (a literal at last) |
+| `RS_INVALID = high(tsuperregister)` | cgbase.pas:400 | `high()` as a const value |
+| `TSuperRegister = type word` | cgbase.pas:317 | the DISTINCT-TYPE alias form, four tokens |
+
+**Nothing new had to learn how to evaluate anything.** Every piece reuses a walk
+or a helper that already existed, which is why this stayed small:
+
+- `PasCondOrdBoundOfTypeName` asks `OrdinalNameToTk` + `OrdinalTypeBound` — the
+  same pair `TryConstHighLowValueInner` asks — so no range table was written into
+  `paslexer.inc`. That is `PasCondSizeOfTypeName`'s rule, whose header records
+  three separate fixes paid for having a second source of size truth.
+- The const-to-const hop reuses `PasCondTypeAlias`. At token level
+  `NAME = OTHER ;` is the same four tokens whether OTHER is a type or a const,
+  and this walk has no section tracking **by design** — `PasCondDeclStartsAt`'s
+  header records why a const/type section tracker is wrong on real source.
+- Both new walks copy `PasCondSizeOfNameOrAlias` hop for hop, cap and all.
+
+**The `A = B` refusal this ticket quoted was half right and is now half
+retired**, said out loud rather than quietly contradicted: what it refuses is
+GUESSING, and resolving `A = B` by looking B up is the resolution, not a guess.
+`A = B + 1`, `A = 'x'` and the typed-const form still decline untouched.
+
+### Measured
+
+7 fixture rows byte-identical to fpc 3.2.2. `65535` is the value that cannot be
+produced by a default, a size or a pointer width, and both directive rows are
+asserted in **both** directions — an evaluator that resolved nothing answers
+False and would agree with a one-directional test.
+
+Declines re-checked and still loud, with no silent number: `high()` of an enum,
+of a record, and a const cycle. The cycle has its own Makefile row **with a
+timeout**, because its failure mode is a HANG, which no output assertion can
+observe; it refuses in 0.00s at the hop cap.
+
+**Corpus, through `tools/fpc_compiler_corpus_probe.sh`'s own invocation:**
+
+| unit | before | after |
+| --- | --- | --- |
+| rgobj | `conditional directive: RS_INVALID has no integer value here` | **`unknown type: TExecuteFlags`** |
+| nld | `conditional directive: expected operator` | unchanged — shape 1 |
+| ncnv | `conditional directive: expected operator` | unchanged — same directive as nld |
+
+rgobj **clears this wall** and stops at cfileutl.pas:136, which is the umbrella's
+largest known wall (127 units,
+[[feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags]]). It does not
+compile, and saying so is the point: a wall cleared is a unit moved to the next
+wall, which is this umbrella's own repeatedly-measured finding.
+
+## Log
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
