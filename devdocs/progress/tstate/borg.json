@@ -14692,7 +14692,7 @@
  "open_regressions": [
   {
    "bad": "7739a09f09dc577122325c085af8019d58cfd50a",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "e46dbffaa80d8049ea895ba4d3d4337f3c499d86",
    "job": "tools-devtest#00",
