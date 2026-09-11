@@ -13263,6 +13263,12 @@ test-core: $(COMPILER)
 	# Ord/Chr/Length/Succ/Pred/Low/High fold in const decls, case labels, array bounds
 	./$(COMPILER) test/test_const_expr_builtins.pas $(TESTTMP)/test_const_expr_builtins26
 	tools/expect_same.sh test_const_expr_builtins26 "$$($(TESTTMP)/test_const_expr_builtins26)" "ok"
+	# sizeof(<a variable or parameter>) folds in a CONST expression: an array bound,
+	# a subrange bound, a local const. FPC's own compiler/entfile.pas:371 writes the
+	# shape. No row here asserts a pointer width or an 8 -- the record is 3 bytes and
+	# the ordinal is a Word, because 8 is also what a slot nobody wrote would answer.
+	./$(COMPILER) test/test_sizeof_of_a_variable_in_a_const_expr.pas $(TESTTMP)/test_sizeof_var_const26
+	tools/expect_same.sh test_sizeof_var_const26 "$$($(TESTTMP)/test_sizeof_var_const26)" "$$(printf '11\n3\n3\n2')"
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas $(TESTTMP)/test_fpc_compat_batch226
 	tools/expect_same.sh test_fpc_compat_batch226 "$$($(TESTTMP)/test_fpc_compat_batch226 | tail -1)" "total ok 13 / 13"

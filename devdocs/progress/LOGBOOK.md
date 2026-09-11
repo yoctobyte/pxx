@@ -2805,3 +2805,33 @@ it compiles, runs, and answers a plausible number.
   written to tell a future reader why the list was incomplete. Cut at cac4669c5. A
   fabrication error, not a boundary error, and the two should not be bundled — bundling them
   made my own report less accurate, which frankS flagged before it reached the owner.
+## 2026-09-11 | frankH | compiler/pasparser_expr.inc | sizeof(<a variable>) folds in a constant expression
+
+`ConstEvalFactor`'s sizeof arm resolved a TYPE NAME through `ParseTypeKind` only,
+so `array[0..sizeof(d)-1]` with `d` the enclosing routine's parameter — the shape
+FPC's own `compiler/entfile.pas:371` writes — came back `unknown type: d`.
+`TryConstSizeOfSymbol` adds a symbol-first arm. It is asked BEFORE the type arm
+and that costs nothing: `TSymKind = (skLocal, skGlobal, skParam, skConst)` has no
+type kind, so a type name cannot resolve through `FindSym` and the two
+populations cannot overlap.
+
+WHY IT DECLINES FOUR SHAPES INSTEAD OF ANSWERING: `TSymbol` has no dimension
+list and no string capacity, so an `IsArray` or frozen-string symbol could only
+be answered by guessing — `string[10]` would confidently return the 8-byte
+handle where fpc says 11. `skConst` and `tyUnknown` likewise. A declined shape
+still refuses with `unknown type: <name>`, so the failure mode stays loud; the
+alternative here was a silent wrong number, which is the worse half of the
+trade in a SIZE operator specifically.
+
+Seven shapes measured against fpc 3.2.2, all agreeing. The controls are a
+3-byte record and a `Word` BECAUSE 8 is also what an unwritten slot answers —
+the ticket said so and it was right. The `sizeof(Pointer)`/`sizeof(Integer)`
+regression row needed `{$mode objfpc}` before fpc would compile the fixture at
+all (a default parameter value is not ISO Pascal), so its first oracle run
+failed to compile and said nothing; those numbers were pxx-only for an hour and
+they are exactly the 8/4/pointer-width collision CLAUDE.md warns about.
+
+Test `test/test_sizeof_of_a_variable_in_a_const_expr.pas` in `test-core` asserts
+11/3/3/2 and NO pointer width, so it says the same true thing on i386. Positive
+control by stashing the fix and rebuilding: the pre-fix binary, a different sha
+(`b1f2e97bf9a8` vs `c321b6466b86`), refuses the fixture at line 21.

@@ -12291,6 +12291,60 @@ function ConstEval: Int64; forward;
 function ConstEvalOrdBound: Int64; forward;
 procedure ParseArrayDimBounds(var lo, hi: Integer); forward;   { body sits with the const helpers }
 
+function TryConstSizeOfSymbol(const nm: AnsiString; var bytes: Int64): Boolean;
+{ `sizeof(<a variable>)` inside a CONSTANT expression -- an array bound, a
+  subrange bound, a default parameter value.
+
+  FPC's own compiler writes this and we refused it: `entfile.pas:371` declares
+  `array[0..sizeof(d)-1] of byte` where `d` is the enclosing function's
+  PARAMETER, and ConstEvalFactor's sizeof arm resolved a TYPE NAME only. Four
+  units of umbrella-pxx-compiles-fpc-itself stopped on `unknown type: d`.
+  bug-p-sizeof-of-a-variable-is-not-folded-in-a-constant-expression
+
+  DELIBERATELY NARROW, and the narrowness is the point. The expression-level
+  intrinsic in ParseFactor is ~300 lines covering `SizeOf(p^)` of a named fixed
+  array, `SizeOf(expr.field)`, `SizeOf(TOuter.TInner)`, the bitsizeof scale and
+  the `SizeOf(-1)` sign rule, and it ends in EmitSizeOfResult -- it builds an AST
+  NODE where a constant expression needs an Int64, so it cannot be reused here
+  whatever its coverage. This answers the BARE-NAME form and nothing else; every
+  other spelling keeps the existing behaviour, which is what the arm's own
+  comment already promises.
+
+  A TYPE NAME CANNOT REACH HERE, which is why asking the symbol table first is
+  safe rather than a precedence change: TSymKind is (skLocal, skGlobal, skParam,
+  skConst) and types live in their own tables, so FindSym('Integer') is -1 and
+  the type arm still sees every spelling it saw before.
+
+  TWO SHAPES ARE DECLINED, and both would be a plausible WRONG number rather
+  than a refusal -- which this file's own sizeof code refuses to ship
+  ("a wrong size reaches GetMem and Move, so a diagnostic beats a plausible
+  number"):
+
+    an ARRAY symbol -- TSymbol carries ArrLen and ElemType and no dimension
+      list, so a multi-dimensional static array cannot be sized from it and a
+      1-D formula would answer the wrong thing for one silently.
+    a STRING symbol -- a `string[10]` carries the legacy overloaded tyString,
+      whose storage size is the 8-byte handle where fpc says 11. That is the
+      exact collision bug-p-sizeof-through-a-pointer-to-a-string-n-answers-
+      pointer-width was about, and TSymbol has no capacity field to fix it with.
+
+  Declining leaves the existing `unknown type:` diagnostic, so nothing that
+  compiles today changes and nothing new answers a guess. }
+var idx: Integer;
+begin
+  TryConstSizeOfSymbol := False;
+  idx := FindSym(nm);
+  if idx < 0 then Exit;
+  if Syms[idx].Kind = skConst then Exit;
+  if Syms[idx].IsArray then Exit;
+  if Syms[idx].TypeKind = tyUnknown then Exit;
+  if TypeIsFrozenString(Syms[idx].TypeKind) then Exit;
+  { The DECLARED type, not the passing mode: a `var r: TRec` parameter has
+    IsRef set and `sizeof(r)` is still the record's size, not a pointer's. }
+  bytes := TypeStorageSize(Syms[idx].TypeKind, Syms[idx].RecName);
+  TryConstSizeOfSymbol := bytes > 0;
+end;
+
 function ConstEvalFactor: Int64;
 { Primary of a const expression: literal / true / false / single-char literal /
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
@@ -12399,8 +12453,17 @@ begin
       full expression path in ParseFactor handles those). See
       feature-sizeof-const-intrinsic-in-const-eval. }
     Next; Expect(tkLParen, '(');
-    sofTk := ParseTypeKind;
-    r := TypeStorageSize(sofTk, LastTypeRecId);
+    { A BARE VARIABLE OR PARAMETER NAME, asked before the type arm because a
+      type name cannot resolve through FindSym -- see TryConstSizeOfSymbol. }
+    if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkRParen) and
+       TryConstSizeOfSymbol(CurTok.SVal, r) then
+      Next
+    else
+    begin
+      sofTk := ParseTypeKind;
+      r := TypeStorageSize(sofTk, LastTypeRecId);
+    end;
     Expect(tkRParen, ')');
   end
   else if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
