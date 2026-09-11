@@ -14949,6 +14949,37 @@
   ],
   "would_pin": false
  },
+ "pin_verify": {
+  "date": "2026-09-11T21:12:50Z",
+  "red": [
+   "lib-test#src:tools/crtl_reachability.py",
+   "lib-test#src:test/lib_sysutils_delphi_exceptions.pas",
+   "test-core#src:test/cfnptr_array_callable.c",
+   "test-core#src:test/c_array_typedef_dims.c",
+   "test-core#src:test/c_crtl_wait.c",
+   "test-emit-obj#src:tools/compiler_srchash.sh",
+   "test-emit-obj#src:test/c_obj_data_import.c",
+   "test-emit-obj#src:test/c_obj_data_dup_a.c",
+   "tools-devtest#00",
+   "demos#00"
+  ],
+  "sha": "04559b9d6c5a9da084888f174e179b5ef5dc6894",
+  "tier": "full",
+  "ver": "v407",
+  "verdict": "RED",
+  "why": {
+   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | OK    examples/tui/menudemo.pas | OK    examples/vm/vmdemo.pas | === demos: 31/36 built into build/demos/ (esp3",
+   "lib-test#src:test/lib_sysutils_delphi_exceptions.pas": "expect_same: MISMATCH [lib_sysutils_delphi_exc.1] | --- expected | +++ actual | @@ -1 +1 @@ | -21 | +25",
+   "lib-test#src:tools/crtl_reachability.py": "lib-units: FAIL mimic_reportlab_pdfbase_pdfmetrics | pascal26:11: error: conflicting types for typedef 'int64_t' \u2014 a repeated typedef must name the same type | near: uint32_t  typedef long long int64_",
+   "test-core#src:test/c_array_typedef_dims.c": "i386      builds   1122334455667788 42 2.50 | arm32     builds   1122334455667788 42 2.50 | riscv32   builds   1122334455667788 42 2.50 | aarch64   builds   1122334455667788 42 2.50 | xtensa    builds",
+   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-",
+   "test-core#src:test/cfnptr_array_callable.c": "ok: $TMP  [code=323352B  data=13424B  bss=73400B  procs=851] | In file included from test/c_fnptr_struct_result_fields.c:40: | /usr/include/stdio.h:28:10: fatal error: bits/libc-header-start.h: No suc",
+   "test-emit-obj#src:test/c_obj_data_dup_a.c": "/usr/bin/ld: skipping incompatible /usr/lib/gcc/x86_64-linux-gnu/13/libgcc.a when searching for -lgcc | /usr/bin/ld: cannot find -lgcc: No such file or directory | /usr/bin/ld: skipping incompatible /",
+   "test-emit-obj#src:test/c_obj_data_import.c": "In file included from $TMP:1: | /usr/include/stdio.h:28:10: fatal error: bits/libc-header-start.h: No such file or directory | 28 | #include <bits/libc-header-start.h> | |          ^~~~~~~~~~~~~~~~~~~",
+   "test-emit-obj#src:tools/compiler_srchash.sh": "In file included from $TMP:6: | /usr/include/stdio.h:28:10: fatal error: bits/libc-header-start.h: No such file or directory | 28 | #include <bits/libc-header-start.h> | |          ^~~~~~~~~~~~~~~~~~~",
+   "tools-devtest#00": "tools-devtest: tools/twatch_toolchain_devtest.py | tools-devtest: tools/twatch_verify_request_devtest.py | tools-devtest: tools/verify_assertions_devtest.py | tools-devtest: tools/whoholds_devtest.py "
+  }
+ },
  "toolchain": {
   "fp": "fbd303b097c6",
   "gcc": "13.3.0",
