@@ -1,0 +1,29 @@
+# THE THIRD DOOR, AND THE ONE THE FLAG DID NOT OPEN UNTIL NOW.
+#
+# Its two siblings are test_nilpy_import_zlib.npy (explicit extension -> the C
+# header) and test_nilpy_import_zlib_ours.npy (bare name -> lib/rtl/zlib.pas).
+# This row is the SAME SOURCE as neither and the same SPELLING as the second:
+# a bare `import zlib`, compiled with --no-shims.
+#
+# A bare NilPy import has TWO ours-first substitutions in front of it, not one:
+# a mimic_<name> shim, and a curated lib/rtl unit on PyRtlUnitServesPython.
+# `--no-shims` used to lift only the first, so the flag meant "no shim" for the
+# names a shim serves and "no shim, except that we substitute for this one by a
+# different mechanism" for the seventeen on the list -- a distinction no caller
+# can read out of the flag's name or its refusal text.
+#
+# compressBound is the right call BECAUSE OUR UNIT DOES NOT HAVE IT. It is a
+# pure function of its argument (len + len>>12 + len>>14 + len>>25 + 13, so
+# 1000 -> 1013 on every zlib ever shipped), and lib/rtl/zlib.pas offers the
+# Python checksum surface and a pure-Pascal inflate, not zlib's C API. So this
+# file WITHOUT the flag is not a different number -- it is
+# `undefined variable (compressBound)`, which is what makes the row unable to
+# pass if the flag does nothing. The Makefile asserts that refusal as the
+# positive control, in the same recipe, rather than trusting that the two doors
+# would have printed different values.
+#
+# AND THE DT_NEEDED HALF IS THE ASSERTION THAT CANNOT PASS BY ACCIDENT: reaching
+# the header means linking libz.so.1, and _ours must carry NO dynamic dependency
+# at all. The pair differs in exactly one thing, the flag.
+import zlib
+print(compressBound(1000))

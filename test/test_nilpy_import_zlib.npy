@@ -26,13 +26,21 @@
 # path.
 #
 # So this row asks for the C door BY NAME. An explicit extension pins the
-# language, which is the documented way to say "I mean the header" -- and it is
-# the only spelling that still exercises the soname derivation, because
-# --no-shims cannot help here: the door that closed is the LIST door, not the
-# shim door, and no flag reopens it.
+# language, which is the documented way to say "I mean the header".
 #
-# Its sibling test_nilpy_import_zlib_ours.npy asserts the OTHER door, and the two
-# are each other's control: this binary must carry libz.so.1, that one must carry
-# no dynamic dependency at all.
+# THE SENTENCE THAT STOOD HERE SAID "--no-shims cannot help here: the door that
+# closed is the LIST door, not the shim door, and no flag reopens it." That was
+# true when written and is false now: the flag lifts BOTH ours-first
+# substitutions as of this change, so a bare `import zlib --no-shims` reaches
+# the header too. It is kept as the record because it is exactly the claim the
+# new sibling exists to pin -- an untested door is how the list door went inert
+# under this row in the first place.
+#
+# THREE SIBLINGS, one per door, and they are each other's controls:
+#   this file                          explicit extension -> the header, libz.so.1
+#   test_nilpy_import_zlib_ours.npy    bare name          -> lib/rtl/zlib.pas, NO DT_NEEDED
+#   test_nilpy_import_zlib_noshims.npy bare name + flag   -> the header, libz.so.1
+# The soname derivation this row was written for is exercised by two of the
+# three now; the middle one must carry no dynamic dependency at all.
 import 'zlib.h' as zlib
 print(compressBound(1000))

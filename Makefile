@@ -526,6 +526,13 @@ test-nilpy: $(COMPILER)
 	# pasparser_proc.inc's host-header probe already said would happen. So the
 	# header route moved to the flag that says "resolve as if no shim existed",
 	# which is what --no-shims claims and, until 2026-09-11, did not do.
+	# THE FLAG IS WIDER THAN THAT SENTENCE AS OF THE SAME DAY, and the sentence
+	# is still right about THIS row: sqlite3 is not on PyRtlUnitServesPython, so
+	# only the shim gate was ever in the way here. --no-shims now lifts the LIST
+	# gate too (the curated lib/rtl units that serve a Python module), which is
+	# what test_nilpy_import_zlib_noshims pins. Read "as if no shim existed" as
+	# "as if we shipped nothing of our own for that name" -- the flag's --help
+	# text names both gates.
 	./$(COMPILER) --no-shims test/test_nilpy_import_sqlite.npy $(TESTTMP)/test_nilpy_import_sqlite26
 	v=$$($(TESTTMP)/test_nilpy_import_sqlite26); case "$$v" in \
 	  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
@@ -543,13 +550,18 @@ test-nilpy: $(COMPILER)
 	# THE IMPORT IS NOW SPELLED `import 'zlib.h' as zlib`, and the reason is
 	# 80d71d782: `zlib` joined PyRtlUnitServesPython, so a BARE import correctly
 	# reaches lib/rtl/zlib.pas and the header door has to be asked for by name.
-	# --no-shims does NOT reopen it -- the door that closed is the LIST door, not
-	# the shim door, which is what separates this from the sqlite row above.
+	# --no-shims DOES reopen it as of 2026-09-11, and that sentence stood here
+	# saying it does not. The flag now lifts BOTH ours-first substitutions, so
+	# the bare spelling plus the flag is a third door with its own row below
+	# (test_nilpy_import_zlib_noshims). This row keeps the explicit-extension
+	# spelling because it is the one that exercises the soname derivation
+	# without a flag.
 	# AND THIS SPELLING IS NOT A GENERAL IDIOM -- measured 2026-09-11 (frankB,
 	# confirmed here). The explicit-extension door is ASYMMETRIC:
-	#     import 'zlib.h'               -> resolves, 1013
-	#     import 'sqlite3.h'           -> error: uses: unit source not found: sqlite3
+	#     import 'zlib.h'                 -> resolves, 1013
+	#     import 'sqlite3.h'              -> error: uses: unit source not found: sqlite3
 	#     import '/usr/include/sqlite3.h' -> resolves, 3046001
+	#     import 'sqlite3.h' --no-shims   -> resolves, 3046001
 	# So the bare header NAME works for zlib and NOT for sqlite3, where only the
 	# absolute path does. THE CAUSE IS THE SHIM, NOT THE INCLUDE ROOT -- chased by
 	# frankB and re-measured here; my own guess in this comment (that the `.h` is
@@ -574,8 +586,22 @@ test-nilpy: $(COMPILER)
 	# PYTHON shim (it says so -- `note: sqlite3 -> mimic_sqlite3 (shim, subset)`)
 	# while the C header needs the absolute path (3046001) or --no-shims. The one
 	# spelling that reaches NEITHER is the bare explicit extension. So the rule is
-	# about reaching the HEADER: a shimmed name has two header doors, an unshimmed
-	# one has three. Do not read this row as a general spelling.
+	# about reaching the HEADER. Do not read this row as a general spelling.
+	# TWO GATES, NOT ONE, AND png CANNOT SEE THE SECOND. "a shimmed name has two
+	# header doors, an unshimmed one has three" was the first form of that
+	# sentence and it is false for zlib, which is UNSHIMMED and still does not
+	# reach the header by its bare name -- because it is on PyRtlUnitServesPython,
+	# a gate png is not behind either. png is unshimmed AND unlisted, so it is a
+	# control for the shim gate and blind to the list gate. Both axes:
+	#
+	#   name     on the list?  mimic_ exists?  bare reaches        --no-shims   header via
+	#   zlib     YES           no              lib/rtl/zlib.pas    reopens      'zlib.h' or the flag
+	#   sqlite3  no            YES             mimic_sqlite3.pas   reopens      abs path or the flag
+	#   png      no            no              the header          n/a          all three spellings
+	#
+	# Until 2026-09-11 --no-shims lifted only the shim gate, which is why zlib and
+	# sqlite3 read as two phenomena. They are one mechanism seen through two
+	# gates, and the flag now lifts both -- test_nilpy_import_zlib_noshims pins it.
 	# 10657 and 3046001 are deliberate: neither collides with 0, 4 or a pointer
 	# width, so a row that printed nothing cannot pass for a row that worked.
 	# AND THE NEGATIVE CONTROL LIED FIRST, MINE, IN THE DIRECTION OF A FALSE BUG:
@@ -608,6 +634,25 @@ test-nilpy: $(COMPILER)
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib_ours26 2>/dev/null | grep -q 'NEEDED'; then \
 	  echo "FAIL: a bare \`import zlib\` produced a binary with a DT_NEEDED — it resolved to a C header, not lib/rtl/zlib.pas. Check PyRtlUnitServesPython in compiler/pasparser_proc.inc"; exit 1; \
 	else echo "ok: bare import zlib reaches lib/rtl/zlib.pas — zero dynamic dependencies"; fi
+	# THE THIRD DOOR: the SAME bare spelling as the row above, plus --no-shims.
+	# A bare NilPy import has two ours-first substitutions in front of it — a
+	# mimic_ shim and a curated lib/rtl unit (PyRtlUnitServesPython) — and the
+	# flag used to lift only the first, so it meant something different for a
+	# name on the list than for a name a shim serves, which no caller can read
+	# out of the flag. It now lifts both.
+	# THE REFUSAL IS THE POSITIVE CONTROL AND IT IS IN THIS RECIPE, not implied:
+	# lib/rtl/zlib.pas has no compressBound, so the same file without the flag
+	# must NOT compile. Without this half, a build where the flag did nothing
+	# would still have to produce the value some other way — but "some other
+	# way" is exactly what a silent fallthrough looks like, so assert it.
+	if ./$(COMPILER) test/test_nilpy_import_zlib_noshims.npy $(TESTTMP)/test_nilpy_import_zlib_ctl26 2>/dev/null; then \
+	  echo "FAIL: test_nilpy_import_zlib_noshims compiled WITHOUT --no-shims — the curated-list door is open by default, so the flag row below proves nothing"; exit 1; \
+	else echo "ok: bare import zlib is lib/rtl/zlib.pas by default — compressBound is refused"; fi
+	./$(COMPILER) --no-shims test/test_nilpy_import_zlib_noshims.npy $(TESTTMP)/test_nilpy_import_zlib_noshims26
+	tools/expect_same.sh test_nilpy_import_zlib_noshims26 "$$($(TESTTMP)/test_nilpy_import_zlib_noshims26)" "1013"
+	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib_noshims26 2>/dev/null | grep -q 'libz\.so\.1'; then \
+	  echo "ok: --no-shims lifts the curated-list substitution too — bare import zlib reaches /usr/include/zlib.h and links libz.so.1"; \
+	else echo "FAIL: test_nilpy_import_zlib_noshims26 has no libz.so.1 DT_NEEDED, so --no-shims did not reach the host header and 1013 came from somewhere else"; exit 1; fi
 	# A mimic_<name>.py shim is found AS a shim. The module name deliberately
 	# collides with a host C header (/usr/include/search.h): that is the one
 	# case where "is there a shim?" is asked, and asking it about `.pas` alone

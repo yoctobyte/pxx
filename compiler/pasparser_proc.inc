@@ -6342,9 +6342,36 @@ begin
     `from classes import Foo` used to bind lib/rtl/classes.pas and fail with
     "no overload of Delete matches these arguments", naming a symbol inside a
     unit the program never mentioned, with no path back to the import.
-    decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19. }
+    decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19.
+
+    AND `--no-shims` LIFTS THIS SUBSTITUTION TOO, WHICH IS THE GENERAL FORM OF
+    THE FLAG. There are TWO ours-first substitutions on a bare NilPy import, not
+    one: a `mimic_<name>` shim, and a curated lib/rtl unit that IS the Python
+    module of that name (PyRtlUnitServesPython, 17 entries). The flag bypassed
+    only the first, so it meant "no shim" for the names a shim serves and "no
+    shim, except that we substitute for this one by a different mechanism" for
+    the seventeen on the list -- a distinction no caller can see from the flag's
+    own wording, and one the flag's own refusal text does not make. It now means
+    what it says: resolve this name as if we shipped nothing of our own for it.
+
+    THE ASYMMETRY THAT MAKES IT LOAD-BEARING RATHER THAN TIDY, AND ITS CAUSE IS
+    THE SAME GATE. `import 'zlib.h' as zlib` resolves and `import 'sqlite3.h'
+    as sqlite3` answers `uses: unit source not found: sqlite3` -- with both
+    headers sitting in /usr/include, 96829 and 645281 bytes, measured
+    2026-09-11. The include root is NOT the discriminator and reading it as one
+    is the wrong mechanism: the shim is. PyTryHostHeader's call site is gated on
+    `NoShims or (not PyMimicShimExists(...))`, and an explicit extension pins the
+    LANGUAGE without lifting that gate -- so for a name a shim shadows, the
+    extension spelling closes the shim route (pyLookupOK is false for lang 'c')
+    and the shim gate closes the header route, and the import reaches neither.
+    lib/rtl/mimic_zlib.pas does not exist and lib/rtl/mimic_sqlite3.pas does,
+    which is the whole of it: the same spelling works for one and not the other.
+    So for a shimmed name there are exactly two doors to the host header -- an
+    ABSOLUTE path (`import '/usr/include/sqlite3.h'`, verified) and this flag --
+    and before this change the flag opened it for the shim half only. }
   pasLookupOK := (pyImportLang <> 'c') and
-                 ((pyImportLang <> 'py') or PyRtlUnitServesPython(lo));
+                 ((pyImportLang <> 'py') or
+                  (PyRtlUnitServesPython(lo) and (not NoShims)));
   pyLookupOK := (pyImportLang <> 'pas') and (pyImportLang <> 'c');
   pyDottedIsPath := False;
   for i := 1 to Length(pyDotted) do

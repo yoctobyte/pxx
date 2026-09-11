@@ -887,6 +887,11 @@ begin
   WriteLn('  --strict-visibility   enforce private/protected across units');
   WriteLn('  --strict-fpc          all of the above at once (the FPC-parity umbrella)');
   WriteLn('  --mimic-fpc           adopt FPC''s define set for identity-probing headers');
+  WriteLn('  --no-shims            a NilPy import resolves as if we shipped nothing of');
+  WriteLn('                        our own for that name: BOTH the mimic_<module>');
+  WriteLn('                        substitution AND the curated lib/rtl unit that serves');
+  WriteLn('                        a Python module (math, json, re, zlib, ...). A host C');
+  WriteLn('                        header is then reachable by its bare name.');
   WriteLn('  --debug --dump-ir --dump-rtti --dump-cpp');
   WriteLn;
   WriteLn('environment:');
@@ -1746,9 +1751,27 @@ begin
     end
     else if option = '--no-shims' then
     begin
-      { Refuse every mimic_<module> substitution: an import must resolve to a
-        real unit of that name or fail. This is what turns "compiled without
-        compatibility shims" from a claim into a checked property. }
+      { Resolve a bare NilPy import as if we shipped nothing of our own for that
+        name. This is what turns "compiled without compatibility shims" from a
+        claim into a checked property.
+
+        BOTH OURS-FIRST SUBSTITUTIONS, AND THE WIDENING IS DELIBERATE. There
+        are two, not one: the mimic_<module> fallback, and a curated lib/rtl
+        unit that IS the Python module of that name (PyRtlUnitServesPython).
+        Lifting only the first made the flag mean something different for
+        `sqlite3` than for `zlib`, which nothing in its name or its refusal text
+        distinguishes -- and a "provably shim-free build" that still linked our
+        own zlib.pas for `import zlib` was not the property the flag advertises.
+
+        THE NAME STILL FITS, and that is the reason not to rename it to
+        --no-substitutions. lib/rtl/zlib.pas's Python surface IS a compatibility
+        shim for CPython's zlib; the only thing separating it from
+        mimic_zlib.pas is that the same unit also serves Pascal, which is a fact
+        about where we put the code and not about what the import got. So the
+        flag's NAME was always the broad claim and the implementation was the
+        narrow half -- "the name is not the thing", with the name in the right.
+        The help text above says which two gates it lifts, because a reader who
+        knows only the name would expect zlib.pas to keep winning. }
       NoShims := True;
       Inc(i);
     end
