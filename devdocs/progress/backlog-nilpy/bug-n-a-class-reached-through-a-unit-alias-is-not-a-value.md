@@ -10,7 +10,7 @@ found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, imports, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. THE RAW-ADDRESS ARM DOES REPRODUCE, on c53cb51926a2, and the missing ingredient is A PRECEDING MODULE-LEVEL ASSIGNMENT in the module that declares the class (frankZ, last section): with `B = 5` above `class Widget`, `w = backend.Widget` then `w.V` gives 5512560 against CPython's 1; delete that one line and it gives 1. Binary, not proportional to the count, so not a symbol index walking off. AND THAT ARM *IS* IMPORT-DEPENDENT -- one file with no import gives the correct answer for the same shape, and `backend.Widget.V` without the binding is also correct -- so it needs the cross-unit read AND the binding AND the preceding assignment. WE EACH GENERALISED THE ARM WE COULD REPRODUCE OVER THE ONE WE COULD NOT: the original slug is right for the raw-address arm and wrong for the method-call arm, and this correction is right for the method-call arm and would misroute the other. THESE ARE TWO BUGS AND WANT TWO TICKETS -- proposed split in the last section, not made unilaterally because half the evidence is frankuser's. Arm 2 is the more serious: arm 1 raises, arm 2 prints a number. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
+summary: "THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. THE RAW-ADDRESS ARM DOES REPRODUCE, on c53cb51926a2, and it needs TWO conditions, not the one first reported (frankZ, last section): a binding name DIFFERENT from the class's own name, AND any construct at all preceding the class in the declaring module -- a DOCSTRING is enough, so nearly every real module is on the failing side and the clean minimal case is the artefact. AND THAT SPARES THE SEAM, which corrects this ticket's own ranking argument: platform/__init__.py writes `gl = _backend.gl`, the SAME-NAME spelling, which resolves correctly -- so the seam is hit by the METHOD-CALL arm and not by the silent one. The p80 stands on arm 1's reach, not on arm 2's silence: with `B = 5` above `class Widget`, `w = backend.Widget` then `w.V` gives 5512560 against CPython's 1; delete that one line and it gives 1. Binary, not proportional to the count, so not a symbol index walking off. AND THAT ARM *IS* IMPORT-DEPENDENT -- one file with no import gives the correct answer for the same shape, and `backend.Widget.V` without the binding is also correct -- so it needs the cross-unit read AND the binding AND the preceding assignment. WE EACH GENERALISED THE ARM WE COULD REPRODUCE OVER THE ONE WE COULD NOT: the original slug is right for the raw-address arm and wrong for the method-call arm, and this correction is right for the method-call arm and would misroute the other. THESE ARE TWO BUGS AND WANT TWO TICKETS -- proposed split in the last section, not made unilaterally because half the evidence is frankuser's. Arm 2 is the more serious: arm 1 raises, arm 2 prints a number. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
 ---
 
 # The measurement
@@ -235,3 +235,68 @@ since half the evidence is frankuser's:
    ticket's original arm, import-dependent, and the one that is SILENT.
 
 Arm 2 is the more serious of the two: arm 1 raises, arm 2 prints a number.
+
+## THE CONDITION IS TWO AXES, NOT ONE, AND MY FIRST STATEMENT OF IT WAS WRONG ON BOTH — frankZ, 2026-09-11, `c53cb51926a2`
+
+The section above says the missing ingredient is "a preceding module-level
+ASSIGNMENT". Too narrow on one axis and blind to the other. Measured properly,
+arm 2 needs **all three** of:
+
+1. the cross-unit read through an alias (import-free is correct — already shown);
+2. **a binding name DIFFERENT from the class's own name**;
+3. **any construct at all preceding the class** in the declaring module.
+
+### Axis 3 is not about assignments
+
+| in the declaring module, before `class Widget` | `w = backend.Widget; w.V` |
+| --- | --- |
+| nothing | **1** — correct |
+| `B = 5` | 5512560 |
+| a **docstring** | 5512560 |
+| a `def` | 5512560 |
+| an `import` | 5603768 |
+| another `class` | 5512648 |
+| an assignment **after** the class | **1** — correct |
+
+So the class must be the **first construct in the module**, and a docstring is
+enough to break it — which means essentially every real module is on the failing
+side and the clean case is the artefact. Binary, not proportional: three
+preceding statements are no worse than one.
+
+**Not a value collision, checked rather than assumed.** With nothing before the
+class and `V = 12345`, pxx answers 12345 — so the correct row is genuinely
+correct and not the failure value happening to equal the expected one.
+
+### Axis 2 is the one I missed entirely, and it is what spares the seam
+
+| spelling (docstring present) | result |
+| --- | --- |
+| `w = backend.Widget` then `w.V` | 5512560 |
+| `Widget = backend.Widget` then `Widget.V` | **1** — correct |
+| `backend.Widget.V`, no binding | **1** — correct |
+
+Binding the class to its OWN name works; binding it to a different name does
+not. Unit scope is flat, so the same-name spelling resolves the bare name to the
+class directly and never goes through the broken path.
+
+### WHICH CORRECTS THIS TICKET'S OWN RANKING ARGUMENT
+
+It was ranked p80 partly on *"`gl` is the OpenGL facade and four modules call
+methods on it"*. That is true of the ticket but **false of this arm**:
+`platform/__init__.py` writes `gl = _backend.gl` — the SAME-NAME spelling — so
+**arm 2 does not touch lekkerzeilen's seam at all.** Measured on the seam's exact
+shape, docstring and all:
+
+```
+gl = backend.gl
+gl.VERSION   ->  42          correct
+gl.clear()   ->  AttributeError: 'type' object has no attribute 'clear'
+```
+
+The seam is hit by **arm 1** — frankuser's static/classmethod arm, which needs no
+import, no package and no alias — and not by the silent one. So: arm 2 is the
+more serious IN KIND (it prints a number where arm 1 raises), and arm 1 is the
+one that actually blocks the demo. Both true, and the ticket said only the first.
+
+The p80 stands on arm 1's reach, not on arm 2's silence, and the split proposed
+above should carry that reasoning with it.

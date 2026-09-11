@@ -25228,3 +25228,69 @@ subsystem. The rules it neighbours (*A GUARD THAT CANNOT FAIL IS NOT A GUARD*,
 line in that file. It earns promotion — as an **extension** of the guard rule,
 a sentence and not a paragraph — the day a second independent subsystem produces
 a control that reddens for the wrong reason.
+
+## MINIMISING A REPRO CAN DELETE THE CONDITION, AND THE RESULT READS AS "NOT REPRODUCED" RATHER THAN AS A SMALLER REPRO
+
+**frankZ and frankuser, 2026-09-11**, from a disagreement that turned out not to
+be one. The framing is frankB's, handed over on review; the measurement is the
+two seats who each had half of it.
+
+One seat reported a silent wrong value: a class read through a unit alias into a
+variable printed **5512560** where CPython prints **1**. A second seat tried to
+reproduce it, built minimal shapes from scratch — import-free, and through an
+alias, binding in a local and at module scope — got the correct answer every
+time, and logged **NOT REPRODUCED**, correctly refusing to record their miss as
+an absence and asking for the exact repro instead.
+
+Neither was wrong. The trigger was **a line a minimiser strips first**: any
+construct preceding the class in the module that declares it. A docstring is
+enough. The minimal shape put the class first, which is the one arrangement that
+works.
+
+**Minimisation is the one debugging move nobody audits**, because its output is
+a cleaner file and that looks like progress in every direction. A shrinking repro
+that still fires feels like convergence; a shrinking repro that stops firing
+feels like the original report was wrong. **Those are the same observation and
+only one of them is about the defect.**
+
+**The discriminator, and it costs one step:** when a minimised repro stops
+firing, put back the LAST thing you removed before concluding anything. If it
+fires again, you have found the condition, not refuted the report — and the
+thing you removed is more interesting than everything you kept, precisely
+because it looked irrelevant enough to delete.
+
+**And state the minimisation in the report.** "Not reproduced" and "not
+reproduced in the three minimal shapes I built" route completely differently:
+the first retires a finding, the second asks for a shape. The second seat here
+wrote the second sentence, which is the only reason the two reports ever got
+reconciled instead of one quietly overwriting the other.
+
+### The half that is already a house rule, and the half that is not
+
+There is an existing rule about a probe whose right answer collides with the
+failure value — *if the machinery did nothing at all, would this row still
+pass?* That is a sibling and it is **not** what happened here, and the difference
+is worth stating because the reflex is to reach for it. Checked: with the class
+first and `V = 12345`, the answer really is 12345. The minimal shape was not
+passing by collision; **the defect genuinely was not present**, because
+minimisation had removed its cause. A collision produces a false PASS from a
+broken mechanism; this produces a true pass from a mechanism that is, in that
+arrangement, correct.
+
+So the guard is different. Against a collision you vary the expected VALUE.
+Against this you restore the deleted CONTEXT. Doing the first here would have
+confirmed 12345 and concluded, with fresh evidence, that the report was wrong.
+
+### What it cost and what it bought
+
+Nothing, in the end, because the second seat asked instead of retiring the
+finding — and asking is the whole lesson. Had it been logged as "could not
+reproduce, dropping", a silent wrong value would have been closed by two careful
+people agreeing, with a measurement each, neither of them wrong.
+
+**Not promoted to CLAUDE.md: one subsystem, one evening, so it fails RECURRENCE
+rather than merit.** Its nearest existing rule — the probe-value collision — is
+explicitly a different mechanism, so this is a NEIGHBOUR and not an extension,
+which makes the bar higher rather than lower. The day a second independent
+subsystem loses a defect to its own minimiser, it earns the paragraph; point
+here for the first.
