@@ -3311,3 +3311,25 @@ unreachable while every other test in the area still passed, because they all ex
 modules that declare the plain spelling. test/nilpy_units/reservedshim.pas now exists to
 be reached by its underscored names through their plain ones, and it passes under the
 pin too: it guards a future narrowing, not the bug just fixed.
+
+2026-09-11 | frankuser | compiler/pyparser.inc | The class sibling of the reserved-member
+bug, and the near-miss is the useful half. A NilPy module's "class set" is reached through
+the qualified-CONSTRUCTION arm, not the member lookup, so the previous fix could not have
+covered it: PyQualCtorSegs asked only whether the UNDERSCORED spelling was a constructor
+name, m.set(...) was never recognised as a construction, fell through to the member path
+and missed there too. Fixed plain-first at both ctor sites.
+THE FIRST ATTEMPT INTRODUCED A CROSS-MODULE LEAK. Admitting the plain spelling through
+PyIsExactCtorName looks right and is wrong -- that function asks FindUClassNonRecord,
+which is GLOBAL -- so a keyword-named CLASS in one module captured a same-named FUNCTION
+in another: with "class set" in one helper and "def set" in a second, m.set(4) built the
+other module's object and printed an object repr where CPython prints 41. The plain arm
+now asks FindUClassInUnit against the unit the qualifier resolved to; the underscored arm
+keeps its global test, because PyIsExactCtorName also recognises class ALIASES that a
+from-import registers under a name the class never has.
+WHY IT WAS CAUGHT: only because both helpers are imported in ONE run. That is the inverse
+of CLAUDE.md's isolation question -- there the hazard is a passing part of a run supplying
+what a failing part needs; here a SECOND module is what makes a wrong scope observable at
+all. A fixture holding only the class helper would have passed and shipped it.
+AND A MISTAKE BACKED OUT RATHER THAN REASONED ABOUT: the classes were first appended
+beside the functions, where "class record" REBINDS "def record" in Python, so every
+function row would have passed while silently testing the class.

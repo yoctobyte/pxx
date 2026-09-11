@@ -47,3 +47,13 @@ print(m.ordinary(4))
 # above pass under either order.
 print(m.set_(4))
 print(m.set(4), m.set_(4))
+
+# A CLASS named like a Pascal keyword is a SECOND site with the same symptom, in
+# its own helper module so that declaring `class record` cannot rebind a `def
+# record` and make the rows above test something else.
+import nilpy_reserved_classes as c
+
+print(c.set(4).get())
+print(c.type(4).get())
+print(c.record(4).get())
+print(c.Ordinary(4).get())

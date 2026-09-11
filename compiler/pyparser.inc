@@ -7817,6 +7817,7 @@ end;
 
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
+    rsvCtor: AnsiString;   { the underscored spelling, probed before it is adopted }
     nArgs, i, k, dcBase, valNode, tkNode, ctorMi, ctorPi: Integer; tkF: TTypeKind;
     kwI, kwJ, kwFld, kwMax, kwPos, kwDcBase: Integer; kwName: AnsiString;
     kwCtorMi, kwCtorPi, kwPk, kwVal: Integer;
@@ -7850,7 +7851,21 @@ begin
     UNQUALIFIED name is the program's own and must never be rewritten, or a user
     `class array_` would start answering to `array`.
     bug-n-a-qualified-constructor-named-by-a-pascal-reserved-word-builds-garbage }
-  if PyCtorQualUnit >= 0 then name := PyMapReservedMember(name);
+  { PLAIN SPELLING FIRST, for the same reason the member lookup probes before it
+    maps: a NilPy module can and does declare `class set`, so rewriting to `set_`
+    unconditionally made `m.set()` miss BY CONSTRUCTION -- and the miss did not
+    say so, it said `no member set came of the qualifier`. A Pascal shim cannot
+    spell the plain name at all, so its probe always misses and the mapping
+    still fires; `text` is the one name in the list Pascal could spell plainly,
+    and there the plain class IS what the author meant. }
+  if PyCtorQualUnit >= 0 then
+  begin
+    rsvCtor := PyMapReservedMember(name);
+    if (rsvCtor <> name) and
+       (FindUClassInUnit(name, PyCtorQualUnit) < 0) and
+       (FindUClassInUnit(rsvCtor, PyCtorQualUnit) >= 0) then
+      name := rsvCtor;
+  end;
   ci := -1;
   excArgsTup := -1;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
@@ -45594,8 +45609,25 @@ begin
     if ti + 2 >= TokCount then Exit;
     if Tokens[ti].Kind <> tkDot then Exit;
     if Tokens[ti + 1].Kind <> tkIdent then Exit;
+    { Plain spelling admitted too -- a NilPy module's `class set` is named `set`,
+      and asking only about `set_` meant this arm never recognised the
+      construction, so the expression fell through to the member path and missed
+      there as well.
+      BUT THE PLAIN ARM IS UNIT-SCOPED AND PyIsExactCtorName IS NOT.
+      PyIsExactCtorName asks FindUClassNonRecord, which is GLOBAL, so admitting
+      a plain spelling through it let a keyword-named class in ONE module capture
+      a same-named FUNCTION in another: with `class set` in one helper and
+      `def set` in a second, `m.set(4)` built the other module's object instead
+      of calling m's function -- printing an object repr where CPython prints 41.
+      Caught by the fixture only because both helpers are imported in one run.
+      So the new arm asks FindUClassInUnit against the unit this qualifier
+      actually resolved to. The underscored arm keeps its existing global test
+      untouched: PyIsExactCtorName also recognises class ALIASES, which a
+      from-import registers under a name the class itself never has, and
+      narrowing that would break aliased constructors. }
     if (Tokens[ti + 2].Kind = tkLParen) and (FindUnitOrAlias(nm) >= 0) and
-       PyIsExactCtorName(PyMapReservedMember(GetTokenStr(ti + 1))) then
+       ((FindUClassInUnit(GetTokenStr(ti + 1), FindUnitOrAlias(nm)) >= 0) or
+        PyIsExactCtorName(PyMapReservedMember(GetTokenStr(ti + 1)))) then
     begin
       unitIdx := FindUnitOrAlias(nm);
       Result := k;
