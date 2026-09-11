@@ -33592,6 +33592,13 @@ lib-test: pxx-stable-check
 	fi
 	$(PXX_STABLE) test/lib_sysutils.pas $(TESTTMP)/lib_sysutils
 	tools/expect_same.sh lib_sysutils "$$($(TESTTMP)/lib_sysutils)" "$$(printf '0\n-123456789\n10000000000\nhello\nworld\n[]\n[pad]\n42\n-7\n-1\n100\nQ\n7\nAB3Z\nab3z\nhello\nab\nbcde\nabcde\nabcde\nhello world\nstart end\nstart end\nabc\nfoobar\nx\nx\nbase\n77\nderived')"
+	# ExecuteProcess/TExecuteFlags. Every expected value was read off fpc 3.2.2 on
+	# this same source, not predicted -- see the fixture's header for why each row
+	# answers differently when the property it names is broken. The `string-one-word`
+	# row makes sh print its own "-c requires an argument" on STDERR on purpose, so
+	# stderr is dropped here; the assertion is on stdout, which sh never touches.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_executeprocess.pas $(TESTTMP)/lib_sysutils_executeprocess
+	tools/expect_same.sh lib_sysutils_executeprocess "$$($(TESTTMP)/lib_sysutils_executeprocess 2>/dev/null)" "$$(printf 'exit-code-3=yes\nexit-code-0=yes\narray-keeps-a-space=yes\nstring-splits-three-words=yes\nstring-one-word=yes\nmissing-raises-127=yes\nflags-accepted=yes\nfails=0\nEXECPROC OK')"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas $(TESTTMP)/lib_regex

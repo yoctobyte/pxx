@@ -325,6 +325,17 @@ type
   EUnderflow        = class(EMathError) end;
   EInvalidPointer   = class(Exception) end;
   EOutOfMemory      = class(Exception) end;
+  { fpc sysutilh.inc:206 declares it straight off Exception with a public
+    ErrorCode, and ExecuteProcess is the only thing in this unit that raises it.
+    Added for the FPC-compiler-source march: cfileutl.pas:136 declares two
+    RequotedExecuteProcess overloads taking `Flags: TExecuteFlags = []`, a type
+    this unit did not have, and 127 of FPC's 207 compiler units queued behind
+    it -- a QUEUE POSITION, not a size, since this umbrella has measured a
+    cleared wall yielding three units four separate times. }
+  EOSError          = class(Exception)
+  public
+    ErrorCode: Longint;
+  end;
   EAssertionFailed  = class(Exception) end;
   ENotImplemented   = class(Exception) end;
   { fpc 3.2.2 sysutilh.inc:225 declares it straight off Exception, not off
@@ -1136,6 +1147,39 @@ function GetEnvironmentVariableCount: Integer;
 { The parent's environment as execve's `envp`, for handing to a spawned child.
   Call it in the parent, before vfork — see the body. }
 function EnvironmentBlock: Pointer;
+
+type
+  { fpc osutilsh.inc:16 verbatim: `Set of ( ExecInheritsHandles)`. One member IS
+    the whole type there, and `Flags: TExecuteFlags = []` in a caller's
+    signature is all the corpus asks of it. }
+  TExecuteFlags = set of (ExecInheritsHandles);
+
+{ Spawn a program, wait for it, return its exit code — fpc osutilsh.inc:34-35.
+
+  TWO OVERLOADS BECAUSE FPC HAS TWO, AND THEY DIFFER IN A WAY THAT MATTERS. The
+  array form hands argv straight through. The string form SPLITS on whitespace
+  and is quote-naive — deliberately, because fpc's is: cfileutl.pas:142 marks
+  `ExecuteProcess = 'Do not use' deprecated 'ExecuteProcess cannot deal with
+  single quotes as used by Unix command lines'`, which is FPC documenting this
+  exact limitation in its own compiler. Matching a splitter nobody should rely
+  on is not worth a quoting engine; a program that needs quoting passes the
+  array form, which is what the deprecation tells it to do.
+
+  RAISES EOSError on a failed spawn and on exit code 127, as fpc does. 127 is
+  the child's way of reporting a failed exec — it is already a different
+  process by then and cannot return a value — so a real program exiting 127 is
+  indistinguishable from a missing binary. FPC has the same ambiguity and
+  raises on both; matching the value is the whole compatibility test.
+
+  `Flags` is accepted and NOT CONSULTED. PalVforkAndExec skips any fd given as
+  -1 and this passes four, so the child inherits every handle already — which
+  is exactly what ExecInheritsHandles asks for. Written down rather than left
+  for a reader to infer from silence.
+  feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags }
+function ExecuteProcess(const Path: AnsiString; const ComLine: AnsiString;
+                        Flags: TExecuteFlags = []): Integer;
+function ExecuteProcess(const Path: AnsiString; const ComLine: array of AnsiString;
+                        Flags: TExecuteFlags = []): Integer;
 
 { Write side (decide-env-write-side, user 2026-08-01: option 3). The write goes
   to OUR buffer — the same one GetEnvironmentVariable reads and the same one
@@ -5159,6 +5203,97 @@ begin
   EnvLoad;
   EnvRebuildTable;
   EnvironmentBlock := @EnvpTable[0];
+end;
+
+const
+  EXEC_MAX_ARGS = 256;   { argv slots, argv[0] and the nil terminator included }
+
+type
+  TExecArgv = array[0..EXEC_MAX_ARGS - 1] of PChar;
+
+procedure RaiseExecuteProcessFailed(const Path: AnsiString; code: Longint);
+{ fpc raises EOSError with the failing code in ErrorCode for both outcomes, and
+  its message is SExecuteProcessFailed, 'Failed to execute %s : %d'. }
+var e: EOSError;
+begin
+  e := EOSError.CreateFmt('Failed to execute %s : %d', [Path, code]);
+  e.ErrorCode := code;
+  raise e;
+end;
+
+function ExecuteProcessArgv(const Path: AnsiString; var argv: TExecArgv): Integer;
+{ The shared tail of both overloads: spawn, wait, convert, raise.
+
+  PalVforkAndExec skips any fd given as -1, so four -1s leave the child with
+  every handle inherited — which is what ExecInheritsHandles asks for, and why
+  Flags needs no consulting to be honoured in the only case it can express.
+
+  The exit code is read the way a shell reads it, from the status word's high
+  byte, which is the same conversion Popen.wait in subprocess.pas does. }
+var pid, status: Integer;
+begin
+  pid := PalVforkAndExec(PChar(Path), @argv[0], EnvironmentBlock, -1, -1, -1, -1);
+  ExecuteProcessArgv := -1;
+  if pid = -1 then
+  begin
+    RaiseExecuteProcessFailed(Path, -1);
+    Exit;
+  end;
+  status := 0;
+  if PalWait4(pid, @status, 0, nil) > 0 then
+    ExecuteProcessArgv := (status shr 8) and 255;
+  if (ExecuteProcessArgv < 0) or (ExecuteProcessArgv = 127) then
+    RaiseExecuteProcessFailed(Path, ExecuteProcessArgv);
+end;
+
+function ExecuteProcess(const Path: AnsiString; const ComLine: AnsiString;
+                        Flags: TExecuteFlags = []): Integer;
+{ The QUOTE-NAIVE form, and deliberately so — see the interface header. fpc's
+  own compiler deprecates this overload in cfileutl.pas:142 for exactly the
+  limitation reproduced here, so a faithful splitter is a whitespace splitter.
+
+  argv[0] IS THE PATH AND NO WORD OF ComLine IS LOST — measured against fpc
+  3.2.2, which is the only reason this is right. Reading
+  rtl/unix/sysutils.pp:1631 alone suggests otherwise: `cmdline2^ :=
+  PAnsiChar(LPath)` looks like it overwrites the first word. It does not.
+  `StringtoPPChar(CommandLine, 1)` RESERVES one leading slot, so the store fills
+  that reserve and every split word shifts up by one. The first version here
+  dropped word 0 and printed `hello` where fpc prints `x hello`. }
+var argv: TExecArgv;
+    parts: array[0..EXEC_MAX_ARGS - 1] of AnsiString;
+    n, i, j: Integer;
+begin
+  n := 0;
+  i := 1;
+  while (i <= Length(ComLine)) and (n < EXEC_MAX_ARGS - 2) do
+  begin
+    while (i <= Length(ComLine)) and (ComLine[i] <= ' ') do Inc(i);
+    if i > Length(ComLine) then Break;
+    j := i;
+    while (j <= Length(ComLine)) and (ComLine[j] > ' ') do Inc(j);
+    parts[n] := Copy(ComLine, i, j - i);
+    Inc(n);
+    i := j;
+  end;
+  argv[0] := PChar(Path);
+  for i := 0 to n - 1 do argv[i + 1] := PChar(parts[i]);
+  argv[n + 1] := nil;
+  ExecuteProcess := ExecuteProcessArgv(Path, argv);
+end;
+
+function ExecuteProcess(const Path: AnsiString; const ComLine: array of AnsiString;
+                        Flags: TExecuteFlags = []): Integer;
+{ The form a program should reach for: argv goes through untouched, so a
+  parameter containing a space or a quote arrives as ONE argument. }
+var argv: TExecArgv;
+    i, n: Integer;
+begin
+  n := Length(ComLine);
+  if n > EXEC_MAX_ARGS - 2 then n := EXEC_MAX_ARGS - 2;
+  argv[0] := PChar(Path);
+  for i := 0 to n - 1 do argv[i + 1] := PChar(ComLine[i]);
+  argv[n + 1] := nil;
+  ExecuteProcess := ExecuteProcessArgv(Path, argv);
 end;
 
 function GetEnvironmentVariableCount: Integer;

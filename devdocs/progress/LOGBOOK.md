@@ -3060,3 +3060,60 @@ asserted paperwork that was never done. Corrected the comment, filed the ticket,
 did NOT relax the guard: it was added to close a segfault
 (bug-nilpy-too-few-args-to-container-method-compiles-and-segfaults), so the runtime
 check has to land first.
+
+## 2026-09-11 | frankH | lib/rtl/sysutils.pas, test/lib_sysutils_executeprocess.pas, Makefile | ExecuteProcess/TExecuteFlags
+
+`sysutils` gains `EOSError` (carrying `ErrorCode`), `TExecuteFlags = set of
+(ExecInheritsHandles)`, and both `ExecuteProcess` overloads — the string form
+(whitespace-split and quote-naive, as fpc's is and as fpc's own cfileutl.pas:142
+deprecates it for) and the `array of AnsiString` form. Built on
+`PalVforkAndExec` + `PalWait4` + `EnvironmentBlock`, all already present: this
+is a surface over existing machinery, not new capability. WHY: it was the
+FPC-compiler-source march's top wall, `cfileutl.pas:136 unknown type:
+TExecuteFlags`.
+
+**Every expected value in the fixture was READ OFF fpc 3.2.2 on that same
+source, not predicted**, after the first draft's string-form row turned out to
+raise rather than return — it ran a nonexistent command, so sh exited 127 and
+`ExecuteProcess` correctly raised, and the row could never have compared
+anything.
+
+**An earlier `array-argc-0` row was a guard that could not fail.** It put the
+space inside the command string and expected 0: `[sh,-c,'exit $#']` and its
+re-split `[sh,-c,exit,$#]` both leave `$#` at 0, so the row certified the
+no-re-split property in either direction. The space is now in a POSITIONAL —
+`$0=zero`, `$1='a b'`, `$2=c`, giving 2, where a re-split gives 3.
+
+**The corpus delta was A/B'd on ONE binary**, the change stashed and restored
+between halves, because a pull's delta reads exactly like your own. cfileutl,
+rgobj and aasmbase all sat at `cfileutl.pas:136` — one wall counted three times
+— and now sit at `TDoubleRec` (x86_64/cpuinfo.pas:36) and `comptty.pas:66
+termio.IsATTY`, the latter one line reached by two units. **Units-compiling
+moved by ZERO: the umbrella's fifth null row.** Both new walls filed
+(feature-b-rtl-has-no-tdoublerec, feature-b-rtl-has-no-termio-unit-and-no-isatty)
+and wired into the umbrella.
+
+`make lib-test` does not reach the new row — it dies ~180 lines earlier at
+Makefile:33417 on the standing `mimic_queue :: unknown type: TPyDeque` pin
+cliff — so the row was run by executing the recipe's two lines verbatim, and
+`expect_same.sh` was shown to reject a wrong expectation for it.
+
+## 2026-09-11 | frankH | devdocs/progress/backlog-pascal | `['x']` is typed as a set
+
+Filed while writing the fixture above, and it is bigger than the note I was
+carrying. pxx types a `[...]` constructor in argument position as a SET
+unconditionally, so an `array of T` parameter is unreachable for one. With no
+set-typed candidate in scope it REFUSES (`argument types: (set)`) where fpc
+compiles. **With a set-typed parameter in scope — including one that is only a
+DEFAULT, `f: TF = []` — it compiles and selects the WRONG overload silently**,
+answering 1 where fpc answers 2 on a six-line source with no `uses`. The real
+`ExecuteProcess` declarations are exactly that shape:
+`ExecuteProcess('/bin/sh', ['x'])` answers 0 here and 2 under fpc.
+
+WHY IT IS RECORDED THIS WAY: my note said the diagnostic was
+`(ShortString, set, set)`. Re-derived against the declarations as they actually
+stand, the single-element case does not refuse at all. **An assertion written
+from a report of the code pins the report** — the refusal I remembered was a
+variant with the extra arguments still on it, and had I written the ticket from
+memory it would have described a wall where the real defect is a silent wrong
+answer.
