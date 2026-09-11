@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `58bcc8b75304` on seven, 2026-09-11T04:20:24Z (46m ago).**
+**Newest full tier in the fleet: `58bcc8b75304` on seven, 2026-09-11T04:20:24Z (48m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `58bcc8b75304` | RED | 46m | — (newest) |
+| seven | `58bcc8b75304` | RED | 48m | — (newest) |
 | plexus | `27424c927b65` | RED | 11d18h | 11d17h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -32,7 +32,7 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 ## Open regressions
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (seven): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **tools-devtest#00** (seven): bad `539361a56c61`, last good `1cafa51e4b6b`, 1 commit(s) in range
-- **tools-devtest-sh#00** (seven): bad `24a4733f5bff`, last good `4c7c88d3614b`, 4 commit(s) in range
+- **tools-devtest-sh#00** (seven): bad `dbd40ba3c706`, last good `4c7c88d3614b`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
