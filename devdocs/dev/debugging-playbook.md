@@ -25123,3 +25123,108 @@ costs a sentence where a neighbour costs a paragraph. **The day a second
 subsystem produces two independent methods agreeing on a question neither was
 asked, it earns the clause.** Whoever finds it: point here for the first
 instance.
+
+## A GUARD THAT *CAN* FAIL, AND FAILS FOR THE WRONG REASON — both of my positive controls on one fixture were wrong, in two different ways, and neither looked like a control problem
+
+Found by **frankB, 2026-09-11**, building the pair fixture
+`test/test_nilpy_a_guarded_seam_alias_folds_against_the_live_arm.npy`
+(`830811ffc`), and offered for write-up by **frankZ**, who named the class:
+every rule we already have is about a guard that **cannot** fail. This is a
+guard that **can** fail, does fail, and is failing about something else — which
+is strictly worse, because a guard that cannot fail at least has no red to
+reassure you with.
+
+Two attempts, one fixture, one evening. They present as opposites and they are
+the same error read from two sides: **I trusted the VERDICT and never asked
+what the verdict was ABOUT.**
+
+### (a) The control was armed against a revert that does nothing — and a dead instrument reads exactly like a dead fixture
+
+To prove the fixture pins the alias fold, I reverted what I took to be the fold:
+`UnitAliasCount := savedAliases` at `compiler/pyparser.inc:22181`. Rebuilt.
+**Nothing changed.** My fixture stayed green. frankZ's sibling row stayed green.
+
+That reading has exactly two explanations and **the observation does not
+separate them**:
+
+| | what green means |
+| --- | --- |
+| the fixture is dead | it never exercised the fold, so of course reverting the fold changes nothing |
+| the INSTRUMENT is dead | the line I reverted is not the fold, so nothing was armed |
+
+The second was true. There are two such assignments, and the compiler's own
+comment at `pyparser.inc:40009` says of the twin that it **"ALONE MEASURED AS NO
+CHANGE"** — the answer was written in the file I was editing. Reverting
+`:40009` instead armed it immediately.
+
+**The natural next move from a green control is to distrust the fixture and
+rewrite it**, which is a day spent improving something that was already correct.
+
+**THE DISCRIMINATOR IS TO ARM AGAINST A KNOWN-POSITIVE FROM ANOTHER SEAT
+FIRST** — a row whose greenness you did not author and whose sensitivity is
+already established. frankZ's sibling row was that row. When my revert left
+*their* row green too, the instrument was convicted in one step, and no
+statement about my fixture was needed at all. A control you wrote and a fixture
+you wrote fail together and silently agree; a control borrowed from another seat
+does not.
+
+### (b) Armed correctly, the control went RED — for a reason that had nothing to do with the construct under test
+
+With `:40009` reverted the row finally went red, and it would have passed review
+in that state. The driver read a member directly:
+
+```python
+print(backend.NAME)            # WRONG — this is not the construct under test
+```
+
+A direct member read on a mis-bound unit alias **fails LOUDLY**: the compile
+stops with a diagnostic, before any `getattr` runs. So the red was real, the
+red was caused by my revert, and the red was about **the wrong construct**. The
+fixture would have been landed, reviewed, and believed, pinning a loud failure
+mode while the silent one it was written for went on being unpinned.
+
+The defect this fixture exists for is silent by nature: a dead-arm alias that
+folds against the wrong arm gives a wrong ANSWER, exit 0, no diagnostic. The
+corrected driver reads nothing directly —
+
+```python
+getattr(backend, "only_in_pxx", None)   # the fold, and nothing else
+```
+
+— and its armed failure is now the right shape: `probe_live absent` where
+CPython says `live`, **exit 0, no diagnostic**.
+
+**A LOUD FAILURE EARLIER IN THE PIPELINE MASKS THE SILENT ONE LATER, AND IT
+MASKS IT BY GOING RED**, which is the direction nobody audits. This is a cousin
+of *"Assert the PRECONDITION, not just the comparison"* and it is not the same
+animal: there the precondition failure is invisible and the comparison passes;
+here the precondition failure **IS** the red, and it is mistaken for the
+verdict.
+
+### The question that catches both
+
+Not *"can this guard fail"* — both of these could, and one of them did. Ask:
+
+> **When the guard fails, is the failure the SAME SHAPE as the defect?**
+
+Silent defect → the armed control must fail silently, with a wrong value and a
+zero exit. If arming it produces a compile error, a crash, or a diagnostic, the
+row is stopping somewhere upstream of the thing you are pinning, and its red is
+worth nothing. **Record the armed failure's SHAPE in the fixture, not just the
+fact that it went red** — the Makefile row for this fixture names both wrong
+attempts on purpose, so the next reader does not rediscover them.
+
+And the pairing, which is the part that makes this a class rather than two
+mistakes: **(a) is a control that will not go red when it should, (b) is a
+control that goes red when it should for a reason it should not.** A seat that
+has just fought (a) is primed to accept any red at all as the fix, which is
+precisely how it walks into (b).
+
+**Not promoted to CLAUDE.md, and said out loud so it is not read as "not
+valued":** it meets merit — frankZ's judgement, not mine — and it **fails the
+recurrence test**. Two instances, one seat, one fixture, one evening, one
+subsystem. The rules it neighbours (*A GUARD THAT CANNOT FAIL IS NOT A GUARD*,
+*CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT*) already hold the
+line in that file. It earns promotion — as an **extension** of the guard rule,
+a sentence and not a paragraph — the day a second independent subsystem produces
+a control that reddens for the wrong reason.
