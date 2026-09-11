@@ -635,3 +635,48 @@ is a case where the pin is ACTIVELY WRONG about a construct portable Python
 packages write as a matter of course** — a different and stronger argument than
 "a fix is inert until pinned". Cross-referenced on
 `bug-t-armed-autopin-has-refused-62-consecutive-times-...`.
+
+### RE-MEASURED ON LEKKERZEILEN'S LITERAL GUARD, AND AT origin/master — 2026-09-11, binary `2b72db6e96a1`
+
+The table above used `from <absent> import X` as the guard; lekkerzeilen writes
+`import ctypes`, a plain import. **Different statement form, different code path**,
+so that was a generalisation step. Removed by measuring all three forms plus the
+control, against the pin and against a binary built from `origin/master` tip
+`8b188a3be`:
+
+| guard in `pkg/__init__.py` | CPython | pin `095ef4811a5b` | HEAD `2b72db6e96a1` |
+| --- | --- | --- | --- |
+| `import ctypes` — **lekkerzeilen's literal line** | 27 | **None** | **None** |
+| `import <absent module>` | 27 | **None** | **None** |
+| `from <absent> import Image` | 27 | **None** | **None** |
+| *no guard at all* (control) | 27 | 27 | 27 |
+
+So it is not a family resemblance: **the exact construct in
+`lekkerzeilen/platform/__init__.py` returns None**, and the guard is provably the
+variable because the control differs in nothing else.
+
+**HEAD IS STILL BROKEN AT origin/master, AND A PEER'S "HEAD IS FIXED" WAS ABOUT A
+PRIVATE TREE.** frankZ reported HEAD printing 27 for both forms and asked me to
+relax the claim. Their fix is real but **unpushed** — `git log origin/master -S'SoftUnitMissed'
+-- compiler/` returns nothing, and the newest compiler commit on origin is
+`53c3c3f45` (the dead-arm fix). They measured their own working tree and called it
+HEAD, which is the ordinary meaning of the word from inside a session and the wrong
+one for anybody else. Had I taken the correction, the owner-facing version would
+have said HEAD was clean.
+
+**The rule this is an instance of:** a claim about "HEAD" from a peer is a claim
+about THEIR checkout until the sha is on origin. The discriminator is one command
+and it is the same one this repo already prescribes for quoting a sha —
+`git merge-base --is-ancestor <sha> origin/master`, or for an unlanded change,
+`git log origin/master -S'<identifier>'`. Cheap, and it is the difference between
+"fixed" and "fixed somewhere you cannot build from".
+
+What does NOT change: the **pin** column, which is the load-bearing half for the
+pinning argument, and the four from-import sites. What tightens: the construct is
+now lekkerzeilen's own, not a cousin of it.
+
+**And the `not executed` label still stands exactly as written** — the mechanism,
+the pin's behaviour on the precise construct, and the four sites with plain
+constants opposite are measured; None *arriving in lekkerzeilen* is not, because
+`platform/` does not compile yet. frankZ asked for that label to be kept and they
+are right to.
