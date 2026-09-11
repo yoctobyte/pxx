@@ -9,7 +9,7 @@ created: 2026-09-11
 found-by: frankuser
 tags: [pin, track-t, autopin, owner-blocker, workflow]
 blocked-by: []
-summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 62 verdicts since, and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 62 of 62 verdicts, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 39 of 62. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 62 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should."
+summary: "The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 62 verdicts since, and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 62 of 62 verdicts, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 39 of 62. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 62 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should. AND THERE IS A CIRCULAR DEPENDENCY, confirmed 2026-09-11 after I wrongly denied it: `lib-test#src:tools/crtl_reachability.py` blocks 41 of 62 and its ACTUAL failure is the builtin cliff (`mimic_threading` / `__pxxclone requires --threadsafe`), clearable ONLY by a pin -- and `make pin` is owner-only. So the fleet cannot break the cycle by fixing tests; auto-pin cannot fire until a human pins once. I denied this by grepping pin-shadow.log for the error text; that log records job IDENTIFIERS (a source fingerprint), never failures."
 ---
 
 # Measured 2026-09-11, from `devdocs/progress/tstate/pin-shadow.log` on origin/master
@@ -56,7 +56,51 @@ distinct job blocking at least one of the 62 verdicts:
   tools-devtest#00
 ```
 
-# `pinned builds live lib/rtl` / TPyDeque IS NOT IN THIS FLOOR — checked, because the inference is the obvious one and it is wrong
+# RETRACTED 2026-09-11, SAME DAY: THE PIN-ONLY RED **IS** IN THE FLOOR, AND THERE **IS** A CIRCULAR DEPENDENCY
+
+**The section below is WRONG and is kept because the instrument that produced it
+is the point.** frankZ said *"a red that only a pin can clear, sitting in the
+floor that is blocking the pin."* That is **correct**. I contradicted it with a
+grep for `TPyDeque` / `mimic_queue` / `pinned builds live lib/rtl` over
+`pin-shadow.log`, got zero, and wrote the retraction below.
+
+**`pin-shadow.log` records job IDENTIFIERS, never error text.** A job is named for
+a SOURCE FINGERPRINT of what changed, not for what fails inside it. So the grep
+did not error and did not return a wrong answer — it answered a question about job
+names while I read it as a question about failures. The house failure mode, in a
+ticket whose own body cites that rule two sections up.
+
+What is actually true, from `seven.json`'s `job_reason` at `a45908bcf68e`:
+
+```
+  job:    lib-test#src:tools/crtl_reachability.py      (src: tools/crtl_reachability.py
+                                                             tools/gen_crtl_map.py +50)
+  fails:  lib-units: FAIL mimic_threading
+          pascal26:199: error: __pxxclone (thread creation) requires --threadsafe ...
+          in: stable_linux_amd64/default/../../lib/rtl/palthread.pas
+  blocks: 41 of the 62 post-arming verdicts
+```
+
+`crtl_reachability.py` itself prints **OK** inside that job (frankS). The failing
+thing is the builtin cliff — **clearable only by a pin** — and `make pin` is
+owner-only. So:
+
+> **A red that only the owner can clear sits in the floor that stops the machine
+> pinning.** The fleet cannot break this cycle by fixing tests.
+
+That changes what this ticket is. It is not "auto-pin refuses until someone fixes
+some reds"; it is **auto-pin cannot fire at all until a human pins once**, and the
+policy fork below is therefore not optional — it is the only exit that does not
+require him to run `make pin` by hand.
+
+**And my 39 was wrong too:** whole-line counting gives **41**, not 39. I had
+counted fragments of a comma-split list.
+
+**The one thing that survives from below:** the `gate.sh:533` step and this tier
+job are two manifestations of ONE defect, not two defects. Conflating them was not
+the error; asserting the tier side was absent was.
+
+# SUPERSEDED — the retraction that was itself wrong, kept for the instrument
 
 frankZ read that red as *"a red that only a pin can clear, sitting in the floor
 that is blocking the pin"*, which would be a genuine circular deadlock and would
