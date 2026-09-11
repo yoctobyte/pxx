@@ -680,3 +680,55 @@ the pin's behaviour on the precise construct, and the four sites with plain
 constants opposite are measured; None *arriving in lekkerzeilen* is not, because
 `platform/` does not compile yet. frankZ asked for that label to be kept and they
 are right to.
+
+### FIXED AT HEAD `0f0c04b8b`, STILL WRONG IN THE PIN — and the population claim re-done with a SECOND FILTER
+
+frankZ pushed the fix (it had been **uncommitted**, not merely unpushed). Re-measured
+on lekkerzeilen's literal `import ctypes` guard at origin tip, binary `f1817610c98e`:
+
+| | pin `095ef4811a5b` | HEAD `f1817610c98e` |
+| --- | --- | --- |
+| `import ctypes` guard | **None** | **27** |
+| no guard (control) | 27 | 27 |
+
+**That is the cleanest form this argument can take: the fix exists, it is landed, and
+the pin does not have it.** Nothing about the demo's correctness is unknown any more —
+only which compiler you build with.
+
+**THE POPULATION CLAIM WAS RIGHT AND MY FILTER WAS WRONG**, which frankZ asked for a
+second opinion on precisely because it was load-bearing for ranking and rested on one
+grep by one author. `tools/lekkerzeilen_guarded_import_census.py` is the second filter,
+built to fail differently — STRUCTURAL (any `ast.Try` whose body contains an
+`Import`/`ImportFrom`, whatever the handlers say) where mine was TEXTUAL
+(`grep -rln 'except ImportError'`):
+
+```
+  lekkerzeilen/platform/__init__.py:91   import ctypes                   handlers: ImportError
+  lekkerzeilen/__main__.py:216           from . import app, session, world
+                                                   handlers: platform.PlatformError | OSError
+  lekkerzeilen/app.py:408                import shutil                   handlers: Exception
+```
+
+**Three guarded imports, not one.** My grep missed two, because neither handler
+contains the string `ImportError` at all. Had either been a package `__init__.py` I
+would have under-reported the population — the conclusion survived by luck, not by
+method, and that is the honest way to record it.
+
+**Why the conclusion still holds:** only `platform/__init__.py` is a package
+`__init__.py`, and the other two files are **never from-imported** (`grep` for
+`from .app import` / `from .__main__ import`: zero sites). No importer exists to
+poison. So the four sites stand.
+
+**AND THE CRITERION IS BROADER THAN I STATED, which matters for future code.** A
+function-local guard leaks just as well as a module-level one:
+
+| guard placement in `pkg/__init__.py` | pin | HEAD |
+| --- | --- | --- |
+| module level | None | 27 |
+| **inside a function** | **None** | 27 |
+| none (control) | 27 | 27 |
+
+So the rule is **any guarded import anywhere in a package's `__init__.py` poisons
+every from-import of that package** — not "a module-level guard". Today that is one
+file; it is one `try:` in any `__init__.py` away from being more, which is why the
+census is a committed tool rather than a number in this ticket.
