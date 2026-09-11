@@ -269,3 +269,38 @@ hesitate at the moment they should not. The fixedpoint gates and this would
 grade, but that is a distinction a red does not announce. **Land it after the
 pin**, when it is green, and it then catches the NEXT instance instead of
 arguing with the current one.
+
+## 2026-09-11 (frankS) — still live, new names, and a SECOND shape of the same cliff that this row does NOT catch
+
+The identifiers have turned over twice; the row has not cleared. Today's
+instance is `mimic_queue :: unknown type: TPyDeque` — 1 of 58 root units under
+`tools/gate.sh quick`, and the same failure heads
+`lib-test#src:tools/crtl_reachability.py` in seven's newest full tier
+(`a45908bcf68e`), together with `mimic_threading :: __pxxclone (thread creation)
+requires --threadsafe`. `TPyDeque` landed in `compiler/builtin/pylib.pas` at
+`1eb448030`, whose own commit message says in as many words that it lands red on
+this row, that `make pin` is owner-only, and that turning it green by putting
+`mimic_queue` on `TPyList` would be the compiler-appeasement workaround CLAUDE.md
+refuses. So that half is knowing, documented and correctly parked here.
+
+**Worth adding to this ticket because it is the same cliff and this row cannot
+see it:** the canary compiles the 58 ROOT UNITS under `lib/**`. Four tstate rows
+were red for two days on the mirror-image shape — a name that LEFT `lib/rtl` for
+`compiler/builtin/`, which a `$(PXX_STABLE)` build then cannot find in either
+place, because the pin's frozen `builtin/` predates the move. Nothing under
+`lib/**` referenced it, so all 58 root units compiled and this row stayed green;
+the failures were in `external/synapse/synautil.pas` (`undefined variable
+(SetString)`) and `testjsondata.pp` (`UTF8Encode`, `sLineBreak`) — corpora
+outside the canary's population, and absent altogether on plexus, so the local
+`make lib-test` skipped them and went green as well.
+
+Two directions, one cliff: **a builtin arriving before a pin** (this row, and
+the remedy really is a pin) and **a lib/rtl name leaving before a pin** (mine,
+`0ffe185bb`, and the remedy was to put it back beside the builtin copy — see
+`task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision`).
+Only the first has an instrument. Widening this canary to compile something from
+`external/` would need the externals fetched, which is one
+`tools/install_externals.sh` and is not done in a fresh clone
+(`bug-b-lib-test-unrunnable-in-a-fresh-clone-no-synapse-fetch`); noting it here
+rather than filing, since the cheap half — running that script before trusting a
+`make lib-test` green — is a habit, not a tool.

@@ -8,21 +8,26 @@ found: 2026-09-09
 found-by: frankS
 owner: ""
 blocked-by: []
-summary: "LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar belong in compiler/builtin/builtin.pas beside the six moved at task-b-nineteen-sysutils-names-that-fpc-keeps-in-system, and are the only members of that population still unreachable from a no-uses program or unit. Nothing is undecided about them: they stayed because lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name that build calls deletes it from the only place it can look -- measured 2026-09-09, `make lib-test` failed EVERY unit with `undefined variable (LowerCase)` raised from inside sysutils.pas, and a second round with `undefined variable (StringOfChar)` at lib_strpchar.pas:49. THE TRIGGER IS A PIN carrying a refreshed frozen builtin; the whole test is compiling a UNIT that calls LowerCase with no `uses` under stable_linux_amd64/default/pinned, which fails today. Do NOT start this before that pin exists -- it will fail lib-test for a reason unrelated to the change. `Error` is a sixth name and is NOT part of this row: it is compiler-internal here and needs sysutils' exception hierarchy first."
+summary: "ELEVEN names, not five, and the number changed because the SIX THAT MOVED CAME BACK as a deliberate duplicate on 2026-09-11. LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar are still declared only in lib/rtl/sysutils.pas; AllocMem, DynArraySize, SetString, sLineBreak, UTF8Decode and UTF8Encode are now declared in BOTH sysutils.pas and compiler/builtin/builtin.pas. Nothing here is undecided: lib/rtl and every external corpus build with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so a name that lives only in builtin/ is invisible to them. Measured three times -- `undefined variable (LowerCase)` from inside sysutils.pas, `undefined variable (StringOfChar)` at lib_strpchar.pas:49, and on seven `undefined variable (SetString)` in external/synapse/synautil.pas plus `undefined variable (UTF8Encode)` in testjsondata.pp, which took out four tstate rows for two days. THE TRIGGER IS A PIN whose stable_linux_amd64/default/builtin/builtin.pas carries these names; grep it there, that is the whole test. Then move the five and DELETE the six duplicates from sysutils.pas. Do NOT start before that pin exists. `Error` is a twelfth name and is NOT part of this row: it is compiler-internal here and needs sysutils' exception hierarchy first."
 ---
 
-# Five names are one pin away, and the blocker is mechanical
+# Eleven names are one pin away, and the blocker is mechanical
 
 ## What to do, once the trigger has fired
 
-1. Confirm the trigger: compile a UNIT that calls `LowerCase` with no `uses`
-   under `stable_linux_amd64/default/pinned`. **It must fail today** — that is
-   the positive control, and it stops passing exactly when the pin carries the
-   unit-level pre-scan and a refreshed frozen `builtin/`. A green there before
-   the work starts means the control is drawn from the wrong tree.
+1. Confirm the trigger, and it is one grep, not a build:
+   `grep SetString stable_linux_amd64/default/builtin/builtin.pas` must find it.
+   **It finds nothing today.** Nothing about a pre-scan — the unit-level clause
+   written for the first six was measured DEAD and removed at `0e2e8dc6b`.
+   The behavioural form of the same control is a program that calls `LowerCase`
+   with no `uses` under `stable_linux_amd64/default/pinned`; it must fail before
+   the work starts, or the control is drawn from the wrong tree.
 2. Move the five declarations and bodies from `lib/rtl/sysutils.pas` into
-   `compiler/builtin/builtin.pas`, MOVED not copied — two homes for one routine
-   is the defect class, not a mitigation of it.
+   `compiler/builtin/builtin.pas`, **and in the same change DELETE the six
+   duplicates** (declaration and body) that this ticket's 2026-09-11 repair put
+   back in `sysutils.pas`. Those two halves are one commit: the duplicate exists
+   only to span a pin-era, and leaving it behind is how two homes for one
+   routine becomes permanent rather than bounded.
 3. Add each name to the pre-scan in `pasparser_prog.inc` — the call-shaped
    group, or the bare-name group for anything spelled without parentheses. A
    builtin that is declared and never dragged in answers `undefined variable`,
@@ -42,15 +47,59 @@ summary: "LowerCase, StrLen, StrPas, SysBackTraceStr and StringOfChar belong in 
 5. `make lib-test` is the gate that matters here, not `make test` — it is the
    build that broke both times.
 
-## The population to check before moving anything
+## The population to check before moving anything — and it has been wrong THREE TIMES
 
-`grep` for each name across **everything the pinned build compiles**, which is
-`lib/`, `examples/` AND the `test/lib_` rows. Missing that last group is what
-cost the second round: the first consumer grep covered the first two and
-StringOfChar failed anyway.
+`grep` for each name across **everything the pinned build compiles.** That is
+`lib/`, `examples/`, the `test/lib_` rows **and `external/`** — synapse, fpjson,
+and whatever else `tools/install_externals.sh` and
+`tools/install_lib_candidates.sh` fetch.
+
+Each round widened the population by exactly one group it had not thought of:
+
+| round | the group that was missed | how it announced itself |
+| --- | --- | --- |
+| 2026-09-09 | `lib/rtl` calling its own declarations | `undefined variable (LowerCase)` from inside `sysutils.pas`, every unit |
+| 2026-09-09 | the `test/lib_` rows | `undefined variable (StringOfChar)` at `lib_strpchar.pas:49` |
+| 2026-09-11 | `external/` | `undefined variable (SetString)` in `external/synapse/synautil.pas`; `undefined variable (UTF8Encode)` in `testjsondata.pp` |
+
+**THE THIRD ROUND IS THE ONE THAT DOES NOT REPRODUCE LOCALLY, AND THAT IS THE
+WHOLE POINT.** `external/` is absent on plexus, so the Makefile SKIPS the three
+`lib_synapse` rows and `make lib-test` goes green having compiled a smaller
+corpus. It says so on its own last line — `SKIPPED: synapse-ssl ... (green here
+does NOT cover them)` — and that line is the instrument. **Read it before
+clearing an RTL move**, or fetch the externals first
+(`tools/install_externals.sh`) so there is nothing to skip.
+
+The fourth round is not worth guessing at: when the pin lands, move all eleven
+and re-run against a host that has `external/` present.
 
 ## Provenance
 
 Split out of `task-b-nineteen-sysutils-names-that-fpc-keeps-in-system` so its
 summary could be true — six of twelve landed, and the rest is not a smaller
 version of the same question.
+
+## 2026-09-11 — the six that moved came back, as a duplicate
+
+Not a revert: `compiler/builtin/builtin.pas` keeps all six, and
+`lib/rtl/sysutils.pas` got its six declarations and bodies back beside them. For
+one pin-era that is the only shape correct on both sides of the cliff — code
+compiled by HEAD reads builtin's copy, code compiled by `$(PXX_STABLE)` reads
+sysutils'. It is bounded by construction: the retirement test is written on the
+`sLineBreak` note in `sysutils.pas` and it is a grep, so nobody has to remember
+the reasoning to undo it.
+
+Two homes for one routine was named in the original commit as the defect class
+this work set out to fix, so the duplicate is a genuine concession and is
+recorded as one. What made it the right concession rather than a workaround:
+**it is already the normal state for three names.** `FloatToStr`,
+`FloatToExpStr` and `HexStr` are declared in both units today, in the frozen
+copy as well as the live one, and have been for as long as `lib-test` has been
+green — so the duplicate costs nothing that is not already being paid, and the
+alternative (reverting the move) would have thrown away the no-uses-clause
+reachability the move bought, on every one of the six, to fix two.
+
+Measured before landing: the pinned compiler compiles a program calling all six
+through `uses sysutils` and prints the fpc values; the same program against
+`sysutils.pas` as it stood on origin/master answers `undefined variable
+(SetString)` — the positive control fires.

@@ -428,10 +428,33 @@ function UTF8Encode(const s: UnicodeString): AnsiString;
 
   So the split is not by importance and not by anything about the names: it is
   exactly "does something built with $(PXX_STABLE) call it".
-  THE TRIGGER TO FINISH IT is a pin that carries the unit-level pre-scan added
-  with this change (pasparser_proc.inc) AND a refreshed frozen builtin. Verify
-  by compiling a UNIT that calls LowerCase with no `uses` under
-  stable_linux_amd64/default/pinned -- that fails today and is the whole test.
+  THE TRIGGER TO FINISH IT is a pin whose FROZEN builtin carries these bodies.
+  Nothing about a pre-scan: the unit-level clause written alongside the move was
+  measured DEAD and removed at 0e2e8dc6b, because any `uses` clause already
+  pulls this unit. Verify by compiling a program that calls LowerCase with no
+  `uses` under stable_linux_amd64/default/pinned -- that fails today and is the
+  whole test.
+
+  AND THERE WAS A THIRD ROUND, ON THE SIX THAT DID MOVE. 2026-09-11: the same
+  population error one level further out. The consumer grep for the six covered
+  lib/, examples/ and the `test/lib_` rows -- and NOT external/, which is absent
+  on plexus and therefore silently skipped by the very `make lib-test` run that
+  cleared the change. On seven, where external/ is present, the pinned build of
+  external/synapse/synautil.pas answered `undefined variable (SetString)` and
+  took out all three lib_synapse rows, and testjsondata.pp answered `undefined
+  variable (UTF8Encode)` and took out test-fpjson. Four rows, named first in 62
+  consecutive auto-pin refusals.
+  The repair does NOT move them back: all six stay here, and all six were also
+  RESTORED in lib/rtl/sysutils.pas as a deliberate duplicate with a retirement
+  test written on it. Two homes for one routine is the defect class this change
+  set out to fix, and for exactly one pin-era it is also the only shape that is
+  correct on both sides of the cliff -- HEAD reads this copy, $(PXX_STABLE)
+  reads sysutils'. Delete the sysutils copies once a pin's frozen builtin
+  carries these names.
+  THE LESSON IS ABOUT THE SKIP, NOT ABOUT THE NAMES: a green `make lib-test` on
+  a host missing external/ is a green about a SMALLER corpus, and it says so on
+  its last line ("SKIPPED: ... green here does NOT cover them"). Read that line
+  before clearing an RTL move.
   task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
 
 { Element count of the dynamic array whose handle is P, 0 for nil. The count is

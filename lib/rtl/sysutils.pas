@@ -534,13 +534,35 @@ function StrLen(P: PChar): Integer;
 { FPC's sLineBreak: the platform line terminator. `LineEnding` is a compiler-known constant
   in this dialect; sLineBreak is the SysUtils spelling of the same thing, which FPC code uses
   interchangeably (fpjson's pretty-printer builds its indentation with it). }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+function sLineBreak: AnsiString;
+{ ^ RESTORED HERE 2026-09-11, DELIBERATELY DUPLICATING the copy in
+  compiler/builtin/builtin.pas -- and the duplicate is what makes the pair
+  COHERENT, not what makes it incoherent. The move on 2026-09-09 (0ffe185bb)
+  deleted six names from this unit and left them only in the compiler's own
+  System unit. That is correct at HEAD and it took out every consumer that
+  builds with $(PXX_STABLE), because that build sees the PINNED compiler and a
+  FROZEN copy of compiler/builtin/ which predates the move: the name is gone
+  from the only two places such a build can look.
+  MEASURED on seven, not inferred -- `undefined variable (SetString)` in
+  external/synapse/synautil.pas took out all three lib_synapse rows, and
+  `undefined variable (UTF8Encode)` in testjsondata.pp took out test-fpjson.
+  Those four rows are named first in every one of the 62 consecutive auto-pin
+  refusals, so the cliff this minted was also blocking the pin that would have
+  ended it.
+  ALL SIX ARE RESTORED, not just the two that were measured. The population for
+  "who calls this" is everything the PINNED build compiles, external corpora
+  included, and external/ is absent on plexus -- so it cannot be enumerated
+  from here, only guessed at. That guess has now cost three rounds (LowerCase
+  and friends, then StringOfChar, then these four rows) and a fourth is not
+  worth the lines it would save.
+  THE DUPLICATE IS NOT A SECOND SOURCE OF TRUTH IN PRACTICE, and that is
+  measured too: FloatToStr, FloatToExpStr and HexStr are declared in this unit
+  AND in builtin.pas today, in the frozen copy as well as the live one, and
+  have been for as long as lib-test has been green.
+  RETIRE IT by deleting the copy here -- declaration AND body -- once a pin's
+  stable_linux_amd64/default/builtin/builtin.pas carries the name. Grep it
+  there; that is the whole test.
+  task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision }
 
 { FPC's Try* parsers: return False on malformed input and leave the out value untouched,
   rather than raising. }
@@ -576,20 +598,16 @@ function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
   that still holds for them, and needs to know what turning the define on would change:
   one element per CHARACTER instead of one per BYTE. For ASCII, which is what fpjson's escaping
   actually walks, the two agree exactly either way. }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+function UTF8Decode(const s: AnsiString): UnicodeString;
+{ ^ RESTORED HERE 2026-09-11 as a deliberate duplicate of the copy in
+  compiler/builtin/builtin.pas, because a $(PXX_STABLE) build sees the FROZEN
+  builtin and cannot reach the moved name. The full note on sLineBreak carries
+  the measurement and the retirement test. }
+function UTF8Encode(const s: UnicodeString): AnsiString;
+{ ^ RESTORED HERE 2026-09-11 as a deliberate duplicate of the copy in
+  compiler/builtin/builtin.pas, because a $(PXX_STABLE) build sees the FROZEN
+  builtin and cannot reach the moved name. The full note on sLineBreak carries
+  the measurement and the retirement test. }
 
 { FPC SysUtils Int64/QWord parsers. StrToInt64/StrToQWord raise EConvertError on
   malformed input, like FPC; the *Def forms return the default instead. }
@@ -776,13 +794,11 @@ function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
   `FBucket := AllocMem(I * sizeof(PHashItem))` is a hash table of pointers then
   tested against nil, so an unzeroed block reads as fully populated with garbage
   addresses. A GetMem alias would compile everywhere and crash later. }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+function AllocMem(Size: PtrUInt): Pointer;
+{ ^ RESTORED HERE 2026-09-11 as a deliberate duplicate of the copy in
+  compiler/builtin/builtin.pas, because a $(PXX_STABLE) build sees the FROZEN
+  builtin and cannot reach the moved name. The full note on sLineBreak carries
+  the measurement and the retirement test. }
 
 { Element count of the dynamic array whose handle is P, 0 for nil (FPC
   System.DynArraySize). The count is the managed-block header's length word at
@@ -790,13 +806,11 @@ function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
   untyped Pointer, which is what a generic comparer has: rtl-generics'
   TCompare._DynArray is handed two `constref ... : Pointer` and must size them
   without knowing the element type. See devdocs/dev/managed-block-header.md. }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+function DynArraySize(P: Pointer): Int64;
+{ ^ RESTORED HERE 2026-09-11 as a deliberate duplicate of the copy in
+  compiler/builtin/builtin.pas, because a $(PXX_STABLE) build sees the FROZEN
+  builtin and cannot reach the moved name. The full note on sLineBreak carries
+  the measurement and the retirement test. }
 
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
@@ -1175,13 +1189,11 @@ function AdjustLineBreaks(const S: AnsiString; Style: TTextLineBreakStyle): Ansi
 
 { System.SetString (FPC): size S to Len and copy Len chars from Buf (when
   non-nil). Lives here until the compiler grows it as a builtin. }
-{ ^ MOVED to compiler/builtin/builtin.pas, where FPC keeps it (its System unit).
-  Declared HERE ONLY, it was unreachable from a program with no `uses` line --
-  fpc runs it and we answered `undefined variable`. Moved and not copied: a
-  second declaration would be two sources of truth for one routine, which is
-  the defect class this fixes rather than another instance of it. `uses
-  SysUtils` code is unaffected, because any `uses` clause pulls the builtin
-  unit. task-b-nineteen-sysutils-names-that-fpc-keeps-in-system }
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+{ ^ RESTORED HERE 2026-09-11 as a deliberate duplicate of the copy in
+  compiler/builtin/builtin.pas, because a $(PXX_STABLE) build sees the FROZEN
+  builtin and cannot reach the moved name. The full note on sLineBreak carries
+  the measurement and the retirement test. }
 
 implementation
 
@@ -1191,6 +1203,12 @@ begin
   s := '';
   for i := 1 to count do s := s + ch;
   Result := s;
+end;
+
+function AllocMem(Size: PtrUInt): Pointer;
+begin
+  Result := GetMem(Size);
+  if (Result <> nil) and (Size > 0) then FillChar(Result^, Size, 0);
 end;
 
 uses platform, platform_types, wideint, strings;
@@ -1227,6 +1245,11 @@ begin
     Result[i + 1] := P[i];
 end;
 
+function sLineBreak: AnsiString;
+begin
+  Result := LineEnding;
+end;
+
 function StrToBoolDef(const s: AnsiString; def: Boolean): Boolean;
 var t: AnsiString; f: Double;
 begin
@@ -1255,6 +1278,16 @@ end;
 { Both bodies are a bare assignment ON PURPOSE -- see the declaration. The store carries the
   width conversion when the widths differ and is a plain copy when they do not, so there is one
   transcoder in this compiler and it lives in the runtime, not here. }
+function UTF8Decode(const s: AnsiString): UnicodeString;
+begin
+  Result := s;
+end;
+
+function UTF8Encode(const s: UnicodeString): AnsiString;
+begin
+  Result := s;
+end;
+
 { The sentinel trick these three share: parse with two DIFFERENT defaults. A malformed input
   yields whichever default was asked for, so the two runs disagree; a well-formed input parses
   to the same value both times. That is cheaper and more honest than duplicating each
@@ -5368,6 +5401,16 @@ begin
   Result := AdjustLineBreaks(S, tlbsLF);
 end;
 
+procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
+var i: Integer;
+begin
+  if Len < 0 then Len := 0;
+  SetLength(S, Len);
+  if Buf = nil then Exit;
+  for i := 1 to Len do
+    S[i] := Buf[i - 1];
+end;
+
 { Raises ECONVERTERROR, not a bare Exception: `on E: EConvertError do` is the
   handler every FPC/Delphi caller writes around a parse, and a bare Exception
   walks straight past it — the catch is there, it just never fires. The rest of
@@ -5772,6 +5815,14 @@ begin
       if a[i] < b[i] then CompareMemRange := -1 else CompareMemRange := 1;
       Exit;
     end;
+end;
+
+function DynArraySize(P: Pointer): Int64;
+begin
+  if P = nil then
+    DynArraySize := 0
+  else
+    DynArraySize := PInt64(PtrUInt(P) - 8)^;
 end;
 
 function SysBackTraceStr(Addr: Pointer): string;

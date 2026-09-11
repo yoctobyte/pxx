@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankS
 owner: frankS
 blocked-by: []
-summary: "RESOLVED 2026-09-09: the classification the ticket asked for is done and six of the twelve are FIXED. A per-name no-uses probe (fpc 3.2.2 vs pxx, one program each, scratchpad ub/gen.py) ran ELEVEN of the twelve -- Error was not probed, it is also a compiler-internal name and needs sysutils' exception hierarchy -- and ALL ELEVEN were real: fpc runs them, pxx answered `undefined variable`. MOVED into compiler/builtin/builtin.pas with pre-scan triggers: AllocMem DynArraySize SetString sLineBreak UTF8Decode UTF8Encode, all six now matching fpc line for line in a no-uses PROGRAM and in a no-uses UNIT. HELD BACK, five: LowerCase StrLen StrPas SysBackTraceStr StringOfChar -- not on merit, on the PIN: lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name something in that build calls deletes it from the only place that build can look (measured twice: `make lib-test` failed every unit with `undefined variable (LowerCase)`, then again with StringOfChar). The split criterion is exactly \"does something built with $(PXX_STABLE) call it\", and the finishing trigger is a pin carrying the new unit-level pre-scan plus a refreshed frozen builtin -- carried forward as [[task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision]]. CORRECTED 2026-09-09, same day: this summary claimed a SECOND hole at the unit level and there is none. A unit-level trigger was written and is now removed as dead code -- any `uses` clause already pulls `builtin`, and a unit is only ever compiled because a program `uses` it, so `builtin` is in scope before any unit is parsed. Measured by disabling each pull and rebuilding: without the unit-level BUILTIN pull the unit fixture still compiles and prints every row; without the unit-level MATH pull it is refused at `pi`. The math case is a real second hole because no `uses` clause pulls `math`; this one was not, and the lib-test failure that made me believe it was the FROZEN-BUILTIN problem below, misread. So this is NOT a third instance of [[bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units]]. tarray13 advances from line 23 to line 67: DynArraySize is supplied, DynArrayIndex/DynArraySetLength still are not."
+summary: "RESOLVED 2026-09-09: the classification the ticket asked for is done and six of the twelve are FIXED. A per-name no-uses probe (fpc 3.2.2 vs pxx, one program each, scratchpad ub/gen.py) ran ELEVEN of the twelve -- Error was not probed, it is also a compiler-internal name and needs sysutils' exception hierarchy -- and ALL ELEVEN were real: fpc runs them, pxx answered `undefined variable`. MOVED into compiler/builtin/builtin.pas with pre-scan triggers: AllocMem DynArraySize SetString sLineBreak UTF8Decode UTF8Encode, all six now matching fpc line for line in a no-uses PROGRAM and in a no-uses UNIT. HELD BACK, five: LowerCase StrLen StrPas SysBackTraceStr StringOfChar -- not on merit, on the PIN: lib/rtl builds with $(PXX_STABLE) against a FROZEN copy of compiler/builtin, so moving a name something in that build calls deletes it from the only place that build can look (measured twice: `make lib-test` failed every unit with `undefined variable (LowerCase)`, then again with StringOfChar). The split criterion is exactly \"does something built with $(PXX_STABLE) call it\", and the finishing trigger is a pin whose FROZEN builtin carries the names -- carried forward as [[task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision]]. CORRECTED 2026-09-09, same day: this summary claimed a SECOND hole at the unit level and there is none. A unit-level trigger was written and is now removed as dead code -- any `uses` clause already pulls `builtin`, and a unit is only ever compiled because a program `uses` it, so `builtin` is in scope before any unit is parsed. Measured by disabling each pull and rebuilding: without the unit-level BUILTIN pull the unit fixture still compiles and prints every row; without the unit-level MATH pull it is refused at `pi`. The math case is a real second hole because no `uses` clause pulls `math`; this one was not, and the lib-test failure that made me believe it was the FROZEN-BUILTIN problem below, misread. So this is NOT a third instance of [[bug-p-the-system-math-and-thread-surfaces-are-not-ambient-in-units]]. CORRECTED AGAIN 2026-09-11: the criterion above was right and the POPULATION it was applied to was not, for the THIRD time in this ticket. The consumer grep covered lib/, examples/ and the `test/lib_` rows and NOT external/, which is absent on plexus -- so the `make lib-test` that cleared the change SKIPPED the three lib_synapse rows and went green about a smaller corpus. On seven, `undefined variable (SetString)` in external/synapse/synautil.pas took out all three, and `undefined variable (UTF8Encode)` plus sLineBreak in testjsondata.pp took out test-fpjson: four rows red for two days and named first in 62 consecutive auto-pin refusals. REPAIRED by restoring all six declarations and bodies in lib/rtl/sysutils.pas as a deliberate duplicate of builtin's copies -- for one pin-era that is the only shape correct on both sides of the cliff -- with the retirement test written on the sLineBreak note. Reproduced and cleared locally after fetching external/ with tools/install_externals.sh; the positive control fires on origin/master's sysutils and not on the repair. tarray13 advances from line 23 to line 67: DynArraySize is supplied, DynArrayIndex/DynArraySetLength still are not."
 ---
 
 # Twelve names sit on the wrong side of our unit boundary — the second sign of a class whose first sign is fixed
@@ -270,3 +270,37 @@ frank-coordinator's probe is what started this: it found `UniqueString` and
 `RunError` reaching a no-uses unit while sitting in the program scan only, and
 said plainly that it had NOT established they were the same mechanism. They
 were not, and the question it flagged is the one that turned out to matter.
+
+## 2026-09-11 — the third round, and the thing all three have in common
+
+Three times in this ticket the criterion was right and the population was
+wrong, each time widening by exactly one group nobody had thought of:
+
+| round | missed group | how it announced itself |
+| --- | --- | --- |
+| 1 | `lib/rtl` calling its own declarations | `undefined variable (LowerCase)`, every unit |
+| 2 | the `test/lib_` rows | `undefined variable (StringOfChar)` at `lib_strpchar.pas:49` |
+| 3 | `external/` | `undefined variable (SetString)` in `external/synapse/synautil.pas` |
+
+The first two failed **on the box that made the change**, in the run written to
+clear it, which is why they cost minutes. The third did not, and cost two days,
+because `external/` is absent on plexus and `make lib-test` **skips** what it
+cannot find. It is not silent about that — the last line of a green run says
+`SKIPPED: synapse-ssl ... (green here does NOT cover them)` — and the skip
+notice was read as bookkeeping rather than as the scope of the green.
+
+**A green that names its own skips is still a green about a smaller corpus, and
+the sentence that says so is the one nobody reads.** The cheap fix is not a
+better grep: it is `tools/install_externals.sh` before the run, so there is
+nothing to skip and the local gate covers the population the claim is about.
+
+Second thing worth keeping: **the first positive control I wrote for this was
+invalid and passed.** Reverting `lib/rtl/sysutils.pas` into a scratch directory
+and pointing `-Fu` at it did NOT reproduce the failure, because the pinned
+compiler resolves `lib/rtl` through an exe-dir-relative path of its own
+(`stable_linux_amd64/default/../../lib/rtl`) before it consults `-Fu` for a
+transitively used unit — so the control was measuring the live tree while
+appearing to measure the reverted one. A direct `uses sysutils` program DID
+fail against the same scratch copy, which is what made the shadow look like a
+real result. The control that works is to revert the file **in place** (patch
+out, measure, patch back). Another instrument correct about something else.

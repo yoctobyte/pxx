@@ -20,6 +20,14 @@
   back for a reason that is about the PIN and not about the names -- see the
   note in compiler/builtin/builtin.pas.
 
+  SINCE 2026-09-11 THE SIX ARE DECLARED IN lib/rtl/sysutils.pas AS WELL, and
+  this fixture is deliberately unaffected by that: with no `uses` line it cannot
+  see sysutils at all, so every row below still tests exactly one thing --
+  builtin's copy. The duplicate spans one pin-era (a $(PXX_STABLE) build reads a
+  FROZEN builtin that predates the move, and external/synapse and fpjson went
+  red for two days on it) and carries its own retirement test; see the note on
+  sLineBreak in lib/rtl/sysutils.pas.
+
   `alloc 0` IS NOT A SMOKE ROW. AllocMem differs from GetMem only in zeroing, so
   a GetMem alias compiles everywhere, passes any "did it return a pointer" test,
   and crashes later on a pointer field read out of garbage. Reading the first
