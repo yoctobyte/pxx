@@ -1394,6 +1394,35 @@ test-nilpy: $(COMPILER)
 	# the pin would red until someone pins.
 	./$(COMPILER) test/test_nilpy_not_on_a_c_width_integer.npy $(TESTTMP)/test_nilpy_notcwidth
 	$(TESTTMP)/test_nilpy_notcwidth | diff -u test/test_nilpy_not_on_a_c_width_integer.expected -
+	# A module member whose name is a word PASCAL reserves (`set`, `type`, `end`,
+	# `file`, `label`, ...) was rewritten to a trailing-underscore spelling the
+	# module never declares, so the qualified CALL missed by construction. The
+	# underscore convention is a Pascal SHIM's -- a library cannot declare a
+	# constant called END -- and a NilPy module is under no such constraint.
+	#
+	# Differential: this .npy runs unchanged under python3 and the .expected IS
+	# python3's output. Two rows carry more than they look like: `ordinary` is
+	# not reserved anywhere, so if it fails the harness is not reaching the
+	# helper module at all and no row above means what it appears to; and the
+	# two `set_` rows are LAST on purpose, because the module declares `set` and
+	# `set_` both and that pair is the only arrangement that can tell which
+	# spelling the lookup prefers -- with either one alone, both orders pass.
+	#
+	# $(COMPILER), not $(PXX_STABLE): the pinned compiler FAILS this fixture
+	# (`no member type came of the qualifier m`), which is what makes it a
+	# regression test rather than a restatement of current behaviour.
+	./$(COMPILER) -Futest test/test_nilpy_a_module_member_named_like_a_pascal_keyword.npy $(TESTTMP)/test_nilpy_reservedmemb
+	$(TESTTMP)/test_nilpy_reservedmemb | diff -u test/test_nilpy_a_module_member_named_like_a_pascal_keyword.expected -
+	# ...and the SHIM half, which is the population the fix above could have
+	# broken and which had no test anywhere before it. reservedshim.pas declares
+	# END_/TEXT_/set_/type_ because Pascal reserves the plain spellings; the
+	# mapping is now CONDITIONAL on the underscored name really existing in the
+	# target unit, so narrowing it to "never" would leave the shim convention
+	# unreachable while every other test in this area still passed. Passes under
+	# the pin as well -- it guards against a future narrowing, not against the
+	# bug just fixed, which is why it is here and not asserted as a differential.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_reserved_member_still_maps_to_a_shim_underscore.npy $(TESTTMP)/test_nilpy_reservedshim
+	tools/expect_same.sh test_nilpy_reservedshim.1 "$$($(TESTTMP)/test_nilpy_reservedshim)" "$$(printf 'shim-end\nshim-text\n41\n42')"
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
@@ -34608,6 +34637,20 @@ endif
 	# one number. Verified under the PIN as well as at HEAD before landing, so
 	# this row is not inert waiting for a `make pin`.
 	$(TESTTMP)/lib_mimic_shutil | diff -u test/lib_mimic_shutil.expected -
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_time.npy $(TESTTMP)/lib_mimic_time
+	# time -- monotonic(), time() and sleep(), each over a REAL syscall
+	# (PalClockGetTime / PalNanosleep) rather than a constant, at nanosecond
+	# resolution: GetTickCount64's millisecond is 6% of a 60fps frame and would
+	# land in a physics dt.
+	#
+	# Every row is a PREDICATE, not a value -- a clock cannot be diffed against
+	# an oracle. The two origin rows are the load-bearing ones: `monotonic()` is
+	# small and `time()` is past 1.7e9, which is what separates the two clocks.
+	# Drop them and a shim returning one clock for both passes everything else.
+	# There is deliberately no negative-sleep row: CPython RAISES on sleep(-1)
+	# and this returns, a chosen divergence recorded in
+	# devdocs/dev/nilpy-semantics-divergences.md.
+	$(TESTTMP)/lib_mimic_time | diff -u test/lib_mimic_time.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"

@@ -3275,3 +3275,39 @@ stashed prints no `in:` at all. Residual left with an owner named: the C arm of
 2026-09-11 | frankH | tools/fpc_compiler_corpus_probe.sh, umbrella-pxx-compiles-fpc-itself | THE SIXTH NULL ROW, MEASURED AS AN A/B ON TWO BINARIES RATHER THAN AS A BEFORE-AND-AFTER ON ONE TREE, because a single post-fix run over a corpus every seat is burning cannot tell my delta from somebody else's pull. Built the pre-fix binary from 401c00f2b^ and the post-fix one from HEAD, saved both, restored the tree, and ran all 207 units against each with the same fpc oracle verdicts: BOTH-OK 21 -> 21, ZERO newly compiling, ZERO regressed, and 101 of 207 changed their first error -- all 101 from `undefined variable (V_Status)`, all 101 to `unknown type: TDoubleRec`. Half the corpus moved and bought nothing. EXPECTATION WAS STATED IN THE UMBRELLA BEFORE THE RUN, which is the only thing that makes a null row informative. The instrument itself is the second finding and it is the reusable one: the probe piped the compiler through `head -1` from the day it was written, while `ErrorRecover` already carries a SEMANTIC failure past its diagnostic and keeps parsing up to MAX_REPORTED_ERRORS=20 -- so the umbrella's standing complaint that nobody had built the every-failure-per-subject instrument was false, it existed and the harness discarded it. Removed, with `errs=N` on the row and an optional PXX_CORPUS_DETAIL dir; VERIFIED BY RUNNING IT, not by reading it, which is why it is a separate commit from the corpus numbers. What it shows immediately: machoutils reports 20 distinct walls, elfbase 16, ppu 11, and behind every TDoubleRec sits `too many array initializer elements` at cpuinfo.pas:281 -- a second defect in the same file that no first-failure census could ever have seen, and cpuinfo.pas is now 132 units' entire blocker. READ errs= AS "IS THERE ANYTHING BEHIND THIS", NEVER AS A SIZE: comphook raised 20 recovered errors from ONE missing binding, so a recovered-error count is no more a work estimate than a wall's population is.
 
 2026-09-11 | frankuser (Track N) | compiler/pyparser.inc, lib/rtl/mimic_shutil.pas, 4 tickets | `not` ON A C-DERIVED WIDTH WAS A BITWISE COMPLEMENT, AND IT IS THE FOURTH INSTANCE OF ONE BUG THIS ROUTINE HAS SHIPPED. PyParseBoolNot gated AN_NOT on PyNumeric, which lists ONLY tyInteger/tyInt64 and the three float kinds -- so size_t, every sized and unsigned int, and a raw pointer fell through to Pascal's bitwise complement, which is non-zero for every non-zero input, i.e. TRUE. `not p` was True for a non-NULL pointer while `if p` on the SAME value in the SAME program was correct, which is what hid it; the routine's own comments already record the string, container and object cases, each fixed one operand class at a time, because AN_NOT is the DEFAULT for anything unrecognised. Named the safe set POSITIVELY (PyNotTestsAgainstZero) rather than adding a fifth arm. WHAT MADE THE FIX AIMABLE WAS MEASURING FIRST: 18 rows of a `not` table over the native types agree with CPython before and after, so nothing written in plain NilPy can reach it -- a Python literal is tyInteger and the frontend's own corpus cannot produce the operand. THE DIAGNOSIS COST AN HOUR AND THE INSTRUMENT WAS HONEST THROUGHOUT: lekkerzeilen's backend raised `SDL_CreateWindow failed` with an EMPTY SDL_GetError, and the empty string was read as a second failure rather than as "nothing failed". The tell was a probe printing `retry handle truthy: True` on the line before `if not handle:` fired. Three hypotheses were measured and discarded first (a tuple default's unpack, a module-level function alias, the window flags) because the one thing nobody doubts is a `not`. ALSO: a from-imported class loses its methods unless RENAMED -- `from .platform import gl` then `gl.get_string()` is AttributeError, `as zz` works, CONSTANTS read correctly on both so the binding looks sound; filed at p80 and I FILED IT WRONG FIRST, blaming a co-occurring `from . import platform` that turned out to be a confound, corrected by the one extra probe that varied only the alias name. Two counting lessons banked in the tickets: `f(*seq)` is 59 sites and my grep said 22 (it matches `COUNT(*)` inside an SQL string and misses `f(**d)` -- count a syntax class with a PARSER, three lines of ast); and `strchr` is the wrong population for a pointer test because char* already had a correct string-length arm and passes on the PIN, so that row would have proved nothing.
+
+2026-09-11 | frankuser | compiler/pyparser.inc | A module member named like a Pascal
+reserved word was uncallable, and the cause was a mapping that FIRES rather than one
+that is missing. PyMapReservedMember (pasparser_name.inc:291) rewrites seventeen names
+-- set, type, end, file, label, string, array, record, text, div, mod and the rest -- to
+a trailing-underscore spelling, because a Pascal SHIM cannot declare a constant called
+END so it declares END_. Applied unconditionally to every unit-qualified member, so a
+NilPy module compiled as a unit, which is under no such constraint and registers
+"def set" as set, missed BY CONSTRUCTION. Now it probes: plain spelling first, map only
+when the plain name is absent from that unit and the underscored one is present. Plain-
+first is what makes it correct for both populations without testing the unit's kind --
+Pascal cannot spell the plain name at all, so a shim's plain probe always misses.
+WHY THIS COST A WHOLE EVENING TO SEE: only the direct CALL failed. print(m.set),
+f = m.set and getattr(m,"set")(3) all compiled AND answered correctly, so the member
+demonstrably resolved, and the diagnostic said "no member set came of the qualifier" --
+which names exactly one cause, an import that bound nothing, and the import was fine.
+Found on lekkerzeilen's world.label(...); cleared that wall and the one behind it.
+
+2026-09-11 | frankuser | compiler/pyparser.inc | ...and a second, unrelated defect
+sharing the symptom: a qualified "inherited" never reached the member lookup at all. The
+Pascal inherited-construct arm was not gated on qUnit, so m.inherited(3) answered
+"inherited call outside method". One line. It is NOT in PyMapReservedMember's list, so
+nothing above had rewritten it -- that arm was the entire bug for that one name, which
+is why it survived the fix above and had to be found separately.
+
+2026-09-11 | frankuser | test/ | The ordering row is the load-bearing one, per
+CLAUDE.md's first-wins rule. A module declaring BOTH set and set_ is the only
+arrangement that can tell which spelling the lookup prefers; underscore-first answered
+set_ for .set where CPython answers set. With either name alone, both orders pass and
+the fixture certifies nothing. Asserted LAST in the .npy on purpose.
+AND THE SHIM HALF HAD NO TEST ANYWHERE -- the population this fix could have broken. A
+narrowing of the mapping to "never" would have left the shim convention silently
+unreachable while every other test in the area still passed, because they all exercise
+modules that declare the plain spelling. test/nilpy_units/reservedshim.pas now exists to
+be reached by its underscored names through their plain ones, and it passes under the
+pin too: it guards a future narrowing, not the bug just fixed.

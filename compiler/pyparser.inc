@@ -16162,6 +16162,61 @@ begin
   end;
 end;
 
+{ Does this call's argument list carry a `*seq` (or `**mapping`, which lexes as
+  two tkStar) unpack at the top level?
+
+  PyCallArgCountAt above counts top-level COMMAS, so it reports the SYNTACTIC
+  argument count -- and for `m(*xs)` that is 1 whatever xs holds. Any decision
+  taken on that number is a decision about a count the call does not have.
+  PyParseVariantMethod's arity deferral was making exactly that decision:
+  `self.world.pound_at(*self.start[:2])` counted as 1 argument, found no 1-arg
+  `pound_at`, deferred to the run-time dispatcher, and the dispatcher's argument
+  parser then refused the `*` with `expected expression`. The static path it
+  skipped handles the unpack perfectly well -- the same call compiles and runs
+  the moment a method of the SYNTACTIC arity happens to exist, which is what
+  made this look like "unpacking is unsupported" when five of six call shapes
+  already supported it (plain function, method, constructor, and both with
+  fixed arguments ahead of the star).
+
+  ARGUMENT-START POSITION IS THE WHOLE POINT, not merely a tkStar at depth 1:
+  `f(a * b)` has one of those and is a multiplication. So the scan tracks
+  whether it sits at the start of an argument -- just after the `(` or just
+  after a top-level comma -- which is the only place Python allows an unpack.
+  bug-nilpy-star-unpack-deferred-to-the-runtime-dispatcher-which-cannot-parse-it }
+function PyCallHasStarArgAt(parenTok: Integer): Boolean;
+var k, depth: Integer; atArgStart: Boolean;
+begin
+  Result := False;
+  if (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  k := parenTok + 1; depth := 1; atArgStart := True;
+  while (k < TokCount) and (depth > 0) do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack] then
+    begin
+      Inc(depth);
+      atArgStart := False;
+    end
+    else if Tokens[k].Kind in [tkRParen, tkRBrack] then
+    begin
+      Dec(depth);
+      atArgStart := False;
+    end
+    else if (depth = 1) and (Tokens[k].Kind = tkComma) then
+      atArgStart := True
+    else
+    begin
+      if (depth = 1) and atArgStart and (Tokens[k].Kind = tkStar) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      atArgStart := False;
+    end;
+    Inc(k);
+  end;
+end;
+
 function PyPromoteOverloadByKwAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer;
 { Pick the same-class OVERLOAD a keyword argument names. `Widget.bind(seq,
   script)` and `Widget.bind(seq, callback, add)` are two methods of one name, and
@@ -18249,7 +18304,12 @@ begin
      and (ProcPyStarIdx[hitPi] < 0) and (ProcPyKwIdx[hitPi] < 0) then
   begin
     smArgN := PyCallArgCountAt(TokPos - 1);
-    arFits := ProcArityMatches(hitPi, smArgN + 1);
+    { A CALL-SITE UNPACK MAKES THE ARITY UNKNOWN, so none of the arity tests
+      below mean anything -- see PyCallHasStarArgAt. Treated as fitting so the
+      static path keeps the call: it owns the star expanders, and the run-time
+      dispatcher this would defer to cannot parse a `*` at all. }
+    arFits := PyCallHasStarArgAt(TokPos - 1)
+              or ProcArityMatches(hitPi, smArgN + 1);
     if (not arFits) and (hitCi >= 0) and
        (FindUMethArityStrict(hitCi, PyMethNameFor(hitCi, mname), smArgN) >= 0) then
       arFits := True;
@@ -45568,6 +45628,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, wrapperArg, wrapperCall, sci: Integer;
     isLiftedCall, isCStringCall: Boolean;
+    rsvMapped: AnsiString;   { a reserved member's underscored spelling, probed before it is adopted }
     qvUnit, qvPi: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
     gaUnit, gaPi, gaSi: Integer; gaMemb, gaRecv: AnsiString; gaDeclared: Boolean;   { getattr/hasattr over a UNIT ALIAS — bug-n-a-module-bound-by-an-import-is-not-a-value }
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
@@ -48864,9 +48925,44 @@ begin
         trailing-underscore convention the reserved METHOD names already use
         (set_, destroy_). Applied to the qualified form only, so an ordinary
         Pascal `unit.End` is untouched — there is no such thing. }
-      if (qUnit >= 0) then name := PyMapReservedMember(name);
+      { ...but ONLY when that unit really declares the underscored spelling.
+        The convention is a LIBRARY's: a Pascal shim cannot declare a constant
+        called END, so it declares END_. A NilPy module compiled as a unit is
+        under no such constraint -- `def set` registers as `set` -- so mapping
+        unconditionally made the lookup miss BY CONSTRUCTION for every Python
+        module whose member is one of these seventeen names, `set` and `type`
+        among them. Probing first keeps both populations: the shim still maps,
+        the module no longer has to.
+
+        PLAIN SPELLING WINS, and the ORDER is the correctness argument, not a
+        preference. A module declaring BOTH `set` and `set_` is the arrangement
+        that exposes it: underscore-first answered `set_` for `.set` where
+        CPython answers `set`. Plain-first is right for both populations at once
+        and needs no test of what kind of unit this is -- Pascal CANNOT declare
+        a routine called `set`, `end` or `type`, so for a shim the plain probe
+        always misses and the mapping still fires. The one name in the list
+        Pascal could spell plainly is `text` (a standard type identifier, not a
+        reserved word), and there the plain declaration IS what the author meant.
+        bug-n-a-module-member-named-like-a-pascal-keyword-is-uncallable }
+      if (qUnit >= 0) then
+      begin
+        rsvMapped := PyMapReservedMember(name);
+        if (rsvMapped <> name) and
+           (FindSymInUnit(name, qUnit) < 0) and
+           (FindProcInUnit(name, qUnit) < 0) and
+           (FindUClassInUnit(name, qUnit) < 0) and
+           ((FindSymInUnit(rsvMapped, qUnit) >= 0) or
+            (FindProcInUnit(rsvMapped, qUnit) >= 0) or
+            (FindUClassInUnit(rsvMapped, qUnit) >= 0)) then
+          name := rsvMapped;
+      end;
       prevTok := TokPos - 1;
-      if CaseEqual(name, 'inherited') then
+      { A QUALIFIED `inherited` is a member name, not the construct: `m.inherited(3)`
+        is an ordinary call on a module that happens to export that name, and
+        taking the construct arm here answered `inherited call outside method`.
+        `inherited` is not in PyMapReservedMember's list, so nothing above
+        rewrote it -- this arm was the whole defect for that one name. }
+      if (qUnit < 0) and CaseEqual(name, 'inherited') then
       begin
         CurASTNode := ParseInheritedCallAST;
         LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);

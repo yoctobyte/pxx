@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_time.pas against CPython's real `time`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython and produces identical
+output both ways. Run it as `python3 test/lib_mimic_time.npy` to see that.
+
+EVERY ROW IS A PREDICATE, NOT A CLOCK READING, for the obvious reason -- the
+numbers differ on every run and between the two runtimes. So what is asserted is
+the part of the contract that does not vary: ordering, origin, and resolution.
+
+THE ORIGIN ROWS ARE THE LOAD-BEARING ONES. `monotonic()` and `time()` would both
+satisfy "does not go backwards over two adjacent reads", so that row alone cannot
+tell them apart and would pass if the shim wired both to the same clock -- which
+is exactly the plausible mistake, since the PAL reaches both through one
+PalClockGetTime call differing only in a clock id. `monotonic() < 1e9` and
+`time() > 1.7e9` separate them: one is boot-relative, the other is an epoch, and
+no single clock can answer both.
+
+NO NEGATIVE-SLEEP ROW. `sleep(-1)` raises ValueError in CPython and returns here,
+which is a CHOSEN divergence in the permitted direction (CPython rejects that
+program) -- recorded in devdocs/dev/nilpy-semantics-divergences.md. An oracle
+that raises cannot produce an expected line, so a divergence in this direction is
+untestable by differential by construction. It is asserted nowhere; the note is
+the record.
+
+THE RESOLUTION ROW IS WHY THIS IS NOT GetTickCount64. That is
+PalMonotonicMillis -- correctly monotonic, and milliseconds, which is 6% of a
+frame at 60fps and lands in a dt that drives physics. The row below would pass on
+a millisecond clock roughly 1 time in 1000, so treat a failure there as real and
+a pass as weak evidence; the strong evidence is the unit under test reading
+nanoseconds from PalClockGetTime directly.
+"""
+
+import time
+
+a = time.monotonic()
+b = time.monotonic()
+print("monotonic does not go back   ", b >= a)
+print("monotonic origin is not epoch", a < 1000000000.0)
+
+print("time is an epoch             ", time.time() > 1700000000.0)
+print("time does not go back        ", time.time() >= time.time() - 1.0)
+
+t0 = time.monotonic()
+time.sleep(0.05)
+slept = time.monotonic() - t0
+print("sleep(0.05) >= 0.04          ", slept >= 0.04)
+print("sleep(0.05) < 1.0            ", slept < 1.0)
+
+time.sleep(0)
+print("sleep(0) returned            ", True)
+
+print("finer than a millisecond     ", (time.monotonic() * 1000.0) % 1.0 != 0.0)

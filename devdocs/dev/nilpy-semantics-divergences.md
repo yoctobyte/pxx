@@ -795,3 +795,36 @@ The mechanism is one integer: `lib/rtl/pythreadlive.pas`, incremented by
 `Thread.start` and decremented when a thread's body returns. It is a unit of its
 own so that `import queue` does not drag `palthread` — and therefore
 `--threadsafe` — into a single-threaded program.
+
+## `time.sleep()` of a negative duration returns instead of raising
+
+*Measured 2026-09-11 (frankuser), writing `lib/rtl/mimic_time.pas`.*
+
+CPython raises `ValueError: sleep length must be non-negative` (verified against
+3.14). `mimic_time.sleep` returns immediately instead. `sleep(0)` returns at once
+in both.
+
+This is inside the file's rule rather than an exception to it: **CPython rejects
+that program**, so no program CPython accepts can observe the difference.
+
+The reason to take the latitude rather than match it is the idiom it protects:
+
+```python
+time.sleep(deadline - time.monotonic())
+```
+
+which goes negative exactly when the loop is already behind — so raising there
+turns a frame the program was late for into a crash, at the moment the program
+was already struggling. Feeding a negative `tv_nsec` to `nanosleep(2)` is EINVAL
+besides, so the alternative to deciding this deliberately is deciding it by
+accident in the syscall.
+
+**The asymmetry is real and is the point**: code written for CPython behaves
+identically here, and code written against this does not port back unchanged.
+That is the one direction this project allows.
+
+Consequence for testing, and it generalises: `test/lib_mimic_time.npy` is a
+differential whose `.expected` IS CPython's output, so it carries **no negative
+row** — an oracle that raises cannot produce an expected line. A divergence in
+this direction is by construction untestable by differential, and has to be
+asserted separately or not at all.

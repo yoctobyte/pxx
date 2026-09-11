@@ -1,0 +1,8 @@
+monotonic does not go back    True
+monotonic origin is not epoch True
+time is an epoch              True
+time does not go back         True
+sleep(0.05) >= 0.04           True
+sleep(0.05) < 1.0             True
+sleep(0) returned             True
+finer than a millisecond      True

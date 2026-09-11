@@ -1,0 +1,20 @@
+# The SHIM direction of the reserved-member mapping, which is the population the
+# fix for bug-n-a-module-member-named-like-a-pascal-keyword-is-uncallable could
+# have broken and which had no coverage at all before it.
+#
+# reservedshim.pas declares END_, TEXT_, set_ and type_ because Pascal reserves
+# the plain spellings. An application writes the plain ones; PyMapReservedMember
+# maps them. That mapping is now conditional -- it fires only where the
+# underscored name really exists in the target unit -- so a regression that
+# narrowed it to "never" would leave the shim convention silently unreachable,
+# and every OTHER test of this area would still pass, because they all exercise
+# modules that declare the plain spelling.
+#
+# Not runnable under python3: reservedshim is a Pascal unit, so the expectations
+# here are written out rather than diffed against CPython.
+import 'reservedshim.pas' as rs
+
+print(rs.END)
+print(rs.TEXT)
+print(rs.set(4))
+print(rs.type(4))

@@ -1,0 +1,49 @@
+# A module member whose name is a word PASCAL reserves -- `set`, `type`, `end`,
+# `file`, `label` -- is ordinary Python, and the unit-qualified member lookup
+# rewrote it unconditionally to a trailing-underscore spelling.
+#
+# That convention is a LIBRARY's: a Pascal shim cannot declare a constant called
+# END, so it declares END_ and PyMapReservedMember maps the application's
+# spelling onto it. A NilPy module compiled as a unit is under no such
+# constraint, so `def set` registers as `set` and the rewrite made the lookup
+# miss BY CONSTRUCTION -- for eleven names, `set` and `type` among them, which
+# are common enough in real Python that the bug was found on a demo
+# (lekkerzeilen's `world.label(...)`).
+#
+# What made it expensive to recognise: only the direct CALL form failed. The
+# member resolved fine as a VALUE, so `print(m.set)`, `f = m.set` and
+# `getattr(m, "set")(3)` all compiled and all answered correctly, and the
+# diagnostic said "no member set came of the qualifier" -- which reads as an
+# import that bound nothing, the one cause its own text names.
+#
+# This runs unchanged under python3 and the .expected IS python3's output, so
+# every row here is a differential rather than a hand-written expectation.
+import nilpy_reserved_members as m
+
+print(m.set(4))
+print(m.type(4))
+print(m.label(4))
+print(m.record(4))
+print(m.array(4))
+print(m.end(4))
+print(m.div(4))
+print(m.mod(4))
+print(m.string(4))
+print(m.file(4))
+print(m.text(4))
+
+# A different defect with the same symptom: this one never reached the lookup,
+# because the qualified form took the Pascal `inherited` construct arm and
+# answered "inherited call outside method".
+print(m.inherited(4))
+
+# Not reserved anywhere -- if this row fails the harness is not reaching the
+# module at all, and none of the rows above mean what they appear to mean.
+print(m.ordinary(4))
+
+# The ordering rows. The module declares `set` AND `set_`; the plain spelling
+# must win, which is the arrangement that catches a first-wins table preferring
+# the mapped name. Asserted LAST on purpose -- put these first and the rows
+# above pass under either order.
+print(m.set_(4))
+print(m.set(4), m.set_(4))
