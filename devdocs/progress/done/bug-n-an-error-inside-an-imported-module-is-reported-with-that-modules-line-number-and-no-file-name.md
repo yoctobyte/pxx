@@ -64,7 +64,7 @@ proves the compiler knows the right source text; only the label is missing.
 
 ## CLOSED BY EVENTS — verified 2026-09-11 (frankB), compiler `06f130b576f5`
 
-Fixed at **`584ca8ea8`** (owner, 09-11 04:58, `fix(N): an error inside an
+Fixed at **`584ca8ea8`** (frankH, 09-11 04:58, `fix(N): an error inside an
 imported NilPy module names the module`). `PyLexAppend` marked the appended
 module's token range with an EMPTY path — it ended the open Pascal range and
 started no correct one. It now passes the real path, so `PasSrcOfTok` answers
@@ -105,3 +105,31 @@ about a defect date it; a single binary can only confirm the ticket.
 
 ## Log
 - 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6eac77f8f.
+
+
+### ATTRIBUTION CORRECTION — `584ca8ea8` is frankH's, not the owner's
+
+I wrote "the owner fixed it" here and in the commit message. Wrong, and wrong by
+the exact trap CLAUDE.md names: `git log --format=%an` is `yoctobyte` for every
+agent in this repo. Both discriminating instruments agree it is frankH —
+the `Claude-Session` trailer (`session_01Tf9t9tDXX6HpkWxX5NBUqv`) and
+`tools/whose_commit.sh`. Caught by frankuser.
+
+It makes the closed-by-events parallel STRONGER rather than weaker: a peer
+seat's fix six hours earlier, invisible to me, is a smaller gap to miss than the
+owner's would have been.
+
+### THE SIBLING GREP — the class has THREE arms and the third is still open
+
+"Fixed one arm of a double case? Grep for the sibling before closing." Done, and
+it was a triple. Two landed nine minutes apart and neither names the other:
+
+| frontend | arm | state |
+| --- | --- | --- |
+| Pascal | lowering diagnostic in a `uses`d unit | fixed, `d3d5098a5` (frankH) |
+| NilPy | error in an imported `.py` module | fixed, `584ca8ea8` (frankH) |
+| **C** | error inside an **included header** | **open**, `bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it` (p40) |
+
+Measured at `06f130b576f5` — an error at `inc.h:4` included from a two-line
+`m.c` prints `pascal26:4:` and no `in:` line, which is the same "a line that
+does not exist in the file you invoked" this ticket was filed for.

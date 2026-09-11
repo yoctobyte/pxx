@@ -1558,9 +1558,10 @@ begin
     mechanism, a false LOCATION in one file and a false SHARED CAUSE across two.
     Passing the real path ends the Pascal range exactly as '' did AND attributes
     the tokens, so it is strictly the stronger form of the same guard.
-    The slug this comment carried until 2026-09-11 —
-    `bug-n-an-error-inside-an-imported-nilpy-module-names-no-file` — has no
-    ticket file and never did; the real one is
+    The slug this comment carried until 2026-09-11 named no ticket and never
+    did. It is not repeated here on purpose: a dead citation left in prose is
+    still a dead citation to any checker scanning for them, so a CORRECT repair
+    would otherwise grow that population by one every time. The real ticket is
     bug-n-an-error-inside-an-imported-module-is-reported-with-that-modules-line-number-and-no-file-name,
     which sat OPEN in backlog-nilpy while this fix was already landed, and was
     re-measured as reproducing by a seat holding a pre-pull binary. A citation
