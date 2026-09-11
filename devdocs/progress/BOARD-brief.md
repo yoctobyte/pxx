@@ -80,6 +80,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
+- `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - `[p 85] [P]` bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all (unblocks 1)
 - `[p 85] [B]` feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
-- `[p 70] [C]` regression-test-core-c-alloca-expression-stack
 
 _432 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

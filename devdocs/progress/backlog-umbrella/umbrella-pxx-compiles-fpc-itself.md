@@ -8,7 +8,7 @@ owner: ""
 created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
-blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, feature-p-unaligned-is-a-transparent-lvalue-not-a-function, bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all, bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body, feature-p-the-element-count-form-of-initialize-and-finalize, bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant, feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags]
+blocked-by: [feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant, feature-p-unaligned-is-a-transparent-lvalue-not-a-function, bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all, bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body, feature-p-the-element-count-form-of-initialize-and-finalize, bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant, feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags]
 summary: "Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at 4c7c88d36 (attempt 7, probe #12): 20 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 177 fail. THE FOUR CONSECUTIVE NULL ROWS ENDED AND THEY ENDED CHEAPLY: cclasses.pas compiles, and the per-unit join says the +3 is exactly that unit plus its two direct dependents (crefs, rabase) -- so clearing the wall 150 units were stacked on was worth THREE, which is this umbrella's own queue-position finding confirmed rather than refuted. It took two bugs, both found by converting one halting diagnostic to ErrorRecover so a unit reports EVERY failure instead of the first: a method parameter typed through a forward pointer alias never matching its own body (ee560d0ad), and the element-count form of Initialize/Finalize (d095cb08d), which had been a DELIBERATE refusal. SEVEN walls cleared now; BOTH-OK has gone 9 -> 15 -> 15 -> 15 -> 15 -> 18. The top wall is now `unknown type: TExecuteFlags` at cfileutl.pas:136, 127 units, and it is NOT a parser gap -- sysutils has no ExecuteProcess, filed by frankH on 2026-09-09 as feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags and now carrying a dated note with the new count. DO NOT RANK IT ON 119: attempt 7 measured the conversion rate of a cleared wall at three units. A second row went the same evening -- a set-valued record field (138604b5e), which is how tokens.pas writes its ~400-row token table -- and probe #12 says it bought TWO (tokens, rescmn) while eight more moved up to the TExecuteFlags wall. THREE WALLS, THREE JOINS, YIELDS OF 3 AND 2: a wall's population says how many units are QUEUED behind it, and the units that turn BOTH-OK are the ones for which it was the LAST wall. Near-disjoint sets; only the second is worth a number."
 ---
 
@@ -628,3 +628,44 @@ NAME only and says so in its own comment; the expression path handles a variable
 and `SizeOf(d)` in a statement answers 8 correctly. Reduced to ten lines and
 left unfixed here rather than folded in — the honest fix is narrow but it is in
 a 300-line intrinsic and deserves its own pass.
+
+## 2026-09-11, frankH — two blockers closed, and the wall census gets a fourth null row
+
+Both were taken from this umbrella's `blocked-by`, both are Track P, and the
+combined corpus movement is **one unit advanced to the next wall and zero units
+compiling.** That is the fourth independent time this umbrella has measured that
+shape, and it is worth one line rather than another paragraph: the finding is no
+longer news, it is the baseline expectation.
+
+**`bug-p-sizeof-of-a-variable-is-not-folded-in-a-constant-expression`** —
+`sizeof(<a variable>)` in a const expression (FPC entfile.pas:371). Fixed; 4
+units stopped there and none of them compiles now either.
+
+**`bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal`**
+— this one was **two defects plus a fourth hop the ticket had not traced**, and
+that is the part worth carrying forward:
+
+- pxx did not SHORT-CIRCUIT `and` in a `{$if}`. FPC's `declared(X) and (X<>Y)`
+  idiom exists BECAUSE it short-circuits, and a shunting-yard applies the
+  parenthesised comparison first. Nobody had filed it. It is a real bug with an
+  oracle and it moves **zero** units, because 17 of FPC's 18 cpubase files DO
+  declare `RS_STACK_POINTER_REG` — the portable idiom is portable, so the
+  portable path is nearly never taken in this corpus.
+- The const door then needed four hops, because the LEFT operand chains too:
+  `RS_STACK_POINTER_REG = RS_RSP` across two units, and `high()` over a
+  distinct-type alias. **rgobj CLEARS this wall** and stops at cfileutl.pas:136,
+  which is `TExecuteFlags` — the 127-unit wall already at the top of this
+  umbrella.
+- `nld` and `ncnv` did NOT move; they are the set-membership shape, now split
+  out as
+  [[bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant]]. They
+  are also **one directive, not two** — ncnv's interface `uses nld`.
+
+**THE SPLIT IS THE TRANSFERABLE PART.** One ticket carried both shapes and their
+sizes differ by an order of magnitude: the half that landed reused walks that
+already existed and added no value kind, while the half split out needs a fourth
+value kind on the directive stack, set-union folding, enum-member resolution and
+an `in` operator the grammar does not have. A summary cannot be true about both,
+and this umbrella ranks by `blocked-by` edges — so a mixed ticket prices the
+cheap half at the expensive half's cost, in the one place where the price is what
+gets read.
