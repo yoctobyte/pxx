@@ -1352,6 +1352,27 @@ test-nilpy: $(COMPILER)
 	# file's line 8; an error inside an imported module prints no file name.
 	./$(COMPILER) test/test_nilpy_a_same_named_rtl_unit_no_longer_answers_a_relative_import.npy $(TESTTMP)/test_nilpy_rtlshadow26
 	tools/expect_same.sh test_nilpy_rtlshadow26 "$$($(TESTTMP)/test_nilpy_rtlshadow26)" "$$(python3 test/test_nilpy_a_same_named_rtl_unit_no_longer_answers_a_relative_import.npy)"
+	# ...AND A MODULE NAMED BY AN IMPORT STANDING AFTER A FAILED ONE IN THAT SAME
+	# ARM MUST NOT BE COMPILED AT ALL. It was, and its errors escaped: the seam's
+	# `from . import _ctypes_backend as _backend` sits one line below a failing
+	# `import ctypes`, so we parsed a module CPython never imports and reported
+	# its own `ctypes.c_uint` as `pascal26:181:` -- the dead module's line, no
+	# file name -- against a platform/__init__.py that is 150 lines long.
+	# NOT the sibling case PyParseFallbackImportTry's header already records: a
+	# module that resolved BEFORE the failing one stays loaded, which is unused
+	# weight in the binary. Opposite side of one statement, and a wall not weight.
+	# The dead modules fail on a MEMBER READ and an UNDEFINED NAME, deliberately:
+	# a soft import miss inside a pulled module IS absorbed by the machinery under
+	# test, so a fixture whose dead module merely failed to import would have
+	# passed for as long as the bug existed.
+	# THE LIVE ARM IS THE CONTROL AND IT IS IN THE SAME RUN -- without it the fix
+	# could be "never resolve a guarded arm's module", which passes every other
+	# row here and breaks every program that has the module it asked for.
+	# POSITIVE CONTROL MEASURED against pin 095ef4811a5b: refuses with
+	# `no member c_uint came of the qualifier ctypes` at `pascal26:7:`, which is
+	# nilpy_deadarm/deadctypes.py line 7 and not this file's.
+	./$(COMPILER) test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy $(TESTTMP)/test_nilpy_deadarmcompile26
+	tools/expect_same.sh test_nilpy_deadarmcompile26 "$$($(TESTTMP)/test_nilpy_deadarmcompile26)" "$$(python3 test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy)"
 	# The builtin Warning hierarchy. These are BUILTINS, not members of the
 	# `warnings` module -- calling code names them bare and, far more often,
 	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no

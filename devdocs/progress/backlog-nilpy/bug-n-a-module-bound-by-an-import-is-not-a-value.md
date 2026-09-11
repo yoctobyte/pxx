@@ -9,7 +9,7 @@ created: 2026-09-10
 found-by: frankB
 tags: [nilpy, imports, lekkerzeilen, values]
 blocked-by: []
-summary: "`from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against. FORK ANSWERED 2026-09-11: NO runtime module object is required. The whole population is 5 sites in ONE file (3 static member reads, 2 getattr); `import ... as` already serves the 3, and the 2 getattr sites need a compile-time special form (measured: getattr on a unit alias fails at the ARGUMENT, not the lookup). The claim that `_backend` is read from four other modules is FALSE -- those read the public surface assigned from it. Recommended: getattr special form + seam rewritten with `as`."
+summary: "THE DESIGN FORK IS ANSWERED (2026-09-11, frankZ, last section): under the `from . import X as _backend` spelling EVERY STATIC ROW IN THE SEAM ALREADY PASSES and `getattr` over a unit alias is the ONLY construct left in lekkerzeilen/platform/__init__.py -- measured by rewriting the seam and walking the wall (`:95 _pxx` -> `_ctypes_backend.py:181` -> `:108 getattr`), not by enumerating call sites. So this needs OPTION 3 (fold `getattr(<unit alias>, \"<literal>\", <default>)` at compile time; receiver, name and miss are all decidable) and NOT a runtime module object, which no site in this corpus requires. The getattr door cannot see a unit qualifier at all today: `pyparser.inc:46680` calls ParseExpr on the receiver first, so `undefined variable (backend)` is raised before its own logic runs -- the intercept goes before that ParseExpr and `UnitDeclaresNameExactly` (symtab.inc:1117) is the non-erroring existence test. The middle wall above was a COMPILER BUG, now fixed ([[bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports]]), so any earlier measurement of this seam reporting a line past the end of a 150-line file was reading a dead module. AND THIS TICKET OVERSTATED OPTION 2'S COST: `_backend` appears in ONE code file; the four other modules read the seam's EXPORTED names (`from .platform import gl`), which are ordinary attributes and are unaffected by how `_backend` was bound. One file, not five. ORIGINAL REPORT: `from . import two` then `return two, \"pxx\"` -> `undefined variable (two)`. The module BINDS and `two.B` reads correctly; what fails is the bare name in VALUE position. A pxx module is a UNIT and a unit is not a first-class value, so there is nothing to push. This is the wall immediately behind bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved on lekkerzeilen/platform/__init__.py, whose seam returns the selected backend AS A VALUE (`return _pxx, \"pxx\"`) and then reads members off the variable holding it (`gl = _backend.gl`). Both halves are needed and the second is the larger: a variable holding a module has no type today that an attribute lookup could resolve against."
 ---
 
 # Measured 2026-09-10, compiler `ca814b0aabcc`, tree at `5fb6e3d57` + the dead-path fix
@@ -361,3 +361,77 @@ line number and no file name against a 150-line file. CPython never imports it.
 Fixed at `PyParseImportUnitAs`. Worth knowing because it means any earlier
 measurement of this seam that saw a line number past the end of
 `platform/__init__.py` was looking at a dead module, not at this ticket.
+
+## THE FORK IS ANSWERED BY MEASUREMENT, NOT BY ARGUMENT — frankZ, 2026-09-11
+
+**Written before the two sections above landed, and they reached the option-2
+correction first and by a different route.** frankuser ran a written filter over
+the corpus; I read the seam and then walked the wall. The `_backend`-is-one-file
+finding below is therefore NOT mine to claim — it is the same answer from two
+filters that fail differently, which is the only reason either of us should
+quote it. What this section adds that an enumeration cannot is the WALL WALK.
+
+The question this ticket's earlier addendum posed —
+
+> **Does part 2 have to serve `getattr` on a module, or only static member
+> reads?**
+
+— is now answered, and the method matters more than the answer. The earlier
+attempt at it ENUMERATED the seam's five call sites and reasoned that three were
+static. An enumeration can only miss what nobody thought to enumerate. This
+rewrote the seam and watched where the wall goes.
+
+**Three runs, one variable each, `lekkerzeilen/platform/__init__.py`:**
+
+| tree | wall |
+| --- | --- |
+| control | `:95 undefined variable (_pxx)` |
+| seam rewritten to `from . import X as _backend` | `_ctypes_backend.py:181 no member c_uint came of the qualifier ctypes` |
+| + [[bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports]] | `:108 undefined variable (_backend)` |
+
+Line 108 is `opener = getattr(_backend, "open_audio", None)`. So under the alias
+spelling **every static row in the seam passes** — `gl = _backend.gl`,
+`open_window`, `_backend.probe()` — and `getattr` over a unit alias is the only
+construct left in the file. Answer: **only `getattr`, and it is option 3.**
+
+Modules-compiling was **23 of 35 for all three runs.** The count is the wrong
+readout here and the wall identity is the right one; banked separately in the
+playbook as *"a flat count with a moved wall is progress the instrument reports
+as zero"*.
+
+### The middle wall was a compiler bug, not a property of the seam
+
+`_ctypes_backend.py:181` was reported against a `platform/__init__.py` that is
+150 lines long. A module named by an import standing AFTER a failed one in the
+same guarded arm was still compiled. Fixed; see the ticket linked above. **Any
+earlier measurement of this seam that reported a line past the end of
+`platform/__init__.py` was reading a dead module.**
+
+### What the `getattr` door can see today: nothing
+
+Measured. `getattr(backend, "name", None)` where `backend` is a unit alias fails
+with `undefined variable (backend)` raised inside `ParseExpr` on the RECEIVER —
+the `hasattr`/`getattr` arm at `pyparser.inc:46680` calls `ParseExpr` first, so
+its own logic never runs and never sees that the receiver is a unit. That is why
+nobody had looked: there is nothing at that door to look at. The intercept has
+to go BEFORE the `ParseExpr`, and `UnitDeclaresNameExactly(name, unitIdx)`
+(symtab.inc:1117) is the non-erroring existence test it needs.
+
+Both corpus sites are `getattr(<unit alias>, "<string literal>", <default>)` —
+receiver decidable, name decidable, miss has a value to answer with. No runtime
+module object is required by this corpus.
+
+### CORRECTION to this ticket's stated cost for option 2
+
+The ticket warns: *"`_backend` is a module global read from four other modules —
+every one of those reads has to become the alias too, or they wall on the same
+thing one file further out."* Measured at corpus `9030d09`:
+
+- the identifier `_backend` appears in exactly ONE code file, `platform/__init__.py`;
+- the four other modules read the seam's **exported** names — `from .platform
+  import gl`, `from .platform import KEY_DOWN, ..., gl`, `from . import
+  platform` — which are ordinary module-level attributes assigned once from
+  `_backend`.
+
+Those reads are unaffected by how `_backend` was bound. **Option 2's cost is one
+file, not five.**

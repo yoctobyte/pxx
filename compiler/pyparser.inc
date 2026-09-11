@@ -38831,6 +38831,39 @@ end;
   resolving under the unchanged Pascal rules. }
 procedure PyParseImportUnitAs(const name, lang: AnsiString);
 begin
+  { AN IMPORT STANDING AFTER A FAILED ONE IN THE SAME GUARDED ARM IS NOT
+    REACHED, AND RESOLVING IT COMPILES A MODULE CPYTHON NEVER IMPORTS. The arm
+    is already known dead here -- an earlier import in this run missed -- so the
+    only honest answer is the one a miss gives, and probing the filesystem can
+    only produce errors that belong to a branch nobody takes.
+
+    THE ERRORS ESCAPE, which is what makes this worth a flag rather than a note.
+    A soft miss inside the pulled module is absorbed by the machinery above; a
+    syntax error, an undefined name, or a member read on a qualifier that bound
+    nothing is not, and it is reported with the DEAD module's line number and no
+    file name, so the reader attributes it to the file they invoked. Measured
+    2026-09-11 against CPython, four bodies for one dead module, CPython
+    printing the handler's answer for every one of them: a well-formed body
+    compiled and agreed, and `def (((`, `X = undefined_name_xyz` and
+    `import ctypes / X = ctypes.c_uint` each killed the program.
+
+    lekkerzeilen's seam is the third of those exactly:
+
+        try:
+            import ctypes                              <- misses
+            from . import _ctypes_backend as _backend  <- compiled anyway
+        except ImportError:
+            from . import _pxx as _backend
+
+    SoftUnitMissed rather than silence, because the arm must keep reading as
+    missed for the rollbacks that follow -- the aliases this run registered are
+    dropped on exactly that flag.
+    bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports }
+  if SoftArmDead then
+  begin
+    SoftUnitMissed := True;
+    Exit;
+  end;
   PyImportLang := lang;
   ParseUsesUnit(name);
 end;
@@ -39036,6 +39069,9 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aliasStmtTok: Integer;      { THIS from-import statement's token index --
                                   the stamp the scan below matches on }
     runMissed: Boolean;         { did ANY import in this run miss? see below }
+    savedArmDead: Boolean;      { SoftArmDead is restored on the way out, so a
+                                  module pulled by a LIVE import may run its own
+                                  guarded blocks without inheriting ours }
 begin
   { SoftUnitMissed DESCRIBES ONE IMPORT, AND THIS RUN HAS MANY. PyParseOneImport
     has cleared it per statement since `from tkinter import ttk` lost its alias
@@ -39053,11 +39089,18 @@ begin
     branch — so the answer is accumulated here and restored on the way out.
     ANY import missing kills the block; WHICH one missed is per-import.
     bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias }
+  savedArmDead := SoftArmDead;
   runMissed := SoftUnitMissed;
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
     if SoftUnitMissed then runMissed := True;
     SoftUnitMissed := False;
+    { ...AND ONCE ONE OF THEM HAS MISSED, THE REST OF THE ARM IS DEAD CODE.
+      Only in a SOFT run: outside a `try:` a miss is a hard error at the import
+      itself, so there is no later statement to protect. Set per iteration from
+      the accumulator rather than latched, so the flag says what is true at THIS
+      statement. See PyParseImportUnitAs for what it prevents. }
+    SoftArmDead := savedArmDead or (SoftUnitResolve and runMissed);
     if PyIsIdent('from') then
     begin
       Next;
@@ -39504,6 +39547,7 @@ begin
   { restore the run's answer: ANY import missing kills the block }
   if SoftUnitMissed then runMissed := True;
   SoftUnitMissed := runMissed;
+  SoftArmDead := savedArmDead;
 end;
 
 { Every TOP-LEVEL import in the file, wherever it sits. The leading run handles

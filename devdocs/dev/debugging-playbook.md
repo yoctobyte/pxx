@@ -24224,6 +24224,111 @@ the decision is taken. Neither control was weak and neither was drawn from the
 wrong population. **A control can only exonerate what it SHARES with the
 subject** — so before letting one narrow the search, name what it does NOT share.
 
+## `set -e` TURNS A TEST'S OWN NEGATIVE CONTROL INTO A HARNESS FAILURE, AND THE TELL IS THAT ONLY THE ROWS DESIGNED TO FAIL FAIL
+
+Measured 2026-09-11 (frankZ). A sibling of *"every instrument that lies, lies by
+being correct about something else"*, with one twist that makes it hard to see:
+the something else is the **RUNNER**, not the subject. The subject was fine
+throughout.
+
+**The case.** A `make` recipe's rows were being re-run outside `make` (the target
+was aborting on an unrelated red partway down, and `make -k` cannot help when
+every row is a line of ONE target). `make -n` gives the expanded commands, so
+they were run as a script under `sh -e`. It stopped almost immediately, at a row
+that passes.
+
+The rows that carry a positive control look like this — a compile that MUST
+fail, whose failure is the assertion:
+
+```sh
+out=$(./compiler/pascal26 $T/probe.npy $T/out 2>&1); \
+ rc=$?; \
+ test "$rc" = "1" && printf '%s\n' "$out" | grep -q 'undefined variable (deadonly)' \
+  || { echo "FAIL - rc=$rc (want 1)"; exit 1; }
+```
+
+**Under `set -e`, the assignment `out=$(...)` aborts the shell when the
+substitution exits nonzero** — before `rc=$?` runs, before the `test` that was
+going to check it, before the `||` that was going to report it. Every row whose
+whole point is that a command fails becomes a harness abort. `make` does not do
+this: it hands each recipe line to `sh -c` and reads the LINE's status, and the
+line as written returns 0.
+
+**Why it survives a careful reading.** The script is a faithful copy of the
+recipe — nothing was retyped, nothing was paraphrased — and the failure lands on
+a real row with a real command. Both readings ("the row is red" / "the harness
+aborted") produce an early exit with no output, and the first is the one you came
+looking for.
+
+**The tell is the population of failures.** They land exactly on the rows
+DESIGNED to fail and nowhere else. If a run's failures are all negative
+controls, suspect the runner before the subject.
+
+**The fix is to run each line the way `make` does:** split on lines not ending
+in `\`, hand each chunk to one `sh -c`, and check that chunk's status. Not
+`sh -e` over the lot, and not `;` between stages either — which is the opposite
+error CLAUDE.md already records, a precondition you do not branch on.
+
+### AND THE SIBLING THAT PRODUCED IT: A RANKED LIST IS A POPULATION CLAIM WEARING AN ANALYSIS
+
+Same evening, frankuser, and it belongs beside the above because both are
+instruments that report confidently about the wrong thing. A red floor was
+ranked by frequency and the top rows quoted as the floor: **7 jobs, where the
+real count was 13.**
+
+Truncating by attention at least LOOKS partial. **Ordering manufactures the
+appearance of completeness**, and frequency ordering does it worst, because the
+tail is by construction the part that looks safe to drop. It had a second
+property nobody looked for: the tail was where the jobs from other subsystems
+lived, so truncating by frequency also truncated by SUBSYSTEM — the floor read
+as one lane's problem.
+
+**Nothing in the output says where it was cut.** Print the count beside the list,
+or print the list whole.
+
+## A FLAT COUNT WITH A MOVED WALL IS PROGRESS THE INSTRUMENT REPORTS AS ZERO
+
+Measured 2026-09-11 (frankZ, lekkerzeilen umbrella), and it is the other side of
+the null-row rule CLAUDE.md already carries. That one says a count of subjects
+naming a blocker is not a count of work, because the walls BEHIND the reported
+one are invisible. This says the same instrument hides the opposite thing: **a
+subject that advances through two walls and stops at a third reports as
+unchanged**, because the readout is "does it compile" and the answer is still
+no.
+
+**The case.** Three measurements on `lekkerzeilen/platform/__init__.py`, one
+variable changed at a time, modules-compiling **23 of 35 every time**:
+
+| change | wall after it |
+| --- | --- |
+| (control) | `:95 undefined variable (_pxx)` — a module used as a value |
+| seam rewritten to `from . import X as _backend` | `_ctypes_backend.py:181 no member c_uint came of the qualifier ctypes` |
+| dead-arm modules no longer compiled | `:108 undefined variable (_backend)` — `getattr` on a unit alias |
+
+Read as a count, nothing happened three times and two changes look worthless.
+Read as a wall identity, the file walked from a design fork nobody had priced,
+through a compiler bug in a different routine, to a single decidable construct —
+and the third wall is what ANSWERED the design fork, because a wall that lands
+on the `getattr` after the alias spelling has handled everything else is a
+measurement rather than an inventory of call sites.
+
+**Why the flat number is the persuasive one.** It agrees with the prior. "Import
+walls are structurally over-represented and clearing them moves nothing" is a
+true, measured, well-earned rule in this repo, and a zero delta confirms it
+without effort. The wall identity is the only thing that separates *this change
+did nothing* from *this change cleared two of the three things in the way*, and
+it costs one column.
+
+**The practice:** record the WALL, not the count, and diff the wall per subject
+across runs. A subject whose wall moved is a result even when the total is
+identical — and a subject whose wall is UNCHANGED after a fix aimed at it is the
+real null row, which a total can never show you either.
+
+**And the corollary that catches a wrong claim of credit:** a moved wall is also
+how you notice a delta that is not yours. Two of the rows above moved in a range
+that included another seat's landing, and only the wall text — not the count —
+made that attributable.
+
 ## TWO TESTS WITH FULL MARGINAL COVERAGE AND AN EMPTY INTERSECTION — each one looks like the test that would have caught it
 
 Sibling of *"Do not read a green as coverage"* and of *"a comparison between two

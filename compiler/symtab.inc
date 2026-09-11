@@ -16482,7 +16482,19 @@ begin
       Scoped to sonames the COMPILER INVENTED from a file name — see
       CSynthMissingLibs in defs.inc. A name the user wrote is intent, and
       LD_LIBRARY_PATH makes an absent-from-cache library a legitimate,
-      in-tree-tested configuration. }
+      in-tree-tested configuration.
+
+      AND IT REFUSES SOME NAMES THAT LOOK INSTALLED, ON PURPOSE — IT IS THE
+      LOADER CACHE THAT DECIDES, NOT THE FILESYSTEM. A bare `libfoo.so` with no
+      version suffix is a -dev symlink; `ld.so` does not resolve it at run time,
+      so a DT_NEEDED naming it produces a binary that loads on the build box and
+      on no box without the -dev package. Measured 2026-09-11 (frankuser),
+      pointing this guard at four RTL units whose names collide with a system
+      header: `png` is REFUSED although /usr/lib/x86_64-linux-gnu/libpng.so
+      exists, and `menu` BUILDS with a DT_NEEDED on libmenu.so.6 — a versioned
+      soname the cache actually answers for. That asymmetry is the guard working,
+      not a false positive, and it is written down here because it reads as one
+      until you check which of the two files the loader would accept. }
     if (ProcLibrary[procIdx] >= 0) and
        CSynthMissingHeaderFor(Strs[ProcLibrary[procIdx]].Text, synthHdr) then
     begin

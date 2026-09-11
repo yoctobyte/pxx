@@ -1,0 +1,49 @@
+# A module named by an import standing AFTER a failed one, inside the same
+# guarded arm, was still COMPILED -- and the errors inside it escaped.
+#
+#     try:
+#         import ctypes                              <- misses
+#         from . import _ctypes_backend as _backend  <- compiled anyway
+#     except ImportError:
+#         from . import _pxx as _backend
+#
+# CPython never imports that module: the arm dies at the first line. We resolved
+# every import in the arm regardless, so `_ctypes_backend.py` was parsed and its
+# own `ctypes.c_uint` was reported -- as `pascal26:181:`, with the DEAD module's
+# line number and no file name, against a `platform/__init__.py` that is 150
+# lines long. lekkerzeilen/platform/__init__.py plus three modules behind it.
+#
+# NOT THE SIBLING CASE, which PyParseFallbackImportTry's own header already
+# records and which is BENIGN: a module that resolved BEFORE the failing one
+# stays loaded, i.e. unused weight in the binary. A module resolved AFTER it
+# raises that module's errors out of a branch nobody takes, which is a wall and
+# not weight. Same routine, opposite side of one statement.
+#
+# WHY THE ERROR CLASSES ARE MIXED ON PURPOSE. A soft import miss inside the
+# pulled module IS absorbed by the machinery under test, so a fixture whose dead
+# module only fails to import would have passed for as long as the bug existed.
+# `deadctypes.py` fails on a member read and `deadname.py` on an undefined name;
+# neither is absorbed by anything. Measured before the fix: a well-formed dead
+# module compiled and agreed with CPython, and `def (((`, an undefined name, and
+# the ctypes shape each killed the program.
+#
+# THE LIVE ARM IS THE CONTROL AND IT IS IN THE SAME RUN. Without it the fix
+# could be "never compile a guarded arm's module", which would pass every row
+# above and break every program that has the module it asked for.
+#
+# CPython is the oracle. The guarded module is a name NEITHER runtime has, so
+# both take the handler and every row is a cross-check rather than a divergence.
+
+from nilpy_deadarm import kind, backend, other_kind, other, live_kind, live
+
+# The corpus shape: the dead arm's module does not compile, and must never be
+# asked to. `who()` is a CALL, not a constant, because two modules that came to
+# agree on a constant would be indistinguishable through one.
+print("dead-member", kind, backend.SHARED, backend.who())
+
+# The second error class, which no import-miss absorbs.
+print("dead-name", other_kind, other.SHARED, other.who())
+
+# The control: this arm's guarded import RESOLVES, so its module must be
+# compiled and must win.
+print("live-arm", live_kind, live.SHARED, live.who())
