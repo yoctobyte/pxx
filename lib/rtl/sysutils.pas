@@ -546,9 +546,14 @@ function sLineBreak: AnsiString;
   MEASURED on seven, not inferred -- `undefined variable (SetString)` in
   external/synapse/synautil.pas took out all three lib_synapse rows, and
   `undefined variable (UTF8Encode)` in testjsondata.pp took out test-fpjson.
-  Those four rows are named first in every one of the 62 consecutive auto-pin
-  refusals, so the cliff this minted was also blocking the pin that would have
-  ended it.
+  Those four rows are named FIRST in every refusal that names them at all -- 41
+  of 64 post-arming verdicts when this was written, and N is still growing,
+  because the watcher is still publishing. The other 23 are led by
+  optdiff#shard0/12, which no RTL change can clear. So the cliff this minted was
+  blocking the pin for 41 of them and the pin was never one fix away: quote the
+  shape (whenever these rows appear they lead) and not a bare count, because a
+  reader who re-derives a live denominator cannot tell a stale figure from a
+  wrong one.
   ALL SIX ARE RESTORED, not just the two that were measured. The population for
   "who calls this" is everything the PINNED build compiles, external corpora
   included, and external/ is absent on plexus -- so it cannot be enumerated
