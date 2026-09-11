@@ -28,6 +28,27 @@ someone's import silently binds a header months later.
     tools/py_surface_is_reachable.py --selftest    # its controls only
     tools/py_surface_is_reachable.py --self-check  # controls THEN the check
                                                    # (what gate.sh runs)
+
+WHAT THIS GUARD CANNOT SEE, measured 2026-09-11 and stated because the docstring
+above reads broader than the instrument is. `MARSHALLING` is a PARTIAL proxy for
+"has a Python surface": **5 of the 17 listed units carry zero marshalling hits** --
+collections, math, pathlib, random, tempfile -- and all five are genuinely the
+Python module of their name. They need no marshalling types because their surface
+is plain-typed: `math.gcd(12, 18)` takes Integers and returns one. So this guard
+catches a unit whose Python surface USES TPy*/pyvar_* and is unreachable (the zlib
+class, which is the one that bit us), and it is BLIND to a plain-typed Python
+surface that is unreachable. A `lib/rtl/foo.pas` exposing `foo.bar(x: Integer)` as
+a Python entry point, unlisted, would pass this check and still bind
+/usr/include/foo.h.
+
+AND THE INVERSE DIRECTION IS THEREFORE UNWRITABLE FROM THIS SIGNAL. "A name is
+listed but its unit has no Python surface" would be the right guard against
+reading the curated list as a COLLISION TABLE -- the error frankB's fixture
+comment made on 2026-09-10, which would have led someone to add menu, netdb, png
+and regex to the list. Written against `MARSHALLING` it is BORN RED with those
+same five names, which is the "an assertion written from a prediction pins the
+prediction" failure. It needs a real signal for "this unit intends a Python
+surface" and there is none today. Do not add it on this proxy.
 """
 import os, re, sys
 
@@ -106,8 +127,13 @@ def main():
 
     bad = scan(listed)
     if not bad:
-        print("py_surface: OK -- every lib unit with a Python surface is reachable "
-              "(%d names listed)" % len(listed))
+        # Scoped deliberately: this says nothing about a PLAIN-TYPED Python
+        # surface, which carries no marshalling types and which this check
+        # cannot see. See the module docstring. 5 of the listed units are in
+        # that category, so the blindness is the common case, not a corner.
+        print("py_surface: OK -- every lib unit with a MARSHALLING-using Python "
+              "surface is reachable (%d names listed; plain-typed surfaces are "
+              "not checked)" % len(listed))
         return 0
 
     print("py_surface: FAIL -- %d unit(s) carry Python marshalling types but no "
