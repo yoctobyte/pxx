@@ -1512,6 +1512,33 @@ test-nilpy: $(COMPILER)
 	# ignored the local shadow would move that row.
 	./$(COMPILER) test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy $(TESTTMP)/test_nilpy_unitgetattr26
 	tools/expect_same.sh test_nilpy_unitgetattr26 "$$($(TESTTMP)/test_nilpy_unitgetattr26)" "$$(python3 test/test_nilpy_getattr_over_a_unit_alias_is_folded.npy)"
+	# `try: import X / except ImportError: / else:` -- the else was LOST when the
+	# try body was an import, and lost loudly (`expected expression` on the else
+	# line) because a guarded import is decided at COMPILE time and that path had
+	# no else case. TWO LAYERS HAD TO LEARN IT and either alone leaves a defect:
+	# PyParseFallbackImportTry consumes the else (skipping it on the missed arm,
+	# folding it onto the body on the resolved one), and PyPreScanImports -- which
+	# resolves every import in the file with no notion of reachability -- now
+	# knows which ARM is dead and skips it.
+	# WHY THE SECOND LAYER IS NOT OPTIONAL, measured 2026-09-11: with only the
+	# parser taught, this fixture COMPILES and answers `hit ('else', 'fallback',
+	# 2)` where CPython says `selected` -- the dead handler's unit alias, bound by
+	# the prescan and winning on FIRST-WINS. An `else:` is what exposes that: in
+	# the ordinary no-else idiom the LIVE arm is lexically first in both outcomes
+	# and wins by position, so the same defect is invisible. Silent, exit 0.
+	# THE ARMS BIND A UNIT ALIAS, NOT A SYMBOL, and that is deliberate -- see the
+	# header of test/nilpy_tryelse/__init__.py: a dead arm's imported SYMBOL still
+	# binds at module scope (the prescan resolves it, no else required), which is
+	# bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
+	# and would red this row for a defect it is not about.
+	# NO ROW GUARDS ON ctypes: the construct's real use is backend selection,
+	# where CPython resolves ctypes and pxx does not -- oracle and subject would
+	# run DIFFERENT arms and the differential could never fail.
+	# POSITIVE CONTROL, measured 2026-09-11 against 785b25831252 (both halves
+	# reverted): `pascal26:29: error: expected expression`, in the fixture's own
+	# package, so the row cannot pass on the pre-fix compiler at all.
+	./$(COMPILER) test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy $(TESTTMP)/test_nilpy_tryelse26
+	tools/expect_same.sh test_nilpy_tryelse26 "$$($(TESTTMP)/test_nilpy_tryelse26)" "$$(python3 test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy)"
 	# THE PAIR: dead-arm alias suppression AND the getattr fold, in ONE fixture,
 	# because each half alone passes every row a test of the other would write.
 	# The fold resolves through FindUnitOrAlias, which is FIRST-WINS

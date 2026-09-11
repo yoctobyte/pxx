@@ -22133,7 +22133,7 @@ function PyParseFallbackImportTry: Integer;
   in the block runs at all), and a module that resolved before the failing one
   stays loaded — an unused unit in the binary, since the handler rebinds whatever
   it needs. feature-nilpy-fallback-import. }
-var body, savedHoist, savedAliases: Integer;
+var body, savedHoist, savedAliases, elseBody, tail: Integer;
     handlerExits: Boolean;
 begin
   savedHoist := PyHoistHead;
@@ -22210,6 +22210,22 @@ begin
     Expect(tkIndent, 'indent');
     body := PyParseBlock;
     Expect(tkDedent, 'dedent');
+    { AN `else:` DOES NOT RUN WHEN THE HANDLER DID, so it is skipped rather than
+      compiled — and it is skipped rather than merely left alone, because an
+      unconsumed `else` arrives at the caller as a statement and dies there as
+      `expected expression`, naming the else line for a decision made at the
+      import. Consumed BEFORE the dead-tail skip below: that one runs only when
+      the handler exits, so without this an `else` after a non-exiting handler
+      reaches the caller untouched. Skipped, never parsed — parsing resolves
+      imports, and this block is on the branch the program does not take.
+      bug-n-try-except-else-does-not-parse-when-the-try-body-is-an-import }
+    PySkipNewlines;
+    if CurTok.Kind = tkElse then
+    begin
+      Next; Expect(tkColon, ':'); Expect(tkNewline, 'newline');
+      PySkipNewlines;
+      PySkipIndentedBlock;
+    end;
     { The tail is dead. Consume it WITHOUT parsing — parsing is what resolves an
       import, so skipping is the fix and not merely an optimisation. }
     if handlerExits then PySkipRestOfBlock;
@@ -22226,6 +22242,34 @@ begin
     Expect(tkNewline, 'newline');
     PySkipNewlines;
     PySkipIndentedBlock;               { the handler cannot be reached }
+    { …AND THE `else:` IS EXACTLY THE BRANCH THAT DOES RUN. try/except/else is
+      not decoration here: the `else` is what keeps the second import OUT of the
+      try's exception coverage, so an ImportError raised by the module the try
+      SELECTED propagates instead of being swallowed into the fallback. A seat
+      rewriting lekkerzeilen's seam had to write the unfaithful spelling and
+      leave a comment saying why, which is the cost this fixes.
+      Appended to the try body, because the compile-time decision that got us
+      into this arm is precisely `the try block completed`. }
+    PySkipNewlines;
+    if CurTok.Kind = tkElse then
+    begin
+      Next; Expect(tkColon, ':'); Expect(tkNewline, 'newline');
+      PySkipNewlines;
+      Expect(tkIndent, 'indent');
+      elseBody := PyParseBlock;
+      Expect(tkDedent, 'dedent');
+      if (elseBody >= 0) and (ASTLeft[elseBody] >= 0) then
+      begin
+        if (body < 0) or (ASTLeft[body] < 0) then
+          body := elseBody
+        else
+        begin
+          tail := ASTLeft[body];
+          while ASTRight[tail] >= 0 do tail := ASTRight[tail];
+          ASTRight[tail] := ASTLeft[elseBody];
+        end;
+      end;
+    end;
   end;
   { This statement consumed its own indented block(s) — and the DEDENT that
     closed the last one — exactly as a nested def does, so tell the block
@@ -39898,8 +39942,8 @@ procedure PyPreScanImports;
   runs first and would report the missing module before the parser is reached,
   and the parser would resolve the tail afterwards even if this walk skipped it. }
 var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
-    savedAliases: Integer;
-    savedSoft, savedMissed, tryMissed: Boolean;
+    savedAliases, clause, clauseAt, k, kdepth: Integer;
+    savedSoft, savedMissed, tryMissed, guardSeen, guardMissed, clauseDead: Boolean;
 begin
   savedTok := TokPos;
   i := PyScanLo;
@@ -39907,6 +39951,9 @@ begin
   tryAt := -1;
   tryHandlerAt := -1;
   tryMissed := False;
+  clause := 0;
+  guardSeen := False;
+  guardMissed := False;
   while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
@@ -39931,6 +39978,74 @@ begin
                 (Tokens[tryHandlerAt].Kind <> tkDedent) do Inc(tryHandlerAt);
           if (tryHandlerAt >= MainProgramTokCount) or
              (Tokens[tryHandlerAt].Kind <> tkIndent) then tryHandlerAt := -1;
+        end;
+        { WHICH ARM OF A GUARDED-IMPORT TRY THIS CLAUSE IS, AND WHETHER THE
+          PROGRAM CAN REACH IT. This walk resolves an import wherever it sits
+          and had no notion of the try's OWN arms: with `try: import X /
+          except ImportError: <a> / else: <b>`, the frontend decides the branch
+          at the import, so exactly one of <a> and <b> is dead — and both were
+          being resolved, binding the dead arm's names at module scope.
+
+          FIRST-WINS IS WHAT MADE THIS LOOK LIKE IT WORKED. FindUnitOrAlias
+          takes the first row for a name, so in the ordinary no-`else` idiom
+          (`try: import X; from . import a as impl / except: from . import b as
+          impl`) the LIVE arm is lexically first in both outcomes and wins by
+          position. An `else:` inverts that — it puts the live arm AFTER the
+          dead handler — so the dead handler's alias wins and every
+          `impl.member` comes off the module the program did not select. No
+          diagnostic; a plausible wrong value far from the cause.
+
+          Decidable here with no call graph, which is the bar the walk's own
+          header sets for repairing an unreachable shape: the miss is known
+          because this walk is what resolved it, and the arms are lexical.
+          GUARDED ONLY — `guardSeen` is what separates a compile-time branch
+          from an ordinary runtime try, whose handler and else are both live
+          and whose imports must still resolve.
+          bug-n-try-except-else-does-not-parse-when-the-try-body-is-an-import }
+        clauseDead := False;
+        if (j < MainProgramTokCount) and (Tokens[j].Kind in [tkExcept, tkElse]) then
+        begin
+          if Tokens[j].Kind = tkExcept then
+          begin
+            clause := 1;
+            clauseDead := guardSeen and not guardMissed;
+          end
+          else
+          begin
+            clause := 2;
+            clauseDead := guardSeen and guardMissed;
+          end;
+          if clauseDead then
+          begin
+            clauseAt := j;
+            while (clauseAt < MainProgramTokCount) and
+                  (Tokens[clauseAt].Kind <> tkIndent) and
+                  (Tokens[clauseAt].Kind <> tkDedent) do Inc(clauseAt);
+            if (clauseAt < MainProgramTokCount) and
+               (Tokens[clauseAt].Kind = tkIndent) then
+            begin
+              k := clauseAt;
+              kdepth := 0;
+              while k < MainProgramTokCount do
+              begin
+                if Tokens[k].Kind = tkIndent then Inc(kdepth)
+                else if Tokens[k].Kind = tkDedent then
+                begin
+                  Dec(kdepth);
+                  if kdepth = 0 then Break;
+                end;
+                Inc(k);
+              end;
+              if (k < MainProgramTokCount) and (Tokens[k].Kind = tkDedent) then
+              begin
+                { entering the block without walking it, so account for the
+                  tkIndent the main loop will never see; it lands on the
+                  closing tkDedent and balances there }
+                Inc(depth);
+                i := k - 1;
+              end;
+            end;
+          end;
         end;
         if (j >= MainProgramTokCount) or
            not (Tokens[j].Kind in [tkExcept, tkFinally, tkElse]) then
@@ -39960,6 +40075,9 @@ begin
           tryAt := -1;
           tryHandlerAt := -1;
           tryMissed := False;
+          clause := 0;
+          guardSeen := False;
+          guardMissed := False;
         end;
       end;
     end
@@ -39968,6 +40086,9 @@ begin
       tryAt := depth;
       tryHandlerAt := -1;
       tryMissed := False;
+      clause := 0;
+      guardSeen := False;
+      guardMissed := False;
     end
     else if ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
@@ -39990,6 +40111,16 @@ begin
       PyParseImportRun;
       { Recorded before the restore, which is what makes the miss invisible to
         everyone else and still usable here. }
+      { THE BODY'S run is the guard; a handler's or an else's own import run is
+        not. tryMissed deliberately still counts every clause — the dead-tail
+        skip below it has been calibrated that way — but the arm decision above
+        must read the TRY BODY alone, or a handler whose own fallback import
+        misses would mark its sibling else dead. }
+      if (tryAt >= 0) and (clause = 0) then
+      begin
+        guardSeen := True;
+        if SoftUnitMissed then guardMissed := True;
+      end;
       if (tryAt >= 0) and SoftUnitMissed then
       begin
         tryMissed := True;
