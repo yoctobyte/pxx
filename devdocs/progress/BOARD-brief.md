@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:158 backlog-nilpy:122 backlog-tools:57 backlog-pascal:8 backlog-decide:44 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3695 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:158 backlog-nilpy:122 backlog-tools:57 backlog-pascal:8 backlog-decide:44 backlog-libs:28 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3696 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 466, ranked
+## Ready — top 30 of 465, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-module-bound-by-an-import-is-not-a-value (unblocks 1)
@@ -82,7 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - `[p 85] [B]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
-- `[p 85] [B]` feature-b-rtl-has-no-termio-unit-and-no-isatty (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -105,5 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard2-12
 - `[p 70] [T]` regression-optdiff-shard5-12
 - `[p 70] [T]` regression-optdiff-shard6-12
+- `[p 70] [T]` regression-test-c-abi-mixed-link-compiler-srchash-2
 
-_436 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_435 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

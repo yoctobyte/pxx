@@ -33599,6 +33599,15 @@ lib-test: pxx-stable-check
 	# stderr is dropped here; the assertion is on stdout, which sh never touches.
 	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_executeprocess.pas $(TESTTMP)/lib_sysutils_executeprocess
 	tools/expect_same.sh lib_sysutils_executeprocess "$$($(TESTTMP)/lib_sysutils_executeprocess 2>/dev/null)" "$$(printf 'exit-code-3=yes\nexit-code-0=yes\narray-keeps-a-space=yes\nstring-splits-three-words=yes\nstring-one-word=yes\nmissing-raises-127=yes\nflags-accepted=yes\nfails=0\nEXECPROC OK')"
+	# termio.IsATTY, grown for the FPC-compiler march (comptty.pas:66). The rows
+	# open their OWN descriptors and assert nothing about stdout: IsATTY(Output)
+	# is 0 under this harness's pipe, and 0 is also what a stub, a failed ioctl
+	# and a bad fd return, so such a row could not fail. A pty master answers 1
+	# however the test was invoked, and /dev/null -- a character device that is
+	# not a terminal -- is the row that separates TCGETS from fstat+S_ISCHR.
+	# fpc 3.2.2 agrees on every value, through both a pipe and a pty.
+	$(PXX_STABLE) -Fulib/rtl test/lib_termio_isatty.pas $(TESTTMP)/lib_termio_isatty
+	tools/expect_same.sh lib_termio_isatty "$$($(TESTTMP)/lib_termio_isatty)" "$$(printf 'ptmx-is-a-tty=yes\ndevnull-is-not-a-tty=yes\nclosed-fd-is-not-a-tty=yes\ntext-overload-agrees=yes\nfails=0\nTERMIO OK')"
 	# regex engine: 61 checks whose expectations are CPython's re output for the
 	# same pattern/subject pairs, including every songformatter pattern
 	$(PXX_STABLE) -Fulib/rtl test/lib_regex.pas $(TESTTMP)/lib_regex

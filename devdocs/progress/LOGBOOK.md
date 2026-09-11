@@ -3118,3 +3118,39 @@ variant with the extra arguments still on it, and had I written the ticket from
 memory it would have described a wall where the real defect is a silent wrong
 answer.
 2026-09-11 | frankuser | tools/slug_citation_census.py, bug-t-177-slug-citations-*, debugging-playbook.md | The slug-citation census was not reproducible by its own author. frankB filed the ticket I had named as the must-be-REPORTED positive control (16b387e33) 90 minutes after I wrote it, so the spec was red-on-arrival for a working matcher. Re-measuring from my own PROSE description answered 195 where the ticket said 177; reading three rows found three more instrument classes (stitch-on-EOL glues the next prose word; author-elided `foo-...` is shorthand not truncation; an [a-z0-9-] body truncates an uppercase citation, which then looks wrapped, which fires the stitcher). Seven corrections, not four. WHY the script is committed rather than described: a census whose method lives in prose is not a census anyone can re-run, and that is the finding, not the count. Controls are now SYNTHETIC — frankB's tension is real, the rows most useful as controls are the rows most likely to move. Prior art found and it already decided the hard half: progress.py:2143's DANGLING-LINK refuses bare slugs because "the bare-slug regex matches too much prose" (frankD, 08-30), so a citation CONVENTION beats a seven-corrections matcher. Two dangling shapes verified: one justifies a live refusal on absent paperwork, one is a FIXED bug's slug on the comment for the code that implements it (assert works today).
+
+## 2026-09-11 | frankH | lib/rtl/termio.pas, test/lib_termio_isatty.pas, Makefile | termio.IsATTY
+
+Both of fpc's overloads — `IsATTY(Handle: Integer)` and `IsATTY(var f: Text)`,
+returning Integer for fpc's `cint` and NOT Boolean, because the call site that
+motivated this writes `termio.IsATTY(t)=1`. WHY: the FPC-compiler march's wall
+at `comptty.pas:66`, for rgobj and aasmbase.
+
+Neither overload holds any knowledge of its own — both call `__pxx_isatty` in
+`pxxcio.pas`, which IS the TCGETS ioctl. A second copy of "what makes something
+a terminal" is how two answers drift apart.
+
+**`termio.pas` ALREADY EXISTED and my ticket said it did not.** 19 lines, three
+ioctl constants, added for synapse, with its own comment saying *"grow only as a
+consumer needs it"*. The ticket was written from `grep -rn IsATTY lib/rtl/`
+coming back empty — a correct grep about the FUNCTION, from which I asserted
+about the UNIT. The quantifier was the invention, again. Title and summary
+corrected; the slug is kept so the three places already citing it still resolve.
+
+**The fixture opens its own descriptors and asserts nothing about stdout.**
+`IsATTY(Output)` is 0 under any capturing harness, and 0 is also what a stub, a
+failed ioctl and a bad fd return — a row that cannot fail. A pty master answers
+1 however the test was invoked. And `/dev/null` is the row that earns its place:
+a character device that is not a terminal, so an `fstat`+`S_ISCHR`
+implementation answers 1 there and would pass every other row in the file.
+fpc 3.2.2 agrees on every value through both a pipe and a pty.
+
+**Nearly filed a duplicate, and a repro that did not reproduce stopped it.**
+rgobj and aasmbase now stop at `comphook.pas:251 undefined variable (V_Status)`,
+which is declared in the corpus itself at `globals.pas:149`. My reading was
+"implementation-section `uses` is not resolving" — but a unit whose
+implementation `uses` another unit's const compiles fine and prints fpc's 8192.
+The defect needs the CYCLE, and it is the already-filed
+bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
+(p60), the umbrella's largest wall at 158 units. Both units cleared here were
+delivered into that queue — the queue-position finding a sixth time.

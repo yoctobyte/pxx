@@ -546,7 +546,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | task-u-evaluate-the-2026-08-31-ticket-rules-next-week | U | 60 | task | Owner asked to evaluate the new rules next week. Written as a ticket rather than a scheduled callback BECAUSE timed callbacks are one of the rules. Carries the 2026-08-31 baseline so the comparison is possible at all -- without it, next week's evaluation is an opinion. | — |
 
-## backlog-libs (29)
+## backlog-libs (28)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -564,7 +564,6 @@ _none_
 | feature-b-getfpcheapstatus-needs-always-on-heap-accounting | B | 50 | feature | FPC's System exposes `TFPCHeapStatus` (a record of MaxHeapSize/MaxHeapUsed/CurrHeapSize/CurrHeapUsed/CurrHeapFree) and `GetFPCHeapStatus`. cclasses.pas:676 uses both in its tmemdebug helper, and that is now the ONLY open wall on the FPC compiler-source corpus -- it blocks cclasses, comphook, finput and cfileutl, measured 2026-09-05 with compiler 108f95a7f278 under --mimic-fpc-compiler. The type is trivial; the FUNCTION is not, and that is the whole ticket. Our allocator has NO always-on counters: -dPXX_ALLOC_CENSUS instruments PXXAlloc/PXXFree at COMPILE time, so a released binary carries no heap accounting at all. Returning zeros would make four units compile while the function lies -- a caller printing a memory delta would print 0 with no error -- which is the compiler-appeasement workaround CLAUDE.md refuses. The real work is deciding whether the allocator carries always-on counters and paying that cost per allocation. | — |
 | feature-b-posix-and-fpc-named-socket-facades | B | 25 | feature | BLOCKED on decide-posix-master-vs-fpc-named-master-for-the-socket-facades: the design says Posix.* is canonical and the FPC-named units wrap it, but the tree shipped the FPC-named units AS the implementation on PAL, and all three of the design's selectable backends already exist one layer down at the PAL. Building as designed would invert a working layer with 15 in-tree consumers plus Synapse, for zero current consumer. Not implementation work until the layering question is re-decided. | decide-posix-master-vs-fpc-named-master-for-the-socket-facades |
 | feature-b-rtl-has-no-tdoublerec | B | 40→85 | feature | `grep -rn TDoubleRec lib/rtl/ compiler/builtin/` is empty. FPC's `x86_64/cpuinfo.pas:36` writes `bestrealrec = TDoubleRec`, so the FPC-compiler-source march stops there with `unknown type: TDoubleRec` -- the wall cfileutl reached once `TExecuteFlags` was cleared. fpc declares it in `rtl/inc/mathh.inc:172` as a packed record overlaying a Double, with PRIVATE const `Bias = $3FF` and property-backed `GetExp/SetExp/GetSign/SetSign/GetFrac/SetFrac`. cfileutl only needs the TYPE to exist for an alias; nothing in the march has yet asked for the accessors, so the cheap version is the layout and the expensive one is the property surface -- measure which is needed before building the second. | — |
-| feature-b-rtl-has-no-termio-unit-and-no-isatty | B | 40→85 | feature | `grep -rn IsATTY lib/rtl/` is empty. FPC's `comptty.pas:66` calls `termio.IsATTY(t)` inside `LinuxIsATTY`, so the FPC-compiler-source march stops with `undefined variable (IsATTY)`. TWO units report it -- rgobj and aasmbase -- and they are ONE wall: both diagnostics are `comptty.pas:66`, reached through a shared dependency, so this is not two findings and must not be ranked as two. It is the wall those units reached once `TExecuteFlags` was cleared. fpc's signature takes a `var t: Text` and returns an Integer (1 for a tty), which `LinuxIsATTY` compares against 1; the underlying primitive is `isatty(2)` on the text file's handle. | — |
 | feature-b-the-rtlevent-family-is-absent-from-the-threading-rtl | B | 35 | feature | The RTLEvent family is absent from the threading RTL | — |
 | feature-demo-nilpy-ide | B+E | 30 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | B+E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
@@ -1003,9 +1002,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3695)
+## done (3696)
 
-3695 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3696 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1102,7 +1101,6 @@ _none_
 - [p 85] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
 - [p 85] [P] bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - [p 85] [B] feature-b-rtl-has-no-tdoublerec (unblocks 1)
-- [p 85] [B] feature-b-rtl-has-no-termio-unit-and-no-isatty (unblocks 1)
 - [p 85] [P] feature-p-legacy-value-object-types (unblocks 1)
 - [p 85] [T] bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - [p 80] [U] decide-release-signing-key-custody (unblocks 2)
@@ -1608,7 +1606,6 @@ _none_
 - **1** — feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray
 - **1** — feature-b-delphi-extended-rtti-object-model
 - **1** — feature-b-rtl-has-no-tdoublerec
-- **1** — feature-b-rtl-has-no-termio-unit-and-no-isatty
 - **1** — feature-dynamic-compiler-tables
 - **1** — feature-nilpy-math-module-twelve-absent-names-measured
 - **1** — feature-nilpy-parallel-for-in
