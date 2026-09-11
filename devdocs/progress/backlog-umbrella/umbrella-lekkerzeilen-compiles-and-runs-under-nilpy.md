@@ -10,18 +10,11 @@ found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
   - task-b-write-the-lekkerzeilen-pxx-platform-backend
-  - feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym
-  - bug-a-the-x86-64-encoder-cannot-name-a-high-byte-register
-  - bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
+  - feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments
   - feature-nilpy-math-module-twelve-absent-names-measured
-  - feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver
-  - feature-n-the-threading-module
   - bug-n-os-environ-and-os-sep-are-not-values
-  - bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value
-  - bug-n-star-unpacking-is-rejected-at-a-method-call
-  - bug-n-a-chained-assignment-to-two-attributes-does-not-parse
   - bug-n-a-module-bound-by-an-import-is-not-a-value
-summary: "RE-MEASURED 2026-09-11 at compiler f9fb672ee109 / corpus 2a3d60e: **28 of 35 compile and CTYPES IS THE ONLY WALL LEFT** -- all seven remaining failures are it. Every count and cause-list later in this summary is from 2026-09-10 and is SUPERSEDED; they are kept because the per-module reasoning is still the best record of how each wall was characterised. What cleared since: the `_pxx` module-as-a-value wall (frankZ's getattr-over-a-unit-alias fold plus frankuser's corpus seam rewrite), heapq (frankuser), and the import-order arity refusal on `nearest` (frankB, 8de1fff93, which took hud.py and traffic.py). threading and sqlite3 no longer appear as walls under `--threadsafe`. SO GOAL 4 NOW REDUCES TO ONE QUESTION AND IT IS NOT A COMPILER QUESTION: do we want NilPy programs to be able to call a native library the way CPython programs do, or do we want this app to reach the native layer through pxx's own binding mechanism and change its source to suit? The umbrella already answers it one way at 'do not build mimic_ctypes for this target' below, and frankuser MEASURED the cost of the other way on 2026-09-11: a correct partial mimic_ctypes moved the census 27 -> 25, because `import ctypes` succeeding IS A CAPABILITY PROBE -- the app's seam commits to the arm that needs the full FFI the moment the import resolves, so a partial shim is not partial progress. Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. RE-MEASURED 2026-09-10 at compiler a812b9549413, tree 813c99cc7: 22 of 35 modules compile clean. THE CORPUS MOVES UNDER YOU -- the owner renamed flight.py to drone.py at 15:47 and added atlas.py at 16:30 the same day, so it was 34 modules that morning and a delta between two censuses is not attributable to compiler work unless you check. The 13 remaining walls are FIVE causes, and THREE OF THE THIRTEEN ARE BY DESIGN AND OWE THE COMPILER NOTHING: platform/{_ctypes_backend,_gl,_sdl2} are the CPython arm of the app's own two-backend seam, which under NilPy is never imported at all -- `try: import ctypes / except ImportError: from . import _pxx` takes the _pxx branch, measurably so since 708555fdb, and they only appear as walls because the census compiles every file DIRECTLY. Of the ten that remain: capture.py and gfx.py need ctypes, and CALLING THAT A SEAM EDIT WAS WRONG -- corrected 2026-09-11 (frankB measured, confirmed here): gfx.py uses `ctypes.` SIXTY times across NINE names (byref 21, c_uint 19, c_void_p 5, sizeof 4, c_float 4, c_int 3, create_string_buffer 2, c_char 2, c_char_p 1) plus the `(TYPE * N)(...)` array-type constructor at three sites, and 22 of its 148 `gl.*` call sites marshal through it -- it IS the OpenGL marshalling layer. Routing the import through a try/except makes the module COMPILE and leaves it unable to do the one thing it exists for: the census moves by two and the demo moves by zero. So these two rows are ONE MISSING CAPABILITY (a bounded mimic_ctypes: nine names and an array-type constructor, not all of CPython's ctypes), not two module fixes, and anyone who does the seam edit anyway MUST say in the resolution that ctypes is not solved or two cleared rows will read as the capability landing; threading blocks 3 modules on 2 real sites (__main__ reports gauges.py line 36 through the import chain); sqlite3 blocks 2 subjects on ONE site at world.py:188 (atlas.py:188 is `if box is None:` and has no sqlite3 near it); a module as a VALUE blocks platform/__init__.py with bindings.py cascading behind it; and a field from a qualified module constant blocks traffic.py:402. So the COMPILER owes 8 modules on 4 causes, not 13 on 5. READ THE PER-MODULE LIST, NOT THE COUNT: clearing the *unpack-with-defaults wall moved five modules and only three of them went green -- the other two advanced into a SIGSEGV that was invisible behind it. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
+summary: "THE ENTRY-POINT CLOSURE IS ONE WALL FROM COMPILING, measured 2026-09-11 at 7958322f8 / binary 465845b20d1e: `pascal26 --threadsafe lekkerzeilen/__main__.py` emits 27 lines and EXACTLY ONE error, `capture.py:44 no member create_string_buffer came of the qualifier ctypes`. The 28-of-35 ratio below counts modules AS SUBJECTS and includes dead code (nothing imports gfx.py; four of the five ctypes files sit in a backend arm pxx never takes) -- the closure is goal 4's question and the ratio is not. Behind that line, measured in a scratch copy, the next wall is one line further (`gl.ReadPixels`, 7 args against the 4-arg run-time-dispatch cap, filed as feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments) and BOTH WALLS ARE THE SAME CAUSE: `_pxx.py`'s `class gl:` declares five names and neither of these, so writing the backend clears both at once. AND THE FORK IS NARROWER THAN STATED BELOW -- THE DEMO NEEDS NO FFI. capture.py names ctypes for one thing, a writable byte buffer for glReadPixels read back via .raw, and the owner's own `_pxx.py` docstring specifies the native backend as having 'no CDLL loading, no restype/argtypes declarations, no create_string_buffer'. So goal 4 waits on task-b-write-the-lekkerzeilen-pxx-platform-backend, not on a ctypes decision; the FFI question is real for other programs and is not this umbrella's. The seam's probe is CORRECT (verified: `try: import ctypes / except ImportError` takes the except arm under pxx), so do NOT shim one member to clear the line -- that flips the probe, which is the 27 -> 25 measurement below. PREVIOUS LEAD, still accurate as a module ratio: RE-MEASURED 2026-09-11 at compiler f9fb672ee109 / corpus 2a3d60e: **28 of 35 compile and CTYPES IS THE ONLY WALL LEFT** -- all seven remaining failures are it. Every count and cause-list later in this summary is from 2026-09-10 and is SUPERSEDED; they are kept because the per-module reasoning is still the best record of how each wall was characterised. What cleared since: the `_pxx` module-as-a-value wall (frankZ's getattr-over-a-unit-alias fold plus frankuser's corpus seam rewrite), heapq (frankuser), and the import-order arity refusal on `nearest` (frankB, 8de1fff93, which took hud.py and traffic.py). threading and sqlite3 no longer appear as walls under `--threadsafe`. SO GOAL 4 NOW REDUCES TO ONE QUESTION AND IT IS NOT A COMPILER QUESTION: do we want NilPy programs to be able to call a native library the way CPython programs do, or do we want this app to reach the native layer through pxx's own binding mechanism and change its source to suit? The umbrella already answers it one way at 'do not build mimic_ctypes for this target' below, and frankuser MEASURED the cost of the other way on 2026-09-11: a correct partial mimic_ctypes moved the census 27 -> 25, because `import ctypes` succeeding IS A CAPABILITY PROBE -- the app's seam commits to the arm that needs the full FFI the moment the import resolves, so a partial shim is not partial progress. Owner-set target (2026-09-08): the lekkerzeilen sailing simulator -- /home/neo/lekkerzeilen -- as a REAL-WORLD nilpy target. It was written knowing about pxx and it shows: the runtime package imports ZERO third-party libraries (numpy and PIL appear only under tests/ and tools/), there is not one f-string in it, and no async, yield, match, walrus or annotation. RE-MEASURED 2026-09-10 at compiler a812b9549413, tree 813c99cc7: 22 of 35 modules compile clean. THE CORPUS MOVES UNDER YOU -- the owner renamed flight.py to drone.py at 15:47 and added atlas.py at 16:30 the same day, so it was 34 modules that morning and a delta between two censuses is not attributable to compiler work unless you check. The 13 remaining walls are FIVE causes, and THREE OF THE THIRTEEN ARE BY DESIGN AND OWE THE COMPILER NOTHING: platform/{_ctypes_backend,_gl,_sdl2} are the CPython arm of the app's own two-backend seam, which under NilPy is never imported at all -- `try: import ctypes / except ImportError: from . import _pxx` takes the _pxx branch, measurably so since 708555fdb, and they only appear as walls because the census compiles every file DIRECTLY. Of the ten that remain: capture.py and gfx.py need ctypes, and CALLING THAT A SEAM EDIT WAS WRONG -- corrected 2026-09-11 (frankB measured, confirmed here): gfx.py uses `ctypes.` SIXTY times across NINE names (byref 21, c_uint 19, c_void_p 5, sizeof 4, c_float 4, c_int 3, create_string_buffer 2, c_char 2, c_char_p 1) plus the `(TYPE * N)(...)` array-type constructor at three sites, and 22 of its 148 `gl.*` call sites marshal through it -- it IS the OpenGL marshalling layer. Routing the import through a try/except makes the module COMPILE and leaves it unable to do the one thing it exists for: the census moves by two and the demo moves by zero. So these two rows are ONE MISSING CAPABILITY (a bounded mimic_ctypes: nine names and an array-type constructor, not all of CPython's ctypes), not two module fixes, and anyone who does the seam edit anyway MUST say in the resolution that ctypes is not solved or two cleared rows will read as the capability landing; threading blocks 3 modules on 2 real sites (__main__ reports gauges.py line 36 through the import chain); sqlite3 blocks 2 subjects on ONE site at world.py:188 (atlas.py:188 is `if box is None:` and has no sqlite3 near it); a module as a VALUE blocks platform/__init__.py with bindings.py cascading behind it; and a field from a qualified module constant blocks traffic.py:402. So the COMPILER owes 8 modules on 4 causes, not 13 on 5. READ THE PER-MODULE LIST, NOT THE COUNT: clearing the *unpack-with-defaults wall moved five modules and only three of them went green -- the other two advanced into a SIGSEGV that was invisible behind it. TWO STANDING RULES FROM THE OWNER, both unusual and both deliberate: (1) WE MAY CHEAT ON THE SOURCE -- where something is principally incompatible with nilpy, changing lekkerzeilen is allowed, which is the opposite of the usual corpus rule; (2) it is NOT to be wired into the test suite, like uforth. It is a target to attempt, not a gate."
 ---
 
 # What the owner said
@@ -993,3 +986,173 @@ a run**, 2026-09-11).
 the summary: native-library access for NilPy programs, or this app reaching the
 native layer through pxx's own binding mechanism with its source changed to
 suit. Seven modules, one cause. No compiler ticket is blocking it.
+
+### THE TWO SECTIONS ABOVE AND BELOW AGREE, AND THEY MEASURE DIFFERENT THINGS
+
+Resolved by keeping both (frankuser, 2026-09-11) — they landed as a conflict
+only because both were appends. frankZ's run above is an **as-subject census**
+and reports 28 of 35 with six modules on `no unit named ctypes` and **one** on
+`no member create_string_buffer`. Mine below is the **entry-point closure** and
+reports that single `create_string_buffer` row as the only error in the whole
+closure. That is the same wall — `capture.py:44` — seen through two instruments,
+and the six-module row is the one that does not survive the change of question,
+because those six sit in a backend arm the closure never enters.
+
+So frankZ's null row and my one-error closure are the same measurement from two
+sides, which is worth more than either alone: the census says nothing regressed
+across the seam rewrite, and the closure says what is actually left.
+
+One correction to the section above, and it is to its LAST paragraph rather than
+to any of its numbers: *"Goal 4's remaining question is unchanged and is still
+the owner's"* — it is not. The closure below shows the demo needs no FFI at all,
+and the owner's own `_pxx.py` docstring specifies the native backend as having
+*"no create_string_buffer"*. The question is still real for other programs; it
+is no longer goal 4's gate. `Seven modules, one cause` is correct as a census
+row and is not the demo's distance.
+
+## THE ENTRY-POINT CLOSURE IS **ONE** WALL FROM COMPILING, AND THE FORK IS NARROWER THAN THIS TICKET HAS BEEN STATING — 2026-09-11 (frankuser)
+
+Every census on this umbrella, mine included, has compiled **each module as a
+subject** and reported a ratio. The demo does not run modules; it runs
+`python3 -m lekkerzeilen`, which is `lekkerzeilen/__main__.py`. Nobody had
+compiled that and read the closure.
+
+Measured at `7958322f8`, binary `465845b20d1e`, corpus clean:
+
+```
+$ cd /home/neo/lekkerzeilen
+$ pascal26 --threadsafe lekkerzeilen/__main__.py /tmp/lzmain
+```
+
+**27 lines of output. Seven shim notes, a handful of run-time-dispatch warnings,
+and exactly ONE error:**
+
+```
+pascal26:44: error: no member create_string_buffer came of the qualifier ctypes
+  in: lekkerzeilen/capture.py
+```
+
+That is the whole remaining compile distance for the demo. Not seven modules —
+one member access, in one function, in one file.
+
+### Why the 28-of-35 number was not telling us this
+
+A module census counts subjects, and this corpus has dead code in it: nothing
+imports `gfx.py`, and four of the five `ctypes` files are in a backend arm pxx
+never takes. Those rows are real as-subject failures and irrelevant to whether
+the demo runs. **The ratio and the closure answer different questions, and only
+the closure is goal 4's question.** Keep reporting the ratio if you like — but
+the closure is the number to act on.
+
+### The seam's capability probe is CORRECT, which I had left open
+
+`platform/__init__.py` selects its backend with `try: import ctypes / except
+ImportError: ... / else: ...`. Probed directly:
+
+```python
+try:
+    import ctypes  # noqa: F401
+except ImportError:
+    print("except-arm: no ctypes")
+else:
+    print("else-arm: ctypes present")
+```
+
+pxx prints **`except-arm: no ctypes`**. So the seam picks `_pxx` and the native
+arm is genuinely the one under test. The all-or-nothing finding below is about
+what happens if a shim makes that probe answer differently; the probe itself is
+not broken.
+
+Note the asymmetry, because it is the reason `capture.py` fails the way it does:
+the same `import ctypes` **inside a `try`** raises, while at `capture.py`'s top
+level, reached as a dependency, it binds nothing and does not raise — so the
+error arrives at the member access, not the import. frankB measured the
+as-subject half of that on 2026-09-11.
+
+### What is BEHIND that wall — measured, in a scratch copy, not inferred
+
+A first-failure census cannot see past a wall, so the line was stubbed to
+`bytearray(...)` in a throwaway copy of the package (the package only: `cp -a`
+of the whole tree copies the owner's terrain and filled `/tmp`, which cost a
+tier row — see
+`bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write`).
+
+The next wall is **one line further down**, `capture.py:45`:
+
+```
+error: .ReadPixels() is dispatched at run time (no class here declares it),
+and that path takes at most 4 arguments
+```
+
+Filed as `feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments`.
+
+### BOTH WALLS ARE THE SAME CAUSE, AND IT IS THE STUB
+
+`_pxx.py` defines `class gl:` with **five** staticmethods — `clear_color`,
+`clear`, `viewport`, `enable`, `get_string`. It declares neither `PixelStorei`
+nor `ReadPixels`, so those calls fall to run-time dispatch, and the 7-argument
+one meets the cap. Declare the real surface and **both walls go at once**: the
+call resolves statically and `MAX_DYN_ARGS` never applies.
+
+So the compile distance is not "clear ctypes, then clear an arity cap". It is
+**write the backend**, which was already this umbrella's second gate
+(`task-b-write-the-lekkerzeilen-pxx-platform-backend`). The two walls are that
+task reporting itself through the compiler.
+
+### THE DEMO NEEDS NO FFI, AND THE OWNER'S OWN FILE SAYS SO
+
+The fork on this ticket has been stated as *"do we want pxx to be able to call
+any C library a Python program names at run time, or only to run this demo
+natively?"* The measurement narrows it to a yes/no, because the native answer
+needs no ctypes at all. `_pxx.py`'s docstring, written by the owner:
+
+> this backend should be a translation of `_ctypes_backend` in which the
+> `ctypes` machinery simply disappears: no CDLL loading, no restype/argtypes
+> declarations, **no create_string_buffer**.
+
+`capture.py` names `ctypes` for exactly one thing — a writable byte buffer to
+hand `glReadPixels`, read back through `.raw`. That is not FFI; it is a
+`bytearray`. Under the native backend the framebuffer read belongs behind the
+seam, returning bytes, and `capture.py` should not name `ctypes` at all.
+
+**So the demo is not waiting on a ctypes decision.** It is waiting on the
+backend, and the backend's own spec excludes ctypes. The FFI question is a real
+question for other programs; it is not this umbrella's.
+
+### What NOT to do with this, and it is the same trap as every census above
+
+`create_string_buffer` is one name and a `bytearray` is sitting right there, so
+the cheap move is to shim it. **Don't.** The section below measured what a
+partial `mimic_ctypes` does: `import ctypes` starts succeeding, the probe flips,
+the seam abandons the native arm for the FFI arm, and the count went DOWN 27 ->
+25. Supplying one member makes the probe's answer wrong, not better.
+
+The honest change is on the consumer side — move the framebuffer read behind the
+`gl` seam so `capture.py` asks the backend for bytes. That is a two-sided edit
+(`_ctypes_backend` keeps the ctypes dance where ctypes belongs, `_pxx` gets the
+native one) and it is **pointless until `_pxx.py` exists**, since the whole point
+is delegating to a backend that currently raises `NotImplementedError`. Left for
+whoever takes that task; not done here, deliberately.
+
+### `blocked-by` WAS SEVEN-TWELFTHS STALE, FOR THE SECOND TIME ON THIS TICKET
+
+Pruned 2026-09-11: seven of the twelve entries were in `done/` — the high-byte
+register bug, the dynsym derivation, the dead-guarded-import resolution, the
+threading module, open-world dispatch, the stdlib-reference-as-a-value bug,
+`*`-unpacking at a method call, and the chained attribute assignment. Five
+remain live.
+
+The section at "Five of the nine `blocked-by` entries were in `done/`" above
+records the same thing happening earlier on this same ticket, which is why this
+is written down rather than quietly fixed. **The edge is the ranker's input and
+the body is the history**; a closed blocker left in the list makes an umbrella
+read as blocked on work that is finished, and `next` cannot tell the difference.
+CLAUDE.md already names this class — the `math.atan2` ticket found closed by
+events 26 days earlier — so nothing new is being claimed, only that an umbrella
+accumulates it faster than a leaf ticket because it is the only place edges are
+written by hand.
+
+One entry was worth keeping apart from the prune:
+`feature-n-open-world-method-dispatch-on-a-dynamically-typed-receiver` is done,
+and it is the feature that BUILT `pydyn_meth0..4`. The four-argument cap filed
+today is the ceiling that feature left behind, not a regression in it.
