@@ -306,8 +306,10 @@ def cmd_status(clone, attach_ok=True):
         # twatch fixes were absent from the publishing daemon while every status
         # line said RUNNING, and the only reason anyone noticed is that one of
         # them added a field whose absence showed up in a report.
-        live_fp = twatch.code_fingerprint(os.path.join(clone,
-                                                       "tools/twatch.py"))
+        # NOT the worktree copy: the clone is detached at the sha under test
+        # for most of every cycle, so that file is history and the comparison
+        # answers a question nobody asked (see deployed_code_fingerprint).
+        live_fp = twatch.deployed_code_fingerprint(clone)
         run_fp = w.get("code_fp") or ""
         if fresh and run_fp and live_fp and run_fp != live_fp:
             print("  %scode   : STALE — this daemon is running twatch.py %s "

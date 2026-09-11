@@ -326,6 +326,45 @@ def code_fingerprint(path=None):
         return ""
 
 
+def deployed_code_fingerprint(repo):
+    """Fingerprint of the twatch.py a restart in `repo` would actually LOAD.
+
+    `trackt status` compared the running daemon against
+    `code_fingerprint(clone/tools/twatch.py)`, and for most of every cycle that
+    file is the version at the SHA UNDER TEST, because the clone is detached
+    there. So the check answered "is this daemon running the code of the commit
+    it happens to be testing?" -- a true fact about the wrong subject, and never
+    the question anyone asks. The question is whether LANDED FIXES are live.
+
+    Measured 2026-09-11 on borg: status reported `STALE -- running 1d5c476a6328
+    while the clone has 17bbd9d15049`. 1d5c476a6328 was `origin/master`, i.e.
+    the daemon was exactly current; 17bbd9d15049 was the twatch.py of
+    `51901941ef5d`, the pin being verified. The restart it prompted aborted a
+    running fuzz slice to replace the code with itself.
+
+    It is false in the other direction too, and that half is the dangerous one:
+    land a twatch fix while a gate runs on an older sha and the comparison is
+    against that sha's file, so a genuinely stale daemon reads as fresh --
+    the check suppressed at exactly the moment it exists for.
+
+    This is the fifth instance of the rule in devdocs/dev/track-t.md: a watcher
+    clone's worktree is HISTORY, not current state. Only READERS are ever wrong
+    about it, and a reader of `tools/` is as exposed as a reader of `tstate/`.
+    """
+    if not head_detached(repo):
+        # On a branch, the worktree file IS what a restart loads.
+        return code_fingerprint(os.path.join(repo, "tools", "twatch.py"))
+    try:
+        out = subprocess.run(["git", "-C", repo, "show",
+                              "origin/%s:tools/twatch.py" % (BRANCH or "master")],
+                             capture_output=True)
+    except OSError:
+        return ""
+    if out.returncode != 0 or not out.stdout:
+        return ""
+    return hashlib.sha256(out.stdout).hexdigest()[:12]
+
+
 CODE_FP = ""            # set once at daemon start; "" for short-lived readers
 # Set by a READER that was told (or could find) the watcher clone, so
 # report_running_code() can compare the resident image against disk. Empty
