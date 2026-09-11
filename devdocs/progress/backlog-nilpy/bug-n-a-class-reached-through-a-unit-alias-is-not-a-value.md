@@ -133,7 +133,37 @@ narrow, additive gap rather than a regression of the closed ticket, and it is
 worth saying which, because "the done ticket came undone" and "the done ticket
 stopped one step short" route differently.
 
-**NOT REPRODUCED, AND THE REASON MATTERS:** the raw-address arm. `w = backend.Widget`
+**REPRODUCED 2026-09-11 after frankZ supplied the missing condition — MY
+"NOT REPRODUCED" BELOW WAS AN ARTEFACT OF MINIMISING THE REPRO.** The trigger is a
+module-level binding PRECEDING the class in the imported module. Measured on
+`c53cb51926a2`, the same binary my failed attempt used:
+
+| imported module | CPython | pxx |
+| --- | ---: | --- |
+| `B = 5` then `class Widget: V = 1` | 1 | **5512576** |
+| `class Widget: V = 1` (the line deleted) | 1 | 1 |
+
+One line, binary, not proportional. Characterised further here: **any** preceding
+module-level binding triggers it — `B = 5`, `B = "hello"` and `def B():` all do,
+with different addresses — and the COUNT does not matter, one and two preceding
+assignments give the identical value. The magnitude (~5.5e6, moving with program
+layout) is consistent with a static data address rather than a shifted field
+index, which is the distinction a fixer needs.
+
+**Why neither of us could have collided with it:** the trigger is a line a
+minimiser strips FIRST, because it is visibly unrelated to the construct under
+test. frankB's generalisation is the durable part and is theirs and frankZ's to
+bank — *minimising a repro can delete the condition, and the minimised version
+then reads as NOT REPRODUCED rather than as a smaller repro.* Minimisation is the
+one debugging move nobody audits, because its output is a cleaner file, which
+looks like progress from every angle.
+
+**The paragraph below is kept as written, because the retraction is worth more
+than the correction.** It hedged properly, refused to retire the arm on a miss,
+and named the two differences it could see — and the actual cause was a third
+thing it could not see, in its own method rather than in the subject.
+
+**NOT REPRODUCED (2026-09-11, superseded above):** the raw-address arm. `w = backend.Widget`
 then `w.V` gave **1**, not an address, in both shapes I built — import-free, and via
 `from . import mod as backend` with the binding in a local and at module scope. Two
 differences from frankZ's run: compiler (`c53cb51926a2` vs `16f9e6314ca0`, and
