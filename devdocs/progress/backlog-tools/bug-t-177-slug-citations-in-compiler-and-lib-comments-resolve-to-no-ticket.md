@@ -37,6 +37,22 @@ a verdict** — I read two of the 49:
 | **(a) justifies a LIVE refusal** — the guard's stated reason is a filing that does not exist | frankB's `pyparser.inc:23973` (now filed) |
 | **(b) a FIXED bug's slug left behind** — the comment documents the FIX and the slug names the defect | `compiler/pyparser.inc:28874` cites `bug-nilpy-assert-statement-not-supported` on the comment for the code that IMPLEMENTS `assert`. Measured: `assert x > 0` compiles and runs, exit 0. |
 
+| **(c) on a LANDED FIX — and this one has a MEASURED COST IN WASTED WORK** | `compiler/pylexer.inc:1561` cited `bug-n-an-error-inside-an-imported-nilpy-module-names-no-file`, which never existed, while the REAL ticket sat open in `backlog-nilpy/`. frankB re-diagnosed and nearly re-fixed a bug already fixed at `584ca8ea8` (frankH, 04:58). Corrected at `6eac77f8f`. |
+
+**(c) IS THE SHAPE THAT ARGUES THE PRIO, AND IT IS A MECHANISM RATHER THAN TIDINESS:
+an unresolvable citation on a landed fix means the fix cannot be checked off, so the
+ticket it fixes STAYS OPEN and gets worked a second time.** That is the owner's own
+`math.atan2` complaint — a ticket closed by events sitting in a folder — arriving
+through a different door. 177 rows of drift is a tidiness cost; this is a causal one,
+and it is the first of the three instances that demonstrably consumed a seat's
+evening.
+
+**MY OWN CENSUS CAUGHT (c) AND IT DID NOT HELP.** The row was present at the sha I
+measured (`96e9c3bb5`) and it is **row 38 of my 182**. The instrument was right and
+nobody read row 38 — which is the real argument for a FORWARD-ONLY checker over a
+baseline: a row inside a 182-row list is invisible, a red on a NEW row is not. A
+census is not a finding.
+
 **(b) is the benign majority and it is still a defect of the same kind**: a reader
 greps the slug, finds nothing, and **cannot tell which shape they are holding** —
 whether the feature is the bug or the fix. (a) is the one that justifies a live
@@ -73,6 +89,7 @@ was an instrument error, not a fix to the tree.
 | 5 | **the AUTHOR elided it.** `bug-a-promoint-shr-yields-nothing-...` is deliberate shorthand, not a dangling citation. 10 instances, **all 10 resolve by prefix** — which is the positive control that the shorthand was honest | run 2 |
 | 6 | **uppercase inside a slug.** `bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-...` is a real citation; an `[a-z0-9-]` body truncates it at the hyphen and the result then looks wrapped, feeding correction 4 | run 2 |
 | 7 | compare **case-insensitively** against lowercase filenames, or 6 reappears at the resolve step | run 2 |
+| 8 | **THE CORRECT REPAIR REINTRODUCES THE STRING.** frankB's fix at `6eac77f8f` keeps the dead slug in the comment as history — *"the slug this comment carried until 2026-09-11 ... has no ticket file and never did"* — so the census still reports it. Measured: **2 of 182 today, and this population GROWS BY ONE WITH EVERY CORRECT REPAIR.** A checker without an escape marker therefore gets **monotonically more red as the problem is fixed** — a gate that punishes the fix | run 3 |
 
 Corrections 4, 5 and 6 compound: 6 truncates the slug, which makes 4 fire, which
 glues prose on, which produces a confident dangling row for a citation that is
@@ -155,9 +172,17 @@ baseline was for anyway — the baseline's whole purpose is to red only on NEW r
 **The 182 then stay a documentation-cleanup ticket with no instrument attached,
 which is honest about what they are.**
 
-Whoever takes this should decide between those two before writing code, and should
-read `tools/progress.py` around line 2120 first — the noise call is already made
-there and it was made correctly.
+**And the prior art supplies the ESCAPE MECHANISM too, which correction 8 makes
+mandatory rather than nice to have.** `tools/progress.py` already carries three
+marker vocabularies for exactly this — `PARK CONDITION SUPERSEDED` (scoped to a
+±2-line window, deliberately, so a NEW stale condition added later still fires),
+`DANGLING LINKS BY DESIGN` and `PROSE EDGES BY DESIGN`. A citation checker needs
+the windowed form: a marker beside the dead slug, not a whole-file escape. That
+design is already written, reviewed and live; copy it rather than inventing one.
+
+Whoever takes this should decide between those two options before writing code, and
+should read `tools/progress.py` around line 2113 first — both the noise call and the
+escape-window design are already made there, and both were made correctly.
 
 ## The census is now a COMMITTED SCRIPT, not a paragraph
 

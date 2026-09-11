@@ -26,6 +26,15 @@ Each correction is a row that was FALSELY reported dangling before it:
   6 uppercase body     -- an [a-z0-9-] body truncates a real citation, which
                           then looks wrapped, which fires 4
   7 case-insensitive   -- compare lowercased, or 6 returns at the resolve step
+  8 documented-DEAD    -- the correct REPAIR for a dangling citation keeps the
+                          dead slug in the comment as history, so the repair
+                          reintroduces the string the check fires on. Bucketed,
+                          not excused: this population GROWS with every fix, so
+                          a checker without an escape marker gets MORE red as
+                          the problem is repaired -- a gate that punishes the
+                          fix. A real checker needs a marker in the window, the
+                          way tools/progress.py carries PARK CONDITION
+                          SUPERSEDED and DANGLING LINKS BY DESIGN.
 Corrections 4, 5 and 6 COMPOUND; 6 feeds 4.
 
 Emits `slug<TAB>file:line` for every dangling row, because a census that prints
@@ -39,6 +48,10 @@ PREF = r"(?:bug|feature|task|decide|compat|refactor|umbrella)"
 RX = re.compile(r"(?:(?<=^)|(?<=[^A-Za-z0-9_-]))(" + PREF + r"-[A-Za-z0-9-]{3,})")
 CONT = re.compile(r"\s*(?://|\{|\(\*|\*|#)?\s*([A-Za-z0-9-]+)")
 EXTS = ("pas", "inc", "py", "md", "c", "h", "txt")
+# (8) A SCREEN, not a marker -- prose saying the cited slug is dead. Deliberately
+# not treated as an escape: inventing a convention is the checker's decision, not
+# this census's. Reported separately so the number is visible as it grows.
+DEAD = re.compile(r"(no ticket|never did|never was|resolves to no|was never filed)", re.I)
 
 
 def real_slugs(root):
@@ -100,6 +113,20 @@ def classify(raw, real):
     return exact, prefix, dangle
 
 
+def documented_dead(root, dangle):
+    """(8) dangling rows whose own comment SAYS the slug is dead. A screen."""
+    out = {}
+    for s, (rel, n) in dangle.items():
+        try:
+            L = open(os.path.join(root, rel), encoding="utf-8",
+                     errors="replace").read().split("\n")
+        except OSError:
+            continue
+        if DEAD.search("\n".join(L[max(0, n - 4):n + 3])):
+            out[s] = (rel, n)
+    return out
+
+
 def main():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     real = real_slugs(root)
@@ -112,7 +139,10 @@ def main():
     w("  author-elided         %5d   (resolve by prefix: %d)\n" % (len(elided), el_ok))
     w("resolve exactly         %5d\n" % len(exact))
     w("resolve as prefix only  %5d\n" % len(prefix))
+    dead = documented_dead(root, dangle)
     w("resolve to NOTHING      %5d\n" % len(dangle))
+    w("  documented-dead       %5d   (screen: the comment says the slug is dead;\n"
+      "                                 GROWS with every correct repair)\n" % len(dead))
     # Controls. The negative one is stable; a REAL positive control is not --
     # both real rows this census originally named went stale within 90 minutes
     # (one was filed by the peer who found it). A planted slug is the only
