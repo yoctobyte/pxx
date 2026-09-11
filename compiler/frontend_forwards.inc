@@ -118,6 +118,14 @@ function ASTIsPoisoned(node: Integer): Boolean; forward;  { value came from a na
 function ParseMetaclassMemberTail(node, mcCi: Integer; var outTk: TTypeKind;
                                   var outRec: Integer; var finished: Boolean): Integer; forward;  { the ONE member-on-a-class-reference parser -- see its body }
 function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;  { NilPy twin (pyparser.inc) }
+{ PyParseRelImportNames (pyparser.inc) factors the `from . import a, b` name
+  loop that used to be duplicated in PyParseOneImport and PyParseImportRun. It
+  sits far above PyParseImportUnit's body, which FPC has therefore not seen;
+  its other callee, PyBindImportUnitAlias, IS declared above it and needs no
+  forward here. Caught by gate.sh quick's FPC seed canary and by nothing else
+  -- the fixedpoint build and --tier quick were both green, because pxx
+  prescans the unit. }
+procedure PyParseImportUnit(const name: AnsiString); forward;
 procedure ParseFactor; forward;   { body in pasparser_expr.inc — called from
                                   pasparser_lval.inc's ParseClassRecordSelectors, which parses
                                   `inst.TNested(x)` by handing the bare type name back to the

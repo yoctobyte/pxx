@@ -1,0 +1,42 @@
+# A PARENTHESISED assignment target list -- `(a, b, c) = expr`, which is
+# ordinary Python and what struct.unpack's callers write when the names do not
+# fit one line.
+#
+# PyUnpackTargetAhead treated a leading '(' as the FIRST ELEMENT of a list --
+# `(a, b), c = ...` -- and then required a comma. A group that IS the whole list
+# is followed by '=', so the detector declined, the '(' was parsed as a tuple
+# VALUE, and the first name died as `undefined variable (a)`: the exact message
+# that function's own comments say it exists to stop producing.
+#
+# NO NEW PATH. PyParseUnpackAssign's existing nested-group arm binds the group to
+# a hidden name and unpacks it after the store, which is precisely the semantics
+# of a parenthesised target list -- so the fix only lets the detector reach
+# machinery that was already correct.
+#
+# Found 2026-09-11 on lekkerzeilen/png.py:211.
+#
+# Runs unmodified under CPython; the .expected is that run's output.
+#
+# THE LAST ROW IS THE CONTROL THAT MATTERS: a parenthesised tuple in VALUE
+# position must stay a value. A fix that made `(a, b)` a target list everywhere
+# would pass every row above and break this one.
+import struct
+
+(a, b, c) = (1, 2, 3)
+print("plain", a, b, c)
+
+# Across two lines, which is the reason anyone writes the parenthesised form.
+(w, h, depth, colour,
+ compression, filtering, interlace) = struct.unpack(">IIBBBBB", b"\x00\x00\x00\x10\x00\x00\x00\x20\x08\x02\x00\x00\x00")
+print("unpacked", w, h, depth, colour, compression, filtering, interlace)
+
+# The spellings that already worked, as positive controls.
+p, q = (7, 8)
+print("bare", p, q)
+(m, n), o = (1, 2), 3
+print("group-first", m, n, o)
+x, (y, z) = 1, (2, 3)
+print("group-last", x, y, z)
+
+t = (4, 5)
+print("value-tuple", t[0], t[1])

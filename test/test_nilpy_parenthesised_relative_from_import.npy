@@ -1,0 +1,23 @@
+# A PARENTHESISED relative from-import -- `from . import (a, b,` / `c, d)`.
+#
+# THE FAILURE WAS SILENT AND REMOTE, which is why this is a fixture and not a
+# note. PyParseImportRun's `from . import a, b` arm loops on
+# `while CurTok.Kind = tkIdent`, so a leading '(' matched nothing: the loop body
+# never ran, no diagnostic was produced, and the import bound no names at all.
+# Every name then died at its FIRST USE as `undefined variable`, in another file
+# and often hundreds of lines away from the import meant to bind it.
+#
+# Found on lekkerzeilen/app.py:18, which imports TWENTY submodules this way --
+# the bare spelling does not fit a line, so a package of any size writes this
+# one. It was the wall BEHIND capture.py's ctypes wall, and therefore invisible
+# to a first-failure census: clearing ctypes is what made it reachable.
+#
+# Runs unmodified under CPython; the .expected is that run's output.
+#
+# The continuation line and the trailing comma are both load-bearing here.
+# Newlines are skipped between elements because a bracketed list is implicitly
+# continued, and the trailing comma leaves the parser on ')' instead of on an
+# identifier -- the one position where an off-by-one in the new arm would show.
+from nilpy_parenimp import joined
+
+print(joined())

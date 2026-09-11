@@ -1365,6 +1365,22 @@ test-nilpy: $(COMPILER)
 	# the oracle here, and agrees.
 	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
 	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
+# A PARENTHESISED relative from-import -- `from . import (a, b,` / `c, d)`.
+# It bound NOTHING AND SAID NOTHING: the name loop is `while CurTok.Kind =
+# tkIdent`, so a '(' matched no arm, and every name died at its first use as
+# `undefined variable` in another file. A PACKAGE on purpose: the first fix
+# patched only PyParseImportRun's copy of that loop, so a plain module bound its
+# names while an __init__.py still bound nothing -- the two are one helper now.
+# Trailing comma included: it leaves the parser on ')' rather than an identifier.
+	./$(COMPILER) -Futest test/test_nilpy_parenthesised_relative_from_import.npy $(TESTTMP)/test_nilpy_parenimp26
+	$(TESTTMP)/test_nilpy_parenimp26 | diff -u test/test_nilpy_parenthesised_relative_from_import.expected -
+# A PARENTHESISED assignment target list -- `(a, b, c) = expr`. The detector read
+# a leading '(' as the first ELEMENT of a list and then required a comma, so a
+# group that IS the whole list was declined and the first name died as
+# `undefined variable (a)`. The last row of the fixture is the control that
+# matters: a parenthesised tuple in VALUE position must stay a value.
+	./$(COMPILER) test/test_nilpy_parenthesised_assignment_target_list.npy $(TESTTMP)/test_nilpy_parentgt26
+	$(TESTTMP)/test_nilpy_parentgt26 | diff -u test/test_nilpy_parenthesised_assignment_target_list.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

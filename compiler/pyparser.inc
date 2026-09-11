@@ -21044,6 +21044,50 @@ begin
   Result := True;
 end;
 
+{ `from . import a, b` and `from . import (a, b,` / `c)` — the names ARE the
+  modules. ONE copy, called from both PyParseOneImport and PyParseImportRun,
+  which each carried their own identical loop until 2026-09-11. The parenthesised
+  form was added that day and went into only ONE of them, so a plain module bound
+  its names while a package `__init__.py` still bound nothing — the second path is
+  the one that stays broken, which is this repo's own normalise-dont-special-case
+  rule arriving by the front door. Factored rather than patched twice, and the
+  test/nilpy_parenimp fixture is a package precisely because that is the copy the
+  first fix missed.
+
+  A '(' used to match no arm here at all: the loop is `while CurTok.Kind =
+  tkIdent`, so the body never ran, NO DIAGNOSTIC was produced, and every imported
+  name died at its first use as `undefined variable` — in another file, often
+  hundreds of lines from the import meant to bind it. lekkerzeilen/app.py:18
+  imports twenty submodules this way; the bare spelling does not fit a line, so a
+  package of any size writes this one.
+
+  Newlines are skipped between elements because a bracketed list is implicitly
+  continued in Python, and a trailing comma is legal inside the brackets and
+  leaves us on ')' rather than on an identifier. }
+procedure PyParseRelImportNames(impLevel: Integer);
+var impAlias: AnsiString; impParen: Boolean;
+begin
+  Next;                                { past `import` }
+  impParen := Eat(tkLParen);
+  if impParen then PySkipNewlines;
+  while CurTok.Kind = tkIdent do
+  begin
+    PyRelativeLevel := impLevel;
+    impAlias := CurTok.SVal;
+    PyParseImportUnit(impAlias);
+    Next;
+    PyBindImportUnitAlias(impAlias);
+    if impParen then PySkipNewlines;
+    if not Eat(tkComma) then Break;
+    if impParen then PySkipNewlines;
+  end;
+  if impParen then
+  begin
+    PySkipNewlines;
+    Expect(tkRParen, ')');
+  end;
+end;
+
 procedure PyParseOneImport; forward;   { ONE import statement, inside a block (pyparser.inc) }
 
 { PyEmitStoreRaxWidth / PyEmitParamSpills lived here: a private, raw-x86-64
@@ -28542,6 +28586,22 @@ begin
     if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
        (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
     i := PySkipTargetSubscripts(i);
+  end;
+  { The group may be the WHOLE target list and not merely its first element —
+    `(a, b, c) = xs`, which is ordinary Python and what struct.unpack's callers
+    write when the names do not fit one line. Without this the list is declined,
+    the leading '(' is parsed as a tuple VALUE, and the first name dies as
+    `undefined variable (a)` — the exact message the rest of this function was
+    written to stop producing. No new path: PyParseUnpackAssign's existing
+    nested-group arm binds the group to a hidden name and unpacks it after the
+    store, which is precisely the semantics of a parenthesised target list, so
+    this only lets the detector reach machinery that was already correct.
+    Found 2026-09-11 on lekkerzeilen/png.py:211, `(width, height, depth, colour,
+    compression, filtering, interlace) = struct.unpack(">IIBBBBB", body)`. }
+  if grp and (i < TokCount) and (Tokens[i].Kind = tkAssign) then
+  begin
+    Result := True;
+    Exit;
   end;
   if (i >= TokCount) or (Tokens[i].Kind <> tkComma) then Exit;
   while i < TokCount do
@@ -39347,17 +39407,8 @@ begin
     impLevel := PyRelativeImportLevel;
     if (impLevel > 0) and (CurTok.Kind = tkUses) then
     begin
-      { `from . import a, b` — the names ARE the modules. }
-      Next;                                { past `import` }
-      while CurTok.Kind = tkIdent do
-      begin
-        PyRelativeLevel := impLevel;
-        impAlias := CurTok.SVal;
-        PyParseImportUnit(impAlias);
-        Next;
-        PyBindImportUnitAlias(impAlias);
-        if not Eat(tkComma) then Break;
-      end;
+      { see PyParseRelImportNames — one copy, both callers }
+      PyParseRelImportNames(impLevel);
       Exit;
     end;
     if CurTok.Kind <> tkIdent then
@@ -39436,6 +39487,8 @@ end;
 
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
+    { `from . import (a, b)` — a parenthesised name list. See the loop below. }
+    impParen: Boolean;
     { the unit key and language of a quoted import; see PyConsumeQuotedModule }
     impKey, impLang: AnsiString;
     { The DOTTED module spelling, captured before ParseUsesUnit: PyDottedImport
@@ -39491,17 +39544,8 @@ begin
       impLevel := PyRelativeImportLevel;
       if (impLevel > 0) and (CurTok.Kind = tkUses) then
       begin
-        { `from . import a, b` — see PyRelativeImportLevel }
-        Next;                              { past `import` }
-        while CurTok.Kind = tkIdent do
-        begin
-          PyRelativeLevel := impLevel;
-          impAlias := CurTok.SVal;
-          PyParseImportUnit(impAlias);
-          Next;
-          PyBindImportUnitAlias(impAlias);
-          if not Eat(tkComma) then Break;
-        end;
+        { see PyParseRelImportNames — one copy, both callers }
+        PyParseRelImportNames(impLevel);
         PySkipNewlines;
         Continue;
       end;
