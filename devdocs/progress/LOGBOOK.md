@@ -2729,3 +2729,26 @@ it compiles, runs, and answers a plausible number.
   are the soname table (:4502) and a stem matcher (:4526). Re-derived from the function
   body with a positive control in both directions. Third instrument-answering-about-
   something-else of the evening, all three mine.
+
+2026-09-11 | frankuser | CORRECTION to the entry above (422f323ba) | "--no-shims is INERT
+  for zlib ... the Makefile sentence must survive" is TRUE OF ORIGIN AND ABOUT TO BE FALSE.
+  I measured compiler/pascal26 sha256 6d860abd8568bd03 at HEAD 422f323ba -- origin's tip,
+  which does NOT carry frankB's pasLookupOK CONDITION (the identifier is already on origin,
+  7 hits, which is what made the tree look current). On frankB's tree at 4091331fdf95 the
+  flag reopens the header for a bare `import zlib`: compressBound(1000) -> 1013 with the
+  flag, `undefined variable` without, and the one-arg crc32 row REFUSES under the flag
+  because C's crc32 takes three arguments. So the inertness IS the bug and the replacement
+  sentence is the correct one; the cell to change in the three-row table is zlib's, to
+  "--no-shims NOW REOPENS, header via 'zlib.h' or the flag". MY OWN OMISSION IS THE LESSON:
+  I printed sha256+commit early in the session and then dropped it from the rows I actually
+  quoted, so a measurement of MY checkout travelled as a measurement of "the code". The
+  rule I had handed a peer four hours earlier -- a peer's report of a tree's state is a
+  timestamp, not a fact -- applies to one's own tree too, and that is the half it does not
+  say out loud. Third seat this evening bitten by the same shape, always in the direction
+  of the reporter's own checkout being read as the code.
+  CHECKED FOR frankB, BOTH CLEAR: (1) the `! --no-shims` refusal row on
+  test_nilpy_dotted_import cannot flip, because pkgprobe has no host header and the
+  refusal already reads "and nothing else of that name resolved" -- wording that is already
+  correct for a flag that also tries the header. (2) That assertion exists TWICE, Makefile
+  :1564 (test-nilpy) and :22800 (test-core), identical but for the .1/.2 expect_same label,
+  so the landing is exercised by both targets. Deliberate duplication, not a defect.
