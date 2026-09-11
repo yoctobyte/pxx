@@ -3917,6 +3917,19 @@ test-nilpy: $(COMPILER)
 	@# bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
 	@./$(COMPILER) test/test_p_a_unit_cycle_through_an_implementation_uses.pas $(TESTTMP)/test_ucycle26
 	@tools/expect_same.sh test_ucycle26 "$$($(TESTTMP)/test_ucycle26 | tail -n 2)" "$$(printf 'fails=0\nUCYCLE OK')"
+	@# THE SAME CYCLE WITH ANOTHER UNIT NAMED AFTER THE CYCLE-CLOSING ONE, which
+	@# the row above structurally cannot reach: it names exactly one open unit
+	@# and nothing follows it. The park keyed off a GLOBAL, so loading a later
+	@# unit in the clause re-entered ParseUnitImplSection and CLEARED the
+	@# pending wait -- `uses ucyctail_a, ucyctail_t` failed while
+	@# `uses ucyctail_t, ucyctail_a` compiled, from the same four units. Five
+	@# reductions missed it because all five put the cycle-closer last.
+	@# ucyctail_t must keep its own implementation `uses`: that clause is the
+	@# active ingredient, not decoration. Verified to FAIL before the fix while
+	@# the row above still passed. Byte-identical to fpc 3.2.2.
+	@# bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface
+	@./$(COMPILER) test/test_p_a_unit_after_the_cycle_closer_in_one_clause.pas $(TESTTMP)/test_ucyctail26
+	@tools/expect_same.sh test_ucyctail26 "$$($(TESTTMP)/test_ucyctail26 | tail -n 2)" "$$(printf 'fails=0\nUCYCTAIL OK')"
 	@# `bitsizeof(x)` is SizeOf(x) * 8 and nothing else -- an FPC intrinsic
 	@# (compinnr.pas:85, in_bitsizeof_x) that FPC's own compiler uses
 	@# throughout. After the unit-cycle fix it became the FIRST failure of 163

@@ -7738,8 +7738,26 @@ function ParseUnitImplSection(const uname: AnsiString; pendPtrMark: Integer): Bo
 var
   doneImp, savedPass2Active, parked: Boolean;
   savedBase, afterImpTok, ii, savedPass2BodyTok, sectionStartTok: Integer;
+  savedCycleWait: Integer;
 begin
   ParseUnitImplSection := False;
+  { CycleWaitUnit IS A GLOBAL AND THIS ROUTINE RE-ENTERS ITSELF, so it has to be
+    saved and restored like Pass2Active below. A `uses` clause here loads each
+    named unit in turn, and loading one runs ITS implementation section through
+    this same routine -- which clears CycleWaitUnit for its own clause. A unit
+    named AFTER the one that closes the cycle therefore wiped the pending wait
+    on the way past, the park never fired, and the section carried on into the
+    pre-fix `undefined variable` on everything the other interface declares.
+
+    ORDER-DEPENDENT, WHICH IS WHY FIVE REDUCTIONS MISSED IT: with the cycle unit
+    LAST in the clause nothing follows it to do the clearing and the same four
+    units compile. Measured 2026-09-11 on FPC's comphook.pas, whose
+    implementation reads `uses cutils, systems, globals, comptty` -- `globals`
+    closes the cycle and `comptty` (which has an implementation `uses` of its
+    own) clears it one unit later. Probe at the park site: `cycleWait=-1` for
+    comphook, immediately after `CYCSITE unit=comptty`.
+    bug-p-a-unit-cycle-closed-through-an-implementation-uses-cannot-see-the-other-interface }
+  savedCycleWait := CycleWaitUnit;
   { WHERE A PARK REWINDS TO, and it is the head of the section rather than the
     token after the `uses` clause. Restarting past the clause looks cheaper --
     no re-walked imports, no duplicate edge in the leak table -- and it is
@@ -7835,6 +7853,7 @@ begin
               DeclItemCount := savedBase;
               PreScanPass := False;
               ParseUnitImplSection := True;
+              CycleWaitUnit := savedCycleWait;
               Exit;
             end;
           end;
@@ -7975,6 +7994,7 @@ begin
   afterImpTok := Pass2BodyTok;   { kept in sync with pass-2 token edits }
   Pass2Active  := savedPass2Active;
   Pass2BodyTok := savedPass2BodyTok;
+  CycleWaitUnit := savedCycleWait;
   TokPos := afterImpTok;
   Next;
   DeclItemCount := savedBase;
