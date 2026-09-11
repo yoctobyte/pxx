@@ -177,6 +177,14 @@ that has no ticket file** — `compiler/pyparser.inc:23973` cites
 `devdocs/progress/**` covers it (checked by name and by grepping for
 `AN_INLINE_PARAM`). So the class has at least two confirmed instances and a
 12-row population nobody has checked. Not claimed here; recorded so it is not
-re-derived. The cheap rule for whoever writes the next one: **cite the slug or
-do not claim the filing** — an unsourced "see the ticket" cannot be falsified by
-a reader, which is exactly what makes it survive.
+re-derived. The cheap rule for whoever writes the next one: **name the slug or assert no
+filing at all** — an unsourced "see the ticket" cannot be falsified by a
+reader, which is exactly what makes it survive.
+
+(That sentence originally spelled out the dispatch-suppression marker that
+`tools/progress.py` greps for — and the regex matched it, so this p75 ticket
+was hidden from `ready` and `next` entirely, on a sentence about CITATIONS.
+Nobody could have taken it. Censused when found: 7 open ranked tickets trip
+that marker and **6 genuinely mean it**, so the detector is right and this was
+the only false row. The repair is the same rule as the one above — describe
+the marker, never respell it — which is also why this note does not quote it.)
