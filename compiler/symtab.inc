@@ -10698,8 +10698,49 @@ begin
 end;
 
 function ParamPtrElemOf(tk: TTypeKind): Integer;
+{ AN UNRESOLVED FORWARD POINTEE IS NOT A POINTEE, AND CALLING IT tyInteger COST
+  A WHOLE METHOD BODY.
+
+  While `PItem = ^TItem` is still waiting for ResolvePendingPointerAliases,
+  AliasElemTk holds the PLACEHOLDER the pending arm in ParseTypeKind leaves --
+  tyInteger -- and not a pointee anyone wrote. Every other carrier of that fact
+  gets repaired by the pass: a FIELD through UFldPtrAlias, an ARRAY element
+  through ArrTypePtrAlias, a RESULT through ProcRetPtrAlias. A PARAMETER has no
+  such column, so ProcParamPtrElemTk keeps the placeholder for the life of the
+  program -- and the IMPLEMENTATION header, parsed after the pass, records the
+  real pointee. FindProcOverloadRec's typed-pointer arm then splits the two,
+  both sides having "positively named" a pointee, the body registers a SECOND
+  proc, and the declaration's entry never gets an address.
+
+  THE FAILURE IS NOWHERE NEAR THE CAUSE AND DEPENDS ON DECLARATION ORDER. A call
+  reached BEFORE the body binds to the bodiless entry and dies at CODEGEN with
+  `unresolved forward: TL.Cb` -- reported against builtinheap.pas, suggesting an
+  unterminated comment -- while the same three routines with the body written
+  first compile and run, and so does the same class in a SECOND type section,
+  after the pass. Measured 2026-09-11 on FPC's own cclasses.pas, where
+  `PViHashListItem = ^TViHashListItem` sits eleven lines above its record and
+  TViHashList.AddToHashTable takes one.
+
+  tyUnknown is the RIGHT answer rather than a workaround, and the guard it feeds
+  was already written for exactly this: the split arm requires BOTH sides to
+  positively name a pointee, precisely so that "never recorded" cannot
+  manufacture a phantom overload. "Not resolved yet" is the same claim. This
+  function was handing it a placeholder that looked like a real type.
+
+  NARROWED TO THE PARAMETER PATH ON PURPOSE. Answering tyUnknown from the alias
+  arm of ParseTypeKind instead -- one layer up, where it reads better -- breaks
+  the compiler's OWN self-host: `make compiler/pascal26` dies at
+  `EmitAsmX64: unknown 0-operand mnemonic`. Other readers of
+  LastTypePointerElemTk depend on the placeholder, and they are repaired later
+  by columns the parameter path does not have. The narrow site is the one whose
+  answer is durable and unrepaired.
+  bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body }
 begin
   if tk <> tyPointer then ParamPtrElemOf := Ord(tyUnknown)
+  else if (LastTypePointerAlias >= 0) and
+          (AliasElemRec[LastTypePointerAlias] = REC_NONE) and
+          (AliasTargetNLen[LastTypePointerAlias] > 0) then
+    ParamPtrElemOf := Ord(tyUnknown)
   else ParamPtrElemOf := Ord(LastTypePointerElemTk);
 end;
 

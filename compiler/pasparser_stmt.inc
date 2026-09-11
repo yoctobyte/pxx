@@ -6820,7 +6820,28 @@ begin
         ParseExpr;
         miArg := CurASTNode;
         if CurTok.Kind = tkComma then
-          Error(name + '(x, n) — the element-count form is not implemented; call it per element (feature-a-implement-initialize-and-finalize-over-the-arc-helpers)');
+        begin
+          { REPORTED AND RECOVERED, not halted, and the distinction is about the
+            INSTRUMENT rather than about this construct. Refusing is still the
+            right answer -- see the paragraph above on why accepting the count
+            form would put a silent leak back -- and recovery does not accept
+            anything: ErrCount is nonzero from here on, and the parse's own
+            contract is that nothing is written when it is. What halting cost
+            was every LATER wall in the same file, because a fatal on line 1726
+            is indistinguishable from a file with exactly one problem.
+            Measured 2026-09-11 on umbrella-pxx-compiles-fpc-itself: this one
+            site was the reported first failure of 150 of FPC's 207 compiler
+            units, and the umbrella's own attempt 6 concluded that first-failure
+            counts measure QUEUE POSITION rather than size -- three consecutive
+            walls, all inside cclasses.pas, each delivering its whole population
+            to the next one a few hundred lines further down.
+            The stand-in the recovery owes the parse is the single-element form
+            built below, with the count expression consumed so the token stream
+            stays well-formed through the `)`. }
+          ErrorRecover(name + '(x, n) — the element-count form is not implemented; call it per element (feature-a-implement-initialize-and-finalize-over-the-arc-helpers)');
+          Next;         { the comma }
+          ParseExpr;    { and the count, discarded }
+        end;
         Expect(tkRParen, ')');
         { Finalize of a STRING is `x := ''` — literally. Assignment already
           releases the old reference and stores the new one, which is Finalize's

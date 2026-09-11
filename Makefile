@@ -6417,6 +6417,25 @@ test-core: $(COMPILER)
 	# bug-p-two-non-const-array-overloads-at-a-bracket-slot-cannot-be-ranked-by-element-type
 	./$(COMPILER) test/test_p_a_bracket_slot_is_ranked_by_what_its_elements_are.pas $(TESTTMP)/test_brkrank26
 	$(TESTTMP)/test_brkrank26 | diff -u test/test_p_a_bracket_slot_is_ranked_by_what_its_elements_are.expected -
+	# A METHOD PARAMETER TYPED THROUGH A FORWARD POINTER ALIAS never matched its
+	# own body, so the declaration's proc never got an address and a call reached
+	# before the body died at CODEGEN with `unresolved forward` -- naming
+	# builtinheap.pas and suggesting an unterminated comment, which is a real file
+	# the author never wrote. Cause: while `PItem = ^TItem` waits for
+	# ResolvePendingPointerAliases its element is a PLACEHOLDER (tyInteger), a
+	# field/array/result all get repaired afterwards and a PARAM has no such
+	# column, so decl and impl recorded different pointees and the typed-pointer
+	# split arm separated them.
+	# THE DECLARATION ORDER IS THE TEST: alias above the record, class in the same
+	# type section, body written after a call to it. Any other order compiles even
+	# unfixed, so do not tidy the fixture.
+	# POSITIVE CONTROL, verified: the PINNED compiler REFUSES this file --
+	# `unresolved forward: TAdder.Later`. Found on FPC's own cclasses.pas, where
+	# it was the last thing between pxx and that unit.
+	# Every expected line is fpc 3.2.2's for the identical source.
+	# bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body
+	./$(COMPILER) test/test_p_a_forward_pointer_alias_parameter_matches_its_own_body.pas $(TESTTMP)/test_fwdptrparam26
+	$(TESTTMP)/test_fwdptrparam26 | diff -u test/test_p_a_forward_pointer_alias_parameter_matches_its_own_body.expected -
 	# The OTHER half of the `static` directive change: a record's static class
 	# function no longer HAS a Self, and the call site that hand-rolls its own
 	# argument loop was still prepending a by-value dummy. The chain was then one
