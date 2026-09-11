@@ -163,4 +163,4 @@ failure that glibc's own `fcntl.h` does not, and making the local declaration
 variadic does not close the gap. That asymmetry is a lead, not a nuisance.
 
 ## Log
-- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 54fd71123.
