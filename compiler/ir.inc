@@ -9495,7 +9495,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
     bmDest, bmSecond, bmThird: Integer;   { __pxxblockmove/fill operands — see AN_BLOCK_MEM }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
-    miArg, miRec, miPi, miArgN: Integer;   { Initialize/Finalize }
+    miArg, miRec, miPi, miArgN, miCnt, miDescN, miCntN: Integer;   { Initialize/Finalize }
     miTk: TTypeKind; miIsFin: Boolean;
     convAmbig: Boolean;             { two conversion operators equally apply — see the assign arm }
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
@@ -11897,6 +11897,7 @@ begin
         out of using the ordinary release helper rather than a bespoke free. }
       miIsFin := ASTIVal[node] = 1;
       miArg := ASTLeft[node];
+      miCnt := ASTRight[node];          { the ELEMENT COUNT, or -1 }
       miTk := IntToTypeKind(ASTTk[miArg]);
       if miTk = tyRecord then
       begin
@@ -11906,26 +11907,68 @@ begin
         if not RecordHasManagedFields(miRec) then
           { No managed members: nothing to do, exactly as in FPC. NOT an error --
             a generic container calling Finalize on every element type must
-            compile for the unmanaged ones too. }
+            compile for the unmanaged ones too. The COUNT form is a no-op here
+            for the same reason and not a different one: n copies of nothing. }
           Result := IRAppend(IR_NOP, -1, -1, -1, 0, Ord(tyInteger))
         else
         begin
-          if miIsFin then miPi := FindProc('PXXRecordFinalize')
-          else miPi := FindProc('PXXRecordInitialize');
-          if miPi < 0 then
-            Error('compiler error: PXXRecordInitialize/PXXRecordFinalize not found');
+          { THE COUNT FORM IS A LOOP OVER THE ONE-ELEMENT HELPER, in the RUNTIME
+            and not unrolled here, because n is an expression: FPC's callers
+            reach it with a field (`Finalize(FItems^, FCount)`).
+            THE STRIDE IS PASSED IN AND IS NOT IN THE DESCRIPTOR. The descriptor
+            enumerates the MANAGED MEMBERS; a record's unmanaged tail contributes
+            to its stride and appears nowhere in that walk, so deriving the step
+            from the descriptor would step short on exactly the records the
+            corpus uses (TViHashListItem is one managed member and three
+            unmanaged ones). RecSize is the compiler's own answer to the same
+            question everywhere else. }
+          if miCnt >= 0 then
+          begin
+            if miIsFin then miPi := FindProc('PXXRecordFinalizeN')
+            else miPi := FindProc('PXXRecordInitializeN');
+            if miPi < 0 then
+              Error('compiler error: PXXRecordInitializeN/PXXRecordFinalizeN not found'
+                    + ' -- the element-count form needs a pin that carries them');
+          end
+          else
+          begin
+            if miIsFin then miPi := FindProc('PXXRecordFinalize')
+            else miPi := FindProc('PXXRecordInitialize');
+            if miPi < 0 then
+              Error('compiler error: PXXRecordInitialize/PXXRecordFinalize not found');
+          end;
           { (recAddr, desc) -- the SAME layout descriptor scope-exit release
             walks, reached the way AN_DYN_DELETE reaches it. }
           miArgN := IRAppend(IR_ARG, IRLowerAddress(miArg), -1, -1, 0, Ord(tyPointer));
-          IRB[miArgN] := IRAppend(IR_ARG,
-                           IRAppend(IR_CONST_DATA, -1, -1, -1,
-                             -(RECORD_RTTI_DATAREF_BASE + (miRec - REC_UCLASS_BASE)),
-                             Ord(tyPointer)),
-                           -1, -1, 0, Ord(tyPointer));
+          miDescN := IRAppend(IR_ARG,
+                       IRAppend(IR_CONST_DATA, -1, -1, -1,
+                         -(RECORD_RTTI_DATAREF_BASE + (miRec - REC_UCLASS_BASE)),
+                         Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[miArgN] := miDescN;
+          if miCnt >= 0 then
+          begin
+            miCntN := IRAppend(IR_ARG, IRLowerAST(miCnt), -1, -1, 0, Ord(tyNativeInt));
+            IRB[miDescN] := miCntN;
+            IRB[miCntN] := IRAppend(IR_ARG,
+                             IRAppend(IR_CONST_INT, -1, -1, -1,
+                               RecSize(miRec), Ord(tyNativeInt)),
+                             -1, -1, 0, Ord(tyNativeInt));
+          end;
           Result := IRAppendCall(miPi, miArgN, -1, Ord(tyNativeInt));
           IRIVal[Result] := 1;   { statement: emit for effect }
         end;
       end
+      else if miCnt >= 0 then
+        { EVERY OTHER ELEMENT TYPE STILL REFUSES THE COUNT FORM, and recovers
+          rather than halting so the rest of the file is still measurable. The
+          record case is the one the corpus asks for; a bare array of strings or
+          variants would need the same loop with a different per-element step
+          and has no demand behind it yet.
+          feature-p-the-element-count-form-of-initialize-and-finalize }
+        ErrorAtRecover(ASTLine[node],
+          'Initialize/Finalize(x, n): the element-count form is implemented for'
+          + ' a RECORD element type only')
       else if (miTk = tyAnsiString) or (miTk = tyString) then
         { Initialize only — the parser desugars Finalize of a string into
           `x := ''` and never builds this node for it. A raw store, NOT an

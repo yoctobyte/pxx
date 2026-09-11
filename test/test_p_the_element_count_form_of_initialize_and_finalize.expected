@@ -1,0 +1,11 @@
+before  3333/2222
+after   3003/2002
+keep    aaa
+ints    10 11 12 13
+again   3003/2002
+zero    3003/2002
+one     3000/2000
+heap    222
+heapint 012
+heapfin 000
+done

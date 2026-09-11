@@ -6463,6 +6463,39 @@ test-core: $(COMPILER)
 	# bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body
 	./$(COMPILER) test/test_p_a_forward_pointer_alias_parameter_matches_its_own_body.pas $(TESTTMP)/test_fwdptrparam26
 	$(TESTTMP)/test_fwdptrparam26 | diff -u test/test_p_a_forward_pointer_alias_parameter_matches_its_own_body.expected -
+	# `Initialize(x, n)` / `Finalize(x, n)` -- the ELEMENT-COUNT form, where x is
+	# the first of n consecutive elements. FPC's own RTL spells both that way
+	# wherever the count is not a compile-time constant, and it is the wall four
+	# consecutive null rows of the FPC-corpus umbrella were stacked behind:
+	# cclasses.pas reported exactly two errors and both were this.
+	# THE STRIDE IS THE ROW TO PROTECT and it is `ints`. The layout descriptor
+	# these lower onto enumerates a record's MANAGED members and carries no size,
+	# so a step derived from it walks 16 bytes where TRec is 24. The stride is
+	# passed in from RecSize instead. TRec is deliberately AnsiString/Integer/
+	# AnsiString -- an UNMANAGED member wedged between two managed ones -- so a
+	# short step lands inside a record rather than neatly on the next.
+	# The range is a[1]..a[2], never a[0]: both boundaries are asserted, and an
+	# off-by-one at either end moves a row.
+	# POSITIVE CONTROL, verified: delete the `Initialize(p^, 3)` line and the
+	# identical program is `Runtime error 216` under fpc 3.2.2 and SIGSEGV under
+	# pxx -- GetMem plus FillChar($FF) is what makes that true, and a stack array
+	# would already be zero, so the control could not fire.
+	# SECOND CONTROL, verified: the PINNED compiler REFUSES this file at line 80 --
+	# `Finalize(x, n) -- the element-count form is not implemented` -- which is the
+	# deliberate refusal recorded in the done ticket
+	# feature-a-implement-initialize-and-finalize-over-the-arc-helpers.
+	# Read it as a control for the FEATURE and NOT
+	# for the STRIDE: the pin stops in the parser and never reaches the lowering
+	# the `ints` row is about, and it has no PXXRecordFinalizeN to reach it with.
+	# THIRD CONTROL, and it is the one for the stride -- RUN, not reasoned: replace
+	# `RecSize(miRec)` at the IR_ARG in compiler/ir.inc with the descriptor-shaped
+	# guess 16 (two managed members x 8), rebuild, and this file SIGSEGVs (rc=139)
+	# after printing `before` and nothing else. So the stride is load-bearing and
+	# the rows below it cannot pass with a wrong one.
+	# Every expected line is fpc 3.2.2's for the identical source.
+	# feature-p-the-element-count-form-of-initialize-and-finalize
+	./$(COMPILER) test/test_p_the_element_count_form_of_initialize_and_finalize.pas $(TESTTMP)/test_fincount26
+	$(TESTTMP)/test_fincount26 | diff -u test/test_p_the_element_count_form_of_initialize_and_finalize.expected -
 	# The OTHER half of the `static` directive change: a record's static class
 	# function no longer HAS a Self, and the call site that hand-rolls its own
 	# argument loop was still prepending a by-value dummy. The chain was then one

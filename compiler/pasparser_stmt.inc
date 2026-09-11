@@ -6490,7 +6490,7 @@ var
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   frozenDest: Integer;   { Insert/Delete over a FROZEN string destination: the original lvalue, read-modify-written through a managed temp. -1 = the destination is already managed. See BuildFrozenStrVarArgRMW. }
-  miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
+  miArg, miEmpty, miCnt: Integer; miIsFin: Boolean; miArgTk: TTypeKind;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
   insSplice: Boolean;   { …and whether this call IS the splice — true for a named source array AND for a retagged element list, which has no symbol }
@@ -6805,10 +6805,14 @@ begin
         runs, and silently does not do what it says. They now lower onto the
         ARC machinery that already exists — see AN_MANAGED_INIT.
 
-        The count form `Finalize(x, n)` (x as the first of n elements) is
-        REFUSED rather than accepted-and-ignored: accepting it would put the
-        silent no-op straight back, in the one shape where it leaks an array's
-        worth of references instead of one. }
+        The count form `Finalize(x, n)` — x as the FIRST of n consecutive
+        elements — is the one FPC's own RTL uses wherever the count is not a
+        compile-time constant, and it is IMPLEMENTED here rather than refused.
+        It was refused until 2026-09-11, on the argument that accepting it
+        would put the silent no-op straight back in the one shape that leaks an
+        array's worth of references instead of one. That argument was about
+        ACCEPTING-AND-IGNORING and stays true; it is not an argument against
+        doing the work, which is a loop over the one-element helper. }
       if (qUnit < 0) and (CaseEqual(name, 'Finalize') or CaseEqual(name, 'Initialize')) and
          (Tokens[TokPos].Kind = tkLParen) and
          (FindProc(name) < 0) and (FindSym(name) < 0) and
@@ -6819,28 +6823,16 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
         miArg := CurASTNode;
+        miArgTk := LastExprTk;   { CAPTURED BEFORE the count expression
+          overwrites it -- LastExprTk is the LAST expression parsed, and the
+          string desugar below asks about the FIRST. Without this, `Finalize(s,
+          n)` read the count's kind and took the scalar arm. }
+        miCnt := -1;
         if CurTok.Kind = tkComma then
         begin
-          { REPORTED AND RECOVERED, not halted, and the distinction is about the
-            INSTRUMENT rather than about this construct. Refusing is still the
-            right answer -- see the paragraph above on why accepting the count
-            form would put a silent leak back -- and recovery does not accept
-            anything: ErrCount is nonzero from here on, and the parse's own
-            contract is that nothing is written when it is. What halting cost
-            was every LATER wall in the same file, because a fatal on line 1726
-            is indistinguishable from a file with exactly one problem.
-            Measured 2026-09-11 on umbrella-pxx-compiles-fpc-itself: this one
-            site was the reported first failure of 150 of FPC's 207 compiler
-            units, and the umbrella's own attempt 6 concluded that first-failure
-            counts measure QUEUE POSITION rather than size -- three consecutive
-            walls, all inside cclasses.pas, each delivering its whole population
-            to the next one a few hundred lines further down.
-            The stand-in the recovery owes the parse is the single-element form
-            built below, with the count expression consumed so the token stream
-            stays well-formed through the `)`. }
-          ErrorRecover(name + '(x, n) — the element-count form is not implemented; call it per element (feature-a-implement-initialize-and-finalize-over-the-arc-helpers)');
-          Next;         { the comma }
-          ParseExpr;    { and the count, discarded }
+          Next;
+          ParseExpr;
+          miCnt := CurASTNode;
         end;
         Expect(tkRParen, ')');
         { Finalize of a STRING is `x := ''` — literally. Assignment already
@@ -6853,7 +6845,11 @@ begin
           of its handle and segfaulted, while this path is the one every
           assignment in the language already exercises. A zero-length literal
           needs no source text, so SOffset is irrelevant at SLen = 0. }
-        if miIsFin and ((LastExprTk = tyAnsiString) or (LastExprTk = tyString)) then
+        { ...and the desugar is for the ONE-ELEMENT form only. `x := ''` says
+          nothing about elements 1..n-1, so a count has to reach the lowering,
+          which walks the descriptor per element. }
+        if miIsFin and (miCnt < 0) and
+           ((miArgTk = tyAnsiString) or (miArgTk = tyString)) then
         begin
           miEmpty := AllocNode(AN_STR_LIT);
           ASTSOffset[miEmpty] := 0; ASTSLen[miEmpty] := 0;
@@ -6863,6 +6859,7 @@ begin
         end;
         Result := AllocNode(AN_MANAGED_INIT);
         ASTLeft[Result] := miArg;
+        ASTRight[Result] := miCnt;   { -1 for the one-element form }
         if miIsFin then ASTIVal[Result] := 1 else ASTIVal[Result] := 0;
         Exit;
       end;

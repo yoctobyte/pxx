@@ -570,6 +570,15 @@ procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
   valid empty state. }
 procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
+{ ...and the ELEMENT-COUNT form, `Initialize(x, n)` / `Finalize(x, n)`: x is the
+  FIRST of n consecutive elements, which is how FPC's own RTL spells it wherever
+  the count is not a compile-time constant (cclasses.pas's TFPHashList.Clear is
+  `Finalize(FItems^, FCount)`). `elemSize` is the compiler's RecSize for the
+  element type, passed in rather than read from the descriptor because the
+  descriptor describes the MANAGED MEMBERS and not the record's stride -- an
+  unmanaged tail contributes to the stride and appears nowhere in the walk. }
+procedure PXXRecordInitializeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+procedure PXXRecordFinalizeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
@@ -3551,6 +3560,39 @@ procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
 begin
   PXXRecordRelease(recAddr, desc);
   PXXRecordZeroManaged(recAddr, desc);
+end;
+
+procedure PXXRecordInitializeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+{ The count form, as a loop over the one-element helper rather than a second
+  descriptor walk: one implementation of what Initialize MEANS, n times.
+
+  A non-positive count is a no-op and not an error. FPC's own callers reach this
+  with a freshly-emptied container (`Finalize(FItems^, FCount)` right after
+  FCount became 0), so refusing 0 would refuse the commonest legal call. }
+var i: NativeInt;
+begin
+  if elemSize <= 0 then Exit;
+  i := 0;
+  while i < count do
+  begin
+    PXXRecordInitialize(Pointer(Int64(recAddr) + i * elemSize), desc);
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordFinalizeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+{ Finalize's twin of the above, and idempotent for the same reason the
+  one-element form is: each element is released and then nil'd, so a second
+  Finalize over the same range decrements nothing. }
+var i: NativeInt;
+begin
+  if elemSize <= 0 then Exit;
+  i := 0;
+  while i < count do
+  begin
+    PXXRecordFinalize(Pointer(Int64(recAddr) + i * elemSize), desc);
+    i := i + 1;
+  end;
 end;
 
 { PXXClassFinalize's forward used to sit here; it is declared in the

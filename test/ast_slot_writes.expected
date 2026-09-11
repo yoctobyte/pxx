@@ -946,6 +946,7 @@ AN_IS_TEST Left unboxCall
 AN_IS_TEST Left xNode
 AN_MANAGED_INIT Left identNode
 AN_MANAGED_INIT Left miArg
+AN_MANAGED_INIT Right miCnt
 AN_METACLASS_NEW Right crefNode
 AN_METHODREF Left node
 AN_METHODREF Left opNode
