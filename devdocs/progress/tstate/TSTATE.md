@@ -2,8 +2,8 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus **QUIET 12d6h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
+| borg | `d4f170a4e7fb` | 2026-09-11T19:51:21Z | RED (full) | 888.8s | `d4f170a4e7fb` RED |
+| plexus **QUIET 12d9h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
@@ -11,11 +11,12 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `27424c927b65` on plexus, 2026-08-30T10:24:09Z (12d6h ago).**
+**Newest full tier in the fleet: `d4f170a4e7fb` on borg, 2026-09-11T19:51:21Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| plexus | `27424c927b65` | RED | 12d6h | — (newest) |
+| borg | `d4f170a4e7fb` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 12d9h | 12d9h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -23,6 +24,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
 
 | host | toolchain | fp |
 |------|-----------|-----|
+| borg | kernel=7.0.0-29-generic gcc=13.3.0 qemu=8.2.2(6 of 6) git=2.43.0 wasmtime=ABSENT | `2b6cbbd65be8` |
 | plexus | _not published since this field existed_ | — |
 
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
@@ -34,15 +36,15 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **test-pascal-conformance#shard0/6** (plexus, quiet 12d6h): bad `e46dbffaa80d`, 217 commit(s) in range
-- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 12d6h): bad `27424c927b65`, 88 commit(s) in range
-- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 12d6h): bad `27424c927b65`, 88 commit(s) in range
-- **test-pascal-conformance#shard1/6** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard2/6** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard3/6** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard4/6** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard5/6** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **tools-devtest#00** (plexus, quiet 12d6h): bad `27424c927b65`, 231 commit(s) in range
-- **lib-test#src:tools/crtl_reachability.py** (plexus, quiet 12d6h): bad `fca28056d8ec`, 4 commit(s) in range
-- **tools-devtest#00** (plexus, quiet 12d6h): bad `539361a56c61`, 1 commit(s) in range
-- **tools-devtest-sh#00** (plexus, quiet 12d6h): bad `dbd40ba3c706`, 1 commit(s) in range
+- **test-pascal-conformance#shard0/6** (plexus, quiet 12d9h): bad `e46dbffaa80d`, 217 commit(s) in range
+- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 12d9h): bad `27424c927b65`, 88 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 12d9h): bad `27424c927b65`, 88 commit(s) in range
+- **test-pascal-conformance#shard1/6** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard2/6** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard3/6** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard4/6** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard5/6** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 12d9h): bad `27424c927b65`, 231 commit(s) in range
+- **lib-test#src:tools/crtl_reachability.py** (plexus, quiet 12d9h): bad `fca28056d8ec`, 4 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 12d9h): bad `539361a56c61`, 1 commit(s) in range
+- **tools-devtest-sh#00** (plexus, quiet 12d9h): bad `dbd40ba3c706`, 1 commit(s) in range
