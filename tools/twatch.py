@@ -4182,6 +4182,23 @@ def staleness_note(clone, sha, parent):
 # not "improve" this by loosening the prefix list: a wrong exoneration hides a
 # real regression, while a missed one costs a message.
 #
+# AND THE PUBLICATION WAS WIDER THAN THE DECISION, for the second time in this
+# same block. 2026-09-11: the stub banner this check drives said "Look at
+# flakiness or box load, not at the named sha; the bisect is unsound here and
+# has been skipped." The check is about ONE commit; the advice is about the
+# whole range, and the range is exactly what this check says nothing about --
+# a pin-built job reads live `lib/**`, `test/**` and the Makefile. Four
+# lib-test / test-fpjson rows carried that banner for two days over a real
+# `lib/rtl/sysutils.pas` cause sitting three commits below the named sha, and
+# the SAME ticket said so correctly in its Range section ("the cause is
+# somewhere below it", "4 observable commit(s)"). A ticket that contradicts
+# itself is read from the top. The banner now stops at the exculpation and
+# hands the residual question to range_note(), which already has
+# `range_non_causal` for the case where "look at the box" is the true answer.
+# Same lesson pin_observable()'s docstring records one screen above: the
+# decision was right, the publication was wrong, and the predicate that knew
+# better was already in the file.
+#
 # Deliberately narrow. It answers "could this commit have changed what this job
 # compiles?" and nothing else: a job that ALSO invokes ./compiler/pascal26 is
 # out of scope (the check returns False), and a commit touching lib/**, test/**,
@@ -4932,12 +4949,17 @@ takes it from the repro line.*
                 "track: %s\n" % track,
                 track_note
                 + slug_note(job, j)
-                + (("> **This commit CANNOT be the cause.** The job builds "
+                + (("> **The NAMED SHA cannot be the cause.** The job builds "
                     "only with `$(PXX_STABLE)`, and this commit moved no "
                     "`stable_linux_amd64/**` — so the bytes that compiled it "
-                    "are unchanged. Look at flakiness or box load, not at the "
-                    "named sha; the bisect is unsound here and has been "
-                    "skipped.\n\n") if immune else "")
+                    "are unchanged, and it was not bisected. **That is a "
+                    "statement about ONE commit, not about the range**: this "
+                    "job still reads live `lib/**`, `test/**` and the Makefile, "
+                    "so a commit BELOW the named sha can have caused it. Read "
+                    "the Range section before concluding anything — it says "
+                    "how many commits here the job can actually observe, and "
+                    "it is the section that will tell you when the answer is "
+                    "genuinely the box.\n\n") if immune else "")
                 + (("> **This expectation records a REFUSAL** (%s). Before "
                     "treating a converged bisect range as an accusation, check "
                     "whether the named commit IMPLEMENTED the thing being "

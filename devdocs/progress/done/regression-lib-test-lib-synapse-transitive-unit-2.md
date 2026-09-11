@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: B
+status: done
 ---
 
 > **Track guessed as B from the FAILING STEP** — line 1 of 6, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_`, which names `test/lib_synapse_transitive_unit.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -48,3 +49,31 @@ pascal26:2178: error: undefined variable (SetString)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-11 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## 2026-09-11 (frankS) — real, mine, fixed at 8887170da
+
+**CAUSE.** `0ffe185bb` moved six System names out of `lib/rtl/sysutils.pas` into
+`compiler/builtin/builtin.pas`. This job builds with `$(PXX_STABLE)` — the PINNED
+compiler plus a FROZEN copy of `compiler/builtin/` that predates the move — so
+the name is gone from the only two places such a build can look. For lib_synapse_transitive_unit the names
+are `SetString`, in `external/synapse/synautil.pas`.
+
+**FIX.** All six restored in `lib/rtl/sysutils.pas` as a deliberate duplicate of
+builtin's copies, with a retirement test written on the `sLineBreak` note (grep
+the name in `stable_linux_amd64/default/builtin/builtin.pas`; delete the sysutils
+copy when it is there). Verified positive-control first, in place: revert
+`sysutils.pas` to origin/master and this job's own recipe reproduces the error in
+the log tail above; apply the fix and it prints `ok`.
+
+**THE BANNER AT THE TOP OF THIS TICKET SAID THE OPPOSITE, AND IT IS WORTH A
+SENTENCE.** "This commit CANNOT be the cause ... Look at flakiness or box load"
+is TRUE about the named sha `fca28056d8ec` (a tstate publish, docs only) and
+WRONG as advice, because this job reads live `lib/**` and the untested range
+below the named sha held four observable commits — one of which is the cause. The
+ticket's own Range section said so correctly thirty lines further down ("the
+cause is somewhere below it", "**4 observable commit(s)**"), so the ticket
+contradicted itself and the contradiction was in the half a reader sees first.
+Reworded in `tools/twatch.py` at HEAD to stop at the exculpation and hand the
+residual question to the Range section, which already carries the
+`range_non_causal` case for when the answer genuinely is the box.
