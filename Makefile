@@ -551,11 +551,22 @@ test-nilpy: $(COMPILER)
 	#     import 'sqlite3.h'           -> error: uses: unit source not found: sqlite3
 	#     import '/usr/include/sqlite3.h' -> resolves, 3046001
 	# So the bare header NAME works for zlib and NOT for sqlite3, where only the
-	# absolute path does. Plausible (unchased) reading: the `.h` is stripped and
-	# the unit search never probes /usr/include, with zlib reaching the header
-	# through the soname table instead. The next person who copies this idiom for
-	# another header gets the sqlite3 answer, so do not read this row as
-	# documenting a general spelling. Unowned; whoever owns the resolver.
+	# absolute path does. THE CAUSE IS THE SHIM, NOT THE INCLUDE ROOT -- chased by
+	# frankB and re-measured here; my own guess in this comment (that the `.h` is
+	# stripped and /usr/include is never probed) was WRONG and frankB was one
+	# keystroke from copying it into the compiler. Both headers ARE in /usr/include
+	# (zlib.h 96829 bytes, sqlite3.h 645281) and PyTryHostHeader probes it directly.
+	# The discriminator is that PyTryHostHeader's call site is gated on
+	# `NoShims or (not PyMimicShimExists(...))` (pasparser_proc.inc:5843, :5856),
+	# and an explicit extension pins the LANGUAGE without lifting that gate: for a
+	# shimmed name the extension closes the shim route and the gate closes the
+	# header route, so the import reaches NEITHER. lib/rtl/mimic_zlib.pas does not
+	# exist; lib/rtl/mimic_sqlite3.pas does. That is the whole asymmetry.
+	# It is a mechanism rather than a story because it PREDICTED a cell nobody had
+	# run: `import 'sqlite3.h' as sqlite3` WITH --no-shims resolves. Verified --
+	# 3046001 with the flag, `unit source not found: sqlite3` without it.
+	# So a SHIMMED header has exactly two doors: an absolute path, and --no-shims.
+	# An unshimmed one has three. Do not read this row as a general spelling.
 	./$(COMPILER) test/test_nilpy_import_zlib.npy $(TESTTMP)/test_nilpy_import_zlib26
 	tools/expect_same.sh test_nilpy_import_zlib26 "$$($(TESTTMP)/test_nilpy_import_zlib26)" "1013"
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib26 2>/dev/null | grep -q 'libzlib\.so'; then \
