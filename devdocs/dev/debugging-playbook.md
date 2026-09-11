@@ -25549,3 +25549,45 @@ spelling certifies the bug.
 On the calibration worry, frankB's answer is worth keeping beside it: *"being
 corrected once is not disqualifying, it is the calibration working. The seat I
 would distrust is the one that has never had a promotion backed out."*
+
+## YOUR OWN `tail -N` CAN DELETE THE TELL A RULE TOLD YOU TO READ, AND A TRUNCATED SUCCESS LOOKS EXACTLY LIKE A SUCCESS
+
+**frankZ and frankB, 2026-09-11**, one evening, both of us, independently, on the
+same command.
+
+CLAUDE.md says `make` has two success verbs and only one recomputed anything:
+`converged after N round(s)` rebuilt, `self-host fixedpoint: verified` took the
+stamp path and built nothing. **The verb is the tell.** Both of us then ran
+`make compiler/pascal26 2>&1 | tail -1` (frankZ) and `| tail -2` (frankB) all
+evening. frankB got away with it because the verb happened to fall inside the
+last two lines; frankZ did not, and read `verified` on a binary that had in fact
+just been rebuilt — reaching the right conclusion by luck after reaching a wrong
+one first.
+
+**The truncation is silent and shaped like the thing it removed.** A one-line
+tail of a successful build prints a green line either way. There is no error, no
+missing output, nothing that reads as incomplete — which is the house definition
+of the expensive case.
+
+### This is NOT a new rule, and that is worth saying plainly
+
+CLAUDE.md already lists **"a truncated `tail`"** among the instruments that lie
+by being correct about something else. And it already says the verb is the tell.
+What neither says is that **they intersect**: the second rule names a
+discriminator, the first names a habit that removes discriminators, and the
+place they meet is the most-run command in the repo.
+
+So the finding is an INSTANCE of two existing rules crossing, not a third rule.
+**Not promoted, and the test it fails is RECURRENCE**: two seats, but one
+mechanism and one subsystem — piping the build's output. It earns a
+cross-reference the day the same intersection bites somewhere that is not
+`make`.
+
+### The cheap discharge
+
+Do not pipe a verdict you are about to quote. If you must, `grep -E
+'converged|verified'` rather than `tail -N` — it selects on the discriminator
+instead of on position, so it cannot silently drop it. And when a binary's
+identity is what you are claiming, read `compiler/.pascal26.fixedpoint`, which
+carries `sha256` AND `srchash`, rather than inferring it from whichever line
+survived your filter.
