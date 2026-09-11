@@ -24939,3 +24939,69 @@ intersection.
 file already carries (a guard that cannot fail; choose a probe whose right answer
 differs from the default; the quantifier is the clause to measure). It earns a
 line there only if a second, unrelated subsystem hits the wrap-truncation class.
+
+## A STALE BINARY MAKES AN ALREADY-FIXED TICKET REPRODUCE — SO IT DOES NOT MISLEAD YOU, IT RECRUITS YOU
+
+**Measured 2026-09-11, two seats within the hour, both shas reproduced
+independently.** frankB picked up its own ticket (the NilPy
+`pascal26:<n>`-with-no-filename cascade), ran the repro, **reproduced it**, traced
+it through `PasMarkTokFile` / `PasSrcOfTok` / `WriteDiagSourceFile`, found the
+empty-path plant, and was about to write the fix. It had been fixed at
+`584ca8ea8` six hours earlier. The fix arrived in frankB's own `tools/sync.sh`
+pull and it ran the repro **without rebuilding**.
+
+**Every existing stale-binary rule is written about claiming a GREEN you did not
+earn. This is the mirror, and it is worse, because a ticket that reproduces is the
+single strongest argument for working on it.** The stale reading does not merely
+mislead — it **recruits**, and then every subsequent step *confirms* it, because
+the mechanism you find is real. It is just already repaired. Nothing in the
+investigation can reveal the error: the traced code path, the empty-path plant,
+the diagnosis, all correct about the binary in front of you.
+
+It is also the owner's own `math.atan2` complaint — a ticket closed by events
+sitting in a folder — **arriving by a different door.** His was nobody re-reading
+the ticket; this one is re-measuring with the wrong instrument and getting exactly
+the answer the ticket predicts.
+
+**THE DISCRIMINATOR IS ONE COMMAND AND IT IS NOT A REBUILD: run the repro under
+the PINNED compiler too.** frankB's framing, and it is the right one —
+**two binaries that disagree DATE a defect; one binary can only confirm the
+ticket.** Reach for it the moment you are about to touch the compiler, not after.
+A rebuild alone tells you the answer changed; pinned-versus-current tells you
+*when* it changed, which is the question "is this already fixed" actually asks.
+
+| | |
+| --- | --- |
+| `b00c6751b693` (pre-pull) | no `in:` line — **the ticket reproduces** |
+| `06f130b576f5` (same HEAD, rebuilt) | `in: nilpy_erroring_module.py` — fixed |
+
+**Same tree identity, two binaries, opposite answers** — and `git status` says
+nothing, because `compiler/pascal26` is untracked.
+
+**THE SECOND SEAT IS THE PART THAT MAKES THIS A CLASS RATHER THAN AN ANECDOTE.**
+This seat reproduced **both of frankB's exact shas without trying to**: it was
+running an unrelated census, checked the repro to verify frankB's claim rather
+than relay it, and its own `compiler/pascal26` was `b00c6751b693` — the identical
+stale sha, because both seats seed from the same place. `make compiler/pascal26`
+printed `converged after 1 round(s)` and produced `06f130b576f5`. So the stale
+binary is not a mistake one tired seat made; **it is the default state of a
+checkout that has pulled and not rebuilt**, which is every checkout between a
+sync and its next build.
+
+**And it silently scopes every claim you made in between.** The same seat had
+just committed a ticket asserting *"`assert x > 0` compiles and runs today"* —
+measured on the stale binary. Re-run on `06f130b576f5`: still true, exit 0. The
+conclusion survived; **the entitlement to state it did not exist when it was
+written.** Say which binary a green was measured with, by sha, or the claim scopes
+to a compiler nobody can identify.
+
+**Not promoted to CLAUDE.md, and the test it failed is RECURRENCE, not merit.**
+The *stale binary* half recurred immediately (two seats, one hour) and is already
+covered there at length, including the exact sequence
+`PUSH -> LET THE PULL SETTLE -> REBUILD -> MEASURE` that both seats had read —
+frankB quoted it at frankZ forty minutes before dropping the rebuild. The
+**recruitment** half, which is the genuinely new observation, has **one
+instance**. What would promote it: a second seat losing work to an already-fixed
+ticket that reproduced, in an unrelated subsystem. The pinned-versus-current
+discriminator is the part worth adopting now, and it needs no rule — it is one
+command.
