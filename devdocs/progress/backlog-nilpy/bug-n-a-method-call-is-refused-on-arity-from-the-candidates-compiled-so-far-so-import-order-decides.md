@@ -107,9 +107,17 @@ import order stays.
 
 ## Where it is in the compiler, and a FALSE PREMISE in the guard's own comment
 
-`compiler/pyparser.inc`, the two arity refusals at the `PyParseClassMethodCall`
-site and the dynamic-receiver site. The dynamic one guards itself on
-`hitCi >= 0` and explains why:
+`compiler/pyparser.inc`. There are TWO arity refusals and they print
+**textually identical** messages, so which one fires cannot be read off the
+error. **Measured, not inferred** (2026-09-11, binary `b00c6751b693`): both
+sites were temporarily tagged and rebuilt, and every row in this ticket —
+the three-file repro, `traffic` alone, and `world`+`hud` — comes out of the
+**dynamic-receiver site**, in both its `takes exactly N` and `takes N to M`
+branches. The `PyParseClassMethodCall` pair never fired. Say it that way
+because an identical message across two sites is exactly the shape that sends
+a fix to the wrong one.
+
+That site guards itself on `hitCi >= 0` and explains why:
 
 > *Guarded on hitCi >= 0: only there is the class known at compile time. When
 > dispatch is genuinely dynamic (hitCi < 0, ...) a compile error would reject

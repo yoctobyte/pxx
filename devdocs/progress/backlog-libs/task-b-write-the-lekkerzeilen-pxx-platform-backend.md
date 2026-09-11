@@ -200,3 +200,36 @@ cleared rows as the capability landing.
 39-line stub this ticket is about, reached from the other side.
 
 Not claiming this ticket; recording the measurement so it is not re-derived.
+
+## 2026-09-11 — the census re-run with a better instrument, and the mis-scored row is now a ticket
+
+The count above (22 clear, five real blockers, one mis-scored) came from a
+per-module census that compiles each module ALONE. Re-run with `--threadsafe`
+and in TWO columns — bare, and with `import world` + `import traffic`
+prepended — so the preload is a visible variable rather than baked in, because
+a preload is itself an instrument that can CREATE failures and did once
+(census2 manufactured hud's row by adding `world` to every compilation):
+
+| | modules | compiling |
+| --- | --- | --- |
+| bare | 29 | 23 |
+| `world`+`traffic` preloaded | 29 | **24** |
+
+**Exactly one row moves, `traffic`, and the preload creates nothing.** That is
+the point of reporting both columns: last time the instrument was the finding.
+
+So the honest reading is now **24 of 29 compiling, 5 blocked by TWO causes**:
+
+- `ctypes` — `capture`, `gfx`. Unchanged; the analysis above stands.
+- `undefined variable (_pxx)` — `__main__`, `app`, `bindings`. One cause, three
+  rows, and it is this ticket's own 39-line stub reached from the other side.
+
+`traffic`'s row was never a blocker and is no longer unexplained: it is
+`bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-so-far-so-import-order-decides`,
+where a method call is arity-checked against the candidates compiled SO FAR.
+`hud` compiles BARE here (zero candidates, deferred to run time) and compiles
+with the preload too — which is the same defect explaining both its earlier
+false row and its absence now.
+
+**Do not "fix" the corpus by reordering imports.** It is the evidence, and the
+no-compiler-appeasement rule applies. Still not claiming this ticket.
