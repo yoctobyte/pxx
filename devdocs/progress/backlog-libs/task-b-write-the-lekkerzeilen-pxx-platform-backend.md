@@ -233,3 +233,72 @@ false row and its absence now.
 
 **Do not "fix" the corpus by reordering imports.** It is the evidence, and the
 no-compiler-appeasement rule applies. Still not claiming this ticket.
+
+## 2026-09-11 — the seam patch is MEASURED AND READY, and deliberately NOT APPLIED
+
+`bug-n-a-module-bound-by-an-import-is-not-a-value` resolves as option 2 + option
+3: the compiler half (folding `getattr(<unit alias>, "<literal>", <default>)`)
+landed at `3662f8a8b` (frankZ), and the corpus half is this one-hunk rewrite of
+`lekkerzeilen/platform/__init__.py`:
+
+```python
+-def _select_backend():
+-    try:
+-        import ctypes  # noqa: F401
+-    except ImportError:
+-        from . import _pxx
+-        return _pxx, "pxx"
+-    from . import _ctypes_backend
+-    return _ctypes_backend, "ctypes"
+-
+-_backend, _backend_name = _select_backend()
++try:
++    import ctypes  # noqa: F401
++    from . import _ctypes_backend as _backend
++    _backend_name = "ctypes"
++except ImportError:
++    from . import _pxx as _backend
++    _backend_name = "pxx"
+```
+
+CPython behaviour is unchanged — `backend_name()` answers `"ctypes"` before and
+after, checked against the untouched tree in the same run. With it,
+`platform/__init__.py` compiles and the census moves **25 -> 27 of 35**, with
+`undefined variable (_pxx)` gone from four modules. **Quote it as +2, not +4:**
+two of the four went green and two advanced to their next wall. Measured by
+frankZ on `16f9e6314ca0`, with only `platform/__init__.py` and `bindings.py`
+re-checked on the merged `c53cb51926a2`.
+
+**NOT APPLIED, and not because nobody got to it.** `lekkerzeilen` has a GitHub
+remote (`yoctobyte/lekkerzeilen`), so a commit there is one step from
+outward-facing, and it is the owner's project rather than this repo's corpus.
+Two seats independently declined it on that ground. It needs the owner, and it
+is one line of assent rather than a design question — the patch, its CPython
+control and its number are all above.
+
+## AND THE CENSUS MEASURES *COMPILES*, NOT *WORKS* — this ticket's surface is bigger than the wall histogram
+
+Found by frankZ while checking a diagnostic's suggested workaround before
+shipping it, which is the only reason anyone looked:
+
+```
+w = backend.Widget ; w.V        -> 5512600   CPython: 1    (a raw address)
+gl = backend.gl    ; gl.VERSION -> 42        CPython: 42   (correct)
+gl = backend.gl    ; gl.clear() -> AttributeError at run time, CPython: "cleared"
+```
+
+So *"every static row in the seam already passes"* — asserted twice in the
+module-as-value ticket, from two independent routes — is a **COMPILE-only**
+claim. `gl = _backend.gl` compiles; calling a method through it does not work.
+`gl` is the OpenGL facade and four modules call methods on it, so **the arm that
+works is the one nobody uses.** Filed as
+`bug-n-a-class-reached-through-a-unit-alias-is-not-a-value` (p80).
+
+Neither derivation was careless: both asked where the compile WALL goes, and a
+wall walk cannot see past the wall it reports. **Two instruments that fail
+differently still share a blind spot when the blind spot is in the QUESTION.**
+
+The consequence for this ticket: every lekkerzeilen number on record — 23/35,
+25/35, my own 24/29 — counts modules that COMPILE. That is the right answer to
+"does lekkerzeilen compile", which is what was asked, and it is not the distance
+to a demo that runs.
