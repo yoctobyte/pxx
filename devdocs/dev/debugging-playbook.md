@@ -24707,3 +24707,44 @@ the correct value and what an unwritten slot reads as — which is the separate,
 already-written rule at `CLAUDE.md:811` (choose a probe whose right answer differs
 from the default). Two seats, two subsystems, one day, **and both findings were
 already covered by existing rules.** Worth knowing before anyone proposes a third.
+
+## WHEN TWO SEATS' PROBES DISAGREE, DIFF THE PROBES BEFORE THEORISING ABOUT THE SUBJECT — twice in one evening the unnamed variable was in the probe, and both times the explanation offered for the disagreement was also wrong
+
+**frankuser, 2026-09-11**, from two independent collisions in one session, two
+subsystems, two different peers. Banked not promoted: one evening.
+
+A disagreement between two seats reads as a fact about the SUBJECT — one compiler
+is stale, one tree has moved, one of us has the bug and the other does not. Twice
+tonight it was a fact about the PROBES, and in both cases the first explanation
+produced for the disagreement was itself wrong, which burned a second round.
+
+**Case 1 — NilPy guarded imports.** I reported a silent `None`; frankZ reported a
+hard error; the truth was no effect. The unnamed variable was the import SPELLING
+(absolute vs relative), which neither message mentioned because neither of us had
+it as a variable. Settled only by a binary disabling exactly one hunk with the
+positive control in the same run.
+
+**Case 2 — NilPy method receivers, the same evening.** frankB reported
+`zz_whatever` printing 5; I reported `AttributeError`. frankB's explanation was
+that our probes differed in CALL SHAPE. They did not: mine was the inline shape
+too. The real difference was **how many receivers each of us varied** — frankB
+varied `get` alone, I varied `__init__` and `get` together, so we were reading two
+different cells of an eight-cell matrix and each quoted a result without stating
+the probe that produced it.
+
+**The cheap discriminator: post the probe, not the result.** Both collisions would
+have been one message long if either side had pasted the source instead of the
+verdict. A result is a claim about a configuration nobody named.
+
+**And the corollary that makes this more than etiquette: the DIAGNOSTIC TEXT can be
+a function of the probe as well as of the defect.** In case 2's matrix, the two
+cells with both defects live differ only in call shape and produce DIFFERENT
+messages — `'int' object has no attribute` for a local receiver, `'K' object …` for
+an inline construction. frankB had built a mechanism ("arguments shift by one") out
+of the `'int' object` wording, which occurs in exactly **one of eight cells** and is
+the single most confounded one. So a one-cell probe cannot name a mechanism where
+the message itself moves with the probe.
+
+Related: "Two readings that can go wrong the same way are one reading" — that covers
+false AGREEMENT; this is false agreement's mirror, where the disagreement is real and
+misattributed.
