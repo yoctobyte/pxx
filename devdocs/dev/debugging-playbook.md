@@ -25825,3 +25825,51 @@ find /tmp/pxx-testtmp-1000-<checkout>-<hash> -maxdepth 0 -mmin -2   # non-empty 
 
 Use that before concluding a peer's scratch is abandoned, and never clear another
 seat's.
+
+## A PROCESS SEARCH MATCHES ITS OWN SEARCHER, so `until ! pgrep -f X` never exits
+
+Measured 2026-09-13, twice in one session, by one seat. Two backgrounded waiters
+had to be killed by hand after the goal checker reported them as live work:
+
+```sh
+until ! pgrep -f bisect.sh    >/dev/null 2>&1; do sleep 10; done   # never exits
+until ! pgrep -f "make test-nilpy" >/dev/null; do sleep 5;  done   # never exits
+```
+
+**The waiter's own command line contains the pattern**, so `pgrep -f` finds the
+waiting shell itself, the negation is never true, and the loop runs until
+something external kills it. It does not error. It does not time out. It reports
+*"the thing you are waiting for is still running"* forever, which is the answer
+that looks most like ordinary patience.
+
+This is the `^## The instrument answered, correctly, about something else` family
+in a new coat, and the third spelling of it on the record — the other two being a
+transcript `grep` for a denial string (the search for it is in the file by the
+time you read it) and `ls`/`find` right after a `git fetch`. **The shape is a
+search whose subject and whose searcher are indistinguishable to it.**
+
+**Two costs, and the second is the one that bites a fleet:**
+1. The same seat also read `pgrep -c -f 'make test-nilpy'` as *"the suite is still
+   running"* while the suite had in fact finished — so it waited ~20 minutes on a
+   completed run and then re-read a log it believed was growing.
+2. A live background task is a signal to the harness. Two permanently-blocked
+   waiters **deferred a goal check-in by 30 minutes** because the session looked
+   busy.
+
+**What to do instead.** Do not poll for a process at all — poll for the thing the
+work PRODUCES, which cannot match its own observer:
+
+```sh
+# the job prints a marker when it is genuinely finished
+until grep -q 'VERIFY-DONE' "$LOG" 2>/dev/null; do sleep 8; done
+```
+
+That is what worked in the same session. When you must match a process, make the
+pattern unmatchable by the matcher — `pgrep -f '[b]isect.sh'`, or compare against
+a recorded PID (`kill -0 "$pid"`) rather than a name. And bound every wait: a
+waiter with no iteration cap converts a finished job into an idle seat.
+
+**And check the exit of the step, not just its artefact.** Same session: a FAILED
+compile leaves the PREVIOUS test binary on disk, so running it prints a full set
+of plausible rows belonging to the earlier build. A waiter that watches for
+output, and a reader that trusts output, both need the producing step's own status.
