@@ -36,7 +36,7 @@ A `.npy` diffed against CPython: forward and negative steps, a length mismatch
 raising ValueError, and the contiguous forms unchanged.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e3dcd6a35.
 
 ## Resolved 2026-09-12 — implemented, CPython-differential green
 
