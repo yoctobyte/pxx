@@ -4,7 +4,7 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-12
 found-by: frankuser
 owner: unassigned
@@ -206,3 +206,9 @@ unimplemented feature (extended-slice assignment).
 One live bug was found while reducing and is separately filed:
 `bug-n-a-collections-deque-segfaults-at-run-time` — `collections.deque()` compiles
 and crashes, identically on both sides of this fix.
+
+## Log
+- 2026-09-12 — resolved, commit ee1a8bc28. The arity promotion now uses the same two-armed
+  test as the `arFits` guard beside it. Verified on the lekkerzeilen closure (app.py:1678 ->
+  2360); NO regression fixture, deliberately — see the section above. The resolve citation
+  originally captured a prose note where the commit reference belongs; corrected here.

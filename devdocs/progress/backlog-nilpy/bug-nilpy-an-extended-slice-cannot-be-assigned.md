@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-summary: "`l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing."
+summary: "`l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. THIS IS NOW THE WALL ON THE lekkerzeilen CLOSURE (goal 4), reached 2026-09-12 at app.py:2360 after the candidate-promotion fix moved the closure 682 lines. Its own prio stays 30 -- it is wired to umbrella-lekkerzeilen-compiles-and-runs-under-nilpy and inherits effective_prio from it, which is how the ranker is supposed to work; do not hand-raise it. The diagnostic is honest and precise (compiler/pyparser.inc:12268), so this is a missing feature rather than a misresolution."
 ---
 
 # An extended slice cannot be assigned
