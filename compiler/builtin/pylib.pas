@@ -1313,12 +1313,21 @@ function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
 function pylist_del_at(l: TPyList; i: Integer): TPyList;           { del l[i] in place }
 procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
-{ `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
-  emulating fixed-width cells in Forth data space), so a length CHANGE is
-  rejected loudly rather than silently splicing: a quiet resize would move
-  every address above the write and corrupt the data space. }
+{ `b[lo:hi] = src`. A length CHANGE RESIZES, which is CPython's answer for a
+  contiguous bytearray slice and what uforth's 2VARIABLE leans on; the body says
+  why. (This comment claimed the opposite — "rejected loudly" — until
+  2026-09-12, describing the behaviour before the resize landed.) The _step
+  forms below are the ones that refuse a mismatch, and that asymmetry is
+  CPython's too. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
 procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);   { RHS is a variant holding bytes }
+{ `l[lo:hi:step] = src` / `b[lo:hi:step] = src` — EXTENDED slice assignment, the
+  write halves of pylist_slice_step / pybytes_slice_step. Each walks exactly the
+  positions its matching read selects, so `x[::-1] = src` reverses, and each
+  REFUSES a length mismatch rather than splicing. }
+procedure pylist_setslice_step(l: TPyList; lo, hi, step: Integer; src: TPyList);
+procedure pybytes_setslice_step(b: TPyBytes; lo, hi, step: Integer; src: TPyBytes);
+procedure pyvar_setslice_step(const dst: Variant; lo, hi, step: Integer; const src: Variant);
 { TARGET is a variant: `vm.memory[a:b] = src` where the receiver has no static
   class (a dynamically-typed parameter, a container element). Unboxes the target
   and dispatches to the bytes or list setter by its runtime type — the mirror of
@@ -11247,6 +11256,52 @@ begin
   end;
 end;
 
+{ `b[lo:hi:step] = src` — the write half of pybytes_slice_step, walking exactly
+  the positions that read selects and in the same order, from PySliceBoundsStep
+  rather than re-derived arithmetic so the two cannot drift apart.
+
+  It does NOT resize, and that is a DIFFERENT answer from pybytes_setslice right
+  above, which does: CPython resizes a contiguous bytearray slice and refuses an
+  extended one ("attempt to assign bytes of size N to extended slice of size M"),
+  because a strided write has nowhere to put a different number of bytes. }
+procedure pybytes_setslice_step(b: TPyBytes; lo, hi, step: Integer; src: TPyBytes);
+var i, k, cnt, n: Integer; sp, dp: PByte; snap, from_: TPyBytes;
+begin
+  if b = nil then Exit;
+  cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
+  if src = nil then n := 0 else n := src.FLen;
+  if n <> cnt then
+    raise ValueError.Create('attempt to assign bytes of size '
+      + pystr_of(Int64(n)) + ' to extended slice of size '
+      + pystr_of(Int64(cnt)));
+  { `b[::-1] = b` is legal Python and reverses in place; writing straight from
+    the target would read bytes this loop has already overwritten, so an exact
+    self-alias is snapshotted. Any other RHS reaching here is a fresh object. }
+  snap := nil;
+  if src = b then
+  begin
+    snap := TPyBytes.Create(cnt);
+    for k := 0 to cnt - 1 do
+    begin
+      sp := PByte(NativeInt(src.FData) + k);
+      dp := PByte(NativeInt(snap.FData) + k);
+      dp^ := sp^;
+    end;
+    from_ := snap;
+  end
+  else
+    from_ := src;
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    sp := PByte(NativeInt(from_.FData) + k);
+    dp := PByte(NativeInt(b.FData) + i);
+    dp^ := sp^;
+    i := i + step;
+  end;
+  if snap <> nil then PXXObjRelease(Pointer(snap));
+end;
+
 { `b[lo:hi] = v` where the RHS is a VARIANT holding bytes — e.g. a value fetched
   from a dict (`mem[a:b] = snapshot["blk"]`). Unbox to the TPyBytes it holds;
   without this the variant's 16 bytes were read as a TPyBytes header and the
@@ -11282,6 +11337,39 @@ begin
     begin
       o := TObject(pyvarobj(src));
       if o is TPyList then begin pylist_setslice(TPyList(d), lo, hi, TPyList(o)); Exit; end;
+    end;
+    raise TypeError.Create('can only assign an iterable to a list slice');
+  end;
+  raise TypeError.Create('object does not support slice assignment');
+end;
+
+{ `v[lo:hi:step] = src` where the TARGET has no static class — the extended-slice
+  twin of pyvar_setslice above, and reached by far more code than the name
+  suggests: a name first bound inside an `if` or `try` body has no static type
+  either, so `l = [..]` then `l[::2] = ..` two lines down comes through here.
+  Both sides are unboxed and dispatched on the target's runtime type. }
+procedure pyvar_setslice_step(const dst: Variant; lo, hi, step: Integer; const src: Variant);
+var d, o: TObject;
+begin
+  if pyvartag(dst) <> 7 then
+    raise TypeError.Create('object does not support slice assignment');
+  d := TObject(pyvarobj(dst));
+  if pyvartag(src) = 7 then o := TObject(pyvarobj(src)) else o := nil;
+  if d is TPyBytes then
+  begin
+    if (o <> nil) and (o is TPyBytes) then
+    begin
+      pybytes_setslice_step(TPyBytes(d), lo, hi, step, TPyBytes(o));
+      Exit;
+    end;
+    raise TypeError.Create('byte slice assignment requires bytes');
+  end;
+  if d is TPyList then
+  begin
+    if (o <> nil) and (o is TPyList) then
+    begin
+      pylist_setslice_step(TPyList(d), lo, hi, step, TPyList(o));
+      Exit;
     end;
     raise TypeError.Create('can only assign an iterable to a list slice');
   end;
@@ -17934,6 +18022,55 @@ begin
   { copy back into l so the original handle stays valid }
   l.FLen := 0;
   for i := 0 to keep.count - 1 do l.append(keep.at(i));
+end;
+
+{ `l[lo:hi:step] = src` — an EXTENDED slice assign, the write half of
+  pylist_slice_step. It walks EXACTLY the positions that read would select, in
+  the same order (`l[::-1] = src` therefore reverses), which is why the bounds
+  arithmetic is PySliceBoundsStep's and not re-derived here: the two must agree
+  element for element or the assign writes plausible wrong elements with no
+  diagnostic.
+
+  Unlike the contiguous pylist_setslice this does NOT resize — CPython refuses a
+  length mismatch for an extended slice, because there is no meaningful place to
+  put the extra elements, and a silent splice would shift every position the
+  program believes it just wrote. }
+procedure pylist_setslice_step(l: TPyList; lo, hi, step: Integer; src: TPyList);
+var i, k, cnt, n: Integer; snap, from_: TPyList;
+begin
+  if l = nil then Exit;
+  { a TUPLE (or a frozenset) is IMMUTABLE — mutating one in place would let an
+    alias observe a change Python guarantees cannot happen (the same question
+    pylist_repeat_inplace asks, and for the same reason) }
+  if l.FKind <> PYSEQ_LIST then
+    raise TypeError.Create('''' + PySeqKindName(l.FKind)
+      + ''' object does not support item assignment');
+  cnt := PySliceBoundsStep(l.count, lo, hi, step);
+  if src = nil then n := 0 else n := src.count;
+  if n <> cnt then
+    raise ValueError.Create('attempt to assign sequence of size '
+      + pystr_of(Int64(n)) + ' to extended slice of size '
+      + pystr_of(Int64(cnt)));
+  { `l[::-1] = l` is legal Python and gives the reverse; writing straight from
+    the target would feed the loop on its own output, so an exact self-alias is
+    snapshotted first. A PARTIAL overlap cannot arise — every other RHS shape
+    reaching here is a freshly built list. }
+  snap := nil;
+  if src = l then
+  begin
+    snap := TPyList.Create;
+    for k := 0 to cnt - 1 do snap.append(src.at(k));
+    from_ := snap;
+  end
+  else
+    from_ := src;
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    l.put(i, from_.at(k));
+    i := i + step;
+  end;
+  if snap <> nil then PXXObjRelease(Pointer(snap));
 end;
 
 function pylist_repeat_inplace(l: TPyList; n: Int64): TPyList;

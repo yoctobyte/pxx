@@ -1474,6 +1474,32 @@ test-nilpy: $(COMPILER)
 	# $(COMPILER), not $(PXX_STABLE): the pin refuses this fixture outright.
 	./$(COMPILER) -Futest test/test_nilpy_a_keyword_argument_after_a_star_unpack.npy $(TESTTMP)/test_nilpy_kwafterstar
 	$(TESTTMP)/test_nilpy_kwafterstar | diff -u test/test_nilpy_a_keyword_argument_after_a_star_unpack.expected -
+	# Extended-slice assignment, `x[lo:hi:step] = src`. The .expected IS python3's
+	# output -- the load-bearing property is that the assign writes EXACTLY the
+	# positions the matching READ selects, which only an oracle can check.
+	#  - LREV/LNEG/BREV are the NEGATIVE-step rows: a dropped or mis-signed step
+	#    still writes plausible values, so these are the rows that separate a
+	#    correct walk from an approximation.
+	#  - LSELF/BSELF are `x[::-1] = x`, legal Python: the loop would otherwise
+	#    feed on its own output. MEASURED load-bearing -- with the self-alias
+	#    snapshot disabled these two alone go wrong ([1,2,3,2,1] / b'abcba')
+	#    while all eleven other rows stay green.
+	#  - LMISMATCH/BMISMATCH pin the two REFUSAL messages verbatim: an extended
+	#    slice does not resize, unlike the contiguous form one function over.
+	#  - TUPLE is the immutability row; COVER is lekkerzeilen/app.py:2358's own
+	#    shape (bytearray, explicit start, omitted stop).
+	#  - LNIL is the empty selection: zero writes, not an error.
+	# THREE ROUTES TO THE SETTER, and the suite must hold all three because only
+	# the first was reachable before this fix: a STATIC list/bytes target (rows
+	# at top level); a VARIANT NAME (the try/except rows rebind their target
+	# inside the block, and a name first bound in an `if`/`try` body has no
+	# static type); and a VARIANT RECEIVER (DELEM/OELEM, a container element).
+	# The middle one is why this fixture found the real bug -- every top-level
+	# spelling compiled while two thirds of the feature was missing.
+	# $(COMPILER), not $(PXX_STABLE): the pin answers
+	# `pascal26:14: error: expected expression`, so this row is red pre-fix.
+	./$(COMPILER) -Futest test/test_nilpy_extended_slice_assign.npy $(TESTTMP)/test_nilpy_extslice
+	$(TESTTMP)/test_nilpy_extslice | diff -u test/test_nilpy_extended_slice_assign.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

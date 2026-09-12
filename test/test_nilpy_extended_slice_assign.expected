@@ -1,0 +1,15 @@
+LPOS [9, 2, 8, 4, 7]
+LOFF [1, 0, 3, 0, 5, 0]
+LREV [5, 4, 3, 2, 1]
+LNEG [1, 2, 9, 8, 7]
+LSELF [5, 4, 3, 2, 1]
+LNIL [1, 2, 3]
+COVER bytearray(b'.X.Y')
+BPOS bytearray(b'XbYdZ')
+BREV bytearray(b'edcba')
+BSELF bytearray(b'edcba')
+LMISMATCH attempt to assign sequence of size 2 to extended slice of size 3
+BMISMATCH attempt to assign bytes of size 2 to extended slice of size 3
+TUPLE 'tuple' object does not support item assignment
+DELEM [9, 2, 8, 4, 7]
+OELEM bytearray(b'edcba')

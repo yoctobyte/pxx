@@ -1,0 +1,90 @@
+# Extended-slice assignment: `x[lo:hi:step] = src`.
+#
+# The load-bearing property is that the assign writes EXACTLY the positions the
+# matching READ selects, in the same order — so every row below pairs an assign
+# with the slice that names the same positions. A step dropped or an order
+# reversed produces a plausible wrong value and no diagnostic, which is why this
+# is a CPython differential and not a hand-written .expected.
+#
+# `pixels[channel::step] = ...` (lekkerzeilen/app.py:2358) is the BYTEARRAY row
+# with an explicit start and an omitted stop — COVER below.
+
+# --- list, positive step -----------------------------------------------------
+l = [1, 2, 3, 4, 5]
+l[::2] = [9, 8, 7]
+print("LPOS", l)
+
+l = [1, 2, 3, 4, 5, 6]
+l[1::2] = [0, 0, 0]
+print("LOFF", l)
+
+# --- list, negative step: the order is what a dropped step would get wrong ---
+l = [1, 2, 3, 4, 5]
+l[::-1] = [1, 2, 3, 4, 5]
+print("LREV", l)
+
+l = [1, 2, 3, 4, 5]
+l[4:1:-1] = [7, 8, 9]
+print("LNEG", l)
+
+# --- list self-alias: reading the target while overwriting it ---------------
+l = [1, 2, 3, 4, 5]
+l[::-1] = l
+print("LSELF", l)
+
+# --- an empty selection writes nothing and is not an error -------------------
+l = [1, 2, 3]
+l[2:1:1] = []
+print("LNIL", l)
+
+# --- bytearray, the app's shape: explicit start, omitted stop ---------------
+cover = bytearray(b"....")
+cover[1::2] = b"XY"
+print("COVER", cover)
+
+b = bytearray(b"abcde")
+b[::2] = b"XYZ"
+print("BPOS", b)
+
+b = bytearray(b"abcde")
+b[::-1] = b"abcde"
+print("BREV", b)
+
+b = bytearray(b"abcde")
+b[::-1] = b
+print("BSELF", b)
+
+# --- a length mismatch is refused, not spliced ------------------------------
+try:
+    l = [1, 2, 3, 4, 5]
+    l[::2] = [9, 9]
+    print("LMISMATCH took it", l)
+except ValueError as e:
+    print("LMISMATCH", e)
+
+try:
+    b = bytearray(b"abcde")
+    b[::2] = b"XY"
+    print("BMISMATCH took it", b)
+except ValueError as e:
+    print("BMISMATCH", e)
+
+# --- a tuple is immutable ---------------------------------------------------
+try:
+    t = (1, 2, 3)
+    t[::2] = [9, 9]
+    print("TUPLE took it", t)
+except TypeError as e:
+    print("TUPLE", e)
+
+# --- a CONTAINER ELEMENT as the target: a variant receiver rather than a
+# variant NAME, so it reaches pyvar_setslice_step by a second route. This
+# spelling reported a bare "expected expression" before the fix, which read as
+# a parse gap and was the same missing predicate entry.
+d = {"k": [1, 2, 3, 4, 5]}
+d["k"][::2] = [9, 8, 7]
+print("DELEM", d["k"])
+
+o = {"b": bytearray(b"abcde")}
+o["b"][::-1] = bytearray(b"abcde")
+print("OELEM", o["b"])

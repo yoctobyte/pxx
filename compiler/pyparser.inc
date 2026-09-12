@@ -12188,12 +12188,17 @@ begin
     (PyMakeSlice's tyVariant arm). bug-nilpy-slice-assign-through-a-dynamically-typed-receiver }
   procIdx := FindProc('pyvar_slice');
   if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
-  { An EXTENDED slice (`l[::2] = ...`) is a valid target in Python but is not
-    implemented here. Recognise it anyway, so PyRewriteSliceAssign can refuse it
-    BY NAME — otherwise the statement falls through to a bare "expected
-    expression" pointing at the '=', which reads like a parser bug rather than a
-    missing feature (bug-nilpy-stepped-slices-other-than-reverse). }
+  { An EXTENDED slice (`l[::2] = ...`), which PyRewriteSliceAssign now serves.
+    All THREE reads have to be named here, the variant one included: it is the
+    arm a target with no static type produces, and omitting it did not refuse by
+    name — the statement fell out of the store path entirely and died on
+    "expected newline after statement" at the '=', reading as a parser bug. That
+    is most targets bound inside an `if` or `try` body, which is how a fixture
+    written to exercise the feature failed while every top-level spelling of the
+    same assignment compiled (bug-nilpy-stepped-slices-other-than-reverse). }
   procIdx := FindProc('pylist_slice_step');
+  if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
+  procIdx := FindProc('pyvar_slice_step');
   if (procIdx >= 0) and (ASTIVal[n] = procIdx) then begin Result := True; Exit; end;
   procIdx := FindProc('pybytes_slice_step');
   Result := (procIdx >= 0) and (ASTIVal[n] = procIdx);
@@ -12261,13 +12266,30 @@ end;
 function PyRewriteSliceAssign(sliceNode, rhsNode: Integer): Integer;
 var procIdx, a3, a: Integer;
 begin
-  { extended-slice assignment — parsed, recognised, and refused by name rather
-    than approximated: dropping the step would write the WRONG elements }
-  if (ASTIVal[sliceNode] = FindProc('pylist_slice_step')) or
-     (ASTIVal[sliceNode] = FindProc('pybytes_slice_step')) then
-    Error('Nil Python: assigning to an extended slice (with a step) is not '
-          + 'implemented; only x[lo:hi] = src is');
-  if ASTIVal[sliceNode] = FindProc('pyvar_slice') then
+  { An EXTENDED slice assign keeps all FOUR of the read's arguments and swaps in
+    the matching _step setter, which walks the same positions the read selects.
+    Refused by name until 2026-09-12 (an approximation that dropped the step
+    would have written the WRONG elements, silently) — the setters now exist, so
+    the refusal is the only thing that has to go. A pyvar_slice_step target is
+    still refused below: there is no pyvar_setslice_step to dispatch to. }
+  if ((ASTIVal[sliceNode] = FindProc('pylist_slice_step')) or
+      (ASTIVal[sliceNode] = FindProc('pybytes_slice_step'))) and
+     (IntToTypeKind(ASTTk[rhsNode]) = tyVariant) then
+    { A VARIANT source, unboxed for the contiguous form by pybytes_setslice_v,
+      has no _step twin. Refused rather than passed through: the setters take a
+      TPyBytes/TPyList, and a raw variant handed to one is read as that object's
+      HEADER — a plausible wrong length and wrong bytes, with no diagnostic. }
+    Error('Nil Python: the source of an extended-slice assignment must have a '
+          + 'static list or bytes type, not a variant; bind it to a typed name '
+          + 'first')
+  else if ASTIVal[sliceNode] = FindProc('pylist_slice_step') then
+    procIdx := FindProc('pylist_setslice_step')
+  else if ASTIVal[sliceNode] = FindProc('pybytes_slice_step') then
+    procIdx := FindProc('pybytes_setslice_step')
+  else if ASTIVal[sliceNode] = FindProc('pyvar_slice_step') then
+    { target has no static class: unbox and dispatch on its runtime type }
+    procIdx := FindProc('pyvar_setslice_step')
+  else if ASTIVal[sliceNode] = FindProc('pyvar_slice') then
     { target has no static class: unbox and dispatch on its runtime type }
     procIdx := FindProc('pyvar_setslice')
   else if ASTIVal[sliceNode] = FindProc('pylist_slice') then
