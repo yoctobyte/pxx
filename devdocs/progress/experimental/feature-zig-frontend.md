@@ -410,7 +410,11 @@ tests, quick tier, self-host byte-identical.
 
 Prompted by the stale-hazard rule: an unranked experimental umbrella asserting
 completion is a warning that decays like a lock. Measured at `356d4d4fa` with a
-freshly `converged` HEAD binary (`808076de24be`), CWD at the repo root. This used
+freshly `converged` HEAD binary (`808076de24be`), CWD at the repo root.
+**That binary is byte-identical to the one pin v408 ships** (`last.sha256` =
+`808076de24be...`, pinned 2026-09-12 from tree `14934e60d`; I built at
+`356d4d4fa`, and only docs landed between — determinism, not the same tree), so
+this census describes exactly the compiler that is now `$(PXX_STABLE)`. This used
 the HEAD-built compiler, NOT `$(PXX_STABLE)`, so it is independent of pin age —
 and every gap below is a PARSE error, raised before any builtin or RTL is
 reached, which no pin could produce.

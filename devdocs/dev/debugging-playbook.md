@@ -25996,3 +25996,60 @@ question.** A `head -6` SIGPIPEs the compiler and returns `rc=13`, which reads
 like a compiler exit code. A backgrounded job's notification reports the WRAPPER.
 A `tail -25` truncates the one FAIL row. And `grep -c` reports failure because
 there was nothing to count.
+
+## A SELF-WRITTEN SUITE IS A MIRROR OF THE IMPLEMENTATION — its vocabulary is the implementation's vocabulary, so it cannot show you what is missing
+
+Neighbours, and this is neither: "Do not read a green as coverage" is about one
+shape not being the shape space, and "A suite that never sets the flag is blind
+to what the flag guards" needs a GATE to make code unreachable. Here there is no
+gate and no ordering variable. **The suite reaches everything it names. It never
+names the failing constructs** — because the tests were written by the
+implementer, feature by feature, as each one landed. A suite built that way is a
+picture of what was built, and a picture of what was built cannot be evidence
+about what was not.
+
+The instance, 2026-09-12, Track Z. `feature-zig-frontend.md` had asserted
+"THEORETIC COMPLETION reached (frontend-side)" since 2026-07-08 — specifically,
+that everything reachable by pure parse-time desugaring was DONE. All six
+`test/test_zig_*.zig` compiled, ran, and matched their expected strings
+byte-for-byte, a full-legality chess perft among them. Nothing had rotted. The
+green was completely honest.
+
+**28 isolated single-construct probes later: 6 compile, 22 refuse.** The suite
+used `for (0..N) |i|` at all four of its loop sites and never `for (arr) |v|`,
+the most common loop in the language; it declared arrays only as
+`[5]i64 = undefined` and never as a literal. Not because those were known to
+fail — because the author was testing what they had just implemented, and reached
+for the spelling they knew worked. The compiler's own diagnostics say "skeleton"
+in those words while the ticket title said completion.
+
+**The instrument, and the cheap part is that it is mechanical:** one probe file
+per construct, each a complete minimal program, plus a scaffolding-only control
+that MUST compile. Isolation is the whole point — a single combined program
+reports a first failure and hides every wall behind it, which is the same
+first-failure census error that ranks by queue position. The control is what lets
+you attribute a failure to the construct rather than to your own scaffolding.
+
+**Re-probe a confounded failure before attributing it.** Three of the 22 moved
+two variables at once: `for (a) |v|` died on the `[_]i64{}` array literal, not on
+the loop. Disambiguated with an explicit length, `[3]i64{1,2,3}` compiles — and
+the ticket had claimed exactly that form and was correct. Attributing those three
+to the loop would have put a false row in the gap list and impeached a true
+sentence in the ticket.
+
+**Confirm the gate in the parser, not in the message text.** Four constraints
+produced most of the 22, and the sharpest tell was a diagnostic's PREFIX: `for
+(arr) |v|` errors `expected '..'` with no `Zig:` on it, which means it reached
+the shared range parser and never hit a frontend check at all. A message is
+evidence about which code raised it; group by MECHANISM and the count collapses —
+one flat token walk requiring `ident : ident` refused methods, `@This()`, default
+field values and every non-scalar field type, seven probes with one cause.
+
+The general form: **for any frontend, "does the suite pass" and "how much of the
+language does this accept" are different questions, and a suite the implementers
+wrote can only answer the first.** Ask what fraction of the suite's constructs
+were chosen because they worked. Where the answer is "all of them", the suite is
+a regression guard — which is a real and sufficient job — and it is not evidence
+of completeness, however green and however long it has been green. The claim
+decays silently, because obeying a completion notice produces nothing that could
+reveal it was wrong.
