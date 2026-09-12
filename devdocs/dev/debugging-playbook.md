@@ -25948,3 +25948,51 @@ Three readouts in one session, each manufacturing a confident wrong answer, none
 of them erroring. Banked here and deliberately NOT promoted to CLAUDE.md: it
 meets the merit test, and the promotion test is a second independent SUBSYSTEM,
 where all three instances are the same one (reading a verdict out of a gate).
+
+## `grep -c` EXITS 1 WHEN IT FINDS NOTHING, SO A FAILURE-COUNTER FAILS WHEN THERE ARE NO FAILURES
+
+Measured 2026-09-12 (frankuser), and it is the fourth readout in one session to
+manufacture a confident wrong verdict. This one inverts a GREEN.
+
+A full tier was run with its verdict extraction appended:
+
+    PXX_ALLOW_FULL_SUITE=1 python3 tools/testmgr.py --tier full > full.log 2>&1
+    echo "FULLTIER rc=$?"
+    ...
+    grep -cE '\bFAIL\b' full.log        # <-- last command in the call
+
+The tier passed: `FULLTIER rc=0`, `4645/4645 pass, 47 skip`, `testmgr: GREEN`.
+The task notification said **"failed with exit code 1"**.
+
+**The exit code is the LAST command's, and the last command was the
+failure-counter.** `grep -c` prints `0` and exits **1** when it matches nothing,
+so the cleaner the run, the more certainly the call "fails":
+
+    $ echo x | grep -cE 'nope'; echo "rc=$?"
+    0
+    rc=1
+
+Trusting the notification would have escalated a green full tier to the owner as
+a red one, and blocked a pin that every precondition permitted.
+
+### Remedies
+
+- **Never end a diagnostic call with a `grep`.** Put the verdict read in the
+  middle, or terminate with something that cannot fail: `; true`, or an `echo`.
+- Prefer `grep -c ... || true` when the count is the point, and read the COUNT
+  rather than the exit status.
+- Echo the verdict you care about into the same log the command writes, inside
+  a `{ ... } > log` block — otherwise a bare `echo "rc=$?"` after a redirected
+  command lands in a DIFFERENT stream than the thing it describes, which is the
+  second half of what went wrong here.
+
+### Why it belongs beside the other three
+
+This is the same family as the already-banked wrapper/tail failures, and it
+completes the set by inverting the sign. The three before it made a RED look
+green or a verdict look absent; this one makes a GREEN look red. All four share
+the shape: **the instrument answered truthfully about something other than the
+question.** A `head -6` SIGPIPEs the compiler and returns `rc=13`, which reads
+like a compiler exit code. A backgrounded job's notification reports the WRAPPER.
+A `tail -25` truncates the one FAIL row. And `grep -c` reports failure because
+there was nothing to count.
