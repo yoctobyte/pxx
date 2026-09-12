@@ -104,5 +104,17 @@ class Tail:
 
 tail = threading.Thread(target=Tail().body, daemon=False, name="tail")
 tail.start()
-gate.set()
 print("main is done; the non-daemon thread has not been joined yet")
+# gate.set() GOES AFTER THE PRINT, and the order is the whole point. It used to
+# come first, which RELEASED the thread before main printed -- so which of the two
+# lines landed first was a genuine race, and the fixture asserted the common
+# outcome byte-exactly. Observed failing once on 2026-09-12 in a suite run sharing
+# the box with a second compile; 30 standalone runs at load 2.3 would not reproduce
+# it, which is exactly why it survived: it only flips when the box is busy, and the
+# box is busy when somebody else is measuring.
+# Setting the gate afterwards makes the order deterministic BY CONSTRUCTION -- the
+# thread is still blocked in gate.wait() while main prints -- and it tests MORE than
+# before, because the thread's line can now only appear via the exit-time join of a
+# non-daemon thread, which is the property the section is named for. Expected output
+# is unchanged.
+gate.set()

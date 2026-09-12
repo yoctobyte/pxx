@@ -1,0 +1,82 @@
+# `with C(...) as name:` WHERE `name` NAMES A CLASS. Broken until 2026-09-12, and
+# the lekkerzeilen closure's wall at app.py:4237 --
+# `with platform.open_window(...) as window:` against platform/_pxx.py:685
+# `class Window`.
+#
+# THE CAUSE IS NOT IN THE `with` PARSER. `is` and `as` share one arm in the
+# SHARED Pascal expression parser (pasparser_expr.inc), because both are Pascal
+# type operators. `is` carried a `not PyExprMode` guard from the start -- Python's
+# `is` is identity, not a type test -- and `as` did not. FindUClass is
+# case-INSENSITIVE, so `as window` resolved to `class Window`, that arm ate
+# `as window` as a CAST, and PyParseWithTail's own `as` handler never fired. The
+# guard is now hoisted so the two operators cannot drift apart again.
+#
+# TWO FAILURE MODES FROM ONE CAUSE, AND THE LOUD ONE IS NOT THE ONE THAT MATTERS.
+# With the target name NEW it was `undefined variable (w)`. With the name ALREADY
+# BOUND it COMPILED and kept the old value -- PREDECL below printed 1 where CPython
+# prints 3, no diagnostic. A fixture asserting only the refusal row would pass the
+# moment the symbol gets allocated, whether or not the assignment happens, so
+# PREDECL is the load-bearing row and must not be "simplified" away.
+
+class W:
+    def __init__(self, n=1):
+        self.n = n
+    def __enter__(self):
+        return self
+    def __exit__(self, a, b, c):
+        return False
+
+class Other:
+    def __init__(self):
+        self.n = 0
+    def __enter__(self):
+        return self
+    def __exit__(self, a, b, c):
+        return False
+
+# COLLIDE -- the target name is the MANAGER's own class, case-insensitively.
+with W(3) as w:
+    print("COLLIDE", w.n)
+
+# PREDECL -- THE LOAD-BEARING ROW. `w` already exists, so there was no
+# `undefined variable` to refuse on and the old object survived the block.
+w = W(1)
+with W(5) as w:
+    print("PREDECL", w.n)
+
+# OTHERCLASS -- the target need not name the MANAGER's class; any class name was
+# enough, because the cast arm only asked FindUClass. Kept separate because a fix
+# that special-cased the manager's own class would pass COLLIDE and fail this.
+with W(7) as other:
+    print("OTHERCLASS", other.n)
+
+# CONTROL -- a target naming NO class. This worked before the fix, so on its own
+# it certifies nothing; it is here so a fix that breaks the ordinary path reds.
+with W(9) as q:
+    print("CONTROL", q.n)
+
+# Nested, and an inner target that also names a class.
+with W(2) as w:
+    with Other() as other:
+        print("NESTED", w.n, other.n)
+
+# `is` MUST STAY IDENTITY IN PYTHON MODE -- the other half of the arm whose guard
+# was hoisted. If `is` ever regains the Pascal type-test reading, `a is Thing`
+# becomes True and this row reds.
+class Thing:
+    pass
+
+a = Thing()
+b = Thing()
+print("IS", a is a, a is b, a is Thing)
+
+# `except C as name:` with a colliding name -- the sibling construct. It parses
+# its own `as` and was never broken, so this is a regression guard on the shared
+# arm, not a fix being asserted.
+class MyErr(Exception):
+    pass
+
+try:
+    raise MyErr("boom")
+except MyErr as myerr:
+    print("EXCEPT", str(myerr))

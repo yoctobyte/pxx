@@ -1540,6 +1540,18 @@ test-nilpy: $(COMPILER)
 #	refused by name, see the fixture. No precision-sensitive value belongs here.
 	./$(COMPILER) test/test_nilpy_lambda_float_literal.npy $(TESTTMP)/test_nilpy_lamfloat
 	$(TESTTMP)/test_nilpy_lamfloat | diff -u test/test_nilpy_lambda_float_literal.expected -
+	# `with C(...) as name:` WHERE `name` NAMES A CLASS. The cause was NOT in the
+#	`with` parser: `is` and `as` share one arm in the SHARED Pascal expression
+#	parser, `is` carried a `not PyExprMode` guard and `as` did not, and FindUClass
+#	is case-INSENSITIVE -- so `as window` resolved to `class Window`, that arm ate
+#	it as a CAST and PyParseWithTail's own `as` handler never fired.
+#	lekkerzeilen/app.py:4237 was the live instance. PREDECL is the LOAD-BEARING
+#	row: with the name already bound the program COMPILED and kept the old value,
+#	so a fixture asserting only the `undefined variable` refusal would pass the
+#	moment the symbol gets allocated. IS and EXCEPT guard the other half of the
+#	hoisted condition and the sibling construct; neither asserts a fix.
+	./$(COMPILER) test/test_nilpy_with_as_names_a_class.npy $(TESTTMP)/test_nilpy_withas
+	$(TESTTMP)/test_nilpy_withas | diff -u test/test_nilpy_with_as_names_a_class.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

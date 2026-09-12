@@ -11497,9 +11497,21 @@ begin
     `is not` was unaffected (this pattern does not match it), which is what
     made the two shapes look unrelated.
     bug-nilpy-construction-on-the-right-of-is-does-not-parse }
-  if (CurTok.Kind = tkIdent) and
-     ((CaseEqual(CurTok.SVal, 'is') and (not PyExprMode)) or
-      CaseEqual(CurTok.SVal, 'as')) and
+  { NEITHER `is` NOR `as` IS A TYPE OPERATOR IN PYTHON, so this whole arm is
+    Pascal-only. `is` carried the PyExprMode guard from the start — Python's `is`
+    is identity, not a type test — and `as` did not, which made `with C(...) as n:`
+    silently unparseable whenever `n` names a class: FindUClass is
+    case-INSENSITIVE, so `as window` resolved to `class Window`, this arm ate
+    `as window` as a cast, and PyParseWithTail's own `as` handler then never fired.
+    With the target name NEW that surfaced as `undefined variable (window)`; with
+    the name already bound it COMPILED and kept the old value, silently.
+    lekkerzeilen/app.py:4237 is the live instance (`platform.open_window(...) as
+    window` against platform/_pxx.py:685 `class Window`).
+    Hoisted rather than repeated so the two operators cannot drift apart again —
+    the duplicated guard is how they drifted in the first place.
+    bug-n-a-with-as-target-is-not-bound-when-enter-returns-self }
+  if (CurTok.Kind = tkIdent) and (not PyExprMode) and
+     (CaseEqual(CurTok.SVal, 'is') or CaseEqual(CurTok.SVal, 'as')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
      (FindUClass(GetTokenStr(TokPos)) >= 0) then
   begin
