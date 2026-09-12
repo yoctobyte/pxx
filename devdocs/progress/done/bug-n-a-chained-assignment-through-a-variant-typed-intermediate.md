@@ -3,7 +3,8 @@ track: N
 prio: 85
 type: bug
 blocked-by: []
-summary: "NOW BLOCKS THE lekkerzeilen CLOSURE AT app.py:3204 — re-prioritised 40 -> 85 on 2026-09-12 once that was measured rather than assumed. `self.nest.inner.visible = <other> = v`, where `inner` is DECLARED as None and only later holds an object, cannot place its store: the receiver fold yields a non-class node and the dynamic setter writes somewhere the declared read does not look. REFUSED BY NAME as of 2026-09-12 rather than silently storing nothing — the diagnostic says to split the chain, and that remedy is real because THE SINGLE-STATEMENT SPELLING IS CORRECT TODAY (`self.nest.inner.visible = 33` works, measured). So this is a gap in the CHAIN path only, and only for a receiver with no static class; statically typed intermediates of any depth work, including app.py:3204's own shape. Nothing that previously compiled is refused — before the nested-target widening a two-level target did not parse at all. The fix is to build the receiver the way the single-statement path does; that path resolves the same source correctly, so the difference between the two is the whole bug."
+summary: "FIXED 2026-09-12 — and the fix was not new inference, it was ASKING THE DOOR THAT ALREADY EXISTED. `self.nest.inner.visible = <other> = v` with `inner` holding no static class was refused by name (and before that silently stored nothing). The statement path had solved this long ago: it wraps the dynamically-unboxed receiver in an AN_CLASS_CAST over AN_CALL(pyvarobj) via `PyVariantFieldArm`, and dispatches on the receiver's RUN-TIME class via `PyMakeVariantFieldSet` when several classes declare the name at different offsets. The chain path never asked either. `PyMakeAttrStore` now routes through both arms — dispatcher first, single placement second, dynamic setter only when NO class declares the name — and the refusal guard is GONE, because all three receiver cases are now handled and they want DIFFERENT answers: an undeclared attribute must take the dynamic setter (Python creates it, the dynamic getter reads it back, no second door), which is why one `declared` out-param separates it from the genuinely ambiguous case. Carried the lekkerzeilen closure 3204 -> 3305, and unlike the earlier 3305 this one is not bought with a silent wrong store. Fixture: test/test_nilpy_chained_assign_nested_attr.npy, VAR* rows; VARAMBIG is app.py's own shape (`visible` declared twice in ui.py at different offsets). NOT fixed and still open separately: a receiver that is a PARAMETER stores nothing through this path (pre-existing, pinned compiler too)."
+status: done
 ---
 
 # A chained assignment through a variant-typed intermediate is refused
@@ -103,7 +104,7 @@ Distinguish them before writing code: dump the chain's AST
 (`PXXDBG=a.ast:<proc>`) for the working single statement and the failing chain and
 diff the two store subtrees. Do not reason from the builders — they are shared.
 
-## 2026-09-13 — both of yesterday's hypotheses are REFUTED, and the fault is the RECEIVER
+## 2026-09-12 — both of yesterday's hypotheses are REFUTED, and the fault is the RECEIVER
 
 Measured with the guard temporarily disabled, then the guard restored and the
 binary verified byte-identical to the landed one (`127f2f6531d9`), so no probe
@@ -145,7 +146,7 @@ through is correct in itself and would NOT unblock app.py:3204, whose field
 
 ### The cheap fix is refuted too — the receiver has NO class identity at all
 
-Probed 2026-09-13, same session, guard restored and binary verified byte-identical
+Probed 2026-09-12, same session, guard restored and binary verified byte-identical
 again (`127f2f6531d9`). `PyMakeAttrLoad` sets `ASTRight[node] := UFldRec_[fi]`, so
 a field can carry a class RECORD while its KIND is variant, and both
 `PyMakeAttrStore` and the guard gate on the KIND (`ASTTk = tyClass`) before ever
@@ -171,3 +172,56 @@ receiver subtrees.
 FAILS, the previously built test binary is still on disk, so running it prints a full
 set of plausible rows that belong to the earlier build. Check the compile's own exit
 before reading any value it was supposed to produce.
+
+
+## Resolution 2026-09-12 — the machinery was already there
+
+Four hypotheses were tested and the first three were REFUTED by measurement, all
+of them cheap, none of them the cause:
+
+1. *the chain's sequence drops an `AN_CALL` store* — refuted: an UNDECLARED
+   attribute through the identical chain gives `22 22`, so the sequence executes.
+2. *`PyForceVariant` copies the receiver* — refuted by the same row.
+3. *the field carries a class record the guard never asks for* — refuted: it
+   carries neither a kind nor a record.
+4. *it needs new NilPy type inference* — **refuted by the AST dump**, which is
+   the measurement that ended this. `PXXDBG=a.ast:store_single` on the WORKING
+   single-statement spelling shows `AN_FIELD` over `AN_CLASS_CAST` over
+   `AN_CALL(pyvarobj)`: the statement path gives a dynamically-unboxed receiver a
+   class identity so a declared field resolves statically. The inference existed.
+   My previous tick recorded "the remaining work is inference" and that was wrong.
+
+Reused, not rebuilt — `grep` first, and the prose was already written:
+
+| existing | what it does |
+| --- | --- |
+| `PyVariantFieldArm(base, ci, fi, fname)` | the `AN_FIELD`/`AN_CLASS_CAST`/`pyvarobj` placement |
+| `PyVariantFieldCands(fname, ...)` | candidate classes + whether they share a layout |
+| `PyVariantFieldStore(...)` | ONE arm of a dispatched write |
+| `PyMakeVariantFieldSet(...)` | the multi-layout dispatcher; -1 when no dispatch is needed |
+
+`PyMakeAttrStore` now asks the dispatcher, then the single placement, then the
+dynamic setter. New code: `PyVariantFieldStorable`, which is the three-way
+decision the old guard could not express.
+
+## Why the guard could not simply be relaxed
+
+It conflated two reasons a store cannot be placed statically, and **they want
+opposite answers**: no class declares the name (dynamic setter is CORRECT — Python
+creates the attribute and the dynamic getter reads it back, so there is no second
+door) versus several classes declare it at different offsets (no single placement
+is correct, so it must dispatch). `declared` separates them. This is why the
+earlier "just allow it" attempt was correctly refused — see `6304103dd`.
+
+## The control, stated with its method
+
+The pinned compiler is NOT a control for the VAR* rows: it refuses the fixture at
+line 43, the chain feature itself, which postdates the pin. The control for these
+rows is my own previous build, where VARDECL printed `11 True` against CPython's
+`11 11` — a Boolean field coercion of the int 11, i.e. the declared read looking
+at a field the dynamic setter never wrote. VARAMBIG is the row that cannot pass by
+accident: `Pair.tag` sits at a later offset than `Solo.tag`, so a single placement
+gives a wrong value for one of them and only a working dispatch prints `9 9`.
+
+## Log
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

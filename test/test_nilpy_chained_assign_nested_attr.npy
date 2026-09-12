@@ -8,25 +8,24 @@
 # lekkerzeilen/app.py:3204 is `self.icon.visible = self.menu.visible = False`, and
 # it was the closure wall; clearing it moved 3215 -> 3305.
 #
-# EVERY RECEIVER HERE IS `self`, DELIBERATELY, and not because that is the
-# interesting arrangement — it is the only one that is correct today. A receiver
-# that is a PARAMETER silently stores NOTHING through this path, on the pinned
-# compiler too, so it is pre-existing and filed separately as
+# A receiver that is a PARAMETER silently stores NOTHING through this path, on the
+# pinned compiler too — pre-existing and filed separately as
 # bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing.
 # Do not "fix" a red here by switching a row to a parameter; that is the open bug.
+#
+# VARIANT-typed receivers ARE covered, as of 2026-09-12 — see the VAR* rows at the
+# bottom. They were refused by name until then, and VARAMBIG is the arrangement
+# lekkerzeilen/app.py:3204 actually needs.
 
 class W:
     def __init__(self, v=True):
         self.visible = v
 
 class N:
-    # `inner` is a W FROM THE START, deliberately. Declared as None and only
-    # later holding an object, its static type is not a class, the receiver fold
-    # cannot place the store, and the chain is now REFUSED by name rather than
-    # silently storing nothing — measured 2026-09-12, and filed as
-    # bug-n-a-chained-assignment-through-a-variant-typed-intermediate. The
-    # single-statement spelling of that store is correct today, which is the
-    # remedy the diagnostic names.
+    # `inner` is a W from the start, so this is the STATICALLY typed three-level
+    # case. The variant-typed spelling is exercised by the VAR* rows below; it was
+    # refused until 2026-09-12 and now routes through the statement path's own
+    # dispatched write.
     def __init__(self):
         self.inner = W()
 
@@ -87,3 +86,68 @@ def f():
     return 7
 
 o.once(f);      print(o.icon.visible, o.menu.visible, len(calls))
+
+
+# ---------------------------------------------------------------------------
+# VARIANT-TYPED RECEIVERS. Until 2026-09-12 a chain whose target receiver had no
+# static class was refused by name, because the fold's store fell to the dynamic
+# setter while a DECLARED field's read kept using the field — two doors, and the
+# statement stored nothing while compiling clean (`11 True` where CPython says
+# `11 11`). The fix asks the statement path's two existing arms instead.
+
+class One:
+    def __init__(self):
+        self.slot = 0
+
+def mk_one(n):
+    return One()            # a FACTORY, so the field holding it is variant-typed
+
+class Holder:
+    def __init__(self):
+        self.a = mk_one(1)
+        self.b = mk_one(2)
+    # VARDECL -- one class declares `slot`, so the store is placed directly.
+    def decl(self):
+        self.a.slot = self.b.slot = 11
+    # VARFRESH -- NO class declares `brand`, so Python creates the attribute and
+    # the dynamic setter is correct; the dynamic getter reads it back, so there is
+    # no second door. This row was refused along with the genuinely undecidable
+    # case, and it is the control that separates the two reasons a store cannot be
+    # placed statically: they want OPPOSITE answers.
+    def fresh(self):
+        self.a.brand = self.b.brand = 22
+
+h = Holder()
+h.decl();  print(h.a.slot, h.b.slot)
+h.fresh(); print(h.a.brand, h.b.brand)
+
+# VARAMBIG -- THE LOAD-BEARING ROW, and app.py:3204's own shape: TWO classes
+# declare `tag` at DIFFERENT offsets, so no single placement is correct and the
+# write has to dispatch on the receiver's run-time class. `visible` in
+# lekkerzeilen/ui.py is declared twice exactly like this. If this row is ever
+# "simplified" by giving Pair and Solo the same layout it stops testing anything:
+# both would then take the single-placement arm above.
+
+class Pair:
+    def __init__(self):
+        self.pad = 0
+        self.tag = 1        # tag at a LATER offset
+
+class Solo:
+    def __init__(self):
+        self.tag = 2        # tag at offset 0
+
+def mk_tagged(n):
+    if n:
+        return Pair()
+    return Solo()
+
+class Two:
+    def __init__(self):
+        self.x = mk_tagged(1)
+        self.y = mk_tagged(0)
+    def go(self):
+        self.x.tag = self.y.tag = 9
+
+t = Two()
+t.go(); print(t.x.tag, t.y.tag)

@@ -28494,9 +28494,49 @@ end;
   Taking a NODE rather than a name is what lets a chained assignment reach
   `self.icon.visible` — two attribute levels, where the receiver is itself an
   attribute load. bug-n-a-chained-assignment-to-two-attributes-does-not-parse }
+{ Can a field of this name be reached off a VARIANT receiver with ONE layout?
+
+  The read path has answered this all along — PyMakeVariantField unboxes through
+  `pyvarobj`, wraps the result in an AN_CLASS_CAST to the class that declares the
+  field, and reads an ordinary AN_FIELD off that. The STORE side never asked, so a
+  chained assignment through a variant receiver fell to the dynamic setter while
+  the read kept using the declared field, and the two used different doors: the
+  write went to the attribute side table and the read returned the field's initial
+  value. Measured 2026-09-13, `11 True` where CPython says `11 11`.
+
+  ONE LAYOUT ONLY, deliberately. PyMakeVariantField handles several by emitting a
+  run-time isinstance dispatch per arm and falling back to the LAST candidate — a
+  read that is "wrong but no worse than the guess it replaces", which is a fine
+  trade for a read and is NOT one for a store: the fallback arm would write at
+  another class's offset. So where the layouts differ the chain keeps refusing by
+  name, which is what it did for every variant receiver until now.
+  bug-n-a-chained-assignment-through-a-variant-typed-intermediate }
+function PyVariantFieldStorable(const fld: AnsiString; var ci, fi: Integer;
+                               var declared: Boolean): Boolean;
+var n: Integer; cands, candFi: TPyFieldCands; sameShape: Boolean;
+begin
+  ci := -1; fi := -1;
+  n := PyVariantFieldCands(fld, cands, candFi, sameShape);
+  { `declared` separates the two reasons a store cannot be placed statically, and
+    they want OPPOSITE answers. No class declares the name -> Python is creating a
+    fresh attribute, the dynamic setter is correct, and the dynamic GETTER will read
+    it back, so there is no second door and nothing to refuse. Several classes
+    declare it with DIFFERENT layouts -> a declared-field read door exists and we
+    cannot tell which offset to write, so refusing is the only safe answer.
+    Measured 2026-09-13: the fresh-attribute chain gives CPython's answer exactly
+    (`22 22`), and it had been refused along with the genuinely ambiguous case. }
+  declared := n > 0;
+  Result := (n = 1) or ((n > 1) and sameShape);
+  if Result then
+  begin
+    ci := cands[0];
+    fi := candFi[0];
+  end;
+end;
+
 function PyMakeAttrStore(baseNode: Integer; const fld: AnsiString;
                          valNode: Integer): Integer;
-var ci, fi, lhs: Integer; rfld: AnsiString;
+var ci, fi, lhs, vci, vfi: Integer; rfld: AnsiString; vdecl: Boolean;
 begin
   ci := -1;
   if IntToTypeKind(ASTTk[baseNode]) = tyClass then
@@ -28509,8 +28549,33 @@ begin
   if ci >= 0 then fi := FindUField(ci, rfld);
   if fi < 0 then
   begin
-    { NOT a declared field — Python creates the attribute on assignment, and the
-      dynamic setter already takes an arbitrary receiver node. }
+    { The receiver has no static class, but a VARIANT one can still be unboxed to
+      the class that declares the field — the SAME two arms the statement path
+      already uses, so a chained store and a single one end up on one door.
+      Neither is new machinery: PyMakeVariantFieldSet dispatches on the receiver's
+      run-time class when several classes declare the name with different layouts
+      (the shape lekkerzeilen/app.py:3204 needs — `visible` is declared twice in
+      ui.py at different offsets), and PyVariantFieldArm places the store directly
+      when there is one layout. The chain simply never asked either of them, which
+      is the whole of this bug. }
+    if (ci < 0) and (IntToTypeKind(ASTTk[baseNode]) = tyVariant) then
+    begin
+      vfi := PyMakeVariantFieldSet(baseNode, fld, valNode, -1);
+      if vfi >= 0 then
+      begin
+        PyMakeAttrStore := vfi;
+        Exit;
+      end;
+      if PyVariantFieldStorable(fld, vci, vfi, vdecl) then
+      begin
+        PyMakeAttrStore := AllocNode(AN_ASSIGN);
+        ASTLeft[PyMakeAttrStore] := PyVariantFieldArm(baseNode, vci, vfi, fld);
+        ASTRight[PyMakeAttrStore] := valNode;
+        Exit;
+      end;
+    end;
+    { NOT a declared field anywhere — Python creates the attribute on assignment,
+      and the dynamic setter already takes an arbitrary receiver node. }
     PyMakeAttrStore := PyMakeDynAttrSet(baseNode, fld, valNode);
     Exit;
   end;
@@ -29351,23 +29416,18 @@ begin
       node := PyMakeSubscriptStore(subBase[i], subIdx[i], PyMakeIdent(chainTmp))
     else if recvs[i] >= 0 then
     begin
-      { REFUSE a receiver that did not resolve to a class, rather than store
-        through the dynamic setter. Measured 2026-09-12: for `self.nest.inner`
-        where `inner` is DECLARED as None and later holds an object, the fold
-        yields a non-class receiver, the dynamic set lands somewhere the declared
-        read does not look, and the statement stores NOTHING while compiling
-        clean — a plausible wrong value with no diagnostic, which is the one
-        outcome worth refusing over. The SINGLE-statement spelling of the same
-        store is correct today (`self.nest.inner.visible = 33` works), so the
-        remedy in the message is real and is what the diagnostic names.
-        Statically typed receivers — app.py:3204's own shape — take the arm above
-        and are unaffected; before this widening a two-level target did not parse
-        at all, so nothing that worked is refused here.
-        bug-n-a-chained-assignment-through-a-variant-typed-intermediate }
-      if IntToTypeKind(ASTTk[recvs[i]]) <> tyClass then
-        Error('Nil Python: in a chained assignment, the receiver of `'
-              + flds[i] + '` has no static class here, so the store cannot be '
-              + 'placed — split the chain into separate assignments');
+      { NO GUARD HERE ANY MORE, and the reason is that there is nothing left for
+        one to refuse. This refused every non-class receiver from 2026-09-12 to
+        2026-09-13, correctly at the time: the fold's store fell to the dynamic
+        setter while a DECLARED field's read kept using the field, so the two used
+        different doors and the statement stored nothing while compiling clean.
+        PyMakeAttrStore now asks the statement path's own two arms first, which
+        between them cover all three receivers — dispatched write when several
+        classes declare the name with different layouts, a direct placement when
+        one does, and the dynamic setter only when NO class does, where the read
+        is dynamic too and the two agree. The refusal's own remedy ("split the
+        chain") was a description of the statement path being right; it is reached
+        from here now. }
       node := PyMakeAttrStore(recvs[i], flds[i], PyMakeIdent(chainTmp));
     end
     else if flds[i] <> '' then
