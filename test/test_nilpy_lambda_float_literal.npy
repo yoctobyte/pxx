@@ -1,0 +1,93 @@
+# A FLOAT LITERAL IN A LAMBDA BODY. Refused outright until 2026-09-12 --
+# `lambda x: 2.0` alone was enough, with `this token is not supported in a
+# lambda/closure body yet`. It was the lekkerzeilen closure's wall at
+# app.py:3305, and it looked like three other things first: the real line is
+# `lambda x, z: canopy.at(x, z, outside=ceiling + 1.0) <= ceiling`, so the
+# keyword argument, the comparison and the method call were all better
+# suspects. A ladder that moved ONE token at a time found it; every shape
+# below survives because the INT spelling of each compiled all along, which is
+# exactly the collision CLAUDE.md warns about -- an expected value that the
+# working path also produces tells you nothing.
+#
+# WHY A SPELLING AND NOT A RENDERING: a lambda body is reconstructed as TEXT
+# from its token span and re-lexed, so the float has to survive a round trip.
+# The lexer now keeps the literal's exact source spelling. Rendering it from
+# the stored bits would need 17 significant digits to be exact and would be a
+# second implementation of what the source already says.
+
+def g(x, outside=0.0):
+    return x + outside
+
+class C:
+    def at(self, x, z, outside=0.0):
+        return x + z + outside
+
+c = C()
+
+# BARE -- the minimal refused shape. The int spelling compiled, so this row is
+# the whole bug in one line.
+bare = lambda x: 2.0
+print(bare(1))
+
+# CMP -- `x <= 5` compiled and `x <= 5.0` did not.
+cmp_ = lambda x: x <= 5.0
+print(cmp_(1), cmp_(9))
+
+# ARITH
+arith = lambda x: x + 1.5
+print(arith(2))
+
+# CALLKW -- app.py:3305's own shape: a float inside a keyword argument to a
+# METHOD, compared against a captured float.
+ceiling = 4.0
+callkw = lambda x, z: c.at(x, z, outside=ceiling + 1.0) <= ceiling
+# Both arguments negative on the first call so the two cases DISAGREE -- a row
+# whose cases both print False cannot distinguish a working lambda from one
+# that returns a constant.
+print(callkw(-20, 0), callkw(1, 1))
+
+# FREEBARE -- a free function with a float keyword argument, NOT wrapped in a
+# comparison. The boundary matters and it is not the one it looks like: the
+# METHOD row above works with the comparison, but wrapping a FREE-function call
+# in one routes the body through pyeval, whose keyword support is hard-wired to
+# print's end/sep/flush, and `lambda x: g(x, outside=2.0) <= 5.0` then dies at
+# RUN time with `pyeval: unsupported keyword arg: outside`. That is a SEPARATE
+# bug from this fixture's -- filed as
+# bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body
+# -- and it is an honest run-time refusal, not a wrong value. Do not "fix" a red
+# here by adding the comparison to this row; that is the open bug.
+freebare = lambda x: g(x, outside=2.0)
+print(freebare(1), freebare(9))
+
+# DICTSET -- the braces. '{' and '}' lex to the PASCAL tkBegin/tkEnd, so a dict
+# or set literal in a lambda body fell into the same refusal table as the float
+# and is cleared by the same change. Values checked against CPython, because a
+# dict that compiles and reads back wrong would print plausibly.
+print((lambda k: {1: "a", 2: "b"}[k])(2))
+print(sorted((lambda: {3, 1, 2})()))
+print((lambda n: {"k": n * 2.5})(4))
+
+# SPELLINGS -- the spellings that must round-trip through the text
+# reconstruction, not just the obvious one. `1_000.5` is stored
+# underscore-stripped, and `.5` and `2.` are real Python spellings that must not
+# re-lex as a dot plus an integer.
+#
+# DELIBERATELY ABSENT: `1e3` and `2E-3`. pyeval's tokenizer cannot read an
+# exponent, so those are refused at COMPILE time by name -- see
+# bug-n-pyeval-cannot-read-an-exponent-float-literal. They are not here because
+# asserting a compile failure is not what this fixture does, and they must not be
+# "fixed" into it by rewriting them in plain decimal: that would assert the
+# decimal path twice and silently drop the only coverage of the exponent refusal.
+#
+# AND NO PRECISION-SENSITIVE VALUE BELONGS HERE. pyeval accumulates a fraction
+# digit-by-digit against a `scale * 0.1`, so a byte-exact diff of a printed float
+# is the instrument CLAUDE.md warns reddens for no defect. Every value in this
+# fixture is one whose printed form is stable; checking the LAST ULP of an
+# interpreted literal is a different question and not this one.
+print((lambda: 1_000.5)())
+print((lambda: .5)())
+print((lambda: 2.)())
+
+# NEGATIVE and a float in a DEFAULT, which is a separate token span.
+print((lambda x: -x * 0.25)(8))
+print((lambda x, k=0.5: x * k)(8))

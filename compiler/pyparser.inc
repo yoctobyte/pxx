@@ -9891,11 +9891,47 @@ begin
   case Tokens[i].Kind of
     tkIdent:   Result := GetTokenStr(i);
     tkInteger: Result := PyIntLiteralText(Tokens[i].IVal);
+    { The SPELLING, never a rendering of the bits — see PyEmitToken. An empty
+      one means the token was SYNTHESISED rather than lexed (PyEmitImaginary's
+      two parts are the only such floats today), and that falls through to the
+      Error below DELIBERATELY: a reconstruction that dropped the text would
+      re-lex as something else and the lambda would return a plausible wrong
+      number with no diagnostic, which is the one outcome worth refusing over.
+      So `lambda: 2j` is still refused, and honestly. }
+    tkFloat:   if Tokens[i].SLen > 0 then
+               begin
+                 Result := GetTokenStr(i);
+                 { `.5` -> `0.5`. pyeval's tokenizer starts a number on a DIGIT,
+                   so a leading-dot spelling reaches it as a lone tkDot. This is
+                   the one normalisation that is exact by inspection rather than
+                   by rounding: the two spellings are the same decimal, so no
+                   bits move. `2.` needs nothing — that path reads digits first. }
+                 if (Length(Result) > 0) and (Result[1] = '.') then
+                   Result := '0' + Result;
+                 { pyeval's own tokenizer cannot read an exponent, so an `1e3`
+                   spelling would compile here and die at RUN time. Refuse at
+                   COMPILE time instead: this arm is reached only when the body
+                   is being reconstructed FOR pyeval, so a lifted body is
+                   unaffected, and a refusal must not move later than it already
+                   was. bug-n-pyeval-cannot-read-an-exponent-float-literal }
+                 if (Pos('e', Result) > 0) or (Pos('E', Result) > 0) then
+                   Error('Nil Python: an exponent float literal (' + Result
+                         + ') is not supported in an interpreted lambda/closure '
+                         + 'body yet — write it in plain decimal');
+               end
+               else
+                 Error('Nil Python: a synthesised float in a lambda/closure '
+                       + 'body has no source spelling to reconstruct');
     tkString:  Result := '"' + GetTokenStr(i) + '"';
     tkDot:     Result := '.';
     tkComma:   Result := ',';
     tkLParen:  Result := '(';
     tkRParen:  Result := ')';
+    { '{' and '}' -- the NilPy lexer maps the braces onto the PASCAL begin/end
+      tokens, which is why a dict or set literal in a lambda body fell into the
+      same refusal as a float. }
+    tkBegin:   Result := '{';
+    tkEnd:     Result := '}';
     tkLBrack:  Result := '[';
     tkRBrack:  Result := ']';
     tkColon:   Result := ':';

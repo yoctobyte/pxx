@@ -108,8 +108,17 @@ begin
   Tokens[TokCount].Line := line;
   { A tkInteger carries text only when the literal is wider than Int64: the
     exact decimal digits, for the promotable-int lowering (the Pascal lexer's
-    CurTok.SVal convention, ferried through the NilPy token pool). }
-  if (k = tkIdent) or (k = tkString) or ((k = tkInteger) and (sval <> '')) then
+    CurTok.SVal convention, ferried through the NilPy token pool).
+    A tkFloat carries its EXACT SOURCE SPELLING, for the same reason one step
+    further on: a lambda body is reconstructed as TEXT and re-lexed, so the
+    only rendering of a double guaranteed to re-read as the same bits is the
+    one the programmer wrote. Rendering it from the bits would need 17
+    significant digits to round-trip and would still be a second
+    implementation of something the source already says. Underscores are
+    already stripped by the caller, so `1_000.5` is stored as `1000.5` —
+    a spelling that re-lexes to the identical value. }
+  if (k = tkIdent) or (k = tkString) or
+     ((k = tkInteger) and (sval <> '')) or ((k = tkFloat) and (sval <> '')) then
   begin
     off := TokCharLen;
     len := Length(sval);
@@ -1114,7 +1123,7 @@ begin
           if PyImaginarySuffix(P) then
             PyEmitImaginary(StrToDoubleBits(s), SrcLine)
           else
-            PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, '');
+            PyEmitToken(tkFloat, StrToDoubleBits(s), SrcLine, s);
         end
         else if PyImaginarySuffix(P) then
           { `2j` — an INTEGER with the imaginary suffix. CPython has no integer

@@ -1527,6 +1527,19 @@ test-nilpy: $(COMPILER)
 #	PIN as well — pre-existing, filed, and not to be "fixed" by editing a row here.
 	./$(COMPILER) test/test_nilpy_chained_assign_nested_attr.npy $(TESTTMP)/test_nilpy_chainattr
 	$(TESTTMP)/test_nilpy_chainattr | diff -u test/test_nilpy_chained_assign_nested_attr.expected -
+	# A FLOAT LITERAL IN A LAMBDA BODY. `lambda x: 2.0` alone was refused with
+#	`this token is not supported in a lambda/closure body yet`, and it was the
+#	lekkerzeilen closure's wall at app.py:3305. The real line there is
+#	`lambda x, z: canopy.at(x, z, outside=ceiling + 1.0) <= ceiling`, so the
+#	keyword argument, the comparison and the method call all looked guiltier; a
+#	ladder moving one token at a time found the float. The INT spelling of every
+#	row below compiled all along, which is why a suite written the ordinary way
+#	would not have caught it. A lambda body is reconstructed as TEXT and re-lexed,
+#	so the lexer now keeps the literal's exact SOURCE SPELLING rather than
+#	rendering it from the stored bits. Exponent spellings are absent on purpose —
+#	refused by name, see the fixture. No precision-sensitive value belongs here.
+	./$(COMPILER) test/test_nilpy_lambda_float_literal.npy $(TESTTMP)/test_nilpy_lamfloat
+	$(TESTTMP)/test_nilpy_lamfloat | diff -u test/test_nilpy_lambda_float_literal.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
