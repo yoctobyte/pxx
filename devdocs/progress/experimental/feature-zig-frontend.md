@@ -3,18 +3,26 @@ track: Z
 prio: 45  # auto
 ---
 
-# Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental
+# Zig frontend — a working SKELETON; 6 of 28 ordinary constructs compile (re-measured 2026-09-12)
 
 - **Type:** feature — umbrella. **Track Z** (the Zig frontend's own lane:
-  `zlexer`/`zparser`, Zig->IR lowering, `lib/zrtl`, Zig tests). The older
+  `zlexer`/`zparser`, Zig->IR lowering, `lib/zrtl` (**which does not exist on
+  disk — checked 2026-09-12; the lane owns the name, not a directory**), Zig
+  tests). The older
   "spans Track A + Track B" reading predates the Z lane; what it was pointing at
   is that the REMAINING items are not frontend work — the comptime VM, record-ABI
   shapes and real tySlice/tagged-union primitives are Track A shared machinery,
   and `lib/zrtl` breadth is Track B on demand. The frontend itself is Z.
-- **Status:** experimental — everything reachable by pure parse-time
-  desugaring onto the existing IR is DONE and tested (2026-07-08); what
-  remains needs shared machinery (see below) and is low-prio by the
-  experimental-frontends rule (experimental/README.md)
+- **Status:** experimental — a SKELETON that compiles its own six tests and
+  a real chess perft, and refuses most ordinary Zig. Re-measured 2026-09-12
+  (see the section at the foot): 6 of 28 isolated single-construct probes
+  compile. The 2026-07-08 claim that "everything reachable by pure parse-time
+  desugaring is DONE" is **FALSE on its own terms** — struct methods,
+  top-level `const`, `for (arr) |v|`, labeled blocks, multiline strings and
+  `[_]T{}` are all pure parse-time work and all refused. The compiler's OWN
+  diagnostics call it a skeleton. Still low-prio by the experimental-frontends
+  rule (experimental/README.md); the point is that the gap list is now real
+  instead of asserted.
 - **Owner:** —
 
 ## Theoretic completion (2026-07-08, Track Z — user-directed)
@@ -72,7 +80,8 @@ comptime VM: no comptime values, control flow, or builtins.
 Track A only on its own merits per experimental/README.md):
 - a real comptime VM (#6's full form) — values/control-flow/builtins.
 - record-ABI shapes — optional/struct/slice params and returns.
-- std breadth (#8, lib/zrtl) — Track B, on demand.
+- std breadth (#8, lib/zrtl) — Track B, on demand. **No `lib/zrtl` exists on
+  disk (2026-09-12); nothing has been started here, so do not go looking.**
 - real tySlice / tagged-union primitives — shared with the Rust tickets
   ([[feature-rust-borrowed-slice-type]], [[feature-rust-match-enum-payload]]).
 
@@ -396,3 +405,63 @@ startpos perft(4)=197281, Kiwipete perft(3)=97862. **Probe verdict: no
 shared-internals bug** — the one bug found this pass was the frontend-local
 5/6-param spill (fixed above, shared with Rust). Regressions green: all Zig
 tests, quick tier, self-host byte-identical.
+
+## Re-measurement 2026-09-12 (frankZ, Track Z) — the completion claim is stale
+
+Prompted by the stale-hazard rule: an unranked experimental umbrella asserting
+completion is a warning that decays like a lock. Measured at `356d4d4fa` with a
+freshly `converged` HEAD binary (`808076de24be`), CWD at the repo root. This used
+the HEAD-built compiler, NOT `$(PXX_STABLE)`, so it is independent of pin age —
+and every gap below is a PARSE error, raised before any builtin or RTL is
+reached, which no pin could produce.
+
+**The existing suite is GREEN and that is not the same claim.** All six
+`test/test_zig_*.zig` compile, run, and match their Makefile expected strings
+byte-for-byte, chess perft included. The frontend has not rotted. But the suite
+is written in the subset that works — it uses `for (0..N) |i|` in all four loop
+sites and never `for (arr) |v|`, and declares arrays only as `[5]i64 = undefined`.
+That is the passing-arrangement population, so it certifies the skeleton rather
+than probing it.
+
+**28 isolated single-construct probes, one file each** (isolation on purpose: a
+combined program reports a first failure and hides the walls behind it; the
+scaffolding-only control compiles, so the failures are the constructs). **6 pass**
+— `bool`, `usize`, `pub fn`, string literal + `{s}`, `while (c) : (i += 1)`, and
+the control. **22 fail.** Three first-round failures were CONFOUNDED and were
+re-probed before attribution: `for (a) |v|` died on the `[_]i64{}` literal, not
+on the loop. Disambiguated, `[3]i64{1,2,3}` compiles (the ticket claims exactly
+that and is correct); `[_]T{}` does not.
+
+Grouped by MECHANISM, not by probe count — four gates produce most of it:
+
+1. **The struct body is a flat token walk requiring `ident : ident`**
+   (`zparser.inc:1611-1618`). One shape constraint refuses methods, `const Self
+   = @This()`, default field values, and every non-scalar field type (arrays,
+   `?T`, nested structs) — 7 probes, one cause. Methods fail regardless of
+   position, so it is not an ordering bug.
+2. **Top level accepts only `fn`/`pub fn`** (`zparser.inc:2111-2112`) — no
+   top-level `const`, no `enum`, no `union(enum)`, no `error{}` set, no `test`
+   block — 5 probes.
+3. **`for` unconditionally parses a range** — `for (arr) |v|` reaches the shared
+   range parser and errors `expected '..'` with no `Zig:` prefix, which is the
+   tell that it never reached a frontend check.
+4. **The type vocabulary is integers, `bool`, `void` and declared structs** —
+   the diagnostic says so in those words. **No floats at all**: `f64` is
+   `unknown type`.
+
+Singles: `switch` ranges `0...3` (the ticket does say "No ranges"), `comptime`,
+labeled `blk: { break :blk v }`, `unreachable`, multiline strings, `[]const u8`
+parameters, and `pub fn main() !void` (refused by name).
+
+**What this changes for ranking.** Of the gaps above, items 1, 2, 3, `[_]T{}`,
+labeled blocks and multiline strings need NO shared machinery — they are parser
+work in `zparser.inc`, which is Track Z's own file. The ticket's standing
+position, that what remains is Track A's comptime VM and real tySlice/tagged-union
+primitives, is true only of floats, ranges and comptime. **The single
+highest-value item is (1)**: struct methods are how essentially all real Zig is
+organised, and the shape constraint that refuses them also refuses six other
+things.
+
+Nothing was fixed here — this is a measurement, and the frontend stays low-prio
+experimental. `lib/zrtl`, which the header names as a Track Z file, does not
+exist on disk at all.
