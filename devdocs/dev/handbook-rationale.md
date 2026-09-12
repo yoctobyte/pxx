@@ -1471,6 +1471,26 @@ subject rows against 103 RED**, so a green tstate verdict at v354's tree is
 entirely plausible. The CLAUDE.md sentence stands; what is wrong is treating a
 pin body as the instrument that would settle it.
 
+**And the governance half, which holds even if the evidence HAD been airtight.**
+The reasoning above is why that edit was wrong; this is why it would have been
+the wrong MOVE regardless. A removal from CLAUDE.md is not symmetrical with an
+addition: that file is the authority every session pays for at startup, so a
+deletion takes a measured fact out of the one place it is guaranteed to be read,
+and is strictly harder to undo than a correction added beside it. Had the
+sentence been provably false, the move is to **add the dated correction under it
+and name what retired it**, never to strike it — the file's own worst failure
+mode is a stale line obeyed literally, and a deleted line cannot be caught at
+all, because it leaves nothing for the next seat to catch you with.
+
+**This slips past the reversibility test on purpose, which is why it needs
+saying separately.** Nobody would call striking a factual sentence "loosening a
+guard", so the guardrail rule never fires on it, and `git revert` makes it look
+trivially reversible. Additions and dated corrections to CLAUDE.md are ordinary
+work. **Removals — and anything that deletes evidence rather than adding to
+it — are the owner's.** Recorded here rather than in CLAUDE.md by the same test
+that governs everything else in it: one instance, one seat, so it is banked and
+not promoted.
+
 The transferable part: **when a record is SILENT about a property, establish
 which instrument was recording that property in that era before reading the
 silence as a negative.** A grading vocabulary that post-dates the rows you are
