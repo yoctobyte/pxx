@@ -626,6 +626,12 @@ type
   ResourceWarning   = class(Warning) end;
   EncodingWarning   = class(Warning) end;
 
+  { Forward: TPyBytes.join takes an ITERATOR overload and TPyIter is declared
+    below it. First forward class declaration in this unit; the alternative was
+    moving a 200-line class, which would have made the diff unreadable for one
+    method signature. }
+  TPyIter = class;
+
   TPyBytes = class
   public
     FLen: Integer;
@@ -731,7 +737,17 @@ type
     function rsplit: TPyList; overload;
     function splitlines: TPyList;
     { b'-'.join([b'a', b'b']) — Self is the SEPARATOR, as for str. }
-    function join(parts: TPyList): TPyBytes;
+    function join(parts: TPyList): TPyBytes; overload;
+    { ...and over an ITERATOR, which str.join has always accepted and this did
+      not: `b"".join(reversed(rows))` was a COMPILE error ("no overload of join
+      matches these arguments") while `"".join(reversed(rows))` worked, and
+      `b"".join(list(reversed(rows)))` worked too -- so the only missing step
+      was materialising. Two paths for one concept and the one nobody extended
+      is the one that stayed broken (devdocs/dev/normalise-dont-special-case.md).
+      A generator and a tuple already reached the TPyList arm; TPyIter is what
+      `reversed()` and `sorted()` return.
+      bug-n-str-join-rejects-an-argument-shape-cpython-accepts }
+    function join(parts: TPyIter): TPyBytes; overload;
     { .translate(table): table is 256 bytes mapping each byte value. A table of
       any other length is a ValueError in CPython. }
     function translate(table: TPyBytes): TPyBytes;
@@ -895,6 +911,53 @@ type
       range needs no new mechanism. }
     function at(i: Int64): Int64;
     property Items[i: Int64]: Int64 read at; default;
+  end;
+
+{ `collections.deque` — a double-ended queue.
+
+  BUILT ON A TPyList PLUS A HEAD INDEX, not on its own variant storage. The
+  slot machinery, the retain/release of an object element and the growth policy
+  are TPyList's already, and a second copy of them is exactly the duplication
+  devdocs/dev/normalise-dont-special-case.md is about. What a deque adds over a
+  list is one number: where the front currently is.
+
+  WHY NOT list.pop(0). Because that is O(n) per element, and the measured
+  caller is a BREADTH-FIRST FLOOD FILL over a chart raster (lekkerzeilen
+  chart.py) where every cell enters the queue exactly once — so list.pop(0)
+  makes the whole traversal quadratic in the pixel count. `popleft` here
+  advances FHead and nothing else; the abandoned prefix is reclaimed by a
+  compaction that runs only once the dead prefix is at least half the buffer,
+  which is what makes it O(1) AMORTISED rather than O(1) until memory runs out.
+
+  DELIBERATELY ABSENT: `maxlen`. It is a real part of the signature and it is
+  the half that silently DISCARDS elements, so a shim that accepted the keyword
+  and ignored it would turn a bounded ring buffer into an unbounded one and
+  lose nothing visibly. Nothing measured passes it; a caller who does gets a
+  loud unknown-argument error. Also absent: rotate, extendleft, index, count,
+  insert, remove, reverse — none is reached, and each would be a guess. }
+  TPyDeque = class
+  public
+    FBuf: TPyList;
+    FHead: Integer;     { index in FBuf of the front element }
+    constructor Create;
+    { Python's deque mutators return None, exactly as list's do — the
+      Self-returning variants TPyList carries are for the frontend's literal
+      chaining and have no deque counterpart. }
+    function append(const v: Variant): Variant;
+    function appendleft(const v: Variant): Variant;
+    function popleft: Variant;
+    function pop: Variant;
+    function clear: Variant;
+    { `len(d)`, and with it TRUTHINESS: `while queue:` on a class that is not
+      one of pylib's own containers is decided by __len__ and by nothing else.
+      Without it the overload matcher silently picks some other container's
+      overload and reads a length off unrelated bytes
+      (bug-nilpy-dunder-protocols-ignored-fall-back-to-handle-arithmetic). }
+    function __len__: Integer;
+    procedure Compact(frontSlack: Integer);
+    function at(i: Integer): Variant;
+    procedure put(i: Integer; const v: Variant);
+    property Items[i: Integer]: Variant read at write put; default;
   end;
 
 { Python's `complex`. A CLASS rather than a new variant tag: a tag would need a
@@ -1156,7 +1219,36 @@ function bytearray(b: TPyBytes): TPyBytes; overload;
   here would be a wrong VALUE in a buffer, which is exactly the failure mode
   this type is used to avoid. }
 function bytearray(l: TPyList): TPyBytes; overload;
-function bytes(b: TPyBytes): TPyBytes;
+{ bytes(n) — n ZERO bytes, CPython's oldest bytes constructor and the one a
+  program reaches for to allocate a buffer of a known size (`array.array("h",
+  bytes(count * 2))`). `bytearray(n)` has carried this overload all along and
+  `bytes(n)` did not, so the immutable spelling was a COMPILE error where
+  CPython accepts it — two spellings of one concept and the one nobody extended
+  is the one that stayed broken (devdocs/dev/normalise-dont-special-case.md).
+  Refusing what CPython accepts is a defect in this direction: NilPy is UPWARD
+  compatible, one way.
+  Deliberately does NOT set FIsByteArray — that tag is the whole difference
+  between the two spellings, and stamping it here would make `bytes(4)` print
+  as a bytearray and answer `bytearray` to type(x).__name__.
+  bug-n-bytes-n-is-refused-where-bytearray-n-is-accepted }
+function bytes(n: Integer): TPyBytes; overload;
+{ ...and the VARIANT arm, which the integer overload above MADE NECESSARY.
+  A dynamically-typed receiver (`for y in [[3,1,2]]: bytes(y)`) used to bind to
+  the TPyBytes overload and be rescued by its runtime `is TPyList` check. Adding
+  an Integer overload changed which one a Variant binds to: it started matching
+  the INTEGER, and `bytes(y)` on a list aborted with "expected a number, got
+  object" — a working call turned into a runtime abort by an overload added for
+  an unrelated shape, with nothing refused at compile time.
+  Caught by test_nilpy_builtin_over_variant_receiver, which exists for exactly
+  this class and whose own header says the variant payload kinds are swept
+  BECAUSE testing only the static one shows nothing.
+  So the arm is explicit tag dispatch rather than `pylist_v(v)`, which is what
+  sum/any/all use: pylist_v SPREADS a str into its characters, and `bytes(s)`
+  with no encoding is a TypeError in CPython, which that same test asserts.
+  max/min/len/tuple/sum already carry a variant arm; bytes did not, and now the
+  reason it needs one exists. }
+function bytes(const v: Variant): TPyBytes; overload;
+function bytes(b: TPyBytes): TPyBytes; overload;
 { bytes([104, 105]) — from a LIST of codepoints. A REAL overload since
   bug-a-overload-resolution-ignores-class-identity: before that, a list
   argument silently bound to the TPyBytes parameter above and was rescued by
@@ -1221,12 +1313,21 @@ function pylist_slice_step(l: TPyList; lo, hi, step: Integer): TPyList;
 function pylist_del_slice(l: TPyList; lo, hi: Integer): TPyList;   { del l[lo:hi] in place }
 function pylist_del_at(l: TPyList; i: Integer): TPyList;           { del l[i] in place }
 procedure pylist_setslice(l: TPyList; lo, hi: Integer; src: TPyList);   { l[lo:hi] = src in place }
-{ `b[lo:hi] = src`. uforth assigns a slice of the SAME length everywhere (it is
-  emulating fixed-width cells in Forth data space), so a length CHANGE is
-  rejected loudly rather than silently splicing: a quiet resize would move
-  every address above the write and corrupt the data space. }
+{ `b[lo:hi] = src`. A length CHANGE RESIZES, which is CPython's answer for a
+  contiguous bytearray slice and what uforth's 2VARIABLE leans on; the body says
+  why. (This comment claimed the opposite — "rejected loudly" — until
+  2026-09-12, describing the behaviour before the resize landed.) The _step
+  forms below are the ones that refuse a mismatch, and that asymmetry is
+  CPython's too. }
 procedure pybytes_setslice(b: TPyBytes; lo, hi: Integer; src: TPyBytes);
 procedure pybytes_setslice_v(b: TPyBytes; lo, hi: Integer; const src: Variant);   { RHS is a variant holding bytes }
+{ `l[lo:hi:step] = src` / `b[lo:hi:step] = src` — EXTENDED slice assignment, the
+  write halves of pylist_slice_step / pybytes_slice_step. Each walks exactly the
+  positions its matching read selects, so `x[::-1] = src` reverses, and each
+  REFUSES a length mismatch rather than splicing. }
+procedure pylist_setslice_step(l: TPyList; lo, hi, step: Integer; src: TPyList);
+procedure pybytes_setslice_step(b: TPyBytes; lo, hi, step: Integer; src: TPyBytes);
+procedure pyvar_setslice_step(const dst: Variant; lo, hi, step: Integer; const src: Variant);
 { TARGET is a variant: `vm.memory[a:b] = src` where the receiver has no static
   class (a dynamically-typed parameter, a container element). Unboxes the target
   and dispatches to the bytes or list setter by its runtime type — the mirror of
@@ -1350,6 +1451,35 @@ procedure pysys_exit(code: Integer);
 procedure pyos_raise_ioerror(err: Int64; const path: AnsiString; const path2: AnsiString);
 function pyos_remove(const path: AnsiString): Integer;
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
+{ os.replace(src, dst) — rename that OVERWRITES an existing destination.
+  On POSIX that is rename(2) exactly, which is why this is one line and not a
+  copy of it: the difference CPython documents is a WINDOWS difference (its
+  os.rename refuses an existing dst, os.replace does not), and pxx reaching
+  Windows is what makes this a separate name rather than a table alias onto
+  pyos_rename. The day the PAL grows a Windows arm, this body changes and
+  os.rename's does not. }
+function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
+{ os.makedirs(path) — every missing component, CPython's own error policy: an
+  intermediate that already exists is FINE, and the LEAF already existing is a
+  FileExistsError. `exist_ok=` is not accepted here and cannot be: the dotted
+  stdlib-call table takes positional arguments only, so `os.makedirs(d,
+  exist_ok=True)` walls with `undefined variable (exist_ok)` — a message that
+  blames the keyword rather than the mechanism.
+  bug-n-a-stdlib-dotted-call-cannot-take-a-keyword-argument }
+{ `os.makedirs(name, mode=0o777, exist_ok=False)`. The parameter NAMES are
+  CPython's, not this file's usual `path`, because a NilPy keyword argument
+  binds by the PASCAL parameter's name — `os.makedirs(d, exist_ok=True)` is
+  the corpus spelling (lekkerzeilen/gauges.py:173) and it can only bind to a
+  parameter actually called `exist_ok`. }
+function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
+                       exist_ok: Boolean = False): Integer;
+{ os.rmdir(path) — remove an EMPTY directory, raising on failure exactly as
+  os.remove does. Deliberately NOT recursive: CPython's os.rmdir refuses a
+  non-empty directory with ENOTEMPTY, and a shim that deleted the contents
+  instead would be the one failure mode worth refusing over — silent data loss
+  where the program asked for an error. shutil.rmtree is the recursive one and
+  is a separate absence (bug-n-os-has-no-rmdir records both). }
+function pyos_rmdir(const path: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
 { os.environ.get(name[, default]) and os.getenv(name[, default]). The process
   environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
@@ -1390,10 +1520,42 @@ function pystdin_read(n: Integer): AnsiString;
 { sys.stdin.readline(): one line from fd 0 (keeping the trailing newline), '' at
   EOF. Reads a byte at a time so it stops at the newline like Python. }
 function pystdin_readline: AnsiString;
-{ sys.stdin.isatty(): 0 (a non-tty). The value that makes uforth's KEY? report
-  no type-ahead — the correct default for pipes/files and never wrong for the
-  native words, which run under the (stubbed) exec path. }
-function pystdin_isatty: Integer;
+{ sys.stdin.isatty() / sys.stdout.isatty() / sys.stderr.isatty().
+
+  BOOLEAN, and that is the fix rather than a style choice: this returned
+  Integer 0 and NilPy printed `0` where CPython prints `False`. The two agree
+  under every truthiness test — `if not sys.stdout.isatty():` was always right —
+  and disagree the moment anyone PRINTS one, which is the collide-with-the-
+  default shape: a wrong TYPE that the common use cannot observe.
+
+  REAL now, not the hardcoded 0 it was. The old comment said 0 was "the correct
+  default for pipes/files and never wrong for the native words"; that is true of
+  a pipe and false of a terminal, and PyPalIsatty answers both. A consumer that
+  depended on the constant was depending on a wrong answer on a tty. }
+function pystdin_isatty: Boolean;
+function pystdout_isatty: Boolean;
+function pystderr_isatty: Boolean;
+{ sys.stdout.write(s) / sys.stderr.write(s).
+
+  Through `write` / `write(StdErr, ..)` — the SAME door AN_WRITE uses for
+  print — and deliberately not through PyPalWrite, which is the obvious route
+  and the wrong one: two writers on one descriptor order their output by
+  whichever buffer drains first, so `print("a"); sys.stdout.write("b")` could
+  emit "ba". One door, one order.
+
+  Returns the character count CPython returns. }
+function pystdout_write(const s: AnsiString): Integer;
+function pystderr_write(const s: AnsiString): Integer;
+{ sys.stdout.flush() / sys.stderr.flush().
+
+  FUNCTIONS returning None, not procedures, and that was not the first cut:
+  as procedures, `print(sys.stdout.flush())` printed `1` where CPython prints
+  `None` -- a procedure in value position yields whatever is in the result slot,
+  which is a plausible wrong number rather than a refusal. Returning pynone
+  makes the value CPython's own and costs nothing at a statement call.
+  bug-n-a-procedure-shim-in-value-position-yields-a-number-not-none }
+function pystdout_flush: Variant;
+function pystderr_flush: Variant;
 function pystr_is_none(const s: AnsiString): Boolean;
 { The None value for a str-typed slot: a NIL managed handle (what
   pystr_is_none tests). Assigning the None literal to a str field/local must
@@ -2337,6 +2499,28 @@ function sum(const v: Variant): Variant; overload;
 function sum(const v: Variant; const start: Variant): Variant; overload;
 function any(const v: Variant): Boolean; overload;
 function all(const v: Variant): Boolean; overload;
+
+{ `deque()` and `deque(iterable)`. Two overloads that differ by ARITY only,
+  never by argument TYPE — the qualified spelling `collections.deque(...)`
+  reaches these through the frontend's stdlib-call table, which re-targets by
+  arity and cannot select by type at all. Counter is deliberately NOT routed
+  the same way for exactly that reason: its 1-argument overloads differ by type
+  (list vs str), so the table would pick one of them silently.
+  bug-n-collections-deque-is-missing }
+function deque: TPyDeque;
+function deque(l: TPyList): TPyDeque; overload;
+{ The same two, under a name a NilPy program cannot collide with. The QUALIFIED
+  spelling `collections.deque(...)` is routed to THESE by the frontend's
+  stdlib-call table, and it must be, because that table resolves its target with
+  a plain FindProc by name: mapped to `deque`, a program that also wrote
+  `def deque(): ...` had its own function called for `collections.deque()` and
+  got a silently wrong object where CPython gives the module's deque. `math.pow`
+  never had this problem only because it happens to map to a DIFFERENTLY named
+  proc (`Power`) — an accident of spelling, not a guard.
+  The bare `deque()` above stays shadowable, which is correct: shadowing a
+  builtin by defining one is ordinary Python. }
+function pydeque_new: TPyDeque; overload;
+function pydeque_new(l: TPyList): TPyDeque; overload;
 
 { collections.Counter(...) — a TPyDict in Counter mode; see TPyDict. }
 function Counter: TPyDict;
@@ -5395,7 +5579,15 @@ begin
     lifted bound-fn (both RAW2 blocks). The last of those is here so a closure
     stored IN a container is reclaimed with the container; the variant
     clear/retain emitters cover the same tags for a plain slot, which is why
-    both sides read one range instead of keeping two lists in step. }
+    both sides read one range instead of keeping two lists in step.
+
+    VT_INTF_TAG (14) is deliberately NOT here and is not a missed sibling: a
+    boxed interface is refcounted through _Release in the IMT, not through the
+    heap-block protocol PXXObjRetain/Release implement, and NilPy has no
+    interfaces, so the tag cannot reach a Python variant slot at all. If it ever
+    can, this needs its own test and PXXIntfAddRefAny/PXXIntfReleaseAny, NOT a
+    wider range -- a wider range is a SILENT no-op on it.
+    bug-p-a-variant-cannot-hold-an-interface }
   PyVarSlotIsObj := (t >= VT_OBJ_FIRST) and (t <= VT_OBJ_LAST);
 end;
 
@@ -7128,6 +7320,32 @@ begin
       pyvar_gt := la > lb;
       Exit;
     end;
+    { ...and two BYTES, by the same lexicographic rule, on UNSIGNED byte values.
+      The arm above covers list/tuple/set because they are one TPyList; bytes is
+      a different class and fell through to pyvar_to_int, so `sorted([b"cd",
+      b"ab"])` raised "expected a number, got object" while `sorted(["cd",
+      "ab"])` and `sorted([2, 1])` both worked. One concept, and the sibling
+      nobody extended is the one that stayed broken
+      (devdocs/dev/normalise-dont-special-case.md).
+      Unsigned matters: CPython compares bytes as values 0..255, so b"\xff" is
+      GREATER than b"\x01". Reading them as signed would invert every pair with
+      a high bit set — a wrong ORDER that still sorts, which is the failure mode
+      a value assertion catches and a "does it run" assertion does not.
+      bug-n-sorted-over-bytes-raises-where-sorted-over-str-works }
+    if (oa is TPyBytes) and (ob is TPyBytes) then
+    begin
+      la := TPyBytes(oa).FLen;
+      lb := TPyBytes(ob).FLen;
+      if la < lb then n := la else n := lb;
+      for k := 0 to n - 1 do
+        if TPyBytes(oa).at(k) <> TPyBytes(ob).at(k) then
+        begin
+          pyvar_gt := TPyBytes(oa).at(k) > TPyBytes(ob).at(k);
+          Exit;
+        end;
+      pyvar_gt := la > lb;
+      Exit;
+    end;
     { Two USER objects: their own __gt__, or the reflected __lt__. Without this
       both fell through to pyvar_to_int and `pts.sort()` over a class defining
       __lt__ died with "expected a number, got object" — a runtime TypeError for
@@ -8100,6 +8318,117 @@ end;
 { Counter() / Counter(iterable) as plain functions, so Python's constructor
   spelling resolves through the ordinary call path with no frontend mapping —
   the same trick lib/rtl/re.pas uses for `import re`. }
+constructor TPyDeque.Create;
+begin
+  FBuf := TPyList.Create;
+  FHead := 0;
+end;
+
+function TPyDeque.__len__: Integer;
+begin
+  Result := FBuf.FLen - FHead;
+end;
+
+procedure TPyDeque.Compact(frontSlack: Integer);
+{ Rebuild the buffer with the dead prefix dropped and `frontSlack` spare slots
+  ahead of the front, so a run of appendleft has somewhere to go. The slack
+  slots hold None and are never read: FHead points past them. }
+var nb: TPyList; k: Integer;
+begin
+  nb := TPyList.Create;
+  for k := 0 to frontSlack - 1 do nb.append_self(pynone);
+  for k := FHead to FBuf.FLen - 1 do nb.append_self(FBuf.at(k));
+  FBuf := nb;
+  FHead := frontSlack;
+end;
+
+function TPyDeque.append(const v: Variant): Variant;
+begin
+  FBuf.append_self(v);
+  Result := pynone;
+end;
+
+function TPyDeque.appendleft(const v: Variant): Variant;
+begin
+  { No room in front: rebuild with slack proportional to the current size, so a
+    run of appendleft costs O(1) each rather than O(n) each. }
+  if FHead = 0 then
+  begin
+    if FBuf.FLen < 8 then Compact(8) else Compact(FBuf.FLen);
+  end;
+  Dec(FHead);
+  FBuf.put(FHead, v);
+  Result := pynone;
+end;
+
+function TPyDeque.popleft: Variant;
+begin
+  if FHead >= FBuf.FLen then
+    raise Exception.Create('pop from an empty deque');
+  Result := FBuf.at(FHead);
+  Inc(FHead);
+  { Reclaim only when the dead prefix is at least half the buffer, which is what
+    makes the amortised cost constant. Compacting eagerly would put an O(n) copy
+    behind every popleft and undo the whole point. }
+  if (FHead >= 32) and (FHead * 2 >= FBuf.FLen) then Compact(0);
+end;
+
+function TPyDeque.pop: Variant;
+begin
+  if FHead >= FBuf.FLen then
+    raise Exception.Create('pop from an empty deque');
+  Result := FBuf.pop;
+end;
+
+function TPyDeque.clear: Variant;
+begin
+  FBuf.clear;
+  FHead := 0;
+  Result := pynone;
+end;
+
+function TPyDeque.at(i: Integer): Variant;
+begin
+  { Python's deque indexes from the FRONT and supports negative indices, as
+    every sequence here does. }
+  if i < 0 then i := (FBuf.FLen - FHead) + i;
+  if (i < 0) or (FHead + i >= FBuf.FLen) then
+    raise Exception.Create('deque index out of range');
+  Result := FBuf.at(FHead + i);
+end;
+
+procedure TPyDeque.put(i: Integer; const v: Variant);
+begin
+  if i < 0 then i := (FBuf.FLen - FHead) + i;
+  if (i < 0) or (FHead + i >= FBuf.FLen) then
+    raise Exception.Create('deque index out of range');
+  FBuf.put(FHead + i, v);
+end;
+
+function pydeque_new: TPyDeque; overload;
+begin
+  Result := TPyDeque.Create;
+end;
+
+function pydeque_new(l: TPyList): TPyDeque; overload;
+var k: Integer;
+begin
+  Result := TPyDeque.Create;
+  if l = nil then Exit;
+  for k := 0 to l.FLen - 1 do Result.append(l.at(k));
+end;
+
+{ One implementation, two names — see the declaration. }
+function deque: TPyDeque;
+begin
+  Result := pydeque_new;
+end;
+
+function deque(l: TPyList): TPyDeque; overload;
+begin
+  Result := pydeque_new(l);
+end;
+
 function Counter: TPyDict;
 var c: TPyDict;
 begin
@@ -10934,6 +11263,52 @@ begin
   end;
 end;
 
+{ `b[lo:hi:step] = src` — the write half of pybytes_slice_step, walking exactly
+  the positions that read selects and in the same order, from PySliceBoundsStep
+  rather than re-derived arithmetic so the two cannot drift apart.
+
+  It does NOT resize, and that is a DIFFERENT answer from pybytes_setslice right
+  above, which does: CPython resizes a contiguous bytearray slice and refuses an
+  extended one ("attempt to assign bytes of size N to extended slice of size M"),
+  because a strided write has nowhere to put a different number of bytes. }
+procedure pybytes_setslice_step(b: TPyBytes; lo, hi, step: Integer; src: TPyBytes);
+var i, k, cnt, n: Integer; sp, dp: PByte; snap, from_: TPyBytes;
+begin
+  if b = nil then Exit;
+  cnt := PySliceBoundsStep(b.FLen, lo, hi, step);
+  if src = nil then n := 0 else n := src.FLen;
+  if n <> cnt then
+    raise ValueError.Create('attempt to assign bytes of size '
+      + pystr_of(Int64(n)) + ' to extended slice of size '
+      + pystr_of(Int64(cnt)));
+  { `b[::-1] = b` is legal Python and reverses in place; writing straight from
+    the target would read bytes this loop has already overwritten, so an exact
+    self-alias is snapshotted. Any other RHS reaching here is a fresh object. }
+  snap := nil;
+  if src = b then
+  begin
+    snap := TPyBytes.Create(cnt);
+    for k := 0 to cnt - 1 do
+    begin
+      sp := PByte(NativeInt(src.FData) + k);
+      dp := PByte(NativeInt(snap.FData) + k);
+      dp^ := sp^;
+    end;
+    from_ := snap;
+  end
+  else
+    from_ := src;
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    sp := PByte(NativeInt(from_.FData) + k);
+    dp := PByte(NativeInt(b.FData) + i);
+    dp^ := sp^;
+    i := i + step;
+  end;
+  if snap <> nil then PXXObjRelease(Pointer(snap));
+end;
+
 { `b[lo:hi] = v` where the RHS is a VARIANT holding bytes — e.g. a value fetched
   from a dict (`mem[a:b] = snapshot["blk"]`). Unbox to the TPyBytes it holds;
   without this the variant's 16 bytes were read as a TPyBytes header and the
@@ -10969,6 +11344,39 @@ begin
     begin
       o := TObject(pyvarobj(src));
       if o is TPyList then begin pylist_setslice(TPyList(d), lo, hi, TPyList(o)); Exit; end;
+    end;
+    raise TypeError.Create('can only assign an iterable to a list slice');
+  end;
+  raise TypeError.Create('object does not support slice assignment');
+end;
+
+{ `v[lo:hi:step] = src` where the TARGET has no static class — the extended-slice
+  twin of pyvar_setslice above, and reached by far more code than the name
+  suggests: a name first bound inside an `if` or `try` body has no static type
+  either, so `l = [..]` then `l[::2] = ..` two lines down comes through here.
+  Both sides are unboxed and dispatched on the target's runtime type. }
+procedure pyvar_setslice_step(const dst: Variant; lo, hi, step: Integer; const src: Variant);
+var d, o: TObject;
+begin
+  if pyvartag(dst) <> 7 then
+    raise TypeError.Create('object does not support slice assignment');
+  d := TObject(pyvarobj(dst));
+  if pyvartag(src) = 7 then o := TObject(pyvarobj(src)) else o := nil;
+  if d is TPyBytes then
+  begin
+    if (o <> nil) and (o is TPyBytes) then
+    begin
+      pybytes_setslice_step(TPyBytes(d), lo, hi, step, TPyBytes(o));
+      Exit;
+    end;
+    raise TypeError.Create('byte slice assignment requires bytes');
+  end;
+  if d is TPyList then
+  begin
+    if (o <> nil) and (o is TPyList) then
+    begin
+      pylist_setslice_step(TPyList(d), lo, hi, step, TPyList(o));
+      Exit;
     end;
     raise TypeError.Create('can only assign an iterable to a list slice');
   end;
@@ -12904,6 +13312,20 @@ begin
   Result := Integer(r);
 end;
 
+function pyos_rmdir(const path: AnsiString): Integer;
+var cs: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  cs := path + #0;
+  r := PyPalRmdir(@cs[1]);
+  { Raises on failure, like pyos_remove: a missing directory, or a non-empty one
+    (ENOTEMPTY), must be a catchable error and not a quiet 0. }
+  if r < 0 then
+    pyos_raise_ioerror(r, path, '');
+  Result := Integer(r);
+end;
+
 function pyos_rename(const src: AnsiString; const dst: AnsiString): Integer;
 var cs, cd: AnsiString; r: Int64;
 begin
@@ -12915,6 +13337,66 @@ begin
   if r < 0 then
     pyos_raise_ioerror(r, src, dst);
   Result := Integer(r);
+end;
+
+function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
+var cs, cd: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  cs := src + #0; cd := dst + #0;
+  r := PyPalRename(@cs[1], @cd[1]);
+  if r < 0 then
+    pyos_raise_ioerror(r, src, dst);
+  Result := Integer(r);
+end;
+
+{ `failIfExists` was called `leaf`, and once exist_ok landed the name became a
+  lie: the caller now passes `not exist_ok` for the last component, so a True
+  there no longer means "this is the leaf". A parameter whose name and meaning
+  disagree is the shape CLAUDE.md says to settle before touching either. }
+function pyos_mkdir_one(const path: AnsiString; failIfExists: Boolean;
+                        mode: Integer): Integer;
+var cs: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if path = '' then Exit;
+  cs := path + #0;
+  { The caller passes CPython's default 0o777 unless the program said
+    otherwise; the process umask narrows it either way. }
+  r := PyPalMkdir(@cs[1], mode);
+  if r >= 0 then Exit;
+  { EEXIST on an INTERMEDIATE is the normal case -- makedirs('a/b/c') with 'a'
+    already there is not an error in CPython either. On the LEAF it is the
+    error CPython documents, unless the call said exist_ok=True. }
+  if (r = -17) and (not failIfExists) then Exit;
+  pyos_raise_ioerror(r, path, '');
+end;
+
+function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
+                       exist_ok: Boolean = False): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  if name = '' then Exit;
+  { Walk the separators left to right, creating each prefix. Index 1 is skipped
+    deliberately: a leading '/' names the root, whose "prefix" is the empty
+    string, and mkdir('') is EFAULT rather than the no-op it looks like.
+
+    An intermediate is never a leaf whatever exist_ok says -- EEXIST there is
+    the normal case for makedirs and always was. exist_ok only decides the LAST
+    component, which is exactly what CPython documents. }
+  for i := 2 to Length(name) do
+    if name[i] = '/' then
+      pyos_mkdir_one(Copy(name, 1, i - 1), False, mode);
+  { A trailing separator means the leaf was already made by the loop -- and
+    CPython treats makedirs('a/b/') as makedirs('a/b'), so the FileExistsError
+    it would raise for an existing 'a/b' must still fire. }
+  if name[Length(name)] = '/' then
+    pyos_mkdir_one(Copy(name, 1, Length(name) - 1), not exist_ok, mode)
+  else
+    pyos_mkdir_one(name, not exist_ok, mode);
 end;
 
 function pyos_stat(const path: AnsiString): TPyStat;
@@ -12948,9 +13430,65 @@ begin
   end;
 end;
 
-function pystdin_isatty: Integer;
+function pystdin_isatty: Boolean;
 begin
-  Result := 0;
+  Result := PyPalIsatty(0);
+end;
+
+function pystdout_isatty: Boolean;
+begin
+  Result := PyPalIsatty(1);
+end;
+
+function pystderr_isatty: Boolean;
+begin
+  Result := PyPalIsatty(2);
+end;
+
+function pystdout_write(const s: AnsiString): Integer;
+begin
+  { The count is of the string we were HANDED, which is what CPython reports:
+    its write returns len(s) for a text stream, not the byte count the OS
+    accepted. Our strings are byte strings, so on this path the two agree
+    anyway -- the distinction is recorded because it stops being true the day
+    NilPy grows a real text encoder. }
+  Result := Length(s);
+  if Length(s) > 0 then write(s);
+end;
+
+function pystderr_write(const s: AnsiString): Integer;
+begin
+  Result := Length(s);
+  if Length(s) > 0 then write(StdErr, s);
+end;
+
+{ NOTHING TO DO, and that is a measured fact about this writer rather than a
+  stub with a hopeful comment. `write` on the builtin path issues the syscall
+  per call -- there is no userspace buffer between a NilPy print and the fd --
+  so everything flush() could push is already gone. Read off the code
+  generator, not assumed: the IR_WRITE arm emits the write(2) syscall INLINE
+  (EmitwriteSyscall / int $80), with no buffer between it and the fd.
+
+  AND DO NOT "PROVE" THIS BY COMPARING THE TWO STREAMS INTERLEAVED AGAINST
+  CPython -- that row is RED BY CONSTRUCTION and it looks like our bug.
+  CPython block-buffers stdout when it is not a tty and leaves stderr
+  unbuffered, so redirecting both to one file puts ALL of CPython's stderr
+  first while ours stays in program order. Measured 2026-09-10: per-stream we
+  match byte for byte; interleaved we differ, and OURS is the order the program
+  wrote. Matching CPython there would mean ADDING a buffer to become less
+  correct. Compare the streams SEPARATELY.
+
+  Empty rather than absent: `sys.stdout.flush()` is written constantly in real
+  code and must not wall, and the day a buffer appears these two bodies are
+  where it drains. Leave them. }
+function pystdout_flush: Variant;
+begin
+  Result := pynone;
+end;
+
+function pystderr_flush: Variant;
+begin
+  Result := pynone;
 end;
 
 { `s is None` for a str-typed value: a NilPy str that is None has a nil handle,
@@ -15254,7 +15792,51 @@ begin
   Result := pybytes_from_list(l);
 end;
 
-function bytes(b: TPyBytes): TPyBytes;
+function bytes(n: Integer): TPyBytes; overload;
+begin
+  { The zero-fill is TPyBytes.Create's own — see its comment: Python's
+    bytearray(n)/bytes(n) are n zero bytes, not uninitialised memory. }
+  Result := TPyBytes.Create(n);
+end;
+
+function bytes(const v: Variant): TPyBytes; overload;
+{ See the declaration for why this exists. Dispatches on the RUNTIME tag,
+  because a Variant is the one argument whose Python type is not knowable when
+  the overload is chosen. }
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    { list/tuple/set are one class here, so this is all three. }
+    if o is TPyList then
+    begin
+      Result := pybytes_from_list(TPyList(o));
+      Exit;
+    end;
+    if o is TPyBytes then
+    begin
+      Result := bytes(TPyBytes(o));
+      Exit;
+    end;
+  end;
+  { An INTEGER variant is bytes(n) — n zero bytes — exactly as the static
+    spelling is, so the two agree rather than diverging on how the value was
+    typed. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  begin
+    Result := TPyBytes.Create(Integer(p^.Payload));
+    Exit;
+  end;
+  { Everything else, a str included: CPython's `bytes(s)` without an encoding is
+    a TypeError, and answering with the encoded characters instead would be
+    accepting what CPython REJECTS in the one place that is a wrong VALUE rather
+    than laxity. }
+  raise TypeError.Create('cannot convert this value to bytes without an encoding');
+end;
+
+function bytes(b: TPyBytes): TPyBytes; overload;
 var k: Integer; src, dst: PByte;
 begin
   { Belt and braces. A list argument used to bind HERE, because class-arg
@@ -17463,6 +18045,55 @@ begin
   for i := 0 to keep.count - 1 do l.append(keep.at(i));
 end;
 
+{ `l[lo:hi:step] = src` — an EXTENDED slice assign, the write half of
+  pylist_slice_step. It walks EXACTLY the positions that read would select, in
+  the same order (`l[::-1] = src` therefore reverses), which is why the bounds
+  arithmetic is PySliceBoundsStep's and not re-derived here: the two must agree
+  element for element or the assign writes plausible wrong elements with no
+  diagnostic.
+
+  Unlike the contiguous pylist_setslice this does NOT resize — CPython refuses a
+  length mismatch for an extended slice, because there is no meaningful place to
+  put the extra elements, and a silent splice would shift every position the
+  program believes it just wrote. }
+procedure pylist_setslice_step(l: TPyList; lo, hi, step: Integer; src: TPyList);
+var i, k, cnt, n: Integer; snap, from_: TPyList;
+begin
+  if l = nil then Exit;
+  { a TUPLE (or a frozenset) is IMMUTABLE — mutating one in place would let an
+    alias observe a change Python guarantees cannot happen (the same question
+    pylist_repeat_inplace asks, and for the same reason) }
+  if l.FKind <> PYSEQ_LIST then
+    raise TypeError.Create('''' + PySeqKindName(l.FKind)
+      + ''' object does not support item assignment');
+  cnt := PySliceBoundsStep(l.count, lo, hi, step);
+  if src = nil then n := 0 else n := src.count;
+  if n <> cnt then
+    raise ValueError.Create('attempt to assign sequence of size '
+      + pystr_of(Int64(n)) + ' to extended slice of size '
+      + pystr_of(Int64(cnt)));
+  { `l[::-1] = l` is legal Python and gives the reverse; writing straight from
+    the target would feed the loop on its own output, so an exact self-alias is
+    snapshotted first. A PARTIAL overlap cannot arise — every other RHS shape
+    reaching here is a freshly built list. }
+  snap := nil;
+  if src = l then
+  begin
+    snap := TPyList.Create;
+    for k := 0 to cnt - 1 do snap.append(src.at(k));
+    from_ := snap;
+  end
+  else
+    from_ := src;
+  i := lo;
+  for k := 0 to cnt - 1 do
+  begin
+    l.put(i, from_.at(k));
+    i := i + step;
+  end;
+  if snap <> nil then PXXObjRelease(Pointer(snap));
+end;
+
 function pylist_repeat_inplace(l: TPyList; n: Int64): TPyList;
 { `xs *= 2` — Python MUTATES the list and rebinds the same object, so an alias
   taken beforehand sees the new contents. Building a fresh list (pylist_repeat)
@@ -17986,6 +18617,16 @@ begin
     part := TPyBytes(TObject(pyvarobj(parts.at(i))));
     for k := 0 to part.FLen - 1 do begin PyBytesSet(Result, w, part.at(k)); Inc(w); end;
   end;
+end;
+
+function TPyBytes.join(parts: TPyIter): TPyBytes; overload;
+begin
+  { Materialise and delegate -- deliberately NOT a second copy of the walk.
+    The TPyList arm computes the total length in one pass and fills in a
+    second, which needs a random-access source; an iterator has none, so a
+    "streaming" version would be a different algorithm with its own bugs for
+    no benefit at these sizes. }
+  Result := join(list(parts));
 end;
 
 function TPyBytes.translate(table: TPyBytes): TPyBytes;

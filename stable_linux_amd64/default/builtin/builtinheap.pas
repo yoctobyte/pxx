@@ -318,6 +318,13 @@ const
   VT_OBJ_FIRST = 7;
   VT_OBJ_LAST  = 10;
   VT_STRING_TAG = 6;
+  { MIRRORS defs.inc's VT_INTF_TAG. Deliberately OUTSIDE the object range: an
+    interface payload is released through `_Release` in the IMT, not through the
+    heap-block protocol that range uses -- and PXXObjRelease would be a silent
+    NO-OP on it, because a manual-lifetime Pascal instance fails the [p-8]
+    population-tag guard. Its own arm, one line below each range test. }
+  VT_INTF_TAG   = 14;
+  VT_EMPTY_TAG  = 0;    { MIRRORS defs.inc's VT_EMPTY -- an unassigned slot }
   VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
   VT_PROMO_LAST  = 8199;
 
@@ -330,6 +337,21 @@ const
     it asserts the array does not leak, so a wrong tag fails it rather than
     quietly restoring the leak this was written to fix. }
   PROMO_TAG_HEAP = 1;
+
+  { Header size of the RECORD LAYOUT DESCRIPTOR -- the blob the six walks below
+    consume. The format is written down once, in compiler/defs.inc beside
+    REC_DESC_HDR_SIZE, which MUST hold the same number: the writer is in the
+    compiler and the reader is here, a builtin unit that cannot `use` the
+    compiler's own constants, so the two copies are checked by the Makefile row
+    `record layout descriptor header size` instead of by the type system.
+
+    Spelled as a constant because the literal it replaces means two different
+    things in this one file: `Int64(desc) + 12` is this header size at the six
+    member walks, and is BaseKind's own offset in the DYN-ARRAY descriptor
+    (kind 2) that PXXDynArrayRelease and PXXDynSetLen walk. A blind
+    sed over the literal corrupts every dynamic-array release in the RTL and
+    nothing about it looks wrong. }
+  PXX_REC_DESC_HDR = 12;
 
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
@@ -439,6 +461,9 @@ function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
 function PXXIntfAddRef(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfRelease(p: Pointer; ifaceId: NativeInt): NativeInt;
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
+function PXXIntfComIMTOf(inst: Pointer): Pointer;
+function PXXIntfAddRefAny(inst: Pointer): NativeInt;
+function PXXIntfReleaseAny(inst: Pointer): NativeInt;
 procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
 
 { ---- IInterface / TInterfacedObject: the COM root pair (FPC declares them in
@@ -464,6 +489,30 @@ type
     function _Release: Integer;
   end;
   IUnknown = IInterface;
+
+  { ---- IEnumerator / IEnumerable, the NON-GENERIC TObject-based pair ----
+    FPC declares these in the System unit (rtl/inc/objpash.inc:273/280), so a
+    program sees them with NO `uses` at all -- which is the whole reason they are
+    here and not in Classes beside the generic pair. tforin8.pp of the FPC
+    testsuite has no uses clause and writes
+    `TMyList = class(TInterfacedObject, IEnumerable)`; from Classes it would
+    still fail. The generic `IEnumerator<T>` / `IEnumerable<T>` stay in
+    lib/rtl/classes.pas and their own note there explains that placement.
+    Shapes copied from objpash.inc, including `Reset` and Current typed TObject.
+
+    Trigger for this addition was written down in advance: classes.pas's note
+    said "nothing in the corpus references it. Add it when something does."
+    Something does. }
+  IEnumerator = interface(IInterface)
+    function GetCurrent: TObject;
+    function MoveNext: Boolean;
+    procedure Reset;
+    property Current: TObject read GetCurrent;
+  end;
+
+  IEnumerable = interface(IInterface)
+    function GetEnumerator: IEnumerator;
+  end;
 
   TInterfacedObject = class(TObject, IInterface)
     FRefCount: Integer;
@@ -521,6 +570,15 @@ procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
   valid empty state. }
 procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
+{ ...and the ELEMENT-COUNT form, `Initialize(x, n)` / `Finalize(x, n)`: x is the
+  FIRST of n consecutive elements, which is how FPC's own RTL spells it wherever
+  the count is not a compile-time constant (cclasses.pas's TFPHashList.Clear is
+  `Finalize(FItems^, FCount)`). `elemSize` is the compiler's RecSize for the
+  element type, passed in rather than read from the descriptor because the
+  descriptor describes the MANAGED MEMBERS and not the record's stride -- an
+  unmanaged tail contributes to the stride and appears nowhere in the walk. }
+procedure PXXRecordInitializeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+procedure PXXRecordFinalizeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
@@ -528,6 +586,8 @@ function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
+procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
+procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
 procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
@@ -3433,7 +3493,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -3502,6 +3562,39 @@ begin
   PXXRecordZeroManaged(recAddr, desc);
 end;
 
+procedure PXXRecordInitializeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+{ The count form, as a loop over the one-element helper rather than a second
+  descriptor walk: one implementation of what Initialize MEANS, n times.
+
+  A non-positive count is a no-op and not an error. FPC's own callers reach this
+  with a freshly-emptied container (`Finalize(FItems^, FCount)` right after
+  FCount became 0), so refusing 0 would refuse the commonest legal call. }
+var i: NativeInt;
+begin
+  if elemSize <= 0 then Exit;
+  i := 0;
+  while i < count do
+  begin
+    PXXRecordInitialize(Pointer(Int64(recAddr) + i * elemSize), desc);
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordFinalizeN(recAddr: Pointer; desc: Pointer; count: NativeInt; elemSize: NativeInt);
+{ Finalize's twin of the above, and idempotent for the same reason the
+  one-element form is: each element is released and then nil'd, so a second
+  Finalize over the same range decrements nothing. }
+var i: NativeInt;
+begin
+  if elemSize <= 0 then Exit;
+  i := 0;
+  while i < count do
+  begin
+    PXXRecordFinalize(Pointer(Int64(recAddr) + i * elemSize), desc);
+    i := i + 1;
+  end;
+end;
+
 { PXXClassFinalize's forward used to sit here; it is declared in the
   interface now, with the rest of the code generator's entry points. }
 {$endif}
@@ -3538,8 +3631,13 @@ begin
   end;
 end;
 
-{ COM/ARC interface refcount helpers. `fatptr` is the ADDRESS of a 16-/8-byte
-  interface fat pointer (word 0 = IMT, word 1 = instance). The IMT is the
+{ COM/ARC interface refcount helpers. `p` is the ADDRESS OF THE SLOT holding an
+  interface value, and that value is ONE WORD -- the instance pointer. The IMT
+  is not in it and never was passed in: it is recovered from the instance's RTTI
+  by PXXIntfIMTOf(inst, ifaceId), which is exactly what lets the value stay a
+  single pointer. (This paragraph described a 16-byte fat pointer {IMT@0,
+  instance@8} until 2026-09-09; the bodies below have read `PMachineWord(p)^` as
+  the instance for longer than that.) The IMT is the
   implementing class's Interface Method Table: a vector of code addresses,
   slot 1 = _AddRef, slot 2 = _Release (slot 0 = QueryInterface), so the call
   dispatches polymorphically into the concrete TInterfacedObject-derived method.
@@ -3557,6 +3655,15 @@ const
   PXXH_RTTI_IFSIZE  = 32;
   PXXH_RTTI_IF_IMT  = 16;
   PXXH_RTTI_IF_ID   = 24;
+  { The ID word is {com-flag: bit 24, class index: low 24} -- defs.inc
+    RTTI_IF_ID_COM. Masked before every compare, so an entry an OLDER emitter
+    wrote (plain index, flag clear) still matches and the encoding change costs
+    nothing across a bootstrap.
+    BIT 24 BECAUSE THIS WORD IS READ THROUGH PMachineWord, WHICH IS FOUR BYTES
+    ON A 32-BIT TARGET. At bit 32 the flag was invisible on i386 and the Any
+    helpers silently became no-ops -- measured, not anticipated. }
+  PXXH_IF_ID_MASK   = $FFFFFF;
+  PXXH_IF_ID_COM    = $1000000;
 
 function PXXIntfIMTOf(inst: Pointer; ifaceId: NativeInt): Pointer;
 var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
@@ -3574,7 +3681,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
-        if NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) = ifaceId then
+        if (NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) and PXXH_IF_ID_MASK) = ifaceId then
         begin
           Result := Pointer(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
           Exit;
@@ -3582,6 +3689,75 @@ begin
       end;
     rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
   end;
+end;
+
+function PXXIntfComIMTOf(inst: Pointer): Pointer;
+{ The IMT of the first REFERENCE-COUNTED interface this instance implements, or
+  nil when it implements none. For a caller that holds only the INSTANCE -- a
+  variant slot, say, which has 16 bytes for {tag, payload} and nowhere to put an
+  interface id.
+
+  WHY NOT SIMPLY THE FIRST ENTRY. Measured 2026-09-09: for a COM class every IMT
+  carries the SAME _AddRef/_Release pair -- three entries on one class, one of
+  them a GUID-less interface, all three identical -- so any entry would do. But
+  under {$interfaces corba} on a plain TObject descendant, IMT slots 0/1/2 are
+  the interface's OWN first three methods (measured: the addresses of A1, A2 and
+  A3), so the same walk would call a user method as if it were _Release, with
+  the right argument count and no diagnostic. Nothing else in the entry
+  separates the two populations: a CORBA interface may carry a GUID and a COM
+  one may not, which is why the flag is in the ID word rather than inferred.
+
+  nil is a REFUSAL, not a miss -- a caller must do nothing rather than guess,
+  which is why this is its own function and not a sentinel ifaceId. }
+var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
+begin
+  Result := nil;
+  if inst = nil then Exit;
+  vmt := Pointer(PMachineWord(inst)^);
+  if vmt = nil then Exit;
+  rtti := Pointer(PMachineWord(Pointer(Int64(vmt) - 8))^);
+  while rtti <> nil do
+  begin
+    cnt := NativeInt(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    if (cnt > 0) and (ifaces <> nil) then
+      for i := 0 to cnt - 1 do
+      begin
+        e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
+        if (NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) and PXXH_IF_ID_COM) <> 0 then
+        begin
+          Result := Pointer(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
+          Exit;
+        end;
+      end;
+    rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+  end;
+end;
+
+function PXXIntfAddRefAny(inst: Pointer): NativeInt;
+{ _AddRef through any refcounted IMT the instance carries; a no-op returning 0
+  when it carries none. }
+var imt: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if inst = nil then Exit;
+  imt := PXXIntfComIMTOf(inst);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
+  Result := fn(inst);
+end;
+
+function PXXIntfReleaseAny(inst: Pointer): NativeInt;
+{ _Release through any refcounted IMT the instance carries; a no-op returning 0
+  when it carries none. }
+var imt: Pointer; fn: TPXXIntfMethod;
+begin
+  Result := 0;
+  if inst = nil then Exit;
+  imt := PXXIntfComIMTOf(inst);
+  if imt = nil then Exit;
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
+  Result := fn(inst);
 end;
 
 function PXXIntfAddRefRaw(inst: Pointer; ifaceId: NativeInt): NativeInt;
@@ -4202,7 +4378,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
 
   i := 0;
   while i < memberCount do
@@ -4282,7 +4458,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -4325,7 +4501,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -4364,7 +4540,7 @@ var
 begin
   if (recAddr = nil) or (desc = nil) then Exit;
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
 
   i := 0;
   while i < memberCount do
@@ -4501,7 +4677,7 @@ begin
   if desc = nil then Exit;
 
   memberCount := PInt32(Int64(desc) + 8)^;
-  memberPtr := Int64(desc) + 12;
+  memberPtr := Int64(desc) + PXX_REC_DESC_HDR;
   i := 0;
   while i < memberCount do
   begin
@@ -5543,7 +5719,9 @@ begin
      ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PMachineWord(Int64(v) + 8)^))
   else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRelease(Pointer(PMachineWord(Int64(v) + 8)^));
+    PXXObjRelease(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if PMachineWord(v)^ = VT_INTF_TAG then
+    PXXIntfReleaseAny(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
 
 { Retain ONE promo-int element in place: an inline-tier slot owns nothing, a
@@ -5569,8 +5747,89 @@ begin
      ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrIncRef(Pointer(PMachineWord(Int64(v) + 8)^))
   else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRetain(Pointer(PMachineWord(Int64(v) + 8)^));
+    PXXObjRetain(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if PMachineWord(v)^ = VT_INTF_TAG then
+    PXXIntfAddRefAny(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
+
+procedure PXXVarSetIntf(v: Pointer; inst: Pointer);
+{ Box an interface value into a variant slot: release whatever the slot held,
+  write {VT_INTF_TAG, instance}, and take the +1.
+
+  A CALL rather than an inline boxing arm in seven backends, and that is the
+  point: the interface case cannot be recognised from a TTypeKind (an interface
+  is tyRecord there, indistinguishable from a plain record, which must keep
+  refusing), so it is recognised in ir.inc's assignment lowering where the AST
+  node is still in hand -- and lowering it to this call means no backend needs a
+  boxing edit at all. The CLEAR side still needs its arm in each inline emitter,
+  because those emitters test the tag themselves.
+
+  Retain AFTER the clear is safe here in the way the variant-to-variant copy's
+  retain-before-release is not: `inst` is a bare instance pointer already held
+  by the source interface variable, so it cannot be freed by clearing v -- v's
+  old payload is a different value, or the same one holding a reference the
+  clear brings from 2 to 1. Self-assignment through a variant goes through
+  PXXVarRetain/PXXVarReleasePayload, not here. }
+begin
+  if v = nil then Exit;
+  PXXVarReleasePayload(v);
+  PMachineWord(v)^ := VT_INTF_TAG;
+  PMachineWord(Int64(v) + 8)^ := PtrUInt(inst);
+  if inst <> nil then PXXIntfAddRefAny(inst);
+end;
+
+procedure PXXIntfFromVariant(dest: Pointer; v: Pointer);
+{ `g := v` where g is an interface and v a Variant: ARC-correct assignment of a
+  boxed interface out of a variant slot.
+
+  RETAIN THE SOURCE BEFORE RELEASING THE DESTINATION, which is the same order
+  PXXIntfAssign uses and for the same reason: dest may already hold the very
+  object v does, and releasing first can take it to zero and free it before the
+  store. The order costs one extra pair of calls on the aliased case and is the
+  only one that is correct.
+
+  AN EMPTY SLOT IS NIL AND ANY OTHER PAYLOAD IS A RUNTIME ERROR, which is where
+  this stopped being "return nil and be honest". Measured against fpc 3.2.2,
+  2026-09-09, on `h := v` for an interface h:
+
+      v := Unassigned   ->  h = nil, no exception
+      v := Null         ->  EVariantTypeCastError (Null into Unknown)
+      v := 'abc' / 5    ->  EVariantTypeCastError
+
+  So FPC splits the population, and it splits it the way CLAUDE.md's "ask what
+  the source MEANT" argues for: an unset variant read into an interface is a
+  program saying "nothing here", and a variant holding a STRING read into an
+  interface is a program that is already wrong. Returning nil for the second
+  half is the silent answer -- the mistake surfaces later, as a nil dereference
+  at the first method call, arbitrarily far from the assignment that caused it.
+  Halt(220) is FPC's own "invalid variant typecast" code and it names the
+  ACTUAL error at the ACTUAL line. This unit is a leaf with no exception
+  machinery (see PXXHdrKindCheck's Halt(204) for the same shape), so the halt is
+  the diagnostic rather than a raise; a raise belongs here the day builtinheap
+  can reach one.
+
+  RETAINING NIL AND RELEASING THE OLD VALUE STILL HAPPENS FIRST on the empty
+  path -- `h := Unassigned` must drop h's reference, not leak it.
+  bug-p-a-variant-cannot-hold-an-interface }
+var inst, old: Pointer;
+    tag: PtrUInt;
+begin
+  if dest = nil then Exit;
+  inst := nil;
+  if v <> nil then
+  begin
+    tag := PMachineWord(v)^;
+    if tag = VT_INTF_TAG then
+      inst := Pointer(PMachineWord(Int64(v) + 8)^)
+    else if tag <> VT_EMPTY_TAG then
+      Halt(220);   { invalid variant typecast -- see the header }
+  end;
+  if inst <> nil then PXXIntfAddRefAny(inst);
+  old := Pointer(PMachineWord(dest)^);
+  if old <> nil then PXXIntfReleaseAny(old);
+  PMachineWord(dest)^ := PtrUInt(inst);
+end;
+
 
 { ---- Float -> text writers (portable bodies for the cross targets, used in
   place of the per-arch EmitWriteFloat* emitters; x86-64 keeps its native

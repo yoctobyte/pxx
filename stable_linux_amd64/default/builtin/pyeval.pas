@@ -309,6 +309,60 @@ function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
   call site takes the dynamic-call path at all. }
 function pyvar_of_callable(p: Pointer): Variant;
 
+{ OPEN-WORLD METHOD DISPATCH -- `o.name(args)` where the compiler could find NO
+  class declaring `name`, and the receiver's static type is unknown.
+
+  NilPy resolved such a call by scanning the classes DECLARED IN THE
+  COMPILATION UNIT and refused outright when none matched. That refuses
+  ordinary cross-module duck typing, which CPython compiles, and CLAUDE.md's N
+  lane settles the direction: NilPy is UPWARD compatible with CPython, so
+  refusing what CPython accepts is a defect. lekkerzeilen's own entry module is
+  one of five that could not compile for this reason alone.
+
+  THE MACHINERY WAS ALREADY HERE, which is the finding and not the design:
+  every NilPy class carries an RTTI blob whose method table holds each method's
+  NAME, code address, arity and parameter kinds (typinfo's GetInstanceRTTI plus
+  PyFindMethCI above), and PyHostCall is a complete by-name invoker over it --
+  the same one `hasattr` has been reading and the pyeval host bridge has been
+  calling. Nothing new is reflected here; this only makes compiled code reach
+  what the interpreter already reached.
+
+  A NAME THAT IS NOT A METHOD FALLS THROUGH TO pydynattr_get, which resolves a
+  dynamic attribute, a declared field, a @property and __getattr__ in CPython's
+  own order -- so a `Callable` field holding a dispatch-table entry is called,
+  and a genuine miss raises pylib's AttributeError with CPython's exact wording.
+  The miss diagnostic is therefore NOT rewritten here: there is one of it, in
+  one place, and this path borrows it.
+
+  Arity is capped at four positional arguments, the same cap PyClassRefNew
+  carries for the same marshalling reason. The compiler refuses a wider call
+  with a message rather than dropping arguments. }
+function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
+function pydyn_meth1(const recv: Variant; const name: AnsiString;
+                     const a0: Variant): Variant;
+function pydyn_meth2(const recv: Variant; const name: AnsiString;
+                     const a0, a1: Variant): Variant;
+function pydyn_meth3(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2: Variant): Variant;
+function pydyn_meth4(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2, a3: Variant): Variant;
+{ ...and the same dispatch carrying KEYWORD bindings. kwspec is one '|'-separated
+  field per argument: the parameter's name for a keyword argument, EMPTY for a
+  positional one, so `f(a, b, outside=c)` sends '||outside'. Parallel to the
+  argument list because that is the shape PyHostCall's binder already takes, and
+  it binds by NAME against the parameter names the RTTI records -- the same
+  names a statically-typed receiver binds against. Positional-only dispatch goes
+  on using pydyn_meth<n>; these exist so a keyword argument does not have to be
+  a refusal. }
+function pydyn_methkw1(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0: Variant): Variant;
+function pydyn_methkw2(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1: Variant): Variant;
+function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2: Variant): Variant;
+function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2, a3: Variant): Variant;
+
 implementation
 
 const
@@ -1125,8 +1179,30 @@ begin
     else res := pyvar_of_int(pret);
     Exit;
   end;
+  { TOO FEW ARGUMENTS IS THE PROGRAM'S ERROR, SO IT IS THE PROGRAM'S EXCEPTION.
+    This was `writeln` + `Halt(1)` until 2026-09-11: an uncatchable process exit,
+    on stdout, with no traceback and no line number, where CPython raises a
+    TypeError a program can catch. It was always reachable -- every call the
+    open-world NAME fall-through defers lands here -- and the arity fall-through
+    added the same day (bug-n-a-method-call-is-refused-on-arity-from-the-
+    candidates-compiled-so-far-so-import-order-decides) deliberately routes a
+    class of calls here that used to be refused at COMPILE time. That trade is
+    right, and it makes this path's failure mode this frontend's problem rather
+    than an edge of it.
+    Every caller of PyHostCall is in this unit (five, checked), and a Halt is
+    unrecoverable, so nothing could have been relying on it to return.
+    THE COUNT IS DELIBERATELY NOT CALLED 'REQUIRED'. CPython says `analyze()
+    missing 1 required positional argument: 'fn'`; all this path knows is
+    mi^.Arity, which counts DEFAULTED parameters too, so the same call would
+    have it say 2. Defaults ARE already bound by the time this runs (measured:
+    `d.zqx(1)` against `zqx(self, a, b=5)` answers 6 here and in CPython), so
+    the gap is real -- it is the NUMBER that would be a false statement, and a
+    diagnostic that over-counts is the same defect as one that under-reports.
+    bug-n-a-too-few-args-runtime-dispatch-halts-the-process-where-cpython-raises-typeerror }
   if nargs < n then
-  begin writeln('pyeval: too few args to ', name, ' (need ', n, ', got ', nargs, ')'); Halt(1); end;
+    raise TypeError.Create(name + '() missing positional argument(s): its '
+            + 'parameter list holds ' + pystr_of(Int64(n)) + ' and only '
+            + pystr_of(Int64(nargs)) + ' could be bound');
 
   if n >= 1 then a0 := args.at(0);
   if n >= 2 then a1 := args.at(1);
@@ -5246,6 +5322,147 @@ begin
   end;
   f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
   Result := f3(a0, a1, a2);
+end;
+
+function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
+                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
+{ The worker behind pydyn_meth0..4. See the interface block for why it exists.
+
+  The VType 7 test is the whole receiver check: a NilPy instance, a TPyList, a
+  TPyDict and a pyeval closure are all VT_OBJECT, so a dynamically dispatched
+  `.append` on a list resolves through exactly the same lookup as a user
+  method -- pylib's containers ARE classes with RTTI. An int or a str receiver
+  is not an object and gets CPython's message naming its type. }
+var
+  obj: Pointer;
+  cls: PClassRTTI;
+  args, kwNames: TPyList;
+  res, cb: Variant;
+  i, cut: Integer;
+  rest: AnsiString;
+begin
+  Result := pynone;
+  obj := nil;
+  if PPyRec(@recv)^.VType = 7 then
+    obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
+  { A None receiver reaches here as VT_NULL, not as a nil-payload object, and
+    either way there is no class to look in. PyVarTypeNameOf answers
+    'NoneType' for it, which is the name CPython puts in this message. }
+  if obj = nil then
+    raise AttributeError.Create('''' + PyVarTypeNameOf(recv) +
+      ''' object has no attribute ''' + name + '''');
+
+  cls := GetInstanceRTTI(obj);
+  if (cls <> nil) and (PyFindMethCI(cls, name) <> nil) then
+  begin
+    { PyHostCall marshals every parameter/return shape the RTTI records and
+      halts if the method is absent -- which is why the lookup above is a
+      GUARD and not a duplicate: it is what turns "absent" into a Python
+      exception instead of a process exit. }
+    args := TPyList.Create;
+    if nargs > 0 then args.append(a0);
+    if nargs > 1 then args.append(a1);
+    if nargs > 2 then args.append(a2);
+    if nargs > 3 then args.append(a3);
+    { kwspec's fields are parallel to args -- '' for a positional slot, which is
+      exactly what PyHostCall's binder skips. Split here rather than at the call
+      site so the emitted code carries one string constant per call. }
+    kwNames := nil;
+    if kwspec <> '' then
+    begin
+      kwNames := TPyList.Create;
+      rest := kwspec;
+      for i := 0 to nargs - 1 do
+      begin
+        cut := Pos('|', rest);
+        if cut > 0 then
+        begin
+          kwNames.append(Copy(rest, 1, cut - 1));
+          rest := Copy(rest, cut + 1, Length(rest) - cut);
+        end
+        else
+        begin
+          kwNames.append(rest);
+          rest := '';
+        end;
+      end;
+    end;
+    res := pynone;
+    PyHostCall(obj, name, args, kwNames, res);
+    args.Free;
+    if kwNames <> nil then kwNames.Free;
+    Result := res;
+    Exit;
+  end;
+
+  cb := pydynattr_get(obj, name);   { raises AttributeError on a genuine miss }
+  { A CALLABLE FIELD is reached through pyvar_callv*, which has no parameter
+    names to bind against -- binding by position is the mis-binding this whole
+    path exists not to do. Refused by name rather than guessed. }
+  if kwspec <> '' then
+    raise TypeError.Create(name + '() is dispatched at run time through a '
+      + 'callable attribute, which takes positional arguments only');
+  case nargs of
+    0: Result := pyvar_callv0(cb);
+    1: Result := pyvar_callv1(cb, a0);
+    2: Result := pyvar_callv2(cb, a0, a1);
+    3: Result := pyvar_callv3(cb, a0, a1, a2);
+  else
+    Result := pyvar_callv4(cb, a0, a1, a2, a3);
+  end;
+end;
+
+function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
+begin
+  Result := PyDynMethN(recv, name, '', 0, pynone, pynone, pynone, pynone);
+end;
+
+function pydyn_meth1(const recv: Variant; const name: AnsiString;
+                     const a0: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, '', 1, a0, pynone, pynone, pynone);
+end;
+
+function pydyn_meth2(const recv: Variant; const name: AnsiString;
+                     const a0, a1: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, '', 2, a0, a1, pynone, pynone);
+end;
+
+function pydyn_meth3(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, '', 3, a0, a1, a2, pynone);
+end;
+
+function pydyn_meth4(const recv: Variant; const name: AnsiString;
+                     const a0, a1, a2, a3: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, '', 4, a0, a1, a2, a3);
+end;
+
+function pydyn_methkw1(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 1, a0, pynone, pynone, pynone);
+end;
+
+function pydyn_methkw2(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 2, a0, a1, pynone, pynone);
+end;
+
+function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 3, a0, a1, a2, pynone);
+end;
+
+function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
+                       const a0, a1, a2, a3: Variant): Variant;
+begin
+  Result := PyDynMethN(recv, name, kwspec, 4, a0, a1, a2, a3);
 end;
 
 function pyvar_of_callable(p: Pointer): Variant;
