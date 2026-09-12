@@ -84,6 +84,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
+- `[p 85] [N]` bug-n-a-chained-assignment-through-a-variant-typed-intermediate
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [A]` feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc (unblocks 2)
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
-- `[p 70] [N]` feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 
 _449 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
