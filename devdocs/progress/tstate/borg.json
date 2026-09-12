@@ -14675,6 +14675,11 @@
   "verdict": "RED",
   "wall": 873.5
  },
+ "last_idle_tier_try": {
+  "date": "2026-09-12T04:51:13Z",
+  "sha": "051b229aa2fa21fd190ccf3716d52d9725af0fb9",
+  "tier": "full"
+ },
  "last_opt": {
   "date": "2026-09-12T03:23:15Z",
   "sha": "ee1a8bc2818566d278dbd076cc5eb0c824cf8dc9"
