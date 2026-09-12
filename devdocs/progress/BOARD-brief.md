@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:158 backlog-nilpy:131 backlog-tools:59 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3710 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:130 backlog-tools:60 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3711 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 477, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
-- `[p 90] [N]` bug-n-a-bare-module-attribute-is-undefined-as-a-whole-argument-to-a-method (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
 - `[p 90] [N]` feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
@@ -103,6 +102,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
+- `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - `[p 70] [N]` feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 - `[p 70] [B]` regression-lib-test-crtl-reachability-9
 

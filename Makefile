@@ -1500,6 +1500,20 @@ test-nilpy: $(COMPILER)
 	# `pascal26:14: error: expected expression`, so this row is red pre-fix.
 	./$(COMPILER) -Futest test/test_nilpy_extended_slice_assign.npy $(TESTTMP)/test_nilpy_extslice
 	$(TESTTMP)/test_nilpy_extslice | diff -u test/test_nilpy_extended_slice_assign.expected -
+#	A bare MODULE-QUALIFIED member as a WHOLE argument to a METHOD: `o.m(math.pi)`.
+#	The load-bearing row is MODQ -- measured 2026-09-12, the pinned compiler answers
+#	`undefined variable (math)` on it, naming the MODULE and not the member. FREE and
+#	WRAPPED are the two shapes that already COMPILED (a free function never routes
+#	through the by-ref predicate; an operator forces the expression parse), and they
+#	are here so a clause widened past the method path reds visibly instead of
+#	silently. SHADOW asserts the FindSym < 0 gate rather than the clause: after
+#	`math = [1,2,3]` the name is a symbol again and must take the bare-lvalue parse.
+#	NILPYVAR is the row that had to be shown safe -- a module VARIABLE, which in
+#	Pascal IS a by-ref target; it answers True anyway because under this predicate's
+#	gate the name cannot be one. $(COMPILER) and not $(PXX_STABLE) because the fix
+#	is in the compiler and the pin predates it.
+	./$(COMPILER) -Futest test/test_nilpy_module_attr_method_arg.npy $(TESTTMP)/test_nilpy_modattr
+	$(TESTTMP)/test_nilpy_modattr | diff -u test/test_nilpy_module_attr_method_arg.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
@@ -2314,8 +2328,8 @@ test-nilpy: $(COMPILER)
 	# The lowering is the IDENTITY, which is a claim about THIS frontend and not a
 	# shortcut: the instance-read rows are what say so, since a staticmethod must
 	# not take the receiver and here it does not.
-	./$(COMPILER) test/test_nilpy_staticmethod_as_a_value.npy $(TESTTMP)/test_nilpy_staticm26
-	$(TESTTMP)/test_nilpy_staticm26 | diff -u test/test_nilpy_staticmethod_as_a_value.expected -
+	./$(COMPILER) test/test_nilpy_staticmethod_as_a_value.npy $(TESTTMP)/test_nilpy_staticmval26
+	$(TESTTMP)/test_nilpy_staticmval26 | diff -u test/test_nilpy_staticmethod_as_a_value.expected -
 	# ...and its POSITIVE CONTROL, which is a different assertion class: classmethod
 	# is NOT the identity (CPython binds the class as the first argument), so the
 	# compiler must REFUSE it by name rather than approximate it. Asserted as a

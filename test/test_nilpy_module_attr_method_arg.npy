@@ -1,0 +1,65 @@
+# A bare MODULE-QUALIFIED member as a WHOLE argument to a METHOD.
+#
+# The receiver must be a NAME (`o.m(...)`), not a construction: a constructed
+# receiver `A().m(...)` reaches ParseArgExpr unconditionally and compiled
+# throughout, which is what made this look like a scope bug for two rounds.
+# Positive control measured 2026-09-12: the pinned compiler answers
+# `pascal26:<n>: error: undefined variable (math)` on the MODQ row -- naming the
+# MODULE, not the member.
+import math
+# ALIASED on purpose: `math` exercises FindUnitOrAlias's plain-unit arm and
+# this one its alias arm, which is the same predicate clause either way.
+import nilpy_modattr_ui as ui
+
+class A:
+    def one(self, a):
+        print(a)
+    def two(self, a, b):
+        print(a, b)
+    def kw(self, a, b=7):
+        print(a, b)
+
+def free(a):
+    print(a)
+
+o = A()
+
+# MODQ -- the row the bug was reported on, and the one the pinned binary refuses.
+o.one(math.pi)
+
+# CALL -- a module FUNCTION call in the same position. Compiled before the fix;
+# here so a regression that breaks it is not mistaken for the bug coming back.
+o.one(math.floor(3.7))
+
+# FIRST / LAST -- argument POSITION is not the variable. Both failed before.
+o.two(math.pi, 1)
+o.two(1, math.pi)
+
+# KW -- the keyword spelling. Ruled out as the cause by the positional rows
+# above; kept because it is a different argument loop.
+o.kw(math.pi)
+o.kw(1, b=math.pi)
+
+# FREE -- the asymmetry that located the fix. A free function never routed
+# through the by-ref predicate and always worked; if this row ever reds, the
+# clause has been widened past the method path it belongs to.
+free(math.pi)
+
+# WRAPPED -- `0 + math.pi` compiled before the fix because an operator forces
+# the expression parse. It is the shape a user would have found as a workaround.
+o.one(0 + math.pi)
+
+# NILPYVAR / NILPYFUNC -- a module written in Python, not a stdlib shim. ROW is a
+# module VARIABLE, which is the case the root-only test had to be shown safe on:
+# a Pascal unit variable IS a by-ref target, and this clause answers True anyway
+# because under its gate the name cannot be one (PyExprMode is false while an
+# .npy program's Pascal RTL units parse, and a const Variant param is never a
+# binding target).
+o.one(ui.ROW)
+o.one(ui.wide())
+
+# SHADOW -- a local bound to a module's own name. This must take the BARE-LVALUE
+# parse, and it does for free: the clause is gated on FindSym < 0, and after the
+# rebinding `math` IS a symbol. The row asserts the gate, not the clause.
+math = [1, 2, 3]
+o.one(math)

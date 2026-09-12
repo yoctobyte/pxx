@@ -19025,7 +19025,14 @@ begin
       type not yet supported". Three targets, three separate fixes, one line. }
     tyClass:                             Result := VT_OBJECT;
   else
-    Error(what + ': this scalar type not yet supported');
+    { NAME the kind. Measured 2026-09-12: this message sent a reader to build a
+      probe compiler to learn which type it meant -- the whole diagnostic is a
+      refusal with the one fact needed to act on it withheld, and the arms
+      above record three separate occasions of a MISSING arm being the cause,
+      where the kind is the entire answer. TypeKindName is defs.inc's, which
+      compiler.pas includes at 44, well before ir.inc at 210. }
+    Error(what + ': this scalar type not yet supported ('
+          + TypeKindName(tk) + ')');
   end;
 end;
 

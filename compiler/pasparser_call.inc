@@ -5275,6 +5275,38 @@ begin
           Exit;
         end;
       end;
+      { ...AND A MODULE-QUALIFIED MEMBER, which is the THIRD instance of the two
+        bugs above and the one the lvalue-CHAIN skip at the top of this routine
+        cannot reach. `math.pi` and `obj.field` are the same token shape -- ident
+        dot ident, then ')' -- so the chain skip walks both and judges both
+        bare-lvalue, and the module one then reaches ParseLValueAST with
+        FindSym = -1 and dies as `undefined variable (math)`, naming the MODULE
+        and not the member. Measured 2026-09-12: the same call through a FREE
+        function compiles, `o.m(0 + math.pi)` compiles, and a CONSTRUCTED
+        receiver compiles -- the identical asymmetry the two clauses above
+        record, because those paths reach ParseArgExpr unconditionally.
+
+        A module member is a VALUE READ, never a binding target, so answering
+        True here is what the argument means. The test is the ROOT only: under
+        this routine's gate the name cannot be a Pascal unit whose variable is a
+        genuine var-binding target -- PyExprMode is false while an .npy
+        program's Pascal RTL units are parsed, and a `const Variant` parameter
+        is never a var-binding target at all (the gate's own comment above).
+
+        Probed before it was written, not predicted: PyParseFactorCore ALREADY
+        resolves this correctly through ConsumeUnitQualifier (unit 651 for
+        `math`, `pi` resolved, TokPos 38). The bug was a SECOND reading of the
+        same tokens from TokPos 37, so the fix is to stop the bare-lvalue arm
+        claiming them -- NOT to add a unit door here, which would be a duplicate
+        of one that already answered.
+        bug-n-a-bare-module-attribute-is-undefined-as-a-whole-argument-to-a-method }
+      if (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+         (Tokens[TokPos + 1].Kind = tkIdent) and
+         (FindUnitOrAlias(LowerCase(CurTok.SVal)) >= 0) then
+      begin
+        Result := True;
+        Exit;
+      end;
     end;
   end;
   Result := (FindSym(CurTok.SVal) < 0) and (TokPos < TokCount) and

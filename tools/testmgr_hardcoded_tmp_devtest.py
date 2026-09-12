@@ -74,6 +74,20 @@ ALLOWED_PATHS = {
         "PINNED: the recipe names it too, so recipe and source must agree",
     "/tmp/pxx_lua_input.lua":
         "PINNED: same — test/lua/runner.c and the Makefile share the name",
+    "/tmp/a":
+        "NEVER OPENED: an ARGUMENT to pathname2url/url2pathname in "
+        "test/lib_mimic_urllib_request_pathname.npy, which converts strings and "
+        "touches no filesystem. Verified 2026-09-12: that source has no open(), "
+        "no urlopen/urlretrieve and no os.* call, so two concurrent runs cannot "
+        "share anything. The path is DATA under test, and its literal spelling "
+        "is the point — these rows diff against CPython's own output, so "
+        "reading the directory from the environment would change what is being "
+        "compared and assert nothing about the conversion.",
+    "/tmp/a.db":
+        "NEVER OPENED: same source, same reason — a pathname2url argument.",
+    "/tmp/lekkerzeilen world.db":
+        "NEVER OPENED: same source; this row exists for the SPACE in the name, "
+        "which is what it asserts gets percent-encoded.",
 }
 
 # ---------------------------------------------------------------------------

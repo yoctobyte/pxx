@@ -3,7 +3,8 @@ track: N
 prio: 75
 type: bug
 blocked-by: []
-summary: "`o.m(math.pi)` gives `error: undefined variable (math)` — a module-qualified attribute as a WHOLE argument to a method call on a NAME receiver. Six lines, single file, stdlib math. MEASURED MECHANISM (2026-09-12, second pass): the argument is PARSED TWICE. PyParseFactorCore resolves it CORRECTLY first (ConsumeUnitQualifier answers unit 651, `pi` resolves), then the position REWINDS and the same tokens are re-parsed through PyParseLValueAST, which has no unit-qualifier door and halts. A constructed receiver (`A().m(..)`) parses once and compiles. So the defect is a REDUNDANT SECOND PARSE, not a missing lookup — the first pass of this ticket concluded the opposite and is corrected in place, because that framing sends the reader to add a duplicate door at the error site. Do NOT make the site recoverable either: it would poison the name into a stand-in and emit a wrong value instead of refusing. Next step is to identify the REWINDER (eleven ParseLValueAST call sites, all in pasparser_lval.inc; not ParseIntrinsicDestLValue, checked). PRE-EXISTING — the pinned compiler fails identically. THIS IS THE WALL ON THE lekkerzeilen CLOSURE (goal 4), app.py:2959; 29 `ui.` sites in app.py."
+summary: "FIXED 2026-09-12 — `o.m(math.pi)` gave `error: undefined variable (math)`, naming the MODULE and not the member. ROOT CAUSE: `ByRefArgStartsExpression` (`compiler/pasparser_call.inc`), the predicate that decides whether a by-ref or open-array argument can be a bare variable lvalue. Its lvalue-CHAIN skip walks `ident . ident` and then judges by the FOLLOWING token, so `math.pi` and `obj.field` are indistinguishable to it — both end at `)`, both were judged bare-lvalue, and the module one then reached ParseLValueAST with FindSym = -1 and halted. THIS IS THE THIRD INSTANCE OF ONE FAMILY IN ONE PREDICATE: the two clauses already sitting there record the same symptom for a bare parameterless FUNCTION and a bare parameterless METHOD, also gated on `FindSym < 0`, also method-only, also fine through a free function. FIX is a fourth clause beside them: root resolves no symbol, a `.ident` follows, and `FindUnitOrAlias` knows the root -> answer True, so the argument takes the ParseArgExpr path that PyParseFactorCore was ALREADY resolving correctly. Gated as narrowly as its neighbours. Fixture `test/test_nilpy_module_attr_method_arg.npy`, 11 rows, CPython-identical, wired into `test-nilpy`; positive control measured — the pinned binary refuses row MODQ. ADVANCED THE lekkerzeilen CLOSURE 2959 -> 3215."
+status: done
 ---
 
 # A bare `mod.ATTR` as a whole argument to a method is undefined
@@ -196,3 +197,73 @@ expression, and through a plain function. The last three are reach-checks that
 already pass — if they fail the harness is not reaching the fixture. The PINNED
 compiler must refuse the name-receiver rows, which is the positive control and
 is MEASURED, not predicted.
+
+## Resolved 2026-09-12 — the rewinder was a PREDICATE, not a missing door
+
+`ByRefArgStartsExpression` in `compiler/pasparser_call.inc` decides whether an
+argument bound to a **by-ref or open-array** parameter may be parsed as a bare
+variable lvalue. Under `if PyExprMode or constVariantParam then` it skips the
+whole lvalue CHAIN — `.ident` pairs, `^`, balanced `[...]` — and then judges by
+the token that follows. For `o.m(math.pi)` the skip consumes `.pi`, the next
+token is `)`, so the predicate does **not** answer True, the bare-lvalue arm
+runs `FindSym('math')` = -1, and `ParseLValueAST` halts on the MODULE name.
+
+**The second pass of this ticket was right that the argument is read twice and
+that the first reading succeeds** — and that is exactly why the fix is here and
+not at the error site. `PyParseFactorCore` resolves this correctly through
+`ConsumeUnitQualifier` (unit 651, `pi` at TokPos 38). Adding a unit door at the
+error site would have duplicated a door that already answered; the job was to
+stop the bare-lvalue arm claiming the tokens at all.
+
+**This is the third instance of one family in this one predicate.** Its own
+trailing comments cite
+`bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument` and
+`bug-p-a-parameterless-method-is-undefined-as-a-by-ref-argument` — same symptom
+shape (`undefined variable` naming something that is not a variable), same
+method-only asymmetry, same `FindSym < 0` gate, both fine through a free
+function, because a free function reaches `ParseArgExpr` unconditionally. The
+new clause sits beside them and is gated identically.
+
+### Why the root-only test is safe, and why it is not wider than that
+
+The clause tests the ROOT and the presence of a following `.ident`; it does not
+inspect the member. A Pascal unit VARIABLE is a genuine by-ref target, so that
+looks too broad — and is not, because of the gate it is under. `PyExprMode` is
+false while an `.npy` program's Pascal RTL units are parsed, and a
+`const Variant` parameter is never a binding target (the gate's own comment).
+Measured rather than argued: a module variable (`ui.ROW`) and a module function
+(`ui.wide()`) both give CPython's answer, and a local rebound to a module's own
+name (`math = [1,2,3]; o.one(math)`) still takes the bare-lvalue parse for free,
+because by then `FindSym` finds it and the gate excludes the clause.
+
+The neighbouring clause carries a warning that was honoured here: ungating it
+*"let a call RESULT bind to a genuine `var` parameter and the program COMPILED"*.
+Nothing was ungated.
+
+### Verified
+
+- `make compiler/pascal26` — `converged after 1 round(s)`, `a1d4b73c63f5`.
+- `test/test_nilpy_module_attr_method_arg.npy`, 11 rows, byte-identical to
+  CPython. Rows MODQ / CALL / FIRST / LAST / KW / FREE / WRAPPED / NILPYVAR /
+  NILPYFUNC / SHADOW; `math` covers `FindUnitOrAlias`'s plain arm and the
+  aliased import its alias arm.
+- **Positive control**: the pinned compiler answers
+  `pascal26:26: error: undefined variable (math)` on row MODQ. The fixture can
+  fail.
+- FREE and WRAPPED are rows that already compiled, kept so a clause widened past
+  the method path reds visibly instead of passing.
+- lekkerzeilen closure **2959 -> 3215** (+256). New wall, separate ticket:
+  `Variant :=: this scalar type not yet supported`.
+
+### Corrections to this ticket's own earlier passes
+
+- It said *"eleven `ParseLValueAST` call sites, all in `pasparser_lval.inc`"*.
+  There are **43**, across `pasparser_lval.inc`, `pasparser_expr.inc` and
+  `pyparser.inc`; the count came from grepping one file. The four that matter are
+  the method-argument sites (`pyparser.inc:45483, 45638, 46588, 46666`), and
+  none of them was the fix — the predicate they all consult was.
+- The first pass concluded the unit door *"is not consulted here"*. It is, and it
+  succeeds; corrected in the second pass and restated above.
+
+## Log
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
