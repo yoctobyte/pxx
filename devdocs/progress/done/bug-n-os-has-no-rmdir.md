@@ -45,7 +45,7 @@ Do not "fix" this ticket by finding those and concluding the family works.
 that makes a scratch directory currently has no way to clean it up.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d0d490ad2.
 
 ## How it was fixed (2026-09-12)
 

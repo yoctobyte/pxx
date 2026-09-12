@@ -45,7 +45,7 @@ Filed on track B (lib/rtl) rather than N: there is no compiler or parser gap her
 and `tempfile` already resolves — only the member is missing.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d0d490ad2.
 
 ## How it was fixed (2026-09-12)
 
