@@ -146,4 +146,4 @@ answers `True` to `is None` and prints **`0`** under `repr` where CPython prints
 `test_nilpy_module_docstring`, `_absent`, `_dedent_columns`.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4db262e08.
