@@ -25873,3 +25873,78 @@ waiter with no iteration cap converts a finished job into an idle seat.
 compile leaves the PREVIOUS test binary on disk, so running it prints a full set
 of plausible rows belonging to the earlier build. A waiter that watches for
 output, and a reader that trusts output, both need the producing step's own status.
+
+## THE PIN IS NOT A POSITIVE CONTROL FOR A `lib/rtl` CHANGE — IT IS THE SAME LIBRARY, NOT AN OLDER ONE
+
+Measured 2026-09-12 (frankuser), adding `tempfile.mkdtemp`. Confirmed
+independently the same evening by frankB, who said it is the trap it would have
+walked into first.
+
+CLAUDE.md already carries the C-lane half of this: *"verifying a C fix under the
+pin can pass for a reason that has nothing to do with your fix"* — there the
+pinned binary is **correctly older** and the SOURCE branches on its age. This is
+the **library** half, and the mechanism is different enough that knowing the
+first one does not protect you.
+
+**`lib/rtl` is read LIVE.** The pinned compiler does not carry a snapshot of it.
+So when you reach for the pin as the control on a new `lib/rtl` fixture:
+
+    pinned pascal26  +  lib/rtl/tempfile.pas (YOUR new version)  ->  compiles fine
+
+and it reads as *"my change is sound, even the old compiler accepts it"*. It is
+not an older library. **It is your library.** The control proves nothing and the
+failure mode is that it proves nothing CONFIDENTLY — the one shape this repo
+keeps paying for.
+
+### The control that works: break the thing under test on purpose
+
+The fixture asserted `MODE 0o700` on the directory `mkdtemp` creates. To show
+that row can fail at all, set the mode wrong in the unit:
+
+    TF_MKDTEMP_MODE = 511        { 0o777 }
+
+and the row prints `0o775` and reds — 0o775 and not 0o777, because the umask here
+is 002. That red is the proof the guard is live. Restore and it greens.
+
+This generalises: **for a live-read artefact, the positive control is a
+deliberate defect in the artefact, never an older consumer of it.**
+
+### The mirror case, so both directions are on the record
+
+`compiler/builtin/*.pas` goes the other way: resolved CWD-relative by the live
+compiler, so a builtin addition is **live in the dev loop and INERT for every
+`$(PXX_STABLE)` consumer until someone pins**. Same file tree, opposite
+staleness. Say which of the two you are in before quoting a green.
+
+## A GATE VERDICT READ FROM A `tail` IS A VERDICT ABOUT THE LAST N LINES
+
+Same session, an hour later, and it nearly became a committed claim.
+
+`tools/gate.sh quick` was captured with `tail -25`. Grepping that captured text:
+
+    FAIL=0  PASS=22
+
+while **`gate: RED (exit 1)` sat two lines away in the same window.** The single
+FAIL row had been truncated above it. The grep was perfectly honest about the
+window it was handed.
+
+**The tell was the `make pin` advisory at the TOP of the window.** That text is
+the TAIL of the canary's failure block, so a row had been cut.
+
+**The remedy is not a bigger tail.** `$LOGDIR/summary.log` is the authoritative
+row list; derive counts from that file, never from a captured window:
+
+    grep -E '^\s+(PASS|FAIL|SKIP)' $LOGDIR/summary.log     # FAIL=1 PASS=22 SKIP=1
+
+This is the third door into one room. CLAUDE.md already has the first two: a
+backgrounded gate's notification reports the **WRAPPER** (`exit code 0` over
+`gate: RED`), and the remedy given there is *grep the log*. **The new half is
+that the remedy has its own truncation failure when the log you grep is itself a
+tail.** A `head -6` on a compiler invocation is the same animal from the other
+end — it SIGPIPEs the compiler and returns `rc=13`, which reads exactly like a
+compiler exit code.
+
+Three readouts in one session, each manufacturing a confident wrong answer, none
+of them erroring. Banked here and deliberately NOT promoted to CLAUDE.md: it
+meets the merit test, and the promotion test is a second independent SUBSYSTEM,
+where all three instances are the same one (reading a verdict out of a gate).

@@ -3,7 +3,7 @@ track: N
 prio: 70
 type: feature
 blocked-by: []
-summary: "`__doc__` answers `undefined variable (__doc__)` and is the lekkerzeilen closure's wall at `__main__.py:312` as of 2026-09-12, with ALL of app.py now compiling. The module docstring is not missing from the compiler — it is deliberately THROWN AWAY: compiler/pyparser.inc:41629 consumes a leading module string literal with the comment \"A leading module docstring may precede the imports; consume it\" and keeps nothing. So the fix is to retain it, not to parse anything new, and `sys.platform` at compiler/pyparser.inc:12934 is the emit pattern to copy verbatim (AN_STR_LIT + StoredName + ASTTk := Ord(tyString)). TWO THINGS MAKE THIS BIGGER THAN IT LOOKS, both capable of a silent wrong value: a module with NO docstring must give `None`, not `''` — the call site is `print(__doc__.strip())`, which raises on None in CPython and would quietly print a blank line if we hand back an empty string; and `__doc__` is PER-MODULE, so an imported module reading its own `__doc__` must not see the main module's. Neither shows up as a compile error."
+summary: "`__doc__` answers `undefined variable (__doc__)` and is the lekkerzeilen closure's wall as of 2026-09-12 — CITE THE CONSTRUCT, NOT THE LINE: `print(__doc__.strip())` in `__main__.py`'s `--help` path, which is line **312 in the owner's WORKING TREE and 299 at HEAD**, because that file is modified on disk by an in-flight backend port and the closure compiles the working tree, with ALL of app.py now compiling. The module docstring is not missing from the compiler — it is deliberately THROWN AWAY: compiler/pyparser.inc:41629 consumes a leading module string literal with the comment \"A leading module docstring may precede the imports; consume it\" and keeps nothing. So the fix is to retain it, not to parse anything new, and `sys.platform` at compiler/pyparser.inc:12934 is the emit pattern to copy verbatim (AN_STR_LIT + StoredName + ASTTk := Ord(tyString)). TWO THINGS MAKE THIS BIGGER THAN IT LOOKS, both capable of a silent wrong value: a module with NO docstring must give `None`, not `''` — the call site is `print(__doc__.strip())`, which raises on None in CPython and would quietly print a blank line if we hand back an empty string; and `__doc__` is PER-MODULE, so an imported module reading its own `__doc__` must not see the main module's. Neither shows up as a compile error."
 ---
 
 # `__doc__` is consumed and discarded
@@ -76,3 +76,23 @@ string. Use a distinctive sentence.
 Tenth wall of 2026-09-12. See
 [[umbrella-lekkerzeilen-compiles-and-runs-under-nilpy]]; three of the last four
 walls were library gaps, and this one is back to being a frontend gap.
+
+## The line number is volatile and the defect is not (2026-09-12)
+
+lekkerzeilen-a2 flagged it and it checked out: `lekkerzeilen/__main__.py` is
+**modified on disk** in the owner's tree — an in-flight port of the platform
+seam to pxx (`_pxx.py` +976, `_gl.py` +154, `gfx.py` stripped of ctypes, a new
+`_vocab.py`). So:
+
+    working tree   312:        print(__doc__.strip())
+    HEAD           299:        print(__doc__.strip())
+
+**The finding survives the caveat, and that is why it is written down rather
+than left to a later re-measurement:** the construct is present in BOTH, and
+both spellings of the module open with the same leading `Entry point.`
+docstring, so the `__doc__` gap is real at HEAD and in the working tree alike.
+Only the citation moves.
+
+Quote the construct and the `--help` path. A line number against a tree somebody
+else is editing is the classic stale pointer — it does not error, it points
+somewhere.
