@@ -1,0 +1,73 @@
+# tempfile.mkdtemp and os.rmdir. Both added 2026-09-12: mkdtemp was the
+# lekkerzeilen closure's wall at __main__.py:115 and os.rmdir was the wall
+# immediately behind it at __main__.py:138 -- found while writing this fixture,
+# because the fixture could not clean up after itself without it.
+#
+# WHAT THIS FIXTURE IS ACTUALLY GUARDING, because the obvious assertion is the
+# weak one. "mkdtemp returned a string" passes for a shim that only GENERATES A
+# NAME, and a name generator races: two processes get the same path and both
+# believe they own it. So the load-bearing rows are EXISTS (the directory is
+# really there, i.e. mkdir ran) and MODE (0700, set by the mkdir call itself and
+# not by a chmod afterwards, so there is no window where it is world-readable).
+# DISTINCT is the WEAKEST row and is kept only so a change that ever made the
+# name deterministic reds here instead of colliding in production -- a name
+# generator also returns distinct names.
+#
+# For os.rmdir the load-bearing rows are the two REFUSALS, not the success:
+# NONEMPTY (a non-empty directory raises and its contents SURVIVE) and MISSING.
+# A "helpful" recursive rmdir would pass a success-only fixture while silently
+# destroying data the program asked to be told about.
+#
+# This fixture removes everything it creates, so it leaves no inodes behind. That
+# matters more than it sounds: this box has already lost its breadth instrument
+# once to inode exhaustion at 9% disk usage.
+
+import tempfile
+import os
+
+d = tempfile.mkdtemp(prefix="pxx-mkdtemp-test-")
+
+# EXISTS -- mkdir actually ran. The row a name generator fails.
+print("EXISTS", os.path.isdir(d))
+
+# MODE -- 0700, as CPython creates it, and this row IS a guard: built with mode
+# 0o777 instead it prints 0o775 on this box and reds (measured 2026-09-12 by
+# temporarily changing TF_MKDTEMP_MODE). 0o775 and not 0o755 because the umask
+# here is 002 -- so CreateDir would have left the directory group-WRITABLE as
+# well as world-readable, which is why mkdtemp calls PalMkdir with the mode
+# directly instead of going through CreateDir.
+print("MODE", oct(os.stat(d).st_mode & 0o777))
+
+print("PREFIX", os.path.basename(d).startswith("pxx-mkdtemp-test-"))
+print("PARENT", d.startswith(tempfile.gettempdir()))
+
+e = tempfile.mkdtemp(prefix="pxx-mkdtemp-test-", suffix="-end")
+print("DISTINCT", d != e)
+print("SUFFIX", os.path.basename(e).endswith("-end"))
+
+# DIRKW -- `dir=` places the new directory inside a given parent, which is also
+# how this fixture builds a NON-EMPTY directory for the refusal row below.
+inner = tempfile.mkdtemp(prefix="inner-", dir=e)
+print("DIRKW", os.path.dirname(inner) == e)
+
+# NONEMPTY -- must RAISE, and `inner` must still be there afterwards. The row
+# that separates a correct rmdir from a recursive one.
+try:
+    os.rmdir(e)
+    print("NONEMPTY removed -- WRONG")
+except OSError:
+    print("NONEMPTY raised", os.path.isdir(inner))
+
+os.rmdir(inner)
+os.rmdir(e)
+print("RMDIR", not os.path.isdir(e))
+
+os.rmdir(d)
+print("CLEAN", not os.path.isdir(d))
+
+# MISSING -- removing what is not there raises rather than quietly returning 0.
+try:
+    os.rmdir(d)
+    print("MISSING removed -- WRONG")
+except OSError:
+    print("MISSING raised")

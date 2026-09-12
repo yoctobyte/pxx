@@ -13023,6 +13023,7 @@ begin
   else if dotted = 'os.listdir' then Result := 'pyos_listdir'
   else if dotted = 'os.replace' then Result := 'pyos_replace'
   else if dotted = 'os.makedirs' then Result := 'pyos_makedirs'
+  else if dotted = 'os.rmdir' then Result := 'pyos_rmdir'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'

@@ -1473,6 +1473,13 @@ function pyos_replace(const src: AnsiString; const dst: AnsiString): Integer;
   parameter actually called `exist_ok`. }
 function pyos_makedirs(const name: AnsiString; mode: Integer = 511;
                        exist_ok: Boolean = False): Integer;
+{ os.rmdir(path) — remove an EMPTY directory, raising on failure exactly as
+  os.remove does. Deliberately NOT recursive: CPython's os.rmdir refuses a
+  non-empty directory with ENOTEMPTY, and a shim that deleted the contents
+  instead would be the one failure mode worth refusing over — silent data loss
+  where the program asked for an error. shutil.rmtree is the recursive one and
+  is a separate absence (bug-n-os-has-no-rmdir records both). }
+function pyos_rmdir(const path: AnsiString): Integer;
 function pyos_stat(const path: AnsiString): TPyStat;
 { os.environ.get(name[, default]) and os.getenv(name[, default]). The process
   environment comes from /proc/self/environ (NUL-separated NAME=VALUE records);
@@ -13300,6 +13307,20 @@ begin
   r := PyPalUnlink(@cs[1]);
   { CPython os.remove RAISES on failure (deleting a missing file must be a
     catchable error — Forth-2012 DELETE-FILE expects a nonzero ior, not 0). }
+  if r < 0 then
+    pyos_raise_ioerror(r, path, '');
+  Result := Integer(r);
+end;
+
+function pyos_rmdir(const path: AnsiString): Integer;
+var cs: AnsiString; r: Int64;
+begin
+  Result := 0;
+  if not PyPalSupported then Exit;
+  cs := path + #0;
+  r := PyPalRmdir(@cs[1]);
+  { Raises on failure, like pyos_remove: a missing directory, or a non-empty one
+    (ENOTEMPTY), must be a catchable error and not a quiet 0. }
   if r < 0 then
     pyos_raise_ioerror(r, path, '');
   Result := Integer(r);

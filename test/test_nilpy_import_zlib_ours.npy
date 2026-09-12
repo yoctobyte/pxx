@@ -16,5 +16,17 @@
 # Makefile makes it: our unit is pure Pascal, so this binary must carry NO
 # dynamic dependency whatsoever. A libz.so.1 here means the header answered and
 # the value row agreed with it by coincidence.
+# ZLIB_VERSION IS THE SECOND DOOR ON THE SAME PROPERTY, AND IT CANNOT AGREE WITH
+# THE HEADER BY COINCIDENCE. The crc32 row above can: crc32 is a pure function,
+# so a C libz that answered would return the SAME 907060870, and only the
+# DT_NEEDED half separates them. ZLIB_VERSION has no such collision — zlib.h's
+# is a libz release number ("1.3.1" here), ours is a string naming us, so the
+# two implementations cannot print the same thing whatever happens to linking.
+#
+# It is also why the value is not a number: there is no libz under this unit
+# (lib/rtl/zlib.pas is RFC 1950/1951 from scratch), and lekkerzeilen's own
+# caller prints it to say WHICH zlib produced its bytes — see the reasoning
+# block above the constant in lib/rtl/zlib.pas.
 import zlib
 print(zlib.crc32(b"hello"))
+print(zlib.ZLIB_VERSION)

@@ -72,7 +72,30 @@ procedure DeflateZlibStored(const src: TByteArray; var dst: TByteArray);
 
   STILL NOT IMPLEMENTED, stated rather than left to be discovered:
   `compressobj`, `decompressobj` (the incremental objects) and the `Z_*`
-  constants. No program has asked for them. }
+  constants. No program has asked for them — but ZLIB_VERSION now has one, see
+  below. }
+
+{ `zlib.ZLIB_VERSION`. CPython's names the libz it was BUILT AGAINST; there is no
+  libz here, this unit is a from-scratch RFC 1950 / 1951 implementation, so any
+  `1.2.x` answer would be a false claim about provenance.
+
+  It reports US instead, and the program that asked settles the question rather
+  than taste: lekkerzeilen/__main__.py:141 prints `"zlib %s" % zlib.ZLIB_VERSION`
+  immediately above its own explanation that its `file` column "matches only where
+  the same zlib is underneath -- deflate may encode the same bytes several valid
+  ways, so a differing `file` column is not a fault." The line exists to say WHICH
+  zlib produced the bytes. A spoofed libz version would not merely be untrue, it
+  would defeat the one purpose the caller has for it, and send a reader comparing
+  columns looking for a bug that is not there.
+
+  THE COST, because it is real: a program doing version arithmetic
+  (`tuple(map(int, zlib.ZLIB_VERSION.split('.')))`) raises here where CPython
+  returns numbers. That is the better of the two failure directions — loudly wrong
+  beats quietly misidentified — and it is the same call sys.version makes, which
+  raises AttributeError rather than inventing a Python version. Revisit if a real
+  program turns out to compare it. }
+const
+  ZLIB_VERSION = 'pxx-rtl';
 function crc32(const data: Variant; const value: Variant = 0): Int64;
 
 { NAME COLLISION, DELIBERATE AND DOCUMENTED: `adler32` differs from

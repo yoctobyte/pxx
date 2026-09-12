@@ -1,0 +1,11 @@
+EXISTS True
+MODE 0o700
+PREFIX True
+PARENT True
+DISTINCT True
+SUFFIX True
+DIRKW True
+NONEMPTY raised True
+RMDIR True
+CLEAN True
+MISSING raised

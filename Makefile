@@ -653,7 +653,7 @@ test-nilpy: $(COMPILER)
 	# The pair is mutually validating: that binary MUST carry libz.so.1, this one
 	# MUST carry nothing.
 	./$(COMPILER) test/test_nilpy_import_zlib_ours.npy $(TESTTMP)/test_nilpy_import_zlib_ours26
-	tools/expect_same.sh test_nilpy_import_zlib_ours26 "$$($(TESTTMP)/test_nilpy_import_zlib_ours26)" "907060870"
+	tools/expect_same.sh test_nilpy_import_zlib_ours26 "$$($(TESTTMP)/test_nilpy_import_zlib_ours26)" "$$(printf '907060870\npxx-rtl')"
 	@if readelf -d $(TESTTMP)/test_nilpy_import_zlib_ours26 2>/dev/null | grep -q 'NEEDED'; then \
 	  echo "FAIL: a bare \`import zlib\` produced a binary with a DT_NEEDED — it resolved to a C header, not lib/rtl/zlib.pas. Check PyRtlUnitServesPython in compiler/pasparser_proc.inc"; exit 1; \
 	else echo "ok: bare import zlib reaches lib/rtl/zlib.pas — zero dynamic dependencies"; fi
@@ -1552,6 +1552,18 @@ test-nilpy: $(COMPILER)
 #	hoisted condition and the sibling construct; neither asserts a fix.
 	./$(COMPILER) test/test_nilpy_with_as_names_a_class.npy $(TESTTMP)/test_nilpy_withas
 	$(TESTTMP)/test_nilpy_withas | diff -u test/test_nilpy_with_as_names_a_class.expected -
+	# tempfile.mkdtemp -- the lekkerzeilen closure's wall at __main__.py:115 and the
+#	first LIBRARY gap in that closure after seven parser gaps. EXISTS and MODE are
+#	the load-bearing rows: "returned a string" passes for a shim that only
+#	GENERATES a name, and a name generator races two processes onto one path.
+#	MODE is a real guard -- built with 0o777 it prints 0o775 here and reds. It also
+#	covers os.rmdir, which was the wall immediately behind mkdtemp: there the
+#	load-bearing rows are the REFUSALS (NONEMPTY raises and its contents survive,
+#	MISSING raises), because a "helpful" recursive rmdir passes a success-only
+#	fixture while silently destroying data. Net-zero on inodes: it removes
+#	everything it creates, measured delta 0 over three runs.
+	./$(COMPILER) test/test_nilpy_tempfile_mkdtemp.npy $(TESTTMP)/test_nilpy_mkdtemp
+	$(TESTTMP)/test_nilpy_mkdtemp | diff -u test/test_nilpy_tempfile_mkdtemp.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

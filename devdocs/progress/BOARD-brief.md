@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:134 backlog-tools:60 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3713 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:135 backlog-tools:60 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3715 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,12 +73,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 481, ranked
+## Ready — top 30 of 482, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
 - `[p 90] [N]` feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments (unblocks 1)
-- `[p 90] [B]` feature-n-tempfile-has-no-mkdtemp (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
@@ -105,5 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
+- `[p 70] [N]` feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 
-_451 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_452 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

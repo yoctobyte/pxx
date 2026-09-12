@@ -37,6 +37,10 @@ interface
 
 const
   PYPAL_AT_FDCWD = -100;
+  { unlinkat's flag that makes it rmdir(2). Linux has no separate rmdir on the
+    at-family path, so this reuses NR_UNLINKAT rather than adding a syscall
+    number to all six tables. }
+  PYPAL_AT_REMOVEDIR = 512;
 
   { ioctl(fd, TCGETS, &termios) -- what isatty(3) is. Arch-independent for
     every target here: asm-generic/ioctls.h gives 0x5401 and only mips, alpha,
@@ -62,6 +66,7 @@ function PyPalClose(fd: Int64): Int64;
 function PyPalLseek(fd, offset, whence: Int64): Int64;
 function PyPalFtruncate(fd, size: Int64): Int64;
 function PyPalUnlink(path: Pointer): Int64;
+function PyPalRmdir(path: Pointer): Int64;
 function PyPalRename(src, dst: Pointer): Int64;
 function PyPalMkdir(path: Pointer; mode: Int64): Int64;
 function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
@@ -430,6 +435,14 @@ begin
   PyPalUnlink := -1;
   if NR_UNLINKAT < 0 then Exit;
   PyPalUnlink := PyPalSys(NR_UNLINKAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
+end;
+
+function PyPalRmdir(path: Pointer): Int64;
+begin
+  PyPalRmdir := -1;
+  if NR_UNLINKAT < 0 then Exit;
+  PyPalRmdir := PyPalSys(NR_UNLINKAT, PYPAL_AT_FDCWD, Int64(path),
+                                 PYPAL_AT_REMOVEDIR, 0, 0, 0);
 end;
 
 function PyPalRename(src, dst: Pointer): Int64;
