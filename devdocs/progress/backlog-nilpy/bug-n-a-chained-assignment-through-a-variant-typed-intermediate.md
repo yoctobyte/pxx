@@ -142,3 +142,32 @@ Compare the two receivers with `PXXDBG=a.ast` before touching anything.
 **And do not narrow the guard as a shortcut.** Allowing the undeclared-field case
 through is correct in itself and would NOT unblock app.py:3204, whose field
 `visible` is declared. Measured, not assumed.
+
+### The cheap fix is refuted too — the receiver has NO class identity at all
+
+Probed 2026-09-13, same session, guard restored and binary verified byte-identical
+again (`127f2f6531d9`). `PyMakeAttrLoad` sets `ASTRight[node] := UFldRec_[fi]`, so
+a field can carry a class RECORD while its KIND is variant, and both
+`PyMakeAttrStore` and the guard gate on the KIND (`ASTTk = tyClass`) before ever
+asking for the record. That looked like a one-line miss.
+
+**It is not.** Rewritten to ask `ResolveNodeRec` unconditionally, the guard still
+fires: for `self.menu` the answer is `< REC_UCLASS_BASE`. The field carries neither
+a class kind nor a class record, so there is nothing on the node to recover and no
+local fix inside these two routines.
+
+**So the remaining work is genuinely NilPy type inference** — recording that a field
+assigned from a function whose body returns `W()` holds a `W` — and its failure mode
+is a store placed on the wrong door with no diagnostic. Parked deliberately on that
+basis, not for lack of an angle.
+
+**Next step for whoever picks it up, in order:** find how the SINGLE-statement path
+obtains a usable class for the same receiver (it demonstrably does — `self.menu.visible = 11`
+is correct), because that is an existing working answer to exactly this question, and
+copying it beats inventing inference. `PXXDBG=a.ast` on the two procs, diff the
+receiver subtrees.
+
+**A measurement hazard that nearly produced a false reading here:** when the compile
+FAILS, the previously built test binary is still on disk, so running it prints a full
+set of plausible rows that belong to the earlier build. Check the compile's own exit
+before reading any value it was supposed to produce.
