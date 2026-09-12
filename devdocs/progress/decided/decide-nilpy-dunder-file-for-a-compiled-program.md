@@ -173,3 +173,31 @@ Four places, and a change of mind (or a new use case) has to move all four:
 - [[docs-nilpy-file-dunder-and-data-files]] — the user-facing text (Track D),
   blocked on the implementation so it describes what ships rather than what was
   decided.
+
+## 2026-09-12 — a case this decision does not cover: a module inside a PACKAGE
+
+Appended as history; the rule above is unchanged and nothing here retires it.
+
+The rule says `<exe_dir>/<original module basename>`, and the word *package*
+appears nowhere in this ticket. Measured 2026-09-12 on lekkerzeilen, which is a
+package: collapsing the package directory makes `__file__` disagree with
+CPython's *shape* on **both** idioms for a module inside one — one dirname should
+name the package directory and names its parent; two dirnames should name the
+root and name one above it. The payoff sentence above ("yields the executable's
+directory for EVERY module") is only reachable by collapsing it, and the
+collapse is what breaks the other form.
+
+Population, measured rather than assumed: lekkerzeilen's runtime package has
+**four** `__file__` sites and **all four** use `dirname(dirname(abspath(...)))`,
+all naming one data root. None use one dirname. The visible result is
+`--starts` printing `open water: nowhere in particular, which is the point` with
+exit code 0 — correct about open water, and nothing raised.
+
+Also: the "application data root" deferred below with *"wait for the first
+program that needs it"* now has that program.
+
+Both are carried in
+**decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package**, with the
+measurement, the three options and what each costs. That is where the fork lives;
+this note exists so a reader of the August rule knows a later case exists before
+implementing against it.
