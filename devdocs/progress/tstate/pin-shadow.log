@@ -741,3 +741,5 @@
 2026-09-12T15:04:59Z	borg	f7e55ea72da21b5a1e52a660f24f46ebd126418f	would NOT pin f7e55ea72da2 — 7 red(s) the current pin does not have: demos#00, lib-test#src:tools/crtl_reachability.py, optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12
 2026-09-12T16:29:42Z	borg	7865c91a87565b40e794cbbbd9a6c3bb435c710c	would NOT pin 7865c91a8756 — 7 red(s) the current pin does not have: demos#00, lib-test#src:tools/crtl_reachability.py, optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12
 2026-09-12T17:43:37Z	borg	9186a7d58def0f3706f377b908bea3b39bec2383	would-pin PENDING 9186a7d58def — qualifies, streak 1/2
+2026-09-12T18:53:37Z	borg	dcc9de2c6d7fc80d08220ee1362830aabc6f1971	WOULD PIN dcc9de2c6d7f — 7 red(s), none new, 7 inherited from the current pin, self-host clean, streak 2/2
+2026-09-12T18:53:37Z	borg	dcc9de2c6d7fc80d08220ee1362830aabc6f1971	AUTO-PIN DECLINED — HEAD is 7fbd7d1cf57e, not the tested dcc9de2c6d7f
