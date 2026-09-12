@@ -9,6 +9,7 @@ created: 2026-09-08
 found-by: frankuser
 tags: [nilpy, corpus, real-world, lekkerzeilen]
 blocked-by:
+  - feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder
   - feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined
   - task-b-write-the-lekkerzeilen-pxx-platform-backend
   - feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments

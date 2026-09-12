@@ -1,9 +1,9 @@
 ---
 track: B
-prio: 55
+prio: 75
 type: feature
-blocked-by: []
-summary: "The owner authorised lekkerzeilen to use PIL on 2026-09-12, mostly for PNG decoding. MEASURED FIRST, AND IT IS NOT A DECODER TICKET: lib/rtl/png.pas ALREADY decodes PNG — any valid deflate stream (stored, fixed and dynamic Huffman) and all standard RGBA scanline filters — over lib/rtl/zlib.pas, which is our own RFC 1950/1951 from scratch, with lib/rtl/image.pas holding the TImage/TRGBA core. So the work is a PIL-SHAPED PYTHON SURFACE over units we already have, exactly as base64.pas carries `b64encode` beside `Base64Encode`, plus adding png/image to PyRtlUnitServesPython in compiler/pasparser_proc.inc (the list today is ast atexit base64 collections configparser html io json markdown math pathlib random re subprocess tempfile tkinter zlib). Thirteen PIL members are reached across tools/ and tests/: Image.new, Image.open, Image.fromarray, Image.alpha_composite, Image.MAX_IMAGE_PIXELS, Image.LANCZOS, and the methods .size .tobytes .load .save .getpixel .resize .convert. THREE SCOPE LIMITS THAT ARE REAL WORK RATHER THAN SURFACE, each named below: png.pas handles ONLY non-interlaced 8-bit RGBA (colour type 6) while PIL opens palette, grayscale, 16-bit and interlaced, and lekkerzeilen's own png.py records palette PNGs being hit in practice; .resize with Image.LANCZOS needs a resampler that image.pas does not have; and Image.fromarray needs NUMPY, which is a far larger dependency than PIL and is out of scope here. ONE FORK FOR THE OWNER, stated in the body: today PIL appears ONLY in tools/ and tests/ and NOT once in the lekkerzeilen/ runtime package, so on the standing 'we don't care compiling tooling right now' this buys nothing yet — the prio assumes the authorisation is forward-looking."
+blocked-by: []  # see FORK RESOLVED — this now belongs under the lekkerzeilen umbrella
+summary: "The owner authorised lekkerzeilen to use PIL on 2026-09-12, mostly for PNG decoding. MEASURED FIRST, AND IT IS NOT A DECODER TICKET: lib/rtl/png.pas ALREADY decodes PNG — any valid deflate stream (stored, fixed and dynamic Huffman) and all standard RGBA scanline filters — over lib/rtl/zlib.pas, which is our own RFC 1950/1951 from scratch, with lib/rtl/image.pas holding the TImage/TRGBA core. So the work is a PIL-SHAPED PYTHON SURFACE over units we already have, exactly as base64.pas carries `b64encode` beside `Base64Encode`, plus adding png/image to PyRtlUnitServesPython in compiler/pasparser_proc.inc (the list today is ast atexit base64 collections configparser html io json markdown math pathlib random re subprocess tempfile tkinter zlib). Thirteen PIL members are reached across tools/ and tests/: Image.new, Image.open, Image.fromarray, Image.alpha_composite, Image.MAX_IMAGE_PIXELS, Image.LANCZOS, and the methods .size .tobytes .load .save .getpixel .resize .convert. THREE SCOPE LIMITS THAT ARE REAL WORK RATHER THAN SURFACE, each named below: png.pas handles ONLY non-interlaced 8-bit RGBA (colour type 6) while PIL opens palette, grayscale, 16-bit and interlaced, and lekkerzeilen's own png.py records palette PNGs being hit in practice; .resize with Image.LANCZOS needs a resampler that image.pas does not have; and Image.fromarray needs NUMPY, which is a far larger dependency than PIL and is out of scope here. FORK RESOLVED BY THE OWNER 2026-09-12, which is why this is p75 and not p55: he gave PIL permission because they were discussing TEXTURING, so it is a RUNTIME dependency and not offline tooling — "PIL is also one of them standard libraries. same for numpy btw". It therefore becomes a real closure wall the moment lekkerzeilen/ imports it, and numpy is a SIBLING in scope rather than the out-of-scope item the first draft of this ticket called it. HIS PREFERENCE IS TO BUILD PILLOW FOR REAL ("that would still be my preferred way of doing - just building the PIL wheel"), with his own caveat that it is "likely a recursive wasps nest" — MEASURED, and he is right for a sharper reason than size: see the measurement section, the recursion is that building a CPython C-API extension requires reproducing CPython's OBJECT LAYOUT, not 81 functions."
 ---
 
 # PIL is a Python surface over the RTL PNG decoder, not a new decoder
@@ -141,3 +141,55 @@ Cross-check before starting: that META ticket is flagged `STALE-PARK-HELD` by
 `tools/progress.sh check` — its prose names four now-resolved tickets near a
 blocking phrase. Per CLAUDE.md, `owner:` is attribution and not a claim, so read
 it before treating it as blocked, and the stale edges are not a reason to wait.
+
+
+## MEASURED: why building Pillow is recursive, and it is not about size
+
+Owner, 2026-09-12: *"we sortof concluded it may be easier to mimic a library
+instead of actually building them - although that would still be my preferred
+way of doing - just building the PIL wheel. or library. but that's likely a
+recursive wasps nest"*.
+
+Measured on this box (Pillow 12.1.1, numpy 2.3.5, CPython 3.14):
+
+| | artefact size | distinct CPython C-API symbols | DT_NEEDED | `.so` in package |
+| --- | --- | --- | --- | --- |
+| `PIL/_imaging` | 486,712 | **81** | 7 | 6 |
+| `numpy/_core/_multiarray_umath` | 9,270,336 | **312** | 6 | 19 |
+
+**THE EXTERNAL HALF IS THE TRACTABLE HALF.** `_imaging` links `libtiff.so.6`,
+`libjpeg.so.8`, `libopenjp2.so.7`, `libz.so.1`, `libimagequant.so.0`,
+`libxcb.so.1`, `libc.so.6` — ordinary C libraries. pxx compiles C with cfront
+and DT_NEEDED dynamic linking demonstrably works (the `--no-shims` zlib fixture
+links `libz.so.1`). The META ticket calls class 2 *"the case pxx is unusually
+good at"*. So libjpeg is WORK, not a nest.
+
+**THE RECURSIVE HALF IS THE C-API, AND 81 UNDERSELLS IT BY CONSTRUCTION.**
+`Py_INCREF` / `Py_DECREF` are **macros**: they write `op->ob_refcnt` directly, so
+they appear in NO symbol table. The only refcount symbol in `_imaging` is
+`_Py_Dealloc`, the out-of-line helper the DECREF macro tail-calls. So the
+coupling is not to 81 functions — it is to **`PyObject`'s memory layout**:
+`ob_refcnt`, `ob_type`, and the `tp_*` slots of every type object.
+
+That is the recursion, stated precisely: **to build the library you must first
+build the interpreter.** Not an approximation of it — a byte-compatible object
+representation, because the extension's compiled code indexes those fields
+directly. `nm` cannot see that, which is why the symbol count reads tractable.
+
+So "mimic vs build" is not two sizes of the same job. Mimicking PIL is a
+library-surface task over a decoder we already own. Building Pillow is the
+CPython C-ABI project wearing a library's name, and it is recursive in the exact
+sense the owner guessed.
+
+**numpy is the same shape at four times the surface**, and it has an extra
+property worth knowing before anyone scopes it: numpy publishes a C-ABI that
+OTHER packages compile against, handed out as a function-pointer table through a
+capsule rather than as dynamic symbols. My `nm --defined-only` probe for
+`PyArray_*` returned 0 for exactly that reason — **that 0 is an instrument
+artefact and must not be quoted as "numpy exports no C-ABI"**. Consequence:
+mimicking numpy's PYTHON surface is bounded, while building numpy unlocks
+nothing for the ecosystem unless that table is provided too.
+
+**Recommendation, unchanged by the owner's preference and now with a reason:**
+mimic the surface. His preferred route is not more expensive by a factor — it is
+a different project, and its first deliverable is CPython.
