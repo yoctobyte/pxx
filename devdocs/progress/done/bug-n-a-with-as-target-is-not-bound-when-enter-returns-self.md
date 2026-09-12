@@ -170,4 +170,4 @@ search from "what does the `with` parser do" to "what consumed `as` before it ra
 which is where the bug was.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b98bedade.
