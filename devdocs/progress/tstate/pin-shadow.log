@@ -740,3 +740,4 @@
 2026-09-12T12:48:39Z	borg	a44fa09dbf08f45062a8a60a66c07b87b1281958	would NOT pin a44fa09dbf08 — 7 red(s) the current pin does not have: demos#00, lib-test#src:tools/crtl_reachability.py, optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12
 2026-09-12T15:04:59Z	borg	f7e55ea72da21b5a1e52a660f24f46ebd126418f	would NOT pin f7e55ea72da2 — 7 red(s) the current pin does not have: demos#00, lib-test#src:tools/crtl_reachability.py, optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12
 2026-09-12T16:29:42Z	borg	7865c91a87565b40e794cbbbd9a6c3bb435c710c	would NOT pin 7865c91a8756 — 7 red(s) the current pin does not have: demos#00, lib-test#src:tools/crtl_reachability.py, optdiff#shard0/12, optdiff#shard10/12, optdiff#shard2/12
+2026-09-12T17:43:37Z	borg	9186a7d58def0f3706f377b908bea3b39bec2383	would-pin PENDING 9186a7d58def — qualifies, streak 1/2
