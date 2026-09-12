@@ -1432,3 +1432,47 @@ fix the doc, not the loop.
   into `ir_codegen.inc` while the ranker went on offering that file to every idle
   Track A agent — correctly, by its own rules
   (`decided/decide-the-ticket-lock-is-too-heavy-for-a-per-minute-commit-loop`).
+
+
+## "Was pin vN green?" is three different questions, and the grades are not where you would look (2026-09-12)
+
+Measured across all 55 pin commits in v354..v408 after I over-claimed "the first
+full green pin since v354" from CLAUDE.md's own sentence rather than from the
+record. Two seats nearly misreported this in opposite directions in one evening.
+
+**The grades are in the pin COMMIT BODIES, not in
+`stable_linux_amd64/default/history.log`** — that file carries timestamp,
+version, sha, commit and subject, and has no grade column at all.
+
+**The vocabulary is era-dependent, so a flat comparison across eras is apples to
+oranges:**
+
+- **v354-v381** — most bodies record NO grade. v354's records the fixedpoint
+  only: "Fixedpoint byte-identical (cmp clean, 7417032B / 2900 procs, default -O
+  level)". No tier, no verdict.
+- **v382-v398** — graded on `gate.sh quick`, which is not a full tier.
+- **v399-v401** — graded on `make stabilize-fast` alone: the fixedpoint, not a
+  tier.
+- **v402-v406** — the `reds(N)` vocabulary, from `gate.sh quick`.
+- **v407** — explicitly "quick GREEN, full tier NOT RUN at this tree".
+- **v408** — "GRADE, recorded AT PIN TIME: green", a full tier actually run:
+  4645/4645, 47 skip, 910s.
+
+**What the record supports: v408 is the first pin in this range whose body
+records a full tier run with zero reds.** That is a claim about what the pin
+bodies CONTAIN, and it is the strongest one available from them.
+
+**What the record does NOT support, in either direction.** CLAUDE.md says twice
+that "v354 was the last green one". The pin body cannot corroborate that — it
+records only a fixedpoint — but **silence is not refutation**, and I nearly
+edited the rules file on that reasoning. The era's verdicts live in the tstate
+archive, not in pins, and that window (08-18..08-21) carries **143 GREEN tstate
+subject rows against 103 RED**, so a green tstate verdict at v354's tree is
+entirely plausible. The CLAUDE.md sentence stands; what is wrong is treating a
+pin body as the instrument that would settle it.
+
+The transferable part: **when a record is SILENT about a property, establish
+which instrument was recording that property in that era before reading the
+silence as a negative.** A grading vocabulary that post-dates the rows you are
+grading makes every earlier row look ungraded, and it is the vocabulary that
+changed, not the trees.
