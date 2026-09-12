@@ -706,6 +706,20 @@ way", "anywhere else", "no X escapes", "always", "cannot", that clause is the
 one to go measure**, and a conclusion handed to you already carrying one is not
 a measurement you may build a rule on: **ask which population it was drawn
 from before you quote it, especially when it arrives labelled as a finding.**
+**AND THE ONE SPELLING NO RE-READ CAN CATCH IS A CONCLUSION WRITTEN AS A
+CAPTION — it puts the claim UPSTREAM of the data.** Everything above assumes you
+read an output and then over-claim from it; here the sentence is already
+committed before the output exists, so the output arrives into text that says
+what it means and re-reading has nothing to check it against. It wears the shape
+of labelling your own probe, which is good practice, and that is the camouflage.
+Measured twice on 2026-09-12, one seat, two unrelated subjects: `echo "(end —
+blank above means no pin before v408 recorded a grade)"` (nine of twenty-five
+recorded one) and `echo "(0 means refcounting is inlined)"` (it was 1, via
+`_Py_Dealloc`). A THIRD instance the same evening was another seat reading a
+silence as a refutation — the same rule missing from the other end, and the rule
+was present, correct and twice-stated while none of the three fired. **So label
+a probe with the QUESTION, never with the answer**: `echo "how many pins record
+a grade:"`, not `echo "(no pin records a grade)"`.
 
 **"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET, AND IT IS HOW REAL
 BUGS GET RANKED AS REFACTORS.** Measured 2026-09-02, twice in one hour by one

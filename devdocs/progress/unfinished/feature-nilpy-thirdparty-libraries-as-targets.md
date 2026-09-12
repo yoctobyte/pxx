@@ -1075,3 +1075,61 @@ in this checkout** — so the next holder fetches the three corpora first. No
 architecture is in the way; the next step is an instrument run and a re-rank.
 
 Nothing applied. Measured at `7b73a385d`.
+
+## THE OWNER'S STRATEGY FOR CLASS 3, IN HIS OWN WORDS (2026-09-12)
+
+The table above gives class 3 as *"the wall. Either mimic the module's SURFACE in
+`lib/` ... or do without"*. The owner sharpened both halves, and the second one
+was wrong rather than merely terse:
+
+> *"actually compiling cpython's libraries is not trivial. it's likely a long
+> term goal. however, mimicing the most trivial use cases and extending that when
+> we encounter them is trivial. since, most for most libraries, we only use like
+> 1%"*
+
+Two corrections to this ticket:
+
+**1. "Or do without" should be "or DEFER".** Building a C-API extension for real
+is a stated long-term goal, not a rejected option. That is `rainy-day/`
+semantics — real, intended, deferred — and not `rejected/`. Do not file a
+build-it-for-real ticket as rejected, and do not rank a class-3 library as
+impossible.
+
+**2. MIMIC THE 1%, NOT THE LIBRARY — AND EXTEND ON DEMAND.** This is the
+operative instruction and it reverses the natural instinct, which is to survey a
+library's API and implement it. Don't. Implement what a real program's call
+sites actually reach, let the next program's failure name the next member, and
+let the surface grow by encounter. It is the umbrella rule — attempt the target,
+let failures name the tickets — applied inside a single library.
+
+The worked example is beside this ticket:
+[[feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder]]
+measures **thirteen** PIL members reached across the whole corpus, against a
+library whose `Image` module alone documents well over a hundred. And the
+decoding behind them already exists in `lib/rtl/png.pas`.
+
+**The corollary for scoping a ticket: a member list measured from CALL SITES is
+the deliverable; a member list copied from the library's documentation is scope
+invented out of nothing.** The second is how a cheap surface becomes a port.
+
+## AND WHY "CHEATING" IS THE SANCTIONED ROUTE, WHICH IS PROJECT HISTORY AND NOT A PREFERENCE
+
+> *"the whole original goal was to just program an ESP32 using a python like
+> language... just our compiler drifted. hence, we allow ourselves to cheat.
+> since re-implementing certain features is relative cheap. and it's even weirder
+> - we implement in pascal (!) typically. avoiding most python 'hacks'."*
+
+Worth recording because it is unrecoverable from the code, and because a seat
+that does not know it reads every shim as a compromise. pxx began as a way to
+program an **ESP32** in a Python-like language; general-purpose compilation is
+where it drifted to, not what it was for. So the licence to re-implement rather
+than port is not laziness about CPython compatibility — **CPython parity was
+never the target**, in the same way FPC's implementation is not the target while
+its dialect is.
+
+And the last clause is the part that makes it pay: **we implement Python
+libraries in PASCAL**, which skips Python's own implementation hacks rather than
+reproducing them. A `lib/rtl` unit has no `__slots__`, no descriptor protocol, no
+C-API refcount dance — it has the 1% of behaviour the call sites need, written
+directly. That is why the mimic route is cheap here and would not be cheap in a
+project whose shims were written in Python.
