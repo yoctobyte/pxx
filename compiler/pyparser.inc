@@ -17458,6 +17458,25 @@ begin
   if (al <> '') and (FindUMeth(ci, al) >= 0) then Result := al;
 end;
 
+{ `Class.method` for a diagnostic, or the bare method when the owning class is
+  not known.
+
+  The arity messages below printed the METHOD NAME ALONE, and that is why four
+  separate reductions of a wrong-overload-set bug all missed:
+  `pop() takes exactly 0 argument(s), got 2` is consistent with a dozen different
+  wrong receivers and distinguishes none of them -- TPyList.pop's zero-argument
+  overload and TPyDeque.pop produce the identical sentence, and the one class that
+  DOES take `pop(k, d)`, TPyDict, is the one the program actually wrote. Naming
+  the receiver turns that into a one-line answer.
+  bug-n-a-dict-field-resolves-pop-against-a-list-or-deque-overload-set }
+function PyMethDiagName(ci: Integer; const mname: AnsiString): AnsiString;
+begin
+  if ci >= 0 then
+    Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) + '.' + mname
+  else
+    Result := mname;
+end;
+
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs, kwCap: Integer;
     anyKw: Boolean;
@@ -17657,10 +17676,11 @@ begin
     while (minArgs > 0) and (minArgs < MAX_PROC_PARAMS) and
           ProcParamHasDefault[mpi * MAX_PROC_PARAMS + minArgs] do Dec(minArgs);
     if minArgs = Procs[mpi].ParamCount - 1 then
-      Error('Nil Python: ' + mname + '() takes exactly ' + AIntToStr(minArgs) +
-            ' argument(s), got ' + AIntToStr(n))
+      Error('Nil Python: ' + PyMethDiagName(ci, mname) + '() takes exactly ' +
+            AIntToStr(minArgs) + ' argument(s), got ' + AIntToStr(n))
     else
-      Error('Nil Python: ' + mname + '() takes ' + AIntToStr(minArgs) + ' to ' +
+      Error('Nil Python: ' + PyMethDiagName(ci, mname) + '() takes ' +
+            AIntToStr(minArgs) + ' to ' +
             AIntToStr(Procs[mpi].ParamCount - 1) + ' arguments, got ' + AIntToStr(n));
   end;
   k := n + 1;
@@ -18881,10 +18901,11 @@ begin
     while (k > 0) and (k < MAX_PROC_PARAMS) and
           ProcParamHasDefault[mpi * MAX_PROC_PARAMS + k] do Dec(k);
     if k = Procs[mpi].ParamCount - 1 then
-      Error('Nil Python: ' + mname + '() takes exactly ' + AIntToStr(k) +
-            ' argument(s), got ' + AIntToStr(i))
+      Error('Nil Python: ' + PyMethDiagName(hitCi, mname) + '() takes exactly ' +
+            AIntToStr(k) + ' argument(s), got ' + AIntToStr(i))
     else
-      Error('Nil Python: ' + mname + '() takes ' + AIntToStr(k) + ' to ' +
+      Error('Nil Python: ' + PyMethDiagName(hitCi, mname) + '() takes ' +
+            AIntToStr(k) + ' to ' +
             AIntToStr(Procs[mpi].ParamCount - 1) + ' arguments, got ' + AIntToStr(i));
   end;
   { Fill the callee's remaining DEFAULTED parameters. The runtime arms below do

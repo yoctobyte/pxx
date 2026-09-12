@@ -5,7 +5,10 @@
 # first found; a KEYWORD argument could already promote a better one, but a call
 # that writes NO arguments names nothing. So `x.fetch()` took the first class —
 # whose fetch(key) REQUIRES an argument — and was refused outright:
-#   Nil Python: fetch() takes exactly 1 argument(s), got 0
+#   Nil Python: Store.fetch() takes exactly 1 argument(s), got 0
+# (the message names the RECEIVER CLASS since 2026-09-12 -- it used to print the
+#  bare `fetch()`, which is consistent with every wrong candidate and identifies
+#  none of them)
 # The receiver is dynamically typed, so the static pick is a GUESS; one that
 # cannot accept the arity written is a guess already known to be wrong.
 #

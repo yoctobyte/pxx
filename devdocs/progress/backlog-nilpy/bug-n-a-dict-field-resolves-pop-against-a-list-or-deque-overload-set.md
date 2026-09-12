@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-12
 found-by: frankuser
 owner: unassigned
-summary: "lekkerzeilen/app.py:1678 `tile.grids.pop(name, None)` is refused with `pop() takes exactly 0 argument(s), got 2`. `grids` is a dict (`self.grids = {}`, three classes in world.py) and TPyDict DOES declare `pop(k)` and `pop(k, d)` -- so the receiver was resolved against a list's or a deque's overload set instead: `takes exactly 0` can only come from TPyList.pop's zero-arg overload or TPyDeque.pop, the only two 0-argument pops in pylib. THIS IS THE CURRENT WALL ON THE lekkerzeilen CLOSURE (goal 4), newly visible after the star-follower fix moved the wall 438 lines further into app.py. FOUR REDUCTIONS FAILED to reproduce it -- see the list below, do not repeat them. The cheap next step is an INSTRUMENT, not another reduction: the arity error does not name the receiver's class, which is exactly why all four missed."
+summary: "ANSWERED 2026-09-12 BY THE INSTRUMENT, NOT BY A REDUCTION: the receiver is typed **TPyDeque**. lekkerzeilen/app.py:1678 `tile.grids.pop(name, None)` -- where `grids` is a dict (`self.grids = {}`, three classes in world.py) -- now reports `TPyDeque.pop() takes exactly 0 argument(s), got 2`, because the arity errors were taught to name the receiver class. The whole program contains ONE deque, `collections.deque()` at chart.py:230, bound to an unrelated local, so the pick has no connection to the value. MECHANISM, and it is already documented in test/test_nilpy_variant_method_pick_by_arity.npy: the dynamic-receiver candidate scan \"keeps one entry per class declaring the name and takes the FIRST FOUND\". So this is a FIRST-WINS SCAN and CLAUDE.md's own rule applies -- it is exposed only by the arrangement that puts the correct entry LAST. SIX REDUCTIONS FAILED and that is now EXPLAINED rather than mysterious: candidate order depends on the whole program's class registration, so a small program puts TPyDict first and compiles, and no small reduction can put TPyDeque there. THE NEXT STEP IS THE SCAN ORDER, NOT A SEVENTH REDUCTION: find what registers TPyDeque ahead of TPyDict for `pop`, and prefer a candidate whose ARITY accepts the call -- which is exactly the fix that fixture records for the zero-argument case, applied to a two-argument one. THIS IS THE CURRENT WALL ON THE lekkerzeilen CLOSURE (goal 4)."
 ---
 
 # `tile.grids.pop(name, None)` resolves against the wrong container's `pop`
@@ -82,3 +82,55 @@ It is pre-existing and was merely invisible, for two independent reasons:
 
 This is the first-failure blindness `CLAUDE.md` describes: one wall hides every
 wall behind it, so clearing one reveals rather than causes the next.
+
+## 2026-09-12, later: the instrument answered it in one run
+
+The ticket said to build the instrument rather than write a fifth reduction. Done
+— both arity errors now print `Class.method()` via `PyMethDiagName` — and the very
+first run named the culprit:
+
+```
+pascal26:1678: error: Nil Python: TPyDeque.pop() takes exactly 0 argument(s), got 2
+```
+
+**`TPyDeque`.** The program contains exactly one deque —
+`collections.deque()` at `chart.py:230`, assigned to a local called `queue` in an
+unrelated function — and `grids` is `{}` in all three classes that declare it. So
+the candidate had nothing to do with the receiver's value.
+
+## The mechanism was already written down, in a fixture
+
+`test/test_nilpy_variant_method_pick_by_arity.npy`, in its own header:
+
+> *"The candidate scan keeps one entry per class declaring the name and takes the
+> first found; a KEYWORD argument could already promote a better one, but a call
+> that writes NO arguments names nothing."*
+
+That fixture fixed the **zero-argument** case (`x.fetch()` taking the first class
+whose `fetch(key)` requires an argument). This ticket is the **two-argument**
+case of the identical scan: `pop(k, d)` took a class whose `pop` accepts none.
+The remedy the fixture already established — prefer a candidate whose arity can
+accept the call as written — covers both, and was applied in only one direction.
+
+## WHY SIX REDUCTIONS FAILED, which is the useful part
+
+Not bad luck. A first-wins scan's answer depends on **class registration order
+across the whole program**, so in any small program `TPyDict` is reached before
+`TPyDeque` and the call binds correctly. The six shapes tried — static dict,
+two-class dynamic member, tuple-unpacked receiver, empty dict literal, a
+three-class receiver, and the same with a `collections.deque()` present elsewhere
+— are all too small to move the order, and the last of those tested the deque
+hypothesis directly and disproved it.
+
+This is `CLAUDE.md`'s rule arriving exactly as written: **a first-wins table is
+exposed only by the arrangement that puts the correct entry LAST**, and the
+passing arrangements are the population everyone writes. A reduction is the wrong
+instrument for this class of bug; the scan order is the thing to read.
+
+## Next step
+
+Read the candidate scan's ordering (`hitCi`/`hitPi` selection in
+`PyParseVariantMethod`, around the `hitCi < 0` first-wins assignments) and make an
+arity-compatible candidate win over an arity-incompatible one — the two-argument
+direction of the fix that fixture already carries for zero arguments. Do NOT write
+a seventh reduction.

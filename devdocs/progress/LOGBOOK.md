@@ -3459,3 +3459,33 @@ FOUR REDUCTIONS OF IT FAILED and the ticket lists all four so nobody repeats the
 is an INSTRUMENT, not a fifth reduction -- the arity error does not name the receiver's CLASS,
 which is exactly why four shapes all looked right. Same move that cracked the p80 widening wall
 the night before, where the diagnostic had to be taught to print tyInt32 instead of 11.
+
+2026-09-12 | frankuser | compiler/pyparser.inc + test/test_nilpy_variant_method_pick_by_arity.npy |
+Both NilPy method-arity errors now name the RECEIVER CLASS (`PyMethDiagName`), and the very first
+run of the instrument answered a ticket six reductions had failed to reduce. WHY: the message
+printed the bare method name, and `pop() takes exactly 0 argument(s), got 2` is consistent with
+every wrong candidate and identifies none -- TPyList.pop's zero-argument overload and TPyDeque.pop
+emit the identical sentence, while TPyDict, the one class that actually declares `pop(k, d)`, is
+what the program wrote. With the class printed, lekkerzeilen/app.py:1678 reads
+`TPyDeque.pop() takes exactly 0 argument(s), got 2` -- so `tile.grids`, a dict in all three
+classes that declare it, is typed as a DEQUE, and the whole program holds exactly one deque
+(collections.deque() at chart.py:230, bound to an unrelated local).
+AND THE MECHANISM WAS ALREADY WRITTEN DOWN IN A FIXTURE, which is the part that should change how
+the next such ticket is worked. test/test_nilpy_variant_method_pick_by_arity.npy says in its own
+header that the dynamic-receiver candidate scan "keeps one entry per class declaring the name and
+takes the first found". That fixture fixed the ZERO-argument case of this scan; app.py:1678 is the
+TWO-argument case of the same scan, and the remedy it established -- prefer a candidate whose
+arity can accept the call as written -- was applied in one direction only.
+SO THE SIX FAILED REDUCTIONS WERE NOT BAD LUCK, THEY WERE STRUCTURAL. A first-wins scan's answer
+depends on class registration order across the WHOLE program, so any small program reaches
+TPyDict before TPyDeque and compiles correctly; no reduction small enough to write can move the
+order. That is CLAUDE.md's own rule arriving verbatim -- a first-wins table is exposed only by the
+arrangement that puts the correct entry LAST, and the passing arrangements are the population
+everyone writes. The ticket now says to read the scan order and NOT write a seventh reduction,
+which is the opposite of what it said two hours earlier.
+Also updated that fixture's header comment, which documented the OLD message text: a comment that
+disagrees with the code is one of them being wrong, and here it was the comment.
+VERIFIED: full `make test-nilpy` rc=0 GREEN; gate.sh quick, only FAIL the standing owner-only
+`pinned builds live lib/rtl`; self-host fixedpoint PASS; `make compiler/pascal26` CONVERGED.
+No fixture ASSERTS either message -- checked before changing them; the two test files that
+mention the wording do so in comments.
