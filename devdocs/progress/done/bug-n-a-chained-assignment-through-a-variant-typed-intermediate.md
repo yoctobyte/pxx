@@ -224,4 +224,4 @@ accident: `Pair.tag` sits at a later offset than `Solo.tag`, so a single placeme
 gives a wrong value for one of them and only a working dispatch prints `9 9`.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit da460243c.
