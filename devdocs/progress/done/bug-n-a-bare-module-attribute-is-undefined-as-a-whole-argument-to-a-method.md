@@ -266,4 +266,4 @@ Nothing was ungated.
   succeeds; corrected in the second pass and restated above.
 
 ## Log
-- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-12 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 003154db3.
