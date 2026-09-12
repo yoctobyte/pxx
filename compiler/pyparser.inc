@@ -28481,9 +28481,52 @@ begin
   PyMakeAttrLoad := node;
 end;
 
+{ `<base>.fld := val` — the STORE mirror of PyMakeAttrLoad above, and deliberately
+  its twin line for line: same class resolution off the base node, same
+  PyComplexFieldName mapping, same fall-through to the dynamic setter when the
+  field is not declared. Written as a mirror because the store logic already
+  existed INLINE in PyUnpackTargetStore below, against a base that could only be
+  a NAME, and that copy had drifted from the load side in two ways nobody had
+  cause to notice: it passed `fld` raw instead of through PyComplexFieldName, and
+  it left ASTRight unset, so the stored field carried no record identity. Both
+  are corrections taken by delegating, not new behaviour invented here.
+
+  Taking a NODE rather than a name is what lets a chained assignment reach
+  `self.icon.visible` — two attribute levels, where the receiver is itself an
+  attribute load. bug-n-a-chained-assignment-to-two-attributes-does-not-parse }
+function PyMakeAttrStore(baseNode: Integer; const fld: AnsiString;
+                         valNode: Integer): Integer;
+var ci, fi, lhs: Integer; rfld: AnsiString;
+begin
+  ci := -1;
+  if IntToTypeKind(ASTTk[baseNode]) = tyClass then
+  begin
+    fi := ResolveNodeRec(baseNode);
+    if fi >= REC_UCLASS_BASE then ci := fi - REC_UCLASS_BASE;
+  end;
+  rfld := PyComplexFieldName(ci, fld);
+  fi := -1;
+  if ci >= 0 then fi := FindUField(ci, rfld);
+  if fi < 0 then
+  begin
+    { NOT a declared field — Python creates the attribute on assignment, and the
+      dynamic setter already takes an arbitrary receiver node. }
+    PyMakeAttrStore := PyMakeDynAttrSet(baseNode, fld, valNode);
+    Exit;
+  end;
+  lhs := AllocNode(AN_FIELD);
+  ASTLeft[lhs] := baseNode;
+  ASTSOffset[lhs] := StoredName(rfld);
+  ASTSLen[lhs] := Length(rfld);
+  ASTTk[lhs] := UFldTk[fi];
+  PyMakeAttrStore := AllocNode(AN_ASSIGN);
+  ASTLeft[PyMakeAttrStore] := lhs;
+  ASTRight[PyMakeAttrStore] := valNode;
+end;
+
 function PyUnpackTargetStore(const nm, fld: AnsiString; valNode: Integer;
                             newTk: TTypeKind; newRec: Integer): Integer;
-var symIdx, ci, fi, lhs: Integer;
+var symIdx, lhs: Integer;
 begin
   symIdx := PyProgSym(nm);
   if fld = '' then
@@ -28515,23 +28558,10 @@ begin
     if symIdx < 0 then
       Error('Nil Python: ' + nm + ' is not defined, so ' + nm + '.' + fld
             + ' cannot be assigned');
-    ci := -1;
-    if (Syms[symIdx].TypeKind = tyClass) and (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
-      ci := Syms[symIdx].RecName - REC_UCLASS_BASE;
-    fi := -1;
-    if ci >= 0 then fi := FindUField(ci, fld);
-    if fi < 0 then
-    begin
-      { NOT a declared field — Python creates the attribute on assignment, and
-        the ordinary `obj.name = v` path already stores it dynamically }
-      PyUnpackTargetStore := PyMakeDynAttrSet(PyMakeIdent(symIdx), fld, valNode);
-      Exit;
-    end;
-    lhs := AllocNode(AN_FIELD);
-    ASTLeft[lhs] := PyMakeIdent(symIdx);
-    ASTSOffset[lhs] := StoredName(fld);
-    ASTSLen[lhs] := Length(fld);
-    ASTTk[lhs] := UFldTk[fi];
+    { ONE store builder — see PyMakeAttrStore above for what this inline copy had
+      drifted away from. }
+    PyUnpackTargetStore := PyMakeAttrStore(PyMakeIdent(symIdx), fld, valNode);
+    Exit;
   end;
   PyUnpackTargetStore := AllocNode(AN_ASSIGN);
   ASTLeft[PyUnpackTargetStore] := lhs;
@@ -29165,8 +29195,12 @@ begin
   Result := -1;
   if (i >= TokCount) or (Tokens[i].Kind <> tkIdent) then Exit;
   Inc(i);
-  if (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
-     (Tokens[i + 1].Kind = tkIdent) then Inc(i, 2);
+  { EVERY attribute level, not one. `self.icon.visible` is the shape that pinned
+    this: with a single level admitted, a two-level target fell through to the
+    nested right-associative reading described at PyParseChainAssign, which is a
+    second implementation of the same concept. }
+  while (i + 1 < TokCount) and (Tokens[i].Kind = tkDot) and
+        (Tokens[i + 1].Kind = tkIdent) do Inc(i, 2);
   Result := PySkipTargetSubscripts(i);
 end;
 
@@ -29239,7 +29273,8 @@ end;
   the nested reading and still stores right to left. }
 function PyParseChainAssign(nTgts: Integer): Integer;
 var names: array[0..7] of AnsiString;
-    flds: array[0..7] of AnsiString;      { attribute target, or '' for a name }
+    flds: array[0..7] of AnsiString;      { LAST attribute level, or '' for a name }
+    recvs: array[0..7] of Integer;        { receiver node when flds[] is not the FIRST level; else -1 }
     subBase: array[0..7] of Integer;      { -1 unless the target ends in [...] }
     subIdx: array[0..7] of Integer;
     i, symIdx, node, seq, chainTmp, tgtBase: Integer;
@@ -29248,13 +29283,31 @@ begin
   begin
     names[i] := CurTok.SVal;
     flds[i] := '';
+    recvs[i] := -1;
     subBase[i] := -1;
     subIdx[i] := -1;
     Next;
-    if (CurTok.Kind = tkDot) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkIdent) then
+    { flds[i] holds the LAST level; recvs[i] is the receiver for it, and stays -1
+      while there is only one, so a one-level target takes exactly the path it
+      took before this. Each further `.name` pushes the level we were holding
+      down into the receiver as a LOAD — which is what `a.b.c = v` means. }
+    while (CurTok.Kind = tkDot) and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkIdent) do
     begin
       Next;
+      if flds[i] <> '' then
+      begin
+        if recvs[i] < 0 then
+        begin
+          symIdx := PyProgSym(names[i]);
+          if symIdx < 0 then
+            Error('Nil Python: ' + names[i] + ' is not defined, so '
+                  + names[i] + '.' + flds[i] + '.' + CurTok.SVal
+                  + ' cannot be assigned');
+          recvs[i] := PyMakeIdent(symIdx);
+        end;
+        recvs[i] := PyMakeAttrLoad(recvs[i], flds[i]);
+      end;
       flds[i] := CurTok.SVal;
       Next;
     end;
@@ -29267,7 +29320,8 @@ begin
       if symIdx < 0 then
         Error('Nil Python: ' + names[i] + ' is not defined, so ' + names[i]
               + '[...] cannot be assigned');
-      tgtBase := PyMakeIdent(symIdx);
+      if recvs[i] >= 0 then tgtBase := recvs[i]
+      else tgtBase := PyMakeIdent(symIdx);
       if flds[i] <> '' then tgtBase := PyMakeAttrLoad(tgtBase, flds[i]);
       while CurTok.Kind = tkLBrack do
       begin
@@ -29295,6 +29349,27 @@ begin
   begin
     if subIdx[i] >= 0 then
       node := PyMakeSubscriptStore(subBase[i], subIdx[i], PyMakeIdent(chainTmp))
+    else if recvs[i] >= 0 then
+    begin
+      { REFUSE a receiver that did not resolve to a class, rather than store
+        through the dynamic setter. Measured 2026-09-12: for `self.nest.inner`
+        where `inner` is DECLARED as None and later holds an object, the fold
+        yields a non-class receiver, the dynamic set lands somewhere the declared
+        read does not look, and the statement stores NOTHING while compiling
+        clean — a plausible wrong value with no diagnostic, which is the one
+        outcome worth refusing over. The SINGLE-statement spelling of the same
+        store is correct today (`self.nest.inner.visible = 33` works), so the
+        remedy in the message is real and is what the diagnostic names.
+        Statically typed receivers — app.py:3204's own shape — take the arm above
+        and are unaffected; before this widening a two-level target did not parse
+        at all, so nothing that worked is refused here.
+        bug-n-a-chained-assignment-through-a-variant-typed-intermediate }
+      if IntToTypeKind(ASTTk[recvs[i]]) <> tyClass then
+        Error('Nil Python: in a chained assignment, the receiver of `'
+              + flds[i] + '` has no static class here, so the store cannot be '
+              + 'placed — split the chain into separate assignments');
+      node := PyMakeAttrStore(recvs[i], flds[i], PyMakeIdent(chainTmp));
+    end
     else if flds[i] <> '' then
       node := PyUnpackTargetStore(names[i], flds[i], PyMakeIdent(chainTmp),
                                   Syms[chainTmp].TypeKind, Syms[chainTmp].RecName)

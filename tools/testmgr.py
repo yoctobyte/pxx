@@ -6243,6 +6243,20 @@ class _RejectRepeat(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
+def run_heartbeat_age(repo):
+    """Seconds since that repo's run.lock last beat, or None if it never has.
+
+    ONE home for the question, because --status and --kill-orphans both ask it
+    and for a while only one of them did -- see the note in the --status block.
+    """
+    try:
+        with open(os.path.join(repo, ".testmgr", "run.lock")) as f:
+            beat = json.load(f).get("heartbeat", 0)
+    except (OSError, ValueError):
+        return None
+    return (time.time() - beat) if beat else None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tier", choices=sorted(TIERS))
@@ -6348,13 +6362,48 @@ def main():
         if runs:
             print("\ntestmgr: %d run(s) on this box — NOT visible in pstree "
                   "(systemd-scoped, reparented to pid 1):" % len(runs))
+            # Say PER RUN whether it is beating, and only then talk about
+            # orphans. Until 2026-09-12 the orphan paragraph below was printed
+            # UNCONDITIONALLY for every scoped run, so a live tier with a
+            # 10-second-old heartbeat was described as "an orphan ... holds
+            # memory" with a kill command attached. Reported by the Track T seat
+            # on borg, which read it, did not believe it, and waited the run out
+            # -- anyone who believed it would have killed the Track T watcher
+            # mid-tier. The orphan TEST already existed directly below in
+            # --kill-orphans, whose own comment says "Detached is NOT orphaned --
+            # EVERY scoped run is detached by design"; --status simply never
+            # asked it. Asking the same question in both places is the fix, not a
+            # softer wording: a diagnostic that asserts a condition it has not
+            # checked, and attaches a DESTRUCTIVE remedy, is the hazard-block
+            # failure mode -- obeying it produces no signal that it was wrong.
+            stale = 0
             for pid, repo, tier, age in runs:
                 mine = " <- this repo" if repo == REPO else ""
-                print("  pid %-8d %-32s tier %-10s up %dm%02ds%s"
-                      % (pid, repo, tier, int(age) // 60, int(age) % 60, mine))
-            print("\n  An orphan (its agent/shell is gone) keeps running to its "
-                  "deadline and holds memory,\n  which starves every new run's "
-                  "admission. Reap with: tools/testmgr.py --kill-orphans")
+                beat = run_heartbeat_age(repo)
+                if beat is None:
+                    why = "  NO heartbeat (old testmgr, or dead)"
+                    stale += 1
+                elif beat >= HEARTBEAT_STALE:
+                    why = "  heartbeat %dm STALE" % (int(beat) // 60)
+                    stale += 1
+                else:
+                    why = "  heartbeat %ds ago — it IS working" % int(beat)
+                print("  pid %-8d %-32s tier %-10s up %dm%02ds%s%s"
+                      % (pid, repo, tier, int(age) // 60, int(age) % 60, mine,
+                         why))
+            if stale:
+                print("\n  %d of the above %s not beating. An orphan (its agent/"
+                      "shell is gone) keeps\n  running to its deadline and holds "
+                      "memory, which starves every new run's\n  admission. Reap "
+                      "with: tools/testmgr.py --kill-orphans (it re-checks each "
+                      "one\n  and keeps anything that is beating or under "
+                      "--older-than)."
+                      % (stale, "is" if stale == 1 else "are"))
+            else:
+                print("\n  All of the above are BEATING, i.e. working. A scoped "
+                      "run is DETACHED BY\n  DESIGN — detached is not orphaned. "
+                      "Nothing to reap; do NOT run --kill-orphans\n  expecting it "
+                      "to find something here.")
         if args.kill_orphans:
             # "Detached" is NOT "orphaned" -- EVERY scoped run is detached by
             # design, including the twatch daemon's and other agents' live runs.
@@ -6367,13 +6416,8 @@ def main():
             for pid, repo, tier, age in runs:
                 if pid == os.getpid():
                     continue
-                beat = 0.0
-                try:
-                    with open(os.path.join(repo, ".testmgr", "run.lock")) as f:
-                        beat = json.load(f).get("heartbeat", 0)
-                except (OSError, ValueError):
-                    pass
-                alive = (time.time() - beat) < HEARTBEAT_STALE if beat else False
+                beat = run_heartbeat_age(repo)
+                alive = beat is not None and beat < HEARTBEAT_STALE
                 if alive:
                     print("  keep  pid %-8d %s — heartbeat fresh, it IS working"
                           % (pid, repo))

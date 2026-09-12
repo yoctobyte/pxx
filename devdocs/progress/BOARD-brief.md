@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:130 backlog-tools:60 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3711 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:132 backlog-tools:60 backlog-pascal:9 backlog-decide:44 backlog-libs:27 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3711 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 477, ranked
+## Ready — top 30 of 479, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
@@ -93,6 +93,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-a-class-reached-through-a-unit-alias-is-not-a-value
 - `[p 80] [N]` bug-n-a-from-imported-class-loses-its-methods-unless-it-is-renamed
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
+- `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - `[p 70] [N]` feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
-- `[p 70] [B]` regression-lib-test-crtl-reachability-9
 
-_447 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_449 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

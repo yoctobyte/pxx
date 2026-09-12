@@ -1,0 +1,89 @@
+# `a.b.c = d.e.f = v` — a CHAINED assignment whose targets are NESTED attributes.
+#
+# PyParseChainAssign admitted NAME and NAME.field (one level). A two-level target
+# fell through to the nested right-associative reading `X = (Y = v)` — a second
+# implementation of the same concept — which is why this reported
+# `expected newline after statement` at the second `=` rather than naming a gap.
+#
+# lekkerzeilen/app.py:3204 is `self.icon.visible = self.menu.visible = False`, and
+# it was the closure wall; clearing it moved 3215 -> 3305.
+#
+# EVERY RECEIVER HERE IS `self`, DELIBERATELY, and not because that is the
+# interesting arrangement — it is the only one that is correct today. A receiver
+# that is a PARAMETER silently stores NOTHING through this path, on the pinned
+# compiler too, so it is pre-existing and filed separately as
+# bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing.
+# Do not "fix" a red here by switching a row to a parameter; that is the open bug.
+
+class W:
+    def __init__(self, v=True):
+        self.visible = v
+
+class N:
+    # `inner` is a W FROM THE START, deliberately. Declared as None and only
+    # later holding an object, its static type is not a class, the receiver fold
+    # cannot place the store, and the chain is now REFUSED by name rather than
+    # silently storing nothing — measured 2026-09-12, and filed as
+    # bug-n-a-chained-assignment-through-a-variant-typed-intermediate. The
+    # single-statement spelling of that store is correct today, which is the
+    # remedy the diagnostic names.
+    def __init__(self):
+        self.inner = W()
+
+class A:
+    def __init__(self):
+        self.icon = W()
+        self.menu = W()
+        self.s = 0
+        self.t = 0
+        self.d = {}
+        self.nest = N()
+
+    # TWONESTED -- app.py:3204's own shape, and the row the parse error was on.
+    def two_nested(self):
+        self.icon.visible = self.menu.visible = False
+
+    # MIXEDA / MIXEDB -- one level and two levels in one chain, BOTH ORDERS.
+    # Both are here because the store arm is selected per target: a fix that
+    # handled only the deeper target would pass whichever order put it first.
+    def mixed_a(self):
+        self.s = self.icon.visible = 11
+
+    def mixed_b(self):
+        self.menu.visible = self.t = 22
+
+    # THREE levels, so the receiver fold is exercised more than once.
+    def three(self):
+        self.nest.inner.visible = self.icon.visible = 33
+
+    # ONELEVEL -- the shape that already worked. Kept so that a widening which
+    # breaks it reds visibly instead of passing.
+    def one_level(self):
+        self.s = self.t = 44
+
+    # SUBS -- a subscript target beside a nested attribute one. The subscript
+    # base is built during the target walk, so it has to start from the folded
+    # receiver rather than from the bare name.
+    def subs(self):
+        self.d["k"] = self.icon.visible = 55
+
+    # ONCE -- Python binds every target to ONE evaluation of the RHS. This is the
+    # property that forbids desugaring to `b = f(); a = f()`, and no value
+    # assertion on the targets alone can see it, so the call is counted.
+    def once(self, f):
+        self.icon.visible = self.menu.visible = f()
+
+o = A()
+o.two_nested(); print(o.icon.visible, o.menu.visible)
+o.mixed_a();    print(o.s, o.icon.visible)
+o.mixed_b();    print(o.menu.visible, o.t)
+o.three();      print(o.nest.inner.visible, o.icon.visible)
+o.one_level();  print(o.s, o.t)
+o.subs();       print(o.d["k"], o.icon.visible)
+
+calls = []
+def f():
+    calls.append(1)
+    return 7
+
+o.once(f);      print(o.icon.visible, o.menu.visible, len(calls))

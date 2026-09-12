@@ -1514,6 +1514,19 @@ test-nilpy: $(COMPILER)
 #	is in the compiler and the pin predates it.
 	./$(COMPILER) -Futest test/test_nilpy_module_attr_method_arg.npy $(TESTTMP)/test_nilpy_modattr
 	$(TESTTMP)/test_nilpy_modattr | diff -u test/test_nilpy_module_attr_method_arg.expected -
+#	`a.b.c = d.e.f = v` — a CHAINED assignment to NESTED attribute targets, which
+#	PyParseChainAssign admitted only one level deep. A two-level target fell
+#	through to the nested right-associative reading and reported `expected newline
+#	after statement` at the second `=`. lekkerzeilen/app.py:3204 is exactly that
+#	shape and was the closure wall. MIXEDA and MIXEDB are both present because the
+#	store arm is chosen PER TARGET, so a fix handling only the deeper one passes
+#	whichever order puts it first; ONELEVEL is the shape that already worked, kept
+#	so a widening that breaks it reds; ONCE counts the RHS calls, which is the one
+#	property no value assertion on the targets can see. Every receiver is `self`
+#	because a PARAMETER receiver silently stores nothing through this path on the
+#	PIN as well — pre-existing, filed, and not to be "fixed" by editing a row here.
+	./$(COMPILER) test/test_nilpy_chained_assign_nested_attr.npy $(TESTTMP)/test_nilpy_chainattr
+	$(TESTTMP)/test_nilpy_chainattr | diff -u test/test_nilpy_chained_assign_nested_attr.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90

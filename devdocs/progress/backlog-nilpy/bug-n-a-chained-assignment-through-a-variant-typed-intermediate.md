@@ -1,0 +1,56 @@
+---
+track: N
+prio: 40
+type: bug
+blocked-by: []
+summary: "`self.nest.inner.visible = <other> = v`, where `inner` is DECLARED as None and only later holds an object, cannot place its store: the receiver fold yields a non-class node and the dynamic setter writes somewhere the declared read does not look. REFUSED BY NAME as of 2026-09-12 rather than silently storing nothing — the diagnostic says to split the chain, and that remedy is real because THE SINGLE-STATEMENT SPELLING IS CORRECT TODAY (`self.nest.inner.visible = 33` works, measured). So this is a gap in the CHAIN path only, and only for a receiver with no static class; statically typed intermediates of any depth work, including app.py:3204's own shape. Nothing that previously compiled is refused — before the nested-target widening a two-level target did not parse at all. The fix is to build the receiver the way the single-statement path does; that path resolves the same source correctly, so the difference between the two is the whole bug."
+---
+
+# A chained assignment through a variant-typed intermediate is refused
+
+Residual of the nested-attribute chain widening landed 2026-09-12. Recorded as a
+REFUSAL, not a miscompile, which is the only reason it is prio 40 and not 80.
+
+## What happens
+
+```python
+class W:
+    def __init__(self):
+        self.visible = True
+        self.inner = None          # <- declared None, so no static class
+
+class A:
+    def __init__(self):
+        self.nest = W()
+        self.nest.inner = W()      # ...but it holds a W at run time
+
+    def go(self):
+        self.nest.inner.visible = self.icon.visible = 33
+```
+
+```
+error: Nil Python: in a chained assignment, the receiver of `visible` has no
+static class here, so the store cannot be placed — split the chain into
+separate assignments
+```
+
+Before the refusal was added this compiled clean and **stored nothing** into
+`self.nest.inner.visible`, which is why the refusal is there: a plausible wrong
+value with no diagnostic is the one outcome worth refusing over.
+
+## What works, so the boundary is clear
+
+- `self.nest.inner.visible = 33` as a SINGLE statement — **correct**, verified.
+- A chain through a statically typed intermediate, at any depth — **correct**,
+  verified to three levels.
+- `self.icon.visible = self.menu.visible = False` (app.py:3204) — **correct**;
+  that receiver is a constructed class.
+
+## The fix
+
+`PyParseChainAssign` folds intermediate levels with `PyMakeAttrLoad`, which
+resolves a class off the base node and otherwise yields a dynamic get. The
+statement path reaches the same store correctly, so copy its receiver
+construction rather than inventing one here — and when it is fixed, move the
+THREE row of `test/test_nilpy_chained_assign_nested_attr.npy` back to a
+`None`-declared intermediate, which is the arrangement that fails.
