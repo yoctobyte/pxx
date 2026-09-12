@@ -29,6 +29,31 @@ unit ecdsa_p256;
   an argument to another call (bug-managed-record-result-self-arg) — every
   intermediate is bound to a temp here. }
 
+{ WHAT THESE TESTS DO AND DO NOT ASSERT -- recorded 2026-09-12 because it was
+  nowhere, and because a value test CANNOT observe the defect class that matters
+  most here.
+
+  ASSERTED: correctness against the spec's own published test vectors
+  (test/lib_ecdsa_p256.pas). That is a real oracle and it is why implementing a
+  documented algorithm from a public spec is the cheap, bounded job it has
+  repeatedly been in this tree.
+
+  NOT ASSERTED: side-channel resistance. Constant-time behaviour, cache-timing
+  and power analysis are not claimed, not measured and not tested. This is the
+  exact shape CLAUDE.md warns about under "match the assertion class to the
+  defect class": a timing leak produces CORRECT VALUES, so every vector in the
+  suite passes while the property is absent. It is the leak example with a
+  cryptographic consequence instead of a missing free.
+
+  WHY THAT IS CURRENTLY FINE: tls.pas makes the OpenSSL backend "the safe
+  default" and tls13_native does not self-register -- a caller opts in with
+  Tls13NativeRegister. So this code is reachable only deliberately.
+
+  WHAT WOULD MAKE IT NOT FINE: promoting the native stack to the default, or
+  using these units to terminate TLS for anyone but ourselves. Do not do either
+  on the strength of a green vector suite.
+  See bug-b-the-from-scratch-crypto-has-no-side-channel-claim-and-the-vectors-cannot-find-one. }
+
 interface
 
 { True iff (r||s) is a valid P-256/SHA-256 signature of `msg` under the public

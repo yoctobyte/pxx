@@ -89,7 +89,10 @@ begin
   for i := 0 to 18 do expected := expected + Chr(DI[i]);
   expected := expected + digest;
 
-  { constant-time-ish compare }
+  { A LENGTH-INDEPENDENT compare, which is NOT the same as constant-time, and the
+    old "-ish" in this comment was doing a lot of work. Side-channel resistance is
+    not claimed anywhere in this unit -- see the note in aesgcm.pas and
+    bug-b-the-from-scratch-crypto-has-no-side-channel-claim-and-the-vectors-cannot-find-one. }
   if Length(em) <> Length(expected) then Exit;
   diff := 0;
   for i := 1 to Length(em) do diff := diff or (Ord(em[i]) xor Ord(expected[i]));
