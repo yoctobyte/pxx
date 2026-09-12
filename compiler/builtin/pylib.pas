@@ -14606,6 +14606,32 @@ begin
   end;
   if (b = 0.0) and (e < 0.0) then
     raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  { A ZERO BASE NEVER REACHES THE LOGARITHM. pypow_v has had these two rows
+    since it was written (`fbase = 0.0` with a positive exponent answers 0.0,
+    and Frac(0)=0 sends a zero exponent down its integer branch to 1.0); this
+    function was written from it and copied the REFUSAL above without them, so
+    one question had two answers and the second one was missing a case —
+    `normalise-dont-special-case.md`'s second path, and it stayed broken.
+
+    The cost was not a wrong digit: with no hook installed the line below is
+    `PyMathExp(e * PyMathLn(b))`, and `PyMathLn(0.0)` RAISES
+    `ValueError: math domain error`. CPython answers 0.0. Measured 2026-09-12 as
+    the reason lekkerzeilen compiles and does not run: `lines.py`'s hull tables
+    are module-level, `station(0.0)` computes `math.sin(0.0) ** fine`, and the
+    first station of the first hull killed the program before `--help` printed.
+
+    WHY THE HOOK WAS NOT INSTALLED is a separate, still-open pair of defects --
+    `pyWantsPow` is scanned before PyParseImportRun, so an imported module's
+    `**` never installs it, and an imported .py becomes a UNIT whose
+    initialisation section runs BEFORE the main body where the assignment sits,
+    so import-time `**` could not see it even when installed. Both are filed.
+    This row is correct independently of them: a fallback that raises where
+    CPython returns a value is wrong whether or not the fast path was reachable. }
+  if b = 0.0 then
+  begin
+    if e > 0.0 then Result := 0.0 else Result := 1.0;
+    Exit;
+  end;
   { Same accuracy as the static route: the RTL's Power through the hook the
     frontend installs whenever it sees `**` at all. }
   if PyPowHook <> nil then

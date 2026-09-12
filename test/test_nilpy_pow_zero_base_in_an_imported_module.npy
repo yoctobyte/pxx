@@ -1,0 +1,41 @@
+# `0.0 ** <fractional>` in an IMPORTED module raised
+# `ValueError: math domain error` where CPython answers 0.0.
+#
+# Why the import matters, and why this fixture would pass without it: a `**`
+# anywhere in the MAIN module makes the frontend install PyPowHook, and then
+# `**` is computed by the RTL's Power, which is correct about zero. An imported
+# module gets neither — the `pyWantsPow` scan runs before the import pass, and a
+# unit's initialisation section runs before the main body that holds the
+# assignment — so its `**` falls through to pypow_cx's own arithmetic,
+# exp(e * ln(b)), and ln(0.0) raises. pypow_v had the zero rows; pypow_cx was
+# written from it and copied only the negative-exponent refusal.
+#
+# So this file deliberately contains NO `**` of its own. Adding one anywhere here
+# installs the hook and silently retires the four post-start m.zpow() rows — they
+# would be answered by the RTL's Power and pass on an unfixed compiler. It would
+# NOT rescue the import-time rows: measured 2026-09-12, a `**` in main leaves
+# them raising, because the imported unit's initialisation runs before the main
+# body that holds the assignment. That asymmetry is the second defect, and it is
+# the reason the rule is "no `**` here" rather than "one `**` is harmless".
+# Oracle: CPython 3.13. It reported the lekkerzeilen closure's last wall.
+import nilpy_pow0_mod as m
+
+print(m.AT_IMPORT)
+print(m.AT_IMPORT_CALL)
+print(m.AT_IMPORT_SIN)
+print(m.AT_IMPORT_E0)
+print(m.AT_IMPORT_NZ_OK)
+
+# the same function, now called after the program has started — still hookless,
+# because nothing in this program ever installed one
+print(m.zpow(0.0, 0.5))
+print(m.zpow(0.0, 3.0))
+print(m.zpow(0.0, 0.0))
+print(abs(m.zpow(2.0, 0.5) - 1.4142135623730951) < 1e-12)
+
+# the refusal ABOVE the new rows must survive them: a negative exponent on a
+# zero base is ZeroDivisionError in CPython, not 0.0 and not inf
+try:
+    print(m.zpow(0.0, -1.0))
+except ZeroDivisionError:
+    print("ZeroDivisionError")

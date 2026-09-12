@@ -2434,6 +2434,25 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_docabsent26 | diff -u test/test_nilpy_module_docstring_absent.expected -
 	./$(COMPILER) test/test_nilpy_module_docstring_dedent_columns.npy $(TESTTMP)/test_nilpy_doccols26
 	$(TESTTMP)/test_nilpy_doccols26 | diff -u test/test_nilpy_module_docstring_dedent_columns.expected -
+	# `0.0 ** <fractional>` in an IMPORTED module raised `ValueError: math domain
+	# error` where CPython answers 0.0 — the runtime fault that made lekkerzeilen
+	# compile and not run. pypow_v had the zero-base rows; pypow_cx was written
+	# from it and copied only the negative-exponent refusal, so with no PyPowHook
+	# installed the next line was exp(e * ln(0.0)) and ln(0.0) raises.
+	# THE IMPORT IS THE FIXTURE, so the .npy deliberately contains no `**` of its
+	# own: a `**` in the main module installs the hook, and the four post-start
+	# m.zpow() rows would then be answered by the RTL's Power and pass on the
+	# unfixed compiler. The import-time rows would NOT — measured, a `**` in main
+	# does not rescue them, because the unit's initialisation section runs before
+	# the main body that holds the assignment. Keeping the file hookless is what
+	# makes all ten rows measure the same thing.
+	# Positive control, measured 2026-09-12: with the pylib.pas row reverted this
+	# exits 217 on the first line of output, before anything is printed.
+	# The two nonzero-base rows are read as a TOLERANCE, never as digits: the
+	# hookless path is a last ulp from Power (sqrt(2) came back ...095 against
+	# CPython's ...0951) and that is a separate F-lane question.
+	./$(COMPILER) test/test_nilpy_pow_zero_base_in_an_imported_module.npy $(TESTTMP)/test_nilpy_pow0imp26
+	$(TESTTMP)/test_nilpy_pow0imp26 | diff -u test/test_nilpy_pow_zero_base_in_an_imported_module.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy $(TESTTMP)/test_nilpy_mapbound26
