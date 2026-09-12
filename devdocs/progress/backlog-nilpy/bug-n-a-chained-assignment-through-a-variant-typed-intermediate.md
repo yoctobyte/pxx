@@ -102,3 +102,43 @@ difference is not the builder. Two candidates, both visible in
 Distinguish them before writing code: dump the chain's AST
 (`PXXDBG=a.ast:<proc>`) for the working single statement and the failing chain and
 diff the two store subtrees. Do not reason from the builders — they are shared.
+
+## 2026-09-13 — both of yesterday's hypotheses are REFUTED, and the fault is the RECEIVER
+
+Measured with the guard temporarily disabled, then the guard restored and the
+binary verified byte-identical to the landed one (`127f2f6531d9`), so no probe
+survives in the tree.
+
+One program, one variant-typed receiver (`self.menu = make(1)`), three stores:
+
+| store | CPython | pxx |
+| --- | --- | --- |
+| chain, **DECLARED** field (`.visible`) | `11 11` | **`11 True`** |
+| chain, **UNDECLARED** field (`.fresh`) | `22 22` | `22 22` |
+| single statement, undeclared field | `33` | `33` |
+
+**Hypothesis 1 — "an AN_CALL store is dropped by the chain's PySeqAppend
+sequence" — is false.** The undeclared-field row is a chain, goes through the same
+`PyMakeDynAttrSet` AN_CALL, and is correct. The call fires.
+
+**Hypothesis 2 — "PyForceVariant copies the receiver, so the write lands on a
+copy" — is false** for the same reason: a write to a copy would not read back, and
+`22 22` reads back.
+
+**The actual mechanism.** For a DECLARED field reached through a variant receiver
+the chain's STORE resolves dynamically while the READ of that declared field does
+not, so the two use different doors: the dynamic write goes to the attribute side
+table and the read returns the field's initial value (`True`). An undeclared field
+has no second door, which is exactly why that row is correct — and is the control
+that separates the two.
+
+**Where the fix is, and where it is NOT.** The single-statement spelling of the
+same store is correct, and both paths call the same builder, so the builder is not
+the bug. `PyMakeAttrLoad` types `self.menu` from `UFldTk[...]`, which is not a
+class here; the expression parser's receiver for the identical source is better
+typed. **So fix the type of the receiver node the chain folds, not the store.**
+Compare the two receivers with `PXXDBG=a.ast` before touching anything.
+
+**And do not narrow the guard as a shortcut.** Allowing the undeclared-field case
+through is correct in itself and would NOT unblock app.py:3204, whose field
+`visible` is declared. Measured, not assumed.
