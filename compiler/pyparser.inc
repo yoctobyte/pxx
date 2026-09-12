@@ -7089,8 +7089,14 @@ function PyClassCreate: Integer; forward;
   PyClassCreate uses it too, and the FPC SEED needs the forward because it
   compiles this include top-down (bug-a-fpc-seed-drift-emitasmx64-forward — the
   self-hosted build resolves it either way, so only the seed canary sees this). }
-procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
+procedure PyStarExpandCallArgs(procIdx, firstSlot, kwCap: Integer;
                                var headArg, lastArg: Integer); forward;
+
+{ The lowest parameter slot claimed by the KEYWORD arguments that follow the
+  starred element, or -1 when what follows is not an unbroken run of
+  `name=value` up to this argument list's own ')'. Defined beside the expander
+  it caps; the FPC seed needs the forward for the same reason. }
+function PyStarTrailingKwMinSlot(mpi: Integer): Integer; forward;
 
 { Is the construction at CurTok followed by a `.name(` suffix — `Cls().m(...)`?
   Then the statement's right-hand side is a CALL whose receiver happens to be a
@@ -7992,7 +7998,12 @@ begin
             + '*args or **kwargs is not supported yet — pass the elements '
             + 'positionally');
     starHead := ASTRight[szArgNode];
-    PyStarExpandCallArgs(ctorPi, 1, starHead, lastArg);
+    { -1: no cap. A trailing keyword here resolves to a FIELD index, not to a
+      1-based parameter slot, and this loop carries its own nArgs/kwAny
+      bookkeeping that the expansion does not feed -- wiring the cap in would
+      risk a plausible wrong argument where today it is a clean refusal.
+      feature-n-a-keyword-after-a-star-unpack-at-a-construction-is-still-refused }
+    PyStarExpandCallArgs(ctorPi, 1, -1, starHead, lastArg);
     if starHead >= 0 then ASTRight[szArgNode] := starHead;
     if lastArg < 0 then lastArg := szArgNode;
     if CurTok.Kind = tkComma then
@@ -16862,7 +16873,88 @@ begin
   PyHoistStmt(callNode);
 end;
 
-procedure PyStarExpandCallArgs(procIdx, firstSlot: Integer;
+{ The lowest parameter slot claimed by the KEYWORD arguments that follow the
+  starred element, or -1 when what follows is not an unbroken run of
+  `name=value` up to the closing paren.
+
+  A trailing KEYWORD argument is the tractable half of "an argument after
+  *unpacking": it names its slot, so it does not depend on how many slots the
+  star consumed. A trailing POSITIONAL does -- its slot is
+  `firstSlot + len(starred)`, a run-time fact -- which is why -1 here keeps the
+  old refusal for that shape, and for `**mapping`.
+
+  Pure lookahead, and it has to be: PyKwArgIndex answers the same question but
+  CONSUMES the name and the '=', and the cap must be known BEFORE the expansion
+  emits its arity guard. Called with CurTok sitting on the '*', so the scan
+  starts at TokPos -- the same cursor convention PyStarExpandCallArgs uses.
+
+  A name that is not a declared parameter returns -1 rather than guessing: a
+  `**kwargs` collector would accept it, and that is a different lowering. }
+function PyStarTrailingKwMinSlot(mpi: Integer): Integer;
+var i, depth, p, slot: Integer;
+    nm: AnsiString;
+begin
+  Result := -1;
+  depth := 0;
+  i := TokPos;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkEnd] then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;          { this argument list's own ')' }
+      Dec(depth);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkComma) then
+    begin
+      { EVERY element after the star must be `name=value`, or the cap does not
+        apply at all -- a mixed tail is the refused shape. }
+      if (i + 2 >= TokCount) or (Tokens[i + 1].Kind <> tkIdent) or
+         (Tokens[i + 2].Kind <> tkAssign) then
+      begin
+        Result := -1;
+        Exit;
+      end;
+      nm := GetTokenStr(i + 1);
+      slot := -1;
+      for p := 1 to Procs[mpi].ParamCount - 1 do
+        if ParamNameEq(mpi, Procs[mpi].Params[p].Name, nm) then
+        begin
+          slot := p;
+          Break;
+        end;
+      if slot < 0 then
+      begin
+        { The tail IS all keywords and one of the names is not a declared
+          parameter. TWO causes, and they need opposite answers.
+
+          A TYPO, on a callee with no collector: -2, so the caller falls into its
+          ordinary loop and PyKwArgIndex reports `has no parameter named 'x'`.
+          Answering "not supported yet" there sends someone hunting for a missing
+          feature instead of a misspelling.
+
+          A `**kwargs` COLLECTOR, which legitimately accepts the name: -1, the
+          old refusal. PyKwArgIndex does NOT error for it -- it returns the
+          -(node+1) key encoding -- so the loop would accept the call after the
+          star had already claimed every slot, and `C().m(*[1], nosuch=9)` on
+          `def m(self, a, **kw)` COMPILED and then raised
+          `forwarded call got 1 arguments, expected 2 to 2` at run time. pxx
+          refused that shape before this cap existed too (with the unhelpful
+          `expected ')' before ','`), so turning a compile-time refusal into a
+          run-time failure is strictly worse and is not a shape that regressed.
+          Left refused, with the honest message; it has its own ticket. }
+        if ProcPyKwIdx[mpi] >= 0 then Result := -1 else Result := -2;
+        Exit;
+      end;
+      if (Result < 0) or (slot < Result) then Result := slot;
+    end;
+    Inc(i);
+  end;
+  Result := -1;                        { no closing paren: not our business }
+end;
+
+procedure PyStarExpandCallArgs(procIdx, firstSlot, kwCap: Integer;
                                var headArg, lastArg: Integer);
 var listCi, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
@@ -16892,6 +16984,17 @@ begin
   PyHoistStmt(asgn);
 
   total := Procs[procIdx].ParamCount;
+  { A trailing KEYWORD argument claims its own slot by NAME, so the star must
+    stop BEFORE it instead of greedily taking every remaining slot -- that greed
+    is the whole reason nothing could follow a star. Capping `total` is the
+    entire change: `required`, `wanted` and both arity bounds derive from it, and
+    with kwCap < 0 the arithmetic below is exactly what it was. `required` is
+    then walked back over the CAPPED prefix, so a defaulted slot inside the
+    starred range still keeps its own default.
+
+    The `**` spelling delegates to PyStarExpandKwArgs above and does NOT take
+    the cap -- `m(**d, forced=9)` is a separate shape, still refused. }
+  if (kwCap > firstSlot) and (kwCap < total) then total := kwCap;
   required := total;
   while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
@@ -17047,7 +17150,7 @@ end;
   hands the whole list here — the mirror of PyParseStarMethodArgs, which does the
   same for a callee that DECLARES *args. }
 procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
-var argNode, kwIdx, head, cnt: Integer;
+var argNode, kwIdx, head, cnt, kwCap: Integer;
 begin
   head := ASTLeft[mcallNode];
   cnt := 1;                          { Self occupies parameter 0 }
@@ -17055,11 +17158,27 @@ begin
   begin
     if CurTok.Kind = tkStar then
     begin
-      PyStarExpandCallArgs(mpi, cnt, head, mlastArg);
-      cnt := Procs[mpi].ParamCount;
-      if CurTok.Kind = tkComma then
-        Error('Nil Python: an argument after *unpacking is not supported yet');
-      Break;
+      kwCap := PyStarTrailingKwMinSlot(mpi);
+      PyStarExpandCallArgs(mpi, cnt, kwCap, head, mlastArg);
+      if kwCap = -2 then
+      begin
+        { an undeclared keyword name: let the loop below name it }
+        cnt := Procs[mpi].ParamCount;
+        if CurTok.Kind = tkComma then Next;
+        Continue;
+      end;
+      if kwCap < 0 then
+      begin
+        cnt := Procs[mpi].ParamCount;
+        if CurTok.Kind = tkComma then
+          Error('Nil Python: an argument after *unpacking is not supported yet');
+        Break;
+      end;
+      { the star stopped at kwCap, so the slots from there on are the keyword
+        arguments' -- fall back into this same loop, which binds them by name }
+      cnt := kwCap;
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
     end;
     kwIdx := PyKwArgIndex(mpi, 1);
     ParseArgExpr;
@@ -17102,7 +17221,11 @@ begin
   begin
     if CurTok.Kind = tkStar then
     begin
-      PyStarExpandCallArgs(procIdx, nArgs, argsHead, lastArg);
+      { -1: no cap. This arm is reached only when PyStarMixedForwardCall
+        declined the call (the callee DECLARES *args, or the iterable form), and
+        both of those already handle a trailing keyword by another route --
+        `g(*xs, forced=9)` onto `def g(*a, **k)` compiles today. }
+      PyStarExpandCallArgs(procIdx, nArgs, -1, argsHead, lastArg);
       if CurTok.Kind = tkComma then
         Error('Nil Python: an argument after *unpacking is not supported yet');
       Break;
@@ -17336,7 +17459,7 @@ begin
 end;
 
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
-var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs: Integer;
+var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs, kwCap: Integer;
     anyKw: Boolean;
     mn: AnsiString;
 begin
@@ -17423,9 +17546,31 @@ begin
     if (CurTok.Kind = tkStar) and (ProcPyStarIdx[mpi] < 0) then
     begin
       k := selfArg;
-      PyStarExpandCallArgs(mpi, n + 1, k, lastArg);
-      n := Procs[mpi].ParamCount - 1;
-      Break;
+      kwCap := PyStarTrailingKwMinSlot(mpi);
+      PyStarExpandCallArgs(mpi, n + 1, kwCap, k, lastArg);
+      if kwCap = -2 then
+      begin
+        n := Procs[mpi].ParamCount - 1;
+        if CurTok.Kind = tkComma then Next;
+        Continue;                        { PyKwArgIndex names the bad keyword }
+      end;
+      if kwCap < 0 then
+      begin
+        n := Procs[mpi].ParamCount - 1;
+        { say WHICH construct is unsupported. Breaking here fell into
+          Expect(tkRParen) and reported `expected ')' before ','` -- a message
+          about punctuation, for an argument list that is plain Python. }
+        if CurTok.Kind = tkComma then
+          Error('Nil Python: an argument after *unpacking is not supported yet');
+        Break;
+      end;
+      { keyword arguments follow; this loop binds them by name below. Without
+        this the Break fell into Expect(tkRParen) and reported
+        `expected ')' before ','` -- a syntax error naming neither the star nor
+        the callee, for an argument list that is plain Python. }
+      n := kwCap - 1;
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
     end;
     { …and into a method that COLLECTS, where the operand is SPLICED into the
       packing instead of expanded into slots. Same arm the plain-call path has;
@@ -17698,6 +17843,7 @@ function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integ
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     kwDictNode: Integer;
+    starKwCap: Integer;       { lowest slot a trailing `name=` claims, or -1 }
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
     dictKwHit: Boolean;       { the keywords-are-KEYS arm already claimed this call }
@@ -18555,9 +18701,26 @@ begin
     if (CurTok.Kind = tkStar) and (ProcPyStarIdx[hitPi] < 0) then
     begin
       kwIdx := selfArg;
-      PyStarExpandCallArgs(hitPi, i + 1, kwIdx, lastArg);
-      i := Procs[hitPi].ParamCount - 1;
-      Break;
+      starKwCap := PyStarTrailingKwMinSlot(hitPi);
+      PyStarExpandCallArgs(hitPi, i + 1, starKwCap, kwIdx, lastArg);
+      if starKwCap = -2 then
+      begin
+        i := Procs[hitPi].ParamCount - 1;
+        if CurTok.Kind = tkComma then Next;
+        Continue;                        { PyKwArgIndex names the bad keyword }
+      end;
+      if starKwCap < 0 then
+      begin
+        i := Procs[hitPi].ParamCount - 1;
+        if CurTok.Kind = tkComma then
+          Error('Nil Python: an argument after *unpacking is not supported yet');
+        Break;
+      end;
+      { as the statically-bound path above: the keyword arguments are bound by
+        this loop, not swallowed by the star }
+      i := starKwCap - 1;
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
     end;
     kwIdx := PyKwArgIndex(hitPi, 1);
     if kwIdx <> 0 then anyKw := True;

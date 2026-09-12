@@ -1,0 +1,100 @@
+# A keyword argument AFTER a *unpack. CPython allows it everywhere; pxx refused
+# it at four of the six call shapes, each shape reaching a different one of the
+# five sites that share PyStarExpandCallArgs. THREE of the four are fixed here --
+# the three METHOD shapes, which all resolve a keyword to a 1-based parameter
+# slot through PyKwArgIndex. The CONSTRUCTOR shape is deliberately still
+# refused: its loop resolves a keyword to a FIELD index and carries its own
+# nArgs/kwAny bookkeeping that the star expansion does not feed, so wiring it
+# the same way risks a plausible wrong argument rather than a refusal. It has
+# its own ticket. Do not add a `Ctor(*xs, forced=9)` row here expecting a pass.
+#
+# A keyword argument is the tractable half of "an argument after *unpacking":
+# it NAMES its slot, so it does not depend on how many slots the star consumed.
+# A trailing POSITIONAL still needs the star's run-time length and is still
+# refused -- see the ticket. Do not add a positional row here expecting it to
+# pass.
+#
+# Every row's expected value is an odd number nothing defaults to: a slot left
+# unfilled reads 0 or None, and `forced=0` is the declared default, so a row
+# asserting 0 could not tell a working keyword from a dropped one.
+
+class Recv:
+    def m(self, a, b, forced=0):
+        print("A", a, b, forced)
+
+class Built:
+    def m(self, a, b, forced=0):
+        print("C", a, b, forced)
+
+# two unrelated classes declaring .n -- forces the dynamic receiver path
+class Dyn1:
+    def n(self, a, b, forced=0):
+        print("D1", a, b, forced)
+
+class Dyn2:
+    def n(self, a, b, forced=0):
+        print("D2", a, b, forced)
+
+def pick(flag):
+    return Dyn1() if flag else Dyn2()
+
+class Gap:
+    def m(self, a, b, c=30, forced=0):
+        print("GAP", a, b, c, forced)
+
+class Two:
+    def m(self, a, b, forced=0, extra=0):
+        print("TWO", a, b, forced, extra)
+
+def plainfn(a, b, forced=0):           # reach-check: already worked
+    print("F", a, b, forced)
+
+def starfn(*a, **k):                   # reach-check: already worked
+    print("E", a, sorted(k.items()))
+
+xs = [1, 2]
+
+# the three method shapes that were refused
+Recv().m(*xs, forced=9)
+Built().m(*xs, forced=9)
+pick(True).n(*xs, forced=9)
+pick(False).n(*xs, forced=9)
+
+# a keyword that skips a defaulted slot: c must keep its own default, not None
+Gap().m(*xs, forced=9)
+
+# the star is not the only positional, and the keyword is still last
+Recv().m(1, *[2], forced=9)
+
+# TWO keywords after the star, and the one declared LAST named FIRST --
+# the arrangement that exposes a first-wins slot scan
+Two().m(*xs, extra=7, forced=9)
+
+# the reach-checks: these two must not regress
+plainfn(*xs, forced=9)
+starfn(*xs, forced=9)
+
+# A callee with a `**kwargs` COLLECTOR. This shape does NOT go through the cap --
+# it routes through the kwargs packing path instead -- and it already worked, so
+# it is here to stop a future narrowing of the cap from taking it. Its siblings
+# `Coll().m(*[1], nosuch=9)` -- the CONSTRUCTED receiver, same class, same call --
+# and `pick(True).n(*xs, nosuch=9)` are REFUSED at
+# compile time and so cannot be rows here; the cap declines a collector callee
+# deliberately, because PyKwArgIndex accepts an undeclared name for one and the
+# call would otherwise compile and fail at run time. See the ticket.
+class Coll:
+    def m(self, a, **kw):
+        print("COLL", a, sorted(kw.items()))
+
+coll = Coll()
+coll.m(*[1], nosuch=9)
+
+# side-effect ORDER, which no value comparison contains: the star's operand and
+# the keyword's value must be evaluated in source order, left to right.
+order = []
+def note(v):
+    order.append(v)
+    return v
+
+Recv().m(*[note(1), note(2)], forced=note(3))
+print(order)

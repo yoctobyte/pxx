@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
-summary: "`self.m(*xs, kw=v)` and `obj.m(*xs, kw=v)` are refused; the SAME shapes on a free function all work. Plain calls route to PyStarMixedForwardCall -> PyStarForwardCall (a run-time arity dispatch that handles positional, *iterable, name=value and **mapping in any order); the three METHOD sites use the older compile-time PyStarExpandCallArgs, which claims every remaining slot and so cannot leave one for a trailing argument. Two different error messages, so it reads as two bugs. This is the current wall on the lekkerzeilen closure (`self._level_here(*self.start[:2], forced=self.level_forced)`) and it is the LAST one a first-failure instrument can see. FULLY DIAGNOSED, NOT STARTED: the fix is to route the method sites through the same forwarder with `self` as slot 0, and the concrete blocker is that `k` inside PyStarForwardCall doubles as the LIST POSITION and the PARAMETER INDEX, which differ by one for a method -- about 12 sites in a ~200-line generator."
+summary: "PARTLY FIXED 2026-09-12. A KEYWORD argument after the star now works at all three METHOD sites (`obj.m`, `Cls().m`, and the dynamic receiver) -- a keyword NAMES its slot, so the fix was to stop the compile-time expander claiming every remaining slot: PyStarTrailingKwMinSlot looks the tail up and PyStarExpandCallArgs caps `total` at the lowest slot a trailing `name=` claims. This cleared the lekkerzeilen closure, which moved 438 lines further into app.py. STILL OPEN, and it is the hard half: a trailing POSITIONAL (`obj.m(*xs, 5)`), whose slot is `firstSlot + len(starred)` and therefore a RUN-TIME fact a compile-time expansion does not have. That needs the method sites routed through PyStarForwardCall, where `k` doubles as the LIST POSITION and the PARAMETER INDEX -- they differ by one for a method, ~12 sites in a ~200-line generator. A trailing `**mapping` is the same shape. The CONSTRUCTOR arm of even the keyword half is its own ticket."
 ---
 
 # A method call cannot take an argument after a `*` unpack
@@ -149,3 +149,99 @@ starred range, a method taking `**mapping`, and a method order-log mirroring the
 off-by-one lives in a code generator and its failure mode is a plausible wrong
 argument at run time with no crash and no diagnostic. Better coverage of the half
 that already works does not make the half with no coverage safe.
+
+## 2026-09-12: the KEYWORD half landed; the POSITIONAL half is what is left
+
+The diagnosis in this ticket was right about the mechanism and wrong about the
+cheapest fix, and the correction is worth more than the fix.
+
+**The ticket said** the route was to send the method sites through
+`PyStarForwardCall` with `self` as slot 0, blocked on `k` meaning two things.
+That is still true for a trailing POSITIONAL.
+
+**It is not true for a trailing KEYWORD, and that is what the wall actually
+was.** A keyword argument names its slot, so it does not depend on how many
+slots the star consumed. The refusal existed because
+`PyStarExpandCallArgs` is GREEDY by construction:
+
+```pascal
+total := Procs[procIdx].ParamCount;
+wanted := total - firstSlot;        { every remaining slot, always }
+```
+
+The star claimed `forced`'s slot, so nothing could follow it. Capping `total` at
+the lowest slot a trailing `name=` claims is the entire change — `required`,
+`wanted` and both arity bounds all derive from `total`, and with no cap the
+arithmetic is byte-for-byte what it was. No index-meaning split, no change to
+the run-time dispatch generator at all.
+
+**Measured, against CPython, before and after** — and the three refused shapes
+reach three different sites, which is why the fixture has a row for each:
+
+| shape | site | before | after |
+| --- | --- | --- | --- |
+| `f(*xs, forced=9)` | `PyStarMixedForwardCall` | worked | worked |
+| `obj.m(*xs, forced=9)` | `PyStarUnpackMethodArgs` | `an argument after *unpacking` | **matches CPython** |
+| `Cls().m(*xs, forced=9)` | `PyParseClassMethodCall` | `expected ')' before ','` | **matches CPython** |
+| `pick().n(*xs, forced=9)` | `PyParseVariantMethod` | `expected ')' before ','` | **matches CPython** |
+| `Cls(*xs, forced=9)` | `PyClassCreate` | refused | **still refused**, own ticket |
+
+Two of the three reported `expected ')' before ','` — a message about
+punctuation, for an argument list that is plain Python, naming neither the star
+nor the callee. That is why this read as two unrelated bugs. All five sites now
+say the same true thing, and an undeclared keyword name after a star now reports
+`C.m has no parameter named 'nosuch'` instead of a syntax error: the lookahead
+returns a distinct `-2` for that case so the ordinary loop can name it. A typo
+was being reported as a missing feature.
+
+**The diagnostic note for whoever takes the positional half:** the `**`
+expansion (`PyStarExpandKwArgs`) deliberately does NOT take the cap, so
+`m(**d, forced=9)` is still refused and is a third shape, not a fourth site.
+
+## What the positive controls were
+
+- HEAD before the change refused all three method shapes, each with the message
+  in the table above. That is the control, taken on the pre-change binary.
+- The pin refuses the fixture too, but **for an earlier reason** — it predates
+  the 2026-09-10 defaults fix and stops at `it has parameters with defaults`. So
+  it is not a clean control for this refusal; cite HEAD-before, not the pin.
+- Four shapes that MUST still refuse were checked and do, with the right message
+  now: trailing positional, trailing `**mapping`, the ctor, and an undeclared
+  keyword name.
+- The fixture's `plainfn`/`starfn` rows already worked; they are reach-checks, so
+  a harness that is not reaching the file cannot look like a pass.
+- The order-log row is the only one a value comparison cannot produce.
+
+## A THIRD refused shape, found by measurement after the fix was written
+
+`C().m(*[1], nosuch=9)` where the callee is `def m(self, a, **kw)` — a keyword the
+callee accepts only through its `**kwargs` COLLECTOR.
+
+**The cap declines this deliberately.** `PyStarTrailingKwMinSlot` returns -1, not
+-2, when `ProcPyKwIdx[mpi] >= 0`, so the old refusal stands. The reason is that
+`PyKwArgIndex` does **not** error for a collector callee — it returns the
+`-(node+1)` key encoding and the loop carries on — so with the star having
+already claimed every slot, the call COMPILED and raised
+`forwarded call got 1 arguments, expected 2 to 2` at run time.
+
+**What the baseline actually was, stated precisely because the first reading of
+this was wrong:** pxx refused that shape before the cap existed too, with
+`expected ')' before ','`. So the cap did not break a working shape — it turned a
+compile-time refusal into a run-time failure, which is strictly worse, and
+declining the collector restores the refusal while keeping the honest message.
+Not a regression from a working state; a regression in the KIND of failure.
+
+**And the variable receiver is different, measured:** `c = C(); c.m(*[1],
+nosuch=9)` WORKS and matches CPython, because a collector callee sets
+`mai := ParamCount` before `PyStarUnpackMethodArgs`'s guard is tested, so that
+site is never reached and the kwargs packing path handles it. It is pinned in the
+fixture for exactly that reason — the working and refused halves of one shape
+differ only in how the receiver was written.
+
+**How this was found, which is the part worth keeping.** Four negative controls
+were written and all four passed, and none of them used a callee with a
+collector — a control set drawn from the wrong population, the failure
+`CLAUDE.md` describes under "A GUARD THAT CANNOT FAIL". The shape only surfaced
+because a separate question ("is the -2 path reachable where PyKwArgIndex does
+not error?") was asked of the CODE rather than of the controls. A guard asserting
+the four shapes I had thought of would have certified this one.

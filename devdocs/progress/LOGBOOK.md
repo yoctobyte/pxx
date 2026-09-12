@@ -3394,3 +3394,68 @@ range" was retired on 2026-09-10 by the code directly beneath it.
 AND I DID NOT TAKE THE CORPUS EDIT. The umbrella's standing rule from the owner permits
 editing lekkerzeilen, and one would clear this wall -- but this is ordinary Python that plain
 calls already accept, so the asymmetry is ours. Offered to him as an option, not taken as a fix.
+
+2026-09-12 | frankuser | compiler/pyparser.inc + test/test_nilpy_a_keyword_argument_after_a_star_unpack.{npy,expected} + Makefile |
+A KEYWORD argument after a `*` unpack now works at the three METHOD call sites. WHY, and the
+part worth keeping: the p75 ticket predicted the fix was to route the method sites through
+PyStarForwardCall and was blocked on `k` there meaning both the list position and the parameter
+index. That is still true for a trailing POSITIONAL and it was the WRONG DIAGNOSIS for the
+wall we actually had. A keyword argument NAMES its slot, so it does not care how many slots the
+star consumed; the refusal existed only because PyStarExpandCallArgs is greedy by construction
+(`wanted := ParamCount - firstSlot` -- every remaining slot, always), so the star had already
+claimed `forced`'s slot. Capping `total` at the lowest slot a trailing `name=` claims is the
+entire change: `required`, `wanted` and both arity bounds all derive from `total`, and with no
+cap the arithmetic is byte-for-byte what it was -- which is also why the existing population is
+provably untouched, every pre-existing caller passes -1.
+THREE SITES, NOT ONE, and they reported TWO DIFFERENT ERRORS, which is why this read as two
+bugs: PyStarUnpackMethodArgs said `an argument after *unpacking is not supported yet`, while
+PyParseClassMethodCall (constructed receiver) and PyParseVariantMethod (dynamic receiver) just
+Broke and died in Expect(tkRParen) with `expected ')' before ','` -- a message about punctuation
+for an argument list that is plain Python, naming neither the star nor the callee. All five
+sites now say the same true thing.
+AND AN UNDECLARED KEYWORD AFTER A STAR WAS BEING REPORTED AS A MISSING FEATURE. `m(*xs,
+nosuch=9)` is a TYPO, and `not supported yet` sends the reader hunting for a feature instead of
+a misspelling. The lookahead returns a distinct -2 for "the tail is all keywords but one name is
+not a declared parameter" so the ordinary loop can fall through and let PyKwArgIndex say
+`C.m has no parameter named 'nosuch'`.
+WHAT I DID NOT DO, deliberately: the CONSTRUCTOR arm. PyClassCreate resolves a keyword to a
+FIELD index, not to the 1-based parameter slot every method path uses, and carries its own
+nArgs/kwAny/kwExtraHead bookkeeping the expansion does not feed. Wiring the cap there the same
+way risks an argument landing in the wrong slot at run time with no diagnostic, where today it
+is a clean refusal -- so it passes a literal -1 with the reason inline, and has its own ticket.
+A refusal is the better wrong answer until someone can verify it.
+AND THE FOUR NEGATIVE CONTROLS I WROTE WERE DRAWN FROM THE WRONG POPULATION -- none of them
+used a callee with a `**kwargs` COLLECTOR, and that is where the cap went wrong. PyKwArgIndex
+does NOT error for an undeclared keyword on a collector callee (it returns the -(node+1) key
+encoding and the loop carries on), so with the star having already claimed every slot,
+`C().m(*[1], nosuch=9)` on `def m(self, a, **kw)` COMPILED and raised `forwarded call got 1
+arguments, expected 2 to 2` at run time. Stated precisely, because my first reading of it was
+wrong: pxx refused that shape BEFORE the cap existed too (with `expected ')' before ','`), so
+the cap did not break a working shape -- it converted a compile-time refusal into a run-time
+failure, which is strictly worse. Fixed by declining the cap when ProcPyKwIdx >= 0, which
+restores the refusal and keeps the honest message. The variable-receiver form of the same call
+(`c = C(); c.m(*[1], nosuch=9)`) WORKS and matches CPython, because a collector callee sets
+`mai := ParamCount` before that site's guard is tested; it is now pinned in the fixture, since
+the working and refused halves of one shape differ only in how the receiver was written.
+It surfaced only because I asked the CODE whether the -2 path was reachable where PyKwArgIndex
+does not error -- not because any control caught it. Four controls asserting the four shapes I
+had thought of would have certified this one, which is the guard-cannot-fail failure in CLAUDE.md
+wearing its most ordinary clothes: I wrote the controls from my model of the change.
+VERIFIED: 12-row CPython differential (the .expected IS python3's output) including a
+side-effect ORDER log, which is the only row a value comparison cannot produce, and the
+collector row above; SEVEN negative controls that must still refuse and do (the original four
+plus the three collector shapes); `make compiler/pascal26` CONVERGED (not the stamp path);
+gate.sh quick 22 PASS / 1 FAIL, the FAIL being the standing owner-only `pinned builds live
+lib/rtl` (`mimic_queue :: unknown type: TPyDeque`), which runs the PINNED binary and no
+compiler-source change can move. Ran `make test-nilpy` under PXX_ALLOW_FULL_SUITE=1 because
+gate quick covers none of the 43 star/kwargs fixtures and they are the entire risk surface of a
+shared argument-expansion generator.
+CONSEQUENCE FOR GOAL 4: the lekkerzeilen closure moved 438 lines further into app.py, to
+`tile.grids.pop(name, None)` refused as `pop() takes exactly 0 argument(s), got 2` -- a dict
+field resolved against a list's or deque's overload set. PRE-EXISTING, not a regression, for two
+independent reasons: Error() ends in Halt(1) so nothing past the old wall was ever parsed, and
+every edit here sits inside an `if CurTok.Kind = tkStar` branch while that call has no star.
+FOUR REDUCTIONS OF IT FAILED and the ticket lists all four so nobody repeats them; the next step
+is an INSTRUMENT, not a fifth reduction -- the arity error does not name the receiver's CLASS,
+which is exactly why four shapes all looked right. Same move that cracked the p80 widening wall
+the night before, where the diagnostic had to be taught to print tyInt32 instead of 11.

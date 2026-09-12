@@ -1445,6 +1445,35 @@ test-nilpy: $(COMPILER)
 	# test and not a restatement -- hence $(COMPILER), not $(PXX_STABLE).
 	./$(COMPILER) -Futest test/test_nilpy_a_qualified_member_loses_to_a_c_function_of_the_same_name.npy $(TESTTMP)/test_nilpy_cnamecollide
 	tools/expect_same.sh test_nilpy_cnamecollide.1 "$$($(TESTTMP)/test_nilpy_cnamecollide)" "$$(printf 'False\nTrue\n407\n408\n407')"
+	# A KEYWORD argument after a `*unpack`. Plain calls took it already (the
+	# run-time arity dispatch, PyStarMixedForwardCall); the three METHOD shapes
+	# did not, because they use the compile-time expander PyStarExpandCallArgs,
+	# which claimed EVERY remaining declared slot and so left the keyword nowhere
+	# to go. A keyword names its own slot, so capping the star at the lowest slot
+	# a trailing `name=` claims is the whole fix.
+	#
+	# Differential: this .npy runs unchanged under python3 and the .expected IS
+	# python3's output.
+	#
+	# What is load-bearing, and why each row is here rather than one row standing
+	# for all of them -- the three refused shapes reach three DIFFERENT sites:
+	#  - Recv().m(...)       PyStarUnpackMethodArgs
+	#  - Built().m(...)      PyParseClassMethodCall   (constructed receiver)
+	#  - pick(True).n(...)   PyParseVariantMethod     (dynamic receiver; needs TWO
+	#                        unrelated classes declaring .n, or the receiver binds
+	#                        statically and this row silently tests the first site)
+	#  - the GAP row keeps a defaulted slot INSIDE the starred range: c must read
+	#    30, its own default, not None.
+	#  - TWO keywords with the LAST-declared one named FIRST -- the arrangement
+	#    that would expose a first-wins slot scan. With one keyword, every order
+	#    passes.
+	#  - plainfn/starfn are REACH-CHECKS: both already worked, so if either fails
+	#    the harness is not reaching this fixture and no row above means anything.
+	#  - the order log is the only row a value comparison cannot produce: the
+	#    star's operand and the keyword's value must evaluate left to right.
+	# $(COMPILER), not $(PXX_STABLE): the pin refuses this fixture outright.
+	./$(COMPILER) -Futest test/test_nilpy_a_keyword_argument_after_a_star_unpack.npy $(TESTTMP)/test_nilpy_kwafterstar
+	$(TESTTMP)/test_nilpy_kwafterstar | diff -u test/test_nilpy_a_keyword_argument_after_a_star_unpack.expected -
 	# Code made dead by a FAILED guarded import must not have its imports
 	# resolved. `try: import X / except ImportError: <fallback>; return` is the
 	# standard backend-selection idiom and lekkerzeilen/platform/__init__.py:90
