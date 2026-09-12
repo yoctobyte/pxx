@@ -5,12 +5,18 @@ unit tls;
 
   Any net code (http, future servers) talks to this contract instead of raw
   NetSend/NetRecv, so a TLS backend can be swapped underneath without touching
-  callers. Two backends are planned behind this one interface:
+  callers. Two backends EXIST behind this one interface (both were "planned"
+  when this comment was written; re-measured 2026-09-12 and both are built):
 
     * OpenSSL (dlopen libssl/libcrypto)  -- the safe default; needs the real
       dynlib loader (feature-real-dynlib-loader).
     * a handrolled syscall-only TLS 1.3  -- the platonic native stack
-      (feature-tls13-from-scratch, deferred).
+      (feature-tls13-from-scratch). 622 lines in lib/rtl/tls13_native.pas:
+      ClientHello -> ServerHello -> X25519 ECDHE -> handshake key schedule,
+      over our own aesgcm / ecdsa_p256 / rsa / sha256 / sha512 / x509. It does
+      NOT self-register -- a caller opts in with Tls13NativeRegister -- which is
+      why "ships NO backend" below is still true of THIS unit and is not a
+      statement about what exists.
 
   This unit is just the seam + a registry; it ships NO backend. With no backend
   registered, the neutral wrappers fail cleanly with tlsError (never crash) --

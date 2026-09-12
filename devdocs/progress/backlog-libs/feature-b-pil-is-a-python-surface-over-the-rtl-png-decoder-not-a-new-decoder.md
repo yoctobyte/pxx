@@ -193,3 +193,38 @@ nothing for the ecosystem unless that table is provided too.
 **Recommendation, unchanged by the owner's preference and now with a reason:**
 mimic the surface. His preferred route is not more expensive by a factor — it is
 a different project, and its first deliverable is CPython.
+
+## CORRECTION TO THIS TICKET'S OWN FRAMING (owner, 2026-09-12)
+
+> *"you did notice we just implemented png and zlib from scratch. or TLS."*
+
+This ticket said "mimic the surface over a decoder we already own", which
+undersells what that decoder IS and draws the line in the wrong place. **We do
+not avoid implementing. We avoid the CPython C-ABI.** The inventory, measured:
+
+    lib/rtl/zlib.pas                965    RFC 1950/1951 inflate, no libz
+    lib/rtl/png.pas                 330    PNG codec over it
+    crypto + TLS, 13 units        3,114    AES-GCM, ECDSA P-256, RSA,
+                                           SHA-256/512, X.509, and a TLS 1.3
+                                           handshake (X25519 ECDHE + key
+                                           schedule) in tls13_native.pas
+
+**A TLS 1.3 stack with its own X.509 parser is a harder job than a JPEG
+decoder.** So "can we implement an image codec from scratch" is already answered
+yes, repeatedly, and nothing in this ticket should read as doubting it.
+
+**The line is therefore NOT mimic-vs-implement. It is:**
+
+| | verdict | why |
+| --- | --- | --- |
+| implement an ALGORITHM from scratch in Pascal | **done routinely** — deflate, PNG, AES-GCM, X.509, TLS 1.3 | bounded, testable against a spec and an oracle |
+| expose it under a Python-shaped name | **the cheap part** — `base64.pas` pattern | one unit, two surfaces |
+| port a CPython C-API extension | **the wasps nest** | couples to `PyObject`'s MEMORY LAYOUT, not to a function list — `Py_INCREF` is a macro writing `ob_refcnt`, so building it means building an interpreter first |
+
+So if `Image.open` eventually needs JPEG, **writing a JPEG decoder in Pascal is
+the in-house move, not a defeat** — the same route that produced `png.pas` over
+`zlib.pas`. What stays refused is reproducing `_imaging` as a CPython extension.
+
+Restating the recommendation with the line in the right place: mimic PIL's
+**surface**; implement whatever **algorithm** it needs from scratch as the need
+is measured; never port the extension.
