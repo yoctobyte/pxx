@@ -1024,3 +1024,40 @@ two working seats with Track P the priority). Nothing above is half-done and
 nothing is waiting on either of us: the sharing is landed on all six backends,
 the threshold question is settled against building a gate, and the emitter for
 the nil-test is unstarted. **Unstaffed, not blocked.**
+
+## v408 CARRIES IT — it had been inert for five days (recorded 2026-09-12, frankuser)
+
+Not a change to this ticket's work, a note about its REACH, because CLAUDE.md asks
+for exactly this before anyone closes a compiler fix that `lib/**` depends on.
+
+`50e25f5f0` landed **2026-09-07 04:23**. Pin **v407** was cut **2026-09-06
+21:59** — six and a half hours earlier. So the -31.9% was real, measured, titled
+and ticketed, and **every `$(PXX_STABLE)` consumer kept building with the old
+emitter for the next five days and twenty-one hours**, until pin v408
+(`9186a7d58`, binary `808076de24be`, 2026-09-12).
+
+Measured from the committed pin bytes, not from a build log — the R E segment is
+the whole of the delta:
+
+                    v407 (51901941e)   v408 (9186a7d58)    delta
+    R E  FileSiz    0xa89000           0x747000            -3,416,064  (-31%)
+    RW   FileSiz    0x08253c           0x08972c               +24,560
+    BSS  MemSiz     0x505f154          0x530f934           +2.8 MB
+    strings         16,426             17,250                   +824
+
+**Code fell while data, BSS and string count all ROSE**, which is what separates
+this from a dropped section or a truncated write — the direction nobody checks,
+since `bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write`
+makes a short write look like a clean one.
+
+The tonnage differs from this ticket's own `11594364 -> 7895676` because 248
+commits touched `compiler/` between the two pins and added code back. The -31%
+measured pin-to-pin is therefore a LOWER bound on what the thunk delivered, not
+a restatement of it.
+
+Found by frankB, which is the part worth recording: it noticed a 29% shrink in
+the pinned binary while the builtin sources in the same commit GREW by ~1,600
+lines, could not attribute it from `readelf` (neither binary carries section
+headers), and handed it over rather than either ignoring a favourable delta or
+guessing at a cause. An unattributed improvement is the direction CLAUDE.md says
+goes unchecked because it flatters whoever is holding it.
