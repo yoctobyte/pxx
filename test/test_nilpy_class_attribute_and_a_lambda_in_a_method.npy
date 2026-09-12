@@ -1,0 +1,155 @@
+# A class-level attribute lost its VALUE when any method of the class contained a
+# lambda — and it lost it SILENTLY, answering the type's default.
+#
+# Cause: PyEmitClassAttrExpr hoists `<hidden global> := <value>` for every
+# class-level attribute, and a lifted lambda's body is compiled long after the
+# construct that queued it. PyCompileLambdaBody flushed the hoist queue with
+# PyFlushHoist(-1) — everything pending — so the enclosing scope's class-attribute
+# assignments were emitted INSIDE the lambda's body instead. The hidden slot is
+# zero-initialised, so nothing raised.
+#
+# THREE THINGS MAKE THIS FIXTURE WHAT IT IS, and all three were needed to see it:
+#
+# 1. POSITION. An attribute declared ABOVE the lambda-bearing method is lost; one
+#    declared BELOW it survives, because its hoist had not happened yet. Write the
+#    fixture the natural way — attributes at the top, methods under them — and you
+#    catch it; write the attribute last and it passes on a broken compiler. The
+#    `Below` class here is that passing arrangement, kept as the control.
+#
+# 2. EVERY TYPE, because every default collides. Measured on the unfixed compiler:
+#    4000.0 read 0.0, 4000 read 0, "four thousand" read '', and (1, 2) read [].
+#    A float-only fixture reads as a float bug; the list of defaults is the tell.
+#    So no expected value here may BE a default: 4000.0/4000/"four thousand"/
+#    (1, 2) are all chosen for that.
+#
+# 3. THE LAMBDA IS NOT CALLED in `Uncalled`, and is in a DIFFERENT method in
+#    `Elsewhere`. Neither is exotic: the defect is in when the body is COMPILED,
+#    not in whether it runs, and a fixture that called the lambda would suggest
+#    otherwise to the next reader.
+#
+# Found by running lekkerzeilen, not by a census: world.py's World declares
+# RESIDENT/RELEASE/LEVEL_CELL above a plan() holding
+# `want.sort(key=lambda k: self._distance2(self.index[k], x, z))`, so LEVEL_CELL
+# was 0.0 and `x / self.LEVEL_CELL` divided by zero — a segfault while opening a
+# world, 300 lines away from the lambda that caused it.
+#
+# Oracle: CPython 3.13, generated not written.
+
+
+class Plain:
+    """No lambda anywhere — the row that always passed."""
+
+    F = 4000.0
+    I = 4000
+    S = "four thousand"
+    T = (1, 2)
+
+    def read(self):
+        return (self.F, self.I, self.S, self.T)
+
+
+class Uncalled:
+    """The lambda is never called. The attribute is still lost without the fix."""
+
+    F = 4000.0
+    I = 4000
+    S = "four thousand"
+    T = (1, 2)
+
+    def read(self):
+        f = lambda k: k
+        return (self.F, self.I, self.S, self.T)
+
+
+class Elsewhere:
+    """The lambda is in a method that has nothing to do with the attributes."""
+
+    F = 4000.0
+    I = 4000
+    S = "four thousand"
+    T = (1, 2)
+
+    def read(self):
+        return (self.F, self.I, self.S, self.T)
+
+    def other(self):
+        g = lambda k: k * 2
+        return g(21)
+
+
+class Below:
+    """The PASSING arrangement: the attribute is declared after the method.
+
+    Kept deliberately. This is how a fixture written without knowing the
+    mechanism would have been written, and it passes on the unfixed compiler.
+
+    SCALARS AND A STRING ONLY, AND THAT IS NOT TIDINESS. A CONTAINER attribute
+    declared after a method reads EMPTY through `self` in this position — with or
+    without a lambda, so it is a SECOND and independent defect, filed as
+    bug-n-a-container-class-attribute-declared-after-a-method-reads-empty-through-self.
+    Measured: `(4000.0, , , 'x')` for a tuple and a list, while reading the same
+    two through the CLASS is correct. Asserting it here would tie this fixture to
+    a bug it is not about and would redden the moment either one moved.
+    """
+
+    def read(self):
+        h = lambda k: k
+        return (self.F, self.I, self.S)
+
+    F = 4000.0
+    I = 4000
+    S = "four thousand"
+
+
+class Sorter:
+    """lekkerzeilen's own shape: sort(key=lambda) calling a staticmethod."""
+
+    RESIDENT = 4000.0
+    RELEASE = 5600.0
+
+    def __init__(self):
+        self.index = {1: 30.0, 2: 10.0, 3: 20.0}
+
+    def plan(self, x, z):
+        want = [k for k in self.index]
+        want.sort(key=lambda k: self._distance2(self.index[k], x, z))
+        return want
+
+    @staticmethod
+    def _distance2(v, x, z):
+        return v + x + z
+
+    def limits(self):
+        return (self.RESIDENT, self.RELEASE)
+
+
+def show(label, got):
+    print("%-10s %s" % (label, got))
+
+
+# ORDER IS LOAD-BEARING IN THE NEXT TWO LINES AND IT IS THE SHARPEST THING IN
+# THIS FILE. The stolen assignment is emitted INSIDE the lambda's body, so
+# CALLING the lambda performs it — `plan()` uses its lambda as a sort key, and on
+# the unfixed compiler that call initialises RESIDENT/RELEASE as a side effect.
+# Read `limits()` after `plan()` and the row passes on a broken compiler, for a
+# reason that has nothing to do with the attribute: one passing part of the run
+# supplied what the failing part needed. Measured — with the two lines swapped,
+# `limits` printed (4000.0, 5600.0) on the unfixed compiler.
+# So: read the attributes BEFORE anything calls the lambda.
+sorter = Sorter()
+show("limits", sorter.limits())
+show("sorter", sorter.plan(1.0, 2.0))
+
+show("plain", Plain().read())
+show("uncalled", Uncalled().read())
+show("elsewhere", Elsewhere().read())
+show("below", Below().read())
+show("elsewhere2", Elsewhere().other())
+
+# through the CLASS as well as through an instance, because the two resolve by
+# different paths and both answered the default
+show("cls", (Plain.F, Uncalled.F, Elsewhere.I, Below.S, Sorter.RELEASE))
+show("cls-t", (Uncalled.T, Elsewhere.T))
+
+# and the division that made it a segfault rather than a wrong number
+show("divide", 3000.0 / Uncalled.F)

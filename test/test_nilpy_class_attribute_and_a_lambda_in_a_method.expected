@@ -1,0 +1,10 @@
+limits     (4000.0, 5600.0)
+sorter     [2, 3, 1]
+plain      (4000.0, 4000, 'four thousand', (1, 2))
+uncalled   (4000.0, 4000, 'four thousand', (1, 2))
+elsewhere  (4000.0, 4000, 'four thousand', (1, 2))
+below      (4000.0, 4000, 'four thousand')
+elsewhere2 42
+cls        (4000.0, 4000.0, 4000, 'four thousand', 5600.0)
+cls-t      ((1, 2), (1, 2))
+divide     0.75

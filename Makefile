@@ -2453,6 +2453,20 @@ test-nilpy: $(COMPILER)
 	# CPython's ...0951) and that is a separate F-lane question.
 	./$(COMPILER) test/test_nilpy_pow_zero_base_in_an_imported_module.npy $(TESTTMP)/test_nilpy_pow0imp26
 	$(TESTTMP)/test_nilpy_pow0imp26 | diff -u test/test_nilpy_pow_zero_base_in_an_imported_module.expected -
+	# A class-level attribute lost its VALUE — silently, answering the type's
+	# default — when ANY method of the class contained a lambda. A lifted lambda's
+	# body is compiled long after the construct that queued it, and it flushed the
+	# hoist queue with PyFlushHoist(-1), so PyEmitClassAttrExpr's
+	# `<hidden global> := <value>` assignments were emitted INSIDE the lambda.
+	# Positive control, measured 2026-09-12 with the PyHoistPark reverted: five
+	# rows differ and the run ends in ZeroDivisionError — `uncalled` reads
+	# (0.0, 0, '', None) against CPython's (4000.0, 4000, 'four thousand', (1, 2)).
+	# EVERY TYPE IS IN THE FIXTURE because every default collides (0, 0, '', None),
+	# and the ORDER of the first two rows is load-bearing: calling the lambda
+	# PERFORMS the stolen assignment, so reading the attributes after `plan()` makes
+	# the row pass on a broken compiler. Read the file's own header before editing.
+	./$(COMPILER) test/test_nilpy_class_attribute_and_a_lambda_in_a_method.npy $(TESTTMP)/test_nilpy_clsattrlam26
+	$(TESTTMP)/test_nilpy_clsattrlam26 | diff -u test/test_nilpy_class_attribute_and_a_lambda_in_a_method.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy $(TESTTMP)/test_nilpy_mapbound26

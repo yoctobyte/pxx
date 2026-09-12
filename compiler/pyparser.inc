@@ -33216,7 +33216,8 @@ end;
 
 procedure PyCompileLambdaBody(procIdx, bStart, realProcIdx: Integer);
 var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode,
-    wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode, wCastNode: Integer;
+    wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode, wCastNode,
+    savedHoist: Integer;
     savedExprMode: Boolean;
 begin
   { NilPy expression rules must be ON while this body parses — the module-level
@@ -33225,6 +33226,31 @@ begin
     (it printed the variant's TYPE TAG instead of the attribute). }
   savedExprMode := PyExprMode;
   PyExprMode := True;
+  { PARK THE CALLER'S HOIST QUEUE. The flush further down is PyFlushHoist(-1),
+    which drains EVERYTHING pending — and a lifted lambda's body is compiled
+    long after the construct that queued it, so whatever the enclosing scope had
+    hoisted and not yet flushed was emitted INSIDE the lambda instead.
+
+    That is not a temporary going astray, it is an assignment the program needs:
+    PyEmitClassAttrExpr hoists `<hidden global> := <value>` for every class-level
+    attribute, so a class with a lambda anywhere in any method lost the VALUE of
+    every attribute declared above that method — and the hidden slot is
+    zero-initialised, so the class answered the type's default rather than
+    raising. Measured 2026-09-12: `C = 4000.0` read 0.0, `C = 4000` read 0,
+    `C = "x"` read '', `C = (1, 2)` read []. Every one of those is an
+    expected-value collision, which is why no fixture caught it. An attribute
+    declared BELOW the method survived, because its hoist had not happened yet —
+    that positional asymmetry is the tell.
+
+    Found by running lekkerzeilen: world.py's World declares RESIDENT/RELEASE/
+    LEVEL_CELL above a `plan()` containing `want.sort(key=lambda k: ...)`, so
+    LEVEL_CELL was 0.0 and `x / self.LEVEL_CELL` divided by zero — the program
+    segfaulted while opening a world, 300 lines from the lambda.
+
+    The lambda does NOT have to be called. Parking here and restoring after the
+    flush is the same discipline the len()/f-string trial parse already uses;
+    this path simply never took it. }
+  savedHoist := PyHoistPark;
   nparams := Procs[procIdx].ParamCount;
   savedSC := SymCount;
   savedFS := FrameSize;
@@ -33390,9 +33416,12 @@ begin
     ASTLeft[exitNode] := CurASTNode;
     node := exitNode;
   end;
-  { any temporaries the expression hoisted must be emitted before it, and
-    CompileAST wants a BLOCK the way every other body path hands it one }
+  { any temporaries THIS EXPRESSION hoisted must be emitted before it, and
+    CompileAST wants a BLOCK the way every other body path hands it one. The
+    queue was parked on entry, so -1 here drains the lambda's own hoists and
+    nothing of the enclosing scope's — see the note at the park. }
   node := PySeqAppend(PyFlushHoist(-1), node);
+  PyHoistRestore(savedHoist);
   seqNode := AllocNode(AN_BLOCK);
   ASTLeft[seqNode] := node;
   ASTTk[seqNode] := Ord(tyUnknown);
