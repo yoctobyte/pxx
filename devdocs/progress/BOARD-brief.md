@@ -78,6 +78,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
 - `[p 90] [N]` feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments (unblocks 1)
+- `[p 90] [N]` feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
-- `[p 70] [N]` feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 
 _452 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
