@@ -1,0 +1,26 @@
+# ParsePyProgram consumed the leading module docstring and dropped it, so
+# `__doc__` was `undefined variable` — and the construct is not obscure: the
+# conventional argv `--help` path is `print(__doc__.strip())`, which is what
+# lekkerzeilen/__main__.py:312 does and what stopped that closure after every
+# other module in the app had compiled.
+# It is recorded as the TOKEN'S SPAN and emitted as an AN_STR_LIT carrying that
+# same SOffset/SLen, so the triple-quoted form needs no handling of its own —
+# the node is indistinguishable from a literal the programmer wrote.
+# Two identifier factors needed the arm: pyparser.inc's (the door a .npy comes
+# through) and pasparser_expr.inc's (the Pascal one), which is where __name__
+# and __file__ each already appear twice. The first patch had only the second
+# and the name stayed undefined with the code sitting right there.
+# Diffed against CPython.
+"""First line of the doc.
+
+  An indented second paragraph, kept verbatim — `__doc__` is the literal, so
+  the leading newline and this indentation are part of the value and `.strip()`
+  is the caller's job, not ours.
+"""
+
+print(repr(__doc__))
+print(__doc__.strip())
+print(__doc__ is None)
+print(bool(__doc__))
+print(len(__doc__) > 40)
+print(__doc__.split("\n")[0])

@@ -1,0 +1,23 @@
+# THE ABSENT CASE, and it is the one that decides whether this feature is
+# correct: a module with no docstring must answer None, NEVER ''.
+# The two are not interchangeable at the only call site real code has.
+# `print(__doc__.strip())` prints a BLANK LINE for '' and raises AttributeError
+# for None, so the '' form turns a module that forgot its docstring into a
+# program that silently prints nothing — and every assertion below except the
+# AttributeError row still PASSES under it, which is why that row is here.
+# Second collision, caught by measurement rather than reasoning: the Pascal
+# tkNil arm builds tyPointer 0, which answers True to `is None` and prints `0`
+# under repr where CPython prints `None`. Both arms now call PyMakeNone, i.e.
+# pylib's pynone() variant, which is what a WRITTEN None yields.
+# A leading COMMENT is not a docstring, which is what makes this file the absent
+# case at all.
+# Diffed against CPython.
+
+print(__doc__ is None)
+print(repr(__doc__))
+print(bool(__doc__))
+try:
+    print(__doc__.strip())
+    print("NO AttributeError — the '' form would reach here and print a blank")
+except AttributeError:
+    print("AttributeError")

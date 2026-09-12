@@ -1,0 +1,8 @@
+'Summary on the first line, whose own indent is dropped outright.\none tab, which is eight columns and sets the minimum\n\n        two tabs: sixteen columns, so eight survive as SPACES\n    twelve spaces: four survive\nback to the minimum\n'
+0 'Summary on the first line, whose own indent is dropped outright.'
+1 'one tab, which is eight columns and sets the minimum'
+2 ''
+3 '        two tabs: sixteen columns, so eight survive as SPACES'
+4 '    twelve spaces: four survive'
+5 'back to the minimum'
+6 ''

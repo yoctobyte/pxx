@@ -2411,6 +2411,29 @@ test-nilpy: $(COMPILER)
 	@# TWICE and len(f.read().upper()) answered 0. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_len_of_a_file_read.npy $(TESTTMP)/test_nilpy_lenread26
 	$(TESTTMP)/test_nilpy_lenread26 | diff -u test/test_nilpy_len_of_a_file_read.expected -
+	@# io.open in a module that REBOUND the bare `open` -- lekkerzeilen/world.py's
+	@# own shape, and the shadow is what makes the row meaningful: without it a
+	@# fixture would also pass if io.open fell through to the builtin's lowering.
+	@# Eight rows are byte-identical to CPython; the three refusals are ours --
+	@# this unit reads BYTES, so an encoding we would have to ignore is declined
+	@# rather than answered with a plausible wrong string.
+	./$(COMPILER) test/test_nilpy_io_open_in_a_module_that_rebound_open.npy $(TESTTMP)/test_nilpy_ioopen26
+	$(TESTTMP)/test_nilpy_ioopen26 | diff -u test/test_nilpy_io_open_in_a_module_that_rebound_open.expected -
+	@# __doc__ -- ParsePyProgram consumed the module docstring and dropped it, so the
+	@# name was `undefined variable`, which is where the lekkerzeilen closure stopped
+	@# after every other module in the app had compiled. Three rows, three arms:
+	@# PRESENT (the value, dedented as CPython 3.13+ dedents it), ABSENT (None, never
+	@# '' -- `print(__doc__.strip())` prints a blank line for '' and raises for None),
+	@# and the COLUMN rules (tab = eight columns, a whitespace-only line ignored in
+	@# the minimum, a partially-stripped tab re-materialised as spaces). All diffed
+	@# against CPython. An imported module's __doc__ is REFUSED rather than answered
+	@# with the main module's text; the arm says so.
+	./$(COMPILER) test/test_nilpy_module_docstring.npy $(TESTTMP)/test_nilpy_doc26
+	$(TESTTMP)/test_nilpy_doc26 | diff -u test/test_nilpy_module_docstring.expected -
+	./$(COMPILER) test/test_nilpy_module_docstring_absent.npy $(TESTTMP)/test_nilpy_docabsent26
+	$(TESTTMP)/test_nilpy_docabsent26 | diff -u test/test_nilpy_module_docstring_absent.expected -
+	./$(COMPILER) test/test_nilpy_module_docstring_dedent_columns.npy $(TESTTMP)/test_nilpy_doccols26
+	$(TESTTMP)/test_nilpy_doccols26 | diff -u test/test_nilpy_module_docstring_dedent_columns.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy $(TESTTMP)/test_nilpy_mapbound26

@@ -4685,6 +4685,18 @@ var
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
+  { The MAIN module's docstring, as a SPAN into the source buffer rather than a
+    copied string — an AN_STR_LIT node carries exactly SOffset/SLen, so `__doc__`
+    emits through the same mechanism a written-out literal does and inherits its
+    de-quoting (triple quotes included) for free. ParsePyProgram used to consume
+    this token and drop it, which is why `__doc__` was an undefined variable.
+    Seen is separate from a zero length because `""` is a real docstring and a
+    module without one must answer None: the call site in the field is
+    `print(__doc__.strip())`, where '' prints a blank line and None raises.
+    feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined }
+  PyModuleDocSeen    : Boolean;
+  PyModuleDocSOffset : Integer;
+  PyModuleDocSLen    : Integer;
   PyProgramMode : Boolean; { compiling a Nil-Python .npy program. Python's `//`
     and `%` FLOOR (quotient rounds toward -inf, remainder takes the DIVISOR's
     sign) where Pascal's div/mod TRUNCATE. Same tokens (tkDiv/tkMod), opposite

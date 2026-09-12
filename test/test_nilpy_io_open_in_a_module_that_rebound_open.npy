@@ -1,0 +1,73 @@
+# `io.open` had no member at all: `import io` binds lib/rtl/io.pas, which
+# carried only BytesIO/StringIO, so the lookup said "no member open came of the
+# qualifier io" — a diagnostic whose own hint ("an import that bound nothing")
+# names the wrong cause, because the import bound fine.
+#
+# THE ARRANGEMENT IS THE TEST. This module REBINDS the bare name `open`, which
+# is the only reason a program writes `io.open` in the first place
+# (lekkerzeilen/world.py defines its own `open` for scenes and says so in a
+# comment). A fixture using io.open WITHOUT shadowing would also pass if
+# `io.open` silently fell through to the bare builtin's lowering — the shadow is
+# what makes the two outcomes distinguishable.
+#
+# Second half: the keywords. The builtin's lowering DISCARDS trailing arguments,
+# so `open(p, encoding="utf-8")` dies on `undefined variable (encoding)` — arg 2
+# is parsed as the MODE and the skip loop starts at arg 3. io.open declares them
+# as Pascal parameters instead, and REFUSES the ones it would otherwise have to
+# ignore: this unit reads bytes, so utf-16 is a real decode and ignoring it
+# would return a plausible wrong string. A happy-path-only fixture cannot see
+# whether that refusal exists, so each one is asserted.
+# Every expectation is CPython's own output, except the three refusals, which
+# CPython performs and we decline to fake.
+
+import io
+
+P = "/tmp/test_nilpy_io_open.txt"
+
+
+def open(path):
+    # The module's own `open`, shadowing the builtin from here on.
+    return "scene:" + path
+
+
+w = io.open(P, "w")
+w.write("alpha\n")
+w.close()
+
+with io.open(P, encoding="utf-8") as h:
+    print(h.read().strip())
+with io.open(P) as h:
+    print(h.read().strip())
+with io.open(P, "r") as h:
+    print(h.read().strip())
+
+# The shadow is live — so the row above really did need the qualified name.
+print(open("harbour"))
+
+# utf-8 is the identity for a byte string; so is latin-1; so is the `_` spelling.
+with io.open(P, encoding="UTF_8") as h:
+    print(h.read().strip())
+with io.open(P, encoding="latin-1") as h:
+    print(h.read().strip())
+with io.open(P, encoding=None) as h:
+    print(h.read().strip())
+
+# The three refusals, each one a decode or a translation we do not do.
+try:
+    io.open(P, encoding="utf-16")
+    print("NOT REFUSED utf-16")
+except ValueError:
+    print("refused utf-16")
+try:
+    io.open(P, errors="replace")
+    print("NOT REFUSED errors")
+except ValueError:
+    print("refused errors")
+try:
+    io.open(P, newline="\n")
+    print("NOT REFUSED newline")
+except ValueError:
+    print("refused newline")
+# newline="" is "translate nothing", which is what we do — accepted.
+with io.open(P, newline="") as h:
+    print(h.read().strip())

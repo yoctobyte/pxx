@@ -2579,6 +2579,58 @@ begin
         CurASTNode := node; LastExprTk := tyString;
         Exit;
       end;
+      if NilPyUserCode and (name = '__doc__') then
+      begin
+        { The module docstring, recorded by ParsePyProgram (see PyModuleDocSeen
+          in defs.inc) and emitted as the literal it was — same AN_STR_LIT, same
+          SOffset/SLen off the original token, so the triple-quoted form needs no
+          handling of its own.
+
+          ABSENT -> None, never ''. The two are not interchangeable at the only
+          call site real code has: `print(__doc__.strip())` answers a blank line
+          for '' and raises for None, so '' would turn a module that forgot its
+          docstring into a program that silently prints nothing.
+
+          IMPORTED MODULE -> REFUSED, because the honest answer is not available.
+          CurrentUnitIdx >= 0 is the same seam __file__ uses below. ParsePyProgram
+          is the only routine that records a docstring, so every value this site
+          could offer an imported module belongs to the MAIN one — a plausible
+          wrong string, with the importer's text where the module's own should be.
+          A compile error is not a regression here: before this arm existed the
+          name was `undefined variable` everywhere, so the imported case trades
+          one refusal for a better-aimed one.
+          feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined }
+        Next;
+        if CurrentUnitIdx >= 0 then
+          Error('Nil Python: __doc__ is the MAIN module''s docstring only — an ' +
+                'imported module''s is not recorded, and answering with the main ' +
+                'one would hand this module the importer''s text. Pass the text ' +
+                'in explicitly, or extend ParsePyProgram''s recording to units');
+        if PyModuleDocSeen then
+        begin
+          node := AllocNode(AN_STR_LIT);
+          ASTSOffset[node] := PyModuleDocSOffset;
+          ASTSLen[node] := PyModuleDocSLen;
+          ASTTk[node] := Ord(tyString);
+          CurASTNode := node; LastExprTk := tyString;
+        end
+        else
+        begin
+          { pylib's pynone() variant, which is what a WRITTEN `None` yields in
+            NilPy — NOT the tyPointer 0 this file's own tkNil arm builds.
+            PyMakeNone lives in pyparser.inc, which is included AFTER this file,
+            and needs NO forward here: compiler/pyforwards.inc exists for exactly
+            this and already carries it. Adding a second one is an FPC `Function
+            is already declared Public/Forward` that pxx prescans past — caught by
+            gate.sh's CONCURRENT fpc seed canary and by nothing else. The two
+            both answer True to `is None` and they differ under repr: measured,
+            the pointer form prints `0` where CPython prints `None`, which is the
+            silent-wrong-value half of this feature wearing the right shape. }
+          node := PyMakeNone;
+          CurASTNode := node; LastExprTk := tyVariant;
+        end;
+        Exit;
+      end;
       if NilPyUserCode and (name = '__file__') then
       begin
         { __file__ — derived from the RESOLVED executable at run time, never

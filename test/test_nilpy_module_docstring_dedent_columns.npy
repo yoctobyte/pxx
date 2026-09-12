@@ -1,0 +1,25 @@
+# THE COLUMN RULES, in one docstring because all three fit in one: a TAB-indented
+# line, a WHITESPACE-ONLY line, and a line indented deeper than the minimum.
+# Each was wrong in the first implementation and each is wrong in a way that
+# returns a plausible string rather than failing:
+#   - a whitespace-only line COUNTED toward the common indent gives 2 where
+#     CPython gives 6, so every other line comes out under-dedented;
+#   - stripping by CHARACTER rather than by COLUMN leaves a tab-indented line
+#     indented, because one tab is eight columns and one character;
+#   - a partially-stripped tab must come back as SPACES -- CPython re-materialises
+#     the surplus columns, so `\t\tc` under a min of 8 is eight spaces then c.
+# CPython dedents docstrings at compile time (3.13+, _PyCompile_CleanDoc), so
+# emitting the token's own span -- which is what the first patch did -- answers a
+# wrong string for every indented docstring, lekkerzeilen/__main__.py's included.
+# Diffed against CPython.
+"""Summary on the first line, whose own indent is dropped outright.
+	one tab, which is eight columns and sets the minimum
+  
+		two tabs: sixteen columns, so eight survive as SPACES
+            twelve spaces: four survive
+	back to the minimum
+"""
+
+print(repr(__doc__))
+for _i, _ln in enumerate(__doc__.split(chr(10))):
+    print(_i, repr(_ln))

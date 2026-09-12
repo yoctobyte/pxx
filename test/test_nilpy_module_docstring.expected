@@ -1,0 +1,10 @@
+"First line of the doc.\n\nAn indented second paragraph, kept verbatim — `__doc__` is the literal, so\nthe leading newline and this indentation are part of the value and `.strip()`\nis the caller's job, not ours.\n"
+First line of the doc.
+
+An indented second paragraph, kept verbatim — `__doc__` is the literal, so
+the leading newline and this indentation are part of the value and `.strip()`
+is the caller's job, not ours.
+False
+True
+True
+First line of the doc.

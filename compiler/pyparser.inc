@@ -41482,12 +41482,117 @@ begin
   PyScanLo := savedScanLo;
 end;
 
+{ CPython DEDENTS a docstring at compile time (3.13+, _PyCompile_CleanDoc), so
+  `__doc__` is NOT the literal and emitting the token's own span answers a
+  plausible wrong string: every line arrives indented by however far the source
+  indented it. Not cosmetic for the case that motivated the feature —
+  lekkerzeilen/__main__.py's docstring is indented FOUR, and its `--help` is
+  `print(__doc__.strip())`, which strips the ends and leaves all forty interior
+  lines four columns over.
+
+  THE RULE, derived by measuring CPython 3.14 rather than from recall, because
+  two of its three clauses are not what a first reading produces:
+    - the FIRST line loses its leading whitespace outright, and takes no part in
+      the common-indent calculation;
+    - the common indent is the minimum over the REMAINING lines, in COLUMNS with
+      a tab advancing to the next multiple of 8 — and WHITESPACE-ONLY LINES ARE
+      IGNORED in that minimum. Counting them gives 2 where CPython gives 6 for
+      `"""a\n  \n      b\n"""`, which silently under-dedents every other line.
+    - stripping is by COLUMN, and leading whitespace is re-materialised as
+      SPACES: `"""a\n\tb\n\t\tc\n"""` has min 8, and the second tab's
+      remaining 8 columns come back as eight spaces, not as a tab.
+  feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined }
+function PyDocLeadCols(const ln: AnsiString; var allWs: Boolean): Integer;
+var i, col: Integer;
+begin
+  col := 0; i := 1;
+  while i <= Length(ln) do
+  begin
+    if ln[i] = ' ' then Inc(col)
+    else if ln[i] = #9 then col := ((col div 8) + 1) * 8
+    else Break;
+    Inc(i);
+  end;
+  allWs := i > Length(ln);
+  Result := col;
+end;
+
+{ The first line: its indentation is discarded entirely, never measured. }
+function PyDocStripLead(const ln: AnsiString): AnsiString;
+var i: Integer;
+begin
+  i := 1;
+  while (i <= Length(ln)) and ((ln[i] = ' ') or (ln[i] = #9)) do Inc(i);
+  Result := Copy(ln, i, Length(ln) - i + 1);
+end;
+
+{ Remove `cols` COLUMNS of indentation. The whole leading run is consumed and
+  the surplus comes back as spaces, which is what makes a partially-stripped tab
+  land where CPython puts it. }
+function PyDocStripCols(const ln: AnsiString; cols: Integer): AnsiString;
+var i, col: Integer;
+begin
+  i := 1; col := 0;
+  while i <= Length(ln) do
+  begin
+    if ln[i] = ' ' then Inc(col)
+    else if ln[i] = #9 then col := ((col div 8) + 1) * 8
+    else Break;
+    Inc(i);
+  end;
+  Result := '';
+  while col > cols do begin Result := Result + ' '; Dec(col); end;
+  Result := Result + Copy(ln, i, Length(ln) - i + 1);
+end;
+
+function PyCleanDoc(const s: AnsiString): AnsiString;
+var n, i, p, lineIdx, col, minCol: Integer;
+    ln: AnsiString; allWs: Boolean;
+begin
+  n := Length(s);
+  minCol := -1;
+  lineIdx := 0;
+  p := 1;
+  while p <= n + 1 do
+  begin
+    i := p;
+    while (i <= n) and (s[i] <> #10) do Inc(i);
+    ln := Copy(s, p, i - p);
+    if lineIdx > 0 then
+    begin
+      col := PyDocLeadCols(ln, allWs);
+      if (not allWs) and ((minCol < 0) or (col < minCol)) then minCol := col;
+    end;
+    Inc(lineIdx);
+    p := i + 1;
+    if i > n then Break;
+  end;
+  if minCol < 0 then minCol := 0;   { nothing after the first line to measure }
+
+  Result := '';
+  lineIdx := 0;
+  p := 1;
+  while p <= n + 1 do
+  begin
+    i := p;
+    while (i <= n) and (s[i] <> #10) do Inc(i);
+    ln := Copy(s, p, i - p);
+    if lineIdx = 0 then Result := Result + PyDocStripLead(ln)
+                   else Result := Result + PyDocStripCols(ln, minCol);
+    if i <= n then Result := Result + #10;
+    Inc(lineIdx);
+    p := i + 1;
+    if i > n then Break;
+  end;
+end;
+
 procedure ParsePyProgram;
 var mainNode, stmt, blockNode, jmpPatch, i, savedUnitIdx: Integer; needsBuiltin: Boolean;
     pyHasExceptions: Boolean;
     dummyNames: array[0..3] of AnsiString;
     dummyTypes: array[0..3] of TTypeKind;
     impName: AnsiString; isCount: Boolean;
+    docRaw: AnsiString;
     aStrIdx, realStrIdx: Integer;
     pyWantsPow: Boolean;
     powSym, powPi, powAddr, powAsgn: Integer;
@@ -41626,10 +41731,31 @@ begin
   PyDefaultClsCi := -1;
   PyClsEvalCi := -1;
   PySkipNewlines;
-  { A leading module docstring may precede the imports; consume it. }
+  { A leading module docstring may precede the imports. RECORDED, then consumed:
+    it is the value of `__doc__`, and dropping it is what made that name an
+    undefined variable — which a real program hits, because the conventional
+    `--help` path is `print(__doc__.strip())` (lekkerzeilen/__main__.py:312).
+    The span, not a copy: Tokens[TokPos - 1] is the CURRENT token (TokPos points
+    one past it, as the tkString arm of ParseFactor shows with its `prevTok :=
+    TokPos - 1`), and an AN_STR_LIT carries that token's own SOffset/SLen, so the
+    emitted node is indistinguishable from a literal the programmer wrote.
+    MAIN MODULE ONLY, on purpose: this routine is ParsePyProgram, an imported
+    module's leading string is an ordinary no-op expression statement nobody
+    records, and a global filled here would hand that module the IMPORTER's text
+    — a wrong value with no diagnostic. The emit site refuses instead. }
+  PyModuleDocSeen := False;
   if (CurTok.Kind = tkString) and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkNewline) then
   begin
+    PyModuleDocSeen := True;
+    { DEDENTED, not the raw span: see PyCleanDoc. The cleaned text goes back into
+      TokChars through StoredName, which is the same pool an AST SOffset/SLen
+      pair points into, so the emitted AN_STR_LIT is still an ordinary literal
+      node — it just no longer aliases the source. }
+    docRaw := GetTokenStrFromRaw(Tokens[TokPos - 1].SOffset, Tokens[TokPos - 1].SLen);
+    docRaw := PyCleanDoc(docRaw);
+    PyModuleDocSOffset := StoredName(docRaw);
+    PyModuleDocSLen    := Length(docRaw);
     Next;
     PySkipNewlines;
   end;
@@ -47655,6 +47781,55 @@ begin
         ASTSOffset[node] := StoredName('__main__'); ASTSLen[node] := 8;
         ASTTk[node] := Ord(tyString);
         CurASTNode := node; LastExprTk := tyString;
+        Exit;
+      end;
+      if (name = '__doc__') then
+      begin
+        { The module docstring. THIS is the door a .npy actually comes through —
+          pyparser.inc carries NilPy's own identifier factor, and pasparser_expr
+          .inc carries Pascal's, which is why __name__ and __file__ each appear
+          in both. Adding only the pasparser_expr arm left `__doc__` undefined
+          with the code sitting right there, reached by nothing.
+
+          Emitted as the literal it was: ParsePyProgram recorded the token's
+          SOffset/SLen (PyModuleDocSeen, defs.inc) and an AN_STR_LIT carries
+          exactly those, so the triple-quoted form needs no handling of its own.
+
+          ABSENT -> None, never ''. Not interchangeable at the call site real code
+          has — `print(__doc__.strip())` prints a blank line for '' and raises for
+          None, so '' turns a missing docstring into a program that silently
+          prints nothing.
+
+          IMPORTED MODULE -> REFUSED: ParsePyProgram is the only recorder, so the
+          only value available here belongs to the MAIN module, and handing it to
+          an imported one is the importer's text wearing the module's name.
+          CurrentUnitIdx >= 0 is the same seam __file__ uses just below. Not a
+          regression — the name was `undefined variable` everywhere before.
+          feature-n-the-module-docstring-is-consumed-and-discarded-so-doc-is-undefined }
+        Next;
+        if CurrentUnitIdx >= 0 then
+          Error('Nil Python: __doc__ is the MAIN module''s docstring only — an ' +
+                'imported module''s is not recorded, and answering with the main ' +
+                'one would hand this module the importer''s text. Pass the text ' +
+                'in explicitly, or extend ParsePyProgram''s recording to units');
+        if PyModuleDocSeen then
+        begin
+          node := AllocNode(AN_STR_LIT);
+          ASTSOffset[node] := PyModuleDocSOffset;
+          ASTSLen[node] := PyModuleDocSLen;
+          ASTTk[node] := Ord(tyString);
+          CurASTNode := node; LastExprTk := tyString;
+        end
+        else
+        begin
+          { Exactly what a written `None` builds — PyMakeNone, i.e. pylib's
+            pynone() variant. NOT the tyPointer 0 the Pascal tkNil arm builds:
+            both answer True to `is None`, and that one prints `0` under repr
+            where CPython prints `None`. Measured, not assumed — the pointer
+            form was written here first and `repr(__doc__)` caught it. }
+          node := PyMakeNone;
+          CurASTNode := node; LastExprTk := tyVariant;
+        end;
         Exit;
       end;
       if (name = '__file__') then
