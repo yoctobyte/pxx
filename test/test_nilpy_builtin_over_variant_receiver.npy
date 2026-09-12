@@ -10,6 +10,17 @@
 # Both payload kinds are swept for every name, because the LIST payload was
 # always correct: testing only that would have shown nothing.
 #
+# A THIRD payload kind — BYTES — was added 2026-09-12, and its absence is what
+# let `bytearray` stay broken here for as long as it has been. The group above is
+# str-and-list, `bytes` grew its Variant arm to serve them, and `bytearray` never
+# grew one at all, so `bytearray(x)` over any dynamically-typed x raised
+# `TypeError: expected a number, got object` — the Variant bound the Integer
+# overload, which is the exact failure this file's own header describes for
+# bytes. Found by running lekkerzeilen's `--conform`, where
+# `png._unfilter` writes `bytearray(raw[position:position + stride])` with `raw`
+# a parameter. So the lesson is about the SWEEP, not about bytearray: a payload
+# kind nobody listed is a payload kind nobody dispatches on.
+#
 # Printed through join/len rather than raw where the output would contain
 # quotes, so the expectation survives the Makefile's printf.
 
@@ -49,3 +60,50 @@ for x in strs:
         print("sum-str NO-RAISE")
     except TypeError:
         print("sum-str TypeError")
+
+# ---- bytearray, and the BYTES payload kind that goes with it ----
+# bytearray's Integer overload has existed all along and its Variant arm had not,
+# so every row below aborted at run time with nothing refused at compile time.
+blobs = [bytes([7, 8, 9])]
+arrs = [bytearray([1, 2])]
+
+for b in blobs:
+    print("bytes-pay-bytes  ", len(bytes(b)), list(bytes(b)))
+    print("bytes-pay-bytearr", list(bytearray(b)))
+    print("bytes-pay-len    ", len(b), b[0])
+
+for a in arrs:
+    print("arr-pay-bytearray", list(bytearray(a)))
+    print("arr-pay-bytes    ", list(bytes(a)))
+
+for y in nums:
+    print("bytearray-num    ", list(bytearray(y)))
+
+# an INTEGER payload is a LENGTH for both spellings, and the two must agree
+# rather than diverging on how the value was typed
+for n in [3]:
+    print("bytearray-int    ", list(bytearray(n)))
+    print("bytes-int        ", list(bytes(n)))
+
+# the type TAG has to survive the variant arm, or the value is a bytes wearing
+# the wrong name — this is what a length-only fallback could never have got right
+for b in blobs:
+    print("tag              ", type(bytearray(b)).__name__, type(bytes(b)).__name__)
+    print("repr             ", repr(bytearray(b)))
+
+# bytearray REFUSES what CPython refuses, and it refuses DIFFERENTLY from bytes
+# on a list: an element outside 0..255 is a ValueError, not a truncation, and the
+# variant arm must route through the list overload to keep that
+for x in strs:
+    try:
+        bytearray(x)
+        print("bytearray-str NO-RAISE")
+    except TypeError:
+        print("bytearray-str TypeError")
+
+for bad in [[1, 300]]:
+    try:
+        bytearray(bad)
+        print("bytearray-range NO-RAISE")
+    except ValueError:
+        print("bytearray-range ValueError")

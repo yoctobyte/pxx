@@ -1209,6 +1209,29 @@ function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
   bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
 function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 function bytearray(n: Integer): TPyBytes; overload;
+{ ...and the VARIANT arm, for the reason the `bytes` one three declarations
+  below spells out in full — read that comment, this is its twin and the bug it
+  describes was STILL LIVE HERE. `bytes` grew a Variant arm when an Integer
+  overload was added beneath it, because a Variant then bound to the INTEGER and
+  `bytes(y)` on a list aborted with "expected a number, got object". bytearray
+  has carried `bytearray(n: Integer)` all along — its own comment above says so —
+  and nobody added the Variant arm, so `bytearray(x)` on a dynamically-typed x
+  has raised that same abort for as long as the Integer overload has existed.
+  One concept, two spellings, and the one nobody extended is the one that stayed
+  broken: devdocs/dev/normalise-dont-special-case.md, third instance in this
+  very pair of functions.
+
+  Measured 2026-09-12 against CPython, from lekkerzeilen's `--conform`:
+  `def f(raw): return len(bytearray(raw))` aborts for a bytes AND for a list of
+  ints, while `bytes(raw)` in the same position is correct. `png._unfilter`
+  writes `bytearray(raw[position:position + stride])` with `raw` a parameter, and
+  that is where the demo's PNG round-trip died.
+
+  It DELEGATES to the three static arms rather than reimplementing them, so the
+  list arm keeps raising ValueError on a byte outside 0..255 where bytes()
+  truncates — that difference is deliberate and documented below, and a shared
+  helper here would quietly erase it. }
+function bytearray(const v: Variant): TPyBytes; overload;
 { bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
   the call is almost always to get a MUTABLE copy of an immutable bytes, so
   returning the same object would be a silent aliasing bug rather than a missing
@@ -10789,6 +10812,47 @@ function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
   Result.FIsByteArray := True;
+end;
+
+function bytearray(const v: Variant): TPyBytes; overload;
+{ See the declaration. Dispatches on the RUNTIME tag, because a Variant is the
+  one argument whose Python type is not knowable when the overload is chosen.
+  Deliberately the same tag tests, in the same order, as bytes(const v: Variant)
+  — if one of them ever learns a new payload kind the other must too, and
+  keeping them textually parallel is what makes that visible. }
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    { list/tuple/set are one class here, so this is all three. Through the LIST
+      arm, not pybytes_from_list, so an out-of-range element still raises
+      ValueError instead of being truncated to a byte. }
+    if o is TPyList then
+    begin
+      Result := bytearray(TPyList(o));
+      Exit;
+    end;
+    if o is TPyBytes then
+    begin
+      Result := bytearray(TPyBytes(o));
+      Exit;
+    end;
+  end;
+  { An INTEGER variant is bytearray(n) — n zero bytes — exactly as the static
+    spelling is, so the two agree rather than diverging on how the value was
+    typed. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  begin
+    Result := bytearray(Integer(p^.Payload));
+    Exit;
+  end;
+  { Everything else, a str included: CPython's `bytearray(s)` without an encoding
+    is a TypeError, the same as bytes(s), and answering with the encoded
+    characters would be accepting what CPython REJECTS in the one place that is a
+    wrong VALUE rather than laxity. }
+  raise TypeError.Create('cannot convert this value to bytearray without an encoding');
 end;
 
 function bytearray(b: TPyBytes): TPyBytes; overload;

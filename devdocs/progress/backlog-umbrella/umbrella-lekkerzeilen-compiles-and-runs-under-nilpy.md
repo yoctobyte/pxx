@@ -16,7 +16,7 @@ blocked-by:
   - feature-nilpy-math-module-twelve-absent-names-measured
   - bug-n-os-environ-and-os-sep-are-not-values
   - feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack
-summary: "2026-09-12, LATEST — IT COMPILES AND IT RUNS. `pascal26 --threadsafe -dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES lekkerzeilen/__main__.py` exits 0 with ZERO errors and 112 warnings, producing an 11431860-byte ELF of 11657 procs; the binary runs, `--help` exits 0, and its output is BYTE-IDENTICAL to CPython's. Disk checked on BOTH axes before believing any of it (1% bytes, 1% inodes) because an ENOSPC write makes this compiler print `ok:` with exact byte counts for a truncated binary. THREE WALLS CLEARED AND ONLY THE MIDDLE ONE WAS ON THE BOARD, which is the point of attempting the target rather than triaging: (1) `io.open` did not exist — `lib/rtl/io.pas` carried BytesIO and StringIO only, and `world.py:697` opens a file with `io.open(path, encoding=utf-8)`; it is now a unit-level function delegating to the bare builtin's `pyfile_open`, claiming nothing the builtin does not already do and REFUSING every encoding/errors/newline value it cannot honour rather than ignoring them. (2) `__doc__`, the banked ticket — and it needed an arm in BOTH identifier factors (`pyparser.inc` carries NilPy's, `pasparser_expr.inc` carries Pascal's, and the first patch went into the one a `.npy` never reaches), plus CPython 3.13's compile-time docstring DEDENT, which the ticket did not predict and which this app's `--help` output depends on character for character — whitespace-only lines are IGNORED in the minimum and a partially-stripped tab is re-emitted as SPACES, neither of which a first reading of the rule gives. (3) `0.0 ** <fractional>` raised `ValueError: math domain error` where CPython answers 0.0 — a missing row in `pypow_cx`, which was written from `pypow_v` and copied only its negative-exponent refusal, so with no `PyPowHook` installed the next line was `exp(e * ln(0.0))`. `lines.py` builds its hull tables at MODULE level and `station(0.0)` computes `math.sin(0.0) ** fine`, so the first station of the first hull killed the program before a single line printed. THE LESSON IS ABOUT THE INSTRUMENT, NOT ABOUT `**`: the moment the closure compiled, every wall left was a RUNTIME one, and a first-failure compile census cannot see those at all — it had nothing to say about the bug that stopped the program. Run the thing. WHAT IS NOT ESTABLISHED, AND DO NOT READ THIS SUMMARY AS SAYING THE SIMULATOR RUNS: only `--help` has been exercised. No graphics path, no `--starts`/`--probe`/`--conform`, nothing that opens a window. `task-b-write-the-lekkerzeilen-pxx-platform-backend` is still open and `ctypes` still decides whether the app proper runs — that is unchanged by tonight. FILED AND DELIBERATELY NOT FIXED: `bug-n-an-imported-module-s-star-star-never-installs-pypowhook` — TWO independent defects (the `pyWantsPow` token scan runs before `PyParseImportRun`; and an imported `.py` is a UNIT whose initialisation section runs before the main body that holds the assignment), each sufficient alone, with a control separating them: with `**` in main too, import time printed 1.9952623149688793 and post-start printed CPython's exact 1.9952623149688795. Visible cost is ONE ULP, not a crash — do not rank it as though it were the ValueError that led to it. REGRESSION ROWS WIRED (this umbrella is still not a gate; these are ordinary `test-nilpy` rows, not lekkerzeilen): `io.open` in a module that rebinds bare `open` — world.py's own shape, because without the rebind the row passes even if `io.open` falls through; three `__doc__` fixtures, one of them a tab/whitespace-only/deeper-than-minimum dedent; and `test_nilpy_pow_zero_base_in_an_imported_module`, which contains no `**` of its own on purpose. Landed: 4db262e08 (io.open + `__doc__`) and the `pypow_cx` row beside this edit. The earlier narrative of this summary — the `with ... as` diagnosis lesson is the one still worth reading — moved to the body section dated 2026-09-12, marked superseded."
+summary: "2026-09-12, LATEST — IT COMPILES AND IT RUNS. `pascal26 --threadsafe -dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES lekkerzeilen/__main__.py` exits 0 with ZERO errors and 112 warnings, producing an 11431860-byte ELF of 11657 procs; the binary runs, `--help` exits 0, and its output is BYTE-IDENTICAL to CPython's. Disk checked on BOTH axes before believing any of it (1% bytes, 1% inodes) because an ENOSPC write makes this compiler print `ok:` with exact byte counts for a truncated binary. AND `--conform` NOW PASSES, which is the app's OWN self-check and a better instrument than anything in this ticket: it encodes six PNGs through `capture.write_png` and decodes them back through `png.decode`, so it exercises zlib, struct, bytes handling and file I/O and then checks its own answer — it carries its own oracle rather than needing a known-good output kept in step beside it. All six round-trip and the `pixels` digest, which the app's own docstring says must match on any correct runtime, is IDENTICAL to CPython on all six rows. The `bytes` and `file` columns differ and that is not a fault: our zlib is RFC 1950/1951 from scratch, reports `pxx-rtl`, and deliberately emits STORED deflate blocks — `lib/rtl/zlib.pas` says so in capitals and names this very program, so the PNGs are 3-12x larger and every byte of them is correct. Getting there took one more wall, found only by running it: `bytearray(x)` over a dynamically-typed x raised `TypeError: expected a number, got object`, because `bytes` grew a Variant overload when an Integer one was added beneath it and `bytearray` — which has had the Integer arm all along — never did. `png._unfilter` writes `bytearray(raw[position:position + stride])` with `raw` a parameter, and an intermediate local rescues it, which is why no ordinary spelling of it was broken. THREE WALLS CLEARED AND ONLY THE MIDDLE ONE WAS ON THE BOARD, which is the point of attempting the target rather than triaging: (1) `io.open` did not exist — `lib/rtl/io.pas` carried BytesIO and StringIO only, and `world.py:697` opens a file with `io.open(path, encoding=utf-8)`; it is now a unit-level function delegating to the bare builtin's `pyfile_open`, claiming nothing the builtin does not already do and REFUSING every encoding/errors/newline value it cannot honour rather than ignoring them. (2) `__doc__`, the banked ticket — and it needed an arm in BOTH identifier factors (`pyparser.inc` carries NilPy's, `pasparser_expr.inc` carries Pascal's, and the first patch went into the one a `.npy` never reaches), plus CPython 3.13's compile-time docstring DEDENT, which the ticket did not predict and which this app's `--help` output depends on character for character — whitespace-only lines are IGNORED in the minimum and a partially-stripped tab is re-emitted as SPACES, neither of which a first reading of the rule gives. (3) `0.0 ** <fractional>` raised `ValueError: math domain error` where CPython answers 0.0 — a missing row in `pypow_cx`, which was written from `pypow_v` and copied only its negative-exponent refusal, so with no `PyPowHook` installed the next line was `exp(e * ln(0.0))`. `lines.py` builds its hull tables at MODULE level and `station(0.0)` computes `math.sin(0.0) ** fine`, so the first station of the first hull killed the program before a single line printed. THE LESSON IS ABOUT THE INSTRUMENT, NOT ABOUT `**`: the moment the closure compiled, every wall left was a RUNTIME one, and a first-failure compile census cannot see those at all — it had nothing to say about the bug that stopped the program. Run the thing. WHAT IS NOT ESTABLISHED, AND DO NOT READ THIS SUMMARY AS SAYING THE SIMULATOR RUNS: only `--help` has been exercised. No graphics path, no `--starts`/`--probe`/`--conform`, nothing that opens a window. `task-b-write-the-lekkerzeilen-pxx-platform-backend` is still open and `ctypes` still decides whether the app proper runs — that is unchanged by tonight. FILED AND DELIBERATELY NOT FIXED: `bug-n-an-imported-module-s-star-star-never-installs-pypowhook` — TWO independent defects (the `pyWantsPow` token scan runs before `PyParseImportRun`; and an imported `.py` is a UNIT whose initialisation section runs before the main body that holds the assignment), each sufficient alone, with a control separating them: with `**` in main too, import time printed 1.9952623149688793 and post-start printed CPython's exact 1.9952623149688795. Visible cost is ONE ULP, not a crash — do not rank it as though it were the ValueError that led to it. REGRESSION ROWS WIRED (this umbrella is still not a gate; these are ordinary `test-nilpy` rows, not lekkerzeilen): `io.open` in a module that rebinds bare `open` — world.py's own shape, because without the rebind the row passes even if `io.open` falls through; three `__doc__` fixtures, one of them a tab/whitespace-only/deeper-than-minimum dedent; and `test_nilpy_pow_zero_base_in_an_imported_module`, which contains no `**` of its own on purpose. Landed: 4db262e08 (io.open + `__doc__`) and the `pypow_cx` row beside this edit. The earlier narrative of this summary — the `with ... as` diagnosis lesson is the one still worth reading — moved to the body section dated 2026-09-12, marked superseded."
 ---
 
 # What the owner said
@@ -1223,3 +1223,53 @@ still waits on `task-b-write-the-lekkerzeilen-pxx-platform-backend`, and
 `ctypes` still decides whether it runs at all — unchanged. The next measurement
 someone takes here should be a non-graphics subcommand, and it should be
 confirmed rather than assumed to work.
+
+## 2026-09-12, later — `--conform` PASSES, and it is the best instrument this ticket has had
+
+`--conform` is the owner's own conformance mode: no window, no GPU, six PNGs
+encoded by `capture.write_png` and decoded back by `png.decode`, checking their
+own answer. **A fixture that carries its own oracle**, which is the shape
+conformance work almost never gets — nothing shipped beside it to keep in step.
+
+All six round-trip. The `pixels` digest — which the function's own docstring says
+must match on any correct runtime, because it is the image and not the encoding —
+is **identical to CPython on all six rows**, the awkward 37-wide case included
+(its comment says a width that is not a multiple of four is where a pack
+alignment bug shears the image, so it is there on purpose).
+
+**The `bytes` and `file` columns differ and that is not a fault, by the app's own
+statement and by ours.** `lib/rtl/zlib.pas` is RFC 1950/1951 from scratch, reports
+`pxx-rtl` rather than a libz release, and emits STORED deflate blocks — its header
+says so in capitals and names this program's `capture.py` as the wall that
+prompted the members. Measured: `zlib.compress` of 2000 identical bytes returns
+2011, against CPython's 23, and the stream round-trips. So our PNGs are 3-12x
+larger and every byte of them is correct. That is a documented position, not a
+finding, and the place to change it is the existing
+`feature-n-mimic-zlib-...-inflater` territory, not here.
+
+### The wall it found, and why no ordinary spelling of it was broken
+
+`bytearray(x)` over a dynamically-typed `x` raised `TypeError: expected a number,
+got object`. The cause is written out in full in `pylib.pas`'s own comment on
+`bytes(const v: Variant)`: adding an Integer overload changes which arm a Variant
+binds, so `bytes` had to grow a Variant arm. **`bytearray` has carried
+`bytearray(n: Integer)` all along and never grew one**, so this has been broken
+for as long as that overload has existed — one concept, two spellings, and the
+one nobody extended is the one that stayed broken.
+
+It survived because the spelling that fails is the one nobody writes by hand:
+
+```python
+s = raw[1:1 + n]
+bytearray(s)                      # fine — s is a local and is inferred bytes
+bytearray(raw[1:1 + n])           # aborts — raw is a parameter, so Variant
+```
+
+`png._unfilter(raw, height, stride, step)` writes the second form, because `raw`
+is a parameter. An intermediate local rescues it.
+
+**The test that should have caught it is
+`test_nilpy_builtin_over_variant_receiver`, and it could not**: its sweep has two
+payload kinds, str and list, and lekkerzeilen's is BYTES. A payload kind nobody
+listed is a payload kind nobody dispatches on. That file now sweeps three, and
+says so in its header — the aperture is the lesson, not `bytearray`.
