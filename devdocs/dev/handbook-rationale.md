@@ -1491,6 +1491,22 @@ it — are the owner's.** Recorded here rather than in CLAUDE.md by the same tes
 that governs everything else in it: one instance, one seat, so it is banked and
 not promoted.
 
+**The pair, for whoever finds this after a third instance.** The same rule
+missed twice in one session on this one subject, from opposite ends, by two
+seats. Mine is above: reading a pin body's silence as a refutation. The other is
+`978658a53` (frankuser, LOGBOOK) — a caption, `blank above means no pin before
+v408 recorded a grade`, written INTO the command before any data existed; nine of
+twenty-five bodies record one. That one is the sharper half, because authoring a
+claim as a CAPTION puts it upstream of the measurement, where re-reading the
+output cannot reach it. **Deliberately NOT promoted and not restructured:** two
+instances on one subject is closer to one event than to recurrence, and the rule
+is already in CLAUDE.md twice (HEDGE THE PREMISE NOT JUST THE INFERENCE; the
+clause-to-go-measure rule). Promotion needs a second SUBJECT, not a second seat.
+If this shape appears somewhere unrelated to pin grading, these two are the first
+half of the pair to cite — and the sanctioned remedy for a rule that is present,
+correct and buried is the one the push-before-a-measurement sequence got: lifted
+onto its own line with the incident recorded beside it.
+
 The transferable part: **when a record is SILENT about a property, establish
 which instrument was recording that property in that era before reading the
 silence as a negative.** A grading vocabulary that post-dates the rows you are
