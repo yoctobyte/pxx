@@ -1,19 +1,19 @@
 sig=fpc-self_for
-seed=35277
-sha=d91b82d6516b
-compiler=/home/neo/trackt-watch/compiler/pascal26
-note=FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved
+seed=174058
+sha=a44fa09dbf08
+compiler=/home/rene/trackt-watch/compiler/pascal26
+note=FPC CONTRADICTS ITSELF (-O0 vs -O2) -- it produces different output; an FPC bug, no judgement needed; pxx is not involved
 
-fpc-O0       14299711572574012630
-fpc-O2       1762488600381260080
-pxx-O0       14299711572574012630
-pxx-O2       14299711572574012630
-pxx-O3       14299711572574012630
+fpc-O0       17821281304253621452
+fpc-O2       11708290295869083225
+pxx-O0       17821281304253621452
+pxx-O2       17821281304253621452
+pxx-O3       17821281304253621452
 
-first divergence at checkpoint 5 of 27 -- a `for` statement
-    fpc-O0     8591159807925009913
-    fpc-O2     5722668260239172461
+first divergence at checkpoint 19 of 27 -- a `for` statement
+    fpc-O0     5262505535865983170
+    fpc-O2     10028898183445532707
     (checkpoint N = the Nth statement of the traced program;
      everything before it agrees, so the bug is AT that statement)
 
-repro: tools/pasmith.py --seed 35277 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
+repro: tools/pasmith.py --seed 174058 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
