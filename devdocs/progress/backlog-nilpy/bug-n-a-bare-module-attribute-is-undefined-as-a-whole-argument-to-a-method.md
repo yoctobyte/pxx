@@ -3,7 +3,7 @@ track: N
 prio: 75
 type: bug
 blocked-by: []
-summary: "`o.m(math.pi)` gives `error: undefined variable (math)` — a module-qualified attribute as a WHOLE argument to a method call on a NAME receiver. Six lines, single file, stdlib math. THE DISCRIMINATOR IS THE RECEIVER FORM: a name receiver (`self.m(..)`, `o.m(..)`) fails, a CONSTRUCTED one (`A().m(..)`) works; the enclosing scope, keyword-vs-positional, and the argument's position are all irrelevant, and wrapping it in any expression (`0 + math.pi`) compiles. Hits every module qualifier, `import math` included, not just relative imports. PRE-EXISTING — the pinned compiler fails identically, so it is not from the 2026-09-12 star/arity/slice work that touched these sites. THIS IS THE WALL ON THE lekkerzeilen CLOSURE (goal 4), app.py:2959 (`self._write(.., leading=ui.ROW)`), reached after the extended-slice fix moved the closure 599 lines; 29 `ui.` sites in app.py."
+summary: "`o.m(math.pi)` gives `error: undefined variable (math)` — a module-qualified attribute as a WHOLE argument to a method call on a NAME receiver. Six lines, single file, stdlib math. MEASURED MECHANISM (2026-09-12, second pass): the argument is PARSED TWICE. PyParseFactorCore resolves it CORRECTLY first (ConsumeUnitQualifier answers unit 651, `pi` resolves), then the position REWINDS and the same tokens are re-parsed through PyParseLValueAST, which has no unit-qualifier door and halts. A constructed receiver (`A().m(..)`) parses once and compiles. So the defect is a REDUNDANT SECOND PARSE, not a missing lookup — the first pass of this ticket concluded the opposite and is corrected in place, because that framing sends the reader to add a duplicate door at the error site. Do NOT make the site recoverable either: it would poison the name into a stand-in and emit a wrong value instead of refusing. Next step is to identify the REWINDER (eleven ParseLValueAST call sites, all in pasparser_lval.inc; not ParseIntrinsicDestLValue, checked). PRE-EXISTING — the pinned compiler fails identically. THIS IS THE WALL ON THE lekkerzeilen CLOSURE (goal 4), app.py:2959; 29 `ui.` sites in app.py."
 ---
 
 # A bare `mod.ATTR` as a whole argument to a method is undefined
@@ -47,7 +47,71 @@ moved two variables at once:
    and a NAME receiver in its method rows, so the scope and the receiver moved
    together and the result was read as being about scope.
 
-## MEASURED: the exact site, and the door that is never asked
+## CORRECTED 2026-09-12, second pass: THE DOOR IS ASKED AND IT SUCCEEDS
+
+**Read this section before the one below it, which it corrects.** The first pass
+concluded *"the door is not missing, it is not consulted"* and that framing is
+wrong in the direction that matters: it sends the reader to add a
+`FindUnitOrAlias` call at the error site, which is not the fix.
+
+Probed at BOTH the factor call site (`pyparser.inc`, `qUnit :=
+ConsumeUnitQualifier(name)` inside `PyParseFactorCore`) and at
+`PyParseLValueAST`'s entry, in the failing and the working case, with the
+binary afterwards verified byte-identical to `82215bad2750`:
+
+```
+FAILING  o.m(math.pi):
+  PROBEFC      factor name=pi  qUnit=651  TokPos=38     <- SUCCEEDS
+  PROBELV-ENTRY      name=math idx=-1     TokPos=37     <- rewound, re-parsed
+  pascal26:6: error: undefined variable (math)
+
+WORKING  A().m(math.pi):
+  PROBEFC      factor name=pi  qUnit=651  TokPos=38     <- and nothing else
+```
+
+**The argument is parsed TWICE on the name-receiver path.** The first parse is
+`PyParseFactorCore`, it consumes `math` as unit 651 through
+`ConsumeUnitQualifier`, resolves `pi` in it, and is CORRECT. Then the position
+rewinds — 38 back to 37, `identTok` 35, i.e. the same `math` token — and the
+same argument is re-parsed through `PyParseLValueAST`, which has no unit
+qualifier door and halts. The constructed-receiver path parses it **once** and
+compiles.
+
+So the defect is the REDUNDANT SECOND PARSE, not a missing lookup. This is the
+`ad7c03b03` shape named in CLAUDE.md under "A SPECULATIVE PARSE AND THE
+COMMITTED ONE CAN DISAGREE", with the polarity reversed: there the probe's
+reading was right and the committed one built something else; here the first
+reading is right and the second one refuses.
+
+### It is not a suppressible probe — checked
+
+There is no speculative-mode flag to consult: the machinery is `ErrorRecover` +
+`ErrCount` + `PoisonSym` (`defs.inc:4957`, `defs.inc:318`), and the NilPy site
+calls `Error` (halt) where its Pascal twin `ReportUndefinedName`
+(`pasparser_lval.inc:223`) calls `ErrorRecover`. **So do not "fix" this by
+making the site recoverable** — that would poison `math` into a stand-in symbol
+and emit wrong code instead of refusing, converting a loud compile error into a
+plausible wrong value. That is strictly worse.
+
+### The two candidate fixes, and why neither was taken
+
+1. **Remove the second parse** — the root-cause fix. The rewinder was NOT
+   located: `ParseLValueAST` has eleven call sites, all in
+   `pasparser_lval.inc`, and the one on this path is not
+   `ParseIntrinsicDestLValue` (checked). Whether the re-parse is load-bearing
+   for overload selection is unknown.
+2. **Give `PyParseLValueAST` the qualifier door.** Small and probably works, but
+   it is a second copy of a door that already exists and already answered
+   correctly thirty tokens earlier — `devdocs/dev/normalise-dont-special-case.md`
+   is about exactly this, and the sibling bugs this argument path has already
+   produced (a bare genexpr, a bare Delphi routine name) are what that file is
+   citing.
+
+**Identify the rewinder first.** A marker threaded through the eleven
+`ParseLValueAST` call sites, or a probe on whatever saves and restores `TokPos`
+on the name-receiver method path, answers it in one build.
+
+## SUPERSEDED first pass: "the door that is never asked"
 
 Instrumented at the failure point (`pyparser.inc`, the `else` arm of
 `PyParseLValueAST` that ends in `Error('undefined variable')`), probe removed
@@ -62,7 +126,10 @@ Three facts, and together they are the whole diagnosis:
 
 1. **`FindUnitOrAlias('math')` answers 651** — a valid unit index — at the very
    moment the site decides the name is undefined. The module door is not
-   missing, it is **not consulted here**.
+   missing, it is **not consulted here**. *(CORRECTED above: it IS consulted
+   earlier, by the factor parse, which succeeds. This site is a redundant second
+   reading of the same tokens. The observation stands; the conclusion drawn from
+   it did not.)*
 2. `qualRecv` is EMPTY, so the sibling arm that would report `no member X came
    of the qualifier Y` cannot fire: the parser is sitting on `math` as a bare
    name, with the `.` still unconsumed (`kind=81`), and nothing has looked
@@ -96,7 +163,7 @@ parameterless proc, `math.sqrt` a callable). What is NOT yet located is the door
 that EMITS that read on the working path, and guessing at it would make this the
 fourth special case for one concept — the shape
 `devdocs/dev/normalise-dont-special-case.md` is about, and the shape that
-produced the two sibling bugs named above. Find that door first.
+produced the two sibling bugs named above. CORRECTED on the second pass: the door is found, it is `ConsumeUnitQualifier` in `PyParseFactorCore`, and it already runs and succeeds — find the REWINDER instead.
 
 ## Where to look
 
