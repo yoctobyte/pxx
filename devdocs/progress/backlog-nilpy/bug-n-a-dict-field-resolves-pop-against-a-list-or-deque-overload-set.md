@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-12
 found-by: frankuser
 owner: unassigned
-summary: "ANSWERED 2026-09-12 BY THE INSTRUMENT, NOT BY A REDUCTION: the receiver is typed **TPyDeque**. lekkerzeilen/app.py:1678 `tile.grids.pop(name, None)` -- where `grids` is a dict (`self.grids = {}`, three classes in world.py) -- now reports `TPyDeque.pop() takes exactly 0 argument(s), got 2`, because the arity errors were taught to name the receiver class. The whole program contains ONE deque, `collections.deque()` at chart.py:230, bound to an unrelated local, so the pick has no connection to the value. MECHANISM, and it is already documented in test/test_nilpy_variant_method_pick_by_arity.npy: the dynamic-receiver candidate scan \"keeps one entry per class declaring the name and takes the FIRST FOUND\". So this is a FIRST-WINS SCAN and CLAUDE.md's own rule applies -- it is exposed only by the arrangement that puts the correct entry LAST. SIX REDUCTIONS FAILED and that is now EXPLAINED rather than mysterious: candidate order depends on the whole program's class registration, so a small program puts TPyDict first and compiles, and no small reduction can put TPyDeque there. THE NEXT STEP IS THE SCAN ORDER, NOT A SEVENTH REDUCTION: find what registers TPyDeque ahead of TPyDict for `pop`, and prefer a candidate whose ARITY accepts the call -- which is exactly the fix that fixture records for the zero-argument case, applied to a two-argument one. THIS IS THE CURRENT WALL ON THE lekkerzeilen CLOSURE (goal 4)."
+summary: "FIXED 2026-09-12, and the cause was NOT the scan order this ticket previously blamed. Measured with three read-only probes: the failure is in PyParseVariantMethod (the dynamic path), smArgN=2 is read correctly, nDual=2, and `arFits` -- the guard deciding whether to DEFER the call to run-time dispatch -- was set by the dual-candidate arm. THE DEFECT IS THAT TWO TESTS ASKING THE SAME QUESTION DISAGREED: `arFits` accepts a dual candidate either because its primary mmi fits OR because FindUMethArityStrict finds a fitting OVERLOAD of that class, while the arity PROMOTION beside it (pyparser.inc:18389, which already existed) tested only the primary mmi. So an overload-only match satisfied \"some candidate can accept this arity\", suppressed the deferral, promoted nothing, and left the call bound to a pick that cannot accept it -- then the arity check raised a hard error naming a class the program never mentions. TPyDict was passed over purely because pylib declares pop(k) at :367 before pop(k, d) at :368. Fix: give the promotion the same two-armed test. It is gated on the current pick NOT accepting the written arity, so it can only affect calls that are hard compile errors today. NO REGRESSION FIXTURE EXISTS and that is deliberate -- SEVEN reductions now fail, the closest passes on the PRE-FIX binary too, and committing it would be a guard that cannot fail. Verified on the app: the lekkerzeilen closure moved app.py:1678 -> 2360."
 ---
 
 # `tile.grids.pop(name, None)` resolves against the wrong container's `pop`
@@ -134,3 +134,75 @@ Read the candidate scan's ordering (`hitCi`/`hitPi` selection in
 arity-compatible candidate win over an arity-incompatible one — the two-argument
 direction of the fix that fixture already carries for zero arguments. Do NOT write
 a seventh reduction.
+
+## 2026-09-12, resolved: the mechanism, measured rather than guessed
+
+Three probes, each read-only (the first attempt reused a live local and was
+redesigned — see the logbook):
+
+| probe | reading |
+| --- | --- |
+| which of the two arity-error sites fires | `[S2-variant]` — `PyParseVariantMethod`, the DYNAMIC path |
+| the argument count the guard sees | `smArgN = 2`, correct |
+| which `arFits` disjunct, and `nDual` | `p=4202` → `nDual=2`, set by the DUAL-CANDIDATE arm |
+
+**The defect is two tests asking one question and disagreeing.** In
+`PyParseVariantMethod`:
+
+- `arFits` (the guard that decides whether to DEFER the whole call to run-time
+  dispatch) accepts a dual candidate **two** ways: `ProcArityMatches` on its
+  primary mmi, *or* `FindUMethArityStrict` finding a fitting **overload** of that
+  class.
+- The arity **promotion** at `pyparser.inc:18389` — which already existed, with a
+  comment stating the exact principle — tested only the **first**.
+
+So an overload-only match says "someone can take this call", the deferral is
+suppressed, nothing is promoted, and the committed pick still cannot accept the
+call. The hard arity error then fires against it. `TPyDict` lost purely to
+declaration order: `pop(k)` at `compiler/builtin/pylib.pas:367`, `pop(k, d)` at
+`:368`.
+
+The fix gives the promotion the same two-armed test. **Gated on the current pick
+NOT accepting the written arity**, so it can only change calls that are hard
+compile errors today — it cannot silently alter a working program.
+
+## WHAT THIS TICKET GOT WRONG, because the correction is the reusable part
+
+It said the next step was to read the scan order and not write a seventh
+reduction. Half right:
+
+- **Right** that a reduction was the wrong instrument.
+- **Wrong** about the target. It framed this as a missing mechanism / first-wins
+  scan-order bug. The scan order is real but there are already **three**
+  promotions layered on it (keyword-across-classes, arity-across-classes,
+  keyword-across-overloads-of-one-class), so the defect was a **gap between two
+  existing tests**, not an absent mechanism. Reading `18389` first turned what
+  would have been a duplicated mechanism into a two-line change.
+
+Three mechanisms serving one concept is the count `root-cause-over-midfix` calls
+a design flaw, and this bug is what that costs: they do not agree with each other.
+A future pass should consider collapsing them into one "best candidate for this
+call site" question asked once.
+
+## AND THERE IS NO REGRESSION FIXTURE — deliberately
+
+A seventh reduction was attempted, now targeting the measured mechanism (a
+doubly-dynamic receiver — Variant `tile` AND a `grids` declared by three classes —
+plus `collections.deque` imported so a deque is registered). It **compiles and
+prints CPython's exact output on the PRE-FIX binary too**, so as a regression test
+it is a guard that cannot fail, and it is not committed.
+
+The reason is the whole-program property this ticket identified correctly:
+first-wins candidate order depends on class registration across the entire
+program, and no hand-written fixture is large enough to put `TPyDeque` ahead of
+`TPyDict`. What would actually pin this is a fixture that controls registration
+order directly, or a unit test on the promotion function rather than on a compiled
+program. Neither exists today.
+
+**Verification is therefore the app itself**: the closure moved `app.py:1678` →
+`app.py:2360`, 682 lines, with the next wall an unrelated and clearly-diagnosed
+unimplemented feature (extended-slice assignment).
+
+One live bug was found while reducing and is separately filed:
+`bug-n-a-collections-deque-segfaults-at-run-time` — `collections.deque()` compiles
+and crashes, identically on both sides of this fix.

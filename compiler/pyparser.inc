@@ -17874,6 +17874,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
       candidate classes to dispatch at runtime" }
     dualCis, dualMmis: array[0..15] of Integer;
     nDual, di, kwIdx, kwDepth, swapCi, swapMmi, dualArgs: Integer;
+    dualAr: Integer;          { a dual candidate's fitting OVERLOAD, or -1 }
     ovlMmi: Integer;   { same-arity overload re-picked by argument TYPE }
     anyKw: Boolean; dualRetMixed: Boolean;
     argExprs: array[0..15] of Integer;
@@ -18398,6 +18399,38 @@ begin
         hitCi := dualCis[di]; hitMmi := dualMmis[di]; hitPi := UMthProc_[hitMmi];
         dualCis[di] := swapCi; dualMmis[di] := swapMmi;
         Break;
+      end
+      { ...OR one of that candidate's OVERLOADS fits. The scan keeps ONE entry
+        per class, so dualMmis[di] is whichever overload was declared first, and
+        testing only that one misses a class whose LATER overload is the fitting
+        signature.
+
+        THE TELL WAS THAT THIS TEST AND THE arFits GUARD BELOW DISAGREED. That
+        guard accepts a dual candidate two ways -- its primary mmi fitting, or
+        FindUMethArityStrict finding a fitting overload -- and it decides whether
+        to DEFER the whole call to run-time dispatch. So an overload-only match
+        satisfied "some candidate can accept this arity", suppressed the
+        deferral, and then promoted nothing: the call stayed bound to a pick that
+        cannot accept it, and the arity check further down raised a hard error
+        naming a class the program never mentions.
+
+        Measured on lekkerzeilen/app.py:1678, `tile.grids.pop(name, None)` on a
+        dynamically-typed receiver: first-wins picked TPyDeque (whose pop takes
+        0), nDual was 2, and TPyDict -- which does declare pop(k, d) -- was
+        passed over because pylib declares pop(k) FIRST, at pylib.pas:367 against
+        :368. Error read `TPyDeque.pop() takes exactly 0 argument(s), got 2`.
+        bug-n-a-dict-field-resolves-pop-against-a-list-or-deque-overload-set }
+      else
+      begin
+        dualAr := FindUMethArityStrict(dualCis[di],
+                    PyMethNameFor(dualCis[di], mname), smArgN);
+        if dualAr >= 0 then
+        begin
+          swapCi := hitCi; swapMmi := hitMmi;
+          hitCi := dualCis[di]; hitMmi := dualAr; hitPi := UMthProc_[hitMmi];
+          dualCis[di] := swapCi; dualMmis[di] := swapMmi;
+          Break;
+        end;
       end;
   end;
 

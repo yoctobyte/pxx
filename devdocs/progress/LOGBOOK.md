@@ -3489,3 +3489,45 @@ VERIFIED: full `make test-nilpy` rc=0 GREEN; gate.sh quick, only FAIL the standi
 `pinned builds live lib/rtl`; self-host fixedpoint PASS; `make compiler/pascal26` CONVERGED.
 No fixture ASSERTS either message -- checked before changing them; the two test files that
 mention the wording do so in comments.
+
+2026-09-12 | frankuser | compiler/pyparser.inc |
+The dynamic-receiver arity PROMOTION now uses the same two-armed test as the `arFits` guard beside
+it. WHY: two tests asked the same question and disagreed. `arFits` -- which decides whether to DEFER
+a call on a dynamically-typed receiver to run-time dispatch -- accepts a dual candidate either
+because its primary mmi fits OR because FindUMethArityStrict finds a fitting OVERLOAD of that class;
+the promotion at pyparser.inc:18389 tested only the primary mmi. So an overload-only match satisfied
+"some candidate can accept this arity", suppressed the deferral, promoted NOTHING, and left the call
+bound to a pick that cannot accept it -- and the arity check below then raised a hard error naming a
+class the program never mentions. lekkerzeilen/app.py:1678 `tile.grids.pop(name, None)`:
+`TPyDeque.pop() takes exactly 0 argument(s), got 2`, with TPyDict passed over purely because pylib
+declares pop(k) at :367 before pop(k, d) at :368. The fix is gated on the current pick NOT accepting
+the written arity, so it can only change calls that are hard compile errors today.
+MEASURED, NOT GUESSED, and the ticket's own prediction was wrong. Three probes: a site marker said
+[S2-variant] (the dynamic path, NOT the static field-type inference I had started to suspect from the
+absence of a warning -- an inference from an absence, and wrong); smArgN=2 (the guard reads the count
+correctly); and a disjunct bitfield gave p=4202, i.e. nDual=2 and arFits set by the dual-candidate
+arm. The ticket had blamed first-wins SCAN ORDER and called for reading it. Half right: a reduction
+was indeed the wrong instrument, but the target was wrong -- there are already THREE promotions
+layered on that scan (keyword-across-classes, arity-across-classes, keyword-across-overloads), so the
+defect was a GAP BETWEEN TWO EXISTING TESTS, not a missing mechanism. I was one edit away from adding
+a fourth promotion that duplicated 18389, whose comment states the exact principle I was re-deriving.
+Three mechanisms for one concept is root-cause-over-microfix's design-flaw count, and this is what it
+costs: they disagree. Worth collapsing into one "best candidate for this call site" question later.
+MY FIRST PROBE WAS THE HAZARD IT WAS MEASURING FOR. To detect whether a guard was entered I set
+`smArgN := -999` before it -- but smArgN is a function-scope local other branches read, so the probe
+CHANGED the logic instead of observing it. I then over-corrected and called its result unusable; on
+inspection the guard WAS entered and smArgN was reassigned immediately, so that particular reading
+was sound. Both errors are mine and the lesson is the cheap one: a probe gets its OWN variable that
+nothing else reads, which is what the later two did.
+NO REGRESSION FIXTURE, DELIBERATELY. A seventh reduction, this time aimed at the measured mechanism
+(doubly-dynamic receiver plus a registered deque), compiles and prints CPython's exact output ON THE
+PRE-FIX BINARY TOO -- built from the same tree minus this one hunk. As a regression test that is a
+guard that cannot fail, so it is not committed, and the ticket says so rather than implying coverage.
+First-wins candidate order is a WHOLE-PROGRAM property: no hand-written fixture is large enough to
+put TPyDeque ahead of TPyDict. Verification is the app -- closure app.py:1678 -> 2360, 682 lines,
+next wall an unrelated and clearly-diagnosed unimplemented feature (extended-slice assignment).
+AND THE REDUCTION FOUND A LIVE BUG ON ITS OWN: `collections.deque()` compiles and SEGFAULTS (rc=139,
+no output at all where CPython prints a value). Identical on both sides of this hunk, so pre-existing;
+the pin cannot be the control because it predates deque support entirely. Filed at p70 --
+bug-n-a-collections-deque-segfaults-at-run-time. A compiling program that crashes silently is worse
+than a refused one.
