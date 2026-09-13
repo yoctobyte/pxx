@@ -3857,6 +3857,66 @@ test-nilpy: $(COMPILER)
 	@# the whole tail rather than one value.
 	./$(COMPILER) test/test_nilpy_a_star_unpack_in_a_with_header.npy $(TESTTMP)/test_nilpy_withstar26
 	$(TESTTMP)/test_nilpy_withstar26 | diff -u test/test_nilpy_a_star_unpack_in_a_with_header.expected -
+	@# A METHOD's default that is not a literal scalar, read from a call INSIDE
+	@# the class. Such a default lives in a hidden global evaluated once at the
+	@# def statement, and the call site references it by SYMBOL -- which for a
+	@# method was recorded only after the whole class body had been parsed, so a
+	@# call written inside the class baked None into the argument while the
+	@# identical call written outside it was parsed later and was right.
+	@#
+	@# Rows A-F, I, L and N are the ones that move. G, H, J, K, M and O are
+	@# regression guards: a literal default, an explicit argument, the same call
+	@# from outside the class, and a method of ANOTHER class called from inside
+	@# this one -- all of which already worked, and all of which the fix
+	@# reschedules the evaluation for.
+	@# Row I is declared BELOW its caller, because declaration order inside the
+	@# class never mattered -- it was the PASS, not the lookup.
+	@#
+	@# ROWS L AND N ARE THE POSITIVE CONTROL FOR THE ONE THING THE FIX COULD
+	@# HAVE BROKEN, AND IT TAKES BOTH OF THEM. Each default reads a CLASS
+	@# ATTRIBUTE of the class being defined, whose store is on the class
+	@# statement's HOIST chain while the default's initialiser is on its def-init
+	@# queue; the hoist chain is flushed first, so the answer must be the
+	@# attribute's value and not the BSS zero -- the 2026-09-10 ordering rule
+	@# this change moves code past.
+	@# L's attribute is a LITERAL (`MARGIN = 14`) and N's is COMPUTED
+	@# (`SPAN = 3 * 5`), and that difference is the whole reason N exists: the
+	@# member pre-pass types a literal attribute's slot correctly from its tokens
+	@# and can only guess at a computed one, which PyEmitClassAttrExpr retypes in
+	@# the class BODY loop. So a version of this fix that reads a class attribute
+	@# earlier than the body loop passes L and answers None for N.
+	@# That is not a prediction: measured 2026-09-13 against the rejected
+	@# evaluate-early version, rows N and O were the ONLY two that failed, every
+	@# other row of this fixture included. A control drawn from the literal
+	@# population certified it.
+	@#
+	@# The .expected is CPython's own output. Control, measured: under pin v408
+	@# rows A-F, I, L and N answer None; G, H, J, K, M and O pass there too.
+	./$(COMPILER) test/test_nilpy_a_method_default_that_is_not_a_literal.npy $(TESTTMP)/test_nilpy_mdflt26
+	$(TESTTMP)/test_nilpy_mdflt26 | diff -u test/test_nilpy_a_method_default_that_is_not_a_literal.expected -
+	@# A CALLEE DECLARED BELOW ITS CALLER got the argument by the wrong ABI. An
+	@# unannotated NilPy parameter is a variant and travels const-by-REF, so the
+	@# caller boxes a non-variant argument into a temp and passes its ADDRESS --
+	@# a decision that reads Procs[cpi].Params[k].IsRef, which used to be written
+	@# only while the callee's BODY was parsed. A call site lowered earlier in
+	@# the file read IsRef = False, passed the object handle by value, and the
+	@# callee dereferenced it: the handle came back as a variant TAG, so
+	@# `list(r)` answered "expected a str, a list or a dict, got int".
+	@#
+	@# THE INTERESTING ELEMENT IS LAST ON PURPOSE, and rows D and G are why that
+	@# matters: D calls the callee from BELOW it and G puts the callee first in
+	@# the class body, and both PASS on the unfixed compiler. A suite written the
+	@# ordinary way -- callee first -- certifies this bug rather than catching
+	@# it. Fourth subsystem to meet the 2026-09-11 rule.
+	@#
+	@# The .expected is CPython's own output, and every row prints a DIFFERENT
+	@# number so a diff names the row that moved.
+	@# Control, measured 2026-09-13: under pin v408 rows A, B, C, E and F raise
+	@# and D and G pass. (The pin dies at row A in this fixture, which stops the
+	@# run; the per-row split above was taken from a try/except variant of the
+	@# same file in a scratch dir, so it is a measurement and not a prediction.)
+	./$(COMPILER) test/test_nilpy_a_callee_declared_below_its_caller.npy $(TESTTMP)/test_nilpy_declbelow26
+	$(TESTTMP)/test_nilpy_declbelow26 | diff -u test/test_nilpy_a_callee_declared_below_its_caller.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy $(TESTTMP)/test_nilpy_kwfwd26
 	$(TESTTMP)/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy $(TESTTMP)/test_nilpy_optstr26

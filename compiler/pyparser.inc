@@ -7257,6 +7257,21 @@ begin
   Inc(PyDfltPendCount);
 end;
 
+function PyParamDefaultGlobalName(const pname: AnsiString): AnsiString;
+{ The hidden global that carries one non-constant parameter default's def-time
+  value. Factored out because TWO passes must agree on it by construction: the
+  declare pass in PyParseClass allocates the symbol before the class body is
+  parsed, and PyEvalParamDefault below fills it in afterwards. Rebuilding the
+  name in two places is how they would silently stop agreeing -- a declared but
+  never-stored global reads as None, which is the exact bug the declare pass
+  exists to fix. }
+begin
+  Result := '$pdef.';
+  if PyDefaultClsName <> '' then Result := Result + PyDefaultClsName + '.';
+  if PyNestPrefix <> '' then Result := Result + PyNestPrefix + '.';
+  Result := Result + PyHdrName + '.' + pname;
+end;
+
 function PyEvalParamDefault(var j: Integer; const pname: AnsiString): Integer;
 { Evaluate a NON-CONSTANT parameter default into a hidden global and return that
   global's symbol (-1 if the expression could not be parsed as a value).
@@ -7302,10 +7317,7 @@ begin
     Next;
     Exit;
   end;
-  gname := '$pdef.';
-  if PyDefaultClsName <> '' then gname := gname + PyDefaultClsName + '.';
-  if PyNestPrefix <> '' then gname := gname + PyNestPrefix + '.';
-  gname := gname + PyHdrName + '.' + pname;
+  gname := PyParamDefaultGlobalName(pname);
   gsym := FindSym(gname);
   if gsym < 0 then
   begin
@@ -33316,9 +33328,45 @@ begin
 end;
 
 { Copy the parsed header's defaults and result class onto a registered Proc. }
+procedure PyMarkVariantParamsByRef(procIdx: Integer);
+{ NILPY'S VARIANT PARAMETER ABI IS A PROPERTY OF THE SIGNATURE, SO IT IS
+  RECORDED WHEN THE SIGNATURE IS REGISTERED -- NOT WHEN THE BODY IS PARSED.
+
+  An unannotated NilPy parameter is a variant and travels const-by-REF: the
+  caller passes the variant's ADDRESS and IRLowerCallArg boxes a non-variant
+  argument into a hidden temp to have an address to pass. That decision reads
+  `Procs[cpi].Params[k].IsRef`, and IsRef used to be written only by PyParseDef
+  (and PyParseMethod) while parsing the BODY -- so every call site lowered
+  EARLIER IN THE FILE than the callee's definition saw IsRef = False, passed the
+  value rather than an address, and the callee then dereferenced it.
+
+  Measured 2026-09-13: `def go(d): return take(list(d))` above
+  `def take(r): return len(list(r))` answers
+  `TypeError: expected a str, a list or a dict, got int` -- the object handle
+  read back as a variant tag. Swap the two defs and it prints 2. Identical for a
+  method calling a method declared lower in the same class body, which is what
+  lekkerzeilen hits: `Live.start` calls `self._apply(held.values())` and
+  `_apply` is written below it.
+
+  Pascal is untouched and must be: there IsRef is NOT a function of the type --
+  `const v: Variant` is by-ref and a plain by-value `v: Variant` copies
+  (bug-pascal-byvalue-variant-param). That is why this lives here and not in
+  RegisterProc, which pylib's own units go through during a NilPy build. }
+var i: Integer;
+begin
+  for i := 0 to Procs[procIdx].ParamCount - 1 do
+    if Procs[procIdx].Params[i].TypeKind = tyVariant then
+    begin
+      Procs[procIdx].Params[i].IsRef := True;
+      if i < MAX_PROC_PARAMS then
+        ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := True;
+    end;
+end;
+
 procedure PyApplyDefSignature(procIdx: Integer);
 var i: Integer;
 begin
+  PyMarkVariantParamsByRef(procIdx);
   { A class-returning def must record WHICH class, or the call site has a
     tyClass value with no identity and a later field access reads the object
     POINTER (test_nilpy_class_return). }
@@ -37919,6 +37967,11 @@ begin
       else
       begin
         procIdx := RegisterProc(fullName, not isCtor, mRet, nparams, pnames, ptypes);
+        { the variant-parameter ABI, fixed here rather than when the body is
+          parsed -- see PyMarkVariantParamsByRef. A method CALLED from a method
+          declared above it in the same class body is lowered before this one's
+          body exists, and that call site reads IsRef. }
+        PyMarkVariantParamsByRef(procIdx);
         if isGenM then PyMarkGeneratorProc(procIdx);
         if mRetRec >= REC_UCLASS_BASE then ProcRetRecId[procIdx] := mRetRec;
         { the call-site packing reads these two, and overload matching reads the
@@ -39658,13 +39711,32 @@ end;
   pre-pass uses, so the constant-vs-expression rule and the span skipping stay
   in ONE place. A second parser that disagrees with the first is the recurring
   failure mode in this frontend. }
-procedure PyEvalMethodDefaults(ci, lo, hi: Integer);
-var j, depth, pIdx, mmi, mpi, savedTok: Integer;
+procedure PyEvalMethodDefaults(ci, lo, hi: Integer; declareOnly: Boolean);
+{ declareOnly: allocate each non-constant default's hidden global and record it
+  on the Proc, WITHOUT evaluating the expression. Run before the class body is
+  parsed, so a call site INSIDE the class has a symbol to reference; the real
+  pass runs at the class statement, finds the symbol by name and fills it in.
+
+  WHY THE TWO ARE SPLIT, AND IT IS A MEASURED REGRESSION AND NOT A PREFERENCE.
+  Evaluating early instead answers None for a COMPUTED class attribute
+  (`LIMIT = 7 * 2`, then `def __init__(self, v=LIMIT)`). The member pre-pass can
+  only guess a computed attribute's type from its tokens, so it types the
+  `$clsattr.<C>.<name>` slot tyVariant; PyEmitClassAttrExpr RETYPES it to what
+  the initialiser actually produced, and that happens in the body loop. Read
+  before the body loop, the attribute is a variant and the default global is
+  allocated variant-shaped over a slot that ends up an Int64 -- a type mismatch
+  whose value reads as None. A LITERAL attribute is typed correctly by the
+  pre-pass, so it passes, which is why a control drawn from the literal
+  population certified the broken version. Declaring early and evaluating late
+  parses nothing twice and evaluates nothing twice. }
+var j, depth, pIdx, mmi, mpi, savedTok, dStart, dSym: Integer;
     savedClsCi: Integer;
     dSOff, dSLen: Integer;
     dVal: Int64;
-    dIsStr: Boolean;
+    dIsStr, isNonConst: Boolean;
     savedEval: Boolean;
+    savedCurProc: Integer;
+    gname: AnsiString;
     savedHdr, savedCls, mname, pname: AnsiString;
 begin
   if (ci < 0) or (lo < 0) or (hi <= lo) then Exit;
@@ -39715,10 +39787,54 @@ begin
                 (pIdx < MAX_PROC_PARAMS) then
         begin
           Inc(j);
-          PyDefaultEvalMode := True;
+          dStart := j;
+          PyDefaultEvalMode := not declareOnly;
           dVal := PyParamDefaultAt(j, pname, dIsStr, dSOff, dSLen);
           PyDefaultEvalMode := False;
           if dVal = 0 then ;   { the ordinal is the pre-pass's business, not ours }
+          if declareOnly then
+          begin
+            { A NON-CONSTANT default is the one shape that needs a symbol, and
+              with evaluation off PyParamDefaultAt reports it as "was None" --
+              the same thing it reports for a literal `= None`, which needs
+              nothing. The two are separated at the token, by the same lone-token
+              test that function uses, rather than by a second flag nobody else
+              would maintain. A lone string default is deliberately NOT declared
+              here: the call site already builds the literal from sOff/sLen, so
+              declaring one would reroute working code through a global. }
+            isNonConst := PyDefaultWasNone and
+                          not ((Tokens[dStart].Kind = tkNil) and
+                               (dStart + 1 < TokCount) and
+                               (Tokens[dStart + 1].Kind in [tkComma, tkRParen]));
+            if isNonConst then
+            begin
+              gname := PyParamDefaultGlobalName(pname);
+              dSym := FindSym(gname);
+              if dSym < 0 then
+              begin
+                { tyVariant, and NOT the value's own type, because the value is
+                  not known yet and a later retype would leave the call site's
+                  already-built ident node disagreeing with the symbol -- which
+                  is precisely the failure this split exists to avoid. A variant
+                  is what an omitted NilPy parameter is anyway, so the store
+                  PyEvalParamDefault queues converts into it and the read at the
+                  call site is a plain variant read.
+                  CurProc := -1 forces a BSS global for the same reason
+                  PyEvalParamDefault does it -- see the note there. }
+                savedCurProc := CurProc;
+                CurProc := -1;
+                dSym := AllocVar(gname, tyVariant);
+                CurProc := savedCurProc;
+                SymSyncTypeRef(dSym);
+              end;
+              ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + pIdx] := dSym;
+              ProcParamDefaultGName[mpi * MAX_PROC_PARAMS + pIdx] :=
+                InternStr(Syms[dSym].Name);
+              ProcParamHasDefault[mpi * MAX_PROC_PARAMS + pIdx] := True;
+              ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + pIdx] := False;
+            end;
+            Continue;
+          end;
           if PyDefaultSym >= 0 then
           begin
             ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + pIdx] := PyDefaultSym;
@@ -40130,6 +40246,28 @@ begin
   if not PyMembersHoisted[ci] then
     PyRegisterClassMembers(ci, bodyStart, bodyEnd, isDC, False);
   if isDC and (ci < PY_MAX_DC_FIELDS) then PyDcClassIsDc[ci] := True;
+  { DECLARE the non-constant method defaults here, before the body loop. The
+    statement loop's own call still EVALUATES them, at the class statement.
+
+    A non-constant default (`def m(self, n=N)`) lives in a hidden global that
+    DefaultArgValueNode references by symbol, and the symbol was recorded on the
+    Proc only when PyEvalMethodDefaults ran -- in the statement loop, AFTER
+    PyParseClass returned, i.e. after every method body in the class had already
+    been parsed. So a call site INSIDE the class read ProcParamDefaultSym = -1
+    and ProcParamDefaultIsNone = True (what the member pre-pass leaves, because
+    it parses headers with evaluation OFF) and baked PyMakeNone into the
+    argument. `self.m()` answered None where `c.m()` from outside the class
+    answered 30, because the outside call is parsed later. Declaration order
+    inside the class made no difference, which is the tell that it was the PASS
+    and not the lookup.
+    bug-n-a-method-s-non-constant-default-is-none-when-the-call-is-inside-the-class
+
+    Only the SYMBOL is needed this early, and only the symbol is taken: the
+    expression is not touched. Moving the whole evaluation here instead was
+    measured RED on a COMPUTED class attribute -- see the note on
+    PyEvalMethodDefaults, which carries the mechanism. }
+  if not PyTypingPass then
+    PyEvalMethodDefaults(ci, bodyStart, bodyEnd, True);
   PySkipNewlines;
   { The body loop, run once for this class's own body and then once per
     flattened base — replaying the base's tokens with ci = THIS class, so every
@@ -41963,7 +42101,7 @@ begin
     begin
       PyClsEvalCi := -1;
       PyParseClass(False);
-      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi, False);
       PyClsEvalCi := -1;
       { a METHOD default is evaluated when the CLASS BODY executes, so its
         initialiser belongs at the class statement — the same shape the def
@@ -42020,7 +42158,7 @@ begin
         Error('Nil Python: @dataclass must precede a class');
       PyClsEvalCi := -1;
       PyParseClass(True);
-      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi, False);
       PyClsEvalCi := -1;
       { the class BODY's own stores first — see the note at the plain-class
         branch above; a default that reads a class attribute must not run before
@@ -42513,7 +42651,7 @@ begin
     begin
       PyClsEvalCi := -1;
       PyParseClass(False);
-      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi, False);
       PyClsEvalCi := -1;
       { as in the def branch below — a method default runs when the class body
         does, so its initialiser is queued at the class statement }
@@ -42549,7 +42687,7 @@ begin
         Error('Nil Python: @dataclass must precede a class');
       PyClsEvalCi := -1;
       PyParseClass(True);
-      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi);
+      PyEvalMethodDefaults(PyClsEvalCi, PyClsEvalLo, PyClsEvalHi, False);
       PyClsEvalCi := -1;
       { the class BODY's own stores first — see the note at the plain-class
         branch above; a default that reads a class attribute must not run before

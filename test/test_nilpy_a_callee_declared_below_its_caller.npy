@@ -1,0 +1,85 @@
+# A CALLEE DECLARED BELOW ITS CALLER GETS THE ARGUMENT BY THE WRONG ABI.
+#
+# An unannotated NilPy parameter is a variant, and a variant travels
+# const-by-REF: the caller passes the variant's ADDRESS, and IRLowerCallArg
+# boxes a non-variant argument into a hidden temp so that there is an address to
+# pass. That decision reads Procs[cpi].Params[k].IsRef -- and IsRef used to be
+# written only while the callee's BODY was parsed. A call site lowered EARLIER
+# IN THE FILE than the callee's definition therefore read IsRef = False, passed
+# the object handle by value, and the callee dereferenced it: the handle came
+# back as a variant TAG, so `list(r)` answered
+# `TypeError: expected a str, a list or a dict, got int`.
+#
+# THE INTERESTING ELEMENT IS LAST ON PURPOSE. Every row here has a twin with the
+# two definitions swapped, and the swapped twin PASSED on the unfixed compiler --
+# a suite written the ordinary way, callee first, certifies this bug. That is
+# the 2026-09-11 rule, and this is the fourth subsystem to meet it.
+#
+# The shape is ordinary Python and it is what lekkerzeilen hits: gauges.Live.start
+# calls `self._apply(held.values())` with `_apply` written below it.
+
+def caller_list(d):
+    return callee_len(list(d))
+
+
+def caller_vals(d):
+    return callee_len(d.values())
+
+
+def caller_keys(d):
+    return callee_len(d.keys())
+
+
+def callee_len(r):
+    # Declared BELOW all three callers above, which is the whole point.
+    return len(list(r))
+
+
+# ...and the control: the same call written BELOW the callee, which worked
+# before this fix and must keep working.
+def caller_after(d):
+    return callee_len(list(d))
+
+
+class C:
+    def start(self, d):
+        held = d
+        return self._apply(held.values())
+
+    def start_keys(self, d):
+        return self._apply(d.keys())
+
+    def _apply(self, readings):
+        # Reassigned, the way real code does it -- gauges.Live._apply is
+        # `readings = list(readings)`.
+        readings = list(readings)
+        return len(readings)
+
+
+class D:
+    # The control class: the callee declared FIRST. It passed before the fix.
+    def _apply(self, readings):
+        readings = list(readings)
+        return len(readings)
+
+    def start(self, d):
+        return self._apply(d.values())
+
+
+# EACH ROW GETS A DIFFERENT SIZE so a diff names the row that moved rather than
+# printing seven identical numbers -- and so that no row's expected value is the
+# 0 or the empty container a broken path would also produce.
+d1 = {"a": 1}
+d2 = {"a": 1, "b": 2}
+d3 = {"a": 1, "b": 2, "c": 3}
+d4 = {"a": 1, "b": 2, "c": 3, "d": 4}
+d5 = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}
+d6 = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6}
+d7 = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7}
+print("A", caller_list(d1))
+print("B", caller_vals(d2))
+print("C", caller_keys(d3))
+print("D", caller_after(d4))
+print("E", C().start(d5))
+print("F", C().start_keys(d6))
+print("G", D().start(d7))

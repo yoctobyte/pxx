@@ -1,0 +1,142 @@
+# A method's NON-CONSTANT parameter default, read from a call INSIDE the class.
+#
+# A default that is not a literal scalar lives in a hidden global evaluated once
+# at the def statement, and the call site references that global by symbol. For
+# a METHOD the symbol was recorded only after the whole class body had been
+# parsed, so a call written inside the class read "not recorded yet" and baked
+# None into the argument -- while the identical call written outside the class
+# was parsed later and was correct.
+#
+# Rows A-F are the ones that moved. Rows G-L are the spellings that already
+# worked and are here as regression guards, because the fix moves WHEN the
+# evaluation happens for every class in the program.
+#
+# bug-n-a-method-s-non-constant-default-is-none-when-the-call-is-inside-the-class
+
+N = 30
+LABEL = "sloep"
+SCALE = 1.5
+PAIR = (1, 2)
+
+
+class C:
+    def m_name(self, n=N):
+        return n
+
+    def m_str(self, s=LABEL):
+        return s
+
+    def m_float(self, f=SCALE):
+        return f
+
+    def m_tuple(self, t=PAIR):
+        return t
+
+    def m_expr(self, n=N + 1):
+        return n
+
+    def m_neg(self, n=-N):
+        return n
+
+    def m_lit(self, n=7):
+        return n
+
+    # Each of these is the call the defect was about: inside the class, on the
+    # `self` receiver, with the argument omitted.
+    def ask_name(self):
+        return self.m_name()
+
+    def ask_str(self):
+        return self.m_str()
+
+    def ask_float(self):
+        return self.m_float()
+
+    def ask_tuple(self):
+        return self.m_tuple()
+
+    def ask_expr(self):
+        return self.m_expr()
+
+    def ask_neg(self):
+        return self.m_neg()
+
+    def ask_lit(self):
+        return self.m_lit()
+
+    def ask_explicit(self):
+        return self.m_name(4)
+
+    # Declared BELOW its caller, to show the defect was never about order.
+    def ask_later(self):
+        return self.m_later()
+
+    def m_later(self, n=N):
+        return n
+
+
+class D:
+    # A default that reads a CLASS ATTRIBUTE of the class being defined. The
+    # attribute's store is on the class statement's hoist chain and the
+    # default's initialiser is on its def-init queue, and the hoist chain is
+    # flushed FIRST -- so MARGIN is 14 and not the BSS zero by the time the
+    # default is evaluated. That ordering is what this row pins; it is the one
+    # thing moving the evaluation earlier could have broken.
+    MARGIN = 14
+
+    def edge(self, left=MARGIN):
+        return left
+
+    def ask_edge(self):
+        return self.edge()
+
+
+class F:
+    # THE SAME ORDERING ROW, BUT WITH A *COMPUTED* CLASS ATTRIBUTE -- and it is
+    # here because D's literal MARGIN was drawn from the easier population and
+    # certified a version of this fix that answered None here.
+    #
+    # The member pre-pass can only guess a class attribute's type from its
+    # tokens, so a computed one is typed tyVariant and PyEmitClassAttrExpr
+    # RETYPES the slot to what the initialiser actually produced -- in the class
+    # BODY loop. A literal is typed correctly by the pre-pass and so needs no
+    # retype, which is exactly why the literal row passes for a reason the
+    # computed row does not share. Any change that reads a class attribute
+    # EARLIER than the body loop breaks this row and leaves D's passing.
+    SPAN = 3 * 5
+
+    def reach(self, far=SPAN):
+        return far
+
+    def ask_reach(self):
+        return self.reach()
+
+
+class E:
+    # A method of ANOTHER class, called from inside this one: the route that
+    # already worked, because D's defaults were evaluated when D's own class
+    # statement was parsed, which is before E's body.
+    def ask_other(self, d):
+        return d.edge()
+
+
+def outside(c):
+    return c.m_name()
+
+
+c = C()
+print("A", c.ask_name())
+print("B", c.ask_str())
+print("C", c.ask_float())
+print("D", c.ask_tuple())
+print("E", c.ask_expr())
+print("F", c.ask_neg())
+print("G", c.ask_lit())
+print("H", c.ask_explicit())
+print("I", c.ask_later())
+print("J", c.m_name())
+print("K", outside(c))
+print("L", D().ask_edge())
+print("M", E().ask_other(D()))
+print("N", F().ask_reach())
+print("O", F().reach())
