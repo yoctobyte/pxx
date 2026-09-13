@@ -3990,6 +3990,17 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_mmkeynone26 | diff -u test/test_nilpy_min_max_key_none.expected -
 	./$(COMPILER) test/test_nilpy_sorted_key_none.npy $(TESTTMP)/test_nilpy_keynone26
 	$(TESTTMP)/test_nilpy_keynone26 | diff -u test/test_nilpy_sorted_key_none.expected -
+	# A builtin whose OPTIONAL arguments are Pascal defaults (`sorted(l, key=nil,
+	# reverse=False)`), bound as a VALUE. A callable-value dispatcher stages only
+	# the arguments the call site wrote, so the defaulted tail arrived as garbage:
+	# `f = sorted; f([3, 1, 2])` answered `[]` in seven of ten runs of ONE binary
+	# and SIGSEGV'd in the other three, while `sorted([3, 1, 2])` was correct
+	# throughout -- the plain call goes through ordinary overload resolution,
+	# which already honours defaults. Both spellings are in the fixture, and the
+	# len/sum rows have no defaulted tail, so a failure that takes them too is the
+	# shared wrapper machinery rather than this.
+	./$(COMPILER) test/test_nilpy_builtin_with_a_defaulted_tail_as_a_value.npy $(TESTTMP)/test_nilpy_deftail26
+	$(TESTTMP)/test_nilpy_deftail26 | diff -u test/test_nilpy_builtin_with_a_defaulted_tail_as_a_value.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy $(TESTTMP)/test_nilpy_brkcont26
 	$(TESTTMP)/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is

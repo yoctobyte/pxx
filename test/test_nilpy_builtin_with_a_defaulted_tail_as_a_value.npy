@@ -1,0 +1,52 @@
+# A pylib/pyeval builtin whose OPTIONAL arguments are spelled as Pascal
+# defaults, bound as a VALUE and then called.
+#
+#   function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False)
+#
+# `sorted(xs)` is arity 1 to a Python programmer and ParamCount 3 to the
+# compiler. Every callable-value dispatcher stages only the arguments the CALL
+# SITE wrote, so binding one of these as a value and calling it with one
+# argument left `key` and `reverse` reading whatever sat in those slots.
+#
+# The failure was a SILENT WRONG VALUE in the majority of runs, not a crash:
+# measured 2026-09-13 at 34a9a7609, ONE binary, ten runs, `f = sorted;
+# f([3, 1, 2])` answered `[]` seven times and SIGSEGV'd three. The plain CALL
+# spelling `sorted([3, 1, 2])` was correct throughout, because that goes
+# through ordinary overload resolution, which already honours defaults -- so no
+# probe of "does sorted work" could see any of this. Both spellings are in this
+# fixture for exactly that reason.
+#
+# `[]` is the failure value, so no row here may legitimately expect an empty
+# list: that is the collision CLAUDE.md warns about, where a guard cannot tell
+# a correct answer from a blank one.
+#
+# Valid CPython: the .expected beside this file is captured from CPython, which
+# is the oracle NilPy is defined against, not derived by hand.
+
+# --- the value form, the one that was broken -----------------------------
+f = sorted
+print(f([3, 1, 2]))
+print(f(["pear", "fig", "apple"]))
+
+# through map(), where a bare builtin name reaches the same path as an argument
+print(list(map(sorted, [[3, 1, 2], [9, 5]])))
+
+# and the same name captured into a variable first, then mapped
+g = sorted
+print(list(map(g, [[2, 1], [4, 3]])))
+
+# --- the CALL form, which was always correct: proves the ordinary overload
+# --- path still honours the defaulted tail rather than being traded for the
+# --- value form.
+print(sorted([3, 1, 2]))
+print(sorted([3, 1, 2], reverse=True))
+
+# --- controls with NO defaulted tail, which already worked. Here so a
+# --- regression in the shared wrapper machinery is attributable: if these go
+# --- red together with the rows above, the fault is the wrapper itself and not
+# --- the defaults handling.
+h = len
+print(h("abcd"))
+print(list(map(len, ["aa", "b"])))
+s = sum
+print(s([1, 2, 3]))

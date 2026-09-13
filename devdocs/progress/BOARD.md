@@ -296,7 +296,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (142)
+## backlog-nilpy (143)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -369,6 +369,7 @@ _none_
 | bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module | N | 55 | bug | `other.keys()` on an untyped parameter is not dispatched on the receiver when the call sits in an IMPORTED module: it either falls through to the dict-view builtin or binds to a `keys()` the callee's module declares, and a foreign object reaching a self-iterating `keys()` segfaults. Reopens bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, which was closed on the single-module case. Found by Track B reverting a workaround the closed ticket had unblocked. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 50 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value | N | 60 | bug | len(x) raises TypeError: expected an object with a length, got object whenever x's static type was not inferred, even though x's class defines __len__: an element of a list, a value out of a dict, an unannotated parameter, the return of any self-referencing or recursive function. The same value answers .attr, .method(), for-in and x[i] correctly, so len is the one protocol with no dynamic fallback. | — |
+| bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit | N | 40 | bug | > | — |
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 20 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic | N | 70 | bug | a = x + 1 then `not a` is True and `~a` is 4, where CPython says False and -1026. It is not about the operator on the right: +, -, *, >> all trigger it, and so does a later reassignment from a plain literal. `int(1025)` does NOT. Some spellings return a 62-bit value with a tag in the high nibble (0x3000000000000004), so `~` is complementing a BOX rather than the integer it holds. It changes CONTROL FLOW: `if not a:` takes the wrong branch, silently. | — |
 | bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value | N | 45 | bug | `B = object` is `undefined variable (object)`, while `t = str`, `u = int`, `v = dict` all bind and call fine. `object` is the single builtin type name that is not a first-class value — it is consumed as a no-op in the base-class position and has no row anywhere else, so any expression naming it fails. | — |
@@ -1379,6 +1380,7 @@ _none_
 - [p 40] [N] bug-n-a-unit-alias-rebind-is-silently-ignored
 - [p 40] [N] bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
+- [p 40] [N] bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling

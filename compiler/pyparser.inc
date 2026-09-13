@@ -15640,8 +15640,15 @@ begin
     if ProcUnitIdx[i] <> ProcUnitIdx[ofPi] then Continue;
     if not ((Procs[i].Name = nm) or
             ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, nm))) then Continue;
-    if Procs[i].ParamCount <> wantArity then Continue;
+    { REQUIRED arity, not ParamCount: pylib spells a Python builtin's optional
+      arguments as Pascal defaults, so `sorted`'s Variant arm is ParamCount 3
+      and arity 1. Matching on ParamCount skipped every such arm and left the
+      caller on the raw unwrapped address — see PyProcRequiredArity. }
+    if PyCallableValueArity(i) <> wantArity then Continue;
     ok := True;
+    { Only the REQUIRED parameters have to be Variant. The defaulted tail is
+      never staged by a callable-value call, and pylib spells it `key: Pointer`
+      — demanding Variant there would reject the very arms this exists to find. }
     for j := 0 to wantArity - 1 do
       if Procs[i].Params[j].TypeKind <> tyVariant then begin ok := False; Break; end;
     if ok then begin Result := i; Exit; end;
@@ -15683,6 +15690,85 @@ begin
   Result := (tk = tyVariant) or PyScalarWrappableRetType(tk);
 end;
 
+{ How many arguments a CALL to pi must actually supply: ParamCount less the
+  TRAILING defaulted tail. This is the arity Python sees, and it is the one the
+  callable-value path has to reason about, because pylib spells a Python
+  builtin's optional arguments as Pascal defaults:
+
+    function sorted(l: TPyList; key: Pointer = nil; reverse: Boolean = False)
+    function min(l: TPyList; key: Pointer = nil): Variant
+
+  `sorted(xs)` is arity 1 to a Python programmer and ParamCount 3 here. Every
+  callable-value dispatcher (pyvar_callv1, PyCallKey1, ...) stages exactly the
+  arguments the CALL SITE wrote, so binding one of these as a value and calling
+  it with one argument left `key` and `reverse` reading whatever happened to sit
+  in those slots. Measured 2026-09-13 at 34a9a7609, one binary, ten runs each:
+
+    f = sorted; f([3, 1, 2])   ->  `[]` seven times, SIGSEGV three
+    f = min;    f([3, 1, 2])   ->  TypeError: expected a number, got object
+    f = max;    f([3, 1, 2])   ->  TypeError: expected a number, got int
+
+  The plain CALL spelling `sorted([3, 1, 2])` was correct throughout — it goes
+  through ordinary overload resolution, which already honours defaults — so no
+  probe of "does sorted work" could see any of this. sorted's majority outcome
+  is an EMPTY LIST with exit 0, which is the silent-wrong-value shape, and it is
+  why this is a bug rather than a gap: min and max at least raise.
+
+  Only a TRAILING run counts. A default in the middle of a parameter list is not
+  something Pascal can express, but scanning backwards rather than asserting it
+  keeps this honest if that ever changes. }
+function PyProcRequiredArity(pi: Integer): Integer;
+begin
+  Result := Procs[pi].ParamCount;
+  while (Result > 0) and (Result - 1 < MAX_PROC_PARAMS) and
+        ProcParamHasDefault[pi * MAX_PROC_PARAMS + (Result - 1)] do
+    Dec(Result);
+end;
+
+{ The arity a CALLABLE VALUE of pi is actually invoked with, which is NOT the
+  same question as how many parameters pi declares.
+
+  A NilPy `def` carries a SIGNATURE RECORD (ProcSigOff, EmitPySignatures) that
+  the dispatcher reads to fill in any argument the call omitted, so its wrapper
+  must declare the FULL parameter list. Narrowing it to the required arity does
+  not merely fail to help — it throws away optional arguments the caller DID
+  supply. Measured 2026-09-13: `def q(a, i=7, s="hi", L=None)` bound as
+  `f = q` answered `(1, 7, 'hi', None)` for `f(1, 2)`, `f(1, 2, "z")` and
+  `f(1, 2, "z", 3)` alike — four tests red, and the PIN was clean on all of
+  them, which is what identified the break as mine rather than inherited.
+
+  A PASCAL-DECLARED builtin has no signature record — EmitPySignatures emits one
+  only for a NilPy def — so nothing fills its defaulted tail and the dispatcher
+  stages exactly what the call site wrote. That is the case PyProcRequiredArity
+  exists for, and it is why this is a unit test and not a structural one.
+
+  NAMED BY UNIT, the way PyProcIsFreshContainerCtor is, and for the same reason:
+  "does this callee get its defaults filled for it?" is not answerable from the
+  signature. pylib and pyeval are the Pascal builtin surface a bare Python name
+  resolves to. A main-program def (ProcUnitIdx < 0) and an imported `.py`
+  module both keep ParamCount, which is what they had.
+
+  NOT PyDefTokOf, which is the obvious candidate and is WRONG: it is stamped
+  only by PyParseNestedDef, so it reads 0 for every TOP-LEVEL def. Measured the
+  same day — `q`, `acc`, `star`, `four` and `nodef` all reported deftok=0 — and
+  a discriminator that answers "not a def" for most defs fails in the direction
+  that silently widens this. Recorded so the next reader does not re-derive it.
+
+  KNOWN GAP: a Pascal routine with real Pascal defaults reached from NilPy
+  through some OTHER unit (an RTL shim) still gets ParamCount here and keeps the
+  pre-existing unwrapped behaviour. Widening this to "any Pascal-declared proc"
+  is the general fix and wants its own measurement of what else it moves. }
+function PyCallableValueArity(pi: Integer): Integer;
+var un: AnsiString;
+begin
+  Result := Procs[pi].ParamCount;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcUnitIdx[pi] < 0 then Exit;          { the main program — a user def }
+  un := Strs[ProcUnitIdx[pi]].Text;
+  if (un = 'pylib') or (un = 'pyeval') then
+    Result := PyProcRequiredArity(pi);
+end;
+
 { realPi already has an all-Variant PARAMETER list (the caller found it via
   PyFindVariantParamOverload, or it is a NilPy-source def PyDefUsedAsValue
   already normalised) but its RETURN type is not tyVariant -- a plain Pascal
@@ -15712,20 +15798,27 @@ function PyGetOrMakeCallableWrapper(realPi: Integer): Integer;
   parameters), so nothing else had to change — with 0 it hand-builds
   `return REALPROC()`.
   bug-n-from-import-with-an-as-rename-loses-what-it-renames }
-var wrapName: AnsiString; wrapPi, wpi: Integer;
+var wrapName: AnsiString; wrapPi, wpi, wrapArity: Integer;
     pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
     ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
 begin
   wrapName := '$pycallwrap_' + AIntToStr(realPi);
   wrapPi := FindProc(wrapName);
   if wrapPi >= 0 then begin Result := wrapPi; Exit; end;
-  for wpi := 0 to Procs[realPi].ParamCount - 1 do
+  { The REQUIRED arity, so the wrapper's hand-built `return realproc(a0, ...)`
+    omits the defaulted tail and lets Pascal's own default mechanism fill it —
+    the same thing a written `sorted(xs)` gets. Taking ParamCount here declared
+    a 3-parameter wrapper for `sorted` that the 1-argument dispatcher then
+    called with two slots unstaged. Cached by realPi alone, which stays a safe
+    key because the required arity is a function of realPi. }
+  wrapArity := PyCallableValueArity(realPi);
+  for wpi := 0 to wrapArity - 1 do
   begin
     pnames[wpi] := 'a' + AIntToStr(wpi);
     ptypes[wpi] := tyVariant;
   end;
   wrapPi := RegisterProc(wrapName, True, tyVariant,
-                         Procs[realPi].ParamCount, pnames, ptypes);
+                         wrapArity, pnames, ptypes);
   Procs[wrapPi].BodyAddr := -1;
   if PyPendLamCount >= PY_MAX_NESTED then
     Error('Nil Python: too many pending callable-value wrappers/lambdas');
@@ -15797,8 +15890,8 @@ end;
   instead of growing a second copy that can drift from this one. }
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer;
 var procAddr, argA, argB, argC, argD, argE, callNode, nilNode, isFuncNode, boundPi,
-    altPi, wpj, starIdx, starNode, sigNode, origPi: Integer;
-    paramsAllVariant: Boolean;
+    altPi, wpj, starIdx, starNode, sigNode, origPi, reqArity: Integer;
+    paramsAllVariant, wrapRetOk: Boolean;
 begin
   Result := -1;
   if (pi < 0) or (pi >= ProcCount) then Exit;
@@ -15844,13 +15937,29 @@ begin
     parameter overload at all (or the wrong arity) is left exactly as
     before: still the pre-existing, unwrapped, possibly-unsafe value.
     feature-nilpy-callable-value-unified-dispatch }
-  altPi := PyFindVariantParamOverload(nm, Procs[pi].ParamCount, pi);
+  altPi := PyFindVariantParamOverload(nm, PyCallableValueArity(pi), pi);
   if altPi >= 0 then pi := altPi;
   { The overload pick above IS the real callee, so it keeps the signature; the
     RETURN-side wrapper below does not -- see the note at the pybound_new_sig
     call. }
   origPi := pi;
-  if Procs[pi].RetType <> tyVariant then
+  { TWO independent reasons to synthesize a wrapper, and this gate used to know
+    only the second one.
+
+    ARITY   the callee has a defaulted tail (`sorted(l, key=nil, reverse=False)`,
+            `min(l, key=nil)`). A callable-value dispatcher stages only the
+            arguments the call site wrote, so those slots arrive as garbage. The
+            wrapper's `return realproc(a0)` omits them and Pascal fills the
+            defaults, exactly as a written `sorted(xs)` does.
+    RETURN  the callee's result does not ride the Variant hidden-destination
+            convention every dispatcher assumes.
+
+    `min`/`max` need ONLY the first — they already return a Variant, so the old
+    `RetType <> tyVariant` gate skipped them entirely and left them on the raw
+    address. That is why they raised `expected a number, got object` while
+    `min(xs)` spelled as a call was correct. See PyProcRequiredArity. }
+  reqArity := PyCallableValueArity(pi);
+  if (Procs[pi].RetType <> tyVariant) or (reqArity < Procs[pi].ParamCount) then
   begin
     { WRAPPABLE, not ALREADY-VARIANT. This asked `TypeKind = tyVariant` of every
       parameter, and the else of that gate is not "no wrapper" but "the RAW
@@ -15875,7 +15984,11 @@ begin
       proc the program never wrote.
       bug-n-a-stdlib-function-referenced-without-calling-it-is-not-a-value }
     paramsAllVariant := True;
-    for wpj := 0 to Procs[pi].ParamCount - 1 do
+    { Over the REQUIRED parameters only. The defaulted tail is never fed from a
+      wrapper slot — Pascal supplies it — so its type does not have to be
+      Variant-coercible, and demanding that it be rejected every pylib builtin
+      that spells an optional argument as `key: Pointer = nil`. }
+    for wpj := 0 to reqArity - 1 do
       if (not PyScalarWrappableParamType(Procs[pi].Params[wpj].TypeKind)) or
          Procs[pi].Params[wpj].IsArray or
          (ProcParamExplicitByRef[pi * MAX_PROC_PARAMS + wpj] and
@@ -15895,8 +16008,21 @@ begin
       argument works" boundary in the ticket — it was never about argument
       count reaching the callee, only about which arity got a wrapper built.
       bug-n-from-import-with-an-as-rename-loses-what-it-renames }
+    { THREE admissible return shapes, not one:
+        - the scalar/string family, which the wrapper adapts (as before);
+        - tyVariant, which needs no adaptation and is here only because the
+          ARITY reason above brought it in (`min`, `max`);
+        - a FRESH container from a known pylib/pyeval constructor (`sorted`),
+          which PyLambdaResultIsOwnedTemp already recognises when it builds the
+          body's AN_EXIT, so the result is returned rather than discarded. A
+          class result that is NOT provably fresh stays out: the wrapper would
+          hand back a second owner of an aliased object, which is the ARC gap
+          bug-nilpy-bound-fn-closure-objects-are-never-freed tracks. }
+    wrapRetOk := PyScalarWrappableRetType(Procs[pi].RetType) or
+                 (Procs[pi].RetType = tyVariant) or
+                 ((Procs[pi].RetType = tyClass) and PyProcIsFreshContainerCtor(pi));
     if paramsAllVariant and (Procs[pi].ParamCount <= MAX_PROC_PARAMS) and
-       Procs[pi].IsFunc and PyScalarWrappableRetType(Procs[pi].RetType) then
+       Procs[pi].IsFunc and wrapRetOk then
       pi := PyGetOrMakeCallableWrapper(pi);
   end;
   { A callee that COLLECTS needs the star-aware pair: its compiled signature
