@@ -4102,6 +4102,20 @@ test-nilpy: $(COMPILER)
 	# disables the value path for module members instead of widening it.
 	./$(COMPILER) test/test_nilpy_a_shim_returning_a_container_as_a_value.npy $(TESTTMP)/test_nilpy_shimval26
 	$(TESTTMP)/test_nilpy_shimval26 | diff -u test/test_nilpy_a_shim_returning_a_container_as_a_value.expected -
+	@# The module-level `re` wrappers must CACHE the compiled pattern. Every one of
+	@# them called MakePattern and nothing ever freed the TPattern, because the
+	@# TMatch/TPyList handed back may reference p.compiled. Measured 3000 iterations:
+	@#   re.findall("a","banana")  live=8349 (~2.78/iter)   re.match  live=10975
+	@#   re.findall("z","banana")  live=8335  -- the same, so NOT the matches
+	@#   p=re.compile("a"); p.findall(..)  live=8  -- ZERO, which names the fix
+	@# `str.split` in the same shape leaked NOTHING, so it was never "a container
+	@# return leaks". BUILT WITH THE CENSUS BECAUSE THE OUTPUT CANNOT SEE A LEAK --
+	@# unfixed this is live=24029 against 75, and the bound of 400 separates them by
+	@# an order of magnitude. The identity row catches it a second, independent way:
+	@# unfixed, `re.compile("a") is re.compile("a")` is False against CPython's True.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_module_level_regex_call_caches_its_pattern.npy $(TESTTMP)/test_nilpy_recache26
+	tools/expect_same.sh test_nilpy_recache26 "$$($(TESTTMP)/test_nilpy_recache26 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_a_module_level_regex_call_caches_its_pattern.expected)"
+	tools/assert_no_leak.sh nilpy_regex_pattern_cache 400 $(TESTTMP)/test_nilpy_recache26
 	./$(COMPILER) test/test_nilpy_break_continue.npy $(TESTTMP)/test_nilpy_brkcont26
 	$(TESTTMP)/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is

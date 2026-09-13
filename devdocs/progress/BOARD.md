@@ -297,7 +297,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (145)
+## backlog-nilpy (146)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -305,6 +305,7 @@ _none_
 | bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing | N | 35 | bug |  | — |
 | bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults | N | 75 | bug | `q = P(a, b); return q.x + q.y` inside a FUNCTION segfaults the produced binary — any binary operator whose BOTH operands are attribute reads of a class instance held in a function LOCAL. Works at module scope, works as `self.x + self.y` inside a method, works with one attribute (`q.x + 1`), works when the two reads are spilled to locals first (`t = q.x; u = q.y; t + u`). Reproduces on the PIN and on the tip, at every -O level, for int and str attributes, and with two different instances (`q.x + r.y`). Found incidentally 2026-09-02 while probing the AST cloners; not diagnosed. | — |
 | bug-n-a-builtin-function-is-not-a-first-class-value | N | 45 | bug | `call_it(print, x)` gives `error: undefined variable (print)` while `call_it(own_fn, x)` works -- a USER function is a value and a BUILTIN is not. Ordinary Python: a builtin passed as a callback. Three sites in lekkerzeilen's entry-point closure, all `announce=None if quiet else print`, which is what walls the demo at app.py:561. The conditional is not involved; a bare argument reproduces it. | — |
+| bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released | N | 45 | bug | > | — |
 | bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments | N | 40 | bug | > | — |
 | bug-n-a-chained-assignment-through-a-call-result-target-still-stores-right-to-left | N | 25 | bug | `box(1)[idx(\"i\")] = box(2)[idx(\"j\")] = 7` evaluates its target subexpressions in the wrong order and prints the right values, so nothing can see it. Measured 2026-09-10 against the FIXED chain arm: pxx gives `[1, 2, 'j', 'i']` where CPython gives `[1, 'i', 2, 'j']`, and both stores land. This is the NAMED RESIDUAL of bug-n-a-chained-assignment-to-two-attributes-does-not-parse, which put every target shape whose receiver is a NAME onto one left-to-right arm; a target whose receiver is a CALL is not one of those shapes, so it still falls through to PyParseLValueAST's nested right-associative reading. Ranked low deliberately, not because the divergence is small but because a chain whose targets are call results is not a shape any corpus here writes -- one measured instance, written by hand to find the boundary. What makes it worth a row at all is that it is SILENT: the values are right and only the side effects of the target subexpressions differ, which is the same property that let the general case sit unreported. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
@@ -1033,9 +1034,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3732)
+## done (3733)
 
-3732 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3733 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1307,6 +1308,7 @@ _none_
 - [p 45] [B] bug-b-copy-cannot-compile-at-all-on-the-frozen-string-path
 - [p 45] [D] bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary
 - [p 45] [N] bug-n-a-builtin-function-is-not-a-first-class-value
+- [p 45] [N] bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released
 - [p 45] [N] bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused
 - [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body

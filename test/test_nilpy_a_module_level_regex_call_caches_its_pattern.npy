@@ -1,0 +1,74 @@
+# The module-level `re` convenience wrappers must not compile a fresh pattern on
+# every call. THE ASSERTION THAT MATTERS HERE IS THE CENSUS, NOT THE OUTPUT --
+# the output was correct throughout, and a leak cannot fail a value check.
+#
+# Measured 2026-09-13, 3000 iterations, -dPXX_ALLOC_CENSUS, before the cache:
+#
+#     re.findall("a", "banana")  x3000   live=8349   ~2.78 per iteration
+#     re.findall("z", "banana")  x3000   live=8335   the same -- NOT the matches
+#     re.match("b", "banana")    x3000   live=10975  ~3.66, and returns no list
+#     p = re.compile("a"); p.findall(..) live=8      ZERO
+#
+# Every module-level wrapper called MakePattern and nothing ever freed the
+# TPattern, because the TMatch and TPyList it hands back may reference
+# p.compiled. The controls are what name the cause: `str.split` in the same loop
+# shape leaked NOTHING, so it was never "a container return leaks"; the 0-match
+# and longer-pattern rows rule out the results and the pattern size; and the one
+# row that came back clean was precompiling, which names the cache as the fix.
+#
+# THE LOOP COUNT IS THE POINT. A leak of this class is proportional to
+# iterations, so a handful of calls cannot distinguish it from a fixed residue.
+# 3000 against a bound of 400 separates them by an order of magnitude.
+#
+# The DISTINCT-pattern row is the other half: the cache does not evict (CPython
+# clears past _MAXCACHE and can, being refcounted; we would leave a TMatch
+# holding a dangling p.compiled), so the residue is bounded by how many distinct
+# patterns the SOURCE mentions and not by how often it loops. 20 patterns over
+# 3000 calls must stay near 20, not near 3000.
+#
+# Valid CPython; .expected captured from the oracle.
+
+import re
+
+# ---- the same pattern, many times: the row that was 8349 -------------------
+n = 0
+for i in range(3000):
+    n = n + len(re.findall("a", "banana"))
+print(n)
+
+# ---- a wrapper that returns no container, which leaked its pattern too ------
+# THE RESULT IS BOUND TO A LOCAL ON PURPOSE, and the reason is a SECOND, separate
+# leak this fixture must not accidentally assert. Measured the same day:
+#
+#     mo = re.match("b","banana"); if mo:   x3000   live=8      clean
+#     if re.match("b","banana"):            x3000   live=3000   1 per iteration
+#
+# The discarded spelling leaks the TMatch, and it is NOT a re bug and NOT the
+# pattern cache: `"b,a".split(",")` discarded in a condition leaks the same way
+# (~3.7/iteration) while a discarded list LITERAL is clean. That is a general
+# gap in the discard path for a CALL result in a boolean context, filed
+# separately. Using the discarded spelling here would put 3000 objects into this
+# fixture's census and make the pattern-cache bound unassertable.
+m = 0
+for i in range(3000):
+    mo = re.match("b", "banana")
+    if mo:
+        m = m + 1
+print(m)
+
+# ---- 20 DISTINCT patterns over 3000 calls: bounded by the source ------------
+pats = ["a", "b", "n", "an", "na", "ba", "aa", "nn", "x", "y",
+        "z", "ab", "bb", "q", "w", "e", "r", "t", "yy", "uu"]
+k = 0
+for i in range(150):
+    for p in pats:
+        k = k + len(re.findall(p, "banana"))
+print(k)
+
+# ---- identity: CPython caches too, so compile of the same pattern is the SAME
+# ---- object. Asserted because the cache is what makes it true here as well.
+print(re.compile("a") is re.compile("a"), re.compile("a") is re.compile("b"))
+
+# ---- and the results must still be right, flags included -------------------
+print(re.findall("a", "banana"), re.split("n", "banana"))
+print(re.sub("a", "X", "banana"), re.findall("A", "banana", re.IGNORECASE))

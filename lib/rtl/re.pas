@@ -332,12 +332,62 @@ end;
 
 { ---- module level -------------------------------------------------------- }
 
+{ The compiled-pattern cache. CPython has one (`re._cache`) and we need it for
+  the same two reasons plus a third that is ours.
+
+  THE LEAK IS THE REASON IT IS NOT OPTIONAL. Every module-level convenience
+  wrapper below -- `findall`, `split`, `match`, `search`, `sub`, `subn`,
+  `finditer`, `fullmatch` -- calls MakePattern on EVERY call and nothing ever
+  frees the TPattern, because the TMatch and TPyList it hands back may reference
+  `p.compiled`. Measured 2026-09-13, 3000 iterations, -dPXX_ALLOC_CENSUS:
+
+    re.findall("a", "banana")   x3000    live=8349   ~2.78 per iteration
+    re.findall("z", "banana")   x3000    live=8335   same -- NOT the matches
+    re.match("b", "banana")     x3000    live=10975  ~3.66, and returns no list
+    p = re.compile("a"); p.findall(...)  live=8      ZERO
+
+  The controls matter: `str.split` in the same loop shape leaks NOTHING
+  (live=1), so this was never "a container return leaks"; and the 0-match and
+  longer-pattern rows rule out the results and the pattern size. The one row
+  that clears it is precompiling, which is what names the cache as the fix.
+
+  NO EVICTION, DELIBERATELY. CPython clears the whole cache past _MAXCACHE and
+  can do that safely because it is refcounted -- a pattern still in use survives
+  the clear. We are not, and a TMatch holding `p.compiled` would be left
+  dangling, which trades a leak for a use-after-free. So the residue here is
+  bounded by the number of DISTINCT (pattern, flags) pairs a program mentions,
+  which is a property of its source and does not grow with how often it loops.
+  That is the whole point: O(distinct patterns) instead of O(calls).
+
+  It is also a speed fix -- ReCompile ran on every call to every wrapper. }
+var
+  PatCacheSrc: array of AnsiString;
+  PatCacheFlg: array of Integer;
+  PatCacheVal: array of TPattern;
+
 function MakePattern(const pattern: AnsiString; flags: Integer): TPattern;
-var p: TPattern;
+var p: TPattern; i, n: Integer;
 begin
+  { The key is the PAIR, held in two parallel arrays rather than concatenated
+    into one string: a pattern may contain any byte, so no separator makes a
+    flattened key injective, and this unit has no IntToStr anyway (it uses only
+    regex and pylib). }
+  n := Length(PatCacheSrc);
+  for i := 0 to n - 1 do
+    if (PatCacheFlg[i] = flags) and (PatCacheSrc[i] = pattern) then
+    begin
+      MakePattern := PatCacheVal[i];
+      Exit;
+    end;
   p := TPattern.Create;
   p.pattern := pattern;
   p.compiled := ReCompile(pattern, flags);
+  SetLength(PatCacheSrc, n + 1);
+  SetLength(PatCacheFlg, n + 1);
+  SetLength(PatCacheVal, n + 1);
+  PatCacheSrc[n] := pattern;
+  PatCacheFlg[n] := flags;
+  PatCacheVal[n] := p;
   MakePattern := p;
 end;
 
