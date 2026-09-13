@@ -18201,7 +18201,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     flGuardCall, flOrNode, flUnboxArg, flUnboxCall, flCall,
     flPairNode, flTern, flArg1, flArg2, flNotNode, flRaiseCall,
     flIfNode, flPair2: Integer;
-    clsOnly: Boolean; clsOnlyMmi, clsSelfCall, clsSelfArg, clsPrevArg, clsArgNode: Integer;   { a class-level-only method through a class held as a VALUE }
+    clsOnly: Boolean; clsOnlyMmi, clsSelfCall, clsSelfArg, clsPrevArg, clsUnboxArg, clsNewArg, clsSrcArg: Integer;   { a class-level-only method through a class held as a VALUE }
 begin
   smArmPossible := False;
   smArmBuilt := False;
@@ -19177,26 +19177,26 @@ begin
       a statically spelled `C.s(1)` passes. }
     i := FindProc('pyvarobj');
     if i < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-    clsArgNode := AllocNode(AN_ARG);
-    ASTLeft[clsArgNode] := PyMakeIdent(vtTmpSym);
-    ASTRight[clsArgNode] := -1;
+    clsUnboxArg := AllocNode(AN_ARG);
+    ASTLeft[clsUnboxArg] := PyMakeIdent(vtTmpSym);
+    ASTRight[clsUnboxArg] := -1;
     clsSelfCall := AllocNode(AN_CALL);
     ASTIVal[clsSelfCall] := i; ASTTk[clsSelfCall] := Ord(tyPointer);
-    ASTLeft[clsSelfCall] := clsArgNode;
+    ASTLeft[clsSelfCall] := clsUnboxArg;
     clsSelfArg := AllocNode(AN_ARG);
     ASTLeft[clsSelfArg] := clsSelfCall;
     ASTRight[clsSelfArg] := -1;
     { then the user's arguments, in the order they were bound }
     clsPrevArg := clsSelfArg;
-    clsArgNode := ASTRight[selfArg];
-    while clsArgNode >= 0 do
+    clsSrcArg := ASTRight[selfArg];
+    while clsSrcArg >= 0 do
     begin
-      clsSelfCall := AllocNode(AN_ARG);
-      ASTLeft[clsSelfCall] := ASTLeft[clsArgNode];
-      ASTRight[clsSelfCall] := -1;
-      ASTRight[clsPrevArg] := clsSelfCall;
-      clsPrevArg := clsSelfCall;
-      clsArgNode := ASTRight[clsArgNode];
+      clsNewArg := AllocNode(AN_ARG);
+      ASTLeft[clsNewArg] := ASTLeft[clsSrcArg];
+      ASTRight[clsNewArg] := -1;
+      ASTRight[clsPrevArg] := clsNewArg;
+      clsPrevArg := clsNewArg;
+      clsSrcArg := ASTRight[clsSrcArg];
     end;
     Result := AllocNode(AN_CALL);
     ASTIVal[Result] := mpi;

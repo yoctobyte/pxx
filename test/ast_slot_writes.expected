@@ -18,6 +18,7 @@ AN_ADDR Left valNode
 AN_ALLOCA Left ASTLeft[argHead]
 AN_ALLOCA Left idn
 AN_ARG Left ASTLeft[ASTLeft[callNode]]
+AN_ARG Left ASTLeft[clsSrcArg]
 AN_ARG Left ASTLeft[currArg]
 AN_ARG Left ASTLeft[lastArg]
 AN_ARG Left ASTLeft[n]
@@ -141,6 +142,7 @@ AN_ARG Left capNode
 AN_ARG Left castNode
 AN_ARG Left ci
 AN_ARG Left clsNode
+AN_ARG Left clsSelfCall
 AN_ARG Left cntN
 AN_ARG Left cntNode
 AN_ARG Left condN
@@ -669,6 +671,8 @@ AN_CALL Left chkArg
 AN_CALL Left clArgC
 AN_CALL Left clArgP
 AN_CALL Left clsArg
+AN_CALL Left clsSelfArg
+AN_CALL Left clsUnboxArg
 AN_CALL Left dcSlArg1
 AN_CALL Left dispArg
 AN_CALL Left domArg
