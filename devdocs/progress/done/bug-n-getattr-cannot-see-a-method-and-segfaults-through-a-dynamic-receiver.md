@@ -2,9 +2,9 @@
 track: N
 type: bug
 blocked-by: []
-summary: "`getattr(obj, \"name\")` with a LITERAL name sees fields and properties, never a plain METHOD: it raises `AttributeError: 'A' object has no attribute 'ping'` about a method the class plainly declares, and in one shape SEGFAULTS instead. hasattr answers True for the same name, so the two disagree. With a DEFAULT the probe silently returns the default, which is the arm that ranks this: lekkerzeilen --starts prints a wrong line because `getattr(region, \"key_at\", None)` answers None. A COMPUTED name, a @property, a field and a genuine multi-class variant receiver were all MEASURED CORRECT 2026-09-13 -- only the literal-name spelling is broken, so a probe using a loop variable for the name reports everything healthy. Compiles clean, no diagnostic. An attempted fix is attached and DOES NOT WORK; read the dead-end section before repeating it."
+summary: "FIXED 2026-09-13. `getattr(obj, \"name\")` with a LITERAL name could not see a plain METHOD: with no default it raised `AttributeError` about a method the class declares, and WITH a default it silently returned the default -- which is lekkerzeilen `_has_ground`, a wrong line and exit 0. hasattr answered True for the same name throughout, because only ITS arm of the existence test consulted PyAttrExists. TWO defects: the literal path never reached the runtime resolver (now it does, the same one the COMPUTED spelling uses), and -- THE ROOT CAUSE -- PyMethodUsedAsValue had no arm for a literal getattr, so the bound-method pair it hands back was never normalised to the function-object ABI and returned its result in a register against a caller expecting the hidden-destination convention. That is why the attempt parked in this ticket entered the method correctly and then answered '' for a string and SEGFAULTED for an int. lekkerzeilen --starts is now BYTE-IDENTICAL to CPython. Gate quick GREEN. NOT covered: the same spelling on a BUILTIN container or str, which is loud in both forms and is filed separately."
 prio: 65
-status: backlog
+status: done
 owner: —
 ---
 
@@ -262,3 +262,91 @@ answer for others.
 It is accurate on both repros and on the field control, all three re-verified
 2026-09-13. Only the variant-receiver DIAGNOSIS is demoted, and the prio moved
 50 -> 65 for the silent-default arm, which it did not know about.
+
+
+## RESOLUTION — 2026-09-13, fixed in two places
+
+**The dead-end section below was right that the resolver was not one hypothesis
+away from working. It was wrong about where to look, and so was I: the resolver
+was never the defect. The ABI of the thing it hands back was.**
+
+### (1) The literal path never reached the resolver
+
+`PyAttrFieldIdx` answers "is it a declared FIELD"; `PyMakePropRead` answers "is
+it a PROPERTY". A plain method is neither. `atExists` is
+
+    (atFld >= 0) or ((not atIsGet) and PyAttrExists(atRecv, atName))
+
+and the second arm — the only one that consults `PyAttrExists`, which DOES see
+methods — is reached **only by hasattr**. That single `not atIsGet` is why the
+two spellings disagreed about one name. With `atExists` False the name went to
+the dynamic-attribute store, which holds no methods; with a default supplied,
+`not (atIsGet and (atDflt >= 0))` skipped that arm altogether and the default
+came back silently.
+
+Fixed by handing the literal name to `PyMakeDynAttrByExpr` — the resolver the
+COMPUTED spelling already used and which was measured correct for methods — so
+the two spellings are one mechanism. The method predicate is lifted from
+`PyAttrExists`' own tyClass arm, including the `PyPylibMethodAlias` half, without
+which `o.m` would be fixed while `getattr(d, "keys")` stayed broken.
+
+### (2) THE ROOT CAUSE: the bound method was never ABI-normalised
+
+`PyMethodUsedAsValue` decides whether a method is normalised to the
+function-object ABI (variant parameters, variant result). Its own comment says
+what happens otherwise: *"a bound method returning a value crashed, and one
+returning None happened to work."* It had an arm for a COMPUTED getattr — coarse
+on purpose, normalising every method, because no token spells the name — and
+**no arm for a literal one**, because until now a literal getattr never produced
+a bound method.
+
+That is the whole of the parked patch's failure. It resolved and entered the
+method with the right receiver and arity, and the RESULT came back in a register
+while the caller expected the hidden-destination convention: a string answered
+`''`, an int segfaulted on return, and a method returning `None` worked by
+accident because `None` needs no hidden destination. Four hypotheses were ruled
+out below and none of them was this, because all four were about REACHING the
+method.
+
+Added `PyModuleGetattrsLiteral(nm)`, exact rather than coarse — the name is a
+token in this spelling, so only the method actually fetched pays the boxing.
+
+### What this buys, measured
+
+- `lekkerzeilen --starts` is **byte-identical to CPython**. It was the one
+  differing line, and it is why this ticket was at prio 65.
+- `--help` byte-identical; `--conform` passes its own self-check with all six
+  `pixels` digests identical to CPython; `--probe` differs only in the line that
+  names the backend.
+- Gate quick GREEN, 23 PASS / 0 FAIL.
+
+### The fixture's design is part of the fix
+
+`test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy` deliberately
+contains **no computed getattr**. `PyModuleHasComputedGetattr` is module-wide:
+one computed getattr anywhere normalises every method, and every literal row
+then passes on the unfixed compiler.
+
+**That is measured, not feared.** The probe this fix was first verified with had
+a computed-name row as a REGRESSION check. It reported all seven rows healthy
+and the defect was still present — row 6 rescued rows 1 to 5. I wrote that probe
+hours after banking the rule it breaks, which is the rule's own point: the
+contaminant was inside the probe, in the right population, and honest.
+
+Rows B, C and D pin the three ABI outcomes separately (non-empty string,
+non-zero int that must survive the return, and `None` — the shape that worked by
+accident). Row F is the positive control: a default must still be returned for
+an absent name, and it is the row that fails if the new arm is gated too wide.
+Control: the fixture raises `AttributeError: 'Real' object has no attribute
+'key_at'` under pin v408.
+
+### Explicitly NOT fixed
+
+`getattr` with a literal method name on a **builtin** container or str.
+`hasattr(d, "keys")` answers True while `getattr(d, "keys")` raises at run time
+and `getattr(s, "upper")` is refused at COMPILE time. Both are LOUD, the
+receiver is not a user class so the new arm correctly declines it, and it is
+filed separately rather than folded in here.
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

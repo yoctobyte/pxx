@@ -1,0 +1,112 @@
+# getattr(o, "m") with a LITERAL name, where m is a plain METHOD.
+#
+# THIS FILE MUST NOT CONTAIN A COMPUTED getattr. PyModuleHasComputedGetattr is
+# module-wide and coarse: one `getattr(o, nm)` anywhere normalises EVERY method
+# in the module to the function-object ABI and every row below then passes on
+# the unfixed compiler. That is not a hypothetical -- the probe this fix was
+# first verified with had a computed-name REGRESSION row, and that row rescued
+# the rows under test. The computed spelling is covered by
+# test_nilpy_getattr_with_a_computed_attribute_name.npy; keep it there.
+#
+# Expected values are chosen so none of them is a failure value: the string
+# methods answer a NON-EMPTY string (the defect returned ''), the int methods a
+# NON-ZERO int that must also survive the RETURN (the defect segfaulted on the
+# way out), and every default is a word that cannot be confused with a method.
+
+class Shadow:
+    # A plain FIELD named like another class's METHOD. Present because the
+    # method rows only fail when a field carrier AND a property carrier of the
+    # name both exist -- with either alone the module happens to work.
+    def __init__(self):
+        self.key_at = 'FIELD'
+
+class Propped:
+    def __init__(self):
+        self._v = 'PROPERTY'
+    @property
+    def key_at(self):
+        return self._v
+
+class Real:
+    def __init__(self):
+        self.n = 2
+    def key_at(self, x, z):
+        return 'K' + str(x + z + self.n)
+    def ms(self, a):
+        return 'M' + str(a)
+    def mi(self, a):
+        return a * 7
+    def mv(self):
+        return None
+
+class Other:
+    # a SECOND carrier of the same method name
+    def key_at(self, x, z):
+        return 'OTHER'
+
+r = Real()
+
+# A: the method, with a field carrier and a property carrier both alive.
+print('A', getattr(r, "key_at")(1, 1))
+
+# B: a method returning a STRING. '' is the defect's value.
+print('B', getattr(r, "ms")(1))
+
+# C: a method returning an INT. 0 is a failure value and so is not returning.
+print('C', getattr(r, "mi")(3))
+
+# D: a method returning None -- the one shape that worked BY ACCIDENT before,
+#    because None needs no hidden destination. Kept so a future regression
+#    cannot hide behind it.
+print('D', getattr(r, "mv")())
+
+# E: three-arg, method PRESENT -> the method, never the default.
+#    This is lekkerzeilen's _has_ground shape, which answered the default
+#    silently and made the app print a wrong line with exit 0.
+e = getattr(r, "key_at", None)
+print('E', e is not None, e(1, 1))
+
+# F: three-arg, method ABSENT -> the default. POSITIVE CONTROL: this row must
+#    still answer the default, and it is the row that fails if the new arm is
+#    gated too wide.
+print('F', getattr(r, "no_such_method", 'DEFAULT'))
+
+# G: the FIELD carrier still reads its field, not a bound method.
+print('G', getattr(Shadow(), "key_at"))
+
+# H: the PROPERTY carrier still reads its property, not a bound method.
+print('H', getattr(Propped(), "key_at"))
+
+# I: a second class carrying the same method name.
+print('I', getattr(Other(), "key_at")(0, 0))
+
+# J: a genuine multi-class VARIANT receiver -- measured correct before this
+#    fix and must stay correct.
+def pick(w):
+    if w == 0:
+        return Real()
+    return Other()
+
+print('J', getattr(pick(0), "key_at")(0, 0))
+print('K', getattr(pick(1), "key_at")(0, 0))
+
+# L: hasattr then a DIRECT call -- the spelling that was always safe.
+if hasattr(r, "ms"):
+    print('L', r.ms(2))
+
+# M: hasattr then a getattr FETCH -- the spelling that raised inside its own
+#    guard, which is the shape that makes this a silent-wrong-branch bug
+#    rather than merely a missing feature.
+if hasattr(r, "ms"):
+    f = getattr(r, "ms")
+    print('M', f(3))
+
+# N: the interesting element LAST in an argument list, and through a local.
+#    Position is a variable: the rows above all put the getattr first.
+def via(o, tag):
+    return tag + ':' + getattr(o, "ms")(9)
+
+print('N', via(r, 'last'))
+
+# O: a statically-typed control that must not change.
+print('O', r.key_at(1, 1), r.ms(1), r.mi(3))

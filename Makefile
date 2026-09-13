@@ -3761,6 +3761,33 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_dictsel26 | diff -u test/test_nilpy_selector_on_a_dict_returning_call.expected -
 	./$(COMPILER) test/test_nilpy_getattr_computed_name.npy $(TESTTMP)/test_nilpy_getattrc26
 	$(TESTTMP)/test_nilpy_getattrc26 | diff -u test/test_nilpy_getattr_computed_name.expected -
+	@# getattr(o, "m") with a LITERAL name, where m is a plain METHOD. Sits
+	@# beside the COMPUTED row above on purpose -- the two spellings are now one
+	@# mechanism (the literal name is handed to the same runtime resolver), and
+	@# they must stay two FILES. PyModuleHasComputedGetattr is module-wide and
+	@# coarse: a single computed getattr anywhere normalises EVERY method in the
+	@# module to the function-object ABI, so putting both spellings in one file
+	@# makes the literal rows pass on the UNFIXED compiler. That is measured, not
+	@# feared -- the probe this fix was first verified with had a computed-name
+	@# regression row, it reported every literal row healthy, and the defect was
+	@# still there. Verified the other way too: the fixture's own control is that
+	@# it raises AttributeError: 'Real' object has no attribute 'key_at' under pin
+	@# v408.
+	@# Two defects stood behind this and the SECOND one is the root cause. (1) The
+	@# literal path asked only "is it a declared field" and "is it a property", so
+	@# a method fell through to the dynamic-attribute store, which holds no
+	@# methods: AttributeError with no default, and the DEFAULT returned silently
+	@# with one -- lekkerzeilen's _has_ground shape, a wrong line and exit 0.
+	@# (2) PyMethodUsedAsValue had no arm for a literal getattr, so the bound
+	@# method it now hands back was never normalised to the function-object ABI
+	@# and returned its result in a register while the caller expected the
+	@# hidden-destination convention. THAT is why an earlier attempt at this
+	@# ticket entered the method correctly and then answered '' for a string and
+	@# SEGFAULTED for an int: rows B, C and D pin all three outcomes, and D (a
+	@# method returning None) is the shape that worked by accident, because None
+	@# needs no hidden destination.
+	./$(COMPILER) test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy $(TESTTMP)/test_nilpy_getattrlit26
+	$(TESTTMP)/test_nilpy_getattrlit26 | diff -u test/test_nilpy_getattr_with_a_literal_name_names_a_method.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy $(TESTTMP)/test_nilpy_kwfwd26
 	$(TESTTMP)/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy $(TESTTMP)/test_nilpy_optstr26

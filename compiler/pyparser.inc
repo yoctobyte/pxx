@@ -16159,6 +16159,69 @@ begin
   Result := PyComputedGetattrSeen;
 end;
 
+function PyModuleGetattrsLiteral(const nm: AnsiString): Boolean;
+{ Does this module call `getattr`/`hasattr` with the LITERAL name `nm`?
+
+  The sibling above answers the COMPUTED question and normalises every method
+  when it is true, because no token spells the name. This one is the literal
+  half, and it can be exact: the name IS a token, so only that method pays.
+
+  Why it is needed at all, which is the root cause of
+  bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver:
+  a method reached through the runtime resolver comes back as a bound-method
+  PAIR, and calling one goes through the function-object ABI (variant
+  parameters, variant result). Without normalisation the method returns its
+  result in a register while the caller expects the hidden-destination
+  convention — so a method returning a string answered EMPTY and one returning
+  an integer SEGFAULTED on the way out, which is exactly the failure an earlier
+  attempt at this ticket produced and could not explain. The resolver was never
+  the defect; the ABI of the thing it hands back was.
+
+  Same token rule as the parse and as the computed scan: the literal form is a
+  string token whose very next token closes or separates the argument, so
+  `"zz" + "z"` is not it. }
+var j, depth: Integer;
+begin
+  Result := False;
+  if nm = '' then Exit;
+  j := 0;
+  while j < MainProgramTokCount - 2 do
+  begin
+    if (Tokens[j].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+       (Tokens[j + 1].Kind = tkLParen) then
+    begin
+      depth := 1;
+      Inc(j, 2);
+      while (j < MainProgramTokCount) and (depth > 0) do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then Dec(depth)
+        else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+        begin
+          if (j + 2 < MainProgramTokCount) and
+             (Tokens[j + 1].Kind = tkString) and
+             (Tokens[j + 2].Kind in [tkComma, tkRParen]) and
+             CaseEqual(GetTokenStr(j + 1), nm) then
+            { `Tokens` is TRawToken (SOffset/SLen), not TToken — there is no
+              .SVal to read here, and GetTokenStr is the accessor the rest of
+              this file uses. CaseEqual, matching the sibling loop below:
+              over-normalising costs only boxing, under-normalising is the
+              bug this function exists to prevent. }
+          begin
+            Result := True;
+            Exit;
+          end;
+          Break;
+        end;
+        Inc(j);
+      end;
+      Continue;
+    end;
+    Inc(j);
+  end;
+end;
+
 function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module reads `<something>.nm` WITHOUT calling it — `cb = self.on_key`,
   `root.after(50, self.tick)`. That is a bound-method value, and calling one back
@@ -16184,6 +16247,16 @@ begin
     that actually dispatches by a runtime name.
     feature-nilpy-getattr-with-a-computed-attribute-name }
   if PyModuleHasComputedGetattr then
+  begin
+    Result := True;
+    Exit;
+  end;
+  { ...and the LITERAL spelling needs it for the same reason, which nothing
+    asked until `getattr(o, "m")` started resolving methods through the same
+    resolver. Exact rather than coarse: the name is a token here, so only the
+    method actually fetched pays the boxing.
+    bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver }
+  if PyModuleGetattrsLiteral(nm) then
   begin
     Result := True;
     Exit;
@@ -46499,6 +46572,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rsvMapped: AnsiString;   { a reserved member's underscored spelling, probed before it is adopted }
     qvUnit, qvPi: Integer; qvMemb: AnsiString;   { `mod.f` as a VALUE — bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable }
     gaUnit, gaPi, gaSi: Integer; gaMemb, gaRecv: AnsiString; gaDeclared: Boolean;   { getattr/hasattr over a UNIT ALIAS — bug-n-a-module-bound-by-an-import-is-not-a-value }
+    atRec, atCi, atNm: Integer; atAl: AnsiString;   { getattr(o, "<lit>") naming a plain METHOD — bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver }
     capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
     derefNode: Integer;   { ...through its frame cell, when it has one (SymCellPtr) }
     capIdx: Integer;   { PXXDBG=n.caps probe cursor }
@@ -48789,6 +48863,52 @@ begin
           CurASTNode := atProp;
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
+        end;
+        { A plain METHOD is neither a field nor a property, so every predicate
+          above answers no and getattr then does one of two wrong things: with
+          no default it resolves through the dynamic-attribute STORE, which
+          holds no methods, and raises AttributeError for a method the class
+          plainly declares; WITH a default it does not even reach that arm
+          (`not (atIsGet and (atDflt >= 0))` is False) and silently returns the
+          default. hasattr answers True for the same name throughout, because
+          its arm of atExists calls PyAttrExists, which DOES see methods — so
+          the two disagree about one name and the guarded idiom
+          `if hasattr(o, "m"): f = getattr(o, "m")` raises inside its own guard.
+
+          The COMPUTED-name spelling already resolves a method correctly,
+          through PyMakeDynAttrByExpr a few dozen lines above. So hand the
+          LITERAL name to that same resolver rather than growing a second
+          mechanism for it: normalise-dont-special-case, and this ticket is
+          what the second path looks like after it has been left alone for a
+          while. An earlier attempt DID grow the second path — it resolved and
+          entered the method with the right receiver and arity, then returned
+          an empty string or segfaulted on the way out — and is parked in the
+          ticket as the option NOT to repeat.
+
+          The method predicate is lifted from PyAttrExists' own tyClass arm,
+          including the PyPylibMethodAlias half: the Python spelling reaches a
+          pylib method under a different Pascal name, and dropping that would
+          fix `o.m` while leaving `getattr(d, "keys")` broken.
+          bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver }
+        if atIsGet and (atFld < 0) and (atProp < 0) then
+        begin
+          atRec := ResolveNodeRec(atRecv);
+          if atRec >= REC_UCLASS_BASE then
+          begin
+            atCi := atRec - REC_UCLASS_BASE;
+            atAl := PyPylibMethodAlias(atCi, atName);
+            if (FindUMeth(atCi, atName) >= 0) or
+               ((atAl <> '') and (FindUMeth(atCi, atAl) >= 0)) then
+            begin
+              atNm := AllocNode(AN_STR_LIT);
+              ASTSOffset[atNm] := StoredName(atName);
+              ASTSLen[atNm] := Length(atName);
+              ASTTk[atNm] := Ord(tyString);
+              CurASTNode := PyMakeDynAttrByExpr(atRecv, atNm, atDflt, False);
+              LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+              Exit;
+            end;
+          end;
         end;
         { An undeclared attribute may be set DYNAMICALLY at run time (on a
           variant OR a class instance), which a compile-time field check cannot
