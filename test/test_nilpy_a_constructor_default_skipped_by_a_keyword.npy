@@ -1,0 +1,148 @@
+# A CONSTRUCTOR's default that a later keyword argument skips over.
+#
+# `C(a, c=5)` against `def __init__(self, a, b=7, c=0)` filled `b` with None.
+# The keyword-hole fill in the construction builder was a PRIVATE COPY of
+# DefaultArgValueNode that mapped EVERY tyVariant parameter to None -- and an
+# unannotated parameter is tyVariant, so every constant default of an ordinary
+# Python shape was lost. Its `str` and `float` arms sat ABOVE that test and were
+# right, which is what made the bug look like it was about containers.
+#
+# The trailing-defaults loop a hundred lines below in the same builder had
+# already been funnelled through DefaultArgValueNode, and its comment records
+# the same two drifts; only the keyword-hole copy was left. Two spellings of one
+# rule, and the one nobody re-read stayed wrong.
+#
+# WHY IT MATTERS AT THIS SIZE: `Widget(parent, option=value)` -- positional
+# receiver, one keyword, an optional in between -- is the shape every
+# widget-style constructor is called with, and the hole is usually
+# DEREFERENCED by the body before anything checks it. lekkerzeilen died in
+# `ui.Panel("trip", "SAIL", items=items)`, whose skipped `tabs=()` reached
+# `list(tabs)` as None -- `TypeError: expected a str, a list or a dict, got
+# NoneType` in a four-line probe, and a SEGFAULT in the full app.
+#
+# EVERY DEFAULT KIND IS A ROW, because the two that worked are what hid it: the
+# rows are grouped so a reader can see that `str` and `float` were the exceptions
+# rather than the rule. `b=None` is here for completeness and is NOT a control --
+# its right answer is the failure value, so it passed throughout.
+#
+# Each row is paired with the same call as a plain METHOD and with the same
+# constructor called WITHOUT the keyword, both of which were correct before the
+# fix. Without that pairing a reader cannot tell a repaired ctor from a lucky one.
+
+
+class Ctor:
+    def __init__(self, a, b=7, c=0):
+        self.t = (a, b, c)
+
+
+class CtorTuple:
+    def __init__(self, a, b=(), c=0):
+        self.t = (a, len(b), c)
+
+
+class CtorList:
+    def __init__(self, a, b=[], c=0):
+        self.t = (a, len(b), c)
+
+
+class CtorDict:
+    def __init__(self, a, b={}, c=0):
+        self.t = (a, len(b), c)
+
+
+class CtorStr:
+    def __init__(self, a, b="zz", c=0):
+        self.t = (a, b, c)
+
+
+class CtorBool:
+    def __init__(self, a, b=True, c=0):
+        self.t = (a, b, c)
+
+
+class CtorFalse:
+    def __init__(self, a, b=False, c=0):
+        self.t = (a, b, c)
+
+
+class CtorFloat:
+    def __init__(self, a, b=1.5, c=0):
+        self.t = (a, b, c)
+
+
+class CtorNone:
+    def __init__(self, a, b=None, c=0):
+        self.t = (a, b, c)
+
+
+class CtorZero:
+    def __init__(self, a, b=0, c=0):
+        self.t = (a, b, c)
+
+
+class CtorNeg:
+    def __init__(self, a, b=-1, c=0):
+        self.t = (a, b, c)
+
+
+class TwoHoles:
+    # TWO holes skipped by one keyword, and the second is a different kind from
+    # the first: the loop fills every slot below the keyword's index, so a single
+    # hole cannot say whether it fills them all correctly.
+    def __init__(self, a, b=7, c=(), d=0):
+        self.t = (a, b, len(c), d)
+
+
+class Shared:
+    # THE SECOND DRIFT the funnel's comment predicted, and it was live: measured
+    # with the private copy restored this row raises `AttributeError: 'NoneType'
+    # object has no attribute 'append'`, so the hole never reached the hidden
+    # global at all. A NON-CONSTANT default is
+    # evaluated ONCE into a hidden global at class-body time, which is what makes
+    # Python's shared-mutable-default idiom accumulate. A private copy that
+    # rebuilds the value gives a fresh container per call and the two instances
+    # stop sharing. Measured through the KEYWORD-hole path, which is the one that
+    # was still private.
+    def __init__(self, a, items=[], c=0):
+        self.items = items
+        items.append(a)
+
+
+class Meth:
+    # the same bodies as plain METHODS: correct before the fix, so they are the
+    # negative control that says the defaults machinery itself was never broken
+    def m(self, a, b=7, c=0):
+        return (a, b, c)
+
+    def mt(self, a, b=(), c=0):
+        return (a, len(b), c)
+
+    def ms(self, a, b="zz", c=0):
+        return (a, b, c)
+
+
+print(Ctor("k", c=5).t)
+print(CtorTuple("k", c=5).t)
+print(CtorList("k", c=5).t)
+print(CtorDict("k", c=5).t)
+print(CtorStr("k", c=5).t)
+print(CtorBool("k", c=5).t)
+print(CtorFalse("k", c=5).t)
+print(CtorFloat("k", c=5).t)
+print(CtorNone("k", c=5).t)
+print(CtorZero("k", c=5).t)
+print(CtorNeg("k", c=5).t)
+print(TwoHoles("k", d=9).t)
+
+s1 = Shared(1, c=5)
+s2 = Shared(2, c=5)
+print(s1.items, s2.items, s1.items is s2.items)
+
+# the same constructors with the tail simply OMITTED -- the loop that was
+# already funnelled, and therefore always correct
+print(Ctor("k").t, CtorTuple("k").t, CtorStr("k").t)
+# the keyword naming the OPTIONAL itself, so there is no hole at all
+print(Ctor("k", b=3).t, CtorTuple("k", b=(1, 2)).t)
+# and the plain-method spelling of all three
+m = Meth()
+print(m.m("k", c=5), m.mt("k", c=5), m.ms("k", c=5))

@@ -8283,37 +8283,42 @@ begin
              (not ProcParamHasDefault[kwCtorPi * MAX_PROC_PARAMS + kwPk]) then
             Error('Nil Python: ' + name + '() is missing a value for parameter ' +
                   AIntToStr(kwI + 1) + ', which has no default');
-          if ProcParamDefaultIsStr[kwCtorPi * MAX_PROC_PARAMS + kwPk] then
-          begin
-            kwVal := AllocNode(AN_STR_LIT);
-            ASTSOffset[kwVal] := ProcParamDefaultSOff[kwCtorPi * MAX_PROC_PARAMS + kwPk];
-            ASTSLen[kwVal] := ProcParamDefaultSLen[kwCtorPi * MAX_PROC_PARAMS + kwPk];
-            ASTTk[kwVal] := Ord(tyString);
-          end
-          else if ProcParamDefaultIsFloat[kwCtorPi * MAX_PROC_PARAMS + kwPk] then
-          begin
-            kwVal := AllocNode(AN_FLOAT_LIT);
-            ASTIVal[kwVal] := ProcParamDefaultVal[kwCtorPi * MAX_PROC_PARAMS + kwPk];
-            ASTTk[kwVal] := Ord(tyDouble);
-          end
-          else if Procs[kwCtorPi].Params[kwPk].TypeKind = tyVariant then
-            { A VARIANT hole. Two things go wrong with a bare ordinal here: the
-              parameter is passed by REFERENCE, so the callee dereferences it
-              (`tk.Label(root, textvariable=sv)` skipped `font` and segfaulted),
-              and a library's `= 0` means "not supplied", which every façade
-              reads as `pyvartag(v) <> 0`. None is both — an addressable empty
-              variant. Same rule as DefaultArgValueNode, which the non-ctor
-              paths use. }
-            kwVal := PyMakeNone
-          else
-          begin
-            kwVal := AllocNode(AN_INT_LIT);
-            ASTIVal[kwVal] := ProcParamDefaultVal[kwCtorPi * MAX_PROC_PARAMS + kwPk];
-            { the LITERAL's type, not the parameter's: tagged as the parameter's
-              it looked like a value that needed no conversion, and the
-              call-argument boxing never ran }
-            ASTTk[kwVal] := Ord(Procs[kwCtorPi].Params[kwPk].TypeKind);
-          end;
+          { DefaultArgValueNode, NOT a private copy of it -- and this site was
+            the last private copy left. The trailing-defaults loop a hundred
+            lines below already made this move and its comment records what the
+            copy had drifted into; this one had drifted the same two ways and
+            the worse of them was still live:
+
+              - EVERY tyVariant parameter became None, where the funnel does
+                that only when the default really IS None (or the routine is a
+                library façade whose `= 0` spells "not supplied"). An
+                unannotated parameter is tyVariant, so a hole skipped by a later
+                keyword took None for `b=7`, `b=()`, `b=[]`, `b={}`, `b=True`
+                and `b=0` alike -- while a `str` and a `float` default were
+                right, because their arms sat ABOVE the tyVariant test. That is
+                what made the bug look like it was about containers.
+              - it never consulted ProcParamDefaultSym, so a NON-CONSTANT
+                default was rebuilt rather than read from the hidden global the
+                class body evaluated -- a fresh container per call, which breaks
+                the shared-mutable-default idiom.
+
+            MEASURED 2026-09-13: `class P: def __init__(self, a, b=(), c=0)`
+            constructed as `P("k", c=5)` gave `('k', None, 5)`. The identical
+            body as a plain METHOD, and the identical ctor with the tail simply
+            omitted, were both correct -- so the two spellings of one rule
+            disagreed and only the constructor-with-a-later-keyword one was
+            wrong. lekkerzeilen died on it in `ui.Panel("trip", "SAIL",
+            items=items)`, whose skipped `tabs=()` reached `list(tabs)` as None:
+            `TypeError: expected a str, a list or a dict, got NoneType`, and in
+            the full app a SEGFAULT, because most callees dereference the hole
+            before anything checks it.
+            test/test_nilpy_a_constructor_default_skipped_by_a_keyword.npy pins one
+            row per default kind; there is no ticket, the fixture IS the record.
+
+            The ProcParamHasDefault guard above is what keeps the funnel's own
+            "no default" Error unreachable from here -- the guard names the
+            CLASS, which the funnel cannot. }
+          kwVal := DefaultArgValueNode(kwCtorPi, kwPk);
           argNode := AllocNode(AN_ARG);
           ASTLeft[argNode] := kwVal;
           ASTRight[argNode] := -1;
@@ -54716,7 +54721,8 @@ begin
           the result through `return`, which builds an AN_EXIT against RetSymIdx
           and never comes through this name lookup, so nothing in the frontend
           needs the synonym.
-          bug-n-a-bare-global-read-inside-a-same-named-def-is-the-result-variable
+          test/test_nilpy_a_bare_global_read_inside_a_same_named_def.npy pins the
+          ten rows; there is no ticket, the fixture IS the record.
 
           BARE, and the qualifier test is what makes that word true. `uboat.BOAT`
           read inside `function boat` matched this arm on the NAME alone and was

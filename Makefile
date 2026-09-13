@@ -870,6 +870,33 @@ test-nilpy: $(COMPILER)
 	# a method on a fresh construction: class return, and omitted defaults filled
 	./$(COMPILER) test/test_nilpy_ctor_suffix_defaults.npy $(TESTTMP)/test_nilpy_ctorsfx26
 	tools/expect_same.sh test_nilpy_ctorsfx26.1 "$$($(TESTTMP)/test_nilpy_ctorsfx26)" "$$(printf 'a\nba\na 1\nba 1')"
+	# A CONSTRUCTOR default that a later KEYWORD argument skips over. `C(a, c=5)`
+	# against `def __init__(self, a, b=7, c=0)` filled `b` with None: the
+	# keyword-hole fill in the construction builder was a private copy of
+	# DefaultArgValueNode and mapped EVERY tyVariant parameter to None, which an
+	# unannotated parameter is. Its `str` and `float` arms sat ABOVE that test and
+	# were right, which is what made the bug look like it was about containers, and
+	# the trailing-defaults loop a hundred lines below had already been funnelled --
+	# two spellings of one rule, and the one nobody re-read stayed wrong.
+	# EVERY default kind is a row because the two that worked are what hid it.
+	# `b=None` is included and is NOT a control: its right answer IS the failure
+	# value, so it passed throughout -- collides-with-the-default, in the corpus the
+	# probe is drawn from.
+	# Positive control, measured PER ROW with the private copy restored rather than
+	# predicted: int, tuple, list, dict, True, False, 0, -1 and BOTH holes of the
+	# two-hole row answer None, and the non-constant `items=[]` row raises
+	# `AttributeError: 'NoneType' object has no attribute 'append'` -- not, as this
+	# comment first said, a loss of sharing; the hole never reached the hidden
+	# global at all. `str` and `float` are unchanged, which is the asymmetry the
+	# fixture exists to pin. Each row is paired with the same call as a plain METHOD
+	# and with the tail simply omitted, both correct before the fix, so a repaired
+	# ctor cannot be mistaken for a lucky one.
+	# `Widget(parent, option=value)` is the shape this breaks, and the hole is
+	# usually dereferenced before anything checks it: lekkerzeilen died in
+	# `ui.Panel("trip", "SAIL", items=items)`, whose skipped `tabs=()` reached
+	# `list(tabs)` as None -- a TypeError in a probe, a SEGFAULT in the app.
+	./$(COMPILER) test/test_nilpy_a_constructor_default_skipped_by_a_keyword.npy $(TESTTMP)/test_nilpy_ctorkwhole26
+	$(TESTTMP)/test_nilpy_ctorkwhole26 | diff -u test/test_nilpy_a_constructor_default_skipped_by_a_keyword.expected -
 	# return-type inference agrees between the shell pre-pass and the body parse
 	./$(COMPILER) test/test_nilpy_infer_return.npy $(TESTTMP)/test_nilpy_inferret26
 	tools/expect_same.sh test_nilpy_inferret26.1 "$$($(TESTTMP)/test_nilpy_inferret26)" "$$(printf '5\n6\nv7\n5\n[1, 2, 3]')"
