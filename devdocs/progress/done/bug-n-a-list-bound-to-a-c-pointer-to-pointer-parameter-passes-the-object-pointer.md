@@ -133,5 +133,5 @@ lekkerzeilen now links every shader and reaches a new wall further in.
 
 ## Log
 
-- 2026-09-13 | fixed in compiler/builtin/pylib.pas and compiler/pyparser.inc, commit PENDING-COMMIT.
+- 2026-09-13 | fixed in compiler/builtin/pylib.pas and compiler/pyparser.inc, commit dca30fbae.
 - 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit dca30fbae.
