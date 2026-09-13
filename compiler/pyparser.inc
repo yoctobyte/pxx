@@ -12983,7 +12983,8 @@ begin
   begin
     { The MODELLED members — the ones PyParseSysStream builds a real value for. }
     Result := (nm = 'argv') or (nm = 'platform') or (nm = 'executable') or
-              (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin');
+              (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin') or
+              (nm = 'byteorder') or (nm = 'maxsize');
     { ...and, for the QUALIFIED spelling only, any other sys attribute as a
       runtime "not available here". `sys._MEIPASS` is the shape — PyInstaller
       sets it and CPython raises AttributeError when it is absent, which is
@@ -13118,6 +13119,39 @@ begin
     ASTSLen[Result] := 5;
     ASTTk[Result] := Ord(tyString);
     LastExprTk := tyString;
+    Exit;
+  end;
+  if nm = 'byteorder' then
+  begin
+    { sys.byteorder — 'little' or 'big', a CONSTANT for the same reason
+      sys.platform is one: it is a property of the TARGET, decided at compile
+      time, and every use in real code is `== "little"`. Every backend pxx has
+      is little-endian today; when a big-endian one lands this has to follow
+      TargetArch, exactly as the note on sys.platform says about Windows.
+
+      Reached by lekkerzeilen's tile loader (app.py:2422,
+      `lo = 0 if sys.byteorder == "little" else 1`), where the missing name
+      raised AttributeError per tile and the loader reported
+      `tile (86, 220): module 'sys' has no attribute 'byteorder'` and dropped
+      the tile. }
+    Result := AllocNode(AN_STR_LIT);
+    ASTSOffset[Result] := StoredName('little');
+    ASTSLen[Result] := 6;
+    ASTTk[Result] := Ord(tyString);
+    LastExprTk := tyString;
+    Exit;
+  end;
+  if nm = 'maxsize' then
+  begin
+    { sys.maxsize — the largest Py_ssize_t, i.e. 2^63-1 on every target pxx
+      builds for. Modelled beside byteorder because the two travel together in
+      the same kind of code (a width or endianness test guarding a fast path)
+      and a missing one costs the same AttributeError. }
+    Result := AllocNode(AN_INT_LIT);
+    ASTIVal[Result] := High(Int64);
+    ASTTk[Result] := Ord(tyInt64);
+    ASTRight[Result] := -1;
+    LastExprTk := tyInt64;
     Exit;
   end;
   if nm = 'executable' then
