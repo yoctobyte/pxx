@@ -295,7 +295,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (142)
+## backlog-nilpy (143)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -347,6 +347,7 @@ _none_
 | bug-n-a-unit-alias-rebind-is-silently-ignored | N | 40 | bug | `from . import a as x` then `from . import b as x` answers A; CPython answers B. `FindUnitOrAlias` scans the alias table from index 0 and takes the FIRST row for a name, so a rebinding is appended and never reached -- silently, with no diagnostic. Split off from bug-n-a-dead-guarded-import-arm-still-binds-its-unit-alias, which was the same table biting through a dead try arm and is fixed; this is the straight-line half and has NO corpus consumer today. Not merely 'make the scan take the last row': the NilPy shim substitutions (`<module> -> mimic_<module>`) share this table and are registered globally rather than per statement, so last-wins would change which unit a shimmed module resolves to. The measurement that decides it is whether any shim row is ever legitimately overridden by a later registration. | — |
 | bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply | N | 55 | bug |  | — |
 | bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost | N | 70 | bug | `open(p, \"w\").write(\"DATA\")` creates the file and leaves it EMPTY — no error, no warning, the data is gone. With an explicit `.close()` or a `with` block the same write lands correctly, so the buffer exists and nothing drains it when the last reference dies. CPython flushes on deallocation, which is what makes the one-liner a normal idiom rather than a mistake. Not reachable from the lekkerzeilen corpus (it uses `with` everywhere, 0 sites), which is why this is filed rather than urgent — but it is silent data loss on a shape half of Python writes, and a test that reads back what it wrote is the only thing that can see it. | — |
+| bug-n-abs-is-not-a-value-while-len-and-str-are | N | 35 | bug | > | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-an-ambiguous-property-store-on-a-dynamic-receiver-has-no-setter-path | N | 30 | bug | > | — |
 | bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address | N | 80 | bug | SPLIT OUT OF bug-n-a-class-reached-through-a-unit-alias-is-not-a-value on 2026-09-11, which held two bugs on two axes. This is the SILENT arm: `w = SomeClass` then `w.V` answers a RAW ADDRESS (~5.5e6) instead of the class attribute, with no diagnostic and exit 0. The other arm is a refusal on METHOD CALLS and is import-free; this one is import-dependent and returns a wrong VALUE, which is worse in kind. THE TRIGGER IS NOT WHAT EITHER OF THE FIRST TWO STATEMENTS SAID, and frankZ corrected their own at 201131b40: it needs (a) a binding name DIFFERENT from the class's own name AND (b) ANY construct preceding the class in the declaring module -- a docstring counts. Binary, not proportional: one preceding construct and two give the IDENTICAL value, so it is not a field index shifted by the number of preceding names, which was the first hypothesis and is wrong. The magnitude tracks program LAYOUT around 5.5e6, i.e. a static data address rather than a slot offset, so whoever fixes it is looking for a place that yields the ADDRESS of the class's storage instead of reading through it. Verified NOT a value collision: class first, `V = 12345`, pxx answers 12345. | — |
@@ -1028,9 +1029,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3723)
+## done (3724)
 
-3723 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3724 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1439,6 +1440,7 @@ _none_
 - [p 35] [N] bug-n-a-local-bound-to-self-loses-its-class-and-an-omitted-default-then-segfaults
 - [p 35] [N] bug-n-a-relative-import-lowercases-the-module-name-but-an-absolute-one-does-not
 - [p 35] [N] bug-n-a-unit-alias-bound-in-both-arms-of-a-runtime-try-answers-the-handler-s-module
+- [p 35] [N] bug-n-abs-is-not-a-value-while-len-and-str-are
 - [p 35] [N] bug-n-collections-counter-is-unreachable-through-its-qualified-spelling
 - [p 35] [N] bug-n-pyeval-cannot-read-an-exponent-float-literal
 - [p 35] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds

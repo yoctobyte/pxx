@@ -6985,14 +6985,62 @@ end;
   (PyMinMaxNoneKey). Adding a third meaning to that one slot would be a fourth
   arm of a distinction the call site cannot make.
   bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
-function pymax_default(const c: Variant; const d: Variant): Variant;
+{ The ONE scan max() and min() do over an iterable. Four callers had three
+  copies of it — the two below and the two `const v: Variant` overloads — and
+  the copies are why the `default=` pair could drift from the plain pair
+  without anything noticing. `l` is already materialised and non-empty; the
+  emptiness decision belongs to the caller, because it is the one thing the two
+  pairs genuinely disagree about (a default value, or a ValueError). }
+function PyExtremeOfList(l: TPyList; wantMax: Boolean): Variant;
+var i, n: Integer; e: Variant;
 begin
-  if pylen_v(c) = 0 then pymax_default := d else pymax_default := max(c);
+  n := l.count;
+  Result := l.at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := l.at(i);
+    if wantMax then
+    begin
+      if pyvar_gt(e, Result) then Result := e;
+    end
+    else
+      if pyvar_lt(e, Result) then Result := e;
+  end;
+end;
+
+{ `max(xs, default=D)` / `min(xs, default=D)`.
+
+  MATERIALISE FIRST, THEN ASK WHETHER IT IS EMPTY — never `pylen_v`. These two
+  called `pylen_v(c)` until 2026-09-13 and so worked for a list, a dict, a str
+  and a bytes and for nothing else: a GENERATOR has no length, and
+  `max((r.at for r in readings), default=None)` — lekkerzeilen gauges.py:467,
+  the wall after the variant-field one — raised `TypeError: expected an object
+  with a length, got object` from a call whose source says nothing about len.
+  The plain `max(genexp)` was right the whole time, because it goes through
+  pylist_v, which DRAINS a cursor; only the `default=` spelling was wrong,
+  which is why a fixture written the ordinary way missed it.
+
+  pylist_v is also the single-consumption rule: it drains the cursor once and
+  everything below reads the materialised list, where the old shape would have
+  walked the argument twice had pylen_v answered at all. }
+function pymax_default(const c: Variant; const d: Variant): Variant;
+var l: TPyList;
+begin
+  if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
+    raise TypeError.Create('max() argument is not iterable');
+  l := pylist_v(c);
+  if (l = nil) or (l.count = 0) then Result := d
+  else Result := PyExtremeOfList(l, True);
 end;
 
 function pymin_default(const c: Variant; const d: Variant): Variant;
+var l: TPyList;
 begin
-  if pylen_v(c) = 0 then pymin_default := d else pymin_default := min(c);
+  if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
+    raise TypeError.Create('min() argument is not iterable');
+  l := pylist_v(c);
+  if (l = nil) or (l.count = 0) then Result := d
+  else Result := PyExtremeOfList(l, False);
 end;
 
 function pyid_v(const v: Variant): Int64;
@@ -8105,37 +8153,25 @@ end;
   drift from the other consumers again.
   bug-nilpy-max-and-min-do-not-iterate-a-dict }
 function max(const v: Variant): Variant; overload;
-var l: TPyList; i: Integer; e: Variant; n: Integer;
+var l: TPyList;
 begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(v);
-  n := 0;
-  if l <> nil then n := l.count;
-  if n = 0 then raise ValueError.Create('max() iterable argument is empty');
-  Result := l.at(0);
-  for i := 1 to n - 1 do
-  begin
-    e := l.at(i);
-    if pyvar_gt(e, Result) then Result := e;
-  end;
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('max() iterable argument is empty');
+  Result := PyExtremeOfList(l, True);
 end;
 
 function min(const v: Variant): Variant; overload;
-var l: TPyList; i: Integer; e: Variant; n: Integer;
+var l: TPyList;
 begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(v);
-  n := 0;
-  if l <> nil then n := l.count;
-  if n = 0 then raise ValueError.Create('min() iterable argument is empty');
-  Result := l.at(0);
-  for i := 1 to n - 1 do
-  begin
-    e := l.at(i);
-    if pyvar_lt(e, Result) then Result := e;
-  end;
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('min() iterable argument is empty');
+  Result := PyExtremeOfList(l, False);
 end;
 
 

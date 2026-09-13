@@ -14149,34 +14149,28 @@ begin
   PyVariantFieldCands := n;
 end;
 
-{ Does some class declare fname as a @PROPERTY rather than as a field? That
-  makes it a candidate with NO FIELD TO READ, and both halves of the variant
-  member path have to agree about it for the same reason they share
-  PyVariantFieldCands: the READ answers a dispatched name with a ternary, which
-  is a VALUE and not an assignable place, so if the WRITE declines a name the
-  READ dispatches, the caller rewinds into the read and the IR refuses the
-  result — `IR_UNSUPPORTED: frontend could not lower AST node (kind 67)`,
-  reported at the assignment with nothing in the source to point at. Measured
-  2026-09-13: teaching only the read about property carriers produced exactly
-  that error on lekkerzeilen's app.py, at a `.wind` write, from a change whose
-  whole subject was a `.name` READ.
+{ PyVariantFieldHasPropCarrier lived here until 2026-09-13 and is gone because
+  the dynamic fallback it selected is now unconditional. It answered "does some
+  class declare fname as a @PROPERTY rather than as a field", and it existed to
+  send exactly those names to the dynamic getter instead of to a field arm. Once
+  EVERY non-matching receiver goes there — which is the whole of the change
+  below — a property carrier is just one more class the `is` tests miss, and
+  pydynattr_get reaches PyPropertyGet on its own.
 
-  A class declaring BOTH a field and a property of the name does not count — the
-  field wins for that class, the precedence every other member path follows. }
-function PyVariantFieldHasPropCarrier(const fname: AnsiString): Boolean;
-var pc: Integer;
-begin
-  Result := False;
-  for pc := 0 to UClsCount - 1 do
-    if (not UClsIsRecord[pc]) and (FindUField(pc, fname) < 0) and
-       (FindUProp(pc, fname) >= 0) then Result := True;
-end;
+  The one thing it taught that still binds: the READ and the WRITE must agree
+  about which names dispatch. Teaching only the read produced
+  `IR_UNSUPPORTED: frontend could not lower AST node (kind 67)` on lekkerzeilen's
+  app.py at a `.wind` WRITE, from a change whose whole subject was a `.name`
+  READ — the read answers a dispatched name with a ternary, which is a value and
+  not an assignable place, so a write that declines what the read dispatches
+  rewinds into the read and the IR refuses the result. Both halves below take
+  the same rule, and that rule is now "every name some class declares". }
 
 function PyMakeVariantField(baseNode: Integer; const fname: AnsiString;
                             var tk: TTypeKind; var recName: Integer): Integer;
 var i, n, armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
     cands, candFi: TPyFieldCands;
-    sameShape, hasProp: Boolean;
+    sameShape: Boolean;
     firstArm: Integer;
 begin
   Result := -1;
@@ -14216,40 +14210,41 @@ begin
     retires the admission in the old comment below ("wrong, but no worse than
     the single-class guess"): the fallback is no longer a guess.
 
-    Gated on hasProp so a program with no such collision emits byte-identical
-    code: without a property carrier the sameShape fast path and the
-    last-candidate fallback are both untouched. A class declaring BOTH a field
-    and a property of the name does not count as a property carrier — the field
-    wins for that class, which is the precedence every other member path
-    follows and the one thing the old comment got right. }
-  hasProp := PyVariantFieldHasPropCarrier(fname);
+    THAT REPAIR WAS GATED ON A PROPERTY CARRIER WHEN IT LANDED, AND THE GATE
+    IS GONE — later the same day the two arms it left standing were measured
+    wrong on their own, so the dynamic fallback is unconditional now and the
+    hasProp predicate has no path to pick. The note below is that measurement;
+    the paragraphs above it are why the arm exists at all. }
+  { EVERY candidate is `is`-tested and the FALLBACK IS ALWAYS THE DYNAMIC
+    GETTER — there is no arm that reads a layout without first proving the
+    object has it. Two unchecked arms lived here until 2026-09-13 and both were
+    measured wrong on lekkerzeilen:
 
-  if sameShape and (not hasProp) then
-  begin
-    { one layout: read it directly, exactly as before — no dispatch, and the
-      emitted code for every program that already compiled is unchanged }
-    Result := PyVariantFieldArm(baseNode, cands[0], candFi[0], fname);
-    tk := IntToTypeKind(UFldTk[candFi[0]]);
-    recName := UFldRec_[candFi[0]];
-    Exit;
-  end;
+    1. `sameShape`, which read the one agreed layout with no test at all. All
+       the DECLARING classes agreeing about the offset says nothing about a
+       receiver that declares the name NOWHERE — and a variant receiver is
+       precisely the case where the frontend does not know which class arrives.
+       The minimal form is one class with a `name` field and an unrelated
+       object reaching `o.name`: a read answers another class's slot, and the
+       WRITE twin stores over it. With the field typed Variant the store then
+       releases whatever those bytes decode to and SEGFAULTS; with it typed
+       AnsiString it corrupts quietly, which is worse.
 
-  { Several layouts: decide at run time. With no property carrier the LAST
-    candidate is the fallback arm and keeps its direct read; with one, the
-    fallback is the dynamic getter and EVERY field candidate gets an `is` test
-    of its own — hence firstArm, which is the only thing the two cases differ
-    by. }
-  if hasProp then
-  begin
-    Result := PyForceVariant(PyMakeDynAttrGet(baseNode, fname));
-    firstArm := n - 1;
-  end
-  else
-  begin
-    Result := PyForceVariant(PyVariantFieldArm(baseNode, cands[n - 1],
-                                               candFi[n - 1], fname));
-    firstArm := n - 2;
-  end;
+    2. the LAST candidate as the else arm, which had the same hole for any
+       non-candidate class — and, because PyVariantFieldCands stops collecting
+       at PY_MAX_FIELD_CANDIDATES, also for every DECLARING class past the
+       sixteenth. Measured: seventeen classes with a field of one name, read
+       through a variant, and the seventeenth segfaults while sixteen pass.
+       A silent cap and an unchecked fallback are one defect, not two.
+
+    pydynattr_get_v resolves by the RTTI of the class the object ACTUALLY is —
+    the dynamic store, the declared fields, then the properties — so the
+    fallback is a correct answer rather than a guess, and a name the object
+    really does not have raises AttributeError where it used to read garbage.
+    The `is`-tested arms are kept because they are the fast path and they are
+    sound; what is gone is the arm that ran when none of them matched. }
+  Result := PyForceVariant(PyMakeDynAttrGet(baseNode, fname));
+  firstArm := n - 1;
   for i := firstArm downto 0 do
   begin
     armN := PyForceVariant(PyVariantFieldArm(baseNode, cands[i], candFi[i], fname));
@@ -14333,38 +14328,29 @@ function PyMakeVariantFieldSet(baseNode: Integer; const fname: AnsiString;
                                valNode, augOp: Integer): Integer;
 var i, n, condN, pairN, ifN, asgN, unboxArg, unboxCall: Integer;
     cands, candFi: TPyFieldCands;
-    sameShape, hasProp: Boolean;
+    sameShape: Boolean;
     firstArm: Integer;
 begin
   Result := -1;
   n := PyVariantFieldCands(fname, cands, candFi, sameShape);
   if n = 0 then Exit;
-  { The read's gate, exactly — see PyVariantFieldHasPropCarrier for why the two
-    must be one rule and what it costs when they are not. }
-  hasProp := PyVariantFieldHasPropCarrier(fname);
-  if (not hasProp) and ((n < 2) or sameShape) then Exit;
+  { The read's rule, exactly — the two halves must agree about which names
+    dispatch or the caller rewinds into the read and the IR refuses the
+    ternary as an assignment target. So this one also dispatches for EVERY
+    name some class declares, down to a single candidate, and its else arm is
+    always the DYNAMIC setter.
 
-  if hasProp then
-  begin
-    { The else arm is the DYNAMIC setter, not the last field candidate. For a
-      class that declares the name no way at all that is the correct store; for
-      the PROPERTY carrier it drops the setter, because pydynattr_set is
-      store-only and there is no PyPropertySet — the already-filed
-      bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver. That
-      is a known gap and it is strictly better than the alternative here, which
-      is writing the value into ANOTHER class's layout at that class's offset.
-      Whoever fixes that ticket should give this arm the setter; the read half
-      above needs no such follow-up, since pydynattr_get already reaches
-      PyPropertyGet. }
-    Result := PyMakeDynAttrSet(baseNode, fname, valNode);
-    firstArm := n - 1;
-  end
-  else
-  begin
-    Result := PyVariantFieldStore(baseNode, cands[n - 1], candFi[n - 1], fname,
-                                  valNode, augOp);
-    firstArm := n - 2;
-  end;
+    For a class that declares the name no way at all that is the correct store.
+    For a PROPERTY carrier it drops the setter, because pydynattr_set is
+    store-only and there is no PyPropertySet — the already-filed
+    bug-nilpy-property-setter-is-skipped-on-a-dynamically-typed-receiver.
+    That gap is strictly better than what the else arm did before, which was to
+    write the value into ANOTHER class's layout at that class's offset — and
+    for a Variant-typed field that store first RELEASES whatever the foreign
+    bytes decode to, which is the segfault half of the read's note above.
+    Whoever fixes that ticket should give this arm the setter. }
+  Result := PyMakeDynAttrSet(baseNode, fname, valNode);
+  firstArm := n - 1;
   for i := firstArm downto 0 do
   begin
     asgN := PyVariantFieldStore(baseNode, cands[i], candFi[i], fname,

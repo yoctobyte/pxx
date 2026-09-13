@@ -36,9 +36,14 @@ unit mimic_struct;
 
   ABSENT, and each would be a hard error rather than a wrong answer: `s`/`p`
   (byte strings), `?` (bool), `c` (char), `n`/`N`/`P` (native-size ints),
-  `e` (half floats), `x` (pad bytes), `pack_into`/`unpack_from`/`iter_unpack`,
-  and the `Struct` class. Adding any of them is a small edit to ItemSize and
-  the two loops; leaving them out is not a design, just an unmet need.
+  `e` (half floats), `x` (pad bytes), and `pack_into`/`unpack_from`/
+  `iter_unpack`. Adding any of them is a small edit to ItemSize and the two
+  loops; leaving them out is not a design, just an unmet need.
+
+  The `Struct` CLASS was in that list until 2026-09-13, when lekkerzeilen's
+  new `facades.py` opened with `HEADER = struct.Struct("<IIIII")` and the
+  build stopped at `no member Struct came of the qualifier struct`. It is
+  below now.
 
   ## `=` IS NOT `<`, AND THAT IS THE WHOLE POINT OF THIS MODULE IN world.py
 
@@ -115,6 +120,41 @@ function pack_list(const fmt: AnsiString; args: TPyList): TPyBytes;
   are one class here and the Python type is a runtime tag, so this really is a
   tuple to repr(), type() and isinstance(). }
 function unpack(const fmt: AnsiString; b: TPyBytes): TPyList;
+
+type
+  { struct.Struct(fmt) -- one format, parsed once and reused.
+
+    CPython's Struct exists for speed: the format is compiled at construction
+    instead of at every call. Here it is a convenience with the same SURFACE,
+    because the parse is a walk over a five-character string either way -- so
+    what a caller can observe is identical, and that is the whole contract.
+
+    `size` is a plain field rather than a re-walk, which is the one place the
+    caching is visible: facades.py reads `HEADER.size` twice per file it
+    opens, once to size the read and once to check it came back whole.
+
+    The four names below are every attribute of CPython's Struct that the
+    corpus reaches. `pack_into`, `unpack_from` and `iter_unpack` stay absent
+    on the class for the same reason they are absent at module level: nothing
+    calls them, and a missing member is a compile error where a guess would
+    be a wrong file. }
+  Struct = class
+  public
+    format: AnsiString;
+    size: Integer;
+    constructor Create(const fmt: AnsiString);
+    { The same arity ladder the module-level `pack` carries, and for the same
+      reason: this dialect has no *args. Each one funnels into pack_list. }
+    function pack(const a1: Variant): TPyBytes; overload;
+    function pack(const a1, a2: Variant): TPyBytes; overload;
+    function pack(const a1, a2, a3: Variant): TPyBytes; overload;
+    function pack(const a1, a2, a3, a4: Variant): TPyBytes; overload;
+    function pack(const a1, a2, a3, a4, a5: Variant): TPyBytes; overload;
+    function pack(const a1, a2, a3, a4, a5, a6: Variant): TPyBytes; overload;
+    function pack(const a1, a2, a3, a4, a5, a6, a7: Variant): TPyBytes; overload;
+    function pack_list(args: TPyList): TPyBytes;
+    function unpack(b: TPyBytes): TPyList;
+  end;
 
 implementation
 
@@ -472,6 +512,99 @@ begin
     end;
   end;
   unpack := res;
+end;
+
+{ ------------------------------------------------------------- Struct ---- }
+
+{ The class methods are named `pack`, `pack_list` and `unpack` -- the Python
+  spelling -- and so are the unit-level functions they delegate to. A method
+  name hides the unit-level one throughout the method body, so calling
+  `pack_list(format, l)` from inside Struct.pack would be an arity error
+  against the METHOD rather than a call to the function. These two aliases sit
+  at unit level, where only the functions are in scope, and are the whole of
+  the indirection. }
+function StructPackList(const fmt: AnsiString; args: TPyList): TPyBytes;
+begin
+  StructPackList := pack_list(fmt, args);
+end;
+
+function StructUnpack(const fmt: AnsiString; b: TPyBytes): TPyList;
+begin
+  StructUnpack := unpack(fmt, b);
+end;
+
+constructor Struct.Create(const fmt: AnsiString);
+begin
+  inherited Create;
+  { calcsize RAISES on a bad code, which is what CPython does at construction
+    too -- `struct.Struct("<z")` is an error there and then, not at the first
+    pack. So the size computation doubles as the format check and there is no
+    second validator to drift from this one. }
+  format := fmt;
+  size := calcsize(fmt);
+end;
+
+function Struct.pack_list(args: TPyList): TPyBytes;
+begin
+  Result := StructPackList(format, args);
+end;
+
+function Struct.unpack(b: TPyBytes): TPyList;
+begin
+  Result := StructUnpack(format, b);
+end;
+
+function Struct.pack(const a1: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2);
+  Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2, a3: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3);
+  Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2, a3, a4: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create; l.append(a1); l.append(a2); l.append(a3); l.append(a4);
+  Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2, a3, a4, a5: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create;
+  l.append(a1); l.append(a2); l.append(a3); l.append(a4); l.append(a5);
+  Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2, a3, a4, a5, a6: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create;
+  l.append(a1); l.append(a2); l.append(a3);
+  l.append(a4); l.append(a5); l.append(a6);
+  Result := StructPackList(format, l);
+end;
+
+function Struct.pack(const a1, a2, a3, a4, a5, a6, a7: Variant): TPyBytes;
+var l: TPyList;
+begin
+  l := TPyList.Create;
+  l.append(a1); l.append(a2); l.append(a3); l.append(a4);
+  l.append(a5); l.append(a6); l.append(a7);
+  Result := StructPackList(format, l);
 end;
 
 end.

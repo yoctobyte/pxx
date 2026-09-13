@@ -86,3 +86,44 @@ print(struct.unpack("<12H", big))
 mixed = struct.pack(">HBId", 513, 7, 70000, 0.5)
 print(len(mixed), mixed)
 print(struct.unpack(">HBId", mixed))
+
+# ---- struct.Struct: one format, parsed once and reused ----------------------
+# lekkerzeilen's facades.py opens with `HEADER = struct.Struct("<IIIII")` and
+# then reads `HEADER.size` twice per file, so the class is reached through a
+# MODULE-LEVEL binding and not through a local -- which is the shape that has
+# to work, and the one a local-only test would not have covered.
+HEADER = struct.Struct("<IIIII")
+print(HEADER.size, HEADER.format)
+head = HEADER.pack(1, 640, 480, 12, 4)
+print(len(head), HEADER.unpack(head))
+
+# The class and the module function must agree, byte for byte and field for
+# field -- two doors onto one implementation, and the pair is the assertion.
+print(head == struct.pack("<IIIII", 1, 640, 480, 12, 4))
+print(HEADER.unpack(head) == struct.unpack("<IIIII", head))
+
+# A prefix the class must honour on its own: `>` against `<` on the same
+# widths, so a Struct that ignored its stored format would print the same
+# number twice here instead of a byte-swapped pair.
+LE = struct.Struct("<H")
+BE = struct.Struct(">H")
+print(LE.pack(513), BE.pack(513))
+print(LE.unpack(BE.pack(513)), BE.unpack(LE.pack(513)))
+
+# A float format and a signed one, through the class.
+print(struct.Struct("<d").unpack(struct.Struct("<d").pack(0.5)))
+print(struct.Struct("<h").unpack(struct.Struct("<h").pack(-2)))
+
+# A repeat count, which makes `size` a real computation rather than a
+# character count -- 3 doubles is 24 bytes and the format is 3 characters.
+TRIPLE = struct.Struct("<3d")
+print(TRIPLE.size, len(TRIPLE.format))
+print(TRIPLE.unpack(TRIPLE.pack(1.5, -2.5, 4.0)))
+
+# A bad code is an error at CONSTRUCTION, not at the first pack -- the size
+# computation doubles as the format check, so there is no second validator.
+try:
+    struct.Struct("<z")
+    print("no error")
+except struct.error:
+    print("bad format refused at construction")

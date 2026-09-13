@@ -1,0 +1,319 @@
+# An attribute on a DYNAMICALLY-TYPED receiver -- a dict value, a for-loop
+# element, an unannotated parameter -- must resolve against the class the object
+# ACTUALLY is. It used to resolve against a class the frontend picked from the
+# name alone, and then read or wrote at that class's field offset with nothing
+# testing whether the object was one.
+#
+# bug-n-an-attribute-on-a-dynamic-receiver-binds-to-another-class-s-field-offset
+
+# ---- 1. ONE class declares the name ----------------------------------------
+# The arm with no `is` test at all. One declaring class does not make the
+# receiver an instance of it, and `Pound` below is never even constructed.
+
+
+class Ghost:
+    def __init__(self):
+        self.keep = 1
+
+
+class Pound:
+    def __init__(self, name):
+        self.name = name or ""
+
+
+def read_name(o):
+    return o.name
+
+
+def write_name(o, v):
+    o.name = v
+
+
+g = Ghost()
+try:
+    print("A", read_name(g))
+except AttributeError:
+    print("A refused")
+# a WRITE on a class that has no such field ADDS one, in Python. It used to
+# store into Pound's layout instead -- and with `name or ""` widening the field
+# to a variant, the store released the foreign bytes and segfaulted.
+write_name(g, "ghostly")
+print("B", read_name(g), g.keep)
+
+# the control: the same two calls on an object that really is a Pound
+p = Pound("Neder-Rijn")
+print("C", read_name(p))
+write_name(p, "IJssel")
+print("D", read_name(p))
+
+
+# ---- 2. SEVERAL classes, different layouts ---------------------------------
+# The dispatch existed for this and its else arm was the last candidate, so the
+# one receiver that is none of them read at that candidate's offset.
+
+
+class Reading:
+    def __init__(self, station, level):
+        self.station = station
+        self.name = station
+        self.level = level
+
+
+class Bare:
+    def __init__(self, n):
+        self.n = n
+
+
+def level_of(o):
+    return o.level
+
+
+class Depth:
+    def __init__(self, level):
+        self.level = level
+
+
+holds = {"r": Reading("s1", 6.5), "d": Depth(2.25), "b": Bare(9)}
+for key in ["r", "d", "b"]:
+    try:
+        print("E", key, level_of(holds[key]))
+    except AttributeError:
+        print("E", key, "refused")
+
+
+# ---- 3. more declaring classes than the candidate table holds --------------
+# PyVariantFieldCands stops collecting at PY_MAX_FIELD_CANDIDATES (16) and says
+# nothing about the rest, so the seventeenth class was not merely last in the
+# dispatch -- it was absent from it, and the unchecked else arm answered for it
+# at the sixteenth class's offset. Each class puts `tag` at a DIFFERENT offset,
+# so a wrong bind cannot land on the right slot by luck, and the rows are
+# printed in declaration order: K1..K16 are the control and K17 is the claim.
+
+class K1:
+    def __init__(self):
+        self.pad0 = 0
+        self.tag = "k1"
+
+class K2:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.tag = "k2"
+
+class K3:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.tag = "k3"
+
+class K4:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.tag = "k4"
+
+class K5:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.tag = "k5"
+
+class K6:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.tag = "k6"
+
+class K7:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.tag = "k7"
+
+class K8:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.tag = "k8"
+
+class K9:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.tag = "k9"
+
+class K10:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.tag = "k10"
+
+class K11:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.tag = "k11"
+
+class K12:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.tag = "k12"
+
+class K13:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.pad12 = 12
+        self.tag = "k13"
+
+class K14:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.pad12 = 12
+        self.pad13 = 13
+        self.tag = "k14"
+
+class K15:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.pad12 = 12
+        self.pad13 = 13
+        self.pad14 = 14
+        self.tag = "k15"
+
+class K16:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.pad12 = 12
+        self.pad13 = 13
+        self.pad14 = 14
+        self.pad15 = 15
+        self.tag = "k16"
+
+class K17:
+    def __init__(self):
+        self.pad0 = 0
+        self.pad1 = 1
+        self.pad2 = 2
+        self.pad3 = 3
+        self.pad4 = 4
+        self.pad5 = 5
+        self.pad6 = 6
+        self.pad7 = 7
+        self.pad8 = 8
+        self.pad9 = 9
+        self.pad10 = 10
+        self.pad11 = 11
+        self.pad12 = 12
+        self.pad13 = 13
+        self.pad14 = 14
+        self.pad15 = 15
+        self.pad16 = 16
+        self.tag = "k17"
+
+
+def tag_of(o):
+    return o.tag
+
+
+for obj in [K1(), K2(), K3(), K4(), K5(), K6(), K7(), K8(), K9(), K10(), K11(), K12(), K13(), K14(), K15(), K16(), K17()]:
+    print("F", tag_of(obj))

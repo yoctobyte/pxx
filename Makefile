@@ -2212,6 +2212,13 @@ test-nilpy: $(COMPILER)
 	# probe -- world.py's ONLY use of struct is `pack("<h",1) == pack("=h",1)`,
 	# so a shim treating `=` as `<` makes that a tautology and decodes every
 	# terrain file backwards on a big-endian host, silently and only there.
+	# The Struct CLASS rows at the end were added 2026-09-13, when lekkerzeilen
+	# grew a facades.py opening `HEADER = struct.Struct("<IIIII")` and the build
+	# stopped at `no member Struct came of the qualifier struct`. Two of those
+	# rows are the ones that could not pass by accident: `LE.unpack(BE.pack(x))`
+	# against its mirror, which a Struct ignoring its OWN stored format would
+	# answer identically both ways, and `<3d` -> size 24 with a 3-character
+	# format, where a size that merely counted the format string would print 3.
 	./$(COMPILER) test/test_nilpy_the_struct_module.npy $(TESTTMP)/test_nilpy_struct26
 	$(TESTTMP)/test_nilpy_struct26 | diff -u test/test_nilpy_the_struct_module.expected -
 	# queue: `import queue` -> lib/rtl/mimic_queue.pas, backed by pylib's
@@ -3361,6 +3368,19 @@ test-nilpy: $(COMPILER)
 	# IR refused it (kind 67) in a program with no conditional expression in it.
 	./$(COMPILER) test/test_nilpy_variant_field_write_dispatch.npy $(TESTTMP)/test_nilpy_vfwrite26
 	$(TESTTMP)/test_nilpy_vfwrite26 | diff -u test/test_nilpy_variant_field_write_dispatch.expected -
+	# ...and the two arms of that dispatch that had NO run-time test at all: the
+	# `sameShape` fast path, taken whenever the declaring classes agree on one
+	# layout -- which includes the ordinary case of exactly ONE declaring class --
+	# and the LAST candidate, used as the else arm. Both read or WROTE at a
+	# class's field offset with nothing proving the object is that class.
+	# Section 3 is the row that cannot be written by accident: PyVariantFieldCands
+	# stops collecting at PY_MAX_FIELD_CANDIDATES = 16 and does not count the
+	# rest, so K1..K16 are the control and K17 is the claim -- under pin v408 the
+	# first sixteen pass and the seventeenth SEGFAULTS. Section 1's `A refused`
+	# is the other kind of control: an attribute the object does not have must
+	# raise AttributeError, where it used to answer another class's slot.
+	./$(COMPILER) test/test_nilpy_an_attribute_on_a_dynamic_receiver.npy $(TESTTMP)/test_nilpy_dynrecv26
+	$(TESTTMP)/test_nilpy_dynrecv26 | diff -u test/test_nilpy_an_attribute_on_a_dynamic_receiver.expected -
 	# ...and the same receiver, a @property TWO UNRELATED classes declare. The
 	# READ has a correct answer at run time and it is CPython's own (PyPropertyGet
 	# finds the getter of the class the object actually is); the STORE does not,
@@ -3501,6 +3521,12 @@ test-nilpy: $(COMPILER)
 	# two dedicated routines, because a second Variant parameter is the slot the
 	# numeric max(a, b) overload already claims (that collision is what made
 	# min(xs, key=f) compare a list against a function).
+	# The rows added 2026-09-13 are an argument with NO LENGTH: both helpers
+	# called pylen_v before anything else, so `max(genexp, default=D)` raised
+	# `expected an object with a length, got object` while `max(genexp)` was
+	# right all along -- the plain form goes through pylist_v, which drains a
+	# cursor. Every row written before that date hands `default=` a list or a
+	# str, which is the arrangement everyone writes and the one that passes.
 	./$(COMPILER) test/test_nilpy_minmax_default.npy $(TESTTMP)/test_nilpy_mmdflt26
 	$(TESTTMP)/test_nilpy_mmdflt26 | diff -u test/test_nilpy_minmax_default.expected -
 	# The shared argument COUNTER tracked () and [] but not BRACES, so every comma

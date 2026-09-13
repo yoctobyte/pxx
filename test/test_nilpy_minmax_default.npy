@@ -22,3 +22,46 @@ print(max(xs, default=-1))
 print(max(3, 5), min(3, 5), max([4, 9]), min([4, 9]))
 print(max([1, 2], key=None), min(["bb", "a"], key=len))
 print(max(1, 2, 3), min(1, 2, 3))
+
+# ---- and the arrangement nobody wrote: an argument with NO LENGTH -----------
+# Every row above hands `default=` a list or a str, so every row above went
+# through pylen_v and passed. A GENERATOR has no length, and the two helpers
+# asked for one before they asked for anything else -- so `max(genexp)` was
+# right (it goes through pylist_v, which drains a cursor) while the very same
+# expression with `default=` raised `TypeError: expected an object with a
+# length, got object`. Found on lekkerzeilen gauges.py:467, 2026-09-13.
+print(max((x for x in [3, 1, 7]), default=0))
+print(min((x for x in [3, 1, 7]), default=0))
+print(max((x for x in []), default=-1), min((x for x in []), default=-1))
+
+# the same shape the demo actually writes: an attribute off each element
+class R:
+    def __init__(self, at):
+        self.at = at
+
+
+rs = [R(11), R(97), R(40)]
+print(max((r.at for r in rs), default=None))
+print(max((r.at for r in []), default=None))
+
+# every other lengthless iterable reaches the same helper. `map` is spelled
+# with `len` rather than `abs` because a bare `abs` is not a value in NilPy
+# (`undefined variable (abs)`, while `len` and `str` both are) -- a separate
+# gap, filed, and not what this fixture is about.
+print(max(map(len, ["aaa", "b"]), default=0), min(map(len, ["aaa", "b"]), default=0))
+print(max(range(3), default=-1), max(range(0), default=-1))
+print(max(iter([4, 8]), default=0))
+
+# SINGLE CONSUMPTION. A cursor is drained once and is empty afterwards -- that
+# is CPython's rule and it is also the reason the fix materialises instead of
+# measuring: the old shape would have walked the argument twice had pylen_v
+# answered at all.
+g = (x for x in [2, 5])
+print(max(g, default=0), list(g))
+
+# a non-iterable is still refused rather than defaulted. The MESSAGE differs
+# from CPython's and is deferred; that it raises TypeError is the claim.
+try:
+    print(max(5, default=0))
+except TypeError:
+    print("not iterable refused")
