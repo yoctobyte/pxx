@@ -191,4 +191,4 @@ not. That is what separated `re.findall` (2155 -> 2156, wrapped) from
 parameters into the arity/parameter split above. No probe, no rebuild.
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 017dfed7d.
