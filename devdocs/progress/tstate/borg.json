@@ -14735,8 +14735,8 @@
   "wall": 887.5
  },
  "last_idle_tier_try": {
-  "date": "2026-09-12T08:26:42Z",
-  "sha": "48ffab327c36736fbdb5f1a471ad8a696bd366c7",
+  "date": "2026-09-13T05:40:14Z",
+  "sha": "4abece660ac5b26c72a72a70fdf3f723ef696170",
   "tier": "full"
  },
  "last_opt": {
@@ -14872,6 +14872,7 @@
    "range": [
     "575e9ec16b9739652f4f22d3a8b8f30c3a93bb71"
    ],
+   "range_non_causal": false,
    "src": "test/c_asm_in_inline_body.c tools/expect_same.sh +2",
    "status": "fail"
   }
