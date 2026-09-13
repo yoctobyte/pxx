@@ -14905,6 +14905,7 @@
   },
   {
    "bad": "e5cd18e4b220306c1b9d1e3c9308371f7969a533",
+   "bad_untestable": false,
    "cascade": [
     "test-uforth#src:tools/compiler_srchash.sh@1",
     "test-uforth#src:tools/compiler_srchash.sh@10",
@@ -14923,10 +14924,12 @@
    "good": "6f085e16261ea5177c8e8424eb385b31daa28dbe",
    "job": "cascade@e5cd18e4b220",
    "name": "",
+   "no_testable_change": false,
    "opened": "2026-09-13T14:57:00Z",
    "range": [
     "e5cd18e4b220306c1b9d1e3c9308371f7969a533"
    ],
+   "range_non_causal": false,
    "src": ""
   }
  ],
