@@ -26300,3 +26300,41 @@ before believing an error message that names a subsystem the gate never mentions
 Related: [Every instrument that lies, lies by being CORRECT ABOUT SOMETHING ELSE]
 in CLAUDE.md — this is that rule with the error MESSAGE as the instrument, and
 the message is correct: `unpack` really was handed a bad format string.
+
+## `procs=N` IS A FREE WRAPPER/SYNTHESIS DETECTOR WHERE `PXXDBG` HAS NO KEY
+
+Measured 2026-09-13 (frankS, Track N). The compiler's own success line carries a
+proc count:
+
+    ok: /tmp/x  [code=1523480B  data=119260B  bss=88364B  procs=2493]
+
+Anything the compiler SYNTHESIZES is a proc, so that number is an instrument for
+"did the machinery fire?" without a probe, a rebuild, or a debug key. Compile the
+same program twice, differing only in the spelling under test:
+
+    import re;   print(re.findall("a","banana"))    procs=2155
+    import re;   f = re.findall; print(f(...))      procs=2156   wrapper BUILT
+    import json; print(json.loads("[1]"))           procs=2393
+    import json; f = json.loads; print(f("[1]"))    procs=2393   NOT built
+
+That two-line difference separated three distinct causes wearing one symptom
+(return type, parameter type, arity) in a case where every symptom pointed at the
+wrong subsystem. It was reached only after `PXXDBG=a.ast:'$pycallwrap*'` produced
+nothing — **there is no PXXDBG key for wrapper synthesis**, and the alternative
+was editing a `WriteLn` into the parser and self-compiling at ~90s a round.
+
+Generalises to anything the compiler generates rather than parses: synthesized
+wrappers, lifted lambdas, generated accessors, instantiated generics. If the
+mechanism you are chasing MAKES A PROC, this counts it.
+
+**THE CAVEAT, AND IT WILL BURN SOMEONE WHO SKIPS IT: this is a DIFFERENTIAL
+reading, not an absolute.** The number is a property of the whole compile, so
+anything else that differs between the two runs moves it as well. It is sound
+when the only change is one spelling of one name in one file, compiled back to
+back. It is NOT sound across a pull, across a rebuild, or between two different
+programs — there the count differs for reasons that have nothing to do with your
+question, and it will answer confidently anyway. Same family as every other
+instrument here: it does not error, it answers about something else.
+
+Related: [A DECLINED GATE IS NOT "NOTHING HAPPENS"] — that is the bug this was
+built to see; this is the instrument, and it is reusable well past that bug.

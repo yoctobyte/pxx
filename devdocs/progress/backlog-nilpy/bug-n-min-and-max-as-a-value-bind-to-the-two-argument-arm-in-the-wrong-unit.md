@@ -122,6 +122,14 @@ Python**, so required arity breaks a real spelling and full arity breaks the
 common one. Neither single arity is right, which is the same conclusion the
 min/max section above reaches from the other direction.
 
+**The refusal is a MEASUREMENT, not caution, and that is the part to keep.** A
+one-line fix was available and working -- add `json` to the unit list -- and it
+was declined because the measurement shows **the list was never the mechanism**:
+required arity breaks `dumps(obj, indent=2)` and full arity breaks `dumps(obj)`,
+so no membership test over units can be right, however the list is spelled. A
+widened list would have closed the row and left the defect, which is the shape
+that gets a ticket reopened later with the fix already in it.
+
 If a discriminator is needed it should be something the DECLARATION carries --
 `ProcParamHasDefault` already does, and `ProcSigOff` marks a NilPy def -- never
 where the file sits. The honest shape is a wrapper that forwards a variable
@@ -134,3 +142,9 @@ VALUE spelling reads one higher than the CALL spelling when a wrapper was built
 and identical when it was not. `re.findall` 2155 -> 2156 (wrapped),
 `json.loads` 2393 -> 2393 (not wrapped, before the fix). No probe, no rebuild --
 the temporary `WriteLn` recorded above is not needed to answer this class.
+
+**It is a DIFFERENTIAL reading and it is only sound when the two compiles differ
+in one thing.** Anything else that changes between them moves the count too, so
+it holds for the call-versus-value spelling of ONE name in ONE file and does NOT
+hold across a pull, a rebuild, or two different programs. Read it as a delta
+between two invocations you made back to back, never as an absolute.
