@@ -15010,6 +15010,7 @@
    "range": [
     "114dfd769a46240b910c87140d9f360aa96b30f9"
    ],
+   "range_non_causal": false,
    "src": "test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh",
    "status": "fail"
   }
