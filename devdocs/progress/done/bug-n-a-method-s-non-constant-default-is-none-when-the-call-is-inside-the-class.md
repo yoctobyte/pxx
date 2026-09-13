@@ -99,6 +99,11 @@ rows N and O), and under the rejected version those two rows are the ONLY ones
 that fail -- every other row of the same fixture passes. That is measured, not
 predicted.
 
+## Resolution
+
+Fixed, commit b48c40d28 on origin/master (both bugs landed together; the close
+is the same commit).
+
 ## Verified
 
 - `test_nilpy_a_method_default_that_is_not_a_literal`: 15 rows, `.expected` from

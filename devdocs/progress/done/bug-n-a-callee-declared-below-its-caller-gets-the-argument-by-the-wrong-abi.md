@@ -85,6 +85,11 @@ is by-ref and a plain by-value `v: Variant` copies
 (bug-pascal-byvalue-variant-param), and pylib's own units go through
 `RegisterProc` during a NilPy build.
 
+## Resolution
+
+Fixed, commit b48c40d28 on origin/master (both bugs landed together; the close
+is the same commit).
+
 ## Verified
 
 - `test/test_nilpy_a_callee_declared_below_its_caller.npy`, 7 rows, `.expected`
