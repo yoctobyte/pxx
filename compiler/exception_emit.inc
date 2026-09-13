@@ -71,6 +71,7 @@ end;
 procedure EmitExceptionRuntime;
 var unhandledJmp, si, cbzOffset, pos, bOffset, k: Integer;
     siColon, jo1, jo2, jc1, jc2, jc3, jc4, jm1, jm2, jm3, jm4: Integer;
+    ExcValidateAddr, excSkip1, excSkip2, siCorrupt: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -107,10 +108,78 @@ begin
     EmitB($48); EmitB($8B); EmitB($04); EmitB($24);             { mov rax, [rsp] }
     EmitStatusSlotX64(0, BSS_EXC_ADDR, True);                   { mov [EXC_ADDR], rax }
     EmitStatusSlotX64(0, BSS_EXC_TOP, False);                   { mov rax, [EXC_TOP] }
+
+    { ---- VALIDATE THE FRAME BEFORE JUMPING INTO IT -----------------------
+      A chain head is a POINTER THE UNWINDER JUMPS TO, so a corrupt one is not
+      a wrong answer, it is a wild jump: `jmp [rdi+56]` with whatever is at that
+      address. Measured 2026-09-14 on lekkerzeilen, four runs of the same
+      binary: three SIGSEGV and one SIGBUS, because the restored rip is not
+      always 0 -- and NOTHING IS PRINTED either way, so a program that hits this
+      loses its diagnostics rather than reporting them. That is the whole cost:
+      the raise was correct, the handler lookup was correct, and the only thing
+      wrong was that the frame it named was dead.
+
+      THE TEST IS AN EQUALITY AND THAT IS WHY IT WORKS. IR_EXC_ENTER emits
+      `sub rsp, EXC_FRAME_SIZE` and then calls setjmp with rdi = rsp+8, so the
+      `lea rax, [rsp+8]` inside setjmp -- one pushed return address deeper --
+      stores EXACTLY THE FRAME'S OWN ADDRESS in the saved-rsp slot at +48. A
+      live frame therefore satisfies `[frame+EXC_JMP_OFFSET+48] == frame`, and a
+      dead one satisfies it only by coincidence.
+
+      A ZERO TEST IS NOT ENOUGH AND WAS TRIED FIRST: dead stack is only zeroes
+      on a page nothing has used yet. In lekkerzeilen the leaked frame read as
+      all zeroes and a `!= 0` guard would have caught it; in the five-line
+      reduction the same leak leaves a PLAUSIBLE stale jmpbuf behind, the guard
+      passed it, and the process segfaulted exactly as before. Measured both
+      ways 2026-09-14, with the ir.inc fix reverted to put the leak back.
+
+      On failure WALK THE CHAIN ([rax+0] is the previous head) rather than
+      jumping: an outer handler further up is still valid and is the right place
+      to land. Falling off the end is the unhandled path, which prints.
+
+      Publishing the surviving head to BSS_EXC_TOP is what makes the walk safe
+      and is a no-op when nothing was skipped -- the landing pad's IR_EXC_LEAVE
+      pops from that slot, so a pad reached after a skip must find ITS OWN frame
+      there or it pops a frame nobody entered.
+
+      THIS DOES NOT REPAIR THE LEAK AND IS NOT MEANT TO: the frame is on the
+      chain because something failed to pop it, and that is
+      bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain.
+      What it buys is that the failure ARRIVES AS A MESSAGE. x86-64 only for
+      now, deliberately -- the other five backends have the same shape and none
+      of them is where this was measured. }
+    ExcValidateAddr := CodeLen;
     EmitB($48); EmitB($85); EmitB($C0);                         { test rax, rax }
     EmitB($0F); EmitB($84); unhandledJmp := CodeLen; EmitI32(0); { jz unhandled }
+    EmitB($48); EmitB($8B); EmitB($50);
+      EmitB(EXC_JMP_OFFSET + 48);                               { mov rdx, [rax+56]  saved rsp }
+    EmitB($48); EmitB($39); EmitB($C2);                         { cmp rdx, rax }
+    EmitB($0F); EmitB($85); excSkip1 := CodeLen; EmitI32(0);    { jne skip }
+    excSkip2 := excSkip1;
+    EmitStatusSlotX64(0, BSS_EXC_TOP, True);                    { mov [EXC_TOP], rax }
     EmitB($48); EmitB($8D); EmitB($78); EmitB(EXC_JMP_OFFSET);  { lea rdi, [rax+8] }
     EmitB($E9); EmitI32(ExcLongJmpAddr - (CodeLen + 4));        { jmp longjmp }
+
+    Patch32(excSkip1, CodeLen - (excSkip1 + 4));
+    Patch32(excSkip2, CodeLen - (excSkip2 + 4));
+    if not NoUnhandledHandler then
+    begin
+      { Say so. A skip that is silent is the same class of defect as the wild
+        jump it replaces -- the program keeps going and nobody learns that the
+        chain was broken. r8 carries the frame across the syscall, which
+        clobbers rax/rcx/r11. }
+      siCorrupt := InternStr('exception frame chain: a stale handler frame (its saved stack pointer is not its own address), skipping it');
+      EmitB($49); EmitB($89); EmitB($C0);                       { mov r8, rax }
+      MovRaxImm(SYS_WRITE); MovRdiImm(2);
+      EmitB($48); EmitB($BE); EmitDataRef(Strs[siCorrupt].Offset + 8);
+      MovRdxImm(Strs[siCorrupt].Len); EmitSyscall;
+      MovRaxImm(SYS_WRITE); MovRdiImm(2);
+      EmitB($48); EmitB($BE); EmitDataRef(NEWLINE_OFFSET);
+      MovRdxImm(1); EmitSyscall;
+      EmitB($4C); EmitB($89); EmitB($C0);                       { mov rax, r8 }
+    end;
+    EmitB($48); EmitB($8B); EmitB($00);                         { mov rax, [rax]  previous head }
+    EmitB($E9); EmitI32(ExcValidateAddr - (CodeLen + 4));       { jmp validate }
     Patch32(unhandledJmp, CodeLen - (unhandledJmp + 4));
 
     if not NoUnhandledHandler then
