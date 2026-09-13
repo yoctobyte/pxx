@@ -97,7 +97,11 @@ and whether it is specific to `@staticmethod` versus instance methods. One
 program each.
 
 
-## 2026-09-13 (frankZ) — NO VERDICT: my probes were VACUOUS, which is not evidence of a fix
+## 2026-09-13 (frankZ) — NO VERDICT: PROBE PROVEN VACUOUS AGAINST A KNOWN-BAD CONTROL
+
+**Not "could not reproduce".** The probes were run against a compiler KNOWN to
+hold the defect and passed there too, which measures the instrument and not the
+bug.
 
 Attempted as part of the "class held as a value" group. **I could not reproduce
 this at HEAD — and I could not reproduce it on pin v408 either**, which is the
@@ -128,7 +132,13 @@ a class receiver for any name with an instance carrier), both verified by their
 authors against lekkerzeilen. Someone with that corpus should close it; I am not
 closing it on a vacuous probe.
 
-**The group hypothesis is UNTESTED and must not be recorded as a finding.**
+**The group hypothesis is DEAD FOR NOW — not "untested", which a later reader
+will mis-read as "promising" and spend an evening on.** It was never in a
+position to be true or false, because two of its three inputs never fired: you
+cannot read two triggers against each other when only one of them reproduces.
+It becomes live again only if arms 1 and 3 get a repro that actually fails on a
+known-bad compiler. Recorded, with its reason for being unresolved, so nobody
+re-derives it:
 frankuser proposed reading this arm's trigger against
 `bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address`
 — same-name breaks method lookup, different-name breaks the attribute read, one
