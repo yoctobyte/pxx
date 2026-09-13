@@ -36831,6 +36831,84 @@ begin
         j := FindUClass(GetTokenStr(caVal));
         if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
       end;
+      { ...and for every OTHER expression initialiser, ask the inference the
+        rest of the file already trusts. This type has to be settled HERE and
+        not at the initialiser, because a method declared ABOVE this line is
+        compiled against whatever this pre-pass recorded — and a variant slot
+        read by a method that was compiled before PyEmitClassAttrExpr retyped
+        it yields an empty container or None. The same field read from a method
+        BELOW the declaration was correct, which is the tell that this is
+        compile-order and not the value.
+        Not a first-token test: `(1, 2)` is a TPyList and `(1 + 2)` is an
+        integer, and both open with tkLParen — PyInferExprType separates them
+        and a token peek cannot. Measured 2026-09-13, it agrees with the
+        retype's own answer on tuple/list/dict/set/call/concat/paren.
+        tyUnknown leaves the variant default, which is exactly today's
+        behaviour, so an expression the inference cannot read degrades rather
+        than regresses.
+        bug-n-a-container-class-attribute-declared-after-a-method-reads-empty-through-self }
+      if tk = tyVariant then
+      begin
+        k2 := caVal;
+        while (k2 < bodyEnd) and (Tokens[k2].Kind <> tkNewline) do Inc(k2);
+        wtk := PyInferExprType(caVal, k2);
+        { a tyString FIELD is an inline string[N] to the store path, and NilPy
+          str is pointer-semantics — the same demotion the annotated branch makes }
+        if wtk = tyString then wtk := tyAnsiString;
+        { tyClass ONLY, and the restriction is load-bearing rather than
+          cautious. A class handle is pointer-sized and that is exactly what
+          the initialiser stores, so narrowing the slot to it is safe. Taking
+          the inference's word for a SCALAR is not: `P = (1 + 2)` infers
+          tyInt64, and typing the field that way SEGFAULTED, because the store
+          path still writes the wide value — measured 2026-09-13 against the
+          pinned compiler, which merely read None there. That scalar case is a
+          real defect and a SEPARATE one: it is wrong at HEAD and wrong under
+          the pin, in both cases without this line, and it is not this ticket's
+          container class. Widening this test is what would resurrect the
+          segfault, so do not widen it without fixing the store path first. }
+        if wtk = tyClass then
+        begin
+          { ...and NEVER tyClass without a rec. tyClass + REC_NONE compiles
+            `self.L[0]` against no class at all and SEGFAULTS, where the
+            variant it replaced merely raised TypeError — measured against the
+            pinned compiler the same day. A crash is worse than a diagnosed
+            refusal, so a shape whose class cannot be named here stays a
+            variant and keeps today's behaviour. }
+          rhsName := '';
+          if Tokens[caVal].Kind = tkLBrack then rhsName := 'TPyList'
+          else if Tokens[caVal].Kind in [tkBegin, tkLParen] then
+          begin
+            { `{...}` is a set (a TPyList) unless a top-level `:` makes it a
+              dict; `(...)` is a TUPLE only if a top-level `,` is in it, which
+              is the whole reason this cannot be a first-token test —
+              `(1, 2)` is a TPyList and `(1 + 2)` is an integer. }
+            if Tokens[caVal].Kind = tkBegin then rhsName := 'TPyList';
+            fj := 0; k2 := caVal + 1;
+            while (k2 < bodyEnd) and (Tokens[k2].Kind <> tkNewline) do
+            begin
+              if Tokens[k2].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(fj)
+              else if Tokens[k2].Kind in [tkRParen, tkRBrack, tkEnd] then
+              begin
+                if fj = 0 then Break;
+                Dec(fj);
+              end
+              else if fj = 0 then
+              begin
+                if (Tokens[caVal].Kind = tkBegin) and (Tokens[k2].Kind = tkColon) then
+                begin rhsName := 'TPyDict'; Break; end;
+                if (Tokens[caVal].Kind = tkLParen) and (Tokens[k2].Kind = tkComma) then
+                begin rhsName := 'TPyList'; Break; end;
+              end;
+              Inc(k2);
+            end;
+          end;
+          if rhsName <> '' then
+          begin
+            j := FindUClass(rhsName);
+            if j >= 0 then begin tk := tyClass; k := REC_UCLASS_BASE + j; end;
+          end;
+        end;
+      end;
       { same lowering choice as the literal branch above }
       PyClsAttrWriteScan(PyRawName(UClsNOff[ci], UClsNLen[ci]), GetTokenStr(i),
                          caClassW, caInstW);

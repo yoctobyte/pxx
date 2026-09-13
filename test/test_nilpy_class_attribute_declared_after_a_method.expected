@@ -1,0 +1,6 @@
+read      ((1, 2), [3, 4], {'a': 7})
+traverse  (3, 7, 2, 2)
+mutate    [3, 4, 99]
+two-early [5, 6]
+two-late  [5, 6]
+inter     ([1, 2], [3, 4])

@@ -1,0 +1,52 @@
+# A CONTAINER class attribute declared AFTER the method that reads it through
+# `self`. The failing arrangement on purpose: attributes are normally written at
+# the TOP of a class body, so every ordinary fixture puts them where they work
+# and certifies the bug instead of catching it. Three things have to line up —
+# a container value, read through self, declared BELOW the reader.
+#
+# bug-n-a-container-class-attribute-declared-after-a-method-reads-empty-through-self
+#
+# Expected values are deliberately NOT defaults: (1, 2) and [3, 4] rather than
+# an empty tuple or list, because an empty container is what the DEFECT
+# produces — asserting one would be a guard that cannot fail.
+#
+# Do NOT fold this into test_nilpy_class_attribute_and_a_lambda_in_a_method:
+# that fixture's `Below` class is scalars-and-a-string by design and would
+# redden whenever either bug moved.
+
+class Below:
+    def read(self):
+        return (self.T, self.L, self.D)
+    def traverse(self):
+        # tyClass with no rec SEGFAULTED here where a variant raised TypeError
+        return (self.L[0], self.D["a"], self.T[1], len(self.L))
+    def mutate(self):
+        self.L.append(99)
+        return self.L
+    T = (1, 2)
+    L = [3, 4]
+    D = {"a": 7}
+
+class TwoReaders:
+    # the sharpest arrangement: ONE field, read from a method above it and a
+    # method below it. Before the fix these two disagreed, which is what proves
+    # the typing was per-method compile order and not a property of the field.
+    def early(self):
+        return self.C
+    C = [5, 6]
+    def late(self):
+        return self.C
+
+class Interleaved:
+    A = [1, 2]
+    def read(self):
+        return (self.A, self.B)
+    B = [3, 4]
+
+b = Below()
+print("read     ", b.read())
+print("traverse ", b.traverse())
+print("mutate   ", b.mutate())
+print("two-early", TwoReaders().early())
+print("two-late ", TwoReaders().late())
+print("inter    ", Interleaved().read())

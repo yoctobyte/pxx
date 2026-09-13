@@ -2496,6 +2496,17 @@ test-nilpy: $(COMPILER)
 	@# value. Verified to SEGFAULT on pin v408 and pass at HEAD.
 	./$(COMPILER) test/test_nilpy_a_property_and_a_field_of_one_name_on_a_variant.npy $(TESTTMP)/test_nilpy_propfieldvar26
 	$(TESTTMP)/test_nilpy_propfieldvar26 | diff -u test/test_nilpy_a_property_and_a_field_of_one_name_on_a_variant.expected -
+	@# A CONTAINER class attribute declared AFTER the method that reads it through
+	@# self — the failing arrangement, because attributes are normally written at the
+	@# TOP of a class body and every ordinary fixture therefore puts them where they
+	@# work. Separate file from the lambda one above ON PURPOSE: that fixture's
+	@# `Below` class is scalars-and-a-string by design, and folding containers into
+	@# it would redden it whenever either bug moved. Expected values are not
+	@# defaults — an EMPTY container is what the defect produces, so asserting one
+	@# would be a guard that cannot fail. Verified to FAIL on the pinned compiler
+	@# (empty containers, then TypeError) and byte-identical to CPython when fixed.
+	./$(COMPILER) test/test_nilpy_class_attribute_declared_after_a_method.npy $(TESTTMP)/test_nilpy_clsattrafter26
+	$(TESTTMP)/test_nilpy_clsattrafter26 | diff -u test/test_nilpy_class_attribute_declared_after_a_method.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy $(TESTTMP)/test_nilpy_mapbound26
