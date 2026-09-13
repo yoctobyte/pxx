@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-13T13:23:28Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6f085e16261ea5177c8e8424eb385b31daa28dbe",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-13T13:40:05Z",
    "fixed": [],
    "new_red": [],
@@ -490,6 +481,15 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-13T23:08:57Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "82e070429d309766a5524b13c5e466a0d29246c6",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -691,14 +691,14 @@
   "lib-test#src:test/test_math.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
   "lib-test#src:test/test_tcomponent.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
   "lib-test#src:test/test_tlist_notify.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
-  "optdiff#shard1/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard11/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard3/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard4/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard6/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard7/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard8/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "optdiff#shard9/12": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
+  "optdiff#shard1/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard11/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard3/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard4/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard6/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard7/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard8/12": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "optdiff#shard9/12": "82e070429d309766a5524b13c5e466a0d29246c6",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "82e070429d309766a5524b13c5e466a0d29246c6",
   "size-canary#src:tools/size_canary.py": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-aarch64#src:test/c_crtl_cmsg_and_socket_levels.c": "82e070429d309766a5524b13c5e466a0d29246c6",
@@ -4682,11 +4682,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-nilpy#src:tools/compiler_srchash.sh": "82e070429d309766a5524b13c5e466a0d29246c6",
-  "test-opt#src:compiler/compiler.pas@1": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "test-opt#src:compiler/compiler.pas@2": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "test-opt#src:compiler/compiler.pas@3": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "test-opt#src:test/test_atomic64.pas": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "test-opt#src:tools/compiler_srchash.sh": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
+  "test-opt#src:compiler/compiler.pas@1": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "test-opt#src:compiler/compiler.pas@2": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "test-opt#src:compiler/compiler.pas@3": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "test-opt#src:test/test_atomic64.pas": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "test-opt#src:tools/compiler_srchash.sh": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-pascal-conformance#shard0/6": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-pascal-conformance#shard1/6": "82e070429d309766a5524b13c5e466a0d29246c6",
   "test-pascal-conformance#shard2/6": "82e070429d309766a5524b13c5e466a0d29246c6",
@@ -5248,7 +5248,7 @@
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | OK    examples/tui/menudemo.pas | OK    examples/vm/vmdemo.pas | === demos: 31/36 built into build/demos/ (esp32 skipped \u2014 cross-only) === | (demos is a dashboard, not a gate; FAILs -> file a ticket)",
   "lib-test#src:tools/crtl_reachability.py": "... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60: warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:60: warning: #include <linux/ioctl.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismat\u2026",
   "optdiff#shard0/12": "OPT DIFF -O3: test/test_double_to_integer_lvalue_rounds.pas (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_field_get_by_name.pas | optdiff skip TIMEOUT-O0: devtest_tls_native_seam.pas test_emit_obj.pas test_halt_from_worker_thread.pas test_header_static_body_ffi_control_explicit.pas | optdiff skip BUILD-FAIL: case_sensitive_unit.pas c_obj_fnptr_a.c kwarg_overload_unit.pas lib_synapse_tls_loopback\u2026",
-  "optdiff#shard10/12": "OPT DIFF -O3: test/c_crtl_glob.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_rtti_kind_numbering.pas | optdiff skip TIMEOUT-O0: c_unsigned_const_guard_folds.c test_qplus_narrowing_store.pas | optdiff skip BUILD-FAIL: cerror_directive_fail.c c_ir_unsupported_reports_the_real_line.c c_obj_data_only.c c_obj_runtime_state_a.c const_before_ctor_unit.pas c_pasunit_ansistring_result_fail.c cpasunit_string\u2026",
+  "optdiff#shard10/12": "OPT DIFF -O3: test/c_crtl_glob.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_rtti_kind_numbering.pas | optdiff skip TIMEOUT-O0: c_unsigned_const_guard_folds.c test_handler_early_exit_pops_the_exception_frame.pas test_qplus_narrowing_store.pas | optdiff skip BUILD-FAIL: cerror_directive_fail.c c_ir_unsupported_reports_the_real_line.c c_obj_data_only.c c_obj_runtime_state_a.c const_before_ctor_unit.p\u2026",
   "optdiff#shard2/12": "OPT DIFF -O3: test/c_crtl_glob_no_leak.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_thread_writeln_interleave.pas | optdiff skip TIMEOUT-O0: test_target_name_in_external_refusal.pas | optdiff skip BUILD-FAIL: aoc_ovl_unit_fmt.pas cabi_bridge.c cabi_intra.c c_cpp_macro_arg_shapes.c c_pasunit_two_overloads_fail.c csqlite_layout_probe.c cxtensa_obj.c isas_b325_base.pas lib_klondike.pas library_export\u2026",
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
@@ -14772,14 +14772,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T22:52:28Z",
+  "date": "2026-09-13T23:08:57Z",
   "deadline": 3600.0,
   "sha": "82e070429d309766a5524b13c5e466a0d29246c6",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 99.5
+  "verdict": "RED",
+  "wall": 977.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14819,14 +14819,14 @@
   },
   "opt": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T22:25:18Z",
+   "date": "2026-09-13T23:08:57Z",
    "deadline": 3600.0,
-   "sha": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
+   "sha": "82e070429d309766a5524b13c5e466a0d29246c6",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 961.0
+   "wall": 977.3
   },
   "slow": {
    "code_fp": "1d5c476a6328",
