@@ -4,13 +4,13 @@ track: N
 type: bug
 prio: 80
 status: backlog
-owner: ""
+owner: frankuser
 created: 2026-09-11
 found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "SEGFAULTS (rc=139) as of 2026-09-13 — THE OLD OBSERVABLE IN THIS TICKET IS RETIRED, not merely restated: `w = SomeClass` then `w.V` no longer answers ~5.5e6 with exit 0, it kills the program. A probe written to the old summary checks a VALUE and CANNOT observe a crash. Where 5.5e6 came from is now known and that is why the number is retired: pyclsattr_bind registers the attribute's slot at ~5.6e6 (`ZBIND name=V cls=5538536 addr=5622640 kind=13`), so the original reading was the bound slot ADDRESS surfacing as the value. TRIGGER, sharpened: a declaring module holding more than ONE top-level EMITTING construct — with TWO classes the FIRST one fails too and nothing precedes it, so it is not position and not precedence; a bare comment is not a construct, and a TRAILING statement changes nothing (rules out the last-class hoist-drain family). ISOLATED to one shape: through the same binding, the qualified read `m.Widget.V`, a @staticmethod, construction, an instance attribute and an instance method are ALL correct, so the classref payload is sound. THE ROUTE IS NOT THE DOCUMENTED ONE: PyClsAttrRefGet in pylib.pas, commented as the route for a class held as a VALUE, is NEVER CALLED — instrumented on entry it fires in neither the failing nor the working case; pyclsattr_inst_get is ruled out too (redeclared attributes only, n>1 declaring classes). Identical under pin v408 and at HEAD, so the three class-as-value fixes of 2026-09-13 neither caused nor fixed it. Left to find: what `w.V` lowers to for a class-valued receiver with ONE declaring class — e5cd18e4b's dynamic-receiver path. OWNED by frankuser from 2026-09-13."
+summary: "SEGFAULTS (rc=139), and the summary said ~5.5e6-with-exit-0 until 2026-09-13 -- a probe written to the old wording checks a VALUE and CANNOT observe a crash. WHERE IT DIES, measured at 7990405c2 with -g -O2 and the .map: __pxxInheritsFrom at `mov (%rax),%rax` reading the parent at +8, with the class pointer equal to 0x40000000 -- MSTR_STATIC_RC / PXX_STATIC_RC_FLOOR, the never-free REFCOUNT sentinel. A refcount word is being walked as a class pointer, so the fix is an OFF-BY-HEADER-OFFSET and not a wrong slot offset. (gdb frame #1 resolves to PyBoxClassRef and is noise -- no CFI, and that return address follows an exception-frame call.) THE OLD 5.5e6 IS EXPLAINED AND RETIRED: frankz-9c traced it to pyclsattr_bind registering the slot at ~5.6e6, i.e. the bound slot ADDRESS surfacing as the value. TRIGGER IS POSITION, NOT COUNT: anything lexically PRECEDING the accessed class, an `import` included -- and an import emits nothing, which also rules out "more than one emitting construct"; a statement AFTER the class is harmless, which rules out the last-class hoist-drain family a second way. AND THE OUTCOME IS SENSITIVE TO THE CLASS NAMES (Other, Self, Value, Count, Rtti, Result, Kind give the right answer; Bbb, Index, Data, Node, Entry, Base, Zzz, Bar segfault; `other` passes and `OTHER` fails). A semantic property cannot depend on an identifier spelling, so THE DEFECT IS PRESENT IN EVERY ROW AND ONLY THE CRASH IS CONDITIONAL ON LAYOUT -- which is what reconciles this ticket's three recorded observables as one defect. A row that prints the right answer is NOT evidence the bug is absent, and no fixture here may assert a value. Deterministic: three recompiles byte-identical, five runs agree. ROUTE: PyClsAttrRefGet, documented in pylib as the route for a class held as a VALUE, is NEVER CALLED in either the failing or the working case (frankz-9c, instrumented on entry); pyclsattr_inst_get is ruled out too. Identical under pin v408 and at HEAD, so the three class-as-value fixes of 2026-09-13 neither caused nor fixed it. OWNED by frankuser from 2026-09-13."
 ---
 
 ## Summary
@@ -118,3 +118,78 @@ receiver with a single declaring class. That is the dynamic-receiver attribute
 path `e5cd18e4b` landed in on 2026-09-13, so read that commit first. I did not
 attempt the fix — the diagnosis is banked rather than microfixed, and the code is
 hours old and another seat's.
+
+## 2026-09-13, frankuser: the FAULTING INSTRUCTION, and the 5.5e6 number is retired
+
+Taken after frankz-9c routed this to e5cd18e4b's lowering. The route is not that
+lowering, and the crash has a precise address.
+
+**Where it dies.** `-g -O2`, gdb, addresses resolved through the `.map`:
+
+    #0  0x426eac  __pxxInheritsFrom   (starts 0x426d98)
+
+    426e99:  mov  -0x20(%rbp),%rax     ; the current class in the walk
+    426ea0:  add  $0x0,%rax
+    426ea6:  add  $0x8,%rax            ; +8 = PXX_RTTI_PARENT
+    426eac:  mov  (%rax),%rax          ; <-- SIGSEGV
+    rax = 0x40000008
+
+So the class pointer being walked is **`0x40000000`**, and that is not garbage
+and not an address: it is `MSTR_STATIC_RC` (`defs.inc:123`) /
+`PXX_STATIC_RC_FLOOR` (`builtinheap.pas:302`), the never-free REFCOUNT sentinel
+that marks a statically allocated object. **A refcount word is being walked as a
+class pointer**, so whoever fixes this is looking for a place that hands
+`__pxxInheritsFrom` a header base off by the distance between the RC word and the
+class/VMT word -- not for a place that computes a wrong slot offset. The same
+signature is already documented one door along in `pylib.pas:1133` (`the object
+jumped through 0x400000003`), where a destroyed VMT produced it.
+
+Do NOT trust gdb's frame #1 here. It resolves to `PyBoxClassRef+0x53`, and the
+disassembly shows that return address follows `call 0x427da1`, an exception-frame
+setup, not a call to `__pxxInheritsFrom`. There is no CFI, so the backtrace past
+frame #0 is noise. Frame #0 is the only reliable row.
+
+## The trigger, corrected in two places
+
+Against the version recorded above and against frankz-9c's note:
+
+| shape | rc |
+| --- | --- |
+| lone class, nothing before it | 0 (correct) |
+| `B = 5` before the class | 139 |
+| `def f()` before the class | 139 |
+| `import sys` before the class | 139 |
+| another class before it | 139 |
+| a statement AFTER the class only | 0 (correct) |
+
+So it is **position, not count**: something lexically PRECEDING the accessed
+class. An `import` is enough, and an import emits nothing -- which rules out
+"more than one top-level EMITTING construct" as the characterisation, and rules
+out the last-class hoist-drain family a second way.
+
+**And the outcome is sensitive to the class NAMES, which is the important part.**
+Holding the structure fixed at two classes and varying only the second class's
+name: `Other`, `Rtti`, `Self`, `Result`, `Value`, `Count`, `Kind` give the
+CORRECT answer; `Bbb`, `Index`, `Data`, `Item`, `Node`, `Entry`, `Base`, `Zzz`,
+`Bar` segfault. `other` passes and `OTHER` fails, so it is not case-insensitive
+name matching. A lone class named `Other` and a lone class named `Bbb` emit
+byte-identical sizes, so `Other` is not special by itself; with two classes the
+`Other` build emits 40 fewer data bytes and 80 fewer bss bytes.
+
+**A semantic property cannot depend on the spelling of an identifier.** The
+honest reading is that the defect is present in every one of these rows and only
+the CRASH is conditional -- the walk either reaches unmapped memory or terminates
+first, depending on layout. That is what reconciles this ticket's three recorded
+observables (a wrong address with exit 0; a correct answer; a segfault) as ONE
+defect rather than three, and it means **a row that prints the right answer is
+not evidence the bug is absent**. Any fixture for this must assert the crash or
+the address, never a value.
+
+Deterministic: three recompiles of one source are byte-identical and five runs of
+one binary agree, so this is source-shape sensitivity, not uninitialised memory
+varying at run time.
+
+**The `~5.5e6` in the summary is retired.** frankz-9c traced it to
+`pyclsattr_bind` returning a sane bound-slot address of that magnitude; it is the
+address of the right thing surfacing where a value belongs, not a corrupted
+pointer. It is no longer the observable and should not be probed for.
