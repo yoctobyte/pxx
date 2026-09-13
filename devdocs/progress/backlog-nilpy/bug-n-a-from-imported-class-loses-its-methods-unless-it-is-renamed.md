@@ -144,3 +144,13 @@ frankuser proposed reading this arm's trigger against
 — same-name breaks method lookup, different-name breaks the attribute read, one
 resolver keyed on the name. I could not test it, because I could not reproduce
 two of the three arms. It stays a hypothesis.
+
+**ASKED, NOT MEASURED — 2026-09-13, frankZ to frankh-30.** Rather than write a
+tenth probe, I asked the seat that got lekkerzeilen running today whether the
+demo still exercises the same-name `from .platform import gl` seam unmodified,
+and whether the 117 `gl.<method>()` calls this ticket cites actually execute
+now. A yes closes this on the corpus rather than on a probe; a "the seam was
+renamed/rerouted" means the corpus no longer exercises the failing shape and
+this stays open with that noted. **No answer yet at the time of writing** — if
+you are reading this and no verdict has been appended below, the question is
+still outstanding and asking again is cheaper than re-probing.

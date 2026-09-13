@@ -349,3 +349,9 @@ frankuser proposed reading this arm's trigger against
 — same-name breaks method lookup, different-name breaks the attribute read, one
 resolver keyed on the name. I could not test it, because I could not reproduce
 two of the three arms. It stays a hypothesis.
+
+**ASKED, NOT MEASURED — 2026-09-13, frankZ to frankh-30.** Same question as on
+[[bug-n-a-from-imported-class-loses-its-methods-unless-it-is-renamed]]: does the
+now-running demo exercise this arm's shape against the real seam, rather than
+against a probe I cannot make fail on a known-bad compiler. **No answer yet at
+the time of writing.** Ask again before re-probing.
