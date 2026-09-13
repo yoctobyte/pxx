@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `e5cd18e4b220` | 2026-09-13T14:41:16Z | RED (native) | 304.6s | `6f085e16261e` RED |
+| borg | `e5cd18e4b220` | 2026-09-13T14:57:00Z | RED (full) | 905.3s | `e5cd18e4b220` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `6f085e16261e` on borg, 2026-09-13T13:21:44Z (1h ago).**
+**Newest full tier in the fleet: `e5cd18e4b220` on borg, 2026-09-13T14:57:00Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `6f085e16261e` | RED | 1h | — (newest) |
+| borg | `e5cd18e4b220` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -34,3 +34,20 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **optdiff#shard2/12** — tools/optdiff.sh (borg): bad `8b11dc8c1df2`, last good `unknown`, 0 commit(s) in range
 - **optdiff#shard5/12** — tools/optdiff.sh (borg): bad `8b11dc8c1df2`, last good `unknown`, 0 commit(s) in range
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
+- **CASCADE 13 jobs** (borg): bad `e5cd18e4b220`, last good `6f085e16261e`, 1 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-uforth#src:tools/compiler_srchash.sh@1`
+  - `test-uforth#src:tools/compiler_srchash.sh@10`
+  - `test-uforth#src:tools/compiler_srchash.sh@11`
+  - `test-uforth#src:tools/compiler_srchash.sh@12`
+  - `test-uforth#src:tools/compiler_srchash.sh@13`
+  - `test-uforth#src:tools/compiler_srchash.sh@2`
+  - `test-uforth#src:tools/compiler_srchash.sh@3`
+  - `test-uforth#src:tools/compiler_srchash.sh@4`
+  - `test-uforth#src:tools/compiler_srchash.sh@5`
+  - `test-uforth#src:tools/compiler_srchash.sh@6`
+  - `test-uforth#src:tools/compiler_srchash.sh@7`
+  - `test-uforth#src:tools/compiler_srchash.sh@8`
+  - `test-uforth#src:tools/compiler_srchash.sh@9`
+  </details>

@@ -759,3 +759,4 @@
 2026-09-13T07:49:25Z	borg	5445b96d82edd019591760200c8f0e764bee348d	would NOT pin 5445b96d82ed — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
 2026-09-13T08:59:55Z	borg	59d6804c994462ae185332d6dbe6c32c33fae71a	would NOT pin 59d6804c9944 — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
 2026-09-13T13:21:44Z	borg	6f085e16261ea5177c8e8424eb385b31daa28dbe	would NOT pin 6f085e16261e — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
+2026-09-13T14:57:00Z	borg	e5cd18e4b220306c1b9d1e3c9308371f7969a533	would NOT pin e5cd18e4b220 — 14 red(s) the current pin does not have, 7 inherited from the current pin: test-uforth#src:tools/compiler_srchash.sh@1, test-uforth#src:tools/compiler_srchash.sh@10, test-uforth#src:tools/compiler_srchash.sh@11, test-uforth#src:tools/compiler_srchash.sh@12, test-uforth#src:tools/compiler_srchash.sh@13
