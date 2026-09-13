@@ -76,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 487, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
+- `[p 90] [N]` bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 90] [B]` feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
-- `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 
 _457 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
