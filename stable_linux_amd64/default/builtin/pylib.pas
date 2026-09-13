@@ -1116,6 +1116,80 @@ function pyvar_repr(const v: Variant): AnsiString;
   two lib/rtl units, and the second copy is the one that stays wrong when the
   encoding moves. The pin is the smaller cost. }
 function pyvar_is_inttag(const v: Variant): Boolean;
+{ True iff v holds a CLASS held as a value (VT_CLASSREF, tag 11) -- its payload
+  is the class's RTTI blob, not an instance. Its sibling pyvar_holds is NOT this
+  test and must not be used for it: that one requires tag 7 and then asks which
+  CONTAINER class the object is (k = 1/2/3 for list/dict/bytes), so
+  pyvar_holds(v, 11) is unconditionally False. Read for a tag test it silently
+  refuses every receiver.
+  bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
+function pyvar_is_classreftag(const v: Variant): Boolean;
+{ The BUFFER of a bytes/bytearray, for a C parameter declared as a POINTER.
+
+  Passing the object hands the callee the TPyBytes INSTANCE -- the VMT pointer,
+  then FLen, then FData -- so a C function that READS sees a VMT pointer and a
+  length where it wanted bytes, and one that WRITES destroys the VMT: measured
+  2026-09-13, `pipe(b)` left fd 3 and fd 4 over it and the next dispatch on the
+  object jumped through 0x400000003. The pointer the callee wanted was sitting 16
+  bytes into what it was given.
+
+  A NON-bytes class falls back to the object pointer, which is what it gets today,
+  so this narrows nothing: the fallback is the deliberate answer for "a class
+  instance handed to a void*", not a defensive shrug.
+
+  FData is nil for an EMPTY bytearray -- TPyBytes.Create(0) sets it and Exits --
+  so this returns nil there. That is the honest answer and it is safe in the shape
+  that matters (POSIX permits a NULL buffer with a zero count); what it is not is
+  a no-op, because today such a call receives a non-null pointer to the object and
+  "works" by corrupting it.
+  bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+function pybytes_cbuf(o: TObject): Pointer;
+{ The same question asked of a VARIANT, which is the spelling the static one
+  cannot reach. A bytes/bytearray arriving at a C pointer parameter is only
+  statically a TPyBytes when the argument is a NAME or a FIELD; through a
+  PARAMETER or a call result it is a tyVariant, and lekkerzeilen's own buffers
+  travel that way -- `_i32(buf, off)` and every gl wrapper take the buffer as a
+  parameter and hand it on. Measured 2026-09-13: with the static arm in place
+  and no variant arm, `write(1, buf, 24)` inside a one-line helper still emitted
+  the VMT, and `pipe(buf)` left the caller's bytearray untouched. So the
+  boundary was never read-versus-write; it was static-versus-dynamic, and a
+  probe that passed the buffer through a helper is what separated them.
+
+  EVERY non-bytes tag returns the raw payload -- the exact word the lowering
+  hands over today -- so this arm changes the answer for a TPyBytes and for
+  nothing else. An empty variant (None, which is what an omitted default fills)
+  has payload 0 and so answers nil, which is what a C callee wants for None.
+  bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+function pyvar_cbuf(const v: Variant): Pointer;
+{ The ARRAY OF POINTERS a C `char **` parameter wants, materialised as a bytes
+  object so that the CALLER owns it.
+
+  `glShaderSource(shader, 1, [src], None)` is the shape: the parameter is
+  `const GLchar *const *`, and a list bound to a C pointer parameter used to
+  pass the TPyList INSTANCE, so the driver read the VMT word as its first
+  `char *` and stored the empty string. An empty vertex shader COMPILES, so
+  nothing failed until the link, which then said `must write to gl_Position` --
+  a message about our marshalling wearing the shape of a shader bug.
+
+  A BYTES RESULT AND NOT A RAW POINTER, AND THAT IS THE WHOLE DESIGN. Unlike
+  pybytes_cbuf, which answers where an object's data already is, this array does
+  not exist in the heap until it is built -- so it needs an owner, and the three
+  candidates are a scratch pool (wrong the moment two are live), a field on
+  every TPyList (a layout change), or a caller-held object. This is the third:
+  the frontend hoists `tmp := pylist_cptrarray(lst)` into the enclosing
+  statement, so the lifetime is the local's and strictly covers the call.
+  Measured 2026-09-13, which is what picked it: a bytes handed to a C pointer
+  parameter through a NAME survives an intervening allocation and is coerced
+  correctly, while the same bytes as a nested pylib CALL RESULT passes the
+  object pointer -- the named temp is both alive and correct, and the nested
+  rewrite is neither.
+
+  Every element answers pybytes_cbuf, so a bytes gives its data and anything
+  else gives today's payload word rather than a refusal. An element that is not
+  bytes has no stable data pointer to hand out, and the one measured call site
+  passes bytes.
+  bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
+function pylist_cptrarray(l: TPyList): TPyBytes;
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -1209,6 +1283,29 @@ function pyformat_v(const v: Variant; const spec: AnsiString): AnsiString;
   bug-n-bytearrays-zero-argument-overload-makes-the-bare-name-a-call }
 function pybytes_mark_bytearray(b: TPyBytes): TPyBytes;
 function bytearray(n: Integer): TPyBytes; overload;
+{ ...and the VARIANT arm, for the reason the `bytes` one three declarations
+  below spells out in full — read that comment, this is its twin and the bug it
+  describes was STILL LIVE HERE. `bytes` grew a Variant arm when an Integer
+  overload was added beneath it, because a Variant then bound to the INTEGER and
+  `bytes(y)` on a list aborted with "expected a number, got object". bytearray
+  has carried `bytearray(n: Integer)` all along — its own comment above says so —
+  and nobody added the Variant arm, so `bytearray(x)` on a dynamically-typed x
+  has raised that same abort for as long as the Integer overload has existed.
+  One concept, two spellings, and the one nobody extended is the one that stayed
+  broken: devdocs/dev/normalise-dont-special-case.md, third instance in this
+  very pair of functions.
+
+  Measured 2026-09-12 against CPython, from lekkerzeilen's `--conform`:
+  `def f(raw): return len(bytearray(raw))` aborts for a bytes AND for a list of
+  ints, while `bytes(raw)` in the same position is correct. `png._unfilter`
+  writes `bytearray(raw[position:position + stride])` with `raw` a parameter, and
+  that is where the demo's PNG round-trip died.
+
+  It DELEGATES to the three static arms rather than reimplementing them, so the
+  list arm keeps raising ValueError on a byte outside 0..255 where bytes()
+  truncates — that difference is deliberate and documented below, and a shared
+  helper here would quietly erase it. }
+function bytearray(const v: Variant): TPyBytes; overload;
 { bytearray(b"abc") — a COPY of a bytes/bytearray, never an alias. The point of
   the call is almost always to get a MUTABLE copy of an immutable bytes, so
   returning the same object would be a silent aliasing bug rather than a missing
@@ -5149,6 +5246,29 @@ begin
   Result := pyvartag(v) = 7;
 end;
 
+function pyvar_is_classreftag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 11;
+end;
+
+function pybytes_cbuf(o: TObject): Pointer;
+begin
+  if o = nil then
+    Result := nil
+  else if o is TPyBytes then
+    Result := TPyBytes(o).FData
+  else
+    Result := Pointer(o);
+end;
+
+function pyvar_cbuf(const v: Variant): Pointer;
+begin
+  if pyvartag(v) = 7 then
+    Result := pybytes_cbuf(TObject(pyvarobj(v)))
+  else
+    Result := Pointer(PPyVarRec(@v)^.Payload);
+end;
+
 { ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used
   to render the receiver through pystr_of first — a None/int/float/bool
   receiver stringifies to plausible-looking TEXT ('None', '5', ...) and the
@@ -6894,14 +7014,62 @@ end;
   (PyMinMaxNoneKey). Adding a third meaning to that one slot would be a fourth
   arm of a distinction the call site cannot make.
   bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
-function pymax_default(const c: Variant; const d: Variant): Variant;
+{ The ONE scan max() and min() do over an iterable. Four callers had three
+  copies of it — the two below and the two `const v: Variant` overloads — and
+  the copies are why the `default=` pair could drift from the plain pair
+  without anything noticing. `l` is already materialised and non-empty; the
+  emptiness decision belongs to the caller, because it is the one thing the two
+  pairs genuinely disagree about (a default value, or a ValueError). }
+function PyExtremeOfList(l: TPyList; wantMax: Boolean): Variant;
+var i, n: Integer; e: Variant;
 begin
-  if pylen_v(c) = 0 then pymax_default := d else pymax_default := max(c);
+  n := l.count;
+  Result := l.at(0);
+  for i := 1 to n - 1 do
+  begin
+    e := l.at(i);
+    if wantMax then
+    begin
+      if pyvar_gt(e, Result) then Result := e;
+    end
+    else
+      if pyvar_lt(e, Result) then Result := e;
+  end;
+end;
+
+{ `max(xs, default=D)` / `min(xs, default=D)`.
+
+  MATERIALISE FIRST, THEN ASK WHETHER IT IS EMPTY — never `pylen_v`. These two
+  called `pylen_v(c)` until 2026-09-13 and so worked for a list, a dict, a str
+  and a bytes and for nothing else: a GENERATOR has no length, and
+  `max((r.at for r in readings), default=None)` — lekkerzeilen gauges.py:467,
+  the wall after the variant-field one — raised `TypeError: expected an object
+  with a length, got object` from a call whose source says nothing about len.
+  The plain `max(genexp)` was right the whole time, because it goes through
+  pylist_v, which DRAINS a cursor; only the `default=` spelling was wrong,
+  which is why a fixture written the ordinary way missed it.
+
+  pylist_v is also the single-consumption rule: it drains the cursor once and
+  everything below reads the materialised list, where the old shape would have
+  walked the argument twice had pylen_v answered at all. }
+function pymax_default(const c: Variant; const d: Variant): Variant;
+var l: TPyList;
+begin
+  if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
+    raise TypeError.Create('max() argument is not iterable');
+  l := pylist_v(c);
+  if (l = nil) or (l.count = 0) then Result := d
+  else Result := PyExtremeOfList(l, True);
 end;
 
 function pymin_default(const c: Variant; const d: Variant): Variant;
+var l: TPyList;
 begin
-  if pylen_v(c) = 0 then pymin_default := d else pymin_default := min(c);
+  if (pyvartag(c) <> 6) and (pyvartag(c) <> 7) then
+    raise TypeError.Create('min() argument is not iterable');
+  l := pylist_v(c);
+  if (l = nil) or (l.count = 0) then Result := d
+  else Result := PyExtremeOfList(l, False);
 end;
 
 function pyid_v(const v: Variant): Int64;
@@ -8014,37 +8182,25 @@ end;
   drift from the other consumers again.
   bug-nilpy-max-and-min-do-not-iterate-a-dict }
 function max(const v: Variant): Variant; overload;
-var l: TPyList; i: Integer; e: Variant; n: Integer;
+var l: TPyList;
 begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('max() argument is not iterable');
   l := pylist_v(v);
-  n := 0;
-  if l <> nil then n := l.count;
-  if n = 0 then raise ValueError.Create('max() iterable argument is empty');
-  Result := l.at(0);
-  for i := 1 to n - 1 do
-  begin
-    e := l.at(i);
-    if pyvar_gt(e, Result) then Result := e;
-  end;
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('max() iterable argument is empty');
+  Result := PyExtremeOfList(l, True);
 end;
 
 function min(const v: Variant): Variant; overload;
-var l: TPyList; i: Integer; e: Variant; n: Integer;
+var l: TPyList;
 begin
   if (pyvartag(v) <> 6) and (pyvartag(v) <> 7) then
     raise TypeError.Create('min() argument is not iterable');
   l := pylist_v(v);
-  n := 0;
-  if l <> nil then n := l.count;
-  if n = 0 then raise ValueError.Create('min() iterable argument is empty');
-  Result := l.at(0);
-  for i := 1 to n - 1 do
-  begin
-    e := l.at(i);
-    if pyvar_lt(e, Result) then Result := e;
-  end;
+  if (l = nil) or (l.count = 0) then
+    raise ValueError.Create('min() iterable argument is empty');
+  Result := PyExtremeOfList(l, False);
 end;
 
 
@@ -10789,6 +10945,47 @@ function bytearray(n: Integer): TPyBytes; overload;
 begin
   Result := TPyBytes.Create(n);
   Result.FIsByteArray := True;
+end;
+
+function bytearray(const v: Variant): TPyBytes; overload;
+{ See the declaration. Dispatches on the RUNTIME tag, because a Variant is the
+  one argument whose Python type is not knowable when the overload is chosen.
+  Deliberately the same tag tests, in the same order, as bytes(const v: Variant)
+  — if one of them ever learns a new payload kind the other must too, and
+  keeping them textually parallel is what makes that visible. }
+var p: PPyVarRec; o: TObject;
+begin
+  p := PPyVarRec(@v);
+  if (p^.VType = 7) and (p^.Payload <> 0) then
+  begin
+    o := TObject(Pointer(NativeInt(p^.Payload)));
+    { list/tuple/set are one class here, so this is all three. Through the LIST
+      arm, not pybytes_from_list, so an out-of-range element still raises
+      ValueError instead of being truncated to a byte. }
+    if o is TPyList then
+    begin
+      Result := bytearray(TPyList(o));
+      Exit;
+    end;
+    if o is TPyBytes then
+    begin
+      Result := bytearray(TPyBytes(o));
+      Exit;
+    end;
+  end;
+  { An INTEGER variant is bytearray(n) — n zero bytes — exactly as the static
+    spelling is, so the two agree rather than diverging on how the value was
+    typed. }
+  if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) then
+  begin
+    Result := bytearray(Integer(p^.Payload));
+    Exit;
+  end;
+  { Everything else, a str included: CPython's `bytearray(s)` without an encoding
+    is a TypeError, the same as bytes(s), and answering with the encoded
+    characters would be accepting what CPython REJECTS in the one place that is a
+    wrong VALUE rather than laxity. }
+  raise TypeError.Create('cannot convert this value to bytearray without an encoding');
 end;
 
 function bytearray(b: TPyBytes): TPyBytes; overload;
@@ -14606,6 +14803,32 @@ begin
   end;
   if (b = 0.0) and (e < 0.0) then
     raise ZeroDivisionError.Create('0.0 cannot be raised to a negative power');
+  { A ZERO BASE NEVER REACHES THE LOGARITHM. pypow_v has had these two rows
+    since it was written (`fbase = 0.0` with a positive exponent answers 0.0,
+    and Frac(0)=0 sends a zero exponent down its integer branch to 1.0); this
+    function was written from it and copied the REFUSAL above without them, so
+    one question had two answers and the second one was missing a case —
+    `normalise-dont-special-case.md`'s second path, and it stayed broken.
+
+    The cost was not a wrong digit: with no hook installed the line below is
+    `PyMathExp(e * PyMathLn(b))`, and `PyMathLn(0.0)` RAISES
+    `ValueError: math domain error`. CPython answers 0.0. Measured 2026-09-12 as
+    the reason lekkerzeilen compiles and does not run: `lines.py`'s hull tables
+    are module-level, `station(0.0)` computes `math.sin(0.0) ** fine`, and the
+    first station of the first hull killed the program before `--help` printed.
+
+    WHY THE HOOK WAS NOT INSTALLED is a separate, still-open pair of defects --
+    `pyWantsPow` is scanned before PyParseImportRun, so an imported module's
+    `**` never installs it, and an imported .py becomes a UNIT whose
+    initialisation section runs BEFORE the main body where the assignment sits,
+    so import-time `**` could not see it even when installed. Both are filed.
+    This row is correct independently of them: a fallback that raises where
+    CPython returns a value is wrong whether or not the fast path was reachable. }
+  if b = 0.0 then
+  begin
+    if e > 0.0 then Result := 0.0 else Result := 1.0;
+    Exit;
+  end;
   { Same accuracy as the static route: the RTL's Power through the hook the
     frontend installs whenever it sees `**` at all. }
   if PyPowHook <> nil then
@@ -14937,6 +15160,28 @@ type
   end;
   PPySigRec = ^TPySigRec;
   PPointer = ^Pointer;
+
+function pylist_cptrarray(l: TPyList): TPyBytes;
+{ Declared beside pyvar_cbuf; the body is HERE because it needs PPointer, which
+  is declared a few lines above and nowhere earlier. }
+var i: Integer; slot: PPyVarRec; dst: PPointer;
+begin
+  if l = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Exit;
+  end;
+  Result := TPyBytes.Create(l.FLen * SizeOf(Pointer));
+  for i := 0 to l.FLen - 1 do
+  begin
+    slot := PPyVarRec(NativeInt(l.FItems) + i * 16);
+    dst := PPointer(NativeInt(Result.FData) + i * SizeOf(Pointer));
+    if slot^.VType = 7 then
+      dst^ := pybytes_cbuf(TObject(Pointer(slot^.Payload)))
+    else
+      dst^ := Pointer(slot^.Payload);
+  end;
+end;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
