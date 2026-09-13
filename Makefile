@@ -972,6 +972,15 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	tools/expect_same.sh test_nilpy_aoc26.1 "$$($(TESTTMP)/test_nilpy_aoc26)" "x:2"
+	# A run-time dispatched method call PAST FOUR ARGUMENTS. The entry points
+	# were an arity ladder, so a fifth argument was refused outright; pydyn_methl
+	# takes a TPyList and has no cap. The four-argument row is the control that
+	# the direct rungs still serve the small arities, which they do deliberately
+	# (a hoisted list escapes a ternary branch -- see the note in
+	# PyMakeDynMethCall). Receiver class in a SEPARATE unit, or nothing would be
+	# dispatched at run time at all. .expected is CPython's own output.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_dyn_dispatch_wide_arity.npy $(TESTTMP)/test_nilpy_dynwide26
+	$(TESTTMP)/test_nilpy_dynwide26 | diff -u test/test_nilpy_dyn_dispatch_wide_arity.expected -
 	# Importing a unit that declares `Text = class` must not change what `Text`
 	# means in a DIFFERENT unit that never names it. It did, silently, decided by
 	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was

@@ -18331,9 +18331,31 @@ function PyMakeDynMethCall(baseNode: Integer; const mname: AnsiString): Integer;
   only a receiver whose static type is unknown reaches here, so a typo on a
   statically-typed receiver is caught elsewhere and is untouched.
 
-  FOUR ARGUMENTS, refused past that rather than truncated: it is the cap
-  PyHostCall's marshalling carries, and dropping arguments silently is how a
-  call returns a plausible wrong value.
+  FOUR ARGUMENTS THROUGH THE DIRECT RUNGS, AND A HOISTED LIST PAST THAT. The
+  rungs (pydyn_meth<n> / pydyn_methkw<n>) are a ladder and were therefore a cap:
+  a fifth argument was refused with "annotate the receiver with its class to pass
+  more", which is a refusal of ordinary duck-typed code — lekkerzeilen's gfx.py
+  has seven `gl.*` calls past it, `gl.tex_image_2d(target, fmt, w, h, fmt, data,
+  level=at)` among them. pydyn_methl takes the arguments as a TPyList and has no
+  cap, because PyHostCall wanted a list all along; the rungs' first act was to
+  build one.
+
+  WHY THE RUNGS STAY FOR n <= 4 INSTEAD OF EVERYTHING GOING THROUGH THE LIST,
+  which would be one mechanism instead of two. Building the list means HOISTED
+  append statements, and hoisting in this frontend ESCAPES A TERNARY BRANCH.
+  Measured 2026-09-13, before this change and with no dynamic dispatch involved:
+
+      r = f(*[track(10), track(20)]) if c else 99      # c is False
+
+  CPython evaluates neither track(); pxx evaluates both. That is a real
+  pre-existing defect of the star machinery
+  (bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch), and routing
+  every dynamic method call through a hoisted list would extend it to every such
+  call in a conditional — code that compiles and is correct today. So the direct
+  rungs keep their exact evaluation timing and the list serves only the arities
+  that do not compile at all right now, where any behaviour is an improvement.
+  The two paths MERGE the day the hoist becomes branch-aware; until then the
+  split is the measured trade and not a preference.
 
   A KEYWORD argument was refused here too until 2026-09-10, on the grounds that
   binding `k=v` to a POSITION without the callee's parameter names is exactly
@@ -18346,12 +18368,15 @@ function PyMakeDynMethCall(baseNode: Integer; const mname: AnsiString): Integer;
   one) to pydyn_methkw<n>, and nothing is bound by position. The refusal
   survives only where there really are no names to bind against: a CALLABLE
   FIELD, which PyDynMethN refuses at run time. }
-const MAX_DYN_ARGS = 4;
+const MAX_DYN_RUNGS = 4;      { the direct pydyn_meth<n> rungs stop here }
+      MAX_DYN_ARGS  = 64;     { ...and the list path's own ceiling, so a runaway
+                                argument list is a message and not a smash }
 var procIdx, argsHead, lastArg, argNode, litNode, kwLitNode, n, i: Integer;
     argExpr: array[0..MAX_DYN_ARGS - 1] of Integer;
     argKw: array[0..MAX_DYN_ARGS - 1] of AnsiString;
     kwspec: AnsiString;
     anyKw: Boolean;
+    listSym, listCi: Integer;
 begin
   Expect(tkLParen, '(');
   n := 0;
@@ -18361,8 +18386,7 @@ begin
     if n >= MAX_DYN_ARGS then
       Error('Nil Python: .' + mname + '() is dispatched at run time (no class '
         + 'here declares it), and that path takes at most '
-        + PyIntLiteralText(MAX_DYN_ARGS) + ' arguments — annotate the receiver '
-        + 'with its class to pass more');
+        + PyIntLiteralText(MAX_DYN_ARGS) + ' arguments');
     argKw[n] := '';
     if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkAssign) then
@@ -18379,14 +18403,24 @@ begin
   end;
   Expect(tkRParen, ')');
 
+  { The kwspec is built for BOTH paths: the list form takes it too, and it is
+    the same '|'-separated string, so the two paths differ in how the ARGUMENTS
+    travel and in nothing else. }
   kwspec := '';
   if anyKw then
-  begin
     for i := 0 to n - 1 do
     begin
       if i > 0 then kwspec := kwspec + '|';
       kwspec := kwspec + argKw[i];
     end;
+  if n > MAX_DYN_RUNGS then
+  begin
+    procIdx := FindProc('pydyn_methl');
+    if procIdx < 0 then
+      Error('Nil Python: pyeval (pydyn_methl) not loaded');
+  end
+  else if anyKw then
+  begin
     procIdx := FindProc('pydyn_methkw' + PyIntLiteralText(n));
     if procIdx < 0 then
       Error('Nil Python: pyeval (pydyn_methkw' + PyIntLiteralText(n)
@@ -18416,7 +18450,10 @@ begin
   ASTRight[lastArg] := argNode;
   lastArg := argNode;
 
-  if anyKw then
+  { pydyn_methl ALWAYS takes a kwspec — an empty one for an all-positional call —
+    where the rungs have a separate kw spelling. One signature, so the list path
+    needs no second entry point for the keyword case. }
+  if anyKw or (n > MAX_DYN_RUNGS) then
   begin
     kwLitNode := AllocNode(AN_STR_LIT);
     ASTSOffset[kwLitNode] := StoredName(kwspec);
@@ -18429,14 +18466,31 @@ begin
     lastArg := argNode;
   end;
 
-  for i := 0 to n - 1 do
+  if n > MAX_DYN_RUNGS then
   begin
+    { ONE list argument, appended to in source order. The appends are hoisted —
+      see the note at the top of this routine for why that timing is why the
+      rungs keep the small arities. }
+    listCi := FindUClass('TPyList');
+    if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+    listSym := PyNewContainerTemp('TPyList', 'dynargs');
+    for i := 0 to n - 1 do
+      PyContainerCall1(listSym, 'TPyList', 'append', argExpr[i], -1);
     argNode := AllocNode(AN_ARG);
-    ASTLeft[argNode] := argExpr[i];
+    ASTLeft[argNode] := PyMakeIdent(listSym);
     ASTRight[argNode] := -1;
     ASTRight[lastArg] := argNode;
     lastArg := argNode;
-  end;
+  end
+  else
+    for i := 0 to n - 1 do
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := argExpr[i];
+      ASTRight[argNode] := -1;
+      ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
 
   Result := AllocNode(AN_CALL);
   ASTIVal[Result] := procIdx;

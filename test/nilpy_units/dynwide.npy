@@ -1,0 +1,27 @@
+# The receiver class for test_nilpy_dyn_dispatch_wide_arity.npy.
+#
+# It lives in a SEPARATE module on purpose: the run-time dispatch path is
+# reached only when NO class declared in the compilation unit declares the
+# method, so a class in the test file itself would be resolved statically and
+# the test would exercise nothing.
+
+
+class Wide:
+    def four(self, a, b, c, d):
+        return "four %s" % str([a, b, c, d])
+
+    def six(self, a, b, c, d, e, f):
+        return "six %s" % str([a, b, c, d, e, f])
+
+    def eight(self, a, b, c, d, e, f, g, h):
+        return "eight %s" % str([a, b, c, d, e, f, g, h])
+
+    def kw(self, a, b, c, d, e, level=0, mode="x"):
+        return "kw %s level=%d mode=%s" % (str([a, b, c, d, e]), level, mode)
+
+    def order(self, a, b, c, d, e, f):
+        return "order %s" % str([a, b, c, d, e, f])
+
+
+def make():
+    return Wide()

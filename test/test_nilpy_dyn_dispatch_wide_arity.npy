@@ -1,0 +1,61 @@
+# A run-time dispatched method call with MORE THAN FOUR arguments.
+#
+# `o.m(a, b, c, d, e)` on a receiver whose class no unit here declares used to
+# be refused outright: "that path takes at most 4 arguments -- annotate the
+# receiver with its class to pass more". The entry points (pydyn_meth<n> /
+# pydyn_methkw<n>) were an arity LADDER and a ladder is a cap. pydyn_methl takes
+# the arguments as a TPyList and has none.
+#
+# lekkerzeilen's gfx.py is why: seven `gl.*` calls sit past four arguments,
+# `gl.tex_image_2d(target, fmt, w, h, fmt, data, level=at)` among them, and the
+# seam's receiver is a module chosen at import time, so nothing declares it.
+#
+# THE FOUR-ARGUMENT ROW IS NOT A FORMALITY. Four and fewer still go through the
+# direct rungs, deliberately -- building the list means HOISTED appends and
+# hoisting in this frontend escapes a ternary branch
+# (bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch), so the small
+# arities keep their exact evaluation timing. That makes `four` the control for
+# "the old path still works" and `six` the control for "the new one is reached",
+# and the pair is the assertion -- one alone would pass against a change that
+# routed everything the wrong way.
+#
+# Expectations are CPython's own output.
+
+import dynwide
+
+o = dynwide.make()
+
+# the boundary, both sides of it
+print(o.four(1, 2, 3, 4))
+print(o.six(1, 2, 3, 4, 5, 6))
+print(o.eight(1, 2, 3, 4, 5, 6, 7, 8))
+
+# a KEYWORD past the boundary: the list path carries the same '|'-separated
+# kwspec the rungs do, so the name is bound against the callee's RTTI and not
+# by position. Both keywords, then one, then none -- the defaults have to hold.
+print(o.kw(1, 2, 3, 4, 5, level=9, mode="z"))
+print(o.kw(1, 2, 3, 4, 5, level=9))
+print(o.kw(1, 2, 3, 4, 5))
+
+# ...and a keyword that is NOT last in the written order, which is the
+# arrangement a positional binder gets wrong and a name binder does not.
+print(o.kw(1, 2, 3, 4, 5, mode="q", level=3))
+
+# ARGUMENT ORDER through the list path. Six distinct values, so a list built
+# backwards or rotated prints a different line rather than a coincidence -- with
+# 1..6 in place, `order` returning them as a list is the readout.
+print(o.order(10, 20, 30, 40, 50, 60))
+
+# ...and expressions rather than literals, evaluated in source order. The
+# appends are hoisted, so this is the row that would catch them being emitted
+# out of order.
+seen = []
+
+
+def note(v):
+    seen.append(v)
+    return v
+
+
+print(o.order(note(1), note(2), note(3), note(4), note(5), note(6)))
+print(seen)

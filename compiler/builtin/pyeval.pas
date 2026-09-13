@@ -363,6 +363,25 @@ function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
 function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
                        const a0, a1, a2, a3: Variant): Variant;
 
+{ THE ARITY-FREE FORM, and what the frontend emits now. pydyn_meth0..4 and
+  pydyn_methkw1..4 above are a LADDER, and a ladder is a cap: the frontend
+  refused a fifth argument with "that path takes at most 4 arguments — annotate
+  the receiver with its class to pass more", which is a real refusal of ordinary
+  duck-typed code (lekkerzeilen's gfx.py has seven `gl.*` calls past it,
+  `gl.tex_image_2d(target, fmt, w, h, fmt, data, level=at)` among them).
+
+  The list is what the worker wanted all along: PyDynMethN's first act was to
+  build a TPyList out of a0..a3 and hand it to PyHostCall. So taking the list
+  DELETES the reason for the ladder rather than lengthening it, and the rungs
+  stay only as wrappers — they are a public interface and nothing establishes
+  that no program calls them.
+
+  args is the CALLER's and is not freed here; the rungs free the one they
+  build. kwspec is '|'-separated, one field per argument, empty for a positional
+  one, exactly as before. }
+function pydyn_methl(const recv: Variant; const name, kwspec: AnsiString;
+                     args: TPyList): Variant;
+
 implementation
 
 const
@@ -5324,9 +5343,10 @@ begin
   Result := f3(a0, a1, a2);
 end;
 
-function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
-                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
-{ The worker behind pydyn_meth0..4. See the interface block for why it exists.
+function PyDynMethL(const recv: Variant; const name, kwspec: AnsiString;
+                    args: TPyList): Variant;
+{ The worker behind pydyn_methl AND behind pydyn_meth0..4. See the interface
+  block for why it exists.
 
   The VType 7 test is the whole receiver check: a NilPy instance, a TPyList, a
   TPyDict and a pyeval closure are all VT_OBJECT, so a dynamically dispatched
@@ -5336,12 +5356,14 @@ function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
 var
   obj: Pointer;
   cls: PClassRTTI;
-  args, kwNames: TPyList;
+  kwNames: TPyList;
   res, cb: Variant;
-  i, cut: Integer;
+  i, cut, nargs: Integer;
   rest: AnsiString;
 begin
   Result := pynone;
+  nargs := 0;
+  if args <> nil then nargs := args.count;
   obj := nil;
   if PPyRec(@recv)^.VType = 7 then
     obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
@@ -5359,11 +5381,9 @@ begin
       halts if the method is absent -- which is why the lookup above is a
       GUARD and not a duplicate: it is what turns "absent" into a Python
       exception instead of a process exit. }
-    args := TPyList.Create;
-    if nargs > 0 then args.append(a0);
-    if nargs > 1 then args.append(a1);
-    if nargs > 2 then args.append(a2);
-    if nargs > 3 then args.append(a3);
+    { args arrives BUILT. It used to be assembled here out of a0..a3, which is
+      the whole reason the entry points were a ladder — PyHostCall has always
+      taken a list. }
     { kwspec's fields are parallel to args -- '' for a positional slot, which is
       exactly what PyHostCall's binder skips. Split here rather than at the call
       site so the emitted code carries one string constant per call. }
@@ -5389,7 +5409,7 @@ begin
     end;
     res := pynone;
     PyHostCall(obj, name, args, kwNames, res);
-    args.Free;
+    { args is the CALLER's — the arity rungs free the list they built. }
     if kwNames <> nil then kwNames.Free;
     Result := res;
     Exit;
@@ -5402,14 +5422,47 @@ begin
   if kwspec <> '' then
     raise TypeError.Create(name + '() is dispatched at run time through a '
       + 'callable attribute, which takes positional arguments only');
+  { pyvar_callv IS STILL A LADDER, and past four it has no rung. This `else`
+    used to be exactly four — the frontend capped every dynamic call at four, so
+    nargs could not exceed it — and lifting that cap for the METHOD arm makes
+    this arm reachable with five. Refused by name rather than truncated:
+    `pyvar_callv4` would have dropped the rest and returned a plausible wrong
+    value, which is the same silent-truncation trade the method arm's own cap
+    was documented as avoiding. A list-taking pyvar_callv is the fix and is a
+    different subsystem with its own consumers, so it is not done here.
+    bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments }
   case nargs of
     0: Result := pyvar_callv0(cb);
-    1: Result := pyvar_callv1(cb, a0);
-    2: Result := pyvar_callv2(cb, a0, a1);
-    3: Result := pyvar_callv3(cb, a0, a1, a2);
+    1: Result := pyvar_callv1(cb, args.at(0));
+    2: Result := pyvar_callv2(cb, args.at(0), args.at(1));
+    3: Result := pyvar_callv3(cb, args.at(0), args.at(1), args.at(2));
+    4: Result := pyvar_callv4(cb, args.at(0), args.at(1), args.at(2), args.at(3));
   else
-    Result := pyvar_callv4(cb, a0, a1, a2, a3);
+    raise TypeError.Create(name + '() is dispatched at run time through a '
+      + 'callable attribute, which takes at most 4 arguments');
   end;
+end;
+
+{ The ladder, kept as wrappers over the list form above: they are a public
+  interface, and nothing establishes that no program calls them. Each owns the
+  list it builds. }
+function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
+                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  if nargs > 0 then args.append(a0);
+  if nargs > 1 then args.append(a1);
+  if nargs > 2 then args.append(a2);
+  if nargs > 3 then args.append(a3);
+  Result := PyDynMethL(recv, name, kwspec, args);
+  args.Free;
+end;
+
+function pydyn_methl(const recv: Variant; const name, kwspec: AnsiString;
+                     args: TPyList): Variant;
+begin
+  Result := PyDynMethL(recv, name, kwspec, args);
 end;
 
 function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
