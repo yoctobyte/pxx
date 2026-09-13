@@ -1,0 +1,46 @@
+import "/usr/include/unistd.h"
+
+# The VARIANT spelling of the pointer-array marshalling: a list that arrives at
+# an external C pointer parameter through an UNANNOTATED parameter, where the
+# frontend cannot see that it is a list at all.
+#
+# Its sibling test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter covers
+# the STATIC spelling, where the argument's type is known and the array is built
+# at compile time's direction. That one passed while this one did not, and the
+# boundary is the argument's static TYPE and nothing else: a literal, a local
+# and a `def f(args: list)` parameter all worked, and only the unannotated
+# parameter -- which is how ordinary Python is written -- did not.
+#
+# WHY THIS NEEDS ITS OWN FILE RATHER THAN A ROW IN THE SIBLING. execv REPLACES
+# the process, so a program gets exactly ONE observable exec, and the observable
+# has to be spent on the spelling under test. fork+waitpid would buy several,
+# and does not compile: `waitpid` comes from sys/wait.h, whose soname the
+# compiler derives as `libwait.so`, which nothing answers to.
+#
+# bug-n-a-list-reaching-a-c-pointer-parameter-through-an-unannotated-parameter-still-passes-the-object
+
+
+def forward(path, args):
+    """`args` is unannotated, so it is a Variant and no static arm can see it."""
+    return execv(path, args)
+
+
+# ---- A. the array is built and the call returns when the exec FAILS ---------
+# A missing file makes execv return rather than replace us, so this proves the
+# argument was marshalled through the variant path without spending the one
+# observable exec below. It is also the row that would CRASH rather than fail if
+# the NULL terminator were lost, because execv walks argv until it finds one.
+forward("/nonexistent/pxx-is-not-here", [b"/nonexistent/pxx-is-not-here", None])
+a = b"A a failed exec through an unannotated parameter returned\n"
+write(1, a, len(a))
+
+# ---- B. the one observable exec, through the unannotated parameter ----------
+# Four pointers, so one correct slot cannot carry the row: /bin/echo prints
+# argv[1..], which is three separate pointers read by a program that is not us.
+b = b"B forwarding four pointers and a terminator\n"
+write(1, b, len(b))
+forward("/bin/echo", [b"/bin/echo", b"C", b"three", b"words", None])
+
+# ---- unreachable when the array is right ------------------------------------
+d = b"D execv returned -- argv was not an array of pointers\n"
+write(1, d, len(d))

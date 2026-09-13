@@ -1190,6 +1190,21 @@ function pyvar_cbuf(const v: Variant): Pointer;
   passes bytes.
   bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
 function pylist_cptrarray(l: TPyList): TPyBytes;
+function pyvar_cptrarray(const v: Variant): TPyBytes;
+{ The same array, for a receiver whose LIST-ness is only known at RUN time -- a
+  list arriving through an unannotated parameter is a Variant, and no static arm
+  can see it. nil when the variant does not hold a list, and that is the whole
+  protocol: the frontend hoists `tmp := pyvar_cptrarray(v)` UNCONDITIONALLY so
+  the array has an owner whatever the tag turns out to be, and this decides at
+  run time only whether to fill it. That is the answer to the ownership question
+  the ticket parked on -- the OWNER does not have to be chosen at run time, only
+  the CONTENT, and a caller-held local can be allocated without knowing whether
+  it will be used. }
+function pyvar_cbuf_or(const v: Variant; arr: TPyBytes): Pointer;
+{ ...and the chooser that reads the pair. `arr` is what pyvar_cptrarray just
+  answered: non-nil means the variant held a list and the array IS the buffer
+  the callee wants; nil means fall through to exactly what this call site did
+  before, so every non-list shape emits the same answer it always did. }
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -15181,6 +15196,22 @@ begin
     else
       dst^ := Pointer(slot^.Payload);
   end;
+end;
+
+function pyvar_cptrarray(const v: Variant): TPyBytes;
+var o: TObject;
+begin
+  Result := nil;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if not (o is TPyList) then Exit;
+  Result := pylist_cptrarray(TPyList(o));
+end;
+
+function pyvar_cbuf_or(const v: Variant; arr: TPyBytes): Pointer;
+begin
+  if arr <> nil then Result := pybytes_cbuf(arr)
+  else Result := pyvar_cbuf(v);
 end;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);

@@ -2,22 +2,22 @@
 slug: bug-n-a-list-reaching-a-c-pointer-parameter-through-an-unannotated-parameter-still-passes-the-object
 title: a list reaching a C pointer parameter through an unannotated parameter still passes the object
 summary: >
-  The VARIANT half of the list-to-C-pointer marshalling fix. A list whose static
-  type IS TPyList (a literal at the call site, a local, or an ANNOTATED
-  parameter) now becomes a real array of pointers; a list arriving through an
-  UNANNOTATED parameter still passes the object pointer, so the callee reads the
-  VMT word as its first `char *`. Measured 2026-09-13: the same execv program
-  prints `C three words` for all three static spellings and execv RETURNS for the
-  unannotated one. `def f(args: list)` is therefore a WORKING ONE-TOKEN
-  WORKAROUND, which was not recorded anywhere. The open question is ownership,
-  not detection -- the run-time route is `pyvar_cbuf`, which returns a Pointer
-  and can own nothing, so deciding at run time to build an array puts the
-  array's owner inside a function that has none.
+  FIXED 2026-09-13. A list arriving through an UNANNOTATED parameter (a variant)
+  now reaches a C `char **` parameter as a real array of pointers, like the
+  static spellings already did. The ownership question that kept this open is
+  answered by SPLITTING the decision: the OWNER does not have to be chosen at
+  run time, only the CONTENT. `PyCoerceCallableArgsIn` hoists a caller-local
+  `tmp := pyvar_cptrarray(v)` UNCONDITIONALLY -- a caller-local can be allocated
+  without knowing whether it will be used -- and passes `pyvar_cbuf_or(v, tmp)`,
+  which falls through to plain `pyvar_cbuf` when tmp is nil. Every non-list shape
+  therefore emits exactly what it did before. Residual, named in the code: the
+  arm is gated on the argument being AN_IDENT, because `v` is mentioned twice
+  and a call in that position would be evaluated twice.
 track: N
 type: bug
 prio: 45
-owner: unassigned
-status: open
+owner: frank-user
+status: done
 ---
 
 ## Why this is a ticket and not a line in `done/`
@@ -87,3 +87,42 @@ static half landed, and still not measured here. Do not assume they behave like
 Unowned as of 2026-09-13. frankuser (who fixed the static half) explicitly
 declined it; frankS (who filed this) is on the bare-builtin-as-a-value group and
 is not taking it. Free to take.
+
+## Resolution
+
+Fixed. `pyvar_cptrarray(v)` (pylib) returns the pointer array as a TPyBytes when
+`v` holds a tag-7 TPyList and nil otherwise; `pyvar_cbuf_or(v, arr)` returns
+`pybytes_cbuf(arr)` when arr is non-nil and `pyvar_cbuf(v)` otherwise. The
+frontend arm sits beside the static one in `PyCoerceCallableArgsIn`.
+
+**The ownership answer, stated as the thing that was actually blocking:** the
+ticket asked where the array's owner lives when the decision is made at run
+time, and read the two as one question. They are not. **Only the CONTENT is
+decided at run time; the OWNER can be decided statically**, because allocating a
+caller-local temp costs nothing when it goes unused. So the decision did NOT
+have to move back to the call site -- the ALLOCATION did, which the call site
+can do unconditionally and without knowing the type.
+
+## Verified
+
+- `test/test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant.npy`,
+  wired into the Makefile beside its static sibling. The list is forwarded
+  through `def forward(path, args)` with `args` unannotated, and the readout is
+  `/bin/echo` printing argv[1..].
+- Positive control under pin v409: the last row prints
+  `D execv returned -- argv was not an array of pointers`; the two rows above it
+  are identical on both compilers, so the diff is exactly the one row that is the
+  claim.
+- Siblings still green: `test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter`,
+  `test_nilpy_a_bytearray_reaches_a_c_pointer_parameter`.
+- `make compiler/pascal26` -> `converged after 1 round(s)`; `tools/gate.sh quick`
+  and the full `make test-nilpy`.
+
+## Still unmeasured, and it stays that way
+
+`str` and `array` in this same position -- unmeasured when the static half
+landed, unmeasured here. `pyvar_cptrarray` refuses anything that is not a
+tag-7 TPyList, so they take exactly the path they took before this fix.
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

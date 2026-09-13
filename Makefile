@@ -3899,6 +3899,18 @@ test-nilpy: $(COMPILER)
 	# without our compiler. Under pin v408 the row prints binary heap bytes.
 	./$(COMPILER) test/test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter.npy $(TESTTMP)/test_nilpy_listptrptr26
 	$(TESTTMP)/test_nilpy_listptrptr26 | diff -u test/test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter.expected -
+	# ...and the VARIANT spelling of the same thing, which is how ordinary Python
+	# is written: the list arrives through an UNANNOTATED parameter, so nothing
+	# static can see that it is a list. Its own file and not a row above, because
+	# execv replaces the process and a program therefore gets exactly ONE
+	# observable exec -- which has to be spent on the spelling under test.
+	# (fork+waitpid would buy several and does not compile: waitpid comes from
+	# sys/wait.h, whose soname the compiler derives as `libwait.so`.) The row
+	# that moved is the last one: under pin v409 this program prints
+	# `D execv returned` where it now prints `C three words`, and the two rows
+	# before it are identical on both, so the diff names the claim exactly.
+	./$(COMPILER) test/test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant.npy $(TESTTMP)/test_nilpy_varptrptr26
+	$(TESTTMP)/test_nilpy_varptrptr26 | diff -u test/test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant.expected -
 	@# A STAR-UNPACK IN A `with` HEADER must evaluate its own setup before the
 	@# manager is read. A star expansion lowers to an arity dispatch on `len(tmp)`
 	@# over a hidden temp; `with` builds its OWN sequence around the manager's

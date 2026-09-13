@@ -25162,14 +25162,75 @@ begin
       if (procIdx < ProcCount) and ProcExternal[procIdx] and
          (FindProc('pyvar_cbuf') >= 0) then
       begin
-        argSeq := AllocNode(AN_ARG);
-        ASTLeft[argSeq] := ASTLeft[currArg];
-        ASTRight[argSeq] := -1;
-        exprNode := AllocNode(AN_CALL);
-        ASTIVal[exprNode] := FindProc('pyvar_cbuf');
-        ASTLeft[exprNode] := argSeq;
-        ASTTk[exprNode] := Ord(tyPointer);
-        ASTLeft[currArg] := exprNode;
+        { ...and a LIST arriving this way is an array of POINTERS, exactly as
+          the static arm above builds for a statically TPyList-typed argument.
+          The static arm cannot see this spelling — `def go(args): execv(p, args)`
+          types `args` tyVariant — and the resolved ticket parked the run-time
+          half on ownership: pyvar_cbuf returns a Pointer and can own nothing,
+          so there was nowhere to put an array built inside it.
+
+          THE OWNER DOES NOT HAVE TO BE CHOSEN AT RUN TIME, ONLY THE CONTENT.
+          A caller-held local can be allocated without knowing whether it will
+          be used, so the hoist is UNCONDITIONAL — `tmp := pyvar_cptrarray(v)`,
+          which answers nil for every tag that is not a list — and the argument
+          becomes `pyvar_cbuf_or(v, tmp)`, which falls through to plain
+          pyvar_cbuf when tmp is nil. Every non-list shape therefore reaches the
+          identical answer it reached before; what changes is that a list now
+          has somewhere to live for the duration of the statement.
+
+          GATED ON THE ARGUMENT BEING A PLAIN NAME, and that is a real limit
+          rather than a convenience. `v` is mentioned TWICE — once in the
+          hoisted call and once in the argument — so anything with a side
+          effect would run twice, and hoisting a CALL's evaluation ahead of the
+          other arguments would also reorder side effects between them. A name
+          has neither hazard. `execv(path, args)` and every gl wrapper in
+          lekkerzeilen pass a name, which is the population this is for; a call
+          result in this position keeps today's behaviour and stays filed.
+          bug-n-a-list-reaching-a-c-pointer-parameter-through-an-unannotated-parameter-still-passes-the-object }
+        bytCi := FindUClass('TPyBytes');
+        if (ASTKind[ASTLeft[currArg]] = AN_IDENT) and (bytCi >= 0) and
+           (FindProc('pyvar_cptrarray') >= 0) and
+           (FindProc('pyvar_cbuf_or') >= 0) then
+        begin
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := ASTLeft[currArg];
+          ASTRight[argSeq] := -1;
+          exprNode := AllocNode(AN_CALL);
+          ASTIVal[exprNode] := FindProc('pyvar_cptrarray');
+          ASTLeft[exprNode] := argSeq;
+          ASTTk[exprNode] := Ord(tyClass);
+          ASTRight[exprNode] := REC_UCLASS_BASE + bytCi;
+          tmpSym := AllocVar(PyHiddenName('vcptrs'), tyClass);
+          Syms[tmpSym].RecName := REC_UCLASS_BASE + bytCi;
+          SymSyncTypeRef(tmpSym);
+          asgn := AllocNode(AN_ASSIGN);
+          ASTLeft[asgn] := PyMakeIdent(tmpSym);
+          ASTRight[asgn] := exprNode;
+          PyHoistStmt(asgn);
+
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := PyMakeIdent(tmpSym);
+          ASTRight[argSeq] := -1;
+          tailArg := AllocNode(AN_ARG);
+          ASTLeft[tailArg] := ASTLeft[currArg];
+          ASTRight[tailArg] := argSeq;
+          exprNode := AllocNode(AN_CALL);
+          ASTIVal[exprNode] := FindProc('pyvar_cbuf_or');
+          ASTLeft[exprNode] := tailArg;
+          ASTTk[exprNode] := Ord(tyPointer);
+          ASTLeft[currArg] := exprNode;
+        end
+        else
+        begin
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := ASTLeft[currArg];
+          ASTRight[argSeq] := -1;
+          exprNode := AllocNode(AN_CALL);
+          ASTIVal[exprNode] := FindProc('pyvar_cbuf');
+          ASTLeft[exprNode] := argSeq;
+          ASTTk[exprNode] := Ord(tyPointer);
+          ASTLeft[currArg] := exprNode;
+        end;
         Result := True;
         capSym := -1;
       end

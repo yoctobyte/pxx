@@ -3693,3 +3693,30 @@ above, measured on the pre-fix binary. `make compiler/pascal26` converged;
 `gate.sh quick` GREEN (23 PASS).
 
 2026-09-13 | frankS (Track N) | devdocs/progress/backlog-nilpy/bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value.md | A STDLIB SHIM FUNCTION RETURNING A CONTAINER IS BROKEN WHEN TAKEN AS A VALUE — `f = re.findall; f("a", "banana")` SEGFAULTS (empty line and exit 0 on a single use; the crash needs a second) while `re.findall("a", "banana")` is correct in the SAME program. json.loads, json.dumps, struct.unpack the same; struct.calcsize fine. The discriminator is the RETURN type: a tyClass result is admitted to the callable-value wrapper only when PyProcIsFreshContainerCtor vouches, and that predicate is scoped by unit name to pylib/pyeval, so every mimic_* shim returning TPyList/TPyBytes is declined — and the declined branch is the pre-existing "box the RAW ADDRESS and call it through the Variant ABI" escape hatch, so the ARGUMENTS are never coerced either. That is why the symptom is `bad char in struct format`, i.e. about the format STRING, and names nothing about the return type that actually gated it; the same branch is on record producing `f = string.capwords` printing an empty line. FOUND WHILE SCOPING min/max, AND THE FIRST DIAGNOSIS WAS WRONG IN AN INSTRUCTIVE WAY: it surfaced on `struct.pack`, the flagship {$PYSTAR} shim, so it read as the star collector not reaching the value door. I routed PyMakeFuncValueFor through PyPascalStarIdx (the lazy accessor) instead of the raw ProcPyStarIdx array, rebuilt, and it changed NOTHING — reverted rather than landed, because a plausible change that fixes nothing is not a fix. What killed the star reading is that struct.unpack and re.findall carry no marker at all and break identically; the 2x2 (direct call + star ok, value + no star ok, value + NilPy star ok, value + Pascal star broken) is in the ticket because it is what anyone will try first. Filed rather than fixed because the fork is real and one arm is unmeasured: vouch for more units (per-function body reading, and pydivmod_v is the standing proof that "looks fresh" is not good enough) versus refuse loudly instead of boxing a raw address (strictly better than a segfault, but nobody has measured how many callable values currently WORK by accident through that branch, and that census is what makes it decidable).
+## 2026-09-13 | frank-user | compiler/pyparser.inc, compiler/builtin/pylib.pas | a list reaching a C `char **` parameter THROUGH A VARIANT
+
+The variant half of `dca30fbae`. A list whose static type is TPyList already
+became a real array of pointers; a list arriving through an UNANNOTATED
+parameter still passed the object handle, so the callee read the VMT word as its
+first `char *` and `execv` returned instead of exec'ing.
+
+WHY it sat open for a day with two seats declining it: the ticket asked where
+the array's OWNER lives when the type is only known at run time, and that reads
+as unanswerable — `pyvar_cbuf` returns a bare Pointer and can own nothing, so a
+run-time decision to build an array puts the array's owner inside a function
+that has none. **The two halves are separable and the ticket read them as one.**
+Only the CONTENT is decided at run time; the OWNER can be decided statically,
+because a caller-local temp that goes unused costs nothing. So the frontend
+hoists `tmp := pyvar_cptrarray(v)` UNCONDITIONALLY and passes
+`pyvar_cbuf_or(v, tmp)`, which falls through to plain `pyvar_cbuf` when tmp is
+nil — every non-list shape emits exactly what it emitted before.
+
+Residual, named in the code and not hidden: the arm is gated on the argument
+being AN_IDENT, because `v` is mentioned twice in the emitted call and a call in
+that position would be evaluated twice and would reorder side effects between
+arguments.
+
+Fixture `test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant`; its
+own file, because execv replaces the process and a program therefore gets
+exactly ONE observable exec. Positive control on pin v409 moves exactly the last
+row. `make compiler/pascal26` converged after 1 round.
