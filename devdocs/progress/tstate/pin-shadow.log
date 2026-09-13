@@ -751,3 +751,4 @@
 2026-09-12T21:37:30Z	borg	99f019920814b32fdd56008866841e9be442b8c5	would NOT pin 99f019920814 — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
 2026-09-13T03:10:44Z	borg	3c39dbf62bec1c5e23aa42b6cf5fef40a5c51fff	would NOT pin 3c39dbf62bec — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
 2026-09-13T03:31:29Z	borg	a56bd7985f8cf8ff6d118b7d3e878a991ed20e33	would NOT pin a56bd7985f8c — 2 red(s) the current pin does not have, 7 inherited from the current pin: test-threads#src:test/test_a_threadvar_is_per_thread.pas, tools-devtest#00
+2026-09-13T04:09:06Z	borg	54c8d828593833bb652afe1efbd0395c8b8e2767	would NOT pin 54c8d8285938 — 1 red(s) the current pin does not have, 7 inherited from the current pin: tools-devtest#00
