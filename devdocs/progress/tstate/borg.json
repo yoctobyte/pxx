@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-12T15:06:45Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f7e55ea72da21b5a1e52a660f24f46ebd126418f",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-12T15:22:47Z",
    "fixed": [],
    "new_red": [],
@@ -467,6 +458,15 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-13T07:16:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -668,14 +668,14 @@
   "lib-test#src:test/test_math.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "lib-test#src:test/test_tcomponent.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "lib-test#src:test/test_tlist_notify.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
-  "optdiff#shard1/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard11/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard3/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard4/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard6/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard7/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard8/12": "2864c47211027990f1d976025165523bc274ace7",
-  "optdiff#shard9/12": "2864c47211027990f1d976025165523bc274ace7",
+  "optdiff#shard1/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard11/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard3/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard4/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard6/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard7/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard8/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "optdiff#shard9/12": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "size-canary#src:tools/size_canary.py": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-aarch64#src:test/c_crtl_cmsg_and_socket_levels.c": "8d5fe5325514651c0d6f17e2ca229e28243808af",
@@ -4631,11 +4631,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-nilpy#src:tools/compiler_srchash.sh": "8d5fe5325514651c0d6f17e2ca229e28243808af",
-  "test-opt#src:compiler/compiler.pas@1": "2864c47211027990f1d976025165523bc274ace7",
-  "test-opt#src:compiler/compiler.pas@2": "2864c47211027990f1d976025165523bc274ace7",
-  "test-opt#src:compiler/compiler.pas@3": "2864c47211027990f1d976025165523bc274ace7",
-  "test-opt#src:test/test_atomic64.pas": "2864c47211027990f1d976025165523bc274ace7",
-  "test-opt#src:tools/compiler_srchash.sh": "2864c47211027990f1d976025165523bc274ace7",
+  "test-opt#src:compiler/compiler.pas@1": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "test-opt#src:compiler/compiler.pas@2": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "test-opt#src:compiler/compiler.pas@3": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "test-opt#src:test/test_atomic64.pas": "8d5fe5325514651c0d6f17e2ca229e28243808af",
+  "test-opt#src:tools/compiler_srchash.sh": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-pascal-conformance#shard0/6": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-pascal-conformance#shard1/6": "8d5fe5325514651c0d6f17e2ca229e28243808af",
   "test-pascal-conformance#shard2/6": "8d5fe5325514651c0d6f17e2ca229e28243808af",
@@ -14662,14 +14662,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T07:00:27Z",
+  "date": "2026-09-13T07:16:45Z",
   "deadline": 3600.0,
   "sha": "8d5fe5325514651c0d6f17e2ca229e28243808af",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 95.2
+  "verdict": "RED",
+  "wall": 965.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14709,14 +14709,14 @@
   },
   "opt": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T06:35:04Z",
+   "date": "2026-09-13T07:16:45Z",
    "deadline": 3600.0,
-   "sha": "2864c47211027990f1d976025165523bc274ace7",
+   "sha": "8d5fe5325514651c0d6f17e2ca229e28243808af",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 989.0
+   "wall": 965.8
   },
   "slow": {
    "code_fp": "1d5c476a6328",
