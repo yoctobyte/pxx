@@ -159,4 +159,4 @@ the world (`rijn: 4 tiles, 1 pounds, 5 routes`) and prints the key legend before
 the next wall, a run-time `forwarded call got 5 arguments, expected 0 to 4`.
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2b7068dd7.
