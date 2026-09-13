@@ -6598,6 +6598,18 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$$($(TESTTMP)/test_threadsafe_refcount_lockfree26 | tail -n 2)" "$$(printf 'fail=0\nTSRCLOCKFREE OK')"
 	./$(COMPILER) -O0 --threadsafe test/test_threadsafe_refcount_lockfree.pas $(TESTTMP)/test_threadsafe_refcount_lockfree26_o0
 	tools/expect_same.sh test_threadsafe_refcount_lockfree26_o0 "$$($(TESTTMP)/test_threadsafe_refcount_lockfree26_o0 | tail -n 2)" "$$(printf 'fail=0\nTSRCLOCKFREE OK')"
+	# ...and the OBJECT sibling of that discipline, which was NOT atomic on
+	# x86-64: PXXObjRetain/PXXObjRelease keyed their atomic arm on
+	# PXX_TS_SOFTLOCK, the i386/aarch64/arm32 spelling of --threadsafe, so the
+	# HARDLOCK target fell through to a plain read-modify-write. The string half
+	# above was always fine because the codegen emits its own lock blob for it;
+	# this half is a Pascal helper that pylib CALLS and no blob reaches.
+	# Positive control MEASURED with the fix reverted, three runs: 400000
+	# balanced retain/release pairs drifted by 784, 1306 and 972 -- always UP,
+	# a lost DECREMENT, which leaks rather than crashing and is therefore the
+	# half no crash-shaped test can see.
+	./$(COMPILER) --threadsafe test/test_threadsafe_obj_refcount_atomic.pas $(TESTTMP)/test_threadsafe_objrc26
+	tools/expect_same.sh test_threadsafe_objrc26 "$$($(TESTTMP)/test_threadsafe_objrc26 | tail -n 2)" "$$(printf 'fail=0\nTSOBJRC OK')"
 	# `parallel for` scalar capture (Phase A): enclosing scalars by-ref via the frame pointer (read + write-back)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture.pas $(TESTTMP)/test_parallel_for_capture26
 	tools/expect_same.sh test_parallel_for_capture26 "$$($(TESTTMP)/test_parallel_for_capture26)" "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"

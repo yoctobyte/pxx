@@ -19,7 +19,21 @@ Full context and rationale: `devdocs/dev/threading-model.md`.
 
 `--threadsafe` makes the **runtime** safe — allocator spinlock, atomic
 refcounts, statement-atomic console I/O. It does nothing for **data
-structures**. `TPyList.append_self`, in full:
+structures**.
+
+> **CORRECTION 2026-09-13 (frankH): on x86-64 the first sentence is FALSE, and
+> that is a separate and higher-priority bug —
+> [[bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe]]
+> (prio 80).** `PXXObjAlloc` calls `PXXAlloc` as an ordinary Pascal call and the
+> x86-64 heap lock is emitted only around `tkGetMem`/`tkFreeMem` sites, so
+> container construction allocates UNLOCKED and two threads are handed the same
+> block; and `PXXObjRetain`/`PXXObjRelease` keyed their atomic arm on
+> `PXX_TS_SOFTLOCK`, which x86-64 does not get, so object refcounts were a plain
+> read-modify-write (that half is fixed). **Two threads each appending to their
+> OWN private list segfault 5/5** — no sharing involved — so this ticket's
+> defect is not reachable in isolation until that one is fixed, and a repro
+> written for THIS ticket will crash for the OTHER reason. The contract below is
+> unaffected and still wanted. `TPyList.append_self`, in full:
 
 ```pascal
 PyListGrow(Self, FLen + 1);                        { may REALLOC FItems }

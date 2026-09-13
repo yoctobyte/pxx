@@ -18,6 +18,7 @@ blocked-by:
   - feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack
   - decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package
   - bug-n-getattr-cannot-see-a-method-and-segfaults-through-a-dynamic-receiver
+  - bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe
   - bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value
   - bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data
   - bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers

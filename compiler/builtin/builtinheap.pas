@@ -3375,7 +3375,7 @@ end;
 
 procedure PXXObjRetain(p: Pointer);
 var base, t: Int64;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
     tsIgnore: Int64;
 {$endif}
 begin
@@ -3401,7 +3401,37 @@ begin
 {$endif}
     Exit;                                  { not ours }
   end;
-{$ifdef PXX_TS_SOFTLOCK}
+{ PXX_THREADSAFE AND NOT PXX_TS_SOFTLOCK: the refcount is not the heap, and
+  x86-64's lock model does not cover it. The SOFTLOCK guard that used to be
+  here is the i386/aarch64/arm32 spelling of "--threadsafe", so on x86-64 --
+  which gets PXX_TS_HARDLOCK instead -- this fell to the plain
+  read-modify-write below and OBJECT REFCOUNTS WERE RACY in every threadsafe
+  x86-64 build. The hand-emitted lock blobs the design credits x86-64 with are
+  real and cover the two paths the CODEGEN owns (`lock incq -0x10(%rax)` for a
+  managed string, the inline class ARC); they do not reach a Pascal helper that
+  pylib CALLS, and PyVarSlotSet/PyVarSlotClear call this one for every variant
+  slot holding a list, dict or tuple.
+
+  MEASURED 2026-09-13, five runs each, one thread allocating against another:
+  two threads each building their OWN `[1, 2, 3]` per iteration segfaulted 5/5
+  (dict 5/5, tuple 5/5) while a NilPy STRING was 0/5 and a user-class instance
+  0/5 -- exactly the split between "reaches this helper" and "the codegen emits
+  its own atomic". The Pascal spelling of the same probe (two threads growing
+  dynamic arrays of strings through palthreadobj.TThread) is 0/5, so the
+  threadsafe HEAP was never the defect. The fault lands in PyListGrow's copy
+  loop reading `l.FItems` as nil with FLen > 0 -- a use-after-free from a lost
+  decrement -- and `objdump` on a -g build counted 142 lock prefixes in the
+  binary and ZERO inside PXXObjRetain/PXXObjRelease.
+
+  The guard is PXX_THREADSAFE and not `SOFTLOCK or HARDLOCK` on purpose:
+  paslexer.inc says in its own words that those two "say WHICH LOCK
+  IMPLEMENTATION is in use ... gating on one keys off a correlated
+  implementation detail rather than the thing meant". The thing meant is
+  --threadsafe, and compiler.pas refuses --threadsafe on every target that
+  cannot lower IR_ATOMIC, so __pxxatomic_add is available wherever this arm can
+  be taken (verified on x86-64: `lock xadd %eax,(%rcx)`).
+  The default build defines neither, so it stays byte-identical. }
+{$ifdef PXX_THREADSAFE}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
   PMachineWord(base)^ := PMachineWord(base)^ + 1;
@@ -3433,7 +3463,10 @@ begin
 {$endif}
     Exit;                                  { not ours }
   end;
-{$ifdef PXX_TS_SOFTLOCK}
+{ The release half of the retain above, and the half that actually corrupts:
+  a lost DECREMENT frees a live object, and exactly one thread must see the
+  count reach zero. PXX_THREADSAFE, not PXX_TS_SOFTLOCK -- see PXXObjRetain. }
+{$ifdef PXX_THREADSAFE}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
   rc := PMachineWord(base)^ - 1;
