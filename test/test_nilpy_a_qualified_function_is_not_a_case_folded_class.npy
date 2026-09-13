@@ -1,0 +1,63 @@
+# A MODULE-QUALIFIED call must reach the name the source wrote, and Python names
+# are CASE-SENSITIVE.
+#
+# `casecls.alpha([1, 2])` was matched against `class Alpha` -- case-insensitively,
+# Pascal-style -- and compiled as a CONSTRUCTION. The function never ran, its
+# argument arrived as the constructor's `key`, and the value that came back was a
+# plausible Alpha instead of the one the factory builds. Silent.
+#
+# THE ARM THAT DECIDES IT IS `PyQualCtorSegs`, AND IT HAS TWO DISJUNCTS. The
+# second asks PyIsExactCtorName and is exact. The first was added later so a
+# NilPy module's keyword-named `class set` could be constructed through a
+# qualifier, was deliberately narrowed to the qualifier's own unit, and did not
+# carry the exactness test across -- so the hole this family had already been
+# closed at reopened one disjunct over.
+# bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class is the
+# same rule at the arm's OUTER guard; this is the inner one.
+#
+# `class Menu` beside `def menu(...)` is the shape, and it is how a Python module
+# is written rather than a corner: lekkerzeilen/ui.py has exactly that pair, and
+# `ui.menu(self.panels)` built a Menu whose `self` was a code address, so the
+# demo SEGFAULTED nine seconds in with a rip inside the constructor.
+#
+# BOTH DECLARATION ORDERS are here, and the class-last row is the one a suite
+# written the ordinary way would omit. Both were measured wrong before the fix,
+# so this arm is not order-sensitive -- which is itself worth pinning, because
+# the cheap reading of "the class wins" is that it registered first.
+import casecls
+
+print("1", casecls.alpha([1, 2]).what)
+print("2", casecls.Alpha("k").what)
+print("3", casecls.beta([1, 2]).what)
+print("4", casecls.Beta("k").what)
+
+# A function-against-function and a global-against-global collision, plus a
+# global against a class: all correct before the fix. Without them a repaired
+# row cannot be told from a lookup that simply stopped folding case anywhere.
+print("5", casecls.eps())
+print("6", casecls.EPS())
+print("7", casecls.DELTA)
+print("8", casecls.Delta().what)
+print("9", casecls.zeta)
+print("10", casecls.ZETA)
+
+# The case the broken disjunct was written FOR. A keyword-named class, spelled
+# plainly, constructed through the qualifier -- it must keep working, and it is
+# why the repair narrows the match rather than deleting the arm.
+print("11", casecls.set(3).n)
+print("12", casecls.setval(1))
+
+# UNQUALIFIED, in the program's own scope: correct before the fix, because the
+# bare-name intercept one screen up has asked the exact predicate since the
+# first member of this family. Here so the fixture says WHERE the defect is.
+class Gamma:
+    def __init__(self, key):
+        self.what = "Gamma.__init__ key=" + str(key)
+
+
+def gamma(x):
+    return Gamma("made-by-gamma")
+
+
+print("13", gamma([1, 2]).what)
+print("14", Gamma("k").what)

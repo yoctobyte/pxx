@@ -1,0 +1,67 @@
+# A class and a lowercase FACTORY FUNCTION of the same name, which is how a
+# Python module is written -- `class Menu` beside `def menu(...)`, the shape
+# lekkerzeilen/ui.py has. Both declaration orders, because a lookup that reads
+# the ordered list can only be caught by the arrangement that puts the right
+# entry LAST.
+#
+# Read through a MODULE QUALIFIER (`casecls.alpha(...)`), `alpha` was matched
+# case-INSENSITIVELY against `class Alpha` and CONSTRUCTED it: the function
+# never ran and its first argument arrived as the ctor's `key`.
+
+
+class Alpha:
+    """Declared BEFORE its factory -- ui.py's own order."""
+
+    def __init__(self, key, title="cls"):
+        self.what = "Alpha.__init__ key=" + str(key) + " title=" + str(title)
+
+
+def alpha(x, title="fn"):
+    return Alpha("made-by-alpha", title)
+
+
+def beta(x, title="fn"):
+    """Declared BEFORE its class: the interesting element last."""
+    return Beta("made-by-beta", title)
+
+
+class Beta:
+    def __init__(self, key, title="cls"):
+        self.what = "Beta.__init__ key=" + str(key) + " title=" + str(title)
+
+
+# Two plain FUNCTIONS differing only in case -- correct throughout, and here to
+# say the defect is the CLASS lookup and not a general case-folding of names.
+def eps():
+    return "eps-lower"
+
+
+def EPS():
+    return "EPS-upper"
+
+
+# A global VARIABLE against a class of the same name, and two globals differing
+# only in case: both correct throughout, same reason.
+DELTA = "delta-the-global"
+
+
+class Delta:
+    def __init__(self):
+        self.what = "Delta.__init__"
+
+
+zeta = "zeta-lower"
+ZETA = "ZETA-upper"
+
+
+# A class whose name is a Pascal KEYWORD, spelled plainly, beside a function of
+# a different name. The unit-scoped arm that lost the exactness test was added
+# for exactly this (`class set` must still construct through a qualifier), so it
+# is the row that says the repair did not cost the case it was written for.
+class set:
+    def __init__(self, n=0):
+        self.n = n
+
+
+def setval(n):
+    return n + 41

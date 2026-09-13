@@ -1085,6 +1085,30 @@ test-nilpy: $(COMPILER)
 	# called through the qualifier.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_qualified_read_of_a_same_named_global.npy $(TESTTMP)/test_nilpy_qualres26
 	$(TESTTMP)/test_nilpy_qualres26 | diff -u test/test_nilpy_a_module_qualified_read_of_a_same_named_global.expected -
+	# A MODULE-QUALIFIED CALL is not a construction of a case-matching class.
+	# `casecls.alpha([1, 2])` matched `class Alpha` case-insensitively, Pascal-
+	# style, and compiled as a CONSTRUCTION: the module's `def alpha` never ran and
+	# its argument arrived as the ctor's `key`. `class Menu` beside `def menu(...)`
+	# is how a Python module is written -- lekkerzeilen/ui.py has that exact pair,
+	# and `ui.menu(self.panels)` built a Menu whose Self was a code address, so the
+	# demo SEGFAULTED nine seconds in with rip inside the constructor.
+	# The arm (PyQualCtorSegs) has TWO disjuncts. The second asks
+	# PyIsExactCtorName and is exact. The first was added afterwards so a NilPy
+	# module's keyword-named `class set` could be constructed through a qualifier,
+	# was narrowed to the qualifier's own unit, and did not carry the exactness
+	# across -- so the repair for this family sat one screen from the hole.
+	# Positive control, MEASURED per row rather than predicted: with the fix
+	# reverted exactly rows 1 and 3 differ (`key=[1, 2] title=cls`), and rows 11
+	# and 12 -- the `class set` case the broken disjunct exists for -- pass either
+	# way, which is what says the repair narrowed the match instead of deleting the
+	# arm. BOTH DECLARATION ORDERS are rows: class-first and class-last both failed,
+	# so this arm is not order-sensitive and "the class registered first" is the
+	# wrong reading. A function-against-function and a global-against-global
+	# collision, a global against a class, and the UNQUALIFIED call are all here and
+	# were all correct before -- without them a repaired row cannot be told from a
+	# lookup that simply stopped folding case everywhere.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_qualified_function_is_not_a_case_folded_class.npy $(TESTTMP)/test_nilpy_qualcase26
+	$(TESTTMP)/test_nilpy_qualcase26 | diff -u test/test_nilpy_a_qualified_function_is_not_a_case_folded_class.expected -
 	# The UNQUALIFIED spelling of the same hijack, and in NilPy the arm has no
 	# correct case at all: Python has no implicit result, so a bare name equal to
 	# the enclosing def is the module GLOBAL, a LOCAL, or the def itself, never a

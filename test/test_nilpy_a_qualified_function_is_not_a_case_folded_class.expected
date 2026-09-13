@@ -1,0 +1,14 @@
+1 Alpha.__init__ key=made-by-alpha title=fn
+2 Alpha.__init__ key=k title=cls
+3 Beta.__init__ key=made-by-beta title=fn
+4 Beta.__init__ key=k title=cls
+5 eps-lower
+6 EPS-upper
+7 delta-the-global
+8 Delta.__init__
+9 zeta-lower
+10 ZETA-upper
+11 3
+12 42
+13 Gamma.__init__ key=made-by-gamma
+14 Gamma.__init__ key=k

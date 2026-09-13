@@ -1099,6 +1099,33 @@ begin
     end;
 end;
 
+function PyIsExactCtorNameInUnit(const nm: AnsiString; unitIdx: Integer): Boolean;
+{ PyIsExactCtorName, narrowed to ONE unit: is `nm` a class declared in unitIdx
+  and spelled EXACTLY as the source wrote it?
+
+  The pair exists because the two questions are genuinely different. A bare
+  `Name(` asks the flat namespace, so PyIsExactCtorName is global and also
+  honours class ALIASES, which a `from M import X as Y` registers under a name
+  the class itself never has. A QUALIFIED `m.Name(` has already named the unit,
+  so the answer must come from that unit and from nowhere else -- a keyword-named
+  `class set` in one helper was capturing a same-named `def set` in another
+  before the qualifier was consulted.
+
+  What this adds over FindUClassInUnit is the EXACTNESS, and that is the whole
+  point: FindUClassInUnit folds case, Pascal-style, so `m.alpha(` matched
+  `class Alpha` in m and was compiled as a construction. Aliases are deliberately
+  NOT consulted here -- an alias is a name in the IMPORTER's scope, not a member
+  of the imported unit, so a qualified spelling cannot legitimately reach one,
+  and the global arm beside this one still answers for them.
+  bug-n-a-qualified-function-is-taken-by-a-case-folded-class-in-the-same-unit }
+var ci: Integer;
+begin
+  Result := False;
+  ci := FindUClassInUnit(nm, unitIdx);
+  if ci < 0 then Exit;
+  Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
+end;
+
 function PyStrDunderName(const n: AnsiString): Boolean;
 { A dunder whose contract is "returns a str": CPython raises TypeError when
   __repr__ or __str__ returns anything else, so inferring a variant for one is
@@ -48016,13 +48043,37 @@ begin
       `def set` in a second, `m.set(4)` built the other module's object instead
       of calling m's function -- printing an object repr where CPython prints 41.
       Caught by the fixture only because both helpers are imported in one run.
-      So the new arm asks FindUClassInUnit against the unit this qualifier
-      actually resolved to. The underscored arm keeps its existing global test
-      untouched: PyIsExactCtorName also recognises class ALIASES, which a
-      from-import registers under a name the class itself never has, and
-      narrowing that would break aliased constructors. }
+      So the new arm asks against the unit this qualifier actually resolved to.
+      The underscored arm keeps its existing global test untouched:
+      PyIsExactCtorName also recognises class ALIASES, which a from-import
+      registers under a name the class itself never has, and narrowing that
+      would break aliased constructors.
+
+      ...AND IT ASKS EXACTLY, which it did not when it was written. It asked
+      FindUClassInUnit, which folds case Pascal-style, so `m.alpha(` matched
+      `class Alpha` in m and CONSTRUCTED it: the module's `def alpha` never ran,
+      its first argument arrived as the ctor's first parameter, and what came
+      back was a plausible instance. `class Menu` beside `def menu(...)` is how a
+      Python module is written -- lekkerzeilen/ui.py has that exact pair, and
+      `ui.menu(self.panels)` built a Menu whose Self was a code address, so the
+      demo SEGFAULTED nine seconds in with rip inside the constructor and a bare
+      map bisection naming the ctor rather than the call.
+
+      THE OUTER GUARD OF THIS SAME ARM WAS FIXED FOR THIS FAMILY ALREADY (see
+      the block above the qcSegs call:
+      bug-n-a-qualified-module-member-is-taken-by-a-case-folded-local-class).
+      This disjunct was added AFTERWARDS, for the `class set` case, and did not
+      carry the exactness across -- so the repair was one screen away from the
+      hole for as long as both were live. Measured 2026-09-13: BOTH declaration
+      orders fail (class-first and class-last alike, so the arm is not
+      order-sensitive and "it registered first" is the wrong reading), while a
+      function-against-function and a global-against-global collision of the
+      same shape were always correct, and so was the UNQUALIFIED call. That is
+      what pins it here rather than to qualified resolution or to name folding
+      in general.
+      test/test_nilpy_a_qualified_function_is_not_a_case_folded_class.npy }
     if (Tokens[ti + 2].Kind = tkLParen) and (FindUnitOrAlias(nm) >= 0) and
-       ((FindUClassInUnit(GetTokenStr(ti + 1), FindUnitOrAlias(nm)) >= 0) or
+       (PyIsExactCtorNameInUnit(GetTokenStr(ti + 1), FindUnitOrAlias(nm)) or
         PyIsExactCtorName(PyMapReservedMember(GetTokenStr(ti + 1)))) then
     begin
       unitIdx := FindUnitOrAlias(nm);
