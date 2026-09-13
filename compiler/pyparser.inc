@@ -15807,10 +15807,27 @@ end;
   the case this gate used to be restricted to.
 
   Deliberately the same scalar/string family as the return side and not one item
-  wider: a class, a record, a set, a pointer or an open array has no Variant
-  coercion, and a wrapper built over one would be a compile error inside a
-  SYNTHESIZED body, reported against a proc the program never wrote. Those keep
-  the pre-existing unwrapped value, which is what they had. }
+  wider. A record, a set, a pointer or an open array has no Variant coercion,
+  and a wrapper built over one would be a compile error inside a SYNTHESIZED
+  body, reported against a proc the program never wrote. Those keep the
+  pre-existing unwrapped value, which is what they had.
+
+  THE tyClass HALF OF THAT SENTENCE WAS WRONG AND IS MEASURED WRONG, 2026-09-13.
+  A Variant->TPyBytes call-argument coercion DOES exist; three spellings all
+  answer (1.5,) against CPython, the middle one carrying the bytes in a Variant:
+
+    struct.unpack("<f", b)                        direct, static TPyBytes
+    def go(fmt, v): struct.unpack(fmt, v)         UNANNOTATED param, so Variant
+    def go(fmt, v: bytes): struct.unpack(fmt, v)  annotated
+
+  So the reason tyClass stays out is NOT a missing coercion. Admitting it here
+  is a one-line change that genuinely fixes `f = struct.unpack` -- and it breaks
+  test_nilpy_callable_value_defaults and _with_star_args with `TypeError:
+  expected an object argument, got int`, because widening the predicate changes
+  which OVERLOAD the wrapper gets built over and an int then reaches a class
+  slot. Measured by applying it, not predicted. The coercion works for a Variant
+  that HOLDS an object and there is no check that it does.
+  bug-n-a-shim-parameter-typed-as-a-container-blocks-the-callable-value-wrapper }
 function PyScalarWrappableParamType(tk: TTypeKind): Boolean;
 begin
   Result := (tk = tyVariant) or PyScalarWrappableRetType(tk);

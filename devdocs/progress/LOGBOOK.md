@@ -3940,3 +3940,4 @@ call comes back as a raw pointer, at arity >= 1 only, while the same call inline
 assigned to a local is correct — `bug-n-a-dynamically-dispatched-call-loses-its-
 return-kind-when-it-is-returned` (p65). The obvious spelling of the new row would
 have been red for that reason, which is why it encodes integers and says so inline.
+2026-09-13 | frankS | compiler/pyparser.inc | correct a FALSE claim in PyScalarWrappableParamType's comment and in the ticket it seeded: a Variant->TPyBytes call-argument coercion DOES exist (measured three ways), so tyClass is not excluded for want of one. Admitting it is a one-liner that fixes `f = struct.unpack` and breaks two callable-value-defaults fixtures with `expected an object argument, got int`, because it changes which OVERLOAD the wrapper is built over. Measured by applying it; reverted, not landed. Comment-only change, binary unchanged.
