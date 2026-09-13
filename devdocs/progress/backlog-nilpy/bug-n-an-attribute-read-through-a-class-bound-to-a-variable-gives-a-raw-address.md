@@ -193,3 +193,75 @@ varying at run time.
 `pyclsattr_bind` returning a sane bound-slot address of that magnitude; it is the
 address of the right thing surfacing where a value belongs, not a corrupted
 pointer. It is no longer the observable and should not be probed for.
+
+## 2026-09-13, frankuser: the full chain, every link read out of the process
+
+Continued from the section above. The `0x40000000` is not a corrupted pointer
+and not luck — it is a **static string's refcount header**, and the route that
+reaches it is mechanical.
+
+**The receiver at the crash is a CLASSREF, confirmed in the process.** Breaking
+at the `call pyvarobj` that precedes the fault and dumping its argument:
+
+    rdi = 0x561cd0
+    0x561cd0:  0x000000000000000b   0x000000000054d388
+                ^ VType = 11 = VT_CLASSREF   ^ Payload = the RTTI blob of `Aaa`
+
+**What the code then does with it**, read off the disassembly at
+`0x53f1eb..0x53f276`:
+
+    call pyvarobj                 ; for tag 11 this yields the RTTI BLOB,
+                                  ;   NOT an instance pointer
+    mov (%rax),%rax               ; p := obj^        "the VMT"
+    cmp $0, je skip               ; nil guard
+    sub $0x8,%rax                 ; p - 8            "the RTTI backlink"
+    mov (%rax),%rax               ; rtti := (p-8)^
+    cmp $0, je skip               ; nil guard
+    call __pxxInheritsFrom(rtti, <target blob>)
+
+**And the two dereferences land on a string.** The blob's first word is the
+class's INTERNED NAME:
+
+    blob      0x54d388:  word0 = 0x553228
+    0x553228:  "#3"                      <- the interned name string
+    0x553220 (= string - 8):  0x40000000 <- MSTR_STATIC_RC
+
+So `rtti` is the never-free refcount of a static AnsiString. `__pxxInheritsFrom`
+walks `+PXX_RTTI_PARENT` (8) from it, reads `0x40000008`, and dies. Both nil
+guards pass, because a refcount is not nil — **the guards that exist cannot see
+this, by construction.**
+
+## The defect, stated so it can be fixed
+
+The sequence `pyvarobj` -> `obj^` -> `[-8]` -> `__pxxInheritsFrom` is the
+INSTANCE shape: it assumes the variant holds an object (tag 7), whose first word
+is a VMT and whose RTTI sits 8 bytes behind it. **For tag 11 the payload IS the
+RTTI blob and must not be dereferenced at all** — the answer is the payload
+itself. The site never asks the tag.
+
+`ir.inc`'s `IRClassMatchRuntime` documents this precondition in its own header —
+*"given a symbol already holding an instance pointer"* — and the emitted code
+matches it instruction for instruction (two nil guards, the `-8`, the call). Its
+only in-tree caller is exception matching at `ir.inc:17585`, so either that
+caller is reached with a classref where it expects an exception instance, or the
+same shape is emitted a second time by the `E is cr` lowering at
+`pasparser_expr.inc:11510` (whose `-8` the IR comment cross-references as
+`AN_RTTIOF`). **Whoever fixes this should settle which of the two emitters is on
+this path before editing either** — the shapes are identical in the binary and
+that is exactly the "normalise, don't special-case" smell: one question, two
+emitters.
+
+The tag test that belongs here already exists and is documented in
+`pylib.pas:1127`: `pyvar_is_classreftag(v)`. The same comment warns that
+`pyvar_holds(v, 11)` is unconditionally False and "read for a tag test it
+silently refuses every receiver" — so do not reach for that one.
+
+## Why some spellings answer correctly
+
+With the mechanism in hand the name sensitivity stops being mysterious and stops
+being interesting: `0x40000000` is unmapped on every run, so any row that
+REACHES this code dies. The rows that answer correctly are rows where this code
+is not reached — a different lowering was selected — not rows where it ran and
+survived. That does not soften the conclusion recorded above; it sharpens it.
+**A passing row is evidence about which lowering was chosen, never evidence that
+the classref path works.**
