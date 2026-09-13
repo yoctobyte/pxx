@@ -3720,3 +3720,102 @@ Fixture `test_nilpy_a_list_reaches_a_c_pointer_parameter_through_a_variant`; its
 own file, because execv replaces the process and a program therefore gets
 exactly ONE observable exec. Positive control on pin v409 moves exactly the last
 row. `make compiler/pascal26` converged after 1 round.
+## 2026-09-13 | frankH (Track N) | compiler/builtin/pylib.pas, compiler/pyparser.inc | a forwarded call's arity failure now names the callee
+
+`TypeError: forwarded call got 5 arguments, expected 0 to 4` is what the
+lekkerzeilen demo printed at run time, out of a binary with 11711 procedures. The
+message named the MECHANISM and nothing else, so locating the call meant
+enumerating every def in the app whose parameters are all defaulted — an AST
+census over 34 modules that returned eight candidates and no answer. Both
+`pystar_check_arity` and `pystar_check_arity_kw` now take the callee's name and
+print it in FRONT of the existing sentence (`sized(): forwarded call got 4
+arguments, expected 1 to 3`, `P.mark(): ...`), so the wording that two Makefile
+assertions, four fixtures and several tickets already quote is untouched.
+
+One helper, `PyStarGuardName`, appends the name at all five emit sites
+(PyStarDynCall, PyStarExpandKwArgs twice, PyStarExpandCallArgs,
+PyStarForwardCall) rather than the literal being written out five times, so a
+sixth site added later cannot quietly go back to the nameless form. An empty name
+is legitimate and prints nothing: PyStarDynCall forwards into an arbitrary
+expression and has no static name to give.
+
+The two Makefile rows that already assert these two messages now assert the name
+too — the method row asserts the QUALIFIED spelling, which is the half a bare
+function cannot show and the half that makes the name useful in an app with
+several `mark`s.
+
+## 2026-09-13 | frankH (Track N) | compiler/builtin/{pyeval,pylib}.pas, compiler/pyparser.inc | a star-unpack through a callable VALUE reached only four arguments — the demo died there at run time
+
+With the compile wall gone, lekkerzeilen ran as far as the key legend and then
+raised `TypeError: forwarded call got 5 arguments, expected 0 to 4`. With the
+callee named (the commit before this one), that is `_quad()` —
+`lekkerzeilen/lines.py:782` and three more sites in the same module:
+
+```python
+from .geometry import _quad          # a DOTTED from-import binds a VALUE
+_quad(out, *(quad if side > 0.0 else tuple(reversed(quad))))
+```
+
+one written argument plus a four-element star, into `def _quad(out, a, b, c, d)`.
+Reduced to three files with no lekkerzeilen, and the discriminator measured: a
+`from <dotted> import <name>` binds the name as a callable VALUE where a
+single-segment `from mod import name` resolves it to a proc, and
+`from . import mod` + `mod.f(*xs)` also resolves. The dotted binding is NOT the
+bug — binding a name to a value is what CPython does — the bug is that the value
+road refused an arity CPython accepts.
+
+The carrier was the `{code, recv}` PAIR (tag 8), which is what a plain def bound
+to a name becomes, NOT the raw code address the first guess assumed. Found by
+widening the raw-address rung first and watching the refusal move to `a bound
+method reached as a value takes at most 4 arguments` — the wrong fix, measured,
+naming the right carrier.
+
+Widened to eight on every road: `pyvar_callv5..8` over one shared
+`pyvar_wide_prelude`, `pybound_callv5..8`, `PyBoundCallV` /
+`pybound_pair_call{,_kw}` / `PyBoundPairCallKwBody` to eight slots, and
+`TPyCallFn5..8` plus **four** `TPyCb*5..8` families — a plain function, a
+`-> None` function (a real Pascal procedure, whose hidden-result convention the
+function types do not have), a bound method, a `-> None` method. Frontend:
+`PyStarDynCall`'s arm chain, and `PyMakeDynCall`'s selection, which also closes a
+hazard its own comment described — arities 5+ took the AN_CALL_IND lowering,
+*"correct for a plain def and a SEGFAULT for a lambda"*.
+
+Two things the widening made newly reachable, both refused rather than left to
+truncate: `PyBoundCallStar` (a COLLECTING callee) carries four fixed slots, where
+a dropped surplus lands in neither a parameter nor the tuple; and the default fill
+was gated on `want <= 4`, so a wide call would have skipped it and the body would
+have read whatever was in the slot.
+
+**Why a ladder and not a list.** A callable value is called through its code
+ADDRESS and this compiler has no variadic indirect call, so the arms must be
+enumerated. The METHOD road escaped this in 95e7eb26e (`pydyn_methl`) only because
+it dispatches through RTTI into `PyHostCall`'s list-taking binder. The
+non-ladder answer is written into the ticket: generalise `PyHostCall`'s
+pointer-family marshalling loop (it already builds an argument array for up to
+five) into a trampoline the value road can use. Recorded so the next seat does not
+simply widen eight to sixteen — frankuser hit the same family from the other side
+this week with `PY_MAX_FIELD_CANDIDATES = 16`, which survived because nobody wrote
+down that the cap was a cap.
+
+Resolved `feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments`
+— done in 95e7eb26e, unclosed, and by the array-passing shape its own last
+paragraph had recommended. Its reproducer (seven arguments, no receiver
+annotation) answers 28 against CPython's 28. Filed the sibling
+`bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments`.
+
+**The demo now gets past this too** and dies further on at
+`TypeError: expected a str, list, dict or bytes, got int` — the next wall.
+
+Test: `test_nilpy_wide_call_through_a_callable_value.npy`, `.expected` from
+CPython — all four carrier families at 5 and 8, defaults filled at a wide arity, a
+written argument BESIDE a star, a lambda (the closure road, never capped), an
+attribute holding a callable; plus two Makefile rows asserting the ceiling refuses
+at nine AND names the callee.
+
+Also banked: `debugging-playbook.md`, "TWO PREDICATES FOR ONE CONCEPT, AND THE
+INCOMPLETE ONE IS WIRED INTO THE HOT PATH" — the `PyWiden`/`PyNumeric` finding
+from the previous commit. NOT promoted to CLAUDE.md and the write-up says so and
+why: promotion needs a second independent subsystem with the same
+duplicated-list-where-one-copy-is-authoritative shape, and the only other copies
+are in `symtab.inc` on the authoritative side of the same list — one subject, not
+two.

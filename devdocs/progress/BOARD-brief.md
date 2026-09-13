@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:28 backlog-umbrella:11 backlog-core:159 backlog-nilpy:147 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3727 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:28 backlog-umbrella:11 backlog-core:159 backlog-nilpy:146 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3729 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 499, ranked
+## Ready — top 30 of 498, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
@@ -81,7 +81,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 90] [B]` feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder (unblocks 1)
 - `[p 90] [N]` feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
-- `[p 90] [N]` feature-n-a-runtime-dispatched-method-call-is-capped-at-four-arguments (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
@@ -101,9 +100,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
-- `[p 75] [N]` bug-n-a-module-from-a-guarded-import-gives-one-attribute-int-and-another-variant
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
+- `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
+- `[p 70] [N]` bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 
-_469 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_468 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

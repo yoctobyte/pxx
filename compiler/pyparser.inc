@@ -7961,6 +7961,28 @@ begin
   ASTTk[Result] := Ord(tyAnsiString);
 end;
 
+{ Append the callee's own NAME as the last argument of a pystar_check_arity /
+  _kw guard, so a run-time arity failure says WHICH forwarded call failed.
+  `forwarded call got 5 arguments, expected 0 to 4` named no callee, and that is
+  what the lekkerzeilen demo printed out of a binary with 11711 procedures -- the
+  message gave the mechanism and nothing else, so locating the call meant
+  enumerating every def in the app whose parameters are all defaulted. One helper
+  rather than the literal at each of the five emit sites, because a site added
+  later would otherwise quietly go back to emitting the nameless form.
+  An EMPTY name is legitimate and prints nothing: a callee reached as a VALUE has
+  no Procs[] entry, and a call result or a subscript has no name in the source
+  either (PyDynCalleeName). }
+procedure PyStarGuardName(chkArg: Integer; const nm: AnsiString);
+var n, a: Integer;
+begin
+  n := chkArg;
+  while ASTRight[n] >= 0 do n := ASTRight[n];
+  a := AllocNode(AN_ARG);
+  ASTLeft[a] := PyExcFoldLit(nm);
+  ASTRight[a] := -1;
+  ASTRight[n] := a;
+end;
+
 function PyClassCreate: Integer;
 var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     rsvCtor: AnsiString;   { the underscored spelling, probed before it is adopted }
@@ -14746,9 +14768,45 @@ end;
   Four is the ceiling because that is where the dynamic bridge itself stops
   (pyvar_callv0..4); past it pystar_check_arity raises rather than picking an
   arm that would call the body with the wrong shape. }
-function PyStarDynCall(baseNode, listSym: Integer): Integer;
+{ The best NAME available for a callee reached as a VALUE. There is no Procs[]
+  entry to ask, so the spelling in the source is all there is: a plain variable
+  gives its own name, an attribute read gives the attribute's, and anything else
+  falls back to the identifier token in front of the '(' -- which is why this
+  must be called BEFORE the argument list is parsed, while TokPos still points
+  just past it. Empty is a legitimate answer (a call result or a subscript has
+  no name in the source either).
+
+  Lifted out of PyMakeDynCall, where it was inline and reachable only on the
+  arm that carries a name into pyvar_callee_addr. PyStarDynCall needs the same
+  answer and had none, which is what made lekkerzeilen's run-time
+  `forwarded call got 5 arguments, expected 0 to 4` name nothing at all: that
+  site is the only one in the frontend with a HARDCODED 0 to 4, so the message
+  identified the site and still not the call. }
+function PyDynCalleeName(baseNode: Integer): AnsiString;
+begin
+  if ASTKind[baseNode] = AN_IDENT then
+    Result := Syms[ASTIVal[baseNode]].Name
+  else if ASTKind[baseNode] = AN_FIELD then
+    Result := PyRawName(ASTSOffset[baseNode], ASTSLen[baseNode])
+  else if (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkIdent) then
+    Result := GetTokenStr(TokPos - 2)
+  else
+    Result := '';
+end;
+
+function PyStarDynCall(baseNode, listSym: Integer; const calleeNm: AnsiString): Integer;
+const
+  { The widest rung pyeval offers. Not a taste: a compiled def taken as a VALUE
+    is called through its code address and an indirect call needs a STATIC arity,
+    so the arms have to be enumerated and only the CEILING is a choice. Eight
+    because the widest star-unpack in the lekkerzeilen corpus is seven
+    (`Grid(*row[1:])`), and because past the ceiling the guard's refusal now
+    names the callee. It was FOUR, which refused `_quad(out, *quad)` --
+    one written argument and a four-tuple, four call sites in lines.py, and
+    CPython accepts every one. }
+  MAX_STAR_DYN = 8;
 var listCi, k, n, chkArg, a2, a3, callNode, argNode, elemNode, lastArg: Integer;
-    slotSyms: array[0..3] of Integer;
+    slotSyms: array[0..MAX_STAR_DYN - 1] of Integer;
     baseSym, asgn, lenNode, cntNode, condNode, pairNode, ternNode, dispPi: Integer;
 begin
   Result := -1;
@@ -14769,9 +14827,10 @@ begin
   ASTIVal[ASTLeft[a2]] := 0; ASTTk[ASTLeft[a2]] := Ord(tyInteger);
   a3 := AllocNode(AN_ARG);
   ASTLeft[a3] := AllocNode(AN_INT_LIT);
-  ASTIVal[ASTLeft[a3]] := 4; ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+  ASTIVal[ASTLeft[a3]] := MAX_STAR_DYN; ASTTk[ASTLeft[a3]] := Ord(tyInteger);
   ASTRight[a3] := -1;
   ASTRight[chkArg] := a2; ASTRight[a2] := a3;
+  PyStarGuardName(chkArg, calleeNm);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := FindProc('pystar_check_arity');
   if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
@@ -14782,7 +14841,7 @@ begin
   { pystar_arg yields None past the end, so every slot is safe to read whatever
     the actual count is — a ternary arm cannot carry hoisted setup, which is
     why the reads happen here and not inside the arms }
-  for k := 0 to 3 do
+  for k := 0 to MAX_STAR_DYN - 1 do
   begin
     slotSyms[k] := AllocVar(PyHiddenName('dyna'), tyVariant);
     elemNode := AllocNode(AN_ARG);
@@ -14803,10 +14862,17 @@ begin
     PyHoistStmt(asgn);
   end;
 
-  for n := 0 to 4 do
+  for n := 0 to MAX_STAR_DYN do
   begin
     dispPi := FindProc('pyvar_callv' + AIntToStr(n));
-    if dispPi < 0 then Break;
+    { A rung pyeval does not offer ends the chain, and the guard above has to
+      agree with where it ended or the refusal would name an arity the lowering
+      cannot reach. }
+    if dispPi < 0 then
+    begin
+      ASTIVal[ASTLeft[a3]] := n - 1;
+      Break;
+    end;
     callNode := AllocNode(AN_CALL);
     ASTIVal[callNode] := dispPi;
     ASTTk[callNode] := Ord(tyVariant);
@@ -14857,6 +14923,9 @@ var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
     kwDictSym: Integer;
     kwName: AnsiString;
 begin
+  { Read the callee's source spelling FIRST: every last-resort arm of
+    PyDynCalleeName is token-positional, and TokPos walks past the '(' below. }
+  calleeNm := PyDynCalleeName(baseNode);
   { the callee code address = the variant's payload as a pointer }
   unboxArg := AllocNode(AN_ARG);
   ASTLeft[unboxArg] := baseNode;
@@ -14871,16 +14940,6 @@ begin
       culprit rather than at "object" }
     nmArg := AllocNode(AN_ARG);
     nmLit := AllocNode(AN_STR_LIT);
-    if ASTKind[baseNode] = AN_IDENT then
-      calleeNm := Syms[ASTIVal[baseNode]].Name
-    else if ASTKind[baseNode] = AN_FIELD then
-      calleeNm := PyRawName(ASTSOffset[baseNode], ASTSLen[baseNode])
-    else if (TokPos >= 2) and (Tokens[TokPos - 2].Kind = tkIdent) then
-      { last resort: the token right before the '(' — a subscript or call-result
-        receiver has no name of its own, but the source text does }
-      calleeNm := GetTokenStr(TokPos - 2)
-    else
-      calleeNm := '';
     ASTSOffset[nmLit] := StoredName(calleeNm);
     ASTSLen[nmLit] := Length(calleeNm);
     ASTTk[nmLit] := Ord(tyString);
@@ -15019,7 +15078,7 @@ begin
   Expect(tkRParen, ')');
   if starSym >= 0 then
   begin
-    Result := PyStarDynCall(baseNode, starSym);
+    Result := PyStarDynCall(baseNode, starSym, calleeNm);
     Exit;
   end;
 
@@ -15086,7 +15145,15 @@ begin
     the callee's payload as a code address — correct for a plain def, a SEGFAULT
     for a lambda (whose value is a closure OBJECT).
     bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
-  else if n = 4 then dispPi := FindProc('pyvar_callv4');
+  else if n = 4 then dispPi := FindProc('pyvar_callv4')
+  { ...and FIVE to EIGHT, which is what the comment above was describing as a
+    hazard rather than as a design: the old lowering calls through the payload as
+    a code address, correct for a plain def and a SEGFAULT for a lambda, whose
+    value is a closure OBJECT. The rungs exist now, so a wide call goes to the
+    dispatcher that tells the carriers apart instead of guessing one. Past eight
+    the AN_CALL_IND path below still applies, with the same hazard, and an arity
+    that no lekkerzeilen call reaches. }
+  else if (n >= 5) and (n <= 8) then dispPi := FindProc('pyvar_callv' + AIntToStr(n));
   if dispPi >= 0 then
   begin
     dispArg := AllocNode(AN_ARG);
@@ -17482,6 +17549,7 @@ begin
   ASTIVal[ASTLeft[idxArg]] := wanted;
   ASTTk[ASTLeft[idxArg]] := Ord(tyInteger);
   ASTRight[a3] := idxArg;
+  PyStarGuardName(chkArg, Procs[procIdx].Name);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := FindProc('pystar_check_arity_kw');
   if ASTIVal[callNode] < 0 then
@@ -17619,6 +17687,7 @@ begin
   ASTLeft[idxArg] := PyMakeIdent(nfoundSym);
   ASTRight[idxArg] := -1;
   ASTRight[a3] := idxArg;
+  PyStarGuardName(chkArg, Procs[procIdx].Name);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := FindProc('pystar_check_arity_kw');
   if ASTIVal[callNode] < 0 then
@@ -17794,6 +17863,7 @@ begin
   ASTTk[ASTLeft[a3]] := Ord(tyInteger);
   ASTRight[chkArg] := a2;
   ASTRight[a2] := a3;
+  PyStarGuardName(chkArg, Procs[procIdx].Name);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := FindProc('pystar_check_arity');
   if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity) not loaded');
@@ -21132,6 +21202,7 @@ begin
     ASTRight[a3] := ASTRight[chkArg];
     ASTRight[chkArg] := a3;
   end;
+  PyStarGuardName(chkArg, Procs[procIdx].Name);
   callNode := AllocNode(AN_CALL);
   { pystar_check_arity_kw counts the dict's keys as arguments, which is right
     when they land on named slots and wrong when the collector swallows them:

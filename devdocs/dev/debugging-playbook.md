@@ -26162,3 +26162,82 @@ reports the one you had in mind.
 Related: [A SELF-WRITTEN SUITE IS A MIRROR OF THE IMPLEMENTATION] — that is
 about which constructs a suite never NAMES; this is about a construct the probe
 does name and does not actually exercise.
+
+## TWO PREDICATES FOR ONE CONCEPT, AND THE INCOMPLETE ONE IS WIRED INTO THE HOT PATH
+
+**Where a concept is expressed as a MEMBERSHIP LIST, look for a second copy
+before believing a refusal that names a member of it.** Measured 2026-09-13,
+Track N, frankH, on the wall that had stopped the lekkerzeilen demo:
+`annotate the type / too dynamic [a=tyInt32(11) b=tyVariant(22)]`.
+
+`PyWiden` — the join for two types meeting at one binding — is built on
+`PyNumeric` in `pyparser.inc`, which read:
+
+```pascal
+Result := (tk = tyInteger) or (tk = tyInt64) or (tk = tySingle) or
+          (tk = tyDouble) or (tk = tyExtended);
+```
+
+Two integer kinds out of eleven. So `tyInt8`, `tyUInt8`, `tyInt16`, `tyUInt16`,
+`tyInt32`, `tyUInt32`, `tyUInt64`, `tyNativeInt` and `tyNativeUInt` matched no arm
+of the join, fell out of the function's bottom, and were reported as the program
+being too dynamic to type. **`TypeIsPyNumeric` in `symtab.inc` has held the
+complete list since the day it was written** — and `IRVariantUnboxKind`, in the
+same file, holds it a third time. The authoritative list was one grep away from
+the broken one, for months.
+
+**What made it survive: the diagnostic is about the PROGRAM, and the defect is in
+the compiler's own table.** `too dynamic` reads as a statement about the source —
+so four hypotheses about the SOURCE were tested and refuted before anyone looked
+at the predicate: a guarded `try/except/else` import, a ternary initialiser, a
+module-vs-class asymmetry between two backends, and an enclosing `if`. Each was a
+plausible story about why one read of `gl.LINEAR` might resolve differently from
+another, and the reduction with none of the four present refuses identically.
+
+**The measurement that ended it, and the shape worth copying.** One Pascal unit
+with one function per kind, and one rebinding per kind:
+
+```pascal
+function r_i32: LongInt;  begin r_i32 := 9729; end;   { and ten siblings }
+```
+```python
+y = 0
+y = u.r_i32()          # annotate the type / too dynamic [a=tyInt64 b=tyInt32]
+```
+
+Nine rows refused, two compiled. **Enumerating the whole domain of a membership
+test is what turns "my program is refused" into "the table has nine holes", and
+it costs one generated file.** Before that, every reduction was a guess about
+which member mattered; afterwards there was nothing left to guess.
+
+The sharpest single-line form needs no package and no lekkerzeilen — a float
+meeting a Pascal `LongInt`:
+
+```python
+y = 1.5
+y = u.ret32()          # [a=tyDouble(19) b=tyInt32(11)]
+```
+
+**And the widening made a LATENT wrong answer reachable, which is the part to
+check when you extend a predicate rather than fix a value.** `PyWiden`'s float arm
+tested only `tyDouble`/`tyExtended`, so `tySingle` meeting an integer fell through
+to the INTEGER arms and answered an integer kind — a join that drops the fraction
+of the one side that has one. It was unreachable for a rebinding
+(`PyWidenBinding` intercepts every int-meets-float pair and answers `tyVariant`)
+and reachable for an expression, and admitting nine more integer kinds widened it
+a great deal further. **Extending a membership test moves traffic into arms that
+were never exercised; read those arms before you extend it.**
+
+Not promoted to CLAUDE.md, and this is which test it met: it is BANKED on merit —
+the mechanism, the enumerate-the-domain instrument and the latent-arm caveat are
+all reusable. It is not PROMOTED because promotion needs a **second independent
+subsystem** with the same duplicated-list-where-one-copy-is-authoritative shape,
+and the only other copies found are `TypeIsPyNumeric` and `IRVariantUnboxKind`,
+both in `symtab.inc` and both the authoritative side of this same list — one
+subject, not two. If you meet this shape somewhere unrelated, that is the second
+row and it should be promoted then.
+
+Related: `devdocs/dev/normalise-dont-special-case.md` (two mechanisms for one
+concept, and the second path is the one that stays broken) — this is that rule
+with the two paths being PREDICATES rather than code paths, which is why a grep
+for the construct does not find it and a grep for the CONCEPT does.

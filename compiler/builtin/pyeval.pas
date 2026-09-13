@@ -303,6 +303,24 @@ function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
   an object. bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
 function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+{ FIVE to EIGHT arguments through a callable VALUE. `fn(*xs)` where fn is a name
+  bound to a def and xs holds five elements was refused outright -- the dispatch
+  ladder stopped at four, and the arity guard in front of it said so at run time:
+  `forwarded call got 5 arguments, expected 0 to 4`. Found by attempting
+  lekkerzeilen, `lines.py:782`:
+
+    from .geometry import _quad            { a DOTTED from-import binds a VALUE }
+    _quad(out, *(quad if side > 0.0 else tuple(reversed(quad))))
+
+  one written argument and a four-tuple, into `_quad(out, a, b, c, d)`. Four call
+  sites in that one module, and CPython accepts every one.
+
+  Each rung shares pyvar_wide_prelude and differs only in the indirect call,
+  which is the one thing a static arity is needed for. }
+function pyvar_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+function pyvar_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+function pyvar_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+function pyvar_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 
 { Box a callable OBJECT pointer (a lambda's pyeval closure or lifted bound-fn)
   as a variant, so a lambda bound to a NAME is typed tyVariant and the name's
@@ -2443,6 +2461,17 @@ type
   TPyCallFn2 = function(const a0, a1: Variant): Variant;
   TPyCallFn3 = function(const a0, a1, a2: Variant): Variant;
   TPyCallFn4 = function(const a0, a1, a2, a3: Variant): Variant;
+  { The WIDE rungs. A compiled def taken as a VALUE is called through its code
+    address, and an indirect call needs a STATIC arity -- there is no variadic
+    call in this compiler -- so the ladder is structurally required and only its
+    CEILING is a choice. Eight because the widest star-unpack call in the
+    lekkerzeilen corpus is seven (`Grid(*row[1:])`), and past the ceiling the
+    refusal now names the callee and the ceiling instead of dropping arguments.
+    bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+  TPyCallFn5 = function(const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCallFn6 = function(const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCallFn7 = function(const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCallFn8 = function(const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   { Variant results, not Int64: an unannotated NilPy def returns its value
     through a hidden destination pointer the callee always copies into. Through
     an Int64-typed pointer that register held stale data and the callee's
@@ -5188,7 +5217,9 @@ begin
   if pycallback_is(cb) then
   begin
     Result := pybound_pair_call_kw(Pointer(NativeInt(PPyRec(@cb)^.Payload)),
-                                   nPos, a0, a1, a2, a3, kwNames, kwVals);
+                                   nPos, a0, a1, a2, a3,
+                                   pynone, pynone, pynone, pynone,
+                                   kwNames, kwVals);
     Exit;
   end;
   o := PyCallableObj(cb);
@@ -5341,6 +5372,113 @@ begin
   end;
   f3 := TPyCallFn3(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
   Result := f3(a0, a1, a2);
+end;
+
+{ Everything a WIDE call (five to eight arguments) can be, except the one shape
+  that needs a static arity: a plain compiled code address. Returns True when it
+  has fully answered the call.
+
+  The carriers that stop short of five get a NAMED refusal rather than a
+  truncated argument list -- dropping arguments silently is the failure mode this
+  whole dispatcher exists to remove, and it is the reason pyvar_callv4 raises for
+  a lifted bound-fn instead of calling it with three. The interpreted closure has
+  no arity limit at all, because its arguments already travel as a TPyList.
+
+  `args` stays the CALLER'S -- this does not free it. }
+function pyvar_wide_prelude(const cb: Variant; nargs: Integer; args: TPyList;
+                           var res: Variant): Boolean;
+var o: Pointer; aLo, aHi: Int64;
+begin
+  Result := True;
+  { pycallback (the {code, recv} pair) is served by each rung itself, through
+    pybound_callv5..8 -- it is the common carrier and the one that must work. }
+  if pyclassref_is(cb) then
+    raise TypeError.Create('a class reached as a value constructs with at most '
+      + '4 arguments, got ' + pystr_of(Int64(nargs)));
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if PyClosureArityBad(o, nargs, aLo, aHi) then PyRaiseArity(nargs, aLo, aHi);
+  if PyBoundFnArityBad(o, nargs, aLo, aHi) then PyRaiseArity(nargs, aLo, aHi);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, res);
+      Exit;
+    end;
+    raise TypeError.Create('a compiled closure takes at most 3 arguments, got '
+      + pystr_of(Int64(nargs)));
+  end;
+  { a plain compiled code address: the caller's own indirect call }
+  Result := False;
+end;
+
+function pyvar_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+var args: TPyList; f5: TPyCallFn5; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv5(cb, a0, a1, a2, a3, a4); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4);
+  done := pyvar_wide_prelude(cb, 5, args, Result);
+  args.Free;
+  if done then Exit;
+  f5 := TPyCallFn5(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f5(a0, a1, a2, a3, a4);
+end;
+
+function pyvar_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+var args: TPyList; f6: TPyCallFn6; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv6(cb, a0, a1, a2, a3, a4, a5); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5);
+  done := pyvar_wide_prelude(cb, 6, args, Result);
+  args.Free;
+  if done then Exit;
+  f6 := TPyCallFn6(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f6(a0, a1, a2, a3, a4, a5);
+end;
+
+function pyvar_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+var args: TPyList; f7: TPyCallFn7; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv7(cb, a0, a1, a2, a3, a4, a5, a6); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5); args.append(a6);
+  done := pyvar_wide_prelude(cb, 7, args, Result);
+  args.Free;
+  if done then Exit;
+  f7 := TPyCallFn7(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f7(a0, a1, a2, a3, a4, a5, a6);
+end;
+
+function pyvar_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
+var args: TPyList; f8: TPyCallFn8; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv8(cb, a0, a1, a2, a3, a4, a5, a6, a7); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5); args.append(a6); args.append(a7);
+  done := pyvar_wide_prelude(cb, 8, args, Result);
+  args.Free;
+  if done then Exit;
+  f8 := TPyCallFn8(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f8(a0, a1, a2, a3, a4, a5, a6, a7);
 end;
 
 function PyDynMethL(const recv: Variant; const name, kwspec: AnsiString;
@@ -5617,7 +5755,8 @@ begin
       This arm used to call through a one-parameter pointer regardless of the
       callee's real arity, which left b and c reading whatever the previous
       call had put there. feature-n-a-callable-value-carries-its-signature-type }
-    Result := pybound_pair_call(key, 1, a0, pynone, pynone, pynone);
+    Result := pybound_pair_call(key, 1, a0, pynone, pynone, pynone,
+                                pynone, pynone, pynone, pynone);
     Exit;
   end;
   if pyclosure_is(key) then begin Result := pyclosure_call1(key, a0); Exit; end;

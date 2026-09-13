@@ -2694,12 +2694,47 @@ test-nilpy: $(COMPILER)
 	# a default-less slot's value from off the end of the sequence.
 	printf 'def sized(a, b=2, c="d"):\n    return a\nprint(sized(*[1, 2, 3, 4]))\n' > $(TESTTMP)/nilpy_stardflt_over.npy
 	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_stardflt_over.npy $(TESTTMP)/nilpy_stardflt_over26 2>&1 && $(TESTTMP)/nilpy_stardflt_over26 2>&1); \
-	 printf '%s\n' "$$out" | grep -q 'forwarded call got 4 arguments, expected 1 to 3' \
-	  || { echo "star-unpack arity: FAIL - a 4-element list into (a, b=2, c=\"d\") was not refused"; printf '%s\n' "$$out"; exit 1; }
+	 printf '%s\n' "$$out" | grep -q 'sized(): forwarded call got 4 arguments, expected 1 to 3' \
+	  || { echo "star-unpack arity: FAIL - a 4-element list into (a, b=2, c=\"d\") was not refused, or the message does not NAME the callee"; printf '%s\n' "$$out"; exit 1; }
 	printf 'class P:\n    def mark(self, region, place=None):\n        return region\nprint(P().mark(*[]))\n' > $(TESTTMP)/nilpy_stardflt_under.npy
 	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_stardflt_under.npy $(TESTTMP)/nilpy_stardflt_under26 2>&1 && $(TESTTMP)/nilpy_stardflt_under26 2>&1); \
-	 printf '%s\n' "$$out" | grep -q 'forwarded call got 0 arguments, expected 1 to 2' \
-	  || { echo "star-unpack arity: FAIL - an EMPTY list into a method with one REQUIRED parameter was not refused (the low bound must stop at `required`, not at zero)"; printf '%s\n' "$$out"; exit 1; }
+	 printf '%s\n' "$$out" | grep -q 'P.mark(): forwarded call got 0 arguments, expected 1 to 2' \
+	  || { echo "star-unpack arity: FAIL - an EMPTY list into a method with one REQUIRED parameter was not refused (the low bound must stop at `required`, not at zero), or the message does not NAME the callee"; printf '%s\n' "$$out"; exit 1; }
+	# ...and the NAME is half of each row above, because the message used to carry
+	# none: `forwarded call got 5 arguments, expected 0 to 4` out of lekkerzeilen's
+	# 11711 procedures named the mechanism and nothing else. The method row asserts
+	# the QUALIFIED spelling (`P.mark`), which is the half a bare function cannot
+	# show and which is what makes the name useful in an app with several `mark`s.
+	# FIVE TO EIGHT arguments through a callable VALUE, which the dispatch ladder
+	# refused outright: `fn(*xs)` on a five-parameter def died at run time with
+	# `forwarded call got 5 arguments, expected 0 to 4`, and that is how the
+	# lekkerzeilen demo died after it started running (lines.py:782,
+	# `_quad(out, *quad)`, four sites in one module). FOUR carrier families answer a
+	# wide call and each has its own function-pointer type, so each needs its own
+	# row or three of the four stay unexercised -- a plain function, a `-> None`
+	# function (a real Pascal procedure: casting one through the function types
+	# reads a garbage hidden-result pointer and the epilogue writes 16 bytes
+	# through it), a bound method, a `-> None` method. Also: a written argument
+	# BESIDE a star, which a star-only fixture never reaches, and defaults filled at
+	# a wide arity (the fill was gated on `want <= 4`, so a wide call skipped it and
+	# the body read whatever was in the slot). .expected is CPython's own output.
+	./$(COMPILER) test/test_nilpy_wide_call_through_a_callable_value.npy $(TESTTMP)/test_nilpy_widecall26
+	$(TESTTMP)/test_nilpy_widecall26 | diff -u test/test_nilpy_wide_call_through_a_callable_value.expected -
+	# ...and the CEILING refuses rather than truncating, and NAMES the callee. A
+	# nameless `forwarded call got N arguments` out of a binary with 11711
+	# procedures says which mechanism failed and nothing else; locating the demo's
+	# own call took an AST census over 34 modules. The callee here is reached as a
+	# VALUE, so it has no Procs[] entry to name and the name comes from the source
+	# spelling (PyDynCalleeName) -- the variable for `fn(*xs)`, the attribute for
+	# `h.cb(*xs)`.
+	printf 'def nine(a, b, c, d, e, f, g, h, i):\n    return a\nfn = nine\nprint(fn(*[1, 2, 3, 4, 5, 6, 7, 8, 9]))\n' > $(TESTTMP)/nilpy_widecall_over.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_widecall_over.npy $(TESTTMP)/nilpy_widecall_over26 2>&1 && $(TESTTMP)/nilpy_widecall_over26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'fn(): forwarded call got 9 arguments, expected 0 to 8' \
+	  || { echo "wide call through a value: FAIL - nine arguments past the eight-deep ladder was not refused, or the message does not NAME the callee and the ceiling"; printf '%s\n' "$$out"; exit 1; }
+	printf 'class H:\n    def __init__(self):\n        self.cb = None\ndef nine(a, b, c, d, e, f, g, h, i):\n    return a\nh = H()\nh.cb = nine\nprint(h.cb(*[1, 2, 3, 4, 5, 6, 7, 8, 9]))\n' > $(TESTTMP)/nilpy_widecall_attr.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_widecall_attr.npy $(TESTTMP)/nilpy_widecall_attr26 2>&1 && $(TESTTMP)/nilpy_widecall_attr26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'cb(): forwarded call got 9 arguments, expected 0 to 8' \
+	  || { echo "wide call through a callable ATTRIBUTE: FAIL - not refused past the ceiling, or the message does not NAME the attribute"; printf '%s\n' "$$out"; exit 1; }
 	# `self.__class__(...)` -- construct another one of the receiver's OWN type.
 	# Was a COMPILE error while `self.__class__.__name__` beside it read fine.
 	# Every `B` row is load-bearing: in a BASE method the class object must be

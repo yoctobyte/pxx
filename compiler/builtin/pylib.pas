@@ -1914,7 +1914,7 @@ function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
   function value fills are the same ones `key=` fills; it exists so pyeval does
   not need its own copy of the record layout or the fill rule. }
 function pybound_pair_call(pair: Pointer; nargs: Integer;
-                           const a0, a1, a2, a3: Variant): Variant;
+                           const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 { ...and the same call carrying KEYWORD arguments, as two parallel lists of
   names and values. They are matched against the callee's own parameter names
   out of the signature record, which is the only thing that can turn
@@ -1922,7 +1922,7 @@ function pybound_pair_call(pair: Pointer; nargs: Integer;
   nothing else. nil/nil is the positional call above.
   bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
 function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
@@ -1961,6 +1961,14 @@ function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ FIVE to EIGHT arguments through a {code, recv} PAIR -- which is what a plain
+  `def` bound to a name becomes, so this is the road an ordinary
+  `from .mod import f` then `f(*five_things)` travels.
+  bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+function pybound_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+function pybound_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+function pybound_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+function pybound_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -2234,11 +2242,11 @@ function pydict_v(const v: Variant): TPyDict;
   at compile time: that the count is one the callee accepts, and that no keyword
   arguments were forwarded — binding those by name would need a runtime call
   protocol, so it FAILS rather than dropping them silently. }
-procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer; const nm: AnsiString);
 function pystar_argc(l: TPyList; d: TPyDict): Integer;
 function pystar_has(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Boolean;
 function pystar_arg_kw(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Variant;
-procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer; const nm: AnsiString);
 procedure pystar_no_kwargs(d: TPyDict);
 { One forwarded argument, or None when the caller passed fewer. The dispatch
   evaluates every slot up to the callee's widest arity before choosing an arm,
@@ -15376,11 +15384,25 @@ type
   TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
   TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
   TPyCbM4 = function(recv: Pointer; const a0, a1, a2, a3: Variant): Variant;
+  { FIVE to EIGHT. A callable VALUE is called through its code address and an
+    indirect call needs a STATIC arity -- there is no variadic call here -- so the
+    ladder is structural and only its CEILING is a choice. Eight covers the widest
+    star-unpack in the lekkerzeilen corpus (`Grid(*row[1:])`, seven) with room
+    over; past it the refusal names the callee and the ceiling.
+    bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+  TPyCbM5 = function(recv: Pointer; const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCbM6 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCbM7 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCbM8 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   TPyCbF0 = function: Variant;
   TPyCbF1 = function(const a0: Variant): Variant;
   TPyCbF2 = function(const a0, a1: Variant): Variant;
   TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
   TPyCbF4 = function(const a0, a1, a2, a3: Variant): Variant;
+  TPyCbF5 = function(const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCbF6 = function(const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCbF7 = function(const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCbF8 = function(const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   { PROCEDURE-shaped siblings of the above: an explicit `-> None` def compiles
     as a genuine Pascal procedure (Procs[pi].IsFunc = False), which never sets
     up the Variant-hidden-destination-pointer convention TPyCbM*/TPyCbF*
@@ -15394,11 +15416,19 @@ type
   TPyCbMP2 = procedure(recv: Pointer; const a0, a1: Variant);
   TPyCbMP3 = procedure(recv: Pointer; const a0, a1, a2: Variant);
   TPyCbMP4 = procedure(recv: Pointer; const a0, a1, a2, a3: Variant);
+  TPyCbMP5 = procedure(recv: Pointer; const a0, a1, a2, a3, a4: Variant);
+  TPyCbMP6 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5: Variant);
+  TPyCbMP7 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6: Variant);
+  TPyCbMP8 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6, a7: Variant);
   TPyCbFP0 = procedure;
   TPyCbFP1 = procedure(const a0: Variant);
   TPyCbFP2 = procedure(const a0, a1: Variant);
   TPyCbFP3 = procedure(const a0, a1, a2: Variant);
   TPyCbFP4 = procedure(const a0, a1, a2, a3: Variant);
+  TPyCbFP5 = procedure(const a0, a1, a2, a3, a4: Variant);
+  TPyCbFP6 = procedure(const a0, a1, a2, a3, a4, a5: Variant);
+  TPyCbFP7 = procedure(const a0, a1, a2, a3, a4, a5, a6: Variant);
+  TPyCbFP8 = procedure(const a0, a1, a2, a3, a4, a5, a6, a7: Variant);
   { A callee that COLLECTS. `def h(a, *rest)` compiles to one Variant parameter
     and ONE TPyList — the surplus arguments are packed by the CALL SITE
     (PyPackStarArgs), which a dynamic call through a function value has no
@@ -15577,12 +15607,12 @@ end;
   uses NilPy's function-object ABI (variant params, variant result — see
   PyDefUsedAsValue), which is exactly what these signatures declare. }
 function PyBoundCallV(const cb: Variant; nargs: Integer;
-                     const a0, a1, a2, a3: Variant): Variant;
+                     const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   Result := pybound_pair_call(Pointer(NativeInt(PPyVarRec(@cb)^.Payload)),
-                              nargs, a0, a1, a2, a3);
+                              nargs, a0, a1, a2, a3, a4, a5, a6, a7);
 end;
 
 function PySigNameEq(np: Pointer; const nm: AnsiString): Boolean;
@@ -15619,7 +15649,7 @@ begin
 end;
 
 function pybound_pair_call(pair: Pointer; nargs: Integer;
-                           const a0, a1, a2, a3: Variant): Variant;
+                           const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 var noNames, noVals: TPyList;
 begin
   { typed nils: an untyped `nil` cannot pick between the class-typed
@@ -15627,11 +15657,11 @@ begin
   noNames := nil;
   noVals := nil;
   pybound_pair_call := pybound_pair_call_kw(pair, nargs, a0, a1, a2, a3,
-                                            noNames, noVals);
+                                            a4, a5, a6, a7, noNames, noVals);
 end;
 
 function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 { The ONE dynamic-call bridge behind pybound_callv0..4.
 
@@ -15645,14 +15675,19 @@ function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
   arity the body was compiled for.
 
   Sig nil = producer could not supply one; behave exactly as before. }
+const MAXSLOT = 7;   { av[0..MAXSLOT]; the widest rung is MAXSLOT + 1 }
 var code, recv, sg, dp: Pointer; isFn: Boolean;
-    av: array[0..3] of Variant; i, want, totN, reqN: Integer;
-    bound: array[0..3] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
+    av: array[0..MAXSLOT] of Variant; i, want, totN, reqN: Integer;
+    bound: array[0..MAXSLOT] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
     sr: PPySigRec; b: PPyBoundRec;
     m0: TPyCbM0; m1: TPyCbM1; m2: TPyCbM2; m3: TPyCbM3; m4: TPyCbM4;
+    m5: TPyCbM5; m6: TPyCbM6; m7: TPyCbM7; m8: TPyCbM8;
     f0: TPyCbF0; f1: TPyCbF1; f2: TPyCbF2; f3: TPyCbF3; f4: TPyCbF4;
+    f5: TPyCbF5; f6: TPyCbF6; f7: TPyCbF7; f8: TPyCbF8;
     mp0: TPyCbMP0; mp1: TPyCbMP1; mp2: TPyCbMP2; mp3: TPyCbMP3; mp4: TPyCbMP4;
+    mp5: TPyCbMP5; mp6: TPyCbMP6; mp7: TPyCbMP7; mp8: TPyCbMP8;
     fp0: TPyCbFP0; fp1: TPyCbFP1; fp2: TPyCbFP2; fp3: TPyCbFP3; fp4: TPyCbFP4;
+    fp5: TPyCbFP5; fp6: TPyCbFP6; fp7: TPyCbFP7; fp8: TPyCbFP8;
 begin
   Result := pynone;
   if pair = nil then Exit;
@@ -15662,8 +15697,9 @@ begin
   recv := b^.Recv;
   isFn := b^.IsFunc;
   av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
-  for i := nPos to 3 do av[i] := pynone;
-  for i := 0 to 3 do bound[i] := i < nPos;
+  av[4] := a4; av[5] := a5; av[6] := a6; av[7] := a7;
+  for i := nPos to MAXSLOT do av[i] := pynone;
+  for i := 0 to MAXSLOT do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
   want := nPos;
@@ -15685,7 +15721,7 @@ begin
       default, which is the whole reason a caller writes one. }
     if nkw > 0 then
     begin
-      if (sr^.Names = nil) or (totN > 4) then
+      if (sr^.Names = nil) or (totN > MAXSLOT + 1) then
         raise TypeError.Create('this callable value carries no parameter names, '
                 + 'so a keyword argument cannot be matched to a parameter');
       for j := 0 to nkw - 1 do
@@ -15712,13 +15748,13 @@ begin
         actually still unbound rather than trusting the positional count }
       hit := 0;
       for i := 0 to reqN - 1 do
-        if (i > 3) or (not bound[i]) then Inc(hit);
+        if (i > MAXSLOT) or (not bound[i]) then Inc(hit);
       if hit > 0 then
         raise TypeError.Create('missing ' + pystr_of(Int64(hit))
                 + ' required positional argument(s)');
     end;
-    if (totN > want) and (totN <= 4) then want := totN;
-    if (want > nPos) and (sr^.Dflts <> nil) and (want <= 4) then
+    if (totN > want) and (totN <= MAXSLOT + 1) then want := totN;
+    if (want > nPos) and (sr^.Dflts <> nil) and (want <= MAXSLOT + 1) then
     begin
       dp := sr^.Dflts;
       for i := nPos to want - 1 do
@@ -15758,6 +15794,14 @@ begin
     default never adds to the surplus. }
   if b^.StarIdx >= 0 then
   begin
+    { PyBoundCallStar's own bridge carries FOUR fixed slots. Until this body was
+      widened the guard in front of it could not deliver a fifth, so the
+      truncation was unreachable; it is reachable now and refuses by name rather
+      than dropping the surplus -- which, in a COLLECTING callee, would land in
+      neither a parameter nor the tuple. }
+    if nPos > 4 then
+      raise TypeError.Create('a collecting callee reached as a value takes at '
+        + 'most 4 written arguments, got ' + pystr_of(Int64(nPos)));
     Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
                               av[0], av[1], av[2], av[3]);
     Exit;
@@ -15770,7 +15814,11 @@ begin
         1: begin f1 := TPyCbF1(code); Result := f1(av[0]); end;
         2: begin f2 := TPyCbF2(code); Result := f2(av[0], av[1]); end;
         3: begin f3 := TPyCbF3(code); Result := f3(av[0], av[1], av[2]); end;
-      else  begin f4 := TPyCbF4(code); Result := f4(av[0], av[1], av[2], av[3]); end;
+        4: begin f4 := TPyCbF4(code); Result := f4(av[0], av[1], av[2], av[3]); end;
+        5: begin f5 := TPyCbF5(code); Result := f5(av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin f6 := TPyCbF6(code); Result := f6(av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin f7 := TPyCbF7(code); Result := f7(av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin f8 := TPyCbF8(code); Result := f8(av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end
     else
       case want of
@@ -15778,7 +15826,11 @@ begin
         1: begin fp1 := TPyCbFP1(code); fp1(av[0]); end;
         2: begin fp2 := TPyCbFP2(code); fp2(av[0], av[1]); end;
         3: begin fp3 := TPyCbFP3(code); fp3(av[0], av[1], av[2]); end;
-      else  begin fp4 := TPyCbFP4(code); fp4(av[0], av[1], av[2], av[3]); end;
+        4: begin fp4 := TPyCbFP4(code); fp4(av[0], av[1], av[2], av[3]); end;
+        5: begin fp5 := TPyCbFP5(code); fp5(av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin fp6 := TPyCbFP6(code); fp6(av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin fp7 := TPyCbFP7(code); fp7(av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin fp8 := TPyCbFP8(code); fp8(av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end;
   end
   else
@@ -15789,7 +15841,11 @@ begin
         1: begin m1 := TPyCbM1(code); Result := m1(recv, av[0]); end;
         2: begin m2 := TPyCbM2(code); Result := m2(recv, av[0], av[1]); end;
         3: begin m3 := TPyCbM3(code); Result := m3(recv, av[0], av[1], av[2]); end;
-      else  begin m4 := TPyCbM4(code); Result := m4(recv, av[0], av[1], av[2], av[3]); end;
+        4: begin m4 := TPyCbM4(code); Result := m4(recv, av[0], av[1], av[2], av[3]); end;
+        5: begin m5 := TPyCbM5(code); Result := m5(recv, av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin m6 := TPyCbM6(code); Result := m6(recv, av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin m7 := TPyCbM7(code); Result := m7(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin m8 := TPyCbM8(code); Result := m8(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end
     else
       case want of
@@ -15797,7 +15853,11 @@ begin
         1: begin mp1 := TPyCbMP1(code); mp1(recv, av[0]); end;
         2: begin mp2 := TPyCbMP2(code); mp2(recv, av[0], av[1]); end;
         3: begin mp3 := TPyCbMP3(code); mp3(recv, av[0], av[1], av[2]); end;
-      else  begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
+        4: begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
+        5: begin mp5 := TPyCbMP5(code); mp5(recv, av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin mp6 := TPyCbMP6(code); mp6(recv, av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin mp7 := TPyCbMP7(code); mp7(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin mp8 := TPyCbMP8(code); mp8(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end;
   end;
 end;
@@ -15807,12 +15867,13 @@ end;
   value travels, and a body that reassigns the attribute it came from frees it
   exactly the same way. Same shape, same reason, one site per road. }
 function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 begin
   PXXObjRetain(pair);
   try
-    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, kwNames, kwVals);
+    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, a4, a5, a6, a7,
+                                    kwNames, kwVals);
   finally
     PXXObjRelease(pair);
   end;
@@ -15820,22 +15881,22 @@ end;
 
 function pybound_callv0(const cb: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 0, pynone, pynone, pynone, pynone);
+  Result := PyBoundCallV(cb, 0, pynone, pynone, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 1, a0, pynone, pynone, pynone);
+  Result := PyBoundCallV(cb, 1, a0, pynone, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 2, a0, a1, pynone, pynone);
+  Result := PyBoundCallV(cb, 2, a0, a1, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 3, a0, a1, a2, pynone);
+  Result := PyBoundCallV(cb, 3, a0, a1, a2, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
@@ -15845,7 +15906,27 @@ function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Varia
   dispatcher had to exist at all.
   bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
 begin
-  Result := PyBoundCallV(cb, 4, a0, a1, a2, a3);
+  Result := PyBoundCallV(cb, 4, a0, a1, a2, a3, pynone, pynone, pynone, pynone);
+end;
+
+function pybound_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 5, a0, a1, a2, a3, a4, pynone, pynone, pynone);
+end;
+
+function pybound_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 6, a0, a1, a2, a3, a4, a5, pynone, pynone);
+end;
+
+function pybound_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 7, a0, a1, a2, a3, a4, a5, a6, pynone);
+end;
+
+function pybound_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 8, a0, a1, a2, a3, a4, a5, a6, a7);
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
@@ -17681,14 +17762,28 @@ begin
 end;
 
 { list(v) on a variant: a str yields its characters, a list a shallow copy. }
-procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+{ The callee's name as a prefix, or nothing when there is none to give.
+  `forwarded call got 5 arguments, expected 0 to 4` named no callee at all, and
+  the lekkerzeilen demo printed exactly that from a binary of 11711 procedures:
+  the message identified the MECHANISM and nothing else, so finding the call meant
+  enumerating every def in the app whose parameters are all defaulted. The name
+  goes in FRONT of the existing sentence rather than inside it, so the wording
+  that tickets, fixtures and two Makefile assertions already quote is untouched.
+  Empty is legitimate: the run-time dynamic arm forwards into an arbitrary
+  expression and has no static name. }
+function pystar_whose(const nm: AnsiString): AnsiString;
+begin
+  if nm = '' then Result := '' else Result := nm + '(): ';
+end;
+
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer; const nm: AnsiString);
 var n: Integer;
 begin
   n := 0;
   if l <> nil then n := l.count;
   if (n < lo) or (n > hi) then
   begin
-    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+    raise TypeError.Create(pystar_whose(nm) + 'forwarded call got ' + pystr_of(Int64(n)) +
                            ' arguments, expected ' + pystr_of(Int64(lo)) +
                            ' to ' + pystr_of(Int64(hi)));
   end;
@@ -17750,12 +17845,12 @@ begin
   Result := pynone;
 end;
 
-procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer; const nm: AnsiString);
 var n: Integer;
 begin
   n := pystar_argc(l, d);
   if (n < lo) or (n > hi) then
-    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+    raise TypeError.Create(pystar_whose(nm) + 'forwarded call got ' + pystr_of(Int64(n)) +
                            ' arguments, expected ' + pystr_of(Int64(lo)) +
                            ' to ' + pystr_of(Int64(hi)));
 end;

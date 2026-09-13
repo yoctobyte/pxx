@@ -1,0 +1,120 @@
+# FIVE TO EIGHT ARGUMENTS through a callable VALUE. The dispatch ladder stopped
+# at four (pyvar_callv0..4), and the arity guard in front of it refused the rest
+# at run time: `forwarded call got 5 arguments, expected 0 to 4`. Every row here
+# is something CPython accepts.
+#
+# Found by attempting lekkerzeilen, lines.py:782 and three more sites in the same
+# module:
+#
+#     from .geometry import _quad        # a DOTTED from-import binds a VALUE
+#     _quad(out, *(quad if side > 0.0 else tuple(reversed(quad))))
+#
+# one written argument and a four-tuple, into `_quad(out, a, b, c, d)`.
+#
+# FOUR carrier families answer a wide call and each has its own function-pointer
+# type, so each needs its own row or three of the four stay unexercised: a plain
+# function (TPyCbF*), a `-> None` function (TPyCbFP*, a real Pascal procedure --
+# casting one through the function types reads a garbage hidden-result pointer
+# and the callee's epilogue writes 16 bytes through it), a bound METHOD
+# (TPyCbM*), and a `-> None` method (TPyCbMP*). The interpreted closure is the
+# fifth road and has no arity limit at all, because its arguments already travel
+# as a list.
+#
+# The ceiling is EIGHT and is structural, not a preference: a callable value is
+# called through its code address and an indirect call needs a static arity, so
+# the arms have to be enumerated. The refusal past the ceiling is a row too, and
+# it must NAME the callee -- a nameless `forwarded call got 5 arguments` out of a
+# binary with 11711 procedures says which mechanism failed and nothing else.
+
+
+def five(a, b, c, d, e):
+    return "five:%s" % ((a, b, c, d, e),)
+
+
+def eight(a, b, c, d, e, f, g, h):
+    return "eight:%s" % ((a, b, c, d, e, f, g, h),)
+
+
+def dflt(a, b, c, d, e, f=60, g=70):
+    return "dflt:%s" % ((a, b, c, d, e, f, g),)
+
+
+out = []
+
+
+def void5(a, b, c, d, e):
+    out.append(("void5", a, b, c, d, e))
+
+
+class Holder:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def m5(self, a, b, c, d, e):
+        return "m5:%s:%s" % (self.tag, (a, b, c, d, e))
+
+    def m8(self, a, b, c, d, e, f, g, h):
+        return "m8:%s:%s" % (self.tag, (a, b, c, d, e, f, g, h))
+
+    def vm5(self, a, b, c, d, e):
+        out.append(("vm5", self.tag, a, b, c, d, e))
+
+
+# ---- a plain function reached as a VALUE -------------------------------------
+# The star operand is deliberately SHORTER than the call: one written argument
+# plus a four-element star is the demo's own shape, and a written argument beside
+# a star is the arrangement that a star-only fixture never reaches.
+fn = five
+xs = [2, 3, 4, 5]
+print(fn(1, *xs))
+print(fn(*[1, 2, 3, 4, 5]))
+
+fn8 = eight
+print(fn8(*[1, 2, 3, 4, 5, 6, 7, 8]))
+print(fn8(1, 2, *[3, 4, 5, 6], 7, 8))
+
+# ...and WRITTEN arguments past four through a value, which took a different
+# lowering (an indirect call through the payload as a code address) and now goes
+# to the same dispatcher.
+print(fn(9, 8, 7, 6, 5))
+print(fn8(1, 2, 3, 4, 5, 6, 7, 8))
+
+# ---- DEFAULTS filled at a wide arity ----------------------------------------
+# The signature record supplies f and g. The default fill used to be gated on
+# `want <= 4`, so a wide call skipped it and the body read whatever was in the
+# slot.
+fd = dflt
+print(fd(*[1, 2, 3, 4, 5]))
+print(fd(1, *[2, 3, 4, 5], 6))
+
+# ---- a `-> None` function: a real Pascal procedure --------------------------
+fv = void5
+fv(*[1, 2, 3, 4, 5])
+fv(1, 2, *[3, 4, 5])
+
+# ---- a bound METHOD reached as a value --------------------------------------
+h = Holder("H")
+mm = h.m5
+print(mm(*[1, 2, 3, 4, 5]))
+print(mm(1, *[2, 3, 4, 5]))
+mm8 = h.m8
+print(mm8(*[1, 2, 3, 4, 5, 6, 7, 8]))
+
+vm = h.vm5
+vm(*[1, 2, 3, 4, 5])
+
+# ---- a lambda: the interpreted-closure road, which never had a cap ----------
+lam = lambda a, b, c, d, e: "lam:%s" % ((a, b, c, d, e),)
+print(lam(*[1, 2, 3, 4, 5]))
+
+# ---- an attribute holding a callable ----------------------------------------
+class Slot:
+    def __init__(self):
+        self.cb = None
+
+
+s = Slot()
+s.cb = five
+print(s.cb(*[1, 2, 3, 4, 5]))
+
+print(out)
