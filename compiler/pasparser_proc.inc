@@ -1074,6 +1074,18 @@ begin
     hdrStartSOff := Tokens[TokPos - 1].SOffset
   else
     hdrStartSOff := 0;
+  { `{$PYSTAR}` on the line above this header. Matched on the TOKEN INDEX the
+    directive recorded, which is exactly TokPos - 1 here — the same "captured at
+    entry, at the procedure/function keyword itself" convention hdrStartSOff
+    uses, and the reason the marker needs no proximity or line heuristic.
+    Consumed by the RegisterProc this header is about to perform. }
+  PasHdrPyStar := False;
+  for pzi := 0 to PasPyStarCount - 1 do
+    if PasPyStarTok[pzi] = TokPos - 1 then
+    begin
+      PasHdrPyStar := True;
+      Break;
+    end;
   isClassKeyword := False;
   isAsmFunc := False;
   isGenerator := False;

@@ -13609,7 +13609,7 @@ begin
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
   SetLength(ProcRetDynDepth, n);
   SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
-  SetLength(PyDefTokOf, n);  SetLength(ProcPyStarIdx, n);  SetLength(ProcPyKwIdx, n);
+  SetLength(PyDefTokOf, n);  SetLength(ProcPyStarIdx, n);  SetLength(ProcPyStarPascal, n);  SetLength(ProcPyKwIdx, n);
   SetLength(ProcSigOff, n);  SetLength(ProcSigDfltOff, n);  SetLength(ObjProcStrOff, n);
   SetLength(ObjProcSymIdx, n);  SetLength(ObjProcIramOff, n);
   SetLength(InlineLocalTk, n*MAX_INLINE_LOCALS);
@@ -13701,6 +13701,10 @@ begin
   ProcFrameSensitive[ProcCount] := False;
   InlineLocalCnt[ProcCount]    := 0;
   ProcPyStarIdx[ProcCount]     := -1;
+  { the `{$PYSTAR}` marker, consumed here: ParamCount is still 0, so only the
+    FACT is recorded and PyPascalStarIdx resolves the index }
+  ProcPyStarPascal[ProcCount]  := PasHdrPyStar;
+  PasHdrPyStar                 := False;
   ProcPyKwIdx[ProcCount]       := -1;
   for i := 0 to MAX_PROC_PARAMS - 1 do
   begin

@@ -445,6 +445,11 @@ const
   MAX_C_CMD_INCLUDES = 32;      { C `-include <file>` forced includes }
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
+  { How many `{$PYSTAR}` markers one compilation may carry. Sized for the RTL
+    shims that present a Python `*args` surface, with the overflow reported
+    rather than dropped -- a dropped marker compiles to the OLD lowering, which
+    is a wrong-arity run-time failure and not a message. }
+  MAX_PAS_PYSTAR = 64;
   MAX_INC_DEPTH = 32;
   { Consecutive pause-loop iterations with the lock HELD before the --threadsafe
     heap lock calls itself deadlocked (EmitHeapLockSlowStub, ir_codegen.inc).
@@ -4059,6 +4064,18 @@ var
   PasCondTaken     : array[0..MAX_PAS_CONDS-1] of Boolean;
   PasCondCount     : Integer;
   PasCommandOption : AnsiString;
+  { `{$PYSTAR}` — the token indices it marked. The directive says "the
+    declaration that STARTS at the next token takes Python `*args` in its last
+    parameter", and it is recorded as a token INDEX because directives are
+    processed while lexing and consumed when that declaration is parsed. A
+    marked declaration's first token is the one TokCount was about to reach, so
+    the match at parse time is exact rather than a line or a proximity guess.
+
+    A short list and not a per-token flag: the population is the handful of RTL
+    shims that present a Python `*args` surface, and a Boolean per token would
+    cost a megabyte of the build to answer False. }
+  PasPyStarTok     : array[0..MAX_PAS_PYSTAR-1] of Integer;
+  PasPyStarCount   : Integer;
 
   Code    : array of Byte;
   CodeLen : Integer;
@@ -5094,6 +5111,18 @@ var
     one TPyList and one TPyDict parameter — and these say which, so each CALL
     site can pack its surplus positional arguments into the list and its
     unmatched keyword arguments into the dict (PyPackStarArgs). }
+  { A PASCAL declaration marked `{$PYSTAR}` — its LAST parameter is the Python
+    `*args` collector. Separate from ProcPyStarIdx because the two are written at
+    different times: RegisterProc knows the marker (PasHdrPyStar, captured at the
+    header's first token) and does NOT yet know ParamCount, so the INDEX is
+    resolved later, once, by PyPascalStarIdx. Every existing reader tests
+    `ProcPyStarIdx >= 0` and must keep working, which is why this does not become
+    a second thing to test — it is a pending write, not a parallel channel. }
+  ProcPyStarPascal : array of Boolean;
+  { Set at each ParseSubroutine entry from the `{$PYSTAR}` marker list and
+    consumed by the RegisterProc that follows. A one-shot: every entry
+    overwrites it, so a marker cannot travel to the next declaration. }
+  PasHdrPyStar : Boolean;
   ProcPyStarIdx : array of Integer;
   ProcPyKwIdx   : array of Integer;
   { Data[] offset of proc pi's SIGNATURE record (PYSIG_SIZE bytes), -1 = none.

@@ -111,10 +111,30 @@ function pack(const fmt: AnsiString;
 function pack(const fmt: AnsiString;
               const a1, a2, a3, a4, a5, a6, a7: Variant): TPyBytes; overload;
 { ...and the list form, which is what every overload above funnels into. Public
-  because a NilPy program with a run-time-sized argument list has no other way
-  in — `struct.pack(fmt, *vals)` does not parse, and this is the honest
-  substitute rather than a private helper. }
+  because a NilPy program with a run-time-sized argument list can also reach it
+  directly, and because `pack` below delegates to it. }
 function pack_list(const fmt: AnsiString; args: TPyList): TPyBytes;
+
+{ THE *args ARM, and the reason the ladder above is no longer the whole story.
+  `{$PYSTAR}` says: the LAST parameter of the declaration that follows is the
+  Python `*args` collector, so `pack(fmt, *values)` packs the starred run into
+  it — one call, any length — instead of dispatching on len(values) against one
+  rung of the ladder.
+
+  THE LADDER CANNOT DO THIS AT ANY WIDTH, which is why the marker exists rather
+  than an eighth overload. lekkerzeilen's gfx.py does
+  `struct.pack("<%df" % len(values), *values)` over a whole VERTEX BUFFER, so
+  the count is unbounded and a `got 3000 arguments, expected 2 to 2` is the same
+  failure however far the rungs go.
+
+  The ladder STAYS and keeps its callers: the promotion to this overload is
+  gated on a star element being present, so `pack(fmt, 1.0, 2.0)` resolves
+  exactly as before. It also stays because the PINNED compiler ignores
+  `{$PYSTAR}` (with a warning) and knows nothing about the promotion — under the
+  pin this is just another overload nobody calls, and the ladder is still what
+  serves every written-out call. }
+{$PYSTAR}
+function pack(const fmt: AnsiString; args: TPyList): TPyBytes; overload;
 
 { unpack(fmt, buf) -> tuple. A TPyList tagged PYSEQ_TUPLE: list, tuple and set
   are one class here and the Python type is a runtime tag, so this really is a
@@ -359,6 +379,13 @@ begin
     raise error.Create('pack expected ' + IntToStr(ai) + ' argument(s), got '
                        + IntToStr(len(args)));
   pack_list := res;
+end;
+
+{ The `*args` arm — see the `{$PYSTAR}` note in the interface. A straight
+  delegation: the collector IS the argument list pack_list already takes. }
+function pack(const fmt: AnsiString; args: TPyList): TPyBytes;
+begin
+  pack := pack_list(fmt, args);
 end;
 
 function pack(const fmt: AnsiString; const a1: Variant): TPyBytes;

@@ -127,3 +127,51 @@ try:
     print("no error")
 except struct.error:
     print("bad format refused at construction")
+
+# ---- A STAR-UNPACK INTO pack, WHICH IS gfx.py's SHAPE VERBATIM --------------
+# `struct.pack("<%df" % len(values), *values)` over a whole vertex buffer: the
+# count is a RUN-TIME fact and unbounded, so no arity ladder can serve it. It
+# reaches the `{$PYSTAR}`-marked overload in the shim, which is the *args
+# collector, and the elements are packed into it rather than dispatched on.
+#
+# The rows below are ORDERED-LIST rows on purpose (CLAUDE.md): the interesting
+# element is put LAST, where a first-wins mechanism refuses it. A star followed
+# by a written argument is the arrangement that a compile-time expansion cannot
+# place, and it is the row a suite written the ordinary way would have omitted.
+verts = [1.5, -2.5, 0.5, 4.0]
+print(struct.pack("<%df" % len(verts), *verts))
+print(struct.pack("<%df" % len(verts), *verts) == struct.pack("<4f", 1.5, -2.5, 0.5, 4.0))
+
+# PAST THE LADDER'S SEVEN, which is the whole point: eight is a clean pack here
+# and a "no overload of pack matches" when the arguments are written out.
+eight = [1, 2, 3, 4, 5, 6, 7, 8]
+print(len(struct.pack("<%dI" % len(eight), *eight)))
+print(struct.unpack("<%dI" % len(eight), struct.pack("<%dI" % len(eight), *eight)))
+
+# ...and far past it, at a size a vertex buffer actually reaches. Only the
+# LENGTH is asserted: 3000 floats of repr would say nothing a length does not.
+buf = [float(k) * 0.5 for k in range(3000)]
+print(len(struct.pack("<%df" % len(buf), *buf)))
+
+# A written argument AFTER the star. Its slot is firstSlot + len(starred), a
+# run-time fact, so this is the shape that separates a packing from an
+# arity-driven expansion.
+pair = [1.5, 2.5]
+print(struct.pack("<3f", *pair, 4.5))
+print(struct.pack("<3f", 0.5, *pair))
+
+# EXACTLY ONE starred element, which is the max/min trap in the shim's
+# neighbourhood: `max(*[[4, 9, 2]])` is 9, over that element's CONTENTS, and a
+# collector must NOT read the element that way -- one starred float is one
+# packed float.
+print(struct.pack("<1f", *[7.5]))
+
+# An EMPTY starred operand, where the expected value collides with nothing:
+# b'' is also what a pack that silently did nothing would return, so the row
+# above it (one element, one float) is what makes this one readable.
+print(struct.pack("<0f", *[]))
+
+# A TUPLE and a CALL RESULT as the operand -- the star normalisation, not the
+# collector, but they arrive through it.
+print(struct.pack("<3I", *(1, 2, 3)))
+print(struct.pack("<2I", *list(range(2))))

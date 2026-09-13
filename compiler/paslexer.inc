@@ -887,6 +887,7 @@ begin
   PasDefineCount := 0;
   PasClaimList := '';
   PasCondCount := 0;
+  PasPyStarCount := 0;
   StrictOverload := False;
   StrictOverloadWidth := False;
   StrictOperator := False;
@@ -3666,6 +3667,50 @@ begin
         Marked per unit, not globally: CurrentUnitIdx is already this unit's
         string index while its LexAppend runs. }
       if CaseEqual(name, 'pxx') then MarkUnitPxxDialect(CurrentUnitIdx);
+    end
+    else if CaseEqual(command, 'pystar') then
+    begin
+      { `{$PYSTAR}` — the declaration that STARTS at the next token presents a
+        Python `*args` surface: its LAST parameter is the collector, and a
+        starred or surplus positional run is packed into it exactly as for a
+        NilPy `def f(a, *rest)`.
+
+        WHY A DECLARATION NEEDS TO SAY THIS AT ALL. `pack(fmt, *values)` is a
+        run-time-sized argument list, and until now the only callee that could
+        receive one was a Python `def`: ProcPyStarIdx was written from a def
+        header and nowhere else, so a Pascal shim emulating a Python function
+        had to spell an ARITY LADDER instead (mimic_struct.pas's seven `pack`
+        overloads, whose own header says "Pascal has no *args and NilPy does not
+        synthesise one"). A star-forward then dispatched on len(args) against
+        ONE arm of that ladder and refused anything wider -- and no ladder can
+        be wide enough, because lekkerzeilen packs whole vertex buffers.
+
+        WHY THE PARAMETER'S TYPE CANNOT SAY IT INSTEAD, which was the cheaper
+        design and is wrong. A `TPyList` parameter has two meanings that differ
+        in what a star means: the COLLECTOR (`pack_list(fmt, args)` -- each
+        element is one argument) and an ordinary ITERABLE argument (`max(xs)` --
+        the list IS the argument). pyparser.inc's max/min note records the
+        measurement that separates them: `max(*[[4, 9, 2]])` is 9, over the one
+        element's CONTENTS, so routing a star to a TPyList sibling by type alone
+        is a silent wrong value there. The distinction is intent, so it is
+        declared.
+
+        WHY A `{$...}` DIRECTIVE AND NOT A PROC DIRECTIVE (`...; pystar;`), which
+        reads better. Measured 2026-09-13 against pin v407: an unknown `{$...}`
+        is `warning: unknown compiler directive -- ignored` and the unit still
+        builds, while an unknown PROC directive is a hard `error: unexpected
+        token in a unit interface section`. lib/rtl is built by the PINNED
+        compiler, so a proc directive would break every B/E session until the
+        next pin; this spelling lets the marker land in lib/rtl today, where the
+        pinned compiler ignores it and keeps taking the arity ladder. }
+      if PasPyStarCount >= MAX_PAS_PYSTAR then
+        ErrorAt(SrcLine, 'too many {$PYSTAR} markers in one compilation (limit '
+                + AIntToStr(MAX_PAS_PYSTAR) + ') -- raise MAX_PAS_PYSTAR')
+      else
+      begin
+        PasPyStarTok[PasPyStarCount] := TokCount;
+        Inc(PasPyStarCount);
+      end;
     end
     else if CaseEqual(command, 'mimic') then
     begin

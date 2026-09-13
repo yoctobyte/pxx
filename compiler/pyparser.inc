@@ -16797,6 +16797,89 @@ begin
   end;
 end;
 
+{ A `{$PYSTAR}`-marked PASCAL declaration's collector slot, resolved ONCE and
+  written through to ProcPyStarIdx so every existing reader sees it.
+
+  Two-step because the marker and the arity are known at different times:
+  RegisterProc holds the marker (PasHdrPyStar) and ParamCount is still 0 there,
+  so only the FACT is recorded and the INDEX is resolved the first time a call
+  asks. By then the unit is fully parsed, so ParamCount is final.
+
+  The collector is REQUIRED to be a TPyList because that is what the packing
+  hands it — PyPackStarArgs builds a TPyList temp and binds it to this slot — so
+  a marker on any other parameter would compile to a class slot receiving a list
+  it is not, which is a segfault far from the declaration. Loud here instead:
+  the marker is deliberate, so a wrong one is an authoring error and not a
+  program shape to tolerate. }
+function PyPascalStarIdx(pi: Integer): Integer;
+var last, listCi: Integer;
+begin
+  Result := -1;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcPyStarIdx[pi] >= 0 then
+  begin
+    Result := ProcPyStarIdx[pi];
+    Exit;
+  end;
+  if not ProcPyStarPascal[pi] then Exit;
+  last := Procs[pi].ParamCount - 1;
+  if last < 0 then
+    Error('{$PYSTAR}: ' + Procs[pi].Name + ' has no parameter for the *args '
+        + 'collector — the marked declaration needs a trailing TPyList');
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  if (Procs[pi].Params[last].TypeKind <> tyClass) or
+     (ProcParamRecId[pi * MAX_PROC_PARAMS + last] <> REC_UCLASS_BASE + listCi) then
+    Error('{$PYSTAR}: the LAST parameter of ' + Procs[pi].Name + ' must be a '
+        + 'TPyList — that is what a packed *args run is, and any other type '
+        + 'would receive a list it is not');
+  ProcPyStarIdx[pi] := last;
+  Result := last;
+end;
+
+{ `struct.pack(fmt, *values)` — a star element in the argument list, and a
+  sibling overload that DECLARES the `*args` collector. Promote to it.
+
+  The exact twin of PyPromoteProcOverloadByKwAt above, one door along:
+  FindProc/FindProcInUnit hands back whichever overload was declared FIRST, and
+  for a shim that emulates *args with an arity ladder that is the NARROWEST arm.
+  `struct.pack("<%df" % len(v), *v)` then reached the run-time forwarder against
+  a two-parameter `pack` and raised `forwarded call got 3000 arguments, expected
+  2 to 2` — a first-wins table exposed by the arrangement that puts the correct
+  entry last (CLAUDE.md), and no ladder can be the correct entry anyway:
+  lekkerzeilen packs whole vertex buffers, so the count is unbounded.
+
+  SAME UNIT ONLY, deliberately narrower than the keyword promotion. That one
+  widened to any unit for a measured reason (a builtin split across pylib and
+  pyeval); nothing here has been measured to need it, and a `{$PYSTAR}` marker
+  is explicit enough that the intended collector is declared beside its ladder.
+
+  Strictly additive: a call with no star element is untouched, and a PLAIN
+  `pack(fmt, 1.0, 2.0)` still takes the ladder, because the promotion is gated
+  on the star. So nothing that compiles today changes answer. }
+function PyPromoteProcOverloadByStar(procIdx: Integer): Integer;
+var cand, unitIdx, found: Integer;
+begin
+  Result := procIdx;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  { already a collector — a NilPy `def` or an already-resolved marker }
+  if PyPascalStarIdx(procIdx) >= 0 then Exit;
+  if not PyArgListHasStarElem then Exit;
+  unitIdx := ProcUnitIdx[procIdx];
+  found := -1;
+  for cand := 0 to ProcCount - 1 do
+    if (cand <> procIdx) and (ProcUnitIdx[cand] = unitIdx) and
+       ProcPyStarPascal[cand] and
+       CaseEqual(Procs[cand].Name, Procs[procIdx].Name) then
+    begin
+      found := cand;
+      Break;
+    end;
+  if found < 0 then Exit;
+  if PyPascalStarIdx(found) < 0 then Exit;
+  Result := found;
+end;
+
 { `obj.m(*xs)` — a STARRED argument in a method call, expanded into the callee's
   remaining declared parameters. Unlike the free-function forwarding path
   (PyStarForwardCall in pasparser_*.inc, which dispatches on len(args) at run time to
@@ -53815,6 +53898,13 @@ begin
           same unit may be the one that actually declares the keyword used. }
         procIdx := PyPromoteProcOverloadByKwAt(procIdx, 0, PyKwNamesTokPos);
         Expect(tkLParen, '(');
+        { ...and the same re-target for a STAR element — an RTL shim that
+          declares the `*args` collector with `{$PYSTAR}` beside its arity
+          ladder. Must run BEFORE the forwarding branch below, which tests
+          `ProcPyStarIdx[procIdx] < 0`: the promotion is what makes that test
+          answer False and route the star into the packing instead of into a
+          run-time arity dispatch no ladder can satisfy. }
+        procIdx := PyPromoteProcOverloadByStar(procIdx);
         argsHead := -1;
         lastArg := -1;
         nArgs := 0;
