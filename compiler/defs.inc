@@ -5917,6 +5917,21 @@ var
   LoopExceptionDepth  : array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionCodegenDepth: Integer;
   ExceptionFinallyBody : array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  { The caught-exception temps an EXCEPT HANDLER BODY's region owns, parallel to
+    ExceptionFinallyBody and read by the same IRLowerCleanupToDepth. -1 at every
+    region that is not a handler body (a try body, a try/finally body), which is
+    all of them except the one pushed around `on E: T do ...`.
+
+    They exist because a handler body is a protected region like any other -- it
+    has its own IR_EXC_ENTER, so the caught object survives an exception raised
+    from inside it -- and an `exit`/`break`/`continue` OUT of it was the one exit
+    path that emitted no IR_EXC_LEAVE and no free. The chain head then pointed at
+    a frame in dead stack; the next UNHANDLED raise longjmped into whatever was
+    there, which on a fresh stack is zeroes, so the process died at rip=rsp=rbp=0
+    instead of printing its diagnostic.
+    bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain }
+  ExceptionCaughtObjTmp: array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  ExceptionCaughtClsTmp: array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionHandlerParseDepth: Integer;
   { The symbol index an open `on E: T do` handler's scope starts at, PLUS ONE,
     so a Pascal global's zero means "no handler scope is open" and nothing has

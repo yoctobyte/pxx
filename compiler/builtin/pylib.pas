@@ -1556,6 +1556,22 @@ function pytime_time: Double;
 function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
+{ sys.setswitchinterval / sys.getswitchinterval — the interpreter's thread switch
+  interval, in seconds.
+
+  WE HAVE NO GIL, so there is nothing here to tune: a pxx --threadsafe thread is
+  an OS thread and the scheduler already owns the question this call exists to
+  answer. It is accepted and REMEMBERED rather than refused, because what the
+  call sites want is the EFFECT — a thread that does not sit on the interpreter
+  for five milliseconds at a time — and they already have it. Refusing raised
+  AttributeError in the middle of a working program (lekkerzeilen's App.__init__,
+  which sets 0.0005 to stop a loader thread stalling the frame).
+
+  get returns what set was last given, CPython's default 0.005 until then, so a
+  save/restore round-trip reads back what it wrote. A negative or zero value is
+  ValueError, as CPython's is. }
+procedure pysys_setswitchinterval(v: Double);
+function pysys_getswitchinterval: Double;
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
   None; the value is unused). os.stat: a stubbed TPyStat — see the class note. }
 { Raise CPython's OSError for a failed syscall: the right SUBCLASS for the
@@ -1682,6 +1698,9 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
   through env["vm"] rather than invoking them, so a stored bound method must
   merely not crash. }
 var
+  { sys.getswitchinterval()'s answer. CPython's default until sys.setswitchinterval
+    moves it; see that procedure for why the call is remembered and not refused. }
+  PySwitchInterval: Double = 0.005;
   PyClosureFinalizeHook: TPyClosureFinalize;
   { map/filter cursors must CALL the callable they stored, and the callable
     dispatch (PyCallKey1, which knows all four representations a NilPy callable
@@ -13472,6 +13491,18 @@ end;
 procedure pysys_exit(code: Integer);
 begin
   Halt(code);
+end;
+
+procedure pysys_setswitchinterval(v: Double);
+begin
+  if v <= 0.0 then
+    raise ValueError.Create('switch interval must be strictly positive');
+  PySwitchInterval := v;
+end;
+
+function pysys_getswitchinterval: Double;
+begin
+  Result := PySwitchInterval;
 end;
 
 { openat(AT_FDCWD, path, O_RDONLY) + read to EOF + close, per-arch like

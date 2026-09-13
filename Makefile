@@ -5246,6 +5246,16 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_nilpy_callable_to_str_param_fails.npy $(TESTTMP)/test_nilpy_callable_to_str_param26 2>&1 \
 	  | grep -q 'expects text for parameter "s"' \
 	  || { echo 'test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter'; exit 1; }
+	@# The NilPy half of the handler-early-exit frame bug: `return`, `break` and
+	@# `continue` out of an `except` body left the frame on the chain, and the
+	@# unhandled raise on the last line then longjmped into dead stack. The
+	@# assertion is that the DIAGNOSTIC arrives -- pin v409 segfaults here after
+	@# printing the same five correct lines.
+	@# bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain
+	./$(COMPILER) test/test_nilpy_early_exit_from_except_pops_the_frame.npy $(TESTTMP)/test_nilpy_early_exit_except26
+	@out=$$(timeout 20 $(TESTTMP)/test_nilpy_early_exit_except26 2>&1); rc=$$?; \
+	  if [ "$$rc" = "124" ]; then echo "test_nilpy_early_exit_from_except: TIMEOUT after 20s"; exit 1; fi; \
+	  tools/expect_same.sh test_nilpy_early_exit_from_except "$$out" "$$(printf 'ret 6\nbreak 10\ncontinue 8\nnamed 8\nnested 101\nUnhandled exception: RuntimeError: frame chain is intact')"
 	./$(COMPILER) test/test_nilpy_float_repeat_typeerror.npy $(TESTTMP)/test_nilpy_float_repeat_typeerror26
 	@out=$$(timeout 20 $(TESTTMP)/test_nilpy_float_repeat_typeerror26 2>&1); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_nilpy_float_repeat_typeerror: TIMEOUT after 20s (not a wrong diagnostic)"; exit 1; fi; \
@@ -25732,6 +25742,30 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_escaping_a_handler_frees_the_caught_object.pas $(TESTTMP)/teeah
 	tools/assert_no_leak.sh exception_escaping_handler 50 $(TESTTMP)/teeah
 	tools/expect_same.sh exception_escaping_handler_out "$$($(TESTTMP)/teeah | grep -v '^pxx-census:')" "$$(printf 'escape 500\nreraise 500\nnested 500\nint 500\nplain 500\nEXCESCAPE OK')"
+	# THE OTHER WAY OUT OF A HANDLER BODY: Exit, Break and Continue. The region
+	# above gets an IR_EXC_ENTER so the caught object survives a raise from
+	# inside it -- but it was pushed with no codegen depth, so
+	# IRLowerCleanupToDepth could not see it and the early-exit paths emitted no
+	# IR_EXC_LEAVE, no free and no clear. The chain head was then a pointer into
+	# DEAD STACK.
+	# TWO ROWS BECAUSE THERE ARE TWO DEFECTS AND NEITHER INSTRUMENT SEES THE
+	# OTHER. The crash row's assertion is the DIAGNOSTIC, not the exit code: the
+	# stale head is only read by an UNHANDLED raise, the unwinder longjmps into
+	# it, and on a fresh stack that memory is zeroes -- so the process died at
+	# rip=rsp=rbp=0 printing nothing, and a segfault is nonzero too. An
+	# enclosing try HIDES it completely (entering one overwrites the head), which
+	# is why the final raise in that fixture is deliberately uncaught. The leak
+	# row's values were right the whole time. Positive control for both, pin v409:
+	# the crash fixture segfaults, and the leak fixture gives live=5003 at the
+	# same allocs=5411 that HEAD runs at live=3.
+	# bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain
+	./$(COMPILER) test/test_handler_early_exit_pops_the_exception_frame.pas $(TESTTMP)/theep
+	! $(TESTTMP)/theep > $(TESTTMP)/theep.out 2> $(TESTTMP)/theep.log
+	grep -q "Unhandled exception" $(TESTTMP)/theep.log
+	tools/expect_same.sh handler_early_exit_frame_out "$$(cat $(TESTTMP)/theep.out)" "$$(printf 'exit 6\nbreak 11\ncontinue 8\nnested 101')"
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_handler_early_exit_frees_the_caught_object.pas $(TESTTMP)/theef
+	tools/assert_no_leak.sh handler_early_exit_frees 50 $(TESTTMP)/theef
+	tools/expect_same.sh handler_early_exit_frees_out "$$($(TESTTMP)/theef | grep -v '^pxx-census:')" "$$(printf 'exit 500\nbreak 500\ncontinue 1500\nplain 500\nHANDLEREXIT OK')"
 	# --threadsafe: a dynamic array of Variants or of COM interfaces must release
 	# its ELEMENTS. ManagedElemKindLocked used to degrade kinds 4 and 6 to 0 under
 	# ThreadSafeMode because _Release -> Destroy -> FreeMem re-entered the

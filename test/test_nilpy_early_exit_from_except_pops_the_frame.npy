@@ -1,0 +1,69 @@
+# An `except` handler body is a protected region of its own -- it has its own
+# IR_EXC_ENTER so the caught object survives an exception raised from inside
+# it -- and `return`, `break` and `continue` OUT of one emitted no matching
+# IR_EXC_LEAVE. The chain head then pointed at a frame in DEAD STACK, and the
+# next UNHANDLED raise longjmped into whatever was there: on a fresh stack,
+# zeroes, so the process died at rip=rsp=rbp=0 with no diagnostic at all.
+#
+# THE LAST LINE IS THE ASSERTION AND IT IS THE ONE A VALUE CHECK CANNOT MAKE.
+# Every row above it printed the right answer while the frame was leaking --
+# the defect is invisible until something raises with no handler left, and
+# then it is invisible again, because a segfault prints nothing. So the row
+# that fails is the DIAGNOSTIC, not a number: before the fix this program
+# printed its five lines and died on SIGSEGV; after it, the sixth line.
+#
+# AND THE ENCLOSING-TRY SPELLING IS NOT A SUBSTITUTE, which is why the raise
+# here is deliberately unhandled: entering any `try` overwrites the chain head,
+# so `raise ... except ...` around the same call PASSES on the broken compiler.
+# The only arrangement that reads the stale head is the one with nothing above
+# it. bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain
+
+def ret_from_handler(k):
+    try:
+        raise ValueError("v")
+    except ValueError:
+        return k * 2
+
+def break_from_handler(k):
+    seen = 0
+    for i in range(3):
+        try:
+            raise KeyError("k")
+        except KeyError:
+            seen = i + k
+            break
+    return seen
+
+def continue_from_handler(k):
+    seen = 0
+    for i in range(3):
+        try:
+            raise IndexError("i")
+        except IndexError:
+            seen = seen + 1
+            continue
+    return seen + k
+
+def named_ret(k):
+    try:
+        raise ValueError("named")
+    except ValueError as e:
+        if len(str(e)) > 0:
+            return k + 1
+    return -1
+
+def nested_ret(k):
+    try:
+        raise ValueError("outer")
+    except ValueError:
+        try:
+            raise KeyError("inner")
+        except KeyError:
+            return k + 100
+
+print("ret", ret_from_handler(3))
+print("break", break_from_handler(10))
+print("continue", continue_from_handler(5))
+print("named", named_ret(7))
+print("nested", nested_ret(1))
+raise RuntimeError("frame chain is intact")

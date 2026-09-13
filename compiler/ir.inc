@@ -1076,6 +1076,7 @@ begin
 end;
 
 function IRLowerAST(node: Integer): Integer; forward;
+procedure IREmitCaughtExcFree(ownTmp, clsTmp: Integer; onUnwind: Boolean); forward;   { declared further down; IRLowerCleanupToDepth needs it to free a caught exception on an early exit OUT of its handler }
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRLowerBoxOperand(argAST: Integer): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
@@ -1140,6 +1141,15 @@ begin
   while current > targetDepth do
   begin
     IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+    { A HANDLER BODY's region owns the caught exception, so leaving it early has
+      to do what its fall-through does: free the object and clear the slots. The
+      fall-through emits exactly this pair right after its own IR_EXC_LEAVE. }
+    if ExceptionCaughtObjTmp[current - 1] >= 0 then
+    begin
+      IREmitCaughtExcFree(ExceptionCaughtObjTmp[current - 1],
+                          ExceptionCaughtClsTmp[current - 1], False);
+      IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
+    end;
     bodyNode := ExceptionFinallyBody[current - 1];
     if bodyNode <> -1 then
     begin
@@ -17540,6 +17550,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
 
       ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
+      ExceptionCaughtObjTmp[ExceptionCodegenDepth] := -1;
+      ExceptionCaughtClsTmp[ExceptionCodegenDepth] := -1;
       Inc(ExceptionCodegenDepth);
       last := IRLowerAST(ASTLeft[node]);
       Dec(ExceptionCodegenDepth);
@@ -17695,12 +17707,25 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         begin
           excUnwindLabel := IRNewLabel;
           last := IRAppend(IR_EXC_ENTER, excUnwindLabel, -1, -1, 0, 0);
+          { REGISTER THE REGION, so `exit`, `break` and `continue` out of the
+            handler body unwind it. The EXC_ENTER above was pushed without a
+            codegen depth, so IRLowerCleanupToDepth could not see it and an
+            early exit left the frame on the chain -- in dead stack, with the
+            next unhandled raise longjmping into it.
+            bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain }
+          ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
+          ExceptionCaughtObjTmp[ExceptionCodegenDepth] := excOwnTmp;
+          ExceptionCaughtClsTmp[ExceptionCodegenDepth] := excClsTmp;
+          Inc(ExceptionCodegenDepth);
         end;
         last := IRDropManagedResult(ASTLeft[handlerNode], IRLowerAST(ASTLeft[handlerNode]));
         IRMarkStatementNode(last);
         IRFlushPostCallIntf(pcBase);
         if excOwnTmp >= 0 then
+        begin
+          Dec(ExceptionCodegenDepth);
           last := IRAppend(IR_EXC_LEAVE, 1, -1, -1, 0, 0);
+        end;
         IREmitCaughtExcFree(excOwnTmp, excClsTmp, False);
         last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);
         last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
@@ -17729,6 +17754,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
 
       ExceptionFinallyBody[ExceptionCodegenDepth] := ASTRight[node];
+      ExceptionCaughtObjTmp[ExceptionCodegenDepth] := -1;
+      ExceptionCaughtClsTmp[ExceptionCodegenDepth] := -1;
       Inc(ExceptionCodegenDepth);
       last := IRLowerAST(ASTLeft[node]);
       IRMarkStatementNode(last);

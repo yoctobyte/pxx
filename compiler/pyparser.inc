@@ -13207,6 +13207,11 @@ begin
   else if dotted = 'os.makedirs' then Result := 'pyos_makedirs'
   else if dotted = 'os.rmdir' then Result := 'pyos_rmdir'
   else if dotted = 'sys.exit' then Result := 'pysys_exit'
+  { No GIL here, so there is nothing to tune — accepted and remembered rather
+    than refused, because the call sites want the EFFECT and an OS thread already
+    has it. See pysys_setswitchinterval's header in pylib.pas. }
+  else if dotted = 'sys.setswitchinterval' then Result := 'pysys_setswitchinterval'
+  else if dotted = 'sys.getswitchinterval' then Result := 'pysys_getswitchinterval'
   else if dotted = 'sys.stdin.read' then Result := 'pystdin_read'
   else if dotted = 'sys.stdin.readline' then Result := 'pystdin_readline'
   else if dotted = 'sys.stdin.isatty' then Result := 'pystdin_isatty'
