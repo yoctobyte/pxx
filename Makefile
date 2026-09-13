@@ -34477,12 +34477,28 @@ endif
 	$(PXX_STABLE) examples/lisp/lispdemo.pas $(TESTTMP)/lib_lispdemo
 	tools/expect_same.sh lib_lispdemo "$$($(TESTTMP)/lib_lispdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas $(TESTTMP)/lib_zlib
-	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored')"
+	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored\nOK deflate roundtrip\nOK deflate compresses\nOK deflate no expansion\nOK deflate level 0 is stored\nOK deflate levels differ')"
+	# DeflateZlib against CPython's decoder. The rows above round-trip our encoder
+	# through OUR inflater, and both halves live in one file -- a shared misreading
+	# of RFC 1951 passes that and fails this. Sizes are printed, never asserted:
+	# which matches an encoder finds is latitude, and CPython emits dynamic-Huffman
+	# blocks where we emit fixed.
+	$(PXX_STABLE) test/lib_zlib_emit.pas $(TESTTMP)/lib_zlib_emit
+	@if command -v python3 >/dev/null 2>&1; then \
+	  $(TESTTMP)/lib_zlib_emit | python3 test/lib_zlib_cpython.py \
+	    && echo "  lib-test: CPython's zlib reads every DeflateZlib stream" \
+	    || { echo "FAIL: CPython rejects a DeflateZlib stream"; exit 1; }; \
+	else echo "  lib-test: python3 absent, skipping the zlib CPython oracle"; fi
 	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas $(TESTTMP)/lib_base64
 	tools/expect_same.sh lib_base64.1 "$$($(TESTTMP)/lib_base64 | grep -c '=ok')" "14"
 	tools/expect_same.sh lib_base64.2 "$$($(TESTTMP)/lib_base64 | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) test/lib_png.pas $(TESTTMP)/lib_png
-	tools/expect_same.sh lib_png "$$($(TESTTMP)/lib_png)" "$$(printf '86\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
+	# The first row is the encoded PNG's total size, so it TRACKS THE ENCODER: it
+	# went 86 -> 80 on 2026-09-13 when png.pas moved its IDAT from stored deflate
+	# blocks to DeflateZlib. Every other row is pixels and they did not move, which
+	# is what says the change was size and not content. If this number shifts again,
+	# check the pixel rows first -- they are the ones that may not.
+	tools/expect_same.sh lib_png "$$($(TESTTMP)/lib_png)" "$$(printf '80\n137 80 78 71\nTRUE\n2x2\n255,0,0,255\n0,255,0,128\n0,0,255,64\n255,255,255,0\nFALSE\nbad chunk crc')"
 	$(PXX_STABLE) test/lib_ansiterm.pas $(TESTTMP)/lib_ansiterm
 	tools/expect_same.sh lib_ansiterm "$$($(TESTTMP)/lib_ansiterm)" "OK"
 	$(PXX_STABLE) test/lib_screen.pas $(TESTTMP)/lib_screen

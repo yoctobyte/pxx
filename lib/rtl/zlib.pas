@@ -12,7 +12,11 @@ unit zlib;
     InflateZlib(input, output, error) — unwrap zlib header, inflate all blocks,
       verify Adler32. Returns True on success.
     DeflateZlibStored(input, output) — wrap input in a zlib stream using only
-      uncompressed deflate blocks (valid zlib, trivial compression).
+      uncompressed deflate blocks (valid zlib, trivial compression). Still the
+      level-0 path, and still what a caller wanting no compression should ask
+      for by name.
+    DeflateZlib(input, output, level) — the compressing encoder: LZ77 + fixed
+      Huffman (btype=1). This is what `zlib.compress` and png.pas use.
 
   AND THIS UNIT IS ALSO PYTHON'S `zlib` MODULE, which is why it is named in
   PyRtlUnitServesPython (pasparser_proc.inc). That list asks whether a unit was
@@ -47,6 +51,15 @@ function InflateRawBytes(const src: TByteArray; var dst: TByteArray;
                          var err: AnsiString): Boolean;
 
 procedure DeflateZlibStored(const src: TByteArray; var dst: TByteArray);
+
+{ DeflateZlib(input, output, level) -- a real compressing encoder: LZ77 with a
+  hash-chain match finder, emitted as one fixed-Huffman (btype=1) block. `level`
+  is 0..9 or -1 for the default 6, and it SELECTS WORK rather than being
+  accepted and dropped: 0 routes to the stored writer above (which is what level
+  0 means to CPython), 1-3 match greedily, 4-9 add lazy matching, and the search
+  bounds widen with the number. Every level emits a valid stream; higher ones
+  spend longer looking for matches. }
+procedure DeflateZlib(const src: TByteArray; var dst: TByteArray; level: Integer);
 
 { ---- Python's `zlib` module surface ------------------------------------------
 
@@ -111,24 +124,27 @@ function adler32(const data: Variant; const value: Variant = 1): Int64;
 
 { `zlib.compress(data, level=-1)` -> bytes, and `zlib.decompress(data)` -> bytes.
 
-  COMPRESS DOES NOT COMPRESS, AND THE OUTPUT IS STILL CORRECT. It wraps the input
-  in a valid RFC 1950 stream built from STORED deflate blocks, so every
-  decompressor reads it and the bytes that come back out are the bytes that went
-  in -- it is simply larger than CPython's. That is the test CLAUDE.md sets for
-  FPC and it is the right one here: the VALUE round-trips, the intermediate
-  encoding is implementation latitude. A byte-diff of compress() against CPython
-  DIFFERS BY DESIGN and is not a defect to file.
+  COMPRESS NOW COMPRESSES. Until 2026-09-13 it wrapped the input in STORED
+  deflate blocks -- valid RFC 1950, correct on the round trip, and simply larger
+  than CPython's. It goes through DeflateZlib now: LZ77 with a hash-chain match
+  finder in one fixed-Huffman block. The caller that paid for the old behaviour
+  was lekkerzeilen's capture.py writing PNG screenshots (`zlib.compress(raw, 6)`
+  for the IDAT, `zlib.crc32(tag + payload)` for the chunk CRC), whose six
+  --conform PNGs came out 3-12x larger than CPython's. png.pas builds its IDAT
+  through the same encoder, so both callers got it at once, which is what the
+  old note here predicted would happen.
 
-  This is not a shortcut taken for the shim's convenience -- it is what our own
-  PNG writer already does. png.pas:169 builds its IDAT with the same
-  DeflateZlibStored call, and the wall that prompted these members is
-  lekkerzeilen's capture.py writing a PNG screenshot: `zlib.compress(raw, 6)` for
-  the IDAT and `zlib.crc32(tag + payload)` for the chunk CRC. A real deflate
-  encoder is a separate piece of work, and when one lands both callers get it.
+  A BYTE-DIFF AGAINST CPYTHON STILL DIFFERS BY DESIGN and is still not a defect
+  to file. Our sizes are now close to CPython's rather than multiples of them,
+  but deflate does not have one right answer: which matches an encoder finds is
+  latitude, and CPython emits dynamic-Huffman blocks where we emit fixed. The
+  test CLAUDE.md sets is the one that applies -- the VALUE round-trips, and the
+  intermediate encoding is ours. What IS assertable, and is asserted in
+  test/lib_zlib.pas, is that CPython's decompressor reads our stream.
 
-  `level` is ACCEPTED AND IGNORED, which is honest for a stored-block encoder:
-  every level produces the same valid stream. Refusing a level would break the
-  call that motivated this for no gain. }
+  `level` SELECTS WORK rather than being accepted and dropped -- see the
+  DeflateZlib comment above. It stopped being honest to ignore it the moment
+  the levels could differ. }
 type
   { CPython raises `zlib.error`. Spelled to match, so `except zlib.error:` in an
     application binds here. }
@@ -839,6 +855,386 @@ begin
 end;
 
 
+{ ---- DeflateZlib: a real encoder (fixed Huffman, btype=1) --------------------
+
+  WHY THIS EXISTS AT ALL, since DeflateZlibStored above is valid zlib and was a
+  deliberate choice: stored blocks never compress, and the cost stopped being
+  theoretical. lekkerzeilen's capture.py writes PNG screenshots through
+  `zlib.compress`, and every one of its six --conform PNGs came out 3-12x larger
+  than CPython's (flat grey 8x8: 268 bytes against 72). 2000 identical bytes went
+  out as 2011. The streams were always correct -- this was a capability gap, never
+  a correctness bug, which is why it could sit here behind a comment.
+
+  FIXED HUFFMAN AND NOT DYNAMIC, deliberately. btype=1 needs no code-length
+  alphabet emission, so it is a few hundred lines rather than a thousand, and on
+  repetitive input it gets nearly all of the win: 2000 identical bytes become
+  eight len-258/dist-1 matches at ~13 bits each. btype=2 would beat it on
+  literal-heavy input (photographic pixel data, text) by fitting the code lengths
+  to the actual symbol frequencies. That is a separate landing with its own
+  measurement, not a TODO here.
+
+  THE DECODER IN THIS UNIT IS THE ORACLE THAT KEEPS THIS HONEST. InflateBlock
+  already reads fixed-Huffman blocks and predates this encoder, so a round trip
+  through our own code exercises two independently-written halves. It is still
+  not sufficient on its own -- a shared misreading of the RFC would pass both
+  ways -- so test/lib_zlib.pas also asserts against streams CPython produced, and
+  lib-test diffs our output through CPython's zlib.decompress when python3 is
+  present. }
+
+const
+  DEF_HASH_SIZE = 32768;
+  DEF_HASH_MASK = 32767;
+  DEF_MIN_MATCH = 3;
+  DEF_MAX_MATCH = 258;
+  DEF_MAX_DIST  = 32768;
+
+var
+  { Module globals for the same reason the inflate state above is module-global:
+    the note at gData explains that dynamic arrays through several parameter
+    layers are a sore spot. Not reentrant, which matches the rest of the unit. }
+  gDefN:      Integer;        { bytes written into gDefDst }
+  gBitBuf:    LongWord;       { pending bits, LSB-first }
+  gBitCnt:    Integer;        { how many bits are pending }
+  gSrcB:      TByteArray;     { deflate input }
+  gSrcLen:    Integer;
+  gHashHead:  array of Integer;
+  gHashPrev:  array of Integer;
+  gMatchLen:  Integer;        { DefFindMatch results }
+  gMatchDist: Integer;
+
+procedure DefPutByte(b: Integer);
+var newcap: Integer;
+begin
+  if gDefN >= Length(gDefDst) then
+  begin
+    newcap := Length(gDefDst) * 2;
+    if newcap < 64 then newcap := 64;
+    SetLength(gDefDst, newcap);
+  end;
+  gDefDst[gDefN] := Byte(b and $FF);
+  gDefN := gDefN + 1;
+end;
+
+{ DEFLATE PACKS BITS LSB-FIRST WITHIN A BYTE, and that is not the order Huffman
+  codes are written in -- RFC 1951 s3.1.1 spells out that Huffman codes go
+  MSB-of-the-code first while everything else (the extra bits, LEN/NLEN) goes
+  LSB-first. So PutBits is the LSB-first primitive and every Huffman code passes
+  through RevBits on the way in. Getting this backwards produces a stream that
+  decodes to plausible garbage rather than to an error, which is why the tests
+  compare against CPython's bytes and not only against our own round trip. }
+procedure PutBits(value, n: Integer);
+begin
+  if n <= 0 then Exit;
+  gBitBuf := gBitBuf or (LongWord(value and ((1 shl n) - 1)) shl gBitCnt);
+  gBitCnt := gBitCnt + n;
+  while gBitCnt >= 8 do
+  begin
+    DefPutByte(Integer(gBitBuf and $FF));
+    gBitBuf := gBitBuf shr 8;
+    gBitCnt := gBitCnt - 8;
+  end;
+end;
+
+procedure FlushBits;
+begin
+  if gBitCnt > 0 then
+    DefPutByte(Integer(gBitBuf and $FF));
+  gBitBuf := 0;
+  gBitCnt := 0;
+end;
+
+function RevBits(code, n: Integer): Integer;
+var i, r: Integer;
+begin
+  r := 0;
+  for i := 0 to n - 1 do
+    r := (r shl 1) or ((code shr i) and 1);
+  Result := r;
+end;
+
+{ Fixed literal/length alphabet, RFC 1951 s3.2.6. Four ranges with three
+  different code lengths, which is the whole reason btype=1 costs nothing to
+  emit: both ends already know this table. }
+procedure PutFixedLit(sym: Integer);
+begin
+  if sym <= 143 then
+    PutBits(RevBits($30 + sym, 8), 8)
+  else if sym <= 255 then
+    PutBits(RevBits($190 + sym - 144, 9), 9)
+  else if sym <= 279 then
+    PutBits(RevBits(sym - 256, 7), 7)
+  else
+    PutBits(RevBits($C0 + sym - 280, 8), 8);
+end;
+
+{ Emit one <length, distance> pair. The LEN_BASE/LEN_EXTRA/DIST_BASE/DIST_EXTRA
+  tables are the inflater's, shared rather than copied -- a second copy of these
+  is exactly the shape normalise-dont-special-case.md warns about, and the arm
+  that stays broken would be this one, since the decoder is exercised far more. }
+procedure PutMatch(len, dist: Integer);
+var idx, didx: Integer;
+begin
+  idx := 28;
+  while (idx > 0) and (LEN_BASE[idx] > len) do idx := idx - 1;
+  PutFixedLit(257 + idx);
+  PutBits(len - LEN_BASE[idx], LEN_EXTRA[idx]);
+
+  didx := 29;
+  while (didx > 0) and (DIST_BASE[didx] > dist) do didx := didx - 1;
+  PutBits(RevBits(didx, 5), 5);
+  PutBits(dist - DIST_BASE[didx], DIST_EXTRA[didx]);
+end;
+
+function DefHash(pos: Integer): Integer;
+begin
+  Result := ((gSrcB[pos] shl 10) xor (gSrcB[pos + 1] shl 5) xor gSrcB[pos + 2])
+            and DEF_HASH_MASK;
+end;
+
+procedure DefInsert(pos: Integer);
+var h: Integer;
+begin
+  if pos + DEF_MIN_MATCH > gSrcLen then Exit;
+  h := DefHash(pos);
+  gHashPrev[pos] := gHashHead[h];
+  gHashHead[h] := pos;
+end;
+
+{ Longest match for the string at `pos`, walking the hash chain newest-first so
+  the first acceptable match is also the nearest one (shorter distance code).
+  `maxChain` bounds the work and `niceLen` stops early on a match good enough to
+  not be worth improving -- those two are what `level` actually selects. }
+procedure DefFindMatch(pos, maxChain, niceLen: Integer);
+var cur, chain, len, maxLen, limit: Integer;
+begin
+  gMatchLen := 0;
+  gMatchDist := 0;
+  if pos + DEF_MIN_MATCH > gSrcLen then Exit;
+
+  maxLen := gSrcLen - pos;
+  if maxLen > DEF_MAX_MATCH then maxLen := DEF_MAX_MATCH;
+  if maxLen < DEF_MIN_MATCH then Exit;
+
+  limit := pos - DEF_MAX_DIST;
+  if limit < 0 then limit := 0;
+
+  cur := gHashHead[DefHash(pos)];
+  chain := maxChain;
+  while (cur >= limit) and (chain > 0) do
+  begin
+    { Check the byte that would EXTEND the current best before comparing from
+      the start -- a candidate that cannot beat what we hold is rejected in one
+      comparison instead of gMatchLen of them. }
+    if (gMatchLen = 0) or (gSrcB[cur + gMatchLen] = gSrcB[pos + gMatchLen]) then
+    begin
+      len := 0;
+      while (len < maxLen) and (gSrcB[cur + len] = gSrcB[pos + len]) do
+        len := len + 1;
+      if len > gMatchLen then
+      begin
+        gMatchLen := len;
+        gMatchDist := pos - cur;
+        if len >= niceLen then Break;
+      end;
+    end;
+    cur := gHashPrev[cur];
+    chain := chain - 1;
+  end;
+
+  if gMatchLen < DEF_MIN_MATCH then
+  begin
+    gMatchLen := 0;
+    gMatchDist := 0;
+  end;
+end;
+
+{ LZ77 over the whole input, emitted as one fixed-Huffman block.
+
+  LAZY MATCHING (`maxLazy` > 0): having found a match at `pos`, look again at
+  pos+1 before committing. If the later match is longer, the byte at `pos` goes
+  out as a literal and the longer match wins. It costs one extra search per
+  position and is worth several percent on text.
+
+  The `while ins < pos` line is the part that is easy to get wrong: every
+  position strictly before `pos` must be in the chains, INCLUDING the ones a
+  match jumped over, and they must go in ascending order or the chain stops
+  being newest-first. }
+procedure DeflateFixedBody(maxChain, niceLen, maxLazy: Integer);
+var pos, ins, curLen, curDist, prevLen, prevDist, prevPos: Integer;
+    havePrev: Boolean;
+begin
+  pos := 0;
+  ins := 0;
+  havePrev := False;
+  prevLen := 0; prevDist := 0; prevPos := 0;
+
+  while pos < gSrcLen do
+  begin
+    while ins < pos do
+    begin
+      DefInsert(ins);
+      ins := ins + 1;
+    end;
+
+    DefFindMatch(pos, maxChain, niceLen);
+    curLen := gMatchLen;
+    curDist := gMatchDist;
+
+    if havePrev then
+    begin
+      if curLen > prevLen then
+      begin
+        PutFixedLit(gSrcB[prevPos]);
+        prevLen := curLen; prevDist := curDist; prevPos := pos;
+        pos := pos + 1;
+      end
+      else
+      begin
+        PutMatch(prevLen, prevDist);
+        pos := prevPos + prevLen;
+        havePrev := False;
+      end;
+    end
+    else if (curLen >= DEF_MIN_MATCH) and (curLen < maxLazy) then
+    begin
+      prevLen := curLen; prevDist := curDist; prevPos := pos;
+      havePrev := True;
+      pos := pos + 1;
+    end
+    else if curLen >= DEF_MIN_MATCH then
+    begin
+      PutMatch(curLen, curDist);
+      pos := pos + curLen;
+    end
+    else
+    begin
+      PutFixedLit(gSrcB[pos]);
+      pos := pos + 1;
+    end;
+  end;
+
+  { A deferred match with the input exhausted. Unreachable as the bounds stand
+    -- deferring needs prevLen >= 3, which puts pos = prevPos + 1 at least two
+    bytes short of the end -- but a future bound change must not turn that into
+    silently dropped output. }
+  if havePrev then
+    PutMatch(prevLen, prevDist);
+end;
+
+{ zlib's own level table, simplified to the three knobs this encoder has. Level
+  0 is not here: it means STORED to CPython, and routing it to the stored writer
+  is the honest reading rather than "the cheapest compression we do". }
+procedure DefLevelConfig(level: Integer; var maxChain, niceLen, maxLazy: Integer);
+begin
+  case level of
+    1: begin maxChain :=    4; niceLen :=   8; maxLazy :=   0; end;
+    2: begin maxChain :=    8; niceLen :=  16; maxLazy :=   0; end;
+    3: begin maxChain :=   32; niceLen :=  32; maxLazy :=   0; end;
+    4: begin maxChain :=   16; niceLen :=  16; maxLazy :=   4; end;
+    5: begin maxChain :=   32; niceLen :=  32; maxLazy :=   8; end;
+    6: begin maxChain :=  128; niceLen := 128; maxLazy :=  16; end;
+    7: begin maxChain :=  256; niceLen := 128; maxLazy :=  32; end;
+    8: begin maxChain := 1024; niceLen := 258; maxLazy := 128; end;
+  else
+    begin maxChain := 4096; niceLen := 258; maxLazy := 258; end;
+  end;
+end;
+
+procedure DeflateZlib(const src: TByteArray; var dst: TByteArray; level: Integer);
+var i, cmf, flg, maxChain, niceLen, maxLazy: Integer;
+    storedLen, nBlocks: Integer;
+    ad: LongWord;
+begin
+  if level < 0 then level := 6;          { -1 is CPython's "default" }
+  if level > 9 then level := 9;
+  if level = 0 then
+  begin
+    DeflateZlibStored(src, dst);
+    Exit;
+  end;
+
+  { COPIED, not aliased. gSrcB is a module global whose storage this procedure
+    frees on the way out; pointing it at the caller's array would make that
+    cleanup a question about how the dialect refcounts dynamic arrays, and the
+    answer would be invisible until it was wrong. One O(n) copy buys the
+    question not being asked. }
+  gSrcLen := Length(src);
+  SetLength(gSrcB, gSrcLen);
+  for i := 0 to gSrcLen - 1 do gSrcB[i] := src[i];
+  SetLength(gHashHead, DEF_HASH_SIZE);
+  for i := 0 to DEF_HASH_SIZE - 1 do gHashHead[i] := -1;
+  SetLength(gHashPrev, gSrcLen);
+  for i := 0 to gSrcLen - 1 do gHashPrev[i] := -1;
+
+  nBlocks := (gSrcLen + 65534) div 65535;
+  if nBlocks = 0 then nBlocks := 1;
+
+  SetLength(gDefDst, 0);
+  gDefN := 0; gBitBuf := 0; gBitCnt := 0;
+
+  { CMF/FLG, RFC 1950 s2.2. FLEVEL carries the level band, and FCHECK is then
+    chosen so the 16-bit header is a multiple of 31. Worth matching exactly:
+    these are the two bytes a reader sees first, and ours now head `78 9c` at the
+    default like CPython's rather than `78 01`. }
+  cmf := $78;
+  if level <= 1 then flg := 0
+  else if level <= 5 then flg := 64
+  else if level = 6 then flg := 128
+  else flg := 192;
+  flg := flg + (31 - ((cmf * 256 + flg) mod 31)) mod 31;
+  DefPutByte(cmf);
+  DefPutByte(flg);
+
+  PutBits(1, 1);   { BFINAL = 1: one block for the whole input }
+  PutBits(1, 2);   { BTYPE  = 01: fixed Huffman }
+
+  DefLevelConfig(level, maxChain, niceLen, maxLazy);
+  DeflateFixedBody(maxChain, niceLen, maxLazy);
+
+  PutFixedLit(256);   { end-of-block }
+  FlushBits;
+
+  ad := hashing.Adler32(src);   { qualified -- see the note in InflateZlib }
+  DefPutByte(Integer((ad shr 24) and $FF));
+  DefPutByte(Integer((ad shr 16) and $FF));
+  DefPutByte(Integer((ad shr 8) and $FF));
+  DefPutByte(Integer(ad and $FF));
+
+  { STORED FALLBACK, and it is not an optimisation -- it is the bound that makes
+    this function safe to call on anything. A fixed-Huffman block spends 8 or 9
+    bits on every literal, so input with no matches in it (already-compressed
+    data, a good PRNG) comes out LARGER than it went in: measured here, 4096
+    bytes of LCG output became 4331, and 256 distinct bytes became 278. Stored
+    blocks cost 5 bytes per 64KB plus the 6-byte wrapper and cannot expand
+    beyond that, so taking whichever is smaller caps the worst case instead of
+    leaving a caller to discover it. CPython does the same thing, which is why
+    its output never blows up either.
+
+    Compared AFTER emitting rather than predicted: the honest comparison is
+    against the bytes we actually produced, and a prediction would be a second
+    model of this encoder's output that could drift from it. }
+  storedLen := 2 + nBlocks * 5 + gSrcLen + 4;
+  if gDefN >= storedLen then
+  begin
+    SetLength(gDefDst, 0);
+    SetLength(gHashHead, 0);
+    SetLength(gHashPrev, 0);
+    SetLength(gSrcB, 0);
+    DeflateZlibStored(src, dst);
+    Exit;
+  end;
+
+  SetLength(dst, gDefN);
+  for i := 0 to gDefN - 1 do
+    dst[i] := gDefDst[i];
+
+  SetLength(gDefDst, 0);
+  SetLength(gHashHead, 0);
+  SetLength(gHashPrev, 0);
+  SetLength(gSrcB, 0);
+end;
+
+
 { ---- Python `zlib` surface ---------------------------------------------------- }
 
 { bytes (TPyBytes) or a plain string -- an application may hand over either.
@@ -945,10 +1341,17 @@ begin
 end;
 
 function compress(const data: Variant; const level: Variant = -1): TPyBytes;
-var src, dst: TByteArray;
+var src, dst: TByteArray; lv: Integer;
 begin
   src := PyBytesToArray(data);
-  DeflateZlibStored(src, dst);
+  { An absent level is CPython's -1, which DeflateZlib reads as 6. Spelled
+    through pynone rather than defaulted to 6 here so the two spellings of
+    "default" stay one value in one place. }
+  if level = pynone then
+    lv := -1
+  else
+    lv := Integer(pyvar_to_int(level));
+  DeflateZlib(src, dst, lv);
   Result := ArrayToPyBytes(dst);
 end;
 

@@ -166,7 +166,12 @@ begin
   AppendChunk(ChunkName('I', 'H', 'D', 'R'), ihdr);
 
   BuildRawRGBA(img, raw);
-  DeflateZlibStored(raw, z);
+  { Level 6, CPython's default, through the compressing encoder. This was
+    DeflateZlibStored until 2026-09-13, which is why PNGs out of this writer were
+    several times larger than they needed to be; zlib.pas's header explains the
+    change. IDAT content is latitude -- any valid zlib stream decodes to the same
+    pixels -- so nothing downstream of here had to change. }
+  DeflateZlib(raw, z, 6);
   AppendChunk(ChunkName('I', 'D', 'A', 'T'), z);
 
   SetLength(empty, 0);

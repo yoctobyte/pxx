@@ -25,6 +25,25 @@ begin
   bad := 1;
 end;
 
+{ sysutils is deliberately NOT in the uses clause -- it declares its own
+  TByteArray as a STATIC array, which shadows hashing's dynamic one and makes
+  SetLength refuse. So the one thing this file needed from it is spelled here. }
+function IStr(v: Integer): AnsiString;
+var s: AnsiString; neg: Boolean;
+begin
+  if v = 0 then begin Result := '0'; Exit; end;
+  neg := v < 0;
+  if neg then v := -v;
+  s := '';
+  while v > 0 do
+  begin
+    s := Chr(48 + (v mod 10)) + s;
+    v := v div 10;
+  end;
+  if neg then s := '-' + s;
+  Result := s;
+end;
+
 procedure TestStoredRoundtrip;
 var src: TByteArray;
     j: Integer;
@@ -226,6 +245,168 @@ begin
   else writeln('OK raw stored');
 end;
 
+
+{ ---- DeflateZlib (the compressing encoder) ----------------------------------
+
+  These five rows exist because `compress` went from stored blocks to a real
+  LZ77 + fixed-Huffman encoder on 2026-09-13, and a round trip alone would not
+  have noticed if it had quietly gone back. THE ROUND TRIP IS THE WEAKEST OF
+  THEM: DeflateZlibStored passed it for months while compressing nothing, so a
+  size assertion is what actually tests the claim. }
+
+var defSrc, defEnc, defEnc2, defStored: TByteArray;
+
+procedure BuildRepeated(n, value: Integer);
+var j: Integer;
+begin
+  SetLength(defSrc, n);
+  for j := 0 to n - 1 do defSrc[j] := Byte(value);
+end;
+
+{ An LCG rather than a fixed blob: it is reproducible, it is the same sequence
+  on every target, and it has no matches for LZ77 to find, which is the case the
+  stored fallback exists for. }
+procedure BuildPseudoRandom(n, seed: Integer);
+var j, st: Integer;
+begin
+  SetLength(defSrc, n);
+  st := seed;
+  for j := 0 to n - 1 do
+  begin
+    st := (st * 1103515245 + 12345) and $3FFFFFFF;
+    defSrc[j] := Byte((st shr 16) and $FF);
+  end;
+end;
+
+procedure BuildLowEntropy(n, seed: Integer);
+var j, st: Integer;
+begin
+  SetLength(defSrc, n);
+  st := seed;
+  for j := 0 to n - 1 do
+  begin
+    st := (st * 1103515245 + 12345) and $3FFFFFFF;
+    defSrc[j] := Byte((st shr 16) and 15);
+  end;
+end;
+
+function DeflateRoundTrips(level: Integer): Boolean;
+begin
+  Result := False;
+  DeflateZlib(defSrc, defEnc, level);
+  if not InflateZlib(defEnc, outbuf, err) then Exit;
+  Result := SameBytes(defSrc, outbuf);
+end;
+
+procedure TestDeflateRoundtrip;
+var j, n: Integer;
+begin
+  { Shapes chosen for their edges, not for variety: 0 and 1 and 2 bytes are all
+    shorter than the 3-byte minimum match, 258 and 259 sit either side of the
+    maximum match length, and 70000 crosses the 65535 stored-block boundary that
+    the fallback path still has to get right. }
+  SetLength(defSrc, 0);
+  if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: empty'); Exit; end;
+  for n := 1 to 3 do
+  begin
+    BuildRepeated(n, 65);
+    if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: short'); Exit; end;
+  end;
+  for n := 257 to 260 do
+  begin
+    BuildRepeated(n, 7);
+    if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: max-match'); Exit; end;
+  end;
+  BuildPseudoRandom(4096, 12345);
+  if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: random'); Exit; end;
+  BuildLowEntropy(30000, 999);
+  if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: low entropy'); Exit; end;
+  SetLength(defSrc, 70000);
+  for j := 0 to 69999 do defSrc[j] := Byte(j mod 3);
+  if not DeflateRoundTrips(6) then begin Fail('deflate roundtrip: 70000'); Exit; end;
+  { Every level, on input with matches in it, so a broken level config cannot
+    hide behind level 6 being the only one anybody runs. }
+  BuildLowEntropy(8000, 4242);
+  for j := 0 to 9 do
+    if not DeflateRoundTrips(j) then
+    begin
+      Fail('deflate roundtrip: level'); Exit;
+    end;
+  writeln('OK deflate roundtrip');
+end;
+
+{ THE ROW THAT WOULD HAVE CAUGHT THE OLD BEHAVIOUR. 2000 identical bytes went
+  out as 2011 under the stored encoder; CPython gives 23. A bound of 64 is loose
+  enough to survive an encoder change and tight enough that stored blocks can
+  never pass it. }
+procedure TestDeflateCompresses;
+begin
+  BuildRepeated(2000, 65);
+  DeflateZlib(defSrc, defEnc, 6);
+  if Length(defEnc) > 64 then
+    Fail('deflate did not compress: 2000 identical bytes -> ' + IStr(Length(defEnc)))
+  else if not InflateZlib(defEnc, outbuf, err) then
+    Fail('deflate compressed but did not inflate: ' + err)
+  else if not SameBytes(defSrc, outbuf) then
+    Fail('deflate compressed to the wrong bytes')
+  else
+    writeln('OK deflate compresses');
+end;
+
+{ A fixed-Huffman block spends 8 or 9 bits on every literal, so input with no
+  matches EXPANDS -- measured at 4331 bytes out of 4096 in before the stored
+  fallback went in. This row is the fallback's positive control: it fails if the
+  fallback is removed, which a round-trip row would not notice. }
+procedure TestDeflateNoExpansion;
+var bound: Integer;
+begin
+  BuildPseudoRandom(4096, 12345);
+  DeflateZlib(defSrc, defEnc, 6);
+  bound := 2 + 5 + Length(defSrc) + 4;   { one stored block + zlib wrapper }
+  if Length(defEnc) > bound then
+    Fail('deflate expanded incompressible input: ' + IStr(Length(defEnc))
+         + ' > ' + IStr(bound))
+  else if not InflateZlib(defEnc, outbuf, err) then
+    Fail('deflate fallback did not inflate: ' + err)
+  else if not SameBytes(defSrc, outbuf) then
+    Fail('deflate fallback produced the wrong bytes')
+  else
+    writeln('OK deflate no expansion');
+end;
+
+{ Level 0 means STORED to CPython, and routing it anywhere else would be a
+  divergence a caller can see in the output size. Compared against
+  DeflateZlibStored's own bytes rather than against a length, so it cannot pass
+  by coincidence. }
+procedure TestDeflateLevelZero;
+begin
+  BuildRepeated(2000, 65);
+  DeflateZlib(defSrc, defEnc, 0);
+  DeflateZlibStored(defSrc, defStored);
+  if not SameBytes(defEnc, defStored) then
+    Fail('level 0 is not the stored encoder')
+  else
+    writeln('OK deflate level 0 is stored');
+end;
+
+{ `level` SELECTS WORK. Without this row the level parameter could be accepted
+  and dropped -- which is what it was before 2026-09-13 -- and every other row
+  here would still pass. Low-entropy input is used because it has many short
+  matches at scattered distances, which is the only shape where the chain bound
+  and lazy matching actually bite; on highly repetitive input every level finds
+  the same matches and ties legitimately. }
+procedure TestDeflateLevelsDiffer;
+begin
+  BuildLowEntropy(30000, 999);
+  DeflateZlib(defSrc, defEnc, 1);
+  DeflateZlib(defSrc, defEnc2, 6);
+  if Length(defEnc2) >= Length(defEnc) then
+    Fail('level 6 did not beat level 1: ' + IStr(Length(defEnc2))
+         + ' vs ' + IStr(Length(defEnc)))
+  else
+    writeln('OK deflate levels differ');
+end;
+
 begin
   bad := 0;
   TestStoredRoundtrip;
@@ -239,4 +420,9 @@ begin
   TestGzipBadCrc;
   TestRawDeflate;
   TestRawStored;
+  TestDeflateRoundtrip;
+  TestDeflateCompresses;
+  TestDeflateNoExpansion;
+  TestDeflateLevelZero;
+  TestDeflateLevelsDiffer;
 end.

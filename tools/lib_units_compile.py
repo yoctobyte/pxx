@@ -38,6 +38,16 @@ EXTRA_ARGS = {
     "palpthread": ["--threadsafe"],
     "palthreadobj": ["--threadsafe"],
     "palthread": ["--threadsafe"],
+    # mimic_threading is `import threading`'s unit and it USES palthread, so the
+    # reach-based gate catches it for the same reason. Missed when the unit
+    # landed on 2026-09-10 (176b91802), which left `lib-units: FAIL
+    # mimic_threading` as the first red in `make lib-test` -- Track B's gate
+    # stops there, so every row after it went unrun rather than green.
+    # NOT the same thing as feature-n-import-threading-should-imply-threadsafe:
+    # that one is about a NilPy PROGRAM having to pass the flag, which is a
+    # question about what we infer at option time. This is the harness telling a
+    # unit what it already knows it needs, which is what this table is for.
+    "mimic_threading": ["--threadsafe"],
 }
 
 # Directories not on the default unit search path, so a bare `uses` cannot find
