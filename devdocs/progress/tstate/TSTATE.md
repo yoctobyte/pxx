@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `e3fa5431fe0f` | 2026-09-13T18:38:54Z | RED (native) | 286.0s | `965f7879d89c` RED |
+| borg | `e3fa5431fe0f` | 2026-09-13T18:54:20Z | RED (full) | 907.4s | `e3fa5431fe0f` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `965f7879d89c` on borg, 2026-09-13T18:33:20Z (5m ago).**
+**Newest full tier in the fleet: `e3fa5431fe0f` on borg, 2026-09-13T18:54:20Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `965f7879d89c` | RED | 5m | — (newest) |
+| borg | `e3fa5431fe0f` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -52,4 +52,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
   - `test-uforth#src:tools/compiler_srchash.sh@9`
   </details>
 - **test-uforth#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `e5cd18e4b220`, last good `6f085e16261e`, 1 commit(s) in range
-- **test-nilpy#src:test/nilpy_open_world_arity_fail.npy** — test/nilpy_open_world_arity_fail.npy test/test_nilpy_package_imports.npy +1 (borg): bad `95e7eb26e171`, last good `c21e1edc4598`, 4 commit(s) in range
