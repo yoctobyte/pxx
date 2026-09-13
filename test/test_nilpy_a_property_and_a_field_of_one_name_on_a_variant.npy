@@ -1,0 +1,124 @@
+# A @property reached through a DYNAMICALLY-TYPED receiver, where some OTHER
+# class carries the same name as a plain field.
+#
+# PyMakeVariantPropRecv handed the name straight to the field path the moment
+# any class had a field of it -- "a real FIELD of that name anywhere wins" --
+# and `anywhere` was across the WHOLE PROGRAM. So one unrelated class with a
+# plain `name` attribute made every other class's `name` PROPERTY unreachable
+# through a variant receiver, and the getter was never called. Not a wrong
+# dispatch: no dispatch. The field path read an offset belonging to a different
+# class.
+#
+# Measured on lekkerzeilen --starts: world.open() returns a World or a Region,
+# World.name is a @property, and Route/Furniture/Pound/Region each carry a plain
+# `name` field. `region.name` answered '' and the app named no world at all.
+#
+# Two things this fixture must keep apart, because BOTH were already right and
+# that is why the mixed case survived:
+#   - a METHOD of one name on two unrelated classes (rows E/F) -- that is
+#     PyParseVariantMethod and it always dispatched correctly;
+#   - a PROPERTY with no field of that name anywhere (rows G/H).
+# Only the MIXED population was broken.
+#
+# No expected value is an empty string, a zero or a None: the failure value was
+# an unread slot, which renders as exactly those, so a row expecting one would
+# be a guard that cannot fail.
+
+class Region:
+    # the plain FIELD carrier, declared FIRST -- declaration order was measured
+    # not to matter, and the row is here so a later reader does not have to
+    # re-measure it
+    def __init__(self, tag):
+        self.name = "region-" + tag
+        self.shared = "rfield-" + tag
+
+
+class World:
+    # the PROPERTY carrier. `name` has no field at all here.
+    def __init__(self, tag):
+        self.meta = {"name": "world-" + tag}
+
+    @property
+    def name(self):
+        return self.meta.get("name", "fallbackW")
+
+    @property
+    def shared(self):
+        return self.meta.get("name", "fallbackW") + "-shared"
+
+
+class Lonely:
+    # a property whose name NO class carries as a field: the already-working case
+    def __init__(self):
+        self.meta = {"only": "lonely-value"}
+
+    @property
+    def only(self):
+        return self.meta.get("only", "fallbackL")
+
+
+class MethA:
+    def __init__(self, tag):
+        self.tag = "A-" + tag
+
+    def label(self):
+        return self.tag
+
+
+class MethB:
+    def __init__(self, tag):
+        self.meta = {"label": "B-" + tag}
+
+    def label(self):
+        return self.meta.get("label", "fallbackB")
+
+
+def pick(which, tag):
+    # two returns of DIFFERENT classes, so the result is a variant and a local
+    # bound from it has no static class
+    if which == "w":
+        return World(tag)
+    if which == "r":
+        return Region(tag)
+    if which == "a":
+        return MethA(tag)
+    return MethB(tag)
+
+
+def show(label, v):
+    print("%-14s %s" % (label, repr(v)))
+
+
+# A/B: the property carrier through a LOCAL. Reading straight off the call
+# always worked, so the local is the discriminator and row C is its control.
+w = pick("w", "one")
+show("A prop", w.name)
+show("B prop2", w.shared)
+show("C off-call", pick("w", "two").name)
+
+# D: the FIELD carrier through the same local shape -- must still read the field
+r = pick("r", "three")
+show("D field", r.name)
+show("D field2", r.shared)
+
+# E/F: a METHOD of one name on two unrelated classes, which always dispatched
+ma = pick("a", "four")
+mb = pick("b", "five")
+show("E meth A", ma.label())
+show("F meth B", mb.label())
+
+# G/H: a property no class carries as a field
+show("G lonely", Lonely().only)
+
+# I: a WRITE through the variant to the FIELD carrier. The read and write halves
+# of the member path must agree on which names dispatch -- when only the read
+# was taught about property carriers, a write elsewhere in the program failed to
+# lower at all (IR_UNSUPPORTED, AST node kind 67).
+r.name = "rewritten"
+show("I write", r.name)
+r.name += "-more"
+show("I augwrite", r.name)
+
+# J: statically-typed receivers are not affected and must not change
+show("J static W", World("six").name)
+show("J static R", Region("seven").name)

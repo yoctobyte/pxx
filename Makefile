@@ -2467,6 +2467,35 @@ test-nilpy: $(COMPILER)
 	# the row pass on a broken compiler. Read the file's own header before editing.
 	./$(COMPILER) test/test_nilpy_class_attribute_and_a_lambda_in_a_method.npy $(TESTTMP)/test_nilpy_clsattrlam26
 	$(TESTTMP)/test_nilpy_clsattrlam26 | diff -u test/test_nilpy_class_attribute_and_a_lambda_in_a_method.expected -
+	@# The None ARM of a conditional expression must survive the def's inferred
+	@# RETURN TYPE. PyInferExprType had no arm for the None literal, so it
+	@# answered tyUnknown — the join's IDENTITY ELEMENT — and the other arm stood
+	@# alone: `return None if y is None else float(y)` registered a DOUBLE result
+	@# and raised `TypeError: expected a number, got NoneType` on the return. The
+	@# INT arm is the worse half (it silently answered 0). Every row is written
+	@# with the None in BOTH arm positions and one with it mid-chain, because the
+	@# arrangement that passes is the one everyone writes. Found by attempting
+	@# lekkerzeilen --starts, where world.Furniture.__init__ has the shape eleven
+	@# times. Verified to FAIL on pin v408 (rc=217) and pass at HEAD.
+	@# Distinct from test_nilpy_conditional_expression_none.npy, which is about a
+	@# CLASS-valued ternary boxing a nil pointer: every row there stores the
+	@# ternary into a LOCAL, and a local takes its type from the NODE (correctly
+	@# tyVariant). Not one row RETURNS one, which is the only path through the
+	@# token-scan that was wrong — so that fixture was green throughout.
+	./$(COMPILER) test/test_nilpy_none_arm_of_a_conditional_expression.npy $(TESTTMP)/test_nilpy_condnonearm26
+	$(TESTTMP)/test_nilpy_condnonearm26 | diff -u test/test_nilpy_none_arm_of_a_conditional_expression.expected -
+	@# A @property through a VARIANT receiver where another class carries the same
+	@# name as a plain FIELD. PyMakeVariantPropRecv gave the name to the field
+	@# path whenever any class anywhere in the PROGRAM had a field of it, so the
+	@# getter was never called and the read took an offset belonging to a
+	@# different class. Rows E/F (a method of one name on two classes) and G (a
+	@# property no class fields) were ALREADY right — only the mixed population
+	@# was broken, which is why it survived both. Row I is the WRITE: teaching
+	@# only the read produced `IR_UNSUPPORTED ... kind 67` at an unrelated
+	@# assignment. No expected value is '' / 0 / None, since that is the failure
+	@# value. Verified to SEGFAULT on pin v408 and pass at HEAD.
+	./$(COMPILER) test/test_nilpy_a_property_and_a_field_of_one_name_on_a_variant.npy $(TESTTMP)/test_nilpy_propfieldvar26
+	$(TESTTMP)/test_nilpy_propfieldvar26 | diff -u test/test_nilpy_a_property_and_a_field_of_one_name_on_a_variant.expected -
 	@# map(obj.method, xs) — a bound method through map/filter/sorted, plus a
 	@# method read as a VALUE off a variant receiver. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_map_over_a_bound_method.npy $(TESTTMP)/test_nilpy_mapbound26

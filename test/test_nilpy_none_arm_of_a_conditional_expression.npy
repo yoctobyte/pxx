@@ -1,0 +1,78 @@
+# The None arm of a conditional expression must survive the def's RETURN TYPE.
+#
+# PyInferExprType had no arm for the `None` literal, so it answered tyUnknown --
+# the JOIN'S IDENTITY ELEMENT -- and PyJoinInferTk let the other arm stand. The
+# None then VANISHED and the def registered the other arm's static type:
+# `None if y is None else float(y)` returned a DOUBLE, and returning None
+# through it raised `TypeError: expected a number, got NoneType` from inside the
+# def. lekkerzeilen's world.Furniture.__init__ writes that shape eleven times.
+#
+# The INT arm is the worse half and is why row C is here: it does not raise, it
+# hands back 0 -- a plausible wrong value with no diagnostic.
+#
+# Every row is written with the None in BOTH positions, because the position of
+# the interesting element is a variable and putting it only where it passes is
+# how a suite certifies the bug (devdocs/dev/normalise-dont-special-case.md).
+# Rows E and F exist for that: same values, arms swapped.
+#
+# Expected values are chosen so they cannot collide with a default. `None` is
+# the answer under test, so the OTHER arm is always a value no zero-initialised
+# slot produces: 2.0, 7, 's', [1, 2].
+
+def fdouble(y):
+    return None if y is None else float(y)
+
+def fint(y):
+    return None if y is None else 7
+
+def fstr(y):
+    return None if y is None else "s"
+
+def flist(y):
+    return None if y is None else [1, 2]
+
+def swapped_double(y):
+    return float(y) if y is not None else None
+
+def swapped_int(y):
+    return 7 if y is not None else None
+
+def chained(p, q):
+    # the None is in the MIDDLE of a chain, so neither end position can be
+    # what makes it work
+    return 1 if p else None if q else 2.5
+
+def through_a_local(y):
+    # the local holds None correctly even unfixed -- it is the RETURN that
+    # coerced, which is what makes this row a control rather than a duplicate
+    r = None if y is None else float(y)
+    return r
+
+def never_none(y):
+    # no None anywhere: this row must keep the scalar result it always had
+    return 1.5 if y else 2.5
+
+
+def show(label, v):
+    print("%-12s %s" % (label, repr(v)))
+
+
+show("A double", fdouble(None))
+show("A double 2", fdouble(2))
+show("B int", fint(None))
+show("B int 2", fint(2))
+show("C str", fstr(None))
+show("C str 2", fstr(2))
+show("D list", flist(None))
+show("D list 2", flist(2))
+show("E swap dbl", swapped_double(None))
+show("E swap dbl2", swapped_double(2))
+show("F swap int", swapped_int(None))
+show("F swap int2", swapped_int(2))
+show("G chain p", chained(1, 0))
+show("G chain q", chained(0, 1))
+show("G chain no", chained(0, 0))
+show("H local", through_a_local(None))
+show("H local 2", through_a_local(2))
+show("I no none", never_none(1))
+show("I no none2", never_none(0))

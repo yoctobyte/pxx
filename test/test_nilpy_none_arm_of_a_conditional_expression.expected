@@ -1,0 +1,19 @@
+A double     None
+A double 2   2.0
+B int        None
+B int 2      7
+C str        None
+C str 2      's'
+D list       None
+D list 2     [1, 2]
+E swap dbl   None
+E swap dbl2  2.0
+F swap int   None
+F swap int2  7
+G chain p    1
+G chain q    None
+G chain no   2.5
+H local      None
+H local 2    2.0
+I no none    1.5
+I no none2   2.5
