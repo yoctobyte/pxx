@@ -1,0 +1,16 @@
+# Globals named exactly like the functions that read them, for
+# test_nilpy_a_module_qualified_read_of_a_same_named_global.npy. The collision is
+# the point: `qualres.BOAT` read inside `def boat` was compiled as boat's own
+# RESULT variable and answered None.
+BOAT = 11.5
+BEAM = 3.6
+DECK = "teak"
+
+
+def hull():
+    return 11
+
+
+class Thing:
+    def __init__(self):
+        self.n = 7

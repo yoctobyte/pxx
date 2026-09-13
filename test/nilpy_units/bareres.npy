@@ -1,0 +1,11 @@
+# Globals named exactly like the functions that read them WITHOUT a qualifier,
+# for test_nilpy_a_bare_global_read_inside_a_same_named_def.npy. Kept in a module
+# rather than in the program so the program's own rows read a real import, which
+# is the shape lekkerzeilen's bindings.py has.
+HELPER = "from-a-module"
+
+
+def helper():
+    # reads its own module's global, from inside the module -- the program cannot
+    # reach this arm on its behalf
+    return HELPER

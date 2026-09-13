@@ -1039,6 +1039,49 @@ test-nilpy: $(COMPILER)
 	# fixture was green on a broken compiler.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_qualified_def_is_a_value_across_modules.npy $(TESTTMP)/test_nilpy_modqualvalx26
 	$(TESTTMP)/test_nilpy_modqualvalx26 | diff -u test/test_nilpy_a_module_qualified_def_is_a_value_across_modules.expected -
+	# A MODULE-QUALIFIED name is not a BARE OWN NAME, whatever it is spelled like.
+	# `qualres.BOAT` read inside `def boat` matched the expression parser's
+	# bare-own-name arm -- the one implementing FPC's `FuncName` synonym for
+	# `Result` -- on the NAME alone, and compiled as boat's own result variable:
+	# None, against CPython's 11.5, while the identical body under a different name
+	# was correct. The qualifier had already been consumed into qUnit and every
+	# sibling arm that must not claim a qualified name tests it.
+	# THE MASKING IS THE INTERESTING HALF and is why this needs a fixture rather
+	# than a line: flat unit scope makes the degraded bare read land on the RIGHT
+	# global whenever the enclosing def is named something else, so nine of
+	# lekkerzeilen's ten hull builders were correct and only `def motorkruiser()`
+	# reading `lines.MOTORKRUISER` was not -- surfacing as
+	# `'NoneType' object has no attribute 'length'` several frames later.
+	# Every row is paired with the same read from a differently-named function, a
+	# method row (registered as `Boat.boat`, matched through LastDotName, a spelling
+	# no plain-function row reaches), a parameterised row, and a module FUNCTION
+	# called through the qualifier.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_qualified_read_of_a_same_named_global.npy $(TESTTMP)/test_nilpy_qualres26
+	$(TESTTMP)/test_nilpy_qualres26 | diff -u test/test_nilpy_a_module_qualified_read_of_a_same_named_global.expected -
+	# The UNQUALIFIED spelling of the same hijack, and in NilPy the arm has no
+	# correct case at all: Python has no implicit result, so a bare name equal to
+	# the enclosing def is the module GLOBAL, a LOCAL, or the def itself, never a
+	# result variable. NilPy sets a result through `return`, which builds an exit
+	# node against RetSymIdx and never comes through this name lookup, so the
+	# synonym is dead weight in this frontend -- disabled with one `not isNilPy`,
+	# while the Pascal arm stays alive (test_a_unit_qualified_read_of_a_same_named
+	# _global.pas proves that, and the diagnostic still fires there).
+	# Kept SEPARATE from the qualified fixture on purpose: one condition guards each
+	# spelling, so either one reverted alone reddens only its own file. Measured
+	# with the guard removed, per row -- `defaults()` None for 'abc', `size(1)` 1
+	# for 8, `cfg()` a TypeError because the hijacked read is None, `local()` 1 for
+	# 4 (the arm beat a REAL LOCAL of the same name), the method row and the
+	# module-internal read both None -- and `fib(10)` 55 either way, which is what
+	# makes it the negative control: a bare own name in CALL position must stay a
+	# call. lekkerzeilen's bindings.py:479 is the first row exactly.
+	# The absence of the warning is asserted, so the `ok:` line is asserted first --
+	# a grep for a string that is missing cannot tell a fixed compiler from one that
+	# never ran.
+	@out=$$(./$(COMPILER) --warn-self-result -Futest/nilpy_units test/test_nilpy_a_bare_global_read_inside_a_same_named_def.npy $(TESTTMP)/test_nilpy_bareres26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q '^ok:' \
+	  && ! printf '%s\n' "$$out" | grep -q 'bare own name' \
+	  || { echo 'bare global read in a same-named def: FAIL (no ok: line, or the Pascal-only self-result synonym fired in NilPy)'; printf '%s\n' "$$out"; exit 1; }
+	$(TESTTMP)/test_nilpy_bareres26 | diff -u test/test_nilpy_a_bare_global_read_inside_a_same_named_def.expected -
 	# Importing a unit that declares `Text = class` must not change what `Text`
 	# means in a DIFFERENT unit that never names it. It did, silently, decided by
 	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was
@@ -11209,6 +11252,18 @@ test-core: $(COMPILER)
 	@# genuine paramform use in the same file, so the zero cannot be satisfied by
 	@# a rewrite that stopped firing altogether. Both halves were confirmed by
 	@# disabling the guard: 2 injections and a failed parse.
+	# The PASCAL half of the same defect, and the frontends are duplicated on
+	# purpose so both arms need the guard: `uqualres.BOAT` read inside
+	# `function boat` answered the uninitialised result where FPC answers 115.
+	# WHAT REDS ON THE BROKEN COMPILER, measured at 4e4eda234f6c: only the
+	# parameterised `Other(5)` row, 4297021 against 65. The `boat` row IS hijacked
+	# -- the compiler warns on it -- and still printed the right answer, because
+	# `boat := uqualres.BOAT` degrades to the self-assignment `boat := boat`, which
+	# is eliminated and leaves the value the eliminated load had put in the result.
+	# A parameterised reader cannot hide that way. All five rows match FPC
+	# (fpc -O2 -Tlinux -Px86_64, run side by side).
+	./$(COMPILER) -Futest/units test/test_a_unit_qualified_read_of_a_same_named_global.pas $(TESTTMP)/test_qualres26
+	$(TESTTMP)/test_qualres26 | diff -u test/test_a_unit_qualified_read_of_a_same_named_global.expected -
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
 	tools/expect_same.sh test_genshadow26 "$$($(TESTTMP)/test_genshadow26)" "shadow 12 10"
 	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias

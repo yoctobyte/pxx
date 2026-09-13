@@ -1,0 +1,105 @@
+# A BARE name equal to the enclosing def's name is never that def's result.
+#
+# The expression parser implements FPC's `FuncName`-as-`Result` synonym: inside
+# `function boat`, a bare `boat` with no following `(` is boat's result variable.
+# That is correct Pascal and it was reached by the NilPy frontend too, where it
+# has NO correct case at all -- Python has no implicit result, so a bare name
+# matching the enclosing def is the module GLOBAL (or a local, or the def itself),
+# and every firing was a silent wrong value. NilPy sets a result through `return`,
+# which builds an exit node against RetSymIdx and never comes through this name
+# lookup, so nothing in the frontend needs the synonym. Measured before the fix:
+#
+#     def defaults(): return DEFAULTS   -> None, CPython 'abc'
+#     def size(n):    return SIZE + n   -> size(1) = 1, CPython 8
+#     def other():    return DEFAULTS   -> 'abc', correct
+#
+# and the arm beat a REAL LOCAL of the same name too -- `def local(): local = 3;
+# return local + 1` answered 1, not 4 -- so it was not merely shadowing globals.
+#
+# and lekkerzeilen's bindings.py:479 is exactly the first row, reading its
+# module's `DEFAULTS` keymap from inside `def defaults()`. The QUALIFIED spelling
+# of the same hijack is test_nilpy_a_module_qualified_read_of_a_same_named_global
+# and is a separate guard -- one condition per spelling -- so the two fixtures
+# must stay separate: either guard reverted alone reddens only its own file.
+#
+# Every row is paired with the SAME read from a function named something else. A
+# row that only checked the colliding spelling could not tell a fixed read from a
+# lucky one, and flat scope makes the degraded read land on the right global
+# whenever the def is named anything else -- which is why nine of ten sister
+# builders in the demo were correct.
+import bareres
+
+DEFAULTS = "abc"
+SIZE = 7
+CFG = {"k": 5}
+ITEMS = [1, 2, 3]
+
+
+def defaults():
+    # paramless and a STRING: the demo's own shape, and the one the compiler used
+    # to warn about in its own words ("bare own name 'DEFAULTS' reads the result
+    # of parameterless function defaults") while doing the wrong thing
+    return DEFAULTS
+
+
+def control_defaults():
+    return DEFAULTS
+
+
+def size(n):
+    # WITH PARAMETERS, where the paramless diagnostic never fires, so before the
+    # fix this row was wrong and silent
+    return SIZE + n
+
+
+def control_size(n):
+    return SIZE + n
+
+
+def cfg():
+    # a DICT read by key: the hijacked read is None, so this row fails as a
+    # TypeError rather than a wrong value -- the same shape bindings.py has
+    return CFG["k"]
+
+
+def items():
+    # a container whose LENGTH is the readout, so a None cannot answer plausibly
+    return len(ITEMS)
+
+
+def fib(n):
+    # RECURSION is the row that says the fix did not simply delete the arm's
+    # exclusion of a following '(' -- a bare own name in call position must stay a
+    # call in both frontends
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+
+def local():
+    # a LOCAL of the def's own name: assignment makes it a local and reading it
+    # must give the local, never a result variable. Measured 1 before the fix, so
+    # the arm outranked a symbol that unambiguously exists in the def's own scope.
+    local = 3
+    return local + 1
+
+
+class Holder:
+    def defaults(self):
+        # a METHOD whose name collides with a module global. A method is
+        # registered as `Holder.defaults` and the arm compared against LastDotName
+        # of that, so the collision reaches it through a spelling no plain
+        # function row exercises.
+        return DEFAULTS
+
+
+print(defaults())
+print(control_defaults())
+print(size(1))
+print(control_size(1))
+print(cfg())
+print(items())
+print(fib(10))
+print(local())
+print(Holder().defaults())
+print(bareres.helper())

@@ -1,0 +1,77 @@
+# A MODULE-QUALIFIED name is not a bare own name, whatever it is spelled like.
+#
+# `qualres.BOAT` read inside `def boat` matched the expression parser's
+# bare-own-name arm -- the one implementing FPC's `FuncName` synonym for
+# `Result` -- on the NAME alone, and was compiled as boat's own result variable.
+# It answered None where CPython answers 11.5, while the identical body under a
+# different name answered 11.5. The qualifier had already been consumed into
+# qUnit; every sibling arm in that routine that must not claim a qualified name
+# tests it and this one did not. The Pascal twin is
+# test_a_unit_qualified_read_of_a_same_named_global.pas and answered 0 -- the
+# uninitialised result -- against FPC's 115.
+#
+# HOW IT WAS FOUND, because the masking is the interesting half: the lekkerzeilen
+# demo died at `AttributeError: 'NoneType' object has no attribute 'length'`
+# several frames from the cause, in `def motorkruiser()` reading
+# `lines.MOTORKRUISER`. Its nine sister builders read their own hulls the same way
+# and were CORRECT -- flat unit scope makes the degraded bare read land on the
+# right global whenever the enclosing def is named something else -- so the bug
+# only shows where a builder happens to share its hull's name.
+#
+# Every row is paired with the SAME read from a function named something else. A
+# row that only checked the colliding spelling could not tell a fixed read from a
+# lucky one.
+import qualres
+
+
+def boat():
+    # case-INSENSITIVELY equal to the global: the demo's own spelling
+    return qualres.BOAT
+
+
+def control_boat():
+    return qualres.BOAT
+
+
+def BOAT():
+    # ...and EXACTLY equal, which Pascal cannot spell as a second function
+    return qualres.BOAT
+
+
+def beam(n):
+    # with PARAMETERS, where the arm is not gated on the paramless diagnostic at
+    # all -- a bare own-name read with parameters is unambiguously the result var,
+    # so this is the arm at its widest
+    return qualres.BEAM + n
+
+
+def hull():
+    # a module FUNCTION of the same name, CALLED through the qualifier. The arm
+    # excludes a following '(' as a recursive call, so this is the row that says
+    # the exclusion is doing the work rather than the qualifier test
+    return qualres.hull()
+
+
+def deck():
+    return qualres.DECK
+
+
+class Boat:
+    def boat(self):
+        # a METHOD whose name collides: a method is registered as `Boat.boat` and
+        # the arm compares against LastDotName of that, so the collision reaches
+        # it through a spelling no plain-function row exercises
+        return qualres.BOAT
+
+    def thing(self):
+        return qualres.Thing().n
+
+
+print(boat())
+print(control_boat())
+print(BOAT())
+print(beam(1.0))
+print(hull())
+print(deck())
+print(Boat().boat())
+print(Boat().thing())

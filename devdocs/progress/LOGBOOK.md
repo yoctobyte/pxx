@@ -3941,3 +3941,66 @@ assigned to a local is correct — `bug-n-a-dynamically-dispatched-call-loses-it
 return-kind-when-it-is-returned` (p65). The obvious spelling of the new row would
 have been red for that reason, which is why it encodes integers and says so inline.
 2026-09-13 | frankS | compiler/pyparser.inc | correct a FALSE claim in PyScalarWrappableParamType's comment and in the ticket it seeded: a Variant->TPyBytes call-argument coercion DOES exist (measured three ways), so tyClass is not excluded for want of one. Admitting it is a one-liner that fixes `f = struct.unpack` and breaks two callable-value-defaults fixtures with `expected an object argument, got int`, because it changes which OVERLOAD the wrapper is built over. Measured by applying it; reverted, not landed. Comment-only change, binary unchanged.
+
+## 2026-09-13 | frankH | compiler/pyparser.inc, compiler/pasparser_expr.inc | a unit-qualified read of a same-named global was compiled as the result variable
+
+BOTH frontends. `uqualres.BOAT` read inside `function boat` matched the
+expression parser's bare-own-name arm -- the one implementing FPC's `FuncName`
+synonym for `Result` -- on the NAME alone, and was compiled as boat's own result
+variable. One program, two functions with identical bodies:
+
+    function boat: Integer;  begin boat  := uqualres.BOAT; end;   ->  0
+    function other: Integer; begin other := uqualres.BOAT; end;   ->  115
+
+FPC answers 115 for both (verified side by side, `fpc -O2 -Tlinux -Px86_64`). The
+NilPy twin answered None against CPython's 11.5. The qualifier had already been
+consumed into qUnit, and every sibling arm in that routine that must not claim a
+qualified name tests it -- this one did not. One condition per frontend.
+
+**The diagnostic was RIGHT ABOUT THE MECHANISM AND WRONG ABOUT THE WORD**, which
+is why nobody had read it as the bug: `--warn-self-result` fires on the hijacked
+line and says `bare own name 'BOAT' reads the result of parameterless function
+boat`. It is a true statement about what the compiler did and it describes a
+QUALIFIED name as bare. It was the instrument that found this, printed by
+`PXXDBG=a.ast:boat` on a twelve-line reduction.
+
+**HOW IT SURFACED, and the masking is the part worth keeping.** The lekkerzeilen
+demo died at `AttributeError: 'NoneType' object has no attribute 'length'`,
+several frames from the cause, inside `def motorkruiser()` reading
+`lines.MOTORKRUISER`. Its NINE sister hull builders read their own hulls exactly
+the same way and were correct -- flat unit scope makes the degraded bare read land
+on the right global whenever the enclosing def is named something else -- so the
+defect is only visible where a builder happens to share its hull's name. A probe
+module reading all eight hull constants (`lines.MOTORKRUISER.length`) was correct
+on all eight, twice, including with the whole app imported: the read had to be
+performed from inside the same-named function to fail at all.
+
+**And the positive control is not where I predicted.** Measured on the pre-fix
+binary against the Pascal fixture: 115 / 115 / 11 / 4297021 / teak -- only the
+PARAMETERISED row reds. The `boat` row is hijacked (the compiler warns) and still
+prints the right answer, because `boat := uqualres.BOAT` degrades to the
+self-assignment `boat := boat`, which is eliminated, leaving the value the
+eliminated load had already put in the result. A string-returning row was added on
+the prediction that a managed result would be deterministically empty and
+therefore the guaranteed control; it printed `teak` and did not warn, so the arm
+never claimed it. Both facts are written into the fixture rather than dropped,
+because the next reader will make the same prediction. The NilPy fixture reds
+outright.
+
+Tests: `test_a_unit_qualified_read_of_a_same_named_global.pas` +
+`test/units/uqualres.pas` (five rows, all matching FPC) and
+`test_nilpy_a_module_qualified_read_of_a_same_named_global.npy` +
+`test/nilpy_units/qualres.npy` (eight rows, `.expected` from CPython), each row
+paired with the same read from a differently-named function, plus a METHOD row --
+registered as `Boat.boat` and matched through LastDotName, a spelling no
+plain-function row reaches.
+
+2026-09-13 | frankH (Track N) | compiler/pyparser.inc, test/test_nilpy_a_bare_global_read_inside_a_same_named_def.{npy,expected}, test/nilpy_units/bareres.npy, Makefile | **the UNQUALIFIED half of the same hijack, and in NilPy that arm has no correct case at all.** The entry above guarded the qualified spelling with one `qUnit < 0`; this one disables the whole FPC `FuncName`-as-`Result` synonym for the NilPy frontend with one `not isNilPy`, because **Python has no implicit result**: a bare name equal to the enclosing def is the module GLOBAL, a LOCAL, or the def itself, and every firing was a silent wrong value. NilPy sets a result through `return`, which builds an AN_EXIT against RetSymIdx and never comes through this name lookup, so the synonym is dead weight there -- verified by the Pascal arm staying alive and still warning (`function f; begin f := 5; if f = 5 then f := f + 1; end` prints 6 with two warnings) and by the Pascal fixture from the entry above staying green.
+
+**Found by the demo's own mouth, not by a failure.** The lz_h7 build printed `pascal26:479: warning: bare own name 'DEFAULTS' reads the result of parameterless function defaults` -- lekkerzeilen/bindings.py:431 is `DEFAULTS = """..."""` and :477 is `def defaults():`. The warning had been in the build output all along; the previous entry's lesson is why it was read this time.
+
+**Per-row positive control, measured on a binary with the one condition removed** (revert, `make compiler/pascal26`, measure, restore, rebuild -- the restored binary came back byte-identical, 8aaab33a308a, which is the determinism check for free): `defaults()` None for 'abc'; `size(1)` 1 for 8 -- the parameterised shape, where the paramless diagnostic never fires, so it was wrong AND silent; `cfg()` a TypeError, not a wrong value, because the hijacked read is None and the row subscripts it, which is bindings.py's shape exactly; `items()` a TypeError on `len(None)`; the METHOD row and a module-internal read (a def reading its own module's global, from inside the module -- an arm the program cannot reach on its behalf) both None; and **`local()` answered 1 against 4, so the arm outranked a REAL LOCAL of the def's own name** -- it was never merely shadowing globals. `fib(10)` is 55 either way and is the negative control: a bare own name in CALL position must stay a call, so the fix is not a deletion of the arm's `(` exclusion.
+
+**Two guards, two fixtures, on purpose.** One condition per spelling, so either reverted alone reddens only its own file -- verified: with `not isNilPy` removed the qualified fixture still passes and only the bare one reds. The Makefile row also asserts the warning is ABSENT, and therefore asserts the `ok:` line FIRST -- a grep for a missing string cannot tell a fixed compiler from one that never ran; both failure shapes of that `&&`/`||` chain were exercised.
+
+Demo: `bin/lz_h7` (procs=11401) now builds every mesh and the traffic and dies later at `TypeError: object does not support item assignment`, which is the next wall.

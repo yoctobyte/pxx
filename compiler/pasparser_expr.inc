@@ -8756,11 +8756,33 @@ begin
         CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
+              (qUnit < 0) and
               (Tokens[TokPos].Kind <> tkLParen) and
               not DelphiMode and
               ((name = Procs[CurProc].Name) or
                CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
       begin
+        { BARE, and the qualifier test is what makes that word true. `uboat.BOAT`
+          read inside `function boat` matched this arm on the NAME alone and was
+          compiled as the RESULT variable: measured 2026-09-13, one program, two
+          functions with identical bodies --
+
+              function boat: Integer;  begin boat  := uboat.BOAT; end;   -> 0
+              function other: Integer; begin other := uboat.BOAT; end;   -> 115
+
+          -- and the same shape in NilPy answered None against CPython's 11.5.
+          A qualified name is not bare in any sense: the qualifier was already
+          consumed into qUnit, every sibling arm in this routine that must not
+          claim a qualified name tests it, and this one did not. The tell is that
+          --warn-self-result DOES fire here and says `bare own name`, which is
+          the diagnostic being right about the mechanism and wrong about the word.
+          Found from the lekkerzeilen demo, where `def motorkruiser()` reading
+          `lines.MOTORKRUISER` got None and died several frames later at
+          `'NoneType' object has no attribute 'length'` -- and where the sister
+          builders survived only because flat unit scope makes the degraded bare
+          read accidentally correct whenever the enclosing def is named something
+          else.
+          bug-a-a-unit-qualified-read-of-a-same-named-global-is-hijacked-by-the-result-variable }
         { Bare function name in its own body, read as a value = the result var
           (FPC `FuncName` synonym for `Result`, e.g. `F := F + x`). The assign
           side (`FuncName := ...`) is handled at the statement level; this is the
