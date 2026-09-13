@@ -131,4 +131,4 @@ therefore an INPUT to this fix: all probe shapes unchanged, and
 CPython including traversal.
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 22b7319f1.
