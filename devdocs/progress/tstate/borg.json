@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-13T03:33:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a56bd7985f8cf8ff6d118b7d3e878a991ed20e33",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-13T03:48:18Z",
    "fixed": [
     "test-threads#src:test/test_a_threadvar_is_per_thread.pas"
@@ -483,6 +474,15 @@
    "new_red": [],
    "sha": "24ae382e142a2330a2bb7c9ae524fc9d5d873831",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-13T18:03:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "24ae382e142a2330a2bb7c9ae524fc9d5d873831",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5232,7 +5232,7 @@
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "test-nilpy#src:test/nilpy_open_world_arity_fail.npy": "nilpy_open_world_arity_fail: FAIL - a fifth positional argument must be refused, not dropped",
-  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), f14ef31bb51c (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
+  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 43bfe4af8250 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@1": "self-host fixedpoint: verified \u2014 1 round(s), 43bfe4af8250 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@10": "self-host fixedpoint: verified \u2014 1 round(s), 43bfe4af8250 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@11": "self-host fixedpoint: verified \u2014 1 round(s), 43bfe4af8250 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
@@ -14734,14 +14734,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T18:03:07Z",
+  "date": "2026-09-13T18:03:30Z",
   "deadline": 3600.0,
   "sha": "24ae382e142a2330a2bb7c9ae524fc9d5d873831",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 902.8
+  "wall": 14.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14792,9 +14792,9 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T15:52:01Z",
+   "date": "2026-09-13T18:03:30Z",
    "deadline": 3600.0,
-   "sha": "32ef226ed967968bb1cdfa4959c519da7918a8bb",
+   "sha": "24ae382e142a2330a2bb7c9ae524fc9d5d873831",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
