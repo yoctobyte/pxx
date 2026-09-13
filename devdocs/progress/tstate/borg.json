@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-12T08:49:01Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9f0adc5fc10474b87326a40048e3735344253a8f",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-12T09:03:35Z",
    "fixed": [],
    "new_red": [],
@@ -459,6 +450,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-13T04:10:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "54c8d828593833bb652afe1efbd0395c8b8e2767",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5006,7 +5006,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "54c8d828593833bb652afe1efbd0395c8b8e2767",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "54c8d828593833bb652afe1efbd0395c8b8e2767",
   "test-threads#src:tools/compiler_srchash.sh": "54c8d828593833bb652afe1efbd0395c8b8e2767",
-  "test-uforth#src:tools/compiler_srchash.sh": "a56bd7985f8cf8ff6d118b7d3e878a991ed20e33",
+  "test-uforth#src:tools/compiler_srchash.sh": "54c8d828593833bb652afe1efbd0395c8b8e2767",
   "test-uforth#src:tools/compiler_srchash.sh@1": "54c8d828593833bb652afe1efbd0395c8b8e2767",
   "test-uforth#src:tools/compiler_srchash.sh@10": "54c8d828593833bb652afe1efbd0395c8b8e2767",
   "test-uforth#src:tools/compiler_srchash.sh@11": "54c8d828593833bb652afe1efbd0395c8b8e2767",
@@ -14645,14 +14645,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T04:09:06Z",
+  "date": "2026-09-13T04:10:53Z",
   "deadline": 3600.0,
   "sha": "54c8d828593833bb652afe1efbd0395c8b8e2767",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 879.7
+  "verdict": "GREEN",
+  "wall": 95.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14703,9 +14703,9 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T03:33:12Z",
+   "date": "2026-09-13T04:10:53Z",
    "deadline": 3600.0,
-   "sha": "a56bd7985f8cf8ff6d118b7d3e878a991ed20e33",
+   "sha": "54c8d828593833bb652afe1efbd0395c8b8e2767",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
