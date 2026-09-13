@@ -23914,10 +23914,35 @@ end;
   feature-nilpy-with-multiple-context-managers }
 function PyParseWithTail: Integer;
 var exprNode, node, seq, symIdx, cmCi, cmSym, entNode, exitNode, bodyNode: Integer;
+    hSave: Integer;
     varName: AnsiString; usesProtocol: Boolean;
 begin
+  { FOLD the manager expression's own hoisted setup INTO it, the same way a
+    short-circuit operand does. Every other statement header is fine without
+    this -- measured 2026-09-13, a star-unpacked call in an `if`, `while`, `for`,
+    `try` and plain-statement header all answer correctly -- because the
+    statement-level flush puts the setup before the whole statement, and before
+    is where it belongs. `with` is the exception because it BUILDS ITS OWN
+    SEQUENCE and puts the manager's evaluation inside it, so the flush lands
+    AFTER the `cm := <manager>` assignment that reads the temps.
+
+    The symptom: `with open_window(t, *size) as w:` died with a nil reference
+    BEFORE open_window was entered. A star-unpack lowers to an arity dispatch on
+    `len(tmp)` over a hidden tyClass temp holding the sequence, and that temp was
+    still nil when the dispatch read it -- the assignments to it were present in
+    the AST, three statements too late. lekkerzeilen's `--shot` path is exactly
+    this line (app.py:4236) and it was the live wall on the demo; `--m0` has the
+    same `with platform.open_window(...)` WITHOUT a star and has always worked,
+    which is what made the shape look innocent.
+
+    Folded before the type questions below on purpose: AN_COMMA carries the tk of
+    its Right, and ResolveNodeRec has an AN_COMMA arm that follows Right, so both
+    see through it. When nothing was hoisted PyFoldHoistSince returns the node
+    unchanged, so the ordinary `with` is byte-for-byte what it was.
+    bug-n-a-star-unpack-in-a-with-header-reads-its-own-temp-before-it-is-filled }
+  hSave := PyHoistTail;
   PyParseBoolExpr;
-  exprNode := CurASTNode;
+  exprNode := PyFoldHoistSince(hSave, CurASTNode);
   seq := -1;
 
   { CONTEXT-MANAGER protocol. Historically `with E as v:` was desugared to

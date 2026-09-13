@@ -1,0 +1,54 @@
+A plain call in the with header
+   mk A a=7 b=8
+   ctor A a=7 b=8
+   __enter__ A
+   body 15
+   __exit__ A
+B the star hoisted OUT of the header
+   mk B a=7 b=8
+   ctor B a=7 b=8
+   __enter__ B
+   body 15
+   __exit__ B
+C the star IN the header -- the row this fixture exists for
+   mk C a=7 b=8
+   ctor C a=7 b=8
+   __enter__ C
+   body 15
+   __exit__ C
+D a LIST rather than a tuple
+   mk D a=11 b=12
+   ctor D a=11 b=12
+   __enter__ D
+   body 23
+   __exit__ D
+E no `as`: the manager is evaluated for effect, and __exit__ still runs
+   mk E a=7 b=8
+   ctor E a=7 b=8
+   __enter__ E
+   body
+   __exit__ E
+F two managers on one line, the SECOND one starred
+   mk F1 a=1 b=2
+   ctor F1 a=1 b=2
+   __enter__ F1
+   mk F2 a=7 b=8
+   ctor F2 a=7 b=8
+   __enter__ F2
+   body 3 15
+   __exit__ F2
+   __exit__ F1
+G ...and the FIRST one starred, because the comma form recurses
+   mk G1 a=7 b=8
+   ctor G1 a=7 b=8
+   __enter__ G1
+   mk G2 a=3 b=4
+   ctor G2 a=3 b=4
+   __enter__ G2
+   body 15 7
+   __exit__ G2
+   __exit__ G1
+H a sibling statement header, which never had the bug and must not gain it
+   mk H a=7 b=8
+   ctor H a=7 b=8
+   if header ok

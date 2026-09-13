@@ -3836,6 +3836,27 @@ test-nilpy: $(COMPILER)
 	@# and the round-tripped bytes come back [0, 0, 0, 0].
 	./$(COMPILER) test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.npy $(TESTTMP)/test_nilpy_bytesptr26
 	$(TESTTMP)/test_nilpy_bytesptr26 | diff -u test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.expected -
+	@# A STAR-UNPACK IN A `with` HEADER must evaluate its own setup before the
+	@# manager is read. A star expansion lowers to an arity dispatch on `len(tmp)`
+	@# over a hidden temp; `with` builds its OWN sequence around the manager's
+	@# evaluation, so the statement-level hoist flush landed AFTER the assignment
+	@# that reads that temp, and the program died with a nil reference BEFORE the
+	@# called function was entered. Fixed by folding the header's hoists into the
+	@# manager expression (PyHoistTail / PyFoldHoistSince), which is what a
+	@# short-circuit operand already does.
+	@# Rows A and B are the CONTROLS and pass before the fix too -- A holds the
+	@# `with` and drops the star, B holds the star and moves it out of the header --
+	@# so neither half alone reproduces it and row C is the only one that does.
+	@# Row H asserts a sibling statement header did not GAIN the bug: measured
+	@# 2026-09-13, a starred call in an if / while / for / try / plain-statement
+	@# header all answer correctly, so `with` was alone and this is the only arm.
+	@# Expected output verified against CPython, which agrees on every row -- not
+	@# captured from our own binary, which would have pinned the implementation.
+	@# Control, measured: under pin v408 the program dies at row C with
+	@# `Runtime error 216 (nil reference)` after 14 of 54 lines, so the diff loses
+	@# the whole tail rather than one value.
+	./$(COMPILER) test/test_nilpy_a_star_unpack_in_a_with_header.npy $(TESTTMP)/test_nilpy_withstar26
+	$(TESTTMP)/test_nilpy_withstar26 | diff -u test/test_nilpy_a_star_unpack_in_a_with_header.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy $(TESTTMP)/test_nilpy_kwfwd26
 	$(TESTTMP)/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy $(TESTTMP)/test_nilpy_optstr26

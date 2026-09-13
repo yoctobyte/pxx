@@ -1,0 +1,83 @@
+# A star-unpacked call in a `with` header must evaluate its own setup BEFORE the
+# manager is read. It did not: the expansion lowers to an arity dispatch on
+# `len(tmp)` over a hidden temp holding the sequence, the `with` lowering builds
+# its OWN sequence around the manager's evaluation, and the statement-level hoist
+# flush therefore landed AFTER the assignment that reads the temp. The temp was
+# still nil when the dispatch read it, so the program died with a nil reference
+# BEFORE the called function was entered.
+#
+# lekkerzeilen's --shot path is exactly this line (app.py:4236,
+# `with platform.open_window("... capture", *size) as window:`), and --m0 writes
+# the same call WITHOUT a star and has always worked -- which is what made the
+# shape look innocent for as long as it did.
+#
+# ROWS A AND B ARE THE CONTROLS AND THEY PASS BEFORE THE FIX TOO. They are what
+# makes row C mean something: A holds the `with` and drops the star, B holds the
+# star and moves it out of the header. Neither half alone reproduces it.
+#
+# Pre-fix, row C is a CRASH, so every row after it vanishes from the output and
+# the diff sees the whole tail go missing rather than one wrong value. That is the
+# instrument working, not a weakness -- a nil reference cannot print a plausible
+# wrong answer.
+# bug-n-a-star-unpack-in-a-with-header-reads-its-own-temp-before-it-is-filled
+
+
+class Box:
+    def __init__(self, tag, a, b):
+        print("   ctor %s a=%d b=%d" % (tag, a, b))
+        self.tag = tag
+        self.a = a
+        self.b = b
+
+    def __enter__(self):
+        print("   __enter__ %s" % self.tag)
+        return self
+
+    def __exit__(self, x, y, z):
+        print("   __exit__ %s" % self.tag)
+        return False
+
+    def sum2(self):
+        return self.a + self.b
+
+
+def mk(tag, a=1, b=2):
+    print("   mk %s a=%d b=%d" % (tag, a, b))
+    return Box(tag, a, b)
+
+
+tup = (7, 8)
+lst = [11, 12]
+
+print("A plain call in the with header")
+with mk("A", 7, 8) as w:
+    print("   body %d" % w.sum2())
+
+print("B the star hoisted OUT of the header")
+held = mk("B", *tup)
+with held as w:
+    print("   body %d" % w.sum2())
+
+print("C the star IN the header -- the row this fixture exists for")
+with mk("C", *tup) as w:
+    print("   body %d" % w.sum2())
+
+print("D a LIST rather than a tuple")
+with mk("D", *lst) as w:
+    print("   body %d" % w.sum2())
+
+print("E no `as`: the manager is evaluated for effect, and __exit__ still runs")
+with mk("E", *tup):
+    print("   body")
+
+print("F two managers on one line, the SECOND one starred")
+with mk("F1", 1, 2) as p, mk("F2", *tup) as q:
+    print("   body %d %d" % (p.sum2(), q.sum2()))
+
+print("G ...and the FIRST one starred, because the comma form recurses")
+with mk("G1", *tup) as p, mk("G2", 3, 4) as q:
+    print("   body %d %d" % (p.sum2(), q.sum2()))
+
+print("H a sibling statement header, which never had the bug and must not gain it")
+if mk("H", *tup).a == 7:
+    print("   if header ok")
