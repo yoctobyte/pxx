@@ -125,4 +125,4 @@ landed, unmeasured here. `pyvar_cptrarray` refuses anything that is not a
 tag-7 TPyList, so they take exactly the path they took before this fix.
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 114dfd769.
