@@ -1941,10 +1941,42 @@ begin
   Next;
 end;
 
+{ Every MACHINE INTEGER kind, which is not the same list as "the kinds a NilPy
+  literal is born as". A Python name binds a Pascal or C integer of whatever
+  width the callee declared -- `function ret: LongInt` is tyInt32, a C `int`
+  constant reaching `gl.LINEAR` is tyInt32 -- and the join below has to answer
+  for those or the binding is refused outright.
+
+  This list was tyInteger and tyInt64 only, and the other NINE kinds therefore
+  reached no arm of PyWiden at all and fell out of its bottom as
+  `annotate the type / too dynamic`. Measured 2026-09-13, one Pascal unit
+  returning each kind against `y = 0; y = k.r_<kind>()`: tyInt8, tyUInt8,
+  tyInt16, tyUInt16, tyInt32, tyUInt32, tyUInt64, tyNativeInt and tyNativeUInt
+  all refused; only tyInteger and tyInt64 compiled. `TypeIsPyNumeric` in
+  symtab.inc has held the full list since it was written -- two mechanisms for
+  one concept, with the narrow one wired into the join. It is not reused
+  verbatim because it counts tyBoolean as a number (`True / 2` is 0.5, which is
+  what it is for) and PyVariantScalar below adds tyBoolean separately.
+  bug-n-a-pascal-sized-integer-reaching-a-nilpy-local-has-no-join }
+function PyIntKind(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyInteger) or (tk = tyInt8) or (tk = tyUInt8) or
+            (tk = tyInt16) or (tk = tyUInt16) or (tk = tyInt32) or
+            (tk = tyUInt32) or (tk = tyInt64) or (tk = tyUInt64) or
+            (tk = tyNativeInt) or (tk = tyNativeUInt);
+end;
+
+{ The two integer kinds whose top bit does not fit an Int64. Joining one of
+  these with any other integer has to reach for tyPromoInt64, whose whole
+  purpose is carrying the exact decimal past 2^63. }
+function PyWideUnsignedKind(tk: TTypeKind): Boolean;
+begin
+  Result := (tk = tyUInt64) or (tk = tyNativeUInt);
+end;
+
 function PyNumeric(tk: TTypeKind): Boolean;
 begin
-  Result := (tk = tyInteger) or (tk = tyInt64) or (tk = tySingle) or
-            (tk = tyDouble) or (tk = tyExtended);
+  Result := PyIntKind(tk) or TypeIsFloat(tk);
 end;
 
 function PyVariantScalar(tk: TTypeKind): Boolean;
@@ -2004,8 +2036,8 @@ begin
       Promo + float has no scalar lowering; error honestly (annotate). }
     if (a = tyVariant) or (b = tyVariant) then
       Result := tyVariant
-    else if (TypeIsPromoInt(a) or (a = tyInteger) or (a = tyInt64) or (a = tyBoolean)) and
-            (TypeIsPromoInt(b) or (b = tyInteger) or (b = tyInt64) or (b = tyBoolean)) then
+    else if (TypeIsPromoInt(a) or PyIntKind(a) or (a = tyBoolean)) and
+            (TypeIsPromoInt(b) or PyIntKind(b) or (b = tyBoolean)) then
       Result := tyPromoInt64
     else
     begin
@@ -2030,12 +2062,28 @@ begin
   end;
   if PyNumeric(a) and PyNumeric(b) then
   begin
-    if (a = tyDouble) or (b = tyDouble) or (a = tyExtended) or (b = tyExtended) then
+    { A float on either side answers DOUBLE, tySingle included. The old form
+      tested only tyDouble/tyExtended, so tySingle-meets-integer fell through to
+      the integer arms and answered an INTEGER KIND -- a join that drops the
+      fraction of the one side that had one. It was unreachable for a REBINDING
+      (PyWidenBinding intercepts every int-meets-float pair and answers
+      tyVariant) and reachable for an EXPRESSION and for return-type inference,
+      and it became reachable much more widely the moment PyIntKind above
+      admitted the sized integers. Double is this compiler's native evaluation
+      type, so it is also the answer that needs no further apology. }
+    if TypeIsFloat(a) or TypeIsFloat(b) then
       Result := tyDouble
-    else if (a = tyInt64) or (b = tyInt64) then
-      Result := tyInt64
+    { Two integers of DIFFERENT kinds (a = b exited at the top) join as the
+      Python `int`, which is tyInt64 -- unless a kind whose top bit overflows
+      one is involved, and then it is the promotable int that carries the exact
+      decimal. Never tyInteger: answering a 32-bit kind for a pair that
+      contained a 64-bit one silently truncated, and no currently reachable pair
+      wanted it (the only int pair that reached this arm before was
+      tyInteger-meets-tyInt64, which already answered tyInt64). }
+    else if PyWideUnsignedKind(a) or PyWideUnsignedKind(b) then
+      Result := tyPromoInt64
     else
-      Result := tyInteger;
+      Result := tyInt64;
     Exit;
   end;
   { string ⊕ char (e.g. `res = res + c`) stays a string — widening to variant

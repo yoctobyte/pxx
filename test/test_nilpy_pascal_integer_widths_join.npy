@@ -1,0 +1,104 @@
+# A NilPy local REBOUND from a Python literal to a Pascal integer, once per
+# machine integer kind. PyNumeric -- the membership test PyWiden's numeric arm
+# and PyVariantScalar are both built on -- listed tyInteger and tyInt64 only, so
+# nine of the eleven integer kinds reached no arm of the join at all and fell out
+# of its bottom as `annotate the type / too dynamic`. This is what a Python name
+# holding a Pascal or C integer looks like, and it is how the lekkerzeilen demo
+# died on `gl.LINEAR` (a C int constant, tyInt32) joined against a dynamic
+# attribute read (tyVariant).
+#
+# Rows in THREE shapes per kind, because each reaches a different arm:
+#   int literal first  -> the integer-meets-integer arm
+#   float first        -> PyWidenBinding's int-meets-float variant redirect
+#   the sized one first-> the same arms with the operands the other way round
+# and a multiply afterwards, because a join that answers a 32-bit kind for a pair
+# containing a wider one compiles and then TRUNCATES -- the value is the only
+# thing that can see that.
+
+import 'intwidths.pas' as u
+
+# Each kind gets its own rebinding. NOT a loop over the functions as VALUES:
+# a bare Pascal function used as a value binds the wrong overload and segfaults
+# (franks-8c is fixing that as part of the bare-builtin-as-a-value group), which
+# has nothing to do with the join under test and would hide it behind a crash.
+def lit_first():
+    out = []
+    y = 0
+    y = u.r_i8();  out.append(y)
+    y = 0
+    y = u.r_u8();  out.append(y)
+    y = 0
+    y = u.r_i16(); out.append(y)
+    y = 0
+    y = u.r_u16(); out.append(y)
+    y = 0
+    y = u.r_i32(); out.append(y)
+    y = 0
+    y = u.r_u32(); out.append(y)
+    y = 0
+    y = u.r_i64(); out.append(y)
+    y = 0
+    y = u.r_u64(); out.append(y)
+    y = 0
+    y = u.r_ni();  out.append(y)
+    y = 0
+    y = u.r_nu();  out.append(y)
+    y = 0
+    y = u.r_int(); out.append(y)
+    return out
+
+print("lit-first:", lit_first())
+
+# One name, one kind, one multiply: a 32-bit slot cannot hold these products.
+y = 0
+y = u.r_i32()
+print("i32 x 1e9:", y * 1000000000)
+
+y = 0
+y = u.r_u32()
+print("u32 x 1e9:", y * 1000000000)
+
+y = 0
+y = u.r_i16()
+print("i16 x 1e9:", y * 1000000000)
+
+# A float on one side and a sized integer on the other. PyWidenBinding answers
+# tyVariant for a REBINDING, so each binding still renders as itself -- the int
+# must not print as 9729.0.
+y = 1.5
+y = u.r_i32()
+print("float-then-i32:", y)
+
+y = u.r_i32()
+y = 1.5
+print("i32-then-float:", y)
+
+# tySingle meets an integer. Before this fix PyWiden's float test named only
+# tyDouble/tyExtended, so this pair fell through to the integer arms; the
+# rebinding never reached it (PyWidenBinding intercepts int-meets-float) but an
+# EXPRESSION did.
+print("i32 + single:", u.r_i32() + u.r_sgl())
+print("i64 * single:", u.r_i64() * u.r_sgl())
+
+# A sized integer meets a string: neither is a number, both BOX, so the local is
+# a variant and each binding renders as itself.
+y = u.r_u8()
+y = "two hundred"
+print("u8-then-str:", y)
+
+# ...and the reverse order, since the join reports its operands in the order it
+# received them and only one order was ever exercised.
+y = "two hundred"
+y = u.r_u8()
+print("str-then-u8:", y)
+
+# The unsigned 64-bit kinds do not fit an Int64, so their join with any other
+# integer is the promotable int, which carries the exact decimal.
+y = 0
+y = u.r_u64()
+print("u64:", y)
+print("u64 + 1:", y + 1)
+
+y = u.r_ni()
+y = u.r_nu()
+print("ni-then-nu:", y)

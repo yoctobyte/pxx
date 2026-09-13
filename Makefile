@@ -981,6 +981,22 @@ test-nilpy: $(COMPILER)
 	# dispatched at run time at all. .expected is CPython's own output.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_dyn_dispatch_wide_arity.npy $(TESTTMP)/test_nilpy_dynwide26
 	$(TESTTMP)/test_nilpy_dynwide26 | diff -u test/test_nilpy_dyn_dispatch_wide_arity.expected -
+	# A NilPy local rebound from a Python literal to a PASCAL INTEGER, once per
+	# machine integer kind. PyNumeric -- what PyWiden's numeric arm and
+	# PyVariantScalar are both built on -- listed tyInteger and tyInt64 only, so
+	# NINE of the eleven integer kinds reached no arm of the join and fell out of
+	# its bottom as `annotate the type / too dynamic`. Measured before the fix,
+	# `y = 0; y = k.r_<kind>()` per kind: tyInt8(7), tyUInt8(8), tyInt16(9),
+	# tyUInt16(10), tyInt32(11), tyUInt32(12), tyUInt64(14), tyNativeInt(15) and
+	# tyNativeUInt(16) all refused, tyInteger and tyInt64 compiled -- that table is
+	# this row's positive control. It is how the lekkerzeilen demo died: `gl.LINEAR`
+	# is a C int constant (tyInt32) joined against a dynamic attribute read
+	# (tyVariant). The multiply rows are here because a join that answers a 32-bit
+	# kind for a pair containing a wider one COMPILES and then truncates, which
+	# only a value can see. .expected is CPython's own output, from the same file
+	# with the one import line pointing at a Python twin of the unit.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_pascal_integer_widths_join.npy $(TESTTMP)/test_nilpy_intwidths26
+	$(TESTTMP)/test_nilpy_intwidths26 | diff -u test/test_nilpy_pascal_integer_widths_join.expected -
 	# Importing a unit that declares `Text = class` must not change what `Text`
 	# means in a DIFFERENT unit that never names it. It did, silently, decided by
 	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was

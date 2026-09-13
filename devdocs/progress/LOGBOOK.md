@@ -3646,3 +3646,48 @@ than a refused one.
 
 2026-09-13 | frankH (Track N) | compiler/{pyparser.inc,builtin/pyeval.pas}, Makefile, test/test_nilpy_dyn_dispatch_wide_arity.{npy,expected}, test/nilpy_units/dynwide.npy, 3 tickets | A RUN-TIME DISPATCHED METHOD CALL IS NO LONGER CAPPED AT FOUR ARGUMENTS, and lekkerzeilen advances past gfx.py:385. `gl.tex_image_2d(target, fmt, w, h, fmt, data, level=at)` was refused with "that path takes at most 4 arguments — annotate the receiver with its class to pass more", which refuses ordinary duck-typed code; the AST census (not a grep — a grep for the shape answered 0) found SEVEN `gl.*` calls past four in gfx.py alone. The entry points pydyn_meth0..4 / pydyn_methkw1..4 were an arity LADDER and a ladder is a cap, and PyDynMethN's FIRST ACT was to build a TPyList out of a0..a3 for PyHostCall — so taking the list deletes the reason for the ladder instead of lengthening it. `pydyn_methl` does that; the rungs stay as wrappers because they are a public builtin interface and nothing establishes no program calls them. TWO PATHS ON PURPOSE, AND THIS IS THE MEASUREMENT THAT DECIDED IT: building the list means HOISTED appends, and hoisting in this frontend ESCAPES A TERNARY BRANCH — measured before the change and with no dynamic dispatch involved, `f(*[track(10), track(20)]) if c else 99` with c False evaluates both track() calls where CPython evaluates neither. Routing every arity through a hoisted list would have extended that defect to every dynamic method call in a conditional, i.e. to code that is correct today, so four and fewer keep the direct rungs and their exact timing. Banked as bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch (prio 55) and the two paths merge when it is fixed — the comment in PyMakeDynMethCall says so, so the split cannot read as taste. LIFTING THE CAP MADE A PREVIOUSLY-UNREACHABLE ARM REACHABLE: PyDynMethL's callable-FIELD fallback ends `else Result := pyvar_callv4(...)`, which was exactly right while nargs could not exceed four and would have meant "silently pass the first four" afterwards. It now raises by name; filed as bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments (prio 40). LEAK CHECKED RATHER THAN ASSUMED, because no output assertion can see one: `args` is the caller's and pydyn_methl must not free it, so the question was whether the frontend temp is managed — 8000 calls under -dPXX_ALLOC_CENSUS give allocs=146514 frees=146506 live=8, so it is ARC-managed and freeing it would have been a double free. Ten fixture rows against the CPython oracle including a keyword that is NOT written last (the arrangement a positional binder gets wrong) and source-order evaluation of six argument expressions. THE DEMO'S NEW WALL IS NOT THIS CLASS: gfx.py:392, `too dynamic [a=tyInt32 b=tyVariant] (inferring least)`, where `gl` arrives through a try/except/else import guard — filed at prio 75 with the null reduction recorded, since a guard-free reduction of the same shape COMPILES and matches CPython, which is what points the next attempt at the guard. Expectation recorded before the re-run and half wrong: I predicted the arity class would clear gfx.py entirely; it cleared 383 and 385 and stopped seven lines later on an unrelated defect.
 2026-09-13 | frankS (Track N) | compiler/pyparser.inc, compiler/pyforwards.inc, test/test_nilpy_a_name_keyed_builtin_is_a_value.{npy,expected}, test/test_nilpy_a_name_keyed_builtin_as_a_value_beats_an_rtl_routine.{npy,expected}, Makefile, devdocs/progress/done/bug-n-abs-is-not-a-value-while-len-and-str-are.md, devdocs/progress/backlog-nilpy/bug-n-the-lazy-builtin-constructors-and-divmod-are-still-not-values.md | A NAME-KEYED PYTHON BUILTIN IS A VALUE NOW — seven of the twelve censused names (abs ascii chr hash id ord round), through a PyBuiltinValueHelper name->pylib-helper table, one shared guard list (PyBuiltinValueNameAhead) and one actor (PyBuiltinIntrinsicValue). THREE THINGS WORTH THE NEXT READER'S TIME. (1) THE BUG WAS NOT "A NAME IS MISSING": without an import `f = abs` was a clean compile error, but with `import math` it bound to lib/rtl/math's Abs(x: Integer) — declared first — and printed an EMPTY LINE for the int case and SIGSEGV'd on the float one, while `abs(-5)` as a CALL stayed correct throughout. The call path has an explicit "own language first, and it overrules import order" rule and the value path never got it, which is why the table is consulted BEFORE FindProcExactCase — the ORDER is the fix. An innocuous import two lines away turning a refusal into a crash is the reason this outranked its filed prio of 35. (2) TWO DOORS, AND I WIRED ONE AND NEARLY STOPPED: PyMakeFuncValue serves assignment, the NilPy factor chain serves an ARGUMENT, so wiring only the first made `f = abs; map(f, xs)` work while `map(abs, xs)` — the ticket's own headline repro — still refused. PyUnboundStrMethodValue's header says both doors are needed and says why; I read it after. The fixture asserts both spellings and would have certified the half-fix without the second. (3) DECLARING `function abs` IN pylib IS EXPLICITLY REJECTED UPSTREAM and the call side records the measurement: a later `uses` unit SHADOWS a whole name rather than joining its overload set, so a pylib `format` stopped existing the moment a program said `import json` — a builtin that vanishes when you add an import is worse than a missing one. Hence a table. ALSO: hash/id are asserted as CALL-form == VALUE-form and never against CPython's numbers, because both are implementation-defined in Python and ours legitimately differ (CPython's hash(7) is 7, id is an address) — comparing them to CPython was my first probe and it reported two false failures. Positive control under the pin: fixture one does not compile, fixture two SIGSEGVs. divmod/enumerate/filter/map/zip left out with stated reasons and filed; divmod looks mechanical and is NOT — it has two exits and the user-class one returns whatever the program's own __divmod__ gave, which may alias, so vouching for it in PyProcIsFreshContainerCtor would reintroduce the double-owner bug. I wrote the opposite into that ticket first and caught it only by reading the body, which is the discipline that predicate's own comment insists on.
+
+## 2026-09-13 | frankH (Track N) | compiler/pyparser.inc | nine of the eleven machine integer kinds had no join at all, and it is what stopped the lekkerzeilen demo
+
+`PyNumeric` — the membership test that `PyWiden`'s numeric arm and
+`PyVariantScalar` are both built on — listed `tyInteger` and `tyInt64` and
+nothing else. Every other machine integer kind therefore reached no arm of the
+join and fell out of its bottom as `annotate the type / too dynamic`. Measured
+first, one Pascal unit returning each kind against `y = 0; y = k.r_<kind>()`:
+tyInt8(7), tyUInt8(8), tyInt16(9), tyUInt16(10), tyInt32(11), tyUInt32(12),
+tyUInt64(14), tyNativeInt(15) and tyNativeUInt(16) all refused; only tyInteger
+and tyInt64 compiled. `TypeIsPyNumeric` in symtab.inc has held the complete list
+since it was written — two mechanisms for one concept, the narrow one wired into
+the join.
+
+This is how `lekkerzeilen/gfx.py:392` died: `gl.LINEAR` is a C `int` constant, so
+it arrives as tyInt32, and `gl.LINEAR_MIPMAP_LINEAR` does not exist on the pxx
+backend's `gl` class, so it reads as tyVariant — and tyInt32 has no join with a
+variant. Four hypotheses were refuted by measurement before this one (a missing
+constant alone; the guarded import; the module-vs-class asymmetry; the enclosing
+`if`): `c3` in the probe set is the shape with no `if` and no ternary at all and
+it refuses identically, which is what ruled the block structure out. Sharpest
+one-line reduction, no lekkerzeilen needed: `y = 1.5` then
+`y = <pascal unit>.ret32()` → `[a=tyDouble(19) b=tyInt32(11)]`.
+
+Also fixed, because this change is what makes the pair reachable: PyWiden's float
+test named only tyDouble/tyExtended, so tySingle-meets-integer fell through to
+the integer arms and answered an INTEGER kind — a join that drops the fraction of
+the one side that has one. Any float side now answers tyDouble, which is this
+compiler's native evaluation type anyway. And the promo arm's machine-int clause
+is `PyIntKind` rather than its own three-name list.
+
+**The lekkerzeilen demo now COMPILES** — `ok: bin/lz_h1 [code=12504744B
+procs=11711]`, warnings only, 2m47s — and RUNS: it brings up the GL context
+(3.3.0 NVIDIA), loads the world (`rijn: 4 tiles, 1 pounds, 5 routes`, not
+`none built -- open water`) and prints the whole key legend before dying at run
+time on `TypeError: forwarded call got 5 arguments, expected 0 to 4`. That is the
+next wall and it names no callee, which is the next thing to fix.
+
+Test: `test_nilpy_pascal_integer_widths_join.npy` + `test/nilpy_units/intwidths.pas`,
+one rebinding per kind in both operand orders, plus multiplies (a join that
+answers a 32-bit kind for a pair containing a wider one compiles and then
+truncates — only a value can see that) and the int-meets-float rows.
+`.expected` is CPython's output. Positive control is the nine-row refusal table
+above, measured on the pre-fix binary. `make compiler/pascal26` converged;
+`gate.sh quick` GREEN (23 PASS).
