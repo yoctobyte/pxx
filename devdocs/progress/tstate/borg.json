@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-12T20:21:04Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "babcfed35a9d5199c5ee0930b60483db17c3519b",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-12T20:26:46Z",
    "fixed": [],
    "new_red": [],
@@ -479,6 +470,15 @@
    "new_red": [],
    "sha": "32ef226ed967968bb1cdfa4959c519da7918a8bb",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-13T15:52:01Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "32ef226ed967968bb1cdfa4959c519da7918a8bb",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5219,7 +5219,7 @@
   "optdiff#shard2/12": "OPT DIFF -O3: test/c_crtl_glob_no_leak.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_thread_writeln_interleave.pas | optdiff skip TIMEOUT-O0: test_target_name_in_external_refusal.pas | optdiff skip BUILD-FAIL: aoc_ovl_unit_fmt.pas cabi_bridge.c cabi_intra.c c_cpp_macro_arg_shapes.c c_pasunit_two_overloads_fail.c csqlite_layout_probe.c cxtensa_obj.c isas_b325_base.pas lib_klondike.pas library_export\u2026",
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
-  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 60b34f9d4b31 (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
+  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), f14ef31bb51c (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@1": "self-host fixedpoint: verified \u2014 1 round(s), f14ef31bb51c (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@10": "self-host fixedpoint: verified \u2014 1 round(s), f14ef31bb51c (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@11": "self-host fixedpoint: verified \u2014 1 round(s), f14ef31bb51c (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
@@ -14705,14 +14705,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T15:51:38Z",
+  "date": "2026-09-13T15:52:01Z",
   "deadline": 3600.0,
   "sha": "32ef226ed967968bb1cdfa4959c519da7918a8bb",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 911.4
+  "wall": 14.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14763,9 +14763,9 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T14:57:32Z",
+   "date": "2026-09-13T15:52:01Z",
    "deadline": 3600.0,
-   "sha": "e5cd18e4b220306c1b9d1e3c9308371f7969a533",
+   "sha": "32ef226ed967968bb1cdfa4959c519da7918a8bb",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
