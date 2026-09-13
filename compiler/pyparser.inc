@@ -18147,12 +18147,22 @@ end;
   class declares the name as an ordinary method, the receiver may well be an
   instance and the runtime arm chain below is right.
   bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
-function PyClassLevelOnlyMeth(const nm: AnsiString;
-                              var outMmi: Integer): Boolean;
+{ SPLIT 2026-09-13 into the two questions it was answering at once. Whether the
+  name has ONE class-level carrier decides whether a class receiver can be
+  dispatched at all; whether it ALSO has instance carriers decides only whether
+  the runtime arm chain is needed beside it. Folding the second into a refusal
+  made the whole class-as-value shape unreachable for any name a program also
+  uses as an ordinary method -- which is `clear` in lekkerzeilen, a @staticmethod
+  on the `gl` namespace class and an instance method on three others, and the
+  live wall on the demo the day this was written.
+  bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers }
+function PyClassLevelCarrier(const nm: AnsiString; var outMmi: Integer;
+                             var anyInstance: Boolean): Boolean;
 var c, m, nStatic, firstPi: Integer;
 begin
   Result := False;
   outMmi := -1;
+  anyInstance := False;
   nStatic := 0;
   firstPi := -1;
   for c := 0 to UClsCount - 1 do
@@ -18160,7 +18170,11 @@ begin
     if UClsIsRecord[c] then Continue;
     m := FindUMeth(c, nm);
     if m < 0 then Continue;
-    if not UMthIsStatic[m] then Exit;        { an instance carrier — ordinary dispatch }
+    if not UMthIsStatic[m] then
+    begin
+      anyInstance := True;                   { REPORTED, not fatal — see the split above }
+      Continue;
+    end;
     if UMthProc_[m] < 0 then Exit;           { declared but not compiled }
     if UMthProc_[m] <> firstPi then
     begin
@@ -18171,6 +18185,13 @@ begin
     end;
   end;
   Result := nStatic = 1;
+end;
+
+function PyClassLevelOnlyMeth(const nm: AnsiString;
+                              var outMmi: Integer): Boolean;
+var anyInst: Boolean;
+begin
+  Result := PyClassLevelCarrier(nm, outMmi, anyInst) and (not anyInst);
 end;
 
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
@@ -18202,9 +18223,16 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     flPairNode, flTern, flArg1, flArg2, flNotNode, flRaiseCall,
     flIfNode, flPair2: Integer;
     clsOnly: Boolean; clsOnlyMmi, clsSelfCall, clsSelfArg, clsPrevArg, clsUnboxArg, clsNewArg, clsSrcArg: Integer;   { a class-level-only method through a class held as a VALUE }
+    clsArm, clsArmBuilt, clsAnyInst, clsRefOk: Boolean;   { ...and the same method where the name ALSO has instance carriers }
+    clsArmPi, clsArmArgs, clsGuardArg, clsGuardCall, clsOrNode,
+    clsUnboxA, clsUnboxC, clsRefCall, clsRefSelf, clsRefLast,
+    clsTern, clsPairN, clsCondArg, clsCondCall,
+    clsRaiseCall, clsIfNode, clsPairFix, clsNameNode, clsNameArg: Integer;
 begin
   smArmPossible := False;
   smArmBuilt := False;
+  clsArm := False;
+  clsArmBuilt := False;
   flArmPossible := False;
   flArmBuilt := False;
   { A receiver that came from an optional module which did not resolve — the
@@ -18934,7 +18962,9 @@ begin
     AttributeError before any arm ran, which is the `'type' object has no
     attribute` message this defect was reported as.
     bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
-  clsOnly := PyClassLevelOnlyMeth(mname, clsOnlyMmi);
+  clsRefOk := PyClassLevelCarrier(mname, clsOnlyMmi, clsAnyInst);
+  clsOnly := clsRefOk and (not clsAnyInst);
+  clsArm := clsRefOk and clsAnyInst;
   if clsOnly then
   begin
     { pyvar_is_classreftag, NOT pyvar_holds(v, 11). pyvar_holds requires tag 7 and
@@ -18955,6 +18985,29 @@ begin
   vtGuardCall := AllocNode(AN_CALL);
   ASTIVal[vtGuardCall] := i; ASTTk[vtGuardCall] := Ord(tyBoolean);
   ASTLeft[vtGuardCall] := vtGuardArg;
+  { ...and the same widening for a CLASS receiver whose method name is ALSO
+    carried by some class as an ordinary method. The guard is hoisted, so
+    widening the arms without widening it changes nothing -- that is the whole
+    reason this shape was unreachable. Each arm asserts its own tag, so the
+    instance arms below are not loosened by this: they still run only for tag 7.
+    Promised here and KEPT below; if the arity turns out not to fit, the raise is
+    restored in the fixup at the end of this function, exactly as the str and
+    float widenings do. }
+  if clsArm then
+  begin
+    k := FindProc('pyvar_is_classreftag');
+    if k < 0 then Error('Nil Python: pylib (pyvar_is_classreftag) not loaded');
+    clsGuardArg := AllocNode(AN_ARG); ASTLeft[clsGuardArg] := PyMakeIdent(vtTmpSym);
+    clsGuardCall := AllocNode(AN_CALL);
+    ASTIVal[clsGuardCall] := k; ASTTk[clsGuardCall] := Ord(tyBoolean);
+    ASTLeft[clsGuardCall] := clsGuardArg;
+    clsOrNode := AllocNode(AN_BINOP);
+    ASTIVal[clsOrNode] := Ord(tkOr);
+    ASTLeft[clsOrNode] := vtGuardCall;
+    ASTRight[clsOrNode] := clsGuardCall;
+    ASTTk[clsOrNode] := Ord(tyBoolean);
+    vtGuardCall := clsOrNode;
+  end;
   { A STRING receiver is legitimate here when the method name is also a str
     method — the dispatcher grows a `pyvar_is_strtag` arm for exactly that at
     the end of this function. This guard runs as a HOISTED statement, i.e.
@@ -19692,6 +19745,107 @@ begin
     Result := flTern;
     flArmBuilt := True;
   end;
+  { THE CLASSREF ARM — `pyvar_is_classreftag(recv) ? <the class-level method> :
+    <everything above>`.
+
+    Same machine as the str arm, one tag further: a name that one class carries at
+    class level and another carries as an instance method is undecidable in the
+    frontend, because only the receiver's RUNTIME tag says which was meant. The
+    previous answer was to refuse the class reading outright, which is wrong for
+    `gl.clear()` where `gl` is a namespace class and three unrelated classes also
+    declare `clear`.
+
+    Slot 0 takes the variant's PAYLOAD, not a cast: for tag 11 that payload is the
+    class's RTTI blob, which is exactly what the injected `$clsrecv` (a static) or
+    the declared `cls` (a classmethod) wants, and it is the same value a
+    statically spelled `C.m(...)` passes.
+
+    Added LAST, so it is the OUTERMOST test. A tag-11 receiver can be neither a
+    string nor a float nor an instance, so no ordering question arises between the
+    arms; outermost is simply where a new tag arm goes.
+
+    Arity is filled from DEFAULTS the same way a dual candidate's is, and the arm
+    is DROPPED rather than fudged when the call cannot be completed -- `gl.clear()`
+    writes no arguments and `clear(depth=True)` declares one, so without the fill
+    the demo's own call site would not build.
+    bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers }
+  if clsArm and (clsOnlyMmi >= 0) and (UMthProc_[clsOnlyMmi] >= 0) and
+     (i <= High(argExprs) + 1) then
+  begin
+    clsArmPi := UMthProc_[clsOnlyMmi];
+    clsArmArgs := i;
+    k := clsArmArgs + 1;
+    while (k < Procs[clsArmPi].ParamCount) and (k < MAX_PROC_PARAMS) and
+          ProcParamHasDefault[clsArmPi * MAX_PROC_PARAMS + k] do
+    begin
+      Inc(clsArmArgs);
+      Inc(k);
+    end;
+    if clsArmArgs + 1 = Procs[clsArmPi].ParamCount then
+    begin
+      { slot 0: the blob pointer straight out of the variant, as the
+        single-carrier direct call above does it. }
+      k := FindProc('pyvarobj');
+      if k < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+      clsUnboxA := AllocNode(AN_ARG);
+      ASTLeft[clsUnboxA] := PyMakeIdent(vtTmpSym);
+      ASTRight[clsUnboxA] := -1;
+      clsUnboxC := AllocNode(AN_CALL);
+      ASTIVal[clsUnboxC] := k; ASTTk[clsUnboxC] := Ord(tyPointer);
+      ASTLeft[clsUnboxC] := clsUnboxA;
+      clsRefSelf := AllocNode(AN_ARG);
+      ASTLeft[clsRefSelf] := clsUnboxC;
+      ASTRight[clsRefSelf] := -1;
+      clsRefLast := clsRefSelf;
+      for k := 0 to i - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := argExprs[k];
+        ASTRight[argNode] := -1;
+        ASTRight[clsRefLast] := argNode;
+        clsRefLast := argNode;
+      end;
+      for k := i to clsArmArgs - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := DefaultArgValueNode(clsArmPi, k + 1);
+        ASTRight[argNode] := -1;
+        ASTRight[clsRefLast] := argNode;
+        clsRefLast := argNode;
+      end;
+      { cond: pyvar_is_classreftag(recv) — the tag, not pyvar_holds, which
+        requires tag 7 and then asks which CONTAINER class the object is. }
+      k := FindProc('pyvar_is_classreftag');
+      if k < 0 then Error('Nil Python: pylib (pyvar_is_classreftag) not loaded');
+      clsCondArg := AllocNode(AN_ARG);
+      ASTLeft[clsCondArg] := PyMakeIdent(vtTmpSym);
+      ASTRight[clsCondArg] := -1;
+      clsCondCall := AllocNode(AN_CALL);
+      ASTIVal[clsCondCall] := k;
+      ASTTk[clsCondCall] := Ord(tyBoolean);
+      ASTLeft[clsCondCall] := clsCondArg;
+
+      clsRefCall := AllocNode(AN_CALL);
+      ASTIVal[clsRefCall] := clsArmPi;
+      ASTTk[clsRefCall] := Ord(Procs[clsArmPi].RetType);
+      ASTLeft[clsRefCall] := clsRefSelf;
+
+      clsPairN := AllocNode(AN_PAIR);
+      ASTLeft[clsPairN] := clsRefCall;
+      ASTRight[clsPairN] := Result;
+      clsTern := AllocNode(AN_TERNARY);
+      ASTLeft[clsTern] := clsCondCall;
+      ASTRight[clsTern] := clsPairN;
+      { the type of the WHOLE chain, as every other arm does it }
+      if IntToTypeKind(ASTTk[clsRefCall]) <> IntToTypeKind(ASTTk[Result]) then
+        ASTTk[clsTern] := Ord(tyVariant)
+      else
+        ASTTk[clsTern] := ASTTk[clsRefCall];
+      LastExprTk := IntToTypeKind(ASTTk[clsTern]);
+      Result := clsTern;
+      clsArmBuilt := True;
+    end;
+  end;
   { The float half of the unkept-promise fixup below: the guard was widened to
     let a float receiver through, and if no arm was built (the call wrote
     arguments, which none of the four take) a float receiver would reach the
@@ -19724,6 +19878,44 @@ begin
     ASTLeft[flPair2] := flRaiseCall; ASTRight[flPair2] := -1;
     ASTRight[flIfNode] := flPair2;
     PyHoistStmt(flIfNode);
+  end;
+  { The classref half of the same fixup: the guard was widened to let a CLASS
+    receiver through, and if the arm was not built after all (the arity cannot be
+    completed from defaults) that receiver would reach the hard instance cast.
+    Put the raise back for exactly that case, so the widening can never turn a
+    clean AttributeError into a wild dereference. }
+  if clsArm and (not clsArmBuilt) then
+  begin
+    k := FindProc('pyvar_is_classreftag');
+    if k < 0 then Error('Nil Python: pylib (pyvar_is_classreftag) not loaded');
+    clsGuardArg := AllocNode(AN_ARG); ASTLeft[clsGuardArg] := PyMakeIdent(vtTmpSym);
+    clsGuardCall := AllocNode(AN_CALL);
+    ASTIVal[clsGuardCall] := k; ASTTk[clsGuardCall] := Ord(tyBoolean);
+    ASTLeft[clsGuardCall] := clsGuardArg;
+
+    k := FindProc('pydynattr_no_method');
+    if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
+    { named for what they HOLD: clsOrNode above is a BINOP and clsCondArg is the
+      tag test's argument, and reusing either here for the method NAME would put
+      a second kind behind a name that already means something in this function. }
+    clsNameNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[clsNameNode] := StoredName(mname);
+    ASTSLen[clsNameNode] := Length(mname);
+    ASTTk[clsNameNode] := Ord(tyString);
+    clsNameArg := AllocNode(AN_ARG); ASTLeft[clsNameArg] := clsNameNode;
+    ASTRight[clsNameArg] := -1;
+    clsGuardArg := AllocNode(AN_ARG); ASTLeft[clsGuardArg] := PyMakeIdent(vtTmpSym);
+    ASTRight[clsGuardArg] := clsNameArg;
+    clsRaiseCall := AllocNode(AN_CALL);
+    ASTIVal[clsRaiseCall] := k; ASTTk[clsRaiseCall] := Ord(tyUnknown);
+    ASTLeft[clsRaiseCall] := clsGuardArg;
+
+    clsIfNode := AllocNode(AN_IF);
+    ASTLeft[clsIfNode] := clsGuardCall;
+    clsPairFix := AllocNode(AN_PAIR);
+    ASTLeft[clsPairFix] := clsRaiseCall; ASTRight[clsPairFix] := -1;
+    ASTRight[clsIfNode] := clsPairFix;
+    PyHoistStmt(clsIfNode);
   end;
   { The objtag guard above was widened to let a STRING receiver through on the
     promise of a str arm. If no arm was built after all — the argument count

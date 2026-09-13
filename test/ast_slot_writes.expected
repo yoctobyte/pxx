@@ -34,6 +34,7 @@ AN_ARG Left CloneAST(ppExp)
 AN_ARG Left CloneAST(rngA)
 AN_ARG Left CloneAST(rngB)
 AN_ARG Left CurASTNode
+AN_ARG Left DefaultArgValueNode(clsArmPi, k + 1)
 AN_ARG Left DefaultArgValueNode(dualPi, k + 1)
 AN_ARG Left DefaultArgValueNode(mpi, i)
 AN_ARG Left DefaultArgValueNode(mpi, k)
@@ -141,8 +142,10 @@ AN_ARG Left calleeNode
 AN_ARG Left capNode
 AN_ARG Left castNode
 AN_ARG Left ci
+AN_ARG Left clsNameNode
 AN_ARG Left clsNode
 AN_ARG Left clsSelfCall
+AN_ARG Left clsUnboxC
 AN_ARG Left cntN
 AN_ARG Left cntNode
 AN_ARG Left condN
@@ -261,6 +264,7 @@ AN_ARG Right asrtA1
 AN_ARG Right bfArgA
 AN_ARG Right cArgs
 AN_ARG Right clArgA
+AN_ARG Right clsNameArg
 AN_ARG Right cpArgs
 AN_ARG Right dfIdxHead
 AN_ARG Right excFoldA
@@ -593,6 +597,7 @@ AN_BINOP Right b
 AN_BINOP Right chCmp
 AN_BINOP Right chRight
 AN_BINOP Right chain
+AN_BINOP Right clsGuardCall
 AN_BINOP Right cmp
 AN_BINOP Right cntNode
 AN_BINOP Right diff
@@ -671,7 +676,11 @@ AN_CALL Left chkArg
 AN_CALL Left clArgC
 AN_CALL Left clArgP
 AN_CALL Left clsArg
+AN_CALL Left clsCondArg
+AN_CALL Left clsGuardArg
+AN_CALL Left clsRefSelf
 AN_CALL Left clsSelfArg
+AN_CALL Left clsUnboxA
 AN_CALL Left clsUnboxArg
 AN_CALL Left dcSlArg1
 AN_CALL Left dispArg
@@ -891,6 +900,7 @@ AN_IF Left RTagTest(scrutSym, vi)
 AN_IF Left RTagTest(tempSym, errVi)
 AN_IF Left arms[i].CondNode
 AN_IF Left clauseCond
+AN_IF Left clsGuardCall
 AN_IF Left cond
 AN_IF Left condIn
 AN_IF Left condN
@@ -1006,6 +1016,8 @@ AN_PAIR Left bodies[i]
 AN_PAIR Left bodyNode
 AN_PAIR Left callNode
 AN_PAIR Left clauseBody
+AN_PAIR Left clsRaiseCall
+AN_PAIR Left clsRefCall
 AN_PAIR Left dcall
 AN_PAIR Left dn
 AN_PAIR Left elseBody
@@ -1138,6 +1150,7 @@ AN_STR_FROM_CHAR Right icRd
 AN_SWITCH Left CPromoteChar(selNode)
 AN_SWITCH Right bodyNode
 AN_TERNARY Left bfIsCall
+AN_TERNARY Left clsCondCall
 AN_TERNARY Left cnd
 AN_TERNARY Left condN
 AN_TERNARY Left condNode
@@ -1152,6 +1165,7 @@ AN_TERNARY Left node
 AN_TERNARY Left rbCall
 AN_TERNARY Left rngDown
 AN_TERNARY Right argSeq2
+AN_TERNARY Right clsPairN
 AN_TERNARY Right flPair2
 AN_TERNARY Right flPairNode
 AN_TERNARY Right pair

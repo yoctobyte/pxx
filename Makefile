@@ -3795,15 +3795,24 @@ test-nilpy: $(COMPILER)
 	@# receiver was refused before any arm could run. Both @staticmethod and
 	@# @classmethod ride UMthIsStatic and BOTH take the class at slot 0, so the
 	@# classref payload -- the RTTI blob -- is exactly what slot 0 wants.
-	@# Rows J and K assert what is still REFUSED, on purpose: a name carried both at
-	@# class level and as an instance method, and two distinct class-level carriers.
-	@# Both want one unbuilt mechanism (a CLASSREF arm in the runtime arm chain), and
-	@# a limit only a ticket records is a limit nobody sees. CPython answers "stat9"
-	@# and "A10" there; if either row goes RED because someone built that arm, the
-	@# fix is to put CPython's answer in the .expected, not to revert.
-	@# Control, measured: under pin v408 rows A-E all raise
-	@# AttributeError: 'type' object has no attribute <name>, and F-K pass -- so the
-	@# five rows that moved are exactly the five this fix is about.
+	@# THE CLASSREF ARM, added 2026-09-13: the same dispatch where the name ALSO has
+	@# instance carriers. `pyvar_is_classreftag(recv) ? <class-level method> : <the
+	@# instance chain>`, outermost, with slot 0 taking the variant's payload (the
+	@# RTTI blob) and missing arguments filled from DEFAULTS. Rows L/M/N are ONE call
+	@# site reached with a class value and two different instances, which is the
+	@# whole claim: the arm must not steal an instance receiver and the chain must
+	@# not steal a class one. Row J stopped being a LIMIT because of it.
+	@# Row K stays a LIMIT -- two distinct class-level carriers, which needs a
+	@# blob-IDENTITY test this does not build. CPython answers "A10"; if it goes RED
+	@# because someone built that, put CPython's answer in the .expected, not a revert.
+	@# Row O is a LIMIT that is ALSO a crash guard, and its assertion class is not
+	@# the string: it answers the same before and after, and what it catches is the
+	@# widened guard letting a tag-11 receiver reach the instance cast when the arm
+	@# was dropped on arity. Measured by disabling only the fixup: rc=139, and every
+	@# row from O onward vanishes from the output.
+	@# Control, measured: under pin v408 rows A-E raise
+	@# AttributeError: 'type' object has no attribute <name>, and so do J and L --
+	@# seven rows moved, and M/N/O/P/F-I pass at the pin too, as regression guards.
 	./$(COMPILER) test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy $(TESTTMP)/test_nilpy_clsvalmeth26
 	$(TESTTMP)/test_nilpy_clsvalmeth26 | diff -u test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.expected -
 	@# A bytes/bytearray handed to a C routine's POINTER parameter must deliver its

@@ -1,26 +1,24 @@
 ---
 slug: bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers
-title: a class-level method through a class value is refused when the name has two carriers
+title: a class-level method through a class value is refused when TWO CLASSES carry it at class level
 summary: >
-  `alias = Gl; alias.sget(1)` now works for a @staticmethod or @classmethod whose
-  name has exactly ONE class-level carrier in the module and no instance carrier.
-  Two shapes are still refused with `AttributeError: 'type' object has no
-  attribute <name>`: (a) the name is ALSO an ordinary method on some other class,
-  and (b) two different classes declare it at class level. Both are the same gap
-  -- `PyClassLevelOnlyMeth` admits a name only when the reading is unique, because
-  the runtime arm chain in `PyParseVariantMethod` has no CLASSREF arm: its arms
-  test `pyvarobj(v) is C`, an INSTANCE test, so there is nothing to select
-  between two class receivers with. Rows J and K of
-  test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy assert both
-  refusals, so the limit is in the suite and not only here.
-  RAISED 40 -> 80 on 2026-09-13: shape (a) is the LIVE WALL on lekkerzeilen
-  `--m0`. With the bytearray/C-pointer fix in, the demo opens a window, brings up
-  GL 3.3, prints the renderer and answers `drawable : 1280x720` -- and then dies
-  on `gl.clear()`, because `clear` is a @staticmethod on the `gl` namespace class
-  AND an ordinary method on three other classes in the same program.
+  SHAPE (a) IS FIXED, 2026-09-13: `alias = Gl; alias.m(...)` now reaches a
+  @staticmethod or @classmethod whose name is ALSO carried by other classes as an
+  ordinary instance method, chosen by the receiver's runtime tag. That was the live
+  wall on lekkerzeilen `--m0` -- `gl.clear()`, a @staticmethod on the `gl` namespace
+  class and an instance method on three others -- and the demo now reaches its
+  render loop.
+  WHAT IS LEFT IS SHAPE (b): TWO DIFFERENT CLASSES declaring the same name at class
+  level. `PyClassLevelCarrier` still refuses that, because choosing between two
+  class receivers needs a blob-IDENTITY test (`pyvarobj(v) = <the RTTI blob of C>`)
+  and the arm chain's existing tests are `pyvarobj(v) is C`, an INSTANCE test that
+  cannot discriminate two classes. Row K of
+  test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy asserts the
+  refusal; CPython answers "A10" there. Nothing measured asks for it, which is why
+  this is back at 40.
 track: N
 type: bug
-prio: 80
+prio: 40
 owner: unassigned
 status: backlog
 ---
@@ -140,3 +138,62 @@ blob-identity test described above and nothing measured asks for it yet.
   -- the parent; the single-carrier call path, resolved 2026-09-13.
 - `bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused`
   -- the READ path, a different mechanism (the attribute registry), same shape.
+
+## SHAPE (a) RESOLVED 2026-09-13
+
+`PyClassLevelOnlyMeth` was answering two questions at once and folding the second
+into a refusal. Split into `PyClassLevelCarrier(nm, outMmi, anyInstance)`:
+
+- exactly ONE class-level carrier (counted by distinct proc) decides whether a
+  class receiver can be dispatched at all;
+- `anyInstance` decides only whether the instance arm chain is needed BESIDE it.
+
+`PyClassLevelOnlyMeth` is now one line over that, so the single-carrier direct
+call is untouched.
+
+Three changes in `PyParseVariantMethod`, and the middle one is the load-bearing
+part the parent ticket warned about:
+
+1. the hoisted guard is widened to `objtag OR classreftag` when the name has a
+   class-level carrier AND instance carriers -- widening the arms alone changes
+   nothing, because the guard runs first;
+2. a CLASSREF ARM, added LAST so it is outermost:
+   `pyvar_is_classreftag(recv) ? <the class-level method> : <the instance chain>`.
+   Slot 0 takes `pyvarobj(recv)` -- the RTTI blob, which is what an injected
+   `$clsrecv` or a declared `cls` wants and what a statically spelled `C.m(...)`
+   passes. Missing arguments are filled from DEFAULTS exactly as a dual candidate's
+   are, and the arm is DROPPED rather than fudged when the arity cannot be
+   completed. The fill is not optional: `gl.clear()` writes no arguments and
+   `clear(depth=True)` declares one;
+3. the unkept-promise FIXUP, mirroring the str and float ones: if the guard was
+   widened and the arm was then dropped on arity, restore the
+   `pydynattr_no_method` raise for a tag-11 receiver.
+
+### The fixup's positive control, measured
+
+Row O of the fixture answers the same string before and after this fix, so on a
+value comparison alone it is a guard that cannot fail. Its assertion class is a
+CRASH. Measured by disabling ONLY the fixup and rebuilding: the fixture
+SEGFAULTS at row O (rc=139), and every row from O onward vanishes -- so the diff
+does see it, by absence. Without the fixup a tag-11 receiver passes the widened
+guard, misses every `pyvarobj(v) is C` arm, and reaches the static class cast,
+which dereferences an RTTI blob as an instance.
+
+### Verified
+
+- Fixture extended to 16 rows. Control under pin v408: A-E, J and L raise
+  `AttributeError: 'type' object has no attribute <name>`; F-I, K, M, N, O, P pass
+  there too and are regression guards. So SEVEN rows have moved across the two
+  commits and J and L are the two this change owns.
+- L/M/N are ONE call site (`viawipe(o)`) reached with a class value and two
+  different instances, which is the claim in both directions: the arm must not
+  steal an instance receiver and the chain must not steal a class one.
+- `gate.sh quick` GREEN after a reviewed `--update` of the AST slot-write census
+  (14 rows, every one an ordinary node-into-child-slot write for an existing kind,
+  so `ASTLeftIsChild`/`ASTRightIsChild` need nothing).
+- lekkerzeilen `--m0` no longer raises on `gl.clear()`; it reaches its render loop
+  and stays there. NOT established: that frames are being SWAPPED. The loop prints
+  its frame count only on a clean exit, and closing the window from outside failed
+  (the session is Wayland, and forcing X11 then driving it with xdotool killed the
+  process through its X connection rather than through the QUIT path -- my own
+  interference, not a defect).

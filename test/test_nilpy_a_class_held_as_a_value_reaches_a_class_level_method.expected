@@ -7,5 +7,10 @@ F S6
 G 7
 H I7
 I inst8
-J LIMIT AttributeError: 'type' object has no attribute 'both'
+J stat9
 K LIMIT AttributeError: 'type' object has no attribute 'twice'
+L wipe-deep
+M bucket-wipe
+N pail-wipe
+O LIMIT AttributeError: 'type' object has no attribute 'sweep'
+P broom12

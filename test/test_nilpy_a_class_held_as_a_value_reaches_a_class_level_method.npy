@@ -67,6 +67,43 @@ class TwiceB:
         return "B" + str(n)
 
 
+class Ns:
+    @staticmethod
+    def wipe(depth=True):
+        if depth:
+            return "wipe-deep"
+        return "wipe-flat"
+
+
+class Bucket:
+    def wipe(self):
+        return "bucket-wipe"
+
+
+class Pail:
+    def wipe(self):
+        return "pail-wipe"
+
+
+class Ns2:
+    @staticmethod
+    def sweep():
+        return "sweep"
+
+
+class Broom:
+    def sweep(self, n):
+        return "broom" + str(n)
+
+
+def viawipe(o):
+    return o.wipe()
+
+
+def viasweep(o, n):
+    return o.sweep(n)
+
+
 def viadyn(o, n):
     return o.both(n)
 
@@ -103,5 +140,28 @@ show("I", lambda: viadyn(InstLast(), 8))       # instance carrier declared LAST:
 # rather than only in a ticket. Both want the same unbuilt mechanism: a CLASSREF
 # arm in the runtime arm chain, testing the RTTI blob the way the existing arms
 # test `pyvarobj(v) is C`. CPython answers "stat9" and "A10".
-show("J LIMIT", lambda: viadyn(StatFirst, 9))  # the name is ALSO an instance method elsewhere
+show("J", lambda: viadyn(StatFirst, 9))        # the name is ALSO an instance method elsewhere
 show("K LIMIT", lambda: ta.twice(10))          # two distinct class-level carriers
+
+# The CLASSREF ARM, which is what row J stopped being a LIMIT for: one class-level
+# carrier and any number of instance carriers, chosen by the receiver's runtime
+# tag. L/M/N are ONE program and one call site -- viawipe(o) -- reached with three
+# different receivers, which is the whole claim: the arm must not steal an
+# instance receiver, and the instance chain must not steal a class one.
+show("L", lambda: viawipe(Ns))                 # a class value; `depth` filled from its DEFAULT
+show("M", lambda: viawipe(Bucket()))           # an instance, same name, same call site
+show("N", lambda: viawipe(Pail()))             # a SECOND instance carrier, so the chain is real
+
+# The guard widening makes a PROMISE the arm has to keep. Here it cannot: the
+# static carrier takes no arguments and the call writes one, so the arm is dropped
+# and the raise must be RESTORED -- without that fixup a class receiver reaches
+# the instance cast and dereferences an RTTI blob as an object.
+#
+# READ ROW O's ASSERTION CLASS CORRECTLY: it answers the same string before and
+# after this fix, so it is NOT one of the rows that moved, and on a value
+# comparison alone it would be a guard that cannot fail. What it catches is a
+# CRASH. Measured 2026-09-13 by disabling only the fixup and rebuilding: the
+# program SEGFAULTS at this row (rc=139, no output from O onward), so the diff
+# does see it -- by the absence of every row after it.
+show("O LIMIT", lambda: viasweep(Ns2, 11))     # arity cannot be completed -> clean AttributeError
+show("P", lambda: viasweep(Broom(), 12))       # ...and the instance reading still works
