@@ -137,6 +137,10 @@ function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): 
 function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
 function PyArgListHasStarElem: Boolean; forward;   { is any argument a `*`/`**` ELEMENT, wherever it sits? (pyparser.inc) }
+function PyArgListHasStarElemAt(parenTok: Integer): Boolean; forward;   { ...the same question about a KNOWN '(' rather than about TokPos (pyparser.inc) }
+function PyPascalStarIdx(pi: Integer): Integer; forward;   { a `{$PYSTAR}`-marked Pascal declaration's *args collector slot, resolved once (pyparser.inc) }
+function PyPromoteOverloadByStarAt(ci, mmi, parenTok: Integer; const mname: AnsiString): Integer; forward;   { re-target a METHOD call with a star element onto the same-class `{$PYSTAR}` collector (pyparser.inc) }
+function PyPromoteOverloadByStar(ci, mmi: Integer; const mname: AnsiString): Integer; forward;   { ...with CurTok on the '(' (pyparser.inc) }
 function PyStarMixedForwardCall(procIdx: Integer): Integer; forward;   { the one generic collector for a forwarded argument list (pyparser.inc) }
 function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;   { a hoisted, empty pylib container temp (pyparser.inc) }
 { merge any mapping expression into a hoisted TPyDict. FORWARDED because

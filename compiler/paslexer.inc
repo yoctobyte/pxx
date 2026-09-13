@@ -880,6 +880,46 @@ begin
   StrictVariantChar := True;
 end;
 
+{ Every `{$PYSTAR}` must have ATTACHED to a declaration, and this is the guard
+  that says so. The marker names the routine that STARTS at the next token, and
+  two header paths consume it — ParseSubroutine for a free routine, the
+  class-member loop in pasparser_decl.inc for a method. A spelling neither
+  recognises (a marker before `class function`, where the recorded token is the
+  `class`; a marker before something that is not a declaration at all) attaches
+  to nothing.
+
+  That failure is silent in the worst direction: the declaration keeps its
+  ordinary lowering, so the call still COMPILES and fails at run time with
+  `forwarded call got N arguments, expected M to M` — a message that names
+  neither the marker nor the file it is in, and which is exactly the bug the
+  marker was added to fix. So it is an error here, naming the line.
+
+  IT CAN FAIL, and the control took two tries, which is the part worth keeping.
+  The FIRST control was wrong: putting a comment between the marker and its
+  header does NOT detach it, because a comment produces no token, so TokCount is
+  still the header's index and the marker attaches exactly as before. That
+  probe's expected outcome collided with the passing one and would have
+  certified a guard I had not shown could fire. The control that works puts the
+  marker before something that is not a routine header at all — measured
+  2026-09-13, `{$PYSTAR}` above a `type` declaration errors here and names its
+  own line, while the same unit with the marker moved onto the header reaches
+  the TPyList check instead, which is what proves it attached.
+
+  So the tolerance is WIDER than "immediately before": comments and blank lines
+  between the marker and the header are fine, and only an intervening TOKEN
+  detaches it. Called after the top-level parse, beside the parked-implementation
+  guard, which is there for the same reason. }
+procedure PasCheckPyStarMarkersUsed;
+var i: Integer;
+begin
+  for i := 0 to PasPyStarCount - 1 do
+    if not PasPyStarUsed[i] then
+      ErrorAt(PasPyStarLine[i], '{$PYSTAR} attached to no declaration — it must '
+              + 'stand immediately before a `function`/`procedure` header whose '
+              + 'LAST parameter is the TPyList *args collector, and nothing '
+              + 'between the two');
+end;
+
 procedure PasInitDefines;
 var name: AnsiString;
 begin
@@ -3709,6 +3749,8 @@ begin
       else
       begin
         PasPyStarTok[PasPyStarCount] := TokCount;
+        PasPyStarUsed[PasPyStarCount] := False;
+        PasPyStarLine[PasPyStarCount] := SrcLine;
         Inc(PasPyStarCount);
       end;
     end

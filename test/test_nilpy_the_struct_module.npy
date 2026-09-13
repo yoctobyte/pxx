@@ -175,3 +175,22 @@ print(struct.pack("<0f", *[]))
 # collector, but they arrive through it.
 print(struct.pack("<3I", *(1, 2, 3)))
 print(struct.pack("<2I", *list(range(2))))
+
+# ---- ...and through the CLASS, which is the other arm of the same defect -----
+# `Struct.pack` carries its own arity ladder for the same reason the module
+# function does, so it needed its own `{$PYSTAR}` collector AND its own overload
+# promotion (FindUMeth answers the first-declared overload exactly as FindProc
+# does). Both statically-typed receiver spellings are here — a NAME bound to a
+# Struct, and the construction called directly — because they take different
+# parser paths and only one of them would have been exercised by whichever the
+# fixture happened to prefer.
+THREE = struct.Struct("<3f")
+trio = [1.5, 2.5, 3.5]
+print(THREE.pack(*trio))
+print(struct.Struct("<3f").pack(*trio))
+print(THREE.pack(*trio) == struct.pack("<3f", 1.5, 2.5, 3.5))
+
+# Past the class ladder's seven, and a written argument after the star.
+nine = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+print(len(struct.Struct("<9I").pack(*nine)))
+print(struct.Struct("<3f").pack(*[1.5, 2.5], 4.5))

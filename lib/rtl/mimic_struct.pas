@@ -172,6 +172,11 @@ type
     function pack(const a1, a2, a3, a4, a5: Variant): TPyBytes; overload;
     function pack(const a1, a2, a3, a4, a5, a6: Variant): TPyBytes; overload;
     function pack(const a1, a2, a3, a4, a5, a6, a7: Variant): TPyBytes; overload;
+    { ...and the *args arm, the class twin of the module-level one. See the
+      `{$PYSTAR}` note above `pack` in the interface for why the marker exists
+      and why the ladder stays beside it. }
+    {$PYSTAR}
+    function pack(args: TPyList): TPyBytes; overload;
     function pack_list(args: TPyList): TPyBytes;
     function unpack(b: TPyBytes): TPyList;
   end;
@@ -569,6 +574,12 @@ begin
     second validator to drift from this one. }
   format := fmt;
   size := calcsize(fmt);
+end;
+
+{ The *args arm — the collector IS the argument list pack_list already takes. }
+function Struct.pack(args: TPyList): TPyBytes;
+begin
+  pack := pack_list(args);
 end;
 
 function Struct.pack_list(args: TPyList): TPyBytes;

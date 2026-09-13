@@ -1761,6 +1761,10 @@ begin
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
               if isNilPy and (mmi >= 0) then
                 mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
+          { ...and the STAR twin: a star element re-targets onto the same-class
+            `{$PYSTAR}` collector. Gated on the star, so a call without one is
+            untouched. }
+          mmi := PyPromoteOverloadByStarAt(mci, mmi, PyKwNamesTokPos, fieldName);
             end;
           end;
           if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);

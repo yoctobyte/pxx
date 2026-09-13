@@ -4075,6 +4075,16 @@ var
     shims that present a Python `*args` surface, and a Boolean per token would
     cost a megabyte of the build to answer False. }
   PasPyStarTok     : array[0..MAX_PAS_PYSTAR-1] of Integer;
+  { ...and whether each one ever ATTACHED to a declaration. A marker that
+    matches nothing is the dangerous failure: the declaration keeps its ordinary
+    lowering, so the call compiles and fails at RUN TIME with a wrong-arity
+    message naming neither the marker nor the file. Two header paths consume
+    markers (ParseSubroutine for a free routine, the class-member loop in
+    pasparser_decl.inc for a method), and a spelling neither recognises -- a
+    marker before `class function`, say, where the recorded token is the `class`
+    -- would otherwise be silent. PasCheckPyStarMarkersUsed reports it. }
+  PasPyStarUsed    : array[0..MAX_PAS_PYSTAR-1] of Boolean;
+  PasPyStarLine    : array[0..MAX_PAS_PYSTAR-1] of Integer;
   PasPyStarCount   : Integer;
 
   Code    : array of Byte;

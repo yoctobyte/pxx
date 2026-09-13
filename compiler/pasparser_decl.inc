@@ -8597,6 +8597,21 @@ begin
           if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
              ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor'))) then
           begin
+            { `{$PYSTAR}` on the line above this member — the class-method twin
+              of the capture in ParseSubroutine, which this path does NOT go
+              through (it registers its own proc at FindProcOverloadRec/
+              RegisterProc below). Same convention: the marker recorded the
+              token index this header STARTS at, which is TokPos - 1 with CurTok
+              on the `function`/`procedure`/`constructor` keyword. Consumed by
+              the RegisterProc further down. }
+            PasHdrPyStar := False;
+            for i := 0 to PasPyStarCount - 1 do
+              if PasPyStarTok[i] = TokPos - 1 then
+              begin
+                PasHdrPyStar := True;
+                PasPyStarUsed[i] := True;
+                Break;
+              end;
             mIsFunc := CurTok.Kind = tkFunction;
             isConstructor := False;
             isDestructor := False;

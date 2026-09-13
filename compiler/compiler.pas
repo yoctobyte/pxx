@@ -2530,6 +2530,13 @@ begin
             + 'parked waiting for another unit''s interface to complete and was '
             + 'never replayed, so its bodies are not in this build');
 
+  { ...and every `{$PYSTAR}` marker must have attached to a declaration. Same
+    class of failure as the guard above and the same reason it is code: an
+    unattached marker leaves the ordinary lowering in place, so the build
+    succeeds and the call fails at RUN TIME with a message naming neither the
+    marker nor its file. }
+  PasCheckPyStarMarkersUsed;
+
   { Recovered diagnostics: the parse was allowed to continue past a name that
     did not resolve, so the file's other independent mistakes are reported in
     the same run. It still FAILED -- stop here, before RTTI, fixups or any

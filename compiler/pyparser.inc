@@ -16600,6 +16600,95 @@ begin
   end;
 end;
 
+{ Is there a top-level `*`/`**` ELEMENT in the argument list that opens at
+  parenTok? The token-indexed twin of PyArgListHasStarElem, which reads TokPos —
+  the method sites reach their promotion at different cursor positions, so the
+  question has to be asked about a KNOWN '(' rather than about wherever the
+  parser happens to be standing.
+
+  Element position is the whole predicate, same as the TokPos twin: `m(a * b)`
+  has a depth-1 star too and it is a multiplication. A star is an ELEMENT only
+  where an element may begin — straight after the '(' or after a depth-1 comma. }
+function PyArgListHasStarElemAt(parenTok: Integer): Boolean;
+var k, depth: Integer; atElemStart: Boolean; tk: TTokenKind;
+begin
+  Result := False;
+  if (parenTok < 0) or (parenTok >= TokCount) or
+     (Tokens[parenTok].Kind <> tkLParen) then Exit;
+  depth := 1;
+  atElemStart := True;
+  k := parenTok + 1;
+  while k < TokCount do
+  begin
+    tk := Tokens[k].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkStar) and (depth = 1) and atElemStart then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if (tk = tkLParen) or (tk = tkLBrack) or (tk = tkBegin) then Inc(depth)
+    else if (tk = tkRParen) or (tk = tkRBrack) or (tk = tkEnd) then
+    begin
+      Dec(depth);
+      if depth = 0 then Exit;            { our own ')': the list ended }
+    end;
+    atElemStart := (tk = tkComma) and (depth = 1);
+    Inc(k);
+  end;
+end;
+
+{ The METHOD arm of PyPromoteProcOverloadByStar: a star element in the argument
+  list, and a same-class `{$PYSTAR}`-marked overload that declares the `*args`
+  collector. `struct.Struct("<3f").pack(*v)` raised `forwarded call got 3
+  arguments, expected 1 to 1` for exactly the free-function reason — FindUMeth
+  answers the overload declared FIRST, which is the narrowest rung of the class's
+  arity ladder.
+
+  Wired as its own helper rather than folded into the keyword promotion because
+  the two ask different questions of the same overload set, and a site may need
+  either, both or neither. The parent chain is walked for the reason the keyword
+  twin walks it: a subclass inherits both the ladder and the collector, and only
+  the base declares them.
+
+  Gated on the star, so a call with none is untouched and every written-out
+  `S.pack(1.5, 2.5)` still resolves exactly as before. }
+function PyPromoteOverloadByStarAt(ci, mmi, parenTok: Integer;
+                                  const mname: AnsiString): Integer;
+var curr, di, cand: Integer;
+begin
+  Result := mmi;
+  if (ci < 0) or (mmi < 0) then Exit;
+  { already the collector — nothing to promote to }
+  if PyPascalStarIdx(UMthProc_[mmi]) >= 0 then Exit;
+  if not PyArgListHasStarElemAt(parenTok) then Exit;
+  curr := ci;
+  while curr >= 0 do
+  begin
+    for di := 0 to UClsMCount[curr] - 1 do
+    begin
+      cand := UClsMBase[curr] + di;
+      if (cand <> mmi) and (UMthProc_[cand] >= 0) and
+         UMemberNameMatch(UMthNOff[cand], UMthNLen[cand], curr, mname, ULower(mname)) and
+         ProcPyStarPascal[UMthProc_[cand]] and
+         (PyPascalStarIdx(UMthProc_[cand]) >= 0) then
+      begin
+        Result := cand;
+        Exit;
+      end;
+    end;
+    curr := UClsParent[curr];
+  end;
+end;
+
+{ CurTok is the '(' of the call — the spelling the sites that already stand
+  there use, mirroring PyPromoteOverloadByKw. }
+function PyPromoteOverloadByStar(ci, mmi: Integer; const mname: AnsiString): Integer;
+begin
+  if CurTok.Kind <> tkLParen then begin Result := mmi; Exit; end;
+  Result := PyPromoteOverloadByStarAt(ci, mmi, TokPos - 1, mname);
+end;
+
 function PyPromoteOverloadByKw(ci, mmi: Integer; const mname: AnsiString): Integer;
 { CurTok is the '(' of the call — the original entry point, kept for the two
   call sites that already have CurTok positioned there. New call sites should
@@ -17881,6 +17970,8 @@ begin
     Error('Nil Python: ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) + ' has no method .' + mname + '()');
   end;
   mmi := PyPromoteOverloadByKw(ci, mmi, mn);
+  { ...and the STAR twin — see PyPromoteOverloadByStarAt. }
+  mmi := PyPromoteOverloadByStar(ci, mmi, mn);
   selfArg := AllocNode(AN_ARG);
   { A static-marked method (@staticmethod or @classmethod) takes the CLASS at
     slot 0, never an instance — so a receiver that is an object must be reduced
@@ -18867,6 +18958,8 @@ begin
   if hitCi >= 0 then
   begin
     hitMmi := PyPromoteOverloadByKw(hitCi, hitMmi, mname);
+    { ...and the STAR twin — see PyPromoteOverloadByStarAt. }
+    hitMmi := PyPromoteOverloadByStar(hitCi, hitMmi, mname);
     if hitMmi >= 0 then hitPi := UMthProc_[hitMmi];
   end;
 
@@ -21995,6 +22088,8 @@ begin
       { keyword-name-aware overload re-target — `super().__init__(x, flag=1)`
         (bug-nilpy-keyword-arg-vs-overload-set); CurTok is the '(' here. }
       mmi := PyPromoteOverloadByKw(ci, mmi, PyMethodName(name));
+      { ...and the STAR twin — see PyPromoteOverloadByStarAt. }
+      mmi := PyPromoteOverloadByStar(ci, mmi, PyMethodName(name));
       mpi := UMthProc_[mmi];
       selfArg := AllocNode(AN_ARG);
       ASTLeft[selfArg] := PyMakeIdent(symIdx);
@@ -46543,6 +46638,10 @@ begin
           name a `key=expr` argument uses (bug-nilpy-keyword-arg-vs-overload-set) }
         if (mmi >= 0) then
           mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
+          { ...and the STAR twin: a star element re-targets onto the same-class
+            `{$PYSTAR}` collector. Gated on the star, so a call without one is
+            untouched. }
+          mmi := PyPromoteOverloadByStarAt(mci, mmi, PyKwNamesTokPos, fieldName);
       end;
 
       { FPC's TObject.MethodAddress(name) / MethodName(addr): published-method RTTI,
@@ -47782,6 +47881,10 @@ begin
               mmi := FindUMethOverloadAhead(mci, fieldName, CountCallArgsAhead);
               if (mmi >= 0) then
                 mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
+          { ...and the STAR twin: a star element re-targets onto the same-class
+            `{$PYSTAR}` collector. Gated on the star, so a call without one is
+            untouched. }
+          mmi := PyPromoteOverloadByStarAt(mci, mmi, PyKwNamesTokPos, fieldName);
             end;
           end;
           if (mmi >= 0) and (mci >= 0) then EnforceMethVis(mmi, fieldName);

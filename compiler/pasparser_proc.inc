@@ -1084,6 +1084,7 @@ begin
     if PasPyStarTok[pzi] = TokPos - 1 then
     begin
       PasHdrPyStar := True;
+      PasPyStarUsed[pzi] := True;
       Break;
     end;
   isClassKeyword := False;
