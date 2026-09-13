@@ -1,0 +1,101 @@
+# A module whose defs cover the whole RETURN-KIND domain, for
+# test_nilpy_a_module_qualified_def_is_a_value.npy. Every one of these is read
+# as `retkinds.<name>` WITHOUT calling it there, which is the shape that used to
+# leave a container-returning def on its concrete Pascal return type while the
+# callable-value pair called it through a Variant-returning pointer.
+#
+# The kinds are here because the two that happened to surface in the
+# lekkerzeilen demo (a list, and an instance) are not the population: int, str,
+# float and a Variant-inferring def were CORRECT through the same spelling, so a
+# fixture built from what surfaced would have certified the bug.
+class Thing:
+    def __init__(self, v):
+        self.v = v
+
+
+def r_int():
+    return 42
+
+
+def r_str():
+    return "hello"
+
+
+def r_float():
+    return 1.5
+
+
+def r_bool():
+    return True
+
+
+def r_list():
+    return [7, 8, 9]
+
+
+def r_tuple():
+    return (1, 2)
+
+
+def r_dict():
+    return {"a": 1}
+
+
+def r_bytes():
+    return b"abc"
+
+
+def r_none():
+    return None
+
+
+def r_obj():
+    return Thing(3)
+
+
+# Infers a VARIANT result on its own (two return statements of different kinds),
+# so it was correct before the fix -- the control that named the mechanism.
+def r_mixed(flag=True):
+    if flag:
+        return [7, 8, 9]
+    return 5
+
+
+# Returns a container it does NOT own: the caller's dict still holds it. This is
+# the ownership case that made a synthesized return-side wrapper the wrong fix,
+# and the caller reads the original again afterwards so a double-release shows.
+def r_alias(d):
+    return d["k"]
+
+
+# Defaults and a star tail through the value road, on a normalised def.
+def r_args(a, b=2, *rest):
+    return [a, b, len(rest)]
+
+
+# Three items, so a caller's `if len(built) > 2` takes its other arm.
+def r_three():
+    return ([1], [2], {"m": 3})
+
+
+# Read ONLY from retkreader.npy, never from a program: see the note there. A def
+# the program also reads is normalised by that read, and a cross-module row over
+# such a def passes without measuring anything.
+def m_list():
+    return [7, 8, 9]
+
+
+def m_dict():
+    return {"a": 1}
+
+
+def m_bytes():
+    return b"abc"
+
+
+def m_obj():
+    return Thing(3)
+
+
+def r_two():
+    return ([1], [2])

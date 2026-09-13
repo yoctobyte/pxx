@@ -1,0 +1,50 @@
+# A module that reads ANOTHER module's defs as values. This is the half a
+# main-program-only fixture cannot reach, and it is where the lekkerzeilen demo
+# actually failed: PyDefUsedAsValue scans from token 0 to MainProgramTokCount,
+# and MainProgramTokCount is RE-POINTED to the module being parsed, so the two
+# halves are not the same question at all. The first fix for the qualified read
+# was measured entirely from the main program and left this broken.
+import retkinds
+
+
+class Holder:
+    """The demo's own shape (lekkerzeilen vessel.py:604): a module-qualified def
+    arrives as a KEYWORD ARGUMENT, is stored in a field, is called back through
+    that field, and its result is measured with len(). A wrong return convention
+    surfaces here as `TypeError: expected a str, list, dict or bytes, got int`
+    from the len(), several frames away from the read."""
+
+    def __init__(self, details=None):
+        self.details = details
+        self._built = None
+
+    def fittings(self):
+        if self._built is None:
+            built = self.details()
+            if len(built) > 2:
+                self._built = tuple(built[:2])
+            else:
+                self._built = tuple(built)
+        return self._built
+
+
+def two():
+    return Holder(details=retkinds.r_two)
+
+
+def three():
+    return Holder(details=retkinds.r_three)
+
+
+def via(h):
+    return h()
+
+
+def read_in_a_module():
+    # assignment, then a call through the local
+    # Every def named here is read from THIS module and nowhere else: a read in
+    # the program would normalise it and this file's rows would pass for a
+    # reason that has nothing to do with reading it from a module.
+    f = retkinds.m_list
+    # argument position, in a module rather than in the program
+    return [f(), via(retkinds.m_dict), via(retkinds.m_bytes), via(retkinds.m_obj).v]

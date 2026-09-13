@@ -1,0 +1,23 @@
+# The same construct as test_nilpy_a_module_qualified_def_is_a_value.npy, with
+# the value read performed INSIDE AN IMPORTED MODULE instead of in the program.
+# It is a different question and needs its own file, for two reasons:
+#
+# THE SCAN'S WINDOW. PyDefUsedAsValue runs from token 0 to MainProgramTokCount,
+# and MainProgramTokCount is RE-POINTED to whichever module is being parsed. A
+# read in a module lexed EARLIER is in range; a read in one lexed later is not.
+# This program therefore imports ONLY the reader, so the reader's tokens exist
+# before the module holding the defs is parsed. The other import order is a
+# known hole and has its own ticket
+# (bug-n-a-qualified-def-value-read-is-invisible-when-the-def-s-module-is-parsed-first)
+# -- deliberately not exercised here, because a fixture that passes in one order
+# and fails in the other must not be written in the order that passes.
+#
+# CONTAMINATION. If the program ALSO read these defs, the program's own read
+# would normalise them and the module's rows would pass for a reason that has
+# nothing to do with the module. Every def this file reaches is read only from
+# inside retkreader.
+import retkreader
+
+print(repr(retkreader.read_in_a_module()))
+print(repr(retkreader.two().fittings()))
+print(repr(retkreader.three().fittings()))

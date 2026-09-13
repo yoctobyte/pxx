@@ -33797,6 +33797,96 @@ function PyDefBodyRaises(defIdx: Integer): Boolean; forward; { abstract-method d
 function PyJoinRetAnnotation(annTk: TTypeKind; methodStart: Integer;
                              var annRec: Integer): TTypeKind; forward;
 
+const
+  MAX_PY_MODQUAL = 512;
+var
+  PyModQualHi: Integer = 0;      { tokens scanned so far -- a HIGH-WATER mark }
+  PyModQualCount: Integer = 0;
+  PyModQualNames: array[0..MAX_PY_MODQUAL - 1] of Integer;  { interned, lowercase }
+
+function PyModuleQualifier(const nm: AnsiString): Boolean;
+{ Does `nm`, standing in front of a dot, name a MODULE rather than an object?
+  It exists for ONE caller, PyDefUsedAsValue, and for one question:
+  `flat3.r_list` in value position is a def taken as a value, `self.items` is
+  not, and the two are the same token shape.
+
+  TWO instruments, OR'd, because each is blind where the other sees -- measured
+  2026-09-13, one reduction per blindness:
+
+  THE UNIT TABLE answers what a name RESOLVES to. It has the module currently
+  being compiled and every one compiled before it, which is exactly the common
+  case (`import fa` in fb.py, then `fa.joinery` read there while fa's def header
+  is parsed). It is blind to an `as` ALIAS, because `import pkg.lines2 as L2`
+  registers L2 only AFTER the module it names is compiled -- and the def header
+  is parsed during that compile. `f = L2.joinery2` regressed on the unit table
+  alone.
+
+  THE TOKEN SCAN answers what an import statement WROTE, so it sees the alias.
+  It must not maintain a statement-start flag: the stream is one Pascal prelude
+  followed by appended module chunks, and the token before a module's first
+  `import` is not a statement terminator, so an atStmtStart-gated scan answered
+  TRUE for the main program's own `import fb` and FALSE for fb's `import fa` --
+  ONE member out of 224707 tokens. tkUses IS the trigger, wherever it sits, and
+  the names run to the end of that statement. It collects a Pascal `uses a, b;`
+  too, which is harmless: those are module names as well.
+
+  Scanned INCREMENTALLY against a high-water mark rather than once. A module's
+  tokens are appended and MainProgramTokCount is RE-POINTED to that module's
+  end, so it moves both ways; only growth is new information, and a cache built
+  at the first call would freeze the set at whatever module asked first.
+
+  A class or variable that happens to share a module's name answers TRUE here.
+  That costs BOXING on a same-named def and never correctness -- the same trade
+  PyMethodUsedAsValue and PyClassUsedAsValueEx already state. Truncation at
+  MAX_PY_MODQUAL leaves a def exactly as it was before this scan existed, which
+  is the safe direction; the set is DEDUPED, so it counts distinct module names
+  and not import statements. }
+var j, i, ni: Integer; lo: AnsiString; inImport, dup: Boolean;
+begin
+  Result := False;
+  if nm = '' then Exit;
+  if MainProgramTokCount > PyModQualHi then
+  begin
+    j := PyModQualHi;
+    inImport := False;
+    while j < MainProgramTokCount do
+    begin
+      if Tokens[j].Kind = tkUses then
+        inImport := True
+      else if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon,
+                                 tkEOF] then
+        inImport := False
+      else if inImport and (Tokens[j].Kind = tkIdent) and
+              (PyModQualCount < MAX_PY_MODQUAL) then
+      begin
+        ni := InternStr(LowerCase(GetTokenStr(j)));
+        dup := False;
+        for i := 0 to PyModQualCount - 1 do
+          if PyModQualNames[i] = ni then begin dup := True; Break; end;
+        if not dup then
+        begin
+          PyModQualNames[PyModQualCount] := ni;
+          Inc(PyModQualCount);
+        end;
+      end;
+      Inc(j);
+    end;
+    PyModQualHi := MainProgramTokCount;
+  end;
+  if FindUnitOrAlias(nm) >= 0 then
+  begin
+    Result := True;
+    Exit;
+  end;
+  lo := LowerCase(nm);
+  for i := 0 to PyModQualCount - 1 do
+    if Strs[PyModQualNames[i]].Text = lo then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyDefUsedAsValue(const nm: AnsiString): Boolean;
 { True iff the module mentions `nm` as a VALUE (a bare name that is not being
   called and is not the `def` line or an attribute) — i.e. the routine is
@@ -33826,6 +33916,15 @@ var j: Integer;
     atStmtStart, inImport: Boolean;
 begin
   Result := False;
+  { PXXDBG=n.dval -- the RANGE this scan can see, which is the thing to print
+    first when a value use is not being found. The window is [PyScanLo,
+    MainProgramTokCount) for the MODULE being parsed, but the scan starts at 0,
+    so a read in an EARLIER-lexed module is in range and a read in a later one is
+    not. It is how the module-qualifier arm below was found to be seeing one
+    import statement out of 224707 tokens. }
+  if PxxDbgEnabled('n.dval') then
+    WriteLn('PXXDBG n.dval ', nm, ' scanlo=', PyScanLo,
+            ' mainTok=', MainProgramTokCount, ' tokCount=', TokCount);
   j := 0;
   atStmtStart := True;
   inImport := False;
@@ -33848,6 +33947,51 @@ begin
       if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
               ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
               ((j > 0) and (Tokens[j - 1].Kind = tkFunction))) then
+      begin
+        Result := True;
+        Exit;
+      end;
+      { A MODULE-QUALIFIED value read is the SAME use, spelled with a dot:
+        `via(flat3.r_list)`, `cb = mod.run`, `handlers[k] = mod.on_key`. The dot
+        exclusion above is right about `self.items` and wrong about this, and
+        that is where a NilPy def whose result is a CONTAINER lost its value:
+        the def kept its concrete `TPyList` return, the `{code, recv}` pair
+        called it through a Variant-returning pointer, and the caller read a
+        16-byte Variant out of a hidden destination the callee never wrote.
+        Measured 2026-09-13 at 913d666f0, one module reached two ways:
+
+          from flat3 import r_list; via(r_list)     [7, 8, 9]
+          import flat3;             via(flat3.r_list)   an EMPTY LINE, rc=0
+
+        and per RETURN kind through the qualified spelling: int, str, float and
+        a def inferring a Variant (`return [..] or return 5`) were all correct,
+        while list, tuple, dict and bytes printed NOTHING and a class instance
+        answered `AttributeError: 'int' object has no attribute 'v'`. Silent
+        wrong values, and the scalar kinds only worked because
+        PyMakeFuncValueFor's wrapper adapts a SCALAR return and declines a class
+        one -- so the working half was carrying a different mechanism.
+
+        The BOUND-METHOD road has always had this: PyMethodUsedAsValue counts
+        exactly the dot form, keyed on the name alone, and `b.fresh` returning a
+        fresh list and `b.alias` returning `self.items` are both correct through
+        a callable value today. This is that same trigger for a plain def, and
+        normalisation rather than a wrapper is deliberately the fix: the boxing
+        then happens INSIDE the callee through the ordinary `return` coercion,
+        where the compiler knows whether the reference is fresh or an alias --
+        which a synthesized wrapper does not, and which is the recorded ARC gap
+        that made PyGetOrMakeCallableWrapper refuse a class result in the first
+        place.
+        bug-n-a-module-qualified-def-returning-a-container-is-broken-as-a-value }
+      if PxxDbgEnabled('n.dval') and (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
+         (Tokens[j - 2].Kind = tkIdent) then
+        WriteLn('PXXDBG n.dval   dot-read of ', nm, ' base=',
+                GetTokenStr(j - 2), ' modqual=',
+                PyModuleQualifier(GetTokenStr(j - 2)));
+      if ((j + 1 >= MainProgramTokCount) or
+          (not (Tokens[j + 1].Kind in [tkLParen, tkAssign]))) and
+         (j >= 2) and (Tokens[j - 1].Kind = tkDot) and
+         (Tokens[j - 2].Kind = tkIdent) and
+         PyModuleQualifier(GetTokenStr(j - 2)) then
       begin
         Result := True;
         Exit;

@@ -1,0 +1,71 @@
+# A def read off an imported MODULE without calling it -- `via(retkinds.r_list)`,
+# `f = rk.r_list` -- is a callable value, and it must answer the same thing the
+# bare-name spelling answers.
+#
+# It did not. PyDefUsedAsValue scans for the def's name in value position and
+# EXCLUDES a dot-preceded one, which is right about `self.items` and wrong about
+# a module qualifier, so the def kept its inferred concrete return type while
+# the `{code, recv}` pair called it through a Variant-returning function
+# pointer. A list/tuple/dict/bytes/instance result came back in a register where
+# the caller read a 16-byte Variant out of a hidden destination the callee never
+# wrote: printed NOTHING, rc=0. int/str/float/bool were correct through the same
+# spelling, by a different mechanism (PyMakeFuncValueFor synthesizes a
+# return-side wrapper for a SCALAR and declines a class), which is why only a
+# whole-domain fixture catches it.
+#
+# Every row is CPython's own output (tools/pydiff.py).
+import retkinds
+import retkinds as rk
+from retkinds import r_str as bare_str
+
+
+def via(g):
+    return g()
+
+
+def via1(g, a):
+    return g(a)
+
+
+# The whole return-kind domain through the qualified value read.
+print(repr(via(retkinds.r_int)))
+print(repr(via(retkinds.r_str)))
+print(repr(via(retkinds.r_float)))
+print(repr(via(retkinds.r_bool)))
+print(repr(via(retkinds.r_list)))
+print(repr(via(retkinds.r_tuple)))
+print(repr(via(retkinds.r_dict)))
+print(repr(via(retkinds.r_bytes)))
+print(repr(via(retkinds.r_none)))
+print(via(retkinds.r_obj).v)
+print(repr(via(retkinds.r_mixed)))
+
+# The ALIAS as the qualifier, so the fix cannot be keyed on the module's real
+# name: `import retkinds as rk` binds rk, and `rk.r_list` is the same value read.
+f = rk.r_list
+print(repr(f()))
+
+# The bare-name spelling, which worked throughout -- here so a regression in it
+# cannot hide behind the rows above.
+print(repr(bare_str()))
+
+# ...and the CALL spelling of the same two defs, which the normalisation must
+# not disturb.
+print(repr(retkinds.r_list()))
+print(repr(retkinds.r_dict()))
+
+# A container the callee does NOT own, returned through a callable value, and
+# the owner read again afterwards: a second release would show here.
+d = {"k": [1, 2]}
+print(repr(via1(retkinds.r_alias, d)))
+print(repr(d["k"]))
+
+# Defaults and a star tail on a def reached as a value.
+print(repr(via1(retkinds.r_args, 1)))
+
+# A callable value held in a CONTAINER rather than a local -- the shape a
+# dispatch table is made of, and the one an argument-position-only fixture
+# never reaches.
+tbl = {"L": retkinds.r_list}
+print(repr(tbl["L"]()))
+

@@ -1,0 +1,64 @@
+# FIVE positional arguments through the RUN-TIME dispatched path arrive with the
+# right VALUES. The receiver is unannotated, so no class is known at the call
+# site and the call goes through pydyn_methl.
+#
+# This asserts the invariant and not a ceiling. It replaces a row that grepped
+# the compiler output for the literal string `takes at most 4 arguments`: the
+# four-argument cap was removed by 95e7eb26e (a list-taking pydyn_methl), so that
+# string can never be emitted again and the row went RED on its own feature
+# landing -- correctly bisected onto the commit that fixed the thing it was
+# guarding. A test that pins a CONSTANT ceiling goes stale every time the ceiling
+# moves, and each time it reads as a regression to whoever runs the tier next.
+#
+# What the old row was really protecting is still live and is what these numbers
+# check: a dropped argument is a plausible wrong value, not a crash. If the fifth
+# were silently dropped the sum would be 10, and if defaults filled the gap it
+# would be 1010. Both are values a program could believe.
+# regression-test-nilpy-nilpy-open-world-arity-fail
+
+
+class P:
+    def sum5(self, a, b, c, d, e):
+        return a + b + c + d + e
+
+    def sum7(self, a, b, c, d, e, f, g):
+        return a + b + c + d + e + f + g
+
+    # One INTEGER carrying three facts, so the row cannot be satisfied by a
+    # dropped argument, by a default filling a written slot, or by a star
+    # swallowing one: the five written positionals, the defaulted sixth, and how
+    # many reached `*rest`. A tuple would have been the obvious spelling and is
+    # not available -- a run-time dispatched method whose result is RETURNED
+    # loses its return kind (bug-n-a-dynamically-dispatched-call-loses-its-
+    # return-kind-when-it-is-returned), which is a separate bug this row must not
+    # be entangled with.
+    def wide(self, a, b, c, d, e, f=1000, *rest):
+        return (a + b + c + d + e) + 100000 * f + 1000000000 * len(rest)
+
+
+def five(o):
+    return o.sum5(1, 2, 3, 4, 5)
+
+
+def seven(o):
+    return o.sum7(1, 2, 3, 4, 5, 6, 7)
+
+
+def wide_written(o):
+    return o.wide(1, 2, 3, 4, 5)
+
+
+def wide_over(o):
+    return o.wide(1, 2, 3, 4, 5, 6, 7, 8)
+
+
+def kw(o):
+    return o.sum5(1, 2, 3, e=5, d=4)
+
+
+p = P()
+print(five(p))
+print(seven(p))
+print(wide_written(p))
+print(wide_over(p))
+print(kw(p))

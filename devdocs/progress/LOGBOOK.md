@@ -3823,3 +3823,120 @@ two.
 2026-09-13 | frankS | devdocs/dev/debugging-playbook.md | bank `procs=N` (the compiler's own ok: line) as a free wrapper/synthesis detector -- there is no PXXDBG key for wrapper synthesis and the alternative is a WriteLn plus a 90s self-compile. WITH the caveat that it is a DIFFERENTIAL reading: sound for one spelling of one name in one file compiled back to back, not across a pull, a rebuild, or two programs.
 2026-09-13 | frankZ | devdocs/progress/backlog-nilpy/ -> done/ | Closed the two p80 class-as-value arms on the lekkerzeilen corpus instead of on a probe. frankh-30 confirmed the demo still uses the same-name `from .platform import gl` in four modules over `gl = _backend.gl`, and the pxx-built binary calls `gl.get_string(gl.VERSION)` through it. I verified every source citation and re-measured arm 1's own four-line repro at f2f11922a (43bfe4af8250): matches CPython. BOTH CLOSE WITH THE REPAIR UNATTRIBUTED — my nine probes all passed on pin v408, which predates the likely closers, so I never captured the failing condition and cannot name what fixed it. WHY IT MATTERS: asking the seat with the corpus cost one message and settled what a tenth probe could not.
 2026-09-13 | frankS | lib/rtl/re.pas | cache the compiled pattern in MakePattern. Every module-level re wrapper compiled a fresh TPattern per call and nothing ever freed it (the TMatch/TPyList may reference p.compiled), so `re.findall` in a loop leaked ~2.78 objects per iteration IN THE CALL SPELLING -- live 8349 at 3000 iterations, 8 when precompiled. `str.split` in the same shape leaked nothing, which is the control that named MakePattern rather than the container return. No eviction on purpose: CPython clears past _MAXCACHE and can because it is refcounted; we would leave a TMatch dangling. Residue is now O(distinct patterns in the source) instead of O(calls). Also a speed fix -- ReCompile ran on every call.
+
+## 2026-09-13 | frankH | compiler/pyparser.inc | a module-qualified def taken as a value keeps its concrete return type
+
+`via(mod.r_list)` / `f = rk.r_list` / `{"L": mod.r_list}` — a def read off an
+imported MODULE without calling it — handed back GARBAGE whenever the def's
+inferred result was a container or an instance. `PyDefUsedAsValue`, the scan that
+normalises such a def to the one callable ABI (Variant result, Variant
+parameters), excludes every DOT-preceded occurrence of the name. That exclusion
+is right about `self.items` and wrong about a module qualifier, so the def kept
+its `TPyList` return while the `{code, recv}` pair called it through a
+Variant-returning function pointer: the caller read 16 bytes out of a hidden
+destination the callee never wrote.
+
+**The whole return-kind domain, measured through the qualified spelling before
+the fix** (b73b690111ea) — int 42, str 'hello', float 1.5, bool True all
+CORRECT; list, tuple, dict and bytes print an EMPTY LINE at rc=0; an instance
+gives `AttributeError: 'int' object has no attribute 'v'`. The four correct kinds
+were carried by a *different* mechanism — `PyMakeFuncValueFor` synthesizes a
+return-side wrapper for a scalar result and declines a class one — so the working
+half certified nothing about the broken half, and a fixture built from the two
+kinds that surfaced in the lekkerzeilen demo (a list at `Vessel.fittings_data`,
+an instance) would have passed on nine of the eleven rows that matter.
+
+**The control that named the mechanism is inside one binary**: adding a bare
+`_ref = r_list` to the module — which trips the existing scan — made the
+qualified read of `r_list` and `r_dict` correct while `r_bytes`, untouched, kept
+printing nothing in the same run. No compiler change involved; the discriminator
+is only which def got a bare mention.
+
+**NORMALISATION, NOT A WRAPPER, AND THE BOUND-METHOD ROAD IS WHY.**
+`PyMethodUsedAsValue` counts exactly the dot form, keyed on the name alone, and
+`b.fresh` returning a fresh list and `b.alias` returning `self.items` are both
+correct through a callable value today, with no wrapper built. Widening the
+wrapper gate was the other candidate and is the wrong shape: the boxing would
+happen OUTSIDE the callee, where nothing knows whether the returned reference is
+fresh or an alias — which is precisely the recorded ARC gap that made
+`PyGetOrMakeCallableWrapper` refuse a class result, and `PyCompileLambdaBody`
+refuse to wrap one in an `AN_EXIT` (traced at 4 retains / 5 releases where the
+scalar case balances 2/2). Normalising makes the callee do its own `return`
+coercion, where the compiler has that knowledge. Four fewer synthesized procs in
+the fixture as a side effect (procs 2111 -> 2107): the scalar kinds no longer
+need their wrappers either.
+
+New `PyImportBoundName` keeps the widening narrow: a dot-read counts only when
+the qualifier is a name an IMPORT statement binds, scanned once and cached, so
+`self.items` and `obj.attr` are untouched. Coarse WITHIN that set on purpose and
+in the same spirit as its two siblings — a false member costs boxing, never
+correctness.
+
+Test: `test_nilpy_a_module_qualified_def_is_a_value.npy` + `test/nilpy_units/retkinds.npy`,
+`.expected` from CPython. Eleven return kinds through the qualified read, the
+alias qualifier (`import retkinds as rk`), the bare-name spelling beside it, the
+CALL spelling of the same defs (normalising changes those too), a container the
+callee does NOT own with the owner read again after, defaults and a star tail on
+a normalised def, and a callable held in a dict rather than a local.
+
+**AND THE FIRST VERSION OF THIS FIX WAS MEASURED ENTIRELY FROM THE MAIN PROGRAM,
+WHICH IS HALF THE CONSTRUCT.** The scan's window is [0, MainProgramTokCount) and
+MainProgramTokCount is RE-POINTED to whichever module is being parsed, so a read
+in the PROGRAM and a read in a MODULE are not the same question. The demo still
+died at the same line after the first fix, and the reduction that had named the
+mechanism (four files: a package, a module reading another module's def into a
+field by keyword argument, called back through the field) reproduced it exactly.
+Two instruments were needed and each is blind where the other sees: the
+compiled-unit table has the module being compiled and every earlier one but is
+blind to an `as` ALIAS, because `import pkg.lines2 as L2` registers L2 only AFTER
+the module it names is compiled; the token scan sees the alias but must NOT gate
+on a statement-start flag — the stream is one Pascal prelude followed by appended
+module chunks, and the token before a module's first `import` is no terminator,
+so an atStmtStart-gated scan found ONE import statement out of 224707 tokens.
+`PXXDBG=n.dval` prints the window and the per-dot-read verdict, and is what
+turned that into a number instead of a theory.
+
+**Residue, filed not fixed, because a pre-scan cannot see tokens that do not
+exist yet:** when the program imports the DEFS' module before the module that
+reads them, the read is still invisible —
+`bug-n-a-qualified-def-value-read-is-invisible-when-the-def-s-module-is-parsed-first`
+(p60). It carries both reductions and the worse half: an unnormalised def also
+reads its ARGUMENTS through the wrong convention, so `def gl2(xs: list)` reached
+as a value SEGFAULTS. The order-independent answer is a return kind (and
+parameter kinds) on the signature record plus PyHostCall's `ptrFamily`
+marshalling in the pair bridge — the same trampoline
+`bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments` already
+names as its own non-ladder answer. One build closes three tickets.
+
+**The demo is past this wall.** `bin/lz_h6`, procs 11712 -> 11391 (321 callable-value
+wrappers no longer synthesized, because those defs now take the normalised ABI):
+`Vessel.fittings_data`'s `built = self.details(); if len(built) > 2:` — where
+`details=lines.sloep_joinery` is exactly this construct, a module-qualified def
+passed as a keyword argument — now returns its tuple. It dies further on at
+`AttributeError: 'NoneType' object has no attribute 'length'`. Next wall.
+
+## 2026-09-13 | frankH | Makefile, test/ | the open-world arity row asserted a ceiling that moved
+
+`nilpy_open_world_arity_fail` went RED on its own feature landing: the row grepped
+the compiler output for the literal `takes at most 4 arguments`, and `95e7eb26e`
+removed that cap, so the string can never be emitted again. Track T's bisect
+converged onto the fixing commit and its auto-filed note flags exactly this case.
+Reported by frankuser, who did the pinned-versus-HEAD control and left it alone as
+mine.
+
+Not renumbered to 8, which is the tempting fix and is the same mistake one ceiling
+later. The row now asserts the INVARIANT the fixture's own comment says it exists
+for — five and seven positionals through the run-time dispatched path arrive with
+the right VALUES, and a defaulted sixth plus a star tail encode three facts in one
+integer so no dropped argument, filled default or swallowed star can satisfy it —
+plus a SECOND row keeping the refusal half: exceeding whatever the current ceiling
+is must refuse rather than truncate, with the count generated and the assertion
+reading the number out of the compiler's own message instead of naming it.
+`test_nilpy_open_world_arity_is_not_truncated.npy`; the old fixture is deleted;
+`regression-test-nilpy-nilpy-open-world-arity-fail` resolved.
+
+Found while writing it: a container result RETURNED out of a run-time dispatched
+call comes back as a raw pointer, at arity >= 1 only, while the same call inline or
+assigned to a local is correct — `bug-n-a-dynamically-dispatched-call-loses-its-
+return-kind-when-it-is-returned` (p65). The obvious spelling of the new row would
+have been red for that reason, which is why it encodes integers and says so inline.

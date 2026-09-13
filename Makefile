@@ -997,6 +997,48 @@ test-nilpy: $(COMPILER)
 	# with the one import line pointing at a Python twin of the unit.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_pascal_integer_widths_join.npy $(TESTTMP)/test_nilpy_intwidths26
 	$(TESTTMP)/test_nilpy_intwidths26 | diff -u test/test_nilpy_pascal_integer_widths_join.expected -
+	# A def read off an imported MODULE without calling it -- `via(mod.r_list)`,
+	# `f = rk.r_list`, `{"L": mod.r_list}` -- is a callable value, and a def whose
+	# result is a CONTAINER or an instance came back as garbage through it: the
+	# value-position scan that normalises such a def to the Variant ABI
+	# (PyDefUsedAsValue) excluded every dot-preceded name, so the def kept its
+	# concrete `TPyList` return while the `{code, recv}` pair called it through a
+	# Variant-returning pointer -- the caller read 16 bytes out of a hidden
+	# destination the callee never wrote.
+	# THE WHOLE RETURN-KIND DOMAIN IS THE ROW, and that is the point rather than
+	# thoroughness: measured on the pre-fix compiler (b73b690111ea) against this
+	# very fixture, int/str/float/bool are CORRECT and list/tuple/dict/bytes print
+	# an EMPTY LINE with rc=0, then the instance raises `AttributeError: 'int'
+	# object has no attribute 'v'` -- that is this row's positive control. The four
+	# correct kinds were carried by a DIFFERENT mechanism (PyMakeFuncValueFor
+	# synthesizes a return-side wrapper for a scalar and declines a class result),
+	# so a fixture built from the two kinds that surfaced in the lekkerzeilen demo
+	# would have certified the bug on the other nine.
+	# r_mixed returns a list OR an int, so it infers a Variant on its own and was
+	# correct before the fix -- the control that named the mechanism. r_alias
+	# returns a container it does not own and the owner is read again after, so a
+	# double-release shows; the CALL spelling of the same defs is asserted beside
+	# the value spelling, because normalising the def changes it too.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_qualified_def_is_a_value.npy $(TESTTMP)/test_nilpy_modqualval26
+	$(TESTTMP)/test_nilpy_modqualval26 | diff -u test/test_nilpy_a_module_qualified_def_is_a_value.expected -
+	# ...and the same construct with the value read performed INSIDE AN IMPORTED
+	# MODULE, which is a DIFFERENT question and not a thoroughness row: the scan
+	# runs from token 0 to MainProgramTokCount, and that bound is re-pointed to
+	# whichever module is being parsed, so a read in the program and a read in a
+	# module do not see the same token stream. The first fix for this bug was
+	# measured entirely from the program and left the demo's own shape -- a
+	# qualified def arriving as a keyword argument, stored in a field, called back
+	# through it, its result measured with len() -- still broken.
+	# Its program imports ONLY the reader, so the reader's tokens exist before the
+	# module holding the defs is parsed. THE OTHER IMPORT ORDER IS A KNOWN HOLE
+	# with its own ticket, and is deliberately not written here: a fixture that
+	# passes in one order and fails in the other must not be spelled in the order
+	# that passes. Every def these rows reach is read from inside that module and
+	# NOWHERE ELSE -- a read in the program would normalise it and the rows would
+	# pass without measuring anything, which is how the first version of this
+	# fixture was green on a broken compiler.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_module_qualified_def_is_a_value_across_modules.npy $(TESTTMP)/test_nilpy_modqualvalx26
+	$(TESTTMP)/test_nilpy_modqualvalx26 | diff -u test/test_nilpy_a_module_qualified_def_is_a_value_across_modules.expected -
 	# Importing a unit that declares `Text = class` must not change what `Text`
 	# means in a DIFFERENT unit that never names it. It did, silently, decided by
 	# import ORDER: ParsingClassBodyCi's "no class scope open" sentinel (-1) was
@@ -5942,11 +5984,31 @@ test-nilpy: $(COMPILER)
 	@$(TESTTMP)/nilpy_ow_kw26 2>&1 \
 	  | grep -q "takes positional arguments only" \
 	  || { echo 'nilpy_open_world_kwarg_fail: FAIL - a keyword through a CALLABLE FIELD must be refused, not bound by position'; exit 1; }
-	# ...and a fifth positional argument does not fit the marshalling, so it is an
-	# error rather than a silently dropped argument.
-	@./$(COMPILER) test/nilpy_open_world_arity_fail.npy $(TESTTMP)/nilpy_ow_ar26 2>&1 \
-	  | grep -q "takes at most 4 arguments" \
-	  || { echo 'nilpy_open_world_arity_fail: FAIL - a fifth positional argument must be refused, not dropped'; exit 1; }
+	# ...and a fifth positional argument is not silently DROPPED. This row used to
+	# grep the compiler output for the literal `takes at most 4 arguments`, and
+	# 95e7eb26e removed that cap (a list-taking pydyn_methl), so the string can
+	# never be emitted again and the row went RED on its own feature landing --
+	# auto-filed as regression-test-nilpy-nilpy-open-world-arity-fail and bisected
+	# correctly onto the commit that fixed what it was guarding. A row asserting a
+	# CONSTANT ceiling goes stale every time the ceiling moves and reads as a
+	# regression to whoever runs the tier next. What the fixture's own comment says
+	# it exists for is still live and is what these numbers check: five and seven
+	# positionals arrive with the right VALUES through the run-time dispatched path,
+	# and `wide` encodes three facts in one integer so the row cannot be satisfied
+	# by a dropped argument, a default filling a written slot, or a star swallowing
+	# one. True at a ceiling of 4, of 64, and of 80.
+	./$(COMPILER) test/test_nilpy_open_world_arity_is_not_truncated.npy $(TESTTMP)/test_nilpy_owarity26
+	$(TESTTMP)/test_nilpy_owarity26 | diff -u test/test_nilpy_open_world_arity_is_not_truncated.expected -
+	# ...and whatever the current ceiling is, EXCEEDING it refuses rather than
+	# truncates. The count is generated (65) and the assertion reads the number out
+	# of the compiler's own message rather than naming it, so raising MAX_DYN_ARGS
+	# keeps this row meaningful as long as the generated count is above it -- the
+	# one thing to change here if that constant ever passes 64.
+	printf 'def f(o):\n    return o.nope(%s)\nprint(1)\n' "$$(seq -s, 1 65)" > $(TESTTMP)/nilpy_ow_ceiling.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_ow_ceiling.npy $(TESTTMP)/nilpy_ow_ceiling26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'dispatched at run time' \
+	  && printf '%s\n' "$$out" | grep -q 'takes at most' \
+	  || { echo 'open-world arity ceiling: FAIL - a call past the run-time dispatch ceiling must be REFUSED and must say what the ceiling is, not truncate'; printf '%s\n' "$$out"; exit 1; }
 	# Absolute DOTTED imports resolve to SOURCE FILES in a package on disk --
 	# `from mypkg.core.bus import Bus` -- instead of only ever asking for a
 	# mimic_ shim. Compiled FROM the package root, because that is what puts
