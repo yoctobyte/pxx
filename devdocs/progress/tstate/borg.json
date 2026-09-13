@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-13T08:59:55Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "59d6804c994462ae185332d6dbe6c32c33fae71a",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-13T09:01:38Z",
    "fixed": [],
    "new_red": [],
@@ -484,6 +475,17 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-13T22:09:05Z",
+   "fixed": [
+    "test-uforth#src:tools/compiler_srchash.sh"
+   ],
+   "new_red": [],
+   "sha": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5059,7 +5061,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
   "test-threads#src:tools/compiler_srchash.sh": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "test-uforth#src:tools/compiler_srchash.sh": "6f085e16261ea5177c8e8424eb385b31daa28dbe",
+  "test-uforth#src:tools/compiler_srchash.sh": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
   "test-uforth#src:tools/compiler_srchash.sh@1": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
   "test-uforth#src:tools/compiler_srchash.sh@10": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
   "test-uforth#src:tools/compiler_srchash.sh@11": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
@@ -5242,7 +5244,6 @@
   "optdiff#shard2/12": "OPT DIFF -O3: test/c_crtl_glob_no_leak.c (rc 2 vs 2) | optdiff skip SKIPLIST: test_thread_writeln_interleave.pas | optdiff skip TIMEOUT-O0: test_target_name_in_external_refusal.pas | optdiff skip BUILD-FAIL: aoc_ovl_unit_fmt.pas cabi_bridge.c cabi_intra.c c_cpp_macro_arg_shapes.c c_pasunit_two_overloads_fail.c csqlite_layout_probe.c cxtensa_obj.c isas_b325_base.pas lib_klondike.pas library_export\u2026",
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
-  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), e7114e5d0c6b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | test-uforth: FAIL \u2014 uforth.py did not compile",
   "test-uforth#src:tools/compiler_srchash.sh@7": "Segmentation fault | Test utilities loaded | -************* | -End of Locals word set tests.<STACK> | +********timeout: the monitored command dumped core | test-uforth: FAIL \u2014 1 of 1 corpora differ from CPython",
   "tools-devtest#00": "The default keeps a bare run byte-identical. | Worked example: test/test_nilpy_class_named_like_an_rtl_record.npy. | Or add the path to ALLOWED_PATHS with a reason. | tools-devtest: 162 green, 1 RED -- tools/testmgr_hardcoded_tmp_devtest.py"
  },
@@ -14578,7 +14579,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-threads#src:tools/compiler_srchash.sh": "pass",
-  "test-uforth#src:tools/compiler_srchash.sh": "fail",
+  "test-uforth#src:tools/compiler_srchash.sh": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@1": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@10": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@11": "pass",
@@ -14755,14 +14756,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-13T22:07:17Z",
+  "date": "2026-09-13T22:09:05Z",
   "deadline": 3600.0,
   "sha": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 902.5
+  "verdict": "GREEN",
+  "wall": 99.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14813,14 +14814,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T21:20:29Z",
+   "date": "2026-09-13T22:09:05Z",
    "deadline": 3600.0,
-   "sha": "a893dfc5818a4f737196e6443de9b2089445e136",
+   "sha": "e7a21f9b1fd86ac0d560f3a61596f7db91827bcf",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "RED",
-   "wall": 15.5
+   "verdict": "GREEN",
+   "wall": 99.4
   }
  },
  "last_full": {
@@ -14985,25 +14986,6 @@
    ],
    "range_non_causal": false,
    "src": ""
-  },
-  {
-   "bad": "e5cd18e4b220306c1b9d1e3c9308371f7969a533",
-   "bad_untestable": false,
-   "first_seen": false,
-   "good": "6f085e16261ea5177c8e8424eb385b31daa28dbe",
-   "job": "test-uforth#src:tools/compiler_srchash.sh",
-   "name": "test-uforth#blocktest",
-   "never_passed": false,
-   "no_testable_change": false,
-   "opened": "2026-09-13T14:57:32Z",
-   "pin_axis": 0,
-   "pin_built": false,
-   "range": [
-    "e5cd18e4b220306c1b9d1e3c9308371f7969a533"
-   ],
-   "range_non_causal": false,
-   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
-   "status": "fail"
   }
  ],
  "pin_baseline": {
