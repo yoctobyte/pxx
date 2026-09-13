@@ -26241,3 +26241,62 @@ Related: `devdocs/dev/normalise-dont-special-case.md` (two mechanisms for one
 concept, and the second path is the one that stays broken) — this is that rule
 with the two paths being PREDICATES rather than code paths, which is why a grep
 for the construct does not find it and a grep for the CONCEPT does.
+
+## A DECLINED GATE IS NOT "NOTHING HAPPENS" — READ THE ELSE ARM BEFORE TRUSTING THE SYMPTOM
+
+Measured 2026-09-13 (frankS, Track N). `f = struct.unpack; f("<f", packed)`
+raised **`error: bad char in struct format`**. The format string is a literal two
+characters long and the CALL spelling of the same function, in the same program,
+was correct. Nothing in the message points at the actual gate, which is the
+RETURN TYPE:
+
+```pascal
+wrapRetOk := PyScalarWrappableRetType(Procs[pi].RetType) or
+             (Procs[pi].RetType = tyVariant) or
+             ((Procs[pi].RetType = tyClass) and PyProcIsFreshContainerCtor(pi));
+```
+
+The trap is reading `wrapRetOk = False` as "no wrapper is built, so behaviour is
+whatever it was". It is not. The else arm **boxes the raw code address and calls
+it through the Variant ABI**, so the callee reads its parameters out of whatever
+the dispatcher happened to stage — and the first thing to notice a garbage
+parameter is the callee's own validation, which reports about the ARGUMENT it
+was handed. A gate on the result produced an error message about the input.
+
+The whole family had this shape, and every one of them misdirects:
+
+    f = re.findall;      f("a","banana")  SIGSEGV, and an EMPTY LINE on one use
+    f = json.loads;      f("[1, 2]")      EJSONError: unexpected character at offset 1
+    f = json.dumps;      f([1, 2])        TypeError: expected a number, got int
+    f = string.capwords; f("a b")         an empty line
+    f = struct.calcsize; f("<3f")         bad char in struct format   (historic)
+
+Five different subsystems' error messages, one gate. Two of these had been sitting
+in `PyMakeFuncValueFor`'s own comment for weeks, whose author called the else arm
+*"possibly-unsafe"* and left it — the comment was accurate and nobody connected it
+to the symptoms, because the symptoms are about JSON and struct formats.
+
+**The instrument that cuts through it costs nothing: `procs=N` in the compiler's
+own `ok:` line.** A synthesized wrapper is a proc, so the VALUE spelling of a
+function reads one higher than the CALL spelling when a wrapper was built and
+identical when it was not:
+
+    import re;   print(re.findall("a","banana"))   procs=2155
+    import re;   f = re.findall; print(f(...))     procs=2156   wrapped
+    import json; print(json.loads("[1]"))          procs=2393
+    import json; f = json.loads; print(f("[1]"))   procs=2393   NOT wrapped
+
+That two-line difference is what separated three distinct causes wearing one
+symptom (return type, parameter type, arity) after a `PXXDBG` key that does not
+exist produced nothing and a temporary `WriteLn` would have cost a 90s
+self-compile.
+
+**The general move: when a predicate can decline, go read what the else arm
+DOES.** If it falls back to a different code path rather than to no path, the
+observable belongs to the fallback and will name the fallback's concerns — not
+the predicate's. Ask "what is the failing code actually being asked to do?"
+before believing an error message that names a subsystem the gate never mentions.
+
+Related: [Every instrument that lies, lies by being CORRECT ABOUT SOMETHING ELSE]
+in CLAUDE.md — this is that rule with the error MESSAGE as the instrument, and
+the message is correct: `unpack` really was handed a bad format string.

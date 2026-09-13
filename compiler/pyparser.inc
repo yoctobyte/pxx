@@ -15816,6 +15816,37 @@ begin
   Result := (tk = tyVariant) or PyScalarWrappableRetType(tk);
 end;
 
+{ Does a call to pi through a callable value need its ARGUMENTS adapted? True
+  when any of the first `req` parameters is not already a Variant.
+
+  This is the THIRD reason to synthesize a wrapper and the gate in
+  PyMakeFuncValueFor knew only two of them (ARITY and RETURN). A callee that
+  already returns a Variant and has no defaulted tail looked like it needed no
+  adaptation at all -- but the return side is only half of what a wrapper does.
+  Measured 2026-09-13:
+
+    function loads(const s: AnsiString): Variant;        { lib/rtl/json.pas }
+    f = json.loads; f("[1, 2]")   EJSONError: unexpected character at offset 1
+
+  tyVariant return, arity 1 of 1, so the old gate skipped the block entirely and
+  boxed the raw address; `loads` then read an AnsiString out of a Variant slot
+  and reported about the JSON TEXT. Same shape as the min/max arity case and the
+  shim return-type case: the complaint names the argument, the cause is the gate.
+  bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value }
+function PyProcNeedsArgAdaptation(pi, req: Integer): Boolean;
+var j: Integer;
+begin
+  Result := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if req > Procs[pi].ParamCount then req := Procs[pi].ParamCount;
+  for j := 0 to req - 1 do
+    if Procs[pi].Params[j].TypeKind <> tyVariant then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 { How many arguments a CALL to pi must actually supply: ParamCount less the
   TRAILING defaulted tail. This is the arity Python sees, and it is the one the
   callable-value path has to reason about, because pylib spells a Python
@@ -16079,13 +16110,19 @@ begin
             defaults, exactly as a written `sorted(xs)` does.
     RETURN  the callee's result does not ride the Variant hidden-destination
             convention every dispatcher assumes.
+    PARAM   a parameter is not already a Variant, so the argument the dispatcher
+            staged has to be coerced on the way in. `json.loads(const s:
+            AnsiString): Variant` needs ONLY this one -- Variant return, no
+            defaulted tail -- and the two reasons above therefore skipped it and
+            left it on the raw address. See PyProcNeedsArgAdaptation.
 
     `min`/`max` need ONLY the first — they already return a Variant, so the old
     `RetType <> tyVariant` gate skipped them entirely and left them on the raw
     address. That is why they raised `expected a number, got object` while
     `min(xs)` spelled as a call was correct. See PyProcRequiredArity. }
   reqArity := PyCallableValueArity(pi);
-  if (Procs[pi].RetType <> tyVariant) or (reqArity < Procs[pi].ParamCount) then
+  if (Procs[pi].RetType <> tyVariant) or (reqArity < Procs[pi].ParamCount) or
+     PyProcNeedsArgAdaptation(pi, reqArity) then
   begin
     { WRAPPABLE, not ALREADY-VARIANT. This asked `TypeKind = tyVariant` of every
       parameter, and the else of that gate is not "no wrapper" but "the RAW
@@ -16134,19 +16171,39 @@ begin
       argument works" boundary in the ticket — it was never about argument
       count reaching the callee, only about which arity got a wrapper built.
       bug-n-from-import-with-an-as-rename-loses-what-it-renames }
-    { THREE admissible return shapes, not one:
-        - the scalar/string family, which the wrapper adapts (as before);
-        - tyVariant, which needs no adaptation and is here only because the
-          ARITY reason above brought it in (`min`, `max`);
-        - a FRESH container from a known pylib/pyeval constructor (`sorted`),
-          which PyLambdaResultIsOwnedTemp already recognises when it builds the
-          body's AN_EXIT, so the result is returned rather than discarded. A
-          class result that is NOT provably fresh stays out: the wrapper would
-          hand back a second owner of an aliased object, which is the ARC gap
-          bug-nilpy-bound-fn-closure-objects-are-never-freed tracks. }
+    { THREE admissible return shapes, not one: the scalar/string family, which
+      the wrapper adapts; tyVariant, which needs no adaptation and is here only
+      because the ARITY reason above brought it in (`min`, `max`); and ANY
+      tyClass.
+
+      THE CLASS ARM USED TO REQUIRE PyProcIsFreshContainerCtor, AND THAT GATE WAS
+      ANSWERING THE WRONG QUESTION AT THIS SITE. Declining it does not mean "no
+      wrapper" -- it means the RAW ADDRESS is boxed and called through the
+      Variant ABI, so the ARGUMENTS are never coerced either. Measured
+      2026-09-13, and the symptom is nowhere near the return type that caused it:
+
+        f = re.findall; f("a", "banana")   SIGSEGV (empty line + exit 0 on one use)
+        f = json.loads;  f("[1, 2]")       EJSONError: unexpected ...
+        f = struct.unpack; f("<f", b)      error: bad char in struct format
+
+      -- every `mimic_*` shim returning TPyList/TPyBytes, because that predicate
+      is scoped by UNIT NAME to pylib/pyeval. A complaint about the format STRING
+      for a defect gated on the RETURN TYPE.
+
+      Freshness is still the right question for a LIFTED LAMBDA, where the body
+      is arbitrary source and may hand back a captured alias; it is not the
+      question for a SYNTHESIZED WRAPPER, whose body is always
+      `return realproc(a0, ...)` and which therefore returns exactly what the
+      direct call at that site would. That is why the relaxation is paired with
+      the bStart = -1 arm in PyCompileLambdaBody and NOT with a wider
+      PyProcIsFreshContainerCtor: the lambda path keeps the old behaviour
+      untouched. Boxing an aliasing result is already what the direct-call path
+      does -- `x = log.append(i)` 500 times is correct and matches CPython -- so
+      the wrapper doing the same is not a new ownership claim.
+      bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value }
     wrapRetOk := PyScalarWrappableRetType(Procs[pi].RetType) or
                  (Procs[pi].RetType = tyVariant) or
-                 ((Procs[pi].RetType = tyClass) and PyProcIsFreshContainerCtor(pi));
+                 (Procs[pi].RetType = tyClass);
     if paramsAllVariant and (Procs[pi].ParamCount <= MAX_PROC_PARAMS) and
        Procs[pi].IsFunc and wrapRetOk then
       pi := PyGetOrMakeCallableWrapper(pi);
@@ -34774,8 +34831,19 @@ begin
     result symbol this proc does not have. }
   if bStart = -2 then
     node := CurASTNode
-  else if (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
+  else if (bStart <> -1) and
+     (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
      not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
+    { `bStart <> -1` EXEMPTS THE SYNTHESIZED CALLABLE-VALUE WRAPPER, and only it.
+      The freshness question this arm asks is a question about an arbitrary
+      LAMBDA BODY, which may evaluate to a captured alias; a wrapper's body is
+      always `return realproc(a0, ...)`, so it hands back exactly what a direct
+      call at that site hands back. Discarding it made the wrapper answer None
+      for every class-returning callee -- measured: with the wrapper admitted but
+      this arm still discarding, `f = re.findall; f("a", "banana")` printed
+      `None` instead of segfaulting, which is the same bug one layer along.
+      Both halves are needed: the wrapper coerces the ARGUMENTS, this returns the
+      RESULT. }
     node := CurASTNode
   else
   begin

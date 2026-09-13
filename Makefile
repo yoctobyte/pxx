@@ -4091,6 +4091,17 @@ test-nilpy: $(COMPILER)
 	# is module-wide; the FLOAT row is the one that crashed, so it must stay.
 	./$(COMPILER) test/test_nilpy_a_name_keyed_builtin_as_a_value_beats_an_rtl_routine.npy $(TESTTMP)/test_nilpy_bivalrtl26
 	$(TESTTMP)/test_nilpy_bivalrtl26 | diff -u test/test_nilpy_a_name_keyed_builtin_as_a_value_beats_an_rtl_routine.expected -
+	# A stdlib SHIM returning a container, taken as a value. The gate was the RETURN
+	# type and the symptom was in the ARGUMENTS: a tyClass result was admitted only
+	# when PyProcIsFreshContainerCtor vouched for it, and that predicate is scoped by
+	# UNIT NAME to pylib/pyeval, so every mimic_* shim was declined -- and declining
+	# boxes the RAW ADDRESS and calls it through the Variant ABI, so `f = struct.unpack`
+	# complained about the FORMAT STRING. The value is called TWICE because one use
+	# printed an empty line and exited 0; only the second segfaulted. struct.calcsize
+	# is the positive control -- Integer return, worked before, fails if a later change
+	# disables the value path for module members instead of widening it.
+	./$(COMPILER) test/test_nilpy_a_shim_returning_a_container_as_a_value.npy $(TESTTMP)/test_nilpy_shimval26
+	$(TESTTMP)/test_nilpy_shimval26 | diff -u test/test_nilpy_a_shim_returning_a_container_as_a_value.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy $(TESTTMP)/test_nilpy_brkcont26
 	$(TESTTMP)/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is

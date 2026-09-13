@@ -3819,3 +3819,4 @@ why: promotion needs a second independent subsystem with the same
 duplicated-list-where-one-copy-is-authoritative shape, and the only other copies
 are in `symtab.inc` on the authoritative side of the same list — one subject, not
 two.
+2026-09-13 | frankS | compiler/pyparser.inc | callable-value wrapper: admit a tyClass RETURN for the synthesized wrapper (freshness is the LAMBDA path's question -- a wrapper body is always `return realproc(a0,...)`), exempt bStart=-1 from the AN_EXIT discard, and add a THIRD reason to wrap: a non-Variant PARAMETER. `f = re.findall` segfaulted and `f = json.loads` reported about the JSON text; both now match CPython. Declining had never meant "no wrapper" -- it boxed the raw address, so arguments went uncoerced, which is why every symptom named the argument.

@@ -12,7 +12,7 @@ summary: >
   spelled as a CALL is correct throughout; only the value form is wrong.
 track: N
 type: bug
-prio: 40
+prio: 55
 owner: unassigned
 status: open
 ---
@@ -91,3 +91,46 @@ predicted, `1` and `3` against CPython's `1` and `3`. That is the arm the name
 binds to, which is why it works. A fix that makes the iterable form work must
 not silently trade it away, and a fixture asserting only the iterable form
 cannot see that happen.
+
+
+## The same question, a much larger population -- measured 2026-09-13 (frankS)
+
+This ticket is filed as two builtin names. It is not two names; it is the
+general question **"how many arguments does a callable value pass?"**, and the
+second population is every lib/rtl shim with a defaulted tail:
+
+    f = json.dumps; f([1, 2])                  TypeError: expected a number, got int
+    f = json.dumps; f([1, 2], -1, True, False) [1, 2]      CORRECT today
+
+    function dumps(const obj: Variant; indent: Integer = -1;
+                   ensure_ascii: Boolean = True; sort_keys: Boolean = False): AnsiString;
+
+The wrapper is built at **4**. `PyCallableValueArity` returns
+`PyProcRequiredArity` only when the callee's unit is `pylib` or `pyeval`, by NAME,
+and `json` is neither -- so the defaulted tail is treated as required. Found while
+fixing [[bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value]],
+whose return-side and parameter-side gates are now closed; this arity residue is
+what is left, and it is here rather than there because it is this ticket's
+question.
+
+**Do not fix it by adding `json`, `re`, `mimic_struct`... to that unit list.**
+Unit-name scoping is exactly the "name is not the thing" failure this repo keeps
+paying for, and here the widened list would ALSO be wrong on the merits: for a
+pylib builtin we chose required arity and accepted that `f = sorted; f(xs, key)`
+cannot pass the optional argument, but **`json.dumps(obj, indent=2)` is ordinary
+Python**, so required arity breaks a real spelling and full arity breaks the
+common one. Neither single arity is right, which is the same conclusion the
+min/max section above reaches from the other direction.
+
+If a discriminator is needed it should be something the DECLARATION carries --
+`ProcParamHasDefault` already does, and `ProcSigOff` marks a NilPy def -- never
+where the file sits. The honest shape is a wrapper that forwards a variable
+count, or one wrapper per reachable arity, which serves min/max too.
+
+## The free instrument
+
+`procs=N` in the compiler's own `ok:` line counts a synthesized wrapper: the
+VALUE spelling reads one higher than the CALL spelling when a wrapper was built
+and identical when it was not. `re.findall` 2155 -> 2156 (wrapped),
+`json.loads` 2393 -> 2393 (not wrapped, before the fix). No probe, no rebuild --
+the temporary `WriteLn` recorded above is not needed to answer this class.

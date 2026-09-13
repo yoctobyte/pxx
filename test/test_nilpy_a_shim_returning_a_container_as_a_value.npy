@@ -1,0 +1,67 @@
+# A stdlib shim function returning a CONTAINER, taken as a value rather than
+# called. `re.findall` returns TPyList; `struct.calcsize` returns Integer.
+#
+# WHY THE VALUE IS CALLED TWICE, AND IT IS NOT DECORATION: with one use
+# `f = re.findall; f("a", "banana")` printed an EMPTY LINE and exited 0 -- the
+# silent-wrong-value shape -- and only SEGFAULTED on the second use. A
+# single-call fixture sees the quiet arm and reads as a lesser bug than it is.
+# bug-n-a-stdlib-shim-function-returning-a-container-is-broken-when-taken-as-a-value
+#
+# The mechanism is the RETURN type and the symptom was in the ARGUMENTS.
+# PyMakeFuncValueFor admitted a tyClass result only when PyProcIsFreshContainerCtor
+# vouched for it, and that predicate is scoped by UNIT NAME to pylib/pyeval, so
+# every `mimic_*` shim was declined. The declined branch is not "no wrapper" --
+# it boxes the RAW ADDRESS and calls it through the Variant ABI, so the callee
+# reads its parameters out of whatever the dispatcher staged. That is why
+# `f = struct.unpack` complained about the FORMAT STRING for a defect gated on
+# the return type, and it is why this fixture asserts VALUES and not just
+# absence of a crash.
+#
+# `struct.calcsize` is the POSITIVE CONTROL and must stay: it returns Integer,
+# it got a wrapper before this fix, and it is the row that fails if a future
+# change disables the value path for module members instead of widening it.
+#
+# Valid CPython; .expected captured from the oracle.
+
+import re
+import struct
+
+# ---- the headline: a TPyList-returning shim as a value, used TWICE ----------
+f = re.findall
+print(f("a", "banana"))
+print(f("n", "banana"))
+
+# the call spelling of the same function, which was correct throughout -- here
+# so a regression that takes BOTH is attributable below the value door
+print(re.findall("a", "banana"))
+
+# ---- the positive control: a scalar-returning shim, which already worked ----
+c = struct.calcsize
+print(c("<3f"), c("<2i"))
+
+# ---- a loop, because the broken form leaked an object per iteration ---------
+# 300 iterations of the VALUE form; the count is the assertion, not the timing.
+g = re.findall
+n = 0
+for i in range(300):
+    n = n + len(g("a", "banana"))
+print(n)
+
+# ---- the value passed on as an argument, the second door into a callable ----
+def apply2(fn, a, b):
+    return fn(a, b)
+print(apply2(re.findall, "a", "banana"))
+
+# ---- the PARAMETER half of the same gate ------------------------------------
+# `json.loads(const s: AnsiString): Variant` needs NEITHER of the two reasons
+# the wrapper gate used to know: its result already rides the Variant
+# convention, and it has no defaulted tail. It still needs a wrapper, because
+# its PARAMETER is an AnsiString and the dispatcher stages a Variant -- so the
+# gate skipped it and the raw address read a Variant slot as a string. It
+# reported `EJSONError: unexpected character at offset 1`, i.e. about the JSON
+# text, for a defect in the calling convention. Twice again, same reason.
+import json
+j = json.loads
+print(j("[1, 2]"))
+print(j('{"a": 1}')["a"])
+print(json.loads("[1, 2]"))
