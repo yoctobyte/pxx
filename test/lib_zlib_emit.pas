@@ -61,6 +61,28 @@ begin
   for i := 0 to 1023 do src[i] := Byte(Ord('a') + (i mod 7) + ((i div 64) mod 3));
   Emit('texty', 6);
 
+  { HIGH LITERALS THROUGH A HUFFMAN BLOCK, and this case exists because its
+    absence let a real bug reach CPython's decoder untouched. Literals 144..255
+    carry nine-bit fixed codes and everything else here uses bytes below 144 or
+    falls into the stored fallback, so half the literal alphabet was never in a
+    stream this oracle saw. A period-50 pattern over 200..249 has matches (so a
+    Huffman block beats stored) and nine-bit literals (so the wide codes are
+    actually emitted). }
+  SetLength(src, 300);
+  for i := 0 to 299 do src[i] := Byte(200 + (i mod 50));
+  Emit('highlitdyn', 6);
+
+  { AND THE SAME ALPHABET THROUGH A FIXED BLOCK, which is a SEPARATE case and
+    not a shorter version of the one above. The bug lived in the fixed table
+    only; the dynamic path builds its own and was always right. Verified by
+    reintroducing it -- the 300-byte case above still passed, because at that
+    size the fitted table wins and the broken one is never used. A short,
+    tightly periodic input keeps the block fixed (measured btype=1 from n=10 to
+    n=120), so this row exercises the half that broke. }
+  SetLength(src, 64);
+  for i := 0 to 63 do src[i] := Byte(200 + (i mod 8));
+  Emit('highlitfix', 6);
+
   { no matches at all -- the stored fallback }
   SetLength(src, 1500);
   st := 12345;

@@ -389,20 +389,132 @@ begin
     writeln('OK deflate level 0 is stored');
 end;
 
+{ THE ROW THAT CAUGHT THE ONLY REAL BUG IN THIS ENCODER, and it caught it after
+  the rest of the suite was green.
+
+  Literals 144..255 carry NINE-bit codes in the fixed alphabet; 0..143 carry
+  eight. When the emitter moved to deriving the fixed codes canonically from a
+  length table instead of writing the RFC's constants, the table stopped at
+  symbol 285 and left out 286/287 -- present-but-unused eight-bit codes. Canonical
+  assignment is a running count over all lengths, so blCount[8] fell from 152 to
+  150 and EVERY nine-bit code was wrong. Streams decoded as `bad adler32`, `bad
+  length code`, or plausible garbage.
+
+  NOTHING ELSE HERE COULD SEE IT. The short round-trip cases used repeated 'A'
+  (65), the long ones used byte values below 144 or fell into the stored
+  fallback, and the one random case was 4096 bytes -- incompressible, so stored
+  won and no Huffman code was emitted at all. A whole half of the literal
+  alphabet was untested while every row read green.
+
+  So: pseudo-random bytes across the full 0..255 range, at every length from 0 to
+  200, which is short enough that a Huffman block always beats stored and long
+  enough to cross the 3-byte minimum match. The lengths are walked rather than
+  sampled because the first failures were at n=1, 3, 4, 5 -- sizes an
+  interesting-values list would have called degenerate and skipped. }
+procedure TestDeflateHighLiterals;
+var n, i, seed, failures: Integer;
+begin
+  failures := 0;
+  seed := 1;
+  for n := 0 to 200 do
+  begin
+    SetLength(defSrc, n);
+    for i := 0 to n - 1 do
+    begin
+      seed := (seed * 1103515245 + 12345) and $3FFFFFFF;
+      defSrc[i] := Byte((seed shr 16) and $FF);
+    end;
+    DeflateZlib(defSrc, defEnc, 6);
+    if not InflateZlib(defEnc, outbuf, err) then
+      failures := failures + 1
+    else if not SameBytes(defSrc, outbuf) then
+      failures := failures + 1;
+  end;
+  if failures > 0 then
+    Fail('deflate high literals: ' + IStr(failures) + ' of 201 lengths failed')
+  else
+    writeln('OK deflate high literals');
+end;
+
+{ THE ROW THAT PROVES BOTH BLOCK TYPES ARE LIVE, and without it the dynamic
+  encoder could be broken in a way nothing else here would notice. The driver
+  emits stored, fixed and dynamic and keeps the smallest; if EmitDynamicHeader
+  produced garbage-but-large output, fixed would simply always win, every other
+  row would still pass, and the fitted tables would be dead code that looked
+  exercised. Compare that to the shape CLAUDE.md warns about -- one passing part
+  of a run supplying what a failing part needs.
+
+  BTYPE lives in bits 1-2 of the first byte after the two-byte zlib header:
+  0 = stored, 1 = fixed, 2 = dynamic. Both expectations are asymmetric on
+  purpose -- a tiny input CANNOT pay for a fitted table, and a long skewed one
+  cannot fail to, so neither row can be satisfied by the other's answer. }
+function BlockTypeOf(const enc: TByteArray): Integer;
+begin
+  Result := -1;
+  if Length(enc) < 3 then Exit;
+  Result := (enc[2] shr 1) and 3;
+end;
+
+procedure TestDeflateBlockTypes;
+var bt: Integer;
+begin
+  { 30000 bytes over 16 values: far too skewed for the fixed table's flat 8 bits
+    per literal, so the fitted one must win. }
+  BuildLowEntropy(30000, 999);
+  DeflateZlib(defSrc, defEnc, 6);
+  bt := BlockTypeOf(defEnc);
+  if bt <> 2 then
+  begin
+    Fail('expected a dynamic block on skewed input, got btype ' + IStr(bt));
+    Exit;
+  end;
+  { Two bytes cannot repay a code-length table, so fixed must win here. }
+  SetLength(defSrc, 2);
+  defSrc[0] := 1; defSrc[1] := 2;
+  DeflateZlib(defSrc, defEnc, 6);
+  bt := BlockTypeOf(defEnc);
+  if bt <> 1 then
+    Fail('expected a fixed block on two bytes, got btype ' + IStr(bt))
+  else
+    writeln('OK deflate picks block types');
+end;
+
 { `level` SELECTS WORK. Without this row the level parameter could be accepted
   and dropped -- which is what it was before 2026-09-13 -- and every other row
   here would still pass. Low-entropy input is used because it has many short
   matches at scattered distances, which is the only shape where the chain bound
   and lazy matching actually bite; on highly repetitive input every level finds
-  the same matches and ties legitimately. }
+  the same matches and ties legitimately.
+
+  ASSERTS THAT THE LEVELS DIFFER, NOT THAT THEY ARE ORDERED, and the difference
+  matters. The first version of this row required level 6 to beat level 1, which
+  passed under fixed Huffman and is NOT a property deflate guarantees: once the
+  encoder fits a code table to the symbols, a better match set can produce a
+  worse distribution and a slightly larger block. Measured 2026-09-13 on this
+  very input -- levels 1,2,3 give 17720, 17778, 17792, so level 2 is worse than
+  level 1 while both are legal and both round-trip. An ordering assertion would
+  have been a claim about optimality; what the parameter actually promises is
+  that it changes the search, and that is what is checked here. }
 procedure TestDeflateLevelsDiffer;
+var lv, distinct, j: Integer;
+    sizes: array[1..9] of Integer;
 begin
   BuildLowEntropy(30000, 999);
-  DeflateZlib(defSrc, defEnc, 1);
-  DeflateZlib(defSrc, defEnc2, 6);
-  if Length(defEnc2) >= Length(defEnc) then
-    Fail('level 6 did not beat level 1: ' + IStr(Length(defEnc2))
-         + ' vs ' + IStr(Length(defEnc)))
+  for lv := 1 to 9 do
+  begin
+    DeflateZlib(defSrc, defEnc, lv);
+    sizes[lv] := Length(defEnc);
+  end;
+  distinct := 0;
+  for lv := 1 to 9 do
+  begin
+    j := 1;
+    while (j < lv) and (sizes[j] <> sizes[lv]) do j := j + 1;
+    if j = lv then distinct := distinct + 1;
+  end;
+  if distinct < 2 then
+    Fail('every level produced the same size (' + IStr(sizes[1])
+         + ') -- level is not selecting anything')
   else
     writeln('OK deflate levels differ');
 end;
@@ -425,4 +537,6 @@ begin
   TestDeflateNoExpansion;
   TestDeflateLevelZero;
   TestDeflateLevelsDiffer;
+  TestDeflateBlockTypes;
+  TestDeflateHighLiterals;
 end.

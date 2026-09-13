@@ -26053,3 +26053,65 @@ a regression guard — which is a real and sufficient job — and it is not evid
 of completeness, however green and however long it has been green. The claim
 decays silently, because obeying a completion notice produces nothing that could
 reveal it was wrong.
+
+## The passing arrangement was the population: a corpus that never reached the code it was testing
+
+**Found 2026-09-13 (frankB, Track B, `lib/rtl/zlib.pas`), and the value is that
+it is not about zlib.** A deflate encoder grew a dynamic-Huffman path, and the
+refactor that enabled it introduced a real bug in the FIXED path: the code-length
+table stopped at symbol 285 and omitted 286/287, which RFC 1951 defines as
+present-but-unused eight-bit codes. Canonical code assignment is a running count
+over all lengths, so `blCount[8]` fell from 152 to 150 and **every nine-bit code
+— literals 144..255 — came out wrong.** Streams decoded as `bad adler32`, `bad
+length code`, or plausible garbage.
+
+**Eight test rows were green while this was live, and so was an independent
+CPython oracle.** The rows were not weak ones: a round trip against our own
+inflater, a compression-actually-happened bound, a no-expansion bound, a
+block-type assertion, four deliberate breaks each reddening exactly one row. None
+could see it.
+
+**THE REASON IS THE FINDING. Every input in the corpus took a path that avoided
+the broken code.** The short round-trip cases used repeated `'A'` (65). The long
+ones used byte values below 144. And the one random case — the only input with
+bytes above 143 in it — was 4096 bytes, therefore incompressible, therefore
+**taken by the stored fallback**, so it emitted no Huffman code at all. Half the
+literal alphabet had never been through a Huffman block in any test, and the
+thing that kept it out was a feature working correctly.
+
+This is the third form of a rule already here — a measurement creating the
+condition it tests for — and the earlier statements are phrased around a fixture
+supplying what a sibling needs, or a filter restating a hypothesis. **Here the
+selection is innocent and the CODE routes around itself.** No step contaminated
+another; the encoder simply chose, correctly, the branch that was not under test,
+for every input that could have exercised the branch that was.
+
+**The question that finds it:** for each input, WHICH BRANCH does it actually
+take — not which branch is it meant to exercise. Where a component picks among
+several implementations by measuring them (smallest output, fastest path,
+fallback on failure), the choice is made at run time and no amount of input
+variety guarantees coverage. An input chosen to stress a path can be the input
+that proves the path is never taken.
+
+**AND THE SHARP HALF: ONE CASE OF THE RIGHT SHAPE IS NOT ONE CASE.** The obvious
+fix was "add a high-literal input". A 300-byte high-literal input was added, the
+bug was reintroduced to check the row, and **the row still passed** — at that
+size the fitted dynamic table wins, so the broken fixed table is never reached.
+Only a SHORT, tightly periodic high-literal input (measured `btype=1` from n=10
+to n=120) keeps the block fixed and exposes it. The property under test was
+"high literals", the selector was SIZE, and those are independent axes: a case
+has to satisfy the property AND land on the branch.
+
+**What actually found it:** walking every length from 0 to 200 rather than
+sampling interesting ones. The first failures were at **n = 1, 3, 4, 5** — sizes
+an interesting-values list calls degenerate and skips. A dense sweep over one
+cheap axis beat a curated list of cases, and it cost one loop.
+
+**The fix for the suite, and it generalises:** assert the BRANCH, not only the
+output. A row that reads the block type out of the emitted bytes and requires
+`btype=2` on skewed input and `btype=1` on two bytes cannot be satisfied by the
+other branch doing the work, and it turns "is this code reached" into something
+the harness answers instead of something a reader assumes. The general form is to
+make the dispatch observable: if a component chooses among implementations, the
+choice is a fact your tests can read, and until they read it a green suite is
+evidence about the winners only.

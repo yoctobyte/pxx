@@ -6,10 +6,12 @@ asserts, for every one, that CPython's zlib.decompress reads our stream back to
 the bytes that went in.
 
 THE SIZE COMPARISON IS PRINTED AND NOT ASSERTED, deliberately. Deflate has no
-single right answer -- which matches an encoder finds is latitude, and CPython
-emits dynamic-Huffman blocks where we emit fixed -- so a size assertion would be
-pinning another implementation's choices, which CLAUDE.md rules out. What is
-assertable is that an independent decoder accepts what we produce.
+single right answer -- which matches an encoder finds is latitude, and two
+encoders that both compress well still emit different bytes -- so a size
+assertion would be pinning another implementation's choices, which CLAUDE.md
+rules out. What is assertable is that an independent decoder accepts what we
+produce, and that caught a real bug on 2026-09-13 that our own inflater's
+round trip caught too but nothing else in the suite did.
 """
 import sys, zlib
 

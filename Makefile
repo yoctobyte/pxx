@@ -34506,12 +34506,13 @@ endif
 	$(PXX_STABLE) examples/lisp/lispdemo.pas $(TESTTMP)/lib_lispdemo
 	tools/expect_same.sh lib_lispdemo "$$($(TESTTMP)/lib_lispdemo | tail -1)" "ALL OK"
 	$(PXX_STABLE) test/lib_zlib.pas $(TESTTMP)/lib_zlib
-	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored\nOK deflate roundtrip\nOK deflate compresses\nOK deflate no expansion\nOK deflate level 0 is stored\nOK deflate levels differ')"
+	tools/expect_same.sh lib_zlib "$$($(TESTTMP)/lib_zlib)" "$$(printf 'OK stored roundtrip\nOK fixed huffman\nOK dynamic huffman\nOK bad header checksum\nOK bad adler32\nOK truncated stream\nOK reserved block type\nOK gzip\nOK gzip bad crc\nOK raw deflate\nOK raw stored\nOK deflate roundtrip\nOK deflate compresses\nOK deflate no expansion\nOK deflate level 0 is stored\nOK deflate levels differ\nOK deflate picks block types\nOK deflate high literals')"
 	# DeflateZlib against CPython's decoder. The rows above round-trip our encoder
 	# through OUR inflater, and both halves live in one file -- a shared misreading
-	# of RFC 1951 passes that and fails this. Sizes are printed, never asserted:
-	# which matches an encoder finds is latitude, and CPython emits dynamic-Huffman
-	# blocks where we emit fixed.
+	# of RFC 1951 passes that and fails this. It earned its keep on 2026-09-13:
+	# a wrong fixed-code table reached CPython as `incorrect data check` on the
+	# highlitfix row. Sizes are printed, never asserted -- which matches an encoder
+	# finds is latitude, and two encoders that both compress well still differ.
 	$(PXX_STABLE) test/lib_zlib_emit.pas $(TESTTMP)/lib_zlib_emit
 	@if command -v python3 >/dev/null 2>&1; then \
 	  $(TESTTMP)/lib_zlib_emit | python3 test/lib_zlib_cpython.py \

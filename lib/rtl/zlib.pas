@@ -15,8 +15,9 @@ unit zlib;
       uncompressed deflate blocks (valid zlib, trivial compression). Still the
       level-0 path, and still what a caller wanting no compression should ask
       for by name.
-    DeflateZlib(input, output, level) — the compressing encoder: LZ77 + fixed
-      Huffman (btype=1). This is what `zlib.compress` and png.pas use.
+    DeflateZlib(input, output, level) — the compressing encoder: LZ77, then
+      whichever of stored / fixed / dynamic Huffman is smallest for that input.
+      This is what `zlib.compress` and png.pas use.
 
   AND THIS UNIT IS ALSO PYTHON'S `zlib` MODULE, which is why it is named in
   PyRtlUnitServesPython (pasparser_proc.inc). That list asks whether a unit was
@@ -53,7 +54,8 @@ function InflateRawBytes(const src: TByteArray; var dst: TByteArray;
 procedure DeflateZlibStored(const src: TByteArray; var dst: TByteArray);
 
 { DeflateZlib(input, output, level) -- a real compressing encoder: LZ77 with a
-  hash-chain match finder, emitted as one fixed-Huffman (btype=1) block. `level`
+  hash-chain match finder, emitted as whichever of a stored, fixed-Huffman
+  (btype=1) or dynamic-Huffman (btype=2) block comes out smallest. `level`
   is 0..9 or -1 for the default 6, and it SELECTS WORK rather than being
   accepted and dropped: 0 routes to the stored writer above (which is what level
   0 means to CPython), 1-3 match greedily, 4-9 add lazy matching, and the search
@@ -135,12 +137,12 @@ function adler32(const data: Variant; const value: Variant = 1): Int64;
   old note here predicted would happen.
 
   A BYTE-DIFF AGAINST CPYTHON STILL DIFFERS BY DESIGN and is still not a defect
-  to file. Our sizes are now close to CPython's rather than multiples of them,
-  but deflate does not have one right answer: which matches an encoder finds is
-  latitude, and CPython emits dynamic-Huffman blocks where we emit fixed. The
-  test CLAUDE.md sets is the one that applies -- the VALUE round-trips, and the
-  intermediate encoding is ours. What IS assertable, and is asserted in
-  test/lib_zlib.pas, is that CPython's decompressor reads our stream.
+  to file, even though our sizes now match or beat CPython's on every case in
+  test/lib_zlib_emit.pas. Deflate does not have one right answer: which matches
+  an encoder finds is latitude, and two encoders that both compress well still
+  emit different bytes. The test CLAUDE.md sets is the one that applies -- the
+  VALUE round-trips, and the intermediate encoding is ours. What IS assertable,
+  and is asserted, is that CPython's decompressor reads our stream.
 
   `level` SELECTS WORK rather than being accepted and dropped -- see the
   DeflateZlib comment above. It stopped being honest to ignore it the moment
@@ -855,7 +857,7 @@ begin
 end;
 
 
-{ ---- DeflateZlib: a real encoder (fixed Huffman, btype=1) --------------------
+{ ---- DeflateZlib: a real encoder ---------------------------------------------
 
   WHY THIS EXISTS AT ALL, since DeflateZlibStored above is valid zlib and was a
   deliberate choice: stored blocks never compress, and the cost stopped being
@@ -865,13 +867,17 @@ end;
   out as 2011. The streams were always correct -- this was a capability gap, never
   a correctness bug, which is why it could sit here behind a comment.
 
-  FIXED HUFFMAN AND NOT DYNAMIC, deliberately. btype=1 needs no code-length
-  alphabet emission, so it is a few hundred lines rather than a thousand, and on
-  repetitive input it gets nearly all of the win: 2000 identical bytes become
-  eight len-258/dist-1 matches at ~13 bits each. btype=2 would beat it on
-  literal-heavy input (photographic pixel data, text) by fitting the code lengths
-  to the actual symbol frequencies. That is a separate landing with its own
-  measurement, not a TODO here.
+  ALL THREE BLOCK TYPES, AND THE SMALLEST WINS. Stored, fixed (btype=1) and
+  dynamic (btype=2) are each produced from one LZ77 pass and compared on their
+  real byte counts. Fixed landed first and dynamic followed the same day, which
+  is why the tokeniser is separate from the emitters: matching is the expensive
+  half and is not redone.
+
+  Dynamic is worth what it costs. Measured 2026-09-13, fixed-only against
+  fixed-plus-dynamic, with CPython beside them: a 64x40 RGBA gradient 757 -> 460
+  (CPython 488); 9000 bytes of repeated text 126 -> 90 (CPython 96); 70000 bytes
+  of a three-value cycle 453 -> 93 (CPython 93), which was fixed Huffman's worst
+  case because three symbols were paying 8 bits each when they deserve about 2.
 
   THE DECODER IN THIS UNIT IS THE ORACLE THAT KEEPS THIS HONEST. InflateBlock
   already reads fixed-Huffman blocks and predates this encoder, so a round trip
@@ -935,6 +941,16 @@ begin
   end;
 end;
 
+{ Rewind the output to `pos` and drop any partial byte. Emitting a block is
+  therefore repeatable, which is what lets the encoder try each block type on
+  the same tokens and keep the smallest. }
+procedure DefResetTo(pos: Integer);
+begin
+  gDefN := pos;
+  gBitBuf := 0;
+  gBitCnt := 0;
+end;
+
 procedure FlushBits;
 begin
   if gBitCnt > 0 then
@@ -952,38 +968,6 @@ begin
   Result := r;
 end;
 
-{ Fixed literal/length alphabet, RFC 1951 s3.2.6. Four ranges with three
-  different code lengths, which is the whole reason btype=1 costs nothing to
-  emit: both ends already know this table. }
-procedure PutFixedLit(sym: Integer);
-begin
-  if sym <= 143 then
-    PutBits(RevBits($30 + sym, 8), 8)
-  else if sym <= 255 then
-    PutBits(RevBits($190 + sym - 144, 9), 9)
-  else if sym <= 279 then
-    PutBits(RevBits(sym - 256, 7), 7)
-  else
-    PutBits(RevBits($C0 + sym - 280, 8), 8);
-end;
-
-{ Emit one <length, distance> pair. The LEN_BASE/LEN_EXTRA/DIST_BASE/DIST_EXTRA
-  tables are the inflater's, shared rather than copied -- a second copy of these
-  is exactly the shape normalise-dont-special-case.md warns about, and the arm
-  that stays broken would be this one, since the decoder is exercised far more. }
-procedure PutMatch(len, dist: Integer);
-var idx, didx: Integer;
-begin
-  idx := 28;
-  while (idx > 0) and (LEN_BASE[idx] > len) do idx := idx - 1;
-  PutFixedLit(257 + idx);
-  PutBits(len - LEN_BASE[idx], LEN_EXTRA[idx]);
-
-  didx := 29;
-  while (didx > 0) and (DIST_BASE[didx] > dist) do didx := didx - 1;
-  PutBits(RevBits(didx, 5), 5);
-  PutBits(dist - DIST_BASE[didx], DIST_EXTRA[didx]);
-end;
 
 function DefHash(pos: Integer): Integer;
 begin
@@ -1048,7 +1032,453 @@ begin
   end;
 end;
 
-{ LZ77 over the whole input, emitted as one fixed-Huffman block.
+{ ---- dynamic Huffman (btype=2) ----------------------------------------------
+
+  WHAT IT BUYS, measured on 2026-09-13 with fixed Huffman already in place:
+  fixed spends a FIXED number of bits per symbol -- 8 for most literals, 9 for
+  the high ones -- whatever the input actually contains. Fitting the code lengths
+  to the real frequencies and shipping the table costs ~50-100 bytes of header
+  and wins that back whenever the distribution is skewed. 70000 bytes of a
+  3-value cycle was the worst case for fixed: 453 bytes against CPython's 93,
+  because three symbols were paying 8 bits each when they deserve about 2.
+
+  THE ENCODER KEEPS ALL THREE BLOCK TYPES AND MEASURES. Stored, fixed and dynamic
+  are each emitted and the smallest is kept, so no input can come out worse than
+  the best of the three. That is measured rather than predicted on purpose: a
+  cost model would be a second description of this encoder's output, and the two
+  would drift. Emission is cheap next to match-finding, which happens once. }
+
+const
+  { TWO SIZES, AND CONFLATING THEM WAS A REAL BUG. The dynamic block transmits at
+    most 286 lit/len lengths (HLIT tops out there), but the FIXED alphabet is
+    defined over 288 symbols: RFC 1951 s3.2.6 gives 280-287 eight bits each, and
+    286/287 are unused-but-present. Canonical code assignment is a running count
+    over ALL lengths, so dropping the last two moved blCount[8] from 152 to 150
+    and every NINE-bit code -- literals 144..255 -- came out wrong.
+
+    It survived the first landing because the round-trip corpus used repeated
+    'A' (65) for its short cases and random bytes only at 4096, where the stored
+    fallback takes over. Nothing in the suite pushed a byte above 143 through a
+    Huffman block. test/lib_zlib.pas now walks n = 0..200 of pseudo-random bytes
+    for exactly this reason. }
+  DEF_LITLEN_SLOTS = 288;  { 0..287 -- the fixed alphabet's full width }
+  DEF_MAX_LITLEN  = 286;   { 0..285 -- the most a dynamic block may transmit }
+  DEF_MAX_DIST_SY = 30;    { 0..29 }
+  DEF_MAX_CL      = 19;    { the code-length alphabet }
+  DEF_MAX_BITS    = 15;    { RFC 1951 limit for lit/len and dist codes }
+  DEF_MAX_CL_BITS = 7;     { and for the code-length code }
+
+var
+  { LZ77 token stream. gTokA is a literal byte or a match length; gTokB is 0 for
+    a literal and the match distance otherwise. Tokenising ONCE and emitting
+    several times is the whole reason the three block types can be compared on
+    their real sizes. }
+  gTokA:    array of Integer;
+  gTokB:    array of Integer;
+  gTokN:    Integer;
+
+  gLitFreq: array[0..287] of Integer;
+  gDstFreq: array[0..29] of Integer;
+  gLitLen:  array[0..287] of Integer;
+  gDstLen:  array[0..29] of Integer;
+  gLitCode: array[0..287] of Integer;
+  gDstCode: array[0..29] of Integer;
+  gClFreq:  array[0..18] of Integer;
+  gClLen:   array[0..18] of Integer;
+  gClCode:  array[0..18] of Integer;
+
+  { The run-length-encoded code-length sequence, RFC 1951 s3.2.7. Built once and
+    then both counted and emitted from, so the counting pass and the writing
+    pass cannot disagree about what they are describing -- which is the bug this
+    shape exists to make impossible. }
+  gRleSym:  array[0..399] of Integer;
+  gRleXtra: array[0..399] of Integer;
+  gRleBits: array[0..399] of Integer;
+  gRleN:    Integer;
+
+{ Huffman code lengths for `n` symbols, capped at maxBits.
+
+  THE CAP IS ENFORCED BY RESCALING, NOT BY PACKAGE-MERGE. If the natural tree is
+  deeper than maxBits, every frequency is halved (rounding up, so nothing that
+  occurred drops to zero) and the tree is rebuilt. That flattens the
+  distribution; the result can be a hair off optimal and is always LEGAL, which
+  is the property that matters.
+
+  IT TERMINATES BECAUSE OF A PRECONDITION, not because halving obviously
+  converges: repeated halving drives every active frequency to 1, and a flat
+  tree over `active` symbols has depth ceil(log2(active)). So the loop ends iff
+  maxBits >= ceil(log2(active)). Both call sites satisfy it with room --
+  15 >= 9 for 286 lit/len symbols, 7 >= 5 for the 19 code-length symbols -- and
+  a future caller that does not would HANG here rather than emit anything wrong.
+  If you add one, check that inequality first.
+
+  AND THIS BRANCH IS NOT EXERCISED BY THE TEST CORPUS. Said plainly because the
+  rows in test/lib_zlib.pas all pass whether it works or not, and a reader is
+  entitled to know which parts of this file are actually covered. Measured
+  2026-09-13: rebuilding with the cap at 10, and again at 9, produced
+  BYTE-IDENTICAL output for every case in lib_zlib_emit -- so no tree the corpus
+  produces is deeper than 9, and the shipped cap of 15 is never approached, let
+  alone exceeded. Reaching it needs Fibonacci-like frequencies across ~17
+  symbols that survive LZ77 as literals, which is not a shape any natural input
+  here takes. What WOULD retire this note is an input that makes the rescale
+  fire; a row asserting the output is still CPython-readable would then cover
+  it, and the harness for that already exists in test/lib_zlib_cpython.py.
+
+  O(n^2) two-minimum selection rather than a heap: n is at most 286, that is
+  ~82k comparisons once per block, and a heap here would be a second data
+  structure to get wrong for no measurable gain. }
+procedure BuildHuffLengths(var freq: array of Integer; n, maxBits: Integer;
+                           var lens: array of Integer);
+var nodeFreq, nodeLeft, nodeRight, nodeDepth: array[0..600] of Integer;
+    active: array[0..600] of Boolean;
+    i, j, cnt, nNodes, m1, m2, deepest, root: Integer;
+    again: Boolean;
+begin
+  for i := 0 to n - 1 do lens[i] := 0;
+
+  repeat
+    again := False;
+    cnt := 0;
+    nNodes := 0;
+    for i := 0 to n - 1 do
+      if freq[i] > 0 then
+      begin
+        nodeFreq[nNodes] := freq[i];
+        nodeLeft[nNodes] := -1;
+        nodeRight[nNodes] := -1;
+        active[nNodes] := True;
+        nNodes := nNodes + 1;
+        cnt := cnt + 1;
+      end;
+
+    if cnt = 0 then Exit;
+    if cnt = 1 then
+    begin
+      { A single symbol still needs a code, and a zero-length code is not one.
+        One bit is the shortest legal answer. }
+      for i := 0 to n - 1 do
+        if freq[i] > 0 then lens[i] := 1;
+      Exit;
+    end;
+
+    while cnt > 1 do
+    begin
+      m1 := -1; m2 := -1;
+      for i := 0 to nNodes - 1 do
+        if active[i] then
+        begin
+          if (m1 < 0) or (nodeFreq[i] < nodeFreq[m1]) then
+          begin
+            m2 := m1; m1 := i;
+          end
+          else if (m2 < 0) or (nodeFreq[i] < nodeFreq[m2]) then
+            m2 := i;
+        end;
+      active[m1] := False;
+      active[m2] := False;
+      nodeFreq[nNodes]  := nodeFreq[m1] + nodeFreq[m2];
+      nodeLeft[nNodes]  := m1;
+      nodeRight[nNodes] := m2;
+      active[nNodes]    := True;
+      nNodes := nNodes + 1;
+      cnt := cnt - 1;
+    end;
+
+    root := nNodes - 1;
+    for i := 0 to nNodes - 1 do nodeDepth[i] := 0;
+    { Children always have a LOWER index than their parent, so one descending
+      sweep propagates depth correctly with no recursion and no work list. }
+    for i := root downto 0 do
+      if nodeLeft[i] >= 0 then
+      begin
+        nodeDepth[nodeLeft[i]]  := nodeDepth[i] + 1;
+        nodeDepth[nodeRight[i]] := nodeDepth[i] + 1;
+      end;
+
+    deepest := 0;
+    j := 0;
+    for i := 0 to n - 1 do
+      if freq[i] > 0 then
+      begin
+        lens[i] := nodeDepth[j];
+        if nodeDepth[j] > deepest then deepest := nodeDepth[j];
+        j := j + 1;
+      end;
+
+    if deepest > maxBits then
+    begin
+      for i := 0 to n - 1 do
+        if freq[i] > 0 then freq[i] := (freq[i] + 1) div 2;
+      again := True;
+    end;
+  until not again;
+end;
+
+{ Canonical codes from lengths, RFC 1951 s3.2.2: shorter codes numerically
+  first, and equal lengths in symbol order. Both ends derive the same table
+  from the lengths alone, which is why only the lengths are transmitted. }
+procedure BuildHuffCodes(var lens: array of Integer; n, maxBits: Integer;
+                         var codes: array of Integer);
+var blCount, nextCode: array[0..15] of Integer;
+    i, bits, code: Integer;
+begin
+  for i := 0 to maxBits do blCount[i] := 0;
+  for i := 0 to n - 1 do
+    if lens[i] > 0 then blCount[lens[i]] := blCount[lens[i]] + 1;
+  code := 0;
+  blCount[0] := 0;
+  for bits := 1 to maxBits do
+  begin
+    code := (code + blCount[bits - 1]) shl 1;
+    nextCode[bits] := code;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    codes[i] := 0;
+    if lens[i] > 0 then
+    begin
+      codes[i] := nextCode[lens[i]];
+      nextCode[lens[i]] := nextCode[lens[i]] + 1;
+    end;
+  end;
+end;
+
+procedure PutRle(sym, extra, bits: Integer);
+begin
+  gRleSym[gRleN]  := sym;
+  gRleXtra[gRleN] := extra;
+  gRleBits[gRleN] := bits;
+  gRleN := gRleN + 1;
+end;
+
+{ Run-length encode the concatenated lit/len and distance code lengths.
+  16 repeats the PREVIOUS length 3-6 times, 17 runs 3-10 zeros, 18 runs 11-138.
+  A run of zeros never uses 16, which is why the zero case is split out first. }
+procedure BuildRleLengths(numLit, numDist: Integer);
+var seq: array[0..399] of Integer;
+    n, i, runStart, runLen, v: Integer;
+begin
+  n := 0;
+  for i := 0 to numLit - 1 do  begin seq[n] := gLitLen[i]; n := n + 1; end;
+  for i := 0 to numDist - 1 do begin seq[n] := gDstLen[i]; n := n + 1; end;
+
+  gRleN := 0;
+  i := 0;
+  while i < n do
+  begin
+    v := seq[i];
+    runStart := i;
+    while (i < n) and (seq[i] = v) do i := i + 1;
+    runLen := i - runStart;
+
+    if v = 0 then
+    begin
+      while runLen >= 11 do
+      begin
+        if runLen > 138 then
+        begin
+          PutRle(18, 138 - 11, 7);
+          runLen := runLen - 138;
+        end
+        else
+        begin
+          PutRle(18, runLen - 11, 7);
+          runLen := 0;
+        end;
+      end;
+      while runLen >= 3 do
+      begin
+        if runLen > 10 then
+        begin
+          PutRle(17, 10 - 3, 3);
+          runLen := runLen - 10;
+        end
+        else
+        begin
+          PutRle(17, runLen - 3, 3);
+          runLen := 0;
+        end;
+      end;
+      while runLen > 0 do
+      begin
+        PutRle(0, 0, 0);
+        runLen := runLen - 1;
+      end;
+    end
+    else
+    begin
+      { The first instance is always written literally -- 16 copies "the
+        previous length", so there must BE one. }
+      PutRle(v, 0, 0);
+      runLen := runLen - 1;
+      while runLen >= 3 do
+      begin
+        if runLen > 6 then
+        begin
+          PutRle(16, 6 - 3, 2);
+          runLen := runLen - 6;
+        end
+        else
+        begin
+          PutRle(16, runLen - 3, 2);
+          runLen := 0;
+        end;
+      end;
+      while runLen > 0 do
+      begin
+        PutRle(v, 0, 0);
+        runLen := runLen - 1;
+      end;
+    end;
+  end;
+end;
+
+{ Length and distance code indices. ONE definition each, used by the frequency
+  count and by both emitters -- three call sites that must agree, which is
+  exactly the shape that grows a second copy and then a divergence. }
+function LenIdxOf(len: Integer): Integer;
+var idx: Integer;
+begin
+  idx := 28;
+  while (idx > 0) and (LEN_BASE[idx] > len) do idx := idx - 1;
+  Result := idx;
+end;
+
+function DistIdxOf(dist: Integer): Integer;
+var idx: Integer;
+begin
+  idx := 29;
+  while (idx > 0) and (DIST_BASE[idx] > dist) do idx := idx - 1;
+  Result := idx;
+end;
+
+procedure CountTokens;
+var i, idx: Integer;
+begin
+  for i := 0 to DEF_LITLEN_SLOTS - 1 do gLitFreq[i] := 0;
+  for i := 0 to DEF_MAX_DIST_SY - 1 do gDstFreq[i] := 0;
+  for i := 0 to gTokN - 1 do
+    if gTokB[i] = 0 then
+      gLitFreq[gTokA[i]] := gLitFreq[gTokA[i]] + 1
+    else
+    begin
+      idx := LenIdxOf(gTokA[i]);
+      gLitFreq[257 + idx] := gLitFreq[257 + idx] + 1;
+      idx := DistIdxOf(gTokB[i]);
+      gDstFreq[idx] := gDstFreq[idx] + 1;
+    end;
+  gLitFreq[256] := gLitFreq[256] + 1;   { the end-of-block symbol }
+end;
+
+{ Emit the token stream with a code table already in gLitCode/gLitLen and
+  gDstCode/gDstLen. The fixed and dynamic blocks differ ONLY in where that table
+  came from, so they share this and cannot drift apart in how they write a
+  match. }
+procedure EmitTokens;
+var i, idx, len, dist: Integer;
+begin
+  for i := 0 to gTokN - 1 do
+  begin
+    if gTokB[i] = 0 then
+      PutBits(RevBits(gLitCode[gTokA[i]], gLitLen[gTokA[i]]), gLitLen[gTokA[i]])
+    else
+    begin
+      len  := gTokA[i];
+      dist := gTokB[i];
+      idx  := LenIdxOf(len);
+      PutBits(RevBits(gLitCode[257 + idx], gLitLen[257 + idx]), gLitLen[257 + idx]);
+      PutBits(len - LEN_BASE[idx], LEN_EXTRA[idx]);
+      idx := DistIdxOf(dist);
+      PutBits(RevBits(gDstCode[idx], gDstLen[idx]), gDstLen[idx]);
+      PutBits(dist - DIST_BASE[idx], DIST_EXTRA[idx]);
+    end;
+  end;
+  PutBits(RevBits(gLitCode[256], gLitLen[256]), gLitLen[256]);
+end;
+
+{ The fixed alphabet expressed as a length table, so it goes out through
+  EmitTokens like any other. RFC 1951 s3.2.6. }
+procedure LoadFixedTables;
+var i: Integer;
+begin
+  for i := 0 to 143 do gLitLen[i] := 8;
+  for i := 144 to 255 do gLitLen[i] := 9;
+  for i := 256 to 279 do gLitLen[i] := 7;
+  for i := 280 to 287 do gLitLen[i] := 8;   { 287, not 285 -- see DEF_LITLEN_SLOTS }
+  BuildHuffCodes(gLitLen, DEF_LITLEN_SLOTS, DEF_MAX_BITS, gLitCode);
+  for i := 0 to DEF_MAX_DIST_SY - 1 do
+  begin
+    gDstLen[i] := 5;
+    gDstCode[i] := i;     { 5-bit fixed distance codes ARE their own index }
+  end;
+end;
+
+{ Build the fitted tables and write the btype=2 header: HLIT, HDIST, HCLEN, the
+  code-length code's own lengths in CLCL_ORDER, then the RLE'd lengths. }
+procedure EmitDynamicHeader(var numLit, numDist: Integer);
+var i, n, sym: Integer;
+begin
+  BuildHuffLengths(gLitFreq, DEF_MAX_LITLEN, DEF_MAX_BITS, gLitLen);
+
+  { A block of pure literals uses no distance code at all, and an empty distance
+    alphabet is not representable -- HDIST counts at least one. Give symbol 0 a
+    code nothing references rather than emitting a table a decoder may reject. }
+  n := 0;
+  for i := 0 to DEF_MAX_DIST_SY - 1 do n := n + gDstFreq[i];
+  if n = 0 then gDstFreq[0] := 1;
+  BuildHuffLengths(gDstFreq, DEF_MAX_DIST_SY, DEF_MAX_BITS, gDstLen);
+
+  BuildHuffCodes(gLitLen, DEF_MAX_LITLEN, DEF_MAX_BITS, gLitCode);
+  BuildHuffCodes(gDstLen, DEF_MAX_DIST_SY, DEF_MAX_BITS, gDstCode);
+
+  numLit := DEF_MAX_LITLEN;
+  while (numLit > 257) and (gLitLen[numLit - 1] = 0) do numLit := numLit - 1;
+  numDist := DEF_MAX_DIST_SY;
+  while (numDist > 1) and (gDstLen[numDist - 1] = 0) do numDist := numDist - 1;
+
+  BuildRleLengths(numLit, numDist);
+
+  for i := 0 to DEF_MAX_CL - 1 do gClFreq[i] := 0;
+  for i := 0 to gRleN - 1 do
+    gClFreq[gRleSym[i]] := gClFreq[gRleSym[i]] + 1;
+  BuildHuffLengths(gClFreq, DEF_MAX_CL, DEF_MAX_CL_BITS, gClLen);
+  BuildHuffCodes(gClLen, DEF_MAX_CL, DEF_MAX_CL_BITS, gClCode);
+
+  { HCLEN counts from the END of CLCL_ORDER, so trailing unused entries cost
+    nothing. Never below 4, which is the RFC's floor. }
+  n := DEF_MAX_CL;
+  while (n > 4) and (gClLen[CLCL_ORDER[n - 1]] = 0) do n := n - 1;
+
+  PutBits(numLit - 257, 5);
+  PutBits(numDist - 1, 5);
+  PutBits(n - 4, 4);
+  for i := 0 to n - 1 do
+    PutBits(gClLen[CLCL_ORDER[i]], 3);
+
+  for i := 0 to gRleN - 1 do
+  begin
+    sym := gRleSym[i];
+    PutBits(RevBits(gClCode[sym], gClLen[sym]), gClLen[sym]);
+    PutBits(gRleXtra[i], gRleBits[i]);
+  end;
+end;
+
+{ Append one LZ77 token: a literal (dist = 0) or a <length, distance> match.
+  Nothing is written to the bit stream here -- see DeflateTokenize for why the
+  two are separate. }
+procedure PutTok(a, b: Integer);
+begin
+  gTokA[gTokN] := a;
+  gTokB[gTokN] := b;
+  gTokN := gTokN + 1;
+end;
+
+{ LZ77 over the whole input, producing a TOKEN STREAM rather than bits.
+
+  IT USED TO EMIT DIRECTLY, and separating the two is what lets the encoder
+  compare block types: matching is the expensive half and happens once, while
+  emitting the same tokens under a fixed table and under a fitted one costs
+  almost nothing and answers which is actually smaller.
 
   LAZY MATCHING (`maxLazy` > 0): having found a match at `pos`, look again at
   pos+1 before committing. If the later match is longer, the byte at `pos` goes
@@ -1059,12 +1489,13 @@ end;
   position strictly before `pos` must be in the chains, INCLUDING the ones a
   match jumped over, and they must go in ascending order or the chain stops
   being newest-first. }
-procedure DeflateFixedBody(maxChain, niceLen, maxLazy: Integer);
+procedure DeflateTokenize(maxChain, niceLen, maxLazy: Integer);
 var pos, ins, curLen, curDist, prevLen, prevDist, prevPos: Integer;
     havePrev: Boolean;
 begin
   pos := 0;
   ins := 0;
+  gTokN := 0;
   havePrev := False;
   prevLen := 0; prevDist := 0; prevPos := 0;
 
@@ -1084,13 +1515,13 @@ begin
     begin
       if curLen > prevLen then
       begin
-        PutFixedLit(gSrcB[prevPos]);
+        PutTok(gSrcB[prevPos], 0);
         prevLen := curLen; prevDist := curDist; prevPos := pos;
         pos := pos + 1;
       end
       else
       begin
-        PutMatch(prevLen, prevDist);
+        PutTok(prevLen, prevDist);
         pos := prevPos + prevLen;
         havePrev := False;
       end;
@@ -1103,12 +1534,12 @@ begin
     end
     else if curLen >= DEF_MIN_MATCH then
     begin
-      PutMatch(curLen, curDist);
+      PutTok(curLen, curDist);
       pos := pos + curLen;
     end
     else
     begin
-      PutFixedLit(gSrcB[pos]);
+      PutTok(gSrcB[pos], 0);
       pos := pos + 1;
     end;
   end;
@@ -1118,7 +1549,7 @@ begin
     bytes short of the end -- but a future bound change must not turn that into
     silently dropped output. }
   if havePrev then
-    PutMatch(prevLen, prevDist);
+    PutTok(prevLen, prevDist);
 end;
 
 { zlib's own level table, simplified to the three knobs this encoder has. Level
@@ -1142,7 +1573,7 @@ end;
 
 procedure DeflateZlib(const src: TByteArray; var dst: TByteArray; level: Integer);
 var i, cmf, flg, maxChain, niceLen, maxLazy: Integer;
-    storedLen, nBlocks: Integer;
+    storedLen, nBlocks, headerEnd, fixedN, dynN, numLit, numDist: Integer;
     ad: LongWord;
 begin
   if level < 0 then level := 6;          { -1 is CPython's "default" }
@@ -1185,14 +1616,50 @@ begin
   DefPutByte(cmf);
   DefPutByte(flg);
 
-  PutBits(1, 1);   { BFINAL = 1: one block for the whole input }
-  PutBits(1, 2);   { BTYPE  = 01: fixed Huffman }
+  headerEnd := gDefN;
 
+  SetLength(gTokA, gSrcLen + 1);
+  SetLength(gTokB, gSrcLen + 1);
   DefLevelConfig(level, maxChain, niceLen, maxLazy);
-  DeflateFixedBody(maxChain, niceLen, maxLazy);
+  DeflateTokenize(maxChain, niceLen, maxLazy);
+  CountTokens;
 
-  PutFixedLit(256);   { end-of-block }
+  { BOTH BLOCK TYPES ARE EMITTED AND THE SMALLER IS KEPT. Fixed wins on short
+    input, where a fitted table costs more header than it saves; dynamic wins
+    whenever the symbol distribution is skewed, which is most real data. Neither
+    is reliably better, so this measures instead of guessing -- and measuring is
+    affordable because the matching above already happened and is not redone.
+
+    Fixed goes first so that, if it wins, the buffer only has to be rebuilt once
+    rather than the dynamic bytes being stashed somewhere. }
+  DefResetTo(headerEnd);
+  PutBits(1, 1);      { BFINAL = 1: one block for the whole input }
+  PutBits(1, 2);      { BTYPE  = 01: fixed Huffman }
+  LoadFixedTables;
+  EmitTokens;
   FlushBits;
+  fixedN := gDefN;
+
+  DefResetTo(headerEnd);
+  PutBits(1, 1);
+  PutBits(2, 2);      { BTYPE = 10: dynamic Huffman }
+  EmitDynamicHeader(numLit, numDist);
+  EmitTokens;
+  FlushBits;
+  dynN := gDefN;
+
+  if fixedN <= dynN then
+  begin
+    DefResetTo(headerEnd);
+    PutBits(1, 1);
+    PutBits(1, 2);
+    LoadFixedTables;
+    EmitTokens;
+    FlushBits;
+  end;
+
+  SetLength(gTokA, 0);
+  SetLength(gTokB, 0);
 
   ad := hashing.Adler32(src);   { qualified -- see the note in InflateZlib }
   DefPutByte(Integer((ad shr 24) and $FF));
@@ -1201,10 +1668,12 @@ begin
   DefPutByte(Integer(ad and $FF));
 
   { STORED FALLBACK, and it is not an optimisation -- it is the bound that makes
-    this function safe to call on anything. A fixed-Huffman block spends 8 or 9
-    bits on every literal, so input with no matches in it (already-compressed
-    data, a good PRNG) comes out LARGER than it went in: measured here, 4096
-    bytes of LCG output became 4331, and 256 distinct bytes became 278. Stored
+    this function safe to call on anything. A Huffman block still spends at least
+    a bit or so per literal plus a code table, so input with no matches in it
+    (already-compressed data, a good PRNG) comes out LARGER than it went in:
+    measured here under fixed Huffman, 4096 bytes of LCG output became 4331 and
+    256 distinct bytes became 278; dynamic narrows that and does not close it.
+    Stored
     blocks cost 5 bytes per 64KB plus the 6-byte wrapper and cannot expand
     beyond that, so taking whichever is smaller caps the worst case instead of
     leaving a caller to discover it. CPython does the same thing, which is why
@@ -1212,7 +1681,10 @@ begin
 
     Compared AFTER emitting rather than predicted: the honest comparison is
     against the bytes we actually produced, and a prediction would be a second
-    model of this encoder's output that could drift from it. }
+    model of this encoder's output that could drift from it. THIS IS THE THIRD
+    CANDIDATE, not a special case -- stored, fixed and dynamic are all emitted
+    or costed and the smallest wins, so no input can come out worse than the
+    best of the three. }
   storedLen := 2 + nBlocks * 5 + gSrcLen + 4;
   if gDefN >= storedLen then
   begin
