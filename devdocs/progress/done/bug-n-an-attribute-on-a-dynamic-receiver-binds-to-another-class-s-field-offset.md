@@ -138,3 +138,9 @@ another class's layout.
   measured identical on pin v408 before it.
 - `tools/gate.sh quick` GREEN, full `make test-nilpy` green.
 - The demo clears `gauges.py` entirely and stops two walls further in.
+
+## Log
+
+- 2026-09-13 | fixed in `compiler/pyparser.inc`, commit e5cd18e4b. Closed by the
+  same commit, which also carries the `max(genexp, default=)` wall behind it and
+  `struct.Struct`.
