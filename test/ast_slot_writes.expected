@@ -757,6 +757,7 @@ AN_CALL Right ProcRetRecId[unpCnt]
 AN_CALL Right REC_UCLASS_BASE + FindUClass('TPyFile')
 AN_CALL Right REC_UCLASS_BASE + FindUClass('TPyList')
 AN_CALL Right REC_UCLASS_BASE + bCi
+AN_CALL Right REC_UCLASS_BASE + bytCi
 AN_CALL Right REC_UCLASS_BASE + ci
 AN_CALL Right REC_UCLASS_BASE + dictCi
 AN_CALL Right REC_UCLASS_BASE + k

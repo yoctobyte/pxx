@@ -1,0 +1,48 @@
+import "/usr/include/unistd.h"
+
+# A LIST handed to a C routine's POINTER parameter is, in C, an ARRAY OF
+# POINTERS: `execv(path, argv)`, `glShaderSource(shader, 1, [src], None)`.
+# Passing the list hands the callee the TPyList INSTANCE, so the callee reads
+# the VMT word as its first `char *`.
+#
+# WHY THIS FIXTURE EXISTS AS A PROGRAM AND NOT AS A VALUE COMPARISON. The array
+# does not exist anywhere the program can look at -- it is built for the call
+# and owned by a hidden temp -- so nothing in NilPy can print it. The only
+# honest assertion is to give it to a callee that USES every pointer in it and
+# let the callee's own behaviour be the readout. execv is that callee: it reads
+# argv[0], argv[1], ... until it reaches a NULL, and /bin/echo then prints the
+# ones after the first. If any pointer is wrong the echoed line is wrong or the
+# child dies, and if the terminator is wrong it walks off the end.
+#
+# Found on lekkerzeilen 2026-09-13: every shader linked with
+# `error C5145: must write to gl_Position` because glShaderSource received the
+# list object, read the VMT word as its source pointer, and compiled the empty
+# string -- which COMPILES, so nothing failed until the link, and the message
+# was about a shader we had never sent.
+# bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer
+
+# Raw unbuffered writes, never print(): execv REPLACES the address space, so a
+# buffered line still sitting in the runtime's buffer is lost with it. The
+# sibling bytes fixture bans raw writes for the opposite reason (it mixes them
+# with print, which has no ordering relation to them); here there is no print at
+# all, so the order is the order of the calls.
+
+# ---- A. the array is built and passed even when the exec FAILS -------------
+# A missing file makes execv return instead of replacing us, so this row proves
+# the argument was marshalled without consuming the one shot below. It is also
+# the row that would crash rather than fail if the terminator were missing.
+missing = execv("/nonexistent/pxx-is-not-here", [b"/nonexistent/pxx-is-not-here", None])
+a = b"A execv of a missing file returned\n"
+write(1, a, len(a))
+
+# ---- B. FOUR pointers, so one correct pointer cannot carry the row ---------
+# echo prints argv[1..], so the line below is read back out of the array by a
+# program that is not us. A single-argument argv would pass on any array whose
+# first slot happens to be right.
+b = b"B handing over four pointers and a terminator\n"
+write(1, b, len(b))
+execv("/bin/echo", [b"/bin/echo", b"C", b"three", b"words", None])
+
+# ---- unreachable when the array is right ------------------------------------
+d = b"D execv returned -- argv was not an array of pointers\n"
+write(1, d, len(d))

@@ -15,7 +15,7 @@ track: N
 type: bug
 prio: 80
 owner: unassigned
-status: backlog
+status: done
 ---
 
 ## What was measured
@@ -90,3 +90,49 @@ read the recommendation above as having settled it.
 
 That ticket recorded `str` / `list` / `array` as never measured. `list` is
 measured here and is broken. `str` and `array` remain unmeasured.
+
+## Fixed 2026-09-13
+
+**The array is built into a bytes object and owned by a hoisted named temp.**
+`pylist_cptrarray(l: TPyList): TPyBytes` in `compiler/builtin/pylib.pas` fills
+one pointer word per element -- `pybytes_cbuf` for a bytes element, the payload
+word for anything else, so a trailing `None` becomes the NULL terminator C
+wants. `PyCoerceCallableArgsIn` in `compiler/pyparser.inc` recognises a
+statically TPyList-typed argument in an EXTERNAL callee's pointer parameter,
+hoists `tmp := pylist_cptrarray(lst)` into the enclosing statement, and passes
+`tmp`.
+
+**Why a named temp and not a nested call**, which is the part worth keeping:
+the array does not exist in the heap until it is built, so it needs an owner,
+and the three candidates were a scratch pool (wrong the moment two are live), a
+field on every TPyList (a layout change), and a caller-held object. Measured the
+same day: a bytes reaching a C pointer parameter through a NAME is coerced
+correctly and survives an intervening allocation, while the same bytes as a
+nested pylib CALL RESULT passes the object pointer. So the nested spelling is
+wrong for two independent reasons and the named one is right for both. The
+argument then arrives as an AN_IDENT statically typed TPyBytes, which
+`IRLowerCallArg`'s existing static arm already turns into `pybytes_cbuf(tmp)` --
+no second answer to "where is this object's data".
+
+**Still open, deliberately:** the VARIANT spelling. A list arriving through a
+PARAMETER reaches `pyvar_cbuf`, which returns a Pointer and can own nothing, so
+deciding at run time to build an array would put the array's owner inside a
+function that has none. That half is unfixed and unguessed.
+
+**The recommendation above is NOT taken**: `[encoded]` stays in lekkerzeilen's
+seam, because a list is the obvious Python spelling of "an array of strings"
+and every C API that takes one lands here.
+
+**Verified:** `test/test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter`
+-- execv walks the array to its NULL and `/bin/echo` prints argv[1..], so the
+readout is a callee that uses every pointer, which is the only honest assertion
+available for an object the program cannot look at. Four pointers, so one
+correct slot cannot carry the row; the `.expected` is derived rather than
+captured. Under pin v408 the same program prints binary heap bytes.
+lekkerzeilen now links every shader and reaches a new wall further in.
+
+## Log
+
+- 2026-09-13 | fixed in `compiler/builtin/pylib.pas` and
+  `compiler/pyparser.inc`, commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

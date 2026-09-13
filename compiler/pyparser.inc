@@ -24478,11 +24478,15 @@ function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
   never tyPointer, so it is skipped by the test rather than by a special case. }
 var currArg, i, capSym, identNode, argSeq, tailArg, exprNode: Integer;
     btPi, argN, code, wrapPi: Integer;
+    lstCi, bytCi, cpaPi, tmpSym, asgn: Integer;
 begin
   Result := False;
   if not isNilPy then Exit;
   if procIdx < 0 then Exit;
   btPi := FindProc('pybtype');
+  lstCi := FindUClass('TPyList');
+  bytCi := FindUClass('TPyBytes');
+  cpaPi := FindProc('pylist_cptrarray');
   currArg := argsHead;
   i := 0;
   while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
@@ -24517,6 +24521,62 @@ begin
           Result := True;
         end;
       end;
+    end;
+    { A LIST bound to an EXTERNAL C pointer parameter, which in C is an array of
+      pointers: `glShaderSource(shader, 1, [src], None)`, whose parameter is
+      `const GLchar *const *`. Without this the TPyList INSTANCE went over, the
+      driver read the VMT word as its first `char *`, and every shader in
+      lekkerzeilen linked with `error C5145: must write to gl_Position` -- the
+      empty string compiles, so nothing failed until the link and the message
+      was about a shader we had never sent.
+
+      A HOISTED NAMED TEMP, not a nested call, and the reason is ownership. The
+      pointer array does not exist in the heap until it is built, so somebody has
+      to own it; a temp in the enclosing routine is owned for the whole statement
+      and therefore strictly outlives the call. Measured 2026-09-13, and the
+      measurement is what chose it: a bytes reaching a C pointer parameter
+      through a NAME is coerced correctly and survives an intervening
+      allocation, while the same bytes as a nested pylib CALL RESULT passes the
+      object pointer. So the nested spelling is wrong for two independent
+      reasons and the named one is right for both.
+
+      The argument is then an AN_IDENT statically typed TPyBytes, which is
+      exactly what IRLowerCallArg's existing static arm already turns into
+      pybytes_cbuf(tmp) -- so this adds no second answer to the question
+      `where is this object's data`, it only builds the object that answers it.
+      If you widen one of those two, look at the other.
+
+      STATIC ONLY, on purpose. The variant spelling (a list arriving through a
+      PARAMETER) reaches the arm below and answers the object pointer, and it
+      still does: deciding at RUN TIME to build an array would put the array's
+      owner inside pyvar_cbuf, which returns a Pointer and can own nothing.
+      That half stays filed rather than guessed.
+      bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
+    if (i < MAX_PROC_PARAMS) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (procIdx < ProcCount) and ProcExternal[procIdx] and
+       (lstCi >= 0) and (bytCi >= 0) and (cpaPi >= 0) and
+       (ASTLeft[currArg] >= 0) and
+       (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyClass) and
+       (ResolveNodeRec(ASTLeft[currArg]) = REC_UCLASS_BASE + lstCi) then
+    begin
+      argSeq := AllocNode(AN_ARG);
+      ASTLeft[argSeq] := ASTLeft[currArg];
+      ASTRight[argSeq] := -1;
+      exprNode := AllocNode(AN_CALL);
+      ASTIVal[exprNode] := cpaPi;
+      ASTLeft[exprNode] := argSeq;
+      ASTTk[exprNode] := Ord(tyClass);
+      ASTRight[exprNode] := REC_UCLASS_BASE + bytCi;
+      tmpSym := AllocVar(PyHiddenName('cptrs'), tyClass);
+      Syms[tmpSym].RecName := REC_UCLASS_BASE + bytCi;
+      SymSyncTypeRef(tmpSym);
+      asgn := AllocNode(AN_ASSIGN);
+      ASTLeft[asgn] := PyMakeIdent(tmpSym);
+      ASTRight[asgn] := exprNode;
+      PyHoistStmt(asgn);
+      ASTLeft[currArg] := PyMakeIdent(tmpSym);
+      Result := True;
     end;
     if (i < MAX_PROC_PARAMS) and
        (Procs[procIdx].Params[i].TypeKind = tyPointer) and

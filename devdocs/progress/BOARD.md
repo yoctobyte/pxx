@@ -80,10 +80,11 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (26)
+## backlog (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| regression-cascade-e5cd18e4b220 | T | 70 | regression | regression CASCADE: 13 jobs newly red in 6f085e162..e5cd18e4b (1 commits) — auto-filed by twatch | — |
 | regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-9 | B | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at fca28056d8ec in step 84/346, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
 | regression-optdiff-shard0-12 | T | 70 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
@@ -295,7 +296,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (143)
+## backlog-nilpy (142)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -323,7 +324,6 @@ _none_
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-a-lambda-stored-in-a-class-attribute-is-not-callable | N | 45 | bug | `class gl: clear = lambda a: a * 3` then `gl.clear(2)` raises `TypeError: object is not callable` at run time; CPython prints 6. The same lambda bound to a MODULE-level name works (`f = lambda a: a * 3; f(2)` gives 6 in both), so it is the class-attribute store that loses the callable, not the lambda. Measured 2026-09-10 at compiler `98b6545b4652`. PRE-EXISTING and verified as such: it reproduces with and without the `staticmethod(...)` wrapper that was being added the same afternoon, so it is not that arm's doing -- the control without the wrapper fails identically. Compiles clean and fails at RUN time, which is the bad half: a class-as-namespace whose members are lambdas is accepted by the compiler and dies on first call. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
-| bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer | N | 80→90 | bug | > | — |
 | bug-n-a-local-bound-to-both-a-pascal-class-and-its-subclass-loses-subscripting | N | 30 | bug | A name bound at one site to a Pascal class and at another to a NilPy SUBCLASS of it aborts at run time with `TypeError: object is not subscriptable` on the subscript, where CPython works. Measured 2026-09-09: `g = array.array(\"h\", bytes(2)); print(g[0]); g = Grid(\"h\")` with `class Grid(array.array)` fails at the FIRST subscript -- the one compiled before the subclass binding exists -- so it is the name's resolved TYPE that is wrong, not the operation. Three controls narrow it: the same name bound twice to the SAME Pascal class works; a Grid instance subscripted with no second binding works; and pure NilPy classes with __getitem__ rebound base->subclass work. So it is specific to a PASCAL class's `default` indexed property plus two bindings whose classes are related by inheritance. Loud, not silent. | — |
 | bug-n-a-local-bound-to-self-loses-its-class-and-an-omitted-default-then-segfaults | N | 35 | bug | > | — |
 | bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call | N | 70 | bug | `lo = f` then `lo(2)` prints `2` and `hi = f` then `hi(2)` prints `0`, where CPython prints f's result. A NilPy LOCAL holding a callable, spelled like a Pascal intrinsic, is answered by the INTRINSIC at the call — no diagnostic, no crash, a plausible wrong number. `abs = f` is the same. `ord = f` is CORRECT, which is the control that makes this a shadowing bug rather than a builtin-name policy: `ord` is a Python builtin too and it binds the local. The assignment is fine — the value is built correctly — so this is the CALL door reading the name, and `f(2)` on the same def is right throughout. Found while testing the module-member-as-a-value group; it made an unrelated test row red for a reason nothing in that row could explain. | — |
@@ -1029,9 +1029,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3724)
+## done (3725)
 
-3724 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3725 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1123,7 +1123,6 @@ _none_
 
 - [p 90] [A] bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - [p 90] [N] bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
-- [p 90] [N] bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer (unblocks 1)
 - [p 90] [N] bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result (unblocks 1)
 - [p 90] [U] decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - [p 90] [B] feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder (unblocks 1)
@@ -1156,6 +1155,7 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - [p 70] [N] feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
+- [p 70] [T] regression-cascade-e5cd18e4b220
 - [p 70] [B] regression-lib-test-crtl-reachability-9 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard0-12
 - [p 70] [T] regression-optdiff-shard10-12
@@ -1635,7 +1635,6 @@ _none_
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers
-- **1** — bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer
 - **1** — bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result
 - **1** — bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - **1** — bug-n-os-environ-and-os-sep-are-not-values

@@ -3862,6 +3862,18 @@ test-nilpy: $(COMPILER)
 	@# and the round-tripped bytes come back [0, 0, 0, 0].
 	./$(COMPILER) test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.npy $(TESTTMP)/test_nilpy_bytesptr26
 	$(TESTTMP)/test_nilpy_bytesptr26 | diff -u test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.expected -
+	# ...and the POINTER-TO-POINTER shape beside it: a LIST bound to a C pointer
+	# parameter is an array of pointers, and passing the TPyList instance gave
+	# the callee the VMT word as its first `char *`. No value comparison can see
+	# this -- the array is built for the call and owned by a hidden temp, so
+	# nothing in the program can print it -- and the readout is therefore a
+	# CALLEE that walks the array: execv reads argv until NULL and /bin/echo
+	# prints the rest. Four pointers, so one correct slot cannot carry the row.
+	# The .expected is DERIVED, not captured: two lines are literals in the
+	# source and the third is `/bin/echo C three words`, which is checkable
+	# without our compiler. Under pin v408 the row prints binary heap bytes.
+	./$(COMPILER) test/test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter.npy $(TESTTMP)/test_nilpy_listptrptr26
+	$(TESTTMP)/test_nilpy_listptrptr26 | diff -u test/test_nilpy_a_list_reaches_a_c_pointer_to_pointer_parameter.expected -
 	@# A STAR-UNPACK IN A `with` HEADER must evaluate its own setup before the
 	@# manager is read. A star expansion lowers to an arity dispatch on `len(tmp)`
 	@# over a hidden temp; `with` builds its OWN sequence around the manager's

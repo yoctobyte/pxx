@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:26 backlog-umbrella:11 backlog-core:159 backlog-nilpy:143 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3724 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:27 backlog-umbrella:11 backlog-core:159 backlog-nilpy:142 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3725 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -77,7 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
-- `[p 90] [N]` bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer (unblocks 1)
 - `[p 90] [N]` bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 90] [B]` feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder (unblocks 1)
@@ -105,5 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time
 - `[p 70] [N]` bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
+- `[p 70] [N]` bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 
 _463 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

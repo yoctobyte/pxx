@@ -1161,6 +1161,35 @@ function pybytes_cbuf(o: TObject): Pointer;
   has payload 0 and so answers nil, which is what a C callee wants for None.
   bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
 function pyvar_cbuf(const v: Variant): Pointer;
+{ The ARRAY OF POINTERS a C `char **` parameter wants, materialised as a bytes
+  object so that the CALLER owns it.
+
+  `glShaderSource(shader, 1, [src], None)` is the shape: the parameter is
+  `const GLchar *const *`, and a list bound to a C pointer parameter used to
+  pass the TPyList INSTANCE, so the driver read the VMT word as its first
+  `char *` and stored the empty string. An empty vertex shader COMPILES, so
+  nothing failed until the link, which then said `must write to gl_Position` --
+  a message about our marshalling wearing the shape of a shader bug.
+
+  A BYTES RESULT AND NOT A RAW POINTER, AND THAT IS THE WHOLE DESIGN. Unlike
+  pybytes_cbuf, which answers where an object's data already is, this array does
+  not exist in the heap until it is built -- so it needs an owner, and the three
+  candidates are a scratch pool (wrong the moment two are live), a field on
+  every TPyList (a layout change), or a caller-held object. This is the third:
+  the frontend hoists `tmp := pylist_cptrarray(lst)` into the enclosing
+  statement, so the lifetime is the local's and strictly covers the call.
+  Measured 2026-09-13, which is what picked it: a bytes handed to a C pointer
+  parameter through a NAME survives an intervening allocation and is coerced
+  correctly, while the same bytes as a nested pylib CALL RESULT passes the
+  object pointer -- the named temp is both alive and correct, and the nested
+  rewrite is neither.
+
+  Every element answers pybytes_cbuf, so a bytes gives its data and anything
+  else gives today's payload word rather than a refusal. An element that is not
+  bytes has no stable data pointer to hand out, and the one measured call site
+  passes bytes.
+  bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
+function pylist_cptrarray(l: TPyList): TPyBytes;
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -15131,6 +15160,28 @@ type
   end;
   PPySigRec = ^TPySigRec;
   PPointer = ^Pointer;
+
+function pylist_cptrarray(l: TPyList): TPyBytes;
+{ Declared beside pyvar_cbuf; the body is HERE because it needs PPointer, which
+  is declared a few lines above and nowhere earlier. }
+var i: Integer; slot: PPyVarRec; dst: PPointer;
+begin
+  if l = nil then
+  begin
+    Result := TPyBytes.Create(0);
+    Exit;
+  end;
+  Result := TPyBytes.Create(l.FLen * SizeOf(Pointer));
+  for i := 0 to l.FLen - 1 do
+  begin
+    slot := PPyVarRec(NativeInt(l.FItems) + i * 16);
+    dst := PPointer(NativeInt(Result.FData) + i * SizeOf(Pointer));
+    if slot^.VType = 7 then
+      dst^ := pybytes_cbuf(TObject(Pointer(slot^.Payload)))
+    else
+      dst^ := Pointer(slot^.Payload);
+  end;
+end;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
