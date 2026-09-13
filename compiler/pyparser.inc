@@ -9062,11 +9062,7 @@ begin
     enStart := -1;
     if Eat(tkComma) then
     begin
-      if PyIsIdent('start') and (TokPos < TokCount) and
-         (Tokens[TokPos].Kind = tkAssign) then
-      begin
-        Next; Next;   { 'start', '=' }
-      end;
+      PyEatEnumerateStartKw;
       ParseArgExpr;
       enStart := CurASTNode;
     end;
@@ -11688,6 +11684,31 @@ end;
   both spellings answer the same thing. Nothing else on the builtin surface has
   that property — `sum(*xs)` and `sorted(*xs)` do not — so this is a two-entry
   list rather than a rule, and it stays that way deliberately. }
+{ `enumerate(xs, start=N)` — consume the `start` `=` pair if it is there, so
+  the caller's ordinary expression parse lands on N.
+
+  ONE copy, because there are TWO spellings of enumerate's second argument and
+  the keyword one is how they drift. The positional form reached the for-HEADER
+  path in bug-nilpy-enumerate-with-start-fails-in-a-for-header and the keyword
+  form did not, so `for i, s in enumerate(xs, start=1)` was
+  `undefined variable (start)` while `enumerate(xs, 1)` in the same position
+  compiled and `list(enumerate(xs, start=1))` as a VALUE compiled too — the
+  second path staying broken for one spelling only
+  (devdocs/dev/normalise-dont-special-case.md). A helper rather than a second
+  three-line skip: the next reader adding a third site gets it for free.
+
+  CurTok is the token after enumerate's comma. Answers nothing and changes
+  nothing when the argument is positional. }
+procedure PyEatEnumerateStartKw;
+begin
+  if PyIsIdent('start') and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkAssign) then
+  begin
+    Next;                              { 'start' }
+    Next;                              { '=' }
+  end;
+end;
+
 function PyStarIsIterableForm(const nm: AnsiString): Boolean;
 begin
   Result := CaseEqual(nm, 'max') or CaseEqual(nm, 'min');
@@ -25381,6 +25402,15 @@ begin
   begin
     contNode := CurASTNode;      { PyParseBoolExpr below overwrites it }
     Next;
+    { ...and the KEYWORD spelling of that same second argument, which this site
+      never learned. The bug above was the positional form missing here; the
+      keyword form was missing too and outlived the fix, so
+      `for i, s in enumerate(xs, start=1)` was `undefined variable (start)` —
+      pointing at a name that is enumerate's own parameter — while
+      `enumerate(xs, 1)` two characters away compiled. Shared with the
+      expression form so the pair cannot drift a third time.
+      bug-n-enumerate-start-as-a-keyword-fails-in-a-for-header }
+    PyEatEnumerateStartKw;
     PyParseBoolExpr;
     enumStartNode := CurASTNode;
     CurASTNode := contNode;

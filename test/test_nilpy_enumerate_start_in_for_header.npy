@@ -9,6 +9,18 @@
 # only the for header would have passed against a fix that broke the expression
 # form, and testing only the expression form is what let this survive.
 #
+# AND THE SECOND AXIS, ADDED 2026-09-13, WHICH THIS FILE MISSED ENTIRELY: the
+# start has two SPELLINGS, positional and `start=`, and every row below was
+# positional. The for header never learned the keyword one, so
+# `for i, v in enumerate(ys, start=1)` was `undefined variable (start)` —
+# naming enumerate's own parameter — for as long as this test was green, in a
+# file written to pin exactly this feature. The header above was alert to one
+# axis (which POSITION the call sits in) and blind to the other (which
+# SPELLING the argument takes), which is why the keyword rows are now
+# interleaved rather than appended: a reader adding a case should see both
+# spellings at every shape. lekkerzeilen gfx.py:384,
+# `enumerate(levels or (), start=1)`.
+#
 # The start is bound to a hidden local BEFORE the loop rather than spliced into
 # the per-iteration index: Python evaluates it once, and an AST node used in two
 # places is emitted twice in this frontend. `enumerate(ys, len(xs))` and
@@ -91,3 +103,56 @@ for v in sorted(xs)[1:]:
     print("slice", v)
 for k, v in sorted({"b": 2, "a": 1}.items()):
     print("items", k, v)
+
+# --- THE KEYWORD SPELLING OF EVERY SHAPE ABOVE -------------------------------
+# Same values, same positions, `start=` instead of a bare second argument.
+for i, v in enumerate(ys, start=1):
+    print("kw1", i, v)
+print(list(enumerate(ys, start=1)))
+
+for i, v in enumerate(ys, start=10):
+    print("kw10", i, v)
+print(list(enumerate(ys, start=10)))
+
+for i, v in enumerate(ys, start=0):
+    print("kw0", i, v)
+
+for i, v in enumerate(ys, start=-2):
+    print("kwneg", i, v)
+print(list(enumerate(ys, start=-2)))
+
+# an EXPRESSION as the keyword's value, and one with a SIDE EFFECT that must
+# still be evaluated exactly once -- the keyword spelling reaches the same
+# hoist, and a per-iteration re-evaluation fails loudly here too.
+for i, v in enumerate(ys, start=len(xs)):
+    print("kwexpr", i, v)
+
+kwcalls = []
+
+
+def kwbump():
+    kwcalls.append(1)
+    return 100
+
+
+for i, v in enumerate(ys, start=kwbump()):
+    print("kwcall", i, v)
+print("kwbump called", len(kwcalls), "time(s)")
+
+# an empty container with a keyword start binds nothing
+for i, v in enumerate([], start=5):
+    print("kwnever", i, v)
+print(list(enumerate([], start=5)))
+
+# gfx.py's shape verbatim: the iterable is an `or` over a falsy value, so the
+# whole loop body is skipped and the keyword still has to PARSE.
+levels = None
+for at, pair in enumerate(levels or (), start=1):
+    print("kwor", at, pair)
+print("kwor done")
+
+# ...and the same shape with the `or` taking its right arm, plus a NESTED
+# tuple target, which is how gfx.py actually writes it.
+real = [(8, 8, "a"), (4, 4, "b")]
+for at, (w, h, data) in enumerate(real or (), start=1):
+    print("kwnest", at, w, h, data)

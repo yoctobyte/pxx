@@ -44,3 +44,29 @@ slice 2
 slice 3
 items a 1
 items b 2
+kw1 1 a
+kw1 2 b
+kw1 3 c
+[(1, 'a'), (2, 'b'), (3, 'c')]
+kw10 10 a
+kw10 11 b
+kw10 12 c
+[(10, 'a'), (11, 'b'), (12, 'c')]
+kw0 0 a
+kw0 1 b
+kw0 2 c
+kwneg -2 a
+kwneg -1 b
+kwneg 0 c
+[(-2, 'a'), (-1, 'b'), (0, 'c')]
+kwexpr 3 a
+kwexpr 4 b
+kwexpr 5 c
+kwcall 100 a
+kwcall 101 b
+kwcall 102 c
+kwbump called 1 time(s)
+[]
+kwor done
+kwnest 1 8 8 a
+kwnest 2 4 4 b

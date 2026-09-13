@@ -136,6 +136,7 @@ function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean; forward;
 function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): Boolean; forward;
 function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
+procedure PyEatEnumerateStartKw; forward;   { consume `start` `=` in enumerate's second argument — ONE copy for both spellings (pyparser.inc) }
 function PyArgListHasStarElem: Boolean; forward;   { is any argument a `*`/`**` ELEMENT, wherever it sits? (pyparser.inc) }
 function PyArgListHasStarElemAt(parenTok: Integer): Boolean; forward;   { ...the same question about a KNOWN '(' rather than about TokPos (pyparser.inc) }
 function PyPascalStarIdx(pi: Integer): Integer; forward;   { a `{$PYSTAR}`-marked Pascal declaration's *args collector slot, resolved once (pyparser.inc) }
