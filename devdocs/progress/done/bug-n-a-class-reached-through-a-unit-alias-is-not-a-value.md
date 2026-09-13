@@ -3,14 +3,14 @@ slug: bug-n-a-class-reached-through-a-unit-alias-is-not-a-value
 track: N
 type: bug
 prio: 80
-status: backlog
+status: done
 owner: ""
 created: 2026-09-11
 found: 2026-09-11
 found-by: frankZ
 tags: [nilpy, imports, values, silent-wrong-value, lekkerzeilen]
 blocked-by: []
-summary: "SPLIT 2026-09-11 (frankB, on frankZ's proposal at 1a6c775d7 and with their correction at 201131b40): this ticket now holds the METHOD-CALL arm only. The silent raw-address arm moved to bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address -- different observable (wrong VALUE vs a REFUSAL), different construct (attribute READ vs method CALL), and import-DEPENDENT where this one is not. Only this arm is about binding, and only this arm blocks the demo: lekkerzeilen's seam writes `gl = _backend.gl`, the same-name spelling, which resolves, so the corpus is hit here. The other arm is worse in KIND; rank them on different things. THE METHOD-CALL ARM IS NOT ABOUT IMPORTS AT ALL IS NOT ABOUT IMPORTS AT ALL and the slug misnames it (frankuser, 2026-09-11, c53cb51926a2): four lines with NO import, NO package and NO alias reproduce it -- `class gl: @staticmethod def s(): ...` then `g = gl; g.s()` raises `AttributeError: 'type' object has no attribute 's'` while `gl.s()` works. Also fails via a dict value and a function parameter, and for `@classmethod`. So a fix aimed at the unit-alias path leaves it broken everywhere else. THE PRECISE BOUNDARY: for `A = B`, instantiation `A()` and instance methods WORK -- `bug-n-a-type-name-is-not-a-first-class-value` (done) covered those -- and only STATIC/CLASS METHOD LOOKUP on a class held in a variable fails. THE RAW-ADDRESS ARM DOES REPRODUCE, on c53cb51926a2, and it needs TWO conditions, not the one first reported (frankZ, last section): a binding name DIFFERENT from the class's own name, AND any construct at all preceding the class in the declaring module -- a DOCSTRING is enough, so nearly every real module is on the failing side and the clean minimal case is the artefact. AND THAT SPARES THE SEAM, which corrects this ticket's own ranking argument: platform/__init__.py writes `gl = _backend.gl`, the SAME-NAME spelling, which resolves correctly -- so the seam is hit by the METHOD-CALL arm and not by the silent one. The p80 stands on arm 1's reach, not on arm 2's silence: with `B = 5` above `class Widget`, `w = backend.Widget` then `w.V` gives 5512560 against CPython's 1; delete that one line and it gives 1. Binary, not proportional to the count, so not a symbol index walking off. AND THAT ARM *IS* IMPORT-DEPENDENT -- one file with no import gives the correct answer for the same shape, and `backend.Widget.V` without the binding is also correct -- so it needs the cross-unit read AND the binding AND the preceding assignment. WE EACH GENERALISED THE ARM WE COULD REPRODUCE OVER THE ONE WE COULD NOT: the original slug is right for the raw-address arm and wrong for the method-call arm, and this correction is right for the method-call arm and would misroute the other. THESE ARE TWO BUGS AND WANT TWO TICKETS -- proposed split in the last section, not made unilaterally because half the evidence is frankuser's. Arm 2 is the more serious: arm 1 raises, arm 2 prints a number. The seam-compiles-but-does-not-work correction to [[bug-n-a-module-bound-by-an-import-is-not-a-value]] STANDS and is the valuable half."
+summary: "FIXED, 2026-09-13, MECHANISM UNATTRIBUTED BY ME. This ticket held the METHOD-CALL arm only (the raw-address arm is [[bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address]], frankuser's). Its own four-line repro -- no import, no package, no alias: `class gl:` with a @staticmethod and a @classmethod, then `g = gl; g.s()` -- now MATCHES CPython at f2f11922a (binary 43bfe4af8250, `converged after 1 round`), and the suite fixture test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy is GREEN. Corroborated by the corpus this ticket was ranked on: lekkerzeilen binds `gl = _backend.gl` over a `class gl:` of 91 @staticmethods and the pxx-built binary calls `gl.get_string(gl.VERSION)` through it, printing a real GL version string with the render loop reaching a GL 3.3 context. THE REPAIR IS CREDITED BY THE SIBLING TICKET, NOT BY THIS ONE: [[bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers]] records its shape (a) fixed by `5445b96d8`, verified against lekkerzeilen by that commit's author. I did not bisect it and my own probes passed on pin v408 too -- a compiler that predates the fix -- so I never captured the failing condition and cannot confirm the mechanism. WHAT REMAINS, EACH WITH ITS OWN TICKET: shape (b), two classes declaring one name at CLASS level, is the p40 sibling above; reading a class-level member as a VALUE (`f = alias.sm`, and the dangerous `hasattr` answering FALSE) is [[bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused]] at p45. Neither has corpus demand: the demo only ever CALLS through `gl`, never reads it as a value, and no second class in it declares a class-level name that `gl` also declares (frankh-30, grepped across lekkerzeilen/*.py and lekkerzeilen/platform/*.py, 2026-09-13)."
 ---
 
 # The measurement
@@ -355,3 +355,51 @@ two of the three arms. It stays a hypothesis.
 now-running demo exercise this arm's shape against the real seam, rather than
 against a probe I cannot make fail on a known-bad compiler. **No answer yet at
 the time of writing.** Ask again before re-probing.
+
+## RESOLVED 2026-09-13 — THE OBSERVABLE IS GONE, THE MECHANISM IS NOT MINE
+
+The answer came from asking, not from a tenth probe. frankh-30 reported the
+corpus; I measured this ticket's own repro.
+
+**Measured here, at `f2f11922a`, binary `43bfe4af8250` (`make compiler/pascal26`
+printed `converged after 1 round(s)` — a real recompute, not the stamp path):**
+
+    class gl:
+        @staticmethod
+        def s():  return "static-ok"
+        @classmethod
+        def c(cls): return "class-ok"
+    g = gl
+    print(g.s()); print(g.c()); print(gl.s())
+
+pxx prints `static-ok / class-ok / static-ok`; CPython prints the same three
+lines. That is frankuser's four-line repro from `c53cb51926a2` — the one that
+established this arm is NOT about imports — and it no longer raises.
+`test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy` is green
+against its `.expected` in the same run.
+
+**Corroborated by the corpus this ticket was ranked on**, which matters because
+the p80 stood on the seam and not on the minimal case: `platform/__init__.py:86`
+binds `gl = _backend.gl` over `_pxx.py:139`'s `class gl:` (91 `@staticmethod`,
+`get_string` at `:480`), and the pxx-built binary calls `gl.get_string(gl.VERSION)`
+at `__main__.py:160`. Source lines verified by me in `/home/neo/lekkerzeilen`;
+the printed output and the render loop are frankh-30's run.
+
+**Why no commit is credited from this side.** My nine probes — including
+`g = gl; g.s()` with a lone `@staticmethod`, the multi-carrier condition, a dict
+value, a function parameter, a module attribute, and a full package mirroring the
+seam — all passed on pin v408, which predates `575e9ec16` and `5445b96d8` and
+should have held the defect. A probe that cannot fail on a known-bad compiler
+measures the instrument. So I can say the observable is gone; I cannot say what
+was wrong or what repaired it. The sibling p40 ticket credits `5445b96d8` for
+shape (a) on its author's own verification against lekkerzeilen, and that is the
+attribution to trust over anything in this section.
+
+**What is NOT closed by this, so nobody reads the closure too wide:** shape (b),
+two classes declaring one name at class level, is still open at p40. Reading a
+class-level member as a value rather than calling it — where `hasattr` answers
+FALSE instead of raising, so guarded code takes the wrong branch silently — is
+still open at p45. The raw-address arm is frankuser's and untouched here.
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

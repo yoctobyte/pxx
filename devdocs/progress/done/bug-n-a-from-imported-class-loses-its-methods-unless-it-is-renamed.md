@@ -4,11 +4,11 @@ track: N
 prio: 80
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
-summary: "`from .platform import gl` then `gl.get_string()` raises AttributeError at run time, while `from .platform import gl as zz` then `zz.get_string()` works -- same class, same program. Constants read correctly on BOTH, so the binding looks fine. The trigger is the local name being EQUAL to the member's name; `as <different name>` is the whole difference. Compiles clean; found only by running. Blocks 117 gl method calls across lekkerzeilen's gfx.py (110), __main__.py (6) and capture.py (1) -- i.e. the entire renderer."
+summary: "FIXED IN THE CORPUS, 2026-09-13 -- and the REPAIR IS NOT ATTRIBUTED, which is the part a later reader must not lose. The exact repro of this ticket now works in the very tree that reported it: lekkerzeilen `platform/__init__.py` binds `gl = _backend.gl` over `class gl:` in `_pxx.py` (91 @staticmethods, `get_string` among them), four modules do the same-name `from .platform import gl` with no rename -- gfx.py:10, capture.py:13, __main__.py:46 and app.py:26, two of them in a multi-name list -- and the pxx-BUILT binary prints `gl : 3.3.0 NVIDIA 580.178.04` from `gl.get_string(gl.VERSION)` at __main__.py:160, with the render loop reaching a GL 3.3 context and a loaded world. NO COMMIT IS CREDITED: frankh-30, who ran it, did not touch the guarded-import machinery (their two commits today were PyWiden integer joins and the callable-value arity ladder, neither plausibly this repair), and frankZ could not make the observable appear on pin v408 either -- a compiler that PREDATES the likely closers `575e9ec16` and `5445b96d8` and should have held the defect. So the observable is gone and the MECHANISM WAS NEVER RE-ESTABLISHED. Closing on the corpus that reported it, not on a cause. If this shape ever regresses, do not start from the probe list in this ticket -- every one of those passed on the known-bad compiler too."
 ---
 
 # A from-imported class loses its methods unless it is renamed
@@ -154,3 +154,58 @@ renamed/rerouted" means the corpus no longer exercises the failing shape and
 this stays open with that noted. **No answer yet at the time of writing** — if
 you are reading this and no verdict has been appended below, the question is
 still outstanding and asking again is cheaper than re-probing.
+
+## RESOLVED 2026-09-13 — THE CORPUS ANSWERS ITS OWN REPRO
+
+Asked rather than probed. frankZ asked frankh-30, who got the demo running
+today, whether the seam still uses the same-name form and whether the calls
+execute. It does, and they do.
+
+**What I verified myself, reading `/home/neo/lekkerzeilen` at its working tree
+(the owner's, with the owner's own uncommitted edits in it — `git log -1` is
+`9521e53`, 2026-09-12, and `__main__.py`, `gfx.py`, `capture.py` and
+`platform/__init__.py` all carry unstaged modifications, so "unmodified" here
+means frankh-30 changed nothing, NOT that it matches a commit):**
+
+- `platform/_pxx.py:139` — `class gl:`; `get_string` at `:480` is a
+  `@staticmethod` inside that class body. 91 `@staticmethod` in the class.
+- `platform/__init__.py:86` — `gl = _backend.gl`, where `_backend` comes from a
+  guarded import: `try: import ctypes` / `except ImportError: from . import _pxx
+  as _backend`. Under pxx, ctypes is absent, so the pxx backend is the one bound.
+- Same-name from-imports, no rename anywhere: `gfx.py:10`, `capture.py:13`,
+  `__main__.py:46` (a multi-name list ending in `gl`), `app.py:26` (likewise).
+- `__main__.py:159-160` and `app.py:4409-4410` — `gl.get_string(gl.RENDERER)`
+  and `gl.get_string(gl.VERSION)`, i.e. this ticket's repro with a constant read
+  through the same class value in the same expression.
+
+**What rests on frankh-30's run, not on my reading:** the printed output
+`gl       : 3.3.0 NVIDIA 580.178.04`, the render loop reaching a GL 3.3 context
+and a loaded world, and the 148 `gl.` occurrences in gfx.py executing rather than
+merely compiling.
+
+**The pxx-versus-CPython discriminator, because a green here could have been
+correct about a different interpreter.** Two independent tells, and I checked the
+second myself: the demo now dies much later in `Vessel.fittings_data` on a NilPy
+lowering defect (a module-qualified def returning a container, read as a value),
+which CPython cannot produce; and `bin/` holds four pxx-built binaries from this
+evening (`lz_h1` 18:55 through `lz_h4` 19:24) whose `.map` files begin
+`# Frankonpiler Map File` and whose ELF has no section header — pxx's own writer.
+The run is our compiler.
+
+**Repair not attributed, and that is deliberate.** frankh-30's two commits today
+(`fec1abd13`, nine of eleven machine integer kinds had no join in `PyWiden`;
+`2b7068dd7`, the callable-value ladder to eight arguments plus an arity refusal
+naming the callee) are not plausibly this fix, and they said so unprompted. The
+likely closers remain `575e9ec16` and `5445b96d8`. Nobody has bisected it and
+this ticket does not claim one.
+
+**The residual, and it is the honest half.** I could not make this observable
+appear on pin v408 — which predates both likely closers and should have held the
+defect — across nine shapes including a full package mirroring this exact seam.
+So my reconstruction never captured the failing condition, and the corpus can
+only say the shape WORKS NOW. It cannot say what was broken, or what fixed it.
+Closing on the observable in the tree that reported it, with the mechanism
+unestablished. See CLAUDE.md, "isolation guards the RUN, not the ROUTE".
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

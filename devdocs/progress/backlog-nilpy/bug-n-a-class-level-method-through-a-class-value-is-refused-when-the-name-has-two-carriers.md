@@ -197,3 +197,21 @@ which dereferences an RTTI blob as an instance.
   (the session is Wayland, and forcing X11 then driving it with xdotool killed the
   process through its X connection rather than through the QUIT path -- my own
   interference, not a defect).
+
+## SHAPE (b) HAS NO CORPUS DEMAND EITHER — measured, not assumed (2026-09-13)
+
+This ticket already said "nothing measured asks for it, which is why this is back
+at 40". That is now checked rather than inferred: frankh-30 grepped the running
+lekkerzeilen and **no second class in the demo declares, at CLASS level, a name
+that `gl` also declares at class level.** Instance methods sharing the name do
+not count — that is shape (a), which `5445b96d8` fixed and which cleared the
+live wall.
+
+The p40 is therefore correct and the corpus agrees with it. Recorded so nobody
+re-derives the question; the answer cost one message.
+
+Sibling context: [[bug-n-a-class-reached-through-a-unit-alias-is-not-a-value]]
+and [[bug-n-a-from-imported-class-loses-its-methods-unless-it-is-renamed]] closed
+the same day on that corpus, both with the repair unattributed from their side —
+this ticket's credit of `5445b96d8` for shape (a), verified by its author against
+lekkerzeilen, is the attribution those two defer to.

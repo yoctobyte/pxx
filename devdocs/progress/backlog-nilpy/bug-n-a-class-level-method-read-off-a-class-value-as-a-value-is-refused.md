@@ -105,3 +105,24 @@ and does not read it, which is why the call path landed alone.
   -- the other residual, on the call side.
 - `bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused`
   -- the same `hasattr`/`getattr` pair, on a builtin receiver instead of a class.
+
+## NO CORPUS DEMAND TODAY — measured, not assumed (2026-09-13)
+
+frankh-30 grepped the running lekkerzeilen across `lekkerzeilen/*.py` and
+`lekkerzeilen/platform/*.py`: **the demo never reads `gl` as a value.** No
+`hasattr(gl, ...)`, no `getattr(gl, "<method>")`, no `f = gl.clear`. It only ever
+CALLS through it. The one value-ish read in the tree is
+`platform/_ctypes_backend.py:326`, `getattr(gl.lib, "_name", "libGL")` — and that
+is the ctypes backend, which is not the one pxx builds, and it reads `gl.lib`, an
+attribute, not `gl` itself.
+
+So the p45 stands on the DEFECT CLASS, not on a blocked program: `hasattr`
+answering FALSE rather than raising is a silent-wrong-branch bug, and that is
+worth keeping regardless of who is calling it today. What this measurement
+removes is the argument that the demo needs it — it does not. Recorded so the
+next reader does not re-ask a question that has been answered against the corpus.
+
+Sibling context: [[bug-n-a-class-reached-through-a-unit-alias-is-not-a-value]]
+and [[bug-n-a-from-imported-class-loses-its-methods-unless-it-is-renamed]] both
+closed the same day on that corpus; this arm and the two-carriers p40 are what is
+left of the group.
