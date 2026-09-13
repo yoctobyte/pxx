@@ -97,3 +97,6 @@ list LITERAL is clean). Filed as
 [[bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released]]. The
 fixture binds its `re.match` result to a local specifically so that this
 fixture's bound stays about the pattern cache.
+
+## Log
+- 2026-09-13 — resolved; the FIX is the pattern cache in `lib/rtl/re.pas`'s MakePattern, which landed together with its fixture and the census guard, commit 06f998bdd. Found while measuring the callable-value wrapper's ownership residue (017dfed7d), which is a different bug and is not this one's cause.
