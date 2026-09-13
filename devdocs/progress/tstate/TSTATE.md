@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `e5cd18e4b220` | 2026-09-13T14:57:00Z | RED (full) | 905.3s | `e5cd18e4b220` RED |
+| borg | `e5cd18e4b220` | 2026-09-13T14:57:32Z | RED (slow) | 14.2s | `e5cd18e4b220` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -51,3 +51,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
   - `test-uforth#src:tools/compiler_srchash.sh@8`
   - `test-uforth#src:tools/compiler_srchash.sh@9`
   </details>
+- **test-uforth#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `e5cd18e4b220`, last good `6f085e16261e`, 1 commit(s) in range
