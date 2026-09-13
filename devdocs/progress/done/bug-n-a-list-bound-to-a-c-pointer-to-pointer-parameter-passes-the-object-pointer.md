@@ -119,6 +119,15 @@ PARAMETER reaches `pyvar_cbuf`, which returns a Pointer and can own nothing, so
 deciding at run time to build an array would put the array's owner inside a
 function that has none. That half is unfixed and unguessed.
 
+**NOW FILED AS ITS OWN TICKET (2026-09-13, frankS):**
+[[bug-n-a-list-reaching-a-c-pointer-parameter-through-an-unannotated-parameter-still-passes-the-object]].
+An open question living in `done/` is invisible to `ready`/`next`, which do not
+scan this folder, so it read as handled while being live. Two things measured
+while filing it that are NOT recorded above: an ANNOTATED parameter
+(`def f(args: list)`) takes the static path and WORKS, so there is a one-token
+workaround; and the boundary is therefore the argument's static type, not
+"parameter versus literal" as this ticket's wording implies.
+
 **The recommendation above is NOT taken**: `[encoded]` stays in lekkerzeilen's
 seam, because a list is the obvious Python spelling of "an array of strings"
 and every C API that takes one lands here.
