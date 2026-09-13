@@ -95,3 +95,42 @@ class member.
 *variables* as well as classes, whether an absolute spelling behaves the same,
 and whether it is specific to `@staticmethod` versus instance methods. One
 program each.
+
+
+## 2026-09-13 (frankZ) — NO VERDICT: my probes were VACUOUS, which is not evidence of a fix
+
+Attempted as part of the "class held as a value" group. **I could not reproduce
+this at HEAD — and I could not reproduce it on pin v408 either**, which is the
+part that matters: v408 PREDATES `575e9ec16` and `5445b96d8`, the two commits
+that claim exactly these shapes. A probe that does not fail on a compiler where
+the bug demonstrably existed has not reached the defect, so my passing result
+says nothing about whether it is fixed. Recording that rather than a green.
+
+Shapes tried, all correct on BOTH v408 and HEAD, all matching CPython:
+`g = gl; g.s()` with a lone `@staticmethod` carrier; the same with the name also
+an instance method on two other classes (the multi-carrier condition `5445b96d8`
+names); a dict value `d["k"].s()`; a function parameter `viaparam(gl)`; the same
+through a module attribute `g = m_backend.gl`; and a full PACKAGE with relative
+imports mirroring lekkerzeilen's seam — `platform/__init__.py` doing
+`gl = _backend.gl` over a `class gl:` of staticmethods, consumed by a sibling
+module's `from .platform import gl`.
+
+**What this is an instance of:** a guard that cannot fail. The route my probes
+took was not the route under test, and the positive control (does it fail on the
+known-bad compiler?) is what exposed that — see CLAUDE.md, "isolation guards the
+RUN, not the ROUTE", and the playbook section of the same name.
+
+**So this ticket needs either the original reporter's repro or a run against the
+lekkerzeilen corpus it cites, not another minimal probe from me.** The likely
+closers are `575e9ec16` (PyParseVariantMethod's hoisted `pyvar_is_objtag` guard
+refusing a VT_CLASSREF receiver) and `5445b96d8` (PyClassLevelOnlyMeth refusing
+a class receiver for any name with an instance carrier), both verified by their
+authors against lekkerzeilen. Someone with that corpus should close it; I am not
+closing it on a vacuous probe.
+
+**The group hypothesis is UNTESTED and must not be recorded as a finding.**
+frankuser proposed reading this arm's trigger against
+`bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address`
+— same-name breaks method lookup, different-name breaks the attribute read, one
+resolver keyed on the name. I could not test it, because I could not reproduce
+two of the three arms. It stays a hypothesis.

@@ -60,3 +60,61 @@ Not a re-reproduction: that is done, three times, by two seats. Find the site
 that yields the class's storage ADDRESS where a read-through was meant. The
 magnitude tracking program layout rather than field order is the discriminator
 that says it is not an index bug.
+
+
+## Re-measured 2026-09-13 (frankZ) — STILL LIVE, and the OBSERVABLE in the summary above is STALE
+
+Measured at HEAD (`e5cd18e4b` in) and under pin v408, **identically**. It is not
+a regression from today's three class-as-value fixes, and it is not fixed by
+them.
+
+**The observable is now a SEGFAULT (rc=139), not a raw address with exit 0.**
+The summary's `~5.5e6 with no diagnostic` no longer reproduces; the program dies
+on the read. Whoever picks this up should not go looking for a wrong NUMBER.
+(The magnitude in the old report is explained below and is still a good clue.)
+
+**The trigger, sharpened — it is not "a construct preceding the class".**
+Measured by varying one line in the DECLARING module:
+
+| declaring module contains | `w = m.Widget; w.V` |
+| --- | --- |
+| the class ALONE | **1 — correct** |
+| the class + a bare `# comment` | **1 — correct** |
+| a docstring, then the class | segfault |
+| `B = 5`, then the class | segfault |
+| a `def`, then the class | segfault |
+| an `import`, then the class | segfault |
+| TWO classes — reading EITHER one | segfault |
+
+So the rule is **a module holding more than ONE top-level EMITTING construct**,
+not position and not precedence: with two classes the FIRST one fails too, and it
+has nothing before it. A comment is not a construct. Adding a TRAILING statement
+after the class changes nothing, which rules out the last-class hoist-drain
+family (`bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero`).
+
+**Isolated to ONE shape.** Through the same binding, in a module that triggers it,
+all of these are CORRECT: the qualified read `m.Widget.V`; a `@staticmethod`
+`w.st()`; construction `w()`; an instance attribute `w().n`; an instance method
+`w().inst()`. Only the class-ATTRIBUTE read through the class-valued variable
+fails. So the classref payload is sound — construction uses it successfully.
+
+**The runtime route is NOT the one the code comments predict, and this is the
+part that should save the next seat the most time.** `PyClsAttrRefGet` in
+`compiler/builtin/pylib.pas` is documented as the route for "a class held as a
+VALUE", and it is **NEVER CALLED** — instrumented with a WriteLn on entry, it
+does not fire in the failing case OR in the working one. Meanwhile
+`pyclsattr_bind` DOES fire and registers a sane address: `ZBIND name=V
+cls=5538536 addr=5622640 kind=13` in both. **So the bind table is correct and
+something else reads the attribute.** Note the address magnitude — ~5.6e6, which
+is exactly the old report's ~5.5e6, so the original "raw address" reading was
+very likely the bound slot's ADDRESS surfacing as the value.
+
+Ruled out as the route: `PyMakeClsAttrInstGet`/`pyclsattr_inst_get`, which only
+fires for an attribute REDECLARED in the chain (`n > 1` declaring classes) and
+this repro has one.
+
+**What is left to find:** what `w.V` actually lowers to for a class-valued
+receiver with a single declaring class. That is the dynamic-receiver attribute
+path `e5cd18e4b` landed in on 2026-09-13, so read that commit first. I did not
+attempt the fix — the diagnosis is banked rather than microfixed, and the code is
+hours old and another seat's.
