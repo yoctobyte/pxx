@@ -3788,6 +3788,24 @@ test-nilpy: $(COMPILER)
 	@# needs no hidden destination.
 	./$(COMPILER) test/test_nilpy_getattr_with_a_literal_name_names_a_method.npy $(TESTTMP)/test_nilpy_getattrlit26
 	$(TESTTMP)/test_nilpy_getattrlit26 | diff -u test/test_nilpy_getattr_with_a_literal_name_names_a_method.expected -
+	@# A CLASS HELD AS A VALUE (`alias = Gl`), calling a method that exists only at
+	@# class level. Every call through such a name has a receiver of unknown tag, so
+	@# it goes through PyParseVariantMethod -- whose arms all hard-cast the receiver
+	@# to an INSTANCE behind a HOISTED pyvar_is_objtag guard, so a VT_CLASSREF
+	@# receiver was refused before any arm could run. Both @staticmethod and
+	@# @classmethod ride UMthIsStatic and BOTH take the class at slot 0, so the
+	@# classref payload -- the RTTI blob -- is exactly what slot 0 wants.
+	@# Rows J and K assert what is still REFUSED, on purpose: a name carried both at
+	@# class level and as an instance method, and two distinct class-level carriers.
+	@# Both want one unbuilt mechanism (a CLASSREF arm in the runtime arm chain), and
+	@# a limit only a ticket records is a limit nobody sees. CPython answers "stat9"
+	@# and "A10" there; if either row goes RED because someone built that arm, the
+	@# fix is to put CPython's answer in the .expected, not to revert.
+	@# Control, measured: under pin v408 rows A-E all raise
+	@# AttributeError: 'type' object has no attribute <name>, and F-K pass -- so the
+	@# five rows that moved are exactly the five this fix is about.
+	./$(COMPILER) test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy $(TESTTMP)/test_nilpy_clsvalmeth26
+	$(TESTTMP)/test_nilpy_clsvalmeth26 | diff -u test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy $(TESTTMP)/test_nilpy_kwfwd26
 	$(TESTTMP)/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy $(TESTTMP)/test_nilpy_optstr26

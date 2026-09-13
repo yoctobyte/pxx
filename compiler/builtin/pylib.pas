@@ -1116,6 +1116,14 @@ function pyvar_repr(const v: Variant): AnsiString;
   two lib/rtl units, and the second copy is the one that stays wrong when the
   encoding moves. The pin is the smaller cost. }
 function pyvar_is_inttag(const v: Variant): Boolean;
+{ True iff v holds a CLASS held as a value (VT_CLASSREF, tag 11) -- its payload
+  is the class's RTTI blob, not an instance. Its sibling pyvar_holds is NOT this
+  test and must not be used for it: that one requires tag 7 and then asks which
+  CONTAINER class the object is (k = 1/2/3 for list/dict/bytes), so
+  pyvar_holds(v, 11) is unconditionally False. Read for a tag test it silently
+  refuses every receiver.
+  bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
+function pyvar_is_classreftag(const v: Variant): Boolean;
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -5170,6 +5178,11 @@ end;
 function pyvar_is_objtag(const v: Variant): Boolean;
 begin
   Result := pyvartag(v) = 7;
+end;
+
+function pyvar_is_classreftag(const v: Variant): Boolean;
+begin
+  Result := pyvartag(v) = 11;
 end;
 
 { ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used

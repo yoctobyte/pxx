@@ -1,0 +1,107 @@
+# A CLASS HELD AS A VALUE, and a method that exists only at class level.
+#
+# `alias = Gl` puts the class into an ordinary variable, so every call through it
+# has a receiver of unknown tag and goes through PyParseVariantMethod. That
+# function's arms all hard-cast the receiver to an INSTANCE, and its guard is
+# HOISTED ahead of them, so a receiver holding a class (VT_CLASSREF, tag 11)
+# was refused before any arm ran -- `'type' object has no attribute 'sget'`.
+# The shape is how a Python module publishes a namespace: lekkerzeilen's
+# platform seam does `gl = _backend.gl` and then calls `gl.get_string(...)`.
+#
+# Both @staticmethod and @classmethod ride UMthIsStatic here and BOTH take the
+# class at slot 0 -- injected `$clsrecv` for a static, declared for a classmethod
+# -- so a VT_CLASSREF payload (the RTTI blob) is exactly what slot 0 wants and
+# the call needs no instance at all.
+#
+# EVERY NAME IN THIS FILE IS USED BY ONE SCENARIO ONLY. PyClassLevelOnlyMeth
+# scans every class in the module, so two scenarios sharing a method name change
+# each other's verdict: one instance carrier anywhere makes the name ambiguous
+# for the whole file. Reusing `sget` for the ambiguity rows would have made the
+# plain rows measure the ambiguous path instead, and they would still have
+# printed something. Keep the names distinct.
+#
+# Ordering: StatFirst declares `both` at class level and InstLast declares it as
+# an ordinary method, in THAT order, so the class scan has to walk PAST the
+# static carrier to find the instance one. The arrangement that passes by accident
+# is the other one.
+
+class Gl:
+    RENDERER = 7
+
+    @staticmethod
+    def sget(name):
+        return "S" + str(name)
+
+    @classmethod
+    def cget(cls, n):
+        return "C" + str(n)
+
+    @staticmethod
+    def swide(a, b, c):
+        return "W" + str(c) + str(b) + str(a)
+
+    def inst(self, n):
+        return "I" + str(n)
+
+
+class StatFirst:
+    @staticmethod
+    def both(n):
+        return "stat" + str(n)
+
+
+class InstLast:
+    def both(self, n):
+        return "inst" + str(n)
+
+
+class TwiceA:
+    @staticmethod
+    def twice(n):
+        return "A" + str(n)
+
+
+class TwiceB:
+    @staticmethod
+    def twice(n):
+        return "B" + str(n)
+
+
+def viadyn(o, n):
+    return o.both(n)
+
+
+def viaparam(k, n):
+    return k.sget(n)
+
+
+def show(tag, f):
+    try:
+        print(tag, f())
+    except AttributeError as e:
+        print(tag, "AttributeError:", e)
+
+
+alias = Gl
+ta = TwiceA
+
+# The call path, which is what landed.
+show("A", lambda: alias.sget(1))               # @staticmethod through a value
+show("B", lambda: alias.cget(1))               # @classmethod through a value
+show("C", lambda: alias.swide(1, 2, 3))        # the LAST argument carries the information
+show("D", lambda: [Gl][0].sget(4))             # a second route to a class value: out of a list
+show("E", lambda: viaparam(alias, 5))          # a third: bound to a parameter
+
+# Routes that already worked, kept as regression guards -- the new arm must not
+# steal a receiver that really is an instance, or an attribute read.
+show("F", lambda: Gl.sget(6))                  # statically spelled, never variant
+show("G", lambda: alias.RENDERER)              # a class ATTRIBUTE through a value
+show("H", lambda: alias().inst(7))             # an instance made from a class value
+show("I", lambda: viadyn(InstLast(), 8))       # instance carrier declared LAST: still an instance
+
+# The two shapes still REFUSED, asserted so the limit is visible in the suite
+# rather than only in a ticket. Both want the same unbuilt mechanism: a CLASSREF
+# arm in the runtime arm chain, testing the RTTI blob the way the existing arms
+# test `pyvarobj(v) is C`. CPython answers "stat9" and "A10".
+show("J LIMIT", lambda: viadyn(StatFirst, 9))  # the name is ALSO an instance method elsewhere
+show("K LIMIT", lambda: ta.twice(10))          # two distinct class-level carriers

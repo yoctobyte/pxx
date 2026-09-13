@@ -1,0 +1,11 @@
+A S1
+B C1
+C W321
+D S4
+E S5
+F S6
+G 7
+H I7
+I inst8
+J LIMIT AttributeError: 'type' object has no attribute 'both'
+K LIMIT AttributeError: 'type' object has no attribute 'twice'

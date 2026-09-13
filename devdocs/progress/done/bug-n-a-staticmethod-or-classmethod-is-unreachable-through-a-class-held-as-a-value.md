@@ -10,13 +10,17 @@ summary: >
   PyEmitClsAttrBinds publishes class attributes to a runtime registry keyed by
   the class's RTTI blob, which is what makes `alias.RENDERER` work, and nothing
   publishes METHODS, so a dynamic receiver holding a class finds nothing and
-  falls through to pydynattr_no_method. THIS IS THE LIVE BLOCKER ON THE
-  LEKKERZEILEN WINDOW PATH: the pxx platform backend declares `class gl:` as a
-  namespace of @staticmethods, the seam re-exports it as `gl = _backend.gl`, and
-  `--m0` now OPENS A WINDOW under pxx and dies on the first `gl.get_string(...)`.
+  falls through to pydynattr_no_method. [THAT CAUSE IS THE READ PATH AND IT IS
+  NOT WHAT WAS WRONG WITH THE CALL. Corrected 2026-09-13 by measurement: the
+  guard in PyParseVariantMethod is HOISTED ahead of every dispatch arm and asserts
+  pyvar_is_objtag, so a VT_CLASSREF receiver was refused before any arm ran. The
+  registry observation is true and belongs to reading the method as a VALUE, which
+  is still refused -- see the residual section.] FIXED 2026-09-13 for the call:
+  `alias.sget(1)` and `alias.cget(1)` now answer, lekkerzeilen's `--m0` gets two
+  real glGetString results back from the driver, and the wall moved one line on.
 track: N
 type: bug
-status: backlog
+status: done
 prio: 70
 owner: frank-user
 ---
@@ -180,15 +184,39 @@ moot exactly as it did for attributes.
 
 ### Why NOT to add an arm to PyParseVariantMethod, which was my first instinct
 
+**[SUPERSEDED 2026-09-13, the same evening, by measurement — the invariant this
+section is built on is FALSE, and the arm is what landed. Kept because the
+reasoning is exactly the shape that nearly stopped the cheap fix, and because the
+bad premise is instructive: it was read off a NAME.]**
+
 That function (pyparser.inc 18129 onward, ~1270 lines) is built around
 `selfArg`: the receiver is argument one, and overload re-resolution by arity,
 `PyBindKwArgs`, `PyPackStarArgs` and the default fill all count positions
-relative to it, dropping self from the count in three separate places. **A
+relative to it, dropping self from the count in three separate places. ~~**A
 staticmethod has no self**, so a classref arm contradicts the invariant the
-whole function is written on, and every dynamic method call in NilPy flows
+whole function is written on~~, and every dynamic method call in NilPy flows
 through it. Landing a change there needs the full NilPy tier, not a quick gate.
 The read-path route touches one Pascal function plus an emitter and leaves that
 invariant alone.
+
+**What the measurement says instead.** In NilPy a @staticmethod DOES have a slot
+0 and it holds the CLASS. `UMthIsStatic` does not mean "no Self" — `UMthNoSelf`
+means that — it means CLASS-LEVEL, and **both decorators ride `UMthIsStatic`**:
+a classmethod declares `cls` and a static gets an injected `$clsrecv`
+(`tyPointer`). So slot 0 is present in both cases and wants a class, which is
+precisely what a VT_CLASSREF variant's payload already is. Far from contradicting
+the function's invariant, the classref receiver SATISFIES it — the arm needs no
+instance, no class cast, and no change to any of the three position counts,
+because it bypasses the arity re-resolution entirely (one carrier, one proc).
+
+`pasparser_lval.inc` had already written the same sentence from the other side
+and I did not go and read it: *"a class method: Self is a real argument, so
+passing the metaclass VALUE makes the dispatch dynamic for free."*
+
+The section's last two claims survive and both held: it needs the full NilPy
+tier, and it is every dynamic method call. What did not survive was a premise
+taken from what `UMthIsStatic` is CALLED. A 1270-line function with a stated
+invariant is the most expensive place to accept a name for the thing.
 
 ### The hazard, restated because it is what cost an attempt today
 
@@ -202,7 +230,87 @@ pass every test whose methods return nothing.
 
 ### Not established
 
-Whether a static/class method is reachable from the RTTI blob at run time; what
-a classmethod's `cls` argument should bind to through this route (the registry
-would need to pass the blob); and no census of the class-as-namespace idiom
-outside this backend.
+~~Whether a static/class method is reachable from the RTTI blob at run time~~ —
+**settled 2026-09-13: the question does not arise on the route that landed.**
+Nothing is recovered FROM the blob; the blob is passed straight into slot 0,
+which is what the statically spelled `Gl.sget(1)` passes too. A classmethod's
+`cls` binds to that same blob and it is correct — row B of the fixture returns
+`C1` against CPython's `C1`. What remains unestablished: no census of the
+class-as-namespace idiom outside this backend.
+
+
+## RESOLUTION — 2026-09-13
+
+### What landed
+
+`compiler/pyparser.inc`, two sites, and `compiler/builtin/pylib.pas`, one:
+
+1. **`PyClassLevelOnlyMeth(nm, outMmi)`** (new, before `PyParseVariantMethod`).
+   True when `nm` is declared at class level by exactly one class — counted by
+   distinct PROC, so an inherited method reported for a subclass and its parent is
+   not two carriers — and as an ordinary instance method by none. Then a receiver
+   of unknown tag has exactly one valid reading.
+
+2. **The hoisted receiver guard** now asks `pyvar_is_classreftag` instead of
+   `pyvar_is_objtag` when that holds. This is the whole defect: the guard sits
+   AHEAD of every arm, so the function was unreachable for a class receiver no
+   matter what the arms could do.
+
+3. **A direct-call block**, placed deliberately BEFORE the arity re-resolution
+   (which re-picks overloads by counting positions relative to an INSTANCE self,
+   which this receiver is not). It passes `pyvarobj(vtTmp)` — the raw payload,
+   i.e. the RTTI blob — as slot 0 with no class cast, then the user's arguments in
+   binding order, then the proc.
+
+4. **`pyvar_is_classreftag`** in `compiler/builtin/pylib.pas`: `pyvartag(v) = 11`.
+
+### The hour this cost, and it is a "the name is not the thing" instance
+
+The first version of the guard used **`pyvar_holds(v, 11)`**. `pyvar_holds` reads
+like a tag test and is not one: it requires tag 7 and then asks which CONTAINER
+class the object is (k = 1/2/3 for list/dict/bytes), so `pyvar_holds(v, 11)` is
+**unconditionally False** and the widened guard refused every receiver. The
+symptom was a change with proven-firing internals and zero behavioural effect —
+`PyClassLevelOnlyMeth` returned True with the right proc, a probe proved the
+direct-call block FIRED, and the program still raised. The fix for the bug
+reproduced the bug. The forward declaration of `pyvar_is_classreftag` now carries
+a comment saying `pyvar_holds` is NOT this test.
+
+### Verification
+
+- **Fixture:** `test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy`,
+  11 rows, wired into `test-nilpy`.
+- **Positive control, measured:** under **pin v408** rows A–E raise
+  `AttributeError: 'type' object has no attribute <name>` and rows F–K pass. At
+  HEAD all 11 match the `.expected`. The five rows that moved are exactly the five
+  this fix is about.
+- **CPython oracle:** rows A–I agree; J and K are the two labelled LIMIT rows.
+- **Full NilPy tier**, not a quick gate, because `PyParseVariantMethod` is on every
+  dynamic method call.
+- **lekkerzeilen `--m0`:** prints `renderer : NVIDIA GeForce GTX 1660
+  SUPER/PCIe/SSE2` and `gl : 3.3.0 NVIDIA 580.178.04` — two `glGetString` calls
+  through `gl.get_string`, the call this ticket was filed for.
+
+### What is still refused, and it is two tickets
+
+- **The call path, two remaining shapes** — a name carried both at class level and
+  as an instance method, and two distinct class-level carriers. Both want one
+  unbuilt mechanism (a CLASSREF arm in the runtime arm chain, testing the RTTI
+  blob the way the existing arms test `pyvarobj(v) is C`):
+  `bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers`.
+- **The READ path** — reading a class-level method off a class value as a VALUE
+  rather than calling it, and `getattr(alias, "sm")`, both still raise
+  `type object 'gl' has no attribute 'sm'`. That is where this ticket's original
+  registry diagnosis applies, and it is a different mechanism.
+
+### The wall that replaced it
+
+`win.size` segfaults one line later:
+`bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data`,
+prio 80. A `bytearray` bound to a C pointer parameter passes the address of pxx's
+{data pointer, length} descriptor rather than the data pointer, so a C function
+that writes destroys the handle. The whole pxx platform backend is built on that
+shape.
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

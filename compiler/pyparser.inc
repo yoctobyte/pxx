@@ -18126,6 +18126,53 @@ begin
   LastExprTk := tyVariant;
 end;
 
+{ Is `nm` a CLASS-LEVEL method and nothing else — declared @staticmethod or
+  @classmethod by exactly one class, and declared as an INSTANCE method by none?
+
+  Then a call on a receiver of unknown tag has only one valid reading, and it is
+  a direct call. Both decorators ride UMthIsStatic and BOTH take the class at
+  slot 0 (injected `$clsrecv` for a static, declared for a classmethod), so the
+  receiver slot is not absent here -- it simply wants the RTTI BLOB rather than
+  an instance, which is exactly what a VT_CLASSREF variant's payload already is.
+  pasparser_lval.inc says the same thing from the other side: "a class method:
+  Self is a real argument, so passing the metaclass VALUE makes the dispatch
+  dynamic for free."
+
+  Exactly ONE static carrier, counted by distinct PROC so an inherited method
+  reported for both a subclass and its parent is not counted twice. Two genuinely
+  different carriers would need an identity test on the blob to choose between
+  them, which this does not build -- they keep today's behaviour.
+
+  Zero instance carriers is the other half and it is the conservative one: if any
+  class declares the name as an ordinary method, the receiver may well be an
+  instance and the runtime arm chain below is right.
+  bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
+function PyClassLevelOnlyMeth(const nm: AnsiString;
+                              var outMmi: Integer): Boolean;
+var c, m, nStatic, firstPi: Integer;
+begin
+  Result := False;
+  outMmi := -1;
+  nStatic := 0;
+  firstPi := -1;
+  for c := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[c] then Continue;
+    m := FindUMeth(c, nm);
+    if m < 0 then Continue;
+    if not UMthIsStatic[m] then Exit;        { an instance carrier — ordinary dispatch }
+    if UMthProc_[m] < 0 then Exit;           { declared but not compiled }
+    if UMthProc_[m] <> firstPi then
+    begin
+      if firstPi >= 0 then Exit;             { two distinct carriers — needs an identity test }
+      firstPi := UMthProc_[m];
+      outMmi := m;
+      Inc(nStatic);
+    end;
+  end;
+  Result := nStatic = 1;
+end;
+
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer;
 var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
@@ -18154,6 +18201,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     flGuardCall, flOrNode, flUnboxArg, flUnboxCall, flCall,
     flPairNode, flTern, flArg1, flArg2, flNotNode, flRaiseCall,
     flIfNode, flPair2: Integer;
+    clsOnly: Boolean; clsOnlyMmi, clsSelfCall, clsSelfArg, clsPrevArg, clsArgNode: Integer;   { a class-level-only method through a class held as a VALUE }
 begin
   smArmPossible := False;
   smArmBuilt := False;
@@ -18877,8 +18925,32 @@ begin
   PyHoistStmt(vtAsgn);
   baseNode := PyMakeIdent(vtTmpSym);
 
-  i := FindProc('pyvar_is_objtag');
-  if i < 0 then Error('Nil Python: pylib (pyvar_is_objtag) not loaded');
+  { The tag this receiver must carry. Normally VT_OBJECT, asserted by
+    pyvar_is_objtag because every arm below hard-casts the payload to an
+    instance. But when `mname` is class-level ONLY, the receiver cannot be an
+    instance at all -- it is a class held as a VALUE (VT_CLASSREF, tag 11), whose
+    payload is an RTTI blob. Leaving the objtag guard in place there made this
+    whole function unreachable for that shape: the guard is HOISTED, so it raised
+    AttributeError before any arm ran, which is the `'type' object has no
+    attribute` message this defect was reported as.
+    bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
+  clsOnly := PyClassLevelOnlyMeth(mname, clsOnlyMmi);
+  if clsOnly then
+  begin
+    { pyvar_is_classreftag, NOT pyvar_holds(v, 11). pyvar_holds requires tag 7 and
+      then asks which CONTAINER class the object is (k = 1/2/3 for
+      list/dict/bytes), so asking it for tag 11 is unconditionally False and the
+      hoisted guard raised for every receiver — which is exactly the bug this arm
+      exists to fix, reproduced by the fix for it. The name reads like a tag test
+      and is not one. }
+    i := FindProc('pyvar_is_classreftag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_classreftag) not loaded');
+  end
+  else
+  begin
+    i := FindProc('pyvar_is_objtag');
+    if i < 0 then Error('Nil Python: pylib (pyvar_is_objtag) not loaded');
+  end;
   vtGuardArg := AllocNode(AN_ARG); ASTLeft[vtGuardArg] := PyMakeIdent(vtTmpSym);
   vtGuardCall := AllocNode(AN_CALL);
   ASTIVal[vtGuardCall] := i; ASTTk[vtGuardCall] := Ord(tyBoolean);
@@ -19083,6 +19155,55 @@ begin
     argExprs[k] := ASTLeft[argNode];
     Inc(k);
     argNode := ASTRight[argNode];
+  end;
+
+  { A CLASS-LEVEL-ONLY method, reached through a class held as a VALUE. The only
+    valid reading of the receiver is a VT_CLASSREF, whose payload IS the RTTI blob
+    the callee's slot 0 wants, so emit the direct call and never build the arm
+    chain: no identity test is needed (PyClassLevelOnlyMeth admitted exactly one
+    carrier), no class cast is needed (slot 0 is tyPointer, not tyClass — the
+    `$clsrecv` the injected parameter uses), and no overload re-resolution is
+    needed because there is one proc.
+
+    Deliberately BEFORE the arity re-resolution below: that block re-picks within
+    hitCi by counting positions relative to a self that is an INSTANCE, which is
+    not what this receiver is.
+    bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
+  if clsOnly and (clsOnlyMmi >= 0) and (UMthProc_[clsOnlyMmi] >= 0) then
+  begin
+    mpi := UMthProc_[clsOnlyMmi];
+    { slot 0: the blob pointer straight out of the variant. pyvarobj hands back
+      the raw payload, which for tag 11 is the class's RTTI blob — the same value
+      a statically spelled `C.s(1)` passes. }
+    i := FindProc('pyvarobj');
+    if i < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+    clsArgNode := AllocNode(AN_ARG);
+    ASTLeft[clsArgNode] := PyMakeIdent(vtTmpSym);
+    ASTRight[clsArgNode] := -1;
+    clsSelfCall := AllocNode(AN_CALL);
+    ASTIVal[clsSelfCall] := i; ASTTk[clsSelfCall] := Ord(tyPointer);
+    ASTLeft[clsSelfCall] := clsArgNode;
+    clsSelfArg := AllocNode(AN_ARG);
+    ASTLeft[clsSelfArg] := clsSelfCall;
+    ASTRight[clsSelfArg] := -1;
+    { then the user's arguments, in the order they were bound }
+    clsPrevArg := clsSelfArg;
+    clsArgNode := ASTRight[selfArg];
+    while clsArgNode >= 0 do
+    begin
+      clsSelfCall := AllocNode(AN_ARG);
+      ASTLeft[clsSelfCall] := ASTLeft[clsArgNode];
+      ASTRight[clsSelfCall] := -1;
+      ASTRight[clsPrevArg] := clsSelfCall;
+      clsPrevArg := clsSelfCall;
+      clsArgNode := ASTRight[clsArgNode];
+    end;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := mpi;
+    ASTTk[Result] := Ord(Procs[mpi].RetType);
+    ASTLeft[Result] := clsSelfArg;
+    LastExprTk := Procs[mpi].RetType;
+    Exit;
   end;
 
   { Overload selection by the ACTUAL argument count. The candidate scan above
