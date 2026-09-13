@@ -2453,6 +2453,29 @@ test-nilpy: $(COMPILER)
 	# and if any of them unwound with the queue's mutex held, it never returns.
 	./$(COMPILER) --threadsafe test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.npy $(TESTTMP)/test_nilpy_qdead26
 	$(TESTTMP)/test_nilpy_qdead26 | diff -u test/test_nilpy_a_queue_wait_that_can_never_be_satisfied.expected -
+	# Two threads ALLOCATING CONTAINERS at the same time. This is the allocator,
+	# not the refcount: on x86-64 --threadsafe the heap lock is emitted by the
+	# CODEGEN around the tkGetMem/tkFreeMem sites and PXXAlloc does not take it,
+	# so an allocation reached from a Pascal HELPER (PXXObjAlloc, which is how
+	# every list, tuple and dict is born) held nothing at all. The spinlock that
+	# does cover it lives INSIDE PXXAlloc/PXXFree and was gated on
+	# PXX_TS_SOFTLOCK -- every threaded target EXCEPT the one everything is built
+	# for. RUN FIVE TIMES ON PURPOSE: unfixed this does not return a wrong value,
+	# it dies, and a single run is a coin toss. Measured 2026-09-14 with the gate
+	# put back: 217 217 139 217 139, five for five. The str and int rows inside
+	# the fixture are the negative control -- both were always green, because a
+	# managed string is allocated by the codegen's own emitter which DOES hold
+	# the lock, so a fixture built from strings certifies the bug.
+	./$(COMPILER) --threadsafe test/test_nilpy_threaded_container_alloc.npy $(TESTTMP)/test_nilpy_tcalloc26
+	@i=1; while [ $$i -le 5 ]; do \
+	  out=$$(timeout 60 $(TESTTMP)/test_nilpy_tcalloc26 2>&1); rc=$$?; \
+	  if [ "$$rc" != "0" ]; then \
+	    echo "test_nilpy_threaded_container_alloc: run $$i exited $$rc (217 = IndexError on a list built three long one statement earlier; 139 = the free list itself)"; \
+	    printf '%s\n' "$$out"; exit 1; \
+	  fi; \
+	  printf '%s\n' "$$out" | diff -u test/test_nilpy_threaded_container_alloc.expected - || exit 1; \
+	  i=$$((i+1)); \
+	done; echo "test_nilpy_threaded_container_alloc: 5/5 clean"
 	# Constructing a class through a DOTTED PACKAGE qualifier --
 	# `urllib.request.Request(url, headers=...)`. It refused with
 	# `expected ')' before ','`, one argument in, which reads as a

@@ -981,13 +981,48 @@ var
   CensusNext   : Int64;   { allocs at which the next report fires; 0 = first }
   CensusBins   : array[0..HEAP_BIN_COUNT-1] of Int64;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
-  { --threadsafe on targets without x86-64's hand-emitted lock blobs (i386):
-    a userspace spinlock guarding the allocator state (FreeList/HeapPtr/
+{$ifdef PXX_THREADSAFE}
+  { A userspace spinlock guarding the allocator state (FreeList/HeapPtr/
     HeapEnd), taken INSIDE PXXAlloc/PXXFree so every entry — a codegen'd call
     site or another helper's internal allocation — is covered. Refcount ops
     use __pxxatomic_* instead of the lock (see PXXStrIncRef & friends).
-    BSS-zeroed = free. }
+    BSS-zeroed = free.
+
+    PXX_THREADSAFE, NOT PXX_TS_SOFTLOCK, AND THAT WAS THE BUG — the same
+    mis-gating PXXObjRetain's header describes, one layer down and far more
+    expensive, because here the unprotected state is the FREE LIST itself.
+    x86-64 --threadsafe selects PXX_TS_HARDLOCK, so on the ONE target
+    everything is built for these nine sites compiled out and the allocator
+    ran with no mutual exclusion at all. The hard lock does not cover the gap:
+    it is emitted by the CODEGEN around the tkGetMem/tkFreeMem sites
+    (EmitAcquireHeapLock, ir_codegen.inc) and PXXAlloc does not take it — so
+    an allocation reached from a Pascal HELPER (PXXObjAlloc -> PXXAlloc, which
+    is how every TPyList/TPyDict/tuple is born) held nothing.
+
+    MEASURED 2026-09-14, two threads each building their own container per
+    iteration, three runs per row, `--threadsafe` against
+    `--threadsafe -dPXX_TS_SOFTLOCK` on the same source:
+
+      list   217 217 139  ->  0 0 0
+      tuple  139 217 139  ->  0 0 0
+      dict   217 217 217  ->  0 0 0
+      int      0   0   0  ->  0 0 0
+      str      0   0   0  ->  0 0 0
+
+    int and str are the control and they are clean for a reason that names the
+    mechanism: a NilPy int is unboxed and a managed string is allocated by the
+    CODEGEN's own emitter, which does hold the hard lock. Only the helper route
+    was exposed. rc=217 is `IndexError: list index out of range` on a list
+    built three elements long one statement earlier — two threads handed the
+    same block — and rc=139 is the free list itself.
+
+    Deadlock: none. Nothing acquires the hard lock while holding this spin
+    (this spin lives only in PXXAlloc/PXXFree, which never take the hard lock),
+    so the two locks cannot cycle. The nesting hard-then-spin is one-way.
+    The magazine fast path (EmitHeapMagTakeGuard) bypasses PXXAlloc entirely
+    and is thread-local, so the hot path pays nothing new; -dPXX_NO_HEAP_MAG
+    was measured and does NOT change the failure, which is what ruled the
+    magazine out as the cause. }
   PXXHeapSpin : Integer;
 {$endif}
 {$ifdef PXX_HEAP_DEBUG}
@@ -1014,7 +1049,7 @@ var
   HeapQuarCount : Integer;
   { A report is RECORDED under the allocator lock and EMITTED after it is
     released — formatting a message can touch the heap, and doing that while
-    holding the spinlock would deadlock the PXX_TS_SOFTLOCK build. }
+    holding the spinlock would deadlock any --threadsafe build. }
   HeapDbgPend   : Integer;                 { 0 none, 1 double free, 2 write-after-free }
   HeapDbgAddr   : Int64;
   { Provenance for a WRITE AFTER FREE, all of it already known at detection and
@@ -1459,11 +1494,11 @@ function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
   bin: Integer;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   tsIgnore: Int64;
 {$endif}
 begin
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   tsIgnore := 0;
   while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
     tsIgnore := tsIgnore + 1;
@@ -1529,7 +1564,7 @@ begin
       end
       else PXXMemZero(Pointer(cur), size);
       Result := Pointer(cur);
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
       PXXHeapSpin := 0;
 {$endif}
 {$ifdef PXX_ALLOC_CENSUS}
@@ -1563,7 +1598,7 @@ begin
           signature of a per-BYTE cost, not per-call overhead. }
         PXXMemZero(Pointer(cur), size);
         Result := Pointer(cur);
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
         PXXHeapSpin := 0;
 {$endif}
 {$ifdef PXX_ALLOC_CENSUS}
@@ -1612,7 +1647,7 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
   CensusBump := CensusBump + 1;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   PXXHeapSpin := 0;
 {$endif}
 {$ifdef PXX_ALLOC_CENSUS}
@@ -1630,7 +1665,7 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64; forward;
 
 { Emit a pending report. Called with the allocator lock RELEASED — reporting
   formats a message and may itself touch the heap, and doing that under the
-  spinlock would deadlock the PXX_TS_SOFTLOCK build against itself. }
+  spinlock would deadlock any --threadsafe build against itself. }
 const
   { The four report texts as CONSTANTS, indexed in place. They used to be
     assigned into a `msg: string` local, and that local is what hung the
@@ -1982,7 +2017,7 @@ var
   sz: Int64;
   bin: Integer;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   tsIgnore: Int64;
 {$endif}
 begin
@@ -2004,7 +2039,7 @@ begin
     free is not a free, and counting it would make live look negative. }
   CensusFrees := CensusFrees + 1;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   tsIgnore := 0;
   while Integer(__pxxatomic_xchg(@PXXHeapSpin, 1)) <> 0 do
     tsIgnore := tsIgnore + 1;
@@ -2031,7 +2066,7 @@ begin
     FreeList := addr;
   end;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   PXXHeapSpin := 0;
 {$endif}
 {$ifdef PXX_HEAP_DEBUG}
@@ -3155,7 +3190,7 @@ end;
   comment deliberately does not repeat the list. }
 procedure PXXStrIncRef(p: Pointer);
 var rcAddr: Int64;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
     tsIgnore: Int64;
 {$endif}
 begin
@@ -3187,11 +3222,20 @@ begin
     blocks in a non-writable segment. The read below is already on this path;
     the guard costs a compare and a branch and removes a store. }
   if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   { threadsafe: atomic increment of the low refcount word (the count never
     approaches 2^32, so the 8-byte header's high dword stays zero). The plain
     read above is sound under contention for the one thing it decides: a
-    saturated block's count is immutable, and a real one cannot reach 2^30. }
+    saturated block's count is immutable, and a real one cannot reach 2^30.
+
+    PXX_THREADSAFE, NOT PXX_TS_SOFTLOCK, AND THAT WAS THE BUG. The two lock
+    defines say WHICH ALLOCATOR LOCK is in use, and --threadsafe on the command
+    line selects HARDLOCK -- so every refcount site spelled `{$ifdef
+    PXX_TS_SOFTLOCK}` took the NON-ATOMIC arm in exactly the builds that need
+    the atomic. PXXObjRetain/PXXObjRelease were corrected on 2026-09-13 and its
+    header says in its own words why the guard has to be PXX_THREADSAFE; these
+    three helpers were the sibling sites and were left behind.
+    bug-a-container-refcounts-are-non-atomic-under-cli-threadsafe }
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
   PMachineWord(rcAddr)^ := PMachineWord(rcAddr)^ + 1;
@@ -3231,7 +3275,7 @@ begin
     they must move together, because suppressing one direction only is what
     would let a static block's count drift. }
   if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
   rc := PMachineWord(rcAddr)^ - 1;
@@ -4048,7 +4092,7 @@ end;
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
 procedure PXXDynArrayIncRef(p: Pointer);
 var rcAddr: Int64;
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
     tsIgnore: Int64;
 {$endif}
 begin
@@ -4067,7 +4111,16 @@ begin
     Exit;
   end;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
+  { A NILPY LIST, TUPLE OR DICT IS A TPyList WHOSE ITEM BUFFER IS A DYNAMIC
+    ARRAY, so this counter -- not the object's -- is the one two threads race
+    on. Measured 2026-09-14, two threads each building their OWN container per
+    iteration, 20000 iterations, five runs each: list 5/5 dead, tuple 5/5, dict
+    5/5, while an int and a str were 0/5 -- exactly the split between "the
+    codegen inlines its own `lock` prefix" and "a Pascal helper does it". Under
+    -dPXX_LIBC_HEAP the same program aborts inside glibc, which is what rules
+    out the allocator and names this as a genuine lost decrement.
+    bug-a-container-refcounts-are-non-atomic-under-cli-threadsafe }
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
   PMachineWord(rcAddr)^ := PMachineWord(rcAddr)^ + 1;
@@ -4096,7 +4149,7 @@ begin
     Exit;
   end;
 {$endif}
-{$ifdef PXX_TS_SOFTLOCK}
+{$ifdef PXX_THREADSAFE}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
   rc := PMachineWord(rcAddr)^ - 1;

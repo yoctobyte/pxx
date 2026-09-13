@@ -1,0 +1,89 @@
+# Two threads allocating CONTAINERS at the same time.
+#
+# WHAT THIS PINS, and it is the allocator and not the refcount: on x86-64
+# --threadsafe selects PXX_TS_HARDLOCK, and that lock is emitted by the CODEGEN
+# around the tkGetMem/tkFreeMem sites only.  PXXAlloc/PXXFree do not take it, so
+# an allocation reached from a Pascal HELPER -- PXXObjAlloc, which is how every
+# list, tuple and dict is born -- ran with no mutual exclusion at all and two
+# threads were handed the same block.  The spinlock that covers this lives
+# INSIDE PXXAlloc/PXXFree and was gated on PXX_TS_SOFTLOCK, i.e. on every
+# threaded target EXCEPT the one everything is built for
+# (bug-a-the-allocator-spinlock-was-gated-on-the-wrong-threadsafe-define).
+#
+# WHY int AND str ARE IN HERE: they are the negative control and they were
+# always green.  A NilPy int is unboxed and a managed string is allocated by
+# the codegen's own emitter, which DOES hold the hard lock -- so a fixture built
+# only from strings certifies the bug.  The container rows are the population
+# the question is about; the scalar rows are what proves the harness is not
+# simply measuring "threads work".
+#
+# THE ASSERTION CLASS IS DELIBERATE.  Unfixed, this does not return a wrong
+# value -- it dies, and it dies in two different ways: rc=217 is
+# `IndexError: list index out of range` on a list built three elements long one
+# statement earlier (the other thread reset FLen), and rc=139 is the free list
+# itself.  An expect_same on the printed values would be red for the first and
+# never reached for the second, so the Makefile row runs this FIVE TIMES and
+# requires all five.  Measured 2026-09-14 on the unfixed compiler, three runs
+# per kind: list 217/217/139, tuple 139/217/139, dict 217/217/217, int 0/0/0,
+# str 0/0/0.
+import threading
+
+N = 40000
+
+
+def burn_list(n):
+    k = 0
+    for i in range(n):
+        x = [1, 2, 3]
+        k += x[0]
+    return k
+
+
+def burn_tuple(n):
+    k = 0
+    for i in range(n):
+        x = (1, 2, 3)
+        k += x[2]
+    return k
+
+
+def burn_dict(n):
+    k = 0
+    for i in range(n):
+        x = {"a": 1, "b": 2}
+        k += x["b"]
+    return k
+
+
+def burn_str(n):
+    k = 0
+    for i in range(n):
+        s = "ab" + str(i % 7)
+        k += len(s)
+    return k
+
+
+def burn_int(n):
+    k = 0
+    for i in range(n):
+        k += (i % 3) + 1
+    return k
+
+
+def pair(fn, n):
+    # the worker allocates while the main thread allocates: BOTH sides must be
+    # live at once.  Measured 2026-09-14: worker-only and main-only are clean
+    # 3/3 on the unfixed compiler, which is why neither alone is a control.
+    th = threading.Thread(target=fn, args=(n,), name="w")
+    th.start()
+    mine = fn(n)
+    th.join()
+    return mine
+
+
+print("list", pair(burn_list, N))
+print("tuple", pair(burn_tuple, N))
+print("dict", pair(burn_dict, N))
+print("str", pair(burn_str, N))
+print("int", pair(burn_int, N))
+print("ok")

@@ -1,0 +1,6 @@
+list 40000
+tuple 120000
+dict 80000
+str 120000
+int 79999
+ok
