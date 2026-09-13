@@ -139,6 +139,28 @@ the cleanest worked example of the rule on this page.
 
 ---
 
+## `bytes` is mutable, the same way a tuple is (2026-09-13)
+
+`bytes` and `bytearray` are one `TPyBytes` with an `FIsByteArray` flag, and
+nothing consults that flag on a write, so `b = b"abc"; b[0] = 65` succeeds here
+and is a `TypeError: 'bytes' object does not support item assignment` under
+CPython. Exactly the tuple case above, decided by the same rule: no working
+CPython program writes to a `bytes`, so none can observe it.
+
+Two things make this the clean side of that split rather than the buggy half.
+The TYPE TAG is right — `type(b).__name__`, `isinstance`, `repr` and every
+message that names the type all read `FIsByteArray` and answer `bytes` or
+`bytearray` correctly, which is the property the tuple entry says a program
+*can* observe. And as of 2026-09-13 all three write paths (a statically-typed
+receiver, a variant receiver through `pyvar_setitem`, and the interpreter's
+`PySubscriptSet`) delegate to `TPyBytes.put`, so if the call is ever reversed
+the check goes in **one** place. Before that day the variant path did not
+support the write at all and the interpreter's copy masked the value with
+`$FF` — three copies of one rule, two of them wrong, which is the actual reason
+this entry exists.
+
+---
+
 ## Set ITERATION ORDER is insertion order — and this is NOT a divergence
 
 *Measured 2026-08-06, after a set started printing with braces and its order

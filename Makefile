@@ -2860,6 +2860,30 @@ test-nilpy: $(COMPILER)
 	# bytes/bytearray segfaulted, TPyBytes having no parameterless Create.
 	./$(COMPILER) test/test_nilpy_bytearray_unbound_and_subclass.npy $(TESTTMP)/test_nilpy_baunbound26
 	$(TESTTMP)/test_nilpy_baunbound26 | diff -u test/test_nilpy_bytearray_unbound_and_subclass.expected -
+	# A bytearray held in a VARIANT is writable. Only the READ half of the variant
+	# subscript grew a bytes arm -- pyvar_getitem has carried `o is TPyBytes` since
+	# `b[i]` on a variant was fixed, and pyvar_setitem beside it went straight from
+	# the TPyList arm to the user-class arm -- so every dynamically-typed bytearray
+	# write raised `object does not support item assignment` while the identical
+	# write through a declared name worked. lekkerzeilen's font atlas (text.py:127)
+	# is the canonical spelling: a list of buffers, one taken out into a name,
+	# written by index, and it is where this was found.
+	# THE FIX DELEGATES TO TPyBytes.put rather than repeating its rules, which is
+	# why the exec rows are in the same file: pyeval's PySubscriptSet had hand-rolled
+	# the negative-index fix, the bounds check and the value check, and got two of
+	# the three wrong -- it masked with $$FF, so `b[0] = 256` stored 0 where CPython
+	# raises, and its bounds message omitted the type name. A fixture per path would
+	# have let the interpreter's copy keep its masking, which is what two copies of
+	# one rule had already done.
+	# Positive controls, measured with each arm removed in turn: without the pylib
+	# arm the first row is the TypeError (so the later rows' reds were measured
+	# per shape separately -- a list element, a dict value, an unannotated
+	# parameter, a call result, each raising the same TypeError); without the pyeval
+	# arm the `exec ValueError` line is simply ABSENT, because the mask made the
+	# refusal silent, and the IndexError arrives without its type name. Every
+	# dynamic row is paired with the static spelling, which worked throughout.
+	./$(COMPILER) test/test_nilpy_a_bytearray_in_a_variant_can_be_written.npy $(TESTTMP)/test_nilpy_bavarwrite26
+	$(TESTTMP)/test_nilpy_bavarwrite26 | diff -u test/test_nilpy_a_bytearray_in_a_variant_can_be_written.expected -
 	# a KEYWORD argument to a callee the frontend cannot name at the call site.
 	# `a = mk(1); a(x=5)` was `undefined variable (x)` -- the keyword NAME parsed
 	# as an expression, because the lowering only fired when a candidate callee

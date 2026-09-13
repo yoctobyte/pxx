@@ -5495,6 +5495,23 @@ begin
     ki := PPyVarRec(@key)^.Payload;
     TPyList(o).put(ki, val);
   end
+  { bytes/bytearray — the WRITE side of the TPyBytes arm pyvar_getitem has
+    carried since `b[i]` on a variant was fixed. Only the read half grew it, so
+    a bytearray held in a VARIANT — the commonest shape being an element of a
+    list of buffers, `rows = [bytearray(n) for _ in range(h)]; row = rows[y];
+    row[at] = 255` — raised "object does not support item assignment" while the
+    statically-typed spelling of the same write worked. lekkerzeilen's font
+    atlas (text.py:127) is exactly that, and it is where this was found.
+
+    EVERYTHING IS DELEGATED TO TPyBytes.put, which already applies Python's
+    negative-index rule, raises `bytearray index out of range` and rejects a
+    value outside 0..255 with CPython's own ValueError. pyeval's PySubscriptSet
+    had hand-rolled the same three steps and got two of them wrong -- it masked
+    the value with $FF, so `b[0] = 256` stored 0 where CPython raises, and its
+    bounds message omitted the type name -- so that arm now delegates here's
+    way too. One mechanism, three shapes. }
+  else if o is TPyBytes then
+    TPyBytes(o).put(Integer(PPyVarRec(@key)^.Payload), Integer(pyvar_to_int(val)))
   { A USER class arriving as a bare variant handle — the write side of the
     __getitem__ arm pyvar_getitem already carries. A statically-typed receiver
     dispatches __setitem__ in the frontend; this one has no static class, so a

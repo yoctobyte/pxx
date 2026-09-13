@@ -1531,13 +1531,17 @@ begin
       raise IndexError.Create('list assignment index out of range');
     li.put(i, val);
   end
+  { DELEGATED, and it used to be hand-rolled: TPyBytes.put already applies the
+    negative-index rule, raises `bytearray index out of range` -- with the type
+    name CPython prints, which the local message omitted -- and rejects a value
+    outside 0..255 with CPython's ValueError. The local copy masked with $FF
+    instead, so `exec("b[0] = 256", d, d)` stored 0 and printed nothing, where
+    CPython raises. Measured before the change: `[0]` against a ValueError.
+    pylib's pyvar_setitem grew the same arm the same way, so the three write
+    paths (a static receiver, a variant receiver, the interpreter) are now one
+    mechanism rather than three copies of one rule. }
   else if o is TPyBytes then
-  begin
-    by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
-    if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
-    by.put(i, pyvar_to_int(val) and $FF);
-  end
+    TPyBytes(o).put(Integer(pyvar_to_int(index)), Integer(pyvar_to_int(val)))
   else if o is TPyDict then
   begin
     di := TPyDict(o);

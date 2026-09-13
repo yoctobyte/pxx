@@ -1,0 +1,119 @@
+# A bytearray held in a VARIANT is writable, the same as a statically-typed one.
+#
+# Only the READ half of the variant subscript grew a bytes arm. `pyvar_getitem`
+# has carried `o is TPyBytes` since `b[i]` on a variant was fixed; `pyvar_setitem`
+# beside it went straight from the TPyList arm to the user-class arm, so every
+# dynamically-typed bytearray write raised
+#
+#     TypeError: object does not support item assignment
+#
+# while the identical write through a declared `b = bytearray(n)` worked. One arm
+# of a double case fixed, the sibling left, which is the shape the
+# normalise-don't-special-case rule is about.
+#
+# FOUND IN lekkerzeilen's font atlas (text.py:127), which is the canonical
+# spelling of the hole:
+#
+#     rows = [bytearray(width * 3) for _ in range(height)]
+#     row = rows[y]
+#     row[at] = row[at + 1] = row[at + 2] = 255
+#
+# -- a list of buffers, one taken out into a name, written by index. The element
+# read hands back a variant, so the receiver has no static class and the write
+# had nowhere to go. Located by breaking on Exception.Create and bisecting the
+# one return address that was not the other eight against bin/lz_h8.map: the
+# caller was `atlas`, and the raise was pyvar_setitem's final else.
+#
+# THE FIX DELEGATES INSTEAD OF REPEATING: everything goes to TPyBytes.put, which
+# already applies the negative-index rule, raises `bytearray index out of range`
+# and refuses a value outside 0..255 with CPython's own ValueError. pyeval's
+# PySubscriptSet -- the interpreter's copy, reached through exec() -- had
+# hand-rolled those three steps and got two wrong: it masked the value with $FF,
+# so `b[0] = 256` stored 0 where CPython raises, and its bounds message omitted
+# the type name. Both now call put. The exec rows below are in this file rather
+# than in one of their own because they are the same defect through the third
+# path; a fixture per path would have let the interpreter's copy keep its
+# masking, which is exactly what happened for as long as there were two copies.
+#
+# Every dynamic row is paired with the STATIC spelling of the same write, which
+# worked throughout and is the negative control.
+rows = [bytearray(6) for _ in range(2)]
+row = rows[0]
+at = 0
+row[at] = row[at + 1] = row[at + 2] = 255
+print(list(row))
+
+# the static spelling of the same three writes
+s = bytearray(6)
+s[0] = s[1] = s[2] = 255
+print(list(s))
+
+# a list ELEMENT written in place, with no name taken out of it
+rows[1][4] = 9
+print(list(rows[1]))
+
+# a DICT value: the other everyday way a buffer arrives as a variant
+d = {"buf": bytearray(3)}
+d["buf"][1] = 8
+print(list(d["buf"]))
+
+
+def poke(buf, i, v):
+    # an UNANNOTATED parameter is a variant, which is the shape a helper has
+    buf[i] = v
+    return len(buf)
+
+
+p = bytearray(4)
+print(poke(p, 2, 7), list(p))
+
+
+def fresh():
+    return bytearray(2)
+
+
+# a CALL RESULT, written without ever being stored in a typed name
+f = fresh()
+f[-1] = 3
+print(list(f))
+
+# negative index through the variant path
+n = [bytearray(3)][0]
+n[-2] = 6
+print(list(n))
+
+# the two REFUSALS, which is the half the delegation buys: before the fix the
+# variant path could not reach them at all and the interpreter's copy answered
+# the first one with a silent 0
+try:
+    q = [bytearray(1)][0]
+    q[5] = 1
+except IndexError as e:
+    print("IndexError", e)
+
+try:
+    q2 = [bytearray(1)][0]
+    q2[0] = 256
+except ValueError as e:
+    print("ValueError", e)
+
+# the INTERPRETER's copy of the same rule, through exec
+e1 = {"b": bytearray(3)}
+exec("b[1] = 9", e1, e1)
+print(list(e1["b"]))
+
+e2 = {"b": bytearray(3)}
+exec("b[-1] = 7", e2, e2)
+print(list(e2["b"]))
+
+e3 = {"b": bytearray(1)}
+try:
+    exec("b[0] = 256", e3, e3)
+except ValueError as e:
+    print("exec ValueError", e)
+
+e4 = {"b": bytearray(1)}
+try:
+    exec("b[5] = 1", e4, e4)
+except IndexError as e:
+    print("exec IndexError", e)
