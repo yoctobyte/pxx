@@ -15082,23 +15082,30 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-12T17:28:15Z",
+  "date": "2026-09-13T17:35:40Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
+   "test-uforth#src:tools/compiler_srchash.sh@1",
+   "test-uforth#src:tools/compiler_srchash.sh@2",
+   "test-uforth#src:tools/compiler_srchash.sh@3",
+   "test-uforth#src:tools/compiler_srchash.sh@4",
+   "test-uforth#src:tools/compiler_srchash.sh@5",
+   "test-uforth#src:tools/compiler_srchash.sh@6",
+   "test-uforth#src:tools/compiler_srchash.sh@7",
+   "test-uforth#src:tools/compiler_srchash.sh@8",
+   "test-uforth#src:tools/compiler_srchash.sh@9",
+   "test-uforth#src:tools/compiler_srchash.sh@10",
+   "test-uforth#src:tools/compiler_srchash.sh@11",
+   "test-uforth#src:tools/compiler_srchash.sh@12",
+   "test-uforth#src:tools/compiler_srchash.sh@13",
    "tools-devtest#00",
    "demos#00"
   ],
-  "sha": "14934e60dd7ed5d76520579e48a6b5955418e531",
+  "sha": "9393ab277ad16d0516d9f0d83ff23baf0e25b1a4",
   "tier": "full",
-  "ver": "v408",
-  "verdict": "RED",
-  "why": {
-   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | OK    examples/tui/menudemo.pas | OK    examples/vm/vmdemo.pas | === demos: 31/36 built into build/demos/ (esp3",
-   "lib-test#src:tools/crtl_reachability.py": "pascal26:11: error: conflicting types for typedef 'int64_t' \u2014 a repeated typedef must name the same type | ... 4 more line(s) not shown | lib-units: FAIL mimic_threading | pascal26:199: error: __pxxcl",
-   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-",
-   "tools-devtest#00": "verify_pin left the fixture clean                          ok | the real checkout's pinned artefacts are untouched         RED | 1 RED: | - the real checkout's pinned artefacts are untouched | tools-d"
-  }
+  "ver": "v409",
+  "verdict": "RED"
  },
  "toolchain": {
   "fp": "fbd303b097c6",
