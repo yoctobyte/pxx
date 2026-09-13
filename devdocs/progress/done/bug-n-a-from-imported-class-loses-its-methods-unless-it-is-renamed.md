@@ -208,4 +208,4 @@ Closing on the observable in the tree that reported it, with the mechanism
 unestablished. See CLAUDE.md, "isolation guards the RUN, not the ROUTE".
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit af9d8c723.
