@@ -1079,6 +1079,7 @@ function IRLowerAST(node: Integer): Integer; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
 function IRLowerBoxOperand(argAST: Integer): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
+function IRNodePyBytesRec(n: Integer): Integer; forward;   { declared further down; IRLowerCallArg needs it to spot a bytes/bytearray argument }
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMethodRefToTemp(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
@@ -5635,6 +5636,47 @@ begin
     if caSlCall < 0 then Error('variant unbox: pyvarobj builtin not loaded');
     caArg1 := IRAppend(IR_ARG, IRVariantAddr(argAST), -1, -1, 0, Ord(tyVariant));
     Result := IRAppendCall(caSlCall, caArg1, -1, Ord(tyPointer));
+    Exit;
+  end;
+  { NilPy: a bytes/bytearray argument to an EXTERNAL routine's POINTER parameter
+    passes its BUFFER, not the object.
+
+    The raw lowering hands over the TPyBytes INSTANCE, so the callee reads and
+    writes the object's own header: measured 2026-09-13, a 40-byte bytearray of
+    0xAA given to `write(1, b, 24)` made the callee emit the VMT pointer, then
+    FLen = 40, then FData -- the pointer it actually wanted, 16 bytes in. A reader
+    therefore gets a VMT where it expected bytes, and a WRITER destroys the VMT:
+    `pipe(b)` put fd 3 and fd 4 over it, `b` then looked fine to `len()` and
+    `list()` in place (neither follows that word) and killed the program on the
+    next call that passed it anywhere.
+
+    ProcExternal gates it, and that is the load-bearing condition: a pxx routine
+    declared with a `Pointer` parameter receives the object pointer today and
+    something in lib/** may want exactly that. A C symbol cannot.
+
+    Deliberately here, beside the variant unboxes and AHEAD of the promo block
+    below -- that block's own comment records a segfault from an ordinal arm
+    matching a Pointer parameter, because TypeIsOrdinal counts tyPointer as
+    ordinal. Anything keyed on a pointer parameter has to come first.
+
+    HALF of the fix, and the other half is in the FRONTEND: this arm asks the AST
+    what the argument IS, which answers only for a NAME or a FIELD. Through a
+    PARAMETER or a call result the buffer is a tyVariant, and the frontend has
+    already rewritten it by then (PyCoerceCallableArgsIn, which routes an external
+    callee's pointer parameter through pyvar_cbuf) -- so a tyVariant arm here was
+    measured UNREACHABLE for every shape and is deliberately not present. If you
+    widen one of these, look at the other.
+    bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+  if PyProgramMode and (cpi >= 0) and (pathIdx >= 0) and
+     (cpi < ProcCount) and ProcExternal[cpi] and
+     (pathIdx < Procs[cpi].ParamCount) and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+     (IRNodePyBytesRec(argAST) >= 0) and
+     (FindProc('pybytes_cbuf') >= 0) then
+  begin
+    caArg1 := IRAppend(IR_ARG, IRLowerAST(argAST), -1, -1, 0, Ord(tyClass));
+    Result := IRAppendCall(FindProc('pybytes_cbuf'), caArg1, -1, Ord(tyPointer));
     Exit;
   end;
   { PROMO argument to a PROMO parameter: give the callee its OWN slot.

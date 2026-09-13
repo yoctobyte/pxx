@@ -24312,7 +24312,43 @@ begin
         None is a legal value for it — `sorted(xs, key=None)` is CPython's own
         no-key spelling. The strict form stays for a parameter with no default,
         where None really is an error (map/filter refuse it in CPython too). }
-      if ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
+      { An EXTERNAL C callee's Pointer parameter is a DATA pointer, not a
+        callback slot, and a variant heading for it is overwhelmingly a buffer:
+        `write(1, buf, 24)`, `glGenTextures(1, ids)`, `SDL_PollEvent(ev)`.
+        Coerced as a callable it hands over the raw payload -- for a
+        bytes/bytearray the TPyBytes INSTANCE -- so a reader sees the VMT
+        pointer where it wanted bytes and a writer destroys it.
+
+        This is the spelling the IR-level arm cannot reach. There the argument
+        is asked what it IS, which answers for a NAME or a FIELD and not for a
+        PARAMETER or a call result; by the time those arrive the frontend has
+        already rewritten them to pyvar_callable_ptr(v, 'buf') and the node is a
+        tyPointer call. lekkerzeilen's own buffers travel exactly that way --
+        `_i32(buf, off)` and every gl wrapper take the buffer as a parameter and
+        pass it on -- so the demo's shape was the one still broken.
+
+        pyvar_cbuf returns the payload for every non-bytes tag, which is what
+        pyvar_callable_ptr returns too, so the only answer that changes is a
+        TPyBytes's. Two diagnostics are deliberately given up for an external
+        callee: None becomes a NULL pointer rather than a named TypeError
+        (NULL is what C means by an absent buffer), and a builtin type passed
+        here is no longer refused by name. Neither is a callback question.
+        bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+      if (procIdx < ProcCount) and ProcExternal[procIdx] and
+         (FindProc('pyvar_cbuf') >= 0) then
+      begin
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := ASTLeft[currArg];
+        ASTRight[argSeq] := -1;
+        exprNode := AllocNode(AN_CALL);
+        ASTIVal[exprNode] := FindProc('pyvar_cbuf');
+        ASTLeft[exprNode] := argSeq;
+        ASTTk[exprNode] := Ord(tyPointer);
+        ASTLeft[currArg] := exprNode;
+        Result := True;
+        capSym := -1;
+      end
+      else if ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
         capSym := FindProc('pyvar_callable_ptr_opt')
       else
         capSym := FindProc('pyvar_callable_ptr');

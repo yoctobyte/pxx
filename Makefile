@@ -3806,6 +3806,27 @@ test-nilpy: $(COMPILER)
 	@# five rows that moved are exactly the five this fix is about.
 	./$(COMPILER) test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy $(TESTTMP)/test_nilpy_clsvalmeth26
 	$(TESTTMP)/test_nilpy_clsvalmeth26 | diff -u test/test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.expected -
+	@# A bytes/bytearray handed to a C routine's POINTER parameter must deliver its
+	@# BUFFER. Passing the object hands over the TPyBytes INSTANCE -- VMT pointer,
+	@# then FLen, then FData -- so a reader sees a VMT where it wanted bytes and a
+	@# WRITER destroys the VMT; `pipe(b)` put fd 3 and fd 4 over it and killed the
+	@# program on the next dispatch through that object.
+	@# FOUR SPELLINGS because the fix needed TWO mechanisms and each is blind to the
+	@# other's shape: a NAME and a FIELD are statically a TPyBytes (IRLowerCallArg
+	@# diverts them through pybytes_cbuf); a PARAMETER and a CALL RESULT arrive as a
+	@# tyVariant, which that arm cannot see, and are diverted in
+	@# PyCoerceCallableArgsIn through pyvar_cbuf. The PARAMETER row is the one
+	@# lekkerzeilen needs -- _i32(buf, off) and every gl wrapper take the buffer as a
+	@# parameter and hand it on -- so a fixture with only the name spelling would
+	@# certify the half that was still broken, which is what nearly happened.
+	@# Both directions, because the first reading of this took the static/dynamic
+	@# boundary for a read/write one: `pipe(b)` was fixed and `write(1, passthru(b),
+	@# 24)` was not, and `int *` versus `const void *` is a plausible cause for that.
+	@# Control, measured: under pin v408 ALL SEVEN rows differ -- A-D print 0 where a
+	@# written buffer gives 1, E/F/G return -1 (EBADF, because the fd never arrived)
+	@# and the round-tripped bytes come back [0, 0, 0, 0].
+	./$(COMPILER) test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.npy $(TESTTMP)/test_nilpy_bytesptr26
+	$(TESTTMP)/test_nilpy_bytesptr26 | diff -u test/test_nilpy_a_bytearray_reaches_a_c_pointer_parameter.expected -
 	./$(COMPILER) test/test_nilpy_kwargs_forwarded.npy $(TESTTMP)/test_nilpy_kwfwd26
 	$(TESTTMP)/test_nilpy_kwfwd26 | diff -u test/test_nilpy_kwargs_forwarded.expected -
 	./$(COMPILER) test/test_nilpy_optional_str_none.npy $(TESTTMP)/test_nilpy_optstr26

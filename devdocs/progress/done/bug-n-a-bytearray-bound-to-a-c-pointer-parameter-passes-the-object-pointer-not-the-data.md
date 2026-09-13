@@ -13,17 +13,17 @@ summary: >
   callee actually wanted. So a C function that READS sees a VMT pointer and a
   length where it expected bytes, and one that WRITES destroys the VMT: `pipe`
   put fd 3 and fd 4 over it, and the next dispatch on the object jumped through
-  0x400000003. THIS IS THE LIVE BLOCKER ON THE
-  LEKKERZEILEN WINDOW PATH: the pxx platform backend is built on exactly this
-  shape -- SDL_PollEvent(self._event_buf), SDL_GL_GetDrawableSize(h, self._wbuf,
-  self._hbuf), glGetShaderiv(shader, pname, buf) -- and `--m0` now opens a window,
-  brings up a real GL 3.3 context, prints the renderer and version strings, and
-  dies in the first `win.size`.
+  0x400000003. FIXED 2026-09-13 and it took TWO arms, not one: a NAME and a FIELD
+  are statically a TPyBytes and divert in IRLowerCallArg through pybytes_cbuf; a
+  PARAMETER and a CALL RESULT arrive as a tyVariant that the frontend has already
+  rewritten, and divert in PyCoerceCallableArgsIn through pyvar_cbuf. The second
+  arm is the one lekkerzeilen needed. Seven-row fixture, all seven red under pin
+  v408.
 track: N
 type: bug
 prio: 80
-owner: unassigned
-status: backlog
+owner: frank-user
+status: done
 ---
 
 ## The reproducer, six lines
@@ -201,3 +201,87 @@ driver, not that it appears twenty times.
 - `umbrella-lekkerzeilen-compiles-and-runs-under-nilpy` -- add as a blocker.
 - `task-b-write-the-lekkerzeilen-pxx-platform-backend` -- the backend that is
   built on this shape.
+
+## RESOLUTION 2026-09-13
+
+Two code sites, because the defect has two shapes and each mechanism is blind to
+the other's. Landed with `test_nilpy_a_bytearray_reaches_a_c_pointer_parameter`
+(7 rows, every one of them red under pin v408).
+
+**`compiler/builtin/pylib.pas`** -- two entry points, so the knowledge about
+TPyBytes stays beside the class:
+
+    function pybytes_cbuf(o: TObject): Pointer;      { FData, or Pointer(o) }
+    function pyvar_cbuf(const v: Variant): Pointer;  { tag 7 -> the above;
+                                                       else the raw payload }
+
+`pyvar_cbuf` returns the payload word for every non-bytes tag, which is exactly
+what the lowering handed over before, so the answer changes for a TPyBytes and
+for nothing else.
+
+**`compiler/ir.inc`, `IRLowerCallArg`** -- the STATIC arm, keyed on
+`IRNodePyBytesRec(argAST) >= 0`, gated on `ProcExternal[cpi]` and a non-ref
+`tyPointer` parameter. Placed with the variant unboxes and ahead of the promo
+block, for the reason that block's own comment gives: `TypeIsOrdinal` counts
+`tyPointer`.
+
+**`compiler/pyparser.inc`, `PyCoerceCallableArgsIn`** -- the DYNAMIC arm, and the
+one the demo needed. That routine already rewrote EVERY variant argument bound to
+a `Pointer` parameter into `pyvar_callable_ptr(v, '<param>')`, on the reading that
+a pointer parameter is a callback slot. For an EXTERNAL C callee it is a data
+pointer, so the rewrite now goes through `pyvar_cbuf` there instead. Two
+diagnostics are deliberately given up for an external callee: None becomes a NULL
+pointer rather than a named TypeError (NULL is what C means by an absent buffer),
+and a builtin type passed there is no longer refused by name. Neither is a
+callback question.
+
+### The measurement that went wrong, and the hedge that saved it
+
+The section above says *"global, FIELD and PARAMETER all hand the callee the
+identical three words ... So it is one shape and one arm."* **The measurement is
+right and the inference is wrong.** What the callee RECEIVES being identical says
+nothing about how the frontend TYPES the argument -- all three were broken, by two
+different routes, which is precisely why they looked alike. One arm fixed two of
+the three.
+
+What caught it is this ticket's own next paragraph, which refused to bank the
+inference: *"write the fixture with all three spellings anyway, because the reason
+they agree is not established."* Written as a hedge on a prediction, and it is the
+only reason the parameter spelling got asked about at all.
+
+The first reading of the RESULT went wrong the same way, in the opposite
+direction. With the static arm alone, `pipe(b)` was fixed and
+`write(1, passthru(b), 24)` was not -- so the note in the handover said the READ
+direction was still broken and named `const void *` versus `int *` as the likely
+cause. That reading is comfortable, mechanical and wrong: the probe for the read
+direction happened to pass the buffer through a HELPER, so it varied the route and
+the direction together. Re-asked with the direction held and the route varied,
+**both directions fail through a parameter and both work through a name.** The
+boundary was never read-versus-write. CLAUDE.md's *"does my probe reach the thing
+under test BY THE ROUTE under test, and by no other?"* is the rule, and the
+violation here was a single incidental `passthru()`.
+
+### The bytes-versus-bytearray fork, decided
+
+The section above left three options. **Chosen: pass FData for both spellings and
+refuse nothing** -- the `NilPy is UPWARD compatible with CPython` answer, and the
+one `pylib.pas` already took for mutating a `bytes`. `FIsByteArray` is a runtime
+tag on one class, so a static refusal is not available anyway, and a runtime one
+would refuse `write(1, b"hello", 5)`, which is correct code.
+
+### Verified
+
+- The 7-row fixture passes; under `stable_linux_amd64/default/pinned` (v408) all
+  seven rows differ -- A-D print 0 where a written buffer gives 1, E/F/G return -1
+  (EBADF: the fd never arrived) and the round-tripped bytes come back as zeros.
+- A tyVariant arm in `IRLowerCallArg` was BUILT, measured UNREACHABLE for every
+  shape constructible (the frontend rewrites first), and removed rather than
+  shipped. Both surviving arms carry a pointer to the other.
+- C frontend probe in the same shape (`write(1, b, 4)` from C) unaffected; the
+  marshalling one-liner `x = "a" * 3` answers `aaa`.
+
+### Residual, not this ticket
+
+`bytes`, `str`, `list` and `array` arguments were never measured -- only
+`bytearray`. `bytes` shares the class and so is covered; the other three are not
+and nothing asks for them yet.

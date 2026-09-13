@@ -1,0 +1,93 @@
+import "/usr/include/unistd.h"
+
+# A bytes/bytearray handed to a C routine's POINTER parameter must deliver its
+# BUFFER. Passing the object hands the callee the TPyBytes instance -- VMT
+# pointer, then FLen, then FData -- so a reader sees a VMT where it wanted bytes
+# and a WRITER destroys the VMT.
+#
+# FOUR SPELLINGS, ONE PER ROW, because the fix needed TWO mechanisms and each one
+# is blind to the other's shape. A NAME and a FIELD arrive statically typed as a
+# TPyBytes and are diverted in IRLowerCallArg; a PARAMETER and a CALL RESULT
+# arrive as a tyVariant, which that arm cannot see, and are diverted in
+# PyCoerceCallableArgsIn. The parameter spelling is the one lekkerzeilen uses --
+# _i32(buf, off) and every gl wrapper take the buffer as a parameter and pass it
+# on -- so a suite with only the name spelling certifies the half that was broken.
+#
+# BOTH DIRECTIONS, because the first measurement read the static/dynamic boundary
+# as a read/write one: pipe(b) was fixed and write(1, passthru(b), 24) was not,
+# which looks like `int *` versus `const void *` and is not.
+#
+# Every row answers through print(), never by writing raw bytes to fd 1 -- a raw
+# write and a buffered print have no ordering relation, and the failure bytes are
+# a heap address that differs per run.
+#
+# The pipe fds are read out of the buffer by BYTE (b[0], b[4]) rather than
+# unpacked: little-endian, and an fd is small. What is printed is the DIFFERENCE
+# of the two, which is 1 for any consecutive pair, so the row does not depend on
+# which fds the process happens to have free. Nothing written leaves both bytes
+# 0 and the difference 0.
+# bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data
+
+
+class Holder:
+    def __init__(self):
+        self.fds = bytearray(8)
+        self.other = bytearray(8)
+
+
+def fill(buf):
+    pipe(buf)
+
+
+def grab(fd, buf):
+    read(fd, buf, 4)
+
+
+def passthru(buf):
+    return buf
+
+
+# A -- a bare NAME, the write direction
+a = bytearray(8)
+pipe(a)
+print("A %d" % (a[4] - a[0]))
+
+# B -- a FIELD, and the sibling field must be untouched
+h = Holder()
+pipe(h.fds)
+print("B %d %s" % (h.fds[4] - h.fds[0], str(list(h.other))))
+
+# C -- a PARAMETER: the spelling lekkerzeilen's own helpers use
+c = bytearray(8)
+fill(c)
+print("C %d" % (c[4] - c[0]))
+
+# D -- a CALL RESULT
+d = bytearray(8)
+pipe(passthru(d))
+print("D %d" % (d[4] - d[0]))
+
+# E -- the READ direction through a NAME. The bytes have to make the round trip,
+# which no wrong pointer produces by luck.
+src = bytearray(4)
+src[0] = 65
+src[1] = 66
+src[2] = 67
+src[3] = 68
+dst = bytearray(4)
+wn = write(a[4], src, 4)
+rn = read(a[0], dst, 4)
+print("E %d %d %s" % (wn, rn, str(list(dst))))
+
+# F -- the READ direction through a PARAMETER
+dst2 = bytearray(4)
+wn2 = write(a[4], src, 4)
+grab(a[0], dst2)
+print("F %d %s" % (wn2, str(list(dst2))))
+
+# G -- a ZERO-LENGTH bytearray. TPyBytes.Create(0) leaves FData nil, so the
+# buffer really is NULL here; POSIX permits that with a zero count. Pre-fix the
+# callee got a non-null pointer to the object and "worked" by corrupting it.
+z = bytearray(0)
+zn = write(a[4], z, 0)
+print("G %d" % zn)

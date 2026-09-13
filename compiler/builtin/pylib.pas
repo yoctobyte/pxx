@@ -1124,6 +1124,43 @@ function pyvar_is_inttag(const v: Variant): Boolean;
   refuses every receiver.
   bug-n-a-staticmethod-or-classmethod-is-unreachable-through-a-class-held-as-a-value }
 function pyvar_is_classreftag(const v: Variant): Boolean;
+{ The BUFFER of a bytes/bytearray, for a C parameter declared as a POINTER.
+
+  Passing the object hands the callee the TPyBytes INSTANCE -- the VMT pointer,
+  then FLen, then FData -- so a C function that READS sees a VMT pointer and a
+  length where it wanted bytes, and one that WRITES destroys the VMT: measured
+  2026-09-13, `pipe(b)` left fd 3 and fd 4 over it and the next dispatch on the
+  object jumped through 0x400000003. The pointer the callee wanted was sitting 16
+  bytes into what it was given.
+
+  A NON-bytes class falls back to the object pointer, which is what it gets today,
+  so this narrows nothing: the fallback is the deliberate answer for "a class
+  instance handed to a void*", not a defensive shrug.
+
+  FData is nil for an EMPTY bytearray -- TPyBytes.Create(0) sets it and Exits --
+  so this returns nil there. That is the honest answer and it is safe in the shape
+  that matters (POSIX permits a NULL buffer with a zero count); what it is not is
+  a no-op, because today such a call receives a non-null pointer to the object and
+  "works" by corrupting it.
+  bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+function pybytes_cbuf(o: TObject): Pointer;
+{ The same question asked of a VARIANT, which is the spelling the static one
+  cannot reach. A bytes/bytearray arriving at a C pointer parameter is only
+  statically a TPyBytes when the argument is a NAME or a FIELD; through a
+  PARAMETER or a call result it is a tyVariant, and lekkerzeilen's own buffers
+  travel that way -- `_i32(buf, off)` and every gl wrapper take the buffer as a
+  parameter and hand it on. Measured 2026-09-13: with the static arm in place
+  and no variant arm, `write(1, buf, 24)` inside a one-line helper still emitted
+  the VMT, and `pipe(buf)` left the caller's bytearray untouched. So the
+  boundary was never read-versus-write; it was static-versus-dynamic, and a
+  probe that passed the buffer through a helper is what separated them.
+
+  EVERY non-bytes tag returns the raw payload -- the exact word the lowering
+  hands over today -- so this arm changes the answer for a TPyBytes and for
+  nothing else. An empty variant (None, which is what an omitted default fills)
+  has payload 0 and so answers nil, which is what a C callee wants for None.
+  bug-n-a-bytearray-bound-to-a-c-pointer-parameter-passes-the-object-pointer-not-the-data }
+function pyvar_cbuf(const v: Variant): Pointer;
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -5183,6 +5220,24 @@ end;
 function pyvar_is_classreftag(const v: Variant): Boolean;
 begin
   Result := pyvartag(v) = 11;
+end;
+
+function pybytes_cbuf(o: TObject): Pointer;
+begin
+  if o = nil then
+    Result := nil
+  else if o is TPyBytes then
+    Result := TPyBytes(o).FData
+  else
+    Result := Pointer(o);
+end;
+
+function pyvar_cbuf(const v: Variant): Pointer;
+begin
+  if pyvartag(v) = 7 then
+    Result := pybytes_cbuf(TObject(pyvarobj(v)))
+  else
+    Result := Pointer(PPyVarRec(@v)^.Payload);
 end;
 
 { ALWAYS raises. `None.upper()` (or any str method on a non-str variant) used

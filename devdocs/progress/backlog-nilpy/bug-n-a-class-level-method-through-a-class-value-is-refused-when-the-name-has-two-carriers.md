@@ -13,9 +13,14 @@ summary: >
   between two class receivers with. Rows J and K of
   test_nilpy_a_class_held_as_a_value_reaches_a_class_level_method.npy assert both
   refusals, so the limit is in the suite and not only here.
+  RAISED 40 -> 80 on 2026-09-13: shape (a) is the LIVE WALL on lekkerzeilen
+  `--m0`. With the bytearray/C-pointer fix in, the demo opens a window, brings up
+  GL 3.3, prints the renderer and answers `drawable : 1280x720` -- and then dies
+  on `gl.clear()`, because `clear` is a @staticmethod on the `gl` namespace class
+  AND an ordinary method on three other classes in the same program.
 track: N
 type: bug
-prio: 40
+prio: 80
 owner: unassigned
 status: backlog
 ---
@@ -104,9 +109,30 @@ tier, not a quick gate.
 ## Not established
 
 No census of how often a real program carries one name both at class level and as
-an instance method. The shape that motivated the parent ticket -- a
+an instance method, beyond the one row below.
+
+## The census, measured 2026-09-13 -- and it contradicts the paragraph above it
+
+The text here used to read *"The shape that motivated the parent ticket -- a
 class-as-namespace in a platform backend -- does not need this, which is why the
-single-carrier case landed alone.
+single-carrier case landed alone."* That was written the same day and it is false
+for the program it names. With the bytearray/C-pointer defect fixed, lekkerzeilen
+`--m0` gets a window, a GL 3.3 context, the renderer string and
+`drawable : 1280x720`, and then stops here:
+
+    Unhandled exception: AttributeError: 'type' object has no attribute 'clear'
+
+`gl.clear()` (`lekkerzeilen/__main__.py:182`, and twice more in `app.py`) is a
+@staticmethod on the `gl` namespace class at `platform/_pxx.py:453`. The name
+`clear` is ALSO an ordinary instance method at `platform/_ctypes_backend.py:209`
+and `wake.py:53`, and `PyClassLevelOnlyMeth` exits on the first instance carrier
+it meets. So the class-as-namespace backend needs exactly this, and needs only
+shape (a): ONE class-level carrier, any number of instance carriers.
+
+That is the narrower fix and it is worth saying so: widening
+`PyClassLevelOnlyMeth` to ignore instance carriers and adding ONE classref arm
+clears the demo. Shape (b) -- two distinct class-level carriers -- still wants the
+blob-identity test described above and nothing measured asks for it yet.
 
 ## See also
 
