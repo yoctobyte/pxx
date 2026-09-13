@@ -148,4 +148,4 @@ and is not (its user-class exit can alias). `min`/`max` are a different mechanis
 again: [[bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit]].
 
 ## Log
-- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9fb9634c4.
