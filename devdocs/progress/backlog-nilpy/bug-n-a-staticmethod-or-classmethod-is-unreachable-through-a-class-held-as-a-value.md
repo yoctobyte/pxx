@@ -120,3 +120,89 @@ is idiomatic for a C-API shim (it mirrors module shape without needing a module
 per backend, which is the comment on that very line), so the population is
 probably "every shim written this way", but that is an expectation and not a
 measurement.
+
+## Sharpened 2026-09-13, same evening — the fix has an exact precedent in the tree
+
+Four more measurements, and together they turn "add an arm somewhere" into a
+specified job. **I did not do it: this is parked, not half-done.**
+
+### It is TWO sites, and the messages prove it
+
+    alias.sm          read as a VALUE   "type object 'gl' has no attribute 'sm'"
+    f = alias.sm; f(1)                  same
+    getattr(alias, "sm")                same
+    alias.sm(1)       CALLED            "'type' object has no attribute 'sm'"
+
+The first three are `pydynattr_get_v`'s tag-11 branch (pylib.pas ~4919), which
+asks `PyClsAttrRefGet`, then `__name__`, then raises naming the class. The fourth
+is `pydynattr_no_method`, reached from the dispatcher the frontend builds. So the
+READ path and the CALL path each lack no-instance methods, independently.
+
+**The read path is the foundation.** If a classref read could produce the method
+as a callable, rows 1 and 3 work immediately through the existing function-object
+ABI, and the call path can then be fixed by routing its tag-11 case to
+read-then-call rather than by teaching it a new kind of arm.
+
+### An IMPORTED class is fine — so this is about the VALUE route only
+
+    from pkg.cls import K
+    K().inst()   WORKS      K.V   WORKS      K.sm(1)   WORKS
+
+All three. A directly-imported class keeps its compile-time identity and
+staticmethods resolve statically. The defect is confined to a class that has
+become a VALUE (assigned to a name, or read off a module as
+`gl = back.gl`). So no import machinery needs touching.
+
+### The class-as-value feature is three-quarters built
+
+    construct          alias()           WORKS
+    class attribute    alias.V           WORKS  (via pyclsattr_bind)
+    instance method    alias().inst()    WORKS
+    no-instance method alias.sm()        MISSING   <- this ticket
+
+That reframes the job: FINISH `feature-nilpy-class-as-a-value`, do not redesign
+anything.
+
+### The recommended route, and it mirrors a mechanism already in the tree
+
+`PyEmitClsAttrBinds(ci)` already solves the identical problem for attributes: a
+class attribute is not stored on the class, so the FRONTEND publishes
+`pyclsattr_bind(<RTTI blob>, "name", @slot, kind)` per attribute at
+class-definition time, and the tag-11 read consults that registry. It sidesteps
+RTTI entirely.
+
+Do the same for methods: an analogous `PyEmitClsMethBinds(ci)` emitting the
+PROC ADDRESS of each @staticmethod / @classmethod, and a tag-11 read that returns
+it as a callable. This is why it is the recommended route rather than a runtime
+RTTI walk — **whether a no-instance method is reachable from the RTTI blob at run
+time is the one thing I did NOT establish**, and the registry makes the question
+moot exactly as it did for attributes.
+
+### Why NOT to add an arm to PyParseVariantMethod, which was my first instinct
+
+That function (pyparser.inc 18129 onward, ~1270 lines) is built around
+`selfArg`: the receiver is argument one, and overload re-resolution by arity,
+`PyBindKwArgs`, `PyPackStarArgs` and the default fill all count positions
+relative to it, dropping self from the count in three separate places. **A
+staticmethod has no self**, so a classref arm contradicts the invariant the
+whole function is written on, and every dynamic method call in NilPy flows
+through it. Landing a change there needs the full NilPy tier, not a quick gate.
+The read-path route touches one Pascal function plus an emitter and leaves that
+invariant alone.
+
+### The hazard, restated because it is what cost an attempt today
+
+Whatever the registry hands back MUST be normalised to the function-object ABI.
+`PyMethodUsedAsValue` is the gate, and this evening it grew its literal-getattr
+arm (`PyModuleGetattrsLiteral`) for exactly this reason. A method published to a
+registry and called back unnormalised does not crash at the call — it answers
+`''` for a string, SEGFAULTS on return for an int, and behaves perfectly for a
+method returning None. Any new publication route needs an arm there, or it will
+pass every test whose methods return nothing.
+
+### Not established
+
+Whether a static/class method is reachable from the RTTI blob at run time; what
+a classmethod's `cls` argument should bind to through this route (the registry
+would need to pass the blob); and no census of the class-as-namespace idiom
+outside this backend.
