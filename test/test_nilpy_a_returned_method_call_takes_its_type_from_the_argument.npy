@@ -1,0 +1,62 @@
+# `return <recv>.<meth>(7)` DECLARED AN INT RESULT, whatever the method returns.
+#
+# The return-type scan resolves a method on a receiver it can type. When it
+# CANNOT -- an unannotated parameter, which is most Python -- nothing claimed the
+# call and `PyInferExprType` was left standing over the whole return expression,
+# so the result type came from the widest LITERAL inside the ARGUMENT LIST. The
+# argument decided the result, in both directions:
+#
+#   `return b.s1(7)`     a str method  -> tk=13 (tyInt64), printed 126713694519424
+#   `return b.i1s("z")`  an int method -> tk=23 (tyAnsiString), SEGFAULT on the read
+#
+# The int-returning row is NOT a control and is marked as such in the unit: an
+# Int64 result is also the failure value, so it passed throughout --
+# collides-with-the-default, inside the population the probe is drawn from.
+#
+# THREE NEAR NEIGHBOURS ARE CORRECT AND THAT IS WHY IT LASTED. `b.s0()` with no
+# arguments (no literal to take), `r = b.s1(7); return r` (the local carries the
+# type), and `b.s1(7) + "!"` (the concatenation decides) are all right, so the
+# shape is exactly a return whose WHOLE expression is one unresolved call.
+#
+# An ANNOTATED receiver does not save it either -- the scan is token-only and
+# never reads the annotation -- while a MODULE qualifier (`math.sqrt`) and a
+# module-level GLOBAL receiver were both already correct, which is what pins the
+# fix to "the receiver is bound in this def" rather than to qualified calls.
+#
+# The str- and list-method rows have their own arm, which keeps its population
+# deliberately: `rsplit` is recorded in pyparser.inc as having been regressed
+# once by exactly this kind of widening, so it is a row here and not an argument.
+import retmeth
+
+b = retmeth.Box(3)
+print("s1   ", retmeth.q_s1(b))
+print("i1   ", retmeth.q_i1(b))
+print("i1s  ", retmeth.q_i1s(b))
+print("f1   ", retmeth.q_f1(b))
+print("b1   ", retmeth.q_b1(b))
+print("l1   ", retmeth.q_l1(b))
+print("d1   ", retmeth.q_d1(b))
+print("t1   ", retmeth.q_t1(b))
+print("o1   ", retmeth.q_o1(b))
+print("n1   ", retmeth.q_n1(b))
+print("y1   ", retmeth.q_y1(b))
+print("var  ", retmeth.q_var(b, 9))
+
+print("zero ", retmeth.c_zero(b))
+print("local", retmeth.c_local(b))
+print("cat  ", retmeth.c_concat(b))
+print("annot", retmeth.c_annot(b))
+print("mod  ", retmeth.c_module())
+print("glob ", retmeth.c_global())
+
+print("rsplit", retmeth.c_rsplit("C minor"))
+# `c_split` is NOT a row here: `return label.split(",")` on an unannotated
+# receiver is typed a string and prints raw memory, pre-existing and
+# reproduced against stable_linux_amd64/default/stable_pinned, filed as
+# bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string.
+# `c_split` stays in retmeth.npy so the row is one line away when it is fixed.
+print("find  ", retmeth.c_find("abc"))
+print("starts", retmeth.c_startswith("abc"))
+print("replac", retmeth.c_replace("abc"))
+print("lindex", retmeth.c_listindex([1, 2, 3]))
+print("lcount", retmeth.c_listcount([1, 2, 2]))

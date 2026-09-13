@@ -1109,6 +1109,27 @@ test-nilpy: $(COMPILER)
 	# lookup that simply stopped folding case everywhere.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_qualified_function_is_not_a_case_folded_class.npy $(TESTTMP)/test_nilpy_qualcase26
 	$(TESTTMP)/test_nilpy_qualcase26 | diff -u test/test_nilpy_a_qualified_function_is_not_a_case_folded_class.expected -
+	# `return <recv>.<meth>(7)` DECLARED AN INT RESULT, whatever the method returns.
+	# Nothing resolved the call -- the receiver is an unannotated parameter, which is
+	# most Python -- so PyInferExprType was left standing over the whole return and
+	# took the result type from the widest LITERAL in the ARGUMENT LIST.
+	# Positive control, MEASURED per row with the fix reverted, not predicted:
+	# str/float/bool/list/dict/tuple/bytes and None all came back tk=13 (tyInt64)
+	# and printed a pointer, an IEEE bit pattern, 1 and 0; `b.i1s("z")` -- an INT
+	# method reached with a STRING argument -- came back tk=23 and SEGFAULTED on the
+	# read, which is the direction that does not merely print wrong; and the
+	# ANNOTATED receiver failed with them, because this scan is token-only and never
+	# reads the annotation.
+	# THE INT ROW IS NOT A CONTROL and the fixture says so: an Int64 result is also
+	# the failure value, so it passed either way.
+	# Three near neighbours are correct and are why it lasted: no arguments at all,
+	# through a local, and inside a larger expression. The module-qualified row
+	# (`math.sqrt`) and the module-level GLOBAL receiver were already right, which
+	# is what pins the fix to "the receiver is bound in this def". The str- and
+	# list-method rows are here because their own arm keeps its population: pyparser
+	# records `rsplit` as having been regressed once by exactly this widening.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_returned_method_call_takes_its_type_from_the_argument.npy $(TESTTMP)/test_nilpy_retmeth26
+	$(TESTTMP)/test_nilpy_retmeth26 | diff -u test/test_nilpy_a_returned_method_call_takes_its_type_from_the_argument.expected -
 	# The UNQUALIFIED spelling of the same hijack, and in NilPy the arm has no
 	# correct case at all: Python has no implicit result, so a bare name equal to
 	# the enclosing def is the module GLOBAL, a LOCAL, or the def itself, never a

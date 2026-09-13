@@ -1,0 +1,167 @@
+# One class with one method per RETURN KIND, and one module function per kind
+# whose whole body is `return <recv>.<meth>(7)` -- the receiver an UNANNOTATED
+# parameter, so the return-type scan cannot type it.
+#
+# Nothing resolved the call, so `PyInferExprType` typed the return from the
+# widest LITERAL inside the ARGUMENT LIST: every one of these declared an Int64
+# result, whatever the method actually returns.
+import math
+
+
+class Box:
+    def __init__(self, n=3):
+        self.n = n
+
+    def s0(self):
+        return "s0-" + str(self.n)
+
+    def s1(self, k):
+        return "s1-" + str(k)
+
+    def i1(self, k):
+        return self.n + k
+
+    def i1s(self, k):
+        # an INT result reached with a STRING argument: the other direction, and
+        # the one that segfaulted rather than printing a wrong value
+        return len(str(k)) + 100
+
+    def f1(self, k):
+        return self.n + k + 0.5
+
+    def b1(self, k):
+        return k > 0
+
+    def l1(self, k):
+        return [k, k]
+
+    def d1(self, k):
+        return {"k": k}
+
+    def t1(self, k):
+        return (k, k)
+
+    def o1(self, k):
+        return Box(self.n + k)
+
+    def n1(self, k):
+        return None
+
+    def y1(self, k):
+        return b"ab"
+
+
+def q_s1(b):
+    return b.s1(7)
+
+
+def q_i1(b):
+    # NOT A CONTROL: an Int64 result is also the FAILURE value, so this row
+    # passed throughout. It is here to say so.
+    return b.i1(7)
+
+
+def q_i1s(b):
+    return b.i1s("z")
+
+
+def q_f1(b):
+    return b.f1(7)
+
+
+def q_b1(b):
+    return b.b1(7)
+
+
+def q_l1(b):
+    return b.l1(7)
+
+
+def q_d1(b):
+    return b.d1(7)
+
+
+def q_t1(b):
+    return b.t1(7)
+
+
+def q_o1(b):
+    return b.o1(7).n
+
+
+def q_n1(b):
+    return b.n1(7)
+
+
+def q_y1(b):
+    return b.y1(7)
+
+
+def q_var(b, k):
+    # a NON-LITERAL argument: correct before the fix, because there was no
+    # literal for the scan to take
+    return b.s1(k)
+
+
+# -- controls, every one of them correct before the fix ---------------------
+
+
+def c_zero(b):
+    return b.s0()                     # no argument list to read at all
+
+
+def c_local(b):
+    r = b.s1(7)                       # the local carries the type
+    return r
+
+
+def c_concat(b):
+    return b.s1(7) + "!"              # the concatenation decides
+
+
+def c_module():
+    return math.sqrt(2.0)             # a MODULE qualifier: a different route
+
+
+G = Box(5)
+
+
+def c_global():
+    return G.s1(7)                    # a module-level receiver: already variant
+
+
+# str and list methods on a receiver bound in this def. These have their OWN arm
+# and it keeps its population: `rsplit` in particular is recorded in the source
+# as having been regressed once by exactly this kind of widening.
+def c_rsplit(label: str):
+    return label.rsplit(" ", 1)
+
+
+def c_split(label):
+    return label.split(",")
+
+
+def c_find(label):
+    return label.find("b")
+
+
+def c_startswith(label):
+    return label.startswith("a")
+
+
+def c_replace(label):
+    return label.replace("a", "z")
+
+
+def c_listindex(xs):
+    return xs.index(2)
+
+
+def c_listcount(xs):
+    return xs.count(2)
+
+
+# An ANNOTATED receiver, which does NOT save it -- the scan is token-only and
+# does not read the annotation, so this failed with the unannotated rows.
+def c_annot(b: Box):
+    return b.s1(7)

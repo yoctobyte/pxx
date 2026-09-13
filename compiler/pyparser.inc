@@ -36544,6 +36544,48 @@ begin
         begin
           cur := smRetTk;
           PyInferLastCi := -1;
+        end
+        { NOTHING RESOLVED THE CALL -- so the ARGUMENTS must not decide the
+          result, and until now they did. Falling through here leaves
+          `cur := PyInferExprType(j + 1, e)` standing, and that walk types the
+          whole return from the widest LITERAL it can see inside the argument
+          list: `return b.s1(7)` on an untyped receiver declared an Int64 result
+          for a method returning a string, so the caller printed
+          126713694519424. The argument's type decides, in BOTH directions and
+          with the worse half on the other side --
+          `return b.i1s("z")` declared an AnsiString result for a method
+          returning an integer and SEGFAULTED on the read.
+
+          Measured 2026-09-13, PXXDBG=n.ret, one class and one call per row:
+          str/float/bool/list/dict/tuple/bytes and None all came back as tk=13
+          (tyInt64) and printed a pointer, an IEEE bit pattern, 1, and 0; the
+          INT row was correct and proves nothing -- its right answer IS the
+          failure value. `b.s0()` with NO arguments was correct (no literal to
+          take), `r = b.s1(7); return r` was correct (the local carries it), and
+          `b.s1(7) + "!"` was correct (the concat decides) -- so the shape is
+          exactly a return whose whole expression is ONE unresolved call, and
+          three near neighbours hid it.
+
+          tyVariant is the honest answer: an unresolved method on a receiver
+          this scan cannot type is dispatched at RUN time and comes back as a
+          variant, which is what the emitted call actually produces.
+
+          THE TWO ARMS ABOVE KEEP THEIR POPULATIONS, deliberately. A name
+          PyStrMethodInfo knows is left to the chase even when it declined --
+          that is how `def a(label: str): return label.rsplit(" ", 1)` keeps its
+          class result, which the arm above records as having been regressed
+          once already by exactly this kind of widening. And the receiver must
+          be BOUND IN THIS DEF, so `math.sqrt(2.0)` and every module-qualified
+          call keep their own route; measured, a module-level GLOBAL receiver
+          was already tyVariant and is untouched.
+          test/test_nilpy_a_returned_method_call_takes_its_type_from_the_argument.npy }
+        else if (not PyStrMethodInfo(GetTokenStr(j + 3), smPname, smRetTk, smWant))
+                and PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi,
+                                     PyInferBodyLo, PyInferBodyHi,
+                                     GetTokenStr(j + 1)) then
+        begin
+          cur := tyVariant;
+          PyInferLastCi := -1;
         end;
       end;
       { The same chase, for an EXPRESSION rather than a bare ident.

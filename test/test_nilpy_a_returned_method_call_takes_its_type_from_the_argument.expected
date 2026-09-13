@@ -1,0 +1,24 @@
+s1    s1-7
+i1    10
+i1s   101
+f1    10.5
+b1    True
+l1    [7, 7]
+d1    {'k': 7}
+t1    (7, 7)
+o1    10
+n1    None
+y1    b'ab'
+var   s1-9
+zero  s0-3
+local s1-7
+cat   s1-7!
+annot s1-7
+mod   1.4142135623730951
+glob  s1-7
+rsplit ['C', 'minor']
+find   1
+starts True
+replac zbc
+lindex 1
+lcount 2
