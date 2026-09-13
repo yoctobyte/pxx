@@ -1,0 +1,121 @@
+# `del <untyped>.list[a:]` WAS A COMPILE ERROR, and the message listed the form.
+#
+# The del handler rewrites the already-parsed READ into an in-place delete by
+# swapping the proc: pylist_slice -> pylist_del_slice, TPyList.at ->
+# pylist_del_at, __getitem__ -> __delitem__, pyvar_getitem -> pyvar_delitem,
+# TPyDict.fetch -> TPyDict.remove. The variant-receiver arm was added for the
+# KEY/INDEX spelling and the SLICE spelling never got its twin, so of four cells
+# on one unannotated receiver -- index, dict key, annotated slice, unannotated
+# slice -- exactly ONE was refused. That is why nothing noticed for months.
+#
+# It is what kept `test-uforth` red: uforth.py:2471 is
+# `del vm.stack[saved_stack_depth:]` inside an `except ForthThrow` handler that
+# restores the data stack, with `vm` a plain parameter. Reproduced identically
+# under stable_linux_amd64/default/stable_pinned, so the row was never a
+# regression from this week's work.
+#
+# EVERY ROW IS PAIRED WITH THE SPELLING THAT ALREADY WORKED, on the same
+# receiver: a row that only checked the broken cell could not tell a fixed arm
+# from a receiver that happens to be typed.
+import sys
+
+
+class VM:
+    def __init__(self):
+        self.stack = [1, 2, 3, 4, 5]
+        self.table = {"a": 1, "b": 2}
+
+
+def trim_open(vm, n):
+    # THE ROW: an unannotated parameter, open-ended slice
+    del vm.stack[n:]
+
+
+def trim_both(vm, a, b):
+    # ...and with BOTH bounds, which is a different argument shape
+    del vm.stack[a:b]
+
+
+def trim_lead(vm, n):
+    # ...and a leading-open slice, where lo is the default
+    del vm.stack[:n]
+
+
+def trim_idx(vm, n):
+    # the INDEX spelling on the same untyped receiver -- already worked
+    del vm.stack[n]
+
+
+def trim_key(vm, k):
+    # the DICT-KEY spelling on the same untyped receiver -- already worked
+    del vm.table[k]
+
+
+def trim_annot(vm: VM, n):
+    # the same body with the receiver ANNOTATED -- already worked, and is the
+    # control that says the fix is about the RECEIVER's type and not the slice
+    del vm.stack[n:]
+
+
+def trim_temp(vm, n):
+    # ...and through a local temp, the route that rescues some of this family
+    s = vm.stack
+    del s[n:]
+    return s
+
+
+class Holder:
+    def __init__(self):
+        self.stack = [1, 2, 3, 4, 5]
+
+    def trim(self, n):
+        # `self` is typed, so this arm was never broken
+        del self.stack[n:]
+
+
+def del_on_a_str(vm):
+    # THE REFUSAL THAT MUST STAY: a variant holding an immutable sequence.
+    # CPython raises TypeError here too, and this is its wording.
+    try:
+        del vm[1:2]
+        return "no error"
+    except TypeError:
+        return "TypeError"
+
+
+v = VM()
+trim_open(v, 2)
+print("open  ", v.stack)
+
+v = VM()
+trim_both(v, 1, 3)
+print("both  ", v.stack)
+
+v = VM()
+trim_lead(v, 2)
+print("lead  ", v.stack)
+
+v = VM()
+trim_idx(v, 0)
+print("index ", v.stack)
+
+v = VM()
+trim_key(v, "a")
+print("key   ", sorted(v.table))
+
+v = VM()
+trim_annot(v, 3)
+print("annot ", v.stack)
+
+v = VM()
+print("temp  ", trim_temp(v, 1), v.stack)
+
+h = Holder()
+h.trim(4)
+print("self  ", h.stack)
+
+loc = [9, 8, 7, 6]
+del loc[2:]
+print("local ", loc)
+
+print("str   ", del_on_a_str("abcdef"))

@@ -1130,6 +1130,23 @@ test-nilpy: $(COMPILER)
 	# records `rsplit` as having been regressed once by exactly this widening.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_a_returned_method_call_takes_its_type_from_the_argument.npy $(TESTTMP)/test_nilpy_retmeth26
 	$(TESTTMP)/test_nilpy_retmeth26 | diff -u test/test_nilpy_a_returned_method_call_takes_its_type_from_the_argument.expected -
+	# `del <untyped>.list[a:]` was a COMPILE ERROR whose message listed the form.
+	# The del handler rewrites the parsed READ into an in-place delete by swapping
+	# the proc; the variant-receiver arm was added for the KEY/INDEX spelling and
+	# the SLICE spelling never got its twin. Of four cells on ONE unannotated
+	# receiver -- index, dict key, annotated slice, unannotated slice -- exactly
+	# one was refused, which is why nothing noticed.
+	# Positive control MEASURED, not predicted: under
+	# stable_linux_amd64/default/stable_pinned this fixture does not COMPILE, and
+	# that binary predates every fix this week -- so the row it unblocks
+	# (test-uforth, dead on uforth.py:2471 `del vm.stack[saved_stack_depth:]`)
+	# was never a regression.
+	# Every row is PAIRED with the spelling that already worked on the same
+	# receiver, so a typed receiver cannot be mistaken for a fixed arm, and the
+	# last row pins the refusal that must STAY: a variant holding a str is a
+	# TypeError in CPython too, in CPython's own wording.
+	./$(COMPILER) test/test_nilpy_del_of_a_slice_on_a_variant_receiver.npy $(TESTTMP)/test_nilpy_delslice26
+	$(TESTTMP)/test_nilpy_delslice26 | diff -u test/test_nilpy_del_of_a_slice_on_a_variant_receiver.expected -
 	# The UNQUALIFIED spelling of the same hijack, and in NilPy the arm has no
 	# correct case at all: Python has no implicit result, so a bare name equal to
 	# the enclosing def is the module GLOBAL, a LOCAL, or the def itself, never a

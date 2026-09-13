@@ -1,0 +1,10 @@
+open   [1, 2]
+both   [1, 4, 5]
+lead   [3, 4, 5]
+index  [2, 3, 4, 5]
+key    ['b']
+annot  [1, 2, 3]
+temp   [1] [1]
+self   [1, 2, 3, 4]
+local  [9, 8]
+str    TypeError

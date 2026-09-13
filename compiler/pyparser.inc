@@ -31298,6 +31298,44 @@ begin
       if Result < 0 then Error('Nil Python: pylib (PyNoDelitemError) not loaded');
       Exit;
     end;
+    { `del v[lo:hi]` on a VARIANT receiver — THE SIBLING THE ARM BELOW DID NOT
+      CARRY. That arm fixed the KEY/INDEX spelling on a variant receiver and the
+      SLICE spelling stayed refused, by a message that lists `del l[a:b]` as
+      supported: `def trim(vm, n): del vm.stack[n:]` is a compile error while
+      the same body with `vm: VM` annotated compiles, and `del vm.stack[n]` and
+      `del vm.table[k]` on the SAME unannotated receiver both compile too. So
+      the missing case is exactly one of four cells, which is why nothing
+      noticed. Fixed one arm of a double case, grep for the sibling:
+      devdocs/dev/normalise-dont-special-case.md.
+
+      MEASURED: this is what kept `test-uforth` red, and it is older than
+      today's work -- stable_pinned refuses uforth.py:2471 identically, so the
+      row was not a regression from anything this week. uforth writes it inside
+      an `except ForthThrow` handler restoring the data stack, with `vm` a plain
+      parameter: `del vm.stack[saved_stack_depth:]`.
+
+      The read lowered to pyvar_slice; swap the proc for the in-place delete, so
+      the bound expressions are evaluated once and the receiver is not
+      re-parsed -- the same swap every arm here performs.
+
+      THE _step SPELLING IS STILL REFUSED, deliberately and by the message
+      below rather than silently: there is no pylist_del_slice_step for a
+      STATIC list either, so `del l[a:b:c]` has never worked and approximating
+      it by dropping the step would delete the WRONG elements with no
+      diagnostic -- the same call PyRewriteSliceAssign made for the extended
+      setters until its twins existed. }
+    symIdx := FindProc('pyvar_slice');
+    if (symIdx >= 0) and (ASTKind[delBase] = AN_CALL) and
+       (ASTIVal[delBase] = symIdx) then
+    begin
+      symIdx := FindProc('pyvar_del_slice');
+      if symIdx < 0 then Error('Nil Python: pylib (pyvar_del_slice) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      ASTRight[delBase] := ProcRetRecId[symIdx];
+      Result := delBase;
+      Exit;
+    end;
     { `del v[k]` on a VARIANT receiver — an unannotated dict/list PARAMETER is
       a variant, so `def drop(d, k): del d[k]` and a recursion guard's
       `del seen[node]` were compile ERRORS, with a message that listed the very

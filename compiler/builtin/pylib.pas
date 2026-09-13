@@ -2840,6 +2840,14 @@ function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
 { `v[lo:hi:step]` on a variant — same run-time tag dispatch, extended step. }
 function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+{ `del v[lo:hi]` on a VARIANT receiver — the DELETE twin of pyvar_slice, and the
+  sibling the variant-receiver del arm did not carry. pyvar_delitem covers
+  `del v[k]`; the SLICE spelling had no variant twin at all, so
+  `def trim(vm, n): del vm.stack[n:]` was a COMPILE ERROR whose message listed
+  `del l[a:b]` as supported. uforth.py:2471 is exactly that line and it is what
+  kept test-uforth red. Returns a variant so the del arm can swap the read's
+  proc in place, as every other arm there does. }
+function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
 { `type(x).__name__` for any value — see the body for why the frontend cannot
   answer this from RTTI alone (tuple and list share one class). }
 function pytype_name_v(const v: Variant): AnsiString;
@@ -5475,6 +5483,30 @@ begin
   end
   else
     raise TypeError.Create('object is not subscriptable');
+end;
+
+{ NO str AND NO bytes ARM, and that is the specification rather than a gap: both
+  are immutable in Python, so `del s[a:b]` on either is a TypeError there too
+  ("doesn't support item deletion"). A list is the only mutable sequence a
+  variant can hold here. The message is CPython's wording for the same input.
+
+  Bounds and the shift live in pylist_del_slice, called rather than copied --
+  an open-ended `[n:]` reaches it with whatever `hi` the READ computed, because
+  the del arm reuses the read's own argument nodes. }
+function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
+var o: TObject;
+begin
+  Result := pyvar_of_int(0);
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then
+    begin
+      pylist_del_slice(TPyList(o), lo, hi);
+      Exit;
+    end;
+  end;
+  raise TypeError.Create('object does not support item deletion');
 end;
 
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
