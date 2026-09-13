@@ -9007,6 +9007,17 @@ begin
   else if PyExprMode and PyStdlibCallAhead(sdName, sdTok) then
     { `os.path.join(...)`, `sys.exit(...)` — mapped by name onto a pylib shim. }
     CurASTNode := PyParseStdlibCall(sdName, sdTok)
+  else if PyExprMode and (CurTok.Kind = tkIdent) and
+          PyBuiltinValueHelperAhead then
+    { `map(abs, xs)` -- a name-keyed intrinsic in ARGUMENT position, with no `(`
+      after it. The ordinary factor path cannot reach these for the same reason
+      it cannot reach `str.lower`: there is no variable and no proc under the
+      Python spelling, so it resolved as `undefined variable (abs)`. Answers -1
+      and consumes nothing unless the tokens really are that shape. }
+  begin
+    CurASTNode := PyBuiltinIntrinsicValue;
+    LastExprTk := tyVariant;      { a boxed callable, like every other func value }
+  end
   else if PyExprMode and (CurTok.Kind = tkIdent) and (CurTok.SVal = 'str') and
           (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
           (Tokens[TokPos + 1].Kind = tkIdent) and (FindSym('str') < 0) and
@@ -16084,6 +16095,109 @@ begin
   Result := callNode;
 end;
 
+{ The pylib HELPER a name-keyed Python builtin routes to, for the names that
+  have no proc under their own Python spelling. Answers False for anything not
+  in the table.
+
+  WHY A TABLE AND NOT A pylib ROUTINE CALLED `abs`. Declaring these under their
+  Python names was tried and is deliberately rejected: a later `uses` unit
+  SHADOWS a whole name rather than joining its overload set, so a pylib `format`
+  stopped existing the moment a program said `import json` -- and a builtin that
+  vanishes when you add an import is worse than a missing one. The CALL side
+  says exactly this beside `id`/`ascii`; this is the VALUE side of the same
+  decision, so the two stay one design rather than two.
+
+  CONSULTED BEFORE FindProcExactCase, which is the whole point and not an
+  ordering detail. `abs` as a value used to fall through to a Pascal RTL routine
+  of the same name, and the call path has an explicit "own language first, and
+  it overrules import order" rule that the value path never got. Measured
+  2026-09-13 at 9393ab277:
+
+    f = abs; print(f(-5))                 undefined variable (abs)   -- loud
+    import math; f = abs; print(f(-5))    an EMPTY LINE, exit 0      -- silent
+    import math; f = abs; print(f(-5.5))  SIGSEGV
+
+  i.e. an innocuous import turned a clean compile error into a wrong value and
+  then a crash, because `abs` bound to lib/rtl/math's `Abs(x: Integer)` (declared
+  first) and was called through the Variant ABI. `abs(-5)` spelled as a CALL was
+  correct throughout. So this arm fixes a silent-wrong-value bug, not only a
+  missing name.
+
+  ONLY the one-argument, value-returning shapes are here. Left out on purpose,
+  each for a stated reason rather than for being harder:
+    divmod    arity 2 returning a fresh TPyList, which PyProcIsFreshContainerCtor
+              does not list (it keys on the PYTHON name, and the helper is
+              `pydivmod_v`), so the wrapper's return side would discard it;
+    enumerate/filter/map/zip
+              lazy constructors with SEVERAL entry points picked from the
+              argument's static type (pymap_iter / pymap_iter_i / pymap_int /
+              pymap_str / pymap_float ...). A bare value has no argument to pick
+              with, so binding one arm would silently mean the wrong one -- the
+              same mistake min/max already embody.
+  Both remain refused, which is what they were. }
+function PyBuiltinValueHelper(const nm: AnsiString; var helperNm: AnsiString): Boolean;
+begin
+  Result := True;
+  if      nm = 'abs'   then helperNm := 'pyabs_v'
+  else if nm = 'ascii' then helperNm := 'pyascii_v'
+  else if nm = 'chr'   then helperNm := 'pychr_s'
+  else if nm = 'hash'  then helperNm := 'pyhash_v'
+  else if nm = 'id'    then helperNm := 'pyid_v'
+  else if nm = 'ord'   then helperNm := 'pyord_v'
+  else if nm = 'round' then helperNm := 'pyround1_v'
+  else begin helperNm := ''; Result := False; end;
+end;
+
+{ A name-keyed intrinsic taken as a VALUE (`f = abs`, `map(ord, s)`), or -1
+  consuming nothing when the tokens are not that shape. The twin of
+  PyUnboundStrMethodValue, and it exists for the same reason that one does:
+  there are TWO doors into a callable value -- PyMakeFuncValue (assignment and
+  friends) and the NilPy factor chain (an ARGUMENT, which is what
+  `map(abs, xs)` is) -- and a builtin reachable through only one of them is the
+  two-paths-for-one-construct shape normalise-dont-special-case.md is about.
+  Wiring only PyMakeFuncValue made `f = abs; map(f, xs)` work while
+  `map(abs, xs)` -- this ticket's own headline repro -- still said
+  `undefined variable (abs)`.
+
+  A following `(` means a CALL and is left to the existing call-side intercepts,
+  which is what keeps `abs(-5)` on its own tested path. }
+{ ONE guard list, because two callers need the same answer to two different
+  questions: the factor chain must DECIDE an arm without consuming, and
+  PyBuiltinIntrinsicValue must then act. Written once so the arm cannot start
+  admitting shapes the body rejects. }
+function PyBuiltinValueNameAhead(var helperNm: AnsiString; var hpi: Integer): Boolean;
+begin
+  Result := False;
+  helperNm := ''; hpi := -1;
+  if not isNilPy then Exit;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not PyBuiltinValueHelper(CurTok.SVal, helperNm) then Exit;
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then Exit;   { a CALL }
+  if FindSym(CurTok.SVal) >= 0 then Exit;                                  { a variable }
+  if PyUserShadowsProc(CurTok.SVal) then Exit;                             { a user def }
+  hpi := FindProc(helperNm);
+  if hpi < 0 then Exit;                  { pylib not linked -- as the call side tests }
+  Result := True;
+end;
+
+function PyBuiltinValueHelperAhead: Boolean;
+var dummyNm: AnsiString; dummyPi: Integer;
+begin
+  Result := PyBuiltinValueNameAhead(dummyNm, dummyPi);
+end;
+
+function PyBuiltinIntrinsicValue: Integer;
+var helperNm: AnsiString; hpi: Integer;
+begin
+  Result := -1;
+  if not PyBuiltinValueNameAhead(helperNm, hpi) then Exit;
+  { The HELPER's name, not the Python one, keys PyMakeFuncValueFor's all-Variant
+    overload search: searching for overloads of `abs` would answer about the RTL
+    routine this whole arm exists to bypass. }
+  Result := PyMakeFuncValueFor(hpi, helperNm);
+  if Result >= 0 then Next;              { consume the name }
+end;
+
 function PyMakeFuncValue: Integer;
 { A bare def NAME in a value position — `w.bind(seq, on_plain)`, `sorted(l,
   key=cmp)`. Python's function object; NilPy already builds one for a bound
@@ -16135,6 +16249,15 @@ begin
     second `def w_include` still handed over the FIRST body — uforth's whole
     ANS FILE word set. }
   pi := -1;
+  { A NAME-KEYED INTRINSIC taken as a VALUE (`f = abs`, `map(ord, s)`). FIRST,
+    ahead of FindProcExactCase, so our own builtin overrules whatever a `uses`
+    unit happens to declare -- see PyBuiltinValueHelper for the measurement that
+    makes the ORDER load-bearing rather than cosmetic. The helper must actually
+    be linked, the way each CALL-side arm tests `FindProc('pyhash_v') >= 0`, and
+    a user def of the same name still wins, which is Python's own shadowing rule
+    and the reason the call side spells this `procIdx < 0`. }
+  Result := PyBuiltinIntrinsicValue;
+  if Result >= 0 then Exit;
   { EXACT case: a Python name is case-SENSITIVE, and Pascal's proc lookup is
     not. `print(Counter)` (no import — CPython's NameError) printed a code
     address, and worse, a module global named `counter` was claimed by pylib's

@@ -1,0 +1,62 @@
+# A name-keyed Python builtin used as a VALUE rather than called.
+#
+# `abs`, `ord`, `chr`, `round`, `ascii`, `hash` and `id` are intercepted by NAME
+# at the call site and routed to a pylib helper (pyabs_v, pyord_v, ...). A
+# name-keyed intrinsic has no symbol for a bare mention to find, so every value
+# spelling was `undefined variable (abs)` -- while `len`, a real proc under its
+# own Python name, worked in all of them.
+# bug-n-abs-is-not-a-value-while-len-and-str-are
+#
+# THE SHAPES ARE THE POINT: there are TWO doors into a callable value --
+# PyMakeFuncValue (assignment) and the NilPy factor chain (an ARGUMENT) -- and
+# wiring only the first made `f = abs; map(f, xs)` work while `map(abs, xs)`,
+# the ticket's own headline repro, still refused. A fixture carrying only the
+# assignment spelling would have certified that half-fix.
+#
+# hash/id are NOT compared against CPython by value: both are
+# implementation-defined in Python and ours legitimately differ (CPython's
+# hash(7) is 7; id is an address). The only thing that can be required of them
+# is that the VALUE form agrees with the CALL form, which is what is asserted.
+#
+# Valid CPython, so the .expected beside this file is captured from the oracle.
+
+# ---- door 1: assignment, then call through the value ------------------------
+f = abs
+print(f(-5), f(-5.5))
+g = ord
+h = chr
+print(g("a"), h(66))
+r = round
+print(r(1.6), r(1.4))
+a = ascii
+print(a("q"))
+
+# ---- door 2: the bare name as an ARGUMENT, never assigned -------------------
+# This is the spelling that stayed broken when only door 1 was wired.
+print(list(map(abs, [-5, 2, -9])))
+print(list(map(ord, ["b", "a"])))
+print(list(map(chr, [66, 65])))
+print(sorted([-5, 2, -9], key=abs))
+
+# ---- door 1 feeding door 2: the value, mapped -------------------------------
+k = abs
+print(list(map(k, [-3, 4])))
+
+# ---- hash and id: agreement between the two forms, not a value -------------
+x = "hi"
+hf = hash
+idf = id
+print(hash(x) == hf(x), id(x) == idf(x))
+print([hash(v) == hf(v) for v in [1, "a", 2.5]])
+
+# ---- the CALL forms, unchanged: proves the value path was added beside the
+# ---- name-keyed intercepts rather than in place of them.
+print(abs(-5), ord("a"), chr(66), round(1.6), ascii("q"))
+
+# ---- a user def still SHADOWS the builtin, in BOTH positions ----------------
+# Python's own rule, and the call side spells it `procIdx < 0`. If this row ever
+# prints 5 the value path has started outranking user code.
+def abs(x):
+    return 99
+u = abs
+print(u(-5), abs(-5))

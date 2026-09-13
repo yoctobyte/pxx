@@ -419,5 +419,7 @@ function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lo
 function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
 function PyProcIsFreshContainerCtor(pi: Integer): Boolean; forward; { Nil Python: does this pylib/pyeval builtin ALWAYS return a newly constructed container? (pyparser.inc) }
 function PyCallableValueArity(pi: Integer): Integer; forward; { Nil Python: the arity a CALLABLE VALUE of this proc is invoked with — full ParamCount for a NilPy def, required arity for a Pascal builtin (pyparser.inc) }
+function PyBuiltinValueHelperAhead: Boolean; forward; { Nil Python: is the token a name-keyed intrinsic (abs/ord/chr/...) taken as a VALUE? (pyparser.inc) }
+function PyBuiltinIntrinsicValue: Integer; forward; { Nil Python: that intrinsic AS a callable value, or -1 consuming nothing (pyparser.inc) }
 
 {$endif}

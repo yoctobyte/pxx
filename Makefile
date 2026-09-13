@@ -4010,6 +4010,24 @@ test-nilpy: $(COMPILER)
 	# shared wrapper machinery rather than this.
 	./$(COMPILER) test/test_nilpy_builtin_with_a_defaulted_tail_as_a_value.npy $(TESTTMP)/test_nilpy_deftail26
 	$(TESTTMP)/test_nilpy_deftail26 | diff -u test/test_nilpy_builtin_with_a_defaulted_tail_as_a_value.expected -
+	# A name-keyed Python builtin (abs/ord/chr/round/ascii/hash/id) used as a VALUE.
+	# Intercepted by NAME at the call site and routed to a pylib helper, so a bare
+	# mention had no symbol to find and every value spelling was `undefined
+	# variable (abs)`. TWO doors into a callable value -- assignment and the factor
+	# chain (an ARGUMENT) -- and wiring only the first made `f = abs; map(f, xs)`
+	# work while `map(abs, xs)` still refused, so both spellings are asserted.
+	# hash/id are implementation-defined and are asserted as call-form ==
+	# value-form, never against CPython's numbers.
+	./$(COMPILER) test/test_nilpy_a_name_keyed_builtin_is_a_value.npy $(TESTTMP)/test_nilpy_bivalue26
+	$(TESTTMP)/test_nilpy_bivalue26 | diff -u test/test_nilpy_a_name_keyed_builtin_is_a_value.expected -
+	# ...and it must mean OUR builtin even when an imported Pascal RTL unit
+	# declares the name. Without `import math` this was a clean compile error; WITH
+	# it, `f = abs` bound to lib/rtl/math's Abs(Integer) and printed an EMPTY LINE
+	# for the int case and SIGSEGV'd on the float one -- an innocuous import
+	# turning a refusal into a silent wrong value. Own file because `import math`
+	# is module-wide; the FLOAT row is the one that crashed, so it must stay.
+	./$(COMPILER) test/test_nilpy_a_name_keyed_builtin_as_a_value_beats_an_rtl_routine.npy $(TESTTMP)/test_nilpy_bivalrtl26
+	$(TESTTMP)/test_nilpy_bivalrtl26 | diff -u test/test_nilpy_a_name_keyed_builtin_as_a_value_beats_an_rtl_routine.expected -
 	./$(COMPILER) test/test_nilpy_break_continue.npy $(TESTTMP)/test_nilpy_brkcont26
 	$(TESTTMP)/test_nilpy_brkcont26 | diff -u test/test_nilpy_break_continue.expected -
 	# set EQUALITY is by MEMBERSHIP, not position ({1,2} == {2,1}), and a set is

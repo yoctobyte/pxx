@@ -16,7 +16,7 @@ track: N
 type: bug
 prio: 35
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured
@@ -88,3 +88,64 @@ The defaulted-tail half of this area -- `f = sorted; f(xs)` answering `[]` or
 segfaulting -- was a separate bug again and is FIXED (see that ticket's
 resolution); it is named here only so a reader who measures `sorted` today and
 finds it working does not conclude this ticket is stale.
+
+
+## RESOLVED 2026-09-13 (frankS) -- seven of the twelve, including the headline
+
+`PyBuiltinValueHelper` maps a Python builtin NAME to its pylib helper for the
+names that have no proc under their own spelling:
+
+    abs -> pyabs_v   ascii -> pyascii_v   chr -> pychr_s   hash -> pyhash_v
+    id  -> pyid_v    ord   -> pyord_v     round -> pyround1_v
+
+`PyBuiltinValueNameAhead` holds the guard list once and `PyBuiltinIntrinsicValue`
+acts on it, wired into BOTH doors into a callable value.
+
+**THE SECOND DOOR IS THE PART THAT NEARLY SHIPPED HALF-DONE.** Wiring only
+PyMakeFuncValue (assignment) made `f = abs; map(f, xs)` work while
+`map(abs, xs)` -- this ticket's own headline repro -- still said
+`undefined variable (abs)`, because an ARGUMENT reaches the NilPy factor chain
+instead. PyUnboundStrMethodValue's header already records that both doors are
+needed and says why; I read it after wiring the first one. The fixture asserts
+both spellings for that reason.
+
+**A DESIGN CONSTRAINT THIS TICKET DID NOT KNOW, AND IT DECIDES THE FIX.** The
+obvious answer -- declare `function abs` in pylib -- is explicitly rejected
+upstream, and the call side records the measurement: a later `uses` unit SHADOWS
+a whole name rather than joining its overload set, so a pylib `format` stopped
+existing the moment a program said `import json`, and *a builtin that vanishes
+when you add an import is worse than a missing one*. Hence a table, not a
+routine.
+
+**AND THE BUG WAS WORSE THAN "A NAME IS MISSING".** Measured at 9393ab277:
+
+    f = abs; print(f(-5))                  undefined variable (abs)  -- loud
+    import math; f = abs; print(f(-5))     an EMPTY LINE, exit 0     -- silent
+    import math; f = abs; print(f(-5.5))   SIGSEGV
+
+An innocuous import turned the refusal into a wrong value and then a crash --
+`abs` bound to lib/rtl/math's `Abs(x: Integer)`, declared first, called through
+the Variant ABI. The CALL path has an explicit "own language first, and it
+overrules import order" rule; the value path never got it. That is why the table
+is consulted BEFORE FindProcExactCase: the ORDER is the fix, not decoration.
+Its own fixture (`..._beats_an_rtl_routine`) keeps the FLOAT row, since an
+int-only version passes on a build where `abs` still binds to Abs(Integer).
+
+hash and id are asserted as CALL-form == VALUE-form, never against CPython's
+numbers: both are implementation-defined in Python and ours legitimately differ
+(CPython's `hash(7)` is 7, `id` is an address). Comparing them to CPython was my
+first probe and it reported two false failures.
+
+Positive control, both fixtures, under the pin: the first does not compile
+(`undefined variable (ord)`), the second SIGSEGVs.
+
+STILL OPEN, deliberately, and filed so it is rankable rather than buried here:
+`divmod enumerate filter map zip` --
+[[bug-n-the-lazy-builtin-constructors-and-divmod-are-still-not-values]]. The
+four lazy constructors have several pylib entry points picked from the argument's
+STATIC type, so a bare value has nothing to pick with; divmod looks mechanical
+and is not (its user-class exit can alias). `min`/`max` are a different mechanism
+again: [[bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit]].
+
+## Log
+- 2026-09-13 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

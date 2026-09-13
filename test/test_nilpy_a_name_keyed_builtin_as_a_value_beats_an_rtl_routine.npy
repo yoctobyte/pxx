@@ -1,0 +1,40 @@
+# A name-keyed Python builtin taken as a VALUE must mean OUR builtin, even when
+# an imported Pascal RTL unit declares a routine of the same name.
+#
+# Its own file rather than a row in the sibling fixture because `import math` is
+# a MODULE-WIDE fact: it changes what every name in the file resolves to, so
+# folding it in would have altered the rows that are about something else.
+#
+# WHY THIS IS A SEPARATE BUG FROM "abs is not a value". Without the import,
+# `f = abs` was a clean compile error -- loud, and nobody's data was wrong. WITH
+# it, `abs` resolved to lib/rtl/math's `Abs(x: Integer)` (declared first) and was
+# called through the Variant ABI. Measured 2026-09-13 at 9393ab277:
+#
+#     import math; f = abs; print(f(-5))                -> an EMPTY LINE, exit 0
+#     import math; f = abs; print(f(-5)); print(f(-5.5)) -> SIGSEGV
+#
+# So an innocuous import two lines away turned a refusal into a silent wrong
+# value and then a crash. `abs(-5)` spelled as a CALL was correct throughout,
+# because the CALL path already has an explicit "own language first, and it
+# overrules import order" rule -- the value path never got it. That is what
+# makes the ORDER in PyBuiltinValueNameAhead load-bearing: the table is
+# consulted BEFORE FindProcExactCase, not after.
+#
+# The float row is the one that segfaulted, so it must stay: an int-only fixture
+# passes on a build where `abs` binds to math's Abs(Integer).
+#
+# Valid CPython; .expected captured from the oracle.
+
+import math
+
+f = abs
+print(f(-5))
+print(f(-5.5))
+print(list(map(abs, [-5, -5.5])))
+
+# the call form, which was correct all along -- here so a regression that takes
+# BOTH is attributable to the name-keyed intercepts rather than to this fix
+print(abs(-5), abs(-5.5))
+
+# math itself still reachable and unshadowed by any of this
+print(math.floor(2.7))
