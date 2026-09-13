@@ -814,6 +814,20 @@ already produced — a fixture naming none of the working members, a probe in a
 directory an earlier step did not write to — and let the asymmetry be the
 control. The question that catches every form of it: **would this row still
 pass if it were the ONLY thing in the run?**
+**AND THAT QUESTION ANSWERS YES FOR A PROBE THAT IS ALONE AND STILL REACHES THE
+SUBJECT BY THE WRONG ROUTE — isolation guards the RUN, not the ROUTE.** Measured
+2026-09-12/13 in two independent subsystems: a MAXIMALLY isolated Zig census
+(one construct per file, scaffolding-only control) recorded `for (a) |v|` as
+refused when it had died on the `[_]i64{}` literal a line above and never
+reached the loop; and a NilPy `getattr(o, "m")` fix measured as WORKING twice,
+because an unrelated `_unused = w.m` in the same probe resolved the name — there
+the contaminant is inside the probe, in the right population, and honest, so
+every isolation question returns yes. Ask also: **does my probe reach the thing
+under test BY THE ROUTE under test, and by no other?** Vary the route while
+holding the subject fixed and let the asymmetry be the control — a second
+spelling that must NOT be rescued, or the interesting element moved so a
+different path reaches it. Worked: debugging-playbook.md, "ISOLATION GUARDS
+AGAINST THE RUN, NOT AGAINST THE ROUTE".
 
 **A positive control is not enough on its own — a guard must also be AIMED and
 READ.** Assert that the thing under test actually RAN before you compare its

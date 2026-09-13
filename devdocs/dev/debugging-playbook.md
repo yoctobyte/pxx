@@ -26115,3 +26115,50 @@ the harness answers instead of something a reader assumes. The general form is t
 make the dispatch observable: if a component chooses among implementations, the
 choice is a fact your tests can read, and until they read it a green suite is
 evidence about the winners only.
+
+
+## ISOLATION GUARDS AGAINST THE RUN, NOT AGAINST THE ROUTE — a perfectly isolated probe still lies if it reaches the subject by a path that is not the one under test
+
+The banked contamination rule asks **"would this row still pass if it were the
+ONLY thing in the run?"** and prescribes ISOLATION. That is correct and it is
+not sufficient, and the gap is not rare. Isolation defends against a contaminant
+ELSEWHERE IN THE RUN. It does nothing when the probe is alone and still reaches
+the thing under test by the wrong door — there the contaminant is inside the
+probe, in the right population, and honest, so every existing question answers
+yes.
+
+The general form, from lekkerzeilen-a2 and better than the phrasings it
+replaces: **does my probe reach the thing under test BY THE ROUTE under test,
+and by NO OTHER?**
+
+**The instance where isolation was already total (2026-09-12, Track Z).** The
+Zig census ran one construct per file, each a complete minimal program, with a
+scaffolding-only control — maximal isolation by construction, every probe the
+only thing in its own run. Three of 22 failures were still misattributed:
+`for (a) |v|` was recorded as "payload for-loop refused" when it had died on the
+`[_]i64{}` array literal one line above and never reached the loop at all.
+Disambiguated with an explicit length, `[3]i64{1,2,3}` compiles and the payload
+loop is a separate refusal. Attributing those three to the loop would have put
+false rows in a gap list AND impeached a ticket sentence that was correct.
+**The isolation question returns YES for every one of those probes.**
+
+**The instance where the contaminant was in the same function (2026-09-13, Track
+N, frankuser).** A `getattr(o, "m")` fix measured as WORKING, twice, because an
+unrelated `_unused = w.m` elsewhere in the same probe made the literal-name
+lookup resolve. It is per-METHOD, not per-program: reading `w.m` does not rescue
+`getattr(w, "z")` in the same file, and that asymmetry is the row that proved a
+ROUTE and not a missing unit was the difference. Same seat's earlier fixture had
+the run-level version of this — `limits()` read correctly because `plan()` had
+already performed the stolen assignment — which isolation WOULD have caught.
+One seat, two contaminations, only one of them reachable by the existing rule.
+
+**The discriminator, and it is cheap.** Vary the route while holding the subject
+fixed, and check the asymmetry: a second spelling that must NOT be rescued
+(`getattr(w, "z")` beside `getattr(w, "m")`), or the interesting element moved
+so a different path reaches it (an explicit array length instead of `[_]`).
+A probe that passes by two routes cannot tell you which one worked, and it
+reports the one you had in mind.
+
+Related: [A SELF-WRITTEN SUITE IS A MIRROR OF THE IMPLEMENTATION] — that is
+about which constructs a suite never NAMES; this is about a construct the probe
+does name and does not actually exercise.
