@@ -101,3 +101,70 @@ RACE), and anything that keeps a pointer INTO a bytes across a call.
 
 The `.grids`-on-None row above is from a binary built before any of this and
 is not evidence about the current one.
+
+### The race is now MEASURED, not inferred
+
+The old reading was that valgrind's serialisation hid a race. That was a
+hypothesis from an absence. It is now a positive measurement -- same binary,
+same arguments, `--shot --for 20`, four runs:
+
+| run | outcome |
+| --- | --- |
+| 1 | **rc=0** |
+| 2 | rc=134, `malloc(): unsorted double linked list corrupted` |
+| 3 | rc=134, `corrupted double-linked list` |
+| 4 | **rc=0** |
+
+TWO runs in four SUCCEED and the two failures print DIFFERENT glibc messages.
+A deterministic overflow cannot do that; the capture loop steps the sim at a
+fixed rate and is otherwise reproducible, so the nondeterminism is coming from
+the only other thread in the program -- `lz-tiles`, the daemon started at
+`app.py:1251` whose `_loader` reads tiles off the frame.
+
+Length sweep on the same binary, one run each: `--for 12` rc=0, `16` rc=0,
+`20` rc=134, `24` rc=134 (`malloc(): mismatching next->prev_size (unsorted)`),
+`30` **rc=139**. Three distinct failure modes across five lengths. So the
+threshold is not a length at all; longer runs simply give the loader thread
+more tiles to deliver and widen the window.
+
+### What has been EXONERATED, so nobody re-walks it
+
+- **The GL seam's out-parameter writers.** Every one passes a plain NAME,
+  which is the arm that always worked (`gen_buffer`, `gen_vertex_array`,
+  `gen_texture`, `gen_framebuffer`, `gen_renderbuffer`, `read_pixels`,
+  `get_shader_iv`, `get_program_iv`, both info-log readers).
+- **The sqlite3 blob seam**, which was the best candidate on the owner's own
+  original hypothesis -- *"why is a library freeing memory that we allocated"*.
+  It does not: `lib/rtl/mimic_sqlite3.pas` binds every blob and text with
+  `TransientDtor` (SQLITE_TRANSIENT), so sqlite COPIES and never takes
+  ownership of a pxx pointer, and on the way back it copies out of sqlite's
+  buffer into a fresh `TPyBytes` rather than aliasing it. Both directions copy.
+  Worth knowing because sqlite is the one real C library on the loader thread:
+  `world.py:841` opens a connection PER TILE, on the worker.
+
+So the remaining suspect is concurrency itself -- two threads allocating and
+releasing through pxx's runtime while a C library (sqlite, then the GL driver)
+works its own glibc heap on the same process. `helgrind`/`drd`, not memcheck.
+
+### Thread state at the abort
+
+`gdb -batch`, caught on the first attempt, `--for 20`. No symbols come out of
+gdb (the pxx ELF has no section headers), so the PCs are resolved against
+`bin/lzfix.map`:
+
+| thread | PC | resolves to |
+| --- | --- | --- |
+| 1 (main) | `0x7ffff7ca61ac` | inside libc -- this is the SIGABRT, raised by glibc's own malloc consistency check |
+| 2 | `0x6280ab` | `PalFutexWaitTimeout + 0xf9` -- parked, not a participant |
+| 3 | `0x4dc2eb` | `pynone + 0x25` -- pxx RUNTIME code, not sqlite and not the GL driver |
+
+So at the moment glibc noticed its heap was inconsistent, the worker was
+inside pxx's own Python runtime. That does NOT name the corrupter -- glibc
+detects corruption long after it happens -- but it does say the crash is not
+being taken *inside* a C library call, which is what a "library frees our
+pointer" story would need.
+
+The frames above #0 are unusable: no section headers means no unwind info, so
+gdb walks garbage. Anything past #0 in that dump should be ignored, which is
+also why there is no point re-running this for a deeper stack. **The next
+instrument is helgrind or drd, not gdb and not memcheck.**
