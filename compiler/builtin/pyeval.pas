@@ -3153,6 +3153,44 @@ begin
     + pystr_of(n) + ' were given');
 end;
 
+function PyClassRefNewRaw(const cb: Variant): Variant;
+{ `cls.__new__(cls)` — ALLOCATE an instance of the class the VT_CLASSREF blob
+  names and DO NOT run its constructor. That is exactly what CPython's
+  object.__new__ does, and it is the idiom for building an object whose fields
+  a classmethod is about to fill itself:
+
+      @classmethod
+      def reserve(cls, size, mode=None):
+          mesh = cls.__new__(cls)
+          mesh.size = size
+          return mesh
+
+  The two lines of allocation are PyClassRefNew's own -- size@InstanceSize,
+  stamp the blob's VMT -- lifted here rather than copied into a second shape,
+  because the ctor half is the ONLY difference between the two and a second
+  allocator would be the thing that drifts. PXXAlloc returns a zeroed payload,
+  so every field starts at the same zero a NilPy instance is born with; a field
+  the method forgets to set reads as 0/nil/'' rather than as garbage, which is
+  CPython's behaviour for a __new__'d instance to the extent it has one.
+
+  The refcount convention is PyClassRefNew's, stated there at length: the
+  alloc's +1 stays, the slot takes its own.
+
+  lekkerzeilen gfx.py:184 and :234 are the call sites that wanted this;
+  Mesh.reserve runs on every tile admission. }
+var cls: PClassRTTI; inst: Pointer;
+begin
+  Result := pynone;
+  if PPyRec(@cb)^.VType <> 11 then                { VT_CLASSREF }
+    raise TypeError.Create('__new__() argument must be a class, not ' +
+                           PyVarTypeNameOf(cb));
+  cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  if cls = nil then Exit;
+  inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
+  PPointer(inst)^ := cls^.VMTPtr;
+  Result := PyBoxObj(inst);
+end;
+
 procedure PyClassRefNew(const cb: Variant; nargs: Integer;
                         const a0, a1, a2, a3: Variant; var res: Variant);
 { `cls(args)` where `cls` holds a VT_CLASSREF variant — a NilPy class reached as
@@ -5512,6 +5550,29 @@ begin
   { A None receiver reaches here as VT_NULL, not as a nil-payload object, and
     either way there is no class to look in. PyVarTypeNameOf answers
     'NoneType' for it, which is the name CPython puts in this message. }
+  { `cls.__new__(cls)` — a CLASS is the receiver, not an instance, so the
+    VType 7 test above leaves obj nil and the message below reports
+    `'type' object has no attribute '__new__'`. True about the lookup and a
+    false lead about the language: __new__ is not a method anyone declares,
+    it is the allocator.
+
+    The CLASS TO BUILD IS THE ARGUMENT, not the receiver — CPython's
+    `A.__new__(B)` makes a B — and the two are only the same because every
+    real call site writes `cls.__new__(cls)`. Falling back to the receiver
+    when no argument is given matches CPython refusing the zero-argument form
+    with a message about the missing argument rather than crashing.
+
+    Surplus arguments are accepted and IGNORED, which is CPython's rule
+    whenever __init__ is overridden — and it always is here, since a class
+    with no __init__ has no fields for __new__ to leave unset. }
+  if (obj = nil) and (PPyRec(@recv)^.VType = 11) and (name = '__new__') then
+  begin
+    if (args <> nil) and (nargs >= 1) then
+      Result := PyClassRefNewRaw(args.at(0))
+    else
+      Result := PyClassRefNewRaw(recv);
+    Exit;
+  end;
   if obj = nil then
     raise AttributeError.Create('''' + PyVarTypeNameOf(recv) +
       ''' object has no attribute ''' + name + '''');

@@ -1,0 +1,65 @@
+# `cls.__new__(cls)` — allocate an instance and DO NOT run its constructor.
+#
+# The idiom is a classmethod that fills the fields itself, and CPython's
+# object.__new__ is what it reaches. We had no __new__ at all: a class receiver
+# is VT_CLASSREF, not VT_OBJECT, so PyDynMethL's receiver test left obj nil and
+# the call raised `'type' object has no attribute '__new__'` — true about the
+# lookup and a false lead about the language, because __new__ is not a method
+# anyone declares, it is the allocator.
+#
+# THE ROWS ARE CHOSEN TO DIFFER FROM WHAT `cls(...)` GIVES, or a fixture that
+# merely constructs would pass with no __new__ at all:
+#   - `tag` is set by __init__ to "ctor" and by reserve() to "reserved", so a
+#     call that quietly ran the constructor is visible in the output.
+#   - the SUBCLASS row: `Small.reserve(...)` must build a Small. The class
+#     comes from the ARGUMENT, and an inherited classmethod is the only
+#     spelling where receiver and argument could disagree.
+#   - `kind()` is overridden, so the subclass row also proves the VMT was
+#     stamped from the argument's blob and not from the receiver's.
+#
+# A DIVERGENCE THIS FIXTURE CANNOT ASSERT, recorded so the next reader does not
+# discover it as a surprise: after __new__, CPython leaves an attribute ABSENT
+# (`b.tag` raises AttributeError) while a NilPy instance has fixed fields and
+# reads the ZERO of each — '' , 0, 0.0, None. We accept what CPython refuses,
+# which is the N lane's stated direction, and the rows below therefore set
+# every field they read. See nilpy-semantics-divergences.md.
+#
+# NOT COVERED, deliberately: the STATIC spelling `Mesh.__new__(Mesh)`, where
+# the receiver is a class LITERAL rather than a class VALUE. It still refuses
+# at COMPILE time with `class method not found: __new__` — loud, not silent,
+# and nothing in the corpus writes it.
+
+
+class Mesh:
+    def __init__(self, n):
+        self.n = n
+        self.tag = "ctor"
+
+    @classmethod
+    def reserve(cls, size, mode=None):
+        m = cls.__new__(cls)
+        m.n = size
+        m.tag = "reserved"
+        return m
+
+    def kind(self):
+        return "mesh"
+
+    def show(self):
+        return "%s n=%s tag=%s" % (self.kind(), self.n, self.tag)
+
+
+class Small(Mesh):
+    def kind(self):
+        return "small"
+
+
+print("constructed ", Mesh(3).show())
+print("reserved    ", Mesh.reserve(4).show())
+print("with default", Mesh.reserve(6, None).show())
+
+c = Small.reserve(5)
+print("subclass    ", c.show())
+print("its type    ", type(c).__name__)
+print("isinstance  ", isinstance(c, Small), isinstance(c, Mesh))
+print("ok")

@@ -1,0 +1,7 @@
+constructed  mesh n=3 tag=ctor
+reserved     mesh n=4 tag=reserved
+with default mesh n=6 tag=reserved
+subclass     small n=5 tag=reserved
+its type     Small
+isinstance   True True
+ok

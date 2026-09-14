@@ -850,3 +850,24 @@ differential whose `.expected` IS CPython's output, so it carries **no negative
 row** — an oracle that raises cannot produce an expected line. A divergence in
 this direction is by construction untestable by differential, and has to be
 asserted separately or not at all.
+
+## `cls.__new__(cls)` leaves fields ZEROED, not absent
+
+CPython's `object.__new__` gives an instance with an empty `__dict__`, so every
+attribute `__init__` would have set is **absent** and reading one raises
+`AttributeError`. A NilPy instance has a fixed layout decided at compile time —
+there is no dict for an attribute to be missing from — so a `__new__`'d
+instance reads the zero of each field: `''`, `0`, `0.0`, `None`, `nil`.
+`PXXAlloc` returns a zeroed payload, so this is the allocator's own behaviour
+and not a fill step we could choose differently.
+
+Direction: we **accept what CPython rejects**, which is this file's one allowed
+asymmetry. A program written for CPython cannot observe it — CPython raises on
+exactly the reads that differ, so no accepted program reaches one. A program
+written against this does not port back.
+
+Consequence for testing, the same one the `time.sleep` row states: a
+differential fixture whose `.expected` is CPython's output **cannot carry a row
+for the unset fields**, because the oracle raises rather than printing.
+`test/test_nilpy_dunder_new_allocates_without_the_constructor.npy` therefore
+sets every field it reads and says so in its own header.

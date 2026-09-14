@@ -1891,6 +1891,14 @@ test-nilpy: $(COMPILER)
 	# happen where it is meant to, or "never drain" would pass.
 	./$(COMPILER) test/test_nilpy_a_failed_overload_retry_restores_the_drained_argument.npy $(TESTTMP)/test_nilpy_iterdrainundo26
 	$(TESTTMP)/test_nilpy_iterdrainundo26 | diff -u test/test_nilpy_a_failed_overload_retry_restores_the_drained_argument.expected -
+	# `cls.__new__(cls)` -- allocate, do NOT run the constructor. A class
+	# receiver is VT_CLASSREF and not VT_OBJECT, so the dynamic dispatcher's
+	# receiver test left it nil and raised `'type' object has no attribute
+	# '__new__'`. The class comes from the ARGUMENT (CPython's A.__new__(B)
+	# makes a B), which the inherited-classmethod row is what pins: Small.reserve
+	# must build a Small, with Small's VMT, or the override answers "mesh".
+	./$(COMPILER) test/test_nilpy_dunder_new_allocates_without_the_constructor.npy $(TESTTMP)/test_nilpy_dundernew26
+	$(TESTTMP)/test_nilpy_dundernew26 | diff -u test/test_nilpy_dunder_new_allocates_without_the_constructor.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None
