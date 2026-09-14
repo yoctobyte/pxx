@@ -17,7 +17,18 @@ unit pymarshal;
 
   Pascal-only consumers must NOT use this unit: it pulls in pylib, and hashing
   is under the crypto/TLS stack where that dependency would be wrong. That is
-  also why the pair does not live in hashing.pas beside TByteArray itself. }
+  also why the pair does not live in hashing.pas beside TByteArray itself.
+
+  NOT-A-PYTHON-MODULE: this unit IMPLEMENTS marshalling for other units' Python
+  surfaces rather than having one. There is no `pymarshal` Python module for a
+  bare import to mean -- CPython's is `marshal`, and it is a different thing
+  (code-object serialisation). compiler/builtin/pylib.pas is the same animal and
+  is invisible to the guard only because it sits outside lib/rtl. Adding
+  `pymarshal` to PyRtlUnitServesPython would make `import pymarshal` resolve to
+  a unit with no Python surface, which is exactly the false entry that list
+  exists to keep out. tools/py_surface_is_reachable.py reads this marker AND
+  CHECKS IT: it is honoured only while a sibling lib unit actually uses this
+  unit, so the claim cannot outlive the sharing that justifies it. }
 
 interface
 

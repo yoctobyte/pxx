@@ -49,6 +49,34 @@ and regex to the list. Written against `MARSHALLING` it is BORN RED with those
 same five names, which is the "an assertion written from a prediction pins the
 prediction" failure. It needs a real signal for "this unit intends a Python
 surface" and there is none today. Do not add it on this proxy.
+
+AND THE PROXY IS BLIND IN A SECOND DIRECTION, WHICH THIS GUARD READ AS A DEFECT
+FOR ~5 HOURS ON 2026-09-14 (6b45b991b, frankB). `MARSHALLING` cannot tell a unit
+that HAS a Python surface from one that IMPLEMENTS marshalling FOR other units'
+surfaces. `lib/rtl/pymarshal.pas` is the second kind: 24 hits, and nobody should
+ever write `import pymarshal` -- it is the single bytes<->TByteArray conversion
+that zlib, base64 and pil share instead of keeping a third copy. The category is
+neither new nor hypothetical: `compiler/builtin/pylib.pas` is the same animal and
+escapes only because it sits outside LIBDIRS.
+
+THE CATEGORY CANNOT BE INFERRED, SO IT IS DECLARED AND THEN VERIFIED. Measured
+2026-09-14: "is used by a sibling" does NOT separate the two -- zlib is used by 2
+sibling units and is genuinely importable. So a unit CLAIMS the category with a
+marker naming its reason, and this guard CHECKS the claim: the marker is honoured
+only if some sibling in LIBDIRS actually uses the unit. A shared-implementation
+unit that nobody shares is not shared -- it is dead or silently shadowed, and
+that is a class this guard could not catch before the marker existed. The
+exemption is therefore a checkable assertion and not an allowlist: putting the
+marker on a unit nobody uses makes this guard LOUDER, not quieter.
+
+WHAT THE MARKER STILL DOES NOT CHECK, stated because the paragraph above reads
+broader than the instrument is: nothing verifies that a marked unit LACKS a
+Python surface. A unit that carries the marker, is used by a sibling, and also
+exposes Python entry points would be exempted wrongly. That is the same missing
+signal named four paragraphs up -- "this unit intends a Python surface" is not
+derivable from the source today -- so the marker is checked for SHARING, which is
+derivable, and trusted on INTENT, which is not. Reviewing a new marker means
+reading the unit; there are 1 of them today.
 """
 import os, re, sys
 
@@ -62,6 +90,22 @@ LIBDIRS = ('lib/rtl', 'lib/pcl')
 # the way a unit name can.
 MARSHALLING = re.compile(r'TPyList|TPyBytes|TPyDict|TPyIter|pyvar_|pystar_|pystr_of|pynone')
 
+# The marker a unit uses to declare it is NOT importable. A reason is REQUIRED --
+# a bare marker would be an allowlist entry wearing a comment's clothes.
+NOT_A_MODULE = re.compile(r'NOT-A-PYTHON-MODULE:[ \t]*(\S[^\r\n}]*)')
+
+# Comments are stripped before reading `uses`, because prose says "uses" constantly
+# -- pylib.pas alone carries four comment lines that would otherwise parse as one.
+COMMENT = re.compile(r'\{[^}]*\}|\(\*.*?\*\)|//[^\r\n]*', re.S)
+
+
+def uses_names(src):
+    """Unit names appearing in any `uses` clause, comments removed."""
+    out = set()
+    for clause in re.findall(r'\buses\b([^;]*);', COMMENT.sub(' ', src), re.I):
+        out.update(n.strip().lower() for n in clause.split(',') if n.strip())
+    return out
+
 
 def listed_names(src):
     m = re.search(r"function PyRtlUnitServesPython.*?\n(.*?)\nend;", src, re.S)
@@ -72,8 +116,28 @@ def listed_names(src):
     return set(re.findall(r"lo = '([a-z0-9_]+)'", m.group(1)))
 
 
-def scan(listed):
-    """Units with a Python surface that no bare import can reach."""
+def shared_units():
+    """Every unit name that some lib unit `uses`, across LIBDIRS."""
+    shared = set()
+    for d in LIBDIRS:
+        full = os.path.join(ROOT, d)
+        if not os.path.isdir(full):
+            continue
+        for f in sorted(os.listdir(full)):
+            if f.endswith('.pas'):
+                src = open(os.path.join(full, f), errors='replace').read()
+                shared.update(uses_names(src) - {f[:-4].lower()})
+    return shared
+
+
+def scan(listed, shared=None):
+    """Units with a Python surface that no bare import can reach.
+
+    `shared` is injectable so the selftest can build the must-fail arm of the
+    marker from the REAL population rather than from a fixture.
+    """
+    if shared is None:
+        shared = shared_units()
     bad = []
     for d in LIBDIRS:
         full = os.path.join(ROOT, d)
@@ -89,8 +153,17 @@ def scan(listed):
                 continue                      # reachable by the list route
             body = open(os.path.join(full, f), errors='replace').read()
             hits = len(MARSHALLING.findall(body))
-            if hits:
-                bad.append((os.path.join(d, f), name, hits))
+            if not hits:
+                continue
+            if NOT_A_MODULE.search(body):
+                # The claim is CHECKED, not taken. A unit declaring itself a
+                # shared implementation that NOBODY uses is unreachable by every
+                # route there is; the marker must not be able to hide that.
+                if name in shared:
+                    continue
+                bad.append((os.path.join(d, f), name, hits, 'orphan-marker'))
+                continue
+            bad.append((os.path.join(d, f), name, hits, 'unreachable'))
     return bad
 
 
@@ -113,15 +186,35 @@ def main():
                      "control cannot be constructed. Pick another listed unit "
                      "with marshalling hits and update this selftest.")
         must_flag = scan(listed - {'zlib'})
-        if not any(n == 'zlib' for _, n, _ in must_flag):
+        if not any(n == 'zlib' for _, n, _, _ in must_flag):
             sys.exit("selftest FAILED (positive control): with `zlib` removed from "
                      "the list, the scan did not flag lib/rtl/zlib.pas. This guard "
                      "cannot fail and is therefore certifying nothing.")
         # NEGATIVE CONTROL: a guard that flags everything passes the above.
-        if any(n == 'zlib' for _, n, _ in scan(listed)):
+        if any(n == 'zlib' for _, n, _, _ in scan(listed)):
             sys.exit("selftest FAILED (negative control): zlib is listed and was "
                      "still flagged, so the scan ignores the list.")
-        print("py_surface selftest OK: flags zlib when unlisted, clears it when listed")
+
+        # THE MARKER'S OWN POSITIVE CONTROL, and it is the reason the marker is a
+        # category rather than an allowlist. Claiming NOT-A-PYTHON-MODULE asserts
+        # that siblings share the unit; with `shared` emptied, that assertion is
+        # false for every marked unit and every one of them MUST flag. If this
+        # arm cannot fail, the marker is a free pass and this guard is certifying
+        # whatever anyone chooses to write in a comment.
+        marked = [n for _, n, _, why in scan(listed, shared=set())
+                  if why == 'orphan-marker']
+        if not marked:
+            sys.exit("selftest FAILED (marker control): with `shared` emptied, no "
+                     "NOT-A-PYTHON-MODULE unit was flagged as an orphan. Either "
+                     "no unit carries the marker (then delete this arm) or the "
+                     "marker is honoured unconditionally, which is an allowlist.")
+        if any(why == 'orphan-marker' for _, _, _, why in scan(listed)):
+            sys.exit("selftest FAILED (marker negative control): a marked unit is "
+                     "flagged as an orphan against the REAL share map, so either "
+                     "`uses` parsing is broken or a marked unit is genuinely dead.")
+        print("py_surface selftest OK: flags zlib when unlisted, clears it when "
+              "listed; flags %d marked unit(s) when nothing shares them, clears "
+              "them when something does" % len(marked))
         if not want_scan:
             return 0
 
@@ -136,9 +229,25 @@ def main():
               "not checked)" % len(listed))
         return 0
 
+    orphans = [b for b in bad if b[3] == 'orphan-marker']
+    if orphans:
+        print("py_surface: FAIL -- %d unit(s) DECLARE NOT-A-PYTHON-MODULE and "
+              "nothing uses them:" % len(orphans))
+        for path, name, hits, _ in orphans:
+            print("    %-34s %d marshalling hits" % (path, hits))
+            print("        It claims to be a shared implementation, and no unit in")
+            print("        %s shares it. Unreachable by every route: no import" %
+                  ', '.join(LIBDIRS))
+            print("        finds it and no sibling calls it. Either wire it up, or")
+            print("        delete it -- the marker does not make dead code live.")
+        print()
+
+    unreachable = [b for b in bad if b[3] == 'unreachable']
+    if not unreachable:
+        return 1
     print("py_surface: FAIL -- %d unit(s) carry Python marshalling types but no "
-          "bare import can reach them:" % len(bad))
-    for path, name, hits in bad:
+          "bare import can reach them:" % len(unreachable))
+    for path, name, hits, _ in unreachable:
         print("    %-34s %d marshalling hits" % (path, hits))
         print("        A bare `import %s` will NOT find this unit. It falls through"
               % name)
@@ -152,6 +261,16 @@ def main():
     print("    the question is not 'does a Python package exist by this name'.")
     print("    If the unit is NOT meant to be that Python module, rename it")
     print("    mimic_<module>.pas instead, or the surface is unreachable by design.")
+    print()
+    print("    AND THERE IS A THIRD CASE THIS MESSAGE DID NOT NAME UNTIL 2026-09-14:")
+    print("    a unit whose marshalling types SERVE other units' Python surfaces and")
+    print("    which nobody should ever import (pymarshal is the worked example;")
+    print("    compiler/builtin/pylib.pas is the same animal outside LIBDIRS). Do")
+    print("    NOT add it to PyRtlUnitServesPython -- that list records units")
+    print("    WRITTEN TO BE the Python module of that name, and a false entry is")
+    print("    the failure mode it exists to prevent. Put a comment reading")
+    print("    NOT-A-PYTHON-MODULE: <why> in the unit instead. The claim is CHECKED:")
+    print("    a marked unit that no sibling uses still fails, above.")
     return 1
 
 
