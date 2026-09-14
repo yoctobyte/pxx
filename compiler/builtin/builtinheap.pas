@@ -3309,7 +3309,7 @@ end;
   character constants and emitted with ONE raw write. A trace that allocated
   would perturb the very heap it is reporting on, and would re-enter the
   allocator from inside PXXObjRelease -> PXXFree. }
-procedure PXXObjTrace(op: NativeInt; p: Pointer; rc: Int64);
+procedure PXXObjTrace(op: NativeInt; p: Pointer; rc: Int64; extra: Int64);
 var buf: array[0..63] of Byte; n, i, d: Integer; v, r: Int64; neg: Boolean;
 begin
   buf[0] := Ord('o'); buf[1] := Ord('b'); buf[2] := Ord('j');
@@ -3354,6 +3354,35 @@ begin
   begin
     buf[n] := Ord('-'); n := n + 1;        { sign trails; an rc below 0 is a bug anyway }
   end;
+  { FOURTH COLUMN, on the A lines only: the requested SIZE. A leaked object is
+    an A with no matching F, so a size here turns "4220 objects a second are
+    never freed" into a size HISTOGRAM of exactly those objects, which names
+    the class. It is a SEPARATE column rather than the rc slot -- rc is always
+    1 on an A line and the slot was free, but a column labelled rc carrying a
+    size is how a reader gets a confident wrong answer. Callers that have
+    nothing to add pass -1 and the column is omitted. }
+  if extra >= 0 then
+  begin
+    buf[n] := 32; n := n + 1;
+    d := n;
+    if extra = 0 then
+    begin
+      buf[n] := Ord('0'); n := n + 1;
+    end
+    else
+      while extra > 0 do
+      begin
+        buf[n] := Byte(48 + Integer(extra mod 10));
+        n := n + 1;
+        extra := extra div 10;
+      end;
+    i := n - 1;
+    while d < i do
+    begin
+      v := buf[d]; buf[d] := buf[i]; buf[i] := Byte(v);
+      d := d + 1; i := i - 1;
+    end;
+  end;
   buf[n] := 10; n := n + 1;
   r := PXXSysWrite(2, Int64(@buf[0]), n);
 end;
@@ -3369,7 +3398,7 @@ begin
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('A'), Result, 1);
+  PXXObjTrace(Ord('A'), Result, 1, size);
 {$endif}
 end;
 
@@ -3383,7 +3412,7 @@ begin
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('A'), Result, 1);
+  PXXObjTrace(Ord('A'), Result, 1, size);
 {$endif}
 end;
 
@@ -3413,7 +3442,7 @@ begin
   PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('A'), Result, 1);
+  PXXObjTrace(Ord('A'), Result, 1, size);
 {$endif}
 end;
 
@@ -3481,7 +3510,7 @@ begin
   PMachineWord(base)^ := PMachineWord(base)^ + 1;
 {$endif}
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('R'), p, PMachineWord(base)^);
+  PXXObjTrace(Ord('R'), p, PMachineWord(base)^, -1);
 {$endif}
 end;
 
@@ -3517,12 +3546,12 @@ begin
   PMachineWord(base)^ := rc;
 {$endif}
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('r'), p, rc);
+  PXXObjTrace(Ord('r'), p, rc, -1);
 {$endif}
   if rc = 0 then
   begin
 {$ifdef PXX_OBJTRACE}
-    PXXObjTrace(Ord('F'), p, 0);
+    PXXObjTrace(Ord('F'), p, 0, -1);
 {$endif}
     { Run the type finalizer (releases children, recursing back through here)
       before the block goes away. Installed by pylib; nil in programs that
