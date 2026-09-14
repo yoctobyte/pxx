@@ -119,4 +119,4 @@ Int64 -- i.e. the detector was reading the PROBE, not the trace, and stopped
 working the moment the probe came out.
 
 ## Log
-- 2026-09-14 — resolved, commit PENDING-COMMIT.
+- 2026-09-14 — resolved, commit c53d9ab55.
