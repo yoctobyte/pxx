@@ -411,4 +411,4 @@ This was the single wall on every lekkerzeilen entry point. After the fix,
 `--open-water` under `setarch -R` gets past the camera, through the frame loop's
 first pass, and dies somewhere new:
 `TypeError: dict.update expects a mapping or an iterable of pairs`.
-- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 56c5e6ea8.
