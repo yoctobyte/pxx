@@ -1,0 +1,57 @@
+# A run-time class test on a VARIANT receiver is `pyvarobj(v) is C`, and
+# pyvarobj hands back the RAW payload whatever the tag is.  Five of the seven
+# sites that emitted that test carried no tag guard, so a receiver that is not
+# a class INSTANCE walked __pxxInheritsFrom over `[[payload+0]-8]` and
+# dereferenced whatever lived there.
+#
+# `cls` inside a @classmethod is the shape that bites: PyBoxClassRef makes a
+# variant whose payload is the class BLOB, so the walk reads a word of RTTI and
+# then eight bytes before wherever that points.  lekkerzeilen's world loader
+# died exactly there, on the worker thread, in a classmethod whose own source
+# writes no `is` anywhere.
+#
+# Two classes declare each name on purpose -- one candidate is dispatched
+# statically and never reaches the test.  The classref rows go LAST in each
+# group: the instance arrangement is the one that passes either way.
+
+
+class Chart:
+    SPAN = 11.0
+
+    def __init__(self):
+        self.span = 1.0
+
+    def reach(self, n):
+        return "chart"
+
+
+class Plot:
+    SPAN = 3.0
+
+    def __init__(self):
+        self.span = 2.0
+
+    def reach(self, n):
+        return "plot"
+
+    @classmethod
+    def cls_attr(cls, n):
+        return cls.SPAN * n
+
+    @classmethod
+    def cls_meth(cls, n):
+        return cls().reach(n)
+
+
+def by_value(o, n):
+    return o.reach(n)
+
+
+def run():
+    print("instance attr ", Plot().span)
+    print("instance meth ", by_value(Plot(), 2))
+    print("classref attr ", Plot.cls_attr(2))
+    print("classref meth ", Plot.cls_meth(2))
+
+
+run()

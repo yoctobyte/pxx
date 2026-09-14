@@ -300,7 +300,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (159)
+## backlog-nilpy (160)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -355,6 +355,7 @@ _none_
 | bug-n-a-shared-slot-class-attribute-is-invisible-to-the-dynamic-getter | N | 60 | bug | > | — |
 | bug-n-a-shim-parameter-typed-as-a-container-blocks-the-callable-value-wrapper | N | 45 | bug | > | — |
 | bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments | N | 45 | bug | "The LADDER is widened to eight and this ticket is what remains: the | — |
+| bug-n-a-staticmethod-called-through-cls-raises-attributeerror | N | 70 | bug | > | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time | N | 60 | bug | `h = sys.stdout` then `h.write(x)` COMPILES and dies at run time with `TypeError: object is not callable`, having written nothing. `sys.stdout`/`sys.stderr` are modelled as a bare fd INTEGER (AN_INT_LIT, 1 and 2) and an Integer has no methods. The dotted spelling `sys.stdout.write(x)` was fixed 2026-09-10 by wiring the three-segment table entries sys.stdin already had; this is the spelling the table cannot reach. The fix is to make a stream an OBJECT — pylib's TPyFile already is one — and it cannot land alone: PyParsePrintFile asserts `ASTKind = AN_INT_LIT` and value 1 or 2, so print's file= handling must move in the same change or every `print(..., file=sys.stderr)` goes red. | — |
@@ -1050,9 +1051,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3747)
+## done (3748)
 
-3747 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3748 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1174,6 +1175,7 @@ _none_
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
+- [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole

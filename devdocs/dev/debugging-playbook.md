@@ -26338,3 +26338,44 @@ instrument here: it does not error, it answers about something else.
 
 Related: [A DECLINED GATE IS NOT "NOTHING HAPPENS"] — that is the bug this was
 built to see; this is the instrument, and it is reusable well past that bug.
+
+## A CRASH INSIDE RTTI IS NOT EVIDENCE THAT THE SOURCE DOES A TYPE TEST
+
+Measured 2026-09-14, Track N, hunting lekkerzeilen's world-path fault.
+
+valgrind put the fault at `__pxxInheritsFrom+0x114` — the class parent-chain
+walk that `is` and `isinstance` lower to — reached from `App._bucket`. The
+obvious next move is to read `_bucket` for the type test and check its operand.
+**There isn't one.** `_bucket`'s source contains no `is`, no `isinstance`, no
+`__class__`, and no `type(`. Its first statement is `size = cls.FOLIAGE_CHUNK`.
+
+The walk was emitted by the compiler, to PICK between candidate arms: where two
+unrelated classes declare the same attribute name, a variant-typed receiver is
+resolved at run time with `pyvarobj(v) is C`. The receiver was `cls` — a
+`PyBoxClassRef` variant whose payload is the class BLOB rather than an
+instance — and the test had no tag guard, so `[[blob+0]-8]` produced
+`0x40000000` and the walk dereferenced it.
+
+**The reading that costs an evening is "the source must do something like
+this".** It is the same mistake as blaming a lowering for a construct the
+parser never committed, one layer up: here the construct is not in the source
+at all. Two questions cut it short, both cheap:
+
+- **Does the source contain the construct this frame implements?** If not, the
+  frame is machinery, and the bug is in what the machinery was handed — not in
+  anything you can find by reading the program.
+- **What does the compiler emit for the statement on the faulting LINE?**
+  `objdump` the enclosing proc and read the call sequence. Here it was
+  `PXXVarClear, PyBoxClassRef, pyvarobj, __pxxInheritsFrom` with **no
+  `pyvartag` between the last two** — the missing guard, visible in the calls
+  alone, without decoding a single instruction.
+
+The corollary is the reason it stayed hidden for so long: **a compiler-emitted
+type test is invisible to every grep a reader would run**, so the population of
+sites that need the guard is not discoverable from the application. Seven sites
+in `pyparser.inc` emitted this test and **two** of them carried the guard — and
+those two were the two written beside the comment that says the guard is not
+optional. A rule that lives next to one call site protects that call site.
+
+Related: "ISOLATION GUARDS AGAINST THE RUN, NOT AGAINST THE ROUTE" — the same
+family, where the instrument is honest about something other than the subject.

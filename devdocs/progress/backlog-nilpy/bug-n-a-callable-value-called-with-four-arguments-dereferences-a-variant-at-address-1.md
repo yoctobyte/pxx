@@ -1,15 +1,16 @@
 ---
 slug: bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1
-title: a callable value called with four arguments dereferences a variant at address 1
+title: a bound-method value crashes when its method was not normalised to a variant return
 summary: >
-  lekkerzeilen's world path dies in the frame loop inside the bound-pair call
-  bridge, reading a variant's VType through a pointer whose value is 1. The
-  faulting instruction is `mov (%rax),%rcx` with rax=1, followed by `cmp $6` /
-  `cmp $7` -- a VT_STRING/VT_OBJECT tag dispatch on a variant that was passed
-  by ADDRESS and received the value 1 instead. Presents WITHOUT MALLOC_PERTURB_
-  as `malloc(): unsorted double linked list corrupted`, which sent the first
-  investigation at the heap; the heap damage is downstream of writing through
-  this pointer, not the cause.
+  ROOT CAUSE FOUND. `PyMethodUsedAsValue` decides whether a method is
+  normalised to the function-object ABI by SCANNING TOKENS up to
+  MainProgramTokCount -- so it cannot see a module that has not been appended
+  yet. A method used as a value in a module compiled AFTER the one declaring it
+  therefore keeps its inferred scalar return, and `PyMakeBoundMethod` hands its
+  RAW address to a bridge whose TPyCbM0..M8 all return Variant. The callee
+  leaves a Boolean in rax, the bridge retains rax as the result variant's
+  ADDRESS, and `mov (%rax),%rcx` with rax=1 is the crash. Reduced to four
+  files; lekkerzeilen's `Frustum.sees` is the live case.
 track: N
 type: bug
 prio: 90
@@ -17,27 +18,119 @@ owner: unassigned
 status: open
 ---
 
-## The chain, fully resolved
+## The reduction
 
-`setarch -R gdb` with `MALLOC_PERTURB_=165 MALLOC_CHECK_=3`, addresses resolved
-against the binary's own `.map`:
+Four files. The shape is the point: `geom` declares the method, `early` imports
+geom and only CALLS it, `late` imports geom and takes it as a VALUE. `early` is
+what drags geom into the compile, so geom is compiled before `late`'s tokens
+exist.
 
+```python
+# geom.py
+class Box:
+    def __init__(self, planes):
+        self.planes = planes
+
+    def sees(self, x, y, z, radius):
+        for a, b, c, d in self.planes:
+            if a * x + b * y + c * z + d < -radius:
+                return False
+        return True
+
+# early.py
+import geom
+PLANES = [(1.0, 0.0, 0.0, 0.0), (0.0, 1.0, 0.0, 0.0)]
+def probe():
+    return geom.Box(PLANES).sees(1.0, 2.0, 3.0, 0.5)
+
+# late.py
+import geom
+import early
+def draw():
+    box = geom.Box(early.PLANES)
+    print("direct  ", box.sees(1.0, 2.0, 3.0, 0.5))
+    sees = box.sees
+    print("hoisted ", sees(1.0, 2.0, 3.0, 0.5))
+
+# main.npy
+import early
+import late
+print("early   ", early.probe())
+late.draw()
 ```
-App.run            + 0x1bf4d
-App.render         + 0x9448
-App._draw_reflection + 0x80d9
-App._draw_scene    + 0xdf74
-pyvar_callv4       + 0x1a9
-pybound_callv4     + 0x2a0
-PyBoundCallV       + 0x220
-pybound_pair_call  + 0x194
-pybound_pair_call_kw + 0x1f1     <-- faults here
+
+CPython prints three lines. pxx at b46c98d433f1 prints `early True` and
+`direct True`, then **rc=139** on the hoisted call.
+
+**Collapse it into one module and it passes.** Put the hoist in the main
+program and it passes. Put the hoist in the same module that first imports the
+declaring one and it passes. Four such arrangements were measured and all four
+are green -- which is exactly why this never showed up in a fixture. It is the
+`normalise-dont-special-case` ordering rule again: the arrangement everyone
+writes is the one that works.
+
+## The mechanism, end to end
+
+`PyMethodUsedAsValue` (pyparser.inc) is a token scan:
+
+```pascal
+j := 1;
+while j < MainProgramTokCount do ...   { `<something>.nm` not followed by ( or = }
 ```
 
-Fault: `mov (%rax),%rcx` with **rax = 1**, then `cmp $0x6,%rcx` / `cmp $0x7,%rcx`.
+`MainProgramTokCount` is re-pointed to the END OF THE MODULE BEING COMPILED, so
+the scan's population is "every module appended so far". A use in a later
+module is invisible, the method is not normalised, and its inferred return type
+stands. Its own comment already records what that costs: *"Without it the pair
+carried a method whose result came back in a register while the caller expected
+the hidden-destination convention: a bound method returning a value crashed,
+and one returning None happened to work."* The mechanism was understood; only
+its blind spot was not.
 
-`pybound_pair_call_kw` is a three-line wrapper (retain / body / release), so at
-`-O2` the +0x1f1 site is `PyBoundPairCallKwBody` inlined into it.
+`PyMakeBoundMethod` then emits `AN_PROCADDR` of the method RAW and passes
+`Procs[mpi].IsFunc` -- a two-way function/procedure flag where a THREE-way
+distinction is needed: variant-returning function, scalar-returning function,
+procedure. The sibling path for plain defs gates on exactly the missing case
+(`Procs[pi].RetType <> tyVariant` -> `PyGetOrMakeCallableWrapper`); the
+bound-method path never got that gate.
+
+`PyBoundPairCallKwBody` casts the code pointer to `TPyCbM4` (`: Variant`),
+calls it, and the emitted caller then does `call <retain thunk>` on rax --
+`mov (%rax),%rcx; cmp $6; cmp $7`. rax is `1`, i.e. `True`.
+
+## Static proof, no timing involved
+
+In lekkerzeilen, `App._draw_scene` contains exactly one `pybound_new_sig` and
+one `pyvar_callv4`, and pushes `0x617379` as the code pointer -- which the map
+names `Frustum.sees`. `Frustum.sees` ends in
+`movzbq -0x29(%rbp),%rax; leave; ret`: a zero-extended BYTE. Nine modules
+import math3d and `app.py`, which holds `sees = frustum.sees`, is not the first
+of them.
+
+## Where to fix it
+
+`PyMakeBoundMethod`. Making the scan see later modules is not possible -- they
+have not been tokenised -- so the adaptation belongs where the callee is known,
+which is the same conclusion `PyGetOrMakeCloneThunk` reached for the clone
+trampoline and states in its own header. Synthesize a cached
+`function $pyboundwrap_N(recv: Pointer; const a0..: Variant): Variant` whose
+body is `Result := TCls(recv).meth(a0, ...)`, on the existing pending-lambda
+queue with a new `PyPendLamTok` sentinel (-1 and -2 are taken by the
+callable-value wrapper and the clone thunk). Then pass the wrapper's address to
+`pybound_new_sig` instead of the method's.
+
+Widening every method unconditionally would also work and costs boxing on every
+bound-method call; the wrapper is local and pays only where the ABI actually
+differs.
+
+## Gate
+
+`make test-nilpy` + self-host byte-identical, plus the four-file reduction
+above wired as a fixture -- and it must stay a MULTI-MODULE fixture with the
+value-use in the later module, because every single-module spelling passes on
+the unfixed compiler.
+
+## Earlier notes (kept)
 
 ## Why this is NOT the heap bug it looks like
 
@@ -65,10 +158,25 @@ Same shape as
 `bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer`: a fix
 that makes calls complete exposes the layer the incomplete call was hiding.
 
-**NOT yet established whether this site is pre-existing or was perturbed by
-accb99f3c**, which did touch shared RTTI emission (`EmitMethInfo`'s param
-block grew by one word). That control is a compiler rebuild plus a ~2m45s app
-build and has not been run. Do not assume either way.
+**MEASURED 2026-09-14: NOT accb99f3c.** The control was run twice over. A
+compiler built at `accb99f3c^` (55cdf94233a9) and a lekkerzeilen built from the
+same sources reproduce the world-path fault identically under valgrind; and
+disassembled, both binaries carry the same call sequence at the faulting site.
+See `done/bug-n-a-class-reference-receiver-walks-rtti-off-a-non-instance`.
+
+**That same run also showed this ticket names the WRONG FRAME.** Under valgrind
+the program dies earlier, on the LOADER thread, at arity 0, inside
+`__pxxInheritsFrom` reached from `App._bucket` -- a classref receiver walking
+RTTI off a non-instance. That was a separate bug and it is now FIXED. The
+gdb chain recorded above is a DIFFERENT fault: main thread, arity 4,
+`App._draw_scene`, a bad ADDRESS rather than a bad class pointer. It IS still live: with the
+classref fix in, lekkerzeilen now loads the world, renders the 512x512 chart
+in 3.2 s, reaches the frame loop -- and dies here, same instruction, same
+`rax=1`, on thread 1, with `PyBoundPairCallKwBody+0x2915` under
+`PyBoundPairCallKwBody+0x111`. So this ticket is the world path's REMAINING
+wall, not a duplicate of the one that was fixed. The slug's "four arguments"
+is accurate for this observation and was never corroborated by the valgrind
+one, which was a different bug entirely.
 
 ## Family
 

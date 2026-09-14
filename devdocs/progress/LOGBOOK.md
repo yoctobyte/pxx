@@ -4114,3 +4114,17 @@ Found from lekkerzeilen: the demo's loader thread dies inside `Region.load`'s in
 2026-09-14 | frank-user | (method) | DO NOT STASH THE TREE WHILE A SUITE IS MEASURING IT. `git stash` to build a pre-fix control voided a running test-nilpy: it reported `undefined variable (pysig_fill_defaults)` against a reverted pylib, which reads exactly like a real compile failure and is the stash's own signature. The rule covers `git stash`, not just pull and commit — and the re-run is the only way back.
 2026-09-14 | frank-user | (diagnosis) | pxx's allocator is mmap-backed and NEVER calls glibc malloc, so `malloc(): unsorted double linked list corrupted` in a pxx program names the C side — and -dPXX_HEAP_DEBUG's poison and quarantine instrument PXXAlloc/PXXFree only, so they run, report nothing, and the program still dies. An instrument correct about the other heap. Use MALLOC_CHECK_/MALLOC_PERTURB_ there.
 2026-09-14 | frank-user | (diagnosis) | MALLOC_PERTURB_ SEPARATED A SYMPTOM FROM ITS CAUSE. lekkerzeilen's world path presents as glibc heap corruption; under perturb it presents instead as `mov (%rax),%rcx` with rax=1 in the bound-pair call bridge — a variant passed BY ADDRESS that received the value 1. 1 is not a perturb-derived value (freed memory reads 0xA5...), so the heap damage is downstream of writing through that pointer. Filed as bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1.
+
+2026-09-14 | frank-user (Track N) | compiler/pyparser.inc | A run-time class
+test on a variant receiver is `pyvarobj(v) is C`, and pyvarobj returns the RAW
+payload whatever the tag is; AN_IS_TEST lowers to __pxxInheritsFrom over
+`[[payload+0]-8]`, so on anything that is not a class instance the walk
+dereferences garbage. SEVEN sites emitted that test and only TWO guarded the
+tag -- both of them the two written beside the comment saying the guard is not
+optional. Folded all of them onto one `PyMakeVariantIsTest`. The receiver that
+bites is `cls` inside a @classmethod: PyBoxClassRef's payload is the class
+BLOB, not an instance. lekkerzeilen's world loader died there, on the worker
+thread, in a classmethod whose own source contains no `is` at all. WHY it took
+this long: the crash presented as glibc heap corruption, so three rounds of
+instrumentation went at the pxx allocator -- which never calls malloc and was
+correct about the other heap the whole time.

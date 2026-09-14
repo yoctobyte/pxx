@@ -14143,6 +14143,65 @@ begin
             (LowerCase(GetTokenStr(TokPos + 1)) = 'from_bytes');
 end;
 
+{ `(pyvartag(v) = VT_OBJECT) and (pyvarobj(v) is <ci>)` -- the ONE spelling of a
+  run-time class test on a VARIANT receiver.
+
+  The tag half is not decoration and it is not optional. pyvarobj hands back the
+  RAW payload whatever the tag is, and AN_IS_TEST lowers to __pxxInheritsFrom on
+  `[[payload+0]-8]` (ir.inc), so on any non-instance tag that walk dereferences
+  whatever happens to live there. A CLASSREF receiver is the shape that actually
+  bites, and it is not exotic: `cls` inside a @classmethod is a PyBoxClassRef'd
+  variant whose payload is the class BLOB rather than an instance, so `[blob+0]`
+  is a word of RTTI and `[that - 8]` is nothing at all. lekkerzeilen's world
+  loader died in __pxxInheritsFrom reading 0x40000008 for exactly that reason --
+  on the worker thread, inside a classmethod whose source writes no `is` at all.
+
+  SEVEN sites emitted this test and only TWO carried the guard, which is why it
+  is a function now rather than an eighth copy of the same ten lines.
+
+  `baseNode` is read TWICE (once per half), so it must already be an
+  evaluate-once value; every caller hoists the receiver into a hidden temp
+  first, the same precondition the attribute chain documents. }
+function PyMakeVariantIsTest(baseNode, ci: Integer): Integer;
+var unboxArg, unboxCall, isN, tagArg, tagCall, tagLit, tagEq: Integer;
+begin
+  unboxArg := AllocNode(AN_ARG);
+  ASTLeft[unboxArg] := baseNode;
+  unboxCall := AllocNode(AN_CALL);
+  ASTIVal[unboxCall] := FindProc('pyvarobj');
+  if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
+  ASTTk[unboxCall] := Ord(tyPointer);
+  ASTLeft[unboxCall] := unboxArg;
+  isN := AllocNode(AN_IS_TEST);
+  ASTLeft[isN] := unboxCall;
+  ASTIVal[isN] := ci;
+  ASTTk[isN] := Ord(tyBoolean);
+
+  tagArg := AllocNode(AN_ARG);
+  ASTLeft[tagArg] := baseNode;
+  tagCall := AllocNode(AN_CALL);
+  ASTIVal[tagCall] := FindProc('pyvartag');
+  if ASTIVal[tagCall] < 0 then Error('Nil Python: pylib (pyvartag) not loaded');
+  ASTTk[tagCall] := Ord(tyInt64);
+  ASTLeft[tagCall] := tagArg;
+  tagLit := AllocNode(AN_INT_LIT);
+  ASTIVal[tagLit] := VT_OBJECT;
+  ASTTk[tagLit] := Ord(tyInt64);
+  tagEq := AllocNode(AN_BINOP);
+  ASTIVal[tagEq] := Ord(tkEq);
+  ASTLeft[tagEq] := tagCall;
+  ASTRight[tagEq] := tagLit;
+  ASTTk[tagEq] := Ord(tyBoolean);
+
+  { boolean `and` lowers with JUMP_IF_FALSE over the right operand (ir.inc
+    AN_BINOP), so a non-object tag never reaches the walk. }
+  Result := AllocNode(AN_BINOP);
+  ASTIVal[Result] := Ord(tkAnd);
+  ASTLeft[Result] := tagEq;
+  ASTRight[Result] := isN;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
 { `v.field` (READ) where `v` is a VARIANT: unbox to the class that declares the
   field and read it. Returns -1 when no class declares the name. }
 { Read `<class>.field` off a variant: unbox to that class and read. }
@@ -14428,17 +14487,7 @@ begin
   begin
     armN := PyForceVariant(PyVariantFieldArm(baseNode, cands[i], candFi[i], fname));
     { cond: pyvarobj(v) is <candidate> — the test isinstance lowers to }
-    unboxArg := AllocNode(AN_ARG);
-    ASTLeft[unboxArg] := baseNode;
-    unboxCall := AllocNode(AN_CALL);
-    ASTIVal[unboxCall] := FindProc('pyvarobj');
-    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-    ASTTk[unboxCall] := Ord(tyPointer);
-    ASTLeft[unboxCall] := unboxArg;
-    condN := AllocNode(AN_IS_TEST);
-    ASTLeft[condN] := unboxCall;
-    ASTIVal[condN] := cands[i];
-    ASTTk[condN] := Ord(tyBoolean);
+    condN := PyMakeVariantIsTest(baseNode, cands[i]);
 
     pairN := AllocNode(AN_PAIR);
     ASTLeft[pairN] := armN;
@@ -14535,17 +14584,7 @@ begin
     asgN := PyVariantFieldStore(baseNode, cands[i], candFi[i], fname,
                                 valNode, augOp);
     { cond: pyvarobj(v) is <candidate> -- the test isinstance lowers to }
-    unboxArg := AllocNode(AN_ARG);
-    ASTLeft[unboxArg] := baseNode;
-    unboxCall := AllocNode(AN_CALL);
-    ASTIVal[unboxCall] := FindProc('pyvarobj');
-    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-    ASTTk[unboxCall] := Ord(tyPointer);
-    ASTLeft[unboxCall] := unboxArg;
-    condN := AllocNode(AN_IS_TEST);
-    ASTLeft[condN] := unboxCall;
-    ASTIVal[condN] := cands[i];
-    ASTTk[condN] := Ord(tyBoolean);
+    condN := PyMakeVariantIsTest(baseNode, cands[i]);
 
     pairN := AllocNode(AN_PAIR);
     ASTLeft[pairN] := asgN;
@@ -15321,6 +15360,68 @@ begin
   PyWrapHeapCallableCall := tern;
 end;
 
+{ A RETURN-SIDE WRAPPER FOR A BOUND METHOD whose own result does not ride the
+  Variant hidden-destination convention.
+
+  `PyMethodUsedAsValue` normalises a method to the function-object ABI when it
+  can SEE the value-use, and it is a token scan bounded by MainProgramTokCount
+  -- the end of the module being compiled. A method used as a value in a module
+  compiled LATER is therefore invisible to it, keeps whatever scalar return was
+  inferred, and `PyMakeBoundMethod` then hands its RAW address to a bridge whose
+  TPyCbM0..M8 are all declared `: Variant`. The callee leaves its Boolean in the
+  result register, the caller retains that register as the result variant's
+  ADDRESS, and `mov (%rax),%rcx` with rax = 1 is the crash. lekkerzeilen's
+  `Frustum.sees` is the live case: nine modules import math3d and the one
+  holding `sees = frustum.sees` is not the first of them.
+
+  Making the scan see later modules is not possible -- they have not been
+  tokenised. So the adaptation goes where the callee IS known, which is here;
+  the same conclusion PyGetOrMakeCloneThunk states for the clone trampoline.
+
+  Shape: `function $pyboundretwrap_N(self: <the class>; const a1..: Variant):
+  Variant`, body `return REALMETHOD(self, a1, ...)`. Parameter 0 keeps the
+  method's OWN receiver type, which is exactly what the bridge passes, so the
+  hand-built `bStart = -1` body builder emits the ordinary method call and the
+  usual return coercion applies. Cached by name, so one wrapper per method
+  however many bound values a module takes.
+  bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1 }
+function PyGetOrMakeBoundRetWrapper(mpi: Integer): Integer;
+var wrapName: AnsiString; wrapPi, wpi, n: Integer;
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+begin
+  Result := -1;
+  if (mpi < 0) or (mpi >= ProcCount) then Exit;
+  n := Procs[mpi].ParamCount;
+  if (n < 1) or (n > MAX_PROC_PARAMS) then Exit;
+  wrapName := '$pyboundretwrap_' + AIntToStr(mpi);
+  wrapPi := FindProc(wrapName);
+  if wrapPi >= 0 then begin Result := wrapPi; Exit; end;
+  pnames[0] := 'self';
+  ptypes[0] := Procs[mpi].Params[0].TypeKind;
+  for wpi := 1 to n - 1 do
+  begin
+    pnames[wpi] := 'a' + AIntToStr(wpi);
+    ptypes[wpi] := tyVariant;
+  end;
+  wrapPi := RegisterProc(wrapName, True, tyVariant, n, pnames, ptypes);
+  { the receiver's CLASS identity, or the call below cannot resolve the method }
+  if (wrapPi * MAX_PROC_PARAMS < Length(ProcParamRecId)) and
+     (mpi * MAX_PROC_PARAMS < Length(ProcParamRecId)) then
+    ProcParamRecId[wrapPi * MAX_PROC_PARAMS] :=
+      ProcParamRecId[mpi * MAX_PROC_PARAMS];
+  Procs[wrapPi].BodyAddr := -1;
+  if PyPendLamCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many pending callable-value wrappers/lambdas');
+  PyPendLamTok[PyPendLamCount] := -1;    { sentinel: hand-built body, not parsed }
+  PyPendLamProc[PyPendLamCount] := wrapPi;
+  PyPendLamWrapReal[PyPendLamCount] := mpi;
+  PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+  PyPendLamSelf[PyPendLamCount] := CurSelfClass;
+  Inc(PyPendLamCount);
+  Result := wrapPi;
+end;
+
 { `obj.method` used as a VALUE (no following call): capture it as a bound-method
   variant so the receiver is not dropped. pybound_new(@method, self) boxes
   {code, recv}; the receiver is passed by ADDRESS-as-value (an object reference is
@@ -15329,7 +15430,7 @@ end;
   selfNode supplies the receiver. }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer;
 var procAddr, recvArg, selfArg, callNode, boundPi, isFuncNode, isFuncArg: Integer;
-    starIdx, starNode, starArg, sigNode, sigArg: Integer;
+    starIdx, starNode, starArg, sigNode, sigArg, addrPi, wrapPi: Integer;
 begin
   { `*args` on a METHOD is recorded in SIGNATURE space (Self at 0); the runtime
     bridge is handed the receiver separately, so it wants the callee's own
@@ -15344,8 +15445,17 @@ begin
     else boundPi := FindProc('pybound_new');
   end;
   if boundPi < 0 then Error('Nil Python: pylib (pybound_new) not loaded');
+  { The ADDRESS is the wrapper's when the method's own return does not ride the
+    Variant convention; the SIGNATURE below stays the real method's, exactly as
+    PyMakeFuncValueFor keeps `origPi` for its own wrapper. }
+  addrPi := mpi;
+  if Procs[mpi].IsFunc and (Procs[mpi].RetType <> tyVariant) then
+  begin
+    wrapPi := PyGetOrMakeBoundRetWrapper(mpi);
+    if wrapPi >= 0 then addrPi := wrapPi;
+  end;
   procAddr := AllocNode(AN_PROCADDR);
-  ASTIVal[procAddr] := mpi;
+  ASTIVal[procAddr] := addrPi;
   ASTTk[procAddr]   := Ord(tyPointer);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := boundPi;
@@ -15706,17 +15816,7 @@ begin
     armN := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[i], fname,
                                                  sigs[i], argsHead, n,
                                                  kwNamesSym, kwValsSym));
-    unboxArg := AllocNode(AN_ARG);
-    ASTLeft[unboxArg] := baseNode;
-    unboxCall := AllocNode(AN_CALL);
-    ASTIVal[unboxCall] := FindProc('pyvarobj');
-    if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-    ASTTk[unboxCall] := Ord(tyPointer);
-    ASTLeft[unboxCall] := unboxArg;
-    condN := AllocNode(AN_IS_TEST);
-    ASTLeft[condN] := unboxCall;
-    ASTIVal[condN] := cands[i];
-    ASTTk[condN] := Ord(tyBoolean);
+    condN := PyMakeVariantIsTest(baseNode, cands[i]);
     pairN := AllocNode(AN_PAIR);
     ASTLeft[pairN] := armN;
     ASTRight[pairN] := Result;
@@ -18980,7 +19080,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     anyKw: Boolean; dualRetMixed: Boolean;
     { the open-world FALLBACK arm — see where it is built }
     dynFbProc, dynFbCall, dynFbArg, dynFbLast, dynFbName: Integer;
-    dynFbCond, dynFbPair, dynFbTern, dynFbUnbox: Integer;
+    dynFbCond, dynFbPair, dynFbTern: Integer;
     dynFbBuilt: Boolean;      { ...and was it actually built — the arms outside
                                 it must then type the chain as the variant it is }
     argExprs: array[0..15] of Integer;
@@ -20324,20 +20424,11 @@ begin
       ASTTk[dynFbCall] := Ord(tyVariant);
       ASTLeft[dynFbCall] := dynFbArg;
 
-      { cond: pyvarobj(recv) is <the pick> — the same is-test the unrelated
-        user-class arms below use, so a descendant keeps the static arm. }
-      dynFbUnbox := AllocNode(AN_ARG);
-      ASTLeft[dynFbUnbox] := baseNode;
-      unboxCall := AllocNode(AN_CALL);
-      ASTIVal[unboxCall] := FindProc('pyvarobj');
-      if ASTIVal[unboxCall] < 0 then
-        Error('Nil Python: pylib (pyvarobj) not loaded');
-      ASTTk[unboxCall] := Ord(tyPointer);
-      ASTLeft[unboxCall] := dynFbUnbox;
-      dynFbCond := AllocNode(AN_IS_TEST);
-      ASTLeft[dynFbCond] := unboxCall;
-      ASTIVal[dynFbCond] := hitCi;
-      ASTTk[dynFbCond] := Ord(tyBoolean);
+      { cond: the receiver really IS the class the static pick came from -- the
+        same tag-guarded test the unrelated user-class arms below use, so a
+        descendant keeps the static arm and a classref/list/number receiver
+        takes the dynamic one instead of walking RTTI off a non-instance. }
+      dynFbCond := PyMakeVariantIsTest(baseNode, hitCi);
 
       dynFbPair := AllocNode(AN_PAIR);
       ASTLeft[dynFbPair] := callNode;
@@ -20471,17 +20562,7 @@ begin
         { cond: pyvarobj(recv) is <that user class> — the same test isinstance
           lowers to, which is what makes an unrelated-user-class candidate
           dispatchable at all. }
-        unboxArg := AllocNode(AN_ARG);
-        ASTLeft[unboxArg] := baseNode;
-        unboxCall := AllocNode(AN_CALL);
-        ASTIVal[unboxCall] := FindProc('pyvarobj');
-        if ASTIVal[unboxCall] < 0 then Error('Nil Python: pylib (pyvarobj) not loaded');
-        ASTTk[unboxCall] := Ord(tyPointer);
-        ASTLeft[unboxCall] := unboxArg;
-        condN := AllocNode(AN_IS_TEST);
-        ASTLeft[condN] := unboxCall;
-        ASTIVal[condN] := dualCis[di];
-        ASTTk[condN] := Ord(tyBoolean);
+        condN := PyMakeVariantIsTest(baseNode, dualCis[di]);
       end;
 
       pairN := AllocNode(AN_PAIR);
@@ -35338,7 +35419,11 @@ begin
     begin
       wIdentNode := AllocNode(AN_IDENT);
       ASTIVal[wIdentNode] := Procs[procIdx].Params[i].SymIdx;
-      ASTTk[wIdentNode] := Ord(tyVariant);
+      { from the wrapper's OWN parameter, not a hardcoded tyVariant: a BOUND
+        wrapper's parameter 0 is the RECEIVER and is class-typed. Every
+        pre-existing caller declares all-Variant parameters, so this reads the
+        same value for them. }
+      ASTTk[wIdentNode] := Ord(Procs[procIdx].Params[i].TypeKind);
       wArgNode := AllocNode(AN_ARG);
       ASTLeft[wArgNode] := wIdentNode; ASTRight[wArgNode] := -1;
       if wArgLast < 0 then wArgSeq := wArgNode else ASTRight[wArgLast] := wArgNode;

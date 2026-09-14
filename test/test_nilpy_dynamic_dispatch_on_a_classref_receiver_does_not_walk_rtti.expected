@@ -1,0 +1,4 @@
+instance attr  2.0
+instance meth  plot
+classref attr  6.0
+classref meth  plot
