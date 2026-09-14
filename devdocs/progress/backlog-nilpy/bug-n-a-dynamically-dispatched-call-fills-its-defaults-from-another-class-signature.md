@@ -137,3 +137,39 @@ apply defaults leaves row 1 silently wrong.
   for the location, a probe runtime that reports instead of dereferencing for
   the value, entry prints in all six candidates to prove no body runs, then
   three reductions to find the arrangement. Filed with the repro.
+
+## Three things measured AFTER filing, each of which narrows the fix
+
+**1. The run-time lookup CANNOT be taught defaults without new RTTI.**
+`TMethInfo` (lib/rtl/typinfo.pas:71) carries `NamePtr`, `Code`, `Arity`,
+`RetKind`, `ParamKinds` (kinds, then param-name pointers) and `Flags`. There is
+no block of DEFAULT VALUES. So the honest error in row 2 is not an oversight in
+PyHostCall -- the information is not there to bind with. Giving the dynamic path
+defaults is a FEATURE touching the RTTI emitter and that mirror record, not a
+fix, and it would still leave row 1 wrong.
+
+**2. The ordering fix is the one that repairs all three outcomes, and it is
+already proven.** Swapping the two import lines in the repro's `__main__.py`
+turns both rows correct. `PyPreScanImports` (pyparser.inc:42740) does visit
+every import token including function-local ones -- its own header says it has
+no notion of reachability and resolves them all -- but it walks them in TOKEN
+ORDER, and `PyParseImportUnitAs` (:41942) parses a pulled module's BODIES at
+pull time. So wind.py's bodies are parsed during the prescan, before world.py
+is mentioned at all. The repair is a two-phase pull: register every imported
+module's class shells first, then parse bodies. That is a restructure of shared
+import machinery with a long tail of documented prior bugs (guarded arms,
+soft misses, alias rollback) and it is NOT a small change.
+
+**3. THE OBVIOUS WORKAROUND DOES NOT WORK -- do not ship it.** Adding
+`from . import world` to the top of `lekkerzeilen/wind.py`, with every other
+source byte-identical to the owner's tree, MOVES the failure rather than
+removing it: the world path then dies during startup with
+
+    AttributeError: 'World' object has no attribute 'flow'
+
+and `World` does declare `flow`, as a @property (world.py, the `grid`/`bed`/
+`canopy`/`flow` block). So either the same family bites one layer over on a
+property lookup, or perturbing the module graph reorders some other first-wins
+pick. Either way the world path does not run, and "one-line workaround" must
+not travel as a fact. Measured twice, the second time on otherwise-pristine
+sources.
