@@ -132,7 +132,7 @@ first exception. The `%` row here was the 217.
 - 2026-09-14 — filed from the lekkerzeilen `--open-water` wall. Reduction is
   single-file and inline above.
 - 2026-09-14 — the ticket's own fallback was the fix; the preferred fold does not exist for f-strings and bytes.
-- 2026-09-14 — resolved, commit PENDING-COMMIT.
+- 2026-09-14 — resolved, commit bf4f94878.
 
 ## Provenance
 
