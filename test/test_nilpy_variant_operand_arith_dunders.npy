@@ -96,3 +96,77 @@ print("strs ", t + "y")
 u = 0
 u = [1]
 print("lists", u + [2], u * 2)
+
+# --- THE OTHER ARRANGEMENT: exactly ONE side is a user object ---------------
+#
+# Everything above binds a variant on the LEFT and a user class on the RIGHT, so
+# BOTH variant slots hold an object -- and the runtime guard those eight entry
+# points carried was `(a.VType = 7) and (b.VType = 7)`. The whole-family fixture
+# passed for a year while the family was half broken, because the only
+# arrangement it ever built was the one that satisfies the `and`.
+#
+# ONE side being a user object is what licenses a dunder call. Three ways to
+# have exactly one, all of them ordinary spellings:
+#   - a statically-known class on the left and a variant NUMBER on the right
+#     (`self.k = k` in an __init__ types the attribute tyVariant -- a third way
+#     to get a variant operand, after the rebinding and the unannotated
+#     parameter this file's header already names);
+#   - a variant number on the left and a class on the right -- the reflected
+#     form;
+#   - a variant HOLDING the object against a plain literal, which has no static
+#     class on either side and so cannot be dispatched at compile time at all.
+#     That row is the one no parser change can reach.
+# bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed
+
+class W:
+    def __init__(self, x):
+        self.x = x
+    def __add__(self, s):
+        return "W+" + str(s)
+    def __mul__(self, s):
+        return self.x * s
+    def __floordiv__(self, s):
+        return self.x // s
+    def __lt__(self, s):
+        return self.x < s
+
+class Q:
+    def __init__(self, k):      # k arrives through a PARAMETER -> a variant
+        self.k = k
+
+class RM:
+    def __init__(self, x):
+        self.x = x
+    def __rmul__(self, s):
+        return ("rmul", s, self.x)
+
+w = W(22.0)
+q = Q(11.0)
+print("wadd ", w + q.k)
+print("wmul ", w * q.k)
+
+# neither side statically a class: the variant holds the object and the other
+# operand is a bare literal. Deliberately NOT last -- an instrument that only
+# saw this row at the end would still have read the file as covering it.
+ww = 0
+ww = W(3.0)
+print("vmul ", ww * 2.0)
+print("vadd ", ww + 2.0)
+
+print("wfdiv", w // q.k)
+print("wlt  ", w < q.k)
+print("wrmul", q.k * RM(2.0))
+
+# ...and it still REFUSES when the dunder is simply absent, through the runtime
+# arm (variant left holding an object, number right) as well as the parser one.
+nb = 0
+nb = Q(1.0)
+try:
+    print("nod1 ", nb + 1.0)
+except TypeError:
+    print("nod1 ", "TypeError")
+nb2 = Q(1.0)
+try:
+    print("nod2 ", nb2 + 1.0)
+except TypeError:
+    print("nod2 ", "TypeError")

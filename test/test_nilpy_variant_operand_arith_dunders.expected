@@ -11,3 +11,12 @@ bare  TypeError
 nums  7 3 10 2.5 2 1 25
 strs  xy
 lists [1, 2] [1, 1]
+wadd  W+11.0
+wmul  242.0
+vmul  6.0
+vadd  W+2.0
+wfdiv 2.0
+wlt   False
+wrmul ('rmul', 11.0, 2.0)
+nod1  TypeError
+nod2  TypeError

@@ -72,3 +72,34 @@ static half is cheap and worth doing first: count enters against leaves per
 path in the IR of every proc the startup touches (`PXXDBG=a.ir:<proc>` dumps
 one at a time), because the balanced 3-enter / 6-leave shape of `load`'s own
 IR is what ruled it out and the same check over its callees has not been run.
+
+## 2026-09-14 — the demo no longer shows the silent face
+
+Not a fix and not a reduction; a dated observation that narrows where to look,
+and a warning about what it does NOT mean.
+
+At 80840e14f plus the `pylib` one-sided-dunder fix, `--open-water` under
+`setarch -R` runs past the startup this ticket measures, opens the window,
+reaches the frame loop and dies with a PRINTED diagnostic:
+
+```
+Unhandled exception: TypeError: dict.update expects a mapping or an iterable of pairs
+```
+
+rc=217, not rip=0. So on this path the exception chain was intact by the time
+the frame loop raised — which is the good face this ticket says the demo shows
+some of the time, observed after several fixes landed in between
+(`c53d9ab55` set-comp over-release, `eb9228950` star-argument over-release,
+`bf4f94878` the literal splice, and today's dunder one).
+
+**This is not evidence the leak is gone**, and reading it that way is the
+mistake this ticket exists to prevent: the ticket's own text records that the
+demo shows both faces, and one clean run of one entry point samples a single
+path. The refcount fixes in between are the more interesting candidate — an
+over-release corrupting a block the exception machinery walks would produce
+exactly a chain that is sometimes right — but nothing here establishes that
+either. What the run DOES retire is "the silent face is what you always get
+now": it is not, on this path, today.
+
+Re-measure with the gs_base / EXC_TOP probe at app.py:780 before treating any
+of this as a state change.

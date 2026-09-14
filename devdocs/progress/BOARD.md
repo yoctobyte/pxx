@@ -300,7 +300,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (155)
+## backlog-nilpy (157)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -328,6 +328,7 @@ _none_
 | bug-n-a-keyword-argument-through-a-callable-field-is-refused | N | 25 | bug | A keyword argument on a run-time-dispatched call REFUSES when the name resolves to a CALLABLE FIELD rather than a method: `TypeError: zap() is dispatched at run time through a callable attribute, which takes positional arguments only`. CPython runs the same program. Method dispatch carries keywords correctly (pydyn_methkw binds by name against the RTTI's parameter names); the callable-field arm goes through pyvar_callv*, which takes POSITIONS and has no names, so the refusal is a deliberate choice of an error over a silent mis-binding. A NilPy def and lambda DO carry a signature at run time (feature-n-a-callable-value-carries-its-signature-type, pybound_new_sig), so the names may already be reachable from the callable's own value -- that is the thing to measure before designing anything. | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
+| bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update | N | 70 | bug | > | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-a-lambda-returning-a-user-class-instance-yields-none | N | 62 | bug | > | — |
 | bug-n-a-lambda-stored-in-a-class-attribute-is-not-callable | N | 45 | bug | `class gl: clear = lambda a: a * 3` then `gl.clear(2)` raises `TypeError: object is not callable` at run time; CPython prints 6. The same lambda bound to a MODULE-level name works (`f = lambda a: a * 3; f(2)` gives 6 in both), so it is the class-attribute store that loses the callable, not the lambda. Measured 2026-09-10 at compiler `98b6545b4652`. PRE-EXISTING and verified as such: it reproduces with and without the `staticmethod(...)` wrapper that was being added the same afternoon, so it is not that arm's doing -- the control without the wrapper fails identically. Compiles clean and fails at RUN time, which is the bad half: a class-as-namespace whose members are lambdas is accepted by the compiler and dies on first call. | — |
@@ -369,9 +370,9 @@ _none_
 | bug-n-an-imported-module-s-star-star-never-installs-pypowhook | N | 30 | bug | `**` inside an IMPORTED .py never gets PyPowHook, for TWO independent reasons, and each one alone is sufficient: (1) the `pyWantsPow` token scan at `pyparser.inc:41694` runs before `PyParseImportRun` at 41769, so an imported module's tokens are not in the array being scanned; (2) an imported .py becomes a UNIT, and a unit's initialisation section runs BEFORE the main body where the assignment is emitted as the first statement — so import-time `**` cannot see the hook even when it IS installed. Both measured 2026-09-12 with a control: with `**` in main too, import-time printed 1.9952623149688793 and post-start printed CPython's exact 1.9952623149688795. Visible cost today is 1 ulp, NOT a crash — the raise this was found through (`0.0 ** fractional` -> `ValueError: math domain error`) was a missing row in `pypow_cx` and is fixed separately. | — |
 | bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float | N | 40 | bug | > | — |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
+| bug-n-an-ordering-dunder-that-returns-a-non-bool-fails-against-a-variant-operand | N | 40 | bug | > | — |
 | bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type | N | 55 | bug | A NilPy construction `C(x)` on a class with several same-arity constructors runs the FIRST one declared, whatever x is. Measured 2026-09-09: one class with `Create(TPyBytes)` and `Create(TPyList)`, one unit with `which(TPyBytes)`/`which(TPyList)` -- the FUNCTIONS resolve correctly (list->2, bytes->1) and the CONSTRUCTORS both answer 1. Silent: the wrong body runs and whatever it does to the wrong argument type is what the program gets. PyClassCreate picks with FindUMeth(ci,'create'), a by-NAME first match; the type-aware picker FindUMethOverloadAhead exists and is already NilPy-aware, but it works by parsing the arguments speculatively and rewinding, and at PyClassCreate's pick site the arguments are ALREADY parsed -- so the fix is a selector over parsed argument NODES, not a call to the existing one. Blocks writing any shim class whose CPython constructor is type-overloaded; lib/rtl/mimic_array.pas carries a one-ctor + runtime `is` workaround with a revert-when-fixed note. | — |
 | bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing | N | 80 | bug | `def f(b): b.s, b.t = 22, 23` COMPILES, RUNS, prints nothing and STORES NOTHING — the fields keep their initial values. Any store through PyUnpackTargetStore (the TUPLE UNPACK and CHAINED-ASSIGNMENT paths, which share it) is silently dropped when the receiver is a PARAMETER. MEASURED 2026-09-12 against the PINNED compiler and HEAD, identical on both, so it is pre-existing and not from the chain widening landed the same day. THE SAME STORE WRITTEN AS A SINGLE STATEMENT IS CORRECT (`b.s = 11` works), and a LOCAL or MODULE-LEVEL receiver is correct (`a.s, a.t = 31, 32` works) — so the defect is exactly PyUnpackTargetStore + parameter. NO DIAGNOSTIC, and the value it leaves behind is the field's initial value, which is plausible. Found only because a chain fixture happened to use a parameter; the receiver kind a test naturally uses is the one that works, because a test constructs the object where it uses it. | — |
-| bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed | N | 65 | bug | > | — |
 | bug-n-async-def-and-await-are-not-implemented | N | 60 | bug | `async def` is refused -- `undefined variable (async)`, so the keyword is not in the grammar at all. Python 3.5. Distinct from yield-from in that a correct implementation needs an event loop and not just a parser arm, so the honest first step may be deciding how far to go rather than typing. Found by the same probe suite as the sys.version_info ruling. | — |
 | bug-n-collections-counter-is-unreachable-through-its-qualified-spelling | N | 35 | bug | `collections.Counter()` is refused with `no member Counter came of the qualifier collections`, while the bare `Counter()` and `from collections import Counter` both work. Measured 2026-09-09. Cause: `collections` HAS a backing unit (lib/rtl/collections.pas, a Pascal generic TList unrelated to Python's module), so the qualifier resolves against it and asks it for a member it has never had. deque was fixed on 2026-09-09 by routing `collections.deque` through the frontend's stdlib-call table, which is consulted BEFORE unit-member lookup; Counter was deliberately NOT routed the same way, because that table re-targets by ARITY and cannot select by argument TYPE, and Counter's two 1-argument overloads differ only by type (TPyList vs AnsiString) -- an entry would compile `collections.Counter(s)` to whichever arity found first and answer a silently wrong count instead of today's honest refusal. So this is blocked on either type-aware selection in that table, or a different mechanism for qualified stdlib members. | — |
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
@@ -458,6 +459,7 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-n-the-field-type-pre-pass-asks-one-question-in-six-places | N | 45 | refactor | MEASURED, not asserted: PyInferFieldDecl is 13 decision arms, and six of them -- 341 lines across PyHeaderParamType, PyModuleGlobalLiteralType, PyModuleGlobalCtorClass, PyModuleGlobalIsDef, PyMethodBindsLocal and PyRhsOnlyNamesThisMethodBinds -- ask ONE question in three scopes: where is this NAME bound and what is its initialiser. Three of them (the module-global trio) carried a BYTE-IDENTICAL copy of one scan differing only in the pattern matched at a statement head and the return type; those are now collapsed to one scan with no answer changed. The remaining duplication is the same question in the PARAMETER and METHOD-LOCAL scopes. Root cause: the pre-pass has no name environment because PyLocals is one FLAT table with a linear name scan and no scope field, and seeding it early was tried and reverted. | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
+| refactor-n-user-class-dunders-are-dispatched-at-run-time-when-the-left-operand-is-static | N | 30 | refactor | > | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
 ## backlog-tools (60)
@@ -1046,9 +1048,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3745)
+## done (3746)
 
-3745 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3746 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1165,6 +1167,7 @@ _none_
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [A] bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
+- [p 70] [N] bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
@@ -1206,7 +1209,6 @@ _none_
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - [p 65] [A] bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program
 - [p 65] [N] bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
-- [p 65] [N] bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [T] bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
@@ -1412,6 +1414,7 @@ _none_
 - [p 40] [N] bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver
 - [p 40] [N] bug-n-a-unit-alias-rebind-is-silently-ignored
 - [p 40] [N] bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float
+- [p 40] [N] bug-n-an-ordering-dunder-that-returns-a-non-bool-fails-against-a-variant-operand
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
@@ -1550,6 +1553,7 @@ _none_
 - [p 30] [A] refactor-a-the-for-in-exception-runtime-trigger-is-the-whole-token-shape
 - [p 30] [A] refactor-a-the-frozen-string-store-body-is-written-twice-in-three-backends
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
+- [p 30] [N] refactor-n-user-class-dunders-are-dispatched-at-run-time-when-the-left-operand-is-static
 - [p 30] [B] task-b-five-system-names-still-in-sysutils-are-waiting-on-a-pin-not-on-a-decision
 - [p 25] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
 - [p 25] [A] bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile (unblocks 1)

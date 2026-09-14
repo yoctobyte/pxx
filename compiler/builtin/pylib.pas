@@ -6417,6 +6417,46 @@ begin
   Result := o;
 end;
 
+{ `a <op> b` through an arithmetic dunder when EITHER side is a user object —
+  the runtime half of the operator protocol, asked once instead of eight times.
+
+  The eight variant arithmetic entry points below each carried their own copy of
+  the question and each asked it the same wrong way: `(a.VType = 7) and
+  (b.VType = 7)`, i.e. BOTH sides are objects. That is the identical drift
+  PyVarUserObj above was created to end for the four COMPARISON entry points,
+  recurring one family over — and its comment already says what the predicate
+  is: "One side being a user object is what actually licenses a dunder call, and
+  requiring two is what made ... `g < 9` die with `expected a number, got
+  object` on a class that declares __lt__."
+
+  Measured 2026-09-14, with every dunder declared and a float on the other side:
+  `v + k`, `v - k`, `v * k`, `v / k`, `v // k`, `v % k` and the reflected
+  `k * v` all raised `TypeError: expected a number, got object`, and so did
+  `vv * 2.0` where `vv` is a variant HOLDING the object — a shape the parser's
+  compile-time dispatch cannot reach at all, since there is no static class on
+  either side to key on. The existing fixture
+  (test_nilpy_variant_operand_arith_dunders) passed throughout: it binds a
+  variant on the LEFT and a user class on the RIGHT, so both slots are objects
+  and the `and` is satisfied. A whole-family guard that only ever sees the
+  two-object arrangement is the arrangement that certifies the bug.
+
+  `otherObj` is not required by PyUserArithCall1 — it says so in its own body —
+  so nil for the non-object side is the ordinary case here, not a degenerate
+  one. PyVarUserObj excludes this unit's own containers, which is what keeps the
+  list/str/bytes arms below reachable: a TPyList operand answers nil and no
+  dunder is attempted.
+  bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed }
+function PyVarUserArith(const a, b: Variant; const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean;
+var pa, pb: TObject;
+begin
+  Result := False;
+  pa := PyVarUserObj(PPyVarRec(@a));
+  pb := PyVarUserObj(PPyVarRec(@b));
+  if (pa = nil) and (pb = nil) then Exit;
+  Result := PyUserObjArith(pa, pb, a, b, dunder, rdunder, res);
+end;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
@@ -9413,10 +9453,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mul__', '__rmul__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mul__', '__rmul__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A SEQUENCE repeats too — `[0] * n` is how Python allocates a fixed-size
@@ -9591,10 +9628,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__pow__', '__rpow__', Result) then Exit;
+  if PyVarUserArith(a, b, '__pow__', '__rpow__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
      (pyvar_to_int(b) >= 0) then
@@ -9763,10 +9797,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__floordiv__', '__rfloordiv__', Result) then Exit;
+  if PyVarUserArith(a, b, '__floordiv__', '__rfloordiv__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -9805,10 +9836,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mod__', '__rmod__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mod__', '__rmod__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A str LEFT operand makes `%` printf-style FORMATTING, not modulo — the
@@ -9950,10 +9978,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__add__', '__radd__', Result) then Exit;
+  if PyVarUserArith(a, b, '__add__', '__radd__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { list + list -> a NEW list holding both, like Python. `xs += ys` is separate
@@ -10084,10 +10109,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__sub__', '__rsub__', Result) then Exit;
+  if PyVarUserArith(a, b, '__sub__', '__rsub__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -10123,10 +10145,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mod__', '__rmod__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mod__', '__rmod__', Result) then Exit;
   Result := pyfloormod_v(a, b);
 end;
 
@@ -10341,10 +10360,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__truediv__', '__rtruediv__', Result) then Exit;
+  if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
