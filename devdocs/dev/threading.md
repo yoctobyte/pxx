@@ -274,6 +274,48 @@ with the repro in `test/thread_glibc_malloc_two_threads.pas` and its two
 controls in `test/thread_glibc_malloc_controls.pas`. This is what aborts the
 lekkerzeilen demo.
 
+#### FOLLOW-UP 2026-09-14 — the route-1 handle did not report thread EXIT
+
+Landing route 1 moved thread creation to glibc and took a kernel service with
+it that nothing replaced. The handle's `TidWord` is the one word every "has it
+stopped?" consumer reads — `Thread.is_alive`, the timed arm of `Thread.join`,
+`TThread.WaitFor` through `palthreadobj`. On the clone route the KERNEL owns
+that word end to end: `CLONE_PARENT_SETTID` fills it before the child runs,
+`CLONE_CHILD_CLEARTID` zeroes it and futex-wakes as the thread's final act.
+**glibc's thread has neither flag**, so on the pthread route the trampoline
+must do both by hand — and for the first hours it did only the first.
+
+Measured, one source built twice with only the libc link differing, an empty
+body long returned before the join starts:
+
+| | clone route | pthread route (before) |
+| --- | --- | --- |
+| `join(timeout=2.0)` | 0 ms | **2004 ms — the full timeout** |
+| `TidWord` after body returned | 0 | non-zero, forever |
+| thread reaped | yes | **no** |
+
+Three defects from one omission: `is_alive()` answers True for a dead thread
+for the life of the process; every TIMED join burns its whole timeout; and
+because the reap is gated on `TidWord = 0`, `pthread_join` never runs, so glibc
+keeps each thread's stack and TLS. A program starting threads in a loop and
+joining them with a timeout leaks all of them. **The BLOCKING join was never
+affected** — `timeout < 0` goes straight to `PalThreadJoin` — which is why the
+TThread suite stayed green and this hid behind it.
+
+**`TidWord` could not carry both meanings, and the first fix deadlocked.**
+Clearing it at exit broke the *parent's* create handshake, which waited on the
+same word for "the child has started": with a short body the child finished
+before the parent's first read and `PalThreadCreate` hung forever, every time.
+The kernel never has this problem because its two flags are independent. So the
+handle now carries **`StartWord`** — set once by the child, never cleared — for
+the start handshake, leaving `TidWord` to mean liveness and nothing else.
+
+Regression: `test/lib_thread_handle_reports_exit_on_both_routes.pas`. It
+hard-imports `getpid` for one reason: a program whose only libc imports are
+weak collapses to a **static** link, takes the clone route, and cannot reach
+this bug at all — a test without that import passes by never using the route it
+was written for.
+
 #### FIXED 2026-09-14 — on x86-64, pxx no longer creates the thread
 
 The correction above is the diagnosis and it stands. What follows is the fix,

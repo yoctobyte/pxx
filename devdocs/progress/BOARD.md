@@ -80,13 +80,17 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (29)
+## backlog (33)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | regression-cascade-e5cd18e4b220 | T | 70 | regression | regression CASCADE: 13 jobs newly red in 6f085e162..e5cd18e4b (1 commits) — auto-filed by twatch | — |
 | regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
+| regression-lib-test-crtl-atexit-2 | C | 70 | regression | regression: lib-test#src:test/crtl_atexit.c at 934ba04180e9 in step 15/17, `sh test/crtl_declaration_census.sh stable_linux_amd64/default/pinned /tmp` (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-9 | B | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at fca28056d8ec in step 84/346, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
+| regression-lib-test-lib-classes-tthread-2 | B | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas at 934ba04180e9 in step 1/5, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_classes_tthread.pas /tmp/lib_classes_tthread` (auto-filed by twatch) | — |
+| regression-lib-test-lib-criticalsection-blocking | B | 70 | regression | regression: lib-test#src:test/lib_criticalsection_blocking.pas at 934ba04180e9 in step 1/3, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_criticalsection_blocking.pas /tmp/lib_cs_blocking` (auto-filed by twatch) | — |
+| regression-lib-test-lib-fpc-thread-surface | B | 70 | regression | regression: lib-test#src:test/lib_fpc_thread_surface.pas at 934ba04180e9 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface` (auto-filed by twatch) | — |
 | regression-optdiff-shard0-12 | T | 70 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard10-12 | T | 70 | regression | regression: optdiff#shard10/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 10/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard2-12 | T | 70 | regression | regression: optdiff#shard2/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 2/12` (auto-filed by twatch) | — |
@@ -304,7 +308,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (160)
+## backlog-nilpy (161)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -409,6 +413,7 @@ _none_
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
 | bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point | N | 60 | bug | `'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically. | — |
 | bug-n-the-lazy-builtin-constructors-and-divmod-are-still-not-values | N | 25 | bug | > | — |
+| bug-n-the-property-conflict-warning-misses-five-of-eight-conflicts-including-the-one-that-crashed | N | 45 | bug | > | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
 | bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values | N | 65 | bug | `a, b = X(), Y()` binds EVERY target to the whole right-hand list instead of unpacking it, when the values' type defines __iter__ or __getitem__. The swap idiom `p, q = q, p` is hit. A NAMED right-hand side (`a, b = tup`), a call (`a, b = f()`) and for-loop targets are all correct, and so is any class without __iter__/__getitem__ -- so it takes a container-ish class AND an inline tuple display to trigger. Silent: downstream sees a list, and a longer program segfaults. | — |
 | bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling | N | 40 | bug | Found by inspection, NOT reproduced: NodeEnumIdOf's call arm and PyEvalOnce's chained-receiver test both match AN_CALL without AN_VIRTUAL_CALL, so a VIRTUAL method call loses its enum result identity and a chained call receiver is re-evaluated per link. Both predate the dunder-dispatch fix that surfaced them. | — |
@@ -1181,7 +1186,11 @@ _none_
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - [p 70] [N] feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 - [p 70] [T] regression-cascade-e5cd18e4b220
+- [p 70] [C] regression-lib-test-crtl-atexit-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-crtl-reachability-9 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [B] regression-lib-test-lib-classes-tthread-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [B] regression-lib-test-lib-criticalsection-blocking [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [B] regression-lib-test-lib-fpc-thread-surface [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard0-12
 - [p 70] [T] regression-optdiff-shard10-12
 - [p 70] [T] regression-optdiff-shard2-12
@@ -1360,6 +1369,7 @@ _none_
 - [p 45] [N] bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled
+- [p 45] [N] bug-n-the-property-conflict-warning-misses-five-of-eight-conflicts-including-the-one-that-crashed
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [S] bug-s-c-on-the-esp-profile-cannot-reach-crtl
 - [p 45] [T] bug-t-177-slug-citations-in-compiler-and-lib-comments-resolve-to-no-ticket [!! DO NOT CLAIM — the ticket says so; read it]

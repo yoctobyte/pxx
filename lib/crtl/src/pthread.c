@@ -95,7 +95,7 @@ int pthread_equal(pthread_t a, pthread_t b)  { return a == b; }
 /* ---- create / join (tid -> handle registry) ---- */
 
 #define PXX_PTHREAD_MAX 64
-#define PXX_HANDLE_BYTES 128         /* TThreadHandle is 56B since the pthread route added PthreadId/EntryFn/EntryArg (was 32B); slack for safety. If it ever outgrows this the C side silently scribbles past the slot -- grow this with the record. */
+#define PXX_HANDLE_BYTES 128         /* TThreadHandle is 64B since the pthread route added PthreadId/EntryFn/EntryArg and StartWord (was 32B); slack for safety. If it ever outgrows this the C side silently scribbles past the slot -- grow this with the record. */
 
 struct pxx_thr_slot {
   long long      tid;                /* > 0 when live */

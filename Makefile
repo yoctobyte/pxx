@@ -34756,6 +34756,16 @@ lib-test: pxx-stable-check
 	# cthreads shim. Expectations are FPC's own output for the same program.
 	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas $(TESTTMP)/lib_fpc_thread_surface
 	tools/expect_same.sh lib_fpc_thread_surface "$$($(TESTTMP)/lib_fpc_thread_surface | tail -n 1)" "FPCTHREAD OK"
+	# A finished thread must REPORT itself finished, on WHICHEVER route made it.
+	# The pthread route (x86-64 + libc already linked) has no CLONE_CHILD_CLEARTID,
+	# so the trampoline clears the handle's TidWord by hand; without that,
+	# is_alive() answers True forever, every TIMED join burns its whole timeout,
+	# and the reap never runs so glibc keeps each thread's stack and TLS.
+	# The test hard-imports getpid for one reason only: a weak-only program
+	# collapses to a static link and takes the CLONE route, where the kernel does
+	# all of this correctly and the bug is unreachable.
+	$(PXX_STABLE) --threadsafe -Fulib/rtl test/lib_thread_handle_reports_exit_on_both_routes.pas $(TESTTMP)/lib_thread_handle_exit
+	tools/expect_same.sh lib_thread_handle_exit "$$($(TESTTMP)/lib_thread_handle_exit | tail -n 1)" "THREADEXIT OK"
 	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
 	# split. The non-threaded half of the bargain (classes still building WITHOUT
 	# --threadsafe) is asserted by every other classes test above, which do not

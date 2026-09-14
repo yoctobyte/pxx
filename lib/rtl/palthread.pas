@@ -55,6 +55,18 @@ type
       which is exactly the lifetime a start-routine argument needs. }
     EntryFn:   Pointer;
     EntryArg:  Pointer;
+    { The pthread route's START handshake, and it is a SEPARATE word from
+      TidWord on purpose. The kernel gives the clone route two independent
+      flags -- CLONE_PARENT_SETTID fills TidWord BEFORE the child runs, and
+      CLONE_CHILD_CLEARTID zeroes it AFTER the body returns -- so on that route
+      "has started" and "is still alive" never have to share a value. glibc
+      gives us neither, so the trampoline does both by hand, and doing them in
+      one word is a deadlock: the parent blocks until the word is non-zero
+      while the child, whose body may already have returned, has zeroed it
+      again. Measured 2026-09-14 with an empty body -- PalThreadCreate hung
+      forever, every time, because the child completed before the parent's
+      first read. Set ONCE by the child and never cleared. }
+    StartWord: Integer;
   end;
 
 const
@@ -287,10 +299,45 @@ begin
     child reaching its first instruction, which glibc has already scheduled. }
   h^.Tid := PalThreadSelf;
   h^.TidWord := Integer(h^.Tid);
-  ignore := PalFutexWake(@h^.TidWord, 1);
+  h^.StartWord := 1;
+  ignore := PalFutexWake(@h^.StartWord, 1);
 
   fn := TThreadEntry(h^.EntryFn);
   fn(h^.EntryArg);
+
+  { CLEAR THE LIVENESS WORD AND WAKE JOINERS -- the half of CLONE_CHILD_CLEARTID
+    that the pthread route has to do by hand.
+
+    On the clone route the KERNEL zeroes TidWord as the thread's final act and
+    futex-wakes the waiters; glibc's thread never had that flag, so on this
+    route nothing zeroes it at all. Everything that asks "has this thread
+    finished?" reads THIS word and nothing else:
+
+      * Thread.is_alive (mimic_threading) -- `TidWord <> 0`
+      * Thread.join(timeout=N)            -- loops until `TidWord = 0`, and only
+                                             then calls PalThreadJoin to reap
+      * TThread's Finished/WaitFor        -- same word, via palthreadobj
+
+    Measured 2026-09-14, one source built twice with only the libc link
+    differing, body long returned before the join starts:
+
+        clone route   join(timeout=2.0) ->    0 ms, TidWord 0,       reaped
+        pthread route join(timeout=2.0) -> 2004 ms, TidWord 856796, NOT reaped
+
+    So leaving it set is three defects, not one: is_alive() answers True for a
+    dead thread forever, every TIMED join burns its whole timeout, and because
+    the reap is gated on `TidWord = 0` the pthread_join never runs -- glibc
+    keeps the thread's stack and TLS for the life of the process. A program
+    that starts threads in a loop and joins them with a timeout leaks all of
+    them. The blocking join (timeout < 0) was never affected: it goes straight
+    to PalThreadJoin, which is why the TThread suite stayed green and this hid.
+
+    ORDER: last, after the body and after everything that reads h^. A joiner
+    that observes the zero breaks its wait and calls pthread_join, which blocks
+    until this thread truly exits -- so the handle cannot be freed underneath
+    the wake, and the munmap below touches only locals. }
+  h^.TidWord := 0;
+  ignore := PalFutexWake(@h^.TidWord, 1);
 
   if blk > 0 then
     ignore := __pxxrawsyscall(SYS_munmap, blk, tlsBytes + altBytes, 0, 0, 0, 0);
@@ -332,6 +379,12 @@ begin
   h.PthreadId := 0;
   h.EntryFn := nil;
   h.EntryArg := nil;
+  { Before either route branches: the caller's handle may be stack or heap
+    memory with anything in it, and the pthread parent below BLOCKS until this
+    word is non-zero. Garbage here does not hang, it does the opposite and
+    worse -- PalThreadCreate returns while the child has published nothing, and
+    the caller reads Tid = 0. }
+  h.StartWord := 0;
 
 {$ifdef CPUX86_64}
   { THE pthread ROUTE, taken exactly when the program already links libc. See
@@ -359,13 +412,20 @@ begin
       Result := -1;
       Exit;
     end;
-    { Block until the child has published its tid. Not a spin: PalFutexWait
+    { Block until the child has published its identity. Not a spin: PalFutexWait
       returns at once if the word already moved, so the common case is one
       syscall that does not sleep. See the trampoline for why Tid must be
-      filled in before this returns rather than left to the caller. }
-    while h.TidWord = 0 do
-      ignore := PalFutexWait(@h.TidWord, 0);
-    h.Tid := h.TidWord;
+      filled in before this returns rather than left to the caller.
+
+      WAITS ON StartWord, NOT ON TidWord, and the difference is a hang: the
+      child clears TidWord when its body returns (that is what makes is_alive
+      and the timed join work), so a short-bodied thread can be finished before
+      the parent's first read and this loop would never see a non-zero value.
+      StartWord is set once and never cleared, so it is safe to wait on however
+      fast the body is. h.Tid is written by the CHILD before it sets StartWord,
+      so it is published by the time this returns. }
+    while h.StartWord = 0 do
+      ignore := PalFutexWait(@h.StartWord, 0);
     Result := 0;
     Exit;
   end;
