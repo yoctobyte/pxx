@@ -97,3 +97,22 @@ than `+` (`*`, `%`, `**`), equal (`+`), looser (`==`, `in`).
 ## Log
 - 2026-09-14 — filed from the lekkerzeilen `--open-water` wall. Reduction is
   single-file and inline above.
+
+## Provenance
+
+Measured and written by the peer session **lekkerzeilen-c8**, which cannot
+commit in this checkout. It swept the demo's other entry points under
+`setarch -R` while this seat was walking one code path serially, and this was
+one of two findings that came out of it -- the other being the entry-point
+census itself: `--help`, `--conform`, `--probe` and `--starts` all rc=0, and
+`--m0` holding a GL window open to the timeout, which is the first statement
+anyone has made about what WORKS in that demo rather than what fails.
+
+It also predicted the six precedence rows from the mechanism BEFORE measuring
+them, and three of three came out as predicted. That ordering is why the
+"position was covered; precedence was not" reading is trustworthy rather than
+post-hoc.
+
+It was swept into commit e013fab89 with this seat's own work rather than
+committed on its own, which is a bookkeeping error and not a claim of
+authorship; this section is the correction.
