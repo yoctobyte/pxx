@@ -79,10 +79,11 @@ def f_popitem(n):
         s = d2.popitem()
 
 # zip/enumerate materialise through the LAZY CURSOR, not through pyzip/
-# pyenumerate -- patching the eager builders moved these by ONE BYTE. The cursor
-# builds its pair into it.FBox; fixing that took them 7000 -> 800 and 6800 ->
-# 599. The residual is NOT explained, so these two carry a LOOSE bound that
-# pins the improvement and would catch a revert, rather than a false LEAKFREE.
+# pyenumerate -- patching the eager builders moved these by ONE BYTE. Fixing the
+# cursor's pair took them 7000 -> 800 and 6800 -> 599, and removing the surplus
+# retain on the cursor's own FBox took both to 0. The 800/599 was per-CALL
+# machinery (3 prefetch boxes), not per-pair: it was FLAT at ~4 leaked objects
+# per call across 4, 8 and 32 elements, which is what told the two apart.
 def f_zip(n):
     for i in range(n):
         s = list(zip(L, A32))
@@ -130,23 +131,11 @@ for name, fn in [("format1", f_format_one), ("format3", f_format_three), ("set",
     base = now
 
 for name in ["format1", "format3", "set", "dictcopy", "dictrepr", "dictsorted",
-             "items", "dcopy", "popitem"]:
+             "items", "dcopy", "popitem", "zip", "enum"]:
     if second[name] < LEAK_LIMIT:
         print("%s LEAKFREE" % name)
     else:
         print("%s LEAKS %d bytes/call" % (name, second[name]))
-        ok = False
-
-# The two cursor shapes, held to a loose bound with the measured before/after
-# in the comment above. 1500 is far below the pre-fix 7000/6800 and far above
-# the post-fix 800/599, so it fails on a revert and passes on the residual.
-CURSOR_LIMIT = 1500
-for name in ["zip", "enum"]:
-    if second[name] < CURSOR_LIMIT:
-        print("%s CURSOR-BOUNDED %d bytes/call" % (name, second[name]))
-    else:
-        print("%s LEAKS %d bytes/call (was 7000/6800 before the cursor fix)"
-              % (name, second[name]))
         ok = False
 
 f_retain(N)

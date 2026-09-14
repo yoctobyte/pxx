@@ -14025,7 +14025,16 @@ begin
     which only shows up when a .pas program `uses pylib` directly, never on the
     NilPy path. The `Result := pynone` assignment form below is fine. }
   FBox.append(pynone());
-  PXXObjRetain(Pointer(FBox));
+  { NO PXXObjRetain HERE, and the asymmetry with FSrc/FUp/FUp2 is the point.
+    Those are BORROWED -- handed in by the caller, who may drop them while the
+    cursor lives -- so the constructor takes a reference and PyObjFinalize
+    drops it. FBox is CONSTRUCTED on the line above, so it arrives already
+    owning rc=1 on behalf of this field; retaining it again made it rc=2
+    against a single release in the finalizer, so every cursor leaked its
+    prefetch box even though the cursor itself was freed correctly.
+    Measured 2026-09-14 with -dPXX_OBJTRACE: `A rc=1, R rc=2, r rc=1` and no F,
+    exactly 3 boxes per list(zip(...)) call -- flat across 4, 8 and 32 elements,
+    which is what identified it as per-CALL machinery rather than per-pair. }
   FPos := 0;
   FStart := 0;
   FHas := False;
