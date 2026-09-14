@@ -369,6 +369,36 @@ Recommendation revised: **build the optional import, then take route 1.** Route
 3 (refuse, or warn, at compile time when a program links libc AND creates a
 pxx thread) remains the interim and is independent of all of this.
 
+## AN OBSERVATION HELD HERE, WITH ITS CAUSE DELIBERATELY UNDECIDED: settle()
+
+Not a claim about this bug. Recorded here because the fork it sits on is this
+bug's fork, and because the alternative was leaving it in nobody's file.
+
+`App.settle(self, seconds=30.0)` at `lekkerzeilen/app.py:1591` loops
+`while self._wanted - set(self.patches) and time.monotonic() < until:`. Measured
+by `lekkerzeilen-c8`, from the program's own printed output: it burns the
+**FULL 30.0 s timeout on every world start**, which is 30.0 s of a 33.2 s
+startup. It does not exit on arrival.
+
+**The observation is solid and the cause is not**, and the two readings are:
+
+1. the patches never arrive -- which would be this bug, the loader thread
+   broken underneath, and `CLONE_SETTLS` fixes it for free; or
+2. they arrive and are not seen -- which would be a demo bug and the owner's.
+
+Nobody has separated them. One piece of weak evidence for (1): the
+single-threaded scratch build in the section above reaches a full rendered
+world, so the arrival path works when one thread owns it. Weak because that
+build also changed the queue bound and the drain site, so it is not a clean
+one-variable test of arrival.
+
+**Deliberately not filed as a demo ticket.** It lives in the owner's repo,
+neither seat was asked to write there, and filing it against the demo would
+assert reading (2) -- which is exactly the half nobody has established. If
+`CLONE_SETTLS` lands and the 30 s stall goes with it, this section closes with
+the fix. If it does not, then there is a real demo bug here and it is the
+owner's to take, with the fork already narrowed for him.
+
 ## Gate
 
 `make compiler/pascal26` + the two fixtures above, which are the repro and its
