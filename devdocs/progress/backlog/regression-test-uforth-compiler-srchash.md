@@ -53,3 +53,6 @@ test-uforth: FAIL — 1 of 1 corpora differ from CPython
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-14 — the borg watcher saw `test-uforth#src:tools/compiler_srchash.sh@3` GREEN at accb99f3c59b (tier full) and did NOT close this: the job FAILED and passed on a retry in this very run, so this green is the race firing rather than evidence against it. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
