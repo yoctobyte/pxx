@@ -7712,15 +7712,21 @@ begin
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;
     Result := AllocNode(AN_CALL);
-    ASTIVal[Result] := FindProc('pyset_of');
+    { One call for each tag, never a marker WRAPPED around pyset_of. The wrap
+      (`PyMarkAsFrozenSet(Result)`) over-released: pylist_mark_frozenset is an
+      identity function handing back a BORROWED alias, while the caller of a
+      class-returning call owns its result and releases it — so the pyset_of
+      temp and the marker's result were released once each against one retain,
+      and the refcount went negative on a list still in use. Measured:
+      `frozenset(x for x in xs)` underflowed once per evaluation.
+      bug-n-a-set-comprehension-over-releases-its-own-list }
+    if isFrozen then ASTIVal[Result] := FindProc('pyfrozenset_of')
+    else ASTIVal[Result] := FindProc('pyset_of');
     if ASTIVal[Result] < 0 then Error('Nil Python: pylib (pyset_of) not loaded');
     ASTTk[Result] := Ord(tyClass);
     ASTRight[Result] := REC_UCLASS_BASE + FindUClass('TPyList');
     ASTLeft[Result] := argNode;
     Expect(tkRParen, ')');
-    { pyset_of stamps a SET; the frozen spelling re-stamps on the way out. One
-      parse path, one value, two tags — see PyIsFrozenSetCall. }
-    if isFrozen then Result := PyMarkAsFrozenSet(Result);
     CurASTNode := Result;
     Exit;
   end;
@@ -27029,8 +27035,24 @@ begin
     once the set operators started REQUIRING set operands — could not be used
     with `-` / `&` / `|` / `^` at all. The three set-producing forms have to
     agree on this or the tag means nothing.
-    bug-nilpy-same-kind-undefined-operators-still-compute }
-  Result := PyMarkAsSet(PyMakeIdent(tmpSym));
+    bug-nilpy-same-kind-undefined-operators-still-compute
+
+    The stamp is HOISTED AS A STATEMENT and the value is the bare temp — the
+    same shape the `{a, b}` LITERAL uses (PyParseListLiteralT's tkBegin arm).
+    It used to be `PyMarkAsSet(PyMakeIdent(tmpSym))`, wrapping the value, and
+    that OVER-RELEASED: pylist_mark_set is an IDENTITY function, so it hands
+    back a BORROWED alias of the temp, while the caller of a class-returning
+    call owns its result and releases it — one release against no retain. The
+    temp's own scope-exit release then drove the refcount NEGATIVE, freeing a
+    list that was still referenced; the next allocation reused the block and
+    the reader faulted far away. Measured: `s = {x for x in xs}` inside a
+    function underflows once per evaluation, while the literal path — the same
+    build, the same stamp, differing only in this line — is clean.
+    A retain inside pylist_mark_set is NOT the fix: it balances this site and
+    LEAKS at the two hoisted ones, which discard the result.
+    bug-n-a-set-comprehension-over-releases-its-own-list }
+  PyHoistStmt(PyMarkAsSet(PyMakeIdent(tmpSym)));
+  Result := PyMakeIdent(tmpSym);
 end;
 
 { The parenthesised generator expression: same build as the bracketed one, with

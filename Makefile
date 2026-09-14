@@ -1929,6 +1929,18 @@ test-nilpy: $(COMPILER)
 	# the int arm is here so the fix cannot swallow it.
 	./$(COMPILER) test/test_nilpy_a_bytes_literal_inside_an_interpreted_closure.npy $(TESTTMP)/test_nilpy_byteslitclo26
 	$(TESTTMP)/test_nilpy_byteslitclo26 | diff -u test/test_nilpy_a_bytes_literal_inside_an_interpreted_closure.expected -
+	# A set comprehension yielded `pylist_mark_set(temp)` as its VALUE. That marker
+	# is an identity function, so it handed back a BORROWED alias while the caller
+	# of a class-returning call owns and releases its result -- one release against
+	# no retain, the temp's own scope-exit release on top, and the refcount went
+	# negative on a list still in use. The RETURNED case is the row that fails on a
+	# value: `return {x for x in xs}` answered len 0 before the fix and 3 after,
+	# because the escaping set was freed on the way out. The stamp is a hoisted
+	# STATEMENT now, the same shape the `{a, b}` literal already used and the one
+	# arrangement measured clean in both directions -- a retain inside the marker
+	# zeroes the underflows and LEAKS at the two sites that discard its result.
+	./$(COMPILER) test/test_nilpy_a_set_comprehension_does_not_over_release_its_own_list.npy $(TESTTMP)/test_nilpy_setcomprc26
+	$(TESTTMP)/test_nilpy_setcomprc26 | diff -u test/test_nilpy_a_set_comprehension_does_not_over_release_its_own_list.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None

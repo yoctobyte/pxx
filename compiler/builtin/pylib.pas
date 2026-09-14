@@ -2416,6 +2416,13 @@ function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overloa
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
   (its characters); anything else is a loud TypeError rather than a guess. }
 function pyset_of(const v: Variant): TPyList;
+{ `frozenset(iterable)` — pyset_of's value with the frozen stamp, as ONE call
+  rather than pylist_mark_frozenset wrapped around a pyset_of call. The wrap
+  over-released: the marker is an identity function returning a BORROWED alias,
+  while the caller owns a class-returning call's result and releases it, so the
+  inner temp and the outer result were released once each against a single
+  retain. bug-n-a-set-comprehension-over-releases-its-own-list }
+function pyfrozenset_of(const v: Variant): TPyList;
 { `{**a, **b}` — copy src's pairs into dst, later keys winning, which is
   Python's merge rule. The frontend emits one call per `**` in a dict literal. }
 { `d.update(m, c=2)`'s SEED merge: the positional argument is whatever
@@ -8398,6 +8405,12 @@ begin
     Exit;
   end;
   raise TypeError.Create('set() argument must be iterable');
+end;
+
+function pyfrozenset_of(const v: Variant): TPyList;
+begin
+  Result := pyset_of(v);
+  if Result <> nil then Result.FKind := PYSEQ_FROZENSET;
 end;
 
 function pydict_fromkeys(const src: Variant): TPyDict;
