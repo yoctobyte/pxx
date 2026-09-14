@@ -112,4 +112,4 @@ rows certify the two red ones.
 **RED against the pinned compiler** -- the positive control.
 
 ## Log
-- 2026-09-14 -- found, fixed, fixture wired, landed.
+- 2026-09-14 -- found, fixed, fixture wired, landed, commit 925346238.

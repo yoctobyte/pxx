@@ -133,4 +133,4 @@ wired into the Makefile, GREEN at HEAD and RED against the pinned compiler
 (`encode 1..16 : 8->9 16->17`, then a segfault on the empty row).
 
 ## Log
-- 2026-09-14 -- found, fixed, fixture wired, landed.
+- 2026-09-14 -- found, fixed, fixture wired, landed, commit 925346238.

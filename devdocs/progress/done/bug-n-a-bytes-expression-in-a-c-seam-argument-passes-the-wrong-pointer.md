@@ -73,6 +73,6 @@ wired into the Makefile, GREEN at HEAD and RED against the pinned compiler
 
 ## Log
 - 2026-09-14 -- found while tracking lekkerzeilen's missing geometry, filed,
-  and fixed the same evening. Filed first as "an inline bytes literal ..."
+  and fixed the same evening, commit 925346238. Filed first as "an inline bytes literal ..."
   which was too narrow: the literal is one case of an expression and
   `"".encode()` is another.
