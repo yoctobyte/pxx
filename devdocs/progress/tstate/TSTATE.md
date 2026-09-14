@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `787b4dc51c08` on borg, 2026-09-14T21:19:23Z (18m ago).**
+**Newest full tier in the fleet: `787b4dc51c08` on borg, 2026-09-14T21:19:23Z (22m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `787b4dc51c08` | RED | 18m | — (newest) |
+| borg | `787b4dc51c08` | RED | 22m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -35,4 +35,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **optdiff#shard5/12** — tools/optdiff.sh (borg): bad `8b11dc8c1df2`, last good `unknown`, 0 commit(s) in range
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `787b4dc51c08`, last good `cc959c28272f`, 2 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `17e5731a7654`, last good `cc959c28272f`, 1 commit(s) in range
