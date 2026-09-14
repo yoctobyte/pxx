@@ -111,5 +111,14 @@ rows certify the two red ones.
 (+ `test/nilpy_modshadow/sess.py`), wired into the Makefile, GREEN at HEAD and
 **RED against the pinned compiler** -- the positive control.
 
+## Inert until pinned
+
+These are `compiler/**` and `compiler/builtin/pylib.pas` changes, so a NilPy
+program built with `./compiler/pascal26` has them now and a program built with
+`$(PXX_STABLE)` does NOT. Anyone rebuilding lekkerzeilen against the pin will
+still get the blank scene until the next `make pin`, which is the owner's to
+run. Saying so here rather than waiting: CLAUDE.md's own rule is that a fix is
+inert until pinned and that nobody holds a seat waiting for one.
+
 ## Log
 - 2026-09-14 -- found, fixed, fixture wired, landed, commit 925346238.

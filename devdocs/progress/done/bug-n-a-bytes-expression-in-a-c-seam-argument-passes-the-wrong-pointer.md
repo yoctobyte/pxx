@@ -71,6 +71,15 @@ that assigns a temp in place.
 wired into the Makefile, GREEN at HEAD and RED against the pinned compiler
 (`call result 3`, `literal 3`, `empty expr 3`).
 
+## Inert until pinned
+
+These are `compiler/**` and `compiler/builtin/pylib.pas` changes, so a NilPy
+program built with `./compiler/pascal26` has them now and a program built with
+`$(PXX_STABLE)` does NOT. Anyone rebuilding lekkerzeilen against the pin will
+still get the blank scene until the next `make pin`, which is the owner's to
+run. Saying so here rather than waiting: CLAUDE.md's own rule is that a fix is
+inert until pinned and that nobody holds a seat waiting for one.
+
 ## Log
 - 2026-09-14 -- found while tracking lekkerzeilen's missing geometry, filed,
   and fixed the same evening, commit 925346238. Filed first as "an inline bytes literal ..."
