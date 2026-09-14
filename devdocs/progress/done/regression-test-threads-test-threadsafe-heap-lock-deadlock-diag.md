@@ -40,3 +40,6 @@ expect_same: MISMATCH [test_ts_hl_diag26_exit]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-14 — auto-closed by the borg watcher: `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` passes at aa43f495ab87 (tier native); it was red at 1e3e9a0b95d0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
