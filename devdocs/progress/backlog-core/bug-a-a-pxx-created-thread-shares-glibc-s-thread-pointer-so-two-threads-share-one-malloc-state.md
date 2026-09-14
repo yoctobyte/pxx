@@ -157,11 +157,37 @@ why this went unnoticed: both seats' environments carry BOTH
 `WAYLAND_DISPLAY=wayland-0` and `DISPLAY=:0`, so SDL chooses, and the choice is
 not stable across harnesses.
 
-**The five aborting runs on this side gave THREE different glibc messages** --
-`corrupted size vs. prev_size`, `malloc(): largebin double linked list
-corrupted (nextsize)`, `malloc(): unsorted double linked list corrupted`. A
-deterministic bug does not choose between three ways to die; that spread is the
-race.
+### FOUR distinct ways to die, and all four are ARENA STRUCTURE checks
+
+Across both harnesses, eleven aborts, four different glibc messages:
+
+| message | seen by | what check it is |
+| --- | --- | --- |
+| `malloc(): unsorted double linked list corrupted` | both | the unsorted-bin walk in `_int_malloc` |
+| `corrupted double-linked list` | peer, x2 | `unlink_chunk`'s fd/bk agreement |
+| `corrupted size vs. prev_size` | this seat | adjacent chunks disagreeing about their own boundary |
+| `malloc(): largebin double linked list corrupted (nextsize)` | this seat | the largebin `nextsize` chain on insertion |
+
+A deterministic bug does not choose between four ways to die, so the spread is
+the race. **But the more useful half is that the four are not a random
+assortment.** Every one of them is glibc discovering that ITS OWN bookkeeping
+no longer agrees with itself -- bin links, chain links, chunk boundaries. Not
+one of them is a bad pointer arriving from the program.
+
+That distinction matters because it is the discriminator against the other
+hypothesis this ticket started from. **"A library is freeing memory we
+allocated"**, or pxx header arithmetic landing on a glibc chunk, produces an
+invalid POINTER, and glibc reports those differently (`free(): invalid
+pointer`, `munmap_chunk(): invalid pointer`). Four different structure-integrity
+checks failing, and no pointer complaint in eleven aborts, is what two threads
+interleaving inside one unlocked arena produces and is hard to produce any
+other way.
+
+The peer's count above is a correction to its own earlier row: it had reported
+one message and had two, because a second batch's `.err` files were written,
+were correct, and were never opened -- it had gone in for the stdout tail and
+got it. **An instrument you only HALF-READ is its own failure mode**, distinct
+from an inert one or a stale one, and the cheapest of the day to avoid.
 
 The other seat also placed the death: 16.0-23.5 s wall, always between the
 first stdout line and `chart 512x512 ...`, which is `settle()`'s window -- the

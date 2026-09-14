@@ -26530,9 +26530,15 @@ class:
 | `MALLOC_CHECK_=3` | it did **nothing** — the code was not loaded | validate it against something it MUST catch before any row counts |
 | `bt` / a stale variant table | it reported a **stale** structure as current | re-derive from the current build; the tool is fine, the input was old |
 | `session.conf` | it reported **accurately about an input that was already ruined** | **nothing — the instrument was right.** Go look upstream of it |
+| a batch's unread `.err` files | it was correct, complete, on disk, and **only half read** | open everything the run wrote, not the part you went in for |
 
 The third is the one that costs a day, because there is nothing to fix in the
-instrument and every impulse says there must be. lekkerzeilen printed
+instrument and every impulse says there must be. The fourth is the cheapest to
+avoid and the easiest to commit: the peer reported one glibc message and had
+two, because a second batch's per-run `.err` files were written, were correct,
+and were never opened — it had gone in for the stdout tail and got it. Nothing
+was misread; part of the data was simply never looked at. **A run's output is
+not the part of it you went in for.** lekkerzeilen printed
 `session: <__main__.Session object at ...>: not a word this file has` on every
 run for hours. `parse()` was correct: it read a line, the line was not a word,
 it said so. The 39-byte file on disk contained exactly that string, written by
