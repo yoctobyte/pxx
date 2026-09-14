@@ -21010,6 +21010,15 @@ test-core: $(COMPILER)
 	# nothing at all, --gtk=2 would still BUILD and would still link
 	# libgtk-3.so.0 -- the default -- so "it compiled" proves nothing here and
 	# only the DT_NEEDED separates a working flag from an ignored one.
+	# gtk3.PC() -- the AnsiString -> `const char*` conversion every gtk binding
+	# call goes through. It was a four-slot static ring until 2026-09-14, and two
+	# of the three rows here are RED against that ring: a call with more than four
+	# PChar arguments reused a live slot, and 1024 chars wrote past one. No
+	# display and no gtk_init -- the rows go through snprintf/strlen, so this
+	# asserts the CONVERSION and nothing about GTK.
+	# bug-b-gtk3-pc-writes-past-its-buffer-on-a-long-string
+	./$(COMPILER) test/test_gtk3_pc_pchar_conversion.pas $(TESTTMP)/test_gtk3_pc26
+	$(TESTTMP)/test_gtk3_pc26 | diff -u test/test_gtk3_pc_pchar_conversion.expected -
 	./$(COMPILER) --gtk=2 test/test_c_gtk_window.pas $(TESTTMP)/gtksel2_26
 	tools/expect_same.sh gtksel-2-soname "$$(readelf -dW $(TESTTMP)/gtksel2_26 | grep -o 'libgtk[^]]*' | head -1)" "libgtk-x11-2.0.so.0"
 	./$(COMPILER) --gtk=3 test/test_c_gtk_window.pas $(TESTTMP)/gtksel3_26
