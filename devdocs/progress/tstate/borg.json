@@ -15051,6 +15051,7 @@
    "range": [
     "d8424f01c7842c43ccf287328f5a7654385f2797"
    ],
+   "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
    "status": "fail"
   },
@@ -15069,6 +15070,7 @@
    "range": [
     "d8424f01c7842c43ccf287328f5a7654385f2797"
    ],
+   "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
    "status": "fail"
   }
