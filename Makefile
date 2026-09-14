@@ -1564,6 +1564,15 @@ test-nilpy: $(COMPILER)
 	# the oracle here, and agrees.
 	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
 	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
+	# A dynamically dispatched call takes its parameter DEFAULTS from its OWN
+	# class, not from whichever same-named method the candidate scan met first.
+	# A PACKAGE on purpose, and the ORDER inside it is the fixture: the scan is
+	# over the classes compiled SO FAR, so the fitting class has to be pulled
+	# LAST -- the only arrangement a first-wins table is exposed by. The other
+	# order compiles and always did. CPython is the oracle.
+	# bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
+	./$(COMPILER) test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.npy $(TESTTMP)/test_nilpy_dynsig26
+	$(TESTTMP)/test_nilpy_dynsig26 | diff -u test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.expected -
 # A PARENTHESISED relative from-import -- `from . import (a, b,` / `c, d)`.
 # It bound NOTHING AND SAID NOTHING: the name loop is `while CurTok.Kind =
 # tkIdent`, so a '(' matched no arm, and every name died at its first use as
