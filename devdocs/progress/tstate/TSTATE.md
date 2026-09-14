@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `06e40fb95b13` | 2026-09-14T18:40:48Z | RED (native) | 296.1s | `934ba04180e9` RED |
+| borg | `06e40fb95b13` | 2026-09-14T18:56:55Z | RED (full) | 928.7s | `06e40fb95b13` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `934ba04180e9` on borg, 2026-09-14T17:57:23Z (43m ago).**
+**Newest full tier in the fleet: `06e40fb95b13` on borg, 2026-09-14T18:56:55Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `934ba04180e9` | RED | 43m | — (newest) |
+| borg | `06e40fb95b13` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -39,3 +39,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:test/lib_classes_tthread.pas** — test/lib_classes_tthread.pas tools/expect_same.sh (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/lib_criticalsection_blocking.pas** — test/lib_criticalsection_blocking.pas tools/expect_same.sh (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/lib_fpc_thread_surface.pas** — test/lib_fpc_thread_surface.pas tools/expect_same.sh (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
+- **lib-test#src:test/lib_thread_handle_reports_exit_on_both_routes.pas** — test/lib_thread_handle_reports_exit_on_both_routes.pas tools/expect_same.sh (borg): bad `06e40fb95b13`, last good `unknown`, 0 commit(s) in range
