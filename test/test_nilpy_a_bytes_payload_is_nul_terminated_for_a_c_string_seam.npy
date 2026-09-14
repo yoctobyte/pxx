@@ -1,0 +1,39 @@
+# A bytes object's payload must carry a terminating zero byte, so that
+# handing it to a C `const char *` says what Python thinks it says.
+#
+# WHICH lengths go wrong is not a language property, it is whatever the
+# allocator happens to put after the payload: on the pinned compiler this
+# program reports 8 and 16, while a neighbouring one reported 8 alone and
+# every other length in 1..24 was correct by accident. A fixture that samples
+# "a few lengths" therefore CERTIFIES the bug most of the time, which is why
+# the sweep here is exhaustive over 1..16 rather than a selection.
+#
+# lekkerzeilen rendered a sky and no geometry because of exactly this: its
+# uniform names of length 8 -- u_zenith, u_aspect, u_ground, u_colour --
+# reached glGetUniformLocation with a ninth character and answered -1, while
+# every name of another length bound correctly.
+#
+# Every row passes the bytes through a VARIABLE on purpose. A bytes
+# EXPRESSION written straight into a C-seam argument is a separate, open
+# defect that answers a constant 3 -- see
+# bug-n-a-bytes-expression-in-a-c-seam-argument-passes-the-wrong-pointer --
+# and mixing the two here would let this fixture redden for that one.
+import "/usr/include/string.h"
+
+alpha = "abcdefghijklmnop"
+bad = []
+for n in range(1, 17):
+    b = alpha[0:n].encode("ascii")
+    if strlen(b) != n:
+        bad.append("%d->%d" % (n, strlen(b)))
+print("encode 1..16 :", "all correct" if not bad else " ".join(bad))
+
+# The empty payload is a C string too, not a null pointer.
+e = "".encode("ascii")
+print("empty        :", strlen(e))
+
+# A bytes that GREW past its first allocation keeps the invariant.
+ba = bytearray()
+ba.extend(alpha[0:8].encode("ascii"))
+g = bytes(ba)
+print("grown to 8   :", strlen(g), len(g))

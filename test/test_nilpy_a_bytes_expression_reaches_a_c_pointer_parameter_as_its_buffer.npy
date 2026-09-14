@@ -1,0 +1,27 @@
+# A bytes handed to an EXTERNAL C routine's pointer parameter must arrive as
+# its BUFFER, whatever shape the argument has. Through a NAME that already
+# worked; through a CALL RESULT or a LITERAL the TPyBytes INSTANCE went over
+# and strlen answered a constant 3 -- the object header's first zero byte.
+#
+# THE ROWS ARE NOT THREE CHARACTERS LONG, DELIBERATELY. `strlen(b"abc")`
+# answers 3 on the broken compiler and 3 is also the right answer, so the
+# natural probe passes. Eight is used throughout for that reason.
+#
+# `glUniformMatrix4fv(loc, 1, GL_FALSE, struct.pack("<16f", *values))` is the
+# call this was found in: every mat4 uniform lekkerzeilen uploaded arrived as
+# an object header, so the renderer drew a sky and no geometry at all.
+import "/usr/include/string.h"
+
+
+def via_param(b):
+    return strlen(b)
+
+
+s = "abcdefgh"
+v = s.encode("ascii")
+print("name        ", strlen(v))
+print("call result ", strlen(s.encode("ascii")))
+print("via param   ", via_param(s.encode("ascii")))
+print("literal     ", strlen(b"abcdefgh"))
+print("lit via parm", via_param(b"abcdefgh"))
+print("empty expr  ", strlen("".encode("ascii")))

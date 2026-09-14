@@ -1,0 +1,5 @@
+qualified region rijn
+internal  region rijn / S<7> / opened nothing
+here fmt  7.5
+here str  7
+here len  4

@@ -4141,3 +4141,49 @@ at the pair site (PyGetOrMakeBoundRetWrapper), where the callee is known.
 WHY NO FIXTURE CAUGHT IT: every single-module spelling passes. It needs four
 files, with the value-use in a module compiled after the declaring one --
 the ordering rule again, and the arrangement everyone writes is the green one.
+
+- 2026-09-14 | frank-user (Track N) | compiler/symtab.inc, compiler/pyparser.inc |
+  A module-level `def` in an IMPORTED `.py` module did not shadow the builtin of
+  the same name: `PyUserShadowsProc` asked whether the MAIN PROGRAM declared it
+  (`ProcUnitIdx = -1`), and Python namespaces are per MODULE. lekkerzeilen's
+  `session.save` therefore wrote the object's repr into the session file,
+  because its own `def format` lost to pylib's. New `PyShadowDeclHere(idx)`
+  scopes the predicate to the unit being parsed (main `.npy`, or a `.py`
+  module's own defs while THAT module is being parsed — never globally, or a
+  module's `def format` would hijack the main program's `format(7.5, ".1f")`),
+  and the `format` intercept gained `(qUnit < 0)` so `mod.format(x)` reaches
+  the module's own def. Repairs `format`, `str`, `open`; `len` and `sorted` go
+  through a different lowering and are filed separately.
+  Fixture: test_nilpy_a_def_in_an_imported_module_shadows_a_builtin — GREEN at
+  HEAD, RED against the pin.
+
+- 2026-09-14 | frank-user (Track N) | compiler/builtin/pylib.pas |
+  A `bytes` payload carried no terminating zero — `TPyBytes.Create` and
+  `PyBytesEnsure` both allocated exactly FLen — so `FData` handed to a C
+  `const char *` was correct only when the allocator happened to leave a zero
+  after it. `"u_zenith".encode("ascii")` reached glGetUniformLocation as a
+  NINE-character name and answered -1, which is why lekkerzeilen drew a sky
+  and no geometry: its four uniform names of length 8 (u_zenith, u_aspect,
+  u_ground, u_colour) never bound while every other name did. Now FLen + 1
+  with a zero at [FLen], both sites; the empty case allocates too, so `b""` is
+  the empty C string rather than a null pointer. Which lengths go wrong is a
+  property of the HEAP, not the language — 8 alone in one program, 8 and 16 in
+  another — so the fixture sweeps 1..16 exhaustively rather than sampling.
+  Fixture: test_nilpy_a_bytes_payload_is_nul_terminated_for_a_c_string_seam —
+  GREEN at HEAD, RED (then SIGSEGV on the empty row) against the pin.
+  A bytes EXPRESSION in a C-seam argument is still broken and is filed apart.
+
+- 2026-09-14 | frank-user (Track N) | compiler/pyparser.inc |
+  A bytes reaching an EXTERNAL C routine's pointer parameter arrived as its
+  buffer only through a NAME or a FIELD — all IRLowerCallArg's arm can see. As
+  a CALL RESULT or a LITERAL the TPyBytes instance went over, so
+  `strlen(s.encode("ascii"))` answered a constant 3 at every length. That is
+  the second half of lekkerzeilen's empty scene: `glUniformMatrix4fv(loc, 1,
+  GL_FALSE, struct.pack("<16f", *values))` handed the driver an object header,
+  so every mat4 uniform in the program was garbage and only the sky — which
+  uses no matrices — drew. PyCoerceCallableArgsIn now hoists such an argument
+  into a named temp, which is the spelling the existing static arm already
+  answers; same hoist and same ownership reasoning as the TPyList arm beside
+  it. Takes one divergence knowingly: the hoisted argument is evaluated before
+  those to its left. Fixture: test_nilpy_a_bytes_expression_reaches_a_c_
+  pointer_parameter_as_its_buffer — GREEN at HEAD, RED against the pin.

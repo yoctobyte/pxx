@@ -1,0 +1,17 @@
+# A module-level def shadows a builtin INSIDE ITS OWN MODULE, and nowhere
+# else. Before the fix, PyUserShadowsProc asked only whether the MAIN
+# program declared the name, so a def in an imported module lost to pylib's
+# builtin -- lekkerzeilen's session.save wrote the object's repr into the
+# session file because its own `format(it)` reached pylib's format().
+#
+# The second half of the row matters as much as the first: the builtins are
+# still the builtins HERE, because Python namespaces are per module.
+import sess
+
+it = sess.Session("rijn")
+
+print("qualified", sess.format(it))
+print("internal ", sess.save(it))
+print("here fmt ", format(7.5, ".1f"))
+print("here str ", str(7))
+print("here len ", len("abcd"))

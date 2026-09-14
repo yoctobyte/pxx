@@ -1,0 +1,3 @@
+encode 1..16 : all correct
+empty        : 0
+grown to 8   : 8 8

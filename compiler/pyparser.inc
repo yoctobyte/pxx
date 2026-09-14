@@ -25628,6 +25628,61 @@ begin
       owner inside pyvar_cbuf, which returns a Pointer and can own nothing.
       That half stays filed rather than guessed.
       bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
+    { A statically TPyBytes EXPRESSION -- a call result, a literal, anything
+      that is not already a plain name -- bound to an EXTERNAL C pointer
+      parameter. Hoisted into a named temp, and then the existing static arm
+      answers it.
+
+      IRLowerCallArg's arm knows how to turn a bytes into its buffer, but it
+      asks the AST what the argument IS, which answers only for a NAME or a
+      FIELD; through a CALL RESULT or a literal it answered nothing and the
+      TPyBytes INSTANCE went over. Measured 2026-09-14, and the constant is the
+      tell: `strlen(s.encode("ascii"))` answers 3 for EVERY length, and so does
+      `strlen(b"abcdefgh")`, while `v = s.encode("ascii"); strlen(v)` is
+      correct at every length. Three is the object pointer's first zero byte.
+
+      That is not a corner: `glUniformMatrix4fv(loc, 1, GL_FALSE,
+      struct.pack("<16f", *values))` is the natural way to write a uniform
+      upload, and it is how lekkerzeilen's GL seam writes it -- so EVERY mat4
+      uniform in the program arrived as an object header. The renderer drew its
+      sky (no matrices) and nothing else.
+
+      THE SAME HOIST THE LIST ARM BELOW USES, for the same ownership reason: a
+      temp in the enclosing routine is owned for the whole statement and
+      therefore strictly outlives the call, where a nested call result has no
+      owner. And the argument becomes an AN_IDENT statically typed TPyBytes,
+      which is exactly what IRLowerCallArg already turns into
+      pybytes_cbuf(tmp) -- so this adds no second answer to `where is this
+      object's data`, it only puts the object somewhere that arm can see.
+      If you widen one of these, look at the other.
+
+      NOT gated on the argument being side-effect-free, because unlike the
+      list arm below it mentions the argument ONCE: the expression moves into
+      the hoisted assignment and the call reads the temp. What DOES move is
+      the evaluation ORDER -- this argument is now evaluated before the ones
+      to its left. Python evaluates arguments left to right, so that is a real
+      divergence; it is the same one the list arm above already takes, and the
+      alternative (a temp assigned in place) has no spelling here.
+      bug-n-a-bytes-expression-in-a-c-seam-argument-passes-the-wrong-pointer }
+    if (i < MAX_PROC_PARAMS) and
+       (Procs[procIdx].Params[i].TypeKind = tyPointer) and
+       (procIdx < ProcCount) and ProcExternal[procIdx] and
+       (bytCi >= 0) and
+       (ASTLeft[currArg] >= 0) and
+       (ASTKind[ASTLeft[currArg]] <> AN_IDENT) and
+       (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyClass) and
+       (ResolveNodeRec(ASTLeft[currArg]) = REC_UCLASS_BASE + bytCi) then
+    begin
+      tmpSym := AllocVar(PyHiddenName('cbytes'), tyClass);
+      Syms[tmpSym].RecName := REC_UCLASS_BASE + bytCi;
+      SymSyncTypeRef(tmpSym);
+      asgn := AllocNode(AN_ASSIGN);
+      ASTLeft[asgn] := PyMakeIdent(tmpSym);
+      ASTRight[asgn] := ASTLeft[currArg];
+      PyHoistStmt(asgn);
+      ASTLeft[currArg] := PyMakeIdent(tmpSym);
+      Result := True;
+    end;
     if (i < MAX_PROC_PARAMS) and
        (Procs[procIdx].Params[i].TypeKind = tyPointer) and
        (procIdx < ProcCount) and ProcExternal[procIdx] and
@@ -53445,7 +53500,13 @@ begin
         LastExprTk := tyAnsiString;
         Exit;
       end;
-      if CaseEqual(name, 'format') and
+      { qUnit < 0: a QUALIFIED name has already said which scope it means, so
+        `mod.format(x)` must reach that module's own `def format` rather than
+        pylib's builtin — the same reasoning the Ord/Chr arm below spells out.
+        PyUserShadowsProc cannot answer this one: it is scoped to the unit being
+        parsed, and the caller here is a different unit.
+        bug-n-a-def-in-an-imported-module-does-not-shadow-a-builtin }
+      if CaseEqual(name, 'format') and (qUnit < 0) and
          (not PyUserShadowsProc(name)) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin

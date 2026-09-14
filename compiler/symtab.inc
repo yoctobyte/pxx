@@ -12355,6 +12355,30 @@ begin
   ProcHideRank := best;
 end;
 
+{ Is this proc the NilPy declaration that shadows a builtin HERE?
+
+  Python namespaces are per MODULE, so "the user declared this name" is a
+  question about the translation unit currently being parsed, not about the
+  main program. `ProcUnitIdx = -1` is the main `.npy`; a `def` in a `.py`
+  module pulled in by an import lives in that module's own unit and shadows
+  only while THAT unit is being compiled — which is exactly what keeps
+  `sess.format` from hijacking a bare `format(7.5, ".1f")` back in the main
+  program.
+
+  Without the second arm, a module-level `def format` / `def str` / `def open`
+  in an imported module lost to the builtin silently, both when called bare
+  inside its own module and when called qualified from outside: lekkerzeilen's
+  `session.save` wrote `str(it)` — the object's repr — into the session file
+  because its own `format(it)` reached pylib's. `len` and `sorted` are lowered
+  somewhere else again and this does NOT repair them — see
+  bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted.
+  bug-n-a-def-in-an-imported-module-does-not-shadow-a-builtin }
+function PyShadowDeclHere(idx: Integer): Boolean;
+begin
+  PyShadowDeclHere := (ProcUnitIdx[idx] = -1) or
+    ((ProcUnitIdx[idx] = CurrentUnitIdx) and UnitIsPyModule(ProcUnitIdx[idx]));
+end;
+
 { The eligibility tests that do NOT depend on scope hiding — the set
   ProcHideRank ranks over. Split out so the rank pass and the final predicate
   cannot drift apart. }
@@ -12383,7 +12407,7 @@ begin
   end;
   { ...and, in a NilPy program that declares this name itself, ONLY that
     declaration is a candidate — see PyUserShadowsProc. }
-  if Result and userOnly and (ProcUnitIdx[idx] <> -1) then Result := False;
+  if Result and userOnly and (not PyShadowDeclHere(idx)) then Result := False;
   { ...and the mirror image: a module-level `def` is not bound ABOVE its own
     `def` statement, so at a module-body call site that precedes it the def is
     not a candidate at all and the builtin it shadows must win. userOnly is
@@ -12475,7 +12499,7 @@ begin
         { ...and, for a def that shadows a BUILTIN, only from its own `def`
         statement onward — Python rebinds the name when that statement RUNS.
         ProcPyDefTok is 0 for everything else, so this costs nothing there. }
-      if ProcNameMatches(i, name) and (ProcUnitIdx[i] = -1) and
+      if ProcNameMatches(i, name) and PyShadowDeclHere(i) and
          ((ProcPyDefTok[i] = 0) or (ProcPyDefTok[i] - 1 <= TokPos)) then
       begin
         PyUserShadowsProc := True;

@@ -10829,15 +10829,36 @@ begin
   PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
   FLen := n;
-  FData := nil;
-  if n = 0 then Exit;
-  GetMem(FData, n);
+  { ALWAYS one byte more than FLen, and that byte is ALWAYS zero. FLen is
+    unchanged, so nothing Python can see moves; what changes is that FData is
+    a valid C string, which is what every `import "<header>"` seam hands it to.
+    CPython guarantees the same thing about a bytes object for the same reason.
+
+    Measured 2026-09-14: without it, `"u_zenith".encode("ascii")` reached
+    glGetUniformLocation as a NINE-character name (strlen said 9 for an
+    eight-byte payload) and the lookup answered -1. lekkerzeilen rendered a
+    sky and nothing else, because the uniform names of length 8 -- u_zenith,
+    u_aspect, u_ground, u_colour -- silently never bound while every other
+    name did.
+
+    WHICH lengths are unlucky is not a property of the language, it is a
+    property of whatever the allocator put after the payload: in one program
+    only 8 was wrong and 1..7, 9..24 all happened to find a zero byte; in
+    another 8 AND 16 were wrong. That is precisely why a sampled probe cannot
+    see this and the fixture sweeps a range.
+    bug-n-a-bytes-payload-is-not-nul-terminated-so-a-c-string-seam-reads-past-it
+
+    The empty case allocates too, rather than leaving FData nil: `b""` handed
+    to a `const char *` must be the empty C string, not a null pointer. }
+  GetMem(FData, n + 1);
   { Python's bytearray(n) is n ZERO bytes, not uninitialised memory }
   for k := 0 to n - 1 do
   begin
     p := PByte(NativeInt(FData) + k);
     p^ := 0;
   end;
+  p := PByte(NativeInt(FData) + n);
+  p^ := 0;
 end;
 
 function TPyBytes.count: Integer;
@@ -10879,7 +10900,8 @@ procedure PyBytesEnsure(b: TPyBytes; need: Integer);
 var np: Pointer; k: Integer; src, dst: PByte;
 begin
   if need <= b.FLen then Exit;
-  GetMem(np, need);
+  { need + 1, and a zero at [need] — same invariant as the constructor. }
+  GetMem(np, need + 1);
   for k := 0 to need - 1 do
   begin
     dst := PByte(NativeInt(np) + k);
@@ -10891,6 +10913,8 @@ begin
     else
       dst^ := 0;
   end;
+  dst := PByte(NativeInt(np) + need);
+  dst^ := 0;
   b.FData := np;
   b.FLen := need;
 end;

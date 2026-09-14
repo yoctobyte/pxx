@@ -1577,6 +1577,12 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_clsref_rtti | diff -u test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.expected -
 	./$(COMPILER) -Futest/nilpy_boundret test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.npy $(TESTTMP)/test_nilpy_boundret
 	$(TESTTMP)/test_nilpy_boundret | diff -u test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.expected -
+	./$(COMPILER) -Futest/nilpy_modshadow test/test_nilpy_a_def_in_an_imported_module_shadows_a_builtin.npy $(TESTTMP)/test_nilpy_modshadow
+	$(TESTTMP)/test_nilpy_modshadow | diff -u test/test_nilpy_a_def_in_an_imported_module_shadows_a_builtin.expected -
+	./$(COMPILER) test/test_nilpy_a_bytes_payload_is_nul_terminated_for_a_c_string_seam.npy $(TESTTMP)/test_nilpy_bytesnul
+	$(TESTTMP)/test_nilpy_bytesnul | diff -u test/test_nilpy_a_bytes_payload_is_nul_terminated_for_a_c_string_seam.expected -
+	./$(COMPILER) test/test_nilpy_a_bytes_expression_reaches_a_c_pointer_parameter_as_its_buffer.npy $(TESTTMP)/test_nilpy_bytesexpr
+	$(TESTTMP)/test_nilpy_bytesexpr | diff -u test/test_nilpy_a_bytes_expression_reaches_a_c_pointer_parameter_as_its_buffer.expected -
 # A PARENTHESISED relative from-import -- `from . import (a, b,` / `c, d)`.
 # It bound NOTHING AND SAID NOTHING: the name loop is `while CurTok.Kind =
 # tkIdent`, so a '(' matched no arm, and every name died at its first use as

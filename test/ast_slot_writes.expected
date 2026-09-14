@@ -397,6 +397,7 @@ AN_ASSIGN Left vbLhs
 AN_ASSIGN Left vcLhs
 AN_ASSIGN Left vrIndex
 AN_ASSIGN Left wIdent
+AN_ASSIGN Right ASTLeft[currArg]
 AN_ASSIGN Right ASTLeft[item]
 AN_ASSIGN Right ASTLeft[pairNode]
 AN_ASSIGN Right ASTRight[pairNode]
