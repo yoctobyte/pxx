@@ -160,6 +160,53 @@ Recommendation: route 1, gated on libc actually being linked, with route 3 as
 the interim. Not taken here because it is a day of work in the PAL with a
 `palpthread.pas` collision to resolve, and because the fork above is a real one.
 
+## Route 2 was MEASURED, not reasoned about -- and it is narrowed, not cleared
+
+The fork above should not cost whoever takes it a day of ABI archaeology to
+find out where route 2 stops being cheap. It was probed directly: a scratch
+build in which the child thread, as its FIRST act, mmaps a block and installs
+it with `arch_prctl(ARCH_SET_FS)` -- the same mechanism `palthread.pas`
+already uses for `gs`, so it needs neither libc nor `CLONE_SETTLS`. The
+`tcbhead_t` at `fs+0x00`/`+0x10` is x86-64 psABI rather than glibc-private, so
+the self-pointers can be fixed up without knowing anything about `struct
+pthread`.
+
+Each stage writes a marker byte with a raw `write(2)`, so a crash says WHERE.
+`a`=entered, `1`=mmap, `2`=copy, `3`=self-pointer fixup, `4`=`ARCH_SET_FS`,
+`b`=installed, `c`=churn finished.
+
+| what the child's static TLS area (below `fs`) is given | markers | result |
+| --- | --- | --- |
+| zeroed (mmap's own zero pages) | `a1234b` | **SIGSEGV inside malloc**, 5/5 |
+| copied from the parent, 1024 bytes | `a1234b` | `free(): too many chunks detected in tcache` |
+| copied from the parent, 4096 bytes | `a1234b` | `free(): double free detected in tcache 2` |
+| copied from the parent, 16384 bytes | `a12` | SIGSEGV **in the copy** -- the parent's region is smaller than that and below it is unmapped |
+
+Read together, and the last row is why the table has four entries rather than
+two: an early draft of this probe used a 64KB window and faulted at `a12`,
+which reads exactly like "the whole idea fails" and is in fact "you read off
+the end of a mapping".
+
+**Installing the block is not the problem.** In every row that got as far as
+`b`, the child ran glibc's malloc successfully for a while. Two things are:
+
+1. **Zeros are not a valid static TLS area.** glibc's thread-locals are
+   initialised from each loaded module's TLS template, and malloc segfaults on
+   a zeroed one. Producing a correct one means walking the loaded modules and
+   building a dtv -- which is `_dl_allocate_tls`, reimplemented.
+2. **A copied one carries the parent's malloc state**, so it reproduces the
+   original bug exactly. Resetting just the malloc fields means knowing their
+   offsets inside `struct pthread`, which is private and versioned.
+
+So route 2's cost is not "set a clone flag": it is owning a private,
+versioned layout plus a loader-internal allocation. **That is precisely the
+work `pthread_create` exists to do**, which is the measured argument for route
+1 and the reason the recommendation is not a preference.
+
+None of this argues against route 3 (detect and refuse) as the interim. It is
+untouched by the above and remains the cheapest strict improvement on silent
+corruption.
+
 ## Gate
 
 `make compiler/pascal26` + the two fixtures above, which are the repro and its
