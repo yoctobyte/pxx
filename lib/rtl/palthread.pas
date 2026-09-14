@@ -16,7 +16,7 @@ unit palthread;
 
 interface
 
-uses palfutex;
+uses palfutex, palsync;
 
 type
   { A thread body: receives the opaque argument passed to PalThreadCreate. Runs on
@@ -355,11 +355,129 @@ begin
   ignore := __pxxrawsyscall(SYS_exit, 0, 0, 0, 0, 0, 0);
 end;
 
+{ ---- reclaiming the stack of a thread nobody joins --------------------------
+
+  MEASURED 2026-09-15, 60 threads started and never joined, statically linked so
+  the CLONE route is taken:
+
+      before  batch1 maps +120  vsz +61680 kB   batch2 maps +120  vsz +61680 kB
+      CPython batch1 maps   +0  vsz     +0 kB   batch2 maps   +0  vsz     +0 kB
+
+  1028 kB per thread is EXACTLY h.StackSize (the 1024 kB stack plus its guard
+  page), and the 2 mappings are ONE mmap that the guard-page mprotect splits
+  into two VMAs -- so the whole leak is the stack mapping and nothing else. It
+  is invisible to every RSS-based instrument (the pages are never touched: ~8.6
+  kB of RSS moves per thread) and invisible to PXXObjTrace, which only sees
+  headered objects. The ceiling is vm.max_map_count, 65530 here, so ~32700
+  threads and then mmap fails; a program creating ~6 threads a second reaches
+  that in under two hours.
+
+  WHY A REAPER AND NOT A DETACH. PalThreadJoin is the only thing that munmaps
+  the stack, so a thread nobody joins keeps it forever. A thread cannot release
+  the stack it is standing on, so the release has to happen on ANOTHER thread,
+  later -- which is also how glibc does it. TidWord is the signal and it is the
+  kernel's, not ours: CLONE_CHILD_CLEARTID zeroes it in mm_release() during
+  do_exit, after the thread can no longer touch its user stack. That is the same
+  word PalThreadJoin already waits on before its own munmap, and the same
+  guarantee pthread_join relies on to recycle a stack.
+
+  REGISTERED AT CREATE, NOT AT DETACH, and that is the design decision here. An
+  explicit detach would need every caller to predict that it will not join --
+  mimic_threading's `daemon=True` is one such caller, but an ordinary thread
+  that is simply never joined is the same leak with nobody to flag it. Sweeping
+  a handle whose TidWord the kernel has cleared is correct for BOTH: a joined
+  thread has StackBase = 0 by then and is skipped, and a thread joined LATER
+  finds StackBase = 0, its TidWord already 0, and returns without waiting.
+
+  BOUND: one sweep per PalThreadCreate, so a dead thread's stack is held until
+  the next thread starts. The last thread's stack is never reclaimed, which is
+  one mapping at exit, not a leak that grows. }
+const
+  PAL_REAP_SLOTS = 256;
+var
+  gReap:      array[0..PAL_REAP_SLOTS - 1] of PThreadHandle;
+  gReapCount: Integer;
+  gReapLock:  TMutex;
+
+{ Take ownership of a handle's stack mapping, or report that someone else
+  already has it. The zeroing and the test are ONE atomic step on purpose: a
+  Join racing a sweep would otherwise both see StackBase > 0 and munmap it
+  twice, and the second munmap is harmless only until the address has been
+  handed back out by another mmap -- at which point it unmaps live memory. }
+function ReapTakeStack(h: PThreadHandle; var base, size: Int64): Boolean;
+begin
+  MutexLock(gReapLock);
+  base := h^.StackBase;
+  size := h^.StackSize;
+  Result := base > 0;
+  if Result then h^.StackBase := 0;
+  MutexUnlock(gReapLock);
+end;
+
+{ Release every registered stack whose thread the kernel has confirmed dead.
+  Entries are removed by swapping the tail in, so the list holds only threads
+  that are still running or not yet swept -- never one entry per thread ever
+  created. }
+procedure ReapSweep;
+var
+  i: Integer;
+  p: PThreadHandle;
+  base, size, ignore: Int64;
+begin
+  MutexLock(gReapLock);
+  i := 0;
+  while i < gReapCount do
+  begin
+    p := gReap[i];
+    if (p <> nil) and (p^.TidWord = 0) then
+    begin
+      base := p^.StackBase;
+      size := p^.StackSize;
+      if base > 0 then
+      begin
+        p^.StackBase := 0;
+        { Inside the lock: ReapTakeStack must not hand the same address to a
+          concurrent Join between the zeroing and the unmap. }
+        ignore := __pxxrawsyscall(SYS_munmap, base, size, 0, 0, 0, 0);
+      end;
+      gReap[i] := gReap[gReapCount - 1];
+      gReap[gReapCount - 1] := nil;
+      gReapCount := gReapCount - 1;
+    end
+    else
+      i := i + 1;
+  end;
+  MutexUnlock(gReapLock);
+end;
+
+{ Register a freshly cloned thread. Called only with the kernel's own tid
+  already in TidWord (CLONE_PARENT_SETTID lands before clone returns to the
+  parent), because a handle registered with TidWord = 0 reads as ALREADY DEAD
+  and the next sweep would unmap a running thread's stack. If that word is
+  somehow not set, or the table is full, the handle is simply not registered:
+  its stack then leaks exactly as it did before this existed, which is the one
+  failure mode that cannot make anything worse. }
+procedure ReapRegister(h: PThreadHandle);
+begin
+  if (h = nil) or (h^.StackBase <= 0) or (h^.TidWord = 0) then Exit;
+  MutexLock(gReapLock);
+  if gReapCount < PAL_REAP_SLOTS then
+  begin
+    gReap[gReapCount] := h;
+    gReapCount := gReapCount + 1;
+  end;
+  MutexUnlock(gReapLock);
+end;
+
 function PalThreadCreate(var h: TThreadHandle; entry: TThreadEntry; arg: Pointer;
                          stackSize: Int64): Integer;
 var
   ignore: Int64;
 begin
+  { Before anything is allocated, so a dead thread's pages are back with the
+    kernel and available to the mmap below. Harmless on the pthread route:
+    nothing is ever registered there -- glibc owns those stacks. }
+  ReapSweep;
   if stackSize <= 0 then stackSize := PAL_DEFAULT_STACK;
   { A FLOOR, because the clone stub carves off the TOP before the thread runs:
     a TLS block (4224 bytes: the slot map plus the `threadvar` area) and, since a cloned thread got its own signal alt
@@ -458,13 +576,14 @@ begin
     Result := -1;
     Exit;
   end;
+  ReapRegister(@h);
   Result := 0;
 end;
 
 procedure PalThreadJoin(var h: TThreadHandle);
 var
   t: Integer;
-  ignore: Int64;
+  base, size, ignore: Int64;
 begin
 {$ifdef CPUX86_64}
   { pthread route: glibc owns the thread and its stack, and the futex handshake
@@ -489,11 +608,10 @@ begin
     if t = 0 then Break;
     PalFutexWait(@h.TidWord, t);
   end;
-  if h.StackBase > 0 then
-  begin
-    ignore := __pxxrawsyscall(SYS_munmap, h.StackBase, h.StackSize, 0, 0, 0, 0);
-    h.StackBase := 0;
-  end;
+  { NOT `if h.StackBase > 0 then munmap` -- the reaper may be unmapping this
+    same mapping right now. ReapTakeStack settles which of the two owns it. }
+  if ReapTakeStack(@h, base, size) then
+    ignore := __pxxrawsyscall(SYS_munmap, base, size, 0, 0, 0, 0);
 end;
 
 end.

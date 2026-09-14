@@ -1,0 +1,134 @@
+# A thread nobody joins must still give its stack back.
+#
+# PalThreadJoin is the only thing that munmaps a clone-route thread's stack, so
+# a daemon thread -- which by definition nobody joins -- kept 1028 kB of address
+# space and 2 mapping-table slots forever. MEASURED 2026-09-15 before the fix:
+# 120 maps / 61680 kB per 60 threads, LINEAR across two batches, 0 under
+# CPython. 1028 kB is exactly the stack plus its guard page, and the 2 mappings
+# are ONE mmap that the guard-page mprotect splits into two VMAs.
+#
+# COUNT MAPPINGS AND VSZ, NEVER RSS. A fresh thread stack is mmap'd and barely
+# touched: RSS moves ~8.6 kB per thread, so every RSS-based instrument -- and
+# every leak fixture in this tree that reads /proc/self/statm field 1 -- reads
+# this defect as clean. PXXObjTrace is blind to it too; it only sees headered
+# objects. What actually runs out is vm.max_map_count (65530 here): ~32700
+# threads, which a program creating six a second reaches in under two hours.
+#
+# THE `live` ROW IS THE POSITIVE CONTROL AND IT GUARDS THE DANGEROUS DIRECTION.
+# Every other row asserts a number stays NEAR ZERO, so a broken instrument -- a
+# maps() that cannot parse, threads that never start -- passes all of them. More
+# than that: the fix reclaims a stack on the evidence that the kernel cleared
+# TidWord, and the way it can be WRONG is freeing a stack still being stood on.
+# `live` holds 40 threads open across further thread creation, so it must show
+# the mappings present (the instrument moves) AND every thread must still finish
+# with a correct result (nothing was freed underneath them).
+import threading
+
+TOTAL = 0
+LK = threading.Lock()
+
+
+def maps():
+    f = open("/proc/self/maps")
+    s = f.read()
+    f.close()
+    return len(s.split("\n"))
+
+
+def vsz_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[0]) * 4
+
+
+def bump():
+    global TOTAL
+    LK.acquire()
+    TOTAL = TOTAL + 1
+    LK.release()
+
+
+def slow_bump():
+    threading.Event().wait(0.6)
+    bump()
+
+
+def spawn(n, fn, daemon):
+    out = []
+    for i in range(n):
+        t = threading.Thread(target=fn, daemon=daemon)
+        t.start()
+        out.append(t)
+    return out
+
+
+ok = True
+
+# A first batch pays any one-off cost (an arena page, the shim's own lock) so it
+# is not charged to the batches that get asserted.
+spawn(30, bump, True)
+threading.Event().wait(0.4)
+
+# ---- reclaim: daemon threads, nobody joins them ---------------------------
+m0 = maps()
+v0 = vsz_kb()
+spawn(60, bump, True)
+threading.Event().wait(0.4)
+m1 = maps()
+v1 = vsz_kb()
+spawn(60, bump, True)
+threading.Event().wait(0.4)
+m2 = maps()
+v2 = vsz_kb()
+print("daemon batch1  maps +%d  vsz +%d kB" % (m1 - m0, v1 - v0))
+print("daemon batch2  maps +%d  vsz +%d kB" % (m2 - m1, v2 - v1))
+if (m2 - m1) <= 4 and (v2 - v1) <= 4096:
+    print("daemon RECLAIMED")
+else:
+    print("daemon LEAKS %d maps / %d kB per 60" % (m2 - m1, v2 - v1))
+    ok = False
+
+# ---- joined: the path that always worked, asserted so the fix cannot break it
+m3 = maps()
+for t in spawn(40, bump, False):
+    t.join()
+threading.Event().wait(0.2)
+m4 = maps()
+print("joined  maps +%d" % (m4 - m3))
+if (m4 - m3) <= 4:
+    print("joined RECLAIMED")
+else:
+    print("joined LEAKS %d maps per 40" % (m4 - m3))
+    ok = False
+
+# ---- live: the positive control -------------------------------------------
+# 40 threads that are STILL RUNNING while 40 more are created. Each creation
+# sweeps, so if the sweep could free a stack in use, it happens here. Two
+# assertions: the mappings must be visible (the instrument is alive), and every
+# thread must still complete (no stack was pulled out from under one).
+before = TOTAL
+m5 = maps()
+held = spawn(40, slow_bump, False)
+alive = maps() - m5
+spawn(40, bump, True)
+threading.Event().wait(0.3)
+for t in held:
+    t.join()
+print("live    maps +%d while running" % alive)
+if alive >= 40:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every RECLAIMED above is meaningless" % alive)
+    ok = False
+done = TOTAL - before
+if done == 80:
+    print("live ALL RAN")
+else:
+    print("live LOST %d of 80 threads" % (80 - done))
+    ok = False
+
+if ok:
+    print("THREADSTACK OK")
+else:
+    print("THREADSTACK FAIL")

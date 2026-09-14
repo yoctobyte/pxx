@@ -34802,6 +34802,14 @@ lib-test: pxx-stable-check
 	# fix is in compiler/builtin/pylib.pas and the pin carries the old one.
 	./$(COMPILER) test/test_nilpy_a_user_object_does_not_leak_because_of_how_its_value_is_consumed.npy $(TESTTMP)/test_nilpy_objlife
 	tools/expect_same.sh test_nilpy_objlife "$$($(TESTTMP)/test_nilpy_objlife | tail -n 1)" "OBJLIFE OK"
+	# A thread nobody joins must give its stack back. --threadsafe is required:
+	# without it mimic_threading is not reachable and the row would pass by not
+	# testing anything. $(COMPILER), not $(PXX_STABLE) -- the fix is in
+	# lib/rtl/palthread.pas, which the pinned compiler also resolves from the
+	# TREE, but the reaper only exists at HEAD so the pin cannot carry the
+	# fixture's premise either way; build it with what this tree built.
+	./$(COMPILER) --threadsafe test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy $(TESTTMP)/test_nilpy_threadstack
+	tools/expect_same.sh test_nilpy_threadstack "$$($(TESTTMP)/test_nilpy_threadstack | tail -n 1)" "THREADSTACK OK"
 	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
 	# split. The non-threaded half of the bargain (classes still building WITHOUT
 	# --threadsafe) is asserted by every other classes test above, which do not
