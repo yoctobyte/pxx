@@ -92,3 +92,6 @@ interpreted closure) plus arithmetic on the result, because the old pyeval arm
 handed back something that only failed once a number was asked of it. The
 literal rows are the positive control. Reverted, the fixture is rc=139 with
 three wrong rows; with the fix it matches CPython exactly.
+
+## Log
+- 2026-09-14 — resolved, commit 900d446e9.

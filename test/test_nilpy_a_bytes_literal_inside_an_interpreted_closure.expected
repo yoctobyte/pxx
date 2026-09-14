@@ -1,0 +1,7 @@
+direct : 4
+closure: 4
+empty  : 0
+present: 3
+concat : b'abcde'
+index  : 121
+int arm: 5

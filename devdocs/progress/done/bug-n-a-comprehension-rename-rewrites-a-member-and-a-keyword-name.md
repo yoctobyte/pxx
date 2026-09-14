@@ -70,3 +70,6 @@ lambda parameter's default name (`lambda a, x=...`), which is a binding too.
 Rows whose target spelling is unused are the positive control; the colliding
 rows follow; the three-name target is last. Reverted, the fixture does not
 even build -- `f has no parameter named '__py_cv169_0'`.
+
+## Log
+- 2026-09-14 — resolved, commit 9b5b1be3b.

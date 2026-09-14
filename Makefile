@@ -1919,6 +1919,16 @@ test-nilpy: $(COMPILER)
 	# area never reached.
 	./$(COMPILER) test/test_nilpy_a_comprehension_rename_leaves_a_member_and_a_keyword_name_alone.npy $(TESTTMP)/test_nilpy_comprename26
 	$(TESTTMP)/test_nilpy_comprename26 | diff -u test/test_nilpy_a_comprehension_rename_leaves_a_member_and_a_keyword_name_alone.expected -
+	# A lambda's body is snapshotted as tokens, and in that snapshot a bytes LITERAL
+	# arrives as a CALL -- `b"abcd"` reaches pyeval's bytes() constructor as
+	# bytes('abcd'). That constructor had a bytes arm and an int arm and no string
+	# arm, so it coerced the literal's own text to an integer:
+	# `TypeError: expected a number, got str` from a lambda containing only a
+	# literal. ParsePrimary's bytes-literal arm already answers "chars are the byte
+	# values"; the two routes disagreed. The compiled row is the positive control and
+	# the int arm is here so the fix cannot swallow it.
+	./$(COMPILER) test/test_nilpy_a_bytes_literal_inside_an_interpreted_closure.npy $(TESTTMP)/test_nilpy_byteslitclo26
+	$(TESTTMP)/test_nilpy_byteslitclo26 | diff -u test/test_nilpy_a_bytes_literal_inside_an_interpreted_closure.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None

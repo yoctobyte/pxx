@@ -4014,6 +4014,24 @@ begin
       cand := args.at(0);
       if PPyRec(@cand)^.VType = 7 then
         res := PyBoxObj(Pointer(bytes(TPyBytes(pyvarobj(cand)))))
+      else if PPyRec(@cand)^.VType = 6 then
+        { A STRING argument is the byte values of that string, which is exactly
+          what ParsePrimary's bytes-LITERAL arm already answers a few hundred
+          lines above (`bytes(TkText[Cur])`, "chars are the byte values"). The
+          two have to agree, because a bytes literal inside an interpreted
+          closure does not reach that arm at all: the closure's snapshot carries
+          the literal as a CALL, `b"abcd"` arriving here as bytes('abcd'). With
+          no string arm it fell to the int coercion below and raised
+          `TypeError: expected a number, got str` -- naming a str the source
+          never wrote, from a lambda that only ever contained a literal. That is
+          lekkerzeilen's `len(indices or b"")`.
+          Accepting a string where CPython wants an encoding is an UPWARD
+          divergence and deliberate (see nilpy-semantics-divergences.md): the
+          two spellings have already collapsed into one by the time this runs,
+          so refusing here would refuse the literal, and the literal is the
+          shape real code writes.
+          bug-n-a-bytes-literal-in-an-interpreted-closure-is-read-as-a-length }
+        res := PyBoxObj(Pointer(bytes(pystr_of(cand))))
       else
         res := PyBoxObj(Pointer(bytearray(pyvar_to_int(cand))));
     end;
@@ -4435,7 +4453,20 @@ begin
       Exit;
     end;
     { otherwise: a reflected host object (vm) — dispatch through the trampoline }
-    PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+    try
+      PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+    except
+      on E: Exception do
+      begin
+        Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
+              PyVarTypeNameOf(recv), ' args:');
+        if args <> nil then
+          for i := 0 to args.count - 1 do
+            Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
+        WriteLn(StdErr, ' || ', E.Message);
+        raise;
+      end;
+    end;
     kwNames.Free;
     Exit;
   end;
@@ -4981,6 +5012,7 @@ begin
   Executing := True; BreakFlag := False;
   ReturnFlag := False; ReturnValue := MakeNone;
   Cur := Closures[cidx].BodyPos;
+  try
   if Closures[cidx].FlatSrc then
   begin
     { source-built closure: flat statements at indent 0 until EOF }
@@ -4993,6 +5025,21 @@ begin
   end
   else
     ExecSuite(True);
+  except
+    on E: Exception do
+    begin
+      Write(StdErr, 'PROBE body:');
+      for i := Closures[cidx].BodyPos to Closures[cidx].BodyPos + 40 do
+        if i < TkN then Write(StdErr, ' ', TkText[i]);
+      WriteLn(StdErr, '');
+      Write(StdErr, 'PROBE locals:');
+      for i := 0 to LclN - 1 do
+        Write(StdErr, ' ', LclNames[i], '=', PyVarTypeNameOf(LclVals[i]));
+      WriteLn(StdErr, '');
+      WriteLn(StdErr, 'PROBE err: ', E.Message);
+      raise;
+    end;
+  end;
   res := ReturnValue;
 
   { restore caller interpreter state }

@@ -1,0 +1,45 @@
+# A lambda's body is snapshotted as tokens and run by the interpreter, and in
+# that snapshot a bytes LITERAL arrives as a CALL: `b"abcd"` reaches pyeval's
+# bytes()/bytearray() constructor as bytes('abcd'). That constructor had an arm
+# for a bytes object and an arm for an int and none for a string, so it coerced
+# the literal's own text to an integer and raised
+# `TypeError: expected a number, got str` -- naming a str the source never
+# wrote, from a lambda that contained nothing but a literal. ParsePrimary's
+# bytes-literal arm has always answered "chars are the byte values"; the two
+# routes disagreed.
+#
+# lekkerzeilen's spelling is `len(indices or b"")`, an EMPTY literal, which is
+# why the value in the message was an empty string and read like a missing
+# argument. So the empty row is here and it is not the last one: the non-empty
+# rows come after it, because an instrument that only ever saw the empty
+# spelling would read the failure as an arity problem.
+
+
+class A:
+    def direct(self):
+        return len(b"abcd")                     # control: compiled, not interpreted
+
+    def closed(self):
+        return lambda g, f, t, p: len(b"abcd")
+
+    def closed_empty(self, idx):
+        return lambda g, f, t, p: len(idx or b"")
+
+    def closed_value(self):
+        return lambda g, f, t, p: b"abc" + b"de"
+
+    def closed_index(self):
+        return lambda g, f, t, p: b"wxyz"[2]
+
+    def closed_int(self, n):
+        return lambda g, f, t, p: len(bytes(n))  # the INT arm must still work
+
+
+a = A()
+print("direct :", a.direct())
+print("closure:", a.closed()(1, 2, 3, 4))
+print("empty  :", a.closed_empty(None)(1, 2, 3, 4))
+print("present:", a.closed_empty(b"xyz")(1, 2, 3, 4))
+print("concat :", a.closed_value()(1, 2, 3, 4))
+print("index  :", a.closed_index()(1, 2, 3, 4))
+print("int arm:", a.closed_int(5)(1, 2, 3, 4))

@@ -871,3 +871,24 @@ differential fixture whose `.expected` is CPython's output **cannot carry a row
 for the unset fields**, because the oracle raises rather than printing.
 `test/test_nilpy_dunder_new_allocates_without_the_constructor.npy` therefore
 sets every field it reads and says so in its own header.
+
+## `bytes("abc")` builds bytes where CPython wants an encoding
+
+CPython: `bytes(str)` without an encoding is
+`TypeError: string argument without an encoding`. NilPy answers the string's
+byte values, which is what `bytes(b"abc")` and the LITERAL `b"abc"` already
+answer.
+
+**This is not a convenience — it is forced, and the forcing is the interesting
+part.** A lambda's body is snapshotted as tokens and run by pyeval, and in that
+snapshot a bytes LITERAL arrives as a CALL: `b"abc"` reaches the constructor as
+`bytes('abc')`. By that point the literal and the call are the same construct,
+so refusing the string would refuse the literal — and the literal is the shape
+real code writes (`len(indices or b"")`, lekkerzeilen app.py:1752). Refusing it
+cost a `TypeError: expected a number, got str` naming a string the source never
+wrote; see
+`bug-n-a-bytes-literal-in-an-interpreted-closure-is-read-as-a-length`.
+
+Consequence for testing: a differential fixture may carry the LITERAL rows
+against CPython, because those agree. A row spelling `bytes("abc")` directly
+cannot be checked against the oracle — CPython raises.
