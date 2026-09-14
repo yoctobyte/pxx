@@ -1,0 +1,61 @@
+# Adjacent string literals are ONE literal in CPython -- concatenation happens
+# in the tokeniser, so it binds tighter than every operator. The NilPy lexer
+# splices ` + ` between them instead, and `+` sits at ADDITIVE precedence, so
+# anything binding tighter took only the LAST literal as its left operand.
+#
+# THE INTERESTING ELEMENT IS NOT LAST. The fixture that closed
+# bug-nilpy-adjacent-string-literals-concatenate-in-only-some-positions swept
+# seven POSITIONS -- assignment, call, def, list, dict -- and no row put an
+# operator AFTER the pair, so every row was blind to this by construction.
+# Position was covered; precedence was not. Both halves are here now, and a row
+# per precedence class: tighter than `+` (* % **), equal (+), looser (== in).
+#
+# Every wrong row was SILENT except the `%` one, which is how lekkerzeilen found
+# it: `"...triggers ahead and " "astern" % self.pad.name` raised
+# `TypeError: not all arguments converted during string formatting` from a
+# wrapped diagnostic that had nothing to do with the real failure.
+#
+# bug-n-adjacent-string-literals-splice-a-plus-so-a-tighter-operator-binds-wrong
+
+name = "PS4 pad"
+
+# tighter than `+` -- the whole point
+print("a %s " "b" % name)
+print("x" "y" * 3)
+print(2 * "x" "y")
+print(repr("a" "b" * 0))
+print("a" "b" "c" * 2)
+print("ab" "cd" * 2 + "!")
+
+# equal and looser: these were always right and must stay right
+print("a" "b" + "c")
+print("a" "b" == "ab")
+print("q" "r" in "qrs")
+print(("a %s " "b") % name)
+
+# the prefixed spellings, and a mix -- a run may start with any of them
+print(r"a\n" "b")
+print("a" r"b\n")
+print(b"ab" b"cd")
+print(f"{name}" "tail")
+print("head" f"{name}" "tail")
+print(("x" f"{name}") * 2)
+
+# the seven POSITIONS the earlier fixture swept, kept in the same file so the
+# two do not drift apart again
+joined = "aa " "bb"
+print(joined)
+print(len("aa" "bb"))
+print(["a" "b" * 2, "c"])
+print({"k": "aa "
+            "bb"})
+
+
+def takes(s):
+    return s + "!"
+
+
+print(takes("aa " "bb"))
+print("wrapped "
+      "over %s lines" % name)
+print("three" "part" "run" * 1)

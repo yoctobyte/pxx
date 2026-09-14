@@ -14,8 +14,8 @@ summary: >
 track: N
 type: bug
 prio: 55
-owner: unassigned
-status: open
+owner: frank-user
+status: done
 ---
 
 ## How it was reached
@@ -94,9 +94,45 @@ ticket in the same file — the two fixtures are testing one construct and shoul
 not drift apart again. Include at least one row per precedence class: tighter
 than `+` (`*`, `%`, `**`), equal (`+`), looser (`==`, `in`).
 
+## What was done
+
+Parenthesised, not folded. The ticket's first choice was to fold adjacent
+literals into ONE literal token in the string factor, and that is right for
+plain strings and wrong for the rest: in this dialect an f-string becomes a
+`pyfmt(...)` call and a bytes literal becomes `bytes("...")`, so `f"a" "b"` and
+`b"a" b"c"` have no single-token form to fold into. The ticket's own fallback --
+"splice a PARENTHESISED group rather than a bare `+`, so the pair binds as a
+unit" -- covers every spelling and is what landed.
+
+`PyExpandFStrings` is a single forward pass, and whether a literal begins a RUN
+is only knowable after it has been emitted, so the open paren is INSERTED at the
+recorded start position (`PyFsInsertAt`) once a follower is seen; the close is
+appended when a literal has no follower. The run therefore always balances --
+the last literal of a run is by definition the one with no follower.
+
+One trap worth recording: the start position must include a RAW prefix. `r` is
+copied by the generic path before the quote branch runs, so a naive start
+position put the paren after it and `r"a" "b"` became `r("a" + "b")` -- a CALL,
+and a loud one. The plain-string branch backs up over an `r`/`R` that is not the
+tail of an identifier.
+
+## Positive control
+
+On the unfixed lexer the fixture dies on its FIRST line with exactly the demo's
+message, `TypeError: not all arguments converted during string formatting`, and
+produces none of the other 22 lines.
+
+## What it did for the demo
+
+Together with `bug-n-a-star-argument-releases-a-sequence-it-only-borrowed`
+(eb9228950), lekkerzeilen's world path went 139 -> 217 -> past the frame loop's
+first exception. The `%` row here was the 217.
+
 ## Log
 - 2026-09-14 — filed from the lekkerzeilen `--open-water` wall. Reduction is
   single-file and inline above.
+- 2026-09-14 — resolved, commit PENDING-COMMIT. The ticket's own fallback was
+  the fix; the preferred fold does not exist for f-strings and bytes.
 
 ## Provenance
 

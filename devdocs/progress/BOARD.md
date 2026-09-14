@@ -300,7 +300,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (156)
+## backlog-nilpy (155)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -363,7 +363,6 @@ _none_
 | bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply | N | 55 | bug |  | — |
 | bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost | N | 70 | bug | `open(p, \"w\").write(\"DATA\")` creates the file and leaves it EMPTY — no error, no warning, the data is gone. With an explicit `.close()` or a `with` block the same write lands correctly, so the buffer exists and nothing drains it when the last reference dies. CPython flushes on deallocation, which is what makes the one-liner a normal idiom rather than a mistake. Not reachable from the lekkerzeilen corpus (it uses `with` everywhere, 0 sites), which is why this is filed rather than urgent — but it is silent data loss on a shape half of Python writes, and a test that reads back what it wrote is the only thing that can see it. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
-| bug-n-adjacent-string-literals-splice-a-plus-so-a-tighter-operator-binds-wrong | N | 55 | bug | > | — |
 | bug-n-an-ambiguous-property-store-on-a-dynamic-receiver-has-no-setter-path | N | 30 | bug | > | — |
 | bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address | N | 80 | bug | SEGFAULTS (rc=139), and the summary said ~5.5e6-with-exit-0 until 2026-09-13 -- a probe written to the old wording checks a VALUE and CANNOT observe a crash. WHERE IT DIES, measured at 7990405c2 with -g -O2 and the .map: __pxxInheritsFrom at `mov (%rax),%rax` reading the parent at +8, with the class pointer equal to 0x40000000 -- MSTR_STATIC_RC / PXX_STATIC_RC_FLOOR, the never-free REFCOUNT sentinel. A refcount word is being walked as a class pointer, so the fix is an OFF-BY-HEADER-OFFSET and not a wrong slot offset. (gdb frame #1 resolves to PyBoxClassRef and is noise -- no CFI, and that return address follows an exception-frame call.) THE OLD 5.5e6 IS EXPLAINED AND RETIRED: frankz-9c traced it to pyclsattr_bind registering the slot at ~5.6e6, i.e. the bound slot ADDRESS surfacing as the value. TRIGGER IS POSITION, NOT COUNT: anything lexically PRECEDING the accessed class, an `import` included -- and an import emits nothing, which also rules out "more than one emitting construct"; a statement AFTER the class is harmless, which rules out the last-class hoist-drain family a second way. AND THE OUTCOME IS SENSITIVE TO THE CLASS NAMES (Other, Self, Value, Count, Rtti, Result, Kind give the right answer; Bbb, Index, Data, Node, Entry, Base, Zzz, Bar segfault; `other` passes and `OTHER` fails). A semantic property cannot depend on an identifier spelling, so THE DEFECT IS PRESENT IN EVERY ROW AND ONLY THE CRASH IS CONDITIONAL ON LAYOUT -- which is what reconciles this ticket's three recorded observables as one defect. A row that prints the right answer is NOT evidence the bug is absent, and no fixture here may assert a value. Deterministic: three recompiles byte-identical, five runs agree. ROUTE: PyClsAttrRefGet, documented in pylib as the route for a class held as a VALUE, is NEVER CALLED in either the failing or the working case (frankz-9c, instrumented on entry); pyclsattr_inst_get is ruled out too. Identical under pin v408 and at HEAD, so the three class-as-value fixes of 2026-09-13 neither caused nor fixed it. OWNED by frankuser from 2026-09-13. | — |
 | bug-n-an-import-inside-exec-is-silently-skipped-and-execution-continues | N | 25 | bug | `exec(\"import math\\nr = math.floor(3.7)\", d, d)` — pyeval's tree-walker discards the import statement without a word and keeps going, so the failure surfaces later as `pyeval: name not defined: math`, naming the module rather than the skipped import. When the imported name is never used there is no error at all and the remaining statements bind normally, which is the accepted-and-ignored failure mode the ambient-exec refusal was explicitly built to avoid. | — |
@@ -1047,9 +1046,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3744)
+## done (3745)
 
-3744 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3745 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1273,7 +1272,6 @@ _none_
 - [p 55] [N] bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 - [p 55] [N] bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply
-- [p 55] [N] bug-n-adjacent-string-literals-splice-a-plus-so-a-tighter-operator-binds-wrong
 - [p 55] [N] bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type
 - [p 55] [N] bug-n-compiling-html5lib-trie-never-terminates
 - [p 55] [N] bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method

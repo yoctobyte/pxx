@@ -1958,6 +1958,20 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_starargrc26 | diff -u test/test_nilpy_a_star_argument_does_not_release_the_sequence_it_borrows.expected -
 	./$(COMPILER) -dPXX_OBJTRACE test/test_nilpy_a_star_argument_does_not_release_the_sequence_it_borrows.npy $(TESTTMP)/test_nilpy_starargrc26_ot
 	tools/assert_no_rc_underflow.sh starargs $(TESTTMP)/test_nilpy_starargrc26_ot
+	# Adjacent string literals are ONE literal in CPython -- the tokeniser joins
+	# them, so the join binds tighter than every operator. The NilPy lexer splices
+	# ` + ` instead, and `+` is at ADDITIVE precedence, so `*`, `%`, `/`, `**` took
+	# only the LAST literal: `"x" "y" * 3` was 'xyyy' against CPython's 'xyxyxy'.
+	# The run is parenthesised now, so the pair binds as a unit.
+	# THE INTERESTING ELEMENT IS NOT LAST, and that is the whole reason this
+	# survived: the fixture that closed the earlier ticket swept seven POSITIONS
+	# and no row put an operator AFTER the pair. Both halves live in this one file
+	# so they cannot drift apart again, with a row per precedence class -- tighter
+	# (* % **), equal (+), looser (== in) -- and the prefixed spellings, because a
+	# run may start with r, b or f and the open paren has to land before the prefix
+	# (`r("a" + "b")` would be a CALL).
+	./$(COMPILER) test/test_nilpy_adjacent_string_literals_bind_as_one_literal.npy $(TESTTMP)/test_nilpy_adjlitprec26
+	$(TESTTMP)/test_nilpy_adjlitprec26 | diff -u test/test_nilpy_adjacent_string_literals_bind_as_one_literal.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None

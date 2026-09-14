@@ -218,12 +218,14 @@ var
   PyFsOut: AnsiString;
   PyFsLen: Integer;
   PyFsCap: Integer;
+  PyFsRunOpen: Boolean;    { a run of adjacent string literals is being wrapped }
 
 procedure PyFsReset(hint: Integer);
 begin
   PyFsCap := hint + 64;
   SetLength(PyFsOut, PyFsCap);
   PyFsLen := 0;
+  PyFsRunOpen := False;
 end;
 
 procedure PyFsPut(const t: AnsiString);
@@ -385,6 +387,58 @@ begin
   else if PyFStrIsQuote(ch) then Result := True;
 end;
 
+{ ADJACENT STRING LITERALS ARE ONE LITERAL IN CPYTHON, AND A SPLICED `+` IS NOT.
+  CPython concatenates them in the TOKENISER, so the join binds tighter than
+  every operator. This pass splices ` + ` instead, and `+` sits at additive
+  precedence — so anything binding tighter took only the LAST literal as its
+  left operand. Measured: `"x" "y" * 3` gave 'xyyy' against CPython's 'xyxyxy',
+  `2 * "x" "y"` gave 'xxy' against 'xyxy', and lekkerzeilen's
+
+      print("  controller: %s -- left stick helm, triggers ahead and "
+            "astern" % self.pad.name)
+
+  raised `TypeError: not all arguments converted during string formatting`,
+  because the `%` bound to "astern" alone. Every row but the `%` one is SILENT.
+  The earlier ticket's fixture swept seven POSITIONS and no row put an operator
+  after the pair, so position was covered and precedence was not.
+
+  The repair is to wrap the whole RUN in parentheses, which is what the
+  parenthesised spelling always did correctly: the splice stays, and the pair
+  binds as a unit. The open paren is INSERTED at the position the run's first
+  literal began, because whether a run exists at all is only known after that
+  literal has been emitted.
+  bug-n-adjacent-string-literals-splice-a-plus-so-a-tighter-operator-binds-wrong }
+procedure PyFsInsertAt(pos: Integer; c: Char);
+var k, oldLen: Integer;
+begin
+  oldLen := PyFsLen;
+  PyFsPutCh(' ');                       { grow by one; the value is overwritten }
+  for k := oldLen downto pos do PyFsOut[k + 1] := PyFsOut[k];
+  PyFsOut[pos] := c;
+end;
+
+{ Called immediately after a string literal has been emitted. `startPos` is the
+  buffer position that literal began at (including its f/b/r prefix), and `more`
+  says whether another literal follows adjacently. The run always closes,
+  because the last literal of a run is by definition the one with no follower. }
+procedure PyFsJoinAdjacent(startPos: Integer; more: Boolean);
+begin
+  if more then
+  begin
+    if not PyFsRunOpen then
+    begin
+      PyFsInsertAt(startPos, '(');
+      PyFsRunOpen := True;
+    end;
+    PyFsPut(' + ');
+  end
+  else if PyFsRunOpen then
+  begin
+    PyFsPutCh(')');
+    PyFsRunOpen := False;
+  end;
+end;
+
 { Python's self-documenting f-string hole — the `expr=` form, which prints the
   EXPRESSION TEXT, an `=`, and then the value: f"n=" with n in the hole gives
   `n=42`. (Braces are spelled out in this comment rather than written, because
@@ -458,6 +512,7 @@ procedure PyExpandFStrings;
 var
   lit: AnsiString;
   i, n, depth, ln, pdepth: Integer;
+  runStart: Integer;       { where the current literal began in the output }
   sdEq, sdK: Integer;      { `{expr=}`: index of the `=`, and a copy cursor }
   q, c, hq: Char;
   inHole, wroteAny, sawTriple: Boolean;
@@ -484,6 +539,14 @@ begin
     if PyFStrIsQuote(c) then
     begin
       q := c;
+      { where THIS literal starts in the output, so a run can be parenthesised.
+        A raw prefix has already been copied verbatim by the generic path, so
+        back up over it -- otherwise `r"a" "b"` would wrap as `r("a" + "b")`,
+        which is a CALL. }
+      runStart := PyFsLen + 1;
+      if (i > 1) and ((Source[i - 1] = 'r') or (Source[i - 1] = 'R')) and
+         ((i = 2) or (not PyIsIdentCont(Source[i - 2]))) and (PyFsLen > 0) then
+        runStart := PyFsLen;
       sawTriple := (i + 2 <= n) and (Source[i + 1] = q) and (Source[i + 2] = q);
       if sawTriple then
       begin
@@ -524,7 +587,7 @@ begin
       end;
       { adjacent literal after this plain string -> implicit concatenation, so
         `"a" "b"` and a plain string followed by an f-string both join }
-      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
+      PyFsJoinAdjacent(runStart, PyFsAdjacentStringAt(Source, i, n, pdepth));
       continue;
     end;
     { b"..." / b'...' — a BYTES literal, rewritten to bytes("...") so it lands
@@ -533,6 +596,7 @@ begin
        ((i = 1) or (not PyIsIdentCont(Source[i - 1]))) then
     begin
       q := Source[i + 1];
+      runStart := PyFsLen + 1;
       PyFsPut('bytes(');
       PyFsPutCh(q);
       Inc(i, 2);
@@ -549,7 +613,7 @@ begin
         PyFsPutCh(Source[i]); Inc(i);
       end;
       PyFsPutCh(')');
-      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
+      PyFsJoinAdjacent(runStart, PyFsAdjacentStringAt(Source, i, n, pdepth));
       continue;
     end;
     { f"..." — the prefix must not be the tail of a longer identifier }
@@ -557,6 +621,7 @@ begin
        ((i = 1) or (not PyIsIdentCont(Source[i - 1]))) then
     begin
       q := Source[i + 1];
+      runStart := PyFsLen + 1;
       if (i + 3 <= n) and (Source[i + 2] = q) and (Source[i + 3] = q) then
         ErrorAt(ln, 'Nil Python: a triple-quoted f-string is not supported yet');
       i := i + 2;
@@ -759,7 +824,7 @@ begin
       if not wroteAny then PyFsPut('""');
       PyFsPutCh(')');
       { adjacent literal after this f-string -> implicit concatenation }
-      if PyFsAdjacentStringAt(Source, i, n, pdepth) then PyFsPut(' + ');
+      PyFsJoinAdjacent(runStart, PyFsAdjacentStringAt(Source, i, n, pdepth));
       continue;
     end;
     if c = #10 then Inc(ln);
