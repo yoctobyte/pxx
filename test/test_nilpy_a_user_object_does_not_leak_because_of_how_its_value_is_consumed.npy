@@ -1,0 +1,243 @@
+# A USER-CLASS instance must not leak because of HOW its value is consumed.
+#
+# Found 2026-09-14/15 while chasing lekkerzeilen's frame leak. TWO defects, and
+# only ONE of them is fixed -- read the ctor_recv row below before trusting the
+# shape of this file.
+#
+# FIXED HERE: A USER OPERATOR ON A VARIANT OPERAND -- `a + b` where __add__
+# returns an object. pylib's PyUserArithCall1 retained the dunder's result on
+# the way into the variant, but a NilPy routine already hands back an owned +1,
+# so every operation leaked its whole result. Measured: 100 iterations, 100
+# leaked instances; 63-64 bytes/call in RSS -> under the limit after.
+#
+# NOT FIXED: a construction consumed as a METHOD RECEIVER --
+# `Quat(...).normalized()` -- still leaks one instance per call. The obvious fix
+# (letting the arg-spill arm own it at param 0) SEGFAULTS the lekkerzeilen demo
+# in 3.0 s of frame loop while passing all 963 tests of `make test-nilpy`. That
+# is banked in bug-n-a-construction-consumed-as-a-method-receiver-leaks with the
+# repro; do not re-derive it.
+#
+# THE ctor_recv ROW ASSERTS THE LEAK, DELIBERATELY. It is the SECOND positive
+# control and it is drawn from the right population: `retain` at the bottom is a
+# synthetic list that any working instrument sees, while ctor_recv is a REAL
+# one-per-call object leak of the exact size and shape this fixture is about. If
+# it ever reads LEAKFREE the fixture says so and FAILS -- that is the prompt to
+# delete this paragraph, flip the row to the ordinary assertion, and close the
+# ticket. A row that must keep failing is uncomfortable and it is honest; the
+# alternative is a file that quietly stops covering half its subject.
+#
+# BOTH ARE ROUTE TRAPS AND THAT IS WHY THIS FIXTURE IS SHAPED THE WAY IT IS.
+# The identical work spelled a different way is CLEAN in both cases:
+#   c = a.add(b)      clean          c = a + b        leaked one per call
+#   p = P(1, 2)       clean          P(1, 2).sum()    leaks one per call
+# so a fixture that exercises the concept rather than the ROUTE certifies the
+# bug. `add` and `__add__` below are byte-identical bodies on purpose, and both
+# are asserted: the named one is the control that says the class itself is fine.
+#
+# AND THE OPERATOR ROUTE ONLY EXISTS WHEN AN OPERAND IS A VARIANT. The parser
+# dispatches a statically-typed operand at compile time, and that path was always
+# balanced. Every operand here arrives as an unannotated PARAMETER, which is what
+# makes it a variant -- annotate them and this fixture stops testing anything.
+#
+# DO NOT DIFF THIS WHOLE FILE AGAINST CPython. Every row but ctor_recv agrees
+# with it; ctor_recv asserts a pxx defect CPython does not have, so CPython
+# prints the "NO LONGER LEAKS" arm and OBJLIFE FAIL -- correctly, about itself.
+# Oracle the individual shapes against CPython, not this file's verdict.
+#
+# THE THRESHOLD IS A RELATION. V is 32 bytes and Q is 40, so a one-per-call leak
+# shows as 32-40 bytes of object plus allocator overhead -- measured at 63-72
+# bytes/call before the fix. 16 is comfortably below that and far above noise at
+# 12000 iterations.
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+
+class V:
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+
+    def add(self, o):
+        return V(self.x + o.x, self.y + o.y, self.z + o.z)
+
+    def __add__(self, o):
+        return V(self.x + o.x, self.y + o.y, self.z + o.z)
+
+    def __sub__(self, o):
+        return V(self.x - o.x, self.y - o.y, self.z - o.z)
+
+    def __mul__(self, s):
+        return V(self.x * s, self.y * s, self.z * s)
+
+    def sum3(self):
+        return self.x + self.y + self.z
+
+
+class Q:
+    def __init__(self, w=1.0, x=0.0, y=0.0, z=0.0):
+        self.w = float(w)
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+
+    def norm(self):
+        return self.w + self.x + self.y + self.z
+
+
+N = 12000
+LEAK_LIMIT = 16          # bytes per call
+held = []
+
+
+def f_ctor_recv(n):
+    t = 0.0
+    for i in range(n):
+        t = t + Q(1.0, 2.0, 3.0, 4.0).norm()
+    return t
+
+
+def f_ctor_bound(n):
+    # the CONTROL for f_ctor_recv: same construction, bound instead of consumed
+    t = 0.0
+    for i in range(n):
+        q = Q(1.0, 2.0, 3.0, 4.0)
+        t = t + q.norm()
+    return t
+
+
+def f_op_add(n, a, b):
+    t = 0.0
+    for i in range(n):
+        c = a + b
+        t = t + c.x
+    return t
+
+
+def f_op_sub(n, a, b):
+    t = 0.0
+    for i in range(n):
+        c = a - b
+        t = t + c.x
+    return t
+
+
+def f_op_mul(n, a):
+    t = 0.0
+    for i in range(n):
+        c = a * 2.0
+        t = t + c.x
+    return t
+
+
+def f_op_discard(n, a, b):
+    t = 0.0
+    for i in range(n):
+        t = t + (a + b).x
+    return t
+
+
+def f_named(n, a, b):
+    # the CONTROL for the operator rows: identical body, reached by name
+    t = 0.0
+    for i in range(n):
+        c = a.add(b)
+        t = t + c.x
+    return t
+
+
+def f_retain(n):
+    for i in range(n):
+        held.append([0] * 16)
+
+
+A = V(1.0, 2.0, 3.0)
+B = V(4.0, 5.0, 6.0)
+ok = True
+
+# Each shape runs TWICE before anything is asserted. A first pass can move for
+# one-off reasons (an arena page, a cache); a second pass on the same shape
+# cannot, and it is the second that is measured.
+base = rss_kb()
+for r in range(2):
+    f_ctor_recv(N)
+    f_ctor_bound(N)
+    f_op_add(N, A, B)
+    f_op_sub(N, A, B)
+    f_op_mul(N, A)
+    f_op_discard(N, A, B)
+    f_named(N, A, B)
+    base = rss_kb()
+
+second = {}
+base = rss_kb()
+
+f_ctor_recv(N)
+now = rss_kb()
+second["ctor_recv"] = ((now - base) * 1024) // N
+base = now
+
+f_ctor_bound(N)
+now = rss_kb()
+second["ctor_bound"] = ((now - base) * 1024) // N
+base = now
+
+f_op_add(N, A, B)
+now = rss_kb()
+second["op_add"] = ((now - base) * 1024) // N
+base = now
+
+f_op_sub(N, A, B)
+now = rss_kb()
+second["op_sub"] = ((now - base) * 1024) // N
+base = now
+
+f_op_mul(N, A)
+now = rss_kb()
+second["op_mul"] = ((now - base) * 1024) // N
+base = now
+
+f_op_discard(N, A, B)
+now = rss_kb()
+second["op_discard"] = ((now - base) * 1024) // N
+base = now
+
+f_named(N, A, B)
+now = rss_kb()
+second["named"] = ((now - base) * 1024) // N
+base = now
+
+for name in ["ctor_bound", "op_add", "op_sub", "op_mul", "op_discard",
+             "named"]:
+    if second[name] < LEAK_LIMIT:
+        print("%s LEAKFREE" % name)
+    else:
+        print("%s LEAKS %d bytes/call" % (name, second[name]))
+        ok = False
+
+# The known-unfixed row, asserted in the OTHER direction -- see the header.
+if second["ctor_recv"] >= LEAK_LIMIT:
+    print("ctor_recv EXPECTED-LEAK")
+else:
+    print("ctor_recv NO LONGER LEAKS -- fixed? then edit this fixture:")
+    print("  delete the EXPECTED-LEAK arm, assert LEAKFREE like its siblings,")
+    print("  and close bug-n-a-construction-consumed-as-a-method-receiver-leaks")
+    ok = False
+
+f_retain(N)
+now = rss_kb()
+ctrl = ((now - base) * 1024) // N
+if ctrl > 100:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every LEAKFREE above is meaningless" % ctrl)
+    ok = False
+
+if ok:
+    print("OBJLIFE OK")
+else:
+    print("OBJLIFE FAIL")

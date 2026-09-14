@@ -20583,8 +20583,29 @@ begin
   begin
     fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV);
     if ores = nil then Exit;
+    { NO RETAIN. The dunder's result is ALREADY OWNED (+1) -- every NilPy
+      routine hands back an owned reference and the consumer borrows -- so
+      writing the handle into the variant TAKES OVER that rc=1; the variant's
+      own clear releases it. The retain that used to stand here made it rc=2
+      against one release, so `a + b` on a user class leaked the whole result,
+      once per operation, forever.
+
+      It is the RUNTIME arm, which is why a small fixture misses it: the
+      compile-time dispatch in the parser fires whenever both operands have a
+      static class type and is balanced. This path is reached only when an
+      operand's static type is a Variant -- an unannotated parameter, a
+      for-loop variable, a container element, an attribute -- which in real
+      Python is nearly every operand. Measured on `c = a + b` in a loop: 100
+      iterations, 100 leaked instances; the IDENTICAL method spelled
+      `c = a.add(b)` leaked none.
+
+      `return self` is covered by the same removal and was measured separately,
+      because a borrowed return here would turn a leak into a use-after-free:
+      with the dunder returning self, the method route nets +1 (the module
+      global's own reference) and the operator route netted +51 over 50 calls.
+      So self is handed back owned too, and one release still balances it.
+      bug-n-a-user-operator-on-a-variant-operand-leaks-its-result }
     r^.VType := 7; r^.Payload := Int64(NativeInt(ores));
-    PXXObjRetain(ores);
   end
   else
     Exit;

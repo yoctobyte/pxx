@@ -34783,6 +34783,25 @@ lib-test: pxx-stable-check
 	# fixture is only meaningful against the tree's own builtin.
 	./$(COMPILER) -Fulib/rtl test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy $(TESTTMP)/test_nilpy_noleak
 	tools/expect_same.sh test_nilpy_noleak "$$($(TESTTMP)/test_nilpy_noleak | tail -n 1)" "PYLEAK OK"
+	# A USER-CLASS instance must not leak because of HOW its value is consumed.
+	# `c = a + b` on a class declaring __add__ leaked the whole result, once per
+	# operation, while the IDENTICAL body reached as `c = a.add(b)` was clean --
+	# the runtime dunder arm (PyUserArithCall1) retained a result that already
+	# arrived owned. Only reachable when an operand's static type is a Variant,
+	# which is an unannotated parameter, a for-loop variable, a container element
+	# or an attribute -- i.e. nearly every operand in real Python, and nearly
+	# none in a small fixture, which is why this went unseen.
+	#
+	# ONE ROW ASSERTS A LEAK ON PURPOSE (ctor_recv) and the file says why at
+	# length. It is the second positive control, drawn from the right population,
+	# and it turns red when someone fixes
+	# bug-n-a-construction-consumed-as-a-method-receiver-leaks -- which is the
+	# prompt to edit the fixture, not a regression.
+	#
+	# $(COMPILER), not $(PXX_STABLE), for the same reason as the row above: the
+	# fix is in compiler/builtin/pylib.pas and the pin carries the old one.
+	./$(COMPILER) test/test_nilpy_a_user_object_does_not_leak_because_of_how_its_value_is_consumed.npy $(TESTTMP)/test_nilpy_objlife
+	tools/expect_same.sh test_nilpy_objlife "$$($(TESTTMP)/test_nilpy_objlife | tail -n 1)" "OBJLIFE OK"
 	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
 	# split. The non-threaded half of the bargain (classes still building WITHOUT
 	# --threadsafe) is asserted by every other classes test above, which do not

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:35 backlog-umbrella:11 backlog-core:165 backlog-nilpy:163 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3763 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:35 backlog-umbrella:11 backlog-core:165 backlog-nilpy:167 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3764 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 526, ranked
+## Ready — top 30 of 530, ranked
 
 - `[p 90] [A]` bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe (unblocks 1)
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
@@ -96,6 +96,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [A]` feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
 - `[p 80] [A]` bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout
+- `[p 80] [N]` bug-n-a-construction-consumed-as-a-method-receiver-leaks
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 
-_496 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_500 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
