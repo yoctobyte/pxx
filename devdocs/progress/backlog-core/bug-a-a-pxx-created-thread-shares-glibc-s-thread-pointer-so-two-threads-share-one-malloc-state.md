@@ -138,6 +138,49 @@ deterministic bug does not choose between two messages.
 The scratch patch is an EXPERIMENT and is not a proposed change to the
 application -- it exists to move one variable.
 
+## THE DRIVER PATH FLIPS IT, AND A HARNESS THAT FORCED WAYLAND HID IT FOR A DAY
+
+Two seats measured this demo all day and got irreconcilable numbers -- 5/5 abort
+here against 13 green rows there -- on the same box, from pristine source, at
+the same compiler sha. The difference was one environment variable in the other
+seat's harness, hardcoded since the start.
+
+`SDL_VIDEODRIVER`. Same pristine binary, same `--shot FILE --for 20`, ASLR on:
+
+| harness | wayland | x11 | unset |
+| --- | --- | --- | --- |
+| this seat, `bin/lzthreaded` | **5/5 rc=0** | **3/5 abort** | -- |
+| `lekkerzeilen-c8`, its own build | **0/10 abort** | **5/9 abort** | 1/5 abort |
+
+Two independent binaries, two harnesses, same conclusion. The `unset` row is
+why this went unnoticed: both seats' environments carry BOTH
+`WAYLAND_DISPLAY=wayland-0` and `DISPLAY=:0`, so SDL chooses, and the choice is
+not stable across harnesses.
+
+**The five aborting runs on this side gave THREE different glibc messages** --
+`corrupted size vs. prev_size`, `malloc(): largebin double linked list
+corrupted (nextsize)`, `malloc(): unsorted double linked list corrupted`. A
+deterministic bug does not choose between three ways to die; that spread is the
+race.
+
+The other seat also placed the death: 16.0-23.5 s wall, always between the
+first stdout line and `chart 512x512 ...`, which is `settle()`'s window -- the
+loader on sqlite while the main thread drives GLX. Both allocating, one arena.
+
+**Reading, not measurement:** EGL/Wayland appears to do less main-thread
+allocation through this window than GLX/XWayland does, and fewer main-thread
+mallocs concurrent with the loader means fewer chances to interleave inside an
+arena operation. Nobody has instrumented the allocation counts. The FINDING is
+only that the driver path flips it.
+
+**The lesson is about harnesses, not about SDL.** `SDL_VIDEODRIVER=wayland` was
+not a deliberate variable -- it was scaffolding, set once and never revisited,
+and it silently removed the condition under test from every row that harness
+produced. Those rows were not wrong; they were correct about the wayland path
+and silent about the other one, which is indistinguishable from "the bug is not
+there" unless someone varies it. **Before trusting a green sweep, list what
+your harness PINS that the defect might live on.**
+
 ## WARNING for anyone re-measuring: two of glibc's debug knobs are INERT here
 
 Measured 2026-09-14 on Ubuntu GLIBC 2.43, with a deliberate double-free in C

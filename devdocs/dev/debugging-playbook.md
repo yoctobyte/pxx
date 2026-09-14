@@ -26502,6 +26502,45 @@ answer is "the same thing", you have not measured anything yet. Related, from
 CLAUDE.md: *"my change measured as NO CHANGE — data about your MODEL"*, and
 "A GUARD THAT CANNOT FAIL IS NOT A GUARD"; this is the reading side of both.
 
-Measured and reported by `lekkerzeilen-c8` (the two variant tables and the
-precondition, verbatim) and by this seat (the inert knobs and the counter),
-2026-09-14.
+### A silent instrument does not only withhold support — it can INVERT the claim
+
+The paragraphs above say silence gets read as a negative result. The stronger
+form, and it arrived the same evening from the same subject: the peer's inert
+`MALLOC_CHECK_=3` did not merely fail to support a claim. It produced a
+confident claim of the OPPOSITE. The reasoning was *"heap corruption would have
+aborted under MALLOC_CHECK_=3, and this stayed SIGSEGV, so this is not heap
+corruption"* — and with the driver variable controlled, glibc prints
+`malloc(): unsorted double linked list corrupted` on the same path. The
+instrument that did nothing was the sole support for a conclusion that was not
+merely unproven but backwards.
+
+So the cost of an unvalidated instrument is not bounded by what you failed to
+learn from it. An instrument that cannot fire turns every "it did not fire"
+into evidence for the negation, and that evidence feels EARNED, because a
+check was run.
+
+### Three kinds, and only one leaves the instrument trustworthy
+
+Three instances landed on one subject in one day, and they are not the same
+failure — the peer's decomposition, which is sharper than treating them as one
+class:
+
+| | what was wrong | what to do with the instrument afterwards |
+| --- | --- | --- |
+| `MALLOC_CHECK_=3` | it did **nothing** — the code was not loaded | validate it against something it MUST catch before any row counts |
+| `bt` / a stale variant table | it reported a **stale** structure as current | re-derive from the current build; the tool is fine, the input was old |
+| `session.conf` | it reported **accurately about an input that was already ruined** | **nothing — the instrument was right.** Go look upstream of it |
+
+The third is the one that costs a day, because there is nothing to fix in the
+instrument and every impulse says there must be. lekkerzeilen printed
+`session: <__main__.Session object at ...>: not a word this file has` on every
+run for hours. `parse()` was correct: it read a line, the line was not a word,
+it said so. The 39-byte file on disk contained exactly that string, written by
+a `save` that had lost `format` to a builtin, in a binary that no longer
+exists. **When a diagnostic is correct and the world is wrong, the diagnostic
+is the only thing pointing at the cause** — and it reads exactly like a bug in
+the reporter.
+
+Measured and reported by `lekkerzeilen-c8` (the two variant tables, the
+precondition verbatim, the inversion, and the three-way split) and by this seat
+(the inert knobs, the counter, and the ruined input), 2026-09-14.
