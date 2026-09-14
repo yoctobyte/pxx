@@ -1,0 +1,6 @@
+params=78 78
+consts=6
+array=36
+dynarray=36
+threadvar=7
+NO GS LEAK

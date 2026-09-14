@@ -6684,6 +6684,20 @@ test-threads: $(COMPILER)
 	# feature-p-threadvar-is-not-supported-at-any-scope
 	./$(COMPILER) --threadsafe test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26
 	tools/expect_same.sh test_threadvar_pt26 "$$($(TESTTMP)/test_threadvar_pt26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ncontrol-raced=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
+	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
+	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is
+	# the not-a-threadvar sentinel and only AllocVar wrote it, so a parameter,
+	# array, dyn-array or const allocated onto a slot no earlier pass had used
+	# read EnsureSymCapacity's zero-fill -- a valid offset -- and was lowered
+	# into a dereference of the thread block's first word. Measured on pin v408:
+	# this program answers 39363342 where 78 is the sum. It reached a SEGFAULT
+	# only in the row above, and only because the poisoned symbol there happened
+	# to be an array index -- one unused integer constant added to palthread.pas
+	# flipped that row from 10/10 clean to 10/10 SIGSEGV.
+	# bug-a-a-symbol-a-threadvar-program-never-declared-is-lowered-as-a-threadvar
+	./$(COMPILER) --threadsafe test/test_a_threadvar_program_does_not_lower_ordinary_symbols_through_gs.pas $(TESTTMP)/test_threadvar_gsleak26
+	$(TESTTMP)/test_threadvar_gsleak26 | diff -u test/test_a_threadvar_program_does_not_lower_ordinary_symbols_through_gs.expected -
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

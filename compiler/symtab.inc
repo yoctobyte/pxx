@@ -6044,6 +6044,16 @@ begin
     would otherwise claim bucket 0 and a rollback over it would corrupt that
     chain. SymHashInsert overwrites this the moment the slot becomes visible. }
   for i := SymCapacity to n - 1 do SymHashBkt[i] := -1;
+  { -1, not SetLength's zero-fill, and for this field the zero is ACTIVELY WRONG
+    rather than merely uninformative: 0 is a valid TLS offset as far as
+    RewriteThreadVarRefs is concerned (`SymTlsOffset[sym] >= 0` is its whole
+    test), so a slot nobody initialised reads as "this symbol is a threadvar at
+    gs:+0" and every reference to it is rewritten into a dereference of the
+    thread block's first word. Only AllocVar set the sentinel until 2026-09-14;
+    the four sibling allocators below now do too, and this loop covers a slot
+    that no allocator has reached yet.
+    bug-a-a-symbol-a-threadvar-program-never-declared-is-lowered-as-a-threadvar }
+  for i := SymCapacity to n - 1 do SymTlsOffset[i] := -1;
   SymCapacity := n;
 end;
 
@@ -6548,6 +6558,7 @@ var sz, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
@@ -6868,6 +6879,7 @@ var elemSize, totalSize, align: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   if LastTypeElemDynDepth > 0 then
   begin
     { Element is itself a dynamic array (`array[..] of TDynAlias`): each slot holds
@@ -7050,6 +7062,7 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
+  SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name        := name;
   Syms[SymCount].TypeKind    := elemType;
   Syms[SymCount].ConstVal    := 0;            { lower bound: dynamic arrays are 0-based }
@@ -7200,6 +7213,7 @@ end;
 function AddConst(const name: AnsiString; tk: TTypeKind; v: Int64): Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
+  SymTlsOffset[SymCount] := -1;   { not a threadvar; the `threadvar` section is the only writer. Capacity growth zero-fills and SymCount is REUSED across the per-frontend reset, so a slot the previous pass left at a real offset must be cleared here, not only at grow time. }
   Syms[SymCount].Name     := name;
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].Kind     := skConst;
