@@ -811,3 +811,4 @@
 2026-09-14T19:18:46Z	borg	1eee9b23387b5835fcd1894ec71bbf667ba1eff5	would-pin PENDING 1eee9b23387b — qualifies, streak 1/2
 2026-09-14T19:57:17Z	borg	5c7d6d650e5dfcd9056c139c1eac23ac97bf421a	would NOT pin 5c7d6d650e5d — 2 red(s) the current pin does not have, 10 inherited from the current pin: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy, test-uforth#src:tools/compiler_srchash.sh@7
 2026-09-14T20:25:56Z	borg	a2861701f1a0f920e4e7b275f7bc0d0d3fa8c2da	would NOT pin a2861701f1a0 — 1 red(s) the current pin does not have, 9 inherited from the current pin: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy
+2026-09-14T20:56:58Z	borg	cc959c28272f6855ee66742b1d0abbb227a3b513	would NOT pin cc959c28272f — 2 red(s) the current pin does not have, 9 inherited from the current pin: test-threads#src:test/test_a_threadvar_is_per_thread.pas, test-uforth#src:tools/compiler_srchash.sh@7
