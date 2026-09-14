@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `1892599756ad` | 2026-09-14T10:25:27Z | RED (native) | 312.5s | `076ec0518798` RED |
+| borg | `1892599756ad` | 2026-09-14T10:41:21Z | RED (full) | 917.6s | `1892599756ad` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `076ec0518798` on borg, 2026-09-14T08:47:41Z (1h ago).**
+**Newest full tier in the fleet: `1892599756ad` on borg, 2026-09-14T10:41:21Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `076ec0518798` | RED | 1h | — (newest) |
+| borg | `1892599756ad` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -36,4 +36,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **test-core#src:test/c_asm_in_inline_body.c@2** — test/c_asm_in_inline_body.c tools/expect_same.sh +2 (borg): bad `accb99f3c59b`, last good `ee441baba852`, 1 commit(s) in range
 - **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `076ec0518798`, last good `accb99f3c59b`, 1 commit(s) in range
-- **test-uforth#src:tools/compiler_srchash.sh@3** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `076ec0518798`, last good `accb99f3c59b`, 1 commit(s) in range
+- **test-uforth#src:tools/compiler_srchash.sh@7** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `1892599756ad`, last good `076ec0518798`, 1 commit(s) in range
