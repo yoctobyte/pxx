@@ -102,7 +102,7 @@ same binary and the same length:
 | run shape | result |
 | --- | --- |
 | `--shot X --for 20` with a world (a tile loader thread doing sqlite; the main thread in SDL/GL) | **4/5 abort**, three different glibc messages: `malloc(): unsorted double linked list corrupted`, `corrupted double-linked list`, `corrupted size vs. prev_size` |
-| `--open-water --shot X --for 20` (no region, hence no loader thread) | **5/5 clean** |
+| `--open-water --shot X --for 20` (no region, hence no TILE LOADER -- but see the correction below) | **5/5 clean** |
 
 Two minimal NilPy stresses had already come back clean and are recorded in
 `bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts`:
@@ -233,6 +233,59 @@ nature is the house failure mode exactly.
 (top)`, and a deliberately BOGUS tunable name leaves it unchanged -- which is
 the control that separates "the tunable did something" from "the string was
 accepted".
+
+## CORRECTION 2026-09-14: IT IS NOT THREAD COUNT, IT IS WHO CALLS INTO C
+
+This ticket first explained the clean `--open-water` row as "no loader thread,
+therefore no second thread". **That reasoning is wrong and the row is still
+right**, which is the dangerous combination -- a reader would come away with
+"avoid threads" when the actual rule is narrower and cheaper to obey.
+
+`--open-water` is not single-threaded. Measured by thread name, which separates
+ours from theirs for free: **a raw `clone` sets no `comm`, so a pxx-created
+thread inherits the PROCESS name, while every library thread created through
+`pthread_create` names itself.**
+
+| mode | threads named `lzthreaded` (OURS) | named threads (gmain, gdbus, pool-0, ...) |
+| --- | --- | --- |
+| `--open-water` | **2** -- main plus one | 9 |
+| world | **4** -- main plus three | 9 |
+
+So open water runs a pxx-created thread of its own and is clean 5/5 anyway, and
+the nine library threads are irrelevant in both modes -- they got `CLONE_SETTLS`
+from glibc and have their own malloc state.
+
+**The condition is not "more than one thread". It is "more than one thread
+ALLOCATING THROUGH A C LIBRARY".** The tile loader qualifies: it opens a sqlite
+connection per tile (`world.py:841`). Whatever open water's second pxx thread
+does, it does not do that while the main thread is in the driver.
+
+That is exactly the repro's condition and it is why the repro is two threads
+doing nothing but `malloc`/`free` -- and it is also why the two NilPy stresses
+came back clean: one had no C library at all, and the other had sqlite on the
+worker with only pxx allocation on the main thread, which is ONE thread in
+glibc malloc, not two.
+
+**Practical consequence, and it is the mitigation to give anyone who hits this
+before the PAL is fixed:** keep C-library calls on one thread. Not "do not
+thread".
+
+### And `--threadsafe` is not the missing flag -- the compiler will not let you omit it
+
+Asked directly, and worth recording because it is the first thing anyone
+sensible checks. Building the repro WITHOUT `--threadsafe`:
+
+```
+pascal26:199: error: __pxxclone (thread creation) requires --threadsafe or
+{$threadsafe on}: the default heap/ARC/console-I/O runtime is not thread-safe
+```
+
+You cannot produce a threaded pxx binary by accident; the guard fires at the
+clone site. lekkerzeilen's own `runbin.sh` passes it, and every measurement in
+this ticket was built with it. `--threadsafe` makes **pxx's** heap, ARC and
+console I/O thread-safe, and that machinery works. It has nothing to say about
+**glibc's** malloc, which is a different allocator in a different library --
+which is the whole point of this ticket.
 
 ## Blast radius
 
