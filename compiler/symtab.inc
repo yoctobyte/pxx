@@ -16619,15 +16619,89 @@ begin
     end;
 end;
 
+function ProgramCreatesPxxThreads: Boolean;
+{ Does this program create threads through pxx's own PAL?
+
+  Presence of `PalThreadCreate` is the proxy, and it is a good one because
+  `palthread.pas` is pulled in on demand: a program that never threads never
+  names it. The chain walk is the ordinary one -- ProcChainHead/ProcHashNext --
+  rather than a linear Procs[] scan, so it costs nothing on a program that does
+  not thread. }
+var i: Integer;
+begin
+  ProgramCreatesPxxThreads := False;
+  i := ProcChainHead('PalThreadCreate');
+  while i >= 0 do
+  begin
+    if CaseEqual(Procs[i].Name, 'PalThreadCreate') then
+    begin
+      ProgramCreatesPxxThreads := True;
+      Exit;
+    end;
+    i := ProcHashNext[i];
+  end;
+end;
+
+procedure WarnThreadsShareGlibcTls;
+{ A WHOLE-PROGRAM hazard warning: this binary links a shared library AND creates
+  threads through pxx's PAL, and those two facts together are unsafe today.
+
+  PXX_CLONE_THREAD omits CLONE_SETTLS, so a pxx-created thread runs on the
+  PARENT's `fs` base. Every shared library in the process brings glibc with it,
+  and glibc keeps malloc's per-thread state in fs-relative TLS and takes no lock
+  on it, because it is per-thread by construction. Two threads allocating
+  through any C library therefore operate ONE malloc state and corrupt glibc's
+  heap. Measured 2026-09-14: two threads doing nothing but malloc/free abort
+  5/5, the same churn on one thread is clean, and the same churn with the worker
+  from glibc's pthread_create is clean.
+  bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+
+  A WARNING AND NOT A REFUSAL, deliberately. The condition here is that the
+  hazard is REACHABLE, not that the program hits it: a program whose C calls all
+  stay on one thread is correct today and must keep compiling. Refusing would
+  break working programs to prevent a bug they do not have.
+
+  Written with writeln rather than Warn for the reason ErrorNoPos exists: by the
+  time the DT_NEEDED set is known the parse is over and the lexer is standing at
+  EOF inside the last builtin unit, so a position would name the wrong file.
+  -Werror still promotes it, like WarnStackFrame. }
+begin
+  Inc(WarnCount);
+  if WarnAsError then
+  begin
+    writeln('pascal26: error: this program creates pxx threads AND links a shared ',
+            'library; a pxx thread shares glibc''s thread pointer, so allocating ',
+            'through a C library on more than one thread corrupts glibc''s heap ',
+            '(warning promoted by -Werror)');
+    Halt(1);
+  end;
+  writeln('pascal26: warning: this program creates pxx threads AND links a shared ',
+          'library. A pxx-created thread inherits the parent''s glibc thread ',
+          'pointer, so malloc''s per-thread state is SHARED and unlocked: calling ',
+          'into any C library that allocates, from more than one thread, corrupts ',
+          'glibc''s heap. Keep C calls on one thread until the PAL is fixed.');
+end;
+
 procedure ResolveSynthImportLibraries;
 { The choke point. Every DT_NEEDED builder calls this first -- PrepareDynamicData,
   PrepareDynamicData32 and writeELFSharedX64, which are the only three readers of
   ProcLibrary[ExternalProc[i]] in the tree. Idempotent: a library that resolved is
-  no longer one of CSynthMissingLibs, so a second pass finds nothing to do. }
+  no longer one of CSynthMissingLibs, so a second pass finds nothing to do.
+
+  The TLS hazard warning rides here for the same reason the library guard does:
+  this is the one place that runs after the parse with the DT_NEEDED population
+  settled. It is one-shot because all three builders call this, and a warning
+  printed three times reads as three programs. }
 var i: Integer;
 begin
   for i := 0 to ExternalCount - 1 do
     ResolveSynthImportLibrary(ExternalProc[i]);
+  if (not ThreadTlsHazardWarned) and (ExternalCount > 0)
+     and ProgramCreatesPxxThreads then
+  begin
+    ThreadTlsHazardWarned := True;
+    WarnThreadsShareGlibcTls;
+  end;
 end;
 
 

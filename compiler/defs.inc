@@ -5256,6 +5256,7 @@ var
   OverloadReport : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
+  ThreadTlsHazardWarned : Boolean; { one-shot: the pxx-thread/glibc-TLS hazard warning }
   NoAssertionsFlag : Boolean; { --no-assertions: start every source with assertions OFF, as if {$ASSERTIONS OFF} led the file. The CLI half of feature-p-assertions-directive-and-position; -Sa is the opposite direction and is a no-op because ON is already our default. Read at lexer reset, so a per-file {$ASSERTIONS ON} still overrides it. }
   { Label fixup scratch for the machine-code emit pass. One shared set: only the
     active target's IREmitMachineCode* runs per compile, and it runs once (not
