@@ -622,6 +622,21 @@ const
                             is unaffected. Names let a reflected caller bind a
                             KEYWORD argument by name instead of by position. }
   RTTI_METH_FLAG_PUBLISHED = 1;
+  { bit1: the method's param block carries ONE EXTRA WORD after the `arity`
+    name pointers, holding the address of this method's PYSIG record. That
+    record already carries ReqN/TotN and a POPULATED defaults array -- the
+    thing a by-name caller needs and had no route to. Reached only through
+    TMethInfo, whose Code field is a code address and is not a key to
+    anything, so the route had to be a pointer.
+
+    IN THE BLOCK RATHER THAN IN THE RECORD, for the reason the star index is
+    in Flags: lib/rtl/typinfo.pas's TMethInfo mirror and the three stride
+    consumers must not move
+    (project_rtti_method_table_multi_consumer_stride_landmine). The block has
+    no length word, so a reader that takes `arity` kinds and `arity` names --
+    which is every reader today -- cannot see the extra word.
+    bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
+  RTTI_METH_FLAG_HASSIG = 2;
   { Bits 8..15 of the same Flags word carry a NilPy `*args` parameter's index
     PLUS ONE (0 = the method has none). A reflected caller cannot otherwise tell
     the packed-list slot from an ordinary one, and it is not an ordinary one:
@@ -3503,6 +3518,15 @@ var
                                     VMT/RTTI slot whose method has no body -- an interface
                                     or abstract declaration -- keeps its nil instead of
                                     being patched to `entry + (-1)'. }
+  { Where each method block's PYSIG slot sits, and whose signature belongs in
+    it. DEFERRED because EmitRTTI runs BEFORE EmitPySignatures (compiler.pas:
+    "After EmitRTTI so it shares the same static-data region"), so ProcSigOff
+    is still -1 while the block is being written. Applied at the end of
+    EmitPySignatures, by which time every offset is settled. }
+  MethSigFixPos      : array of Integer;
+  MethSigFixProc     : array of Integer;
+  MethSigFixCount    : Integer;
+  MethSigFixCap      : Integer;
   DataPtrFix         : array of TDataPtrFix;
   DataPtrFixCount    : Integer;
   DataPtrFixCapacity : Integer;

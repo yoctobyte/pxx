@@ -1068,6 +1068,36 @@ begin
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
 
+  { THE CALLEE'S OWN DEFAULTS, filled from ITS signature rather than from
+    whichever same-named method the frontend's candidate scan happened to see
+    first.
+
+    THIS IS THE HALF THAT MAKES OPEN-WORLD DISPATCH ACTUALLY OPEN. Until now a
+    call deferred to run time could only be completed when the source wrote
+    every parameter: the binder had mi^.Arity and no values, so
+    `g.at(a, b)` against `at(self, x, z, outside=None)` raised a TypeError
+    naming an argument the program is entitled to omit. Every caller that had
+    to be right about a default was therefore the COMPILER, at a call site
+    where the receiver's class is by definition not known -- which is the
+    defect this is from.
+
+    THE ROUTE IS THE NEW BLOCK WORD, NOT A NEW FIELD, so nothing about
+    TMethInfo moves; see RTTI_METH_FLAG_HASSIG. The pointer is read only when
+    the flag says the word is there AND the word is non-nil: a proc that got no
+    signature record leaves it nil and this simply does not fire, which is the
+    pre-existing behaviour.
+
+    pysig_fill_defaults is ALL-OR-NOTHING. A partial fill would hand the body a
+    slot the caller never wrote and the signature never settled, and calling at
+    an arity the callee cannot take is the segfault this path exists to avoid.
+    When it declines, the TypeError below still fires and still says the true
+    thing. }
+  if (nargs < n) and (pk <> nil) and ((mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0) then
+  begin
+    if pysig_fill_defaults(Pointer(NativeInt(pk[2 * (n + 1)])), args, n) then
+      nargs := args.count;
+  end;
+
   { --- Double param/return shapes (fpush/fpop): the one non-Variant family --- }
   if (rk = 0) and (n = 1) and (pk <> nil) and (pk[1] = TK_DOUBLE) then
   begin

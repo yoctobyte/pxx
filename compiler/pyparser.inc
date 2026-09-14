@@ -18978,6 +18978,11 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     dualAr: Integer;          { a dual candidate's fitting OVERLOAD, or -1 }
     ovlMmi: Integer;   { same-arity overload re-picked by argument TYPE }
     anyKw: Boolean; dualRetMixed: Boolean;
+    { the open-world FALLBACK arm — see where it is built }
+    dynFbProc, dynFbCall, dynFbArg, dynFbLast, dynFbName: Integer;
+    dynFbCond, dynFbPair, dynFbTern, dynFbUnbox: Integer;
+    dynFbBuilt: Boolean;      { ...and was it actually built — the arms outside
+                                it must then type the chain as the variant it is }
     argExprs: array[0..15] of Integer;
     smTmpSym, smAsgn, smGuardArg, smGuardCall, smNotNode, smNameArg,
     smArg1, smArg2, smRaiseCall, smIfNode, smPairNode: Integer;
@@ -18997,6 +19002,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
 begin
   smArmPossible := False;
   smArmBuilt := False;
+  dynFbBuilt := False;
   clsArm := False;
   clsArmBuilt := False;
   flArmPossible := False;
@@ -20233,9 +20239,125 @@ begin
   LastExprTk := Procs[mpi].RetType;
   Result := callNode;
 
+  { THE OPEN-WORLD FALLBACK ARM — `pyvarobj(recv) is <the pick> ? <static call>
+    : pydyn_meth<n>(recv, 'name', args...)`.
+
+    THE STATIC ARM ABOVE IS THE INNERMOST FALLBACK OF THE WHOLE CHAIN, and it
+    is reached by a receiver that matched NO runtime arm — i.e. exactly the
+    receiver the scan never saw. It then calls hitCi's VMT slot on an instance
+    of an unrelated class, having already filled hitCi's DEFAULTS at the call
+    site. No diagnostic, no body runs, and the caller gets {VType=7,Payload=1}
+    back to dereference somewhere else entirely.
+
+    THE SCAN IS OVER THE CLASSES COMPILED SO FAR AND IS TREATED AS EXHAUSTIVE.
+    It is not: a module pulled LATER declares classes it cannot see, and
+    function-local imports make that the common case rather than the exotic one.
+    Measured on lekkerzeilen, which is what this is from. wind.py imports
+    nothing and __main__.py takes `from .wind import Wind` (line 207) before
+    `from . import world as world_mod` (line 325, inside a function), so at
+    wind.py parse time the only visible `.at` is Wind's:
+
+      SCAN .at pick=Breeze nDual=4 arms=[TPyBytes TPyList TPyDeque TPyRange]
+
+    -- the pick is the caller-module sibling and TiledGrid, the class the
+    receiver actually is, is not even an arm. `Wind.at(self, x, z, t=0.0,
+    height=6.0)` against `TiledGrid.at(self, x, z, outside=None)`: the call
+    writes two arguments, the site fills FOUR from Wind's signature, and the
+    bind against TiledGrid's three-parameter slot fails silently.
+
+    SO THE CLOSED WORLD GETS THE SAME ANSWER HERE THAT IT ALREADY GETS TWO
+    ARMS UP. `hitCi < 0` (nothing declares the name), a keyword no candidate
+    declares, and an arity no candidate accepts ALL already dispatch on the
+    receiver at run time -- and that path is correct, because PyHostCall binds
+    against the RECEIVER'S OWN RTTI. The one case still trusting the guess was
+    the one where the guess LOOKS fine: the name exists, the arity fits, and
+    only the CLASS is wrong. That is the silent-wrong-value case, and it is the
+    one worth spending a class compare on.
+
+    NARROWED TO WHERE THE CALL SITE FABRICATES ARGUMENTS, which is the defect's
+    actual mechanism rather than its neighbourhood: `i + 1 < ParamCount` means
+    parameters were filled from the pick's defaults, so the emitted arity is a
+    property of a GUESSED signature and not of anything the program wrote. A
+    call whose arity matches exactly passes through untouched -- it may still
+    reach the wrong body, but it does so at an arity the source chose, which is
+    today's behaviour and not this ticket.
+
+    IT CANNOT CHANGE A RECEIVER THAT WORKS TODAY. Pascal's `is` is true for
+    hitCi AND every descendant, so anything the static arm was right about
+    still takes the static arm; only a genuinely unrelated class falls through,
+    and today that class gets a wrong-slot call. Where the dispatcher finds no
+    such method it raises a clean AttributeError naming it, instead of
+    returning a payload of 1 for someone else to dereference.
+
+    THE CHAIN GOES VARIANT WHEN THE ARMS DISAGREE, the same rule dualRetMixed
+    applies to the runtime arms below and for the same reason: pydyn_meth<n>
+    answers a Variant, and typing the whole expression from the static arm
+    alone is how a value gets silently narrowed.
+    bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
+  if (hitCi >= 0) and (hitMmi >= 0) and (not clsOnly) and (not anyKw)
+     and (ProcPyStarIdx[mpi] < 0) and (ProcPyKwIdx[mpi] < 0)
+     and (i >= 0) and (i <= 4) and (i <= High(argExprs) + 1)
+     and (i + 1 < Procs[mpi].ParamCount) then
+  begin
+    dynFbProc := FindProc('pydyn_meth' + PyIntLiteralText(i));
+    if dynFbProc >= 0 then
+    begin
+      dynFbName := AllocNode(AN_STR_LIT);
+      ASTSOffset[dynFbName] := StoredName(mname);
+      ASTSLen[dynFbName] := Length(mname);
+      ASTTk[dynFbName] := Ord(tyString);
+
+      dynFbArg := AllocNode(AN_ARG);
+      ASTLeft[dynFbArg] := baseNode;
+      dynFbLast := AllocNode(AN_ARG);
+      ASTLeft[dynFbLast] := dynFbName;
+      ASTRight[dynFbArg] := dynFbLast;
+      for k := 0 to i - 1 do
+      begin
+        argNode := AllocNode(AN_ARG);
+        ASTLeft[argNode] := argExprs[k];
+        ASTRight[dynFbLast] := argNode;
+        dynFbLast := argNode;
+      end;
+      dynFbCall := AllocNode(AN_CALL);
+      ASTIVal[dynFbCall] := dynFbProc;
+      ASTTk[dynFbCall] := Ord(tyVariant);
+      ASTLeft[dynFbCall] := dynFbArg;
+
+      { cond: pyvarobj(recv) is <the pick> — the same is-test the unrelated
+        user-class arms below use, so a descendant keeps the static arm. }
+      dynFbUnbox := AllocNode(AN_ARG);
+      ASTLeft[dynFbUnbox] := baseNode;
+      unboxCall := AllocNode(AN_CALL);
+      ASTIVal[unboxCall] := FindProc('pyvarobj');
+      if ASTIVal[unboxCall] < 0 then
+        Error('Nil Python: pylib (pyvarobj) not loaded');
+      ASTTk[unboxCall] := Ord(tyPointer);
+      ASTLeft[unboxCall] := dynFbUnbox;
+      dynFbCond := AllocNode(AN_IS_TEST);
+      ASTLeft[dynFbCond] := unboxCall;
+      ASTIVal[dynFbCond] := hitCi;
+      ASTTk[dynFbCond] := Ord(tyBoolean);
+
+      dynFbPair := AllocNode(AN_PAIR);
+      ASTLeft[dynFbPair] := callNode;
+      ASTRight[dynFbPair] := dynFbCall;
+      dynFbTern := AllocNode(AN_TERNARY);
+      ASTLeft[dynFbTern] := dynFbCond;
+      ASTRight[dynFbTern] := dynFbPair;
+      ASTTk[dynFbTern] := Ord(tyVariant);
+      LastExprTk := IntToTypeKind(ASTTk[dynFbTern]);
+      Result := dynFbTern;
+      dynFbBuilt := True;
+    end;
+  end;
+
   { Do the candidates agree on a return type? Computed ONCE, before any arm is
     built — see the note where it is used. }
-  dualRetMixed := False;
+  { …and the FALLBACK arm counts as a disagreeing candidate, because it is one:
+    pydyn_meth<n> answers a Variant. Without this the arms below re-type the
+    whole chain from the static pick and narrow an arm that cannot be narrowed. }
+  dualRetMixed := dynFbBuilt;
   for di := 0 to nDual - 1 do
   begin
     mmi := FindUMethArity(dualCis[di], PyMethNameFor(dualCis[di], mname), i);

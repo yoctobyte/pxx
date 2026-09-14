@@ -160,16 +160,108 @@ module's class shells first, then parse bodies. That is a restructure of shared
 import machinery with a long tail of documented prior bugs (guarded arms,
 soft misses, alias rollback) and it is NOT a small change.
 
-**3. THE OBVIOUS WORKAROUND DOES NOT WORK -- do not ship it.** Adding
+**3. THE OBVIOUS WORKAROUND FIXES THIS SITE AND UNCOVERS THE NEXT ONE.** Adding
 `from . import world` to the top of `lekkerzeilen/wind.py`, with every other
 source byte-identical to the owner's tree, MOVES the failure rather than
 removing it: the world path then dies during startup with
 
     AttributeError: 'World' object has no attribute 'flow'
 
-and `World` does declare `flow`, as a @property (world.py, the `grid`/`bed`/
-`canopy`/`flow` block). So either the same family bites one layer over on a
-property lookup, or perturbing the module graph reorders some other first-wins
-pick. Either way the world path does not run, and "one-line workaround" must
-not travel as a fact. Measured twice, the second time on otherwise-pristine
-sources.
+and `World` does declare `flow`, as a @property (world.py:1272; `Region.flow`
+at :343 is a second, and `Environment.flow` at environment.py:25 is a plain
+instance attribute -- three unrelated declarers).
+
+CORRECTED by lekkerzeilen-c8, who ran the test in both spellings, 3/3 each,
+before my "do not run it" reached them:
+
+  A. `from . import world` added to wind.py
+  B. `from . import world` at module level in __main__.py, ahead of
+     `from .wind import Wind` -- adds NO new import edge to wind.py, it only
+     changes what the scan has seen when wind.py is parsed
+
+Both give rc=217 with the identical message, and both turn an unattributable
+segfault 2.95s into the frame loop into a NAMED deterministic error at 0.95s.
+Spelling B is what retires the "perturbed module graph" worry: the graph is
+unchanged and the answer is the same to two decimal places.
+
+So the workaround is not a failure -- it repairs `.at` and then falls into the
+SECOND INSTANCE of this same defect, on a property read. `app.py:1243`,
+`self.env.flow = source.flow if source else None`, where `source = self.scene`
+is a Region OR a World. The message is FALSE as stated: the property is there.
+
+**This is why an app-side import order cannot be the fix.** `.at` and `.flow`
+want different orders, so there is no single arrangement that satisfies both;
+the repair has to be in the compiler.
+
+**AND THE WARNING'S ABSENCE IS NOT EVIDENCE OF SAFETY -- read a build log the
+other way round.** `.up`, `.water_level` and `.spawn` all draw "several
+unrelated classes declare a .X property"; `.flow`, with three declarers, draws
+NOTHING. Identical to `.at` (silent, three declarers) against `.contains`
+(warned, five declarers). Where the scan sees the WRONG SUBSET it stays quiet
+and binds anyway; where it sees nothing it says so. A reader scanning warnings
+for trouble is looking at exactly the sites that are fine.
+
+## FIXED 2026-09-14 -- two halves, and neither works alone
+
+**1. THE FRONTEND: the closed world's innermost fallback is now the open world.**
+`PyParseVariantMethod` builds a chain of runtime-tested arms over a STATIC arm,
+and that static arm -- `hitCi`, the first-wins pick -- was the innermost
+fallback. A receiver that matched no arm therefore took a VMT-slot call on a
+class it is not, with `hitCi`'s DEFAULTS already filled at the call site. It is
+now wrapped:
+
+    pyvarobj(recv) is <the pick> ? <static call> : pydyn_meth<n>(recv, 'name', ...)
+
+Pascal's `is` is true for the pick and every descendant, so nothing the static
+arm was right about changes; only a genuinely unrelated class falls through,
+and today that class gets a wrong-slot call. **Narrowed to `i + 1 <
+ParamCount`** -- calls where the site FABRICATES arguments from a guessed
+signature, which is the defect's actual mechanism rather than its
+neighbourhood. A call whose arity matches exactly is untouched.
+
+**2. THE RUNTIME: the by-name binder can now fill the callee's OWN defaults.**
+This is what made the first half insufficient on its own -- routed to
+`pydyn_meth2`, the reduction then died with `at() missing positional
+argument(s)`, because `PyHostCall` had `mi^.Arity` and no values. The defaults
+already existed, populated, in the PYSIG record `EmitPySignatures` emits per
+def; there was simply no route from a TMethInfo to one (`Code` is a code
+address and keys nothing).
+
+The route is ONE WORD, appended to the method's ParamKinds block after the
+name pointers, flagged by `RTTI_METH_FLAG_HASSIG`. In the BLOCK and not in the
+record, for the same reason the `*args` index lives in Flags: TMethInfo's
+mirror in `lib/rtl/typinfo.pas` and the three stride consumers must not move
+(project_rtti_method_table_multi_consumer_stride_landmine). The block carries
+no length word, so every reader that takes `Arity` kinds and `Arity` names
+cannot see it. `pysig_fill_defaults` lives in pylib, which already owns the
+layout, so pyeval passes the pointer and never learns the shape -- a third
+mirror is a third thing to keep in step.
+
+It is **all-or-nothing**: every slot in the missing range is checked before any
+is appended, because a partial fill calls the body at an arity it cannot take,
+which is the smash this path exists to stop. When it declines, the existing
+TypeError still fires and still says the true thing.
+
+Reduction: `devdocs/progress/repro/dynamic-default-signature/` now matches
+CPython byte for byte on both rows. Fixture:
+`test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.npy`, whose
+package puts the fitting class SECOND -- the only arrangement a first-wins
+table is exposed by -- and whose control rows (a call written in full, and a
+receiver that really IS the pick) assert that the static arm still wins where
+it was already right.
+
+## What this did NOT fix, measured rather than assumed
+
+**The world path still does not run.** It gets FURTHER -- the `.at` site is
+repaired and the run advances from ~2.95s in-loop to ~5.7s -- and then dies in
+`malloc(): unsorted double linked list corrupted`, a HEAP corruption, which is
+a different defect wearing a different failure mode. `--open-water` survives a
+150s timeout (rc=124) on the same binary, so the corruption is specific to the
+world path and not general.
+
+**And one layer underneath was uncovered:**
+`bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer` -- a
+dispatched call returning a float truncates and one returning a string raises.
+Filed with its own repro and a control proving it was UNREACHABLE before this
+fix, because the call never completed at all.
+

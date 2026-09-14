@@ -9,6 +9,16 @@ const
     children only into published fields; reflection reaches any field). }
   RTTI_FIELD_FLAG_PUBLISHED = 1;
 
+  { TMethInfo.Flags bit1: the ParamKinds block carries ONE EXTRA WORD after the
+    `Arity` name pointers, holding this method's PYSIG record address. Mirrors
+    RTTI_METH_FLAG_HASSIG in compiler/defs.inc, which emits it. }
+  RTTI_METH_FLAG_HASSIG = 2;
+
+  { A PYSIG defaults slot that the compiler never filled. Deliberately NOT 0:
+    0 is VT_EMPTY is None, so zero would make "unfilled" and a legitimate
+    `x=None` indistinguishable. Mirrors PYSIG_DFLT_UNSET in compiler/defs.inc. }
+  PYSIG_DFLT_UNSET = -1;
+
 type
   { RTTI metadata name strings are emitted into the static blob as frozen,
     word-length-prefixed strings (rtti_emit.inc points NamePtr at Strs[].Offset).
@@ -87,7 +97,17 @@ type
                             contract and still correct; the names are what let a
                             reflected caller bind a KEYWORD argument by name. }
     {$ifdef CPU32} _pad_pk: LongInt; {$endif}
-    Flags:      Int64;    { bit0 = published (RTTI_METH_FLAG_PUBLISHED) }
+    Flags:      Int64;    { bit0 = published (RTTI_METH_FLAG_PUBLISHED)
+                            bit1 = the ParamKinds block carries ONE EXTRA WORD
+                            after the `Arity` name pointers, holding this
+                            method's PYSIG record address -- ReqN/TotN and a
+                            populated defaults array, which is what a by-name
+                            caller needs to fill a parameter the call omitted.
+                            (RTTI_METH_FLAG_HASSIG.) The block has no length
+                            word, so this record and every stride consumer are
+                            unchanged; a reader taking `Arity` kinds and `Arity`
+                            names cannot see it.
+                            bits 8..15 = a NilPy `*args` index PLUS ONE. }
   end;
   PMethInfo = ^TMethInfo;
 

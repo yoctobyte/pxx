@@ -2744,6 +2744,17 @@ function iter(const v: Variant): TPyIter; overload;
 function iter(r: TPyRange): TPyIter; overload;
 function next(it: TPyIter): Variant; overload;
 function next(it: TPyIter; const dflt: Variant): Variant; overload;
+{ Append the callee's OWN trailing defaults to `args` until it holds `want`
+  values, reading them out of the PYSIG record at `sig`. False, having appended
+  nothing, when there is no record, no defaults array, or a slot in the range
+  that was never filled.
+
+  WHY IT LIVES HERE. The PYSIG layout has two mirrors already -- defs.inc, which
+  emits it, and TPySigRec below, which reads it -- and a third in pyeval would be
+  a third thing to keep in step. pyeval holds the POINTER and pylib holds the
+  LAYOUT, so the pointer travels and the record does not.
+  bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
+function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 { `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
@@ -15357,6 +15368,25 @@ type
   end;
   PPySigRec = ^TPySigRec;
   PPointer = ^Pointer;
+
+function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
+var sr: PPySigRec; dp: Pointer; i: Integer;
+begin
+  Result := False;
+  if (sig = nil) or (args = nil) then Exit;
+  sr := PPySigRec(sig);
+  dp := sr^.Dflts;
+  if dp = nil then Exit;
+  if sr^.TotN < want then Exit;
+  { Every slot in the range must be a real value BEFORE anything is appended --
+    a partial fill would call the body at an arity it cannot take, which is the
+    smash this whole path exists to stop. So: check, then fill. }
+  for i := args.count to want - 1 do
+    if PPyVarRec(NativeInt(dp) + i * 16)^.VType = PYSIG_DFLT_UNSET then Exit;
+  for i := args.count to want - 1 do
+    args.append(PVariant(NativeInt(dp) + i * 16)^);
+  Result := True;
+end;
 
 function pylist_cptrarray(l: TPyList): TPyBytes;
 { Declared beside pyvar_cbuf; the body is HERE because it needs PPointer, which

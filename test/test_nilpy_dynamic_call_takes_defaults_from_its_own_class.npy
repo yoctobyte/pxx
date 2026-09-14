@@ -1,0 +1,47 @@
+# bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
+#
+# A call on a dynamically-typed receiver dispatched at run time but took its
+# PARAMETER DEFAULTS AND ARITY from whichever same-named method the candidate
+# scan happened to see first. The scan is over the classes compiled SO FAR and
+# was treated as exhaustive; a module pulled later declares classes it cannot
+# see, and function-local imports make that the ordinary case.
+#
+# Found by attempting lekkerzeilen. wind.py imports nothing and __main__.py
+# takes `from .wind import Wind` before `from . import world as world_mod`, so
+# at wind.py parse time the only visible `.at` was Wind's. The compiler's own
+# scan said so:
+#
+#   SCAN .at pick=Breeze nDual=4 arms=[TPyBytes TPyList TPyDeque TPyRange]
+#
+# -- the pick is the caller-module sibling and the class the receiver actually
+# is was not even an arm. `Wind.at(self, x, z, t=0.0, height=6.0)` against
+# `TiledGrid.at(self, x, z, outside=None)`: the call wrote two arguments, the
+# site filled FOUR from Wind's signature, the bind against the three-parameter
+# slot failed, and {VType=7, Payload=1} came back with no body run and no
+# diagnostic -- to be dereferenced somewhere else entirely.
+#
+# THE DEFAULT VALUES ARE DELIBERATELY DISTINCT, not just differently counted.
+# Grid's is 77.5 where Breeze's are 0.0 and 6.0, so a fill from the wrong
+# signature cannot answer correctly by accident -- the failure mode this repo
+# pays most for is a plausible wrong value, and an expected value that collides
+# with the wrong one is a row that cannot fail.
+#
+# THE LAST TWO ROWS ARE THE CONTROL and they matter as much as the first two.
+# Their receiver really IS the class the scan picked, so both must still take
+# the STATIC arm -- which is what says the fix narrowed the change to calls
+# whose arity the call site fabricated, rather than loosening dispatch
+# generally.
+#
+# A third control -- a call written in FULL, filling no defaults -- is
+# deliberately NOT here. It fails, on a SEPARATE defect this fix uncovered by
+# making such calls complete at all
+# (bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer), and it
+# is asserted in that ticket's own repro. A fixture red for a reason it is not
+# about is a fixture nobody reads.
+# The rows are printed from INSIDE the package, by a function the package
+# exports. They have to be: the call sites must be compiled while early.py is
+# the module being parsed, which is the condition the whole defect needs, and a
+# call written out here would be compiled with both modules already pulled.
+from nilpy_dynsig import run
+
+run()

@@ -362,6 +362,26 @@ end;
   reserved record array). The generic native-call trampoline reads arity +
   param kinds to marshal variant args to each param's type. Record must be
   reserved by the caller first. }
+function PyProcIsNilPyDef(pi: Integer): Boolean; forward;
+{ Forward because EmitMethInfo needs it and its body sits with the signature
+  emitter further down — the same single-pass reason TypeInfoOrdName is
+  forward-declared below. }
+
+procedure AddMethSigFix(dataPos, procIdx: Integer);
+var n: Integer;
+begin
+  if MethSigFixCount >= MethSigFixCap then
+  begin
+    if MethSigFixCap = 0 then n := 256 else n := MethSigFixCap * 2;
+    SetLength(MethSigFixPos, n);
+    SetLength(MethSigFixProc, n);
+    MethSigFixCap := n;
+  end;
+  MethSigFixPos[MethSigFixCount] := dataPos;
+  MethSigFixProc[MethSigFixCount] := procIdx;
+  Inc(MethSigFixCount);
+end;
+
 procedure EmitMethInfo(mi, miPos: Integer);
 var strIdx, procIdx, arity, p, paramOff, flags: Integer;
     nm: AnsiString;
@@ -398,7 +418,11 @@ begin
       Reserve the whole block BEFORE interning any name — InternStr appends to
       Data[], and interning mid-reservation would split the array. }
     paramOff := DataLen;
-    DataPutZeros(arity * 8 * 2);
+    { ...plus ONE WORD for the PYSIG pointer — see RTTI_METH_FLAG_HASSIG. It is
+      reserved unconditionally and left nil when there is no signature, so the
+      block has one shape rather than two; the FLAG, not the size, is what says
+      whether the word means anything. }
+    DataPutZeros(arity * 8 * 2 + 8);
     for p := 0 to arity - 1 do
       PatchDataU64(paramOff + p * 8, Ord(Procs[procIdx].Params[p].TypeKind));
     for p := 0 to arity - 1 do
@@ -407,9 +431,16 @@ begin
       AddDataPtrFix(paramOff + (arity + p) * 8, Strs[strIdx].Offset);
     end;
     AddDataPtrFix(miPos + 32, paramOff);
+    AddMethSigFix(paramOff + arity * 8 * 2, procIdx);
   end;
   flags := 0;
   if UMthPub[mi] = 1 then flags := RTTI_METH_FLAG_PUBLISHED;
+  { The flag is set from PyProcIsNilPyDef, which is the SAME test
+    EmitPySignatures gates its own emission on. Asking the same question twice
+    is deliberate: ProcSigOff is not yet filled here, so the alternative is a
+    flag that disagrees with the pointer. }
+  if (arity > 0) and (procIdx >= 0) and PyProcIsNilPyDef(procIdx) then
+    flags := flags or RTTI_METH_FLAG_HASSIG;
   if (procIdx >= 0) and (ProcPyStarIdx[procIdx] >= 0) then
     flags := flags or ((ProcPyStarIdx[procIdx] + 1) shl RTTI_METH_STARIDX_SHIFT);
   if flags <> 0 then PatchDataU64(miPos + 40, flags);
@@ -661,6 +692,17 @@ begin
         DataPutZ(Procs[pi].Params[k].Name);
       end;
     end;
+  end;
+
+  { ...and now every ProcSigOff is settled, so the method blocks reserved
+    during EmitRTTI can be pointed at their signatures. A proc that got no
+    record leaves its slot nil; the reader tests the pointer as well as the
+    flag, so a nil is simply "no defaults known" and not a crash. }
+  for k := 0 to MethSigFixCount - 1 do
+  begin
+    pi := MethSigFixProc[k];
+    if (pi >= 0) and (pi < ProcCount) and (ProcSigOff[pi] >= 0) then
+      AddDataPtrFix(MethSigFixPos[k], ProcSigOff[pi]);
   end;
 end;
 
@@ -917,6 +959,7 @@ var ci, i, j, k, base, cnt, hdr, strIdx, etid: Integer;
 begin
   RTTIRegistryOff := -1;
   RTTIRegistryCount := 0;
+  MethSigFixCount := 0;
   for ci := 0 to MAX_UCLASS - 1 do UClsRTTIOff[ci] := -1;
   for ci := 0 to MAX_UCLASS - 1 do UClsLayoutOff[ci] := -1;
 
