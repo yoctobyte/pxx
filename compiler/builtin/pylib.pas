@@ -14448,11 +14448,25 @@ function pystar_as_list(const v: Variant): TPyList;
 var o: TObject;
 begin
   { a list (or a tuple, which is the same object) is handed straight back —
-    the packing only READS it, so a copy would be pure cost }
+    the packing only READS it, so a copy would be pure cost — but it is handed
+    back OWNED, with a retain, because the OTHER arm returns a fresh list and a
+    function cannot return borrowed down one arm and owned down the other.
+    PyStarExpandCallArgs assigns this result into a hidden class-typed local
+    (`$starl`) that is released at scope exit, so the borrowed arm drove the
+    refcount NEGATIVE once per `f(*xs)` whose operand was a variant — which is
+    every unannotated parameter. `HullDrag.__init__` doing `Vec3(*angular)` is
+    the shape that found it: one underflow per Vessel built, and the freed block
+    was reused, so the eventual fault was in whatever moved in.
+    bug-n-a-star-argument-releases-a-sequence-it-only-borrowed }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin pystar_as_list := TPyList(o); Exit; end;
+    if o is TPyList then
+    begin
+      PXXObjRetain(Pointer(o));
+      pystar_as_list := TPyList(o);
+      Exit;
+    end;
   end;
   pystar_as_list := pyiter_drain(pyiter_v(v));
 end;

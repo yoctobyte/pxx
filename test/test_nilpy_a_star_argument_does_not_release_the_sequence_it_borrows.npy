@@ -1,0 +1,98 @@
+# `f(*xs)` lowers to a hidden class-typed local holding the operand as a
+# TPyList, filled by pystar_as_list. That function had TWO conventions: a list
+# or tuple was handed "straight back" BORROWED, anything else was drained into a
+# fresh OWNED list -- and the hidden local is released at scope exit either way.
+# So every star call whose operand is a variant (which is every unannotated
+# parameter) released a sequence it only borrowed.
+#
+# THIS FIXTURE CANNOT FAIL ON A VALUE, BY CONSTRUCTION. The extra release lands
+# after the last read, so the answer is right and the damage is a block freed
+# while something else still points at it. The guard that catches it is
+# tools/assert_no_rc_underflow.sh, wired beside this row in the Makefile; what
+# is asserted HERE is only that the star forms still compute what CPython
+# computes, so a repair cannot buy the refcount back by breaking the semantics.
+#
+# bug-n-a-star-argument-releases-a-sequence-it-only-borrowed
+
+
+def three(x, y, z):
+    return x + y + z
+
+
+def spread(a):
+    return three(*a)
+
+
+def spread_twice(a):
+    return three(*a) + three(*a)
+
+
+class Vec3:
+    __slots__ = ("x", "y", "z")
+
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(z)
+
+
+class Drag:
+    def __init__(self, longitudinal=86.0, angular=(3000.0, 9000.0, 2400.0),
+                 hull_speed=None):
+        self.longitudinal = longitudinal
+        self.angular = Vec3(*angular)
+        self.hull_speed = hull_speed
+
+
+def build(mass=1200.0):
+    # the shape that found it: a tuple arrives as a keyword argument and is
+    # star-unpacked into a constructor whose parameters are all defaulted
+    return Drag(angular=(mass * 2.5, mass * 7.5, mass * 2.0))
+
+
+# EVERY call is made from inside a function, deliberately. At module level the
+# operand temp outlives the frame, so the extra release never reaches zero and
+# the row proves nothing -- the same shape passes on the unfixed compiler.
+
+
+def from_tuple():
+    return spread((1.0, 2.0, 3.0))
+
+
+def from_list():
+    return spread([1.0, 2.0, 3.0])
+
+
+def twice():
+    return spread_twice((1.0, 2.0, 3.0))
+
+
+def from_str():
+    # a str spreads its characters: the DRAINED arm, already owned, which must
+    # stay unaffected by the retain the borrowed arm gained
+    return spread("abc")
+
+
+def from_range():
+    return spread(range(3))
+
+
+def outlives():
+    held = (11.0, 22.0, 33.0)
+    total = spread(held)
+    noise = []
+    for i in range(32):
+        noise.append([i * 1.5, i + 0.5])
+    return total, held[0], held[1], held[2], len(noise)
+
+
+print(from_tuple())
+print(from_list())
+print(twice())
+
+d = build()
+print(d.angular.x, d.angular.y, d.angular.z, d.longitudinal, d.hull_speed)
+
+print(from_str())
+print(from_range())
+print(outlives())

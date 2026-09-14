@@ -1941,6 +1941,23 @@ test-nilpy: $(COMPILER)
 	# zeroes the underflows and LEAKS at the two sites that discard its result.
 	./$(COMPILER) test/test_nilpy_a_set_comprehension_does_not_over_release_its_own_list.npy $(TESTTMP)/test_nilpy_setcomprc26
 	$(TESTTMP)/test_nilpy_setcomprc26 | diff -u test/test_nilpy_a_set_comprehension_does_not_over_release_its_own_list.expected -
+	# `f(*xs)` puts the operand in a hidden class-typed local that is released at
+	# scope exit, and pystar_as_list filled it from TWO conventions: a list or a
+	# tuple handed "straight back" BORROWED, anything else drained into a fresh
+	# OWNED list. So every star call with a variant operand -- every unannotated
+	# parameter -- released a sequence it only borrowed.
+	# THE VALUE ROW CANNOT CATCH THIS AND IS NOT MEANT TO. The extra release lands
+	# after the last read, so the unfixed compiler prints exactly these lines; it
+	# is here so a repair cannot buy the refcount back by breaking the semantics.
+	# The SECOND row is the guard: built -dPXX_OBJTRACE, it counts releases that
+	# drive a refcount below zero -- 6 unfixed, 0 fixed. Every star call in the
+	# fixture is made from inside a function on purpose: at module level the
+	# operand outlives the frame, the count never reaches zero, and the row would
+	# pass on the unfixed compiler.
+	./$(COMPILER) test/test_nilpy_a_star_argument_does_not_release_the_sequence_it_borrows.npy $(TESTTMP)/test_nilpy_starargrc26
+	$(TESTTMP)/test_nilpy_starargrc26 | diff -u test/test_nilpy_a_star_argument_does_not_release_the_sequence_it_borrows.expected -
+	./$(COMPILER) -dPXX_OBJTRACE test/test_nilpy_a_star_argument_does_not_release_the_sequence_it_borrows.npy $(TESTTMP)/test_nilpy_starargrc26_ot
+	tools/assert_no_rc_underflow.sh starargs $(TESTTMP)/test_nilpy_starargrc26_ot
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None
