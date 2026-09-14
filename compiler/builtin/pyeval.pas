@@ -6046,9 +6046,16 @@ begin
 end;
 
 function sorted(d: TPyDict; key: Pointer; reverse: Boolean): TPyList; overload;
+var kl: TPyList;
 begin
-  if d = nil then Result := TPyList.Create
-  else Result := sorted(d.keylist, key, reverse);
+  if d = nil then begin Result := TPyList.Create; Exit; end;
+  { keylist CONSTRUCTS a fresh list; sorted(TPyList) copies out of it and
+    returns a NEW list, so this snapshot is a pure temporary and a Pascal local
+    does not participate in refcounting. Measured 2026-09-14: 584 bytes leaked
+    per sorted(dict) call on a 32-entry dict, CPython 0. }
+  kl := d.keylist;
+  Result := sorted(kl, key, reverse);
+  PXXObjRelease(Pointer(kl));
 end;
 
 { `sorted("cba")` -> ['a','b','c']. Python sorts any ITERABLE, and a str is one.

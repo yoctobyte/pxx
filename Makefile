@@ -34770,11 +34770,18 @@ lib-test: pxx-stable-check
 	# pxx objects are refcounted, but a PASCAL local does not participate and
 	# pylib.pas is Pascal -- so a list built and dropped there leaks on every
 	# call, forever. Measured before the fix: .format() 199 bytes/call, set()
-	# 583, both linear, both 0 under CPython. The fixture asserts a RELATION
-	# (under 50 bytes/call on a SECOND pass) and carries a retain-style positive
-	# control, without which every "LEAKFREE" row would pass on a dead
-	# instrument.
-	$(PXX_STABLE) -Fulib/rtl test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy $(TESTTMP)/test_nilpy_noleak
+	# 583, dict(D) 1168, repr(D) 583, sorted(D) 584 -- all linear, all 0 under
+	# CPython. The fixture asserts a RELATION (under 50 bytes/call on a SECOND
+	# pass) and carries a retain-style positive control, without which every
+	# "LEAKFREE" row would pass on a dead instrument.
+	#
+	# $(COMPILER), not $(PXX_STABLE): the pinned compiler FAILS every row of
+	# this fixture, with exactly the pre-fix magnitudes above (measured against
+	# v410, 2026-09-14) -- which is what makes it a regression test rather than
+	# a restatement, and is why it must not be pinned to the stable snapshot's
+	# builtin. The fixes live in compiler/builtin/{pylib,pyeval}.pas, so the
+	# fixture is only meaningful against the tree's own builtin.
+	./$(COMPILER) -Fulib/rtl test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy $(TESTTMP)/test_nilpy_noleak
 	tools/expect_same.sh test_nilpy_noleak "$$($(TESTTMP)/test_nilpy_noleak | tail -n 1)" "PYLEAK OK"
 	# TThread reached through `uses Classes` — FPC's own uses line, no {$IFDEF FPC}
 	# split. The non-threaded half of the bargain (classes still building WITHOUT

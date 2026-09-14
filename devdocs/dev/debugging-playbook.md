@@ -26550,3 +26550,77 @@ the reporter.
 Measured and reported by `lekkerzeilen-c8` (the two variant tables, the
 precondition verbatim, the inversion, and the three-way split) and by this seat
 (the inert knobs, the counter, and the ruined input), 2026-09-14.
+
+## A REFCOUNT PROBE WRITTEN IN PASCAL MEASURES A POPULATION WHERE REFCOUNTING IS SWITCHED OFF — `PXXObjRelease` is a deliberate no-op there, and it returns a clean, stable, wrong number
+
+Measured 2026-09-14, hunting a residual per-pair leak in `dict.items`. The
+question was decisive and correctly posed — *does `PXXObjRelease` actually free
+a `TPyList`?* — and the probe answered it in a Pascal program:
+
+```
+create only          per_call=160
+create + release     per_call=160     <-- release freed NOTHING
+create+retain+rel x2 per_call=160
+create + Free        per_call=128
+```
+
+Read literally that says release is inert and **every fix of that shape is a
+no-op**, including four already pushed that evening. It is the opposite of the
+truth, and nothing in the output marks it: no error, no zero, no sentinel — a
+stable linear number, reproducible, with a `.Free` row moving beside it as a
+built-in control. **The control moved, which is what made it persuasive.**
+
+**The gate is `isNilPy`, and it is the WHOLE COMPILATION, units included**
+(`compiler/ir.inc`, the `AN_METACLASS_NEW` arm, ~line 15773). In a NilPy program
+every class construction is lowered to `PXXObjAlloc`, so the instance carries
+the `[inst-8]` population tag and `[inst-16]` refcount. In a **Pascal**
+compilation it is untouched: `TPyList.Create` is an ordinary manual-lifetime
+instance, and `PXXObjRelease` reads a header word that is not one of
+`PXX_OBJ_MAGIC` / `_RAW` / `_RAW2` and **exits at the guard**. `builtinheap.pas`
+says so in prose at the `PXXVarClear` comment — *"whose `PXX_OBJ_MAGIC` guard
+makes it a no-op on manual-lifetime Pascal instances"* — which nobody had read,
+because the probe had already answered.
+
+**The two-line discriminator, and it costs nothing:**
+
+```pascal
+type PI64 = ^Int64;
+...
+WriteLn(PI64(Int64(Pointer(l)) - 8)^);   { 32 = an allocator size word: NOT ours }
+                                          { 1348027121 = PXX_OBJ_MAGIC: ours }
+```
+
+A Pascal-built `TPyList` prints **32**. So the probe was never measuring
+refcounting at all.
+
+**The confusing part, and the reason this is not simply "write it in NilPy":**
+the fixes under suspicion are themselves in `pylib.pas` and `pyeval.pas`, which
+ARE Pascal. They work anyway. **The discriminator is who ALLOCATED the object,
+not which language releases it** — those units are compiled *as part of* a NilPy
+program, so `isNilPy` is true for them too and their `TPyList.Create` is
+headered. A Pascal *program* is the only place the header is absent, and a
+standalone probe is exactly that place. **The probe did not merely take a
+different route to the subject; it took the one route where the subject does not
+exist.**
+
+**`-dPXX_OBJTRACE` settles it in one run and should have been first.** On the
+NilPy route the trace shows the whole life:
+
+```
+objtrace A 0x...2d0 1      <- allocated, headered, rc=1
+objtrace r 0x...2d0 0      <- released to zero
+objtrace F 0x...2d0 0      <- FREED
+```
+
+An `F` line is positive evidence that cannot be produced by accident. In the
+Pascal probe there are no trace lines for that object at all, because it never
+passed through `PXXObjAlloc` — **an absence that is itself the answer**, and one
+the byte-counting instrument could not represent.
+
+**The general shape, which is the part worth carrying:** where a behaviour is
+gated on a whole-compilation flag, a minimal standalone probe silently selects
+the arm where the behaviour is disabled — *minimality is what puts it on the
+wrong side of the gate.* Ask what the gate is before trusting a negative, and
+prefer an instrument that reports the mechanism firing (a trace, a header word)
+over one that reports a consequence (bytes), because only the first can tell
+"it did not run" from "it ran and did nothing".

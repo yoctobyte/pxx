@@ -8,6 +8,9 @@
 #
 # MEASURED 2026-09-14, before the fix: "{}".format(i) leaked 199-200 bytes per
 # call and set(L) 583, both LINEAR across two passes, both 0 under CPython.
+# The dict rows are the same defect in pylib/pyeval and were measured the same
+# evening: dict(D) 1168 bytes per call, repr(D) 584, sorted(D) 584, CPython 0
+# for all three. They snapshot keys/values into a fresh TPyList and drop it.
 #
 # THE THRESHOLD IS A RELATION, NOT A RATE. Asserting "0 bytes" would make this
 # fixture flap on any unrelated page the process happens to fault in; asserting
@@ -27,6 +30,9 @@ def rss_kb():
     return int(s.split()[1]) * 4
 
 L = list(range(32))
+D = {}
+for i in range(32):
+    D["k%d" % i] = i
 N = 40000
 LEAK_LIMIT = 50          # bytes per call
 held = []
@@ -43,6 +49,18 @@ def f_set(n):
     for i in range(n):
         s = set(L)
 
+def f_dictcopy(n):
+    for i in range(n):
+        s = dict(D)
+
+def f_dictrepr(n):
+    for i in range(n):
+        s = repr(D)
+
+def f_dictsorted(n):
+    for i in range(n):
+        s = sorted(D)
+
 def f_retain(n):
     for i in range(n):
         held.append([0] * 16)
@@ -55,7 +73,10 @@ base = rss_kb()
 # that is asserted.
 for name, fn in [("format1", f_format_one), ("format1", f_format_one),
                  ("format3", f_format_three), ("format3", f_format_three),
-                 ("set", f_set), ("set", f_set)]:
+                 ("set", f_set), ("set", f_set),
+                 ("dictcopy", f_dictcopy), ("dictcopy", f_dictcopy),
+                 ("dictrepr", f_dictrepr), ("dictrepr", f_dictrepr),
+                 ("dictsorted", f_dictsorted), ("dictsorted", f_dictsorted)]:
     fn(N)
     now = rss_kb()
     per = ((now - base) * 1024) // N
@@ -63,13 +84,15 @@ for name, fn in [("format1", f_format_one), ("format1", f_format_one),
 
 second = {}
 base = rss_kb()
-for name, fn in [("format1", f_format_one), ("format3", f_format_three), ("set", f_set)]:
+for name, fn in [("format1", f_format_one), ("format3", f_format_three), ("set", f_set),
+                 ("dictcopy", f_dictcopy), ("dictrepr", f_dictrepr),
+                 ("dictsorted", f_dictsorted)]:
     fn(N)
     now = rss_kb()
     second[name] = ((now - base) * 1024) // N
     base = now
 
-for name in ["format1", "format3", "set"]:
+for name in ["format1", "format3", "set", "dictcopy", "dictrepr", "dictsorted"]:
     if second[name] < LEAK_LIMIT:
         print("%s LEAKFREE" % name)
     else:
