@@ -158,6 +158,7 @@ const
 var
   gLive: array[0..63] of Thread;
   gLiveCount: Integer;
+  gFinalCount: Integer;   { finalization's own cursor -- see the note there }
   gLiveLock: TMutex;
   gLiveInit: Boolean;
 
@@ -185,6 +186,49 @@ begin
   else
     WriteLn(StdErr, 'threading: more than 64 unjoined non-daemon threads; ' +
                     'the surplus will not be joined at exit');
+  MutexUnlock(gLiveLock);
+end;
+
+{ ...and its counterpart, which did not exist. Without it gLiveCount counted
+  THREAD CREATIONS rather than live unjoined threads: it only ever went up, so
+  a program that started and joined 64 non-daemon threads in a loop filled the
+  registry with corpses, and every Thread constructed after that printed the
+  surplus warning -- once per construction. The diagnostic that exists to flag
+  a real overflow became noise that would hide one.
+
+  Measured 2026-09-15: 100 threads started and joined in a loop printed 36
+  warnings and left gLiveCount pinned at 64 with every registered entry already
+  dead. With this, the same program prints none.
+
+  WHAT THIS DOES NOT FIX, BECAUSE THE CONTROL REFUTED IT. The obvious reading
+  is that a live non-daemon thread past the full registry is never joined at
+  exit and dies mid-flight. That was tested -- 80 start/join cycles to exhaust
+  the registry, then one live thread holding a bounded 0.5 s wait, so the
+  assertion is a clock and not a race -- and it printed its completion line on
+  the PRE-FIX build as well as the fixed one and on CPython. Whatever keeps it
+  alive, it is not this registry, and the severity here is a false diagnostic
+  and a miscount, not a lost thread. Recorded so the next reader does not
+  promote the plausible story back into the ticket. }
+{ Swap-with-last rather than a shift: the registry is a SET with no meaningful
+  order -- finalization joins all of it -- so an O(1) removal is correct and an
+  O(n) memmove would only be slower. }
+procedure LiveRemove(t: Thread);
+var i: Integer;
+begin
+  if not gLiveInit then Exit;
+  MutexLock(gLiveLock);
+  i := 0;
+  while i < gLiveCount do
+  begin
+    if gLive[i] = t then
+    begin
+      gLive[i] := gLive[gLiveCount - 1];
+      gLive[gLiveCount - 1] := nil;
+      gLiveCount := gLiveCount - 1;
+      Break;
+    end;
+    i := i + 1;
+  end;
   MutexUnlock(gLiveLock);
 end;
 
@@ -307,6 +351,7 @@ begin
   begin
     PalThreadJoin(FHandlePtr^);
     FJoined := True;
+    LiveRemove(Self);
     Exit;
   end;
   { A TIMED join, which PalThreadJoin does not offer. Same handshake, waiting
@@ -333,6 +378,7 @@ begin
   begin
     PalThreadJoin(FHandlePtr^);
     FJoined := True;
+    LiveRemove(Self);
   end;
 end;
 
@@ -435,9 +481,16 @@ finalization
     they were doing is lost with no diagnostic -- a silent wrong answer, which
     is the shape this project ranks worst. Daemon threads are NOT here on
     purpose: being killed at exit is what daemon MEANS. }
-  while gLiveCount > 0 do
+  { SNAPSHOT AND ZERO FIRST, then join. `join` now calls LiveRemove, which
+    mutates gLiveCount and swaps the tail entry into the removed slot -- so
+    walking the live registry while joining from it would skip entries. Taking
+    the count to zero up front makes every LiveRemove below a no-op and leaves
+    this loop reading a list nothing can move. }
+  gFinalCount := gLiveCount;
+  gLiveCount := 0;
+  while gFinalCount > 0 do
   begin
-    gLiveCount := gLiveCount - 1;
-    if gLive[gLiveCount] <> nil then gLive[gLiveCount].join;
+    gFinalCount := gFinalCount - 1;
+    if gLive[gFinalCount] <> nil then gLive[gFinalCount].join;
   end;
 end.
