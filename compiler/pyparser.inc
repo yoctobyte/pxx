@@ -48723,7 +48723,34 @@ begin
     begin
       CurASTNode := PyParseClassRecordSelectors(CurASTNode,
                       ResolveNodeRec(CurASTNode), LastExprTk);
-    end;
+    end
+    { `C(...).m()` LEAKED THE CONSTRUCTION, ONE INSTANCE PER CALL, FOREVER.
+      A construction is lowered through a conduit local that holds its rc=1 for
+      whoever consumes the expression and never releases it (SymIsCtorResultTemp,
+      defs.inc). Downstream, the ATTRIBUTE spelling `C(...).a` hoists that
+      through PyEvalOnce and so ends up owned by an ARC-eligible `__py_recv_N`
+      local, released at scope exit. The METHOD spelling passed the conduit
+      straight through as arg 0 of the call, where nothing ever released it --
+      the same construction, two routes, one of them balanced.
+
+      Hoisting HERE rather than widening the selector call above, and the
+      difference is not cosmetic: routing `.` into PyParseClassRecordSelectors
+      also changes WHICH parser reads the argument list, and that one cannot
+      resolve a bare function name passed as a value
+      (test_nilpy_ctor_suffix_defaults: `A().analyze(["a"], notes)` ->
+      "undefined variable (notes)"). This leaves the parse path exactly as it
+      was and only changes the NODE the downstream path sees, from the
+      construction to an ident bound to it.
+
+      NOT the arg-spill arm owning param 0, which is the obvious fix and is
+      wrong: it releases the receiver at CALL END, and a bound callable
+      outlives the call that made it -- 963 Track N fixtures green and the
+      lekkerzeilen demo dead in 3.0 s, SIGSEGV in PyCallablePartsP reading a
+      dangling PPyVarRec. Scope-exit ownership is what makes the hoist safe.
+      bug-n-a-construction-consumed-as-a-method-receiver-leaks }
+    else if (CurTok.Kind = tkDot) and
+            (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) then
+      CurASTNode := PyEvalOnce(CurASTNode);
     Exit;
   end;
   { `set(xs)` in ANY expression position (`return set(...)`, an argument, a

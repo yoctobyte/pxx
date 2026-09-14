@@ -1,30 +1,29 @@
 # A USER-CLASS instance must not leak because of HOW its value is consumed.
 #
-# Found 2026-09-14/15 while chasing lekkerzeilen's frame leak. TWO defects, and
-# only ONE of them is fixed -- read the ctor_recv row below before trusting the
-# shape of this file.
+# Found 2026-09-14/15 while chasing lekkerzeilen's frame leak. TWO defects, both
+# fixed now, and this file covers both.
 #
-# FIXED HERE: A USER OPERATOR ON A VARIANT OPERAND -- `a + b` where __add__
-# returns an object. pylib's PyUserArithCall1 retained the dunder's result on
-# the way into the variant, but a NilPy routine already hands back an owned +1,
-# so every operation leaked its whole result. Measured: 100 iterations, 100
-# leaked instances; 63-64 bytes/call in RSS -> under the limit after.
+# A USER OPERATOR ON A VARIANT OPERAND -- `a + b` where __add__ returns an
+# object. pylib's PyUserArithCall1 retained the dunder's result on the way into
+# the variant, but a NilPy routine already hands back an owned +1, so every
+# operation leaked its whole result. Measured: 100 iterations, 100 leaked
+# instances; 63-64 bytes/call in RSS -> under the limit after.
 #
-# NOT FIXED: a construction consumed as a METHOD RECEIVER --
-# `Quat(...).normalized()` -- still leaks one instance per call. The obvious fix
-# (letting the arg-spill arm own it at param 0) SEGFAULTS the lekkerzeilen demo
-# in 3.0 s of frame loop while passing all 963 tests of `make test-nilpy`. That
-# is banked in bug-n-a-construction-consumed-as-a-method-receiver-leaks with the
-# repro; do not re-derive it.
+# A CONSTRUCTION CONSUMED AS A METHOD RECEIVER -- `Quat(...).normalized()`.
+# `C(...)` followed by `.` exited the construction arm to be "picked up
+# downstream", and downstream the ATTRIBUTE spelling hoisted the construction
+# into an ARC-eligible `__py_recv_N` while the METHOD spelling passed the
+# conduit local straight through as arg 0, where nothing ever released it.
+# Fixed by routing `.` into the same selector path the `[` spelling already
+# used, which hoists. ctor_recv ASSERTED THIS LEAK DELIBERATELY until
+# 2026-09-15 and now asserts LEAKFREE like its siblings.
 #
-# THE ctor_recv ROW ASSERTS THE LEAK, DELIBERATELY. It is the SECOND positive
-# control and it is drawn from the right population: `retain` at the bottom is a
-# synthetic list that any working instrument sees, while ctor_recv is a REAL
-# one-per-call object leak of the exact size and shape this fixture is about. If
-# it ever reads LEAKFREE the fixture says so and FAILS -- that is the prompt to
-# delete this paragraph, flip the row to the ordinary assertion, and close the
-# ticket. A row that must keep failing is uncomfortable and it is honest; the
-# alternative is a file that quietly stops covering half its subject.
+# DO NOT "FIX" THIS BY MAKING THE ARG SPILL OWN PARAM 0. That is the obvious
+# patch, it takes this row to zero, it passes all 963 tests of `make
+# test-nilpy`, and it SEGFAULTS the lekkerzeilen demo in 3.0 s of frame loop --
+# it releases the receiver at CALL END, and a bound callable outlives that.
+# The hoist works because `__py_recv_N` is released at SCOPE exit instead.
+# Banked in done/bug-n-a-construction-consumed-as-a-method-receiver-leaks.
 #
 # BOTH ARE ROUTE TRAPS AND THAT IS WHY THIS FIXTURE IS SHAPED THE WAY IT IS.
 # The identical work spelled a different way is CLEAN in both cases:
@@ -39,10 +38,9 @@
 # balanced. Every operand here arrives as an unannotated PARAMETER, which is what
 # makes it a variant -- annotate them and this fixture stops testing anything.
 #
-# DO NOT DIFF THIS WHOLE FILE AGAINST CPython. Every row but ctor_recv agrees
-# with it; ctor_recv asserts a pxx defect CPython does not have, so CPython
-# prints the "NO LONGER LEAKS" arm and OBJLIFE FAIL -- correctly, about itself.
-# Oracle the individual shapes against CPython, not this file's verdict.
+# CPython agrees with every row now, verdict included -- which it did NOT while
+# ctor_recv asserted a pxx defect CPython does not have. If a row is ever
+# flipped to assert a defect again, restore that warning with it.
 #
 # THE THRESHOLD IS A RELATION. V is 32 bytes and Q is 40, so a one-per-call leak
 # shows as 32-40 bytes of object plus allocator overhead -- measured at 63-72
@@ -219,13 +217,14 @@ for name in ["ctor_bound", "op_add", "op_sub", "op_mul", "op_discard",
         print("%s LEAKS %d bytes/call" % (name, second[name]))
         ok = False
 
-# The known-unfixed row, asserted in the OTHER direction -- see the header.
-if second["ctor_recv"] >= LEAK_LIMIT:
-    print("ctor_recv EXPECTED-LEAK")
+# Asserted like its siblings since 2026-09-15. It is still the row drawn from
+# the right population -- a REAL one-per-call object leak of the exact size and
+# shape this fixture is about, where `retain` below is a synthetic list any
+# working instrument sees -- so it is worth keeping distinct in the output.
+if second["ctor_recv"] < LEAK_LIMIT:
+    print("ctor_recv LEAKFREE")
 else:
-    print("ctor_recv NO LONGER LEAKS -- fixed? then edit this fixture:")
-    print("  delete the EXPECTED-LEAK arm, assert LEAKFREE like its siblings,")
-    print("  and close bug-n-a-construction-consumed-as-a-method-receiver-leaks")
+    print("ctor_recv LEAKS %d bytes/call" % second["ctor_recv"])
     ok = False
 
 f_retain(N)

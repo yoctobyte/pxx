@@ -310,7 +310,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (167)
+## backlog-nilpy (166)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -327,7 +327,6 @@ _none_
 | bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers | N | 40→90 | bug | > | — |
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-collections-deque-segfaults-at-run-time | N | 70 | bug | `collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output. | — |
-| bug-n-a-construction-consumed-as-a-method-receiver-leaks | N | 80 | bug | `Quat(...).normalized()` leaks the construction, and the obvious fix segfaults the demo | — |
 | bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted | N | 55 | bug | > | — |
 | bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string | N | 45 | bug | > | — |
@@ -1065,9 +1064,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3765)
+## done (3766)
 
-3765 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3766 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1178,7 +1177,6 @@ _none_
 - [p 80] [T] bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - [p 80] [A] feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
 - [p 80] [A] bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout
-- [p 80] [N] bug-n-a-construction-consumed-as-a-method-receiver-leaks
 - [p 80] [N] bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - [p 80] [N] bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - [p 80] [A] umbrella-track-p-and-a-have-no-open-bugs [umbrella — a GOAL, not a unit of work; take something it blocks]
