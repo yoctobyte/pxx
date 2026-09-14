@@ -26379,3 +26379,63 @@ optional. A rule that lives next to one call site protects that call site.
 
 Related: "ISOLATION GUARDS AGAINST THE RUN, NOT AGAINST THE ROUTE" — the same
 family, where the instrument is honest about something other than the subject.
+
+## A CONSTANT WRONG ANSWER COLLIDES WITH A PLAUSIBLE RIGHT ONE — the defaults list in CLAUDE.md is about VALUES a default takes, and this is about a value the BUG takes
+
+CLAUDE.md's "choose a probe whose right answer differs from the default" lists
+the collisions where the *machinery doing nothing* produces your expected
+value: a type's default, a zero, an empty aggregate, a `nil` sentinel, a
+`sizeof(int)`, a pointer width. Every entry is a value the ABSENCE of work
+returns. This is the mirror: the machinery runs, it is broken, and the broken
+path returns a **fixed** value that happens to be the right answer for the
+input a reader reaches for first.
+
+Measured 2026-09-14, Track N, chasing lekkerzeilen's GL uniform names.
+`TPyBytes.Create(n)` did `GetMem(FData, n)` with no terminator, so the buffer
+handed to a C `PChar` parameter was NUL-terminated only by whatever the
+allocator happened to leave after it. The natural probe is:
+
+```python
+from "/usr/include/string.h" import strlen
+print(strlen(b"abc"))     # 3
+```
+
+and **3 is correct**. It is also what that program prints for `b"abcdefgh"`,
+for `"".encode()`, and for every other bytes expression, because the argument
+reaching `strlen` was not the payload at all — a separate bug passed the
+object's header pointer, and `strlen` was measuring three bytes of header.
+**The wrong answer was a CONSTANT, and the constant collided with the right
+answer for the three-character literal everybody writes first.**
+
+The discriminator costs one character: make the probe's correct answer a value
+the broken path cannot produce. `b"abcd"` would have shown 3 against 4
+immediately.
+
+### The second half, and it is the one that survives a careful author
+
+Having found it, I wrote *"exactly 8 and nothing else"* into the fix's comment
+and into the fixture, from a sweep of one program. The pinned control then
+answered `8->9 16->17`. **Which lengths are unterminated is a property of the
+HEAP, not of the language** — it depends on what the allocator left after the
+payload, so it differs between two programs compiled from the same compiler,
+and it differs between runs that allocated differently beforehand.
+
+So a sampled probe **certifies** this class of bug and a swept one catches it.
+The fixture sweeps 1..16 plus an empty and a grown buffer for exactly that
+reason, and every row routes through a VARIABLE, because a literal and a
+variable reach the seam by different routes.
+
+### The question that catches it
+
+CLAUDE.md's question is *"if the machinery did nothing at all, would this row
+still pass?"* Ask this one beside it: **"if the machinery returned the SAME
+WRONG VALUE for every input, would this row still pass?"** — and then vary the
+input so the answer is no. A probe with one row cannot answer it at all.
+
+Banked here and not promoted to CLAUDE.md: it is an EXTENSION of a rule that
+already exists there, and its two instances (`strlen` answering a constant; the
+heap-dependent terminator) are both in one subsystem, so it meets the merit
+test and not the second-independent-subsystem test. If a second subsystem
+produces a constant-valued wrong answer that collides with a natural probe,
+this is the paragraph to promote — as a sentence appended to that list, not as
+a neighbouring rule.

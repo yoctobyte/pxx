@@ -168,3 +168,56 @@ The frames above #0 are unusable: no section headers means no unwind info, so
 gdb walks garbage. Anything past #0 in that dump should be ignored, which is
 also why there is no point re-running this for a deeper stack. **The next
 instrument is helgrind or drd, not gdb and not memcheck.**
+
+### Two minimal-stress NEGATIVES, 2026-09-14
+
+The question these were built to answer: **is this lekkerzeilen-specific, or
+does pxx's threaded runtime corrupt under concurrent allocation?** A 30-line
+NilPy repro would be worth far more than a 20-second GL demo, so it was worth
+trying before reaching for helgrind.
+
+Both programs mirror lekkerzeilen's shape -- a daemon worker building objects
+off the frame and handing them over a `queue.Queue` while the main thread
+allocates too -- and both were built with `--threadsafe`.
+
+| stress | what it adds | result |
+| --- | --- | --- |
+| `stress.npy` -- pure allocation on both threads | nothing; pxx runtime only | 3/3 clean, 20000 rounds each, 2160-2416 items genuinely crossing the queue |
+| `sqlstress.npy` -- a `sqlite3.connect()` and a blob-returning `SELECT` per job on the worker, mirroring `world.py:841` | a real C library on glibc's heap, on the worker thread | 3/3 clean, 400 rounds each, ~220 batches crossing |
+
+**Neither reproduces.** So plain concurrent allocation through pxx's Python
+runtime is not sufficient, and neither is adding sqlite on the worker.
+
+Both instruments were checked for the "guard that cannot fail" shape first:
+the first version of `stress.npy` printed `drained 0`, which is exactly what it
+would also print if the worker thread had never run. It carries a `SEEN`
+counter and an explicit `INSTRUMENT DEAD: the worker produced nothing, this run
+proves nothing` line now, and the item counts above are what that counter
+reports -- the runs are live, not silently empty.
+
+**What is left, and it is the axis neither stress has:** the main thread being
+inside the GL driver (`libGL.so.1`) at the same time the worker allocates. That
+is the one ingredient lekkerzeilen has that a headless NilPy program does not,
+and it is not reachable from a minimal repro without bringing SDL and a context
+along -- at which point it is not minimal any more.
+
+### sqlite3 ownership, closed out
+
+The exculpation above was on the blob COPY direction. The ownership question is
+now closed on all four counts, against `lib/rtl/mimic_sqlite3.pas`:
+
+- `TransientDtor` really is `Pointer(-1)` = `SQLITE_TRANSIENT`, so every bound
+  text and blob is copied by sqlite before the call returns -- we never hand it
+  a pxx pointer to keep (`:265`, call sites `:510`, `:511`, `:528`).
+- `sqlite3_free` is called at exactly ONE site, `:454`, on the `errmsg` that
+  `sqlite3_exec` itself allocated. We never free a pxx pointer through it, and
+  we never `FreeMem` a sqlite one.
+- `sqlite3_open_v2` passes no `SQLITE_OPEN_NOMUTEX`, so connections are in
+  sqlite's default serialized mode.
+- The system library answers `sqlite3_threadsafe() = 1` (3.46.1), i.e. built
+  serialized.
+
+**That is the owner's original hypothesis -- "why is a library freeing memory
+that we allocated" -- refuted for the only library where we could plausibly
+have done it.** The remaining `DT_NEEDED` are `libc.so.6`, `libSDL2-2.0.so.0`
+and `libGL.so.1`, and we hand none of those a pointer to own.
