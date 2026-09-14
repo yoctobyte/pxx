@@ -12,11 +12,21 @@ summary: >
   worker created by `pthread_create` is 5/5 clean. Disabling glibc's tcache does
   NOT rescue it, so there is no env-var mitigation. This is what aborts the
   lekkerzeilen demo.
+  FIXED 2026-09-14 ON x86-64, and NOT by adding CLONE_SETTLS: palthread.pas
+  imports pthread_create/pthread_join as `weakexternal` and lets glibc make the
+  thread whenever they resolve, so glibc owns the fs base because glibc created
+  it. The child trampoline installs pxx's own gs block and alt stack the way the
+  clone stub's child leg does. The route is chosen at RUNTIME, so a libc-free
+  static program resolves nothing and keeps the clone path byte-for-byte. The
+  repro goes 5/5 rc=134 abort -> 5/5 rc=0. The other four targets still carry the
+  hazard:
+  bug-a-a-cloned-thread-still-inherits-the-parents-fs-base-on-every-target-but-x86-64.
 track: A
 type: bug
 prio: 85
 owner: unassigned
-status: open
+status: resolved
+resolved: 2026-09-14
 ---
 
 ## The mechanism
@@ -466,3 +476,55 @@ one.
   second thread was required. Reading `lib/rtl/palthread.pas` for the clone
   flags then named the cause, and `devdocs/dev/threading.md` turned out to
   document the premise already -- it just does not draw this conclusion from it.
+
+## RESOLUTION 2026-09-14 — route 1, via the optional import this ticket asked for
+
+The revised recommendation above was *"build the optional import, then take
+route 1."* Both landed.
+
+**`weakexternal`** (`5484ad6bb`) — an import the program works without. STB_WEAK
+undefined dynamic symbol; the loader zeroes the GOT slot when nothing defines
+it, `@f` reads nil, the caller must test. A library reached ONLY by weak imports
+emits **no `DT_NEEDED`**, because emitting one would load the library to answer
+the question the weak import exists to ask, and a weak-only program collapses
+back to a **static** link — otherwise every threaded libc-free pxx program stops
+being static.
+
+**Route 1** — `lib/rtl/palthread.pas` weakly imports `pthread_create` and
+`pthread_join`. `PalThreadCreate` tests both and, when they resolve, hands the
+thread to glibc; the child runs `PxxPthreadStart`, which installs pxx's own
+`gs` block and signal alt stack exactly as the clone stub's child leg does, then
+publishes `Tid`/`TidWord` and futex-wakes the joiner. `PalThreadJoin`
+discriminates on `PthreadId`, because a glibc thread never had
+`CLONE_CHILD_CLEARTID` and the futex handshake cannot join it.
+
+Chosen at **runtime**. A libc-free static program resolves nothing and keeps the
+clone path unchanged; a program that already links a shared library gets glibc's
+thread for free. Nobody opts in, nobody pays.
+
+| measurement | before | after |
+| --- | --- | --- |
+| `test/thread_glibc_malloc_two_threads.pas` | 5/5 `rc=134` abort | **5/5 `rc=0`** |
+| one thread, double work (control) | clean | clean |
+| worker via `pthread_create` (control) | clean | clean |
+| `test_a_threadvar_is_per_thread` (libc-free, static, clone path) | clean | clean |
+| weak-only program's link | — | `statically linked`, no PT_INTERP |
+
+## THE DAY'S REAL COST WAS NOT THIS TICKET
+
+Route 1 looked like it had broken `test_a_threadvar_is_per_thread` — 3/3
+SIGSEGV on a `gs`-relative read in a child thread, with the pthread route
+*disabled*. Six bisect variants later the difference was down to **one unused
+integer constant** in `palthread.pas`, and pin v408 reproduced it identically.
+
+It was never this branch. `RewriteThreadVarRefs` rewrites every `AN_IDENT` whose
+`SymTlsOffset` is `>= 0`, and of the five symbol-creating paths only `AllocVar`
+wrote the `-1` sentinel — so a parameter allocated onto a slot no earlier pass
+had used read `SetLength`'s zero, a valid offset, and became a read of the
+thread block's first word. `bug-a-a-symbol-a-threadvar-program-never-declared-is-lowered-as-a-threadvar`,
+fixed in `b984ad07e`.
+
+**Worth carrying: a crash that moves when you add an unrelated declaration is
+about symbol NUMBERING, not about the declaration.** One `PXXDBG=a.ir:Body` diff
+said it outright — `load_sym [sym=arg]` had become `tlsbase` + `load_mem` — and
+it was reached only after several variants had been bisected the slow way.

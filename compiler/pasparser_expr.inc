@@ -801,6 +801,7 @@ end;
 
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
+    i64v: Int64;         { a compiler constant answered as a literal (__pxxTlsBlockSize et al) }
     fcNode: Integer;     { FloatCastToTemp's result — a float cast is a conversion through a hidden temp, at all three doors }
     eoNode: Integer;     { TryExplicitOpCast's result — an `operator Explicit` on a record/class operand, at both name doors }
     aliasEtid: Integer;  { the enum identity of an alias cast target — from the alias table's column, never from the kind }
@@ -4396,6 +4397,34 @@ begin
           Next; { consume type token — ParseTypeKind already did when it ran }
         Expect(tkRParen, ')');
         EmitSizeOfResult(prevTok, szBitScale);
+        Exit;
+      end;
+
+      if CaseEqual(name, '__pxxTlsBlockSize') or CaseEqual(name, '__pxxSigAltStackSize') then
+      begin
+        { The two sizes the clone stub carves off a child stack, as compile-time
+          constants the RTL can READ instead of restating.
+
+          palthread.pas's PAL_MIN_STACK already restates them and says so in its
+          own comment -- "if either grows, this is the second copy and the stub
+          is the first". A THIRD copy arrived the moment a pthread_create path
+          had to allocate the same regions itself, and a third copy of a number
+          that moves (TLS_BLOCK_SIZE changed once already, when `threadvar`
+          landed) is a silent-corruption bug waiting for the next change: too
+          small a block means gs-relative slots write past the mapping.
+
+          Constants, not calls -- they fold to an AN_INT_LIT here, so a `const`
+          in the RTL can be defined from them.
+          bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
+        if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TLS_BLOCK_SIZE
+        else i64v := SIG_ALTSTACK_SIZE;
+        Next;
+        if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;
+        node := AllocNode(AN_INT_LIT);
+        ASTIVal[node] := i64v;
+        ASTTk[node] := Ord(tyInteger);
+        LastExprTk := tyInteger;
+        CurASTNode := node;
         Exit;
       end;
 

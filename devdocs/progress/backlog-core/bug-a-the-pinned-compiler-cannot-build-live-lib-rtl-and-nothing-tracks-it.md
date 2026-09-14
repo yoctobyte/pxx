@@ -7,7 +7,7 @@ prio: 60
 status: backlog
 found: 2026-09-06
 found-by: frank-coordinator (announced the red to the fleet), frankD (confirmed no artefact existed, and that its own diff is not the cause)
-summary: "The PINNED compiler cannot compile `lib/rtl/mimic_string` or `mimic_urllib_request`: `undefined variable (pyvar_is_objtag)` / `(pyvar_is_inttag)`. A commit added a builtin and used it from `lib/rtl` without a pin, which is the documented shape. A compiler built from HEAD compiles all 54 units cleanly, so nothing in the tree is broken — the pin is behind the source it has to build. Every `$(PXX_STABLE)` consumer carries it, so Track B and E build against a compiler that cannot build the RTL they depend on. NOT DISPATCHABLE as coded work: `make pin` is owner-only and no agent may run it. This ticket exists so the red has an artefact and a date rather than living in whichever session last ran the gate. IT IS NOT ONLY `gate.sh quick`: Track T's newest FULL tier at `b77ac29` (2026-09-06T04:08:52Z) is RED with `lib-test#src:tools/crtl_reachability.py` failing on those same two identifiers, so the fleet's headline verdict carries it too. The non-ancestry is measured, not inferred: the fix is frankZ's `8374118ec` (2026-09-05 23:15) and pin v404 is `8844c8c42` (2026-09-05 20:17), three hours EARLIER -- `git merge-base --is-ancestor 8374118ec 8844c8c42` is false, so no pin carries it and no amount of rebuilding at HEAD will change that."
+summary: "RECURRED 2026-09-14 WITH A NEW CAUSE, and the 2026-09-06 one below is CLEARED -- pin v408 carried it. Today the pinned compiler cannot PARSE lib/rtl/palthread.pas at all: `expected 'begin' before 'weakexternal'`. Same documented shape as every previous instance -- a commit added compiler syntax (`weakexternal`, plus the `__pxxTlsBlockSize`/`__pxxSigAltStackSize` builtins) and used it from lib/rtl, which self-hosts and is right, and breaks every $(PXX_STABLE) build until someone pins. Track B and E cannot build lib/rtl until then. ORIGINAL 2026-09-06 TEXT FOLLOWS, kept because the mechanism is the same and the shape is what recurs: The PINNED compiler cannot compile `lib/rtl/mimic_string` or `mimic_urllib_request`: `undefined variable (pyvar_is_objtag)` / `(pyvar_is_inttag)`. A commit added a builtin and used it from `lib/rtl` without a pin, which is the documented shape. A compiler built from HEAD compiles all 54 units cleanly, so nothing in the tree is broken — the pin is behind the source it has to build. Every `$(PXX_STABLE)` consumer carries it, so Track B and E build against a compiler that cannot build the RTL they depend on. NOT DISPATCHABLE as coded work: `make pin` is owner-only and no agent may run it. This ticket exists so the red has an artefact and a date rather than living in whichever session last ran the gate. IT IS NOT ONLY `gate.sh quick`: Track T's newest FULL tier at `b77ac29` (2026-09-06T04:08:52Z) is RED with `lib-test#src:tools/crtl_reachability.py` failing on those same two identifiers, so the fleet's headline verdict carries it too. The non-ancestry is measured, not inferred: the fix is frankZ's `8374118ec` (2026-09-05 23:15) and pin v404 is `8844c8c42` (2026-09-05 20:17), three hours EARLIER -- `git merge-base --is-ancestor 8374118ec 8844c8c42` is false, so no pin carries it and no amount of rebuilding at HEAD will change that."
 ---
 
 ## 2026-09-06 04:20Z (frank-coordinator) — measured, and the blast radius is wider than the gate
@@ -304,3 +304,27 @@ Only the first has an instrument. Widening this canary to compile something from
 (`bug-b-lib-test-unrunnable-in-a-fresh-clone-no-synapse-fetch`); noting it here
 rather than filing, since the cheap half — running that script before trusting a
 `make lib-test` green — is a habit, not a tool.
+
+## 2026-09-14 (frank-user) — a fourth instance, and this one is a PARSE error
+
+The row was PASS after pin v408, so today's RED is new and it is mine. It is a
+harder failure than the previous ones: not `undefined variable` on a builtin the
+pin lacks, but **`pascal26:218: error: expected 'begin' before 'weakexternal'`** —
+the pinned compiler cannot get through `lib/rtl/palthread.pas` at all, so no unit
+that `uses palthread` builds under `$(PXX_STABLE)` either.
+
+Cause, and it is the documented shape rather than an accident: `weakexternal`
+(`5484ad6bb`) and the `__pxxTlsBlockSize` / `__pxxSigAltStackSize` builtins are
+what the CLONE_SETTLS fix needed, and `lib/rtl/palthread.pas` is where they are
+used. The tree self-hosts and the fixedpoint is green.
+
+**No workaround was written, deliberately.** A `{$IF PXX_VERSION >= N}` guard
+around the weak imports would clear this row and would be precisely the
+compiler-appeasement workaround CLAUDE.md names — reshaping library code to
+please an old compiler, for a condition one pin resolves. This canary's own
+failure text agrees: *"The change is usually RIGHT and the remedy is a pin, not
+a revert."*
+
+**What is inert until the next pin:** `lib/rtl/palthread.pas`, and therefore
+Track B's `make lib-test` and `make demos` for anything threaded. `make pin` is
+owner-only; this is reported, not waited on.

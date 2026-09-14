@@ -16658,7 +16658,8 @@ end;
 
 procedure WarnThreadsShareGlibcTls;
 { A WHOLE-PROGRAM hazard warning: this binary links a shared library AND creates
-  threads through pxx's PAL, and those two facts together are unsafe today.
+  threads through pxx's PAL, and on a target with no pthread route those two
+  facts together are unsafe.
 
   PXX_CLONE_THREAD omits CLONE_SETTLS, so a pxx-created thread runs on the
   PARENT's `fs` base. Every shared library in the process brings glibc with it,
@@ -16669,6 +16670,27 @@ procedure WarnThreadsShareGlibcTls;
   5/5, the same churn on one thread is clean, and the same churn with the worker
   from glibc's pthread_create is clean.
   bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+
+  SILENT ON x86-64 SINCE 2026-09-14, AND THE REASON IS THAT THIS WARNING'S OWN
+  CONDITION IS NOW THE CONDITION UNDER WHICH THE FIX APPLIES. palthread.pas
+  imports pthread_create/pthread_join as `weakexternal` and routes thread
+  creation through glibc whenever they resolve; a program that links a shared
+  library has glibc in the process, so they do resolve, so the thread is
+  glibc's and carries its own fs base. Firing here would be warning about a
+  hazard the same fact removes. Measured the same day, same repro:
+  5/5 rc=134 abort before, 5/5 rc=0 after.
+
+  IT STILL FIRES EVERYWHERE ELSE, because PthreadRouteAvailable is x86-64 only
+  and every other target still clones without CLONE_SETTLS. Retire this routine
+  when a second target gains the route -- not when someone reads it and assumes
+  the whole hazard is gone.
+
+  THE ONE RESIDUAL, stated so nobody has to rediscover it: an x86-64 program
+  linking a shared library that does NOT bring glibc in would take the clone
+  route with the hazard intact and get no warning. No such library is known
+  here and none was constructed, so this is a reasoned gap and not a measured
+  one; if one turns up, the discriminator belongs at the DT_NEEDED set, which
+  this routine's caller already has in hand.
 
   A WARNING AND NOT A REFUSAL, deliberately. The condition here is that the
   hazard is REACHABLE, not that the program hits it: a program whose C calls all
@@ -16696,6 +16718,37 @@ begin
           'glibc''s heap. Keep C calls on one thread until the PAL is fixed.');
 end;
 
+procedure DropWeakOnlyImports;
+{ A PROGRAM WHOSE ONLY IMPORTS ARE WEAK STAYS STATIC. Every `weakexternal` is
+  dropped when not one ordinary `external` survives, which is what keeps the
+  directive free to use in a unit EVERY program pulls in -- lib/rtl/palthread.pas
+  declares two, and without this every threaded pxx program would stop being a
+  static, libc-free binary, which is a large part of what pxx is for.
+
+  Dropping them is not a special case, it is the SAME ANSWER the dynamic path
+  gives: an unresolved weak symbol's GOT slot is zero either way (RegisterExternal
+  zeroes it at registration), so `@f` reads nil and a guarded call site takes the
+  same branch. The loader was never going to resolve these -- with no DT_NEEDED
+  there is nothing loaded to resolve them FROM.
+
+  CALLED BEFORE THE WRITER LOOKS AT ExternalCount FOR ANYTHING, and that
+  placement is the whole of the correctness here. It lived inside
+  ResolveSynthImportLibraries for one iteration, which is called from the MIDDLE
+  of PrepareDynamicData -- after the PT_INTERP string has already been appended
+  and before `isDyn` is computed. The result was a binary that was neither: no
+  PT_INTERP, a stale interpreter string in .data, and a jump to address 0 before
+  the first Writeln. Measured; the entry point was valid, which is what made it
+  look like a codegen fault rather than a writer one.
+  feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+var i: Integer;
+    anyHard: Boolean;
+begin
+  anyHard := False;
+  for i := 0 to ExternalCount - 1 do
+    if not ProcWeakExternal[ExternalProc[i]] then begin anyHard := True; Break; end;
+  if (ExternalCount > 0) and (not anyHard) then ExternalCount := 0;
+end;
+
 procedure ResolveSynthImportLibraries;
 { The choke point. Every DT_NEEDED builder calls this first -- PrepareDynamicData,
   PrepareDynamicData32 and writeELFSharedX64, which are the only three readers of
@@ -16710,8 +16763,12 @@ var i: Integer;
 begin
   for i := 0 to ExternalCount - 1 do
     ResolveSynthImportLibrary(ExternalProc[i]);
+
+
+  { TARGET_X86_64 takes the pthread route (palthread.pas, PthreadRouteAvailable),
+    which is exactly available when this condition holds -- see the routine. }
   if (not ThreadTlsHazardWarned) and (ExternalCount > 0)
-     and ProgramCreatesPxxThreads then
+     and ProgramCreatesPxxThreads and (TargetArch <> TARGET_X86_64) then
   begin
     ThreadTlsHazardWarned := True;
     WarnThreadsShareGlibcTls;

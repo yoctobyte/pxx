@@ -1831,11 +1831,23 @@ begin
     else
       Patch32(GlobFix[i].CodePos, addr);
   end;
+  { PatchDynCallSites RUNS EITHER WAY; only the dynamic TABLES are conditional.
+    It walks DynCallCount, which is the count of emitted `call qword [rip+disp32]`
+    sites and is independent of ExternalCount -- and a site left unpatched keeps
+    whatever placeholder displacement codegen wrote, so the call reads a GOT slot
+    that is not the GOT slot. That is not a nil pointer a guard can catch; it is
+    garbage.
+
+    It only became reachable when DropWeakOnlyImports started zeroing
+    ExternalCount for a weak-only program. Measured 2026-09-14: `@f` on an
+    unresolved weak symbol answered 13258598199620634952 in a static link and 0
+    in a dynamic one, so a correctly guarded `if @f <> nil` took the WRONG branch
+    and called into code bytes. The slot itself was always zero -- only the
+    displacement pointing at it was wrong.
+    feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  PatchDynCallSites(dataBase, codeVA);
   if ExternalCount > 0 then
-  begin
-    PatchDynCallSites(dataBase, codeVA);
     PatchDynamicData(dataBase);
-  end;
 
   for i := 0 to MethodFixCount-1 do
   begin
@@ -1879,6 +1891,11 @@ var f: File; i: Integer;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
     zb: Byte;
 begin
+  { Weak-only imports collapse to a static link, and this must run BEFORE
+    anything reads ExternalCount -- the PT_INTERP decision, isDyn, and
+    PrepareDynamicData all do. See DropWeakOnlyImports for what a late call
+    produced. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  DropWeakOnlyImports;
   if TargetArch = TARGET_AARCH64 then
     machine := 183
   else
@@ -1999,6 +2016,11 @@ var f: Integer; i: Integer;
     dataBase, bssBase, entry, filesz, memsz, addr: Int64;
     doDebug: Boolean; dbgFileBase, shoff: Int64; padN: Integer;
 begin
+  { Weak-only imports collapse to a static link, and this must run BEFORE
+    anything reads ExternalCount -- the PT_INTERP decision, isDyn, and
+    PrepareDynamicData all do. See DropWeakOnlyImports for what a late call
+    produced. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  DropWeakOnlyImports;
   if TargetArch = TARGET_AARCH64 then
     machine := 183
   else
@@ -2140,6 +2162,11 @@ var
   f: Integer;
 {$endif}
 begin
+  { Weak-only imports collapse to a static link, and this must run BEFORE
+    anything reads ExternalCount -- the PT_INTERP decision, isDyn, and
+    PrepareDynamicData all do. See DropWeakOnlyImports for what a late call
+    produced. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  DropWeakOnlyImports;
   isDyn := False;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) then
   begin
@@ -2320,25 +2347,35 @@ begin
     PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
 
   { Dynamic externals: point each FF/14/25 indirect call at its GOT slot VA, and
-    fill the dynamic-section absolute pointers (STRTAB/SYMTAB/HASH/REL). }
-  if isDyn then
+    fill the dynamic-section absolute pointers (STRTAB/SYMTAB/HASH/REL).
+
+    THE CALL-SITE LOOP RUNS EITHER WAY; only the dynamic TABLES are conditional,
+    and this is the 32-bit sibling of the same fix in ApplyImageFixups -- found
+    by running the i386 row, not by reading. DynCallCount is the count of emitted
+    indirect-call sites and does not follow isDyn: a weak-only program collapses
+    to a static link (DropWeakOnlyImports), so isDyn goes False while the call
+    sites remain, and each one keeps the placeholder operand codegen wrote. The
+    GOT slot is correctly zero; the operand naming it is not, so `@f` answers
+    garbage instead of nil and a correctly guarded `if @f <> nil` calls into it.
+    Measured 2026-09-14: test_weakexternal_absent segfaults on i386 with this
+    loop inside the guard and passes with it outside.
+    feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  for i := 0 to DynCallCount-1 do
   begin
-    for i := 0 to DynCallCount-1 do
+    addr := dataBase + ExternalGotOff[DynCallExtIdx[i]];
+    if TargetArch = TARGET_ARM32 then
     begin
-      addr := dataBase + ExternalGotOff[DynCallExtIdx[i]];
-      if TargetArch = TARGET_ARM32 then
-      begin
-        { movw ip,#lo16 ; movt ip,#hi16 — A2 encoding imm4:imm12 fields. }
-        Patch32(DynCallCodePos[i],
-          $E300C000 or (((addr and $F000) shl 4) or (addr and $FFF)));
-        Patch32(DynCallCodePos[i] + 4,
-          $E340C000 or ((((addr shr 16) and $F000) shl 4) or ((addr shr 16) and $FFF)));
-      end
-      else
-        Patch32(DynCallCodePos[i], addr);   { i386 call dword [abs32] operand }
-    end;
-    PatchDynamicData32(dataBase);
+      { movw ip,#lo16 ; movt ip,#hi16 — A2 encoding imm4:imm12 fields. }
+      Patch32(DynCallCodePos[i],
+        $E300C000 or (((addr and $F000) shl 4) or (addr and $FFF)));
+      Patch32(DynCallCodePos[i] + 4,
+        $E340C000 or ((((addr shr 16) and $F000) shl 4) or ((addr shr 16) and $FFF)));
+    end
+    else
+      Patch32(DynCallCodePos[i], addr);   { i386 call dword [abs32] operand }
   end;
+  if isDyn then
+    PatchDynamicData32(dataBase);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);

@@ -6698,6 +6698,15 @@ test-threads: $(COMPILER)
 	# bug-a-a-symbol-a-threadvar-program-never-declared-is-lowered-as-a-threadvar
 	./$(COMPILER) --threadsafe test/test_a_threadvar_program_does_not_lower_ordinary_symbols_through_gs.pas $(TESTTMP)/test_threadvar_gsleak26
 	$(TESTTMP)/test_threadvar_gsleak26 | diff -u test/test_a_threadvar_program_does_not_lower_ordinary_symbols_through_gs.expected -
+	# The two carve sizes the RTL reads from the COMPILER instead of restating.
+	# RELATIONS, not literals: pinning 4224 and 32768 here would make the test the
+	# fourth copy of a number that has already moved once, which is the failure it
+	# exists to prevent. Both positive controls were run: forcing the block size to
+	# 0 (a builtin that quietly stopped folding) and the alt stack to 2000000 each
+	# turn the row red.
+	# bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+	./$(COMPILER) --threadsafe test/test_the_tls_carve_constants_are_readable_from_the_rtl.pas $(TESTTMP)/test_tls_carve26
+	$(TESTTMP)/test_tls_carve26 | diff -u test/test_the_tls_carve_constants_are_readable_from_the_rtl.expected -
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

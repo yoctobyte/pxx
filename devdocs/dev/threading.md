@@ -274,6 +274,47 @@ with the repro in `test/thread_glibc_malloc_two_threads.pas` and its two
 controls in `test/thread_glibc_malloc_controls.pas`. This is what aborts the
 lekkerzeilen demo.
 
+#### FIXED 2026-09-14 — on x86-64, pxx no longer creates the thread
+
+The correction above is the diagnosis and it stands. What follows is the fix,
+and it does **not** add `CLONE_SETTLS`: it stops using `clone` at all where
+glibc is in the process.
+
+`lib/rtl/palthread.pas` imports `pthread_create` and `pthread_join` as
+**`weakexternal`** — an optional import, an undefined weak dynamic symbol whose
+GOT slot the loader zeroes when nothing defines it, so `@c_pthread_create`
+reads `nil` and no `DT_NEEDED` is emitted for a library reached only that way.
+`PalThreadCreate` tests those two pointers and, when they resolve, hands the
+thread to glibc. The child then runs `PxxPthreadStart`, which installs pxx's
+own block in `gs` and its own signal alt stack exactly the way the clone stub's
+child leg does — so pxx's thread-locals are unchanged and glibc's are finally
+*per thread*, because glibc made the thread.
+
+`PalThreadJoin` discriminates on `PthreadId`: a thread glibc created never had
+`CLONE_CHILD_CLEARTID`, so the futex handshake cannot join it and
+`pthread_join` must.
+
+**The route is chosen at runtime, and that is the point.** A libc-free static
+program resolves nothing, takes the clone path, and is byte-for-byte the
+program it was. A program that already links a shared library gets glibc's
+thread for free. Nobody opts in and nobody pays.
+
+| measurement | before | after |
+| --- | --- | --- |
+| `test/thread_glibc_malloc_two_threads.pas` | 5/5 `rc=134` abort | **5/5 `rc=0`** |
+| one thread, double work (control) | clean | clean |
+| worker via `pthread_create` (control) | clean | clean |
+| `test_a_threadvar_is_per_thread` (libc-free, static, clone path) | clean | clean |
+
+**What is NOT fixed:** every target other than x86-64. `PthreadRouteAvailable`
+is `{$ifdef CPUX86_64}` and returns False elsewhere, so i386, aarch64, arm32
+and riscv32 still clone without `CLONE_SETTLS` and still carry the hazard.
+The compiler's whole-program warning (`WarnThreadsShareGlibcTls`) is therefore
+now **silent on x86-64 and unchanged everywhere else** — its firing condition,
+"links a shared library AND creates pxx threads", is precisely the condition
+under which the pthread route is available, so on x86-64 it would be warning
+about a hazard the same fact removes.
+
 That needs no compiler support at all — it is an ordinary syscall. Only the
 **read** side does, because the x86-64 segment base is not readable as a register
 (`rdgsbase` needs `CR4.FSGSBASE`, which is not guaranteed):
