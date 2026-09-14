@@ -66,4 +66,4 @@ and `bytes(n)` is a row so the fix cannot swallow the int arm. Reverted, the
 fixture dies at the second line with the original message.
 
 ## Log
-- 2026-09-14 — resolved, commit PENDING-COMMIT.
+- 2026-09-14 — resolved, commit e013fab89.
