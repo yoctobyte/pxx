@@ -785,3 +785,4 @@
 2026-09-13T22:07:17Z	borg	e7a21f9b1fd86ac0d560f3a61596f7db91827bcf	WOULD PIN e7a21f9b1fd8 — 10 red(s), none new, 10 inherited from the current pin, self-host clean, streak 11/2
 2026-09-13T22:07:17Z	borg	e7a21f9b1fd86ac0d560f3a61596f7db91827bcf	AUTO-PIN DECLINED — HEAD is e2728de24d31, not the tested e7a21f9b1fd8
 2026-09-13T22:50:26Z	borg	82e070429d309766a5524b13c5e466a0d29246c6	would NOT pin 82e070429d30 — 1 red(s) the current pin does not have, 8 inherited from the current pin: test-uforth#src:tools/compiler_srchash.sh@3
+2026-09-14T00:02:22Z	borg	1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0	would NOT pin 1e3e9a0b95d0 — 2 red(s) the current pin does not have, 8 inherited from the current pin: test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas, test-uforth#src:tools/compiler_srchash.sh@3
