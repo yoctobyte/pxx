@@ -1,29 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-13T14:57:00Z",
-   "fixed": [],
-   "new_red": [
-    "test-uforth#src:tools/compiler_srchash.sh@1",
-    "test-uforth#src:tools/compiler_srchash.sh@10",
-    "test-uforth#src:tools/compiler_srchash.sh@11",
-    "test-uforth#src:tools/compiler_srchash.sh@12",
-    "test-uforth#src:tools/compiler_srchash.sh@13",
-    "test-uforth#src:tools/compiler_srchash.sh@2",
-    "test-uforth#src:tools/compiler_srchash.sh@3",
-    "test-uforth#src:tools/compiler_srchash.sh@4",
-    "test-uforth#src:tools/compiler_srchash.sh@5",
-    "test-uforth#src:tools/compiler_srchash.sh@6",
-    "test-uforth#src:tools/compiler_srchash.sh@7",
-    "test-uforth#src:tools/compiler_srchash.sh@8",
-    "test-uforth#src:tools/compiler_srchash.sh@9"
-   ],
-   "sha": "e5cd18e4b220306c1b9d1e3c9308371f7969a533",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-13T14:57:32Z",
    "fixed": [],
    "new_red": [
@@ -492,6 +469,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-14T00:04:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5072,7 +5058,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
   "test-threads#src:tools/compiler_srchash.sh": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
-  "test-uforth#src:tools/compiler_srchash.sh": "82e070429d309766a5524b13c5e466a0d29246c6",
+  "test-uforth#src:tools/compiler_srchash.sh": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
   "test-uforth#src:tools/compiler_srchash.sh@1": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
   "test-uforth#src:tools/compiler_srchash.sh@10": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
   "test-uforth#src:tools/compiler_srchash.sh@11": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
@@ -14778,14 +14764,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-14T00:02:22Z",
+  "date": "2026-09-14T00:04:21Z",
   "deadline": 3600.0,
   "sha": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 918.2
+  "verdict": "GREEN",
+  "wall": 99.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14836,14 +14822,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-13T22:52:28Z",
+   "date": "2026-09-14T00:04:21Z",
    "deadline": 3600.0,
-   "sha": "82e070429d309766a5524b13c5e466a0d29246c6",
+   "sha": "1e3e9a0b95d0eb623f0d78b9024a9672a9c431b0",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 99.5
+   "wall": 99.6
   }
  },
  "last_full": {
