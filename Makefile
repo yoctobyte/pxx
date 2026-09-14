@@ -1899,6 +1899,16 @@ test-nilpy: $(COMPILER)
 	# must build a Small, with Small's VMT, or the override answers "mesh".
 	./$(COMPILER) test/test_nilpy_dunder_new_allocates_without_the_constructor.npy $(TESTTMP)/test_nilpy_dundernew26
 	$(TESTTMP)/test_nilpy_dundernew26 | diff -u test/test_nilpy_dunder_new_allocates_without_the_constructor.expected -
+	# A class attribute from an ARITHMETIC EXPRESSION (`SLICE = 2 << 20`) is typed
+	# tyPromoInt64, where a single literal stays tyInt64 -- and neither reflective
+	# boxer had an arm for the promotable-int kinds. pylib's reported NOT FOUND, so
+	# hasattr answered False for an attribute the static read returns; pyeval's
+	# fell into "anything else = a class pointer" and handed back the promo slot's
+	# TAG as an object, retained. That is how lekkerzeilen's `2 << 20` arrived four
+	# frames later as `TypeError: expected a number, got object` inside a lambda.
+	# The LITERAL rows are the positive control -- right before the fix and after.
+	./$(COMPILER) test/test_nilpy_a_class_attribute_from_an_expression_is_readable_dynamically.npy $(TESTTMP)/test_nilpy_clsattrexpr26
+	$(TESTTMP)/test_nilpy_clsattrexpr26 | diff -u test/test_nilpy_a_class_attribute_from_an_expression_is_readable_dynamically.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None

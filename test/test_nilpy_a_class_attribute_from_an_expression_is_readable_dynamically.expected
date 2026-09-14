@@ -1,0 +1,9 @@
+static : 7 -3 ab 2097152 7 1180591620717411303424
+dynamic: LIT True 7
+dynamic: NEG True -3
+dynamic: STR True ab
+dynamic: SHIFT True 2097152
+dynamic: SUM True 7
+dynamic: BIG True 1180591620717411303424
+closure: (7, 2097152, 7)
+arith  : 2097153 14 1180591620717411303425

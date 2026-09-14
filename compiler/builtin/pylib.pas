@@ -4779,6 +4779,17 @@ begin
   else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
   else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
   else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else if (k = 27) or (k = 28) then                             { promotable int }
+    { The aggregate arms of this chain are the ones a new TypeKind lands in, and
+      this one reported NOT FOUND — so `hasattr(o, 'K')` answered False and
+      getattr handed back its default, for a class attribute that plainly exists
+      and that the STATIC read `self.K` returns correctly. The kind arrives here
+      whenever a class attribute's initialiser is an arithmetic expression
+      (`K = 2 << 20`), which the retype types tyPromoInt64; a bare literal is
+      tyInt64 and was already served above. Result is assigned first because
+      PXXPromoToVariant CLEARS the destination, which reads the old tag.
+      bug-n-a-promotable-int-field-is-boxed-as-an-object }
+    begin Result := 0; PXXPromoToVariant(@Result, a); end
   else
     { a kind with no Python value shape yet (a record, a set, a frozen string,
       a static array). Answering with SOMETHING would be a wrong value; report

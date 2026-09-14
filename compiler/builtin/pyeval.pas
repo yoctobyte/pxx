@@ -1428,6 +1428,20 @@ begin
     19: res := MakeFloat(PDouble(p)^);           { tyDouble }
     22: res := PVariant(p)^;                      { tyVariant — copy the slot }
     23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString (deref arg owned by the isNilPy arg lowering) }
+    { tyPromoInt32 / tyPromoInt64 — a promotable int is an AGGREGATE
+      ({tag, payload}, two machine words), so without these two arms it fell to
+      the else below and was read as an OBJECT POINTER: VType 7 with the promo
+      TAG as the payload, plus a PXXObjRetain on that number. The value then
+      travelled as a plausible object until something asked it for a number,
+      which is how `SLICE = 2 << 20` at class level surfaced four frames away as
+      `TypeError: expected a number, got object` inside an interpreted lambda —
+      and why the retain on a tag-shaped address could fault instead.
+      A class attribute whose initialiser is an arithmetic EXPRESSION is typed
+      tyPromoInt64 by the class-attribute retype, so this is the ordinary shape,
+      not an exotic one; a single literal stays tyInt64 and took arm 13, which is
+      why only the expression spelling was ever wrong.
+      bug-n-a-promotable-int-field-is-boxed-as-an-object }
+    27, 28: PXXPromoToVariant(@res, p);
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
       VT_OBJECT so subscripts and method calls can reach the container. A field

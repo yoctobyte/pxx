@@ -1,0 +1,46 @@
+# A class attribute whose initialiser is an ARITHMETIC EXPRESSION is typed
+# tyPromoInt64 by the class-attribute retype, where a single literal stays
+# tyInt64.  Neither reflective boxer had an arm for the promotable-int kinds,
+# so the field fell through to each one's "anything else" case: pylib's
+# reported NOT FOUND (hasattr answered False for an attribute the static read
+# returns correctly), and pyeval's read the promo slot's TAG as an object
+# pointer and retained it -- which is how `SLICE = 2 << 20` surfaced four
+# frames away as "TypeError: expected a number, got object" inside an
+# interpreted lambda in lekkerzeilen.
+#
+# Every row is here in BOTH spellings on purpose.  The literal rows are the
+# positive control: they were correct before the fix and must stay correct,
+# so a run where they fail is measuring something other than this bug.  And
+# the expression rows come LAST in each group, because an instrument that
+# stops at the first difference would otherwise never reach them.
+
+
+class Holder:
+    LIT = 7                 # single literal  -> tyInt64      (control)
+    NEG = -3                # negated literal -> tyInt64      (control)
+    STR = "a" + "b"         # folded string                   (control)
+    SHIFT = 2 << 20         # arithmetic expression -> promotable int
+    SUM = 2 + 5             # arithmetic expression -> promotable int
+    BIG = 1 << 70           # past Int64, so the heap tier is exercised too
+
+    def reader(self):
+        """A closure that escapes, so the read happens in the interpreter."""
+        return lambda a, b, c, d: (self.LIT, self.SHIFT, self.SUM)
+
+
+h = Holder()
+
+# route 1 -- the STATIC read, which was already right
+print("static :", h.LIT, h.NEG, h.STR, h.SHIFT, h.SUM, h.BIG)
+
+# route 2 -- the reflective read by computed name (pylib's PyBoxByKind)
+for name in ("LIT", "NEG", "STR", "SHIFT", "SUM", "BIG"):
+    print("dynamic:", name, hasattr(h, name), getattr(h, name, "MISSING"))
+
+# route 3 -- the read from inside an INTERPRETED closure (pyeval's own boxer)
+print("closure:", h.reader()(1, 2, 3, 4))
+
+# and the value has to be a NUMBER, not merely present: the old pyeval arm
+# handed back a plausible object that only failed once something did
+# arithmetic on it.
+print("arith  :", h.SHIFT + 1, h.SUM * 2, h.BIG + 1)
