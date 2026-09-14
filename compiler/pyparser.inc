@@ -15397,7 +15397,11 @@ begin
   wrapName := '$pyboundretwrap_' + AIntToStr(mpi);
   wrapPi := FindProc(wrapName);
   if wrapPi >= 0 then begin Result := wrapPi; Exit; end;
-  pnames[0] := 'self';
+  { NOT named `self`: the body is compiled with CurSelfClass restored to
+    whatever scope queued it, and a parameter spelled `self` there is asking a
+    name-resolution question nothing needs -- the hand-built body references
+    every parameter by SymIdx. }
+  pnames[0] := '$brecv';
   ptypes[0] := Procs[mpi].Params[0].TypeKind;
   for wpi := 1 to n - 1 do
   begin

@@ -2,7 +2,7 @@
 slug: bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1
 title: a bound-method value crashes when its method was not normalised to a variant return
 summary: >
-  ROOT CAUSE FOUND. `PyMethodUsedAsValue` decides whether a method is
+  FIXED. Root cause: `PyMethodUsedAsValue` decides whether a method is
   normalised to the function-object ABI by SCANNING TOKENS up to
   MainProgramTokCount -- so it cannot see a module that has not been appended
   yet. A method used as a value in a module compiled AFTER the one declaring it
@@ -10,13 +10,42 @@ summary: >
   RAW address to a bridge whose TPyCbM0..M8 all return Variant. The callee
   leaves a Boolean in rax, the bridge retains rax as the result variant's
   ADDRESS, and `mov (%rax),%rcx` with rax=1 is the crash. Reduced to four
-  files; lekkerzeilen's `Frustum.sees` is the live case.
+  files; lekkerzeilen's `Frustum.sees` is the live case. Fixed by synthesizing
+  a return-side wrapper at the pair site, where the callee IS known.
 track: N
 type: bug
 prio: 90
-owner: unassigned
-status: open
+owner: frank-user
+status: done
 ---
+
+## The fix
+
+`PyGetOrMakeBoundRetWrapper(mpi)` in `pyparser.inc`: when a method's own
+`RetType` is not `tyVariant`, `PyMakeBoundMethod` boxes the address of a cached
+`function $pyboundretwrap_N($brecv: <the class>; const a1..: Variant): Variant`
+instead of the method's, and its hand-built body is `return REALMETHOD($brecv,
+a1, ...)`. Parameter 0 keeps the method's OWN receiver type, which is exactly
+what the bridge passes, so the existing `bStart = -1` body builder emits an
+ordinary method call and the usual return coercion applies. The SIGNATURE
+handed to `pybound_new_sig` stays the real method's, the same split
+`PyMakeFuncValueFor` already makes for its own wrapper.
+
+One line of that builder had to stop assuming: it typed every wrapper
+parameter `tyVariant`, which is true of every pre-existing caller and false of
+a bound wrapper's receiver. It now reads the wrapper's own declared parameter
+type.
+
+Making `PyMethodUsedAsValue` see later modules is not an option -- they have
+not been tokenised -- so the adaptation belongs where the callee is known.
+`PyGetOrMakeCloneThunk` states that same conclusion for the clone trampoline.
+
+Verified: the four-file reduction is rc=139 before and byte-identical to
+CPython after, wired into `test-nilpy` as
+`test_nilpy_a_bound_method_value_keeps_the_variant_return_abi`. On
+lekkerzeilen the world path moves past this wall -- it was rc=139 in
+`PyBoundPairCallKwBody` and is now rc=134, glibc heap corruption, a third and
+separate problem.
 
 ## The reduction
 

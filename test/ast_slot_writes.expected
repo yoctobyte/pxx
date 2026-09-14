@@ -156,6 +156,7 @@ AN_ARG Left dNode
 AN_ARG Left dcCountIdent
 AN_ARG Left dcTempIdent
 AN_ARG Left dcast
+AN_ARG Left dynFbName
 AN_ARG Left elemNode
 AN_ARG Left enStart
 AN_ARG Left endLit
@@ -575,6 +576,7 @@ AN_BINOP Left smGuardCall
 AN_BINOP Left stopNode
 AN_BINOP Left subRead
 AN_BINOP Left tagCall
+AN_BINOP Left tagEq
 AN_BINOP Left tc
 AN_BINOP Left unpCnt
 AN_BINOP Left valNode
@@ -609,6 +611,7 @@ AN_BINOP Right flUnboxCall
 AN_BINOP Right hiNode
 AN_BINOP Right idxExpr
 AN_BINOP Right idxLit
+AN_BINOP Right isN
 AN_BINOP Right left
 AN_BINOP Right limitNode
 AN_BINOP Right lit
@@ -636,6 +639,7 @@ AN_BINOP Right spanLit
 AN_BINOP Right stepConstNode
 AN_BINOP Right stepsNode
 AN_BINOP Right strideLit
+AN_BINOP Right tagLit
 AN_BINOP Right tl
 AN_BINOP Right unpElem
 AN_BINOP Right valNode
@@ -687,6 +691,7 @@ AN_CALL Left dcSlArg1
 AN_CALL Left dispArg
 AN_CALL Left domArg
 AN_CALL Left dself
+AN_CALL Left dynFbArg
 AN_CALL Left elemNode
 AN_CALL Left enArg0
 AN_CALL Left eoArg
@@ -1070,6 +1075,7 @@ AN_PAIR Right boxCall
 AN_PAIR Right chain
 AN_PAIR Right defCall
 AN_PAIR Right dfltNode
+AN_PAIR Right dynFbCall
 AN_PAIR Right elseE
 AN_PAIR Right elseN
 AN_PAIR Right elseNode
@@ -1156,6 +1162,7 @@ AN_TERNARY Left clsCondCall
 AN_TERNARY Left cnd
 AN_TERNARY Left condN
 AN_TERNARY Left condNode
+AN_TERNARY Left dynFbCond
 AN_TERNARY Left flGuardCall
 AN_TERNARY Left flNotNode
 AN_TERNARY Left guard
@@ -1168,6 +1175,7 @@ AN_TERNARY Left rbCall
 AN_TERNARY Left rngDown
 AN_TERNARY Right argSeq2
 AN_TERNARY Right clsPairN
+AN_TERNARY Right dynFbPair
 AN_TERNARY Right flPair2
 AN_TERNARY Right flPairNode
 AN_TERNARY Right pair

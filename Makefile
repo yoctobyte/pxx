@@ -1575,6 +1575,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_dynsig26 | diff -u test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.expected -
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.npy $(TESTTMP)/test_nilpy_clsref_rtti
 	$(TESTTMP)/test_nilpy_clsref_rtti | diff -u test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.expected -
+	./$(COMPILER) -Futest/nilpy_boundret test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.npy $(TESTTMP)/test_nilpy_boundret
+	$(TESTTMP)/test_nilpy_boundret | diff -u test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.expected -
 # A PARENTHESISED relative from-import -- `from . import (a, b,` / `c, d)`.
 # It bound NOTHING AND SAID NOTHING: the name loop is `while CurTok.Kind =
 # tkIdent`, so a '(' matched no arm, and every name died at its first use as

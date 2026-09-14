@@ -115,5 +115,5 @@ staticmethod the class plainly declares. Filed separately.
 positive control, `make test-nilpy`.
 
 ## Log
-- 2026-09-14 -- found hunting lekkerzeilen's world-path fault under valgrind
+- 2026-09-14 -- found hunting lekkerzeilen's world-path fault under valgrind, commit 189259975
   after the owner installed it; fixed the same evening.

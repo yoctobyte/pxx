@@ -4128,3 +4128,16 @@ thread, in a classmethod whose own source contains no `is` at all. WHY it took
 this long: the crash presented as glibc heap corruption, so three rounds of
 instrumentation went at the pxx allocator -- which never calls malloc and was
 correct about the other heap the whole time.
+
+2026-09-14 | frank-user (Track N) | compiler/pyparser.inc | A bound-method
+VALUE whose method was never normalised to the function-object ABI handed its
+RAW address to a bridge whose TPyCbM0..M8 all return Variant: the callee left a
+Boolean in the result register and the caller retained that register as the
+result variant's ADDRESS -- `mov (%rax),%rcx` with rax=1. The normaliser,
+PyMethodUsedAsValue, is a TOKEN SCAN bounded by MainProgramTokCount, so it
+cannot see a module that has not been appended yet; a method taken as a value
+in a LATER module is invisible to it. Fixed with a cached return-side wrapper
+at the pair site (PyGetOrMakeBoundRetWrapper), where the callee is known.
+WHY NO FIXTURE CAUGHT IT: every single-module spelling passes. It needs four
+files, with the value-use in a module compiled after the declaring one --
+the ordering rule again, and the arrangement everyone writes is the green one.

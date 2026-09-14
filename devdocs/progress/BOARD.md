@@ -310,7 +310,6 @@ _none_
 | bug-n-a-builtin-function-is-not-a-first-class-value | N | 45 | bug | `call_it(print, x)` gives `error: undefined variable (print)` while `call_it(own_fn, x)` works -- a USER function is a value and a BUILTIN is not. Ordinary Python: a builtin passed as a callback. Three sites in lekkerzeilen's entry-point closure, all `announce=None if quiet else print`, which is what walls the demo at app.py:561. The conditional is not involved; a bare argument reproduces it. | — |
 | bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released | N | 45 | bug | > | — |
 | bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments | N | 40 | bug | > | — |
-| bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1 | N | 90 | bug | > | — |
 | bug-n-a-chained-assignment-through-a-call-result-target-still-stores-right-to-left | N | 25 | bug | `box(1)[idx(\"i\")] = box(2)[idx(\"j\")] = 7` evaluates its target subexpressions in the wrong order and prints the right values, so nothing can see it. Measured 2026-09-10 against the FIXED chain arm: pxx gives `[1, 2, 'j', 'i']` where CPython gives `[1, 'i', 2, 'j']`, and both stores land. This is the NAMED RESIDUAL of bug-n-a-chained-assignment-to-two-attributes-does-not-parse, which put every target shape whose receiver is a NAME onto one left-to-right arm; a target whose receiver is a CALL is not one of those shapes, so it still falls through to PyParseLValueAST's nested right-associative reading. Ranked low deliberately, not because the divergence is small but because a chain whose targets are call results is not a shape any corpus here writes -- one measured instance, written by hand to find the boundary. What makes it worth a row at all is that it is SILENT: the values are right and only the side effects of the target subexpressions differ, which is the same property that let the general case sit unreported. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused | N | 45 | bug | > | — |
@@ -388,6 +387,7 @@ _none_
 | bug-n-inline-cast-deref-loses-a-pointer-fields-pointee | N | 55 | bug | compiler/pyparser.inc:44098 carries a byte-identical copy of the alias-cast postfix loop just fixed on the Pascal side: its `^` arm answers the pointee from the ORIGINAL cast's alias every time, so the second `^` in a `PRec(x)^.fld^` chain gets the type the CAST points at instead of the type the FIELD points at. The deref happens, only the tag is wrong, so the value is plausible and silently wrong. | — |
 | bug-n-keys-through-an-untyped-receiver-is-not-dispatched-cross-module | N | 55 | bug | `other.keys()` on an untyped parameter is not dispatched on the receiver when the call sits in an IMPORTED module: it either falls through to the dict-view builtin or binds to a `keys()` the callee's module declares, and a foreign object reaching a self-iterating `keys()` segfaults. Reopens bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, which was closed on the single-module case. Found by Track B reverting a workaround the closed ticket had unblocked. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 50 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
+| bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts | N | 75 | bug | > | — |
 | bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value | N | 60 | bug | len(x) raises TypeError: expected an object with a length, got object whenever x's static type was not inferred, even though x's class defines __len__: an element of a list, a value out of a dict, an unannotated parameter, the return of any self-referencing or recursive function. The same value answers .attr, .method(), for-in and x[i] correctly, so len is the one protocol with no dynamic fallback. | — |
 | bug-n-min-and-max-as-a-value-bind-to-the-two-argument-arm-in-the-wrong-unit | N | 55 | bug | > | — |
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 20 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
@@ -1051,9 +1051,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3748)
+## done (3749)
 
-3748 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3749 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1151,7 +1151,6 @@ _none_
 - [p 90] [B] feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder (unblocks 1)
 - [p 90] [N] feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack (unblocks 1)
 - [p 90] [N] feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
-- [p 90] [N] bug-n-a-callable-value-called-with-four-arguments-dereferences-a-variant-at-address-1
 - [p 90] [N] bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - [p 88] [N] bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 - [p 85] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
@@ -1170,6 +1169,7 @@ _none_
 - [p 80] [A] umbrella-track-p-and-a-have-no-open-bugs [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
+- [p 75] [N] bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [A] bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
