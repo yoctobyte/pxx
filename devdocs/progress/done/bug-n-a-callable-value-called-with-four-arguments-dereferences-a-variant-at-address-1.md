@@ -247,7 +247,7 @@ exists because arity 4 had no member and had to be added
 with the least mileage on it.
 
 ## Log
-- 2026-09-14 -- found hunting lekkerzeilen's world-path fault, after accb99f3c
+- 2026-09-14 -- found hunting lekkerzeilen's world-path fault, commit 1fa5bc5e3, after accb99f3c
   moved the failure past the dispatch bug. Owner's steer (heap re-use / bad
   string-PChar conversion) is what prompted the glibc-vs-pxx-heap distinction
   that reframed it.
