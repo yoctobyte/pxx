@@ -259,6 +259,47 @@ None of this argues against route 3 (detect and refuse) as the interim. It is
 untouched by the above and remains the cheapest strict improvement on silent
 corruption.
 
+## A THIRD ROUTE THAT DISSOLVES THE FORK, and the one thing missing for it
+
+The fork above is real only because route 1 as stated makes threading depend on
+libc. That dependency is not intrinsic to the route -- it is an artefact of how
+the import would have to be spelled. `external 'libc.so.6'` in `palthread.pas`
+puts `libc.so.6` into EVERY pxx program's `DT_NEEDED`, including the static,
+libc-free ones that are a large part of what pxx is for. That, and only that,
+is what makes "route thread creation through `pthread_create`" a question about
+what we are trying to be.
+
+**An OPTIONAL import removes it.** Declare `pthread_create` as an undefined
+WEAK dynamic symbol: a program that already links libc (because it imports
+sqlite, SDL, anything) resolves it and gets a correct thread; a program that
+links nothing resolves it to zero, adds no `DT_NEEDED`, and falls through to
+today's `clone` path -- which is entirely correct there, because with no C
+library in the process there is no second malloc state to share. A fully static
+binary with no interpreter bakes the same zero at link time. The behaviour is
+right in both worlds and neither pays for the other.
+
+Stated that way it is not a fork at all: threading depends on libc exactly for
+the programs that already depend on libc.
+
+**What blocks it is that pxx cannot spell an optional import today.** Weak
+BINDING exists in the ELF writer (`ObjProcBind`, `$20 WEAK`) but only for
+`--emit-obj` DEFINITIONS, where it stops two pxx objects colliding on 116 crtl
+symbols. The source-level directive that would reach the undefined side,
+`weakexternal`, is on `pasparser_call.inc`'s **deliberately refused** list --
+with the right reasoning for that list: it changes linkage, and silently
+ignoring it would make pxx compile something other than what was written.
+
+So the honest shape of the work is: build an optional-import mechanism (an
+undefined weak dynamic symbol, a runtime nil test at the call site), and route
+1 then lands unconditionally at no cost to anybody's libc-free build. That
+mechanism is worth having well beyond this ticket -- it is the general answer
+to "use this C facility if the program already has it" -- which is an argument
+for building it rather than working around its absence.
+
+Recommendation revised: **build the optional import, then take route 1.** Route
+3 (refuse, or warn, at compile time when a program links libc AND creates a
+pxx thread) remains the interim and is independent of all of this.
+
 ## Gate
 
 `make compiler/pascal26` + the two fixtures above, which are the repro and its
