@@ -194,4 +194,4 @@ control. When this ticket is fixed that row goes red and the fixture says, in
 its own output, to flip it.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f78e381e5.
