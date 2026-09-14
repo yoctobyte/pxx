@@ -228,4 +228,4 @@ What this fix did buy on the world path is real and smaller: it was a
 **deterministic 3/3 rc=139** at 80840e14f, arriving before the frame loop. It
 now reaches the frame loop and runs for 36 seconds. That is a different failure
 at a later point, not this one surviving.
-- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d8424f01c.
