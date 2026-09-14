@@ -34,7 +34,7 @@ interface
   COST, since it is not free: png.pas `uses zlib`, so pylib enters png's closure
   too. That is the price of one unit carrying both surfaces, which is the house
   pattern (pxx-crash-course.md) rather than a mimic_zlib competing for the name. }
-uses hashing, pylib;
+uses hashing, pylib, pymarshal;   { pymarshal: the shared bytes<->TByteArray pair }
 
 function InflateZlib(const src: TByteArray; var dst: TByteArray;
                      var err: AnsiString): Boolean;
@@ -1716,53 +1716,22 @@ end;
   `pyvar_is_objtag` rather than an open-coded `pyvartag(data) = 7`: pylib's own
   comment at the declaration says copying the tag ENCODING into a lib/rtl unit
   makes a second copy that stays wrong when the encoding moves. }
+{ MOVED TO pymarshal 2026-09-14, kept as a name so the three call sites below
+  read unchanged. The body -- the `is TPyBytes` test that makes
+  `zlib.crc32(some_list)` safe, and the deliberate acceptance of a str that
+  CPython refuses -- is pymarshal.PyToBytes now, because base64.pas had an
+  open-coded second copy and pil.pas would have been the third. }
 function PyBytesToArray(const data: Variant): TByteArray;
-var o: TObject; by: TPyBytes; raw: AnsiString; i: Integer;
 begin
-  o := nil;
-  if pyvar_is_objtag(data) then o := TObject(pyvarobj(data));
-  if (o <> nil) and (o is TPyBytes) then
-  begin
-    { `o is TPyBytes` rather than an unchecked cast of anything obj-tagged --
-      DataToString in mimic_urllib_request.pas is the model, and the difference
-      matters for `zlib.crc32(some_list)`: the cast would read a length off
-      whatever object arrived. }
-    by := TPyBytes(o);
-    SetLength(Result, by.count);
-    for i := 0 to by.count - 1 do
-      Result[i] := by.at(i);
-    Exit;
-  end;
-  { bytes OR a plain string -- an application may hand over either. CPython
-    REFUSES a str here; accepting one is deliberate, because NilPy is upward
-    compatible with CPython in one direction and accepting what CPython rejects
-    is a feature (nilpy-semantics-divergences.md). }
-  raw := pystr_of(data);
-  SetLength(Result, Length(raw));
-  for i := 1 to Length(raw) do
-    Result[i - 1] := Byte(raw[i]);
+  Result := PyToBytes(data);
 end;
 
-{ THE DECLARED DEFAULT IS NOT APPLIED ON THE NilPy CALL PATH, MEASURED, so this
-  absence test is load-bearing rather than defensive. At arity 1 an omitted
-  `value` arrives as pynone -- `pyvartag` 0, `pyvar_to_int` 0 -- and NOT as the
-  declared 0 or 1. The declaration keeps its default anyway, because that is the
-  correct Pascal signature and the test is harmless once the frontend honours it:
-  bug-n-a-variant-default-parameter-arrives-as-none-from-nilpy-while-typed-defaults-apply.
-
-  AND THIS IS WHY adler32 FOUND IT AND crc32 COULD NOT. crc32's CPython default
-  is 0, which is exactly the value an unsupplied argument already reads as, so
-  all four crc32 rows matched the oracle while the mechanism was broken --
-  the failure value collided with the expected one. adler32's default is 1, so
-  its `a` accumulator started at 0 and every row was wrong by a visible amount.
-  A probe whose right answer differs from the do-nothing answer is the only kind
-  that can see this class at all. }
+{ The absence test and the reason a default of 0 cannot see its own bug are in
+  pymarshal.PyArgInt now -- crc32 below is the worked case and the comment there
+  is the one to read. This wrapper stays because both callers want LongWord. }
 function ChecksumSeed(const value: Variant; whenAbsent: LongWord): LongWord;
 begin
-  if value = pynone then
-    Result := whenAbsent
-  else
-    Result := LongWord(pyvar_to_int(value));
+  Result := LongWord(PyArgInt(value, Int64(whenAbsent)));
 end;
 
 function crc32(const data: Variant; const value: Variant = 0): Int64;
@@ -1800,29 +1769,26 @@ begin
   Result := Int64((bsum shl 16) or a);
 end;
 
-{ TPyBytes rather than base64.pas's AnsiString-with-a-stated-divergence: these
-  two feed binary file writes and byte concatenation (`tag + payload`), where a
-  string would have to survive a round trip through text. Returning real bytes
-  costs one loop. }
+{ THIS COMMENT USED TO CONTRAST WITH base64.pas, WHICH RETURNED AnsiString WITH
+  A STATED DIVERGENCE. It does not any more -- b64encode/b64decode return
+  TPyBytes as of 2026-09-14, for the reason this pair already gave: these values
+  feed binary file writes and byte concatenation (`tag + payload`), where a
+  string has to survive a round trip through text. Every Python surface in
+  lib/rtl that hands back bytes now agrees. }
 function ArrayToPyBytes(const a: TByteArray): TPyBytes;
-var i: Integer;
 begin
-  Result := TPyBytes.Create(Length(a));
-  for i := 0 to Length(a) - 1 do
-    Result.put(i, a[i]);
+  Result := BytesToPy(a);
 end;
 
 function compress(const data: Variant; const level: Variant = -1): TPyBytes;
 var src, dst: TByteArray; lv: Integer;
 begin
   src := PyBytesToArray(data);
-  { An absent level is CPython's -1, which DeflateZlib reads as 6. Spelled
-    through pynone rather than defaulted to 6 here so the two spellings of
-    "default" stay one value in one place. }
-  if level = pynone then
-    lv := -1
-  else
-    lv := Integer(pyvar_to_int(level));
+  { An absent level is CPython's -1, which DeflateZlib reads as 6. Through
+    PyArgInt rather than a bare pynone test so the two spellings of "default"
+    stay one value in one place, and so this parameter is covered by the same
+    absence handling as the checksum seeds. }
+  lv := Integer(PyArgInt(level, -1));
   DeflateZlib(src, dst, lv);
   Result := ArrayToPyBytes(dst);
 end;

@@ -3,7 +3,9 @@ track: B
 prio: 75
 type: feature
 blocked-by: []  # see FORK RESOLVED — this now belongs under the lekkerzeilen umbrella
-summary: "The owner authorised lekkerzeilen to use PIL on 2026-09-12, mostly for PNG decoding. MEASURED FIRST, AND IT IS NOT A DECODER TICKET: lib/rtl/png.pas ALREADY decodes PNG — any valid deflate stream (stored, fixed and dynamic Huffman) and all standard RGBA scanline filters — over lib/rtl/zlib.pas, which is our own RFC 1950/1951 from scratch, with lib/rtl/image.pas holding the TImage/TRGBA core. So the work is a PIL-SHAPED PYTHON SURFACE over units we already have, exactly as base64.pas carries `b64encode` beside `Base64Encode`, plus adding png/image to PyRtlUnitServesPython in compiler/pasparser_proc.inc (the list today is ast atexit base64 collections configparser html io json markdown math pathlib random re subprocess tempfile tkinter zlib). Thirteen PIL members are reached across tools/ and tests/: Image.new, Image.open, Image.fromarray, Image.alpha_composite, Image.MAX_IMAGE_PIXELS, Image.LANCZOS, and the methods .size .tobytes .load .save .getpixel .resize .convert. THREE SCOPE LIMITS THAT ARE REAL WORK RATHER THAN SURFACE, each named below: png.pas handles ONLY non-interlaced 8-bit RGBA (colour type 6) while PIL opens palette, grayscale, 16-bit and interlaced, and lekkerzeilen's own png.py records palette PNGs being hit in practice; .resize with Image.LANCZOS needs a resampler that image.pas does not have; and Image.fromarray needs NUMPY, which is a far larger dependency than PIL and is out of scope here. FORK RESOLVED BY THE OWNER 2026-09-12, which is why this is p75 and not p55: he gave PIL permission because they were discussing TEXTURING, so it is a RUNTIME dependency and not offline tooling — "PIL is also one of them standard libraries. same for numpy btw". It therefore becomes a real closure wall the moment lekkerzeilen/ imports it, and numpy is a SIBLING in scope rather than the out-of-scope item the first draft of this ticket called it. HIS PREFERENCE IS TO BUILD PILLOW FOR REAL ("that would still be my preferred way of doing - just building the PIL wheel"), with his own caveat that it is "likely a recursive wasps nest" — MEASURED, and he is right for a sharper reason than size: see the measurement section, the recursion is that building a CPython C-API extension requires reproducing CPython's OBJECT LAYOUT, not 81 functions."
+summary: "RESOLVED 2026-09-14 (frankb-56). lib/rtl/pil.pas serves `from PIL import Image' (`pil' added to PyRtlUnitServesPython) and EVERY ROW of test/lib_pil_pillow.py is BYTE-IDENTICAL to Pillow 12.1.1, which is installed here and is the oracle in make lib-test -- getpixel, convert, tobytes, crop, alpha_composite, nine resize combinations over three filters, save/open round trip, and decoding all seven PNG colour types Pillow can write. BOTH REAL SCOPE LIMITS ARE DISCHARGED: png.pas now decodes colour types 0/2/3/4/6 at every legal bit depth with PLTE and tRNS (palette was the case lekkerzeilen actually hits) and refuses interlaced BY NAME; and NEAREST/BILINEAR/LANCZOS all exist and are byte-exact. fromarray/numpy stays out of scope. FOUR CORRECTIONS TO THIS TICKET'S OWN NUMBERS, re-derived from the six PIL-importing files as it asked: `.load' is NOT a PIL member (every one is json.load, so the list of 13 has 12 in it); `.size' is 3 uses not 31; ImageDraw IS used by two files and is deferred-because-tooling rather than speculative; and Image.open(io.BytesIO) is used and is refused loudly here. TWO COMPILER BUGS FOUND AND FILED WITH REDUCTIONS THAT CONTAIN NO PIL: a class var declared before an instance field is counted into the INSTANCE layout so two live objects OVERLAP (p80, silent, this is what made resize segfault) and a class named after a used unit cannot be constructed from outside it (p45, loud). Both worked around at the declaration in pil.pas and registered in track-b-workarounds.md. THREE PLACES THE OBVIOUS IMPLEMENTATION WAS WRONG AND ONLY THE ORACLE CAUGHT IT: convert('RGB') DROPS alpha rather than compositing onto black; resize PREMULTIPLIES alpha (a 2x1 opaque-red-beside-transparent-blue reduced to 1x1 is (255,0,0,128) in Pillow and (127,0,127,127) under straight averaging) -- and a comment here asserted the opposite from assumption; and a fully opaque fixture cannot see either, so the fixture carries a hard alpha edge and the positive control reddens six rows. STILL OPEN AND STATED: ImageDraw, numpy, file-object open, interlaced, and convert('1') dithering which matches 16 of 18 bytes at the trailing edge (searched, not assumed). png and image were deliberately NOT added to PyRtlUnitServesPython though this ticket asked -- `import png' resolves to /usr/include/png.h today, and adding it would swap a wrong answer for a useless one since png.pas has no Python surface. INERT UNTIL THE NEXT PIN AND THE ROW SAYS SO: `from PIL import Image' needs `pil' on PyRtlUnitServesPython, which is a COMPILER change, and lib-test builds with $(PXX_STABLE) -- pin v409 predates it, so the pinned compiler refuses the import. The differential SKIPS LOUDLY (and is recorded in lib-test's SKIPPED list) rather than going red or reading as a pass, and the skip is a behavioural probe of the pinned compiler rather than a version check, so it starts running by itself at the next pin with nothing to remember. Everything above was measured with the LIVE compiler. THE FORK IS UNCHANGED: PIL still appears only in tools/ and tests/, so this is still not wired to the lekkerzeilen umbrella."
+status: done
+owner: frankb-56
 ---
 
 # PIL is a Python surface over the RTL PNG decoder, not a new decoder
@@ -228,3 +230,134 @@ the in-house move, not a defeat** — the same route that produced `png.pas` ove
 Restating the recommendation with the line in the right place: mimic PIL's
 **surface**; implement whatever **algorithm** it needs from scratch as the need
 is measured; never port the extension.
+
+## RESOLVED 2026-09-14 (frankb-56, Track B)
+
+`lib/rtl/pil.pas` serves `from PIL import Image`, and **every row of
+`test/lib_pil_pillow.py` is byte-identical to Pillow 12.1.1**, which is
+installed on this machine and is used as the oracle in `make lib-test`.
+
+### What the ticket asked for, and what happened to its three scope limits
+
+| the ticket's limit | outcome |
+| --- | --- |
+| 1. `png.pas` is non-interlaced 8-bit RGBA only; palette PNGs are hit in practice | **DONE.** It now decodes colour types 0, 2, 3, 4 and 6 at every bit depth the spec allows (1/2/4/8/16 as applicable), with PLTE and tRNS. Verified against Pillow-written files of every one. Interlaced (Adam7) is refused **by name** |
+| 2. `.resize` + `Image.LANCZOS` needs a resampler `image.pas` does not have | **DONE.** NEAREST, BILINEAR and LANCZOS, all byte-exact against Pillow |
+| 3. `Image.fromarray` needs numpy | **still out of scope**, as the ticket said |
+
+### Four corrections to this ticket's own measurements
+
+The ticket said to re-derive the member list from the PIL-importing files
+before ranking on volume. Done, and it moved:
+
+- **`.load` is not a PIL member at all.** Every `.load` in those files is
+  `json.load`. The ticket's list of thirteen has twelve members in it.
+- **`.size` is real but rare** — 3 uses on PIL images (`tools/fronts.py:98`,
+  `tools/texture.py:508`, `tests/test_icon.py:48`), not the 31 the grep
+  suggested; the rest are numpy arrays.
+- **`ImageDraw` IS used and is not speculative.** `tools/icon.py` and
+  `tools/import_nl.py` both write `from PIL import Image, ImageDraw` and call
+  `.polygon` / `.rounded_rectangle`. The ticket's *"should not be added
+  speculatively"* is right about the priority and wrong about the facts: it is
+  deferred because both callers are offline tooling, not because nobody uses it.
+- **`Image.open(io.BytesIO(...))` is used** (`tools/import_nl.py:88`). We take a
+  path only, and refuse a file object loudly rather than returning a wrong
+  picture.
+
+### Two compiler bugs found on the way, both filed with reductions
+
+Neither is about PIL; both were reduced to units with no library in them.
+
+- [[bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout]]
+  — **p80, silent memory corruption.** A `class var` before an instance field is
+  counted into the INSTANCE layout, so two live objects overlap and constructing
+  the second reinitialises the first. This is what made `im.resize(...)`
+  segfault: the constructor emptied the image being resized. Four rows locate
+  it; three plausible reductions do *not* reproduce it and are recorded so a
+  fixer does not spend them again.
+- [[bug-a-a-class-named-after-a-used-unit-cannot-be-constructed-from-outside-that-unit]]
+  — p45, loud. `Image.Create(...)` is `undefined variable (Create)` when the
+  unit also uses `image`. Both names are forced from outside, so the collision
+  cannot be designed away.
+
+Both are worked around in `pil.pas` at the declaration, with the reason at the
+site, and registered in `devdocs/dev/track-b-workarounds.md` with revert
+instructions.
+
+### Three places the obvious implementation was wrong, caught only by the oracle
+
+Worth recording because each is a *plausible* answer that a round-trip or
+self-consistency test would have certified:
+
+1. **`convert("RGB")` drops alpha; it does not composite onto black.** We
+   composited. Only fully transparent pixels differed — Pillow keeps their
+   colour.
+2. **`resize` premultiplies alpha.** We resampled channels independently and had
+   written a comment asserting that this was Pillow's behaviour. It is not. The
+   one-line proof: a 2x1 image of opaque red beside *transparent* blue, reduced
+   to 1x1 bilinear, is `(255, 0, 0, 128)` in Pillow and `(127, 0, 127, 127)`
+   under straight averaging — the invisible blue bleeding halfway in.
+3. **A fully opaque fixture cannot see (2).** Both implementations agree on it,
+   so the fixture deliberately carries a hard alpha edge, and the positive
+   control (disabling the premultiply) reddens six rows.
+
+Also: `Luma` must round, not truncate; mode `"1"` pixels read back as 0/255 and
+not 0/1; and `MAX_IMAGE_PIXELS` is 89478485, not the 178956970 written here from
+memory.
+
+### What is NOT done, stated plainly
+
+- **`ImageDraw`** — measured as used by two tooling files. A scanline rasteriser
+  is a day's work; deferred, not refused.
+- **`Image.fromarray` / numpy** — out of scope, per the ticket.
+- **`Image.open` of a file object** (`io.BytesIO`) — refused loudly.
+- **Interlaced (Adam7) PNG** — refused by name.
+- **`convert("1")` dithering is not byte-exact** — 16 of 18 bytes on the
+  fixture; the trailing edge of the last rows differs. Searched rather than
+  assumed (clamping changes nothing, floor and float accumulation both score
+  11/18), so truncating division is right and the gap is Pillow's boundary
+  carry, which is not readable on this machine. Nothing in the corpus calls it.
+- **`png` and `image` were deliberately NOT added to `PyRtlUnitServesPython`**,
+  though the ticket asked for both. Measured: `import png` today resolves to
+  `/usr/include/png.h`, compiles green, and fails at exec looking for a
+  `libpng.so` nobody declared. Adding `png` would swap that silent wrong answer
+  for a resolution to `lib/rtl/png.pas`, which has **no Python surface at all** —
+  every entry point takes `hashing.TByteArray`, which NilPy cannot spell. So the
+  trade is a wrong answer for a useless one. `pil.pas` is the Python face for
+  both units, and the host-header fallthrough belongs to
+  [[bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing]].
+
+### The fork this ticket raised is unchanged by the work
+
+*"Do we want the runtime to decode PNG through a PIL-shaped surface, or is PIL
+only ever for the offline importer and the tests?"* — still open, and still not
+wired to the lekkerzeilen umbrella. The measurement that bears on it: PIL appears
+in `tools/` and `tests/` only, in all six importing files, exactly as this ticket
+recorded. Nothing found today moves that.
+
+### INERT UNTIL THE NEXT PIN, and this is the part a reader must not miss
+
+`from PIL import Image` needs `pil` on `PyRtlUnitServesPython` in
+`compiler/pasparser_proc.inc`. That is a COMPILER change, and `make lib-test`
+builds with `$(PXX_STABLE)` — **pin v409 predates it**, so under the pinned
+compiler the import is refused with *"pil is the Pascal unit lib/rtl/pil.pas,
+not a Python module"*.
+
+So the differential row **skips loudly** until a pin carries the entry. It does
+not go red, and it does not read as a pass: it prints
+`PIL SKIP -- the pinned compiler cannot resolve ...` and records
+`pil-vs-pillow` in lib-test's own SKIPPED list, which the final summary line
+reproduces.
+
+**The skip is a behavioural probe, not a version check.** The recipe asks the
+pinned compiler to compile a two-line `from PIL import Image` and branches on
+the answer, so the row starts running by itself at the next pin with nothing for
+anyone to remember or revert. Everything measured in this resolution was
+measured with the LIVE compiler, where all 30 rows are identical to Pillow
+12.1.1.
+
+This is the cost CLAUDE.md names: a fix is inert until pinned, and a compiler
+change a `lib/**` file depends on has to say so at closing time. Saying it.
+
+## Log
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

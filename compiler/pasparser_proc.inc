@@ -4747,10 +4747,26 @@ end;
 
 function PyRtlUnitServesPython(const lo: AnsiString): Boolean;
 begin
+  { `pil` serves `from PIL import Image` -- the name is lowercased before it
+    gets here, so PIL and pil are one entry. lib/rtl/pil.pas carries Pillow's
+    Image surface over png.pas and image.pas.
+
+    `png` AND `image` ARE DELIBERATELY NOT ON THIS LIST, and the ticket asked
+    for both. Measured 2026-09-14: a bare `import png` today resolves to
+    /usr/include/png.h and compiles green -- a silent wrong resolution, and the
+    binary then fails at exec looking for a `libpng.so` nobody declared. Adding
+    `png` here would swap that for a resolution to lib/rtl/png.pas, which has no
+    Python surface at all: every entry point takes hashing.TByteArray, which
+    NilPy has no spelling for. So the trade is a wrong answer for a useless one,
+    and pil.pas is the Python face for both units. The host-header fallthrough
+    is real and belongs to its own ticket
+    (bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing),
+    not to a half-fix here. }
   Result := (lo = 'ast') or (lo = 'atexit') or (lo = 'base64') or
             (lo = 'collections') or (lo = 'configparser') or (lo = 'html') or
             (lo = 'io') or (lo = 'json') or (lo = 'markdown') or
-            (lo = 'math') or (lo = 'pathlib') or (lo = 'random') or
+            (lo = 'math') or (lo = 'pathlib') or (lo = 'pil') or
+            (lo = 'random') or
             (lo = 're') or (lo = 'subprocess') or (lo = 'tempfile') or
             (lo = 'tkinter') or (lo = 'zlib');
 end;

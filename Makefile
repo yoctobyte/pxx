@@ -35288,6 +35288,76 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_base64.pas $(TESTTMP)/lib_base64
 	tools/expect_same.sh lib_base64.1 "$$($(TESTTMP)/lib_base64 | grep -c '=ok')" "14"
 	tools/expect_same.sh lib_base64.2 "$$($(TESTTMP)/lib_base64 | grep -c 'FAIL')" "0"
+	# THE PYTHON-SURFACE repr SWEEP. lib_base64.pas above tests the PASCAL half;
+	# this runs the PYTHON half of base64 and zlib under pxx AND CPython and
+	# diffs the two outputs. It exists because the defect it guards is invisible
+	# to every other kind of row: base64.b64encode returned a str where CPython
+	# returns bytes, so the characters matched, the round trip matched, and
+	# lib_base64's fourteen `=ok` rows all passed while the type was wrong.
+	# Each row prints a repr() or a type() and never a bare value -- a row that
+	# prints the value cannot fail, and adding one quietly retires the guard.
+	# Positive control, measured 2026-09-14: against the pre-fix base64.pas the
+	# fixture does not even COMPILE, because `b64encode(x).decode()` is a str
+	# method call. Compare that with the two lines below, which stay green.
+	# bug-b-base64-b64encode-returns-a-string-where-cpython-returns-bytes
+	# Temp files and not `diff <(a) <(b)`: this Makefile sets no SHELL, so every
+	# recipe runs under /bin/sh, where process substitution is a syntax error.
+	@if command -v python3 >/dev/null 2>&1; then \
+	  $(PXX_STABLE) -Fulib/rtl test/lib_pysurface_repr.py $(TESTTMP)/lib_pysurface_repr >/dev/null; \
+	  $(TESTTMP)/lib_pysurface_repr > $(TESTTMP)/pysurface.pxx; \
+	  python3 test/lib_pysurface_repr.py > $(TESTTMP)/pysurface.cpy; \
+	  if diff $(TESTTMP)/pysurface.pxx $(TESTTMP)/pysurface.cpy >/dev/null; then \
+	    echo "  lib-test: the lib/rtl python surfaces agree with CPython on repr AND type"; \
+	  else \
+	    echo "FAIL: a lib/rtl python surface diverges from CPython -- diff below (left=pxx, right=CPython)"; \
+	    diff $(TESTTMP)/pysurface.pxx $(TESTTMP)/pysurface.cpy; exit 1; \
+	  fi; \
+	else echo "  lib-test: python3 absent, skipping the python-surface repr sweep"; fi
+	# THE PIL SURFACE, AGAINST REAL PILLOW. lib/rtl/pil.pas serves
+	# `from PIL import Image`, so ONE file runs under pxx and under
+	# CPython-with-Pillow and every row is a claim about agreement, not a shape
+	# assertion. Covers getpixel, convert, tobytes, crop, alpha_composite, nine
+	# resize combinations over three filters, the save/open round trip, and
+	# decoding all seven PNG colour types Pillow can write -- palette and
+	# palette+tRNS included, which is the case png.pas could not read at all
+	# before 2026-09-14.
+	# Generation is a SEPARATE script because the palette files must come from
+	# the real Pillow in both runs (ours against ours could agree while both
+	# were wrong) and because the calls that make them take keyword arguments,
+	# which NilPy does not have.
+	# Positive control, measured: disabling the premultiply in ResizeFiltered
+	# reddens six resize rows. Exit 77-style skip if Pillow is absent, so a
+	# machine without it says so instead of reading as agreement.
+	# feature-b-pil-is-a-python-surface-over-the-rtl-png-decoder-not-a-new-decoder
+	# THIS ROW IS INERT UNTIL A PIN CARRIES THE COMPILER SIDE, and it says so
+	# rather than going red. `from PIL import Image` needs `pil` on
+	# PyRtlUnitServesPython in compiler/pasparser_proc.inc; lib-test builds with
+	# $(PXX_STABLE), and pin v409 predates that entry, so the pinned compiler
+	# refuses the import with "pil is the Pascal unit ... not a Python module".
+	# The probe below asks the PINNED compiler that exact question instead of
+	# inferring it from a version number, so the row starts running by itself at
+	# the next pin with nothing to remember. Verified against the live compiler
+	# at the time of writing: all 30 rows identical to Pillow 12.1.1.
+	@printf 'from PIL import Image\nprint(Image.LANCZOS)\n' > $(TESTTMP)/pil_probe.py; \
+	if ! python3 -c "import PIL" >/dev/null 2>&1; then \
+	  echo "  lib-test: Pillow absent, skipping the PIL differential (NOT a pass)"; \
+	  echo pil-vs-pillow >> $(TESTTMP)/lib-test.skipped; \
+	elif ! $(PXX_STABLE) $(TESTTMP)/pil_probe.py $(TESTTMP)/pil_probe >/dev/null 2>&1; then \
+	  echo "  lib-test: PIL SKIP -- the pinned compiler cannot resolve \`from PIL import Image\` (needs \`pil\` in PyRtlUnitServesPython; inert until the next pin)"; \
+	  echo pil-vs-pillow >> $(TESTTMP)/lib-test.skipped; \
+	else \
+	  mkdir -p $(TESTTMP)/pilfix; \
+	  python3 test/lib_pil_gen.py $(TESTTMP)/pilfix >/dev/null; \
+	  $(PXX_STABLE) -Fulib/rtl test/lib_pil_pillow.py $(TESTTMP)/lib_pil_pillow >/dev/null; \
+	  $(TESTTMP)/lib_pil_pillow $(TESTTMP)/pilfix pxx > $(TESTTMP)/pil.pxx; \
+	  python3 test/lib_pil_pillow.py $(TESTTMP)/pilfix cpy > $(TESTTMP)/pil.cpy; \
+	  if diff $(TESTTMP)/pil.pxx $(TESTTMP)/pil.cpy >/dev/null; then \
+	    echo "  lib-test: PIL.Image agrees with Pillow byte for byte"; \
+	  else \
+	    echo "FAIL: lib/rtl/pil.pas diverges from Pillow -- diff below (left=pxx, right=Pillow)"; \
+	    diff $(TESTTMP)/pil.pxx $(TESTTMP)/pil.cpy; exit 1; \
+	  fi; \
+	fi
 	$(PXX_STABLE) test/lib_png.pas $(TESTTMP)/lib_png
 	# The first row is the encoded PNG's total size, so it TRACKS THE ENCODER: it
 	# went 86 -> 80 on 2026-09-13 when png.pas moved its IDAT from stored deflate
@@ -36549,7 +36619,7 @@ endif
 	# not cover them". awk dedupes rather than `sort -u`, which merges
 	# distinct identifiers under some locales.
 	@sk="$$(awk '!a[$$0]++' $(TESTTMP)/lib-test.skipped 2>/dev/null | tr '\n' ' ' | sed 's/ *$$//')"; \
-	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sockets-closedpeer + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
+	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + pysurface-repr + png smoke + pil-vs-pillow + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sockets-closedpeer + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check
