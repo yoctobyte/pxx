@@ -176,4 +176,4 @@ reaping, so `pthread_join` never ran at all — was fixed in `06e40fb95`. That
 made timed joins reap; it does nothing for a thread nobody joins.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f3b9be658.
