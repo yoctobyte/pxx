@@ -4454,6 +4454,20 @@ var
   BlockCount: Integer;
   CurBlockId: Integer;
   ProcExternal : array of Boolean;
+  { `weakexternal` rather than `external`: an OPTIONAL import. The symbol is
+    emitted STB_WEAK UND, so a loader that cannot resolve it leaves the GOT slot
+    at zero and the program still loads -- where a STB_GLOBAL UND it cannot
+    resolve is a hard `symbol lookup error` at startup. The call site is then
+    obliged to test `@f <> nil` before calling; the compiler does not insert
+    that test, exactly as FPC does not.
+
+    THE POINT IS "USE THIS C FACILITY IF THE PROGRAM ALREADY HAS IT". A weak
+    import adds its library to DT_NEEDED like any other, so it is not a way to
+    avoid a dependency you actually took -- it is a way for one unit to reach a
+    symbol that MAY be present, without every program that includes the unit
+    failing to start when it is not. A fully static link bakes the same zero.
+    feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  ProcWeakExternal : array of Boolean;
   { This proc row has NO Self parameter although it IS a method -- the `static`
     directive. Read by GenMakeStaticMethodCall so that every call site building
     a metaclass Self argument is corrected in ONE place rather than seven.

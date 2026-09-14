@@ -1,0 +1,3 @@
+real import: ok
+weak sibling: resolved and callable
+undefined weak: still nil

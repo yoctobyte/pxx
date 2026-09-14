@@ -304,11 +304,13 @@ begin
               CaseEqual(CurTok.SVal, 'deprecated') or CaseEqual(CurTok.SVal, 'platform') or
               CaseEqual(CurTok.SVal, 'experimental') or CaseEqual(CurTok.SVal, 'unimplemented') or
               CaseEqual(CurTok.SVal, 'library') or
-              CaseEqual(CurTok.SVal, 'external'))) or
+              CaseEqual(CurTok.SVal, 'external') or
+              CaseEqual(CurTok.SVal, 'weakexternal'))) or
             (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
             IsInertRoutineDirectiveTok do
       begin
-        if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
+        if (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'external') or
+                                        CaseEqual(CurTok.SVal, 'weakexternal')) then
         begin
           { external clause has no body; consume to its terminating ';' }
           while (CurTok.Kind <> tkEOF) and (CurTok.Kind <> tkSemicolon) do Next;
@@ -1031,6 +1033,7 @@ var
   isIram, isInterrupt: Boolean;
   sawIram, sawCdecl, sawRegister, sawStackful, sawReintroduce: Boolean;
   sawVarargs: Boolean;
+  sawWeakExternal: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
   savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
   genBodyAST, genStepAST, declElemTk: Integer;
@@ -1735,6 +1738,7 @@ begin
   declInline := False;
   sawIram := False; sawCdecl := False; sawRegister := False;
   sawVarargs := False;
+  sawWeakExternal := False;
   sawStackful := False; sawReintroduce := False;
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
@@ -1861,9 +1865,20 @@ begin
   { External binding: `procedure foo(...); cdecl; external 'libname.so' [name 'sym'];`
     Marks the routine as a dynamically-linked import. Symbol defaults to the
     routine's own name (GTK symbols are valid lowercase identifiers); an
-    optional `name 'sym'` clause overrides the emitted symbol. }
-  if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
+    optional `name 'sym'` clause overrides the emitted symbol.
+
+    `weakexternal` is the same clause with one bit set: the symbol goes out
+    STB_WEAK UND, so a loader that cannot resolve it zeroes the GOT slot instead
+    of refusing to start the program, and `@f` reads nil. FPC's spelling, and
+    FPC's contract -- the CALLER tests for nil; no test is inserted here. It was
+    on IsInertRoutineDirectiveTok's deliberately-REFUSED list until 2026-09-14,
+    with the right reason for that list (it changes linkage, so ignoring it
+    would compile something other than what was written). Implementing it is
+    what takes it off. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+  if (CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'external') or
+                                  CaseEqual(CurTok.SVal, 'weakexternal')) then
   begin
+    sawWeakExternal := CaseEqual(CurTok.SVal, 'weakexternal');
     Next;
     extLib := '';
     extSym := '';
@@ -1995,6 +2010,7 @@ begin
     end;
     Procs[procIdx].BodyAddr := -1;
     ProcExternal[procIdx] := True;
+    if sawWeakExternal then ProcWeakExternal[procIdx] := True;
     if declFlexColumn then ProcFlexColumn[procIdx] := True;
     ProcLibrary[procIdx] := InternStr(extLib);
     if extSym <> '' then ProcExtName[procIdx] := InternStr(extSym);

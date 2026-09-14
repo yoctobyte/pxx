@@ -154,6 +154,24 @@ begin
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
+    { A library reached ONLY by `weakexternal` contributes NO DT_NEEDED, and that
+      is the entire point of the directive rather than a detail of it. An
+      optional import asks "resolve this IF the program already has the
+      library"; emitting DT_NEEDED would LOAD the library in order to answer, so
+      the answer would always be yes and the weak binding would buy nothing but
+      a dependency. With no DT_NEEDED the symbol is looked up in whatever the
+      global scope already holds: present when something else pulled libc in
+      (SDL, sqlite), zero when nothing did, zero at static link time.
+
+      The test is per-LIBRARY, not per-symbol: an ordinary `external` naming the
+      same library restores DT_NEEDED for every weak sibling of it, which is
+      correct -- the dependency was taken for another reason and an optional
+      symbol may rely on it.
+
+      THIS LOOP HAS THREE COPIES (64-bit exe, 32-bit exe, --emit-obj) and all
+      three carry the skip. They were already three before this change.
+      feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+    if ProcWeakExternal[ExternalProc[i]] then Continue;
     libIdx := ProcLibrary[ExternalProc[i]];
     found := False;
     for j := 0 to DynamicNeededCount-1 do
@@ -181,7 +199,13 @@ begin
   for i := 0 to ExternalCount-1 do
   begin
     DataPutU32(nameOff[i]);
-    DataPutB($12); { STB_GLOBAL, STT_FUNC }
+    { $12 = STB_GLOBAL STT_FUNC; $22 = STB_WEAK STT_FUNC for a `weakexternal`.
+      The binding is the whole mechanism: a GLOBAL UND the loader cannot resolve
+      is a startup `symbol lookup error`, a WEAK UND it cannot resolve leaves
+      this symbol's GLOB_DAT slot at zero and the program runs. Measured against
+      the real loader on our own ELF before this was built, not assumed.
+      feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+    if ProcWeakExternal[ExternalProc[i]] then DataPutB($22) else DataPutB($12);
     DataPutB(0);
     DataPutU16(0);
     DataPutU64(0);
@@ -264,6 +288,9 @@ begin
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
+    { Weak-only library: no DT_NEEDED. See the canonical note on the first copy
+      of this loop. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+    if ProcWeakExternal[ExternalProc[i]] then Continue;
     libIdx := ProcLibrary[ExternalProc[i]];
     found := False;
     for j := 0 to DynamicNeededCount-1 do
@@ -292,7 +319,18 @@ begin
     DataPutU32(nameOff[i]);
     DataPutU32(0);                              { value }
     DataPutU32(0);                              { size }
-    DataPutB($12);                              { STB_GLOBAL, STT_FUNC }
+    { $22 = STB_WEAK for a `weakexternal`, exactly as the 64-bit writer does.
+      THIS ARM IS NOT COSMETIC ON i386 AND MISSING IT IS WORSE THAN NOT HAVING
+      THE FEATURE: the DT_NEEDED suppression a few dozen lines up already
+      applies here, so a weak import left STB_GLOBAL is an unresolvable GLOBAL
+      UND with no library to resolve it from -- a guaranteed startup failure on
+      a program that works on x86-64. The suppression and the binding are one
+      change and must land per-target together.
+      feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+    if ProcWeakExternal[ExternalProc[i]] then
+      DataPutB($22)                             { STB_WEAK,   STT_FUNC }
+    else
+      DataPutB($12);                            { STB_GLOBAL, STT_FUNC }
     DataPutB(0);                                { other }
     DataPutU16(0);                              { shndx = SHN_UNDEF }
   end;
@@ -4812,6 +4850,9 @@ begin
   neededCount := 0;
   for i := 0 to ExternalCount - 1 do
   begin
+    { Weak-only library: no DT_NEEDED. See the canonical note on the first copy
+      of this loop. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
+    if ProcWeakExternal[ExternalProc[i]] then Continue;
     libIdx := ProcLibrary[ExternalProc[i]];
     found := False;
     for j := 0 to neededCount - 1 do
@@ -4977,7 +5018,10 @@ begin
         writeSym64(f, ObjProcStrOff[i], $12, 1,
                    textOff + Procs[i].BodyAddr, ObjProcSize(i));
   for i := 0 to ExternalCount - 1 do
-    writeSym64(f, strOffImport[i], $10, 0, 0, 0);
+    if ProcWeakExternal[ExternalProc[i]] then
+      writeSym64(f, strOffImport[i], $20, 0, 0, 0)   { STB_WEAK  NOTYPE UND }
+    else
+      writeSym64(f, strOffImport[i], $10, 0, 0, 0);  { STB_GLOBAL NOTYPE UND }
 
   { .hash: SysV DT_HASH, single bucket (same naive-but-correct scheme
     PrepareDynamicData already uses for the ET_EXEC path). }

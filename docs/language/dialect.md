@@ -168,15 +168,44 @@ missing directive an error, the way FPC has it.
 
 ### Not accepted
 
-`varargs`, `public`, `export`, `alias`, `weakexternal`, `compilerproc`,
-`internproc`, `rtlproc`, `hardfloat` and `softfloat` are refused, and that is a
-decision rather than a gap. Each of them means something: `varargs` changes how
-a call marshals, the linkage group changes what `--emit-obj` produces,
-`compilerproc` and its neighbours mark a routine the compiler itself supplies,
-and `hardfloat`/`softfloat` select a float ABI — which is a real choice on the
-arm32 and riscv32 targets. Accepting one and ignoring it would compile something
-other than what was written, which is worse than refusing it. FPC sources using
-them need the directive removed, or the behaviour implemented.
+`varargs`, `public`, `export`, `alias`, `compilerproc`, `internproc`,
+`rtlproc`, `hardfloat` and `softfloat` are refused, and that is a decision
+rather than a gap. Each of them means something: `varargs` changes how a call
+marshals, the linkage group changes what `--emit-obj` produces, `compilerproc`
+and its neighbours mark a routine the compiler itself supplies, and
+`hardfloat`/`softfloat` select a float ABI — which is a real choice on the arm32
+and riscv32 targets. Accepting one and ignoring it would compile something other
+than what was written, which is worse than refusing it. FPC sources using them
+need the directive removed, or the behaviour implemented.
+
+`weakexternal` was on that list until 2026-09-14 and is now **accepted**, by the
+second route that sentence offers: it is implemented.
+
+### `weakexternal` — an optional import
+
+`weakexternal` takes the same clause as `external` and emits the symbol as an
+undefined **weak** dynamic symbol:
+
+```pascal
+function pthread_create(t, attr, fn, arg: Pointer): Integer; cdecl;
+  weakexternal 'libc.so.6' name 'pthread_create';
+```
+
+A symbol declared `external` that the loader cannot resolve is a fatal
+`symbol lookup error` before `main` runs. One declared `weakexternal` is not:
+the loader leaves its GOT slot at zero, the program starts, and `@f` reads
+`nil`. **The caller must test for nil** — PXX inserts no check, exactly as FPC
+inserts none:
+
+```pascal
+if @pthread_create <> nil then { use it } else { fall back };
+```
+
+It is for *"use this C facility if the program already has it"*, not for
+avoiding a dependency you actually took: a weak import still contributes its
+library to `DT_NEEDED`. What it buys is that one unit can reach a symbol that
+may be absent without every program including that unit failing to start. A
+fully static link with no interpreter bakes the same zero.
 
 ### Finding out which ones are inert here: `--warn-ignored-directives`
 

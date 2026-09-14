@@ -13614,7 +13614,7 @@ begin
   SetLength(ProcFrameSensitive, n);  SetLength(DceLive, n);  SetLength(DceWork, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcLexParent, n);

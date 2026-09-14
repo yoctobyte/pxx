@@ -2192,12 +2192,19 @@ function IsInertRoutineDirectiveTok: Boolean;
 
   NOT here, deliberately, though they are all one-word directives that would
   parse just as easily: `varargs` (changes how a call marshals), `public`,
-  `export`, `alias` and `weakexternal` (change linkage, which `--emit-obj` can
-  observe), `compilerproc`/`internproc`/`rtlproc` (mark a routine the compiler
-  supplies, and internproc has no body to parse), and `hardfloat`/`softfloat`
-  (select a float ABI, and pxx HAS arm32 and riscv32 targets where the two
-  differ). Ignoring any of those would make pxx compile something other than
-  what was written, which is worse than refusing it. }
+  `export` and `alias` (change linkage, which `--emit-obj` can observe),
+  `compilerproc`/`internproc`/`rtlproc` (mark a routine the compiler supplies,
+  and internproc has no body to parse), and `hardfloat`/`softfloat` (select a
+  float ABI, and pxx HAS arm32 and riscv32 targets where the two differ).
+  Ignoring any of those would make pxx compile something other than what was
+  written, which is worse than refusing it.
+
+  `weakexternal` WAS on that list and came off it on 2026-09-14, by being
+  IMPLEMENTED rather than by being reclassified -- pasparser_proc.inc parses it
+  beside `external` and elfwriter.inc emits the symbol STB_WEAK UND. That is
+  the only way off this list: the entry was correct while it stood, and the
+  reasoning it gave is the reasoning that forbids ever moving one of the others
+  here instead. feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
 begin
   Result := False;
   if CurTok.Kind <> tkIdent then Exit;

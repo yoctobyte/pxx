@@ -21019,6 +21019,46 @@ test-core: $(COMPILER)
 	# bug-b-gtk3-pc-writes-past-its-buffer-on-a-long-string
 	./$(COMPILER) test/test_gtk3_pc_pchar_conversion.pas $(TESTTMP)/test_gtk3_pc26
 	$(TESTTMP)/test_gtk3_pc26 | diff -u test/test_gtk3_pc_pchar_conversion.expected -
+	# `weakexternal` -- optional imports. THREE rows and they are a set; any two
+	# of them pass on a broken compiler.
+	#   absent   a weak-only library emits NO DT_NEEDED, so even a symbol libc
+	#            really defines (pthread_create) stays nil. The readelf row is the
+	#            direct assertion; the nil row is what a regression would show.
+	#   present  a real `external` on the same library restores DT_NEEDED and the
+	#            weak sibling resolves off it -- the shape every real use has.
+	#   hard     plain `external` of an undefined symbol is STILL a fatal startup
+	#            failure. Without this, "weakexternal works" is also satisfied by
+	#            a compiler that made every import weak. It cannot be a normal
+	#            row: the program never reaches its own begin.
+	# feature-a-optional-imports-an-undefined-weak-dynamic-symbol
+	./$(COMPILER) test/test_weakexternal_absent.pas $(TESTTMP)/test_weakext_absent26
+	tools/expect_same.sh weakext-absent-noneeded "$$(readelf -dW $(TESTTMP)/test_weakext_absent26 | grep -c NEEDED)" "0"
+	$(TESTTMP)/test_weakext_absent26 | diff -u test/test_weakexternal_absent.expected -
+	./$(COMPILER) test/test_weakexternal_present.pas $(TESTTMP)/test_weakext_present26
+	tools/expect_same.sh weakext-present-needed "$$(readelf -dW $(TESTTMP)/test_weakext_present26 | grep -o 'libc[^]]*' | head -1)" "libc.so.6"
+	$(TESTTMP)/test_weakext_present26 | diff -u test/test_weakexternal_present.expected -
+	# THE BINDING ITSELF, in the one binary that holds both kinds: `objdump -T`
+	# marks a weak symbol with a `w` column. readelf --dyn-syms cannot be used
+	# here -- pxx writes no section headers, so it prints nothing at all and would
+	# pass whatever the binding was. Asserting BOTH rows is the point: "weak" is
+	# also true of a compiler that made every import weak, and `getpid` is the row
+	# that catches that.
+	tools/expect_same.sh weakext-binding-weak "$$(objdump -T $(TESTTMP)/test_weakext_present26 | awk '$$NF=="getppid"{print ($$2=="w")?"weak":"global"}')" "weak"
+	tools/expect_same.sh weakext-binding-global "$$(objdump -T $(TESTTMP)/test_weakext_present26 | awk '$$NF=="getpid"{print ($$2=="w")?"weak":"global"}')" "global"
+	# i386, AND IT RUNS -- the 32-bit ELF writer is a SECOND copy of both halves
+	# (the DT_NEEDED skip and the st_info binding) and they must land together:
+	# the skip without the binding leaves a GLOBAL UND with no library to resolve
+	# it from, which is a startup failure on a program that works on x86-64. That
+	# is the shape of defect an x86-64-only assertion cannot see.
+	./$(COMPILER) --target=i386 test/test_weakexternal_present.pas $(TESTTMP)/test_weakext_present32
+	tools/expect_same.sh weakext-i386-binding "$$(objdump -T $(TESTTMP)/test_weakext_present32 | awk '$$NF=="getppid"{print ($$2=="w")?"weak":"global"}')" "weak"
+	$(TESTTMP)/test_weakext_present32 | diff -u test/test_weakexternal_present.expected -
+	./$(COMPILER) --target=i386 test/test_weakexternal_absent.pas $(TESTTMP)/test_weakext_absent32
+	tools/expect_same.sh weakext-i386-noneeded "$$(readelf -dW $(TESTTMP)/test_weakext_absent32 | grep -c NEEDED)" "0"
+	$(TESTTMP)/test_weakext_absent32 | diff -u test/test_weakexternal_absent.expected -
+	./$(COMPILER) test/test_weakexternal_hard.pas $(TESTTMP)/test_weakext_hard26
+	! $(TESTTMP)/test_weakext_hard26 > $(TESTTMP)/test_weakext_hard.log 2>&1
+	grep -q "undefined symbol: nosuchfunc_pxx_probe" $(TESTTMP)/test_weakext_hard.log
 	./$(COMPILER) --gtk=2 test/test_c_gtk_window.pas $(TESTTMP)/gtksel2_26
 	tools/expect_same.sh gtksel-2-soname "$$(readelf -dW $(TESTTMP)/gtksel2_26 | grep -o 'libgtk[^]]*' | head -1)" "libgtk-x11-2.0.so.0"
 	./$(COMPILER) --gtk=3 test/test_c_gtk_window.pas $(TESTTMP)/gtksel3_26
