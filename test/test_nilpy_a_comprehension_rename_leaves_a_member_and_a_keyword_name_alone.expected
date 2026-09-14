@@ -1,0 +1,8 @@
+plain  : ['a', 'b']
+two    : [2, 4]
+kwother: [5]
+member1: ['a', 'b']
+kwarg  : [1, 1]
+member2: [1, 2]
+member3: ['z']
+kwarg3 : [8]

@@ -1909,6 +1909,16 @@ test-nilpy: $(COMPILER)
 	# The LITERAL rows are the positive control -- right before the fix and after.
 	./$(COMPILER) test/test_nilpy_a_class_attribute_from_an_expression_is_readable_dynamically.npy $(TESTTMP)/test_nilpy_clsattrexpr26
 	$(TESTTMP)/test_nilpy_clsattrexpr26 | diff -u test/test_nilpy_a_class_attribute_from_an_expression_is_readable_dynamically.expected -
+	# A comprehension renames its loop target to a hidden name, and the rename walked
+	# every ident token in the range -- including the MEMBER after a dot and a call's
+	# KEYWORD ARGUMENT name, neither of which is a reference to the target. That gave
+	# `AttributeError: 'T' object has no attribute '__py_cv58_2'` and
+	# `f has no parameter named '__py_cv23_0'`, both naming an identifier the source
+	# never wrote. Rows whose target spelling is unused are the positive control, and
+	# the three-name target is LAST: slot 2 is the slot the two earlier fixes in this
+	# area never reached.
+	./$(COMPILER) test/test_nilpy_a_comprehension_rename_leaves_a_member_and_a_keyword_name_alone.npy $(TESTTMP)/test_nilpy_comprename26
+	$(TESTTMP)/test_nilpy_comprename26 | diff -u test/test_nilpy_a_comprehension_rename_leaves_a_member_and_a_keyword_name_alone.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None

@@ -24903,6 +24903,31 @@ begin
     if (Tokens[k].Kind = tkIdent) and (Tokens[k].SLen = Length(oldName)) and
        (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) = oldName) then
     begin
+      { NOT EVERY ident THAT SPELLS THE NAME IS A REFERENCE TO IT. Every caller
+        of this is renaming a BINDING -- a comprehension's loop target, an
+        except handler's name -- to a hidden one, and two token positions carry
+        that spelling while naming something else entirely:
+
+          `[name.name for a, b, name in rows]`   the MEMBER after the dot
+          `[f(step=1) for step in xs]`           the KEYWORD ARGUMENT's name
+
+        Renaming them rewrote the member into the hidden name, so the read
+        raised `AttributeError: 'T' object has no attribute '__py_cv58_2'`
+        four frames from anything the source mentions -- lekkerzeilen died
+        exactly there -- and rewrote the keyword into
+        `f has no parameter named '__py_cv23_0'`, which refuses the program.
+
+        The narrowing that landed before this one moved the RANGE (a clause's
+        own iterable is evaluated in the enclosing scope, so it is left alone);
+        this is about what a token IS inside the range, which no range can
+        express. It goes in the helper rather than at the four call sites
+        because the rule is a property of the token and is true for all of
+        them -- the fourth site is what the previous two fixes each missed.
+        bug-n-a-comprehension-rename-rewrites-a-member-and-a-keyword-name }
+      if (k > lo) and (Tokens[k - 1].Kind = tkDot) then Continue;
+      if (k > lo) and (k + 1 < TokCount) and
+         (Tokens[k + 1].Kind = tkAssign) and
+         (Tokens[k - 1].Kind in [tkLParen, tkComma]) then Continue;
       if newOff < 0 then newOff := StoredName(newName);
       Tokens[k].SOffset := newOff;
       Tokens[k].SLen := Length(newName);

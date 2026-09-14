@@ -1,0 +1,47 @@
+# A comprehension's loop target is renamed to a hidden name so it cannot
+# collide with an enclosing variable of the same spelling. The rename walked
+# every identifier token in the range, and two token positions carry that
+# spelling while naming something else entirely: the MEMBER after a dot, and a
+# call's KEYWORD ARGUMENT name. Rewriting them produced
+# `AttributeError: 'T' object has no attribute '__py_cv58_2'` and
+# `f has no parameter named '__py_cv23_0'` -- both naming a hidden identifier
+# the source never mentions.
+#
+# The rows where the target's spelling is NOT reused are the positive control:
+# they were right before the fix and must stay right, so a run where they fail
+# is measuring something other than this bug. The colliding rows come after
+# them, and the THREE-name target comes last of all -- the previous two fixes
+# in this area each shipped a fixture whose interesting element sat where it
+# already passed, and slot 2 is the slot they never reached.
+
+
+class T:
+    def __init__(self, name, step):
+        self.name = name
+        self.step = step
+
+
+def f(step=0):
+    return step
+
+
+rows = [T("a", 1), T("b", 2)]
+triples = [(9, 8, T("z", 7))]
+
+# controls: the target's spelling is used nowhere else
+print("plain  :", [t.name for t in rows])
+print("two    :", [b for a, b in ((1, 2), (3, 4))])
+print("kwother:", [f(step=5) for q in (0,)])
+
+# the MEMBER collides with a one-name target
+print("member1:", [name.name for name in rows])
+
+# the KEYWORD collides with a one-name target
+print("kwarg  :", [f(step=1) for step in (5, 6)])
+
+# both collide, inside a TWO-name target
+print("member2:", [step.step for name, step in ((0, rows[0]), (1, rows[1]))])
+
+# ...and a THREE-name target, where the colliding name is slot 2
+print("member3:", [name.name for a, b, name in triples])
+print("kwarg3 :", [f(step=b) for a, b, step in triples])
