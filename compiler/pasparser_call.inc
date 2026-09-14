@@ -3889,7 +3889,7 @@ begin
     (which cannot parse a `**` at all). PyDictKwOverloadAhead carries the why. }
   if isNilPy then
   begin
-    i := PyDictKwOverloadAhead(ci, name);
+    i := PyDictKwOverloadAhead(ci, name, False);
     if i >= 0 then begin Result := i; Exit; end;
   end;
 

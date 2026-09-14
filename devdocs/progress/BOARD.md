@@ -300,7 +300,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (157)
+## backlog-nilpy (156)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -328,7 +328,6 @@ _none_
 | bug-n-a-keyword-argument-through-a-callable-field-is-refused | N | 25 | bug | A keyword argument on a run-time-dispatched call REFUSES when the name resolves to a CALLABLE FIELD rather than a method: `TypeError: zap() is dispatched at run time through a callable attribute, which takes positional arguments only`. CPython runs the same program. Method dispatch carries keywords correctly (pydyn_methkw binds by name against the RTTI's parameter names); the callable-field arm goes through pyvar_callv*, which takes POSITIONS and has no names, so the refusal is a deliberate choice of an error over a silent mis-binding. A NilPy def and lambda DO carry a signature at run time (feature-n-a-callable-value-carries-its-signature-type, pybound_new_sig), so the names may already be reachable from the callable's own value -- that is the thing to measure before designing anything. | — |
 | bug-n-a-keyword-argument-through-a-class-value-is-refused-at-runtime | N | 55 | bug | `cls(x, b=99)` — a keyword argument to a class reached as a VALUE — raises TypeError at run time saying such a callable 'still carries no parameter names'. It does: RTTI_METH_FLAG's paramKinds block has carried param NAMES since the reflection work, and PyClassRefNew does not read them. The static spelling `P(x, b=99)` is correct, so this is one construction path disagreeing with the other. | — |
 | bug-n-a-keyword-argument-through-a-procedural-field-needs-a-plain-receiver | N | 55 | bug | `H().fn(1, b=2)` and `hs[0].fn(1, b=2)` are `error: undefined variable (b)` where `h.fn(1, b=2)` and `g().fn(1, b=2)` answer correctly — a KEYWORD argument to a callable FIELD, only when the receiver is a constructor call or a subscript. The keyword name parses as an expression, the same symptom the statically-unknown-callee ticket had. | — |
-| bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update | N | 70 | bug | > | — |
 | bug-n-a-lambda-returning-a-captured-heap-value-yields-none | N | 60 | bug | A lambda whose body is a captured heap-typed value returns None: `lv = [1]; (lambda: lv)()` is None, not [1]. Holds for list, dict, tuple and bytes; str and int are fine, a literal body is fine, a parameter passthrough is fine, and a nested `def` with the identical body is fine. Silent wrong VALUE in ordinary Python, and it makes lambda-based test probes lie. | — |
 | bug-n-a-lambda-returning-a-user-class-instance-yields-none | N | 62 | bug | > | — |
 | bug-n-a-lambda-stored-in-a-class-attribute-is-not-callable | N | 45 | bug | `class gl: clear = lambda a: a * 3` then `gl.clear(2)` raises `TypeError: object is not callable` at run time; CPython prints 6. The same lambda bound to a MODULE-level name works (`f = lambda a: a * 3; f(2)` gives 6 in both), so it is the class-attribute store that loses the callable, not the lambda. Measured 2026-09-10 at compiler `98b6545b4652`. PRE-EXISTING and verified as such: it reproduces with and without the `staticmethod(...)` wrapper that was being added the same afternoon, so it is not that arm's doing -- the control without the wrapper fails identically. Compiles clean and fails at RUN time, which is the bad half: a class-as-namespace whose members are lambdas is accepted by the compiler and dies on first call. | — |
@@ -1048,9 +1047,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3746)
+## done (3747)
 
-3746 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3747 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1167,7 +1166,6 @@ _none_
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [A] bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
-- [p 70] [N] bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost

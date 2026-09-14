@@ -14,7 +14,7 @@ track: N
 type: bug
 prio: 70
 owner: frank-user
-status: open
+status: done
 ---
 
 ## Repro
@@ -151,3 +151,81 @@ run.
 - 2026-09-14 -- filed from the lekkerzeilen frame loop, reached after
   `bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed`
   was fixed in pylib. Reduction is single-file and inline above.
+
+## Resolution (2026-09-14)
+
+Both halves, as set out above, with one correction the measurement forced.
+
+**The parser still claims the `**` shape, and the line is CAPABILITY, not
+taste.** Dropping the claim entirely -- the clean version -- broke
+`def fill(m): m.update(**{"c": 3})`, which then bound against
+`TPyList.setupdate(other)` and died with `forwarded call has no value for
+parameter 'other'`: the same defect wearing the list class instead of the dict
+one. A NAMED keyword reaches the dynamic dispatcher as a kwspec string parallel
+to the arguments; a `**` has no dynamic-call shape to travel in at all. So the
+parser keeps exactly the calls that must be bound at parse time and stops
+guessing about the ones that need not be. `PyDictKwRunFrom` was split into
+`PyKwRunFromKind(start, starOnly)` so the two halves are one scanner, and
+`PyDictKwOverloadAhead` took the flag; the STATIC path passes False and is
+unchanged.
+
+**The residual, stated rather than hidden:** a user class with
+`def update(self, **kw)` reached through an untyped receiver and called with
+`**` still binds `TPyDict.update`. That was true before this change for every
+keyword spelling; it is now true for one. Closing it needs a dynamic call shape
+that can carry a `**`, which does not exist.
+
+**A warning that fires on correct code.** With the claim dropped, every dynamic
+`d.update(a=1)` -- correct code, correctly compiled -- printed *"no class here
+declares a .update() with a parameter named 'a' -- dispatching on the receiver
+at run time"*. True, and not a problem: on a dict receiver a keyword IS a key.
+Suppressed by asking whether the call could have been `TPyDict.update` at all
+(`dictKwMaybe`), which deliberately does NOT claim it. The same build prints 110
+warnings and nobody reads the 111th.
+
+### Guard
+
+`test/test_nilpy_update_on_a_dynamic_receiver.npy`, eleven rows, expectations
+from CPython. Three receivers (static, variant by rebinding, variant through a
+parameter) x {positional, keyword}; a dict reached three ways including a
+subscript result and an untyped parameter, with named keywords, `**` and mixed
+positional-plus-keyword; and a control METHOD NAME (`tick`) on the same three
+receivers, which is what stops a fix being credited to the name lookup rather
+than to the keyword run. The dict rows are load-bearing in the other direction:
+a fix that only taught the parser to leave user classes alone breaks every one
+of them.
+
+The user-class row is LAST on purpose -- every row above it has a dict
+somewhere, and a run that only ever met a dict is the run that certified this
+bug for as long as it existed.
+
+Reverted, the fixture dies at row 2 with the original message. The 45-row
+keyword matrix and the 90-row positional matrix both match CPython, and
+`test_nilpy_dict_update_keywords` and `test_nilpy_dict_update_variant` pass.
+
+### What it cost the demo, and what it bought
+
+**lekkerzeilen runs on the open-water entry points.** `--open-water` under
+`setarch -R`, sources byte-identical to the owner's tree: 19m16s of wall clock,
+1149s of CPU across 13 threads, state R throughout, no exception, ended only
+because it was killed. Confirmed independently by **lekkerzeilen-c8** at a 200s
+cap, and `--m0` likewise.
+
+**The world path is NOT covered by that claim, and my first report of it was
+wrong.** I ran `--silent` five times under `timeout 20`, got rc=124 five times,
+and reported it clean. It dies at **36.1s +/- 0.3**, so every one of those runs
+ended before the defect could occur: five agreeing runs measured my own clock.
+The peer reached the same false negative independently at a 25s cap, 10/10, and
+caught it only by raising the cap to 90.
+
+A timeout cannot fail below its own threshold, so a survival rate taken under
+one is evidence about the window, not about the program. The tell was sitting in
+my own numbers: `--open-water` survived nineteen MINUTES while the world path
+"survived" twenty SECONDS, and I read the two as one result. Where a deadline is
+suspected, report the TIME OF DEATH rather than a pass count.
+
+What this fix did buy on the world path is real and smaller: it was a
+**deterministic 3/3 rc=139** at 80840e14f, arriving before the frame loop. It
+now reaches the frame loop and runs for 36 seconds. That is a different failure
+at a later point, not this one surviving.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

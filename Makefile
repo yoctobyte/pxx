@@ -3877,6 +3877,20 @@ test-nilpy: $(COMPILER)
 	# all. Every receiver shape, because they reach the call by three routes.
 	./$(COMPILER) test/test_nilpy_dict_update_keywords.npy $(TESTTMP)/test_nilpy_dictupdkw26
 	$(TESTTMP)/test_nilpy_dictupdkw26 | diff -u test/test_nilpy_dict_update_keywords.expected -
+	# ...and the OTHER half of that question: `update` is a name USER classes
+	# carry too. A keyword call on a receiver with no static type was routed to
+	# TPyDict.update unconditionally, on the premise that "a KEYWORD run only
+	# ever means dict.update" -- true of TPyList and TPySet, which is the
+	# population it was measured against, false of every user class. Three axes
+	# had to coincide: no static type, KEYWORDS, and the name `update`;
+	# fourteen other names and every positional spelling were always correct.
+	# The dict rows here are load-bearing in the other direction -- a fix that
+	# only taught the parser to leave user classes alone breaks every one of
+	# them -- and `tick` is the control that stops a fix being credited to the
+	# name lookup rather than to the keyword run.
+	# bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update
+	./$(COMPILER) test/test_nilpy_update_on_a_dynamic_receiver.npy $(TESTTMP)/test_nilpy_updyn26
+	$(TESTTMP)/test_nilpy_updyn26 | diff -u test/test_nilpy_update_on_a_dynamic_receiver.expected -
 	# A BUILTIN TYPE as a VALUE -- `t = str`, `string_types = (str,)`, `{"k": int}`.
 	# Functions were first-class in NilPy and types were not: every conversion arm
 	# opened with `Next; Expect(tkLParen)`, so a type could be CALLED, never BOUND.

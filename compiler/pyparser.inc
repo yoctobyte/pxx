@@ -18967,6 +18967,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
     dictKwHit: Boolean;       { the keywords-are-KEYS arm already claimed this call }
+    dictKwMaybe: Boolean;     { ...and could it have been that call at all — asked only to keep the keyword-miss warning off correct code }
     arFits: Boolean;          { some candidate can accept the arity the call writes }
     dualPi, dcall, dself, dcast, tern, pairN, condN: Integer;
     { room for a real class hierarchy: songformatter has EIGHT detector classes
@@ -19560,13 +19561,54 @@ begin
     m.update(a=1)` and `xs[0].update(r=1)`, both of which arrive here rather
     than through FindUMethOverloadAhead. `update` is a name TPyList and TPySet
     carry too, so the dynamic scan above answered with whichever class it met
-    first and the call was reported against `TPyList.setupdate`. A KEYWORD run
-    only ever means dict.update — CPython's list and set take no keywords —
-    so the dict arm is the one answer, exactly as the static path picks it. }
+    first and the call was reported against `TPyList.setupdate`.
+
+    THIS USED TO CLAIM THE DICT ARM OUTRIGHT, on the premise — its own words —
+    that "a KEYWORD run only ever means dict.update, CPython's list and set
+    take no keywords". That is true of TPyList and TPySet, which is the
+    population it was measured against, and FALSE of every user class: nothing
+    stops a program writing `def update(self, boat, running=True,
+    paused=False)`, and lekkerzeilen's audio.Soundscape does. The arm then
+    rewrote a correct dynamic dispatch into a call on a class the program never
+    named, and `self.sound.update(self.boat, running=..., paused=...)` died
+    with `dict.update expects a mapping or an iterable of pairs` — a message
+    about a type the source does not mention. That is the mirror of the
+    `Wind.at has no parameter named 'outside'` case the paragraph below was
+    written to fix, and the same remedy answers both: a receiver with NO static
+    type is decided BY THE RECEIVER, at run time.
+
+    NAMED KEYWORDS ARE NO LONGER CLAIMED. They fall through to the open-world
+    arm below, which dispatches on the receiver, and pyeval's PyDynMethL
+    answers a TPyDict receiver's keyword run as KEYS — which is where CPython
+    decides it too. The two halves do not work apart, and the fixture says so:
+    without the runtime half, `xs[0].update(r=1, s=2)` (test_nilpy_dict_update_
+    keywords line 66) is the row that breaks.
+
+    A `**e` RUN IS STILL CLAIMED, and the line between them is capability, not
+    taste: named keywords reach the dynamic dispatcher as a kwspec string
+    parallel to the arguments, and a `**` has no dynamic-call shape to travel
+    in at all. So this keeps exactly the calls that must be bound to something
+    at parse time, and stops guessing about the ones that need not be. Measured
+    2026-09-14 — with the `**` half dropped too, `def fill(m): m.update(**{"c":
+    3})` binds against TPyList.setupdate(other) and dies with `forwarded call
+    has no value for parameter 'other'`, which is this same defect wearing the
+    list class instead of the dict one.
+
+    THE RESIDUAL, stated rather than hidden: a user class with `def update(self,
+    **kw)` reached through an untyped receiver and called with `**` still binds
+    TPyDict.update. That was true before this change for every keyword spelling;
+    it is now true for one. Closing it needs a dynamic call shape that can carry
+    a `**`, which does not exist.
+
+    The STATIC path is untouched. PyKeywordsAreKeys and PyDictKwOverloadAhead
+    are correct wherever the receiver's class is known to be TPyDict; only
+    applying them where there is no receiver type at all was wrong.
+    bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
   dictKwHit := False;
+  dictKwMaybe := False;
   if isNilPy then
   begin
-    i := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname);
+    i := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname, True);
     if i >= 0 then
     begin
       hitCi := FindUClass('TPyDict');
@@ -19574,6 +19616,17 @@ begin
       hitPi := UMthProc_[i];
       dictKwHit := True;
     end;
+    { ...and the WIDER question, asked only to keep the warning below honest:
+      could this call have been TPyDict.update at all? If it could, a keyword
+      that names no parameter is not evidence of a mistake — it is a KEY, and
+      the run-time dispatch the warning announces is the right answer rather
+      than a fallback. Without this, every `d.update(a=1)` through an untyped
+      receiver — correct code, correctly compiled — printed a warning saying no
+      class declares a parameter named `a`, which is true and is not a problem.
+      A warning that fires on correct code is how a build's warnings stop being
+      read. It does NOT set dictKwHit: claiming the call is what this change
+      exists to stop. }
+    dictKwMaybe := PyDictKwOverloadAhead(FindUClass('TPyDict'), mname, False) >= 0;
   end;
 
   { MOVED ABOVE THE OPEN-WORLD FALL-THROUGH, and the order is the whole fix.
@@ -19619,9 +19672,10 @@ begin
     end;
     if kwMissName <> '' then
     begin
-      Warn('Nil Python: no class here declares a .' + mname + '() with a '
-           + 'parameter named ''' + kwMissName + ''' — dispatching on the '
-           + 'receiver at run time');
+      if not dictKwMaybe then
+        Warn('Nil Python: no class here declares a .' + mname + '() with a '
+             + 'parameter named ''' + kwMissName + ''' — dispatching on the '
+             + 'receiver at run time');
       Result := PyMakeDynMethCall(baseNode, mname);
       Exit;
     end;
@@ -22262,7 +22316,17 @@ end;
   token c"). Scans to the closing ')' of THIS call, so a keyword belonging to a
   nested call cannot be mistaken for one of ours.
   bug-nilpy-dict-update-mixed-positional-and-keyword-args }
-function PyDictKwRunFrom(start: Integer): Boolean;
+function PyKwRunFromKind(start: Integer; starOnly: Boolean): Boolean;
+{ ...and `starOnly` asks only about the `**e` half of that run.
+
+  The two halves are NOT interchangeable to a caller that has to choose between
+  binding a callee statically and deferring to the run-time dispatcher: named
+  keywords travel to that dispatcher perfectly well (they become a kwspec
+  string parallel to the arguments), and a `**` does not travel at all — there
+  is no dynamic-call shape that carries one. So the shapes the parser must
+  still guess at are exactly the `**` ones, and asking for that half is what
+  lets the other half stop guessing.
+  bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
 var i, depth: Integer;
 begin
   Result := False;
@@ -22283,7 +22347,7 @@ begin
     end
     else if depth = 0 then
     begin
-      if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
+      if (not starOnly) and (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
          (Tokens[i + 1].Kind = tkAssign) then
       begin
         Result := True;
@@ -22298,6 +22362,13 @@ begin
     end;
     Inc(i);
   end;
+end;
+
+{ The whole run — named keywords OR a `**e`. The spelling every caller that
+  simply needs to know "is this a keywords-are-KEYS argument list" wants. }
+function PyDictKwRunFrom(start: Integer): Boolean;
+begin
+  Result := PyKwRunFromKind(start, False);
 end;
 
 { ...asked from where the parser is STANDING, which is how an argument loop
@@ -22344,7 +22415,8 @@ begin
     end;
 end;
 
-function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString): Integer;
+function PyDictKwOverloadAhead(ci: Integer; const name: AnsiString;
+                              starOnly: Boolean): Integer;
 { The UMeth index `d.update(a=1, b=2)` / `d.update(**e)` must resolve to, or -1
   when this is not that call.
 
@@ -22387,7 +22459,7 @@ begin
     SEGFAULTED. That is the identical failure this function was written to
     remove, reached by the one shape its lookahead did not cover.
     bug-nilpy-dict-update-mixed-positional-and-keyword-args }
-  if not PyDictKwRunFrom(lp + 1) then Exit;
+  if not PyKwRunFromKind(lp + 1, starOnly) then Exit;
   base := UClsMBase[dictCi];
   cnt := UClsMCount[dictCi];
   for i := 0 to cnt - 1 do

@@ -5671,6 +5671,29 @@ begin
         end;
       end;
     end;
+    { A DICT RECEIVER's keyword run is KEYS, not parameter names, and this is
+      the only place that knows which the receiver is. `d.update(a=1)` names a
+      KEY; PyBindHostKwArgs below would look for a PARAMETER called `a` on
+      TPyDict.update and refuse with `host method update has no parameter named
+      a`, which is a true statement about the wrong question.
+
+      The frontend used to answer this by claiming the TPyDict.update overload
+      at parse time for EVERY keyword call to a method named `update` on a
+      receiver it could not type — which broke every user class with an
+      `update` taking keywords. Decided here instead, by the receiver's own
+      class, exactly as CPython does it.
+
+      Positional slots (an empty name in kwNames) keep dict.update's other
+      meaning — a mapping or an iterable of pairs — so `d.update(m, c=2)`
+      merges `m` and then stores `c`, in the order written.
+      bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
+    if (kwNames <> nil) and (name = 'update') and (TObject(obj) is TPyDict) then
+    begin
+      PyDictUpdateKw(TPyDict(obj), args, kwNames);
+      kwNames.Free;
+      Result := pynone;
+      Exit;
+    end;
     res := pynone;
     PyHostCall(obj, name, args, kwNames, res);
     { args is the CALLER's — the arity rungs free the list they built. }

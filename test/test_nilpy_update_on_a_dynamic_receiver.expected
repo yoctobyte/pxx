@@ -1,0 +1,11 @@
+S1 static,  kw   update b False True
+S2 variant, kw   update b False True
+D1 dict,    kw   {'a': 1, 'b': 2}
+S3 param,   kw   update b False True
+S4 variant, pos  update b True False
+D2 dict, untyped {'c': 3, 'd': 4, 'e': 5, 'f': 6, 'g': 7}
+D3 dict, subscr  {'h': 8, 'i': 9}
+N1 static,  kw   tick b False
+N2 variant, kw   tick b False
+N3 param,   kw   tick b False
+S5 variant, kw   update z True True

@@ -2435,6 +2435,9 @@ function pyfrozenset_of(const v: Variant): TPyList;
   the bug. bug-nilpy-dict-update-mixed-positional-and-keyword-args }
 procedure pydict_merge_any(dst: TPyDict; const src: Variant);
 procedure pydict_merge(dst: TPyDict; src: TPyDict);
+{ `d.update(a=1, b=2)` / `d.update(m, c=2)` with the keyword names already split
+  out, for a receiver only the RUN TIME knows is a dict. See the body. }
+procedure PyDictUpdateKw(d: TPyDict; args, kwNames: TPyList);
 { The AGGREGATE builtins over a list (a generator expression already desugars to
   one). Each keeps Python's own answer for the empty case: sum([]) is 0, any([])
   is False, all([]) is True, and max/min of an empty sequence is an ERROR rather
@@ -8413,6 +8416,43 @@ begin
   else if o is TPyList then dst.update(TPyList(o))
   else
     raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+end;
+
+{ `d.update(a=1, b=2)` / `d.update(m, c=2)` with the keyword names already
+  split out — the KEYS reading of dict.update, applied where the receiver is
+  known to be a dict and nowhere else.
+
+  `kwNames` is parallel to `args`: entry i is the keyword argument i was
+  written with, or '' if it was positional. A positional slot keeps
+  dict.update's other meaning and goes through TPyDict.update's own Variant
+  overload, so the mapping and the keywords merge in the order written, which
+  is CPython's order for `dict.update(E, **F)`.
+
+  It merges through that overload rather than through a fresh copy of its
+  rules: that method is the one place saying what dict.update accepts, and the
+  one place that knows about Counter mode. A second copy of the answer is how
+  two spellings drift — which is the defect this whole ticket is, one layer up.
+  bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
+procedure PyDictUpdateKw(d: TPyDict; args, kwNames: TPyList);
+var i: Integer; nm: AnsiString; kv: Variant;
+begin
+  if (d = nil) or (args = nil) then Exit;
+  for i := 0 to args.count - 1 do
+  begin
+    nm := '';
+    if (kwNames <> nil) and (i < kwNames.count) then nm := pystr_of(kwNames.at(i));
+    if nm = '' then
+      d.update(args.at(i))
+    else
+    begin
+      { the name goes through a Variant LOCAL rather than straight into store's
+        const parameter — the same care TPyDict.update(const s) records beside
+        its own pystr_ofchar, where a raw Char is VT_CHAR and never equals the
+        VT_STRING a lookup arrives with. }
+      kv := nm;
+      d.store(kv, args.at(i));
+    end;
+  end;
 end;
 
 function pyset_of(const v: Variant): TPyList;

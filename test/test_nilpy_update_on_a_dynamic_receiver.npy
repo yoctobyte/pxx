@@ -1,0 +1,87 @@
+# bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update
+#
+# `obj.update(x, flag=True)` on a receiver the compiler cannot type was routed
+# to TPyDict.update UNCONDITIONALLY, on the premise -- pyparser.inc's own words
+# -- that "a KEYWORD run only ever means dict.update, CPython's list and set
+# take no keywords". True of TPyList and TPySet, which is the population it was
+# measured against; false of every user class, and lekkerzeilen's
+# audio.Soundscape writes exactly `def update(self, boat, running=True,
+# paused=False)`. It died with `dict.update expects a mapping or an iterable of
+# pairs` -- a message about a type the source does not mention.
+#
+# THREE AXES, and the bug needed all three: no static type for the receiver,
+# KEYWORDS in the call, and the name `update`. Positional calls were correct, a
+# statically-typed receiver was correct, and fourteen other method names were
+# correct -- including eight that pylib's own containers carry (get, add, keys,
+# pop, append, sort, copy, setdefault), which is what says the cause was never
+# "a name pylib also uses". `update` is the one name written into the compiler.
+#
+# The dict rows are not decoration: `update` really does take KEYS from a
+# keyword run when the receiver is a dict, and the fix moves that decision to
+# where the receiver's class is known (pyeval's PyDynMethL). A fix that only
+# taught the parser to leave user classes alone would break every row below
+# that has a dict on the left.
+#
+# The `**` rows stay bound at parse time and that is deliberate: a named
+# keyword reaches the dynamic dispatcher as a kwspec string, and a `**` has no
+# dynamic-call shape to travel in. They are here so a later change that drops
+# the remaining claim fails loudly instead of at `forwarded call has no value
+# for parameter 'other'`, which is where it lands -- TPyList.setupdate.
+#
+# Expectations are CPython's own output.
+
+class Sound:
+    def __init__(self, n=0):
+        self.n = n
+
+    def update(self, boat, running=True, paused=False):
+        return "update %s %s %s" % (boat, running, paused)
+
+    def tick(self, boat, running=True):
+        return "tick %s %s" % (boat, running)
+
+
+def through_param(o):
+    return o
+
+
+snd = 0                    # rebound: a VARIANT holding a Sound
+snd = Sound(1)
+stat = Sound(1)            # statically typed
+parm = through_param(Sound(1))
+
+print("S1 static,  kw  ", stat.update("b", running=False, paused=True))
+print("S2 variant, kw  ", snd.update("b", running=False, paused=True))
+
+# a DICT reached the same three ways -- the reading this call used to be given
+# unconditionally, and which has to keep working
+d1 = {}
+d1.update(a=1, b=2)
+print("D1 dict,    kw  ", d1)
+
+print("S3 param,   kw  ", parm.update("b", running=False, paused=True))
+print("S4 variant, pos ", snd.update("b"))
+
+def fill(m):                    # m is an unannotated parameter: no static type
+    m.update(c=3)
+    m.update({"d": 4})
+    m.update(**{"e": 5})
+    m.update({"f": 6}, g=7)
+    return m
+
+print("D2 dict, untyped", fill({}))
+
+xs = [{}]
+xs[0].update(h=8, i=9)          # a subscript result: also no static type
+print("D3 dict, subscr ", xs[0])
+
+# the control NAME: same three receivers, same keywords, a name the compiler
+# does not know. If a fix is credited to the name lookup rather than to the
+# keyword run, these move with the rows above.
+print("N1 static,  kw  ", stat.tick("b", running=False))
+print("N2 variant, kw  ", snd.tick("b", running=False))
+print("N3 param,   kw  ", parm.tick("b", running=False))
+
+# ...and the user class LAST, because every row above it has a dict somewhere
+# and a run that only ever met a dict is the run that certified this bug.
+print("S5 variant, kw  ", snd.update("z", paused=True))
