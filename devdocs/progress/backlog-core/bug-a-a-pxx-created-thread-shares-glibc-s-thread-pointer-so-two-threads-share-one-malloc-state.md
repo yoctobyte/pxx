@@ -113,6 +113,50 @@ collision). Both negatives are consistent with this cause and neither could
 have found it -- **the defect needs a C library on BOTH threads**, which is
 the one shape a headless minimal repro does not fall into by accident.
 
+## The demo itself, with the thread taken out
+
+The repro above is 60 lines of Pascal. This is the same claim made end to end,
+in the application, by removing the second thread and changing nothing else:
+a scratch copy of lekkerzeilen with `_loader` moved onto the MAIN thread (the
+loader's body, drained synchronously where the orders are submitted; the
+`_ready` queue unbounded so a synchronous pump cannot deadlock on `maxsize=2`).
+
+| build | world, `--shot --for 20` |
+| --- | --- |
+| loader on its own pxx thread | **4/5 abort** |
+| loader on the main thread, everything else identical | **5/5 rc=0**, ~739KB images every time |
+
+Both built from the same entry point with the same flags, so the comparison is
+not across build commands. The scratch patch is an EXPERIMENT and is not a
+proposed change to the application -- it exists to move one variable.
+
+## WARNING for anyone re-measuring: two of glibc's debug knobs are INERT here
+
+Measured 2026-09-14 on Ubuntu GLIBC 2.43, with a deliberate double-free in C
+as the subject:
+
+| env | what the double free says |
+| --- | --- |
+| none | `free(): double free detected in tcache 2` |
+| `MALLOC_CHECK_=3` | `free(): double free detected in tcache 2` -- **identical** |
+| `GLIBC_TUNABLES=glibc.malloc.check=3` | `free(): double free detected in tcache 2` -- **identical** |
+| `LD_PRELOAD=libc_malloc_debug.so.0 MALLOC_CHECK_=3` | `free(): invalid pointer` -- the mcheck path, reached at last |
+
+`MALLOC_PERTURB_` is inert the same way: freed bytes past the tcache header
+read back unchanged with it set. Since glibc 2.34 both live in
+`libc_malloc_debug.so`, which must be preloaded.
+
+**Neither errors. Both answer.** A run "under `MALLOC_CHECK_=3`" on this box is
+a plain run wearing a label, and "the checker did not convert it to an abort"
+is not a fact about the program. Reading such a row as evidence about a crash's
+nature is the house failure mode exactly.
+
+`glibc.malloc.tcache_count` IS live and the rows above that use it stand:
+`tcache_count=0` changes the double-free message to `double free or corruption
+(top)`, and a deliberately BOGUS tunable name leaves it unchanged -- which is
+the control that separates "the tunable did something" from "the string was
+accepted".
+
 ## Blast radius
 
 Every `--threadsafe` pxx program that links any C library and allocates on

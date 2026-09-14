@@ -26439,3 +26439,69 @@ test and not the second-independent-subsystem test. If a second subsystem
 produces a constant-valued wrong answer that collides with a natural probe,
 this is the paragraph to promote — as a sentence appended to that list, not as
 a neighbouring rule.
+
+## A BAD VARIANT TABLE DOES NOT LOOK WRONG, IT LOOKS CLEAN — and the same is true of an inert instrument and an uncapped counter
+
+Varying a construct's spelling and tabulating the results is the standard way
+to find a boundary. It has a failure mode with no symptom: when the table is
+built wrong, every row comes back the same, and a uniform table reads as a
+clean negative — *"this is not the cause"* — which is the one verdict that
+ends the search instead of continuing it. A wrong ANSWER gets challenged. A
+row of identical answers gets believed.
+
+The precondition, and it wants to be read as one sentence:
+
+> **A variant table is only evidence if the tree was rebuilt at the current
+> compiler AND the variant you changed is on the executed path.**
+
+Both halves failed on one subject within a few hours on 2026-09-14, hunting
+lekkerzeilen's world-path wall:
+
+- **Ten spellings of `wind.py:143`, all 5/5 identical.** The tree had been
+  built against a compiler predating two landed fixes, so every row was a
+  uniform negative — and a location that was CORRECT got withdrawn on the
+  strength of it.
+- **Four spellings of `TiledGrid.at:955`, all unchanged.** `grid is not None`
+  on that path, so the branch being varied never executed. The null result
+  read as exoneration of the very line that was right.
+
+### The same shape in two other instruments
+
+**An inert instrument answers.** Measured the same day on Ubuntu GLIBC 2.43:
+`MALLOC_CHECK_=3` and `MALLOC_PERTURB_` have lived in `libc_malloc_debug.so`
+since glibc 2.34 and do **nothing** unless it is `LD_PRELOAD`ed. A deliberate
+double-free prints the identical message with the variable set and unset; only
+the preload reaches the mcheck path and changes it to `free(): invalid
+pointer`. So a crash observed "under `MALLOC_CHECK_=3`" was observed under
+nothing, and the inference everyone draws from it — *the checker did not turn
+this into an abort, so it is not heap corruption* — is a statement about an
+instrument that was never running. The discriminator costs one command:
+**give the knob something it MUST catch, and a deliberately bogus knob name
+beside it.** `glibc.malloc.tcache_count=0` passes that test (the message
+changes; a nonsense tunable name leaves it unchanged); `malloc.check=3` fails
+it.
+
+**An uncapped counter cannot report starvation.** A drain loop that prints
+`drained 0` prints exactly that whether the queue was empty or the producer
+never ran at all. Cap it, count it, and print an explicit
+`INSTRUMENT DEAD: the worker produced nothing, this run proves nothing` line
+before any row is trusted. Both stress programs written for the thread hunt
+carry one, and the item counts they report (2160–2416 items across the queue)
+are the only reason their clean results mean anything.
+
+### What joins all three
+
+None of these produces a wrong value. They produce **silence** — a uniform
+table, an unchanged message, a zero — and silence is read as a negative
+result rather than as a broken instrument. That is why they survive review by
+careful people: there is nothing in the output to interrogate.
+
+So before recording a negative, ask the question that has teeth:
+**what would this instrument have printed if it were not working?** If the
+answer is "the same thing", you have not measured anything yet. Related, from
+CLAUDE.md: *"my change measured as NO CHANGE — data about your MODEL"*, and
+"A GUARD THAT CANNOT FAIL IS NOT A GUARD"; this is the reading side of both.
+
+Measured and reported by `lekkerzeilen-c8` (the two variant tables and the
+precondition, verbatim) and by this seat (the inert knobs and the counter),
+2026-09-14.
