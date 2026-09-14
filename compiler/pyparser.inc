@@ -25505,6 +25505,10 @@ function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean;
 var i, currArg, listCi, iterCi, pRec: Integer;
 begin
   Result := False;
+  { Clear the undo record on EVERY entry, including the ones that exit early:
+    a stale entry from an earlier call in the same expression would restore a
+    node into an argument list it does not belong to. }
+  for i := 0 to MAX_PROC_PARAMS - 1 do PyIterDrainSaved[i] := -1;
   if not PyExprMode then Exit;
   if nArgs <= 0 then Exit;
   listCi := FindUClass('TPyList');
@@ -25518,6 +25522,18 @@ begin
     begin
       if procIdx < 0 then
       begin
+        { SPECULATIVE -- record what was here so a failed retry can put it
+          back. Beyond MAX_PROC_PARAMS there is nowhere to record it, so do
+          not guess at all: a call with more arguments than any routine can
+          declare matches nothing either way, and an unrecorded rewrite is the
+          exact failure this array exists to stop. }
+        if i >= MAX_PROC_PARAMS then
+        begin
+          currArg := ASTRight[currArg];
+          Inc(i);
+          Continue;
+        end;
+        PyIterDrainSaved[i] := ASTLeft[currArg];
         ASTLeft[currArg] :=
           PyCallProc1('pyiter_drain', PyCallProc1('pyiter_of_userobj', ASTLeft[currArg]));
         Result := True;
@@ -25537,6 +25553,39 @@ begin
           Result := True;
         end;
       end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
+end;
+
+function PyUndoIterableArgs(argsHead, nArgs: Integer): Boolean;
+{ Put back what the SPECULATIVE arm of PyFixIterableArgs replaced.
+
+  The drain is a guess made to give the overload match a second chance, and
+  when that second chance also comes back -1 the guess was simply wrong -- but
+  it has already rewritten the caller's argument list, and every path BELOW the
+  match reads that list. The defaulted-arity path is the one that bit: it
+  lowers a correct call and fills the missing trailing default, so the program
+  compiles, runs, and hands the callee `list(bag)` where the source said `bag`.
+  No diagnostic is possible after that point; the callee simply dispatches
+  through the wrong class.
+
+  Restoring by SAVED NODE rather than by recognising the wrapper: the wrapper
+  is two nested PyCallProc1 nodes and matching on its shape would be a second
+  place to keep in step with the code that builds it. }
+var i, currArg: Integer;
+begin
+  Result := False;
+  currArg := argsHead;
+  i := 0;
+  while (currArg >= 0) and (i < nArgs) do
+  begin
+    if (i < MAX_PROC_PARAMS) and (PyIterDrainSaved[i] >= 0) then
+    begin
+      ASTLeft[currArg] := PyIterDrainSaved[i];
+      PyIterDrainSaved[i] := -1;
+      Result := True;
     end;
     currArg := ASTRight[currArg];
     Inc(i);
@@ -55180,6 +55229,29 @@ begin
             currArg := ASTRight[currArg];
           end;
           procIdx := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, argTypes);
+          { THE RETRY IS A GUESS AND A FAILED GUESS MUST BE TAKEN BACK. The
+            drain above rewrote the caller's argument list in place, and every
+            path BELOW this match reads that list -- including the one that
+            fills a callee's missing trailing DEFAULT, which happily lowers a
+            correct two-argument call carrying `list(bag)` where the source
+            said `bag`. Measured 2026-09-14: a def with a defaulted trailing
+            parameter, called without it, one argument whose class declares
+            __iter__ -- first match -1, retry ALSO -1, and the callee then
+            dispatched a method through TPyList's table and called data.
+            No diagnostic is possible past this point, and the same call with
+            the default supplied is correct, so the CALL SITE alone decided.
+            bug-n-a-failed-overload-retry-leaves-a-drained-argument-behind }
+          if (procIdx < 0) and PyUndoIterableArgs(argsHead, nArgs) then
+          begin
+            currArg := argsHead;
+            for i := 0 to nArgs - 1 do
+            begin
+              argTypes[i] := IntToTypeKind(ASTTk[ASTLeft[currArg]]);
+              if (ASTKind[ASTLeft[currArg]] = AN_STR_LIT) and (argTypes[i] = tyString) then
+                argTypes[i] := tyAnsiString;
+              currArg := ASTRight[currArg];
+            end;
+          end;
         end
         else if (procIdx >= 0) then
           PyFixIterableArgs(procIdx, argsHead, nArgs);

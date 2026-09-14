@@ -1879,6 +1879,18 @@ test-nilpy: $(COMPILER)
 	# nilpy_deadarm/deadctypes.py line 7 and not this file's.
 	./$(COMPILER) test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy $(TESTTMP)/test_nilpy_deadarmcompile26
 	tools/expect_same.sh test_nilpy_deadarmcompile26 "$$($(TESTTMP)/test_nilpy_deadarmcompile26)" "$$(python3 test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy)"
+	# A call that OMITS a trailing defaulted argument, where the argument's class
+	# declares __iter__. PyFixIterableArgs drains a user-iterable argument on
+	# SPECULATION so the overload match can be retried once (that is what gives
+	# `sum(bag)` its row); when the retry ALSO failed, the drain stayed, and the
+	# defaulted-arity path below then lowered a correct call carrying list(bag)
+	# where the source said bag. Three conditions, each with its control IN the
+	# fixture and each green on the ordinary spelling: __iter__ on the argument's
+	# class, the omitted trailing default, and a callee in a NON-MAIN module.
+	# The sum()/sorted() rows are the other direction -- the drain must still
+	# happen where it is meant to, or "never drain" would pass.
+	./$(COMPILER) test/test_nilpy_a_failed_overload_retry_restores_the_drained_argument.npy $(TESTTMP)/test_nilpy_iterdrainundo26
+	$(TESTTMP)/test_nilpy_iterdrainundo26 | diff -u test/test_nilpy_a_failed_overload_retry_restores_the_drained_argument.expected -
 	# A module that RESOLVED could leave `SoftUnitMissed` set from its own guarded
 	# import -- the flag is a global -- and the importing from-import read it as
 	# ITS OWN miss and bound every name to None. `from pkg import VALUE` gave None
@@ -2396,6 +2408,16 @@ test-nilpy: $(COMPILER)
 	# and print 104, which is ord('h'), then segfault.
 	./$(COMPILER) test/test_nilpy_the_array_module.npy $(TESTTMP)/test_nilpy_array26
 	$(TESTTMP)/test_nilpy_array26 | diff -u test/test_nilpy_the_array_module.expected -
+	# ...and the same array indexed where the compiler does NOT know the
+	# receiver's class. The default property is resolved by the FRONTEND, so a
+	# typed local always worked while an attribute, a list element and an
+	# unannotated parameter all raised "object is not subscriptable" -- those go
+	# through pyvar_getitem/pyvar_setitem, which have only the handle and look
+	# for __getitem__/__setitem__ in the class RTTI. The typed-local row is in
+	# the fixture as the control and deliberately not alone: it was green
+	# throughout, so the ordinary one-array-one-local test certifies the bug.
+	./$(COMPILER) test/test_nilpy_array_subscript_through_a_variant.npy $(TESTTMP)/test_nilpy_arrvarsub26
+	$(TESTTMP)/test_nilpy_arrvarsub26 | diff -u test/test_nilpy_array_subscript_through_a_variant.expected -
 	# ...and the refusal that fix must NOT have widened: the reserved-word
 	# mapping is gated on a QUALIFIER, so an UNQUALIFIED `array(...)` is still
 	# the program's own name and must stay undefined. Without this row the gate

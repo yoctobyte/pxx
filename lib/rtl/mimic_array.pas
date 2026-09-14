@@ -110,6 +110,28 @@ type
 
     function at(i: Integer): Variant;
     procedure put(i: Integer; const v: Variant);
+    { `a[i]` WHEN THE RECEIVER ARRIVES AS A VARIANT rather than as a
+      statically-typed local -- an attribute (`self.values[row]`), an element
+      of a container, an unannotated parameter.  The default property below is
+      resolved by the FRONTEND against a known class and cannot fire there;
+      pyvar_getitem has only the handle, and it looks for `__getitem__` in the
+      class RTTI (PyUserArithCall1 / PyUserSetitemCall) -- the same route
+      `__len__` above already takes, and the reason that one is spelled with
+      the Python name too.
+
+      Without these, `array.array` was subscriptable only where the compiler
+      knew the type: world.py's Grid.at reads `self.values[row]` four times per
+      bilinear sample and every one of them raised
+      `TypeError: object is not subscriptable`, which lekkerzeilen's tile
+      loader caught and reported per tile as
+      `tile (86, 220): object is not subscriptable`.
+
+      The signatures are dictated by the dispatchers and are not free: arity 2
+      and 3, every non-self parameter a Variant, and a RetKind they recognise
+      -- so __setitem__ is a FUNCTION returning an Integer nobody reads, since
+      a procedure has no return ABI to dispatch on. }
+    function __getitem__(const k: Variant): Variant;
+    function __setitem__(const k, v: Variant): Integer;
     { `a[i]` read and write. Variant rather than two typed properties because
       one buffer answers in Int64 for ten typecodes and in Double for two, and
       which it is is a RUNTIME property of the instance. }
@@ -305,6 +327,11 @@ end;
 function array_.at(i: Integer): Variant;
 var p: NativeInt;
 begin
+  { Python's negative-index rule belongs at the Python SURFACE and not in
+    ByteAt, which is the storage primitive and must keep refusing an index it
+    was handed literally.  CPython answers a[-1]; ours raised
+    `array index out of range: -1`. }
+  if i < 0 then i := i + FLen;
   p := ByteAt(i);
   if FIsFloat then
   begin
@@ -327,9 +354,21 @@ begin
     end;
 end;
 
+function array_.__getitem__(const k: Variant): Variant;
+begin
+  Result := at(Integer(pyvar_to_int(k)));
+end;
+
+function array_.__setitem__(const k, v: Variant): Integer;
+begin
+  put(Integer(pyvar_to_int(k)), v);
+  Result := 0;
+end;
+
 procedure array_.put(i: Integer; const v: Variant);
 var p: NativeInt; iv: Int64;
 begin
+  if i < 0 then i := i + FLen;             { the write half of at()'s rule }
   p := ByteAt(i);
   if FIsFloat then
   begin

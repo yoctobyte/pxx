@@ -1,0 +1,9 @@
+typed local 1 4
+typed local neg 4 1
+attribute 2
+through a method 3
+unannotated param 1 3 3
+element of a list 4
+attribute write 9
+negative write 7
+ok

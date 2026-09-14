@@ -84,3 +84,7 @@ way every run, on `tile (x, y): object is not subscriptable`. The
 bug-a-something-in-lekkerzeilen-s-startup... records as "racing with the loader
 thread" was this: a freed-and-reused container block read back with the wrong
 FKind.
+
+## Log
+
+- 2026-09-14 frank-user: re-gated the nine allocator-spin sites on PXX_THREADSAFE, commit 02b7f7250; fixture test_nilpy_threaded_container_alloc wired in the same commit. gate quick GREEN.

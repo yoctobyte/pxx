@@ -6691,6 +6691,30 @@ var
                            Python precedence (below comparison) via PyParseBoolExpr; suppressed
                            in Pascal RTL units pulled in by .npy programs }
 
+  { THE ARGUMENT NODES PyFixIterableArgs REPLACED ON SPECULATION, per argument
+    position, or -1.
+
+    Its `procIdx < 0` arm drains every user-iterable argument so the overload
+    match can be RETRIED once -- that is what gives `sum(bag)` the
+    `sum(TPyList)` row. The retry is a guess, and a guess that fails has to be
+    taken back: the drain rewrites the caller's AST in place, so a failed retry
+    used to leave `f(bag)` calling f with `list(bag)` where the source said
+    `bag`, silently, with no diagnostic anywhere.
+
+    Measured 2026-09-14 -- the shape is a def with a DEFAULTED TRAILING
+    PARAMETER called without it, where an argument's class declares __iter__:
+
+      mt.x2(panels)        -> first match -1, drained, RETRY ALSO -1, and the
+                              defaulted-arity path below then lowered a correct
+                              two-argument call carrying the drained list
+      mt.x2(panels, "T")   -> matched at once, nothing touched
+
+    The callee received a TPyList, dispatched `panels.panel(key)` through
+    TPyList's method table and called whatever data sat at slot 0x28. Same
+    function, same binary; the CALL SITE alone decided.
+    bug-n-a-failed-overload-retry-leaves-a-drained-argument-behind }
+  PyIterDrainSaved : array[0..MAX_PROC_PARAMS-1] of Integer;
+
   { THE ONE TOKEN ParseClassRecordSelectors MUST NOT WALK THROUGH, or -1.
 
     `@a.b.Foo` needs the chain `a.b` parsed as a VALUE and `Foo` taken as a

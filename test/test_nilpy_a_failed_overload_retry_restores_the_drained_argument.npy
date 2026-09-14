@@ -1,0 +1,53 @@
+# A call that OMITS a trailing defaulted argument, where the argument's class
+# declares __iter__.
+#
+# PyFixIterableArgs has a speculative arm: when no overload matched, it drains
+# every user-iterable argument -- `pyiter_drain(pyiter_of_userobj(x))` -- and
+# lets the caller retry the match once. That is what gives `sum(bag)` the
+# `sum(TPyList)` row, and it is right. What was missing is the other half: the
+# drain REWRITES THE CALLER'S ARGUMENT LIST IN PLACE, and when the retry also
+# comes back -1 the rewrite stayed. Every path below the match reads that list,
+# including the one that fills a callee's missing trailing default -- so the
+# call compiled, ran, and handed the callee `list(bag)` where the source said
+# `bag`. No diagnostic is possible after that point.
+#
+# Measured 2026-09-14 on the unfixed compiler, with the compiler instrumented
+# at the decision itself:
+#
+#   callee.with_default(held)        first match -1, drained, RETRY ALSO -1
+#   callee.with_default(held, "T")   matched at once, nothing touched
+#
+# and the crash was `mov (%rdi),%rax ; call *0x28(%rax)` -- the method
+# dispatched through TPyList's table, calling whatever data sat at slot 0x28.
+# Same function, same binary: the CALL SITE alone decided.
+#
+# THREE CONDITIONS, each one measured on its own, and the fixture carries the
+# control for each because every one of them is green on the ordinary spelling:
+#   1. the argument's class declares __iter__      (NotIterable is the control)
+#   2. the call omits a trailing default           (the ", T" rows are it)
+#   3. the callee is defined in a NON-MAIN module  (local_with_default is it)
+# A test written with the class in this file, or the callee in this file, or
+# the default supplied, passes on the unfixed compiler.
+from nilpy_iterdrain import held, callee
+
+h = held.Held([10, 20, 30])
+p = held.NotIterable([10, 20, 30])
+
+
+def local_with_default(c, title="T"):
+    return c.label() + "/" + title
+
+
+print("iterable, default omitted  ", callee.with_default(h))
+print("iterable, default supplied ", callee.with_default(h, "T"))
+print("iterable, no default at all", callee.no_default(h))
+print("plain,    default omitted  ", callee.with_default(p))
+print("plain,    default supplied ", callee.with_default(p, "T"))
+print("local callee, omitted      ", local_with_default(h))
+
+# The speculative drain must still WORK where it is meant to: a user iterable
+# handed to a builtin that wants a container. Without this row the fix could be
+# "never drain" and the test would not notice.
+print("sum over the same object   ", sum(h))
+print("sorted over the same object", sorted(h))
+print("ok")

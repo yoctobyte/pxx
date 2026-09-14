@@ -1,0 +1,9 @@
+iterable, default omitted   held:3/T
+iterable, default supplied  held:3/T
+iterable, no default at all held:3
+plain,    default omitted   plain:3/T
+plain,    default supplied  plain:3/T
+local callee, omitted       held:3/T
+sum over the same object    60
+sorted over the same object [10, 20, 30]
+ok
