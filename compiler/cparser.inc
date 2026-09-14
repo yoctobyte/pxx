@@ -11955,6 +11955,23 @@ begin
     soname := Strs[ProcLibrary[procIdx]].Text;
     if not (CaseEqual(soname, 'libc.so.6') or CaseEqual(soname, 'libm.so.6')) then continue;
     if CSystemLibSelectedForSoname(soname) then continue;
+    { A WEAK EXTERNAL IS NOT AN IMPLICIT IMPORT, AND THIS WARNING'S PREMISE IS
+      FALSE FOR ONE. The text says the program "will import them from the system
+      C library at run time, and its ABI need not match" -- that is the hazard
+      for a HARD undefined symbol, which the loader must resolve or refuse to
+      start. A weak one is optional by construction: unresolved, its GOT slot is
+      zero, `@f` reads nil and the call site takes its guarded branch; and if
+      nothing else is imported hard, DropWeakOnlyImports removes it entirely and
+      the binary stays static with no DT_NEEDED at all. There is no silent
+      ABI mismatch to warn about because there is no silent link.
+
+      Measured 2026-09-14: lib/rtl/palthread.pas's weak pthread_create/-_join
+      made `test/crtl_declaration_census.sh` FAIL with "crtl declares functions
+      it does not define: c_pthread_create" -- a name that appears nowhere in
+      lib/crtl, reported against a C surface it is not part of, for a Pascal
+      unit that every --threadsafe program pulls in. The census is right to be
+      strict; the warning was answering about the wrong population. }
+    if ProcWeakExternal[procIdx] then continue;
     if n > 0 then AppendString(names, ', ');
     AppendString(names, Procs[procIdx].Name);
     Inc(n);

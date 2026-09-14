@@ -8493,6 +8493,14 @@ begin
   if kl <> nil then
   begin
     for i := 0 to kl.count - 1 do r.add(kl.at(i));
+    { kl IS OURS TO RELEASE and it is a full copy, not an alias: every arm of
+      pyseq_of_obj returns a fresh list -- the list, bytes and range arms copy
+      through list(), the dict arm builds one in keylist, the iter and
+      user-object arms drain into a new one. Measured 2026-09-14: set(L) for a
+      32-element L leaked 583 bytes per call, linear, which is exactly that
+      copy (32 Variants at 16 bytes plus header). A Pascal local does not
+      participate in refcounting; see the note on pystr_format. }
+    PXXObjRelease(Pointer(kl));
     Exit;
   end;
   raise TypeError.Create('set() argument must be iterable');
@@ -16720,6 +16728,15 @@ begin
   args := TPyList.Create;
   args.append(a);
   pystr_format := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 { `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
@@ -16740,6 +16757,15 @@ begin
   args.append(a);
   args.append(b);
   pystr_format2 := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 { THREE OR MORE placeholders. The arity-suffixed-name trick above does not
@@ -16765,6 +16791,15 @@ begin
   if n > 6 then args.append(a6);
   if n > 7 then args.append(a7);
   pystr_formatn := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;

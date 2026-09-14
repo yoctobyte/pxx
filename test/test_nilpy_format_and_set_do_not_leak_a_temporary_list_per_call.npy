@@ -1,0 +1,91 @@
+# A pylib function that builds a TPyList as a LOCAL TEMPORARY must release it.
+#
+# pxx objects ARE refcounted (PXXObjRetain/Release, finalizer on zero), but a
+# PASCAL local does not participate -- the frontend emits retain/release for
+# NilPy locals, and pylib.pas is Pascal. So a list built in a pylib function and
+# dropped there is never released by anything, and the call leaks on every
+# invocation, forever.
+#
+# MEASURED 2026-09-14, before the fix: "{}".format(i) leaked 199-200 bytes per
+# call and set(L) 583, both LINEAR across two passes, both 0 under CPython.
+#
+# THE THRESHOLD IS A RELATION, NOT A RATE. Asserting "0 bytes" would make this
+# fixture flap on any unrelated page the process happens to fault in; asserting
+# "under 200 bytes per call" would pass on the unfixed compiler, which leaked
+# exactly 199. 50 is comfortably below the smallest defect (199) and far above
+# ordinary noise at 40000 iterations.
+#
+# `retain` IS THE POSITIVE CONTROL AND THE FIXTURE IS WORTHLESS WITHOUT IT:
+# every other row here asserts a number stays near ZERO, so a broken instrument
+# -- statm unreadable, the parse returning 0, the loop not running -- passes all
+# of them. retain deliberately keeps its allocations and MUST show growth.
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+L = list(range(32))
+N = 40000
+LEAK_LIMIT = 50          # bytes per call
+held = []
+
+def f_format_one(n):
+    for i in range(n):
+        s = "{}".format(i)
+
+def f_format_three(n):
+    for i in range(n):
+        s = "{} {} {}".format(i, i + 1, "z")
+
+def f_set(n):
+    for i in range(n):
+        s = set(L)
+
+def f_retain(n):
+    for i in range(n):
+        held.append([0] * 16)
+
+ok = True
+base = rss_kb()
+
+# Each shape runs TWICE. A first pass can move for one-off reasons (an arena
+# page, a cache); a SECOND pass on the same shape cannot, and it is the second
+# that is asserted.
+for name, fn in [("format1", f_format_one), ("format1", f_format_one),
+                 ("format3", f_format_three), ("format3", f_format_three),
+                 ("set", f_set), ("set", f_set)]:
+    fn(N)
+    now = rss_kb()
+    per = ((now - base) * 1024) // N
+    base = now
+
+second = {}
+base = rss_kb()
+for name, fn in [("format1", f_format_one), ("format3", f_format_three), ("set", f_set)]:
+    fn(N)
+    now = rss_kb()
+    second[name] = ((now - base) * 1024) // N
+    base = now
+
+for name in ["format1", "format3", "set"]:
+    if second[name] < LEAK_LIMIT:
+        print("%s LEAKFREE" % name)
+    else:
+        print("%s LEAKS %d bytes/call" % (name, second[name]))
+        ok = False
+
+f_retain(N)
+now = rss_kb()
+ctrl = ((now - base) * 1024) // N
+if ctrl > 100:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every LEAKFREE above is meaningless" % ctrl)
+    ok = False
+
+if ok:
+    print("PYLEAK OK")
+else:
+    print("PYLEAK FAIL")
