@@ -131,4 +131,4 @@ that drive a refcount below zero -- **6 unfixed, 0 fixed**. Every star call in
 the fixture is made from inside a function on purpose.
 
 ## Log
-- 2026-09-14 — resolved, commit PENDING-COMMIT.
+- 2026-09-14 — resolved, commit eb9228950.
