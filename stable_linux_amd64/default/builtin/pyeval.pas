@@ -303,6 +303,24 @@ function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
   an object. bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
 function pyvar_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
 function pyvar_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
+{ FIVE to EIGHT arguments through a callable VALUE. `fn(*xs)` where fn is a name
+  bound to a def and xs holds five elements was refused outright -- the dispatch
+  ladder stopped at four, and the arity guard in front of it said so at run time:
+  `forwarded call got 5 arguments, expected 0 to 4`. Found by attempting
+  lekkerzeilen, `lines.py:782`:
+
+    from .geometry import _quad            { a DOTTED from-import binds a VALUE }
+    _quad(out, *(quad if side > 0.0 else tuple(reversed(quad))))
+
+  one written argument and a four-tuple, into `_quad(out, a, b, c, d)`. Four call
+  sites in that one module, and CPython accepts every one.
+
+  Each rung shares pyvar_wide_prelude and differs only in the indirect call,
+  which is the one thing a static arity is needed for. }
+function pyvar_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+function pyvar_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+function pyvar_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+function pyvar_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 
 { Box a callable OBJECT pointer (a lambda's pyeval closure or lifted bound-fn)
   as a variant, so a lambda bound to a NAME is typed tyVariant and the name's
@@ -362,6 +380,25 @@ function pydyn_methkw3(const recv: Variant; const name, kwspec: AnsiString;
                        const a0, a1, a2: Variant): Variant;
 function pydyn_methkw4(const recv: Variant; const name, kwspec: AnsiString;
                        const a0, a1, a2, a3: Variant): Variant;
+
+{ THE ARITY-FREE FORM, and what the frontend emits now. pydyn_meth0..4 and
+  pydyn_methkw1..4 above are a LADDER, and a ladder is a cap: the frontend
+  refused a fifth argument with "that path takes at most 4 arguments — annotate
+  the receiver with its class to pass more", which is a real refusal of ordinary
+  duck-typed code (lekkerzeilen's gfx.py has seven `gl.*` calls past it,
+  `gl.tex_image_2d(target, fmt, w, h, fmt, data, level=at)` among them).
+
+  The list is what the worker wanted all along: PyDynMethN's first act was to
+  build a TPyList out of a0..a3 and hand it to PyHostCall. So taking the list
+  DELETES the reason for the ladder rather than lengthening it, and the rungs
+  stay only as wrappers — they are a public interface and nothing establishes
+  that no program calls them.
+
+  args is the CALLER's and is not freed here; the rungs free the one they
+  build. kwspec is '|'-separated, one field per argument, empty for a positional
+  one, exactly as before. }
+function pydyn_methl(const recv: Variant; const name, kwspec: AnsiString;
+                     args: TPyList): Variant;
 
 implementation
 
@@ -1031,6 +1068,36 @@ begin
   pk := PInt64(mi^.ParamKinds);
   rk := mi^.RetKind;
 
+  { THE CALLEE'S OWN DEFAULTS, filled from ITS signature rather than from
+    whichever same-named method the frontend's candidate scan happened to see
+    first.
+
+    THIS IS THE HALF THAT MAKES OPEN-WORLD DISPATCH ACTUALLY OPEN. Until now a
+    call deferred to run time could only be completed when the source wrote
+    every parameter: the binder had mi^.Arity and no values, so
+    `g.at(a, b)` against `at(self, x, z, outside=None)` raised a TypeError
+    naming an argument the program is entitled to omit. Every caller that had
+    to be right about a default was therefore the COMPILER, at a call site
+    where the receiver's class is by definition not known -- which is the
+    defect this is from.
+
+    THE ROUTE IS THE NEW BLOCK WORD, NOT A NEW FIELD, so nothing about
+    TMethInfo moves; see RTTI_METH_FLAG_HASSIG. The pointer is read only when
+    the flag says the word is there AND the word is non-nil: a proc that got no
+    signature record leaves it nil and this simply does not fire, which is the
+    pre-existing behaviour.
+
+    pysig_fill_defaults is ALL-OR-NOTHING. A partial fill would hand the body a
+    slot the caller never wrote and the signature never settled, and calling at
+    an arity the callee cannot take is the segfault this path exists to avoid.
+    When it declines, the TypeError below still fires and still says the true
+    thing. }
+  if (nargs < n) and (pk <> nil) and ((mi^.Flags and RTTI_METH_FLAG_HASSIG) <> 0) then
+  begin
+    if pysig_fill_defaults(Pointer(NativeInt(pk[2 * (n + 1)])), args, n) then
+      nargs := args.count;
+  end;
+
   { --- Double param/return shapes (fpush/fpop): the one non-Variant family --- }
   if (rk = 0) and (n = 1) and (pk <> nil) and (pk[1] = TK_DOUBLE) then
   begin
@@ -1391,6 +1458,20 @@ begin
     19: res := MakeFloat(PDouble(p)^);           { tyDouble }
     22: res := PVariant(p)^;                      { tyVariant — copy the slot }
     23: res := MakeStr(PAnsiString(p)^);          { tyAnsiString (deref arg owned by the isNilPy arg lowering) }
+    { tyPromoInt32 / tyPromoInt64 — a promotable int is an AGGREGATE
+      ({tag, payload}, two machine words), so without these two arms it fell to
+      the else below and was read as an OBJECT POINTER: VType 7 with the promo
+      TAG as the payload, plus a PXXObjRetain on that number. The value then
+      travelled as a plausible object until something asked it for a number,
+      which is how `SLICE = 2 << 20` at class level surfaced four frames away as
+      `TypeError: expected a number, got object` inside an interpreted lambda —
+      and why the retain on a tag-shaped address could fault instead.
+      A class attribute whose initialiser is an arithmetic EXPRESSION is typed
+      tyPromoInt64 by the class-attribute retype, so this is the ordinary shape,
+      not an exotic one; a single literal stays tyInt64 and took arm 13, which is
+      why only the expression spelling was ever wrong.
+      bug-n-a-promotable-int-field-is-boxed-as-an-object }
+    27, 28: PXXPromoToVariant(@res, p);
   else
     { class / aggregate field: the slot holds an object pointer; expose it as a
       VT_OBJECT so subscripts and method calls can reach the container. A field
@@ -1494,13 +1575,17 @@ begin
       raise IndexError.Create('list assignment index out of range');
     li.put(i, val);
   end
+  { DELEGATED, and it used to be hand-rolled: TPyBytes.put already applies the
+    negative-index rule, raises `bytearray index out of range` -- with the type
+    name CPython prints, which the local message omitted -- and rejects a value
+    outside 0..255 with CPython's ValueError. The local copy masked with $FF
+    instead, so `exec("b[0] = 256", d, d)` stored 0 and printed nothing, where
+    CPython raises. Measured before the change: `[0]` against a ValueError.
+    pylib's pyvar_setitem grew the same arm the same way, so the three write
+    paths (a static receiver, a variant receiver, the interpreter) are now one
+    mechanism rather than three copies of one rule. }
   else if o is TPyBytes then
-  begin
-    by := TPyBytes(o); n := by.count; i := pyvar_to_int(index);
-    if i < 0 then i := i + n;
-    if (i < 0) or (i >= n) then raise IndexError.Create('index out of range');
-    by.put(i, pyvar_to_int(val) and $FF);
-  end
+    TPyBytes(o).put(Integer(pyvar_to_int(index)), Integer(pyvar_to_int(val)))
   else if o is TPyDict then
   begin
     di := TPyDict(o);
@@ -2424,6 +2509,17 @@ type
   TPyCallFn2 = function(const a0, a1: Variant): Variant;
   TPyCallFn3 = function(const a0, a1, a2: Variant): Variant;
   TPyCallFn4 = function(const a0, a1, a2, a3: Variant): Variant;
+  { The WIDE rungs. A compiled def taken as a VALUE is called through its code
+    address, and an indirect call needs a STATIC arity -- there is no variadic
+    call in this compiler -- so the ladder is structurally required and only its
+    CEILING is a choice. Eight because the widest star-unpack call in the
+    lekkerzeilen corpus is seven (`Grid(*row[1:])`), and past the ceiling the
+    refusal now names the callee and the ceiling instead of dropping arguments.
+    bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+  TPyCallFn5 = function(const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCallFn6 = function(const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCallFn7 = function(const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCallFn8 = function(const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   { Variant results, not Int64: an unannotated NilPy def returns its value
     through a hidden destination pointer the callee always copies into. Through
     an Int64-typed pointer that register held stale data and the callee's
@@ -3099,6 +3195,44 @@ begin
     want := pystr_of(lo) + ' positional arguments';
   raise TypeError.Create('<lambda>() takes ' + want + ' but '
     + pystr_of(n) + ' were given');
+end;
+
+function PyClassRefNewRaw(const cb: Variant): Variant;
+{ `cls.__new__(cls)` — ALLOCATE an instance of the class the VT_CLASSREF blob
+  names and DO NOT run its constructor. That is exactly what CPython's
+  object.__new__ does, and it is the idiom for building an object whose fields
+  a classmethod is about to fill itself:
+
+      @classmethod
+      def reserve(cls, size, mode=None):
+          mesh = cls.__new__(cls)
+          mesh.size = size
+          return mesh
+
+  The two lines of allocation are PyClassRefNew's own -- size@InstanceSize,
+  stamp the blob's VMT -- lifted here rather than copied into a second shape,
+  because the ctor half is the ONLY difference between the two and a second
+  allocator would be the thing that drifts. PXXAlloc returns a zeroed payload,
+  so every field starts at the same zero a NilPy instance is born with; a field
+  the method forgets to set reads as 0/nil/'' rather than as garbage, which is
+  CPython's behaviour for a __new__'d instance to the extent it has one.
+
+  The refcount convention is PyClassRefNew's, stated there at length: the
+  alloc's +1 stays, the slot takes its own.
+
+  lekkerzeilen gfx.py:184 and :234 are the call sites that wanted this;
+  Mesh.reserve runs on every tile admission. }
+var cls: PClassRTTI; inst: Pointer;
+begin
+  Result := pynone;
+  if PPyRec(@cb)^.VType <> 11 then                { VT_CLASSREF }
+    raise TypeError.Create('__new__() argument must be a class, not ' +
+                           PyVarTypeNameOf(cb));
+  cls := PClassRTTI(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  if cls = nil then Exit;
+  inst := PXXObjAlloc(NativeInt(cls^.InstanceSize));
+  PPointer(inst)^ := cls^.VMTPtr;
+  Result := PyBoxObj(inst);
 end;
 
 procedure PyClassRefNew(const cb: Variant; nargs: Integer;
@@ -3910,6 +4044,24 @@ begin
       cand := args.at(0);
       if PPyRec(@cand)^.VType = 7 then
         res := PyBoxObj(Pointer(bytes(TPyBytes(pyvarobj(cand)))))
+      else if PPyRec(@cand)^.VType = 6 then
+        { A STRING argument is the byte values of that string, which is exactly
+          what ParsePrimary's bytes-LITERAL arm already answers a few hundred
+          lines above (`bytes(TkText[Cur])`, "chars are the byte values"). The
+          two have to agree, because a bytes literal inside an interpreted
+          closure does not reach that arm at all: the closure's snapshot carries
+          the literal as a CALL, `b"abcd"` arriving here as bytes('abcd'). With
+          no string arm it fell to the int coercion below and raised
+          `TypeError: expected a number, got str` -- naming a str the source
+          never wrote, from a lambda that only ever contained a literal. That is
+          lekkerzeilen's `len(indices or b"")`.
+          Accepting a string where CPython wants an encoding is an UPWARD
+          divergence and deliberate (see nilpy-semantics-divergences.md): the
+          two spellings have already collapsed into one by the time this runs,
+          so refusing here would refuse the literal, and the literal is the
+          shape real code writes.
+          bug-n-a-bytes-literal-in-an-interpreted-closure-is-read-as-a-length }
+        res := PyBoxObj(Pointer(bytes(pystr_of(cand))))
       else
         res := PyBoxObj(Pointer(bytearray(pyvar_to_int(cand))));
     end;
@@ -4331,7 +4483,20 @@ begin
       Exit;
     end;
     { otherwise: a reflected host object (vm) — dispatch through the trampoline }
-    PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+    try
+      PyHostCall(Pointer(PPyRec(@recv)^.Payload), mname, args, kwNames, res);
+    except
+      on E: Exception do
+      begin
+        Write(StdErr, 'PROBE hostcall ', mname, ' recv=',
+              PyVarTypeNameOf(recv), ' args:');
+        if args <> nil then
+          for i := 0 to args.count - 1 do
+            Write(StdErr, ' ', PyVarTypeNameOf(args.at(i)));
+        WriteLn(StdErr, ' || ', E.Message);
+        raise;
+      end;
+    end;
     kwNames.Free;
     Exit;
   end;
@@ -4877,6 +5042,7 @@ begin
   Executing := True; BreakFlag := False;
   ReturnFlag := False; ReturnValue := MakeNone;
   Cur := Closures[cidx].BodyPos;
+  try
   if Closures[cidx].FlatSrc then
   begin
     { source-built closure: flat statements at indent 0 until EOF }
@@ -4889,6 +5055,21 @@ begin
   end
   else
     ExecSuite(True);
+  except
+    on E: Exception do
+    begin
+      Write(StdErr, 'PROBE body:');
+      for i := Closures[cidx].BodyPos to Closures[cidx].BodyPos + 40 do
+        if i < TkN then Write(StdErr, ' ', TkText[i]);
+      WriteLn(StdErr, '');
+      Write(StdErr, 'PROBE locals:');
+      for i := 0 to LclN - 1 do
+        Write(StdErr, ' ', LclNames[i], '=', PyVarTypeNameOf(LclVals[i]));
+      WriteLn(StdErr, '');
+      WriteLn(StdErr, 'PROBE err: ', E.Message);
+      raise;
+    end;
+  end;
   res := ReturnValue;
 
   { restore caller interpreter state }
@@ -5169,7 +5350,9 @@ begin
   if pycallback_is(cb) then
   begin
     Result := pybound_pair_call_kw(Pointer(NativeInt(PPyRec(@cb)^.Payload)),
-                                   nPos, a0, a1, a2, a3, kwNames, kwVals);
+                                   nPos, a0, a1, a2, a3,
+                                   pynone, pynone, pynone, pynone,
+                                   kwNames, kwVals);
     Exit;
   end;
   o := PyCallableObj(cb);
@@ -5324,9 +5507,117 @@ begin
   Result := f3(a0, a1, a2);
 end;
 
-function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
-                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
-{ The worker behind pydyn_meth0..4. See the interface block for why it exists.
+{ Everything a WIDE call (five to eight arguments) can be, except the one shape
+  that needs a static arity: a plain compiled code address. Returns True when it
+  has fully answered the call.
+
+  The carriers that stop short of five get a NAMED refusal rather than a
+  truncated argument list -- dropping arguments silently is the failure mode this
+  whole dispatcher exists to remove, and it is the reason pyvar_callv4 raises for
+  a lifted bound-fn instead of calling it with three. The interpreted closure has
+  no arity limit at all, because its arguments already travel as a TPyList.
+
+  `args` stays the CALLER'S -- this does not free it. }
+function pyvar_wide_prelude(const cb: Variant; nargs: Integer; args: TPyList;
+                           var res: Variant): Boolean;
+var o: Pointer; aLo, aHi: Int64;
+begin
+  Result := True;
+  { pycallback (the {code, recv} pair) is served by each rung itself, through
+    pybound_callv5..8 -- it is the common carrier and the one that must work. }
+  if pyclassref_is(cb) then
+    raise TypeError.Create('a class reached as a value constructs with at most '
+      + '4 arguments, got ' + pystr_of(Int64(nargs)));
+  PyNotCallable(cb);
+  o := PyCallableObj(cb);
+  if PyClosureArityBad(o, nargs, aLo, aHi) then PyRaiseArity(nargs, aLo, aHi);
+  if PyBoundFnArityBad(o, nargs, aLo, aHi) then PyRaiseArity(nargs, aLo, aHi);
+  if o <> nil then
+  begin
+    if pyclosure_is(o) then
+    begin
+      PyClosureInvoke(PClosureObj(o)^.Cidx, args, res);
+      Exit;
+    end;
+    raise TypeError.Create('a compiled closure takes at most 3 arguments, got '
+      + pystr_of(Int64(nargs)));
+  end;
+  { a plain compiled code address: the caller's own indirect call }
+  Result := False;
+end;
+
+function pyvar_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+var args: TPyList; f5: TPyCallFn5; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv5(cb, a0, a1, a2, a3, a4); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4);
+  done := pyvar_wide_prelude(cb, 5, args, Result);
+  args.Free;
+  if done then Exit;
+  f5 := TPyCallFn5(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f5(a0, a1, a2, a3, a4);
+end;
+
+function pyvar_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+var args: TPyList; f6: TPyCallFn6; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv6(cb, a0, a1, a2, a3, a4, a5); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5);
+  done := pyvar_wide_prelude(cb, 6, args, Result);
+  args.Free;
+  if done then Exit;
+  f6 := TPyCallFn6(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f6(a0, a1, a2, a3, a4, a5);
+end;
+
+function pyvar_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+var args: TPyList; f7: TPyCallFn7; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv7(cb, a0, a1, a2, a3, a4, a5, a6); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5); args.append(a6);
+  done := pyvar_wide_prelude(cb, 7, args, Result);
+  args.Free;
+  if done then Exit;
+  f7 := TPyCallFn7(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f7(a0, a1, a2, a3, a4, a5, a6);
+end;
+
+function pyvar_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
+var args: TPyList; f8: TPyCallFn8; done: Boolean;
+begin
+  Result := pynone;
+  { a {code, recv} PAIR -- what a plain def bound to a name becomes, and the
+    carrier the lekkerzeilen wall turned out to be }
+  if pycallback_is(cb) then begin Result := pybound_callv8(cb, a0, a1, a2, a3, a4, a5, a6, a7); Exit; end;
+  args := TPyList.Create;
+  args.append(a0); args.append(a1); args.append(a2); args.append(a3);
+  args.append(a4); args.append(a5); args.append(a6); args.append(a7);
+  done := pyvar_wide_prelude(cb, 8, args, Result);
+  args.Free;
+  if done then Exit;
+  f8 := TPyCallFn8(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
+  Result := f8(a0, a1, a2, a3, a4, a5, a6, a7);
+end;
+
+function PyDynMethL(const recv: Variant; const name, kwspec: AnsiString;
+                    args: TPyList): Variant;
+{ The worker behind pydyn_methl AND behind pydyn_meth0..4. See the interface
+  block for why it exists.
 
   The VType 7 test is the whole receiver check: a NilPy instance, a TPyList, a
   TPyDict and a pyeval closure are all VT_OBJECT, so a dynamically dispatched
@@ -5336,18 +5627,43 @@ function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
 var
   obj: Pointer;
   cls: PClassRTTI;
-  args, kwNames: TPyList;
+  kwNames: TPyList;
   res, cb: Variant;
-  i, cut: Integer;
+  i, cut, nargs: Integer;
   rest: AnsiString;
 begin
   Result := pynone;
+  nargs := 0;
+  if args <> nil then nargs := args.count;
   obj := nil;
   if PPyRec(@recv)^.VType = 7 then
     obj := Pointer(NativeInt(PPyRec(@recv)^.Payload));
   { A None receiver reaches here as VT_NULL, not as a nil-payload object, and
     either way there is no class to look in. PyVarTypeNameOf answers
     'NoneType' for it, which is the name CPython puts in this message. }
+  { `cls.__new__(cls)` — a CLASS is the receiver, not an instance, so the
+    VType 7 test above leaves obj nil and the message below reports
+    `'type' object has no attribute '__new__'`. True about the lookup and a
+    false lead about the language: __new__ is not a method anyone declares,
+    it is the allocator.
+
+    The CLASS TO BUILD IS THE ARGUMENT, not the receiver — CPython's
+    `A.__new__(B)` makes a B — and the two are only the same because every
+    real call site writes `cls.__new__(cls)`. Falling back to the receiver
+    when no argument is given matches CPython refusing the zero-argument form
+    with a message about the missing argument rather than crashing.
+
+    Surplus arguments are accepted and IGNORED, which is CPython's rule
+    whenever __init__ is overridden — and it always is here, since a class
+    with no __init__ has no fields for __new__ to leave unset. }
+  if (obj = nil) and (PPyRec(@recv)^.VType = 11) and (name = '__new__') then
+  begin
+    if (args <> nil) and (nargs >= 1) then
+      Result := PyClassRefNewRaw(args.at(0))
+    else
+      Result := PyClassRefNewRaw(recv);
+    Exit;
+  end;
   if obj = nil then
     raise AttributeError.Create('''' + PyVarTypeNameOf(recv) +
       ''' object has no attribute ''' + name + '''');
@@ -5359,11 +5675,9 @@ begin
       halts if the method is absent -- which is why the lookup above is a
       GUARD and not a duplicate: it is what turns "absent" into a Python
       exception instead of a process exit. }
-    args := TPyList.Create;
-    if nargs > 0 then args.append(a0);
-    if nargs > 1 then args.append(a1);
-    if nargs > 2 then args.append(a2);
-    if nargs > 3 then args.append(a3);
+    { args arrives BUILT. It used to be assembled here out of a0..a3, which is
+      the whole reason the entry points were a ladder — PyHostCall has always
+      taken a list. }
     { kwspec's fields are parallel to args -- '' for a positional slot, which is
       exactly what PyHostCall's binder skips. Split here rather than at the call
       site so the emitted code carries one string constant per call. }
@@ -5387,9 +5701,32 @@ begin
         end;
       end;
     end;
+    { A DICT RECEIVER's keyword run is KEYS, not parameter names, and this is
+      the only place that knows which the receiver is. `d.update(a=1)` names a
+      KEY; PyBindHostKwArgs below would look for a PARAMETER called `a` on
+      TPyDict.update and refuse with `host method update has no parameter named
+      a`, which is a true statement about the wrong question.
+
+      The frontend used to answer this by claiming the TPyDict.update overload
+      at parse time for EVERY keyword call to a method named `update` on a
+      receiver it could not type — which broke every user class with an
+      `update` taking keywords. Decided here instead, by the receiver's own
+      class, exactly as CPython does it.
+
+      Positional slots (an empty name in kwNames) keep dict.update's other
+      meaning — a mapping or an iterable of pairs — so `d.update(m, c=2)`
+      merges `m` and then stores `c`, in the order written.
+      bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
+    if (kwNames <> nil) and (name = 'update') and (TObject(obj) is TPyDict) then
+    begin
+      PyDictUpdateKw(TPyDict(obj), args, kwNames);
+      kwNames.Free;
+      Result := pynone;
+      Exit;
+    end;
     res := pynone;
     PyHostCall(obj, name, args, kwNames, res);
-    args.Free;
+    { args is the CALLER's — the arity rungs free the list they built. }
     if kwNames <> nil then kwNames.Free;
     Result := res;
     Exit;
@@ -5402,14 +5739,47 @@ begin
   if kwspec <> '' then
     raise TypeError.Create(name + '() is dispatched at run time through a '
       + 'callable attribute, which takes positional arguments only');
+  { pyvar_callv IS STILL A LADDER, and past four it has no rung. This `else`
+    used to be exactly four — the frontend capped every dynamic call at four, so
+    nargs could not exceed it — and lifting that cap for the METHOD arm makes
+    this arm reachable with five. Refused by name rather than truncated:
+    `pyvar_callv4` would have dropped the rest and returned a plausible wrong
+    value, which is the same silent-truncation trade the method arm's own cap
+    was documented as avoiding. A list-taking pyvar_callv is the fix and is a
+    different subsystem with its own consumers, so it is not done here.
+    bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments }
   case nargs of
     0: Result := pyvar_callv0(cb);
-    1: Result := pyvar_callv1(cb, a0);
-    2: Result := pyvar_callv2(cb, a0, a1);
-    3: Result := pyvar_callv3(cb, a0, a1, a2);
+    1: Result := pyvar_callv1(cb, args.at(0));
+    2: Result := pyvar_callv2(cb, args.at(0), args.at(1));
+    3: Result := pyvar_callv3(cb, args.at(0), args.at(1), args.at(2));
+    4: Result := pyvar_callv4(cb, args.at(0), args.at(1), args.at(2), args.at(3));
   else
-    Result := pyvar_callv4(cb, a0, a1, a2, a3);
+    raise TypeError.Create(name + '() is dispatched at run time through a '
+      + 'callable attribute, which takes at most 4 arguments');
   end;
+end;
+
+{ The ladder, kept as wrappers over the list form above: they are a public
+  interface, and nothing establishes that no program calls them. Each owns the
+  list it builds. }
+function PyDynMethN(const recv: Variant; const name, kwspec: AnsiString;
+                    nargs: Integer; const a0, a1, a2, a3: Variant): Variant;
+var args: TPyList;
+begin
+  args := TPyList.Create;
+  if nargs > 0 then args.append(a0);
+  if nargs > 1 then args.append(a1);
+  if nargs > 2 then args.append(a2);
+  if nargs > 3 then args.append(a3);
+  Result := PyDynMethL(recv, name, kwspec, args);
+  args.Free;
+end;
+
+function pydyn_methl(const recv: Variant; const name, kwspec: AnsiString;
+                     args: TPyList): Variant;
+begin
+  Result := PyDynMethL(recv, name, kwspec, args);
 end;
 
 function pydyn_meth0(const recv: Variant; const name: AnsiString): Variant;
@@ -5564,7 +5934,8 @@ begin
       This arm used to call through a one-parameter pointer regardless of the
       callee's real arity, which left b and c reading whatever the previous
       call had put there. feature-n-a-callable-value-carries-its-signature-type }
-    Result := pybound_pair_call(key, 1, a0, pynone, pynone, pynone);
+    Result := pybound_pair_call(key, 1, a0, pynone, pynone, pynone,
+                                pynone, pynone, pynone, pynone);
     Exit;
   end;
   if pyclosure_is(key) then begin Result := pyclosure_call1(key, a0); Exit; end;

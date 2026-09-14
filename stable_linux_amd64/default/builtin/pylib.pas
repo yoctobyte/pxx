@@ -1190,6 +1190,21 @@ function pyvar_cbuf(const v: Variant): Pointer;
   passes bytes.
   bug-n-a-list-bound-to-a-c-pointer-to-pointer-parameter-passes-the-object-pointer }
 function pylist_cptrarray(l: TPyList): TPyBytes;
+function pyvar_cptrarray(const v: Variant): TPyBytes;
+{ The same array, for a receiver whose LIST-ness is only known at RUN time -- a
+  list arriving through an unannotated parameter is a Variant, and no static arm
+  can see it. nil when the variant does not hold a list, and that is the whole
+  protocol: the frontend hoists `tmp := pyvar_cptrarray(v)` UNCONDITIONALLY so
+  the array has an owner whatever the tag turns out to be, and this decides at
+  run time only whether to fill it. That is the answer to the ownership question
+  the ticket parked on -- the OWNER does not have to be chosen at run time, only
+  the CONTENT, and a caller-held local can be allocated without knowing whether
+  it will be used. }
+function pyvar_cbuf_or(const v: Variant; arr: TPyBytes): Pointer;
+{ ...and the chooser that reads the pair. `arr` is what pyvar_cptrarray just
+  answered: non-nil means the variant held a list and the array IS the buffer
+  the callee wants; nil means fall through to exactly what this call site did
+  before, so every non-list shape emits the same answer it always did. }
 function pyvar_is_objtag(const v: Variant): Boolean;
 { The message text for `raise SomeError(x)` where x is NOT a string. Every
   builtin exception below KeyError takes `const m: AnsiString`, so a bare
@@ -1541,6 +1556,22 @@ function pytime_time: Double;
 function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
 procedure pysys_exit(code: Integer);
+{ sys.setswitchinterval / sys.getswitchinterval — the interpreter's thread switch
+  interval, in seconds.
+
+  WE HAVE NO GIL, so there is nothing here to tune: a pxx --threadsafe thread is
+  an OS thread and the scheduler already owns the question this call exists to
+  answer. It is accepted and REMEMBERED rather than refused, because what the
+  call sites want is the EFFECT — a thread that does not sit on the interpreter
+  for five milliseconds at a time — and they already have it. Refusing raised
+  AttributeError in the middle of a working program (lekkerzeilen's App.__init__,
+  which sets 0.0005 to stop a loader thread stalling the frame).
+
+  get returns what set was last given, CPython's default 0.005 until then, so a
+  save/restore round-trip reads back what it wrote. A negative or zero value is
+  ValueError, as CPython's is. }
+procedure pysys_setswitchinterval(v: Double);
+function pysys_getswitchinterval: Double;
 { os.remove / os.rename: unlink / rename via syscall, returning 0 (Python returns
   None; the value is unused). os.stat: a stubbed TPyStat — see the class note. }
 { Raise CPython's OSError for a failed syscall: the right SUBCLASS for the
@@ -1667,6 +1698,9 @@ function pyvar_box(const v: Variant): Variant;   { box a value into a variant }
   through env["vm"] rather than invoking them, so a stored bound method must
   merely not crash. }
 var
+  { sys.getswitchinterval()'s answer. CPython's default until sys.setswitchinterval
+    moves it; see that procedure for why the call is remembered and not refused. }
+  PySwitchInterval: Double = 0.005;
   PyClosureFinalizeHook: TPyClosureFinalize;
   { map/filter cursors must CALL the callable they stored, and the callable
     dispatch (PyCallKey1, which knows all four representations a NilPy callable
@@ -1899,7 +1933,7 @@ function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
   function value fills are the same ones `key=` fills; it exists so pyeval does
   not need its own copy of the record layout or the fill rule. }
 function pybound_pair_call(pair: Pointer; nargs: Integer;
-                           const a0, a1, a2, a3: Variant): Variant;
+                           const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 { ...and the same call carrying KEYWORD arguments, as two parallel lists of
   names and values. They are matched against the callee's own parameter names
   out of the signature record, which is the only thing that can turn
@@ -1907,7 +1941,7 @@ function pybound_pair_call(pair: Pointer; nargs: Integer;
   nothing else. nil/nil is the positional call above.
   bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
 function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
@@ -1946,6 +1980,14 @@ function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
+{ FIVE to EIGHT arguments through a {code, recv} PAIR -- which is what a plain
+  `def` bound to a name becomes, so this is the road an ordinary
+  `from .mod import f` then `f(*five_things)` travels.
+  bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+function pybound_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+function pybound_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+function pybound_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+function pybound_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 { Finalizer for dying refcounted objects, installed into builtinheap's
   PXXObjFinalizeHook by the container constructors and pybound_new: releases
   the object's children recursively before the block is freed
@@ -2219,11 +2261,11 @@ function pydict_v(const v: Variant): TPyDict;
   at compile time: that the count is one the callee accepts, and that no keyword
   arguments were forwarded — binding those by name would need a runtime call
   protocol, so it FAILS rather than dropping them silently. }
-procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer; const nm: AnsiString);
 function pystar_argc(l: TPyList; d: TPyDict): Integer;
 function pystar_has(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Boolean;
 function pystar_arg_kw(l: TPyList; d: TPyDict; i: Integer; const nm: AnsiString): Variant;
-procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer; const nm: AnsiString);
 procedure pystar_no_kwargs(d: TPyDict);
 { One forwarded argument, or None when the caller passed fewer. The dispatch
   evaluates every slot up to the callee's widest arity before choosing an arm,
@@ -2374,6 +2416,13 @@ function pydict_fromkeys(const src: Variant; const v: Variant): TPyDict; overloa
   iterable may be a list/tuple/set, a dict (its KEYS, like CPython) or a string
   (its characters); anything else is a loud TypeError rather than a guess. }
 function pyset_of(const v: Variant): TPyList;
+{ `frozenset(iterable)` — pyset_of's value with the frozen stamp, as ONE call
+  rather than pylist_mark_frozenset wrapped around a pyset_of call. The wrap
+  over-released: the marker is an identity function returning a BORROWED alias,
+  while the caller owns a class-returning call's result and releases it, so the
+  inner temp and the outer result were released once each against a single
+  retain. bug-n-a-set-comprehension-over-releases-its-own-list }
+function pyfrozenset_of(const v: Variant): TPyList;
 { `{**a, **b}` — copy src's pairs into dst, later keys winning, which is
   Python's merge rule. The frontend emits one call per `**` in a dict literal. }
 { `d.update(m, c=2)`'s SEED merge: the positional argument is whatever
@@ -2386,6 +2435,9 @@ function pyset_of(const v: Variant): TPyList;
   the bug. bug-nilpy-dict-update-mixed-positional-and-keyword-args }
 procedure pydict_merge_any(dst: TPyDict; const src: Variant);
 procedure pydict_merge(dst: TPyDict; src: TPyDict);
+{ `d.update(a=1, b=2)` / `d.update(m, c=2)` with the keyword names already split
+  out, for a receiver only the RUN TIME knows is a dict. See the body. }
+procedure PyDictUpdateKw(d: TPyDict; args, kwNames: TPyList);
 { The AGGREGATE builtins over a list (a generator expression already desugars to
   one). Each keeps Python's own answer for the empty case: sum([]) is 0, any([])
   is False, all([]) is True, and max/min of an empty sequence is an ERROR rather
@@ -2692,6 +2744,17 @@ function iter(const v: Variant): TPyIter; overload;
 function iter(r: TPyRange): TPyIter; overload;
 function next(it: TPyIter): Variant; overload;
 function next(it: TPyIter; const dflt: Variant): Variant; overload;
+{ Append the callee's OWN trailing defaults to `args` until it holds `want`
+  values, reading them out of the PYSIG record at `sig`. False, having appended
+  nothing, when there is no record, no defaults array, or a slot in the range
+  that was never filled.
+
+  WHY IT LIVES HERE. The PYSIG layout has two mirrors already -- defs.inc, which
+  emits it, and TPySigRec below, which reads it -- and a third in pyeval would be
+  a third thing to keep in step. pyeval holds the POINTER and pylib holds the
+  LAYOUT, so the pointer travels and the record does not.
+  bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature }
+function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
 function pyvar_holds(const v: Variant; k: Int64): Boolean;
 function pycontains(l: TPyList; const v: Variant): Boolean;
 { `x in <bytes>`. Python allows BOTH a bytes subsequence (`b"ell" in b"hello"`)
@@ -2817,6 +2880,14 @@ function pydynattr_hasattr(obj: Pointer; const name: AnsiString): Boolean;
 function pyvar_slice(const v: Variant; lo, hi: Integer): Variant;
 { `v[lo:hi:step]` on a variant — same run-time tag dispatch, extended step. }
 function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
+{ `del v[lo:hi]` on a VARIANT receiver — the DELETE twin of pyvar_slice, and the
+  sibling the variant-receiver del arm did not carry. pyvar_delitem covers
+  `del v[k]`; the SLICE spelling had no variant twin at all, so
+  `def trim(vm, n): del vm.stack[n:]` was a COMPILE ERROR whose message listed
+  `del l[a:b]` as supported. uforth.py:2471 is exactly that line and it is what
+  kept test-uforth red. Returns a variant so the del arm can swap the read's
+  proc in place, as every other arm there does. }
+function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
 { `type(x).__name__` for any value — see the body for why the frontend cannot
   answer this from RTTI alone (tuple and list share one class). }
 function pytype_name_v(const v: Variant): AnsiString;
@@ -4729,6 +4800,17 @@ begin
   else if (k = 15) or (k = 16) then Result := PPyFN(a)^         { NativeInt/UInt }
   else if k = 22 then Result := PPyFV(a)^                       { Variant: copy }
   else if k = 6 then Result := TObject(PPyFP(a)^)               { class instance }
+  else if (k = 27) or (k = 28) then                             { promotable int }
+    { The aggregate arms of this chain are the ones a new TypeKind lands in, and
+      this one reported NOT FOUND — so `hasattr(o, 'K')` answered False and
+      getattr handed back its default, for a class attribute that plainly exists
+      and that the STATIC read `self.K` returns correctly. The kind arrives here
+      whenever a class attribute's initialiser is an arithmetic expression
+      (`K = 2 << 20`), which the retype types tyPromoInt64; a bare literal is
+      tyInt64 and was already served above. Result is assigned first because
+      PXXPromoToVariant CLEARS the destination, which reads the old tag.
+      bug-n-a-promotable-int-field-is-boxed-as-an-object }
+    begin Result := 0; PXXPromoToVariant(@Result, a); end
   else
     { a kind with no Python value shape yet (a record, a set, a frozen string,
       a static array). Answering with SOMETHING would be a wrong value; report
@@ -5454,6 +5536,30 @@ begin
     raise TypeError.Create('object is not subscriptable');
 end;
 
+{ NO str AND NO bytes ARM, and that is the specification rather than a gap: both
+  are immutable in Python, so `del s[a:b]` on either is a TypeError there too
+  ("doesn't support item deletion"). A list is the only mutable sequence a
+  variant can hold here. The message is CPython's wording for the same input.
+
+  Bounds and the shift live in pylist_del_slice, called rather than copied --
+  an open-ended `[n:]` reaches it with whatever `hi` the READ computed, because
+  the del arm reuses the read's own argument nodes. }
+function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
+var o: TObject;
+begin
+  Result := pyvar_of_int(0);
+  if pyvartag(v) = 7 then
+  begin
+    o := TObject(pyvarobj(v));
+    if o is TPyList then
+    begin
+      pylist_del_slice(TPyList(o), lo, hi);
+      Exit;
+    end;
+  end;
+  raise TypeError.Create('object does not support item deletion');
+end;
+
 procedure pyvar_setitem(const v: Variant; const key: Variant; const val: Variant);
 var o: TObject; ki: Int64;
 begin
@@ -5472,6 +5578,23 @@ begin
     ki := PPyVarRec(@key)^.Payload;
     TPyList(o).put(ki, val);
   end
+  { bytes/bytearray — the WRITE side of the TPyBytes arm pyvar_getitem has
+    carried since `b[i]` on a variant was fixed. Only the read half grew it, so
+    a bytearray held in a VARIANT — the commonest shape being an element of a
+    list of buffers, `rows = [bytearray(n) for _ in range(h)]; row = rows[y];
+    row[at] = 255` — raised "object does not support item assignment" while the
+    statically-typed spelling of the same write worked. lekkerzeilen's font
+    atlas (text.py:127) is exactly that, and it is where this was found.
+
+    EVERYTHING IS DELEGATED TO TPyBytes.put, which already applies Python's
+    negative-index rule, raises `bytearray index out of range` and rejects a
+    value outside 0..255 with CPython's own ValueError. pyeval's PySubscriptSet
+    had hand-rolled the same three steps and got two of them wrong -- it masked
+    the value with $FF, so `b[0] = 256` stored 0 where CPython raises, and its
+    bounds message omitted the type name -- so that arm now delegates here's
+    way too. One mechanism, three shapes. }
+  else if o is TPyBytes then
+    TPyBytes(o).put(Integer(PPyVarRec(@key)^.Payload), Integer(pyvar_to_int(val)))
   { A USER class arriving as a bare variant handle — the write side of the
     __getitem__ arm pyvar_getitem already carries. A statically-typed receiver
     dispatches __setitem__ in the frontend; this one has no static class, so a
@@ -6306,6 +6429,46 @@ begin
   o := TObject(Pointer(NativeInt(p^.Payload)));
   if (o is TPyList) or (o is TPyDict) or (o is TPyBytes) then Exit;
   Result := o;
+end;
+
+{ `a <op> b` through an arithmetic dunder when EITHER side is a user object —
+  the runtime half of the operator protocol, asked once instead of eight times.
+
+  The eight variant arithmetic entry points below each carried their own copy of
+  the question and each asked it the same wrong way: `(a.VType = 7) and
+  (b.VType = 7)`, i.e. BOTH sides are objects. That is the identical drift
+  PyVarUserObj above was created to end for the four COMPARISON entry points,
+  recurring one family over — and its comment already says what the predicate
+  is: "One side being a user object is what actually licenses a dunder call, and
+  requiring two is what made ... `g < 9` die with `expected a number, got
+  object` on a class that declares __lt__."
+
+  Measured 2026-09-14, with every dunder declared and a float on the other side:
+  `v + k`, `v - k`, `v * k`, `v / k`, `v // k`, `v % k` and the reflected
+  `k * v` all raised `TypeError: expected a number, got object`, and so did
+  `vv * 2.0` where `vv` is a variant HOLDING the object — a shape the parser's
+  compile-time dispatch cannot reach at all, since there is no static class on
+  either side to key on. The existing fixture
+  (test_nilpy_variant_operand_arith_dunders) passed throughout: it binds a
+  variant on the LEFT and a user class on the RIGHT, so both slots are objects
+  and the `and` is satisfied. A whole-family guard that only ever sees the
+  two-object arrangement is the arrangement that certifies the bug.
+
+  `otherObj` is not required by PyUserArithCall1 — it says so in its own body —
+  so nil for the non-object side is the ordinary case here, not a degenerate
+  one. PyVarUserObj excludes this unit's own containers, which is what keeps the
+  list/str/bytes arms below reachable: a TPyList operand answers nil and no
+  dunder is attempted.
+  bug-n-arithmetic-on-a-user-class-fails-when-the-other-operand-is-object-typed }
+function PyVarUserArith(const a, b: Variant; const dunder, rdunder: AnsiString;
+                        var res: Variant): Boolean;
+var pa, pb: TObject;
+begin
+  Result := False;
+  pa := PyVarUserObj(PPyVarRec(@a));
+  pb := PyVarUserObj(PPyVarRec(@b));
+  if (pa = nil) and (pb = nil) then Exit;
+  Result := PyUserObjArith(pa, pb, a, b, dunder, rdunder, res);
 end;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
@@ -8266,6 +8429,43 @@ begin
     raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
 end;
 
+{ `d.update(a=1, b=2)` / `d.update(m, c=2)` with the keyword names already
+  split out — the KEYS reading of dict.update, applied where the receiver is
+  known to be a dict and nowhere else.
+
+  `kwNames` is parallel to `args`: entry i is the keyword argument i was
+  written with, or '' if it was positional. A positional slot keeps
+  dict.update's other meaning and goes through TPyDict.update's own Variant
+  overload, so the mapping and the keywords merge in the order written, which
+  is CPython's order for `dict.update(E, **F)`.
+
+  It merges through that overload rather than through a fresh copy of its
+  rules: that method is the one place saying what dict.update accepts, and the
+  one place that knows about Counter mode. A second copy of the answer is how
+  two spellings drift — which is the defect this whole ticket is, one layer up.
+  bug-n-a-keyword-call-to-update-on-a-dynamic-receiver-is-routed-to-dict-update }
+procedure PyDictUpdateKw(d: TPyDict; args, kwNames: TPyList);
+var i: Integer; nm: AnsiString; kv: Variant;
+begin
+  if (d = nil) or (args = nil) then Exit;
+  for i := 0 to args.count - 1 do
+  begin
+    nm := '';
+    if (kwNames <> nil) and (i < kwNames.count) then nm := pystr_of(kwNames.at(i));
+    if nm = '' then
+      d.update(args.at(i))
+    else
+    begin
+      { the name goes through a Variant LOCAL rather than straight into store's
+        const parameter — the same care TPyDict.update(const s) records beside
+        its own pystr_ofchar, where a raw Char is VT_CHAR and never equals the
+        VT_STRING a lookup arrives with. }
+      kv := nm;
+      d.store(kv, args.at(i));
+    end;
+  end;
+end;
+
 function pyset_of(const v: Variant): TPyList;
 var r, kl: TPyList; o: TObject; i: Integer; sv: AnsiString;
 begin
@@ -8296,6 +8496,12 @@ begin
     Exit;
   end;
   raise TypeError.Create('set() argument must be iterable');
+end;
+
+function pyfrozenset_of(const v: Variant): TPyList;
+begin
+  Result := pyset_of(v);
+  if Result <> nil then Result.FKind := PYSEQ_FROZENSET;
 end;
 
 function pydict_fromkeys(const src: Variant): TPyDict;
@@ -9298,10 +9504,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mul__', '__rmul__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mul__', '__rmul__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A SEQUENCE repeats too — `[0] * n` is how Python allocates a fixed-size
@@ -9476,10 +9679,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__pow__', '__rpow__', Result) then Exit;
+  if PyVarUserArith(a, b, '__pow__', '__rpow__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   if (not PyVarIsFloat(pa)) and (not PyVarIsFloat(pb)) and
      (pyvar_to_int(b) >= 0) then
@@ -9648,10 +9848,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__floordiv__', '__rfloordiv__', Result) then Exit;
+  if PyVarUserArith(a, b, '__floordiv__', '__rfloordiv__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -9690,10 +9887,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mod__', '__rmod__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mod__', '__rmod__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { A str LEFT operand makes `%` printf-style FORMATTING, not modulo — the
@@ -9835,10 +10029,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__add__', '__radd__', Result) then Exit;
+  if PyVarUserArith(a, b, '__add__', '__radd__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   { list + list -> a NEW list holding both, like Python. `xs += ys` is separate
@@ -9969,10 +10160,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__sub__', '__rsub__', Result) then Exit;
+  if PyVarUserArith(a, b, '__sub__', '__rsub__', Result) then Exit;
   pa := PPyVarRec(@a); pb := PPyVarRec(@b); r := PPyVarRec(@Result);
   r^.VType := 0; r^.Payload := 0;
   if PyVarIsFloat(pa) or PyVarIsFloat(pb) then
@@ -10008,10 +10196,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__mod__', '__rmod__', Result) then Exit;
+  if PyVarUserArith(a, b, '__mod__', '__rmod__', Result) then Exit;
   Result := pyfloormod_v(a, b);
 end;
 
@@ -10226,10 +10411,7 @@ begin
     program plainly declares. Placed FIRST so a user class can override even the
     list/str arms below, matching Python's own precedence.
     bug-nilpy-module-global-rebound-scalar-then-class-loses-dispatch }
-  if (PPyVarRec(@a)^.VType = 7) and (PPyVarRec(@b)^.VType = 7) and
-     (PPyVarRec(@a)^.Payload <> 0) and (PPyVarRec(@b)^.Payload <> 0) then
-    if PyUserObjArith(TObject(pyvarobj(a)), TObject(pyvarobj(b)), a, b,
-                      '__truediv__', '__rtruediv__', Result) then Exit;
+  if PyVarUserArith(a, b, '__truediv__', '__rtruediv__', Result) then Exit;
   { pyvar_to_float RAISES TypeError for a str/list/dict/None tag, so the
     coercion is the type check — there is no arm that reads a handle as a
     number. Divisor first is deliberate only in that both must be numbers
@@ -10647,15 +10829,36 @@ begin
   PXXObjFinalizeHook := @PyObjFinalize;
   if n < 0 then n := 0;
   FLen := n;
-  FData := nil;
-  if n = 0 then Exit;
-  GetMem(FData, n);
+  { ALWAYS one byte more than FLen, and that byte is ALWAYS zero. FLen is
+    unchanged, so nothing Python can see moves; what changes is that FData is
+    a valid C string, which is what every `import "<header>"` seam hands it to.
+    CPython guarantees the same thing about a bytes object for the same reason.
+
+    Measured 2026-09-14: without it, `"u_zenith".encode("ascii")` reached
+    glGetUniformLocation as a NINE-character name (strlen said 9 for an
+    eight-byte payload) and the lookup answered -1. lekkerzeilen rendered a
+    sky and nothing else, because the uniform names of length 8 -- u_zenith,
+    u_aspect, u_ground, u_colour -- silently never bound while every other
+    name did.
+
+    WHICH lengths are unlucky is not a property of the language, it is a
+    property of whatever the allocator put after the payload: in one program
+    only 8 was wrong and 1..7, 9..24 all happened to find a zero byte; in
+    another 8 AND 16 were wrong. That is precisely why a sampled probe cannot
+    see this and the fixture sweeps a range.
+    bug-n-a-bytes-payload-is-not-nul-terminated-so-a-c-string-seam-reads-past-it
+
+    The empty case allocates too, rather than leaving FData nil: `b""` handed
+    to a `const char *` must be the empty C string, not a null pointer. }
+  GetMem(FData, n + 1);
   { Python's bytearray(n) is n ZERO bytes, not uninitialised memory }
   for k := 0 to n - 1 do
   begin
     p := PByte(NativeInt(FData) + k);
     p^ := 0;
   end;
+  p := PByte(NativeInt(FData) + n);
+  p^ := 0;
 end;
 
 function TPyBytes.count: Integer;
@@ -10697,7 +10900,8 @@ procedure PyBytesEnsure(b: TPyBytes; need: Integer);
 var np: Pointer; k: Integer; src, dst: PByte;
 begin
   if need <= b.FLen then Exit;
-  GetMem(np, need);
+  { need + 1, and a zero at [need] — same invariant as the constructor. }
+  GetMem(np, need + 1);
   for k := 0 to need - 1 do
   begin
     dst := PByte(NativeInt(np) + k);
@@ -10709,6 +10913,8 @@ begin
     else
       dst^ := 0;
   end;
+  dst := PByte(NativeInt(np) + need);
+  dst^ := 0;
   b.FData := np;
   b.FLen := need;
 end;
@@ -13402,6 +13608,18 @@ begin
   Halt(code);
 end;
 
+procedure pysys_setswitchinterval(v: Double);
+begin
+  if v <= 0.0 then
+    raise ValueError.Create('switch interval must be strictly positive');
+  PySwitchInterval := v;
+end;
+
+function pysys_getswitchinterval: Double;
+begin
+  Result := PySwitchInterval;
+end;
+
 { openat(AT_FDCWD, path, O_RDONLY) + read to EOF + close, per-arch like
   pyos_path_exists. aarch64/riscv have only openat, so openat(AT_FDCWD=-100)
   is used everywhere for portability. }
@@ -14321,11 +14539,25 @@ function pystar_as_list(const v: Variant): TPyList;
 var o: TObject;
 begin
   { a list (or a tuple, which is the same object) is handed straight back —
-    the packing only READS it, so a copy would be pure cost }
+    the packing only READS it, so a copy would be pure cost — but it is handed
+    back OWNED, with a retain, because the OTHER arm returns a fresh list and a
+    function cannot return borrowed down one arm and owned down the other.
+    PyStarExpandCallArgs assigns this result into a hidden class-typed local
+    (`$starl`) that is released at scope exit, so the borrowed arm drove the
+    refcount NEGATIVE once per `f(*xs)` whose operand was a variant — which is
+    every unannotated parameter. `HullDrag.__init__` doing `Vec3(*angular)` is
+    the shape that found it: one underflow per Vessel built, and the freed block
+    was reused, so the eventual fault was in whatever moved in.
+    bug-n-a-star-argument-releases-a-sequence-it-only-borrowed }
   if pyvartag(v) = 7 then
   begin
     o := TObject(pyvarobj(v));
-    if o is TPyList then begin pystar_as_list := TPyList(o); Exit; end;
+    if o is TPyList then
+    begin
+      PXXObjRetain(Pointer(o));
+      pystar_as_list := TPyList(o);
+      Exit;
+    end;
   end;
   pystar_as_list := pyiter_drain(pyiter_v(v));
 end;
@@ -15161,6 +15393,25 @@ type
   PPySigRec = ^TPySigRec;
   PPointer = ^Pointer;
 
+function pysig_fill_defaults(sig: Pointer; args: TPyList; want: Integer): Boolean;
+var sr: PPySigRec; dp: Pointer; i: Integer;
+begin
+  Result := False;
+  if (sig = nil) or (args = nil) then Exit;
+  sr := PPySigRec(sig);
+  dp := sr^.Dflts;
+  if dp = nil then Exit;
+  if sr^.TotN < want then Exit;
+  { Every slot in the range must be a real value BEFORE anything is appended --
+    a partial fill would call the body at an arity it cannot take, which is the
+    smash this whole path exists to stop. So: check, then fill. }
+  for i := args.count to want - 1 do
+    if PPyVarRec(NativeInt(dp) + i * 16)^.VType = PYSIG_DFLT_UNSET then Exit;
+  for i := args.count to want - 1 do
+    args.append(PVariant(NativeInt(dp) + i * 16)^);
+  Result := True;
+end;
+
 function pylist_cptrarray(l: TPyList): TPyBytes;
 { Declared beside pyvar_cbuf; the body is HERE because it needs PPointer, which
   is declared a few lines above and nowhere earlier. }
@@ -15181,6 +15432,22 @@ begin
     else
       dst^ := Pointer(slot^.Payload);
   end;
+end;
+
+function pyvar_cptrarray(const v: Variant): TPyBytes;
+var o: TObject;
+begin
+  Result := nil;
+  if pyvartag(v) <> 7 then Exit;
+  o := TObject(pyvarobj(v));
+  if not (o is TPyList) then Exit;
+  Result := pylist_cptrarray(TPyList(o));
+end;
+
+function pyvar_cbuf_or(const v: Variant; arr: TPyBytes): Pointer;
+begin
+  if arr <> nil then Result := pybytes_cbuf(arr)
+  else Result := pyvar_cbuf(v);
 end;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
@@ -15345,11 +15612,25 @@ type
   TPyCbM2 = function(recv: Pointer; const a0, a1: Variant): Variant;
   TPyCbM3 = function(recv: Pointer; const a0, a1, a2: Variant): Variant;
   TPyCbM4 = function(recv: Pointer; const a0, a1, a2, a3: Variant): Variant;
+  { FIVE to EIGHT. A callable VALUE is called through its code address and an
+    indirect call needs a STATIC arity -- there is no variadic call here -- so the
+    ladder is structural and only its CEILING is a choice. Eight covers the widest
+    star-unpack in the lekkerzeilen corpus (`Grid(*row[1:])`, seven) with room
+    over; past it the refusal names the callee and the ceiling.
+    bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments }
+  TPyCbM5 = function(recv: Pointer; const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCbM6 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCbM7 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCbM8 = function(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   TPyCbF0 = function: Variant;
   TPyCbF1 = function(const a0: Variant): Variant;
   TPyCbF2 = function(const a0, a1: Variant): Variant;
   TPyCbF3 = function(const a0, a1, a2: Variant): Variant;
   TPyCbF4 = function(const a0, a1, a2, a3: Variant): Variant;
+  TPyCbF5 = function(const a0, a1, a2, a3, a4: Variant): Variant;
+  TPyCbF6 = function(const a0, a1, a2, a3, a4, a5: Variant): Variant;
+  TPyCbF7 = function(const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+  TPyCbF8 = function(const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
   { PROCEDURE-shaped siblings of the above: an explicit `-> None` def compiles
     as a genuine Pascal procedure (Procs[pi].IsFunc = False), which never sets
     up the Variant-hidden-destination-pointer convention TPyCbM*/TPyCbF*
@@ -15363,11 +15644,19 @@ type
   TPyCbMP2 = procedure(recv: Pointer; const a0, a1: Variant);
   TPyCbMP3 = procedure(recv: Pointer; const a0, a1, a2: Variant);
   TPyCbMP4 = procedure(recv: Pointer; const a0, a1, a2, a3: Variant);
+  TPyCbMP5 = procedure(recv: Pointer; const a0, a1, a2, a3, a4: Variant);
+  TPyCbMP6 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5: Variant);
+  TPyCbMP7 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6: Variant);
+  TPyCbMP8 = procedure(recv: Pointer; const a0, a1, a2, a3, a4, a5, a6, a7: Variant);
   TPyCbFP0 = procedure;
   TPyCbFP1 = procedure(const a0: Variant);
   TPyCbFP2 = procedure(const a0, a1: Variant);
   TPyCbFP3 = procedure(const a0, a1, a2: Variant);
   TPyCbFP4 = procedure(const a0, a1, a2, a3: Variant);
+  TPyCbFP5 = procedure(const a0, a1, a2, a3, a4: Variant);
+  TPyCbFP6 = procedure(const a0, a1, a2, a3, a4, a5: Variant);
+  TPyCbFP7 = procedure(const a0, a1, a2, a3, a4, a5, a6: Variant);
+  TPyCbFP8 = procedure(const a0, a1, a2, a3, a4, a5, a6, a7: Variant);
   { A callee that COLLECTS. `def h(a, *rest)` compiles to one Variant parameter
     and ONE TPyList — the surplus arguments are packed by the CALL SITE
     (PyPackStarArgs), which a dynamic call through a function value has no
@@ -15546,12 +15835,12 @@ end;
   uses NilPy's function-object ABI (variant params, variant result — see
   PyDefUsedAsValue), which is exactly what these signatures declare. }
 function PyBoundCallV(const cb: Variant; nargs: Integer;
-                     const a0, a1, a2, a3: Variant): Variant;
+                     const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
   Result := pybound_pair_call(Pointer(NativeInt(PPyVarRec(@cb)^.Payload)),
-                              nargs, a0, a1, a2, a3);
+                              nargs, a0, a1, a2, a3, a4, a5, a6, a7);
 end;
 
 function PySigNameEq(np: Pointer; const nm: AnsiString): Boolean;
@@ -15588,7 +15877,7 @@ begin
 end;
 
 function pybound_pair_call(pair: Pointer; nargs: Integer;
-                           const a0, a1, a2, a3: Variant): Variant;
+                           const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
 var noNames, noVals: TPyList;
 begin
   { typed nils: an untyped `nil` cannot pick between the class-typed
@@ -15596,11 +15885,11 @@ begin
   noNames := nil;
   noVals := nil;
   pybound_pair_call := pybound_pair_call_kw(pair, nargs, a0, a1, a2, a3,
-                                            noNames, noVals);
+                                            a4, a5, a6, a7, noNames, noVals);
 end;
 
 function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 { The ONE dynamic-call bridge behind pybound_callv0..4.
 
@@ -15614,14 +15903,19 @@ function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
   arity the body was compiled for.
 
   Sig nil = producer could not supply one; behave exactly as before. }
+const MAXSLOT = 7;   { av[0..MAXSLOT]; the widest rung is MAXSLOT + 1 }
 var code, recv, sg, dp: Pointer; isFn: Boolean;
-    av: array[0..3] of Variant; i, want, totN, reqN: Integer;
-    bound: array[0..3] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
+    av: array[0..MAXSLOT] of Variant; i, want, totN, reqN: Integer;
+    bound: array[0..MAXSLOT] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
     sr: PPySigRec; b: PPyBoundRec;
     m0: TPyCbM0; m1: TPyCbM1; m2: TPyCbM2; m3: TPyCbM3; m4: TPyCbM4;
+    m5: TPyCbM5; m6: TPyCbM6; m7: TPyCbM7; m8: TPyCbM8;
     f0: TPyCbF0; f1: TPyCbF1; f2: TPyCbF2; f3: TPyCbF3; f4: TPyCbF4;
+    f5: TPyCbF5; f6: TPyCbF6; f7: TPyCbF7; f8: TPyCbF8;
     mp0: TPyCbMP0; mp1: TPyCbMP1; mp2: TPyCbMP2; mp3: TPyCbMP3; mp4: TPyCbMP4;
+    mp5: TPyCbMP5; mp6: TPyCbMP6; mp7: TPyCbMP7; mp8: TPyCbMP8;
     fp0: TPyCbFP0; fp1: TPyCbFP1; fp2: TPyCbFP2; fp3: TPyCbFP3; fp4: TPyCbFP4;
+    fp5: TPyCbFP5; fp6: TPyCbFP6; fp7: TPyCbFP7; fp8: TPyCbFP8;
 begin
   Result := pynone;
   if pair = nil then Exit;
@@ -15631,8 +15925,9 @@ begin
   recv := b^.Recv;
   isFn := b^.IsFunc;
   av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
-  for i := nPos to 3 do av[i] := pynone;
-  for i := 0 to 3 do bound[i] := i < nPos;
+  av[4] := a4; av[5] := a5; av[6] := a6; av[7] := a7;
+  for i := nPos to MAXSLOT do av[i] := pynone;
+  for i := 0 to MAXSLOT do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
   want := nPos;
@@ -15654,7 +15949,7 @@ begin
       default, which is the whole reason a caller writes one. }
     if nkw > 0 then
     begin
-      if (sr^.Names = nil) or (totN > 4) then
+      if (sr^.Names = nil) or (totN > MAXSLOT + 1) then
         raise TypeError.Create('this callable value carries no parameter names, '
                 + 'so a keyword argument cannot be matched to a parameter');
       for j := 0 to nkw - 1 do
@@ -15681,13 +15976,13 @@ begin
         actually still unbound rather than trusting the positional count }
       hit := 0;
       for i := 0 to reqN - 1 do
-        if (i > 3) or (not bound[i]) then Inc(hit);
+        if (i > MAXSLOT) or (not bound[i]) then Inc(hit);
       if hit > 0 then
         raise TypeError.Create('missing ' + pystr_of(Int64(hit))
                 + ' required positional argument(s)');
     end;
-    if (totN > want) and (totN <= 4) then want := totN;
-    if (want > nPos) and (sr^.Dflts <> nil) and (want <= 4) then
+    if (totN > want) and (totN <= MAXSLOT + 1) then want := totN;
+    if (want > nPos) and (sr^.Dflts <> nil) and (want <= MAXSLOT + 1) then
     begin
       dp := sr^.Dflts;
       for i := nPos to want - 1 do
@@ -15727,6 +16022,14 @@ begin
     default never adds to the surplus. }
   if b^.StarIdx >= 0 then
   begin
+    { PyBoundCallStar's own bridge carries FOUR fixed slots. Until this body was
+      widened the guard in front of it could not deliver a fifth, so the
+      truncation was unreachable; it is reachable now and refuses by name rather
+      than dropping the surplus -- which, in a COLLECTING callee, would land in
+      neither a parameter nor the tuple. }
+    if nPos > 4 then
+      raise TypeError.Create('a collecting callee reached as a value takes at '
+        + 'most 4 written arguments, got ' + pystr_of(Int64(nPos)));
     Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
                               av[0], av[1], av[2], av[3]);
     Exit;
@@ -15739,7 +16042,11 @@ begin
         1: begin f1 := TPyCbF1(code); Result := f1(av[0]); end;
         2: begin f2 := TPyCbF2(code); Result := f2(av[0], av[1]); end;
         3: begin f3 := TPyCbF3(code); Result := f3(av[0], av[1], av[2]); end;
-      else  begin f4 := TPyCbF4(code); Result := f4(av[0], av[1], av[2], av[3]); end;
+        4: begin f4 := TPyCbF4(code); Result := f4(av[0], av[1], av[2], av[3]); end;
+        5: begin f5 := TPyCbF5(code); Result := f5(av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin f6 := TPyCbF6(code); Result := f6(av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin f7 := TPyCbF7(code); Result := f7(av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin f8 := TPyCbF8(code); Result := f8(av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end
     else
       case want of
@@ -15747,7 +16054,11 @@ begin
         1: begin fp1 := TPyCbFP1(code); fp1(av[0]); end;
         2: begin fp2 := TPyCbFP2(code); fp2(av[0], av[1]); end;
         3: begin fp3 := TPyCbFP3(code); fp3(av[0], av[1], av[2]); end;
-      else  begin fp4 := TPyCbFP4(code); fp4(av[0], av[1], av[2], av[3]); end;
+        4: begin fp4 := TPyCbFP4(code); fp4(av[0], av[1], av[2], av[3]); end;
+        5: begin fp5 := TPyCbFP5(code); fp5(av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin fp6 := TPyCbFP6(code); fp6(av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin fp7 := TPyCbFP7(code); fp7(av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin fp8 := TPyCbFP8(code); fp8(av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end;
   end
   else
@@ -15758,7 +16069,11 @@ begin
         1: begin m1 := TPyCbM1(code); Result := m1(recv, av[0]); end;
         2: begin m2 := TPyCbM2(code); Result := m2(recv, av[0], av[1]); end;
         3: begin m3 := TPyCbM3(code); Result := m3(recv, av[0], av[1], av[2]); end;
-      else  begin m4 := TPyCbM4(code); Result := m4(recv, av[0], av[1], av[2], av[3]); end;
+        4: begin m4 := TPyCbM4(code); Result := m4(recv, av[0], av[1], av[2], av[3]); end;
+        5: begin m5 := TPyCbM5(code); Result := m5(recv, av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin m6 := TPyCbM6(code); Result := m6(recv, av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin m7 := TPyCbM7(code); Result := m7(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin m8 := TPyCbM8(code); Result := m8(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end
     else
       case want of
@@ -15766,7 +16081,11 @@ begin
         1: begin mp1 := TPyCbMP1(code); mp1(recv, av[0]); end;
         2: begin mp2 := TPyCbMP2(code); mp2(recv, av[0], av[1]); end;
         3: begin mp3 := TPyCbMP3(code); mp3(recv, av[0], av[1], av[2]); end;
-      else  begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
+        4: begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
+        5: begin mp5 := TPyCbMP5(code); mp5(recv, av[0], av[1], av[2], av[3], av[4]); end;
+        6: begin mp6 := TPyCbMP6(code); mp6(recv, av[0], av[1], av[2], av[3], av[4], av[5]); end;
+        7: begin mp7 := TPyCbMP7(code); mp7(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6]); end;
+      else  begin mp8 := TPyCbMP8(code); mp8(recv, av[0], av[1], av[2], av[3], av[4], av[5], av[6], av[7]); end;
       end;
   end;
 end;
@@ -15776,12 +16095,13 @@ end;
   value travels, and a body that reassigns the attribute it came from frees it
   exactly the same way. Same shape, same reason, one site per road. }
 function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
-                              const a0, a1, a2, a3: Variant;
+                              const a0, a1, a2, a3, a4, a5, a6, a7: Variant;
                               kwNames, kwVals: TPyList): Variant;
 begin
   PXXObjRetain(pair);
   try
-    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, kwNames, kwVals);
+    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, a4, a5, a6, a7,
+                                    kwNames, kwVals);
   finally
     PXXObjRelease(pair);
   end;
@@ -15789,22 +16109,22 @@ end;
 
 function pybound_callv0(const cb: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 0, pynone, pynone, pynone, pynone);
+  Result := PyBoundCallV(cb, 0, pynone, pynone, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 1, a0, pynone, pynone, pynone);
+  Result := PyBoundCallV(cb, 1, a0, pynone, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 2, a0, a1, pynone, pynone);
+  Result := PyBoundCallV(cb, 2, a0, a1, pynone, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
 begin
-  Result := PyBoundCallV(cb, 3, a0, a1, a2, pynone);
+  Result := PyBoundCallV(cb, 3, a0, a1, a2, pynone, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
@@ -15814,7 +16134,27 @@ function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Varia
   dispatcher had to exist at all.
   bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
 begin
-  Result := PyBoundCallV(cb, 4, a0, a1, a2, a3);
+  Result := PyBoundCallV(cb, 4, a0, a1, a2, a3, pynone, pynone, pynone, pynone);
+end;
+
+function pybound_callv5(const cb: Variant; const a0, a1, a2, a3, a4: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 5, a0, a1, a2, a3, a4, pynone, pynone, pynone);
+end;
+
+function pybound_callv6(const cb: Variant; const a0, a1, a2, a3, a4, a5: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 6, a0, a1, a2, a3, a4, a5, pynone, pynone);
+end;
+
+function pybound_callv7(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 7, a0, a1, a2, a3, a4, a5, a6, pynone);
+end;
+
+function pybound_callv8(const cb: Variant; const a0, a1, a2, a3, a4, a5, a6, a7: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 8, a0, a1, a2, a3, a4, a5, a6, a7);
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's
@@ -17650,14 +17990,28 @@ begin
 end;
 
 { list(v) on a variant: a str yields its characters, a list a shallow copy. }
-procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer);
+{ The callee's name as a prefix, or nothing when there is none to give.
+  `forwarded call got 5 arguments, expected 0 to 4` named no callee at all, and
+  the lekkerzeilen demo printed exactly that from a binary of 11711 procedures:
+  the message identified the MECHANISM and nothing else, so finding the call meant
+  enumerating every def in the app whose parameters are all defaulted. The name
+  goes in FRONT of the existing sentence rather than inside it, so the wording
+  that tickets, fixtures and two Makefile assertions already quote is untouched.
+  Empty is legitimate: the run-time dynamic arm forwards into an arbitrary
+  expression and has no static name. }
+function pystar_whose(const nm: AnsiString): AnsiString;
+begin
+  if nm = '' then Result := '' else Result := nm + '(): ';
+end;
+
+procedure pystar_check_arity(l: TPyList; lo: Integer; hi: Integer; const nm: AnsiString);
 var n: Integer;
 begin
   n := 0;
   if l <> nil then n := l.count;
   if (n < lo) or (n > hi) then
   begin
-    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+    raise TypeError.Create(pystar_whose(nm) + 'forwarded call got ' + pystr_of(Int64(n)) +
                            ' arguments, expected ' + pystr_of(Int64(lo)) +
                            ' to ' + pystr_of(Int64(hi)));
   end;
@@ -17719,12 +18073,12 @@ begin
   Result := pynone;
 end;
 
-procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer);
+procedure pystar_check_arity_kw(l: TPyList; d: TPyDict; lo: Integer; hi: Integer; const nm: AnsiString);
 var n: Integer;
 begin
   n := pystar_argc(l, d);
   if (n < lo) or (n > hi) then
-    raise TypeError.Create('forwarded call got ' + pystr_of(Int64(n)) +
+    raise TypeError.Create(pystar_whose(nm) + 'forwarded call got ' + pystr_of(Int64(n)) +
                            ' arguments, expected ' + pystr_of(Int64(lo)) +
                            ' to ' + pystr_of(Int64(hi)));
 end;
