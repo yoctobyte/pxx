@@ -123,12 +123,20 @@ loader's body, drained synchronously where the orders are submitted; the
 
 | build | world, `--shot --for 20` |
 | --- | --- |
-| loader on its own pxx thread | **4/5 abort** |
-| loader on the main thread, everything else identical | **5/5 rc=0**, ~739KB images every time |
+| loader on its own pxx thread | **5/5 abort**, and no image is written at all |
+| loader on the main thread, everything else identical | **5/5 rc=0**, a ~739KB image every time |
 
-Both built from the same entry point with the same flags, so the comparison is
-not across build commands. The scratch patch is an EXPERIMENT and is not a
-proposed change to the application -- it exists to move one variable.
+Both built from the same entry point with the same flags, from the same
+sources apart from the loader patch, so the comparison is not across build
+commands -- the earlier 4/5 figure in this ticket's history came from
+`bin/lzfix`, which was built from a different source file, and the matched
+control is worse, not better. The threaded side's five runs give two distinct
+messages (`corrupted double-linked list` once, `malloc(): unsorted double
+linked list corrupted` four times), which is itself the signature: a
+deterministic bug does not choose between two messages.
+
+The scratch patch is an EXPERIMENT and is not a proposed change to the
+application -- it exists to move one variable.
 
 ## WARNING for anyone re-measuring: two of glibc's debug knobs are INERT here
 
