@@ -7,16 +7,21 @@ summary: >
   a bytes payload; a bytes EXPRESSION in a C-seam argument passing the object
   header instead of its buffer), and the world path now RENDERS and exits
   rc=0 -- `--shot --for 12`, which used to abort, produces a 772KB picture of
-  the Rhine corridor. What survives is the glibc heap corruption at longer
-  runs: `--for 30` still aborts with `malloc(): unsorted double linked list
-  corrupted`. The `.grids`-on-None reading in this ticket was taken under
-  valgrind on a binary that no longer exists and has NOT been re-measured;
-  treat it as unverified until someone re-runs it.
+  the Rhine corridor. The glibc heap corruption at longer runs is ROOT-CAUSED
+  and is not a NilPy bug at all: pxx-created threads share glibc's thread
+  pointer, so the tile loader and the main thread operate one malloc state
+  unlocked -- see the Track A ticket this is now blocked by. The
+  `.grids`-on-None reading in this ticket was taken under valgrind on a binary
+  that no longer exists and has NOT been re-measured; treat it as unverified
+  until someone re-runs it. Nothing is left here that is demonstrably OURS.
 track: N
 type: bug
 prio: 75
 owner: unassigned
 status: open
+blocked-by:
+  - bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+
 ---
 
 ## What is measured
@@ -221,3 +226,19 @@ now closed on all four counts, against `lib/rtl/mimic_sqlite3.pas`:
 that we allocated" -- refuted for the only library where we could plausibly
 have done it.** The remaining `DT_NEEDED` are `libc.so.6`, `libSDL2-2.0.so.0`
 and `libGL.so.1`, and we hand none of those a pointer to own.
+
+### ROOT CAUSE FOUND, 2026-09-14 -- and it is not in the frontend
+
+`--open-water` (no region, therefore no tile loader thread) is **5/5 clean** at
+`--for 20`, where a world is **4/5 abort**. A second thread is required.
+
+`PXX_CLONE_THREAD` omits `CLONE_SETTLS`, so every pxx-created thread inherits
+the parent's `fs` base -- glibc's thread pointer -- and therefore shares
+glibc's per-thread malloc state with the main thread, unlocked. A 60-line
+Pascal repro aborts 5/5; the same churn single-threaded is clean, and the same
+churn with the worker created by `pthread_create` is clean.
+
+Filed as
+`bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state`
+(Track A, prio 85), which this ticket is blocked by. The helgrind/drd line
+above is retired: the instrument that answered it was reading the clone flags.

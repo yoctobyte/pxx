@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:29 backlog-umbrella:11 backlog-core:161 backlog-nilpy:162 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3752 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:29 backlog-umbrella:11 backlog-core:162 backlog-nilpy:162 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:29 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3752 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -85,6 +85,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 90] [N]` bug-n-the-compiler-segfaults-on-two-lekkerzeilen-modules-after-open-world-dispatch
 - `[p 88] [N]` bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
+- `[p 85] [A]` bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state (unblocks 1)
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim (unblocks 1)
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
@@ -101,7 +102,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
-- `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 - `[p 70] [N]` bug-n-a-collections-deque-segfaults-at-run-time

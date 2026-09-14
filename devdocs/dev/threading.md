@@ -246,6 +246,34 @@ nothing caught it; `test_multithreading` links libpthread and survived by luck.
 `test_glibc_tls_coexist` is the regression test, and it is deliberately **not**
 `--threadsafe`: this is about every build, not the threaded one.
 
+#### CORRECTION 2026-09-14 — coexisting is not the same as being correct
+
+Everything above is right and it is only half the picture. Not taking `fs` is
+necessary; leaving it **inherited** is a defect of its own. `CLONE_SETTLS` is
+absent from `PXX_CLONE_THREAD`, so a pxx-created thread runs on the PARENT's
+`fs` base — which means every glibc thread-local is SHARED between the main
+thread and every thread pxx creates. `errno` is one. malloc's per-thread state
+is the expensive one: glibc takes no lock on it, because it is per-thread by
+construction.
+
+Measured: two threads doing nothing but `malloc`/`free` from `libc.so.6` abort
+**5/5** with `free(): too many chunks detected in tcache`. The same churn on
+one thread with twice the work is 3/3 clean; the same churn with the worker
+created by glibc's own `pthread_create` is 5/5 clean. One variable, and it is
+which call created the thread. Disabling the tcache via
+`GLIBC_TUNABLES=glibc.malloc.tcache_count=0` does not rescue it (4 SIGSEGV, 1
+`double free or corruption`), so the shared state is larger than the tcache and
+there is no runtime knob for this.
+
+`test_glibc_tls_coexist` cannot see any of it: it is single-threaded, and
+single-threaded is exactly the case that works.
+
+Tracked as
+`bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state`,
+with the repro in `test/thread_glibc_malloc_two_threads.pas` and its two
+controls in `test/thread_glibc_malloc_controls.pas`. This is what aborts the
+lekkerzeilen demo.
+
 That needs no compiler support at all — it is an ordinary syscall. Only the
 **read** side does, because the x86-64 segment base is not readable as a register
 (`rdgsbase` needs `CR4.FSGSBASE`, which is not guaranteed):
