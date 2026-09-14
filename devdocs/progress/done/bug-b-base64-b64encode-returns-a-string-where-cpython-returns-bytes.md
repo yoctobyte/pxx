@@ -136,4 +136,4 @@ add them and each is a few lines; nobody has done it, and saying so is the point
 — this closes the two units that were measured, not the class.
 
 ## Log
-- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6b45b991b.

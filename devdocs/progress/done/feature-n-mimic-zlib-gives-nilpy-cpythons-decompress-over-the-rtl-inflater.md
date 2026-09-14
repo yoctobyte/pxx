@@ -136,4 +136,4 @@ holds. What the pattern bought is visible in what it unblocked the same day:
 lib/rtl Python surface against CPython in `make lib-test`.
 
 ## Log
-- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6b45b991b.

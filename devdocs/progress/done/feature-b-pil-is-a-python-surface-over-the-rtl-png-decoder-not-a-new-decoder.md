@@ -360,4 +360,4 @@ This is the cost CLAUDE.md names: a fix is inert until pinned, and a compiler
 change a `lib/**` file depends on has to say so at closing time. Saying it.
 
 ## Log
-- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-14 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6b45b991b.
