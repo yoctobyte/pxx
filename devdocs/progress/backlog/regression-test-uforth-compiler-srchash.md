@@ -56,3 +56,4 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-14 — the borg watcher saw `test-uforth#src:tools/compiler_srchash.sh@3` GREEN at accb99f3c59b (tier full) and did NOT close this: the job FAILED and passed on a retry in this very run, so this green is the race firing rather than evidence against it. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+- 2026-09-14 — the borg watcher saw `test-uforth#src:tools/compiler_srchash.sh@7` GREEN at 1fa5bc5e334c (tier full) and did NOT close this: the job FAILED and passed on a retry in this very run, so this green is the race firing rather than evidence against it. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
