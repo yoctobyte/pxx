@@ -7451,6 +7451,12 @@ begin
   ks := keylist;
   vs := vallist;
   for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
+  { store() copies each element out, so both snapshots are pure temporaries.
+    Measured 2026-09-14: 1168 bytes per call on a 32-entry dict -- the SAME
+    number dict(d) leaked before 88a55bb9f fixed it, because d.copy() is a
+    DIFFERENT function reaching the same operation. }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
 end;
 
 function TPyDict.popitem: TPyList;
@@ -7458,7 +7464,12 @@ var ks, vs: TPyList; n: Integer; k: Variant;
 begin
   ks := keylist;
   if ks.count = 0 then
+  begin
+    { release BEFORE raising: the early exit leaks ks otherwise, and vs does
+      not exist yet on this path }
+    PXXObjRelease(Pointer(ks));
     raise KeyError.Create('popitem(): dictionary is empty');
+  end;
   vs := vallist;
   n := ks.count - 1;                  { LIFO, matching CPython 3.7+ }
   k := ks.at(n);
@@ -7467,6 +7478,9 @@ begin
   Result.append(k);
   Result.append(vs.at(n));
   remove(k);
+  { both snapshots are read-only temporaries here -- measured 656 bytes/call }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
 end;
 
 function TPyDict.pop(const k: Variant): Variant;
@@ -8085,8 +8099,17 @@ begin
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8107,8 +8130,17 @@ begin
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8165,8 +8197,17 @@ begin
     pair.append(b.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8677,6 +8718,12 @@ begin
     pair.append(vs.at(idx[i]));
     res.append(pair);
   end;
+  { measured 3855 bytes/call on a 16-entry dict. This releases the two
+    SNAPSHOTS only: the pairs reach res through res.append(pair) -- an object,
+    not a boxed variant like the four eager sites -- so whether that retains is
+    not established here and is not patched on an assumption. }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
   Result := res;
 end;
 
@@ -8841,12 +8888,19 @@ begin
     pair.FKind := PYSEQ_TUPLE;   { dict.items() yields (key, value) tuples }
     pair.append(kl.at(i));
     pair.append(vl.at(i));
-    { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
-      list literal gets when it is appended }
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
   PXXObjRelease(Pointer(kl));
   PXXObjRelease(Pointer(vl));
@@ -14371,8 +14425,17 @@ begin
     Inc(it.FPos);
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;
@@ -14472,8 +14535,17 @@ begin
     if pair = nil then begin it.FEnd := True; Exit; end;   { zip() of nothing }
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;
@@ -14504,8 +14576,17 @@ begin
     end;
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;

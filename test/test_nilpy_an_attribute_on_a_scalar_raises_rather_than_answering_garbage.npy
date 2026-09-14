@@ -1,0 +1,76 @@
+# An attribute that does not exist must raise AttributeError whatever the
+# RECEIVER is. This is the SCALAR arm of
+# done/bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror, which
+# fixed only the class-instance arm.
+#
+# EVERY EXPECTED VALUE HERE IS A RAISE, NEVER A VALUE, AND THAT IS DELIBERATE.
+# The broken compiler answers the RECEIVER for an int (`(5).foo` -> 5), so a
+# fixture asserting "not None" or "falsy" passes on the bug. Only "did it
+# raise" separates them.
+#
+# Measured before the fix: (5).foo -> 5, "abc".foo -> 6513249 (a raw internal
+# handle surfaced as an integer), (1.5).bar -> 0, (5).foo + 1 -> 6, and
+# `None.foo = 1` silently no-ops. CPython raises AttributeError for all five.
+
+ok = True
+
+def expect_raise(label, fn):
+    global ok
+    try:
+        v = fn()
+        print("%-18s NO RAISE -> %s   FAIL" % (label, repr(v)))
+        ok = False
+    except AttributeError:
+        print("%-18s AttributeError" % label)
+
+def r_int():
+    i = 5
+    return i.foo
+
+def r_str():
+    s = "abc"
+    return s.foo
+
+def r_float():
+    f = 1.5
+    return f.bar
+
+def r_arith():
+    i = 5
+    return i.foo + 1
+
+def w_none():
+    n = None
+    n.foo = 1
+    return "written"
+
+expect_raise("int.foo", r_int)
+expect_raise("str.foo", r_str)
+expect_raise("float.bar", r_float)
+expect_raise("int.foo + 1", r_arith)
+expect_raise("None.foo = 1", w_none)
+
+# POSITIVE CONTROL: attributes that DO exist must still work, or a fix that
+# raises unconditionally would pass every row above.
+class C:
+    def __init__(self):
+        self.a = 7
+
+c = C()
+if c.a == 7:
+    print("control: real attribute still reads")
+else:
+    print("control: real attribute BROKE")
+    ok = False
+
+d = {"k": 1}
+if len("abc") == 3 and d.get("k") == 1 and "AB".lower() == "ab":
+    print("control: scalar methods still work")
+else:
+    print("control: scalar methods BROKE")
+    ok = False
+
+if ok:
+    print("SCALARATTR OK")
+else:
+    print("SCALARATTR FAIL")
