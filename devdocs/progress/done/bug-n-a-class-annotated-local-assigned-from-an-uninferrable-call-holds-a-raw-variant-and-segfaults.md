@@ -225,4 +225,4 @@ at COMPILE time where the RHS type is knowably not that class — is the thing
 that would close it, and it is still unbuilt.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fc646c17a.

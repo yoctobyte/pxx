@@ -127,4 +127,4 @@ Noted, not fixed: a tighter answer needs the walk to treat `(group).sel` as a
 unit, which is a second copy of arm 1 inside the walk.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 26e3389e3.
