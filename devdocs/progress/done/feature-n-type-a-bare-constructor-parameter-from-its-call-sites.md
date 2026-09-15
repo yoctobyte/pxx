@@ -88,4 +88,4 @@ instrument that can see the typing).
 
 ## Log
 
-- 2026-09-15 frankuser (Fable): built, measured on bench2 (0.93 s -> 0.34 s, output 661050096 both) and on the demo compile; commit PENDING-COMMIT.
+- 2026-09-15 frankuser (Fable): built, measured on bench2 (0.93 s -> 0.34 s, output 661050096 both) and on the demo compile; commit 7bf3860e0.
