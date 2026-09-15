@@ -1,0 +1,129 @@
+# A VARIANT stored into a local whose ANNOTATION made it a user class must be
+# UNBOXED. Nothing did it, so the class-typed slot held the raw variant payload:
+# `v.x` answered 6.8526596474162e-310 -- the POINTER reinterpreted as a double --
+# and `v.norm1()` dereferenced it and SEGFAULTED.
+#
+# THE ANNOTATION IS WHAT BROKE IT. `v = s.mk()` was correct throughout and
+# `v: Vec3 = s.mk()` was not, so the edit a user makes to go faster took the
+# program apart, silently on a field read and loudly on a method call.
+#
+# WHY THE ROWS ARE SHAPED LIKE THIS. The trigger is an AND: an annotated local
+# AND a call whose return type the compiler cannot infer. Every row below that
+# ends `_bad` is on the broken side of BOTH; the `_ok` rows each relax exactly
+# one conjunct and MUST have been green before this fix too -- they are here to
+# catch a fix that unboxes indiscriminately, which would break the rows where
+# the value is already a class pointer.
+#
+# The method-call rows are not decoration: a field read off the broken slot
+# returns a garbage DOUBLE and compares unequal, but a method call CRASHES, and
+# a fixture that only read fields would have asserted the quiet half of a defect
+# whose loud half is a segfault.
+
+class Vec3:
+    def __init__(self, x: float, y: float, z: float):
+        self.x = x
+        self.y = y
+        self.z = z
+    def norm1(self):
+        return self.x + self.y + self.z
+
+class Quat:
+    def __init__(self):
+        self.w = 1.0
+    def rot(self, v):
+        return Vec3(v.x, v.y, v.z)
+    def rot_ann(self, v) -> 'Vec3':
+        return Vec3(v.x, v.y, v.z)
+
+class State:
+    def __init__(self):
+        self.p = Vec3(1.0, 2.0, 3.0)
+        self.q = Quat()
+    def mk(self):                 # returns a FIELD -- not inferrable
+        return self.p
+    def mk_ann(self) -> 'Vec3':   # the same, annotated
+        return self.p
+    def mk_ctor(self):            # returns a CONSTRUCTOR call -- inferrable
+        return Vec3(4.0, 5.0, 6.0)
+    def two_hop(self, v) -> 'Vec3':
+        return self.q.rot(v)
+
+def plain_fn(st):                 # a plain function, same shape as mk
+    return st.p
+
+ok = True
+
+def check(label, got, want):
+    global ok
+    if abs(got - want) > 1e-9:
+        print("%s FAIL got %r want %r" % (label, got, want))
+        ok = False
+
+s = State()
+src = Vec3(7.0, 8.0, 9.0)
+
+# --- the defect: annotated local, uninferrable call ---
+a: Vec3 = s.mk()
+check("field_bad", a.x, 1.0)
+check("method_bad", a.norm1(), 6.0)
+
+# a plain function, not a method -- the same rule
+b: Vec3 = plain_fn(s)
+check("fn_bad", b.x, 1.0)
+check("fn_method_bad", b.norm1(), 6.0)
+
+# two hops, the outer annotated over an UNannotated inner
+c: Vec3 = s.two_hop(src)
+check("twohop_bad", c.x, 7.0)
+check("twohop_method_bad", c.norm1(), 24.0)
+
+# a method call on the receiver, one hop, via a Quat whose method is bare
+d: Vec3 = s.q.rot(src)
+check("recv_bad", d.x, 7.0)
+check("recv_method_bad", d.norm1(), 24.0)
+
+# --- relax ONE conjunct each: green before the fix, must stay green ---
+e = s.mk()                      # not annotated
+check("noann_ok", e.x, 1.0)
+check("noann_method_ok", e.norm1(), 6.0)
+
+f: Vec3 = s.mk_ann()            # callee annotated
+check("calleeann_ok", f.x, 1.0)
+check("calleeann_method_ok", f.norm1(), 6.0)
+
+g: Vec3 = s.mk_ctor()           # callee inferrable
+check("ctor_ok", g.x, 4.0)
+check("ctor_method_ok", g.norm1(), 15.0)
+
+h: Vec3 = Vec3(2.0, 3.0, 4.0)   # annotated from a constructor directly
+check("direct_ok", h.x, 2.0)
+check("direct_method_ok", h.norm1(), 9.0)
+
+# a SCALAR annotation off the same uninferrable call -- the variant-to-double
+# coercion already existed and is what made the class gap easy to miss
+i: float = s.mk().x
+check("scalar_ok", i, 1.0)
+
+# the unboxed slot must still be a live, owned reference AFTER the statement
+# that produced it: a bare pointer whose variant temp was released would read
+# correct here and garbage later.
+j: Vec3 = s.mk()
+k = j.norm1() + j.x + j.y + j.z
+check("owned_after", k, 12.0)
+
+# ...and survive being handed on
+def take(v: Vec3):
+    return v.norm1()
+m: Vec3 = s.mk()
+check("passed_on", take(m), 6.0)
+
+# augmented assignment must NOT be unboxed into the target's class: the node
+# there is a BINOP operand, not the stored value.
+n: float = 1.0
+n += 2.0
+check("augassign_untouched", n, 3.0)
+
+if ok:
+    print("ANNUNBOX OK")
+else:
+    print("ANNUNBOX FAIL")

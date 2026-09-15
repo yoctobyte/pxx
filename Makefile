@@ -2439,6 +2439,8 @@ test-nilpy: $(COMPILER)
 	@# itself a class, which is what let it survive.
 	./$(COMPILER) test/test_nilpy_a_def_returning_a_multi_hop_attribute_chain_is_typed_by_its_last_hop.npy $(TESTTMP)/test_nilpy_chainret26
 	tools/expect_same.sh test_nilpy_chainret "$$($(TESTTMP)/test_nilpy_chainret26 | tail -n 1)" "CHAINRET OK"
+	./$(COMPILER) test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy $(TESTTMP)/test_nilpy_annunbox26
+	tools/expect_same.sh test_nilpy_annunbox "$$($(TESTTMP)/test_nilpy_annunbox26 | tail -n 1)" "ANNUNBOX OK"
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy $(TESTTMP)/test_nilpy_class_attr_hoist_leak26
 	$(TESTTMP)/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
 	# calling a NON-CALLABLE segfaulted instead of raising a catchable TypeError.

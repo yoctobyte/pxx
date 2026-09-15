@@ -4,6 +4,7 @@ prio: 90
 type: bug
 blocked-by: []
 summary: "`v: Vec3 = s.mk()` where `mk`'s return type cannot be inferred stores a raw variant into a class-typed slot: a field read returns a denormal (the pointer reinterpreted) and a method call SEGFAULTS. Unannotated is correct, so ADDING the annotation is what breaks it."
+status: done
 ---
 
 # A class-annotated local assigned from an uninferrable call holds a raw variant and segfaults
@@ -170,3 +171,58 @@ caller (measured: four return annotations moved thirteen hot locals where three
 constructor annotations moved none, and definitions-only took 41 -> 30 with no
 annotated local anywhere). Worth saying in the NilPy docs regardless of this bug,
 because the failure it prevents is silent.
+
+## FIXED — and what the fix does NOT check
+
+Implemented as `PyStoreRhsToClassSlot(symIdx, rhsNode)` in `pyparser.inc`, a
+separate helper rather than a fourth arm inside `PyCoerceAssignmentRHS`. The
+plan above said to make that procedure a function and thread the target's
+`RecName` through it; that was wrong in one respect and the ticket should say
+so. It is shared by THREE sites and one of them is the AUGMENTED assignment,
+where the node becomes an OPERAND of an `AN_BINOP` rather than the stored value
+— coercing it to the target's class there would be wrong for `v += 1`. Widening
+an int literal IS right at all three; the unbox is right at two. That asymmetry
+is the reason for a separate helper, and folding it in would have shipped a
+fourth-site bug in the same week this repo shipped a third-site one.
+
+Verified: `field read: 1.0`, `method call: 6.0`, matching CPython exactly, where
+the same program gave `6.85e-310` and a core dump. All five matrix rows pass.
+Fixture `test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy`,
+wired into the Makefile, twenty rows including nine `_ok` rows that a fix
+unboxing indiscriminately would redden. **Its positive control is the pinned
+compiler, which fails it with `rc=139` and `field_bad FAIL got
+6.2639678662742e-310`** — drawn from the population the question is about, and
+the failure is the original defect rather than a manufactured one.
+
+**THE GAP, AND IT IS IN THE FIX RATHER THAN IN THE BUG: `pyvarobj_owned` IS
+RETAIN-BUT-UNCHECKED.**
+
+```pascal
+function pyvarobj_owned(const v: Variant): Pointer;
+begin
+  Result := Pointer(PPyVarRec(@v)^.Payload);
+  if PyVarSlotIsObj(PPyVarRec(@v)^.VType) then PXXObjRetain(Result);
+end;
+```
+
+It hands back the payload bits whatever the tag says, and retains only when the
+tag is an object. So a class-annotated local assigned from a call that at
+RUNTIME yields a double, a str or a container now has those bits reinterpreted
+as an instance pointer, with no retain and no diagnostic. pylib's own
+`pyvarobj_arg` comment records that exact failure from the argument-binding
+site: *"a variant holding a STRING was reinterpreted as an instance pointer and
+the callee dereferenced it — `tuple(v)`, `sorted(v)`, `bytes(v)`, `reversed(v)`
+and `sum(v)` all SEGFAULTED."*
+
+**This is not a regression** — before the fix that same program stored a raw
+variant into an 8-byte slot and read garbage, which is not better. And the
+checked entry point (`pyvarobj_arg`) cannot simply be substituted: it raises,
+and raising here would turn a wrong ANNOTATION into a runtime abort where
+CPython would have run the program. But the honest statement is that the fix
+trusts the annotation, and an annotation is exactly the thing a user gets wrong.
+The diagnostic proposed above — refuse the `tyClass`-slot / `tyVariant`-RHS pair
+at COMPILE time where the RHS type is knowably not that class — is the thing
+that would close it, and it is still unbuilt.
+
+## Log
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

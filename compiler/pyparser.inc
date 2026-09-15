@@ -3715,6 +3715,44 @@ begin
   Result := PyUnboxVariantToClassEx(varNode, ci, False);
 end;
 
+function PyStoreRhsToClassSlot(symIdx, rhsNode: Integer): Integer;
+{ A VARIANT value being stored into a local whose ANNOTATION made it a user
+  class. Nothing unboxed it, so the class-typed slot held the raw variant: a
+  field read reinterpreted the payload (`v.x` answering 6.85e-310 -- the POINTER
+  read as a double) and a method call dereferenced it and SEGFAULTED. The
+  UNannotated spelling was correct throughout, so writing `v: Vec3 = s.mk()`
+  instead of `v = s.mk()` is what broke the program -- the one edit a user makes
+  to go faster.
+
+  Reached whenever the right-hand side's type could not be inferred: a call whose
+  callee returns a field or another method's result, a dynamically dispatched
+  one, anything the expression chase gives up on. The set of such calls was never
+  characterised and does not need to be -- this asks what the VALUE is, not why.
+
+  owned := True, and that is not a detail. An unboxed pointer is a bare
+  reference, while the variant TEMP it came out of is released at the end of the
+  statement and takes the object with it, so without the retain the slot points
+  at a freed block: correct at the assignment and garbage at the first read --
+  strictly worse than the bug being fixed. The dataclass keyword-argument site
+  records the same reasoning for the same reason.
+
+  NOT called from the AUGMENTED-assignment site, deliberately. There the node
+  becomes an OPERAND of an AN_BINOP rather than the stored value, so coercing it
+  to the target's class would be wrong for `v += 1`. PyCoerceAssignmentRHS is
+  shared by all three sites because widening an integer literal IS right in all
+  three; this is not, and that asymmetry is the whole reason it is a separate
+  helper rather than another arm in there.
+  bug-n-a-class-annotated-local-assigned-from-an-uninferrable-call-holds-a-raw-variant-and-segfaults }
+begin
+  Result := rhsNode;
+  if rhsNode < 0 then Exit;
+  if Syms[symIdx].TypeKind <> tyClass then Exit;
+  if Syms[symIdx].RecName < REC_UCLASS_BASE then Exit;
+  if IntToTypeKind(ASTTk[rhsNode]) <> tyVariant then Exit;
+  Result := PyUnboxVariantToClassEx(rhsNode,
+                                    Syms[symIdx].RecName - REC_UCLASS_BASE, True);
+end;
+
 
 function PyMakeTruthy(n: Integer): Integer;
 var procIdx, argNode, rec, lenNode, zeroNode, node: Integer;
@@ -32610,6 +32648,7 @@ begin
       lhsNode := PyMakeIdent(symIdx);
       PyNoteOptionalTaint(symIdx, CurASTNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
+      CurASTNode := PyStoreRhsToClassSlot(symIdx, CurASTNode);
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := lhsNode;
       ASTRight[node] := CurASTNode;
@@ -32746,6 +32785,7 @@ begin
     lhsNode := PyMakeIdent(symIdx);
     PyNoteOptionalTaint(symIdx, rhsNode);
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, rhsNode);
+    rhsNode := PyStoreRhsToClassSlot(symIdx, rhsNode);
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := lhsNode;
     ASTRight[node] := rhsNode;
