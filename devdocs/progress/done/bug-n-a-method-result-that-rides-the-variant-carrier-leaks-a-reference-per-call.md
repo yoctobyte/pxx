@@ -1288,7 +1288,7 @@ hidden-dest family repaired here, operator dispatch, the field store, and the
 discarded constructor.
 
 ## Log
-- 2026-09-15 — resolved, commit PENDING-COMMIT.
+- 2026-09-15 — resolved, commit 6fbbffa2d.
 
   Fixed in `IRBuildHiddenDest`: the caller-owned hidden-destination scratch is
   now cleared before a Variant-returning call, matching the guard `IRAppendCall`
