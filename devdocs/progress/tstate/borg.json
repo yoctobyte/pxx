@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-14T20:41:20Z",
-   "fixed": [
-    "test-threads#src:test/test_a_threadvar_is_per_thread.pas"
-   ],
-   "new_red": [],
-   "sha": "cc959c28272f6855ee66742b1d0abbb227a3b513",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-14T20:56:57Z",
    "fixed": [
     "lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy",
@@ -519,6 +508,17 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-15T08:19:08Z",
+   "fixed": [
+    "test-uforth#src:tools/compiler_srchash.sh"
+   ],
+   "new_red": [],
+   "sha": "c3cfdac9e733210255d4b041d529a85ca646a07d",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5134,7 +5134,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "c3cfdac9e733210255d4b041d529a85ca646a07d",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "c3cfdac9e733210255d4b041d529a85ca646a07d",
   "test-threads#src:tools/compiler_srchash.sh": "c3cfdac9e733210255d4b041d529a85ca646a07d",
-  "test-uforth#src:tools/compiler_srchash.sh": "f7a745e876ef94b58995c3dd23c53545f5b81919",
+  "test-uforth#src:tools/compiler_srchash.sh": "c3cfdac9e733210255d4b041d529a85ca646a07d",
   "test-uforth#src:tools/compiler_srchash.sh@1": "c3cfdac9e733210255d4b041d529a85ca646a07d",
   "test-uforth#src:tools/compiler_srchash.sh@10": "c3cfdac9e733210255d4b041d529a85ca646a07d",
   "test-uforth#src:tools/compiler_srchash.sh@11": "c3cfdac9e733210255d4b041d529a85ca646a07d",
@@ -5320,7 +5320,6 @@
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124",
-  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 561c30f6409b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "tools-devtest#00": "ok   only .md files are tickets | RED  the working tree has no duplicate slug | twatch duplicate-slug BROKEN | the working tree has no duplicate slug | live duplicates: ['regression-cascade-e5cd18e4b220.md', 'regression-lib-test-lib-criticalsection-blocking.md', 'regression-lib-test-lib-fpc-thread-surface.md', 'regression-lib-test-lib-thread-handle-reports-exit-on-both-routes.md', 'regression-lib\u2026"
  },
  "job_tier": {
@@ -14733,7 +14732,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-threads#src:tools/compiler_srchash.sh": "pass",
-  "test-uforth#src:tools/compiler_srchash.sh": "fail",
+  "test-uforth#src:tools/compiler_srchash.sh": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@1": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@10": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@11": "pass",
@@ -14910,14 +14909,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-15T08:17:18Z",
+  "date": "2026-09-15T08:19:08Z",
   "deadline": 3600.0,
   "sha": "c3cfdac9e733210255d4b041d529a85ca646a07d",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 957.9
+  "verdict": "GREEN",
+  "wall": 99.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14968,14 +14967,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-15T06:55:37Z",
+   "date": "2026-09-15T08:19:08Z",
    "deadline": 3600.0,
-   "sha": "03975f44d5d4ef22e3f5971afb8f95e3d7895980",
+   "sha": "c3cfdac9e733210255d4b041d529a85ca646a07d",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "RED",
-   "wall": 18.8
+   "verdict": "GREEN",
+   "wall": 99.1
   }
  },
  "last_full": {
@@ -15147,25 +15146,6 @@
    ],
    "range_non_causal": false,
    "src": "test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh",
-   "status": "fail"
-  },
-  {
-   "bad": "827fabcc7d6d134590694d3560af498967c6c7f0",
-   "bad_untestable": false,
-   "first_seen": false,
-   "good": "f7a745e876ef94b58995c3dd23c53545f5b81919",
-   "job": "test-uforth#src:tools/compiler_srchash.sh",
-   "name": "test-uforth#blocktest",
-   "never_passed": false,
-   "no_testable_change": false,
-   "opened": "2026-09-15T06:01:18Z",
-   "pin_axis": 0,
-   "pin_built": false,
-   "range": [
-    "827fabcc7d6d134590694d3560af498967c6c7f0"
-   ],
-   "range_non_causal": false,
-   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
    "status": "fail"
   },
   {
