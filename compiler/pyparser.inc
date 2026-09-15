@@ -745,12 +745,9 @@ function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind; forward;
 function PyChaseBareLocalClass(startIdx, endIdx: Integer;
                                var tk: TTypeKind; var ci: Integer): Boolean; forward;
-{ The augmented-store dunder dispatch and its marker predicate, defined with
-  the other PyAug* helpers ~14000 lines below the variant field store that
-  now asks them (PyVariantFieldStore / PyMakeVariantFieldSet). }
-function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward;
-function PyAugMarkedTok(k: TTokenKind): Boolean; forward;
-function PyNodeListCi(n: Integer): Integer; forward;
+{ PyAugClassDunderNode / PyAugMarkedTok / PyNodeListCi are forwarded in
+  pyforwards.inc; a second forward here compiled under pxx and was FPC's
+  "already declared Public/Forward" (borg fpc-bootstrap, 2026-09-15). }
 function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
                               mode: Integer; const clsName: AnsiString): TTypeKind; forward;
 function PyDefSiteMode(defTok: Integer; var clsName: AnsiString): Integer; forward;
@@ -14803,7 +14800,7 @@ begin
     { a VARIANT field takes the same marker the name and typed-field targets
       take, so a list held there is extended IN PLACE and a user object held
       there reaches its __i<op>__ (same ticket, the variant-field row) }
-    if PyAugMarkedTok(TTokenKind(augOp)) and (UFldTk[fi] = tyVariant) then
+    if PyAugMarkedTok(TTokenKind(augOp)) and (IntToTypeKind(UFldTk[fi]) = tyVariant) then
       ASTSLen[binN] := PY_BINOP_AUGMENTED;
     rhs := binN;
   end;
@@ -14815,7 +14812,7 @@ begin
     first method call. Same ticket, the plain-store rows. NOT owned: the
     field store retains what it stores, exactly as the local store does --
     see PyStoreRhsToClassSlot for the trace that settled it. }
-  if (UFldTk[fi] = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) and
+  if (IntToTypeKind(UFldTk[fi]) = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) and
      (IntToTypeKind(ASTTk[rhs]) = tyVariant) then
     rhs := PyUnboxVariantToClassEx(rhs, UFldRec_[fi] - REC_UCLASS_BASE, False);
   Result := AllocNode(AN_ASSIGN);
