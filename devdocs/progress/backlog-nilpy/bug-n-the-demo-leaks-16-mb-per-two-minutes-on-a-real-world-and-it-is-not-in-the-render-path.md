@@ -241,3 +241,16 @@ same evening; NOT yet measured on the demo. See
 
 **Standing caveat from that seat:** an RSS slope cannot distinguish a repaired
 leak from a premature free. Every figure above means "growth removed".
+
+**Re-measured after 0badcd665 and 3a91d13f1 (lekkerzeilen seat, 2026-09-15
+late evening, prediction P15 registered 19:25 before the push):** neither fix
+moved the residual. Three arms, two interleaved rounds: `lzafter` (79551a1b)
+11.33 / 11.52, `newbin` (1a74a231) 11.25 / 11.54, `lznew` (3aa02900de0f,
+runtime_sha f2a20652c12a4580, the first arm with a runtime stamp) 11.38 /
+11.62 kB/s; CPU flat at 31-33%. `lzafter` has now been measured six times
+across three batches today, mean 11.50, full spread 0.40, which is what
+licenses calling a 0.9% delta a null. The arms were shown to genuinely differ
+by `runtime_sha` (0badcd665 adds no top-level symbol, so the `.map` trick
+cannot see it; the two instruments are complementary). Growth still absent,
+not a leak proven fixed. The residual -- `angular` at 47.85 bytes per vessel
+step and the 79% in uninstrumented code -- is unchanged and unowned.
