@@ -241,6 +241,104 @@ and RECVLIVE is the half this one cannot be -- a premature free passes every
 byte row here, and a leak passes every value row there.
 
 
+## THE LEAK NEEDS A HEAP REFERENT -- A FLOAT OR INT ATTRIBUTE LEAKS NOTHING
+
+Measured 2026-09-15, k=8, M=20000, one call site, the attribute REPLACED on
+every call so the referent always dies:
+
+| attribute payload | bytes/invocation | per leaked reference |
+|---|---|---|
+| float | **0** | 0 |
+| int | **0** | 0 |
+| tuple, 3 elements | 1400 | 200 |
+| list, 3 elements | 1400 | 200 |
+
+Floats and ints are UNBOXED in the Variant payload: no heap object, no
+refcount, nothing to leak. **The leak needs a heap-allocated referent**, and
+its size is the referent's, not a fixed cost -- the 1095 figure elsewhere in
+this ticket is a 64-element list, and a 3-element container is 200.
+
+So the byte cost of a site is `(executions per scope - 1) x sizeof(referent)`,
+and a getter over a scalar attribute is free however hot it is. That is the
+third condition, alongside "the referent must be able to die" and "one site
+executed more than once per scope" -- and it is the one that decides whether a
+per-frame getter in a real program costs anything at all.
+
+## THE FIX, LOCATED IN SOURCE 2026-09-15 -- AND WHY IT IS NOT A ONE-LINER
+
+**The slot is `IRBuildHiddenDest` (`compiler/ir.inc:3476`).** It allocates a
+caller-owned scratch of `Procs[procIdx].RetType` and returns its `IR_LEA`; the
+method-call site stashes that in `IRCallDest[callNode]`
+(`compiler/ir.inc:18167-18173`, `if ABIRetViaHiddenDestProc(cpi)`). A Variant
+return comes back through it.
+
+**Nothing releases the slot's previous contents.** The callee writes it through
+the hidden-destination ABI -- not through `IR_VAR_STORE` and not through
+`IR_VAR_BOX`, which are the two arms that DO clear their destination first
+(`ir_codegen.inc:11774` and `:11821`, both `EmitVariantClear`). So the write
+that lands a new managed payload in that slot is the one write in the compiler
+that skips the release, and it is skipped silently because the write is not a
+store node at all.
+
+That is the whole defect, and it explains every row: one slot per call SITE,
+overwritten per EXECUTION, drained once at SCOPE EXIT -- hence k-1.
+
+### The primitive already exists
+
+`PXXVarClear` is an RTL proc taking a variant slot address; `Finalize` lowers
+to it at `ir.inc:12121-12127`. And on x86-64 the blob is already
+address-preserving -- `defs.inc:6646`: *"VariantClearBlobAddr : Integer;
+{ rax = variant slot address; preserves rax }"*. So "LEA the slot, clear it,
+and still have its address" is one blob call with no spill.
+
+### Why it is not a one-liner: IRCallDest is consumed PER BACKEND
+
+`grep -n IRCallDest compiler/*.inc` -- xtensa, arm32, aarch64, riscv, i386,
+x86-64 each emit it themselves, several with two ABI arms apiece. A fix written
+in the x86-64 arm would leave every cross target leaking and would put the
+backends out of step with each other, which `gate.sh quick`'s backend-parity row
+is there to notice.
+
+**So the fix belongs in the IR, where every backend inherits it**, and the
+shape that needs no new IR kind is: at the method-call lowering site, when the
+callee's `RetType` is a managed Variant, emit `PXXVarClear(@scratch)` as a
+PRECEDING STATEMENT (`IRMarkStatementNode`) before building the
+`IR_VIRTUAL_CALL`. Statements emit in order, so the clear runs first.
+
+### The two things to check before writing it, neither of them measured yet
+
+1. **A call on a short-circuit branch.** The clear would run even when the call
+   does not. That looks safe -- the slot's payload is a reference this scope
+   owns, and every consumer took its own retain via the `IR_VAR_STORE` tk=22
+   arm -- but it is REASONING, not a measurement, and this family has now
+   punished reasoning three times in one day. Write the row first:
+   `x = c and h.g()` with `c` false, in a loop, asserting the receiver's
+   attribute is still intact afterwards.
+2. **Pascal facades.** `IRDropManagedResult`'s tyClass arm gates on
+   `UnitIsPyModule(ProcUnitIdx[callee])` and its header records that three
+   weaker gates SIGSEGV'd, naming `TPyList.append_self` and `pylist_mark_tuple`
+   -- Pascal methods returning their own receiver, borrowed, with no retain to
+   balance. A Variant-returning Pascal facade would be the same hazard here.
+   Read that header before choosing the gate; the answer it reached for tyClass
+   is likely the answer here.
+
+### The instruments to arm, all three, and none is sufficient alone
+
+- `test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy`
+  -- bytes. Catches the leak. **Blind to a premature free.**
+- `test_nilpy_a_method_does_not_free_the_receivers_attribute.npy` (RECVLIVE,
+  wired) -- values. Catches the premature free. **Blind to the leak.**
+- The NilPy tier. It is what caught attempt 2, and neither fixture could have.
+
+Plus the `plain_fn` row, which is the route control: a plain function returning
+the same value is clean TODAY, so a fix that reaches every call instead of
+every hidden-dest Variant call pushes that row off zero and nothing else
+notices.
+
+**And run the k-sweep pair.** A fix verified only on `k=1`-shaped rows is
+verified on the arrangement that is already green.
+
+
 ## THE QUANTITY, 2026-09-15 -- k-1 PER CALL SITE PER SCOPE, AND "DOES THE FUNCTION RETURN" WAS A PROXY
 
 The factorial below has one wrong row and lekkerzeilen-c8 found it by reading
