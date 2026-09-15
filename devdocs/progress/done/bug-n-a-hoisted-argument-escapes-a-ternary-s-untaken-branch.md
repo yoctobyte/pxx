@@ -15,7 +15,7 @@ track: N
 type: bug
 prio: 80
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured 2026-09-13, at `533c194fd`, no dynamic dispatch involved
@@ -180,12 +180,54 @@ untouched.
 | a class defines some OTHER method | correct | correct |
 | the `if`/`else` STATEMENT form | correct | correct |
 
-**STILL OPEN: THE COMPREHENSION FILTER.** `[g(b=side(4), a=1) for i in [1] if
-False]` still prints `evaluated 4`. That is a SEPARATE hoist site -- the
-comprehension splices the element's hoisted setup into the loop BODY, ahead of
-the filter's `AN_IF`, so it runs on every iteration whether the filter passes or
-not. Same family, same root cause, different code. This ticket stays OPEN for
-it.
+## AND THE COMPREHENSION FILTER, THE THIRD HOIST SITE -- FIXED IN THE SAME PASS
+
+`[g(b=side(4), a=1) for i in [1] if False]` printed `evaluated 4`. A separate
+site with the same shape: the comprehension spliced the element's hoisted setup
+into the loop BODY, ahead of the filter's `AN_IF`, so it ran on every iteration
+whether the filter passed or not.
+
+The element's setup is now taken off the queue BEFORE the filter is parsed and
+placed inside the filter's TAKEN arm. The queue is emptied before the element
+parse (`savedHoist`), so whatever is on it at that moment is the element's and
+only the element's. The FILTER's own hoists deliberately stay on the queue --
+they must run before the filter is tested, and the existing splice puts them in
+the body ahead of the `AN_IF`, which is already correct.
+
+A NESTED comprehension as the element hoists its whole build loop, and that
+moves inside the arm too: `[[side(x) for x in [k, k]] for k in [1, 2, 20] if k >
+10]` no longer builds the inner list for a rejected `k`.
+
+**THE PRE-FIX FAILURE SHAPE IS THE TICKET'S OWN ARGUMENT, MEASURED.** On the
+compiler carrying the ternary half but not this one, the three comprehension
+VALUE rows all pass and only the side-effect COUNTS fail:
+
+```
+comp_untaken        OK
+comp_untaken_calls  WRONG got 2 want 0
+comp_taken          OK
+comp_taken_calls    WRONG got 4 want 2
+comp_nested         OK
+comp_nested_calls   WRONG got 6 want 2
+```
+
+Every value is right and every effect count is doubled. No `expect_same` row
+over the results could ever have caught this; the instrument has to be a log of
+what RAN.
+
+## ALL THREE SHAPES ARE NOW FIXED -- CLOSING THIS AND ITS SIBLING
+
+One root cause, three symptoms, one fix, one fixture
+(`test/test_nilpy_a_conditional_expression_does_not_evaluate_the_untaken_arm.npy`,
+13 rows, wired into the tier). The rows live in ONE file deliberately: a reader
+who breaks the hoist fold should see all three go red together.
+
+`PyMakeDynMethCall`'s two paths -- direct `pydyn_meth<n>` rungs for four
+arguments or fewer, a hoisted `TPyList` past that -- split ONLY because of this
+bug, and its own comment says to merge them when it is fixed. **That merge is
+now unblocked and is NOT done here**; it is a separate change with its own
+risk, and doing it in the same commit as the correctness fix would make a
+regression in either one unattributable.
 
 ## PROVENANCE: THIS IS NOT A RECENT REGRESSION
 
@@ -234,3 +276,6 @@ and banked rather than microfixed.
 `PyMakeDynMethCall` runs two paths — direct `pydyn_meth<n>` rungs for four
 arguments or fewer, a hoisted `TPyList` past that — and the split exists ONLY
 because of this bug. Merge them when it is fixed; the comment there says so.
+
+## Log
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

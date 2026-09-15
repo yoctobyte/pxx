@@ -28,10 +28,13 @@
 # Without those two, a fix that simply stopped evaluating conditional
 # expressions altogether would print OK.
 #
-# NOT ASSERTED HERE: the comprehension filter
-# (`[g(...) for i in [1] if False]`), which is the same root cause at a
-# DIFFERENT hoist site and is still open. Adding it would put a known red in
-# this file.
+# THE COMPREHENSION FILTER ROWS ARE THE SAME ROOT CAUSE AT A DIFFERENT HOIST
+# SITE and were added when that site was fixed too. The comprehension used to
+# splice the element's hoisted setup into the loop BODY, ahead of the filter's
+# AN_IF, so it ran on every iteration whether the filter passed or not. They
+# live here rather than in a file of their own because one root cause with three
+# symptoms is one thing to keep green, and a reader who breaks the hoist fold
+# should see all three go red together.
 
 class P:
     def pending(self, extra):
@@ -97,6 +100,44 @@ c2 = True
 r5 = add(*[track(10), track(20)]) if c2 else 99
 check("star_taken", r5, 30)
 check("star_taken_calls", len(calls), 2)
+
+# 6. COMPREHENSION FILTER, untaken: the element's setup must not run for an
+#    iteration the filter rejects. Printed `evaluated 4` before the fix.
+cfilter = []
+
+
+def note(v):
+    cfilter.append(v)
+    return v
+
+
+def two(a, b):
+    return a + b
+
+
+r6 = [two(*[note(4), note(5)]) for i in [1] if False]
+check("comp_untaken", len(r6), 0)
+check("comp_untaken_calls", len(cfilter), 0)
+
+# 7. POSITIVE CONTROL for row 6: the same comprehension with a filter that
+#    PASSES. The element must be built and its side effects must happen.
+r7 = [two(*[note(4), note(5)]) for i in [1] if True]
+check("comp_taken", r7, [9])
+check("comp_taken_calls", len(cfilter), 2)
+
+# 8. A NESTED comprehension as the element hoists its whole build loop, and that
+#    loop must not run for a rejected key either.
+inner = []
+
+
+def side(v):
+    inner.append(v)
+    return v
+
+
+r8 = [[side(x) for x in [k, k]] for k in [1, 2, 20] if k > 10]
+check("comp_nested", r8, [[20, 20]])
+check("comp_nested_calls", len(inner), 2)
 
 if ok:
     print("TERNARM OK")

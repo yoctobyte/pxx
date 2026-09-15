@@ -26335,6 +26335,7 @@ var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, n
     elemNode, lenNode, node, cmpNode, incNode, bodyNode, seq, whileNode: Integer;
     compSaved, keyN, savedHoist, innerHoist: Integer;
     filtIdx, fj, fdepth, filtPair, filtN, closerPos: Integer;  { comprehension `if` filter }
+    elemHoist, thenSeq: Integer;  { the element's own hoists, gated on that filter }
     tailStart, tj, tdepth: Integer;   { where this clause's OWN iterable ends }
     isStr, pairMode, isIter: Boolean; contTk, tk: TTypeKind;
     elemNode2, pairSym, plistSym, xi, nExtra, cci: Integer;
@@ -27124,12 +27125,41 @@ begin
       the append on it. The cursor lands on the real closer for the caller. }
     if CurTok.Kind = tkIf then
     begin
+      { TAKE THE ELEMENT'S OWN HOISTED SETUP BEFORE THE FILTER IS PARSED, and
+        put it INSIDE the taken arm. The queue was emptied before the element
+        parse (savedHoist, above), so whatever is on it now is the element's and
+        only the element's -- the filter has not been parsed yet.
+
+        Left in the body it ran on every iteration, filter or no filter, which
+        is this family's escape one level further in:
+        `[g(b=side(4), a=1) for i in [1] if False]` printed `evaluated 4` where
+        CPython prints nothing. Python evaluates the filter FIRST and the
+        element only on the iterations that pass it.
+
+        The FILTER's own hoists are deliberately NOT taken here: they must run
+        before the filter is tested, so they stay on the queue and the splice
+        below puts them in the body ahead of this AN_IF, which is correct.
+
+        A nested comprehension as the element hoists its whole build loop, and
+        that loop belongs inside the arm too -- `[[f(x) for x in g(k)] for k in
+        ks if p(k)]` must not build the inner list for a k the filter rejects.
+        bug-n-a-hoisted-argument-temp-escapes-a-conditional-that-lives-inside-an-expression }
+      elemHoist := PyHoistHead;
+      PyHoistHead := -1;
       Next;
       PyParseBoolExpr;
       filtN := AllocNode(AN_IF);
       ASTLeft[filtN] := PyMakeTruthy(CurASTNode);
+      thenSeq := -1;
+      while elemHoist >= 0 do
+      begin
+        if ASTLeft[elemHoist] >= 0 then
+          thenSeq := PySeqAppend(thenSeq, ASTLeft[elemHoist]);
+        elemHoist := ASTRight[elemHoist];
+      end;
+      thenSeq := PySeqAppend(thenSeq, node);
       filtPair := AllocNode(AN_PAIR);
-      ASTLeft[filtPair] := node;
+      ASTLeft[filtPair] := thenSeq;
       ASTRight[filtPair] := -1;
       ASTRight[filtN] := filtPair;
       node := filtN;
