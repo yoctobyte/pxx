@@ -1,23 +1,99 @@
 ---
 type: bug
 track: N
-prio: 70
+prio: 85
 status: open
 slug: bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 ---
 
-# A DISCARDED method result on the VARIANT carrier leaks a reference per call
+# A method result on the VARIANT carrier leaks a reference per call
 
-**PARTIALLY FIXED 2026-09-15. The BOUND case is closed; the DISCARDED case is
-what remains, and this ticket is now about that.** Prio dropped 85 -> 70
-accordingly: a discarded getter call is a real shape but a much rarer one than
-`k = h.get()`, which was the expensive half.
+**REOPENED IN FULL 2026-09-15 AND PRIO RESTORED 70 -> 85. Both halves of the
+"fix" are REVERTED; `compiler/pascal26` is byte-identical to
+`cfee5d6255237332` again. Nothing below the next two sections has been
+rewritten -- read it as the record of a wrong attempt, not as guidance.**
 
-| | before | after |
-|---|---|---|
-| `k = h.g()` bound | 72 bytes/call | **0** |
-| `h.g()` discarded | 72 bytes/call | 72 -- STILL LEAKS |
-| `k = h.g_slice()` bound | 200 bytes/call | **0** |
+Everything in this ticket's old headline was wrong in the same way: the
+attempt did not fix the leak, it FREED LIVE OBJECTS, and the fixture could not
+see the difference.
+
+| | true state at cfee5d6255237332 |
+|---|---|
+| `k = h.g()` bound | 72 bytes/call |
+| `k = h.g_slice()` bound | 200 bytes/call |
+| `h.g()` discarded | 72 bytes/call |
+| `h.g_slice()` discarded | 200 bytes/call |
+
+## WHAT THE ATTEMPT ACTUALLY DID -- objtrace, not inference
+
+Ten lines, deterministic, found by lekkerzeilen-c8's demo failing at world
+load and reduced from a rate table they measured:
+
+```python
+class Box:
+    def __init__(self, v): self.q = v
+    def g(self):           return self.q
+def r(h):
+    t = h.g()              # h unannotated -> Variant -> virtual call
+    return 1               # t is never read
+h2 = Box([50, 60, 70])
+for i in range(6):
+    r(h2)
+    print(h2.q)            # [] on the 3rd pass, SIGSEGV on the 4th
+```
+
+`-dPXX_OBJTRACE`, two calls, the same source under both binaries. The list is
+the 32-byte object, the Box the 24-byte one:
+
+| binary | object | per call | net |
+|---|---|---|---|
+| `cfee5d6255237332` retain | list | `R`->4 `R`->5 `r`->4 `r`->3 | **0** |
+| | box | `R`->2 `R`->3 `r`->2 | **+1** |
+| `c304147cdebded94` move | list | `R`->4 `r`->3 `r`->2 | **-1** |
+| | box | `R`->2 `R`->3 `r`->2 | **+1** |
+
+So the caller's retain was NECESSARY -- a variant carried out of a virtual
+call is BORROWED, exactly like the `def` half the old table below calls
+borrowed -- and removing it did not touch the surplus +1 at all.
+
+## WHERE THE LEAK ACTUALLY IS: THE RECEIVER, NOT THE RESULT
+
+Two retains and one release per call, on the BOX. The call site copies the
+unannotated `h` into a hidden Variant temp -- `__py_vt_N` in `PXXDBG=a.ir:r`,
+an `IR_VAR_STORE c=22` whose source is a `lea` of the parameter, so it
+retains -- and nothing releases it. That is the +1. It is the same surplus for
+the bound and the discarded shapes, which is why they leak the same 72/200 and
+why splitting them into two tickets was itself a symptom of chasing the result.
+
+Next attempt starts there and nowhere near `IRDropManagedResult`.
+
+## THE INSTRUMENT FAILURE, AND IT IS THE PART TO KEEP
+
+**RSS CANNOT TELL A REPAIRED LEAK FROM A PREMATURE FREE.** Both hand memory
+back; both read as `0 bytes per call`. All fourteen rows of
+`test_nilpy_a_variant_carried_method_result_does_not_leak.npy` went green on a
+change that frees live objects, because **not one of them read the receiver's
+attribute again after the calls**. The fixture was half an instrument and the
+missing half is a value assertion on something the calls were supposed to
+leave alone.
+
+`test/test_nilpy_a_method_result_does_not_free_the_receivers_attribute.npy`
+is that half, wired now: it asserts VALUES, never bytes, and it SEGFAULTS on
+both broken builds. The leak fixture is exempted in `test/UNWIRED.txt` until
+the leak is genuinely fixed, and the two must be wired together.
+
+**Four predicates, four wrong, one shape.** `IRNodeOwnsFreshCallResult` (node
+kind), `IRNodeOwnsManagedObj` (node shape), `UnitIsPyModule` (the callee's
+file), `IRKind = IR_VIRTUAL_CALL` (the dispatch). Every one answered
+correctly; every one answered a different question than "who owns this +1".
+The first three were caught within the hour by an instrument. **The fourth
+was caught by a peer's application failing, three hours and two commits
+later, because the instrument that should have caught it was measuring the
+wrong quantity.**
+
+---
+
+*Everything below predates 2026-09-15 and describes the retracted attempt.*
 
 ## THE FIX, AND THE CARRIER SPLITS ON THE DISPATCH
 

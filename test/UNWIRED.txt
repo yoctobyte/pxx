@@ -140,3 +140,18 @@ test/c_abi_struct_byval_pxx.c  the pxx-compiled half of the pair above; same rea
 # is answered and the install lands -- it is already the acceptance test for it.
 test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creator's exception chain and an exception escapes its own try; measured failing 3 of 3. Blocked on bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread and the decide- it names; wire it when a foreign thread gets its own TLS block
 
+
+# RE-EXEMPTED 2026-09-15 after the fix it was wired with was RETRACTED. It was
+# wired at 827fabcc7 and green; the change that made it green MOVED a variant
+# result out of an IR_VIRTUAL_CALL, which frees an object the receiver still
+# points at -- a ten-line program SIGSEGVs on the third call. Both arms are
+# reverted (compiler/pascal26 is byte-identical to cfee5d6255237332 again), so
+# the leak is back and this file reports it honestly: obj/chain/index 72
+# bytes/call, slice 200, disc_obj 72, disc_slice 200.
+#
+# DO NOT WIRE IT AS A GATE UNTIL THE LEAK IS ACTUALLY FIXED, and when it is,
+# wire it TOGETHER WITH test_nilpy_a_method_result_does_not_free_the_receivers_
+# attribute.npy, which is wired now and is the half this file cannot be: every
+# row here asserts a BYTE COUNT stays near zero, and a premature free passes
+# all of them.
+test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy  the variant-carrier leak is OPEN again after the 2026-09-15 retraction; this is the repro, not a gate. Blocked on bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call; wire it in the commit that fixes the leak, alongside the recvlive gate

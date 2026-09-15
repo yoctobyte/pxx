@@ -34824,16 +34824,20 @@ lib-test: pxx-stable-check
 	# $(COMPILER) rather than $(PXX_STABLE): this is about today's compiler.
 	./$(COMPILER) test/test_nilpy_a_borrowed_variant_result_is_not_moved.npy $(TESTTMP)/test_nilpy_borrowvar
 	tools/expect_same.sh test_nilpy_borrowvar "$$($(TESTTMP)/test_nilpy_borrowvar | tail -n 1)" "BORROWVAR OK"
-	# The other half of that matched pair: a method result on the VARIANT carrier
-	# must not leak. The two files fail in OPPOSITE directions -- this one if the
-	# retain is never suppressed, borrowvar if it is always suppressed -- and
-	# NEITHER CAN CATCH THE OTHER'S DEFECT. Verified to FAIL on the pre-fix
-	# compiler cfee5d6255237332 (obj/chain/index 72 bytes/call, slice 200,
-	# scalar and class controls 0) rather than assumed to, and the file carries
-	# a retain control that must MOVE because every other row asserts a number
-	# stays near zero. $(COMPILER), not $(PXX_STABLE): the pin predates the fix.
-	./$(COMPILER) test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy $(TESTTMP)/test_nilpy_varcarry
-	tools/expect_same.sh test_nilpy_varcarry "$$($(TESTTMP)/test_nilpy_varcarry | tail -n 1)" "VARCARRY OK"
+	# The THIRD member of that family, and the one the other two cannot be: a
+	# method result on the variant carrier must not consume a reference the
+	# RECEIVER still owns. borrowvar and varcarry both read RSS, and RSS CANNOT
+	# TELL A REPAIRED LEAK FROM A PREMATURE FREE -- both give memory back. On
+	# 2026-09-15 a change that MOVED an IR_VIRTUAL_CALL's variant result turned
+	# all fourteen varcarry rows green while freeing live objects; no row read
+	# the receiver's attribute again afterwards, so none could see it. This file
+	# asserts VALUES, never bytes. Verified 2026-09-15 to SEGFAULT on both broken
+	# builds (c304147cdebded94 and 745b82d21c1bdc72) and to pass at
+	# cfee5d6255237332 and under CPython. It carries a mutate control that MUST
+	# change the receiver, because every other row asserts nothing changed.
+	# $(COMPILER), not $(PXX_STABLE): this is about today's compiler.
+	./$(COMPILER) test/test_nilpy_a_method_result_does_not_free_the_receivers_attribute.npy $(TESTTMP)/test_nilpy_recvlive
+	tools/expect_same.sh test_nilpy_recvlive "$$($(TESTTMP)/test_nilpy_recvlive | tail -n 1)" "RECVLIVE OK"
 	# A conditional expression must evaluate ONLY the selected arm. The arms are
 	# not statements, so an arm's hoisted setup used to land at the enclosing
 	# statement and run either way -- a stray side effect in two shapes and an

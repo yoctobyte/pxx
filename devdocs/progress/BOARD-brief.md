@@ -86,6 +86,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
+- `[p 85] [N]` bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - `[p 85] [N]` bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
@@ -104,6 +105,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 
 _502 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

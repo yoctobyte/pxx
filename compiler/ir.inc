@@ -1375,49 +1375,24 @@ begin
     IRDropManagedResult := IRAppend(IR_BLOCK, dmStore, dmRel, -1, 0, 0);
     Exit;
   end;
-  { A discarded result on the VARIANT carrier. `h.g()` where g returns an
-    attribute hands back an OWNED reference and nothing consumes it, so the +1
-    is dropped on the floor: 72 bytes/call for an object, 200 for a slice,
-    forever.
+  { RETRACTED 2026-09-15, WITH ITS PARTNER. There WAS a tyVariant arm here that
+    parked a discarded IR_VIRTUAL_CALL result in a hidden variant temp so
+    scope exit would free it. It rested entirely on the copy arm in
+    ir_codegen.inc MOVING such a result -- and that MOVE is gone, because a
+    variant arriving from a virtual call is BORROWED and moving it frees an
+    object the receiver still points at (objtrace and a ten-line repro in the
+    retraction above IRVariantCallResultIsOwned's old home).
 
-    THE GATE IS IR_VIRTUAL_CALL AND NOTHING WEAKER, AND IT IS THE SAME BIT THE
-    COPY ARM IN ir_codegen.inc CARRIES. On this carrier a METHOD result arrives
-    owned and a DIRECT call's arrives BORROWED -- measured with the receiver
-    dying on both sides so neither row is RSS-blind: `h.m_attr()` 72 bytes/call
-    against `d_attr(h)` 0, identical source, 11 IR nodes against 87, because an
-    unannotated NilPy parameter is a Variant and `h.q` becomes a full dynamic
-    lookup whose result comes back borrowed. Releasing every discarded variant
-    result instead would be the SAME use-after-free from the other end.
+    With the copy arm retaining again this arm is exactly a retain followed by
+    a scope-exit release: it costs a hidden temp per discarded call and moves
+    the leak by zero. Measured after the revert -- disc_obj 72 bytes/call,
+    disc_slice 200, unchanged with the arm in and with it out. So it goes,
+    rather than staying as a no-op that reads like a fix.
 
-    Do NOT reach for the callee's unit here the way the tyClass arm above does.
-    That is the right instrument for tyClass and the wrong one for this carrier:
-    module-defined getters leak identically to main-program ones, so
-    UnitIsPyModule is not measuring ownership at all here, and using it
-    segfaulted the NilPy tier.
-
-    PROBED AT THE SITE BEFORE BEING WRITTEN, because the comment above says a
-    statement-level call has its result type erased and that is NOT true of
-    these: a discarded `h.g_var()` arrives as irkind=30 irtk=22 astkind=32,
-    a discarded `h.g_cls()` as irkind=30 irtk=6, and a discarded `d_var(h)` as
-    irkind=6 irtk=22. dmRet already separates the carriers and IRKind already
-    separates owned from borrowed, so no new state and no proc-table lookup.
-
-    THE STORE IS THE RELEASE. Parking the value in a hidden VARIANT temp lets
-    the ordinary scope-exit variant clear free it, exactly as the tyAnsiString
-    arm below parks a string -- and because the copy arm now MOVES an
-    IR_VIRTUAL_CALL result rather than retaining it, the temp takes the +1
-    rather than adding a second one.
+    The DISCARDED leak is real and still open, and it is the same surplus +1
+    as the bound one: two retains and one release on the receiver's hidden
+    Variant temp, not on the result.
     bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call }
-  if PyProgramMode and (dmRet = tyVariant) and
-     (IRKind[irNode] = IR_VIRTUAL_CALL) then
-  begin
-    dmTmp := AllocVar('', tyVariant);
-    SymIsHiddenArgTemp[dmTmp] := True;
-    IRDropManagedResult := IRAppend(IR_VAR_STORE,
-      IRAppend(IR_LEA, dmTmp, -1, -1, 0, Ord(tyPointer)),
-      irNode, Ord(tyVariant), 0, Ord(tyVariant));
-    Exit;
-  end;
   if dmRet = tyAnsiString then
   begin
     dmTmp := AllocVar('', tyAnsiString);

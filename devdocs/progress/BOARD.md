@@ -350,7 +350,7 @@ _none_
 | bug-n-a-local-bound-to-self-loses-its-class-and-an-omitted-default-then-segfaults | N | 35 | bug | > | — |
 | bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call | N | 70 | bug | `lo = f` then `lo(2)` prints `2` and `hi = f` then `hi(2)` prints `0`, where CPython prints f's result. A NilPy LOCAL holding a callable, spelled like a Pascal intrinsic, is answered by the INTRINSIC at the call — no diagnostic, no crash, a plausible wrong number. `abs = f` is the same. `ord = f` is CORRECT, which is the control that makes this a shadowing bug rather than a builtin-name policy: `ord` is a Python builtin too and it binds the local. The assignment is fine — the value is built correctly — so this is the CALL door reading the name, and `f(2)` on the same def is right throughout. Found while testing the module-member-as-a-value group; it made an unrelated test row red for a reason nothing in that row could explain. | — |
 | bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts | N | 70 | bug | A NilPy method's receiver parameter must be literally named `self`. TWO distinct failures, isolated by varying one method at a time: a non-`self` receiver in `__init__` never creates the attribute (`AttributeError: 'K' object has no attribute 'x'`, rc 217), and a non-`self` receiver in a plain method SEGFAULTS when the receiver is a local (rc 139) while working when it is an inline construction. Eight names swept per axis; only `self` passes either. The `@classmethod` path binds by POSITION and is correct for ANY spelling, including `zz_whatever` — so the machinery a fix needs is a few lines away. In the pin. CPython requires nothing of the name. | — |
-| bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call | N | 70 | bug | A DISCARDED method result on the VARIANT carrier leaks a reference per call | — |
+| bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call | N | 85 | bug | A method result on the VARIANT carrier leaks a reference per call | — |
 | bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result | N | 70→90 | bug | > | — |
 | bug-n-a-module-level-instance-called-by-name-in-a-function-constructs-instead-of-calling | N | 58 | bug | > | — |
 | bug-n-a-nested-class-is-hoisted-to-module-scope-and-is-not-an-attribute-of-its-enclosing-class | N | 45 | bug | > | — |
@@ -1170,6 +1170,7 @@ _none_
 - [p 85] [P] bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
 - [p 85] [P] feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - [p 85] [P] feature-p-legacy-value-object-types (unblocks 1)
+- [p 85] [N] bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 - [p 85] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - [p 85] [N] bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
 - [p 85] [T] bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
@@ -1193,7 +1194,6 @@ _none_
 - [p 70] [N] bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
-- [p 70] [N] bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 - [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic

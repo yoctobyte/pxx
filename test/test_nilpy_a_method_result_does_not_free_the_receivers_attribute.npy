@@ -1,0 +1,124 @@
+# A method result carried on the VARIANT carrier must not consume a reference
+# the RECEIVER still owns.
+#
+# THIS FIXTURE EXISTS BECAUSE RSS CANNOT TELL A REPAIRED LEAK FROM A PREMATURE
+# FREE. Both hand memory back; both read as "0 bytes per call". On 2026-09-15 a
+# change that MOVED an IR_VIRTUAL_CALL's variant result instead of retaining it
+# turned every one of the fourteen RSS rows in
+# test_nilpy_a_variant_carried_method_result_does_not_leak.npy green, and it
+# was freeing live objects: `self.q` lost one reference per call and the third
+# call left `h.q == []`, the fourth SIGSEGV'd. Not one of those rows READ the
+# receiver's attribute again after the calls, so not one of them could see it.
+#
+# So this file asserts VALUES, never bytes. It is the half of the instrument
+# the leak fixture does not contain, and the two are wired separately for that
+# reason -- the leak fixture is a repro today and this one is a gate.
+#
+# The receiver MUST be an unannotated parameter. That is what makes it a
+# Variant, which is what makes `h.g()` a virtual call; hoist the same body to
+# module scope, where the receiver's type is static, and the defect is
+# unreachable. Six iterations, because the freed block is not reused
+# immediately: the first two passes printed the correct list on the broken
+# compiler and only the third showed [].
+#
+# CONTROL: mutate() MUST change what it is given. Every other row asserts that
+# something did NOT change, so an instrument that never calls anything at all
+# passes all of them.
+
+class Box:
+    def __init__(self, v):
+        self.q = v
+        self.lines = ["a", "b", "c", "d", "e"]
+
+    def g(self):
+        return self.q
+
+    def g_slice(self):
+        return self.lines[1:4]
+
+    def g_index(self):
+        return self.lines[0]
+
+    def mutate(self):
+        self.q = [99]
+        return 1
+
+
+def bind_unused(h):
+    t = h.g()
+    return 1
+
+
+def bind_used(h):
+    t = h.g()
+    return t[0]
+
+
+def discard(h):
+    h.g()
+    return 1
+
+
+def bind_slice(h):
+    t = h.g_slice()
+    return len(t)
+
+
+def bind_index(h):
+    t = h.g_index()
+    return t
+
+
+def chain(h):
+    a = b = h.g()
+    return a[0] + b[0]
+
+
+def call_mutate(h):
+    h.mutate()
+    return 1
+
+
+ok = True
+N = 6
+
+
+def check(name, fn, want_q, want_lines):
+    global ok
+    h = Box([50, 60, 70])
+    for i in range(N):
+        fn(h)
+        if h.q != want_q:
+            print("%s CORRUPT q=%s on pass %d" % (name, h.q, i))
+            ok = False
+            return
+        if h.lines != want_lines:
+            print("%s CORRUPT lines=%s on pass %d" % (name, h.lines, i))
+            ok = False
+            return
+    print("%s INTACT" % name)
+
+
+Q = [50, 60, 70]
+L = ["a", "b", "c", "d", "e"]
+
+check("bind_unused", bind_unused, Q, L)
+check("bind_used", bind_used, Q, L)
+check("discard", discard, Q, L)
+check("bind_slice", bind_slice, Q, L)
+check("bind_index", bind_index, Q, L)
+check("chain", chain, Q, L)
+
+# The control. If this prints INTACT the harness is not calling anything.
+h = Box([50, 60, 70])
+call_mutate(h)
+if h.q == [99]:
+    print("control MUTATED")
+else:
+    print("control DEAD q=%s -- every INTACT above is meaningless" % h.q)
+    ok = False
+
+if ok:
+    print("RECVLIVE OK")
+else:
+    print("RECVLIVE FAIL")

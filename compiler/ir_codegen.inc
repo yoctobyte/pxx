@@ -4816,47 +4816,47 @@ begin
       (IRA[n] < Length(SymIsCtorResultTemp)) and SymIsCtorResultTemp[IRA[n]]));
 end;
 
-{ Does a call result arriving on the VARIANT carrier already own its +1, so the
-  copy must MOVE rather than retain?
+{ RETRACTED 2026-09-15 -- IRVariantCallResultIsOwned, the fourth wrong
+  predicate in this family, is GONE and the retain below is unconditional
+  again. It read the DISPATCH (IR_VIRTUAL_CALL) and moved the result; it
+  segfaults a ten-line program.
 
-  MEASURED, NOT INFERRED -- and every predicate that reads plausibly here is
-  wrong. IRNodeOwnsFreshCallResult ("is this a fresh call result") answers True
-  for every call and is the RIGHT question on the string and tyClass carriers,
-  where a call result always owns; using it here moves the borrowed half and
-  turns an ordinary `for nm, fn in rows:` into `IndexError: tuple index out of
-  range`. Asking the callee's UNIT instead (UnitIsPyModule, as the tyClass arm
-  of IRDropManagedResult does) segfaults the NilPy tier, and module-defined
-  getters leak identically to main-program ones, so the unit was never
-  measuring this at all.
+    class Box:
+        def __init__(self, v): self.q = v
+        def g(self):           return self.q
+    def r(h):
+        t = h.g()              # h unannotated -> Variant -> virtual call
+        return 1
+    h2 = Box([50, 60, 70])
+    for i in range(6):
+        r(h2)
+        print(h2.q)            # [] on the 3rd pass, then SIGSEGV
 
-  What the carrier actually splits on is the DISPATCH, measured at
-  cfee5d6255237332 with the receiver dying on both sides so neither row is
-  RSS-blind:
+  -dPXX_OBJTRACE on two calls, the same source under both binaries, is what
+  settled it. The list is the 32-byte object; the Box is the 24-byte one:
 
-    h.m_attr()   METHOD `return self.q`         72 bytes/call   OWNED
-    d_attr(h)    def    `return h.q`             0 bytes/call   BORROWED
-    h.m_slice()  METHOD `return self.lines[1:4]` 200            OWNED
-    d_slice(h)   def    same body                0              BORROWED
+    cfee5d6255237332   list  R->4 R->5  r->4 r->3   net  0   BALANCED
+    (retain)           box   R->2 R->3  r->2        net +1
 
-  Identical in SOURCE, not at all in lowering: 11 IR nodes against 87, because
-  an unannotated NilPy parameter is a VARIANT, so `h.q` is a full dynamic
-  attribute lookup whose result comes back borrowed. The method reads a tyClass
-  `self` and boxes, which retains. Both callers then retain again; only the
-  method's is a second reference, and that is the leak.
+    c304147cdebded94   list  R->4       r->3 r->2   net -1   FREED at call 3
+    (move)             box   R->2 R->3  r->2        net +1
 
-  Refuted en route, so it is not re-tried: routing the method's return through
-  an intermediate local (`t = self.q; return t`) leaks the same 72, so this is
-  not about $pyresult versus a local.
+  So the caller's retain was NECESSARY -- the variant carried out of a virtual
+  call is BORROWED, exactly like the def half the table in the old comment
+  called borrowed -- and removing it does not touch the surplus +1 at all. The
+  leak is on the RECEIVER: two retains and one release per call, on the hidden
+  Variant temp the call site copies `h` into (__py_vt_N in the IR dump). That
+  is where the next attempt goes; it is not this store.
 
-  DELIBERATELY CONSERVATIVE. A method call that lowers to a direct IR_CALL
-  keeps its retain and keeps leaking. Incomplete beats a use-after-free, and
-  this family has already produced one.
+  WHY THE FIXTURE PASSED, AND THIS IS THE PART WORTH KEEPING: RSS CANNOT TELL
+  A REPAIRED LEAK FROM A PREMATURE FREE. Both give back memory and both read
+  as "0 bytes per call". All fourteen rows went green on a change that frees
+  live objects, because not one of them READ the receiver's attribute again
+  after the calls. A lifetime fixture measuring only RSS is half an
+  instrument; the other half is a value assertion on something the calls were
+  supposed to leave alone. The rows are there now.
+
   bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call }
-function IRVariantCallResultIsOwned(n: Integer): Boolean;
-begin
-  IRVariantCallResultIsOwned := PyProgramMode and
-    (n >= 0) and (n < IRCount) and (IRKind[n] = IR_VIRTUAL_CALL);
-end;
 
 procedure EmitObjRetainRaxGuarded;
 { rax = object pointer (or nil). Retain via the object blob; the Pascal callee
@@ -11709,11 +11709,11 @@ begin
             the slot the copy below was about to read, so `v := v` came back
             Empty. bug-a-a-variant-assigned-to-itself-becomes-empty }
           IREmitNode(IRB[node]);                 { rax = src addr }
-          { A call result that already owns its +1 MOVES; every lvalue copy and
-            every borrowed call result retains. See IRVariantCallResultIsOwned
-            for why the node-shape predicates the arms below use are wrong here. }
-          if not IRVariantCallResultIsOwned(IRB[node]) then
-            EmitVariantRetain;
+          { UNCONDITIONAL, and see the retraction above IRNodeOwnsManagedObj's
+            neighbour for the objtrace that put it back: a variant arriving
+            from a virtual call is BORROWED, so moving it here frees an object
+            the receiver still points at. }
+          EmitVariantRetain;
           EmitB($50);
           IREmitNode(IRA[node]);                 { rax = dest addr }
           EmitVariantReleasePayload;

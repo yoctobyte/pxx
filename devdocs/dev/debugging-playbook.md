@@ -111,6 +111,37 @@ mode of a playbook is that writing one *feels* like fixing something, which is
 the same confusion as writing a plan and testing a plan (see *The `## The fix`
 section is trusted MORE than the summary*).
 
+## A LEAK GAUGE AND A USE-AFTER-FREE READ THE SAME
+
+The playbook already says to match the assertion class to the defect class,
+with the leak as the worked example: an `expect_same` row cannot fail for a
+leak, because a leak corrupts nothing. **The mirror is worse and nothing was
+watching it. An RSS gauge cannot fail for a PREMATURE FREE, because a
+premature free gives memory back — which is exactly what a repaired leak
+does.** The two are the same reading. `0 bytes per call` is what you get
+when you fixed it and what you get when you started freeing live objects.
+
+Measured 2026-09-15 (NilPy variant carrier). A change that MOVED a method
+result instead of retaining it turned **all fourteen rows** of a purpose-built
+lifetime fixture green — obj 72->0, slice 200->0, every control behaving — and
+it was consuming a reference the receiver still owned. `t = h.g()` with `t`
+never read left `h.q == []` on the third call and SIGSEGV'd on the fourth. The
+fixture could not see it because **not one row read the receiver's attribute
+again after the calls**. It shipped, and a peer's application found it three
+hours later.
+
+**The missing half of a lifetime fixture is a VALUE assertion on something the
+calls were supposed to leave alone.** Bytes say the reference count went down;
+only a value says it went down to the right number. Write both, and write them
+as separate files — they fail in opposite directions and neither can catch the
+other's defect.
+
+The general form, for any instrument that reads a RESOURCE rather than a
+RESULT: ask which OTHER defect produces the same reading in the same
+direction. Handles, file descriptors, arena occupancy, thread counts and
+connection pools all have a repaired-leak twin that is a premature release.
+
+
 ## The rule this is built on
 
 **The expensive bugs in this project do not crash. They produce a plausible
