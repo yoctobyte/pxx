@@ -61,6 +61,7 @@ AN_ARG Left PyForceVariant(nameNode)
 AN_ARG Left PyForceVariant(node)
 AN_ARG Left PyForceVariant(op)
 AN_ARG Left PyForceVariant(recvNode)
+AN_ARG Left PyForceVariant(rhs)
 AN_ARG Left PyForceVariant(right)
 AN_ARG Left PyForceVariant(tpObjNode)
 AN_ARG Left PyForceVariant(valNode)
@@ -664,6 +665,7 @@ AN_CALL Left ASTRight[lnArg]
 AN_CALL Left a
 AN_CALL Left a0
 AN_CALL Left a1
+AN_CALL Left aA
 AN_CALL Left arg0
 AN_CALL Left argA
 AN_CALL Left argHead

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:37 backlog-umbrella:11 backlog-core:166 backlog-nilpy:168 backlog-tools:60 backlog-pascal:9 backlog-decide:46 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3771 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:37 backlog-umbrella:11 backlog-core:166 backlog-nilpy:169 backlog-tools:60 backlog-pascal:9 backlog-decide:46 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3771 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -104,6 +104,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
+- `[p 70] [N]` bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
 
 _505 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

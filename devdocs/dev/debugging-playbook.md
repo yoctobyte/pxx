@@ -27044,3 +27044,75 @@ A/B that nobody had run yet, against a census that had been run four times.
 **Prefer the measurement that could refute the exculpation over the census that
 supports it**, and when only the census is available, say in the exculpation
 which measurement would settle it.
+
+## A ONE-ARM FIX TO AN N-ARM RULE LEAVES N−1 ARMS THAT THE FIXTURE YOU JUST WROTE CERTIFIES
+
+Measured 2026-09-15, Track N, augmented assignment on a variant target.
+
+`p += x` where `p` is an unannotated parameter dispatched `__add__` instead of
+`__iadd__`, so the caller never saw the mutation. Fixed, fixture written, twelve
+rows byte-identical to CPython, `make test-nilpy` and `make lib-test` green,
+ticket updated, pushed.
+
+**Eleven sibling operators still had the identical defect.** `-=`, `*=`, `/=`,
+`//=`, `%=`, `**=`, `&=`, `|=`, `^=`, `<<=`, `>>=` — measured the next hour, all
+silently returning the caller's ORIGINAL value, one of them dying with RunError
+219. The rule is one rule: *an augmented assignment tries the in-place dunder
+first.* The frontend implemented it for `tkPlus` and the marker constant was
+even NAMED for it (`PY_BINOP_AUGADD`).
+
+### Why the green tier could not see it
+
+The fixture was written FOR the `+=` bug, the whole way down: four classes, a
+factorial over the receiver's storage class (local, attribute, global,
+parameter), a must-not-mutate row, a list-extend row. Careful, and every row
+about `+`. **The operator was not an axis at all**, so eleven rows did not exist
+to be red.
+
+This is not "the fixture was incomplete". It is worse and more specific: **the
+fixture demonstrated rigour on the axis that was already fixed.** Its storage-
+class factorial is a genuinely good control — it stops a future change repairing
+the parameter by breaking the global — and reading it gives every impression of
+coverage. A reviewer checking "is this tested" gets yes.
+
+### The tell, and it is in the source, not the test
+
+`grep -c PY_BINOP_AUGADD` answers 4: one definition, one reader in `ir.inc`, two
+writers in the parser. Both writers read
+
+    if (augTk = tkPlus) and (... = tyVariant) then
+      ASTSLen[node] := PY_BINOP_AUGADD;
+
+**A conjunct naming ONE member of a set the rule is about is the tell**, and it
+is visible without running anything. The fix generalised the marker to
+`PY_BINOP_AUGMENTED` — the operator is already in `ASTIVal`, so one value serves
+the family — and replaced `augTk = tkPlus` with a named predicate whose comment
+says which members are excluded and why.
+
+### The question that finds it before the fixture is written
+
+Not "did I test this", which the storage-class factorial answers yes to. Ask:
+**"what is the SET this rule quantifies over, and how many members does my
+fixture name?"** One named member out of twelve is the answer that should stop
+you, and it is available before any code is written.
+
+The generalisation is the cheaper direction too. Twelve operators reached
+through one marker cost one predicate and five four-line pylib functions, each
+CALLING its plain twin rather than re-implementing it. Twelve separate repairs,
+one per bug report, would have cost twelve fixtures and produced eleven more
+chances to fix one arm and stop.
+
+### What it does NOT say
+
+Seven of twelve landed; five are blocked one layer down (the plain `c & 12` on a
+variant user object does not reach `__and__` either, so there is no
+variant-dispatch arm for the augmented marker to select). **Enumerating the set
+is not a promise to clear it in one commit** — it is what lets you say which
+members are fixed, which are blocked, and on what, instead of discovering the
+remainder a month later from a bug report.
+
+Related, and this is the two-member case of the same thing:
+`devdocs/dev/normalise-dont-special-case.md` — *"Fixed one arm of a double case?
+Grep for the sibling before closing."* The rule holds at N=2 and the reason it
+is easy to skip at N=12 is that twelve arms do not LOOK like a double case; they
+look like a family, and a family looks like something you work through.

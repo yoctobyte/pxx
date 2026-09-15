@@ -12864,10 +12864,18 @@ begin
           at runtime; without this the most ordinary Python loop
           (`for a in xs: a // 2`) silently kept Pascal's truncating result. The
           scalar-to-Variant boxing in IRLowerCallArg handles a mixed pair. }
+        { An AUGMENTED `//=` / `%=` on a variant target takes the pyaug twin,
+          which tries the IN-PLACE dunder first — see PY_BINOP_AUGMENTED. }
         if Integer(ASTIVal[node]) = Ord(tkDiv) then
-          fdName := 'pyfloordiv_v'
+        begin
+          if ASTSLen[node] = PY_BINOP_AUGMENTED then fdName := 'pyaugfloordiv_v'
+          else fdName := 'pyfloordiv_v';
+        end
         else
-          fdName := 'pyfloormod_v';
+        begin
+          if ASTSLen[node] = PY_BINOP_AUGMENTED then fdName := 'pyaugfloormod_v'
+          else fdName := 'pyfloormod_v';
+        end;
         cpi := FindProc(fdName);
         if cpi < 0 then Error('Nil Python: ' + fdName + ' (pylib) not loaded');
         left := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
@@ -12920,14 +12928,22 @@ begin
         fdTk := tyBoolean;
         if Integer(ASTIVal[node]) = Ord(tkPlus) then
         begin
-          if ASTSLen[node] = PY_BINOP_AUGADD then fdName := 'pyaugadd_v'
+          if ASTSLen[node] = PY_BINOP_AUGMENTED then fdName := 'pyaugadd_v'
           else fdName := 'pyadd_v';
           fdTk := tyVariant;
         end
         else if Integer(ASTIVal[node]) = Ord(tkMinus) then
-        begin fdName := 'pysub_v'; fdTk := tyVariant; end
+        begin
+          if ASTSLen[node] = PY_BINOP_AUGMENTED then fdName := 'pyaugsub_v'
+          else fdName := 'pysub_v';
+          fdTk := tyVariant;
+        end
         else if Integer(ASTIVal[node]) = Ord(tkSlash) then
-        begin fdName := 'pytruediv_v'; fdTk := tyVariant; end
+        begin
+          if ASTSLen[node] = PY_BINOP_AUGMENTED then fdName := 'pyaugtruediv_v'
+          else fdName := 'pytruediv_v';
+          fdTk := tyVariant;
+        end
         else if Integer(ASTIVal[node]) = Ord(tkLt) then fdName := 'pylt_v'
         else if Integer(ASTIVal[node]) = Ord(tkLe) then fdName := 'pyle_v'
         else if Integer(ASTIVal[node]) = Ord(tkGt) then fdName := 'pygt_v'

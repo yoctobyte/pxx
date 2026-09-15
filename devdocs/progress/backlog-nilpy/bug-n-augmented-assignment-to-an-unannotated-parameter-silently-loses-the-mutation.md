@@ -4,16 +4,29 @@ track: N
 prio: 70
 status: open
 slug: bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
+blocked-by: [bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder]
+summary: "An augmented assignment to an unannotated PARAMETER dispatches the plain dunder instead of the in-place one, so the caller never sees the mutation. Seven of twelve operators fixed 2026-09-15; `&= |= ^= <<= >>=` remain, blocked on the plain bitwise binop not reaching its dunder either."
 ---
 
 # `p += x` on an UNANNOTATED PARAMETER never dispatches `__iadd__`, and silently loses the caller's mutation
 
-**`+=` IS FIXED (2026-09-15, `pyaugadd_v`). `-=`, `*=` AND EVERY OTHER IN-PLACE
-DUNDER ARE STILL BROKEN — measured, not assumed — SO THIS TICKET STAYS OPEN.**
-The frontend marks only `tkPlus` as augmented, so no other operator has anywhere
-to hang the runtime dispatch. See "PARTIALLY FIXED" at the foot, and note the
-month-older sibling [[bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds]],
-whose own body already says to fix them together.
+**SEVEN OF TWELVE OPERATORS FIXED (2026-09-15). FIVE REMAIN AND THEY ARE
+BLOCKED, NOT PENDING — SO THIS TICKET STAYS OPEN.**
+
+Fixed: `+= -= *= /= //= %= **=`. Each now reaches its `__i<op>__` on a variant
+receiver, byte-identical to CPython.
+
+Still broken: `&= |= ^= <<= >>=`. **They cannot be repaired from this layer.**
+The augmented marker selects a `pyaug<op>_v` out of the IR's variant-dispatch
+arm, and for these five there is no arm: the PLAIN `c & 12` on a variant holding
+a user object does not reach `__and__` either — it coerces the object to an int
+(silent for `& | ^`, RunError 219 for `<< >>`). That is a defect one layer down,
+filed as [[bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder]],
+and this ticket is `blocked-by` it in substance if not yet in frontmatter.
+
+See "FIXED 2026-09-15 — the operator axis" at the foot. The month-older sibling
+[[bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds]] keeps its own
+residue (a dict VALUE target still rebinds) and is NOT closed by this.
 
 **A WRONG VALUE, NOT A CRASH, on the ordinary accumulator idiom.** Measured
 2026-09-15.
@@ -267,3 +280,68 @@ is how there came to be two tickets for one gate.
 I am not merging them — the sibling is older, has its own measurements and its
 own prio, and merging would lose that. They should be worked together and closed
 together.
+
+
+## FIXED 2026-09-15 — the operator axis (`861b3ad34`, sha PENDING-COMMIT)
+
+**The first fix was `+`-ONLY and the fixture passed.** `PY_BINOP_AUGADD` marked
+`tkPlus` alone, so ten sibling operators kept the identical defect while the
+green tier said nothing. That is the finding worth more than the fix: a
+one-operator repair to a rule that spans twelve leaves eleven rows that no
+existing row can see, and the fixture written for the first one CERTIFIES them.
+
+### What changed
+
+- `PY_BINOP_AUGADD` -> **`PY_BINOP_AUGMENTED`**, same value. The marker now says
+  AUGMENTED and nothing else; the OPERATOR is already in `ASTIVal`, so one value
+  serves the whole family. The old spelling is an alias so nothing outside had
+  to move.
+- `PyAugMarkedTok` (`pyparser.inc`) names the marked set and, in its own
+  comment, names what is NOT in it and why — `*` because `PyAugMulNode` routes a
+  variant `*=` through `pymul_v_inplace` and returns first, the five
+  bitwise/shift tokens because there is no arm for a marker to select.
+- `ir.inc` picks `pyaugsub_v` / `pyaugtruediv_v` / `pyaugfloordiv_v` /
+  `pyaugfloormod_v` on a marked node, beside the `pyaugadd_v` row that was there.
+- `pylib.pas` gains those four plus `pyaugpow_v`, each **calling the plain twin**
+  rather than re-implementing it, which is what makes the non-user population
+  provably unchanged. `pymul_v_inplace` gains the `__imul__` try in place.
+- `**=` has no binary token, so it never reaches the marked `AN_BINOP` at all;
+  `PyAugPowVariantNode` is its hand-built route, wired at both `tkPowEq` sites.
+
+### The regression this caught, and it was mine
+
+`PyAugPowVariantNode` initially took EVERY variant `**=`. That took `v **= 0.5`
+on a variant holding -4 away from `PyMakePow` -> `pypow_cx`, which answers
+CPython's `(1.2246467991473532e-16+2j)` **byte for byte** — and `pyaugpow_v`
+raises on it. A row that was already correct went red.
+
+It was found because the regression probe was diffed against a **rebuilt
+pre-change compiler**, not against CPython: three rows differed from CPython and
+only one of them was mine. The other two (`100 ** 0.5` at 1 ulp, and the dict
+VALUE target still rebinding) are in the control too. *Attribute a delta to a
+range before attributing it to yourself* — here the range was one commit and the
+control cost two 25-second rebuilds.
+
+`pypow_cx` takes two `Double`s, so `pyaugpow_v` cannot delegate to it — coercing
+a variant to a Double is the step a user object does not survive — so the gate
+mirrors `PyMakePow`'s own and lives at the parse site. **Residual, stated rather
+than hidden:** `c **= 0.5` on a variant holding a user object still misses
+`__ipow__`. It did not work before either, so declining neither fixes nor breaks
+it.
+
+### Gate
+
+`make compiler/pascal26` **converged** (861b3ad3410e21a7, from 79551a1b6d05f02e);
+`tools/gate.sh quick` GREEN after a reviewed `ast_slot_overloads.py --update`
+(two rows, both ordinary child-node writes: `AN_ARG Left PyForceVariant(rhs)`,
+`AN_CALL Left aA`). `make test-nilpy` and `make lib-test` green.
+
+`test/test_nilpy_augmented_assignment_on_a_parameter_dispatches_the_in_place_dunder.npy`
+extended with the operator axis and **byte-identical to CPython**. Its positive
+control is a rebuild at the parent commit: the new rows read
+
+    op_sub WRONG got 20 want 17 / op_mul 60 / op_div 5.0 / op_floordiv 5
+    op_mod 6 / op_pow 400 ... AUGPARAM FAIL
+
+while `op_add`, all seven `rebind_*` rows and all seven `scalar_*` rows pass on
+BOTH compilers — so the redness is the fix and not the fixture.

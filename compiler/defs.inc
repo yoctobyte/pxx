@@ -1595,13 +1595,24 @@ const
     is an IDENTITY comparison and must NOT be rewritten into a by-contents
     compare (bug-nilpy-is-on-two-lists-compares-contents). }
   PY_BINOP_IDENTITY = 1;
-  { AN_BINOP marker in ASTSLen: this `+` came from an AUGMENTED assignment
-    (`l += [9]`) whose target's STATIC type is a variant, not a known
-    TPyList — the arithmetic lowering picks pyaugadd_v instead of pyadd_v so a
-    list target is extended IN PLACE (every alias sees the mutation) rather
-    than rebound to a new list the caller never sees
-    (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
-  PY_BINOP_AUGADD = 2;
+  { AN_BINOP marker in ASTSLen: this binop came from an AUGMENTED assignment
+    (`l += [9]`, `c -= 3`) whose target's STATIC type is a VARIANT, not a known
+    class or TPyList — the arithmetic lowering picks `pyaug<op>_v` instead of
+    the plain `py<op>_v`, so the run time can do what the static dispatch could
+    not: extend a list target IN PLACE (every alias sees the mutation) rather
+    than rebinding it to a new list the caller never sees
+    (bug-nilpy-augmented-add-on-variant-list-is-not-in-place), and dispatch a
+    user class's __i<op>__ rather than its __<op>__, which builds a new object
+    and binds it to the local while the caller's object never changes
+    (bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation).
+
+    The marker says AUGMENTED and nothing else; the OPERATOR is already in
+    ASTIVal, so one value serves the whole family. It was `PY_BINOP_AUGADD` and
+    `+`-only until 2026-09-15, which is why ten operators kept the defect after
+    `+` was fixed. }
+  PY_BINOP_AUGMENTED = 2;
+  { the old spelling, kept so nothing outside this family has to move at once }
+  PY_BINOP_AUGADD = PY_BINOP_AUGMENTED;
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
     variable: `Assigned(fp)` tests the pointer in every mode, while `fp <> nil`

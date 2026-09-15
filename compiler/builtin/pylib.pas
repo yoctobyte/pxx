@@ -2115,6 +2115,7 @@ function pymul_v(const a: Variant; const b: Variant): Variant;
   number; there is no complex type here, so it degrades to NaN.
   feature-nilpy-power-operator-and-divmod }
 function pypow_v(const a: Variant; const b: Variant): Variant;
+function pyaugpow_v(const a: Variant; const b: Variant): Variant;
 { Python's `divmod(a, b)` -- (a // b, a % b) as a 2-tuple, both of which are
   already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
@@ -2129,7 +2130,9 @@ function pyvar_to_char(const v: Variant): Char;
 function pyor_v(const a: Variant; const b: Variant): Variant;
 function pyand_v(const a: Variant; const b: Variant): Variant;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
+function pyaugfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
+function pyaugfloormod_v(const a: Variant; const b: Variant): Variant;
 { Arithmetic / bitwise / compare over VARIANTS, for the pyeval tree-walker
   (feature-lib-pyexec): its operands are always variants and Python dispatches
   on the runtime tag. `+` concatenates two strings, else numeric add (float if
@@ -2140,6 +2143,7 @@ function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 function pysub_v(const a: Variant; const b: Variant): Variant;
+function pyaugsub_v(const a: Variant; const b: Variant): Variant;
 function pymod_v(const a: Variant; const b: Variant): Variant;
 function pybitand_v(const a: Variant; const b: Variant): Variant;
 function pybitor_v(const a: Variant; const b: Variant): Variant;
@@ -2156,6 +2160,7 @@ function pycmp_v(const a: Variant; const b: Variant): Int64;   { -1/0/1 }
   that turned a str handle into a number
   (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math). }
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
+function pyaugtruediv_v(const a: Variant; const b: Variant): Variant;
 { The ORDERING operators over variants. Each is pycmp_v plus a test, exposed as
   its own function so the lowering emits one call returning a Boolean rather
   than hand-building a compare against pycmp_v's Int64. pycmp_v raises for a
@@ -9551,9 +9556,16 @@ function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
 
   A tuple and a frozenset are immutable and take the ordinary path — the kind
   check lives in pylist_repeat_inplace, which is the one place that knows it.
+  A USER class declaring __imul__ mutates and hands back self, and it is tried
+  BEFORE the list arm because a user class can hold a list and still mean its
+  own operator. Without it `c *= 3` fell to __mul__, which builds a NEW object
+  and binds it to the local — the caller's object never changed, silently.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
+
   bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds }
 var o: TObject;
 begin
+  if PyVarUserAug(a, b, '__imul__', Result) then Exit;
   { BOTH integer tags: a boxed literal wears VT_INT (1) and a boxed Int64
     VT_INT64 (2), and testing only one is how the arm silently never fired. }
   if (pyvartag(a) = 7) and (pyvarobj(a) <> nil) and
@@ -9748,6 +9760,26 @@ begin
   end;
   PXXPromoToVariant(dst, @pr);
   PXXPromoClear(@pb); PXXPromoClear(@pr); PXXPromoClear(@pt);
+end;
+
+
+{ `t **= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pypow_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __ipow__/__pow__ rule was skipped for
+  exactly that target shape, and `p **= 2` fell to __pow__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugpow_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ipow__', Result) then Exit;
+  Result := pypow_v(a, b);
 end;
 
 function pypow_v(const a: Variant; const b: Variant): Variant;
@@ -9959,6 +9991,26 @@ begin
   end;
 end;
 
+
+{ `t //= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pyfloordiv_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __ifloordiv__/__floordiv__ rule was skipped for
+  exactly that target shape, and `n //= 4` fell to __floordiv__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugfloordiv_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ifloordiv__', Result) then Exit;
+  Result := pyfloordiv_v(a, b);
+end;
+
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 var
   pa, pb, r: PPyVarRec;
@@ -10099,6 +10151,26 @@ begin
                         ((x < 0) and (y > 0) and (r >= 0))
   else
     PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
+end;
+
+
+{ `t %= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pyfloormod_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __imod__/__mod__ rule was skipped for
+  exactly that target shape, and `n %= 7` fell to __mod__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugfloormod_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__imod__', Result) then Exit;
+  Result := pyfloormod_v(a, b);
 end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;
@@ -10501,6 +10573,26 @@ begin
   else Result := 0;
 end;
 
+
+{ `t -= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pysub_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __isub__/__sub__ rule was skipped for
+  exactly that target shape, and `n -= 3` fell to __sub__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugsub_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__isub__', Result) then Exit;
+  Result := pysub_v(a, b);
+end;
+
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
@@ -10530,6 +10622,26 @@ end;
   rather than ordering the tag-0 payload as 0 and answering False.
   bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising.
   `==`/`!=` are pyeq_v's business and stay total — `None == 3` is False. }
+
+{ `t /= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pytruediv_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __itruediv__/__truediv__ rule was skipped for
+  exactly that target shape, and `n /= 4` fell to __truediv__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugtruediv_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__itruediv__', Result) then Exit;
+  Result := pytruediv_v(a, b);
+end;
+
 function pylt_v(const a: Variant; const b: Variant): Boolean;
 begin
   PyOrdCheck(a, b, '<');

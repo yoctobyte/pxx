@@ -29053,6 +29053,70 @@ begin
   end;
 end;
 
+{ `t **= e` where t reads as a VARIANT — an unannotated parameter, a dict value,
+  a list element. `**` has no binary token, so it never reaches the AN_BINOP
+  path that PY_BINOP_AUGMENTED marks; the route is this hand-built call instead.
+
+  pyaugpow_v tries __ipow__ and is otherwise pypow_v itself, so every row that
+  already worked is unchanged. Without it the variant target fell to PyMakePow
+  -> __pow__, which builds a NEW object and binds it to the local while the
+  caller's object never changes.
+
+  Answers the CALL node, -1 when the target is not a variant; the caller owns
+  the store, because the two `**=` sites differ in how they clone their target.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function PyAugPowVariantNode(target, rhs: Integer): Integer;
+var pi, aA, aB: Integer;
+begin
+  PyAugPowVariantNode := -1;
+  if (target < 0) or (rhs < 0) then Exit;
+  if IntToTypeKind(ASTTk[target]) <> tyVariant then Exit;
+  { DECLINE the one shape PyMakePow answers better, and this is a MEASURED
+    regression rather than a precaution: a FLOAT exponent that is not an
+    integral constant is the complex case, which PyMakePow routes to pypow_cx —
+    and pypow_cx is right. `v **= 0.5` on a variant holding -4 gives CPython's
+    (1.2246467991473532e-16+2j), byte for byte; taking it away and calling
+    pyaugpow_v instead RAISED, on rows this frontend was already answering
+    correctly. pypow_cx takes two Doubles, so pyaugpow_v cannot delegate to it —
+    coercing a variant to a Double is the very step a user object does not
+    survive — so the gate lives here, mirroring PyMakePow's own.
+
+    Residual, stated rather than hidden: `c **= 0.5` on a variant holding a USER
+    object still misses __ipow__. That shape does not work today either (it
+    reaches pypow_cx and coerces), so declining neither fixes nor breaks it. }
+  if TypeIsFloat(IntToTypeKind(ASTTk[rhs])) and
+     (not PyNodeIsIntegralConst(rhs)) then Exit;
+  pi := FindProc('pyaugpow_v');
+  if pi < 0 then Exit;            { pylib absent: leave the old path alone }
+  aA := AllocNode(AN_ARG); ASTLeft[aA] := target;
+  aB := AllocNode(AN_ARG); ASTLeft[aB] := PyForceVariant(rhs); ASTRight[aB] := -1;
+  ASTRight[aA] := aB;
+  PyAugPowVariantNode := AllocNode(AN_CALL);
+  ASTIVal[PyAugPowVariantNode] := pi;
+  ASTTk[PyAugPowVariantNode] := Ord(tyVariant);
+  ASTLeft[PyAugPowVariantNode] := aA;
+end;
+
+function PyAugMarkedTok(k: TTokenKind): Boolean;
+{ Which BINARY tokens (as PyAugBinTok normalises an augmented assignment to)
+  get the PY_BINOP_AUGMENTED marker on a VARIANT target.
+
+  Exactly the set for which the IR has a variant-dispatch arm AND pylib has a
+  `pyaug<op>_v` twin. `*` is NOT here: PyAugMulNode routes a variant `*=`
+  through pymul_v_inplace and returns before the marked AN_BINOP is built, so
+  including it would be a second, dead route.
+
+  The bitwise and shift operators are not here either, and that is a REAL gap
+  rather than a routing detail: `c & 12` on a variant holding a user object
+  does not reach __and__ at all today — the IR has no variant arm for them, so
+  there is nothing for a marker to select. Marking them would select a
+  `pyaug<op>_v` that the lowering never asks for.
+  bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder }
+begin
+  PyAugMarkedTok := (k = tkPlus) or (k = tkMinus) or (k = tkSlash) or
+                    (k = tkDiv) or (k = tkMod);
+end;
+
 function PyAugBinTok(k: TTokenKind): TTokenKind;
 begin
   case k of
@@ -32084,7 +32148,10 @@ begin
         Result := node;
         Exit;
       end;
-      node := PyMakePow(lhsNode, CurASTNode);
+      { a VARIANT target cannot be decided here — see PyAugPowVariantNode }
+      node := PyAugPowVariantNode(lhsNode, CurASTNode);
+      if node < 0 then
+        node := PyMakePow(lhsNode, CurASTNode);
       Result := AllocNode(AN_ASSIGN);
       ASTLeft[Result] := CloneAST(lhsNode);
       ASTRight[Result] := node;
@@ -32135,16 +32202,23 @@ begin
       end;
       node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
       ASTLeft[node] := lhsNode; ASTRight[node] := CurASTNode;
-      { `l += y` where l's STATIC type is a variant (an unannotated parameter,
-        a list out of a list/dict, ...): PyNodeListCi above only recognises a
-        STATICALLY tyClass/TPyList target, so this is the variant case the
-        in-place `extend` above cannot reach. Mark the node so the IR's
-        variant-dispatch arm for `+` picks pyaugadd_v, which extends IN PLACE
-        when the runtime value turns out to hold a list (mutating the object
-        every alias shares) and otherwise behaves exactly like pyadd_v
-        (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
-      if (augTk = tkPlus) and (IntToTypeKind(ASTTk[lhsNode]) = tyVariant) then
-        ASTSLen[node] := PY_BINOP_AUGADD;
+      { `l op= y` where l's STATIC type is a variant (an unannotated parameter,
+        a list out of a list/dict, ...): PyNodeListCi and PyAugClassDunderNode
+        above only recognise a STATICALLY tyClass/TPyList target, so this is the
+        variant case neither the in-place `extend` nor the __i<op>__ dispatch
+        can reach. Mark the node so the IR's variant-dispatch arm picks
+        `pyaug<op>_v`, which extends a list IN PLACE / calls the in-place dunder
+        when the runtime value turns out to want one, and otherwise behaves
+        exactly like the plain `py<op>_v`
+        (bug-nilpy-augmented-add-on-variant-list-is-not-in-place,
+        bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation).
+
+        `*` is absent DELIBERATELY: PyAugMulNode above already routes a variant
+        `*=` through pymul_v_inplace and returns before reaching here, so
+        marking it too would be a second, unreachable route to the same
+        decision. }
+      if PyAugMarkedTok(augTk) and (IntToTypeKind(ASTTk[lhsNode]) = tyVariant) then
+        ASTSLen[node] := PY_BINOP_AUGMENTED;
       { `/=` is TRUE division: always a float, regardless of operand types
         (`4 /= 2` is 2.0, not 2) -- same rule the plain `/` binop already has
         via FloatBinopResultTk. Falling through to the generic PyWiden below
@@ -32301,7 +32375,10 @@ begin
         Result := node;
         Exit;
       end;
-      node := PyMakePow(PyMakeIdent(symIdx), CurASTNode);
+      { a VARIANT target cannot be decided here — see PyAugPowVariantNode }
+      node := PyAugPowVariantNode(PyMakeIdent(symIdx), CurASTNode);
+      if node < 0 then
+        node := PyMakePow(PyMakeIdent(symIdx), CurASTNode);
       if PyTypingPass then
         PyNoteLocalType(name, IntToTypeKind(ASTTk[node]), REC_NONE);
       rhsNode := node;
@@ -32392,11 +32469,12 @@ begin
     PyCoerceAssignmentRHS(Syms[symIdx].TypeKind, CurASTNode);
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(augTk);
     ASTLeft[node] := PyMakeIdent(symIdx); ASTRight[node] := CurASTNode;
-    { see the twin lhs-expression site's note: a variant target's `+=` must
-      extend a runtime list IN PLACE rather than rebind
-      (bug-nilpy-augmented-add-on-variant-list-is-not-in-place). }
-    if (augTk = tkPlus) and (Syms[symIdx].TypeKind = tyVariant) then
-      ASTSLen[node] := PY_BINOP_AUGADD;
+    { see the twin lhs-expression site's note: a variant target's augmented op
+      must extend a runtime list IN PLACE, or call the in-place dunder, rather
+      than rebind (bug-nilpy-augmented-add-on-variant-list-is-not-in-place,
+      bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation). }
+    if PyAugMarkedTok(augTk) and (Syms[symIdx].TypeKind = tyVariant) then
+      ASTSLen[node] := PY_BINOP_AUGMENTED;
     { `/=` is always a float (see the twin lhs-expression site's note); widen,
       don't copy the target type otherwise: `n -= 0x10000000000000000` on an
       int target must type the binop PROMO (see the twin lhs-expression site) }

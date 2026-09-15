@@ -91,3 +91,31 @@ model. Left on this ticket, which returns to the backlog at prio 20.
 `test/test_nilpy_augmented_repeat_mutates_in_place.npy` extended and still
 byte-identical to CPython: the parameter case with the caller observing, and
 the same parameter over int, str, float and tuple (which must not mutate).
+
+
+## 2026-09-15 — the USER-CLASS half of `*=` landed; the dict-value residue did NOT
+
+`pymul_v_inplace` now tries `__imul__` before its list arm, so `c *= 3` on a
+variant holding a user object mutates and the caller sees it (was: `__mul__`,
+new object, caller untouched). That came in with
+[[bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation]],
+which generalised the augmented marker from `+` to the whole operator family.
+
+**This ticket's own residue is UNCHANGED and was measured, not assumed.**
+
+```python
+d = {"k": [3]}
+z = d["k"]
+d["k"] *= 3
+print(d["k"], z)      # CPython [3,3,3] [3,3,3]   pxx [3,3,3] [3]
+```
+
+Identical on the pre-change compiler (`79551a1b`) and the post-change one
+(`861b3ad3`) — it was a row in the regression probe precisely so the two could
+not be confused. The residue is in how the SUBSCRIPT target's augmented store is
+built, which the `__imul__` try does not touch: the value is right and an alias
+of it keeps the old contents.
+
+The `+=` / `*=` split this ticket opens with is now closed in the direction it
+named — both operators reach their in-place dunder on a variant target — so what
+remains here is the subscript-target store alone.

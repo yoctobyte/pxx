@@ -28,6 +28,25 @@
 # RECEIVER's storage class and nothing else -- local, attribute and global all
 # worked throughout and only the parameter failed. They are kept so a future
 # change cannot fix the parameter by breaking one of them.
+#
+# THE OPERATOR IS THE SECOND AXIS, ADDED 2026-09-15, and the reason is that the
+# first fix was `+`-ONLY: the frontend marked just tkPlus as augmented, so ten
+# sibling operators kept the identical defect after `+=` was green and this file
+# passed. One operator per row is what makes that visible.
+#
+# WHICH DUNDER RAN IS ASSERTED, NOT INFERRED FROM THE VALUE. `__iadd__` and
+# `__add__` compute the same number; only the CALLER's view separates them, and
+# on a class whose plain dunder returns a differently-shaped object the two can
+# still coincide. Each op_* row therefore checks the caller's value AND the
+# rebind row checks that the caller was left alone -- the two directions the
+# same fix can break in opposite ways.
+#
+# FIVE OPERATORS ARE DELIBERATELY ABSENT: `&=`, `|=`, `^=`, `<<=`, `>>=`. They
+# are not fixed and they are not forgotten -- the PLAIN `c & 12` on a variant
+# holding a user object does not reach __and__ either, so there is no
+# variant-dispatch arm for the augmented form to hook. Asserting them here would
+# redden the tier for a defect that lives one layer down.
+# bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder
 
 class Both:
     def __init__(self, x):
@@ -136,6 +155,118 @@ def aug_str(s):
 S = "a"
 check("str_inner", aug_str(S), "ab")
 check("str_caller", S, "a")
+
+# --- THE SECOND AXIS: one row per operator, each on an unannotated parameter.
+# Cell declares BOTH dunders for every operator, which is the silent shape: the
+# in-place one mutates, the plain one builds a new object the caller never sees.
+class Cell:
+    def __init__(self, v):
+        self.v = v
+    def __iadd__(self, o):
+        self.v = self.v + o
+        return self
+    def __add__(self, o):
+        return Cell(self.v + o)
+    def __isub__(self, o):
+        self.v = self.v - o
+        return self
+    def __sub__(self, o):
+        return Cell(self.v - o)
+    def __imul__(self, o):
+        self.v = self.v * o
+        return self
+    def __mul__(self, o):
+        return Cell(self.v * o)
+    def __itruediv__(self, o):
+        self.v = self.v / o
+        return self
+    def __truediv__(self, o):
+        return Cell(self.v / o)
+    def __ifloordiv__(self, o):
+        self.v = self.v // o
+        return self
+    def __floordiv__(self, o):
+        return Cell(self.v // o)
+    def __imod__(self, o):
+        self.v = self.v % o
+        return self
+    def __mod__(self, o):
+        return Cell(self.v % o)
+    def __ipow__(self, o):
+        self.v = self.v ** o
+        return self
+    def __pow__(self, o):
+        return Cell(self.v ** o)
+
+def op_add(c):   c += 3
+def op_sub(c):   c -= 3
+def op_mul(c):   c *= 3
+def op_div(c):   c /= 4
+def op_floor(c): c //= 4
+def op_mod(c):   c %= 7
+def op_pow(c):   c **= 2
+
+for nm, fn, want in [("op_add", op_add, "23"), ("op_sub", op_sub, "17"),
+                     ("op_mul", op_mul, "60"), ("op_div", op_div, "5.0"),
+                     ("op_floordiv", op_floor, "5"), ("op_mod", op_mod, "6"),
+                     ("op_pow", op_pow, "400")]:
+    c = Cell(20)
+    fn(c)
+    check(nm, "%s" % c.v, want)
+
+# --- the MUST-NOT-mutate direction, once per operator. A class with only the
+# PLAIN dunder follows Python's fallback: build a new object, bind it to the
+# local, leave the caller's alone. A fix that made every augmented op in-place
+# passes every row above and breaks all seven of these.
+class Plain:
+    def __init__(self, v):
+        self.v = v
+    def __add__(self, o):      return Plain(self.v + o)
+    def __sub__(self, o):      return Plain(self.v - o)
+    def __mul__(self, o):      return Plain(self.v * o)
+    def __truediv__(self, o):  return Plain(self.v / o)
+    def __floordiv__(self, o): return Plain(self.v // o)
+    def __mod__(self, o):      return Plain(self.v % o)
+    def __pow__(self, o):      return Plain(self.v ** o)
+
+def pl_add(c):   c += 3
+def pl_sub(c):   c -= 3
+def pl_mul(c):   c *= 3
+def pl_div(c):   c /= 4
+def pl_floor(c): c //= 4
+def pl_mod(c):   c %= 7
+def pl_pow(c):   c **= 2
+
+for nm, fn in [("rebind_add", pl_add), ("rebind_sub", pl_sub),
+               ("rebind_mul", pl_mul), ("rebind_div", pl_div),
+               ("rebind_floordiv", pl_floor), ("rebind_mod", pl_mod),
+               ("rebind_pow", pl_pow)]:
+    c = Plain(20)
+    fn(c)
+    check(nm, "%s" % c.v, "20")
+
+# --- THE NON-USER POPULATION, which is what the pyaug*_v fallbacks must leave
+# exactly as they found it: each one calls the plain py*_v rather than
+# re-implementing it, so a variant holding a number must answer identically.
+def sc_sub(v):   v -= 3;  return v
+def sc_div(v):   v /= 4;  return v
+def sc_floor(v): v //= 4; return v
+def sc_mod(v):   v %= 7;  return v
+def sc_pow(v):   v **= 2; return v
+
+check("scalar_sub", "%s" % sc_sub(20), "17")
+check("scalar_div", "%s" % sc_div(20), "5.0")
+check("scalar_floordiv", "%s" % sc_floor(-20), "-5")
+check("scalar_mod", "%s" % sc_mod(-20), "1")
+check("scalar_pow", "%s" % sc_pow(-20), "400")
+
+# `**=` on a variant target with a NON-INTEGRAL FLOAT exponent must keep the
+# PyMakePow route: pypow_cx answers CPython's complex for a negative base, and
+# routing it to pyaugpow_v instead RAISED on rows that were already correct.
+# Measured regression, caught by this row's ancestor before it landed.
+def sc_powf(v):  v **= 0.5; return v
+check("scalar_powcx", "%s" % sc_powf(-4), "(1.2246467991473532e-16+2j)")
+check("scalar_powf", "%s" % sc_powf(2.25), "1.5")
 
 if ok:
     print("AUGPARAM OK")
