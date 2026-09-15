@@ -12267,8 +12267,20 @@ begin
         out `self.n = self.n + v` gets, and that spelling is measured correct. }
       ASTTk[node] := Ord(PyWiden(IntToTypeKind(ASTTk[left]),
                                  IntToTypeKind(ASTTk[right])));
-      if (caOp = Ord(tkPlus)) and (IntToTypeKind(ASTTk[left]) = tyVariant) then
-        ASTSLen[node] := PY_BINOP_AUGADD;
+      { THE THIRD SITE FOR ONE RULE, and it was `+`-only after the other two were
+        generalised on 2026-09-15 -- which is the same miss, in the same hour,
+        that the generalisation was written to stop. Measured here: with the
+        field holding a user object, `self.n -= 3` and `self.n //= 4` left an
+        ALIAS of that object unchanged (field=17 alias=20) while `+=`, `*=`,
+        `/=`, `%=` and `**=` were correct, because those five reach a different
+        route. Two operators, silently, on an ordinary method.
+
+        PyAugMarkedTok is CALLED, not restated: a second copy of the set is
+        exactly how the first two sites came to disagree.
+        bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+      if PyAugMarkedTok(TTokenKind(caOp)) and
+         (IntToTypeKind(ASTTk[left]) = tyVariant) then
+        ASTSLen[node] := PY_BINOP_AUGMENTED;
       caRhs := node;
       node := AllocNode(AN_ASSIGN);
       ASTLeft[node] := left; ASTRight[node] := caRhs;

@@ -364,6 +364,46 @@ remainder from a bug report a month later.
 Worked at length in `debugging-playbook.md`, "A ONE-ARM FIX TO AN N-ARM RULE
 LEAVES N−1 ARMS THAT THE FIXTURE YOU JUST WROTE CERTIFIES".
 
+### THIRD SITE, FOUND BY THE GENERALISATION'S OWN TELL — AND MISSED BY THE GENERALISATION
+
+Same day, ninety minutes later. `pasparser_expr.inc`'s compound-assign arm is a
+THIRD site for the augmented-marker rule, and it was **still `+`-only after the
+other two were widened.** The change written to stop exactly this missed a site
+in the hour it was written.
+
+It was found by grepping for the tell — `= tkPlus)` across the frontends — not
+by a failing test, because no test covered that statement shape for any operator
+but `+`. And the defect it was hiding is the reason a value check could not have
+found it either:
+
+    class Box:
+        def __init__(self, c):  self.n = c
+        def bump(self):         self.n -= 3     # field 17, ALIAS 20
+
+**The field reads correctly and the alias does not.** The plain dunder builds a
+new object and rebinds the FIELD, so everything that inspects `b.n.v` passes;
+only something else holding the original object can tell. Five of seven
+operators were correct on that shape — `+` through the marker, `*` through
+`PyAugMulNode`, and three more through the pyparser sites — so **two broken
+operators sat among five working ones on one statement shape.**
+
+Two things this adds to the rule above:
+
+**The grep IS the instrument once you know the tell**, even though it was
+useless for finding the twelve missing operators at the first site. Once one
+instance has taught you what the tell looks like — a conjunct naming one member
+of the set — the grep finds the other SITES, which is the N=2 job it was always
+good at. The order matters: enumerate the set first, then grep for who else
+tests it.
+
+**Generalising one site does not generalise the rule.** Having just replaced
+`augTk = tkPlus` with a named predicate in two places, the natural feeling is
+that the rule is now centralised — and the third site was two includes away,
+spelled `caOp = Ord(tkPlus)`, which no grep for `augTk` would ever return. The
+fix calls the predicate through `pyforwards.inc` rather than restating it,
+because a second copy of a set is how the first two sites drifted apart in the
+first place.
+
 **Not promoted to CLAUDE.md, and the test it failed is worth naming** since an
 author reads "not promoted" as "not valued". Recurrence is the bar, and both
 instances are Track N, one night, one seat — and the second was found while

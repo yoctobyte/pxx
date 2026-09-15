@@ -29,14 +29,33 @@ int (silent); `<<` and `>>` die with RunError 219 (loud).
 
 `IRLowerAST`'s variant-dispatch arms cover `+`, `-`, `*`, `/`, `//`, `%` and the
 four orderings (`ir.inc`, the `pyadd_v`/`pysub_v`/`pymul_v`/`pyfloordiv_v`
-blocks). **There is no such arm for `&`, `|`, `^`, `<<`, `>>`**, so the node
-lowers to a raw `IR_BINOP` over the operand's HANDLE.
+blocks). **There is no such arm for `&`, `|`, `^`, `<<`, `>>`.**
+
+**Verified by dumping the IR of both, rather than inferred** — an earlier draft
+of this ticket said the node lowers to a raw `IR_BINOP` over the operand's
+handle, and that was wrong. `PXXDBG=a.ir:f` on `return c - 12` and
+`return c & 12`, same class, same receiver:
+
+    c - 12    ->  call <pysub_v>                    (the dispatch arm)
+    c & 12    ->  var_binop  ... (no pylib call)    (the generic fallback)
+
+So it reaches **`IR_VAR_BINOP`**, the generic variant-operator path, which
+coerces both operands numerically. That is why `& | ^` answer a plain int
+(silent) and `<< >>` raise RunError 219 — a coercion refusing an object, not a
+pointer being used as a number. The distinction matters for the fix: the value
+is not garbage, it is a *correct* numeric answer about the wrong thing.
 
 `pybitand_v`, `pybitor_v`, `pybitxor_v`, `pyshl_v` and `pyshr_v` already exist
-in `pylib.pas` — they are what `pyeval` uses — and they coerce through
-`pyvar_to_int`, which is the 219. So the runtime helpers are present and the
-LOWERING never calls them; and none of the five tries `PyVarUserArith` first,
-which is what the arithmetic helpers do.
+in `pylib.pas` — they are what `pyeval` uses. **Verified: nothing in `ir.inc` or
+`pyparser.inc` references any of the five**, so the lowering never calls them;
+and each is a one-line `pyvar_of_int(pyvar_to_int(a) <op> pyvar_to_int(b))` with
+no `PyVarUserArith` try, unlike every arithmetic helper.
+
+**Open question, stated as one:** the `c & 12` IR also carries a guarded runtime
+call before the `var_binop` which `c - 12` does not need. Whatever that guard
+tries, it does not admit `&` — a class declaring `__and__` still gets the
+numeric answer. Worth identifying before adding the arm, in case the arm belongs
+there instead.
 
 This is the same shape as
 [[bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math]], which is the

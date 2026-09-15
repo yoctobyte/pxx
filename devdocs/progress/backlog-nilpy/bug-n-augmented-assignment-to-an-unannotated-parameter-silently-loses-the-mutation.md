@@ -345,3 +345,69 @@ control is a rebuild at the parent commit: the new rows read
 
 while `op_add`, all seven `rebind_*` rows and all seven `scalar_*` rows pass on
 BOTH compilers — so the redness is the fix and not the fixture.
+
+
+## 2026-09-15, later — A THIRD SITE, MISSED BY THE GENERALISATION ITSELF
+
+`pasparser_expr.inc`'s compound-assign arm marks `PY_BINOP_AUGMENTED` on a
+variant target and was **still `+`-only** after the two `pyparser.inc` sites
+were generalised. Same rule, third site, missed in the same hour by the change
+written to stop exactly this.
+
+```python
+class Box:
+    def __init__(self, c):  self.n = c
+    def bump(self):         self.n -= 3
+
+inner = Cell(20)
+b = Box(inner)
+b.bump()
+print(b.n.v, inner.v)     # CPython 17 17     pxx 17 20
+```
+
+**THE FIELD IS RIGHT AND THE ALIAS IS NOT**, which is why this was invisible: the
+plain dunder builds a new object and rebinds the FIELD, so every check that
+reads `b.n.v` passes. Only something else holding the original object can tell.
+
+Measured across the family on this shape, before the fix:
+
+| operator | field | alias |
+| --- | --- | --- |
+| `+=` `*=` `/=` `%=` `**=` | correct | correct |
+| `-=` | 17 | **20** |
+| `//=` | 5 | **20** |
+
+Five of seven correct, because those five reach a different route — `+=` through
+the marker, `*=` through `PyAugMulNode`/`pymul_v_inplace`, and `/=`/`%=`/`**=`
+through the pyparser sites. **Two broken operators hiding among five working
+ones on the same statement shape** is what a per-operator row buys.
+
+### Why it was found
+
+By grepping for the tell the fix had just been written about — a conjunct naming
+one member of the set (`caOp = Ord(tkPlus)`) — not by a failing test. No test
+covered the self-field shape for any operator but `+`.
+
+### The fix
+
+`PyAugMarkedTok` is **called**, not restated. It is forward-declared in
+`pyforwards.inc` — the mechanism `PyWiden` already uses for this same site,
+because `pasparser_expr.inc` is included at compiler.pas:188 and `pyparser.inc`
+at :277. A second copy of the set is precisely how the first two sites came to
+disagree, and `compiler.pas`'s own forward-declaration comments say so about
+other shared predicates.
+
+### Gate
+
+`make compiler/pascal26` converged (4452ec0631a97c02, from 92ca0ab1b8e4a87e);
+`tools/gate.sh quick` GREEN. The fixture gains seven `selffield_*` rows plus a
+list-extend control and stays byte-identical to CPython. Its positive control is
+the PREVIOUS compiler, on which it fails on **exactly** `selffield_sub` and
+`selffield_fdiv` and nothing else.
+
+The full 7-operator x 6-storage-class cross (parameter, bare local, attribute,
+self-field, dict value, list element) now matches CPython on every cell for the
+seven arithmetic operators. That cross is the probe that started this: it
+segfaulted, and the crash was
+[[bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last]],
+an unrelated pre-existing defect it tripped over on the way.

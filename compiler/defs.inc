@@ -1609,16 +1609,16 @@ const
     The marker says AUGMENTED and nothing else; the OPERATOR is already in
     ASTIVal, so one value serves the whole family. It was `PY_BINOP_AUGADD` and
     `+`-only until 2026-09-15, which is why ten operators kept the defect after
-    `+` was fixed. }
+    `+` was fixed — and THREE sites tested that one token, two in pyparser.inc
+    and one in pasparser_expr.inc that the first generalisation missed. They now
+    all ask `PyAugMarkedTok`, which is the only place the set is written down. }
   PY_BINOP_AUGMENTED = 2;
-  { the old spelling, kept so nothing outside this family has to move at once }
-  PY_BINOP_AUGADD = PY_BINOP_AUGMENTED;
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
     variable: `Assigned(fp)` tests the pointer in every mode, while `fp <> nil`
     under {$MODE DELPHI} CALLS fp and tests the result. Indistinguishable at
     lowering, so the Assigned form is tagged here (ASTSLen, the binop's spare
-    marker field, as PY_BINOP_AUGADD already uses).
+    marker field, as PY_BINOP_AUGMENTED already uses).
     bug-pascal-procvar-value-context-outside-assignment }
   PAS_BINOP_ASSIGNED = 3;
   { AN_BINOP marker in ASTSLen: this comparison was written PARENTHESIZED, so

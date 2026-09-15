@@ -245,6 +245,50 @@ for nm, fn in [("rebind_add", pl_add), ("rebind_sub", pl_sub),
     fn(c)
     check(nm, "%s" % c.v, "20")
 
+# --- THE THIRD SITE: a SELF-FIELD target, `self.n op= v` inside a method. This
+# reaches pasparser_expr.inc's compound-assign arm, NOT either pyparser site, and
+# it was still `+`-only after the other two were generalised -- the same miss, in
+# the same hour, that the generalisation existed to stop.
+#
+# THE ALIAS IS THE WHOLE ASSERTION. The field reads correctly either way, so a
+# row checking only `b.n.v` certifies the bug: the plain dunder builds a new
+# object and rebinds the FIELD, and only something else holding the original can
+# tell. Measured before the fix: sub and floordiv gave field=17 alias=20 and
+# field=5 alias=20, while add, mul, div, mod and pow were correct -- those five
+# reach a different route, which is exactly why two broken ones were invisible.
+class Box:
+    def __init__(self, c):  self.n = c
+    def b_add(self):   self.n += 3
+    def b_sub(self):   self.n -= 3
+    def b_mul(self):   self.n *= 3
+    def b_div(self):   self.n /= 4
+    def b_fdiv(self):  self.n //= 4
+    def b_mod(self):   self.n %= 7
+    def b_pow(self):   self.n **= 2
+
+for nm, want in [("add", "23"), ("sub", "17"), ("mul", "60"), ("div", "5.0"),
+                 ("fdiv", "5"), ("mod", "6"), ("pow", "400")]:
+    inner = Cell(20)
+    b = Box(inner)
+    if nm == "add":    b.b_add()
+    elif nm == "sub":  b.b_sub()
+    elif nm == "mul":  b.b_mul()
+    elif nm == "div":  b.b_div()
+    elif nm == "fdiv": b.b_fdiv()
+    elif nm == "mod":  b.b_mod()
+    else:              b.b_pow()
+    check("selffield_%s" % nm, "%s|%s" % (b.n.v, inner.v), "%s|%s" % (want, want))
+
+# a LIST field must still extend IN PLACE -- the other direction, at the third
+# site, and the arm that must not be swallowed by the new marker.
+class LBox:
+    def __init__(self, xs):  self.xs = xs
+    def push(self):          self.xs += [9]
+
+LF = [1, 2]
+LBox(LF).push()
+check("selffield_list", "%d %s" % (len(LF), LF[2]), "3 9")
+
 # --- THE NON-USER POPULATION, which is what the pyaug*_v fallbacks must leave
 # exactly as they found it: each one calls the plain py*_v rather than
 # re-implementing it, so a variant holding a number must answer identically.

@@ -166,6 +166,7 @@ function RecordHasFinalizeOp(recId: Integer): Boolean; forward;   { does this re
 function ArgTempTakesManagementOps(cpi, pathIdx: Integer; byValueCopy: Boolean): Boolean; forward;   { is this argument temp a BY-VALUE parameter -- the only event fpc runs AddRef/callee-Finalize for -- or merely an address for a const/var parameter given a non-lvalue }
 {$ifndef PXX_NO_NILPY}
 function PyWiden(a, b: TTypeKind): TTypeKind; forward;   { Nil Python numeric-kind widening (pyparser.inc) }
+function PyAugMarkedTok(k: TTokenKind): Boolean; forward;   { Nil Python: does this augmented operator get PY_BINOP_AUGMENTED on a variant target? ONE definition, because pasparser_expr.inc's compound-assign arm is a THIRD site for the same rule and a second copy of the set is how the first two drifted (pyparser.inc) }
 function PyRawName(off, len: Integer): AnsiString; forward;           { name text from the token pool (pyparser.inc) }                                   { Nil Python None literal node (pyparser.inc) }
 function PyNodeIsPyList(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyList? (pyparser.inc) }
 function PySubscriptableSuffix(n: Integer): Boolean; forward; { Nil Python: may `[` follow this non-lvalue? (pyparser.inc) }
