@@ -113,6 +113,46 @@ and, varying only what the callee returns:
 BORROWED managed value retains it on the way out, and on the direct path
 nobody consumes that +1. Fresh results are already owned and are correct.
 
+## THE PER-ITERATION LEDGER, which narrows it again and contradicts the section above
+
+`for i in range(3): h = H(); k = h.g()` with a marker printed each iteration.
+Following ONE Leaf through its whole life:
+
+```
+ITER   A  <leaf> rc=1        allocated inside Leaf()
+       R  <leaf> -> 2        stored into self.q
+       R  <leaf> -> 3        the method result stored into k
+ITER   r  <oldH> -> 0 F      h reassigned, the old H freed
+       r  <leaf> -> 2        H's finaliser releases self.q
+       r  <leaf> -> 1        k reassigned, releasing the old result
+       ... and the leaf stays at 1 forever
+LOOPEND
+       r  <lastleaf> -> 2    k at scope exit
+       r  <lastleaf> -> 1    the finaliser
+       r  <lastleaf> -> 0 F  A THIRD release that only happens at PROC EXIT
+```
+
+THREE retains and TWO releases per iteration; the survivor is the reference
+that exists from allocation. The third release exists — the last Leaf gets it
+— and it arrives only when the procedure ends, which is exactly the n-1
+signature from the other direction.
+
+**This does not fit "the callee hands back +1 and the direct path never
+consumes it", and that sentence should not be quoted until it is re-derived.**
+The section above was written from a four-iteration trace read by eye and it
+attributed the surviving reference to the CALL. Here the surviving reference is
+the one present at `A`, before any call exists. Both readings are consistent
+with the counts; neither is consistent with the other; and objtrace does not
+say which CALL SITE any given `R` came from, which is the whole reason this
+keeps splitting.
+
+**So the next instrument is not another objtrace run.** It is a probe that
+prints at entry and exit of `Leaf.__init__`, `H.__init__` and `H.g`, so each
+`R`/`r` is attributed to a site rather than guessed from position. Until that
+exists, the measured facts are the OUTCOME tables above — which shapes leak and
+which do not — and everything about WHICH reference survives is an attribution,
+not a measurement.
+
 ## THE FORK THE NEXT ATTEMPT HAS TO SETTLE FIRST -- DO NOT SKIP IT
 
 Two self-consistent ABIs, and the tree currently does neither:
