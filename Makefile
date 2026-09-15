@@ -34812,6 +34812,18 @@ lib-test: pxx-stable-check
 	# also carries a retain control that must MOVE.
 	./$(COMPILER) test/test_nilpy_a_discarded_method_result_is_released.npy $(TESTTMP)/test_nilpy_discardmeth
 	tools/expect_same.sh test_nilpy_discardmeth "$$($(TESTTMP)/test_nilpy_discardmeth | tail -n 1)" "DISCARDMETH OK"
+	# A conditional expression must evaluate ONLY the selected arm. The arms are
+	# not statements, so an arm's hoisted setup used to land at the enclosing
+	# statement and run either way -- a stray side effect in two shapes and an
+	# AttributeError in the third. $(COMPILER), not $(PXX_STABLE): the fix is in
+	# compiler/pyparser.inc and no pin carries it. Verified to FAIL on the
+	# pre-fix compiler f5c08154dcac (rc=217, the nil-receiver row) rather than
+	# assumed to. The fixture carries TWO positive controls -- the selected arm
+	# must still run and its side effects must still happen -- because the other
+	# rows all assert that nothing happened and a compiler evaluating NEITHER arm
+	# would pass them.
+	./$(COMPILER) test/test_nilpy_a_conditional_expression_does_not_evaluate_the_untaken_arm.npy $(TESTTMP)/test_nilpy_ternarm
+	tools/expect_same.sh test_nilpy_ternarm "$$($(TESTTMP)/test_nilpy_ternarm | tail -n 1)" "TERNARM OK"
 	# A thread nobody joins must give its stack back. --threadsafe is required:
 	# without it mimic_threading is not reachable and the row would pass by not
 	# testing anything. $(COMPILER), not $(PXX_STABLE) -- the fix is in

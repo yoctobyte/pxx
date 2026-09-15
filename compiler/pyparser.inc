@@ -4004,7 +4004,14 @@ end;
 
 procedure PyParseBoolExpr;
 var left, right, node, condNode, elseNode, pairNode, hSave: Integer;
+    thenSave, elseSave: Integer;
 begin
+  { Snapshot the hoist queue BEFORE the then-arm is parsed. A conditional
+    expression's arms are not statements, so anything the arm's parse hoists
+    (PyHoistStmt) lands at the ENCLOSING statement and runs whichever arm is
+    selected -- see the tkIf branch below for what that costs.
+    bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch }
+  thenSave := PyHoistTail;
   PyParseBoolAnd;
   left := CurASTNode;
   while CurTok.Kind = tkOr do
@@ -4049,12 +4056,34 @@ begin
     types is a NilPy question the corpus does not raise. }
   if CurTok.Kind = tkIf then
   begin
+    { FOLD THE THEN-ARM'S HOISTED SETUP INTO THE THEN ARM, before the condition
+      is parsed -- at this point the only thing queued since thenSave is the
+      then arm's own setup.
+
+      Without this the setup runs unconditionally. Three measured instances, one
+      of them fatal: `f(*[track(10), track(20)]) if c else 99` ran both track()
+      calls with c False; `g(b=side(2), a=1) if False else 'x'` ran side(); and
+      `staged.pending() if staged is not None else {}` RAISED AttributeError on
+      a None receiver, because the attribute-missing guard the parser emits for
+      a resolvable method name is itself a hoisted statement. CPython evaluates
+      the untaken arm in none of the three.
+
+      The CONDITION's own hoists deliberately stay on the queue: the condition
+      always runs, so statement level is the correct place for them, and they
+      must run BEFORE the ternary.
+
+      PyFoldHoistSince is the same mechanism `and`/`or` operands already use --
+      attach each operand's setup to THAT operand -- and its own header says so.
+      When nothing was hoisted it returns the node unchanged, so the common case
+      allocates nothing. }
+    left := PyFoldHoistSince(thenSave, left);
     Next;
     PyParseBoolExpr;
     condNode := PyMakeTruthy(CurASTNode);
     if CurTok.Kind <> tkElse then
       Error('Nil Python: a conditional expression needs an else');
     Next;
+    elseSave := PyHoistTail;
     { `A if C else None`: None is a real value (VT_EMPTY variant) — the nil
       literal boxed integer 0 and the consumer's `is None` tag-test failed
       (feature-nilpy-none-variant, sibling of the literal/setter routes). }
@@ -4065,7 +4094,9 @@ begin
     end
     else
       PyParseBoolExpr;
-    elseNode := CurASTNode;
+    { ...and the same for the else arm, which is why a bare `{}` there was
+      being ALLOCATED on every evaluation whether or not it was selected. }
+    elseNode := PyFoldHoistSince(elseSave, CurASTNode);
     pairNode := AllocNode(AN_PAIR);
     ASTLeft[pairNode] := left;
     ASTRight[pairNode] := elseNode;

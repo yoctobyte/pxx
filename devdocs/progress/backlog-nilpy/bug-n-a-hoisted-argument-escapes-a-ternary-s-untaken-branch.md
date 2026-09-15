@@ -155,6 +155,69 @@ working). **Fix once, close both, and check the third row above as the
 acceptance test** -- it is the only one of the three that fails loudly, so it is
 the cheapest positive control the family has.
 
+## FIXED FOR THE CONDITIONAL EXPRESSION -- 2026-09-15
+
+`PyParseBoolExpr` now snapshots the hoist queue before the then-arm and folds
+each arm's hoisted setup INTO that arm with `PyFoldHoistSince`. The CONDITION's
+hoists deliberately stay at statement level: the condition always runs, and they
+must run before the ternary.
+
+This is the mechanism `and`/`or` operands already use in the same file, and
+`PyFoldHoistSince`'s own header states the principle -- *"Attaching each
+operand's setup to THAT operand is what satisfies both: the value is fresh, and
+it is only computed on the path that actually reaches it."* The ternary arms had
+simply never been given the same treatment. Of the two options this ticket
+listed, it is neither: the setup moves into the ARM rather than into a generated
+`if`, so the condition is not duplicated and `AN_TERNARY`'s lowering is
+untouched.
+
+| row | before | after |
+|---|---|---|
+| `staged.pending() if staged is not None else {}`, `dict.get` miss | AttributeError rc=217 | **len=0, matches CPython** |
+| same, literal `None` receiver | AttributeError rc=217 | **len=0** |
+| `f(*[track(10), track(20)]) if c else 99` | `99 [10, 20]` | **`99 []`** |
+| no class defines the name | correct | correct |
+| a class defines some OTHER method | correct | correct |
+| the `if`/`else` STATEMENT form | correct | correct |
+
+**STILL OPEN: THE COMPREHENSION FILTER.** `[g(b=side(4), a=1) for i in [1] if
+False]` still prints `evaluated 4`. That is a SEPARATE hoist site -- the
+comprehension splices the element's hoisted setup into the loop BODY, ahead of
+the filter's `AN_IF`, so it runs on every iteration whether the filter passes or
+not. Same family, same root cause, different code. This ticket stays OPEN for
+it.
+
+## PROVENANCE: THIS IS NOT A RECENT REGRESSION
+
+Measured by lekkerzeilen-c8 against archived compiler `44a006699586f064` (sha
+verified before and after the run, CWD at the repo root so the builtin lookup
+resolves correctly): the crash reproduces there. So the defect predates the
+NilPy object-lifetime work entirely. Scoped honestly -- that says the COMPILER
+predates it; `lib/` and `builtin/` are today's, and an old compiler against a
+current tree is not a time machine (the demo leg on that compiler does not build
+at all: today's `heapq` does not bind `heapify` for it).
+
+## CONFIRMED IN THE REAL APP, NOT ONLY IN FIXTURES
+
+c8 built a probe into the demo that exercises every conditional-expression site
+whose receiver can be nil, in the constructed app with real panels, with two
+controls in OPPOSITE directions (a name nothing defines, which must PASS; and a
+deliberately missing attribute, which must RAISE) and a runner that refuses to
+print a verdict if either misbehaves. Pre-registered predictions, hit row for
+row:
+
+```
+RAISED  ui.py:1020 Stack.press    <- a left click on OPEN WATER kills the demo
+RAISED  ui.py:1034 Stack.wheel    <- so does a scroll there
+RAISED  app.py:3130 _panel_note(menu)
+RAISED  ui.py:776  Menu.text      <- a Menu with no tabs
+RAISED  app.py:2913 panel.value (shape)
+RAISED  sim.py:373  env.depth (shape)
+PASS    app.py:3136 _panel_note(panel)   receiver is a Panel, never nil
+PASS    control (no such method name)
+RAISED  positive control (expected)
+```
+
 ## The shape of a fix, not yet chosen
 
 The hoist target is the enclosing statement. A ternary arm is not a statement,

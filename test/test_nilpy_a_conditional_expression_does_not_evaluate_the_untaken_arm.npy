@@ -1,0 +1,104 @@
+# A conditional expression must evaluate ONLY the selected arm.
+#
+# The arms of `A if C else B` are not statements, so anything an arm's parse
+# HOISTS (PyHoistStmt) landed at the enclosing STATEMENT and ran whichever arm
+# was selected. Three measured instances, one of them fatal.
+#
+# THE CRASHING ROW IS THE VALUABLE ONE AND IT IS WHY THIS FILE EXISTS. Most of
+# this family produces a RIGHT answer with a wrong side effect, so no
+# value comparison can see it -- CLAUDE.md's "match the assertion class to the
+# defect class". The nil-receiver row is the exception: it RAISES, so it is the
+# one member that fails loudly and the cheapest guard the family has.
+#
+# THE TRIGGER IS NAME RESOLUTION, WHICH IS WHY `pending` IS DEFINED BELOW AND
+# MUST STAY DEFINED. The guard whose hoist escapes is only emitted when the
+# attribute name resolves to a known method somewhere in the compilation. A
+# fixture whose method name nothing defines is clean on the UNFIXED compiler and
+# certifies this bug as absent -- that is exactly what a first sweep of six
+# short-circuit forms did, using a name nothing defined. `unused_keeps_pending_
+# resolvable` exists for no other reason; deleting class P disarms this file.
+#
+# What the guard TESTS is the receiver for NIL; what it is EMITTED on is the
+# name resolving. Those are different and conflating them mis-states the row.
+#
+# CONTROLS, because four of the five rows assert that nothing happened and a
+# compiler that evaluated NEITHER arm would pass all of them:
+#   taken_arm  -- the selected arm MUST still run and return its value
+#   tracked    -- the side-effect log MUST fill in when the call is selected
+# Without those two, a fix that simply stopped evaluating conditional
+# expressions altogether would print OK.
+#
+# NOT ASSERTED HERE: the comprehension filter
+# (`[g(...) for i in [1] if False]`), which is the same root cause at a
+# DIFFERENT hoist site and is still open. Adding it would put a known red in
+# this file.
+
+class P:
+    def pending(self, extra):
+        return {"k": extra}
+
+    def unused_keeps_pending_resolvable(self):
+        return 0
+
+
+calls = []
+
+
+def track(v):
+    calls.append(v)
+    return v
+
+
+def add(a, b):
+    return a + b
+
+
+ok = True
+
+
+def check(name, got, want):
+    global ok
+    if got == want:
+        print("%s OK" % name)
+    else:
+        print("%s WRONG got %s want %s" % (name, got, want))
+        ok = False
+
+
+# 1. the receiver is None because the lookup MISSED. The else arm is selected,
+#    so `pending` must never be reached. Raised AttributeError before the fix.
+d = {}
+staged = d.get("miss")
+r1 = staged.pending(1) if staged is not None else {}
+check("miss", len(r1), 0)
+
+# 2. the same with a literal None, which is the reduced form of row 1.
+staged2 = None
+r2 = staged2.pending(1) if staged2 is not None else {}
+check("literal_none", len(r2), 0)
+
+# 3. POSITIVE CONTROL: the receiver is present, so the then arm IS selected and
+#    the method MUST run. A fix that stops evaluating the then arm fails here.
+d["hit"] = P()
+staged3 = d.get("hit")
+r3 = staged3.pending(7) if staged3 is not None else {}
+check("taken_arm", len(r3), 1)
+
+# 4. a hoisting construct (star-unpack) in an UNTAKEN arm: its side effects must
+#    not happen. Printed `99 [10, 20]` before the fix.
+c = False
+r4 = add(*[track(10), track(20)]) if c else 99
+check("star_untaken", r4, 99)
+check("star_untaken_calls", len(calls), 0)
+
+# 5. POSITIVE CONTROL for row 4: the same shape with the arm SELECTED. The
+#    side effects must happen and the value must be the sum.
+c2 = True
+r5 = add(*[track(10), track(20)]) if c2 else 99
+check("star_taken", r5, 30)
+check("star_taken_calls", len(calls), 2)
+
+if ok:
+    print("TERNARM OK")
+else:
+    print("TERNARM FAIL")
