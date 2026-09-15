@@ -15163,7 +15163,7 @@
    "bad": "0ee21235b1682e4a84362549cb828327d19d6216",
    "bad_untestable": true,
    "first_seen": false,
-   "good": "1073d96840ab0fdad8bd21c5b1552f1c7391619f",
+   "good": "fc646c17a2b85623cb8967aa3d1d9dff14ddfa0e",
    "job": "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
    "name": "test-threads#11",
    "never_passed": false,
@@ -15172,7 +15172,6 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "fc646c17a2b85623cb8967aa3d1d9dff14ddfa0e",
     "26e3389e372611719f87bedd4c29a3e9938be75e"
    ],
    "range_non_causal": false,

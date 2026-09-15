@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `0ee21235b168` on borg, 2026-09-15T17:09:19Z (19m ago).**
+**Newest full tier in the fleet: `0ee21235b168` on borg, 2026-09-15T17:09:19Z (21m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `0ee21235b168` | RED | 19m | — (newest) |
+| borg | `0ee21235b168` | RED | 21m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -36,5 +36,5 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy** — test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh (borg): bad `e977f78c3199`, last good `19bcd974455c`, 1 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `0ee21235b168`, last good `1073d96840ab`, 2 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `0ee21235b168`, last good `fc646c17a2b8`, 1 commit(s) in range
 - **test-uforth#src:tools/compiler_srchash.sh@3** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `0ee21235b168`, last good `1073d96840ab`, 2 commit(s) in range
