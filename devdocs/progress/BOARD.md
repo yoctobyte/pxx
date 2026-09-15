@@ -80,11 +80,10 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (38)
+## backlog (37)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| regression-cascade-827fabcc7d6d | T | 70 | regression | regression CASCADE: 14 jobs newly red in f7a745e87..827fabcc7 (1 commits) — auto-filed by twatch | — |
 | regression-cascade-e5cd18e4b220 | T | 70 | regression | regression CASCADE: 13 jobs newly red in 6f085e162..e5cd18e4b (1 commits) — auto-filed by twatch | — |
 | regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | regression: lib-test#src:test/crtl_atexit.c at 934ba04180e9 in step 15/17, `sh test/crtl_declaration_census.sh stable_linux_amd64/default/pinned /tmp` (auto-filed by twatch) | — |
@@ -335,7 +334,7 @@ _none_
 | bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string | N | 45 | bug | > | — |
 | bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature | N | 88 | bug | > | — |
 | bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned | N | 65 | bug | > | — |
-| bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity | N | 65 | bug | `for t in ts:` where `t` already holds one of the elements loses that object's identity | — |
+| bug-n-a-for-in-loop-that-rebinds-its-own-name-leaves-the-thread-registry-undrained | N | 40 | bug | `for t in ts:` where `t` already holds one of the elements leaves the thread registry undrained | — |
 | bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body | N | 45 | bug | `lambda x: g(x, outside=2.0) <= 5.0` dies at RUN time with `pyeval: unsupported keyword arg: outside`, where `g` is a free function. The discriminator is NOT free-vs-method and NOT the keyword: it is whether the body gets LIFTED. A body that is a bare call (`lambda x: g(x, outside=2.0)`) is compiled and correct; wrapping the same call in a comparison routes the body through pyeval, whose keyword handling is hard-wired to print's `end`/`sep`/`flush` and errors on anything else (compiler/builtin/pyeval.pas:4040). The METHOD spelling of the same shape works through the comparison, which is why this reads as a free-vs-method bug and is not one. Measured 2026-09-12 while clearing the float-literal-in-a-lambda wall; app.py:3305 is the METHOD form and is CORRECT (verified against CPython), so this does NOT block the lekkerzeilen closure. Honest run-time refusal, not a wrong value. A real fix needs the callee's signature at run time so a keyword can be mapped to a parameter slot, which pyeval does not have — that is the actual work, and it is why this is not a microfix. | — |
 | bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released | N | 70 | bug | A call whose FRESH result is discarded never releases it -- methods and containers | — |
 | bug-n-a-from-import-alias-resolves-its-source-through-flat-scope | N | 60 | bug | `from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis. | — |
@@ -1069,9 +1068,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3769)
+## done (3770)
 
-3769 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3770 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1202,7 +1201,6 @@ _none_
 - [p 70] [N] bug-n-the-demo-leaks-137-kb-s-on-a-real-world-and-it-is-not-in-the-render-path
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - [p 70] [N] feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
-- [p 70] [T] regression-cascade-827fabcc7d6d
 - [p 70] [T] regression-cascade-e5cd18e4b220
 - [p 70] [C] regression-lib-test-crtl-atexit-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-crtl-reachability-9 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -1246,7 +1244,6 @@ _none_
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - [p 65] [A] bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program
 - [p 65] [N] bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
-- [p 65] [N] bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [T] bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites
@@ -1454,6 +1451,7 @@ _none_
 - [p 40] [C] bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse
 - [p 40] [N] bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
+- [p 40] [N] bug-n-a-for-in-loop-that-rebinds-its-own-name-leaves-the-thread-registry-undrained
 - [p 40] [N] bug-n-a-plain-function-as-a-class-attribute-does-not-bind-the-receiver
 - [p 40] [N] bug-n-a-unit-alias-rebind-is-silently-ignored
 - [p 40] [N] bug-n-an-int-arm-of-a-conditional-expression-is-rendered-as-a-float

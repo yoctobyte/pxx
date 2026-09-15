@@ -3218,6 +3218,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-562162b03a02 | T | 70 | regression | regression CASCADE: 42 jobs newly red in cab3205aa..562162b03 (6 commits) — auto-filed by twatch | — |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
 | regression-cascade-6758c7ce7dbd | T | 70 | regression | regression CASCADE: 23 jobs newly red in b8e3b3010..6758c7ce7 (105 commits) — auto-filed by twatch | — |
+| regression-cascade-827fabcc7d6d | T | 70 | regression | regression CASCADE: 14 jobs newly red in f7a745e87..827fabcc7 (1 commits) — auto-filed by twatch | — |
 | regression-cascade-8654c4d55b61 | T | 70 | regression | regression CASCADE: 11 jobs newly red in 4f526e338..8654c4d55 (241 commits) — auto-filed by twatch | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
 | regression-cascade-afc0da53c859 | T | 70 | regression | regression CASCADE: 30 jobs newly red in bebac3336..afc0da53c (1 commits) — auto-filed by twatch | — |

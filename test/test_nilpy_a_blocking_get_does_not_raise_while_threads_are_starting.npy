@@ -76,7 +76,7 @@ for r in range(ROUNDS):
     # holds one of the threads trips a SEPARATE defect (the join then fails to
     # unregister, and stderr fills with spurious "more than 64 unjoined
     # non-daemon threads"). One fixture, one defect -- see
-    # bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity.
+    # bug-n-a-for-in-loop-that-rebinds-its-own-name-leaves-the-thread-registry-undrained.
     for u in burst:
         u.join()
     f.join()
