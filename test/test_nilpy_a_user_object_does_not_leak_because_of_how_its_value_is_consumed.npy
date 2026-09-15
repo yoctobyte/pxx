@@ -9,6 +9,12 @@
 # operation leaked its whole result. Measured: 100 iterations, 100 leaked
 # instances; 63-64 bytes/call in RSS -> under the limit after.
 #
+# A CONSTRUCTION WHOSE VALUE IS DISCARDED -- `P(1, 2)` as a bare statement --
+# was the same conduit with nobody to consume it: 56 bytes/call, 0 under
+# CPython, against a `p = P(1, 2)` control reading 0 on both. Bound to a hidden
+# ARC-eligible local, so the slot's rebind-release reclaims each iteration's
+# object and only the last waits for scope exit.
+#
 # A CONSTRUCTION CONSUMED AS A METHOD RECEIVER -- `Quat(...).normalized()`.
 # `C(...)` followed by `.` exited the construction arm to be "picked up
 # downstream", and downstream the ATTRIBUTE spelling hoisted the construction
@@ -99,8 +105,18 @@ def f_ctor_recv(n):
     return t
 
 
+def f_ctor_discard(n):
+    # A construction whose value goes NOWHERE. Same conduit local as
+    # f_ctor_recv, and the same reason it leaked -- nobody consumes the
+    # expression, so nothing released it. f_ctor_bound below is the control for
+    # BOTH: identical construction, bound to a name, always clean.
+    for i in range(n):
+        Q(1.0, 2.0, 3.0, 4.0)
+
+
 def f_ctor_bound(n):
-    # the CONTROL for f_ctor_recv: same construction, bound instead of consumed
+    # the CONTROL for f_ctor_recv and f_ctor_discard: same construction, bound
+    # instead of consumed
     t = 0.0
     for i in range(n):
         q = Q(1.0, 2.0, 3.0, 4.0)
@@ -163,6 +179,7 @@ ok = True
 base = rss_kb()
 for r in range(2):
     f_ctor_recv(N)
+    f_ctor_discard(N)
     f_ctor_bound(N)
     f_op_add(N, A, B)
     f_op_sub(N, A, B)
@@ -177,6 +194,11 @@ base = rss_kb()
 f_ctor_recv(N)
 now = rss_kb()
 second["ctor_recv"] = ((now - base) * 1024) // N
+base = now
+
+f_ctor_discard(N)
+now = rss_kb()
+second["ctor_discard"] = ((now - base) * 1024) // N
 base = now
 
 f_ctor_bound(N)
@@ -210,7 +232,7 @@ second["named"] = ((now - base) * 1024) // N
 base = now
 
 for name in ["ctor_bound", "op_add", "op_sub", "op_mul", "op_discard",
-             "named"]:
+             "named", "ctor_discard"]:
     if second[name] < LEAK_LIMIT:
         print("%s LEAKFREE" % name)
     else:

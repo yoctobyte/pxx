@@ -31407,6 +31407,7 @@ var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
     cmpExisted: Boolean;
     asrtCond, asrtMsg, asrtProc, asrtA0, asrtA1: Integer;   { assert statement }
+    discSym, discNew: Integer;         { binder for a DISCARDED construction }
     delCi, delRecv, delKey: Integer;   { `del c[k]` on a user class }
     delSavedInDel: Boolean;
     setOp: AnsiString;                 { the in-place set op for |= &= ^= -= }
@@ -32685,6 +32686,40 @@ begin
     Exit;
   end;
   Result := CurASTNode;
+  { A CONSTRUCTION WHOSE VALUE GOES NOWHERE -- `P(1, 2)` as a bare statement --
+    LEAKED IT, one instance per execution, forever. A construction is lowered
+    through a conduit local that holds its rc=1 "for whoever consumes the
+    expression" (SymIsCtorResultTemp, defs.inc), and here nobody consumes it, so
+    nothing ever releases it. CPython drops it at the end of the statement.
+    Measured 2026-09-15: 56 bytes/call, 0 under CPython, against a `p = P(1, 2)`
+    control reading 0 on both -- so it is the DISCARD, not the class.
+
+    Bound to a hidden tyClass local, which is the same ownership the assignment
+    spelling already has and which is why that spelling was always clean:
+    PyClassSymArcEligible has no name filter, so this temp gets rebind-release
+    and scope-exit release like any other NilPy class local. In a loop the slot
+    is reused, so iteration N+1's store releases iteration N's object and only
+    the last one waits for scope exit -- bounded, not merely deferred.
+
+    NOT released at end of STATEMENT, which is what CPython does and what a
+    reader will ask for. That would need a release the lowering has no place to
+    emit, and it would be the arg-spill mistake again in a new position: the
+    only thing that makes this safe is that the object outlives every borrow
+    taken during the statement.
+    bug-n-a-construction-whose-value-is-discarded-is-never-released }
+  if (Result >= 0) and (ASTKind[Result] = AN_CALL) and
+     (ASTIVal[Result] = -Ord(tkGetMem)) and
+     (Integer(ASTRight[Result]) >= REC_UCLASS_BASE) then
+  begin
+    discNew := Result;         { the construction whose value is dropped }
+    discSym := AllocVar(PyHiddenName('disc'), tyClass);
+    Syms[discSym].RecName := ResolveNodeRec(discNew);
+    SymSyncTypeRef(discSym);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(discSym);
+    ASTRight[node] := discNew;
+    Result := node;
+  end;
 end;
 
 function PyParseBlock: Integer;

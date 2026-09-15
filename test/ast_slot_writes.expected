@@ -311,6 +311,7 @@ AN_ASSIGN Left PyMakeIdent(chainTmp)
 AN_ASSIGN Left PyMakeIdent(clsLocal)
 AN_ASSIGN Left PyMakeIdent(cmSym)
 AN_ASSIGN Left PyMakeIdent(dictSym)
+AN_ASSIGN Left PyMakeIdent(discSym)
 AN_ASSIGN Left PyMakeIdent(enumStartSym)
 AN_ASSIGN Left PyMakeIdent(extraSyms[xi])
 AN_ASSIGN Left PyMakeIdent(gsym)
@@ -460,6 +461,7 @@ AN_ASSIGN Right defValN
 AN_ASSIGN Right destNode
 AN_ASSIGN Right dfltAST
 AN_ASSIGN Right dictNode
+AN_ASSIGN Right discNew
 AN_ASSIGN Right dn
 AN_ASSIGN Right e
 AN_ASSIGN Right elemNode

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:35 backlog-umbrella:11 backlog-core:165 backlog-nilpy:166 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3766 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:36 backlog-umbrella:11 backlog-core:165 backlog-nilpy:167 backlog-tools:60 backlog-pascal:9 backlog-decide:45 backlog-libs:26 backlog-cfront:15 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:75 known-incompat:5 float:23 done-followup:3 decided:151 done:3767 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -73,7 +73,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 529, ranked
+## Ready — top 30 of 531, ranked
 
 - `[p 90] [A]` bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe (unblocks 1)
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
@@ -106,4 +106,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 
-_499 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_501 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
