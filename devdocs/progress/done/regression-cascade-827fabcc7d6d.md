@@ -65,3 +65,6 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+## Log
+- 2026-09-15 — auto-closed by the borg watcher: `cascade@827fabcc7d6d` passes at bd35a383c7c2 (tier full); it was red at 827fabcc7d6d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
