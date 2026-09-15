@@ -3796,6 +3796,13 @@ test-nilpy: $(COMPILER)
 	# points plus pycmp_v's three-way ordering.
 	./$(COMPILER) test/test_nilpy_variant_operand_arith_dunders.npy $(TESTTMP)/test_nilpy_vararith26
 	$(TESTTMP)/test_nilpy_vararith26 | diff -u test/test_nilpy_variant_operand_arith_dunders.expected -
+	@# An ANNOTATED dunder operand (`def __add__(self, o: 'V')`, `k: float`,
+	@# `i: int`) was declined by the runtime dispatch, which accepted only a
+	@# Variant `other`, so every operator on a VARIANT receiver raised
+	@# "expected a number, got object" -- while the same class on a statically
+	@# typed receiver was fine. Nine (operand shape x return kind) cells.
+	./$(COMPILER) test/test_nilpy_an_annotated_dunder_operand_dispatches_on_a_variant_receiver.npy $(TESTTMP)/test_nilpy_anndunder26
+	tools/expect_same.sh test_nilpy_anndunder "$$($(TESTTMP)/test_nilpy_anndunder26 | tail -n 1)" "ANNDUNDER OK"
 	# a scalar-then-class rebind INSIDE a block widens (it kept the scalar's type,
 	# so the operands were added as handles). if/try/for/while + scalar controls.
 	./$(COMPILER) test/test_nilpy_block_nested_rebind_widens.npy $(TESTTMP)/test_nilpy_blkrebind26

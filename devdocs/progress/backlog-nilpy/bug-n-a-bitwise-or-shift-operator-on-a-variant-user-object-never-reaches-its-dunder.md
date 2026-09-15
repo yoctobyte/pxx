@@ -96,3 +96,19 @@ tokens for the same operator. Delegating one to the other is the trap.
 on a variant receiver; a variant holding an int must keep its ordinary bitwise
 answer; `set |= set` and any other pylib-owned class must be unaffected
 (`PyVarUserObj` excludes them, which is the existing guard).
+
+## Addendum 2026-09-15 — `@` is the same gap, one operator over
+
+Measured while fixing
+`bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver`:
+`h.a @ h.b` with `h` a bare parameter raises `unsupported operand type(s) for
+this operator` with a BARE `def __matmul__(self, o)`, while `a @ b` on
+statically typed locals answers 12.0. `compiler/builtin/pylib.pas` has no
+`__matmul__` string anywhere — the variant `@` entry point never consults a
+user dunder, exactly like the five bitwise/shift operators this ticket names.
+The parser side is wired (`PyBinOpDunderName` maps `tkAt`), so it is the
+runtime arm only, and the fix shape is the one the arithmetic entry points
+already have: `if PyVarUserArith(a, b, '__matmul__', '__rmatmul__', Result)
+then Exit;` at the top of the variant `@` routine. Not fixed in that commit
+because the dispatch ticket's fixture had to stay about dispatch; six
+operators now share this ticket.

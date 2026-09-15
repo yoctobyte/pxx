@@ -1,0 +1,103 @@
+# An operator dunder whose `other` parameter is ANNOTATED must still dispatch
+# when the RECEIVER is a variant -- a bare parameter, a container element, an
+# untyped field, which in real Python is nearly every receiver.
+#
+# Before the fix: two programs one annotation apart, `def __add__(self, o)`
+# against `def __add__(self, o: 'V')`. Known receiver: 3.0 both ways. Variant
+# receiver: 3.0 bare, `TypeError: expected a number, got object` annotated.
+# The runtime dispatch (PyUserArithCall1) accepted exactly ONE parameter shape,
+# a Variant `other`, and declined every annotated one; the numeric fallback arm
+# then raised a message pointing nowhere near the annotation the user added.
+# `o: float` failed the same way, so the class shape was not special.
+#
+# Why it matters: the operand annotation is the largest code-generation win
+# measured on this compiler, so the advice "annotate your dunder operands"
+# produced programs that were beautiful in the disassembly and died at run
+# time at every variant receiver.
+#
+# ROWS. Each `_var_` row reads the operands off a bare parameter, which is
+# what makes them variants. Each `_known_` row is its control with statically
+# typed operands, which dispatch at compile time and were always green. The
+# three annotated shapes -- class pointer, float, int -- are each exercised
+# with more than one RETURN kind, because the dispatcher is a grid of
+# (parameter shape x return kind) and a grid is tested by its off-diagonal
+# cells. The `wrongkind` row hands a float to a class-annotated `other`: the
+# dispatch must DECLINE (not crash), and the program sees an exception, as
+# CPython does from inside the body.
+#
+# `@` is deliberately absent: the variant runtime has no `__matmul__` arm at
+# all (bare or annotated, `h.a @ h.b` raises "unsupported operand"), which is
+# the bitwise/shift gap one operator over, not this ticket's.
+
+class V:
+    def __init__(self, x):
+        self.x = float(x)
+    def __add__(self, o: 'V'):              # class operand, class result
+        return V(self.x + o.x)
+    def __sub__(self, o: 'V') -> float:     # class operand, double result
+        return self.x - o.x
+    def __mul__(self, k: float):            # float operand, class result
+        return V(self.x * k)
+    def __rmul__(self, k: float):           # reflected, float operand
+        return V(self.x * k)
+    def __truediv__(self, k: float) -> float:   # float operand, double result
+        return self.x / k
+    def __mod__(self, k) -> str:            # BARE operand -- the control
+        return "m%d" % int(self.x % k)
+    def __floordiv__(self, k: int) -> int:  # int operand, int result
+        return int(self.x) // k
+    def __getitem__(self, i: int):          # int operand, variant result
+        return self.x + i
+    def __pow__(self, o: 'V') -> bool:      # class operand, bool result
+        return self.x > o.x
+
+class H:
+    def __init__(self):
+        self.a = V(6.0)
+        self.b = V(2.0)
+
+def known():
+    a = V(6.0); b = V(2.0)
+    return [(a + b).x, a - b, (a * 2.0).x, (3.0 * a).x, a / 4.0,
+            a % 4.0, a // 4, a[1], a ** b]
+
+def variant(h):
+    return [(h.a + h.b).x, h.a - h.b, (h.a * 2.0).x, (3.0 * h.a).x,
+            h.a / 4.0, h.a % 4.0, h.a // 4, h.a[1], h.a ** h.b]
+
+def variant_int_for_float(h):
+    return (h.a * 2).x                      # an int operand where float is asked
+
+def wrongkind(h):
+    try:
+        c = h.a + 1.0                       # a float where 'V' is asked
+        return "no raise %s" % c.x
+    except Exception:
+        return "raised"
+
+ok = True
+
+def check(label, got, want):
+    global ok
+    if got != want:
+        print("%s FAIL got %r want %r" % (label, got, want))
+        ok = False
+
+want = [8.0, 4.0, 12.0, 18.0, 1.5, "m2", 1, 7.0, True]
+names = ["add_cls_cls", "sub_cls_dbl", "mul_flt_cls", "rmul_flt_cls",
+         "div_flt_dbl", "mod_bare_str", "floordiv_int_int", "getitem_int_var",
+         "pow_cls_bool"]
+
+k = known()
+h = H()
+v = variant(h)
+for i in range(len(want)):
+    check("known_" + names[i], k[i], want[i])
+    check("var_" + names[i], v[i], want[i])
+check("var_int_for_float", variant_int_for_float(h), 12.0)
+check("wrongkind", wrongkind(h), "raised")
+
+if ok:
+    print("ANNDUNDER OK")
+else:
+    print("ANNDUNDER FAIL")

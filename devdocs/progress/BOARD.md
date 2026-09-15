@@ -314,7 +314,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (175)
+## backlog-nilpy (174)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -397,7 +397,6 @@ _none_
 | bug-n-an-ordering-dunder-that-returns-a-non-bool-fails-against-a-variant-operand | N | 40 | bug | > | — |
 | bug-n-an-overloaded-constructor-is-picked-by-name-ignoring-argument-type | N | 55 | bug | A NilPy construction `C(x)` on a class with several same-arity constructors runs the FIRST one declared, whatever x is. Measured 2026-09-09: one class with `Create(TPyBytes)` and `Create(TPyList)`, one unit with `which(TPyBytes)`/`which(TPyList)` -- the FUNCTIONS resolve correctly (list->2, bytes->1) and the CONSTRUCTORS both answer 1. Silent: the wrong body runs and whatever it does to the wrong argument type is what the program gets. PyClassCreate picks with FindUMeth(ci,'create'), a by-NAME first match; the type-aware picker FindUMethOverloadAhead exists and is already NilPy-aware, but it works by parsing the arguments speculatively and rewinding, and at PyClassCreate's pick site the arguments are ALREADY parsed -- so the fix is a selector over parsed argument NODES, not a call to the existing one. Blocks writing any shim class whose CPython constructor is type-overloaded; lib/rtl/mimic_array.pas carries a one-ctor + runtime `is` workaround with a revert-when-fixed note. | — |
 | bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing | N | 80 | bug | `def f(b): b.s, b.t = 22, 23` COMPILES, RUNS, prints nothing and STORES NOTHING — the fields keep their initial values. Any store through PyUnpackTargetStore (the TUPLE UNPACK and CHAINED-ASSIGNMENT paths, which share it) is silently dropped when the receiver is a PARAMETER. MEASURED 2026-09-12 against the PINNED compiler and HEAD, identical on both, so it is pre-existing and not from the chain widening landed the same day. THE SAME STORE WRITTEN AS A SINGLE STATEMENT IS CORRECT (`b.s = 11` works), and a LOCAL or MODULE-LEVEL receiver is correct (`a.s, a.t = 31, 32` works) — so the defect is exactly PyUnpackTargetStore + parameter. NO DIAGNOSTIC, and the value it leaves behind is the field's initial value, which is plausible. Found only because a chain fixture happened to use a parameter; the receiver kind a test naturally uses is the one that works, because a test constructs the object where it uses it. | — |
-| bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver | N | 75 | bug | Annotating an operator dunder's operand (`def __add__(self, o: 'V')`) makes the operator raise `TypeError: expected a number, got object` whenever the RECEIVER is a variant. Bare works, annotated raises, matched pair one character apart. The annotation is the biggest codegen win we have measured, so it is a trap. | — |
 | bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type | N | 80 | bug | `t: Holder = Holder(); return t` types the CALLER's local as a variant where the unannotated `t = Holder()` types it correctly — the annotation makes the inference worse, and only at the call site. `return self.m()` is the same scan's second blind spot. | — |
 | bug-n-async-def-and-await-are-not-implemented | N | 60 | bug | `async def` is refused -- `undefined variable (async)`, so the keyword is not in the grammar at all. Python 3.5. Distinct from yield-from in that a correct implementation needs an event loop and not just a parser arm, so the honest first step may be deciding how far to go rather than typing. Found by the same probe suite as the sys.version_info ruling. | — |
 | bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation | N | 70 | bug | An augmented assignment to an unannotated PARAMETER dispatches the plain dunder instead of the in-place one, so the caller never sees the mutation. Seven of twelve operators fixed 2026-09-15; `&= \|= ^= <<= >>=` remain, blocked on the plain bitwise binop not reaching its dunder either. | bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder |
@@ -1078,9 +1077,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3773)
+## done (3775)
 
-3773 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3775 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1202,7 +1201,6 @@ _none_
 - [p 75] [N] bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - [p 75] [N] bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - [p 75] [N] bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
-- [p 75] [N] bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver
 - [p 75] [N] bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)

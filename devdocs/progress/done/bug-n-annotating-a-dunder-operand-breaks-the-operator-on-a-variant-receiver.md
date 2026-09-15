@@ -4,6 +4,7 @@ prio: 75
 type: bug
 blocked-by: []
 summary: "Annotating an operator dunder's operand (`def __add__(self, o: 'V')`) makes the operator raise `TypeError: expected a number, got object` whenever the RECEIVER is a variant. Bare works, annotated raises, matched pair one character apart. The annotation is the biggest codegen win we have measured, so it is a trap."
+status: done
 ---
 
 # Annotating a dunder operand breaks the operator on a variant receiver
@@ -135,3 +136,43 @@ rule in CPython, and the RTTI records a parameter's KIND but not its class, so a
 cross-class check would refuse `Quat.__mul__(self, v: 'Vec3')`; the compiled
 method-call path on a variant receiver already hands an instance to a
 class-typed parameter by TAG alone, and this follows it.
+
+## FIXED — in the runtime dispatch, not the parser
+
+`PyUserArithCall1` now delivers `other` in the shape the dunder DECLARES: a
+Variant (unchanged), a class pointer (kind 6, the object behind a VT_OBJECT
+variant), a Double (kind 19, any numeric variant through `pyvar_to_float`) or
+an Int64 (kinds 13/1/11/15, an int-family variant's payload). Eighteen new
+thunk types beside the six that existed, mirroring the `TPyEqObjFn` precedent.
+An operand the declared shape cannot take DECLINES (so the reflected dunder on
+the other operand still gets its turn, then the caller's numeric arm raises as
+before) rather than raising from inside the dispatch. Cross-class instances are
+handed to a class-typed `other` by tag alone, the way the compiled method-call
+path on a variant receiver already does — the RTTI records a parameter's kind
+and not its class, and refusing every cross-class pair would refuse
+`Quat.__mul__(self, v: 'Vec3')`.
+
+Covers every call site of that helper at once: the eight arithmetic entry
+points, the seven in-place ones (`PyVarUserAug`), and `__getitem__` — an
+annotated `def __getitem__(self, i: int)` on a variant receiver was declined
+by the same line and is green in the fixture.
+
+Verified: the ticket's own matched pair (`dv_bare`/`dv_ann`) both print 3.0
+on the variant receiver; the float-annotated twin too. Fixture
+`test/test_nilpy_an_annotated_dunder_operand_dispatches_on_a_variant_receiver.npy`,
+nine (operand shape × return kind) cells plus the bare control, an
+int-for-float coercion row and a wrong-kind row that must raise, all matching
+CPython; pinned v410 raises on it. Ownership unchanged: the class-result arm
+takes over the dunder's owned reference exactly as before, and a
+3000-iteration loop of `h.a + h.b` / `h.a * 2.0` / `h.a - h.b` on a variant
+receiver ends with `allocs=6088 frees=6080 live=8` under `-dPXX_ALLOC_CENSUS`.
+
+Not in this fix, noted on the bitwise ticket: `@` on a variant receiver never
+reaches `__matmul__` at all, bare or annotated — the runtime has no arm for it.
+
+So the guidance changes: annotate operator dunder operands too; the safe cut
+in this ticket is no longer needed. The peer seat's annotation arms can be
+re-run against a tree carrying this.
+
+## Log
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

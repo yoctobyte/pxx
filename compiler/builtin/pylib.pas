@@ -20313,6 +20313,38 @@ type
   TPyArithD = function(self: Pointer; const other: Variant): Double;
   TPyArithB = function(self: Pointer; const other: Variant): Boolean;
   TPyArithO = function(self: Pointer; const other: Variant): Pointer;
+  { ...and the three shapes an ANNOTATED `other` takes. `def __add__(self,
+    o: 'V')` arrives as a class POINTER (tk=6), `def __mul__(self, k: float)`
+    as a Double in an xmm register (tk=19), `def __getitem__(self, i: int)` as
+    an Int64 (tk=13). The comment above said only the Variant shape existed
+    because nothing GENERATED the others; hand-written annotations do, and
+    the operand annotation is the single largest code-generation win measured
+    on this compiler (feature-n-specialise-a-dunder-body-on-the-operand-type-
+    the-call-site-already-knows). Declining them here meant the annotation
+    that produces that codegen broke the operator at every VARIANT receiver --
+    a bare parameter, a container element, an untyped field -- with
+    `TypeError: expected a number, got object` from the numeric fallback arm,
+    pointing nowhere near the annotation the user added. Same ABI facts as
+    TPyEqObjFn above, measured with PXXDBG=a.ir:V.__add__ on both spellings.
+    bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver }
+  TPyArithPV = function(self: Pointer; other: Pointer): Variant;
+  TPyArithPS = function(self: Pointer; other: Pointer): AnsiString;
+  TPyArithPI = function(self: Pointer; other: Pointer): Int64;
+  TPyArithPD = function(self: Pointer; other: Pointer): Double;
+  TPyArithPB = function(self: Pointer; other: Pointer): Boolean;
+  TPyArithPO = function(self: Pointer; other: Pointer): Pointer;
+  TPyArithDV = function(self: Pointer; other: Double): Variant;
+  TPyArithDS = function(self: Pointer; other: Double): AnsiString;
+  TPyArithDI = function(self: Pointer; other: Double): Int64;
+  TPyArithDD = function(self: Pointer; other: Double): Double;
+  TPyArithDB = function(self: Pointer; other: Double): Boolean;
+  TPyArithDO = function(self: Pointer; other: Double): Pointer;
+  TPyArithIV = function(self: Pointer; other: Int64): Variant;
+  TPyArithIS = function(self: Pointer; other: Int64): AnsiString;
+  TPyArithII = function(self: Pointer; other: Int64): Int64;
+  TPyArithID = function(self: Pointer; other: Int64): Double;
+  TPyArithIB = function(self: Pointer; other: Int64): Boolean;
+  TPyArithIO = function(self: Pointer; other: Int64): Pointer;
   { ...and the ARITY-3 shape, for `__setitem__(self, k, v)`. Both extra
     parameters are unannotated in the ordinary spelling, so both arrive tk=22.
     The RESULT is ignored — Python's __setitem__ returns nothing — but the ABI
@@ -20680,6 +20712,13 @@ function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
 var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
     fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
     fb: TPyArithB; fo: TPyArithO;
+    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
+    pb: TPyArithPB; po: TPyArithPO;
+    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
+    db: TPyArithDB; dob: TPyArithDO;
+    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
+    ib: TPyArithIB; io: TPyArithIO;
+    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
     sres: AnsiString; ores: Pointer; r: PPyVarRec;
 begin
   PyUserArithCall1 := False;
@@ -20699,37 +20738,95 @@ begin
   if mi^.Arity <> 2 then Exit;
   if mi^.ParamKinds = nil then Exit;
   pk := PInt64(mi^.ParamKinds);
-  if pk[1] <> 22 then Exit;               { `other` must be a Variant }
+  { `other`'s parameter SHAPE decides how the operand is DELIVERED; the RetKind
+    below decides how the result comes back. Four shapes, and the three
+    annotated ones were declined outright until 2026-09-15 -- see the
+    TPyArithP*/D*/I* types for what that cost.
+
+    An operand the annotated shape cannot take -- a float where the dunder
+    asks for `'V'`, an object where it asks for `float` -- DECLINES rather
+    than raises, so the reflected dunder on the other operand still gets its
+    turn (that is CPython's order) and, failing that, the caller's numeric arm
+    raises the TypeError it always raised. Inside NilPy a parameter
+    annotation is a TYPE, not a hint: an instance of some other class is
+    handed to a class-typed `other` the way the compiled method-call path
+    already hands one (by tag, not by class), because the RTTI records only
+    the parameter's KIND, and refusing every cross-class pair would refuse
+    `Quat.__mul__(self, v: 'Vec3')`, the ordinary spelling of a rotation.
+    A promotable bignum (VType 8193) is outside every annotated scalar shape
+    and declines with the rest. }
+  mode := -1; op := nil; od := 0.0; oi := 0;
+  ot := PPyVarRec(@otherV)^.VType;
+  if pk[1] = 22 then
+    mode := 0
+  else if pk[1] = 6 then
+  begin
+    op := Pointer(PyVarUserObj(PPyVarRec(@otherV)));
+    if op = nil then Exit;
+    mode := 1;
+  end
+  else if pk[1] = 19 then
+  begin
+    if (ot <> 3) and (ot <> 1) and (ot <> 2) and (ot <> 4) then Exit;
+    od := pyvar_to_float(otherV);
+    mode := 2;
+  end
+  else if (pk[1] = 13) or (pk[1] = 1) or (pk[1] = 11) or (pk[1] = 15) then
+  begin
+    if (ot <> 1) and (ot <> 2) and (ot <> 4) then Exit;
+    oi := PPyVarRec(@otherV)^.Payload;
+    mode := 3;
+  end
+  else
+    Exit;
   rk := mi^.RetKind;
   r := PPyVarRec(@res);
   if rk = 22 then
   begin
-    fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV);
+    if mode = 0 then begin fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pv := TPyArithPV(mi^.Code); res := pv(Pointer(selfObj), op); end
+    else if mode = 2 then begin dv := TPyArithDV(mi^.Code); res := dv(Pointer(selfObj), od); end
+    else begin iv := TPyArithIV(mi^.Code); res := iv(Pointer(selfObj), oi); end;
   end
   else if (rk = 23) or (rk = 4) then
   begin
-    fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV);
+    if mode = 0 then begin fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin ps := TPyArithPS(mi^.Code); sres := ps(Pointer(selfObj), op); end
+    else if mode = 2 then begin ds := TPyArithDS(mi^.Code); sres := ds(Pointer(selfObj), od); end
+    else begin is_ := TPyArithIS(mi^.Code); sres := is_(Pointer(selfObj), oi); end;
     r^.VType := 6; PPyAnsiString(@r^.Payload)^ := sres;
   end
   else if (rk = 13) or (rk = 1) or (rk = 11) or (rk = 15) then
   begin
-    fi := TPyArithI(mi^.Code);
-    r^.VType := 2; r^.Payload := fi(Pointer(selfObj), otherV);
+    r^.VType := 2;
+    if mode = 0 then begin fi := TPyArithI(mi^.Code); r^.Payload := fi(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pi_ := TPyArithPI(mi^.Code); r^.Payload := pi_(Pointer(selfObj), op); end
+    else if mode = 2 then begin di := TPyArithDI(mi^.Code); r^.Payload := di(Pointer(selfObj), od); end
+    else begin ii := TPyArithII(mi^.Code); r^.Payload := ii(Pointer(selfObj), oi); end;
   end
   else if (rk = 19) or (rk = 18) then
   begin
-    fd := TPyArithD(mi^.Code);
-    r^.VType := 3; PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV);
+    r^.VType := 3;
+    if mode = 0 then begin fd := TPyArithD(mi^.Code); PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pd := TPyArithPD(mi^.Code); PPyDouble(@r^.Payload)^ := pd(Pointer(selfObj), op); end
+    else if mode = 2 then begin dd := TPyArithDD(mi^.Code); PPyDouble(@r^.Payload)^ := dd(Pointer(selfObj), od); end
+    else begin id_ := TPyArithID(mi^.Code); PPyDouble(@r^.Payload)^ := id_(Pointer(selfObj), oi); end;
   end
   else if rk = 2 then
   begin
-    fb := TPyArithB(mi^.Code);
     r^.VType := 4;
-    if fb(Pointer(selfObj), otherV) then r^.Payload := 1 else r^.Payload := 0;
+    r^.Payload := 0;
+    if mode = 0 then begin fb := TPyArithB(mi^.Code); if fb(Pointer(selfObj), otherV) then r^.Payload := 1; end
+    else if mode = 1 then begin pb := TPyArithPB(mi^.Code); if pb(Pointer(selfObj), op) then r^.Payload := 1; end
+    else if mode = 2 then begin db := TPyArithDB(mi^.Code); if db(Pointer(selfObj), od) then r^.Payload := 1; end
+    else begin ib := TPyArithIB(mi^.Code); if ib(Pointer(selfObj), oi) then r^.Payload := 1; end;
   end
   else if rk = 6 then
   begin
-    fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV);
+    if mode = 0 then begin fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin po := TPyArithPO(mi^.Code); ores := po(Pointer(selfObj), op); end
+    else if mode = 2 then begin dob := TPyArithDO(mi^.Code); ores := dob(Pointer(selfObj), od); end
+    else begin io := TPyArithIO(mi^.Code); ores := io(Pointer(selfObj), oi); end;
     if ores = nil then Exit;
     { NO RETAIN. The dunder's result is ALREADY OWNED (+1) -- every NilPy
       routine hands back an owned reference and the consumer borrows -- so
