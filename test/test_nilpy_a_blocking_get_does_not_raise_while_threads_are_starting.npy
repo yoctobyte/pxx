@@ -1,0 +1,111 @@
+# A blocking Queue.get() must not raise "no other thread is alive" while a
+# thread IS alive.
+#
+# mimic_queue asks pythreadlive.PyThreadLiveAny before it decides a wait can
+# never be satisfied. That counter had two defects, both found 2026-09-15 by
+# lekkerzeilen-c8 chasing an intermittent failure at world load in a demo whose
+# main thread was demonstrably alive and busy:
+#
+#  1. THE ORDERING, and it is the one a short body triggers without any word
+#     tearing. Thread.start called PalThreadCreate and incremented AFTER it, so
+#     a child could run to the end of ThreadLauncher and decrement before the
+#     parent's own increment -- taking the count off whatever OTHER thread was
+#     standing. With one worker already alive the counter reads 0 for as long
+#     as the child body takes.
+#  2. THE RACE. gLive was a plain Integer with three writers (Inc on the
+#     parent, two Decs on the child), so the read-modify-writes could lose an
+#     increment outright. The clamp on Dec caught a lost decrement and nothing
+#     caught a lost increment, so the surviving error was the one that matters.
+#
+# THIS FIXTURE IS A STRESS ROW AND IT IS HONEST ABOUT THAT. Both defects are
+# races, so a green run is evidence and not proof; what makes it worth wiring
+# is that the failure mode is an EXCEPTION, not a wrong value, so a single
+# occurrence anywhere in the run is fatal and visible. The shape is c8's
+# measured one: an UNBOUNDED get(), which samples the predicate once as the
+# wait begins, while short-lived threads start and exit around it.
+#
+# THE FEEDER IS THE POINT. Every wait here has a thread that will satisfy it,
+# so a raise is unambiguously a false positive and needs no interpretation.
+# There is deliberately NO genuine-deadlock row: it would have to hang under
+# CPython, so the file would stop being runnable on both sides.
+
+import threading
+import queue
+
+# 300 rounds rather than the 30 this was written with: the defects are races,
+# so the control is a RATE. Measured 2026-09-15 on the unfixed library, 40 runs
+# of the 30-round version: 3 failures, 7.5%. At 300 rounds a single run carries
+# ten times the exposure, and the whole thing still costs about a fifth of a
+# second.
+ROUNDS = 300
+CHURN = 8
+
+work = queue.Queue()
+done = queue.Queue()
+ok = True
+
+
+def feeder(n):
+    work.put(n)
+
+
+def churn():
+    return 0
+
+
+def waiter():
+    # UNBOUNDED get: one sample of the liveness predicate per wait, which is
+    # the demo's shape and the reason the rate is a fraction and not 100%.
+    v = work.get()
+    done.put(v)
+
+
+for r in range(ROUNDS):
+    w = threading.Thread(target=waiter)
+    w.start()
+    # Start and retire short bodies around the pending wait. These are what
+    # decremented somebody else's count under the old ordering.
+    burst = []
+    for i in range(CHURN):
+        t = threading.Thread(target=churn)
+        t.start()
+        burst.append(t)
+    f = threading.Thread(target=feeder, args=(r,))
+    f.start()
+    # `for u in burst`, NOT `for t in burst`: rebinding the name that already
+    # holds one of the threads trips a SEPARATE defect (the join then fails to
+    # unregister, and stderr fills with spurious "more than 64 unjoined
+    # non-daemon threads"). One fixture, one defect -- see
+    # bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity.
+    for u in burst:
+        u.join()
+    f.join()
+    w.join()
+    got = done.get()
+    if got != r:
+        print("round %d got %s" % (r, got))
+        ok = False
+
+# CONTROL: the counter must still be able to say "nothing is alive". With every
+# thread joined, a get_nowait on an empty queue must raise Empty -- if this
+# prints NOTHING the harness never reached here, and if it reports a DeadWait
+# the predicate has drifted the other way into permanent over-count.
+ctrl = "none"
+try:
+    work.get_nowait()
+    ctrl = "returned"
+except queue.Empty:
+    ctrl = "empty"
+except Exception:
+    ctrl = "other"
+
+if ctrl != "empty":
+    print("control %s -- expected Empty" % ctrl)
+    ok = False
+else:
+    print("control EMPTY")
+
+if ok:
+    print("LIVECOUNT OK")
+else:
+    print("LIVECOUNT FAIL")

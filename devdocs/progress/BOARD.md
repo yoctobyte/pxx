@@ -313,7 +313,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (167)
+## backlog-nilpy (168)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -335,6 +335,7 @@ _none_
 | bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string | N | 45 | bug | > | — |
 | bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature | N | 88 | bug | > | — |
 | bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned | N | 65 | bug | > | — |
+| bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity | N | 65 | bug | `for t in ts:` where `t` already holds one of the elements loses that object's identity | — |
 | bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body | N | 45 | bug | `lambda x: g(x, outside=2.0) <= 5.0` dies at RUN time with `pyeval: unsupported keyword arg: outside`, where `g` is a free function. The discriminator is NOT free-vs-method and NOT the keyword: it is whether the body gets LIFTED. A body that is a bare call (`lambda x: g(x, outside=2.0)`) is compiled and correct; wrapping the same call in a comparison routes the body through pyeval, whose keyword handling is hard-wired to print's `end`/`sep`/`flush` and errors on anything else (compiler/builtin/pyeval.pas:4040). The METHOD spelling of the same shape works through the comparison, which is why this reads as a free-vs-method bug and is not one. Measured 2026-09-12 while clearing the float-literal-in-a-lambda wall; app.py:3305 is the METHOD form and is CORRECT (verified against CPython), so this does NOT block the lekkerzeilen closure. Honest run-time refusal, not a wrong value. A real fix needs the callee's signature at run time so a keyword can be mapped to a parameter slot, which pyeval does not have — that is the actual work, and it is why this is not a microfix. | — |
 | bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released | N | 70 | bug | A call whose FRESH result is discarded never releases it -- methods and containers | — |
 | bug-n-a-from-import-alias-resolves-its-source-through-flat-scope | N | 60 | bug | `from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis. | — |
@@ -1245,6 +1246,7 @@ _none_
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
 - [p 65] [A] bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program
 - [p 65] [N] bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
+- [p 65] [N] bug-n-a-for-in-loop-that-rebinds-its-own-name-loses-the-objects-identity
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [T] bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites

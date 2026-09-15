@@ -2598,6 +2598,34 @@ test-nilpy: $(COMPILER)
 	  printf '%s\n' "$$out" | diff -u test/test_nilpy_threaded_container_alloc.expected - || exit 1; \
 	  i=$$((i+1)); \
 	done; echo "test_nilpy_threaded_container_alloc: 5/5 clean"
+	# A blocking get() must not raise "no other thread is alive" WHILE ONE IS.
+	# mimic_queue consults pythreadlive before it decides a wait is a deadlock,
+	# and that counter had two defects. The ORDERING is the one a short body
+	# triggers with no word tearing at all: Thread.start incremented AFTER
+	# PalThreadCreate, so a child could reach the Dec at the end of
+	# ThreadLauncher before the parent's own Inc, taking the count off whatever
+	# OTHER thread was standing -- with one worker alive the counter reads 0 for
+	# as long as the child body takes. The RACE is the second: a plain Integer
+	# with three writers (Inc on the parent, two Decs on the child), where the
+	# clamp on Dec caught a lost decrement and nothing caught a lost increment,
+	# so the surviving error was the one pythreadlive's own header calls "the
+	# error that matters".
+	# RUN FIVE TIMES ON PURPOSE, same reason as the row above: both defects are
+	# races, so the control is a RATE and one run is a coin. Measured 2026-09-15
+	# with the fixes stashed out, 20 runs of this exact binary: 6 FAILED, 30%.
+	# Five runs is 83%. With the fixes: 0 of 20, and 0 of 40 at the 30-round
+	# size that gave 3 of 40 unfixed. Found by lekkerzeilen-c8 in a demo whose
+	# main thread was demonstrably alive, then reduced to this.
+	./$(COMPILER) --threadsafe test/test_nilpy_a_blocking_get_does_not_raise_while_threads_are_starting.npy $(TESTTMP)/test_nilpy_livecount26
+	@i=1; while [ $$i -le 5 ]; do \
+	  out=$$(timeout 60 $(TESTTMP)/test_nilpy_livecount26 2>&1); rc=$$?; \
+	  if [ "$$rc" != "0" ]; then \
+	    echo "test_nilpy_a_blocking_get_does_not_raise_while_threads_are_starting: run $$i exited $$rc -- a wait was refused while its feeder was alive"; \
+	    printf '%s\n' "$$out"; exit 1; \
+	  fi; \
+	  case "$$out" in *"LIVECOUNT OK"*) ;; *) echo "run $$i:"; printf '%s\n' "$$out"; exit 1;; esac; \
+	  i=$$((i+1)); \
+	done; echo "test_nilpy_a_blocking_get_does_not_raise_while_threads_are_starting: 5/5 clean"
 	# Constructing a class through a DOTTED PACKAGE qualifier --
 	# `urllib.request.Request(url, headers=...)`. It refused with
 	# `expected ')' before ','`, one argument in, which reads as a

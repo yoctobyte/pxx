@@ -252,7 +252,11 @@ begin
     BEFORE it does anything that might block on this thread, and a child that
     has not been scheduled yet has incremented nothing. Counting from the
     parent closes that window; counting from here would leave it open exactly
-    when it matters. See pythreadlive.pas. }
+    when it matters. See pythreadlive.pas.
+    AMENDED 2026-09-15: still the right asymmetry, and it was reasoning only
+    about what the PARENT can see. The Dec below runs on the child, so the
+    parent's Inc has to happen before PalThreadCreate or this decrement can
+    land first and come off another thread's count -- see Thread.start. }
   if not pycallback_is(t.FTarget) then
   begin
     PyThreadLiveDec;
@@ -316,14 +320,35 @@ begin
   if not pycallback_is(FTarget) then
     raise Exception.Create('threading: Thread(target=...) is not callable');
   GetMem(FHandlePtr, SizeOf(TThreadHandle));
+  { THE INC GOES BEFORE THE CREATE, AND IT USED TO GO AFTER IT. That ordering
+    is the bigger half of the intermittent `queue.Queue.get() would block
+    forever: no other thread is alive`, and it needs no interleaving of a
+    read-modify-write to go wrong -- a SHORT BODY is enough. The child can be
+    scheduled, run to the end of ThreadLauncher and call PyThreadLiveDec before
+    the parent reaches its own Inc, and that decrement then comes off whatever
+    OTHER thread's count was standing. With one loader already alive the
+    counter reads 0 for as long as the child body takes, which is milliseconds,
+    not a word-tearing window -- and any wait that samples the predicate in
+    that window raises on a process that is demonstrably alive.
+
+    Incrementing first cannot produce the mirror error: the count is high for
+    the instant between here and a create that fails, and the failure path
+    below puts it back. High is the direction the unit header calls safe.
+
+    ThreadLauncher's own comment argues for counting in the PARENT and it is
+    right about that; it reasons entirely about what the parent can see and
+    never asks what the CHILD can do before the parent's next instruction.
+    Both halves of that asymmetry are kept -- parent counts up, child counts
+    down -- and the up now happens before the child exists. }
+  PyThreadLiveInc;
   if PalThreadCreate(FHandlePtr^, @ThreadLauncher, Pointer(Self), 0) <> 0 then
   begin
+    PyThreadLiveDec;
     FreeMem(FHandlePtr);
     FHandlePtr := nil;
     raise Exception.Create('threading: could not start a new thread');
   end;
   FStarted := True;
-  PyThreadLiveInc;
   if not daemon then LiveAdd(Self);
 end;
 
