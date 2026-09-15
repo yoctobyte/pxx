@@ -236,8 +236,38 @@ verified before and after the run, CWD at the repo root so the builtin lookup
 resolves correctly): the crash reproduces there. So the defect predates the
 NilPy object-lifetime work entirely. Scoped honestly -- that says the COMPILER
 predates it; `lib/` and `builtin/` are today's, and an old compiler against a
-current tree is not a time machine (the demo leg on that compiler does not build
-at all: today's `heapq` does not bind `heapify` for it).
+current tree is not a time machine.
+
+**CORRECTED 2026-09-15 -- the parenthetical that used to close this paragraph
+was WRONG, and it was wrong in the direction that retired a leg we could have
+run.** It read: *"the demo leg on that compiler does not build at all: today's
+`heapq` does not bind `heapify` for it"*. `lib/rtl/mimic_heapq.py:121` defines
+`heapify` perfectly well. The build was not hitting a version mismatch at all --
+an archived binary invoked by absolute path does not resolve `lib/` , so nothing
+that imports a shim binds. `PXX_HOME=/home/neo/frank-user` in front of the
+archived compiler fixes it outright, rc=0 on BOTH archived compilers, and c8 has
+since run the pre-fix demo leg that this sentence had written off.
+
+**The root cause was already measured and banked** -- LOGBOOK.md 2026-09-13, on
+a compiler built into a scratch dir answering `import: no unit named heapq and
+no shim mimic_heapq` on a demo that had just compiled: *"a binary outside the
+repo root finds neither `compiler/builtin` nor the `lib/rtl` shims beside
+itself"*. Same mechanism, found twice, a fortnight apart, and the second finder
+had to rediscover it because the first wrote it in the logbook and not here.
+
+**So Condition One as stated in this ticket is necessary but NOT sufficient.**
+CWD at the repo root fixes the BUILTIN lookup; it does not fix the SHIM lookup
+for a binary invoked by absolute path. The archive pattern wants `PXX_HOME` in
+it. CLAUDE.md documents the builtin half of this and not the shim half, which
+is why both of us had the incomplete version.
+
+**How the wrong diagnosis survived, in c8's own words, because it generalises:**
+two failures shared an error string; the first time they reasoned from the
+message to a plausible cause and stopped. *"One data point let me pick the
+explanation that was interesting; two forced the one that was true."* The tell
+was available without the second failure -- both failures were archive builds
+and both successes were in-tree builds, so the compiler version was never the
+variable.
 
 ## CONFIRMED IN THE REAL APP, NOT ONLY IN FIXTURES
 

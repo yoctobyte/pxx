@@ -1,0 +1,58 @@
+# A call result on the VARIANT carrier is not always OWNED -- some are BORROWED,
+# and moving one instead of retaining it is a use-after-free.
+#
+# THIS FIXTURE EXISTS TO CATCH THE OBVIOUS FIX FOR A DIFFERENT BUG.
+# bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
+# is real: `c = h.give()` where give() returns an attribute retains twice and
+# releases once, +1 per call forever. The arm that does it is an unconditional
+# EmitVariantRetain in IR_VAR_STORE (tk=22), and the two arms directly beneath
+# it guard themselves with IRNodeOwnsManagedStr / IRNodeOwnsManagedObj. So the
+# fix that suggests itself -- and that a probe at the site actively encourages,
+# since IRNodeOwnsFreshCallResult answers True there -- is to copy that guard.
+#
+# IT IS WRONG. Those predicates ask "is this node a fresh call result", which is
+# a claim about NODE SHAPE, not about the callee's convention. On the variant
+# carrier both conventions exist:
+#
+#   OWNED    a NilPy method returning an attribute -- its own `return` took the
+#            same var_store arm and already retained. Caller must MOVE.
+#   BORROWED a Pascal library facade -- list/tuple iteration, open(), pylist
+#            internals. Caller must RETAIN.
+#
+# MEASURED 2026-09-15: with that guard applied, this file dies with
+# `IndexError: tuple index out of range`; at cfee5d6255237332 it prints
+# UNPACK OK. The same guard makes the leak repro segfault, but only after a
+# 12000-iteration warmup, with a corrupted print as the visible symptom, and
+# every row of that repro passes in ISOLATION -- all nine bisected, all rc=0.
+# This file fails in four lines, deterministically, on the first run.
+#
+# WHY A TUPLE UNPACK IN A for-LOOP: it is not an exotic shape chosen to break
+# something. It is what the leak repro's own driver loop is written in, which is
+# why that repro crashed in its driver rather than in any row under test.
+
+def f1(n):
+    return n + 1
+
+def f2(n):
+    return n + 2
+
+rows = [("alpha", f1), ("beta", f2)]
+
+bad = 0
+seen = 0
+for i in range(4000):
+    for nm, fn in rows:
+        s = "%s" % nm
+        seen = seen + 1
+        if s != "alpha":
+            if s != "beta":
+                bad = bad + 1
+
+# The counter is the positive control: every assertion above is "a string still
+# equals itself", which a loop that never runs satisfies perfectly.
+if seen != 8000:
+    print("BORROWVAR CONTROL DEAD seen=%d -- the check below means nothing" % seen)
+elif bad == 0:
+    print("BORROWVAR OK")
+else:
+    print("BORROWVAR CORRUPT %d of %d" % (bad, seen))

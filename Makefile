@@ -34812,6 +34812,18 @@ lib-test: pxx-stable-check
 	# also carries a retain control that must MOVE.
 	./$(COMPILER) test/test_nilpy_a_discarded_method_result_is_released.npy $(TESTTMP)/test_nilpy_discardmeth
 	tools/expect_same.sh test_nilpy_discardmeth "$$($(TESTTMP)/test_nilpy_discardmeth | tail -n 1)" "DISCARDMETH OK"
+	# A BORROWED variant call result must still be retained on copy. This guards
+	# the obvious-but-wrong fix for the variant-carrier leak: the unconditional
+	# EmitVariantRetain looks like it wants the IRNodeOwnsManagedObj guard its
+	# two neighbouring arms carry, and a probe at the site encourages that by
+	# answering True -- but that predicate reads NODE SHAPE, and on the variant
+	# carrier a NilPy method returns OWNED while a Pascal library facade returns
+	# BORROWED. Applying the guard turns an ordinary `for nm, fn in rows:` into
+	# `IndexError: tuple index out of range`. Verified 2026-09-15 to fail on the
+	# guard build 745b82d21c1b and to pass at cfee5d6255237332 and under CPython.
+	# $(COMPILER) rather than $(PXX_STABLE): this is about today's compiler.
+	./$(COMPILER) test/test_nilpy_a_borrowed_variant_result_is_not_moved.npy $(TESTTMP)/test_nilpy_borrowvar
+	tools/expect_same.sh test_nilpy_borrowvar "$$($(TESTTMP)/test_nilpy_borrowvar | tail -n 1)" "BORROWVAR OK"
 	# A conditional expression must evaluate ONLY the selected arm. The arms are
 	# not statements, so an arm's hoisted setup used to land at the enclosing
 	# statement and run either way -- a stray side effect in two shapes and an
