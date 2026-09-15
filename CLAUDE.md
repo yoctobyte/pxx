@@ -187,6 +187,15 @@ OBSERVER IS ALSO IN counts the observer**, and `ps`/`pgrep`/`pkill` are that by
 construction. Kill by explicit PID gathered from `/proc/*/exe`; match on
 something the query itself cannot contain; and prefer the backgrounded job's own
 completion notification, which needs no loop at all.
+**AND THE BRACKET TRICK DOES NOT CLOSE THIS — IT CLOSES THE HALF EVERYONE KNOWS
+ABOUT.** `grep "[w]pbisect.sh"` stops the grep matching its OWN pattern and does
+nothing about the **PARENT SHELL**, whose command line contains the whole
+pipeline including the bracketed spelling. Measured 2026-09-15, a fourth form in
+one night: `ps -eo args | grep -c "[w]pbisect2.sh"` answered **2** for a runner
+that had finished. The workaround is more widely known than the failure it half
+fixes, which is exactly what makes it dangerous — a seat that reaches for it
+believes the hole is closed. `/proc/*/exe` is the instrument that does not
+contain the observer.
 
 **Peer-to-peer messages stay preferred** — bounded, and they carry a fact.
 
@@ -785,6 +794,22 @@ the population your question is about** — a control from the wrong population
 passes and certifies the broken instrument. The same applies
 to any "proof-grade" flag — a flag that cannot come out false is the same animal.
 And a **gate that cannot pass** is not a gate either.
+**AND FOR A NUMERICAL INSTRUMENT THE POPULATION AXIS IS THE INPUT'S MAGNITUDE,
+NOT ITS SHAPE — A VALIDATION AT THE WRONG SCALE PASSES AND CERTIFIES BROKEN
+ARITHMETIC.** Measured 2026-09-15 by the lekkerzeilen seat, in a subsystem this
+rule had never been written about: a least-squares fit fed ABSOLUTE EPOCH
+SECONDS, so `n*Sxx - Sx^2` became the difference of two doubles of order 4e20
+and came back as **65536** — a power of two, i.e. pure float granularity —
+where the true value is 239482. Same thirteen samples: absolute epoch gives
+slope 483.49 ± 158.78, centred gives 132.31 ± 0.32, endpoints 132.36. **The
+data was the best-behaved straight line of the night and the arithmetic turned
+it into noise with an error bar on it.** The smoke test had passed and was
+reported as proof the instrument worked — on synthetic input with `t = 1000000`,
+correct shape, correct slope, recovered 99.86 ± 0.17. Re-run at epoch scale the
+same code reproduces the failure on manufactured data. **Magnitude is precisely
+what a passing test cannot show you**, so validate at the scale the real input
+has, centre or otherwise condition anything that squares a coordinate, and
+treat a variance or determinant that lands on a power of two as the tell.
 
 **AND A CENSUS BUILT ON THE HYPOTHESIS IT IS TESTING WILL AGREE WITH IT.** The
 guard rules above are about what an assertion can OBSERVE; this is about what
