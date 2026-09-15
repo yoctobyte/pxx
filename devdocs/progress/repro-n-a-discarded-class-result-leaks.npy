@@ -1,0 +1,81 @@
+class Q:
+    def __init__(self):
+        self.w = 1.0
+        self.x = 2.0
+        self.y = 3.0
+        self.z = 4.0
+
+
+class H:
+    def __init__(self):
+        self.q = Q()
+
+    def me(self):        # returns SELF (a class)
+        return self
+
+    def give(self):      # returns an EXISTING attribute (a class)
+        return self.q
+
+    def num(self):       # returns an INT -- the discriminator
+        return 7
+
+    def fresh(self):     # returns a FRESH object
+        return Q()
+
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+
+N = 12000
+
+
+def f_base(n):
+    for i in range(n):
+        h = H()
+
+
+def f_num(n):
+    for i in range(n):
+        h = H()
+        h.num()
+
+
+def f_me(n):
+    for i in range(n):
+        h = H()
+        h.me()
+
+
+def f_give(n):
+    for i in range(n):
+        h = H()
+        h.give()
+
+
+def f_fresh(n):
+    for i in range(n):
+        h = H()
+        h.fresh()
+
+
+def f_me_bound(n):
+    for i in range(n):
+        h = H()
+        k = h.me()
+
+
+rows = [("base", f_base), ("num", f_num), ("me", f_me), ("give", f_give),
+        ("fresh", f_fresh), ("me_bound", f_me_bound)]
+for name, fn in rows:
+    fn(N)
+    fn(N)
+base = rss_kb()
+for name, fn in rows:
+    fn(N)
+    now = rss_kb()
+    print("%-10s %d bytes/call" % (name, ((now - base) * 1024) // N))
+    base = now
