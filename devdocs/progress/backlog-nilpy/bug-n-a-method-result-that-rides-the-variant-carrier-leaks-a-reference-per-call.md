@@ -67,6 +67,75 @@ why splitting them into two tickets was itself a symptom of chasing the result.
 
 Next attempt starts there and nowhere near `IRDropManagedResult`.
 
+## LOCALISED 2026-09-15 AT OBJECT GRANULARITY -- and the dispatch story is DEAD
+
+RSS is not the instrument for this and never was. `-dPXX_OBJTRACE` counts
+`A`/`F` lines, so it answers **how many objects were allocated and never
+freed**, which is the actual question. Every row below is 200 iterations at
+`bd35a383c`, 16-byte Leaf:
+
+| shape | objects still live |
+|---|---|
+| `h = H()` alone | 0 |
+| `k = h.g()` | **199** |
+| `h.g()` discarded | **199** |
+| `k = h.g()` then `k.a` read | **199** |
+| `k = h.q` -- the attribute WITHOUT a call | 0 |
+| `via(h)` where `via` does `k = h.g()`, `h` unannotated | **0** |
+
+and, varying only what the callee returns:
+
+| callee body | objects still live |
+|---|---|
+| `return self.q` -- a BORROWED managed field | **199** |
+| `return Leaf()` -- fresh, already owned | 0 |
+| `return self.n` -- an int | 0 |
+| `t = self.q; return t` | **199** |
+| `return None` | 0 |
+
+**What that kills:**
+
+- **It is not the store.** Discarding the result leaks exactly as much as
+  binding it, so nothing at the assignment can be the cause and
+  `IRDropManagedResult` was never the right place either.
+- **It is not the dispatch, and both shapes lower to `IR_VIRTUAL_CALL`
+  anyway** (`PXXDBG=a.ir`, `virtual_call ... tk=22` in both). The predicate
+  this ticket shipped could not have separated them even in principle. The
+  Variant-receiver path is CLEAN; the statically-typed receiver LEAKS. That is
+  the exact opposite of the table the retracted attempt was built on.
+- **It is not the attribute read.** `k = h.q` is clean; the same field reached
+  through a one-line method is not.
+- **Routing through a local changes nothing**, so the old "refuted en route,
+  not about $pyresult versus a local" note is right about the observation and
+  drew the wrong conclusion from it.
+
+**What is left, and it is one sentence:** a NilPy method that RETURNS A
+BORROWED managed value retains it on the way out, and on the direct path
+nobody consumes that +1. Fresh results are already owned and are correct.
+
+## THE FORK THE NEXT ATTEMPT HAS TO SETTLE FIRST -- DO NOT SKIP IT
+
+Two self-consistent ABIs, and the tree currently does neither:
+
+**(a) the callee returns BORROWED.** Drop the retain when the returned value
+is a borrowed read; the caller's existing copy-retain is then the only one.
+Smaller diff. Risk: the value is kept alive only by the receiver, so any
+caller that drops the receiver before copying is a use-after-free.
+
+**(b) the callee returns OWNED.** Keep the retain and make the caller MOVE.
+This is what the retracted attempt tried, and the reason it exploded is
+recorded above: the VARIANT path is already balanced -- something in the
+`PyMakeDynMethCall` wrapper consumes the +1 -- so moving at a site both paths
+share consumed it twice.
+
+**Answer this before writing any code: what consumes the +1 on the Variant
+path?** Find that and the fork answers itself; guess and this becomes the
+fifth wrong predicate. The acceptance tests already exist -- the wired
+`test_nilpy_a_method_result_does_not_free_the_receivers_attribute.npy` for the
+free-too-early direction, the exempted leak fixture for the leak direction --
+and **neither is sufficient alone; run the objtrace object count too**, which
+is the only one of the three that saw this.
+
 ## THE INSTRUMENT FAILURE, AND IT IS THE PART TO KEEP
 
 **RSS CANNOT TELL A REPAIRED LEAK FROM A PREMATURE FREE.** Both hand memory
