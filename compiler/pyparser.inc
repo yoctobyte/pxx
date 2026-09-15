@@ -36628,6 +36628,79 @@ begin
     fldRec := UFldRec_[fi];
 end;
 
+function PyRetFieldChainType(scanFrom, scanTo, chainFrom, chainEnd: Integer;
+                             var fldRec: Integer; var recvCi: Integer): TTypeKind;
+{ The type of `recv.a.b.c` where `recv` is a local of this body and the whole
+  return is that chain — the N-HOP generalisation of PyRetFieldType, which
+  handled exactly one hop (`e = j + 4`).
+
+  `def f(): h = Holder(); return h.c.v` was typed tyClass (Cell), **the type of
+  the INTERMEDIATE hop**, while the value returned is the leaf field's own. The
+  one-hop arm's gate is an equality on the span, so two hops did not match it
+  and fell through to the expression chase — which is the exact failure that
+  arm's own header warns about, one hop further along.
+  bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last
+
+  **IT IS INVISIBLE WHENEVER THE LEAF IS ITSELF A CLASS**, because then the
+  wrong answer and the right one coincide: measured, `h.c.v` with an int leaf
+  and with a str leaf both SEGV, and with a class leaf it is clean. The
+  shapes that pass are not a sample, they are the ones anybody would write to
+  check it.
+
+  Token-only, for the reason PyRetFieldType gives: the two passes must agree.
+  `recvCi` is reported back so the caller can tell "receiver is not a local
+  here" (leave it alone) from "receiver known, chain not resolvable" — the
+  second must NOT fall through, because the chase then claims the receiver's
+  class, and claiming the class is the bug. Same contract as PyRetMethodType. }
+var ci, fi, k: Integer; tk: TTypeKind;
+begin
+  PyRetFieldChainType := tyUnknown;
+  fldRec := REC_NONE;
+  recvCi := -1;
+  if (chainEnd - chainFrom) < 3 then Exit;          { need at least `a . b` }
+  if Tokens[chainFrom].Kind <> tkIdent then Exit;
+  ci := PyRetRecvClass(scanFrom, scanTo, GetTokenStr(chainFrom));
+  if ci < 0 then Exit;
+  recvCi := ci;
+  tk := tyUnknown;
+  k := chainFrom + 1;
+  while k + 1 < chainEnd + 1 do
+  begin
+    if (Tokens[k].Kind <> tkDot) or (Tokens[k + 1].Kind <> tkIdent) then
+    begin
+      PyRetFieldChainType := tyUnknown; fldRec := REC_NONE; Exit;
+    end;
+    if ci < 0 then
+    begin
+      { a hop THROUGH a non-class: the chain cannot be walked further and the
+        honest answer is "unresolvable", not the last class we saw. }
+      PyRetFieldChainType := tyUnknown; fldRec := REC_NONE; Exit;
+    end;
+    fi := FindUField(ci, GetTokenStr(k + 1));
+    if fi < 0 then
+    begin
+      PyRetFieldChainType := tyUnknown; fldRec := REC_NONE; Exit;
+    end;
+    tk := IntToTypeKind(UFldTk[fi]);
+    if (tk = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
+    begin
+      fldRec := UFldRec_[fi];
+      ci := UFldRec_[fi] - REC_UCLASS_BASE;
+    end
+    else
+    begin
+      fldRec := REC_NONE;
+      ci := -1;
+    end;
+    k := k + 2;
+  end;
+  if k <> chainEnd + 1 then
+  begin
+    PyRetFieldChainType := tyUnknown; fldRec := REC_NONE; Exit;
+  end;
+  PyRetFieldChainType := tk;
+end;
+
 function PyRetMethodType(scanFrom, scanTo: Integer; const recvNm, mthNm: AnsiString;
                          var mthRec: Integer; var recvCi: Integer): TTypeKind;
 { The type of `recv.mth(...)` where `recv` is a local of this body — the METHOD
@@ -37139,6 +37212,43 @@ begin
             PyInferLastCi := rec2 - REC_UCLASS_BASE
           else
             PyInferLastCi := -1;
+        end;
+      end;
+      { `return q.a.b` — the N-HOP sibling of the arm above, and the third time
+        this one rule has been implemented one shape at a time. The gate above
+        is an EQUALITY on the span (`e = j + 4`), so it matches exactly one hop;
+        two hops fell through to the chase below, which types the RECEIVER —
+        here, the hop before last. Measured: `return h.c.v` SEGVs with an int
+        leaf and with a str leaf, and is CLEAN with a class leaf, because then
+        the wrong answer and the right one coincide.
+
+        `t = h.c.v; return t` was always correct, and so is `return h.c.v + 0`
+        and `h: Holder = ...` — which is what identifies this as the return-type
+        scan and not the field walk.
+        bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last }
+      if (e >= j + 6) and (Tokens[j + 1].Kind = tkIdent) and
+         (Tokens[j + 2].Kind = tkDot) and (Tokens[j + 3].Kind = tkIdent) and
+         (Tokens[j + 4].Kind = tkDot) then
+      begin
+        rec2 := REC_NONE;
+        recvCi2 := -1;
+        t2 := PyRetFieldChainType(bodyScanStart, j, j + 1, e - 1, rec2, recvCi2);
+        if t2 <> tyUnknown then
+        begin
+          cur := t2;
+          if (t2 = tyClass) and (rec2 >= REC_UCLASS_BASE) then
+            PyInferLastCi := rec2 - REC_UCLASS_BASE
+          else
+            PyInferLastCi := -1;
+        end
+        else if recvCi2 >= 0 then
+        begin
+          { receiver IS a local here and the chain did not resolve. tyVariant is
+            the honest answer and the one the two-statement spelling already
+            gives; falling through would let the chase claim a class. Same
+            reasoning, verbatim, as the method arm below. }
+          cur := tyVariant;
+          PyInferLastCi := -1;
         end;
       end;
       { `return q.m(...)` — the METHOD sibling of the arm above, and the shape

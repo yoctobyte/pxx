@@ -2431,6 +2431,14 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_strmul26 | diff -u test/test_nilpy_str_mul_str_undefined.expected -
 	./$(COMPILER) test/test_nilpy_parent_call_after_instantiation.npy $(TESTTMP)/test_nilpy_parentcall26
 	$(TESTTMP)/test_nilpy_parentcall26 | diff -u test/test_nilpy_parent_call_after_instantiation.expected -
+	@# the THIRD shape of the same rule: a return that reads THROUGH something
+	@# must be typed by the LAST hop. One-hop field, then `q.m(...)`, then this --
+	@# `return h.c.v` fell through to the chase and declared the INTERMEDIATE's
+	@# class while returning an int, so print(f()) read a small integer as an
+	@# object pointer. SEGV, no diagnostic, and it is CLEAN whenever the leaf is
+	@# itself a class, which is what let it survive.
+	./$(COMPILER) test/test_nilpy_a_def_returning_a_multi_hop_attribute_chain_is_typed_by_its_last_hop.npy $(TESTTMP)/test_nilpy_chainret26
+	tools/expect_same.sh test_nilpy_chainret "$$($(TESTTMP)/test_nilpy_chainret26 | tail -n 1)" "CHAINRET OK"
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy $(TESTTMP)/test_nilpy_class_attr_hoist_leak26
 	$(TESTTMP)/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
 	# calling a NON-CALLABLE segfaulted instead of raising a catchable TypeError.

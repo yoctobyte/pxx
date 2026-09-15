@@ -1,0 +1,213 @@
+# `def f(): h = Holder(); return h.c.v` must be typed by the LAST hop (`v`), not
+# by the hop before it (`c`).
+#
+# Before the fix this SEGFAULTED. PyInferDefRetTypeScanInner had an arm for
+# `return q.n` gated on an EQUALITY, `e = j + 4` -- exactly one hop -- so two
+# hops matched nothing and fell through to the expression chase, which types the
+# RECEIVER. The def then declared a tyClass result while returning an int, and
+# `print(f())` read a small integer as an object pointer.
+#
+# THE SHAPES THAT PASS ARE NOT A SAMPLE, THEY ARE WHAT ANYBODY WOULD WRITE TO
+# CHECK IT. Measured 2026-09-15 on the unfixed compiler, every one of these was
+# GREEN while the two-hop int case crashed:
+#
+#     h: Holder = Holder(); return h.c.v      OK   (the annotation retypes it)
+#     x = h.c; return x.v                     OK   (one hop per statement)
+#     r = h.c.v; return r                     OK   (the local carries the type)
+#     return h.c.v + 0                        OK   (the expression retypes it)
+#     print(h.c.v); return h.c.v              OK   (the earlier read rescues it)
+#     return self.c.v  inside a method        OK
+#     return xs[0].v / return d["k"].v        OK   (containers take another path)
+#     module scope                            OK   (no $pyresult at all)
+#
+# So a fixture written the ordinary way certifies the bug, and the `print then
+# return` row is the sharpest of them: adding a diagnostic print MAKES IT WORK,
+# which is the worst possible property for something you are trying to debug.
+#
+# AND THE LEAF'S TYPE DECIDES WHETHER IT IS VISIBLE AT ALL. With a CLASS leaf
+# the wrong answer (the intermediate's tyClass) and the right one coincide and
+# nothing goes wrong. Only a leaf of some other kind separates them, so `cls`
+# below is the row that must NOT be the only one -- it passes on the broken
+# compiler.
+
+class Leaf:
+    def __init__(self):
+        self.n = 7
+
+class Cell:
+    def __init__(self, v):
+        self.v = v
+    def get(self):
+        return self.v
+
+class Holder:
+    def __init__(self, v):
+        self.c = Cell(v)
+
+class Deep:
+    def __init__(self, v):
+        self.h = Holder(v)
+
+ok = True
+
+def check(name, got, want):
+    global ok
+    if got == want:
+        print("%s OK" % name)
+    else:
+        print("%s WRONG got %s want %s" % (name, got, want))
+        ok = False
+
+# --- the defect: two hops, non-class leaf, as the whole return expression
+def two_int():
+    h = Holder(20)
+    return h.c.v
+
+def two_str():
+    h = Holder("hi")
+    return h.c.v
+
+def two_float():
+    h = Holder(2.5)
+    return h.c.v
+
+def two_list():
+    h = Holder([1, 2])
+    return h.c.v
+
+check("two_int", "%s" % two_int(), "20")
+check("two_str", "%s" % two_str(), "hi")
+check("two_float", "%s" % two_float(), "2.5")
+check("two_list", "%s" % two_list(), "[1, 2]")
+
+# --- three hops: the same rule one further along, which is how this defect got
+# here in the first place (a one-hop arm, then a method arm, then nothing).
+def three_int():
+    d = Deep(20)
+    return d.h.c.v
+
+check("three_int", "%s" % three_int(), "20")
+
+# --- four hops, and a chain whose walk must STOP at a non-class hop and hand
+# back a variant rather than the last class it happened to see. Both exercise
+# the walk's termination, which is the half a 2-hop row cannot reach.
+class A:
+    def __init__(self):
+        self.n = 9
+
+class B:
+    def __init__(self):
+        self.a = A()
+
+class C4:
+    def __init__(self):
+        self.b = B()
+
+class D4:
+    def __init__(self):
+        self.c = C4()
+
+def four_hops():
+    d = D4()
+    return d.c.b.a.n
+
+def through_then_method():
+    h = Holder("abc")
+    return h.c.v.upper()
+
+def chain_then_method():
+    h = Holder(20)
+    return h.c.get()
+
+check("four_hops", "%s" % four_hops(), "9")
+check("through_then_method", through_then_method(), "ABC")
+check("chain_then_method", "%s" % chain_then_method(), "20")
+
+# --- a CLASS leaf: the row that passes on the BROKEN compiler, kept so nobody
+# reduces this fixture to it.
+def two_cls():
+    class_holder = Holder(Leaf())
+    return class_holder.c.v
+
+check("cls_leaf", "%s" % two_cls().n, "7")
+
+# --- the spellings that ALREADY worked. They are here so a future change cannot
+# repair the two-hop case by breaking one of them -- the same reason the sibling
+# augmented-assignment fixture keeps its storage-class factorial.
+def split_hops():
+    h = Holder(20)
+    x = h.c
+    return x.v
+
+def via_local():
+    h = Holder(20)
+    r = h.c.v
+    return r
+
+def in_expr():
+    h = Holder(20)
+    return h.c.v + 0
+
+def annotated():
+    h: Holder = Holder(20)
+    return h.c.v
+
+def print_then_return():
+    h = Holder(20)
+    q = h.c.v
+    return h.c.v
+
+class Method:
+    def __init__(self):
+        self.c = Cell(20)
+    def get(self):
+        return self.c.v
+
+def from_list():
+    xs = [Cell(20)]
+    return xs[0].v
+
+def from_dict():
+    d = {"k": Cell(20)}
+    return d["k"].v
+
+def annotated_ret() -> int:
+    h = Holder(20)
+    return h.c.v
+
+check("split_hops", "%s" % split_hops(), "20")
+check("via_local", "%s" % via_local(), "20")
+check("in_expr", "%s" % in_expr(), "20")
+check("annotated", "%s" % annotated(), "20")
+check("print_then_return", "%s" % print_then_return(), "20")
+check("method_self", "%s" % Method().get(), "20")
+check("from_list", "%s" % from_list(), "20")
+check("from_dict", "%s" % from_dict(), "20")
+check("annotated_ret", "%s" % annotated_ret(), "20")
+
+# --- the receiver is NOT a local of this body: must keep its own route, and the
+# chain arm must not claim it.
+G = Holder(20)
+
+def from_global():
+    return G.c.v
+
+check("from_global", "%s" % from_global(), "20")
+
+def from_param(h):
+    return h.c.v
+
+check("from_param", "%s" % from_param(Holder(20)), "20")
+
+# --- the chain that does NOT resolve: a hop through a non-class. The honest
+# answer is a variant, never the last class the walk happened to see.
+def through_str():
+    h = Holder("abc")
+    return h.c.v
+
+check("through_str", "%s" % through_str(), "abc")
+
+if ok:
+    print("CHAINRET OK")
+else:
+    print("CHAINRET FAIL")

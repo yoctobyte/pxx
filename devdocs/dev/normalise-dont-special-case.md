@@ -299,3 +299,75 @@ know what you are looking for.
 
 See also: `differential-probes.md` (the oracles that make a silent sibling
 visible at all) and `debugging-playbook.md` (measure, do not reason).
+
+---
+
+## The double case has an N-case, and N is where the grep is not the instrument
+
+Everything above is about finding a SIBLING: another site spelled like the one
+you fixed. That is the N=2 shape and the grep is the right tool for it.
+
+**At N=12 the grep does not fire, because the other eleven members are not
+sites — they are VALUES the one site never considered.** Two instances, same
+night, 2026-09-15, Track N, different files and different mechanisms:
+
+**The augmented-assignment marker.** `p += x` on a variant target dispatched
+`__add__` instead of `__iadd__`. Fixed, fixture written — four classes, a
+factorial over the receiver's storage class, a must-not-mutate control. Eleven
+sibling operators kept the identical defect. There was no second site to grep
+for: one site, one line, `if augTk = tkPlus and ...`, and a marker constant
+named `PY_BINOP_AUGADD` after the single member it served.
+
+**The return-type scan.** `def f(): h = Holder(); return h.c.v` declared the
+INTERMEDIATE hop's class as its result type and segfaulted the caller. The
+scan already had an arm for `return q.n` gated on `e = j + 4` — an EQUALITY,
+so exactly one hop — and an arm for `return q.m(...)`. The one-hop arm's own
+header warns about the chase typing the receiver, and the method arm's header
+says in so many words *"Same defect, one token further along"*. **Two authors
+each noticed they were adding a shape and neither asked how many shapes there
+were.** A fourth, `return mk().v`, is still open.
+
+### The tell is a token, and it is in the source
+
+    if (augTk = tkPlus) and ...            <- one member of a set, named
+    if (e = j + 4) and ...                 <- an EQUALITY on a span that varies
+
+**A conjunct pinning ONE member of the set the rule quantifies over.** An
+equality where the quantity can legitimately take other values. Neither needs a
+test run to spot, and neither looks wrong in review: both read as precise.
+
+### The question, and it is not "did I test this"
+
+The augmented fixture answers yes to "is this tested" — its storage-class
+factorial is a genuinely good control that stops a future change repairing the
+parameter by breaking the global. It demonstrates rigour **on the axis that was
+already fixed**, which is exactly why it reads as coverage.
+
+Ask instead: **"what is the SET this rule quantifies over, and how many members
+does my fixture name?"** One of twelve is the answer that should stop you, and
+it is available before any code is written.
+
+### Generalising is also the cheaper direction
+
+Twelve operators through one marker: one predicate and five four-line runtime
+functions, each CALLING its plain twin rather than re-implementing it. Twelve
+separate repairs, one per bug report, would have cost twelve fixtures and
+produced eleven more chances to fix one arm and stop — which is, precisely,
+what the return-type scan did three times.
+
+**Enumerating the set is not a promise to clear it in one commit.** Seven of the
+twelve operators landed and five are blocked a layer down; three of the four
+return shapes landed and one is open. What enumeration buys is being able to say
+which members are fixed, which are blocked and on what — instead of learning the
+remainder from a bug report a month later.
+
+Worked at length in `debugging-playbook.md`, "A ONE-ARM FIX TO AN N-ARM RULE
+LEAVES N−1 ARMS THAT THE FIXTURE YOU JUST WROTE CERTIFIES".
+
+**Not promoted to CLAUDE.md, and the test it failed is worth naming** since an
+author reads "not promoted" as "not valued". Recurrence is the bar, and both
+instances are Track N, one night, one seat — and the second was found while
+probing the first, which makes it weaker evidence of independent recurrence than
+the count suggests. CLAUDE.md already points at THIS file for the rule, so the
+N-case belongs here as an extension rather than as a new startup-cost paragraph.
+A third instance in a different lane is what would change that.

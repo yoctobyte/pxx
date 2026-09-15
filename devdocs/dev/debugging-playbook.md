@@ -27116,3 +27116,41 @@ Related, and this is the two-member case of the same thing:
 Grep for the sibling before closing."* The rule holds at N=2 and the reason it
 is easy to skip at N=12 is that twelve arms do not LOOK like a double case; they
 look like a family, and a family looks like something you work through.
+
+### SECOND INSTANCE, SAME NIGHT, DIFFERENT SUBSYSTEM — AND THE GREP DOES NOT FIRE
+
+`def f(): h = Holder(); return h.c.v` SEGFAULTED. `PyInferDefRetTypeScanInner`
+already had an arm for `return q.n` gated on `e = j + 4` — an **equality**, so
+exactly one hop — and an arm for `return q.m(...)`. Two hops matched neither and
+fell through to the expression chase, which types the RECEIVER, so the def
+declared the INTERMEDIATE hop's class while returning an int.
+
+**Both existing arms carry a comment warning about this exact failure.** The
+one-hop arm's header says the chase answers the receiver's class *"and nothing
+downstream can tell"*; the method arm's says *"Same defect, one token further
+along"*. Two authors each noticed they were adding a shape, each wrote down why
+it was the same bug, and neither asked how many shapes there were. A fourth,
+`return mk().v`, is still open.
+
+**This is why "grep for the sibling" is not sufficient at N > 2.** There was no
+second site spelled alike — one site, one equality, and the other members of the
+set are VALUES that site never considered. The tell is a token:
+
+    if (augTk = tkPlus) and ...      <- one member of the set, named
+    if (e = j + 4) and ...           <- an equality on a quantity that varies
+
+A conjunct pinning one member, or an equality where the value legitimately
+varies. Neither looks wrong in review; both read as precise.
+
+**AND THE LEAF'S TYPE DECIDED WHETHER IT WAS VISIBLE**, which is the collision
+rule wearing an unusual default: with a CLASS leaf the wrong answer (the
+intermediate's `tyClass`) and the right one COINCIDE, so `h.c.v` is clean. Only
+an int, str, float or list leaf separates them. The usual list of colliding
+defaults is zeros, empties, `nil` and pointer widths — here the default was
+*another plausible class*, which no such list would have caught.
+
+The `print then return` row deserves its own line: on the unfixed compiler,
+`print(h.c.v)` BEFORE `return h.c.v` makes the return work. **Adding a
+diagnostic print fixes it** — the worst property a defect can have, and a
+fixture written the ordinary way (print the value, then assert it) cannot see
+this class at all.
