@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `f7a745e876ef` on borg, 2026-09-15T05:09:31Z (18m ago).**
+**Newest full tier in the fleet: `f7a745e876ef` on borg, 2026-09-15T05:09:31Z (20m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `f7a745e876ef` | RED | 18m | — (newest) |
+| borg | `f7a745e876ef` | RED | 20m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -36,4 +36,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy** — test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh (borg): bad `e977f78c3199`, last good `19bcd974455c`, 1 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `f7a745e876ef`, last good `cfe21f98ea32`, 2 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `e873776e4482`, last good `cfe21f98ea32`, 1 commit(s) in range
