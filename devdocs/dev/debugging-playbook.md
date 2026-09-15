@@ -26720,6 +26720,13 @@ sent the next person to the wrong function.
 attributed to the region open when it fires, and so is a free. Net = allocs −
 frees per region. Over 26153 steps:
 
+**"Per step" below means per VESSEL-step, not per simulation tick** — the step
+marker sits in a function with two call sites, which was found only after these
+tables were published; see "VERIFY WHAT YOUR STEP MARKER COUNTS" below. It does
+not affect anything here, because every comparison in this section is between
+two rows measured by the SAME counter. It would affect any conversion to a
+per-second rate, and this section makes none.
+
 | region | allocs | frees | net | per step |
 |---|---|---|---|---|
 | contrib | 7778892 | 6606889 | +1172003 | 297.4 allocs |
@@ -26734,12 +26741,23 @@ objects per step.
 **Both halves are artefacts.** pxx releases at SCOPE EXIT, and the enclosing
 scope closes after the inner regions do — so a free is attributed to whatever
 region happened to be open when the release FIRED, which for a deferred release
-is systematically not the region that allocated. A birthplace census over the
-same stream, same binary, attributing each still-live address to the region that
-ALLOCATED it, put `body` at 122 objects for the entire run — 0.00 per step,
-against a net of −261288.
+is systematically not the region that allocated. A birthplace census over a SECOND RUN of the
+same binary, attributing each still-live address to the region that ALLOCATED
+it, put `body` at 122 objects for the entire run — 0.00 per step, against a net
+of −261288.
 
-**Same stream, same run, opposite reading of the same region.**
+**Two readings of the same region, opposite in sign.**
+
+**THE TWO RUNS ARE NOT THE SAME STREAM, and this section said they were for
+about an hour.** 26153 steps for the net-per-region table, 25271 for the
+birthplace census — comparable STATISTICALLY, not address-for-address. The
+author of the measurement caught the overclaim in review and it is worth keeping
+as a caption of its own: "same stream" promises a controlled comparison, and
+what was run was two samples of one population. **The conclusion is untouched —
+−261288 against 122 is three orders of magnitude and no sampling difference
+reaches that** — but a sentence that promises a control you did not run is the
+kind that survives into someone else's argument, where the margin may not be
+three orders of magnitude.
 
 **THE GENERAL FORM.** Wherever frees are DEFERRED relative to allocations —
 scope-exit refcounting, arena reset, a drain at the end of a frame, a GC pass —
@@ -26793,3 +26811,211 @@ independent second subsystem, not on merit, and running the two together is how
 it grew to 72KB the first time. The measurement is banked here and credited to
 the lekkerzeilen seat; promote it if a region/arena profiler in an unrelated
 lane reads negative for the same reason.
+
+## VERIFY WHAT YOUR STEP MARKER COUNTS — A PER-STEP NORMALISATION BECOMES PER-SOMETHING-ELSE THE MOMENT THE STEPPED FUNCTION HAS A SECOND CALL SITE
+
+Measured 2026-09-15 by the lekkerzeilen seat, and it arrives as a WITHDRAWAL of
+a more exciting claim, which is the more useful story.
+
+`MARK sit-in` sits unconditionally at the top of `Vessel.step` — one marker per
+invocation, and that part was never in doubt. But `Vessel.step` has **two** call
+sites:
+
+```
+app.py:4117      self.boat.step(SIM_DT, self.env)     the player
+traffic.py:646   boat.step(dt, env)                   every traffic craft
+```
+
+Each `Craft` holds a Vessel and steps it. So the counter measures
+**VESSEL-steps, not SIMULATION steps**, and every figure normalised by it —
+"44.2 objects per step", "1632 bytes/step", "297.4 allocs/step" — is per
+vessel-step. **The arithmetic was right and the LABEL was wrong**, which is the
+version that survives review, because nothing in the numbers looks off.
+
+**What this costs and what it does not.** Every comparison INSIDE the instrument
+is untouched, because both sides used the same counter: region against region,
+endpoint against difference, the negative regions collapsing to zero. What
+breaks is every conversion OUT of it — any per-step figure turned into a
+per-second one, which now needs a craft-per-tick count nobody has measured.
+
+**So ask what the marked function's callers are before you name the unit**, and
+prefer a normalisation whose denominator you can point at. A ratio taken within
+one counter needs no such proof and is why most of that night's work survived
+its own label being wrong.
+
+### The claim this replaces, and why it was wrong
+
+The first version of this section said something much better: that a
+fixed-timestep loop with an accumulator clamp (`frame = min(now - previous,
+MAX_FRAME)`) feeds the simulation less than real time under instrumentation, so
+the sim runs in slow motion and every per-SECOND figure under-reports by the
+traced/untraced ratio — **2.75x here, in the direction that flatters the
+finding.** It generalises to most game loops. It explained the numbers in hand.
+It was reasoned from reading `SIM_HZ = 120.0` and the clamp, and **nobody had
+put a clock on it.**
+
+Clocked — marker-only build, no objtrace, two fixed wall-clock runs differenced
+so the load phase cancels — it is false:
+
+| | steps/s |
+|---|---|
+| untraced (3998 markers / 130 s vs 8948 / 250 s) | **41.25** |
+| traced, markcount2 | 43.6 |
+| traced, markleak2 | 46.3 |
+
+**Untraced is not faster. It is fractionally SLOWER.** objtrace costs this
+simulation nothing, there is no slow motion, and the mechanism was a good story
+fitted to the data.
+
+**The instructive part is the sequence, not the error.** The claim's author
+flagged that a clock was needed, agreed it was needed — and sent the conclusion
+in the same message, where it was written up under its own heading before either
+party had measured it. **An explanation that accounts for every number you have
+is the easiest thing in the world to believe and is not evidence**; a mechanism
+inferred from reading source is a HYPOTHESIS however well it fits, and the
+interval between "this needs a clock" and "here is the conclusion" is where it
+stops being labelled as one.
+
+## A REGISTERED PREDICTION THAT LOSES BEATS AN UNREGISTERED ONE THAT WINS
+
+Measured 2026-09-15 by the lekkerzeilen seat. Three predictions written down and
+timestamped BEFORE a two-checkpoint run, then all three refuted:
+
+1. *contrib's delta will fall materially below its endpoint, because part of it
+   is retention.* **Wrong** — 1632 against an endpoint of 1672, 2.4% below. Not
+   a retained set; linear.
+2. *If contrib is the whole leak it lands at 1095 ± 150 bytes/step.* **Wrong**,
+   and outside the author's own stated interval: 1632.
+3. *`outside`'s delta will be near zero, because world-load residue does not
+   grow.* **Wrong, and this one is the finding**: 155 bytes/step, 1.62
+   objects/step, linear. A real leak source OUTSIDE the marked regions, ~9% of
+   the total, invisible to the existing markers because they do not cover it.
+
+Prediction 3 is why this earns a section. *"Near zero because residue does not
+grow"* is exactly the kind of assumption that never gets written down and
+therefore never gets refuted — and writing it down is what turned it into a
+measured 9% of the leak sitting in unmarked code.
+
+**AND THE SECOND CHECKPOINT DID NOT IMPROVE THE NUMBER ANYONE CARED ABOUT — IT
+SAID WHICH NUMBERS WERE ALLOWED TO BE TRUSTED.** This is the honest sales pitch
+and it is weaker-sounding than the usual one, which is why it is worth writing
+down. The endpoint predicted 1672 for `contrib`; the difference gave 1632.
+**Differencing alone would have produced the same answer.** Taking the endpoint
+alone would have got `contrib` right, `outside` wrong, and — the part that
+matters — **no way to tell which was which.**
+
+So resist the reading that the endpoint census "was fine after all" because its
+headline row survived. It was correct about one region and wrong about another
+in the same table, and a single endpoint cannot partition itself into the rows
+it got right and the rows it did not. **The differential is not a better
+estimator; it is the thing that licenses the estimator you already had.** The
+measurement's own author wrote the generalising version first — *"contrib is
+linear, so the endpoint census was already telling the truth"* — and withdrew it
+on exactly this ground: a row promoted to a method.
+
+### Name your own instrument as a suspect before you name the subject
+
+The same run left an accounting residual between never-freed object bytes and
+measured arena growth. Three candidates were offered and none yet separated: the
+traced and untraced builds may leak at different rates (different binaries, and
+the comparison crosses between them); the traced object SIZE may not equal what
+the arena grows by; or — the author's own least-favourite — **the arena sampler
+counts only rw-p mappings of 128 MB or more, so anything allocated in a smaller
+mapping is invisible to every arena figure it has ever produced.**
+
+**Naming your own instrument as the leading suspect for a discrepancy you could
+have blamed on the subject is the behaviour this playbook exists to encourage.**
+
+**The size of that residual is deliberately not quoted here**, because both
+published values for it depended on a per-second conversion that the step-marker
+finding above invalidated — it was stated as 1.68x with the leak accounting
+exceeding the observable, and inverts to 0.58x at the measured rate. **A ratio
+that moves by a factor of three when one label is corrected is not a quantity to
+put in a playbook**; what belongs here is the disposition toward it. The fix is
+the right one regardless: sample the arena AND count the markers **in the same
+process**, so both rates come off one run against one counter and the ratio is
+valid whatever a "step" turns out to be.
+
+## DELETE A VALIDATION FIXTURE BEFORE THE REAL RUN, BECAUSE ITS GROUND TRUTH IS YOUR EXPECTED ANSWER
+
+Measured 2026-09-15 by the lekkerzeilen seat, which validated a replacement
+analyser on four synthetic series with four known slopes (1632, 1095, 1200, 1300
+bytes/step) — then **deleted the fixtures immediately, rather than leaving them
+in the scratchpad under the filenames the real run writes to.**
+
+That is CLAUDE.md's "a measurement can create the condition it is testing for"
+arriving in its worst form. Ordinarily the contaminant is some unrelated earlier
+step and the result is merely wrong. Here the contaminant would be **a file
+whose contents were chosen to produce a specific answer you typed in an hour
+ago** — so a validated analyser pointed at leftover test data returns exactly the
+numbers you expect, from an instrument you have just proven correct, with no
+disagreement anywhere to notice. **The better your validation, the more
+convincing the contaminated run.**
+
+The cheap discipline is the one taken: a validation fixture is deleted by the
+step that validates, never merely "not used again", and it never shares a
+filename with a production artefact.
+
+**NONE OF THESE THREE IS PROMOTED TO CLAUDE.md**, and the reason is that file's
+own rule rather than any judgement about merit: promotion needs a second
+INDEPENDENT subsystem, and a profiler plus its own validation harness are not
+two. Promote one if it recurs in a lane with no connection to this one.
+
+## AN EXCULPATION WRITTEN FROM THE REPRO'S SHAPE INSTEAD OF THE MECHANISM'S STATEMENT EXCLUDES THE WRONG POPULATION — AND IT READS AS RIGOUR
+
+Measured 2026-09-15. A compiler defect — **a method returning an ALREADY-OWNED
+MANAGED VALUE leaks a reference per call** — was excluded from a demo by census.
+The census was run four times, refined against a corrected predicate, with
+receivers resolved at their assignment rather than matched by name. It was
+careful work and its answer was accurate.
+
+It searched for **getters**: methods returning `self.<attribute>`. Every
+hot-path getter in the demo returns an unboxed float, which leaks nothing, so
+the family was written off — in a ticket, in a resolution, and in a commit
+message, all of which shipped.
+
+**The A/B then measured the demo's leak at 131.4 kB/s before the fix and 11.5
+after. A 91% reduction, two interleaved rounds, ~240 standard errors.** The
+objects were Vec3s coming out of methods that are not getters at all.
+
+**THE SHAPE OF THE FIXTURE HAD BECOME THE DEFINITION OF THE DEFECT.** "A getter"
+was never the mechanism; it was the shape of the repro that demonstrated the
+mechanism. A reader generalises from the shape because the shape is CONCRETE and
+the mechanism is a sentence — and once "getter" is the working vocabulary, a
+census over getters feels like a census over the defect. Both seats involved used
+that vocabulary; the ticket's own head block had spent the evening calling the
+leaking shape "a getter on a short-lived receiver" and renamed it twice before
+landing on the mechanism.
+
+**An exculpation is a claim about the MECHANISM'S REACH.** So it must be written
+from the mechanism's own one-sentence statement, never from the example.
+
+**The discharge is cheap and it is a rule about ORDER:** write down the defect in
+one sentence with no reference to the repro, then derive the search predicate
+from THAT sentence, then go look at the repro to check the predicate would have
+caught it. Deriving the predicate while the repro is in front of you produces a
+predicate shaped like the repro, every time.
+
+**And this failure wears the clothes of diligence.** Four passes, a corrected
+predicate, resolved receivers — every one of those refinements made the census
+more accurate about getters and none of them could widen it, because the scope
+error is upstream of everything being refined. **A census cannot discover that it
+is asking too narrow a question, and the more rigorously it is executed the more
+authoritative its answer sounds.** That is why this belongs beside the
+question-begging-census entry rather than inside it: there, the FILTER restates
+the hypothesis; here, the filter is honest and the DEFINITION is too small.
+
+**Three instances in one night by one seat**, on three unrelated subjects —
+2-vs-28 on bare bodies, 1-vs-3 on receiver binding, and this one — which is what
+makes it a pattern and not a slip. The first two did not teach the general form,
+because each was corrected as a fact about its own subject rather than as an
+instance of validating-against-the-example.
+
+**Corollary, and it is what makes the cost asymmetric: an exculpation that is
+wrong deletes the finding, where a false accusation merely wastes a bisect.**
+"Not X" closes a line of inquiry and nobody re-opens it, so it needs the
+STRONGER evidence of the two — and here the strongest available evidence was one
+A/B that nobody had run yet, against a census that had been run four times.
+**Prefer the measurement that could refute the exculpation over the census that
+supports it**, and when only the census is available, say in the exculpation
+which measurement would settle it.

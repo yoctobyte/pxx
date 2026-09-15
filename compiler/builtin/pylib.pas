@@ -6471,6 +6471,26 @@ begin
   Result := PyUserObjArith(pa, pb, a, b, dunder, rdunder, res);
 end;
 
+{ `p += x` where p is a VARIANT holding a user object: the IN-PLACE dunder, on
+  the LEFT operand only. Deliberately NOT PyVarUserArith, which also tries the
+  reflected dunder on the right operand -- there is no such thing as a reflected
+  in-place operation. Python's rule is "__iadd__ on the left, else fall back to
+  the binary form and REBIND", and the fallback is the caller's job.
+
+  Answers False when the left operand is not a user object, which is what keeps
+  `xs += ys` on a list out of here: PyVarUserObj excludes TPyList/TPyDict/
+  TPyBytes, so the list arm above it still owns that case.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function PyVarUserAug(const a, b: Variant; const idunder: AnsiString;
+                      var res: Variant): Boolean;
+var pa: TObject;
+begin
+  Result := False;
+  pa := PyVarUserObj(PPyVarRec(@a));
+  if pa = nil then Exit;
+  Result := PyUserArithCall1(pa, PyVarUserObj(PPyVarRec(@b)), b, idunder, res);
+end;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
@@ -10210,6 +10230,22 @@ begin
       Exit;
     end;
   end;
+  { A USER class declaring __iadd__ MUTATES IN PLACE and hands back self, so the
+    caller's object must see the change. Without this the fallback below reached
+    __add__, which builds a NEW object and binds it to the local -- the value
+    inside the function was right and the CALLER'S OBJECT WAS NEVER TOUCHED. A
+    silent wrong answer on the ordinary accumulator idiom, and silent precisely
+    because declaring both __iadd__ and __add__ is the normal way to write the
+    class; with only __iadd__ declared it was instead a loud "expected a number,
+    got object".
+
+    This is the runtime half of a dispatch the parser does statically. The
+    compile-time arm (PyAugClassDunder) keys on Syms[].TypeKind = tyClass, which
+    an UNANNOTATED PARAMETER never is -- it arrives as a variant -- so the whole
+    __iadd__/__add__ rule was skipped for exactly that one target shape. Same
+    structure, and the same comment, as the __add__ arm in pyadd_v.
+    bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+  if PyVarUserAug(a, b, '__iadd__', Result) then Exit;
   Result := pyadd_v(a, b);
 end;
 

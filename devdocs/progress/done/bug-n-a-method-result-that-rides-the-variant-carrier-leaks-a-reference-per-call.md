@@ -258,7 +258,13 @@ and RECVLIVE is the half this one cannot be -- a premature free passes every
 byte row here, and a leak passes every value row there.
 
 
-## EXCULPATION 2026-09-15: THIS FAMILY IS NOT LEKKERZEILEN'S HOT-PATH LEAK
+## EXCULPATION 2026-09-15: **RETRACTED THE SAME DAY — READ THE RETRACTION BELOW BEFORE THIS SECTION**
+
+> **THIS EXCULPATION IS FALSE. It is kept because the way it was reached is the
+> lesson, and deleting it would take the lesson with it. The A/B measured the
+> demo's leak at 131.4 kB/s before and 11.5 kB/s after — a 91% reduction, two
+> interleaved rounds, 240 standard errors. Skip to "RETRACTION 2026-09-15" at
+> the foot of this ticket.**
 
 This ticket was opened from lekkerzeilen and ranked partly on that. **It does
 not reach the demo's hot path**, established by lekkerzeilen-c8 across four
@@ -1311,7 +1317,76 @@ discarded constructor.
   INERT UNTIL PINNED for any `lib/**` consumer: the fix is in `compiler/ir.inc`
   and no pin carries it.
 
-  NOT lekkerzeilen's hot-path leak — every hot-path getter there returns an
-  unboxed float, which costs zero bytes. That residual is the lekkerzeilen seat's
-  stage-2 bisect, which has the demo landed on `body.step` at 44 net-unfreed
-  objects per step.
+  ~~NOT lekkerzeilen's hot-path leak — every hot-path getter there returns an
+  unboxed float, which costs zero bytes.~~ **RETRACTED 2026-09-15, hours after
+  this resolution was written. It IS the demo's leak, or nearly all of it: the
+  A/B measured 131.4 kB/s before and 11.5 kB/s after. See "RETRACTION
+  2026-09-15" at the foot of this ticket.**
+
+
+## RETRACTION 2026-09-15 — THE EXCULPATION WAS WRONG, AND THE WAY IT WAS WRONG IS THE PART WORTH KEEPING
+
+**Measured, interleaved, two rounds, same machine, same world, same demo
+source:**
+
+| binary | run | kB/s | stderr | cpu | compiler |
+|---|---|---|---|---|---|
+| lzwater_fix | 1 | 131.34 | ±0.38 | 32.3% | `cfee5d6255237332` |
+| lzafter | 1 | **11.48** | ±0.05 | 32.0% | `79551a1b6d05f02e` |
+| lzwater_fix | 2 | 131.99 | ±0.54 | 31.8% | `cfee5d6255237332` |
+| lzafter | 2 | **11.55** | ±0.05 | 31.8% | `79551a1b6d05f02e` |
+
+**A 91.3% reduction in the demo's leak rate.** The error bars are ±0.4 and ±0.05
+against a gap of 120 kB/s — about 240 standard errors. CPU is identical at ~32%
+across all four legs, so it is not a workload confound.
+
+**THE BASELINE LANDED ON A PRE-REGISTERED NUMBER.** lekkerzeilen-c8 predicted
+131.4 ± 1 **before the fix was built**, and `lzwater_fix` measured 131.34 ± 0.38
+an hour and a half later. The arm that refutes the prediction is the arm that
+proves the instrument was sound.
+
+### Why the exculpation was wrong: the pattern was validated against the EXAMPLE, not against the MECHANISM
+
+The census behind it was accurate. It searched for **getters** — methods
+returning `self.<attribute>` — and correctly found that every hot-path one
+returns an unboxed float, which leaks nothing.
+
+**The defect is not "a getter". It is ANY METHOD RETURNING AN ALREADY-OWNED
+MANAGED VALUE.** `contrib` allocates ~297 objects per vessel-step, and those
+Vec3s come back out of methods that are not getters at all. The census answered
+its own question correctly and the question was too narrow.
+
+**The shape of the fixture became the definition of the defect.** That is the
+mechanism of this error and it is worth more than the correction: a reader given
+a repro generalises from its SHAPE, because the shape is concrete and the
+mechanism is a sentence. Both seats did it — this ticket's own head block spent
+the evening calling the leaking shape "a getter on a short-lived receiver",
+renamed it twice, and the exculpation was written in the vocabulary that
+survived. **An exculpation is a claim about the MECHANISM'S REACH, so it must be
+written from the mechanism's statement, never from the example that demonstrated
+it** — and the test is to re-derive the search predicate from the one-sentence
+definition of the defect without looking at the repro.
+
+The same seat made this error three times in one night on three different
+subjects (2-vs-28 on bare bodies, 1-vs-3 on receiver binding, and this), which is
+what establishes it as a pattern rather than a slip.
+
+### It also closes the residual from the other direction
+
+There was an unreconciled gap between ~1835.8 bytes per vessel-step of
+never-freed objects and the measured arena rate. The answer is that most of
+those objects were this defect: `contrib` was the leak, and `contrib` is where
+the fix landed.
+
+### WHAT IS **NOT** YET ESTABLISHED: THAT THE 91% IS `ir.inc`
+
+The two arms differ by the **whole toolchain** — compiler binary AND `lib/rtl`,
+`b9662ab57` against `4f3eb3073` — not by this ticket's diff. A 91% prize is
+exactly the size that deserves correct attribution rather than fast attribution.
+
+The disambiguating arm is building: **`lzmid` = the archived `cfee5d62` compiler
+(hash-verified) + the CURRENT pxx tree.** ~131 means the drop is the compiler
+fix; ~11 means it is in `lib/rtl` and this fix is not what did it; in between
+means both contributed and the split is measurable. **Until that lands, this
+ticket claims the leak was RE-ATTRIBUTED to this family, not that the 91% is
+this diff.**

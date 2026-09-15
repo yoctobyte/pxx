@@ -8,6 +8,13 @@ slug: bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-
 
 # `p += x` on an UNANNOTATED PARAMETER never dispatches `__iadd__`, and silently loses the caller's mutation
 
+**`+=` IS FIXED (2026-09-15, `pyaugadd_v`). `-=`, `*=` AND EVERY OTHER IN-PLACE
+DUNDER ARE STILL BROKEN — measured, not assumed — SO THIS TICKET STAYS OPEN.**
+The frontend marks only `tkPlus` as augmented, so no other operator has anywhere
+to hang the runtime dispatch. See "PARTIALLY FIXED" at the foot, and note the
+month-older sibling [[bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds]],
+whose own body already says to fix them together.
+
 **A WRONG VALUE, NOT A CRASH, on the ordinary accumulator idiom.** Measured
 2026-09-15.
 
@@ -137,3 +144,126 @@ A nested `class W: pass` inside a function body is a parse error
 (`pascal26:N: error: expected expression`). Unrelated to this ticket and not
 investigated — noted here only so the next person does not spend the minute I
 did wondering why a probe would not compile.
+
+## PARTIALLY FIXED 2026-09-15 — `+=` ONLY, AND THE SIBLINGS ARE MEASURED
+
+**`+=` is fixed. `-=`, `*=` and every other in-place dunder are STILL BROKEN,
+and this ticket stays OPEN for them.** Saying which arm was repaired matters
+more than usual here, because this is precisely the shape
+`normalise-dont-special-case.md` warns about: a construct reachable through
+several spellings, repaired one spelling at a time, where the un-repaired path
+is the one that stays broken.
+
+### What landed
+
+`pyaugadd_v` (`compiler/builtin/pylib.pas`) now tries the in-place dunder on the
+left operand before falling back to `pyadd_v`:
+
+```pascal
+  if PyVarUserAug(a, b, '__iadd__', Result) then Exit;
+  Result := pyadd_v(a, b);
+```
+
+with a new one-sided dispatcher `PyVarUserAug`, deliberately NOT `PyVarUserArith`
+— that one also tries the REFLECTED dunder on the right operand, and there is no
+such thing as a reflected in-place operation.
+
+It is a one-line insertion because the machinery was already there: `pyaugadd_v`
+already existed as the `+=`-on-a-variant entry point (it carries the
+`TPyList.extend` arm for `xs += ys`), and `PyUserArithCall1` already dispatches a
+user dunder from a variant BY NAME. No new mechanism, and no change to the
+static arm, which is correct for what it does.
+
+### Why only `+=`
+
+The frontend marks only ONE operator as augmented. `PY_BINOP_AUGADD` is set at
+`pyparser.inc:32399` and `:32147`, guarded by `(augTk = tkPlus) and (... =
+tyVariant)`, and `ir.inc:12923` reads it to pick `pyaugadd_v` over `pyadd_v`.
+Every other augmented operator lowers to the SAME node as its binary form, so
+the runtime cannot tell `p -= x` from `p - x` and has nowhere to hang the
+in-place attempt.
+
+Measured after the fix, class declaring `__iadd__`/`__isub__`/`__imul__` and all
+three binary forms, receiver a parameter:
+
+| | NilPy | CPython |
+|---|---|---|
+| `p += D` | 12.0 **OK** | 12.0 |
+| `p -= D` | 10.0 **LOST** | 8.0 |
+| `p *= D` | 10.0 **LOST** | 20.0 |
+
+### The shape of the remaining work
+
+Generalise the marker from "this is an augmented ADD" to "this is an augmented
+assignment", let `ir.inc` select a `pyaug<op>_v` per operator, and add the
+missing runtime entries — `pyaugsub_v`, `pyaugmul_v`, `pyaugtruediv_v`,
+`pyaugmod_v`, `pyaugfloordiv_v`, `pyaugpow_v`, `pyaugbitand_v`, `pyaugbitor_v`,
+`pyaugbitxor_v`, `pyaugshl_v`, `pyaugshr_v`. Each is `pyaugadd_v`'s shape minus
+the list arm: try `__i<op>__`, else the binary entry. Mechanical, three files,
+and it retires the whole family rather than one more spelling.
+
+**Do NOT add them one at a time as they are encountered.** That is how this
+defect got here — the bare-name arm and the class-typed-FIELD arm were each
+fixed on their own, and the third target shape was left.
+
+### The fixture
+
+`test/test_nilpy_augmented_assignment_on_a_parameter_dispatches_the_in_place_dunder.npy`,
+wired. 12 rows, byte-identical to CPython. Two of them must NOT move and they
+point in opposite directions:
+
+- `rebind_caller` — a class declaring ONLY `__add__`. Python builds a new object
+  and leaves the caller's alone. **A fix that made every `+=` in-place passes
+  every other row in the file and breaks this one.**
+- `lst` — `xs += ys` on a variant holding a list must stay `TPyList.extend`, in
+  place. `PyVarUserObj` excludes `TPyList`/`TPyDict`/`TPyBytes`, which is what
+  keeps the new arm out of it.
+
+**VERIFIED TO FAIL ON THE PRE-FIX RUNTIME, and the first attempt to establish
+that was itself wrong.** Compiling the fixture from a scratch tree holding a
+reverted `pylib.pas` reported PASS — because **an exe-dir builtin beats a
+CWD-relative one**, so the compiler invoked by absolute path had been reading the
+LIVE builtin the whole time. The tell was a deliberate-garbage guard: appending
+nonsense to the scratch `pylib.pas` still compiled clean, which is only possible
+if that file is not being read. Copying the compiler binary BESIDE the reverted
+builtin gave the real answer — `param_both WRONG got 1.00 want 1.50`, then
+`TypeError: expected a number, got object`.
+
+That is CLAUDE.md's silent-substitution arm arriving in a new place: the rules
+file warns about a sibling CHECKOUT supplying the builtin, and this is the same
+lookup answering about the exe dir instead. **A "the fixture passes on the old
+build" result is worthless without a guard proving the old build was in use**,
+and the guard costs one `printf`.
+
+### THE SIBLING TICKET, FOUND BY GREPPING THE BACKLOG BEFORE CLOSING
+
+[[bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds]] (prio 35) is
+**the same defect in the same place**, one operator over, and it was filed a
+month earlier. Its own body already states the shared rule:
+
+> *"`+=` has exactly the same split and the same known gap ... One rule, two
+> operators, one missing half each — fix them together."*
+
+Both are the identical structure:
+
+| | static arm (works) | variant arm (broken) |
+|---|---|---|
+| this ticket | `PyAugClassDunder`, gated `Syms[].TypeKind = tyClass` | user class `__iadd__` never dispatched |
+| the sibling | `PyAugMulNode`, gated `PyNodeIsPyList(left)` | list `*=` rebinds instead of repeating in place |
+
+In both, a statically-typed target was repaired at some earlier date, the gate
+that made the repair possible is a COMPILE-TIME type test, and every target
+whose type is only known at run time — a parameter, a dict value, a list element
+— was left on the old path. In both, the fix is a runtime twin. The sibling
+ticket even prescribes `pyvar_repeat_inplace` "plus the `+=` equivalent", which
+is `pyaugadd_v`, which existed and until today did not try the dunder.
+
+**So the remaining work on both tickets is ONE piece of work**, and the generalised
+marker described above is what serves them together: once `ir.inc` can tell an
+augmented node from a binary one for every operator, both the list/repeat
+semantics and the in-place dunder have somewhere to hang. Doing them separately
+is how there came to be two tickets for one gate.
+
+I am not merging them — the sibling is older, has its own measurements and its
+own prio, and merging would lose that. They should be worked together and closed
+together.

@@ -1,0 +1,143 @@
+# `p += x` where p is an UNANNOTATED PARAMETER must dispatch __iadd__, mutate in
+# place, and let the CALLER see it.
+#
+# Before the fix this was a SILENT WRONG VALUE. PyAugClassDunder keys on the
+# target's STATIC type (Syms[].TypeKind = tyClass); an unannotated parameter
+# arrives as a variant, so the whole __iadd__/__add__ rule was skipped for that
+# one target shape and the value fell through to pyadd_v -> __add__, which
+# builds a NEW object and binds it to the local. The value inside the function
+# was right and the caller's object was never touched: caller_sees 1.00 against
+# CPython's 1.50. Fixed by giving pyaugadd_v the runtime half of the dispatch.
+#
+# WITH BOTH DUNDERS IT WAS SILENT; WITH ONLY __iadd__ IT WAS LOUD -- a
+# "TypeError: expected a number, got object". The silent shape is the common
+# one, because declaring both is how the class is normally written. Both are
+# rows here.
+#
+# THE `rebind` ROW IS THE ONE THAT MUST NOT GO IN PLACE, and it is why this file
+# cannot just assert "the caller sees the change" everywhere. A class declaring
+# ONLY __add__ follows Python's fallback rule: build a new object, bind it to
+# the local, LEAVE THE CALLER'S OBJECT ALONE. A fix that made every += in-place
+# would pass every other row in this file and break that one.
+#
+# THE `lst` ROW GUARDS THE OTHER DIRECTION: `xs += ys` on a variant holding a
+# list is TPyList.extend, in place, and must stay that way. PyVarUserObj
+# excludes TPyList/TPyDict/TPyBytes, which is what keeps the new arm out of it.
+#
+# THE STORAGE CLASSES ARE A FACTORIAL, not a list of guesses: the defect was the
+# RECEIVER's storage class and nothing else -- local, attribute and global all
+# worked throughout and only the parameter failed. They are kept so a future
+# change cannot fix the parameter by breaking one of them.
+
+class Both:
+    def __init__(self, x):
+        self.x = x
+    def __iadd__(self, o):
+        self.x += o.x
+        return self
+    def __add__(self, o):
+        return Both(self.x + o.x)
+
+class OnlyI:
+    def __init__(self, x):
+        self.x = x
+    def __iadd__(self, o):
+        self.x += o.x
+        return self
+
+class OnlyAdd:
+    def __init__(self, x):
+        self.x = x
+    def __add__(self, o):
+        return OnlyAdd(self.x + o.x)
+
+class Holder:
+    def __init__(self):
+        self.v = Both(1.0)
+
+D = Both(0.5)
+DI = OnlyI(0.5)
+DA = OnlyAdd(0.5)
+G = Both(1.0)
+ok = True
+
+def check(name, got, want):
+    global ok
+    if got == want:
+        print("%s OK" % name)
+    else:
+        print("%s WRONG got %s want %s" % (name, got, want))
+        ok = False
+
+# --- the defect: receiver is a PARAMETER
+def aug_param(p):
+    p += D
+
+a = Both(1.0)
+aug_param(a)
+check("param_both", "%.2f" % a.x, "1.50")
+
+def aug_param_onlyi(p):
+    p += DI
+
+b = OnlyI(1.0)
+aug_param_onlyi(b)
+check("param_onlyi", "%.2f" % b.x, "1.50")
+
+# --- the row that must NOT go in place: only __add__, so Python rebinds the
+#     local and the caller keeps its own object unchanged.
+def aug_param_rebind(p):
+    p += DA
+    return p.x
+
+c = OnlyAdd(1.0)
+inner = aug_param_rebind(c)
+check("rebind_inner", "%.2f" % inner, "1.50")
+check("rebind_caller", "%.2f" % c.x, "1.00")
+
+# --- the storage classes that always worked, kept as a factorial
+def aug_local():
+    v = Both(1.0)
+    v += D
+    return v.x
+check("local", "%.2f" % aug_local(), "1.50")
+
+H = Holder()
+def aug_attr():
+    H.v += D
+aug_attr()
+check("attr", "%.2f" % H.v.x, "1.50")
+
+def aug_global():
+    global G
+    G += D
+aug_global()
+check("global", "%.2f" % G.x, "1.50")
+
+# --- the other direction: a variant holding a LIST must still extend IN PLACE
+def aug_list(xs):
+    xs += [4, 5]
+
+L = [1, 2, 3]
+aug_list(L)
+check("lst", "%d %s" % (len(L), L[4]), "5 5")
+
+# --- scalars are untouched by any of this
+def aug_int(n):
+    n += 1
+    return n
+K = 7
+check("int_inner", "%d" % aug_int(K), "8")
+check("int_caller", "%d" % K, "7")
+
+def aug_str(s):
+    s += "b"
+    return s
+S = "a"
+check("str_inner", aug_str(S), "ab")
+check("str_caller", S, "a")
+
+if ok:
+    print("AUGPARAM OK")
+else:
+    print("AUGPARAM FAIL")

@@ -34890,6 +34890,31 @@ lib-test: pxx-stable-check
 	tools/expect_same.sh test_nilpy_varcarry "$$($(TESTTMP)/test_nilpy_varcarry | tail -n 1)" "VARCARRY OK"
 	./$(COMPILER) test/test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy $(TESTTMP)/test_nilpy_getterlive
 	tools/expect_same.sh test_nilpy_getterlive "$$($(TESTTMP)/test_nilpy_getterlive | tail -n 1)" "GETTERLIVE OK"
+	# `p += x` on an UNANNOTATED PARAMETER must dispatch __iadd__ and let the
+	# CALLER see the mutation. The compile-time arm (PyAugClassDunder) keys on
+	# Syms[].TypeKind = tyClass, which a parameter never is -- it arrives as a
+	# variant -- so this one target shape skipped the whole __iadd__/__add__
+	# rule. pyaugadd_v now carries the runtime half.
+	#
+	# TWO ROWS HERE MUST NOT MOVE AND THEY POINT IN OPPOSITE DIRECTIONS:
+	# `rebind_caller` is a class declaring ONLY __add__, where Python's rule is
+	# to build a new object and LEAVE THE CALLER'S ALONE -- a fix that made
+	# every += in-place passes everything else in the file and breaks that one.
+	# `lst` is `xs += ys` on a variant holding a list, which must stay
+	# TPyList.extend in place; PyVarUserObj excludes TPyList/TPyDict/TPyBytes,
+	# which is what keeps the new arm out of it.
+	#
+	# Verified 2026-09-15 to FAIL on the pre-fix pylib rather than assumed to:
+	# `param_both WRONG got 1.00 want 1.50` (the silent shape) followed by
+	# `TypeError: expected a number, got object` (the loud one, when only
+	# __iadd__ is declared). Measured by putting the reverted builtin BESIDE a
+	# copy of the compiler -- an exe-dir builtin wins over a CWD-relative one,
+	# so a scratch tree alone proves nothing and a garbage-file guard is what
+	# established that. All 12 rows are byte-identical to CPython.
+	# $(COMPILER), not $(PXX_STABLE): the fix is in compiler/builtin/pylib.pas
+	# and no pin carries it.
+	./$(COMPILER) test/test_nilpy_augmented_assignment_on_a_parameter_dispatches_the_in_place_dunder.npy $(TESTTMP)/test_nilpy_augparam
+	tools/expect_same.sh test_nilpy_augparam "$$($(TESTTMP)/test_nilpy_augparam | tail -n 1)" "AUGPARAM OK"
 	# A conditional expression must evaluate ONLY the selected arm. The arms are
 	# not statements, so an arm's hoisted setup used to land at the enclosing
 	# statement and run either way -- a stray side effect in two shapes and an
