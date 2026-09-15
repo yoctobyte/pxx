@@ -159,6 +159,88 @@ are ten lines each; rebuild them from this section rather than hunting for a
 scratch file.
 
 
+## 2026-09-15 -- THE LEAK IS RSS-VISIBLE AFTER ALL, AND THE SHAPE IS ORDINARY CODE
+
+Every rate table in this ticket, mine and c8's, held the receiver ALIVE across
+the loop. That is why they read small or zero: a leaked reference costs no
+bytes while its referent is long-lived. **Give the receiver a short life and
+the same leak becomes bytes, unbounded.**
+
+```python
+for i in range(N):
+    h = H()          # fresh receiver
+    k = h.bare()     # def bare(self): return self.q
+```
+
+`-dPXX_OBJTRACE` with markers, three iterations: the H object is `F`'d every
+iteration -- the receiver dies correctly -- and `self.q` is `A`'d every
+iteration and **never `F`'d**, settling at rc=1 with nothing pointing at it.
+One orphaned graph per call.
+
+N=40000 at `cfee5d6255237332`, plain build, RSS:
+
+| row | | bytes/call |
+|---|---|---|
+| `bare` | `return self.q` | **1095** |
+| `ifexp` | `return self.q if c else self.r` | **1095** |
+| `vialocal` | `x = self.q; return x` | **1096** |
+| `computed` | work, then `return self.q` | **1095** |
+| `discard` | `h.bare()`, result not stored | **1095** |
+| `index` | `return self.q[0]` (scalar) | 0 |
+| `chain` | `return self.n` (scalar) | 0 |
+| `variantrecv` | same body via an UNANNOTATED receiver | 0 |
+| `control` | build the receiver, call nothing | 0 |
+
+### `discard` is the load-bearing row and it retires the store-retain framing
+
+With no store there is no store-retain, and the leak is **the same 1095**. So
+the surplus is not the store's. The `IR_VAR_STORE` tk=22 retain is correct and
+uniform -- a store retains what it stores -- and **the unconsumed reference is
+the one the RETURN mints.** Every predicate this ticket has tried lives at the
+store, which is why all three were correlates: the store is not where the
+defect is.
+
+Read against the p5 ledger, the asymmetry is in the RELEASES, not the retains:
+
+```
+Variant-receiver path   bind R   return-mint R   scope r   store R   TEMP r   local r   = 0
+direct path             bind R   return-mint R   scope r   store R             local r   = +1
+```
+
+The Variant path releases twice at statement end because `__py_vt_N` is
+finalised as well as the named local. The direct path has no temp, so the
+return's +1 has no consumer. **The missing event is a DROP of the call result,
+not a missing predicate at the store** -- and `IRDropManagedResult` is the
+machinery for exactly that. Its `tyVariant` arm was added and reverted this
+same day as "measured inert"; that measurement was taken on `disc_obj` and
+`disc_slice`, both of which drive the **unannotated-receiver** path, the one
+column that is already balanced and needs nothing. It was never measured on
+the shape that leaks.
+
+### What this settles about the shape population
+
+c8 censused both trees for it: a body that is ONLY `return self.<attr>` is
+**2 sites**; ANY `return self.<attr>` statement is **28**, plus 14 of the
+`return self.x if ... else ...` form. The `ifexp` row above measures that form
+at 1095 -- identical to `bare` -- so all three groups are one population. The
+narrow pattern did not look empty, it looked like a smaller true answer.
+
+`variantrecv` staying at 0 **with a fresh receiver** is the row that keeps the
+earlier four-shape table honest: that column was previously measured only with
+a long-lived receiver, which is the condition under which everything reads 0.
+It survives the harder test.
+
+### The fixture
+
+`test/test_nilpy_a_getter_on_a_short_lived_receiver_does_not_leak_its_attribute.npy`
+-- all nine rows plus a `retain` positive control, CPython prints
+`GETTERLIVE OK`, pxx prints `GETTERLIVE FAIL`. **Deliberately UNWIRED** (in
+`test/UNWIRED.txt`), like the other two in this family: wire all three in the
+commit that fixes the leak. It is the half the RECVLIVE value gate cannot be,
+and RECVLIVE is the half this one cannot be -- a premature free passes every
+byte row here, and a leak passes every value row there.
+
+
 ## WHERE THE LEAK ACTUALLY IS: THE RECEIVER, NOT THE RESULT
 
 Two retains and one release per call, on the BOX. The call site copies the
