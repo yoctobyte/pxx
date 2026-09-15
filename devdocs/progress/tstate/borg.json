@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-14T18:40:48Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "06e40fb95b13af1d28b9ffebe028e26ab10dff26",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-14T18:56:55Z",
    "fixed": [],
    "new_red": [
@@ -511,6 +502,17 @@
    ],
    "sha": "827fabcc7d6d134590694d3560af498967c6c7f0",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-15T06:01:18Z",
+   "fixed": [],
+   "new_red": [
+    "test-uforth#src:tools/compiler_srchash.sh"
+   ],
+   "sha": "827fabcc7d6d134590694d3560af498967c6c7f0",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5312,6 +5314,7 @@
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124",
+  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), c304147cdebd (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@1": "self-host fixedpoint: verified \u2014 1 round(s), c304147cdebd (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@10": "self-host fixedpoint: verified \u2014 1 round(s), c304147cdebd (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@11": "self-host fixedpoint: verified \u2014 1 round(s), c304147cdebd (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
@@ -14734,7 +14737,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-threads#src:tools/compiler_srchash.sh": "pass",
-  "test-uforth#src:tools/compiler_srchash.sh": "pass",
+  "test-uforth#src:tools/compiler_srchash.sh": "fail",
   "test-uforth#src:tools/compiler_srchash.sh@1": "fail",
   "test-uforth#src:tools/compiler_srchash.sh@10": "fail",
   "test-uforth#src:tools/compiler_srchash.sh@11": "fail",
@@ -14911,14 +14914,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-15T06:00:36Z",
+  "date": "2026-09-15T06:01:18Z",
   "deadline": 3600.0,
   "sha": "827fabcc7d6d134590694d3560af498967c6c7f0",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 966.8
+  "wall": 21.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14969,14 +14972,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-15T05:11:25Z",
+   "date": "2026-09-15T06:01:18Z",
    "deadline": 3600.0,
-   "sha": "f7a745e876ef94b58995c3dd23c53545f5b81919",
+   "sha": "827fabcc7d6d134590694d3560af498967c6c7f0",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 99.7
+   "verdict": "RED",
+   "wall": 21.6
   }
  },
  "last_full": {
@@ -15179,6 +15182,24 @@
    ],
    "range_non_causal": false,
    "src": ""
+  },
+  {
+   "bad": "827fabcc7d6d134590694d3560af498967c6c7f0",
+   "bad_untestable": false,
+   "first_seen": false,
+   "good": "f7a745e876ef94b58995c3dd23c53545f5b81919",
+   "job": "test-uforth#src:tools/compiler_srchash.sh",
+   "name": "test-uforth#blocktest",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-15T06:01:18Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "827fabcc7d6d134590694d3560af498967c6c7f0"
+   ],
+   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
+   "status": "fail"
   }
  ],
  "pin_baseline": {
