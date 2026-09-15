@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `bd35a383c7c2` | 2026-09-15T07:35:33Z | RED (native) | 306.9s | `03975f44d5d4` RED |
+| borg | `bd35a383c7c2` | 2026-09-15T07:53:28Z | RED (full) | 956.4s | `bd35a383c7c2` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `03975f44d5d4` on borg, 2026-09-15T06:55:08Z (40m ago).**
+**Newest full tier in the fleet: `bd35a383c7c2` on borg, 2026-09-15T07:53:28Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `03975f44d5d4` | RED | 40m | — (newest) |
+| borg | `bd35a383c7c2` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -36,23 +36,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy** — test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh (borg): bad `e977f78c3199`, last good `19bcd974455c`, 1 commit(s) in range
-- **CASCADE 14 jobs** (borg): bad `827fabcc7d6d`, last good `f7a745e876ef`, 1 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas`
-  - `test-uforth#src:tools/compiler_srchash.sh@1`
-  - `test-uforth#src:tools/compiler_srchash.sh@10`
-  - `test-uforth#src:tools/compiler_srchash.sh@11`
-  - `test-uforth#src:tools/compiler_srchash.sh@12`
-  - `test-uforth#src:tools/compiler_srchash.sh@13`
-  - `test-uforth#src:tools/compiler_srchash.sh@2`
-  - `test-uforth#src:tools/compiler_srchash.sh@3`
-  - `test-uforth#src:tools/compiler_srchash.sh@4`
-  - `test-uforth#src:tools/compiler_srchash.sh@5`
-  - `test-uforth#src:tools/compiler_srchash.sh@6`
-  - `test-uforth#src:tools/compiler_srchash.sh@7`
-  - `test-uforth#src:tools/compiler_srchash.sh@8`
-  - `test-uforth#src:tools/compiler_srchash.sh@9`
-  </details>
 - **test-uforth#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint (borg): bad `827fabcc7d6d`, last good `f7a745e876ef`, 1 commit(s) in range
-- **test-threads#src:test/test_tls_base.pas** — test/test_tls_base.pas tools/expect_same.sh (borg): bad `bd35a383c7c2`, last good `03975f44d5d4`, 1 commit(s) in range
