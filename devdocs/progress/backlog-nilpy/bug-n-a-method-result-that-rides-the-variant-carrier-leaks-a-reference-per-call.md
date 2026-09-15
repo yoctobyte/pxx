@@ -260,6 +260,103 @@ either -- a discarded facade call returns borrowed, and releasing it is the same
 use-after-free from the other end. Both defects need the same provenance bit,
 which is an argument for building that bit ONCE rather than twice.
 
+## ATTEMPT 2 ALSO FAILED, AND IT NARROWS THE QUESTION TO ONE SENTENCE
+
+Built the provenance discrimination the section above prescribes: read the
+callee proc index off the call node (`IRA` for `IR_CALL`, `IRC` for
+`IR_VIRTUAL_CALL` -- both already operands, no new state) and ask
+`UnitIsPyModule(ProcUnitIdx[cp])`, exactly as `IRDropManagedResult`'s tyClass
+arm does. Self-hosts, `converged after 1 round(s)`, binary `37acfdbcc84d`.
+
+**Results, all four fixtures:**
+
+| | pre-fix `cfee5d62` | node-shape guard `745b82d2` | provenance guard `37acfdbc` |
+|---|---|---|---|
+| VARCARRY (the leak) | FAIL, 5 rows | -- | **OK** |
+| BORROWVAR (the use-after-free) | OK | IndexError | **OK** |
+| Track N tier | green | -- | **SEGV** |
+
+It fixes the leak, keeps the borrowed half alive, and **breaks
+`test_nilpy_a_module_qualified_def_is_a_value_across_modules`**, which the
+NilPy tier caught. Under `-dPXX_HEAP_DEBUG`:
+
+```
+pxx-heap: RELEASE of a FREED object 0x00007d07ad0004a8
+pxx-heap: RETAIN of a FREED object  0x00007d07ad000230
+```
+
+`rax` at the fault holds `0x39202c38202c3753` -- ASCII text -- so the block was
+freed and its memory reissued to a string. A genuine use-after-free, not a leak.
+
+## WHY THE UNIT IS THE WRONG INSTRUMENT, MEASURED RATHER THAN ARGUED
+
+`UnitIsPyModule` is a proxy for "did this callee's return leave +1", and the two
+come apart because **NilPy has TWO return paths onto the variant carrier**, not
+one. From `PXXDBG=a.ir` on the two callees:
+
+```
+H.give   (main program, `return self.q`)
+  3: load_mem a=2 tk=6
+  5: var_store a=4 b=3 c=6  tk=22      <- c=6: source is tyClass, BOXING path
+
+via      (module, `return h()`)
+  7: call a=1852 c=6 tk=22             <- pyvar_callv0, a Pascal facade
+  9: var_store a=8 b=7 c=22 tk=22      <- c=22: variant-to-variant COPY path
+```
+
+`IRC` on the store is the SOURCE KIND. The arm under guard is only the `c=22`
+copy; the `c=6` boxing arm is a different piece of code that retains
+regardless. So `H.give` owns its result for a reason that has nothing to do with
+its unit, and `via` owns or borrows its result for a reason that has nothing to
+do with its unit either. **The unit test agreed with the truth on the rows I had
+measured and disagreed on the rows I had not**, which is the definition of a
+proxy rather than an instrument.
+
+Confirming that the seam is exactly here and not elsewhere: restricting `owned`
+to `ProcUnitIdx < 0` (main-program procs only) turns all three fixtures green --
+tier rc=0, VARCARRY OK, BORROWVAR OK. **That is NOT landed and must not be.** It
+is the same proxy with the failing half deleted, it leaves every module-defined
+method leaking, and shipping a predicate known to be wrong in a case nobody can
+explain is the compiler-appeasement workaround CLAUDE.md refuses. It is recorded
+because it localises the seam for the next attempt, not because it is a
+candidate.
+
+## WHAT THE FIX ACTUALLY NEEDS, IN ONE SENTENCE
+
+**Whether a call result arrives owned is a property of the CALLEE'S OWN RETURN
+LOWERING, so it must be recorded when that return is lowered -- not inferred at
+the call site from anything about the callee.**
+
+Concretely: a per-proc flag (`ProcVariantResultOwned`, the shape
+`ProcRetFixedArrBytes` and `ProcUnitIdx` already have in defs.inc) set at the
+point the return's `IR_VAR_STORE` is built in `ir.inc`, recording whether that
+store left +1. Pascal facades never go through NilPy return lowering and so
+default to False -- borrowed, retain -- which is the safe default and the one
+that is correct for them today.
+
+**The ordering question is the real work and is why this is not a small
+change**: a call site can be lowered before its callee. `PyMarkVariantParamsByRef`
+is the in-tree precedent for exactly this problem -- it moved an ABI decision to
+signature-REGISTRATION time for the same reason -- and its own ticket
+(`done/bug-n-a-callee-declared-below-its-caller-gets-the-argument-by-the-wrong-abi`)
+records what goes wrong when the decision is read from the body instead. Read it
+before starting.
+
+## DO NOT ATTEMPT A THIRD FIX FROM A PREDICATE THAT MERELY ANSWERS
+
+Three attempts in this family have now failed the same way: the probe answers,
+the answer is correct, and the question is wrong.
+
+1. banked: "the operand is a temp address, the predicate cannot answer" -- it is
+   the call, and it answers.
+2. `IRNodeOwnsManagedObj` -- answers True, and asks about node SHAPE.
+3. `UnitIsPyModule` -- answers, and asks about the callee's FILE.
+
+**The next patch must be justified by what the CALLEE'S RETURN DID, and the
+justification must be a measurement of that, not of a correlate.** Both
+fixtures must be run, and so must the NilPy tier -- the tier is what caught
+attempt 2, and neither fixture could have.
+
 ## THE ORIGINAL SECTION, KEPT SO THE RETRACTION IS CHECKABLE
 
 ## THE HARD PART, AND IT HAS A WORKED PRECEDENT IN-TREE

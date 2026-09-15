@@ -1,0 +1,182 @@
+# A method result that rides the VARIANT carrier must not leak a reference.
+#
+# `return self.q` -- and chained, indexed and sliced attribute reads -- come back
+# on the variant carrier (tk=22). The `return` is ITSELF an IR_VAR_STORE tk=22
+# over a load_mem, so it takes the unconditional-retain arm and hands back +1,
+# correctly. The CALLER then hit the same arm and retained a second time: +1 per
+# call, forever, bound or not. Measured before the fix: obj/chain/index 72
+# bytes/call, slice 199, every scalar and class control 0.
+#
+# TWO RECEIVER LIFETIMES, DELIBERATELY. With a LONG-LIVED receiver the leak is a
+# pure refcount climb -- nothing is allocated, RSS reads 0 on every row, and a
+# fixture built that way certifies the bug as absent. The `longlived_*` rows are
+# kept as the trap they are; only the fresh-receiver rows can see the defect in
+# bytes. (longlived_slice is the exception and does allocate.)
+#
+# THE retain ROW IS THE POSITIVE CONTROL AND THIS FILE IS WORTHLESS WITHOUT IT.
+# Every other assertion here says a number stays near ZERO, which a dead
+# instrument satisfies perfectly -- statm unreadable, the parse returning 0, the
+# loop never running. retain deliberately keeps its allocations and MUST move.
+#
+# DELIBERATELY NOT WIRED INTO THE MAKEFILE YET. This file prints VARCARRY FAIL
+# at HEAD -- that is the bug -- so wiring it now would put a known red into
+# every lib-test run and train readers to ignore it. Wire the row IN THE COMMIT
+# THAT FIXES THIS, asserting tail -n 1 == "VARCARRY OK", built with
+# ./$(COMPILER) rather than $(PXX_STABLE) since the pin will predate the fix.
+# Its sibling borrowvar.npy IS wired, because that one passes at HEAD and
+# guards against the wrong fix.
+#
+# THE OPPOSITE MISTAKE HAS ITS OWN FIXTURE. The obvious fix -- guarding the
+# retain with IRNodeOwnsManagedObj, which answers True at that site -- moves the
+# BORROWED half of the carrier too and is a use-after-free. See
+# test_nilpy_a_borrowed_variant_result_is_not_moved.npy. Both files are needed:
+# this one fails if the retain is never suppressed, that one fails if it is
+# always suppressed, and neither can catch the other's defect.
+
+class Leaf:
+    def __init__(self):
+        self.w = 1.0
+        self.x = 2.0
+        self.y = 3.0
+        self.z = 4.0
+
+class Mid:
+    def __init__(self):
+        self.leaf = Leaf()
+
+class H:
+    def __init__(self):
+        self.q = Leaf()
+        self.mid = Mid()
+        self.rows = [Leaf(), Leaf()]
+        self.lines = [1, 2, 3, 4, 5, 6]
+        self.level = 0.5
+        self.count = 7
+        self.muted = False
+
+    def g_obj(self):    return self.q
+    def g_chain(self):  return self.mid.leaf
+    def g_index(self):  return self.rows[0]
+    def g_slice(self):  return self.lines[1:4]
+    def g_float(self):  return self.level
+    def g_int(self):    return self.count
+    def g_bool(self):   return self.muted
+    def g_self(self):   return self
+    def g_fresh(self):  return Leaf()
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+N = 12000
+LEAK_LIMIT = 40          # bytes per call; smallest real defect here was 72
+shared = H()
+held = []
+
+def longlived_obj(n):
+    for i in range(n):
+        k = shared.g_obj()
+
+def longlived_slice(n):
+    for i in range(n):
+        k = shared.g_slice()
+
+def base(n):
+    for i in range(n):
+        h = H()
+
+def obj(n):
+    for i in range(n):
+        h = H()
+        k = h.g_obj()
+
+def chain(n):
+    for i in range(n):
+        h = H()
+        k = h.g_chain()
+
+def index(n):
+    for i in range(n):
+        h = H()
+        k = h.g_index()
+
+def slice_(n):
+    for i in range(n):
+        h = H()
+        k = h.g_slice()
+
+def flt(n):
+    for i in range(n):
+        h = H()
+        k = h.g_float()
+
+def integer(n):
+    for i in range(n):
+        h = H()
+        k = h.g_int()
+
+def boolean(n):
+    for i in range(n):
+        h = H()
+        k = h.g_bool()
+
+def selfret(n):
+    for i in range(n):
+        h = H()
+        k = h.g_self()
+
+def fresh(n):
+    for i in range(n):
+        h = H()
+        k = h.g_fresh()
+
+def retain(n):
+    for i in range(n):
+        held.append([0] * 16)
+
+names = ["longlived_obj", "longlived_slice", "base", "obj", "chain", "index",
+         "slice", "float", "int", "bool", "self", "fresh"]
+fns = [longlived_obj, longlived_slice, base, obj, chain, index,
+       slice_, flt, integer, boolean, selfret, fresh]
+
+# Each shape runs once to settle -- a first pass can move for one-off reasons
+# (an arena page, a cache) -- and the SECOND pass is the one asserted.
+i = 0
+while i < len(fns):
+    fns[i](N)
+    i = i + 1
+
+ok = True
+measured = 0
+i = 0
+while i < len(fns):
+    b = rss_kb()
+    fns[i](N)
+    per = ((rss_kb() - b) * 1024) // N
+    measured = measured + 1
+    if per < LEAK_LIMIT:
+        print("%s LEAKFREE" % names[i])
+    else:
+        print("%s LEAKS %d bytes/call" % (names[i], per))
+        ok = False
+    i = i + 1
+
+if measured != 12:
+    print("VARCARRY CONTROL DEAD -- measured %d rows, expected 12" % measured)
+    ok = False
+
+b = rss_kb()
+retain(N)
+ctrl = ((rss_kb() - b) * 1024) // N
+if ctrl > 100:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every LEAKFREE above is meaningless" % ctrl)
+    ok = False
+
+if ok:
+    print("VARCARRY OK")
+else:
+    print("VARCARRY FAIL")
