@@ -136,6 +136,40 @@ free-too-early direction, the exempted leak fixture for the leak direction --
 and **neither is sufficient alone; run the objtrace object count too**, which
 is the only one of the three that saw this.
 
+## THE UNMATCHED RETAIN, READ OFF THE TRACE OBJECT BY OBJECT
+
+Four iterations of `h = H(); h.g()` with `H.__init__` doing `self.q = Leaf()`,
+`-dPXX_OBJTRACE`, every line accounted for:
+
+```
+A <H>            H allocated
+A <Leaf>         its Leaf, rc 1
+R <Leaf> -> 2    stored into self.q
+   ... next iteration ...
+r <H>  -> 0 F    the old H is released and FREED
+r <Leaf> -> 1    H's finaliser releases self.q -- Leaf drops to 1, NOT to 0
+R <newLeaf> -> 2
+```
+
+**The Leaf never reaches zero because the call left a retain on it.** `self.q`
+is released correctly when the receiver dies; the surplus +1 is the method
+call's, and nothing on the direct path ever releases it. The final one goes
+only because its holder leaves scope at proc exit, which is why the count is
+n-1 and not n, and why this reads as "one object short" rather than as a leak.
+
+Scaling, measured: n=5 -> 4 live, n=50 -> 49, so it is LINEAR and permanent,
+not a single slot holding the newest. Two DIFFERENT methods in one loop
+(`h.g()` and `h.g2()`) -> 2(n-1), so it is per callee. Two calls to the SAME
+method in one loop -> still n-1, which is not yet explained and is the one
+loose thread in this section; do not build on that row.
+
+So the callee DOES hand back +1 -- ABI (b) above -- and the bug is that the
+direct path never consumes it. The retracted attempt had the right ABI and
+consumed it at the STORE, a site the Variant path also reaches, where it is
+already consumed by the dyn-dispatch wrapper. That is the whole error in one
+sentence: **right ownership model, wrong consumer, and a site shared by a path
+that was already correct.**
+
 ## THE INSTRUMENT FAILURE, AND IT IS THE PART TO KEEP
 
 **RSS CANNOT TELL A REPAIRED LEAK FROM A PREMATURE FREE.** Both hand memory
