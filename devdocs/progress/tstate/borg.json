@@ -14987,8 +14987,8 @@
   "wall": 1006.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-15T07:35:46Z",
+  "sha": "bd35a383c7c2f9b7806de3b0af37bbd4e86f7a55",
   "tier": "full"
  },
  "last_opt": {
@@ -15210,6 +15210,7 @@
    "range": [
     "bd35a383c7c2f9b7806de3b0af37bbd4e86f7a55"
    ],
+   "range_non_causal": false,
    "src": "test/test_tls_base.pas tools/expect_same.sh",
    "status": "fail"
   }
