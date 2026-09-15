@@ -1390,3 +1390,72 @@ fix; ~11 means it is in `lib/rtl` and this fix is not what did it; in between
 means both contributed and the split is measurable. **Until that lands, this
 ticket claims the leak was RE-ATTRIBUTED to this family, not that the 91% is
 this diff.**
+## ATTRIBUTION CLOSED 2026-09-15 — THE 91% IS THIS COMMIT, BY ENUMERATION
+
+The retraction above deliberately stopped at "re-attributed to this family, not
+that the 91% is this diff", because the two A/B arms differed by the whole
+toolchain. Two further measurements close it.
+
+### `lzmid` — the tree contributes nothing
+
+lekkerzeilen-c8 built a third arm holding the OLD compiler constant and moving
+the pxx tree forward by the whole day's work (`b9662ab57` -> `4f3eb3073`):
+
+| binary | run | kB/s | stderr | compiler | pxx HEAD |
+|---|---|---|---|---|---|
+| lzwater_fix | 1 | 132.70 | ±0.29 | `cfee5d62` | `b9662ab57` |
+| **lzmid** | 1 | **131.25** | ±0.47 | `cfee5d62` | `4f3eb3073` |
+| lzafter | 1 | 11.57 | ±0.03 | `79551a1b` | `4f3eb3073` |
+| lzwater_fix | 2 | 132.04 | ±0.51 | `cfee5d62` | `b9662ab57` |
+| **lzmid** | 2 | **132.79** | ±0.36 | `cfee5d62` | `4f3eb3073` |
+| lzafter | 2 | 11.53 | ±0.03 | `79551a1b` | `4f3eb3073` |
+
+`lzmid` sits inside the baseline's own scatter with no direction. **The tree
+moved and the leak did not notice**, so the drop is the compiler BINARY.
+
+### Enumerating the window — the binary delta is one commit
+
+`lzmid` narrows it to "the compiler", not to this commit: anything entering
+`pascal26` between the `cfee5d62` archive and the `79551a1b` build is inside
+that arm. That set is listable, and all three checks below are `git` facts
+rather than inferences.
+
+Everything touching `compiler/` or `lib/rtl/` since 05:30 that day:
+
+    87d0fae10  06:00  comprehension filter
+    827fabcc7  07:36  variant result MOVED            <- attempt 1
+    03975f44d  08:30  release a DISCARDED result      <- attempt 2
+    bd35a383c  09:29  REVERT -- both arms out
+    db1fd52c9  09:49  blocking get() while a thread was alive
+    e59efc3f5  12:11  THE FIX
+    b651c29d3  13:16  += dispatch (pylib only, built after lzafter)
+
+1. **`db1fd52c9` touches no compiler source** — `lib/rtl/mimic_threading.pas`
+   and `lib/rtl/pythreadlive.pas` only. **And `lzmid` already carried it**,
+   since that arm moved the tree to `4f3eb3073`. The one non-compiler candidate
+   in the window was tested and came back null.
+2. **`git diff bd35a383c e59efc3f5^ -- compiler/` is EMPTY.** No compiler source
+   changed between the revert and this fix's parent.
+3. **From 87d0fae10 to `e59efc3f5^`, `compiler/` shows 64 insertions — ALL OF
+   THEM COMMENT TEXT.** Zero `:=`, zero `begin`/`end`; they are the retraction
+   blocks for attempts 1 and 2. That is *why* the post-revert binary came back
+   byte-identical to `cfee5d62`, so the byte-identity in the record and the
+   source diff are two independent facts that agree.
+
+**The only executable compiler-source change between `cfee5d62` and `79551a1b`
+is this commit: one file, `compiler/ir.inc`, 64 insertions / 11 deletions.**
+
+### What this still rests on, stated rather than buried
+
+That the `cfee5d62` binary corresponds to the tree at 87d0fae10/bd35a383c. The
+record says the revert made it byte-identical and check 3 independently explains
+why that would be true — but **a binary sha is not a source identity**, and
+nobody has rebuilt at `bd35a383c` to compare. That single build would convert
+the last inference into a measurement.
+
+Four converging lines, then: `lzmid` (the tree is null), the enumeration above
+(one executable commit in the window), the fixture control (VARCARRY 7 of 14
+leaking at `cfee5d62`, all 14 clean at `79551a1b`; GETTERLIVE 8 rows against 13),
+and the birthplace census putting 95% of unfreed objects in `contrib` — the
+Vec3-returning contributor loop, which is precisely the population this fix
+stops minting.
