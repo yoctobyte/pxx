@@ -314,10 +314,11 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (175)
+## backlog-nilpy (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| addendum-2026-09-16-value-parity-and-the-first-fully-restatable-toolchain | A | 50 | addendum | Addendum, 2026-09-16 — value parity on 7bf3860e0, and a toolchain that can be restated | — |
 | addendum-the-property-warning-fires-on-the-safe-pair-and-is-silent-on-the-lethal-one | A | 50 | addendum | Addendum: the property warning fires on the SAFE pair and is silent on the lethal one | — |
 | bug-n-a-bare-import-of-a-c-header-only-name-builds-a-binary-that-cannot-exec | N | 50 | bug | `import strings` in a .npy resolves to /usr/include/strings.h, synthesises `libstrings.so` from the header's own file NAME, and emits a DT_NEEDED no loader can satisfy. Verified against the PINNED compiler (2026-09-10): the build succeeds, `readelf -d` shows `Shared library: [libstrings.so]`, and the program dies at exec with `cannot open shared object file`. At HEAD it is a compile error instead, because e53eff428's guard catches exactly this -- so the OBSERVABLE has already moved from silent-broken-binary to loud-refusal, and this row is about the remaining half: nothing should have emitted that DT_NEEDED in the first place. NOT a resolution bug: `strings` is DELIBERATELY absent from pasparser_proc.inc's curated bare-import list (an ordinary Pascal unit sharing a Python name, named there beside `classes` and `types`), so falling through to the host header is the documented behaviour. Six of the seven RTL/header name collisions on this box -- math, menu, netdb, png, regex, zlib -- resolve to the unit; `strings` is the one that reaches a header, which is why nobody hit this before. | feature-n-derive-a-header-s-library-from-its-directory-and-verify-it-against-the-library-s-own-dynsym |
 | bug-n-a-bare-nilpy-import-falls-through-to-a-host-c-header-of-the-same-name-and-says-nothing | N | 35 | bug |  | — |
@@ -1360,6 +1361,7 @@ _none_
 - [p 55] [A] refactor-a-the-assignment-kind-funnel-needs-a-third-discriminator-not-a-third-special-case
 - [p 55] [T] regression-cascade-154d1aa3fba6-has-no-ticket-and-its-range-cannot-explain-its-jobs
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
+- [p 50] [A] addendum-2026-09-16-value-parity-and-the-first-fully-restatable-toolchain
 - [p 50] [A] addendum-the-property-warning-fires-on-the-safe-pair-and-is-silent-on-the-lethal-one
 - [p 50] [B] bug-b-mkkiosk-selfhost-compares-two-stages-so-a-pinned-seed-reports-no-fixedpoint
 - [p 50] [N] bug-n-a-bare-import-of-a-c-header-only-name-builds-a-binary-that-cannot-exec
