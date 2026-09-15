@@ -140,17 +140,3 @@ test/c_abi_struct_byval_pxx.c  the pxx-compiled half of the pair above; same rea
 # is answered and the install lands -- it is already the acceptance test for it.
 test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creator's exception chain and an exception escapes its own try; measured failing 3 of 3. Blocked on bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread and the decide- it names; wire it when a foreign thread gets its own TLS block
 
-# MEASURED 2026-09-15, and the reason it is here is the reason the repo has this
-# guard: the file prints VARCARRY FAIL at HEAD, so wiring it now puts a known
-# red into every lib-test run and trains readers to ignore the row. Its sibling
-# test_nilpy_a_borrowed_variant_result_is_not_moved.npy IS wired, because that
-# one passes at HEAD and guards against the WRONG fix -- the two are a matched
-# set and neither can catch the other's defect.
-# Verified to fail on the pre-fix compiler cfee5d6255237332 rather than assumed
-# to: obj/chain/index 72 bytes/call, slice 200, scalar and class controls 0, and
-# the retain control MOVES. Wire it in the commit that fixes the leak --
-# tail -n 1 == "VARCARRY OK", built with ./$(COMPILER) since the pin will
-# predate the fix. Two fixes have already failed (node-shape predicate: a
-# use-after-free; callee-unit predicate: a tier segfault), both banked in the
-# ticket.
-test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy  a method result on the VARIANT carrier leaks +1 per call; prints VARCARRY FAIL at HEAD. Blocked on bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call, which needs a per-callee return-ownership flag rather than a call-site predicate; wire it when that lands

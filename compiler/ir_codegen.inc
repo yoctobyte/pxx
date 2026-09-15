@@ -4816,6 +4816,48 @@ begin
       (IRA[n] < Length(SymIsCtorResultTemp)) and SymIsCtorResultTemp[IRA[n]]));
 end;
 
+{ Does a call result arriving on the VARIANT carrier already own its +1, so the
+  copy must MOVE rather than retain?
+
+  MEASURED, NOT INFERRED -- and every predicate that reads plausibly here is
+  wrong. IRNodeOwnsFreshCallResult ("is this a fresh call result") answers True
+  for every call and is the RIGHT question on the string and tyClass carriers,
+  where a call result always owns; using it here moves the borrowed half and
+  turns an ordinary `for nm, fn in rows:` into `IndexError: tuple index out of
+  range`. Asking the callee's UNIT instead (UnitIsPyModule, as the tyClass arm
+  of IRDropManagedResult does) segfaults the NilPy tier, and module-defined
+  getters leak identically to main-program ones, so the unit was never
+  measuring this at all.
+
+  What the carrier actually splits on is the DISPATCH, measured at
+  cfee5d6255237332 with the receiver dying on both sides so neither row is
+  RSS-blind:
+
+    h.m_attr()   METHOD `return self.q`         72 bytes/call   OWNED
+    d_attr(h)    def    `return h.q`             0 bytes/call   BORROWED
+    h.m_slice()  METHOD `return self.lines[1:4]` 200            OWNED
+    d_slice(h)   def    same body                0              BORROWED
+
+  Identical in SOURCE, not at all in lowering: 11 IR nodes against 87, because
+  an unannotated NilPy parameter is a VARIANT, so `h.q` is a full dynamic
+  attribute lookup whose result comes back borrowed. The method reads a tyClass
+  `self` and boxes, which retains. Both callers then retain again; only the
+  method's is a second reference, and that is the leak.
+
+  Refuted en route, so it is not re-tried: routing the method's return through
+  an intermediate local (`t = self.q; return t`) leaks the same 72, so this is
+  not about $pyresult versus a local.
+
+  DELIBERATELY CONSERVATIVE. A method call that lowers to a direct IR_CALL
+  keeps its retain and keeps leaking. Incomplete beats a use-after-free, and
+  this family has already produced one.
+  bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call }
+function IRVariantCallResultIsOwned(n: Integer): Boolean;
+begin
+  IRVariantCallResultIsOwned := PyProgramMode and
+    (n >= 0) and (n < IRCount) and (IRKind[n] = IR_VIRTUAL_CALL);
+end;
+
 procedure EmitObjRetainRaxGuarded;
 { rax = object pointer (or nil). Retain via the object blob; the Pascal callee
   carries the nil check and the population-tag guard, so a manual-lifetime
@@ -11667,7 +11709,11 @@ begin
             the slot the copy below was about to read, so `v := v` came back
             Empty. bug-a-a-variant-assigned-to-itself-becomes-empty }
           IREmitNode(IRB[node]);                 { rax = src addr }
-          EmitVariantRetain;
+          { A call result that already owns its +1 MOVES; every lvalue copy and
+            every borrowed call result retains. See IRVariantCallResultIsOwned
+            for why the node-shape predicates the arms below use are wrong here. }
+          if not IRVariantCallResultIsOwned(IRB[node]) then
+            EmitVariantRetain;
           EmitB($50);
           IREmitNode(IRA[node]);                 { rax = dest addr }
           EmitVariantReleasePayload;

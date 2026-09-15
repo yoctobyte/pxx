@@ -34824,6 +34824,16 @@ lib-test: pxx-stable-check
 	# $(COMPILER) rather than $(PXX_STABLE): this is about today's compiler.
 	./$(COMPILER) test/test_nilpy_a_borrowed_variant_result_is_not_moved.npy $(TESTTMP)/test_nilpy_borrowvar
 	tools/expect_same.sh test_nilpy_borrowvar "$$($(TESTTMP)/test_nilpy_borrowvar | tail -n 1)" "BORROWVAR OK"
+	# The other half of that matched pair: a method result on the VARIANT carrier
+	# must not leak. The two files fail in OPPOSITE directions -- this one if the
+	# retain is never suppressed, borrowvar if it is always suppressed -- and
+	# NEITHER CAN CATCH THE OTHER'S DEFECT. Verified to FAIL on the pre-fix
+	# compiler cfee5d6255237332 (obj/chain/index 72 bytes/call, slice 200,
+	# scalar and class controls 0) rather than assumed to, and the file carries
+	# a retain control that must MOVE because every other row asserts a number
+	# stays near zero. $(COMPILER), not $(PXX_STABLE): the pin predates the fix.
+	./$(COMPILER) test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy $(TESTTMP)/test_nilpy_varcarry
+	tools/expect_same.sh test_nilpy_varcarry "$$($(TESTTMP)/test_nilpy_varcarry | tail -n 1)" "VARCARRY OK"
 	# A conditional expression must evaluate ONLY the selected arm. The arms are
 	# not statements, so an arm's hoisted setup used to land at the enclosing
 	# statement and run either way -- a stray side effect in two shapes and an

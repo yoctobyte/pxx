@@ -1,12 +1,75 @@
 ---
 type: bug
 track: N
-prio: 85
+prio: 70
 status: open
 slug: bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 ---
 
-# A method result that rides the VARIANT carrier leaks a reference on EVERY call
+# A DISCARDED method result on the VARIANT carrier leaks a reference per call
+
+**PARTIALLY FIXED 2026-09-15. The BOUND case is closed; the DISCARDED case is
+what remains, and this ticket is now about that.** Prio dropped 85 -> 70
+accordingly: a discarded getter call is a real shape but a much rarer one than
+`k = h.get()`, which was the expensive half.
+
+| | before | after |
+|---|---|---|
+| `k = h.g()` bound | 72 bytes/call | **0** |
+| `h.g()` discarded | 72 bytes/call | 72 -- STILL LEAKS |
+| `k = h.g_slice()` bound | 200 bytes/call | **0** |
+
+## THE FIX, AND THE CARRIER SPLITS ON THE DISPATCH
+
+A result reached through `IR_VIRTUAL_CALL` arrives OWNED and the variant copy
+must MOVE. Everything else on that carrier -- every lvalue copy and every
+DIRECT call -- arrives BORROWED and must retain. `IRVariantCallResultIsOwned`
+in `ir_codegen.inc`, one line at the copy arm.
+
+Measured with the receiver dying on BOTH sides, so neither row is RSS-blind:
+
+| | leak | |
+|---|---|---|
+| `h.m_attr()` METHOD `return self.q` | 72 B/call | OWNED |
+| `d_attr(h)` def `return h.q` | 0 | BORROWED |
+| `h.m_slice()` METHOD | 200 B/call | OWNED |
+| `d_slice(h)` def, same body | 0 | BORROWED |
+
+Identical in SOURCE, 11 IR nodes against 87: an unannotated NilPy parameter is
+a VARIANT, so `h.q` is a full dynamic attribute lookup whose result comes back
+borrowed, while the method reads a tyClass `self` and boxes, which retains.
+
+Deliberately conservative -- a method call that lowers to a direct `IR_CALL`
+keeps its retain and keeps leaking. Incomplete beats a use-after-free, and this
+family produced one.
+
+## WHAT REMAINS: DEFECT 2, AND IT NEEDS THE SAME BIT
+
+`IRDropManagedResult` (`ir.inc`) still has no `tyVariant` arm, so a discarded
+method result is never released: 72 bytes/call, objtrace shows the retain with
+no matching release. **It must NOT be fixed by releasing every discarded
+variant call result** -- a discarded DIRECT call returns borrowed, and
+releasing that is the same use-after-free from the other end. It needs the same
+`IR_VIRTUAL_CALL` discrimination the copy arm now carries, at AST level where
+`IRDropManagedResult` runs.
+
+## THE THREE PREDICATES THAT FAILED FIRST -- READ BEFORE TOUCHING DEFECT 2
+
+Each one ANSWERED, and each asked the wrong question:
+
+1. banked diagnosis: "the operand is a spill temp, the predicate cannot answer".
+   It is the call (`VCPROBE srckind=30`), and it answers.
+2. `IRNodeOwnsManagedObj` -- answers True, asks about NODE SHAPE. Moves the
+   borrowed half; turns `for nm, fn in rows:` into `IndexError`.
+3. `UnitIsPyModule` -- answers, asks about the callee's FILE. Segfaults the
+   NilPy tier, and module getters leak identically to main-program ones, so it
+   was never measuring this at all.
+
+**A predicate being ABLE to answer is not evidence it is the right predicate.**
+And the NilPy TIER is what caught attempt 2 -- neither purpose-built fixture
+could have. Run it.
+
+## ORIGINAL REPORT BELOW
 
 `return self.q` leaks +1 refcount per call. So does `return self.a.b`,
 `return self.rows[0]` and `return self.lines[a:b]`. `return self` and
