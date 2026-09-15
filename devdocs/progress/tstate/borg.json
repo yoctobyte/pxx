@@ -15140,7 +15140,7 @@
    "status": "fail"
   },
   {
-   "bad": "c3cfdac9e733210255d4b041d529a85ca646a07d",
+   "bad": "db1fd52c96cf542ce9f357dd509162a98ef7dc4b",
    "bad_untestable": false,
    "first_seen": false,
    "good": "bd35a383c7c2f9b7806de3b0af37bbd4e86f7a55",
@@ -15152,8 +15152,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "db1fd52c96cf542ce9f357dd509162a98ef7dc4b",
-    "c3cfdac9e733210255d4b041d529a85ca646a07d"
+    "db1fd52c96cf542ce9f357dd509162a98ef7dc4b"
    ],
    "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
