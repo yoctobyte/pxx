@@ -15152,6 +15152,7 @@
   },
   {
    "bad": "827fabcc7d6d134590694d3560af498967c6c7f0",
+   "bad_untestable": false,
    "cascade": [
     "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
     "test-uforth#src:tools/compiler_srchash.sh@1",
@@ -15171,10 +15172,12 @@
    "good": "f7a745e876ef94b58995c3dd23c53545f5b81919",
    "job": "cascade@827fabcc7d6d",
    "name": "",
+   "no_testable_change": false,
    "opened": "2026-09-15T06:00:36Z",
    "range": [
     "827fabcc7d6d134590694d3560af498967c6c7f0"
    ],
+   "range_non_causal": false,
    "src": ""
   }
  ],
