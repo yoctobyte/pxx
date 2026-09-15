@@ -2893,6 +2893,14 @@ function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
   kept test-uforth red. Returns a variant so the del arm can swap the read's
   proc in place, as every other arm there does. }
 function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
+{ `del s[i]` / `del s[a:b]` on a value the compiler KNOWS is a str: CPython's
+  run-time TypeError, in its wording, instead of a compile error. Reached
+  once the call-site typing (PyParamTypeFromSites) made `def f(vm): del
+  vm[1:2]` a str parameter where it used to be a variant, and the variant
+  path raised at run time -- a program that catches the TypeError has to
+  keep running the same way. Same swap-the-read's-proc shape as the twins. }
+function pystr_del_at(const s: AnsiString; i: Integer): Variant;
+function pystr_del_slice(const s: AnsiString; lo, hi: Integer): Variant;
 { `type(x).__name__` for any value — see the body for why the frontend cannot
   answer this from RTTI alone (tuple and list share one class). }
 function pytype_name_v(const v: Variant): AnsiString;
@@ -5549,6 +5557,18 @@ end;
   Bounds and the shift live in pylist_del_slice, called rather than copied --
   an open-ended `[n:]` reaches it with whatever `hi` the READ computed, because
   the del arm reuses the read's own argument nodes. }
+function pystr_del_at(const s: AnsiString; i: Integer): Variant;
+begin
+  Result := pyvar_of_int(0);
+  raise TypeError.Create('''str'' object doesn''t support item deletion');
+end;
+
+function pystr_del_slice(const s: AnsiString; lo, hi: Integer): Variant;
+begin
+  Result := pyvar_of_int(0);
+  raise TypeError.Create('''str'' object does not support item deletion');
+end;
+
 function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
 var o: TObject;
 begin

@@ -1,0 +1,97 @@
+# A BARE parameter -- no annotation, which is how Python is written -- takes
+# the scalar type its CALL SITES agree on: a constructor's from `Cls(`, a
+# method's from `.name(`, a module function's from `name(`. The value rows are
+# the same under CPython; what the typing changes is the code (SSE arithmetic
+# on a double field instead of the variant protocol), which no value can see,
+# so the Makefile row also reads the compiler's own decision through
+# PXXDBG=n.psites. The negative controls below are the ones whose WRONG answer
+# would be visible: an int claim over a value that is later a float truncates.
+# feature-n-type-a-bare-constructor-parameter-from-its-call-sites
+
+class Grid:
+    def __init__(self, cols, rows, cell, x0, z0):
+        self.cols = cols; self.rows = rows; self.cell = cell; self.x0 = x0; self.z0 = z0
+    def at(self, x, z):
+        i = int((x - self.x0) / self.cell)
+        j = int((z - self.z0) / self.cell)
+        return i + j * self.cols
+
+def tick(g, dt, n):
+    acc = 0
+    x = 0.0
+    for k in range(n):
+        x = x + dt              # an accumulator keeps the local's float type
+        acc += g.at(x, 3.0)     # x is a caller's LOCAL, dt a caller's PARAMETER
+    return acc
+
+# sites that DISAGREE leave the parameter a variant
+class Mixed:
+    def __init__(self, v):
+        self.v = v
+    def show(self):
+        return str(self.v)
+
+# a star-argument site cannot be split: variant
+class Star:
+    def __init__(self, a, b):
+        self.a = a; self.b = b
+
+# the default anchors; a keyword site and an untypeable own-field site agree with it
+class Vec:
+    def __init__(self, x=0.0, y=0.0):
+        self.x = x; self.y = y
+    def __add__(self, o):
+        return Vec(self.x + o.x, self.y + o.y)
+
+# a bool is never claimed either (a bool field would turn a later `= 11` into
+# True): the values still print as CPython's, and the census row pins the veto
+class Flag:
+    def __init__(self, on=True):
+        self.on = on
+
+# an int local that takes a FLOAT step is not an int: probe's q stays a variant,
+# and the value row sees it -- an int claim would print 3 here, not 4.5
+def drift(n):
+    d = 0
+    for k in range(n):
+        d += 0.5
+    return probe(d)
+
+def probe(q):
+    return q * 3
+
+# every site passes a str, and the body REBINDS the parameter: variant
+def parse(payload):
+    if isinstance(payload, str):
+        payload = payload.split(",")
+    return len(payload)
+
+# a method call on a root that is neither local nor a unit must not be typed
+# from a same-named module-level function: holder.read() is R.read, not read()
+def read(path):
+    return 5
+class R:
+    def read(self):
+        return "abc"
+holder = R()
+def viaholder():
+    return f9(holder.read())
+def f9(a):
+    return a
+
+# a subscript of a CALL RESULT in a return: the index literals are not
+# operands, and the element is a variant -- 1.75, not 1 (the demo's keel())
+class Hull:
+    def section(self, t):
+        return ((0.0, 1.75), (0.0, 0.0))
+    def keel(self, t):
+        return self.section(t)[0][1]
+
+m1 = Mixed(1)
+m2 = Mixed("s")
+row = [1.5, 2.5]
+st = Star(*row)
+v = Vec(1.0, 2.0) + Vec(y=3.0)
+print(tick(Grid(64, 64, 2.5, -80.0, -80.0), 0.001, 3000))
+print(m1.show(), m2.show(), st.a + st.b, v.x, v.y, drift(3), parse("a,b,c"), viaholder(), Flag().on, Flag(on=False).on, Hull().keel(0.5))
+print("PSITES OK")

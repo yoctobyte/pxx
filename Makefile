@@ -2457,6 +2457,21 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_class_annotated_local_from_a_call_is_released.npy $(TESTTMP)/test_nilpy_annrelease26
 	tools/expect_same.sh test_nilpy_annrelease "$$($(TESTTMP)/test_nilpy_annrelease26 2>/dev/null | grep -v census)" "$$(printf '2001000.0 2000.0\nANNRELEASE OK')"
 	tools/assert_no_leak.sh nilpy_annotated_local_released 64 $(TESTTMP)/test_nilpy_annrelease26
+	@# A BARE parameter takes the scalar type its call sites agree on (ctor
+	@# `Cls(`, method `.m(`, function `f(`), through a caller's local chain and
+	@# parameter. The value row cannot see the typing (that is the point --
+	@# the values match CPython either way), so the second row reads the
+	@# compiler's own per-parameter decision through PXXDBG=n.psites: the
+	@# positive rows are typed, the controls (disagreeing sites, star-args, a
+	@# float step into an int local, a body that rebinds the parameter, and
+	@# EVERY int site -- ints are not claimed, an unseen float caller would be
+	@# truncated silently) stay variant. The value row DOES see the two wrong answers this found on
+	@# the way: an int claim where a float arrives truncates (4.5 -> 4), a
+	@# dotted call on a non-local root typed from a same-named global def, and
+	@# a subscript of a call result typed from its index literals (1.75 -> 1).
+	./$(COMPILER) test/test_nilpy_a_bare_parameter_is_typed_from_its_call_sites.npy $(TESTTMP)/test_nilpy_psites26
+	tools/expect_same.sh test_nilpy_psites "$$($(TESTTMP)/test_nilpy_psites26)" "$$(printf '6432500\n1 s 4.0 1.0 5.0 4.5 3 abc True False 1.75\nPSITES OK')"
+	tools/expect_same.sh test_nilpy_psites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_bare_parameter_is_typed_from_its_call_sites.npy $(TESTTMP)/test_nilpy_psites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites Flag.on mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Grid.cell mode=0 sites=1 gaveup=0 tk=19 PXXDBG n.psites Grid.cols mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Grid.rows mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Mixed.v mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Star.a mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Star.b mode=0 sites=0 gaveup=1 tk=0 PXXDBG n.psites Vec.x mode=0 sites=4 gaveup=0 tk=19 PXXDBG n.psites Vec.y mode=0 sites=4 gaveup=0 tk=19 PXXDBG n.psites at.x mode=1 sites=1 gaveup=0 tk=19 PXXDBG n.psites at.z mode=1 sites=1 gaveup=0 tk=19 PXXDBG n.psites drift.n mode=2 sites=0 gaveup=1 tk=0 PXXDBG n.psites keel.t mode=1 sites=1 gaveup=0 tk=19 PXXDBG n.psites parse.payload mode=2 sites=1 gaveup=0 tk=0 PXXDBG n.psites probe.q mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites section.t mode=1 sites=1 gaveup=0 tk=19 PXXDBG n.psites tick.dt mode=2 sites=1 gaveup=0 tk=19 PXXDBG n.psites tick.g mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites tick.n mode=2 sites=0 gaveup=1 tk=0 ')"
 	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
 	@# selector (a double), so the Result store retained 3.0 as an object pointer
 	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.

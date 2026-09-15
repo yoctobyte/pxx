@@ -549,6 +549,84 @@ type
   TPSFn4 = function(self: Pointer; a, b, c, d: Int64): AnsiString;
   TPSFn5 = function(self: Pointer; a, b, c, d, e: Int64): AnsiString;
 
+  { THE MIXED FAMILY: a host method with DOUBLE parameters beside pointer-class
+    ones -- `def at(self, x, z, outside=77.5)` once the call-site typing made
+    `outside` a Double, or any annotated `t: float`. Unsupported until
+    2026-09-16 ("unsupported param shape", Halt) because every thunk above
+    takes Int64 only. The SysV ABI assigns integer-class and SSE-class
+    arguments to two INDEPENDENT register files, in order of appearance
+    within each class, so the callee's interleaving does not matter: a method
+    with m pointer-class and k double parameters is called through the one
+    thunk whose Int64s come first and Doubles second. m + k <= 5, no stack
+    arguments. Four result flavours as above, plus Double (a double result
+    with n > 0 read rax before this and was wrong). }
+  TPMD_0_0 = function(self: Pointer): Double;
+  TPMV_0_1 = function(self: Pointer; d0: Double): Variant;
+  TPMS_0_1 = function(self: Pointer; d0: Double): AnsiString;
+  TPMI_0_1 = function(self: Pointer; d0: Double): Int64;
+  TPMD_0_1 = function(self: Pointer; d0: Double): Double;
+  TPMV_0_2 = function(self: Pointer; d0, d1: Double): Variant;
+  TPMS_0_2 = function(self: Pointer; d0, d1: Double): AnsiString;
+  TPMI_0_2 = function(self: Pointer; d0, d1: Double): Int64;
+  TPMD_0_2 = function(self: Pointer; d0, d1: Double): Double;
+  TPMV_0_3 = function(self: Pointer; d0, d1, d2: Double): Variant;
+  TPMS_0_3 = function(self: Pointer; d0, d1, d2: Double): AnsiString;
+  TPMI_0_3 = function(self: Pointer; d0, d1, d2: Double): Int64;
+  TPMD_0_3 = function(self: Pointer; d0, d1, d2: Double): Double;
+  TPMV_0_4 = function(self: Pointer; d0, d1, d2, d3: Double): Variant;
+  TPMS_0_4 = function(self: Pointer; d0, d1, d2, d3: Double): AnsiString;
+  TPMI_0_4 = function(self: Pointer; d0, d1, d2, d3: Double): Int64;
+  TPMD_0_4 = function(self: Pointer; d0, d1, d2, d3: Double): Double;
+  TPMV_0_5 = function(self: Pointer; d0, d1, d2, d3, d4: Double): Variant;
+  TPMS_0_5 = function(self: Pointer; d0, d1, d2, d3, d4: Double): AnsiString;
+  TPMI_0_5 = function(self: Pointer; d0, d1, d2, d3, d4: Double): Int64;
+  TPMD_0_5 = function(self: Pointer; d0, d1, d2, d3, d4: Double): Double;
+  TPMD_1_0 = function(self: Pointer; a0: Int64): Double;
+  TPMV_1_1 = function(self: Pointer; a0: Int64; d0: Double): Variant;
+  TPMS_1_1 = function(self: Pointer; a0: Int64; d0: Double): AnsiString;
+  TPMI_1_1 = function(self: Pointer; a0: Int64; d0: Double): Int64;
+  TPMD_1_1 = function(self: Pointer; a0: Int64; d0: Double): Double;
+  TPMV_1_2 = function(self: Pointer; a0: Int64; d0, d1: Double): Variant;
+  TPMS_1_2 = function(self: Pointer; a0: Int64; d0, d1: Double): AnsiString;
+  TPMI_1_2 = function(self: Pointer; a0: Int64; d0, d1: Double): Int64;
+  TPMD_1_2 = function(self: Pointer; a0: Int64; d0, d1: Double): Double;
+  TPMV_1_3 = function(self: Pointer; a0: Int64; d0, d1, d2: Double): Variant;
+  TPMS_1_3 = function(self: Pointer; a0: Int64; d0, d1, d2: Double): AnsiString;
+  TPMI_1_3 = function(self: Pointer; a0: Int64; d0, d1, d2: Double): Int64;
+  TPMD_1_3 = function(self: Pointer; a0: Int64; d0, d1, d2: Double): Double;
+  TPMV_1_4 = function(self: Pointer; a0: Int64; d0, d1, d2, d3: Double): Variant;
+  TPMS_1_4 = function(self: Pointer; a0: Int64; d0, d1, d2, d3: Double): AnsiString;
+  TPMI_1_4 = function(self: Pointer; a0: Int64; d0, d1, d2, d3: Double): Int64;
+  TPMD_1_4 = function(self: Pointer; a0: Int64; d0, d1, d2, d3: Double): Double;
+  TPMD_2_0 = function(self: Pointer; a0, a1: Int64): Double;
+  TPMV_2_1 = function(self: Pointer; a0, a1: Int64; d0: Double): Variant;
+  TPMS_2_1 = function(self: Pointer; a0, a1: Int64; d0: Double): AnsiString;
+  TPMI_2_1 = function(self: Pointer; a0, a1: Int64; d0: Double): Int64;
+  TPMD_2_1 = function(self: Pointer; a0, a1: Int64; d0: Double): Double;
+  TPMV_2_2 = function(self: Pointer; a0, a1: Int64; d0, d1: Double): Variant;
+  TPMS_2_2 = function(self: Pointer; a0, a1: Int64; d0, d1: Double): AnsiString;
+  TPMI_2_2 = function(self: Pointer; a0, a1: Int64; d0, d1: Double): Int64;
+  TPMD_2_2 = function(self: Pointer; a0, a1: Int64; d0, d1: Double): Double;
+  TPMV_2_3 = function(self: Pointer; a0, a1: Int64; d0, d1, d2: Double): Variant;
+  TPMS_2_3 = function(self: Pointer; a0, a1: Int64; d0, d1, d2: Double): AnsiString;
+  TPMI_2_3 = function(self: Pointer; a0, a1: Int64; d0, d1, d2: Double): Int64;
+  TPMD_2_3 = function(self: Pointer; a0, a1: Int64; d0, d1, d2: Double): Double;
+  TPMD_3_0 = function(self: Pointer; a0, a1, a2: Int64): Double;
+  TPMV_3_1 = function(self: Pointer; a0, a1, a2: Int64; d0: Double): Variant;
+  TPMS_3_1 = function(self: Pointer; a0, a1, a2: Int64; d0: Double): AnsiString;
+  TPMI_3_1 = function(self: Pointer; a0, a1, a2: Int64; d0: Double): Int64;
+  TPMD_3_1 = function(self: Pointer; a0, a1, a2: Int64; d0: Double): Double;
+  TPMV_3_2 = function(self: Pointer; a0, a1, a2: Int64; d0, d1: Double): Variant;
+  TPMS_3_2 = function(self: Pointer; a0, a1, a2: Int64; d0, d1: Double): AnsiString;
+  TPMI_3_2 = function(self: Pointer; a0, a1, a2: Int64; d0, d1: Double): Int64;
+  TPMD_3_2 = function(self: Pointer; a0, a1, a2: Int64; d0, d1: Double): Double;
+  TPMD_4_0 = function(self: Pointer; a0, a1, a2, a3: Int64): Double;
+  TPMV_4_1 = function(self: Pointer; a0, a1, a2, a3: Int64; d0: Double): Variant;
+  TPMS_4_1 = function(self: Pointer; a0, a1, a2, a3: Int64; d0: Double): AnsiString;
+  TPMI_4_1 = function(self: Pointer; a0, a1, a2, a3: Int64; d0: Double): Int64;
+  TPMD_4_1 = function(self: Pointer; a0, a1, a2, a3: Int64; d0: Double): Double;
+  TPMD_5_0 = function(self: Pointer; a0, a1, a2, a3, a4: Int64): Double;
+
 { ---- variant makers (build via pointer writes -> safe as functions) ---- }
 
 function MakeFloat(d: Double): Variant;
@@ -1045,6 +1123,73 @@ var
   pf0: TPFn0; pf1: TPFn1; pf2: TPFn2; pf3: TPFn3; pf4: TPFn4; pf5: TPFn5;
   pvf0: TPVFn0; pvf1: TPVFn1; pvf2: TPVFn2; pvf3: TPVFn3; pvf4: TPVFn4; pvf5: TPVFn5;
   psf0: TPSFn0; psf1: TPSFn1; psf2: TPSFn2; psf3: TPSFn3; psf4: TPSFn4; psf5: TPSFn5;
+  pmd_0_0: TPMD_0_0;
+  pmv_0_1: TPMV_0_1;
+  pms_0_1: TPMS_0_1;
+  pmi_0_1: TPMI_0_1;
+  pmd_0_1: TPMD_0_1;
+  pmv_0_2: TPMV_0_2;
+  pms_0_2: TPMS_0_2;
+  pmi_0_2: TPMI_0_2;
+  pmd_0_2: TPMD_0_2;
+  pmv_0_3: TPMV_0_3;
+  pms_0_3: TPMS_0_3;
+  pmi_0_3: TPMI_0_3;
+  pmd_0_3: TPMD_0_3;
+  pmv_0_4: TPMV_0_4;
+  pms_0_4: TPMS_0_4;
+  pmi_0_4: TPMI_0_4;
+  pmd_0_4: TPMD_0_4;
+  pmv_0_5: TPMV_0_5;
+  pms_0_5: TPMS_0_5;
+  pmi_0_5: TPMI_0_5;
+  pmd_0_5: TPMD_0_5;
+  pmd_1_0: TPMD_1_0;
+  pmv_1_1: TPMV_1_1;
+  pms_1_1: TPMS_1_1;
+  pmi_1_1: TPMI_1_1;
+  pmd_1_1: TPMD_1_1;
+  pmv_1_2: TPMV_1_2;
+  pms_1_2: TPMS_1_2;
+  pmi_1_2: TPMI_1_2;
+  pmd_1_2: TPMD_1_2;
+  pmv_1_3: TPMV_1_3;
+  pms_1_3: TPMS_1_3;
+  pmi_1_3: TPMI_1_3;
+  pmd_1_3: TPMD_1_3;
+  pmv_1_4: TPMV_1_4;
+  pms_1_4: TPMS_1_4;
+  pmi_1_4: TPMI_1_4;
+  pmd_1_4: TPMD_1_4;
+  pmd_2_0: TPMD_2_0;
+  pmv_2_1: TPMV_2_1;
+  pms_2_1: TPMS_2_1;
+  pmi_2_1: TPMI_2_1;
+  pmd_2_1: TPMD_2_1;
+  pmv_2_2: TPMV_2_2;
+  pms_2_2: TPMS_2_2;
+  pmi_2_2: TPMI_2_2;
+  pmd_2_2: TPMD_2_2;
+  pmv_2_3: TPMV_2_3;
+  pms_2_3: TPMS_2_3;
+  pmi_2_3: TPMI_2_3;
+  pmd_2_3: TPMD_2_3;
+  pmd_3_0: TPMD_3_0;
+  pmv_3_1: TPMV_3_1;
+  pms_3_1: TPMS_3_1;
+  pmi_3_1: TPMI_3_1;
+  pmd_3_1: TPMD_3_1;
+  pmv_3_2: TPMV_3_2;
+  pms_3_2: TPMS_3_2;
+  pmi_3_2: TPMI_3_2;
+  pmd_3_2: TPMD_3_2;
+  pmd_4_0: TPMD_4_0;
+  pmv_4_1: TPMV_4_1;
+  pms_4_1: TPMS_4_1;
+  pmi_4_1: TPMI_4_1;
+  pmd_4_1: TPMD_4_1;
+  pmd_5_0: TPMD_5_0;
+  pd: array[0..4] of Double; mc, kc: Integer; hasDouble, mixedInt: Boolean; dret: Double;
   ptrFamily: Boolean;
   pa: array[0..4] of Int64;
   psHold: array[0..4] of AnsiString;   { keep AnsiString-by-value args alive across the call }
@@ -1131,9 +1276,11 @@ begin
   if not allVariant then
   begin
     ptrFamily := (n <= 5) and (pk <> nil);
+    hasDouble := False;
     if ptrFamily then
       for i := 1 to n do
-        if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
+        if pk[i] = TK_DOUBLE then hasDouble := True
+        else if not ((pk[i] = 1) or (pk[i] = 2) or (pk[i] = 3) or (pk[i] = 13) or
                 (pk[i] = 17) or (pk[i] = 6) or (pk[i] = 23) or
                 (pk[i] = TK_VARIANT)) then ptrFamily := False;
     if not ptrFamily then
@@ -1147,9 +1294,18 @@ begin
           writeln('  param ', i, ' kind ', pk[i]);
       Halt(1);
     end;
-    for i := 0 to 4 do pa[i] := 0;
+    for i := 0 to 4 do begin pa[i] := 0; pd[i] := 0.0; end;
+    mc := 0; kc := 0;
     for i := 1 to n do
     begin
+      if pk[i] = TK_DOUBLE then
+      begin
+        { the mixed family: a Double goes to the SSE file, in its own order }
+        if (i - 1) < nargs then pd[kc] := pyvar_to_float(args.at(i - 1));
+        Inc(kc);
+      end
+      else
+      begin
       { A VARIANT param takes the ADDRESS of a 16-byte slot, which is what a
         `const Variant` parameter means at the ABI. pvHold owns the slot for the
         duration of the call — an `args.at()` temporary would not outlive the
@@ -1164,23 +1320,23 @@ begin
       begin
         if (i - 1) >= nargs then
         begin
-          pvHold[i-1].VType := 0;          { VT_EMPTY — a real None, see below }
-          pvHold[i-1].Payload := 0;
+          pvHold[mc].VType := 0;          { VT_EMPTY — a real None, see below }
+          pvHold[mc].Payload := 0;
         end
         else
         begin
           a0 := args.at(i-1);
-          pvHold[i-1].VType := PPyRec(@a0)^.VType;      { RAW copy: no retain, }
-          pvHold[i-1].Payload := PPyRec(@a0)^.Payload;  { and so no release }
+          pvHold[mc].VType := PPyRec(@a0)^.VType;      { RAW copy: no retain, }
+          pvHold[mc].Payload := PPyRec(@a0)^.Payload;  { and so no release }
         end;
-        pa[i-1] := Int64(NativeInt(@pvHold[i-1]));
+        pa[mc] := Int64(NativeInt(@pvHold[mc]));
       end
       else if (i - 1) >= nargs then
-        pa[i-1] := 0            { omitted -> per-kind zero default }
+        pa[mc] := 0            { omitted -> per-kind zero default }
       else if pk[i] = 23 then
       begin
-        psHold[i-1] := pystr_of(args.at(i-1));
-        pa[i-1] := Int64(NativeInt(Pointer(psHold[i-1])));
+        psHold[mc] := pystr_of(args.at(i-1));
+        pa[mc] := Int64(NativeInt(Pointer(psHold[mc])));
       end
       else if (pk[i] = 17) or (pk[i] = 6) then
       begin
@@ -1188,16 +1344,162 @@ begin
           object/function value -> its payload pointer, None -> nil. }
         a0 := args.at(i-1);
         case PPyRec(@a0)^.VType of
-          VT_PYCLOSURE: pa[i-1] := PPyRec(@a0)^.Payload;
-          7:            pa[i-1] := PPyRec(@a0)^.Payload;
-          0:            pa[i-1] := 0;
-        else            pa[i-1] := pyvar_to_int(a0);
+          VT_PYCLOSURE: pa[mc] := PPyRec(@a0)^.Payload;
+          7:            pa[mc] := PPyRec(@a0)^.Payload;
+          0:            pa[mc] := 0;
+        else            pa[mc] := pyvar_to_int(a0);
         end;
       end
       else
-        pa[i-1] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
+        pa[mc] := pyvar_to_int(args.at(i-1));   { int/int64/bool/char }
+      Inc(mc);
+      end;
     end;
     code := mi^.Code;
+    { --- the mixed family (see the TPM* types): m pointer-class args in
+          pa[], k doubles in pd[], one thunk per (m, k, result) --- }
+    if hasDouble or ((rk = TK_DOUBLE) and (n > 0)) then
+    begin
+      mixedInt := False; pret := 0;
+      case mc * 8 + kc of
+        0: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_0_0 := TPMD_0_0(code); dret := pmd_0_0(vmobj); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+        1: begin
+          if rk = TK_VARIANT then begin pmv_0_1 := TPMV_0_1(code); res := pmv_0_1(vmobj, pd[0]); end
+          else if rk = 23 then begin pms_0_1 := TPMS_0_1(code); res := MakeStr(pms_0_1(vmobj, pd[0])); end
+          else if rk = TK_DOUBLE then begin pmd_0_1 := TPMD_0_1(code); dret := pmd_0_1(vmobj, pd[0]); res := MakeFloat(dret); end
+          else begin pmi_0_1 := TPMI_0_1(code); pret := pmi_0_1(vmobj, pd[0]); mixedInt := True; end;
+        end;
+        2: begin
+          if rk = TK_VARIANT then begin pmv_0_2 := TPMV_0_2(code); res := pmv_0_2(vmobj, pd[0], pd[1]); end
+          else if rk = 23 then begin pms_0_2 := TPMS_0_2(code); res := MakeStr(pms_0_2(vmobj, pd[0], pd[1])); end
+          else if rk = TK_DOUBLE then begin pmd_0_2 := TPMD_0_2(code); dret := pmd_0_2(vmobj, pd[0], pd[1]); res := MakeFloat(dret); end
+          else begin pmi_0_2 := TPMI_0_2(code); pret := pmi_0_2(vmobj, pd[0], pd[1]); mixedInt := True; end;
+        end;
+        3: begin
+          if rk = TK_VARIANT then begin pmv_0_3 := TPMV_0_3(code); res := pmv_0_3(vmobj, pd[0], pd[1], pd[2]); end
+          else if rk = 23 then begin pms_0_3 := TPMS_0_3(code); res := MakeStr(pms_0_3(vmobj, pd[0], pd[1], pd[2])); end
+          else if rk = TK_DOUBLE then begin pmd_0_3 := TPMD_0_3(code); dret := pmd_0_3(vmobj, pd[0], pd[1], pd[2]); res := MakeFloat(dret); end
+          else begin pmi_0_3 := TPMI_0_3(code); pret := pmi_0_3(vmobj, pd[0], pd[1], pd[2]); mixedInt := True; end;
+        end;
+        4: begin
+          if rk = TK_VARIANT then begin pmv_0_4 := TPMV_0_4(code); res := pmv_0_4(vmobj, pd[0], pd[1], pd[2], pd[3]); end
+          else if rk = 23 then begin pms_0_4 := TPMS_0_4(code); res := MakeStr(pms_0_4(vmobj, pd[0], pd[1], pd[2], pd[3])); end
+          else if rk = TK_DOUBLE then begin pmd_0_4 := TPMD_0_4(code); dret := pmd_0_4(vmobj, pd[0], pd[1], pd[2], pd[3]); res := MakeFloat(dret); end
+          else begin pmi_0_4 := TPMI_0_4(code); pret := pmi_0_4(vmobj, pd[0], pd[1], pd[2], pd[3]); mixedInt := True; end;
+        end;
+        5: begin
+          if rk = TK_VARIANT then begin pmv_0_5 := TPMV_0_5(code); res := pmv_0_5(vmobj, pd[0], pd[1], pd[2], pd[3], pd[4]); end
+          else if rk = 23 then begin pms_0_5 := TPMS_0_5(code); res := MakeStr(pms_0_5(vmobj, pd[0], pd[1], pd[2], pd[3], pd[4])); end
+          else if rk = TK_DOUBLE then begin pmd_0_5 := TPMD_0_5(code); dret := pmd_0_5(vmobj, pd[0], pd[1], pd[2], pd[3], pd[4]); res := MakeFloat(dret); end
+          else begin pmi_0_5 := TPMI_0_5(code); pret := pmi_0_5(vmobj, pd[0], pd[1], pd[2], pd[3], pd[4]); mixedInt := True; end;
+        end;
+        8: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_1_0 := TPMD_1_0(code); dret := pmd_1_0(vmobj, pa[0]); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+        9: begin
+          if rk = TK_VARIANT then begin pmv_1_1 := TPMV_1_1(code); res := pmv_1_1(vmobj, pa[0], pd[0]); end
+          else if rk = 23 then begin pms_1_1 := TPMS_1_1(code); res := MakeStr(pms_1_1(vmobj, pa[0], pd[0])); end
+          else if rk = TK_DOUBLE then begin pmd_1_1 := TPMD_1_1(code); dret := pmd_1_1(vmobj, pa[0], pd[0]); res := MakeFloat(dret); end
+          else begin pmi_1_1 := TPMI_1_1(code); pret := pmi_1_1(vmobj, pa[0], pd[0]); mixedInt := True; end;
+        end;
+        10: begin
+          if rk = TK_VARIANT then begin pmv_1_2 := TPMV_1_2(code); res := pmv_1_2(vmobj, pa[0], pd[0], pd[1]); end
+          else if rk = 23 then begin pms_1_2 := TPMS_1_2(code); res := MakeStr(pms_1_2(vmobj, pa[0], pd[0], pd[1])); end
+          else if rk = TK_DOUBLE then begin pmd_1_2 := TPMD_1_2(code); dret := pmd_1_2(vmobj, pa[0], pd[0], pd[1]); res := MakeFloat(dret); end
+          else begin pmi_1_2 := TPMI_1_2(code); pret := pmi_1_2(vmobj, pa[0], pd[0], pd[1]); mixedInt := True; end;
+        end;
+        11: begin
+          if rk = TK_VARIANT then begin pmv_1_3 := TPMV_1_3(code); res := pmv_1_3(vmobj, pa[0], pd[0], pd[1], pd[2]); end
+          else if rk = 23 then begin pms_1_3 := TPMS_1_3(code); res := MakeStr(pms_1_3(vmobj, pa[0], pd[0], pd[1], pd[2])); end
+          else if rk = TK_DOUBLE then begin pmd_1_3 := TPMD_1_3(code); dret := pmd_1_3(vmobj, pa[0], pd[0], pd[1], pd[2]); res := MakeFloat(dret); end
+          else begin pmi_1_3 := TPMI_1_3(code); pret := pmi_1_3(vmobj, pa[0], pd[0], pd[1], pd[2]); mixedInt := True; end;
+        end;
+        12: begin
+          if rk = TK_VARIANT then begin pmv_1_4 := TPMV_1_4(code); res := pmv_1_4(vmobj, pa[0], pd[0], pd[1], pd[2], pd[3]); end
+          else if rk = 23 then begin pms_1_4 := TPMS_1_4(code); res := MakeStr(pms_1_4(vmobj, pa[0], pd[0], pd[1], pd[2], pd[3])); end
+          else if rk = TK_DOUBLE then begin pmd_1_4 := TPMD_1_4(code); dret := pmd_1_4(vmobj, pa[0], pd[0], pd[1], pd[2], pd[3]); res := MakeFloat(dret); end
+          else begin pmi_1_4 := TPMI_1_4(code); pret := pmi_1_4(vmobj, pa[0], pd[0], pd[1], pd[2], pd[3]); mixedInt := True; end;
+        end;
+        16: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_2_0 := TPMD_2_0(code); dret := pmd_2_0(vmobj, pa[0], pa[1]); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+        17: begin
+          if rk = TK_VARIANT then begin pmv_2_1 := TPMV_2_1(code); res := pmv_2_1(vmobj, pa[0], pa[1], pd[0]); end
+          else if rk = 23 then begin pms_2_1 := TPMS_2_1(code); res := MakeStr(pms_2_1(vmobj, pa[0], pa[1], pd[0])); end
+          else if rk = TK_DOUBLE then begin pmd_2_1 := TPMD_2_1(code); dret := pmd_2_1(vmobj, pa[0], pa[1], pd[0]); res := MakeFloat(dret); end
+          else begin pmi_2_1 := TPMI_2_1(code); pret := pmi_2_1(vmobj, pa[0], pa[1], pd[0]); mixedInt := True; end;
+        end;
+        18: begin
+          if rk = TK_VARIANT then begin pmv_2_2 := TPMV_2_2(code); res := pmv_2_2(vmobj, pa[0], pa[1], pd[0], pd[1]); end
+          else if rk = 23 then begin pms_2_2 := TPMS_2_2(code); res := MakeStr(pms_2_2(vmobj, pa[0], pa[1], pd[0], pd[1])); end
+          else if rk = TK_DOUBLE then begin pmd_2_2 := TPMD_2_2(code); dret := pmd_2_2(vmobj, pa[0], pa[1], pd[0], pd[1]); res := MakeFloat(dret); end
+          else begin pmi_2_2 := TPMI_2_2(code); pret := pmi_2_2(vmobj, pa[0], pa[1], pd[0], pd[1]); mixedInt := True; end;
+        end;
+        19: begin
+          if rk = TK_VARIANT then begin pmv_2_3 := TPMV_2_3(code); res := pmv_2_3(vmobj, pa[0], pa[1], pd[0], pd[1], pd[2]); end
+          else if rk = 23 then begin pms_2_3 := TPMS_2_3(code); res := MakeStr(pms_2_3(vmobj, pa[0], pa[1], pd[0], pd[1], pd[2])); end
+          else if rk = TK_DOUBLE then begin pmd_2_3 := TPMD_2_3(code); dret := pmd_2_3(vmobj, pa[0], pa[1], pd[0], pd[1], pd[2]); res := MakeFloat(dret); end
+          else begin pmi_2_3 := TPMI_2_3(code); pret := pmi_2_3(vmobj, pa[0], pa[1], pd[0], pd[1], pd[2]); mixedInt := True; end;
+        end;
+        24: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_3_0 := TPMD_3_0(code); dret := pmd_3_0(vmobj, pa[0], pa[1], pa[2]); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+        25: begin
+          if rk = TK_VARIANT then begin pmv_3_1 := TPMV_3_1(code); res := pmv_3_1(vmobj, pa[0], pa[1], pa[2], pd[0]); end
+          else if rk = 23 then begin pms_3_1 := TPMS_3_1(code); res := MakeStr(pms_3_1(vmobj, pa[0], pa[1], pa[2], pd[0])); end
+          else if rk = TK_DOUBLE then begin pmd_3_1 := TPMD_3_1(code); dret := pmd_3_1(vmobj, pa[0], pa[1], pa[2], pd[0]); res := MakeFloat(dret); end
+          else begin pmi_3_1 := TPMI_3_1(code); pret := pmi_3_1(vmobj, pa[0], pa[1], pa[2], pd[0]); mixedInt := True; end;
+        end;
+        26: begin
+          if rk = TK_VARIANT then begin pmv_3_2 := TPMV_3_2(code); res := pmv_3_2(vmobj, pa[0], pa[1], pa[2], pd[0], pd[1]); end
+          else if rk = 23 then begin pms_3_2 := TPMS_3_2(code); res := MakeStr(pms_3_2(vmobj, pa[0], pa[1], pa[2], pd[0], pd[1])); end
+          else if rk = TK_DOUBLE then begin pmd_3_2 := TPMD_3_2(code); dret := pmd_3_2(vmobj, pa[0], pa[1], pa[2], pd[0], pd[1]); res := MakeFloat(dret); end
+          else begin pmi_3_2 := TPMI_3_2(code); pret := pmi_3_2(vmobj, pa[0], pa[1], pa[2], pd[0], pd[1]); mixedInt := True; end;
+        end;
+        32: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_4_0 := TPMD_4_0(code); dret := pmd_4_0(vmobj, pa[0], pa[1], pa[2], pa[3]); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+        33: begin
+          if rk = TK_VARIANT then begin pmv_4_1 := TPMV_4_1(code); res := pmv_4_1(vmobj, pa[0], pa[1], pa[2], pa[3], pd[0]); end
+          else if rk = 23 then begin pms_4_1 := TPMS_4_1(code); res := MakeStr(pms_4_1(vmobj, pa[0], pa[1], pa[2], pa[3], pd[0])); end
+          else if rk = TK_DOUBLE then begin pmd_4_1 := TPMD_4_1(code); dret := pmd_4_1(vmobj, pa[0], pa[1], pa[2], pa[3], pd[0]); res := MakeFloat(dret); end
+          else begin pmi_4_1 := TPMI_4_1(code); pret := pmi_4_1(vmobj, pa[0], pa[1], pa[2], pa[3], pd[0]); mixedInt := True; end;
+        end;
+        40: begin
+          if False then
+          else if rk = TK_DOUBLE then begin pmd_5_0 := TPMD_5_0(code); dret := pmd_5_0(vmobj, pa[0], pa[1], pa[2], pa[3], pa[4]); res := MakeFloat(dret); end
+          else Halt(1);   { unreachable: k = 0 arrives here only with a Double result }
+        end;
+      else
+        begin
+          writeln('pyeval: host method ', name, ' has an unsupported mixed shape (', mc, ' ints, ', kc, ' doubles)');
+          Halt(1);
+        end;
+      end;
+      if mixedInt then
+      begin
+        if (rk = 6) or (rk = 17) then
+        begin
+          PPyRec(@res)^.VType := 7; PPyRec(@res)^.Payload := pret;
+          PXXObjRetain(Pointer(NativeInt(pret)));
+        end
+        else if rk = 0 then res := MakeNone
+        else res := pyvar_of_int(pret);
+      end;
+      Exit;
+    end;
     { The RESULT decides the thunk, the arguments never do — they are all one
       register wide by now. A Variant result comes back through the hidden
       destination and an AnsiString is managed, so neither can be read out of

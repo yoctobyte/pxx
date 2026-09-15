@@ -1613,6 +1613,7 @@ const
     and one in pasparser_expr.inc that the first generalisation missed. They now
     all ask `PyAugMarkedTok`, which is the only place the set is written down. }
   PY_BINOP_AUGMENTED = 2;
+  PY_PSMEMO_MAX = 8192;   { PyParamTypeFromSites memo entries }
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
     variable: `Assigned(fp)` tests the pointer in every mode, while `fp <> nil`

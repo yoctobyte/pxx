@@ -455,6 +455,18 @@ var
   PyInferHdrLo, PyInferHdrHi: Integer;
   PyInferBodyLo, PyInferBodyHi: Integer;
   PyChaseBareDepth: Integer;   { recursion bound for PyChaseBareLocalClass; 0 at rest }
+  PyInferFieldCi: Integer;     { the class whose fields PyInferFieldDecl is typing; -1 outside }
+  { PyParamTypeFromSites memo, keyed by the def token (unique for the whole
+    compilation: imported modules APPEND to Tokens) and the parameter name }
+  PyPSMemoN: Integer;
+  PyPSMemoDef: array[0..8191] of Integer;
+  PyPSMemoName: array[0..8191] of AnsiString;
+  PyPSMemoTk: array[0..8191] of TTypeKind;
+  PyPSDepth: Integer;          { PyParamTypeFromSites re-entry depth (a bare argument that is the caller's own parameter) }
+  PyPSEnclN: Integer;          { memo: def token -> (mode, class name) }
+  PyPSEnclDef: array[0..8191] of Integer;
+  PyPSEnclMode: array[0..8191] of Integer;
+  PyPSEnclCls: array[0..8191] of AnsiString;
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -739,6 +751,11 @@ function PyChaseBareLocalClass(startIdx, endIdx: Integer;
 function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward;
 function PyAugMarkedTok(k: TTokenKind): Boolean; forward;
 function PyNodeListCi(n: Integer): Integer; forward;
+function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
+                              mode: Integer; const clsName: AnsiString): TTypeKind; forward;
+function PyDefSiteMode(defTok: Integer; var clsName: AnsiString): Integer; forward;
+function PyLocalScalarType(defTok, bodyLo, bodyHi: Integer; const nm: AnsiString): TTypeKind; forward;
+function PyLocalScalarTypeFrom(defTok, bodyLo, bodyHi: Integer; const nm: AnsiString; base0: TTypeKind): TTypeKind; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -5912,6 +5929,32 @@ begin
       necessary rather than assumed — the call arm skips the paren group and
       leaves the walk sitting on the `[`.
       bug-nilpy-rebinding-a-list-parameter-aliases-the-callers-list }
+    { A SUBSCRIPT OF A CALL RESULT, or of another subscript: `return
+      self.section(t)[0][1]`. The call arms skip their paren group and leave
+      the walk on the `[`, and the index literals were then JOINED as if they
+      were operands: the return typed Int64 and 1.75 came out as 1 (the
+      lekkerzeilen seat's bisect, 2026-09-15: `r = self.section(t); return
+      r[0][1]` was correct, the direct form was not). The element of an
+      untyped container is a variant; skip the group. }
+    if (Tokens[i].Kind = tkLBrack) and (i > startIdx) and
+       (Tokens[i - 1].Kind in [tkRParen, tkRBrack]) then
+    begin
+      depth := 0;
+      while i < endIdx do
+      begin
+        if Tokens[i].Kind = tkLBrack then Inc(depth)
+        else if Tokens[i].Kind = tkRBrack then
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+        Inc(i);
+      end;
+      Result := PyWiden(Result, tyVariant);
+      PyInferLastCi := -1;
+      Inc(i);
+      Continue;
+    end;
     if ((Tokens[i].Kind = tkLBrack) or (Tokens[i].Kind = tkBegin)) and
        (i > startIdx) and
        not (Tokens[i - 1].Kind in [tkIdent, tkRParen, tkRBrack, tkString]) then
@@ -6064,7 +6107,16 @@ begin
                 if qmProc >= 0 then procIdx := qmProc;
               end;
             end;
-            if procIdx < 0 then procIdx := FindProc(name);
+            { ...and a DOTTED root that is not a unit gets NO global fallback:
+              `response.read()` (bound by `with ... as response`, which the
+              local-root check does not see) is a METHOD call, and a global
+              def named `read` in some other module is a name collision, not
+              its type. Measured 2026-09-15 on the lekkerzeilen demo: three
+              modules define a module-level `read`, and the argument of
+              `parse(response.read())` was typed Int64 from one of them. }
+            if (procIdx < 0) and
+               not ((i - 2 >= startIdx) and (Tokens[i - 1].Kind = tkDot)) then
+              procIdx := FindProc(name);
             if procIdx >= 0 then tk := Procs[procIdx].RetType;
             { A call returning a CLASS has to record WHICH class, or the
               inferred local/field carries tyClass with no identity and
@@ -32182,6 +32234,36 @@ begin
       Result := delBase;
       Exit;
     end;
+    { `del s[a:b]` / `del s[i]` on a STATIC str -- a parameter every call
+      site passes a str for (PyParamTypeFromSites), where the variant it used
+      to be raised CPython's TypeError at run time. The read lowered to
+      pystr_slice / pystr_at; swap in the raising twin so the program that
+      catches the TypeError keeps running exactly as CPython does, instead of
+      meeting the compile error below for code CPython accepts. }
+    symIdx := FindProc('pystr_slice');
+    if (symIdx >= 0) and (ASTKind[delBase] = AN_CALL) and
+       (ASTIVal[delBase] = symIdx) then
+    begin
+      symIdx := FindProc('pystr_del_slice');
+      if symIdx < 0 then Error('Nil Python: pylib (pystr_del_slice) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      ASTRight[delBase] := ProcRetRecId[symIdx];
+      Result := delBase;
+      Exit;
+    end;
+    symIdx := FindProc('pystr_at');
+    if (symIdx >= 0) and (ASTKind[delBase] = AN_CALL) and
+       (ASTIVal[delBase] = symIdx) then
+    begin
+      symIdx := FindProc('pystr_del_at');
+      if symIdx < 0 then Error('Nil Python: pylib (pystr_del_at) not loaded');
+      ASTIVal[delBase] := symIdx;
+      ASTTk[delBase] := Ord(Procs[symIdx].RetType);
+      ASTRight[delBase] := ProcRetRecId[symIdx];
+      Result := delBase;
+      Exit;
+    end;
     ci := FindUClass('TPyDict');
     symIdx := -1;
     if ci >= 0 then symIdx := FindUMeth(ci, 'fetch');
@@ -35058,6 +35140,12 @@ begin
         (variant), the same fallback an unannotated local gets. uforth's native
         word bodies are all `def w(vm):`. }
       PyHdrPTypes[PyHdrNParams] := tyVariant;
+      { ...unless every CALL SITE agrees on a scalar -- PyParamTypeFromSites.
+        The variant is what an unannotated local gets; the call sites are
+        what the program already says. }
+      PyHdrPTypes[PyHdrNParams] :=
+        PyParamTypeFromSites(hdrDefIdx, PyHdrPNames[PyHdrNParams], 2, '');
+      if PyHdrPTypes[PyHdrNParams] = tyUnknown then PyHdrPTypes[PyHdrNParams] := tyVariant;
       PyHdrPCis[PyHdrNParams] := -1;
       PyHdrPSigs[PyHdrNParams] := -1;
     end
@@ -37110,6 +37198,34 @@ begin
   PySkipNestedSuite := k;
 end;
 
+function PyRetExprHasUntypedParam(defTok, s, e: Integer): Boolean;
+{ Does the expression [s, e) read a BARE parameter of the def at defTok whose
+  type nobody knows -- not annotated, not agreed by its call sites? `self`
+  and `cls` are the receiver, never an operand whose type is in question. A
+  call `p(...)` and a keyword argument `p=` are not reads of p's value. }
+var k, hdrEnd: Integer; nm, encl: AnsiString; t: TTypeKind;
+begin
+  Result := False;
+  hdrEnd := PyFindSuiteIndent(defTok, TokCount);
+  if hdrEnd < 0 then Exit;
+  for k := s to e - 1 do
+    if (Tokens[k].Kind = tkIdent) and (Tokens[k - 1].Kind <> tkDot) and
+       (Tokens[k + 1].Kind <> tkLParen) and (Tokens[k + 1].Kind <> tkAssign) then
+    begin
+      nm := GetTokenStr(k);
+      if (nm = 'self') or (nm = 'cls') then Continue;
+      if not PyHeaderHasParam(defTok, hdrEnd, nm) then Continue;
+      t := PyHeaderParamType(defTok, hdrEnd, nm);
+      if t = tyUnknown then
+        t := PyParamTypeFromSites(defTok, nm, PyDefSiteMode(defTok, encl), encl);
+      if t = tyUnknown then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+end;
+
 function PyInferDefRetTypeScanInner(methodStart: Integer; var retRec: Integer;
                                var sawNone: Boolean): TTypeKind;
 var j, pdepth, bdepth, e, k, e2, rec2, bodyScanStart, curRec: Integer;
@@ -37275,6 +37391,27 @@ begin
         cur := tyVariant
       else
         cur := PyInferExprType(j + 1, e);
+      { A BARE parameter nobody has typed, read in the expression -- `return
+        q * 3` -- makes the result whatever the CALLER passed; the literal
+        beside it does not get to decide. The token walk joined q (unknown,
+        the join's identity) with 3 and answered Int64, and the double came
+        out truncated: measured 2026-09-15, `def probe(q): return q * 3`
+        printed 4 for probe(1.5). `return a + b` was already right, because
+        two unknowns join to unknown -- it took a literal to go wrong. With
+        the sites typing (PyParamTypeFromSites) a parameter every caller
+        passes an int for stays int, so the loops that were fast stay fast. }
+      { NUMERIC results only: a comparison is a bool BY CONSTRUCTION whatever
+        its operands (`return self.n == o.n` in __eq__ came out a variant and
+        a dict lookup then missed its own key --
+        test_nilpy_unhashable_eq_without_hash, on the tier), and a str result
+        over a bare operand (`return "x" + name`) is a str in every CPython
+        run that does not raise. }
+      if ((cur = tyDouble) or PyIsMachineIntTk(cur)) and (cur <> tyBoolean) and
+         PyRetExprHasUntypedParam(methodStart, j + 1, e) then
+      begin
+        cur := tyVariant;
+        PyInferLastCi := -1;
+      end;
       { `def h(b): return b` beside `class B: pass` came back as a raw pointer.
         PyInferExprType tests IsClassType(name) BEFORE consulting the locals
         table, and every later refinement there is guarded on `tk = tyUnknown`,
@@ -38819,6 +38956,588 @@ begin
   Result := n > 0;
 end;
 
+function PyDefSiteMode(defTok: Integer; var clsName: AnsiString): Integer;
+{ Which kind of def sits at defTok, for PyParamTypeFromSites: 0 = a class's
+  __init__ (clsName = the class), 1 = a method of clsName, 2 = a module-level
+  or nested function. The nearest enclosing `class`/`def` whose suite reaches
+  defTok decides; memoised, because the walk back is over every preceding
+  construct and each candidate costs a suite skip. }
+var d, m, suiteEnd: Integer;
+begin
+  Result := 2; clsName := '';
+  for m := PyPSEnclN - 1 downto 0 do
+    if PyPSEnclDef[m] = defTok then
+    begin
+      Result := PyPSEnclMode[m]; clsName := PyPSEnclCls[m];
+      Exit;
+    end;
+  d := defTok - 1;
+  while d >= 0 do
+  begin
+    if Tokens[d].Kind in [tkClass, tkFunction] then
+    begin
+      suiteEnd := PySkipNestedSuite(d);
+      if suiteEnd > defTok then
+      begin
+        if (Tokens[d].Kind = tkClass) and (d + 1 < TokCount) and
+           (Tokens[d + 1].Kind = tkIdent) then
+        begin
+          clsName := GetTokenStr(d + 1);
+          if PyMethodName(GetTokenStr(defTok + 1)) = 'create' then Result := 0
+          else Result := 1;
+        end;
+        Break;        { a def encloses it: nested, stays 2 }
+      end;
+    end;
+    Dec(d);
+  end;
+  if PyPSEnclN < PY_PSMEMO_MAX then
+  begin
+    PyPSEnclDef[PyPSEnclN] := defTok;
+    PyPSEnclMode[PyPSEnclN] := Result;
+    PyPSEnclCls[PyPSEnclN] := clsName;
+    Inc(PyPSEnclN);
+  end;
+end;
+
+function PyIsSiteIntTk(tk: TTypeKind): Boolean;
+{ A machine int for the site typer: PyIsMachineIntTk counts Boolean as one
+  (it is an ordinal), and a `b=True` default typed Int64 printed 1 for True
+  (test_nilpy_a_constructor_default_skipped_by_a_keyword, 2026-09-15). A
+  bool is its own scalar here: it agrees only with a bool. }
+begin
+  Result := PyIsMachineIntTk(tk) and (tk <> tyBoolean);
+end;
+
+function PyStmtEndFrom(k: Integer): Integer;
+{ The token index that ends the simple statement containing k: the first
+  NEWLINE, DEDENT, EOF or `;` at bracket depth 0. }
+var depth: Integer;
+begin
+  depth := 0;
+  while k < TokCount do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+    else if (depth <= 0) and
+            (Tokens[k].Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon]) then Break;
+    Inc(k);
+  end;
+  Result := k;
+end;
+
+function PyLocalRhsType(defTok, bodyLo, bodyHi, s, e: Integer; const nm: AnsiString): TTypeKind;
+{ The type of the expression [s, e) inside the def at defTok, for the local
+  typer below: PyInferExprType under the caller's scan ranges, and when that
+  cannot type a single bare name, the name is either a parameter of this def
+  (its call sites know) or another local (its bindings know). `nm` is the
+  local being typed, so a self-reference is NOT chased here -- the
+  accumulator arm of the caller reads it. }
+var t2: TTypeKind; nm2, encl: AnsiString;
+begin
+  t2 := PyInferExprType(s, e);
+  PyInferLastCi := -1;
+  if (t2 = tyUnknown) and (e = s + 1) and (Tokens[s].Kind = tkIdent) and
+     (PyPSDepth < 6) then
+  begin
+    nm2 := GetTokenStr(s);
+    Inc(PyPSDepth);
+    if PyHeaderHasParam(defTok, bodyLo, nm2) then
+      t2 := PyParamTypeFromSites(defTok, nm2, PyDefSiteMode(defTok, encl), encl)
+    else if nm2 <> nm then
+      t2 := PyLocalScalarType(defTok, bodyLo, bodyHi, nm2);
+    Dec(PyPSDepth);
+  end;
+  if t2 = tyString then t2 := tyAnsiString;
+  if PyIsSiteIntTk(t2) then t2 := tyInt64;
+  Result := t2;
+end;
+
+function PyLocalScalarType(defTok, bodyLo, bodyHi: Integer; const nm: AnsiString): TTypeKind;
+begin
+  Result := PyLocalScalarTypeFrom(defTok, bodyLo, bodyHi, nm, tyUnknown);
+end;
+
+function PyLocalScalarTypeFrom(defTok, bodyLo, bodyHi: Integer; const nm: AnsiString;
+                               base0: TTypeKind): TTypeKind;
+{ The scalar type of the LOCAL `nm` of the def at defTok, or tyUnknown. With
+  base0 set, `nm` is a PARAMETER whose call sites agreed on base0, and the
+  question is whether the body REBINDS it to something else: `payload =
+  json.loads(payload)` after `isinstance(payload, str)` makes a str parameter
+  a variant, and typing it str refused the program at the rebinding
+  (lekkerzeilen gauges.py:108, 2026-09-15). Every binding must agree with
+  base0 exactly as with a base found in the body. Token-
+  only, over the def's body [bodyLo, bodyHi), and it answers only when EVERY
+  binding agrees:
+
+    - a plain binding `nm = expr` (prev token a statement start, or `=` in a
+      chain) contributes expr's type; an untypeable one is a veto, because an
+      unknown could be the float that a later int claim would TRUNCATE at the
+      typed parameter (pyvar_to_int truncates a double silently -- that is the
+      one coercion in the family that is not loud);
+    - `for nm in range(` contributes int;
+    - an accumulator step -- `nm = nm <op> rest` or `nm <op>= rest`, the
+      ordinary spelling of a loop -- keeps the type the plain bindings gave
+      when rest has that type, or when the type is float and rest is an int
+      (float + int is float). `/` needs a float base. Anything else vetoes.
+    - any OTHER binding form vetoes: a tuple target, `for nm in <not range>`,
+      `as nm`, `global`/`nonlocal nm`, a keyword argument spelled `nm=`.
+
+  PyRetNameType, the existing name typer, takes the LAST typeable binding and
+  ignores augmented assignment entirely; that is right for the class-identity
+  chase it serves and wrong here, where `x = 0; x += 0.5` typed int would
+  truncate every later value. Born for `x = 0.0; for ...: x = x + dt;
+  g.at(x, 3.0)` (bench2), the shape every integrator loop in the lekkerzeilen
+  demo has. }
+var k, e, s, w, pass: Integer; t, base: TTypeKind; ok, isBind: Boolean;
+    prevK: TTokenKind; prevS: AnsiString; op: TTokenKind;
+begin
+  Result := tyUnknown;
+  if (bodyLo < 0) or (bodyHi <= bodyLo) then Exit;
+  base := base0; ok := True;
+  for pass := 0 to 1 do
+  begin
+    k := bodyLo;
+    while (k + 1 < bodyHi) and ok do
+    begin
+      if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) and
+         (Tokens[k - 1].Kind <> tkDot) then      { `self.nm = nm` binds the FIELD }
+      begin
+        prevK := Tokens[k - 1].Kind;
+        prevS := '';
+        if prevK = tkIdent then prevS := GetTokenStr(k - 1);
+        isBind := (prevK in [tkNewline, tkIndent, tkDedent, tkSemicolon, tkAssign]);
+        e := PyStmtEndFrom(k + 1);
+        if (prevS = 'as') or (prevS = 'global') or (prevS = 'nonlocal') then ok := False
+        else if prevK = tkFor then
+        begin
+          if pass = 0 then
+          begin
+            if (Tokens[k + 1].Kind = tkIn) and (Tokens[k + 2].Kind = tkIdent) and
+               (GetTokenStr(k + 2) = 'range') and (Tokens[k + 3].Kind = tkLParen) then
+            begin
+              if base = tyUnknown then base := tyInt64
+              else if base <> tyInt64 then ok := False;
+            end
+            else ok := False;
+          end;
+        end
+        else if Tokens[k + 1].Kind = tkAssign then
+        begin
+          if not isBind then ok := False
+          else
+          begin
+            s := k + 2;
+            if (e > s + 2) and (Tokens[s].Kind = tkIdent) and (GetTokenStr(s) = nm) and
+               (Tokens[s + 1].Kind in [tkPlus, tkMinus, tkStar, tkSlash]) then
+            begin
+              { accumulator: judged in pass 1 against the base }
+              if pass = 1 then
+              begin
+                op := Tokens[s + 1].Kind;
+                t := PyLocalRhsType(defTok, bodyLo, bodyHi, s + 2, e, nm);
+                if not ((t = base) or ((base = tyDouble) and PyIsSiteIntTk(t))) then ok := False
+                else if (op = tkSlash) and (base <> tyDouble) then ok := False;
+              end;
+            end
+            else if pass = 0 then
+            begin
+              { a plain binding that mentions the name itself -- `payload =
+                payload.split(",")`, `x = f(x)` -- is a rebinding to whatever
+                that yields, and the typer would answer it FROM the name's own
+                type: circular. Veto. }
+              w := s;
+              while (w < e) and not ((Tokens[w].Kind = tkIdent) and (GetTokenStr(w) = nm) and
+                                     (Tokens[w - 1].Kind <> tkDot)) do Inc(w);
+              if w < e then begin ok := False; t := tyUnknown; end
+              else t := PyLocalRhsType(defTok, bodyLo, bodyHi, s, e, nm);
+              if t = tyUnknown then ok := False
+              else if base = tyUnknown then base := t
+              else if base <> t then ok := False;
+            end;
+          end;
+        end
+        else if Tokens[k + 1].Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkTrueDivEq] then
+        begin
+          if not isBind then ok := False
+          else if pass = 1 then
+          begin
+            t := PyLocalRhsType(defTok, bodyLo, bodyHi, k + 2, e, nm);
+            if not ((t = base) or ((base = tyDouble) and PyIsSiteIntTk(t))) then ok := False
+            else if (Tokens[k + 1].Kind = tkTrueDivEq) and (base <> tyDouble) then ok := False;
+          end;
+        end
+        else if Tokens[k + 1].Kind in [tkSlashEq, tkModEq, tkPowEq] then ok := False
+        else if (prevK in [tkComma, tkLParen]) or (Tokens[k + 1].Kind = tkComma) then
+        begin
+          { a tuple target binds when `=` or `in` follows at depth 0 }
+          s := k + 1;
+          while (s < e) and not (Tokens[s].Kind in [tkAssign, tkIn]) do
+            if Tokens[s].Kind in [tkLParen, tkLBrack, tkBegin] then s := PyEndOfGroup(s, e)
+            else Inc(s);
+          if s < e then ok := False;
+        end;
+      end;
+      Inc(k);
+    end;
+    if (pass = 0) and (base = tyUnknown) then ok := False;
+  end;
+  if ok and ((base = tyDouble) or (base = tyAnsiString)) then
+    Result := base;
+  { an int local is never an answer either -- see the int-site veto in
+    PyParamTypeFromSites; the int base still serves the accumulator check }
+  if PxxDbgEnabled('n.psites') then
+    WriteLn('PXXDBG n.psites   local ', nm, ' of def@', defTok, ' ok=', Ord(ok), ' tk=', Ord(Result));
+end;
+
+function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
+                              mode: Integer; const clsName: AnsiString): TTypeKind;
+{ A BARE parameter of the def at defTok: what type do its CALL SITES pass?
+  mode 0 = a constructor (`__init__`): the sites are `Cls(`; mode 1 = a method:
+  the sites are `.name(` (an unbound `Cls.name(` is skipped -- its argument
+  positions are shifted); mode 2 = a module-level function: the sites are
+  bare `name(`. Every def of that name shares the `.name(` sites, which is
+  what a polymorphic call is: `c.accumulate(state, env, acc)` types the
+  parameter for every contributor's accumulate at once, and a same-named
+  method somewhere else with different arguments VETOES all of them rather
+  than mis-typing one. Memoised per (defTok, pname): the header is parsed up
+  to three times (shell, pre-pass, body) and the three MUST agree, so they
+  ask one function once.
+
+  Born as the constructor-only field typer, which is still its first use:
+  `self.cell = cell` in a constructor whose `cell` parameter is BARE -- what
+  type do this class's constructions pass for it?
+
+  The field took the variant type here, which is correct and is also the
+  single largest cost in the lekkerzeilen demo: every field is set from a bare
+  __init__ parameter (334 constructor parameters, zero annotated -- which is
+  how Python is written), so every arithmetic op on every field runs the full
+  dynamic protocol. Measured 2026-09-15 on `Grid.at`: annotating the ctor's
+  parameters took it from 1337 B / 48 calls / 0 SSE to 280 B / 1 call / 3 SSE,
+  nineteen times faster, identical output. The program does not get annotated
+  (the owner's rule: programs do not contort for the frontend); the compiler
+  reads what the call sites already say.
+
+  TOKEN-ONLY, like every other pre-pass scanner: find `Cls(` in the token
+  stream, split the arguments, take the one for this parameter (positional or
+  keyword, else the header's default), type it with PyInferExprType under the
+  enclosing def's scan ranges. Every site must agree on ONE scalar type --
+  float, a machine int, bool, str -- or the answer is unknown and the field
+  stays a variant exactly as before. int against float is a disagreement, not
+  a widening: `range(self.n)` on a float field would be a new error.
+
+  ONLY THIS MODULE'S SITES ARE VISIBLE. Imports are lexed one module at a
+  time, so a construction in another module cannot be consulted. Measured on
+  the demo: 38 of the 45 constructed classes are constructed only inside their
+  own module, and the cross-module ones (Vec3, Quat) have 13 and 10 own-module
+  literal sites. A foreign site that disagrees meets a typed field: the store
+  coerces through pyvar_to_float / pyvar_to_int and RAISES on a string, so the
+  failure is loud, never a silent wrong value. A class-typed answer is
+  deliberately NOT given yet: a variant-into-class-field store needs the unbox
+  arm and that is a second step with its own fixture.
+
+  Returns tyUnknown for: no site, any site with `*`/`**` arguments, a
+  keyword-only parameter, a site whose argument the scanner cannot type, or
+  disagreement. PXXDBG=n.psites prints the decision per parameter and per site.
+  feature-n-type-a-bare-constructor-parameter-from-its-call-sites }
+var i, k, e, pos, cur, depth, nSites, argIdx, argS, argE, dfltS, dfltE: Integer;
+    methodStart, hdrStop, m: Integer;
+    siteName: AnsiString; t, agreed: TTypeKind;
+    found, isKw, gaveUp, seenStar, isSite: Boolean;
+    sHLo, sHHi, sBLo, sBHi, d, suiteEnd, best, scanLo, scanHi: Integer;
+    encl: AnsiString;
+begin
+  Result := tyUnknown;
+  if (defTok < 0) or (defTok + 2 >= TokCount) or (Tokens[defTok].Kind <> tkFunction) then Exit;
+  { memo: the same question from the shell, the pre-pass and the body parse }
+  for m := PyPSMemoN - 1 downto 0 do
+    if (PyPSMemoDef[m] = defTok) and (PyPSMemoName[m] = pname) then
+    begin
+      Result := PyPSMemoTk[m];
+      Exit;
+    end;
+  methodStart := defTok;
+  hdrStop := TokCount;
+  if mode = 0 then siteName := clsName else siteName := GetTokenStr(defTok + 1);
+  { 1. the parameter's POSITION (self counts as 0) and its default, if any }
+  pos := -1; dfltS := -1; dfltE := -1; cur := -1; seenStar := False;
+  i := methodStart;
+  while (i < hdrStop) and (Tokens[i].Kind <> tkLParen) do Inc(i);
+  if i >= hdrStop then Exit;
+  depth := 1; Inc(i);
+  while (i < hdrStop) and (depth > 0) do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then Dec(depth)
+    else if depth = 1 then
+    begin
+      if (Tokens[i].Kind = tkIdent) and
+         (Tokens[i - 1].Kind in [tkLParen, tkComma]) then
+      begin
+        Inc(cur);
+        if GetTokenStr(i) = pname then
+        begin
+          if seenStar then Exit;      { keyword-only: no positional index }
+          pos := cur;
+          { a default: `name = expr` or `name: T = expr`, up to the next comma }
+          k := i + 1;
+          if Tokens[k].Kind = tkColon then
+            while (k < hdrStop) and not (Tokens[k].Kind in [tkAssign, tkComma, tkRParen]) do Inc(k);
+          if Tokens[k].Kind = tkAssign then
+          begin
+            dfltS := k + 1; dfltE := dfltS;
+            while (dfltE < hdrStop) and (Tokens[dfltE].Kind <> tkComma) and
+                  (Tokens[dfltE].Kind <> tkRParen) do
+              if Tokens[dfltE].Kind in [tkLParen, tkLBrack, tkBegin] then
+                dfltE := PyEndOfGroup(dfltE, hdrStop)
+              else Inc(dfltE);
+          end;
+        end;
+      end
+      else if (Tokens[i].Kind in [tkStar, tkPow]) then seenStar := True;
+    end;
+    Inc(i);
+  end;
+  if (pos < 0) or ((mode <> 2) and (pos = 0)) then Exit;
+  { 2. every `Cls(` in the module that is a CALL: not `def Cls(`, not
+       `class Cls(`, not `mod.Cls(` (a qualified name is another module's) }
+  sHLo := PyInferHdrLo;  sHHi := PyInferHdrHi;
+  sBLo := PyInferBodyLo; sBHi := PyInferBodyHi;
+  nSites := 0; agreed := tyUnknown; gaveUp := False;
+  { The DEFAULT is a site of its own -- a value the parameter takes, written
+    beside the declaration, with no blind spot at all. `Vec3(x=0.0, y=0.0,
+    z=0.0)` types its three fields from this line alone, and the demo
+    constructs Vec3 87 times from OTHER modules against 14 in its own (the
+    lekkerzeilen seat's census, 2026-09-15), so for the hot classes this is
+    the arm that carries the answer. It still has to AGREE with every visible
+    call site. }
+  if dfltS >= 0 then
+  begin
+    PyInferHdrLo := -1; PyInferHdrHi := -1;
+    PyInferBodyLo := -1; PyInferBodyHi := -1;
+    t := PyInferExprType(dfltS, dfltE);
+    PyInferLastCi := -1;
+    if t = tyString then t := tyAnsiString;
+    if (t = tyDouble) or (t = tyAnsiString) then
+    begin
+      agreed := t; nSites := 1;
+    end
+    else if Tokens[dfltS].Kind <> tkNil then gaveUp := True;
+    { an int or bool default (`scale=2`, `v=True`) vetoes like an int site -- see the site loop }
+    { `= None` is not a type and does not veto the call sites either }
+  end;
+  { ONLY THE DEF'S OWN SOURCE FILE IS SCANNED. Every imported module AND every
+    builtin Pascal unit is appended to the one token stream, so an unbounded
+    scan meets `x.at(` in pylib.pas -- Pascal, one argument -- and vetoes
+    Grid.at's `z` with a site that is not even Python (measured 2026-09-15:
+    token 68229, pylib.pas:3985). The file marks PyLexAppend plants
+    (PasSrcRangeStart) bound the file; the main file is everything before
+    the first mark. A cross-module site is therefore invisible: a caller in
+    another module passing a different scalar meets the typed parameter's
+    coercion, which raises on a string and never yields a silent wrong value. }
+  scanLo := 0; scanHi := TokCount;
+  for m := 0 to PasSrcRangeCount - 1 do
+  begin
+    if (PasSrcRangeStart[m] <= defTok) and (PasSrcRangeStart[m] > scanLo) then
+      scanLo := PasSrcRangeStart[m];
+    if (PasSrcRangeStart[m] > defTok) and (PasSrcRangeStart[m] < scanHi) then
+      scanHi := PasSrcRangeStart[m];
+  end;
+  k := scanLo + 1;
+  while (k + 1 < scanHi) and not gaveUp do
+  begin
+    isSite := (Tokens[k].Kind = tkIdent) and (Tokens[k + 1].Kind = tkLParen) and
+              (GetTokenStr(k) = siteName);
+    if isSite then
+    begin
+      if mode = 1 then
+        { a METHOD site is `.name(`, and not `Cls.name(` (unbound: the
+          arguments are shifted by one) }
+        isSite := (Tokens[k - 1].Kind = tkDot) and
+                  not ((k >= 2) and (Tokens[k - 2].Kind = tkIdent) and
+                       (FindUClass(GetTokenStr(k - 2)) >= 0))
+      else
+        isSite := not (Tokens[k - 1].Kind in [tkFunction, tkClass, tkDot]);
+    end;
+    if isSite then
+    begin
+      e := PyEndOfGroup(k + 1, TokCount);      { just past the ')' }
+      { split the arguments at depth 0; find ours }
+      found := False; argIdx := 0; i := k + 2; argS := -1; argE := -1;
+      while (i < e - 1) and not found and not gaveUp do
+      begin
+        if Tokens[i].Kind in [tkStar, tkPow] then
+        begin
+          gaveUp := True;
+          if PxxDbgEnabled('n.psites') then
+            WriteLn('PXXDBG n.psites   site@', k, ' star-args -> veto');
+        end
+        else
+        begin
+          isKw := (Tokens[i].Kind = tkIdent) and (i + 1 < e - 1) and
+                  (Tokens[i + 1].Kind = tkAssign);
+          argS := i;
+          if isKw then argS := i + 2;
+          argE := argS;
+          while (argE < e - 1) and (Tokens[argE].Kind <> tkComma) do
+            if Tokens[argE].Kind in [tkLParen, tkLBrack, tkBegin] then
+              argE := PyEndOfGroup(argE, e - 1)
+            else Inc(argE);
+          if isKw then found := (GetTokenStr(i) = pname)
+          else begin
+            if mode = 2 then found := (argIdx = pos) else found := (argIdx = pos - 1);
+            Inc(argIdx);
+          end;
+          i := argE + 1;
+        end;
+      end;
+      if gaveUp then Break;
+      if not found then
+      begin
+        if dfltS < 0 then
+        begin
+          if PxxDbgEnabled('n.psites') then
+            WriteLn('PXXDBG n.psites   site@', k, ' no argument and no default -> veto  (', PasSrcOfTok(k), ':', Tokens[k].Line, ')');
+          gaveUp := True; Break;
+        end;
+        argS := dfltS; argE := dfltE;
+      end;
+      if argE <= argS then
+      begin
+        if PxxDbgEnabled('n.psites') then
+          WriteLn('PXXDBG n.psites   site@', k, ' empty argument -> veto');
+        gaveUp := True; Break;
+      end;
+      { 3. type the argument under the scan ranges of the def that contains
+           the site (the nearest preceding def whose suite reaches it),
+           else the module scope (ranges -1, every def-scoped arm inert) }
+      best := -1; d := k - 1;
+      while (d >= 0) and (best < 0) do
+      begin
+        if Tokens[d].Kind = tkFunction then
+        begin
+          suiteEnd := PySkipNestedSuite(d);
+          if (suiteEnd > k) then best := d;
+        end;
+        Dec(d);
+      end;
+      if best >= 0 then
+      begin
+        PyInferHdrLo := best;
+        PyInferHdrHi := PyFindSuiteIndent(best, TokCount);
+        if PyInferHdrHi < 0 then PyInferHdrHi := best;
+        PyInferBodyLo := PyInferHdrHi;
+        PyInferBodyHi := PySkipNestedSuite(best);
+      end
+      else
+      begin
+        PyInferHdrLo := -1; PyInferHdrHi := -1;
+        PyInferBodyLo := -1; PyInferBodyHi := -1;
+      end;
+      t := PyInferExprType(argS, argE);
+      PyInferLastCi := -1;
+      { A bare argument that is the CALLER's own parameter -- `boat.step(dt,
+        env)` inside `def tick(self, dt)` -- has no type in the tokens, but the
+        caller's call sites have one: ask them, through this same function.
+        This is what carries a literal at the top of a call chain down to the
+        method that does the arithmetic. Bounded: a recursive function's site
+        is its own body, and the memo never records an answer from a bounded
+        cut, so a later unbounded question still gets a real answer. }
+      if (t = tyUnknown) and (argE = argS + 1) and (Tokens[argS].Kind = tkIdent) and
+         (best >= 0) and (PyPSDepth < 6) and
+         PyHeaderHasParam(best, PyInferBodyLo, GetTokenStr(argS)) then
+      begin
+        Inc(PyPSDepth);
+        t := PyParamTypeFromSites(best, GetTokenStr(argS),
+                                  PyDefSiteMode(best, encl), encl);
+        Dec(PyPSDepth);
+      end
+      else if (t = tyUnknown) and (argE = argS + 1) and (Tokens[argS].Kind = tkIdent) and
+              (best >= 0) and (PyPSDepth < 6) then
+      begin
+        { a bare argument that is the caller's LOCAL: `x = 0.0; ... x = x +
+          dt; g.at(x, 3.0)` -- its bindings know, see PyLocalScalarType }
+        Inc(PyPSDepth);
+        t := PyLocalScalarType(best, PyInferBodyLo, PyInferBodyHi, GetTokenStr(argS));
+        Dec(PyPSDepth);
+      end;
+      if t = tyString then t := tyAnsiString;
+      { AN INT SITE IS A VETO, NOT A CLAIM. An int-typed parameter is the one
+        answer a caller this scan cannot see can defeat SILENTLY: only the
+        def's own file is scanned, a caller in another module passing 1.25
+        meets pyvar_to_int and is truncated to 1 with no diagnostic (a static
+        1.25 is refused at compile time, which is loud but refuses a program
+        CPython runs). Measured 2026-09-15 on the demo by the lekkerzeilen
+        seat: text.measure(line, scale=2) typed int from its ONE own-file
+        site while all four real callers sit in ui.py/app.py, and 80 of the
+        357 typed parameters were int on a single site. A float claim is
+        safe in both directions (an int widens exactly, a str raises), so
+        floats, strs and bools are claimed and ints are not -- and an int
+        site vetoes a float claim too, because CPython computes `n * 2` as an
+        int there and a float claim would print 6.0 for 6. Re-enable when
+        the import closure is lexed before parsing, so every site is visible:
+        feature-n-lex-the-import-closure-before-parsing-so-call-site-typing-sees-every-caller }
+      if PyIsMachineIntTk(t) then
+      begin
+        { ...and a BOOL is the same silent class: a bool field typed from
+          `v=True` turned a later `self.icon.visible = 11` into True where
+          CPython keeps 11 (test_nilpy_chained_assign_nested_attr, on the
+          tier), and a bool parameter handed 2 computes with True. Only a
+          float (an int widens exactly) and a str (anything else raises)
+          fail loudly or not at all. }
+        if PxxDbgEnabled('n.psites') then
+          WriteLn('PXXDBG n.psites   site@', k, ' int/bool argument -> veto (ints and bools are not claimed)');
+        gaveUp := True;
+        Break;
+      end;
+      if PxxDbgEnabled('n.psites') then
+        WriteLn('PXXDBG n.psites   site@', k, ' arg ', argS, '..', argE, ' "',
+                GetTokenStr(argS), '" encl=', best, ' t=', Ord(t));
+      { THE DEFAULT ANCHORS; A SITE CAN CONTRADICT IT BUT NOT WEAKEN IT. A
+        site the scanner cannot type at all (an argument that is another
+        def's bare parameter, a subscript of a variant, the class's OWN field
+        inside its own method -- `Vec3(self.x + o.x, ...)` in __add__, whose
+        field type is the very thing being decided) leaves a default-anchored
+        answer standing, because the default IS the declared shape and a
+        wrong guess meets the coercion loudly. With no default there is no
+        anchor, and an untypeable site is a veto. A site of a DIFFERENT scalar
+        type is a veto either way. }
+      if not ((t = tyDouble) or (t = tyAnsiString)) then
+      begin
+        if (dfltS < 0) or (agreed = tyUnknown) or (t <> tyUnknown) then gaveUp := True;
+      end
+      else if nSites = 0 then agreed := t
+      else if agreed <> t then gaveUp := True;
+      Inc(nSites);
+      k := e - 1;
+    end;
+    Inc(k);
+  end;
+  if (not gaveUp) and (nSites > 0) then
+  begin
+    { the sites agree; now the body must not rebind the parameter to
+      something else (PyLocalScalarTypeFrom), read under this def's ranges }
+    PyInferHdrLo := defTok;
+    PyInferHdrHi := PyFindSuiteIndent(defTok, TokCount);
+    if PyInferHdrHi < 0 then PyInferHdrHi := defTok;
+    PyInferBodyLo := PyInferHdrHi;
+    PyInferBodyHi := PySkipNestedSuite(defTok);
+    Result := PyLocalScalarTypeFrom(defTok, PyInferBodyLo, PyInferBodyHi, pname, agreed);
+  end;
+  PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
+  PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
+  if (PyPSMemoN < PY_PSMEMO_MAX) and (PyPSDepth = 0) then
+  begin
+    PyPSMemoDef[PyPSMemoN] := defTok;
+    PyPSMemoName[PyPSMemoN] := pname;
+    PyPSMemoTk[PyPSMemoN] := Result;
+    Inc(PyPSMemoN);
+  end;
+  if PxxDbgEnabled('n.psites') then
+    WriteLn('PXXDBG n.psites ', siteName, '.', pname, ' mode=', mode, ' sites=', nSites,
+            ' gaveup=', Ord(gaveUp), ' tk=', Ord(Result));
+end;
+
 procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
                            isCtor: Boolean;
                            var tk: TTypeKind; var fldRec, fldSig: Integer);
@@ -39060,6 +39779,19 @@ begin
       tk := tyVariant;
       fldRec := REC_NONE;
       fldSig := -1;
+      { a BARE PARAMETER, alone on the right-hand side, in the CONSTRUCTOR:
+        ask what this module's constructions pass for it -- see
+        PyCtorParamTypeFromCallSites. Unknown leaves the variant above. }
+      if isCtor and (Tokens[j + 4].Kind = tkIdent) and (k2 = j + 5) and
+         PyHeaderHasParam(methodStart, j, GetTokenStr(j + 4)) then
+      begin
+        if PyInferFieldCi >= 0 then
+          tk := PyParamTypeFromSites(methodStart, GetTokenStr(j + 4), 0,
+                                     PyRawName(UClsNOff[PyInferFieldCi],
+                                               UClsNLen[PyInferFieldCi]));
+        if tk = tyUnknown then tk := tyVariant;
+        fldRec := REC_NONE;
+      end;
     end
     else if not isCtor then
       { OUTSIDE the constructor an unreadable right-hand side is not a
@@ -39129,6 +39861,7 @@ begin
         fldSig := -1;
         if fldAnn >= 0 then
         begin
+          PyInferFieldCi := ci;
           PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
                            tk, fldRec, fldSig);
           PyFJNote(ci, GetTokenStr(j + 2), tk);
@@ -39826,8 +40559,18 @@ begin
           begin
             { UNANNOTATED parameter — defaults to Any (variant), matching
               PyParseDefHeader. Must agree with the header parse or the
-              registered signature and the frame disagree. }
+              registered signature and the frame disagree. Both ask
+              PyParamTypeFromSites, memoised, so they cannot disagree. }
             ptypes[nparams] := tyVariant;
+            if not (PyIsStaticMethodAt(i) or PyIsClassMethodAt(i)) then
+            begin
+              if isCtor then
+                ptypes[nparams] := PyParamTypeFromSites(i, pnames[nparams], 0,
+                                     PyRawName(UClsNOff[ci], UClsNLen[ci]))
+              else
+                ptypes[nparams] := PyParamTypeFromSites(i, pnames[nparams], 1, '');
+              if ptypes[nparams] = tyUnknown then ptypes[nparams] := tyVariant;
+            end;
           end
           else
           begin
@@ -39889,6 +40632,7 @@ begin
     the top of the file. }
   PyInferHdrLo := -1;  PyInferHdrHi := -1;
   PyInferBodyLo := -1; PyInferBodyHi := -1;
+  PyInferFieldCi := -1;
   PyChaseBareDepth := 0;
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
       { __repr__/__str__ return a str by contract — the SIGNATURE half of the
@@ -40215,6 +40959,7 @@ begin
           fldSig := -1;
           if fldAnn >= 0 then
           begin
+            PyInferFieldCi := ci;
             PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd, isCtor,
                              tk, fldRec, fldSig);
             { ...unless the name is a CLASS ATTRIBUTE lowered as a shared slot
@@ -40479,6 +41224,7 @@ var isGenDef: Boolean;
     savedHoist: Integer; clsAttrSeq: Integer;
     origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer;
+    psDefTok: Integer; isStatic: Boolean;   { the def token and its @staticmethod, for PyParamTypeFromSites }
     { MAX_PROC_PARAMS -- must equal the bound in PyRegisterClassMembers above.
       See the note there. }
     pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
@@ -40553,6 +41299,8 @@ begin
     [def][name][(][CurTok] — putting `def` four back. Off by one, only the
     pre-pass saw the decorator, and the two passes registered DIFFERENT
     signatures: exactly the silent ABI mismatch this pairing is warned about. }
+  psDefTok := TokPos - 4;
+  isStatic := PyIsStaticMethodAt(TokPos - 4) and (not isCtor);
   if PyIsStaticMethodAt(TokPos - 4) and (not isCtor) then
   begin
     pnames[0] := '$clsrecv'; ptypes[0] := tyPointer; pcis[0] := -1;
@@ -40607,8 +41355,18 @@ begin
     begin ptypes[nparams] := tyClass; pcis[nparams] := ci; end
     else if CurTok.Kind <> tkColon then
     begin
-      { UNANNOTATED parameter -> Any (variant); must match the pre-pass. }
+      { UNANNOTATED parameter -> Any (variant); must match the pre-pass, and
+        it does by construction: the same memoised PyParamTypeFromSites. }
       ptypes[nparams] := tyVariant; pcis[nparams] := -1;
+      if not (isStatic or isClsMeth) then
+      begin
+        if isCtor then
+          ptypes[nparams] := PyParamTypeFromSites(psDefTok, pnames[nparams], 0,
+                               PyRawName(UClsNOff[ci], UClsNLen[ci]))
+        else
+          ptypes[nparams] := PyParamTypeFromSites(psDefTok, pnames[nparams], 1, '');
+        if ptypes[nparams] = tyUnknown then ptypes[nparams] := tyVariant;
+      end;
       if CurTok.Kind = tkAssign then PySkipParamDefaultAtCursor;
     end
     else
