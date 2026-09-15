@@ -26708,3 +26708,88 @@ side rather than the ordering side.
 enough in time and personnel that recurrence is not yet established across
 independent subsystems in the sense that file's promotion rule means. Revisit
 if it turns up in a lane with no connection to this one.
+
+## A REGION PROFILER MIS-ATTRIBUTES A DEFERRED FREE BY EXACTLY THE QUANTITY UNDER MEASUREMENT, AND THE ENCLOSING REGION READS NEGATIVE
+
+Measured 2026-09-15 by the lekkerzeilen seat, profiling the demo's physics
+integrator. The instrument was sound, the partition was complete, the sums
+checked out — and the per-region reading was wrong in a way that would have
+sent the next person to the wrong function.
+
+**The setup.** Markers partition `Body.step` into regions; an allocation is
+attributed to the region open when it fires, and so is a free. Net = allocs −
+frees per region. Over 26153 steps:
+
+| region | allocs | frees | net | per step |
+|---|---|---|---|---|
+| contrib | 7778892 | 6606889 | +1172003 | 297.4 allocs |
+| angular | 267517 | 109487 | +158030 | 10.2 |
+| linear | 106485 | 27118 | +79367 | 4.1 |
+| **body (remainder)** | **4067** | **265355** | **−261288** | **0.2** |
+
+The remainder of `Body.step` shows 265355 frees against 4067 allocations. Read
+naively: the tail of the function reclaims memory, and `contrib` leaks ~44.8
+objects per step.
+
+**Both halves are artefacts.** pxx releases at SCOPE EXIT, and the enclosing
+scope closes after the inner regions do — so a free is attributed to whatever
+region happened to be open when the release FIRED, which for a deferred release
+is systematically not the region that allocated. A birthplace census over the
+same stream, same binary, attributing each still-live address to the region that
+ALLOCATED it, put `body` at 122 objects for the entire run — 0.00 per step,
+against a net of −261288.
+
+**Same stream, same run, opposite reading of the same region.**
+
+**THE GENERAL FORM.** Wherever frees are DEFERRED relative to allocations —
+scope-exit refcounting, arena reset, a drain at the end of a frame, a GC pass —
+net-per-region is not leak-per-region, and the two differ by *precisely the
+quantity you are trying to measure*. The error is not noise around the answer;
+it is the answer, moved to a neighbouring row. A region that merely OUTLIVES its
+siblings collects their releases and reads negative, which presents as a
+reclaiming region rather than as an artefact, so nothing in the table looks
+broken.
+
+**The tell is a NEGATIVE region**, and it is easy to rationalise — "that is where
+cleanup happens" is a true sentence about most programs and it is exactly what
+the artefact looks like. Treat any region whose net is negative as evidence that
+releases are landing outside their birthplace, not as a finding about that
+region.
+
+**The instrument that answers the question**: remember each live address with
+the region that allocated it, drop it on the free, and count what is still
+standing BY BIRTHPLACE. That is a different program, not a different reading of
+the same table — the deferred-free information is simply not present in
+per-region net counts, and no amount of care in reading them recovers it.
+
+**AND A SINGLE ENDPOINT STILL CANNOT SEPARATE A LEAK FROM A RETAINED SET.** The
+birthplace census counts (leaked) + (legitimately retained) + (born too recently
+to have been freed). A retained set is BOUNDED and a leak is LINEAR, so the
+discriminator is two checkpoints and a difference, where anything retained
+cancels. Do not quote a birthplace count as a leak rate from one census.
+
+**Validate such an analyser on a synthetic stream with known ground truths**, and
+include the deferred-free case explicitly — an object allocated inside a region
+and freed after that region closes must be attributed to its birthplace, and the
+enclosing region must not go negative. That is the exact case the net-per-region
+instrument got wrong, so it is the one a replacement has to be shown to get
+right.
+
+**PAD THE SYNTHETIC TO PRODUCTION VOLUME, NOT MERELY PRODUCTION MAGNITUDE.** The
+seat's own control failed first and for a reason that does not travel: a bounded
+retained pool reported a 54 bytes/step leak, because `mawk` BLOCK-BUFFERS ITS
+INPUT, so a low-volume generator delivers nothing until EOF and two wall-clock
+checkpoints collapse onto the end of the run. The production stream is 13 MB/s
+and never lags, so the defect existed ONLY in the control. That is the dangerous
+direction: *"it is only the test"* is true here and is also the sentence said
+right before shipping a real one, and the only way to tell them apart was to fix
+the control and watch all five ground truths come back. Any time-based
+checkpoint inside a pipeline analyser has this shape.
+
+**NOT PROMOTED TO CLAUDE.md, and the reason is the promotion rule rather than
+the quality.** This is one subsystem — a refcounting runtime with scope-exit
+releases, profiled by one seat. That file promotes on RECURRENCE across an
+independent second subsystem, not on merit, and running the two together is how
+it grew to 72KB the first time. The measurement is banked here and credited to
+the lekkerzeilen seat; promote it if a region/arena profiler in an unrelated
+lane reads negative for the same reason.
