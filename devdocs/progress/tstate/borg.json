@@ -15121,6 +15121,7 @@
    "range": [
     "f78e381e5a812d1e3e126e6c7aeb338676ce08f6"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh",
    "status": "fail"
   }
