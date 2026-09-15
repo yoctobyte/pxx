@@ -241,6 +241,49 @@ and RECVLIVE is the half this one cannot be -- a premature free passes every
 byte row here, and a leak passes every value row there.
 
 
+## EXCULPATION 2026-09-15: THIS FAMILY IS NOT LEKKERZEILEN'S HOT-PATH LEAK
+
+This ticket was opened from lekkerzeilen and ranked partly on that. **It does
+not reach the demo's hot path**, established by lekkerzeilen-c8 across four
+census passes, the last one on the corrected k-1 predicate, with receivers
+resolved at their assignment rather than matched by method name.
+
+Every hot-path site resolves to a **float** attribute, which by the table below
+is unboxed and leaks nothing:
+
+| site | returns | verdict |
+|---|---|---|
+| `sim.py:195` `water_height` | `self.level`, float | 0 -- unboxed |
+| `vessel.py:505` `Crew.settle` | `self.offset`, float | 0 -- unboxed |
+| `app.py:2105` `App._level_of` | `self.level`, float | 0 -- unboxed |
+
+The only heap-referent sites in either tree are **startup-only or
+keypress-only**: `Vessel.rig_data` / `crew_data` (lists, `_build_meshes`, once)
+and `App.change_boat` (a string, on a keypress).
+
+`Crew.settle` is worth recording because it was the near miss. It has the
+leaking shape exactly -- one call site, executed once per crew member inside
+`_sit(dt)`, the attribute REPLACED on the line above (`self.offset += ...`), so
+the referent dies every call. Everything about it is right except the payload
+type, and `self.offset` is a float. The estimate built on it was ~10 kB/s from
+assuming a small float box; the true value is zero. **That is the dangerous
+kind of wrong** -- had the leg returned 10-15 kB/s it would have read as a
+confirmed prediction for a mechanism contributing nothing, and nothing would
+have prompted a second look.
+
+**THE RESIDUAL QUESTION AND ITS OWNER.** *"Then what is the demo's ~97 kB/s?"*
+is NOT answered here and is not this ticket's. It is c8's stage-2 leg bisect
+(`bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path`).
+Their prediction, filed before the leg landed: if `boatstep` carries part of the
+97, it is not this family, and markers go in the step.
+
+**PRIO STAYS 85, AND THE REASON CHANGES.** It is no longer "it blocks the
+demo". It is that the defect is general and unbounded in ordinary code: any
+method returning a heap-allocated attribute, called more than once per scope
+from one site, leaks `(executions - 1) x sizeof(referent)` forever, in every
+NilPy program, with no diagnostic. lekkerzeilen escapes it by using floats on
+its hot path, which is luck rather than a property of the language.
+
 ## THE LEAK NEEDS A HEAP REFERENT -- A FLOAT OR INT ATTRIBUTE LEAKS NOTHING
 
 Measured 2026-09-15, k=8, M=20000, one call site, the attribute REPLACED on
