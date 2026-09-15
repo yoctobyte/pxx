@@ -156,11 +156,13 @@ test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creato
 # all of them.
 test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy  the variant-carrier leak is OPEN again after the 2026-09-15 retraction; this is the repro, not a gate. Blocked on bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call; wire it in the commit that fixes the leak, alongside the recvlive gate
 
-# test_nilpy_a_getter_on_a_short_lived_receiver_does_not_leak_its_attribute.npy
-# is the SAME defect measured where an RSS gauge can see it: give the receiver
-# a short life and the leaked reference keeps a dead object's graph alive, 1095
-# bytes per call across five shapes. CPython prints GETTERLIVE OK; pxx at
-# cfee5d6255237332 prints GETTERLIVE FAIL with bare/ifexp/vialocal/computed/
-# discard leaking and index/chain/variantrecv/control at zero.
+# test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy
+# is the SAME defect measured where an RSS gauge can see it. Renamed off
+# "short-lived receiver" 2026-09-15: the receiver's lifetime decides only
+# whether the leak costs BYTES, and a full factorial put the cause elsewhere --
+# METHOD dispatch returning an ALREADY-OWNED managed value, drained only at
+# scope exit. Receiver TYPING is irrelevant (static and Variant both 1096); a
+# plain function on the same value is clean. CPython prints GETTERLIVE OK; pxx
+# at cfee5d6255237332 prints GETTERLIVE FAIL.
 # Wire it in the commit that fixes the leak, together with the two files above.
-test/test_nilpy_a_getter_on_a_short_lived_receiver_does_not_leak_its_attribute.npy  RSS-visible half of the variant-carrier leak; repro, not a gate. Blocked on bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
+test/test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy  RSS-visible half of the variant-carrier leak, with the factorial; repro, not a gate. Blocked on bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call

@@ -1,0 +1,250 @@
+# A METHOD that returns an ALREADY-OWNED managed value leaks ONE REFERENCE PER
+# CALL. Every call but the last: the +1 the return mints is drained only when
+# the enclosing scope exits, so a loop that does not leave its function
+# accumulates one orphaned graph per call.
+#
+# READ OFF THE TRACE, NOT INFERRED (-dPXX_OBJTRACE plus sys.stderr.write
+# markers, which interleave in exact program order because a NilPy write is an
+# unbuffered syscall per call):
+#
+#   iter 1   A list rc=1 (self.q holds it)  R 2 (return mint)  R 3 (store to k)
+#   iter 2   r 2 (k rebind drops the old)   r 1 (H dies, finalizer drops self.q)
+#            ... and it sits at rc=1 with NOTHING pointing at it, forever
+#   fn exit  only the LAST iteration's object gets its releases and is freed
+#
+# THE FACTORIAL, measured 2026-09-15 at cfee5d6255237332, N=40000. Three
+# earlier tables in this family each varied ONE factor and attributed the
+# result to it; two of the three attributions were wrong. This varies all
+# three:
+#
+#   receiver typing      static 1096   |  unannotated/Variant 1096   -- IRRELEVANT
+#   enclosing fn returns no     1096   |  yes                   0    -- DECISIVE
+#   what is returned     attribute 1096 | fresh object 0 | scalar 0  -- DECISIVE
+#   referent can die     yes    1096   |  no (long-lived)      0     -- bytes only
+#   dispatch             method 1096   |  plain function       0     -- DECISIVE
+#
+# RECEIVER TYPING WAS THE FIRST WRONG ATTRIBUTION and it survived two tables,
+# because the shapes that tested it were ALSO clean for another reason -- a
+# helper that returned each iteration, and a referent that never died. Two
+# independent preventers, one zero, nothing in the result saying which.
+#
+# RECEIVER LIFETIME WAS THE SECOND. It decides only whether the leaked
+# reference costs BYTES: a getter on a long-lived receiver leaks a reference
+# per call too, to an object that was going to live anyway, so RSS reads 0.
+# The rows below build the receiver inside the loop for exactly that reason --
+# to turn a reference leak into a byte leak an RSS gauge can see.
+#
+# WHY THE LOOP IS INSIDE THE FUNCTION IN EVERY ROW: a fixture written the
+# ordinary way, with a helper called once per iteration, is CLEAN ON THE
+# BROKEN COMPILER. The scope exit drains the slot. That arrangement certifies
+# the bug instead of catching it.
+#
+#   plain_fn        a plain function returning the same value     0   route control
+#   bare            return self.q                              1095
+#   ifexp           return self.q if c else self.r              1095
+#   vialocal        x = self.q; return x                        1096
+#   computed        work, then return self.q                    1095
+#   discard         h.bare(), result NOT stored                 1095
+#   index           return self.q[0]  (a scalar)                   0
+#   chain           return self.n     (a scalar)                   0
+#   refresh_static  long-lived STATIC receiver, dying referent   1095
+#   refresh_variant long-lived VARIANT receiver, dying referent   1096
+#   control         build the receiver, call nothing                0
+#
+# DISCARD LEAKING THE SAME AMOUNT IS LOAD-BEARING. With no store there is no
+# store-retain, so the surplus is not the store's -- which is why all three
+# predicates this family has tried, all of them at the store, were correlates.
+#
+# refresh_static AND refresh_variant ARE A PAIR and must be read together: same
+# body, same long-lived receiver, same dying referent, the ONLY variable is the
+# receiver's typing. They are what retired "the Variant path is balanced".
+#
+# plain_fn IS THE ROUTE CONTROL and is the row a wrong fix breaks first --
+# see the comment on it below.
+#
+# THRESHOLD IS A RELATION. The smallest real leak in this family is 199 (the
+# slice form, a separate surplus, deliberately not asserted); the smallest
+# leaking row asserted is 1095. 150 sits below the first and far above noise at
+# 40000 iterations.
+#
+# CPython prints GETTERLIVE OK. pxx at cfee5d6255237332 prints GETTERLIVE FAIL.
+
+class H:
+    def __init__(self):
+        self.q = [0] * 64
+        self.r = [1] * 64
+        self.n = 7
+        self.on = True
+
+    def bare(self):
+        return self.q
+
+    def ifexp(self):
+        return self.q if self.on else self.r
+
+    def vialocal(self):
+        x = self.q
+        return x
+
+    def computed(self):
+        t = self.n + 1
+        if t > 0:
+            return self.q
+        return self.r
+
+    def index(self):
+        return self.q[0]
+
+    def chain(self):
+        return self.n
+
+    # Reassigns the attribute, so the PREVIOUS referent becomes garbage on every
+    # call. This is what lets the two receiver typings be compared without
+    # varying the receiver's lifetime: the receiver is long-lived in both rows
+    # and the REFERENT is what dies.
+    def refresh(self):
+        self.q = [0] * 64
+        return self.q
+
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+
+N = 40000
+LEAK_LIMIT = 150
+held = []
+
+
+def r_bare(n):
+    for i in range(n):
+        h = H()
+        k = h.bare()
+
+
+def r_ifexp(n):
+    for i in range(n):
+        h = H()
+        k = h.ifexp()
+
+
+def r_vialocal(n):
+    for i in range(n):
+        h = H()
+        k = h.vialocal()
+
+
+def r_computed(n):
+    for i in range(n):
+        h = H()
+        k = h.computed()
+
+
+def r_discard(n):
+    for i in range(n):
+        h = H()
+        h.bare()
+
+
+def r_index(n):
+    for i in range(n):
+        h = H()
+        k = h.index()
+
+
+def r_chain(n):
+    for i in range(n):
+        h = H()
+        k = h.chain()
+
+
+# STATIC receiver, long-lived, dying referent. The paired positive for the row
+# below: if this one does not leak, the comparison underneath it proves nothing.
+def r_refresh_static(n):
+    hh = H()
+    for i in range(n):
+        k = hh.refresh()
+
+
+# VARIANT receiver -- `proto` is an unannotated parameter -- same body, same
+# long-lived receiver, same dying referent. THE ONLY VARIABLE IS THE RECEIVER'S
+# TYPING. An earlier draft called a helper per iteration instead, which was
+# clean for two reasons at once and could not tell them apart.
+def r_refresh_variant(n, proto):
+    for i in range(n):
+        k = proto.refresh()
+
+
+# THE ROUTE CONTROL, AND IT IS THE ONE A WRONG FIX BREAKS FIRST. A PLAIN
+# FUNCTION returning the same already-owned managed value does NOT leak today,
+# measured 0 bytes/call in the same factorial that found every leaking row
+# above. The defect is specific to METHOD DISPATCH. A fix that reaches every
+# call instead of every virtual call will push this row off zero, and nothing
+# else in this file would notice.
+def plain_returns_attr():
+    return GLOBAL_H.q
+
+
+def r_plain_fn(n):
+    for i in range(n):
+        GLOBAL_H.q = [0] * 64
+        k = plain_returns_attr()
+
+
+def r_control(n):
+    for i in range(n):
+        h = H()
+
+
+def r_retain(n):
+    for i in range(n):
+        held.append([0] * 16)
+
+
+ok = True
+P = H()
+GLOBAL_H = H()
+rows = [("plain_fn", r_plain_fn, None),("bare", r_bare, None), ("ifexp", r_ifexp, None),
+        ("vialocal", r_vialocal, None), ("computed", r_computed, None),
+        ("discard", r_discard, None), ("index", r_index, None),
+        ("chain", r_chain, None),
+        ("refresh_static", r_refresh_static, None),
+        ("refresh_variant", r_refresh_variant, P),
+        ("control", r_control, None)]
+
+for name, fn, arg in rows:
+    if arg is None:
+        fn(1000)
+        base = rss_kb()
+        fn(N)
+    else:
+        fn(1000, arg)
+        base = rss_kb()
+        fn(N, arg)
+    per = ((rss_kb() - base) * 1024) // N
+    if per < LEAK_LIMIT:
+        print("%s LEAKFREE" % name)
+    else:
+        print("%s LEAKS %d bytes/call" % (name, per))
+        ok = False
+
+# The positive control. Every row above asserts a number stays near ZERO, so a
+# broken gauge -- statm unreadable, the parse returning 0, the loop not
+# running -- passes all of them. This one MUST move.
+r_retain(1000)
+base = rss_kb()
+r_retain(N)
+ctrl = ((rss_kb() - base) * 1024) // N
+if ctrl > 100:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every LEAKFREE above is meaningless" % ctrl)
+    ok = False
+
+if ok:
+    print("GETTERLIVE OK")
+else:
+    print("GETTERLIVE FAIL")

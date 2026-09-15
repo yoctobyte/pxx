@@ -26655,3 +26655,56 @@ wrong side of the gate.* Ask what the gate is before trusting a negative, and
 prefer an instrument that reports the mechanism firing (a trace, a header word)
 over one that reports a consequence (bytes), because only the first can tell
 "it did not run" from "it ran and did nothing".
+
+## THE CONTROL VARIABLE WAS THE BUG — A ZERO WITH TWO INDEPENDENT PREVENTERS
+
+Measured 2026-09-15, one evening, two seats, four instances. The guard rules in
+CLAUDE.md cover a control drawn from the wrong population, a filter that
+restates the hypothesis, and a run that supplies what a failing part needs.
+This is a fourth and none of them catch it: **the population is right, the
+filter is honest, the run is isolated — and the thing held FIXED across every
+row is what decided the answer.**
+
+The shape is a clean control that is clean for a SECOND reason as well, so the
+zero is over-determined and nothing in the result says which preventer produced
+it. It reads as a confirmed negative, and it is two negatives wearing one.
+
+Four instances, three subsystems:
+
+- **Receiver typing in the NilPy method-result leak.** A "Variant receiver is
+  balanced" row was clean because the helper holding the call RETURNED each
+  iteration (draining a slot) *and* because the referent was long-lived (so a
+  leaked reference cost no bytes). The unconfounded pair — same body, same
+  long-lived receiver, same dying referent, only the typing varied — leaks
+  1095 and 1096. Receiver typing never mattered. The claim survived two tables
+  and a site-attributed objtrace run.
+- **Receiver LIFETIME in the same family.** Every rate table anyone had written,
+  across two seats, held the receiver alive across the loop — the one condition
+  under which the leak reads zero. Nobody varied it, so nobody could see it.
+- **A `pkill -f` cleanup matching its own wrapper shell**, leaving both demos
+  orphaned and contending for one GPU — the contaminated run would have
+  produced a plausible table, because leak rate scales with frame rate.
+- **A getter census filtered on "is the attribute reassigned somewhere"**, which
+  matched 29 of 29 because it matched by attribute NAME across all classes. A
+  filter that passes everything is not a filter; it is a column that looks like
+  evidence. Caught by its author, who reported it rather than the filtered
+  number.
+
+**The question that catches it: what did I hold FIXED in every row, and would
+a row with it varied still be zero?** A factorial is the discharge and it is
+usually cheap — the one that settled the leak above was nine rows in one
+program and it retired two attributions that had each survived a careful
+single-factor table.
+
+**And a second preventer is most likely exactly where a fixture is most
+natural to write.** The leaking rows above all keep the loop INSIDE the
+function under test; written the ordinary way, with a helper called once per
+iteration, every row is clean on the broken compiler, because scope exit
+drains the slot. That is `normalise-dont-special-case.md`'s "the passing
+arrangements are the population everyone writes" arriving from the control
+side rather than the ordering side.
+
+**Not promoted to CLAUDE.md**: one evening, and the four instances are close
+enough in time and personnel that recurrence is not yet established across
+independent subsystems in the sense that file's promotion rule means. Revisit
+if it turns up in a lane with no connection to this one.

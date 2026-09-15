@@ -241,6 +241,72 @@ and RECVLIVE is the half this one cannot be -- a premature free passes every
 byte row here, and a leak passes every value row there.
 
 
+## THE FACTORIAL, 2026-09-15 -- AND IT RETIRES TWO ATTRIBUTIONS OF MINE FROM EARLIER TODAY
+
+Three tables in this ticket each varied ONE factor and named it as the cause.
+Two of the three were wrong, and both survived because the shape that was
+supposed to be the clean control **was clean for a second reason as well**.
+This varies all of them at once. N=40000, `cfee5d6255237332`, bytes/call:
+
+| factor | | | verdict |
+|---|---|---|---|
+| receiver typing | static **1096** | Variant **1096** | **IRRELEVANT** |
+| enclosing fn returns between calls | no **1096** | yes **0** | DECISIVE |
+| what the callee returns | attribute **1096** | fresh object **0**, scalar **0** | DECISIVE |
+| dispatch | method **1096** | plain function **0** | DECISIVE |
+| referent can die | yes **1096** | no **0** | bytes only, not the leak |
+
+**The defect is: a METHOD returning an ALREADY-OWNED managed value mints a +1
+that is drained only when the enclosing scope exits.** A plain function
+returning the identical value through the identical store is clean, so it is
+`IR_VIRTUAL_CALL`-specific. A fresh-object return is clean because its +1 is
+the object's only reference and the store consumes it correctly.
+
+### What was wrong, and how it survived
+
+**"The Variant path is balanced."** Stated this morning from the four-shape
+table and repeated in the site-attributed section. The rows that produced it
+were clean twice over: the receiver went through a helper that RETURNED each
+iteration (draining the slot), and the referent was LONG-LIVED (so a leaked
+reference cost no bytes). Nothing in a zero says which preventer produced it.
+The unconfounded pair -- same body, same long-lived receiver, same dying
+referent, only the receiver's typing varied -- is `refresh_static` **1095** and
+`refresh_variant` **1096**. Both leak. Receiver typing never mattered.
+
+**"Give the receiver a short life and the leak becomes bytes."** True, and
+stated as the cause when it is only the visibility condition. What makes the
+leak happen is the enclosing function not returning; what makes it cost bytes
+is the referent being able to die. I sent a peer seat a census predicate built
+on the wrong half of that and they spent a census on it.
+
+Both errors are one shape: **the control variable was the bug.** Not the
+pattern, not the metric -- the thing held fixed while everything else varied.
+Banked in `debugging-playbook.md`; **not promoted to CLAUDE.md**, because it is
+one seat's evening and this file's own rule wants a second independent
+subsystem before a rule costs every session at startup.
+
+### Why every predicate at the store was a correlate
+
+`discard` leaks the same 1095 with no store at all, and a plain function's
+store of the same value is clean. The store is identical in the leaking and
+clean cases; the call is not. **The next patch belongs at the virtual-call
+result slot, not at `IR_VAR_STORE`.**
+
+The slot is visible in the IR as the bare `lea` beside the call --
+`29: virtual_call ... tk=22` / `30: lea a=548 [sym=]` / `31: var_store a=19
+b=29 c=22` -- and the call writes it through the Variant return ABI, which is
+why no release-of-previous-contents happens: the write is not a `var_store` and
+never passes the arm that would have done it.
+
+### The fixture's shape is itself a finding
+
+Every row keeps the loop INSIDE the function. Written the ordinary way -- a
+helper called once per iteration -- **every row is clean on the broken
+compiler**, because scope exit drains the slot. That is
+`normalise-dont-special-case.md`'s "the passing arrangement is the population
+everyone writes" in a new subsystem: the natural fixture certifies this bug.
+
+
 ## WHERE THE LEAK ACTUALLY IS: THE RECEIVER, NOT THE RESULT
 
 Two retains and one release per call, on the BOX. The call site copies the
