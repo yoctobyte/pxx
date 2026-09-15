@@ -106,7 +106,7 @@ the argument expression and compare the LOG, the same instrument the assignment
 -order bug needed.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 87d0fae10.
 
 
 ## Resolution

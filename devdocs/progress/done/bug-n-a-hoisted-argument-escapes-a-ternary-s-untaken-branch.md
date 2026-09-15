@@ -278,4 +278,4 @@ arguments or fewer, a hoisted `TPyList` past that — and the split exists ONLY
 because of this bug. Merge them when it is fixed; the comment there says so.
 
 ## Log
-- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 87d0fae10.
