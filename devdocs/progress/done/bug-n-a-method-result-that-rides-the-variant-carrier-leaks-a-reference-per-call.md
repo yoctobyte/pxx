@@ -2,7 +2,7 @@
 type: bug
 track: N
 prio: 85
-status: open
+status: done
 slug: bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call
 ---
 
@@ -1286,3 +1286,29 @@ on `body.step` at 44.2 net-unfreed objects/step by its own tier-1 marker census.
 What these rows do establish is that four families are off that list: the
 hidden-dest family repaired here, operator dispatch, the field store, and the
 discarded constructor.
+
+## Log
+- 2026-09-15 — resolved, commit PENDING-COMMIT.
+
+  Fixed in `IRBuildHiddenDest`: the caller-owned hidden-destination scratch is
+  now cleared before a Variant-returning call, matching the guard `IRAppendCall`
+  already had on the direct-call path. All four call sites hoisted so the dest is
+  built BEFORE the call node — the emitter walks in index order, and the reverse
+  order frees the value the callee just returned.
+
+  Verified by the NilPy tier (`TIER_EXIT=0`), the instrument that caught attempt
+  2. Three fixtures wired: `VARCARRY` and `GETTERLIVE` read BYTES, `RECVLIVE`
+  reads VALUES — RSS cannot tell a repaired leak from a premature free, which is
+  how attempt 2 passed fourteen green rows while freeing live objects.
+
+  Costs +14% bare dispatch / +8% method-heavy, filed as
+  `perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob`
+  rather than hidden.
+
+  INERT UNTIL PINNED for any `lib/**` consumer: the fix is in `compiler/ir.inc`
+  and no pin carries it.
+
+  NOT lekkerzeilen's hot-path leak — every hot-path getter there returns an
+  unboxed float, which costs zero bytes. That residual is the lekkerzeilen seat's
+  stage-2 bisect, which has the demo landed on `body.step` at 44 net-unfreed
+  objects per step.
