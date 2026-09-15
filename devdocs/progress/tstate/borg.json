@@ -15007,8 +15007,8 @@
   "wall": 1034.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-15T18:24:54Z",
+  "sha": "3a91d13f1decc37144c5699d5aeaf1ed6e72dbb8",
   "tier": "full"
  },
  "last_opt": {
@@ -15200,6 +15200,7 @@
    "range": [
     "3a91d13f1decc37144c5699d5aeaf1ed6e72dbb8"
    ],
+   "range_non_causal": false,
    "src": "compiler/compiler.pas",
    "status": "fail"
   },
@@ -15218,6 +15219,7 @@
    "range": [
     "3a91d13f1decc37144c5699d5aeaf1ed6e72dbb8"
    ],
+   "range_non_causal": false,
    "src": "test/c_asm_in_inline_body.c tools/expect_same.sh +2",
    "status": "fail"
   }
