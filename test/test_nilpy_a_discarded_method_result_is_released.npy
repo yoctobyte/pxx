@@ -1,0 +1,137 @@
+# A NilPy method call whose CLASS result is discarded at statement level must
+# release it. Every NilPy result is owned (+1) and the consumer borrows; with no
+# consumer the +1 was dropped on the floor and the object never died.
+#
+# Settled by objtrace at d5a02f0bd32c, one call per shape, no loop: a method
+# returning `self` and one returning a fresh object each hand back an owned
+# reference (self -> a RETAIN, rc 1->2; fresh -> rc=1 from its own allocation),
+# and before the fix neither was ever released.
+#
+# WHAT THE THREE CONTROLS ARE FOR, because every asserted row here is a number
+# staying near ZERO and a dead instrument passes all of them:
+#
+#   retain  -- deliberately KEEPS its allocations and MUST show growth. Without
+#              it a broken statm read, a parse returning 0, or a loop that never
+#              ran passes this whole file.
+#   num     -- discards an INT. It pins the fix to the discarded CLASS result
+#              rather than to method calls in general; it was already 0 before
+#              the fix and must stay 0.
+#   bound   -- BINDS the same value instead of discarding it. Already correct
+#              before the fix (ARC releases it at scope exit) and must not be
+#              broken by an arm that releases one time too many.
+#
+# THE RECEIVER IS BUILT FRESH INSIDE EACH LOOP, DELIBERATELY. With a long-lived
+# receiver a leaked reference allocates nothing, RSS reads 0 on every row, and
+# this fixture would certify the bug as absent -- measured, that is exactly what
+# a first draft of it did. See
+# bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call.
+#
+# NOT ASSERTED HERE: a method returning an ATTRIBUTE (`return self.q`). That
+# rides the VARIANT carrier, not tyClass, leaks whether or not the result is
+# discarded, and is a different defect with its own ticket. Adding a row for it
+# would put a known red in this file.
+
+class Q:
+    def __init__(self):
+        self.w = 1.0
+        self.x = 2.0
+        self.y = 3.0
+        self.z = 4.0
+
+
+class H:
+    def __init__(self):
+        self.q = Q()
+
+    def me(self):        # returns SELF -- an owned reference, discarded
+        return self
+
+    def fresh(self):     # returns a FRESH object, discarded
+        return Q()
+
+    def num(self):       # returns an INT -- the discriminator
+        return 7
+
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+
+N = 12000
+LEAK_LIMIT = 40          # bytes per call; the defect was 72-120, noise is ~0
+held = []
+ok = True
+
+
+def f_base(n):
+    for i in range(n):
+        h = H()
+
+
+def f_me(n):
+    for i in range(n):
+        h = H()
+        h.me()
+
+
+def f_fresh(n):
+    for i in range(n):
+        h = H()
+        h.fresh()
+
+
+def f_num(n):
+    for i in range(n):
+        h = H()
+        h.num()
+
+
+def f_bound(n):
+    for i in range(n):
+        h = H()
+        k = h.me()
+
+
+def f_retain(n):
+    for i in range(n):
+        held.append([0] * 16)
+
+
+# Each shape runs TWICE. A first pass can move for one-off reasons (an arena
+# page, a cache); a SECOND pass on the same shape cannot, and it is the second
+# that is asserted.
+rows = [("base", f_base), ("me", f_me), ("fresh", f_fresh),
+        ("num", f_num), ("bound", f_bound)]
+for name, fn in rows:
+    fn(N)
+
+second = {}
+base = rss_kb()
+for name, fn in rows:
+    fn(N)
+    now = rss_kb()
+    second[name] = ((now - base) * 1024) // N
+    base = now
+
+for name in ["base", "me", "fresh", "num", "bound"]:
+    if second[name] < LEAK_LIMIT:
+        print("%s LEAKFREE" % name)
+    else:
+        print("%s LEAKS %d bytes/call" % (name, second[name]))
+        ok = False
+
+f_retain(N)
+ctrl = ((rss_kb() - base) * 1024) // N
+if ctrl > 100:
+    print("control MOVES")
+else:
+    print("control DEAD %d -- every LEAKFREE above is meaningless" % ctrl)
+    ok = False
+
+if ok:
+    print("DISCARDMETH OK")
+else:
+    print("DISCARDMETH FAIL")

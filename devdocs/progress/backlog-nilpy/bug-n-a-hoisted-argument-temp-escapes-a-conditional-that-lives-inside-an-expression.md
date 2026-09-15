@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 80
 type: bug
 owner: unassigned
 blocked-by: []
@@ -8,6 +8,15 @@ summary: "`g(b=side(2), a=1) if False else 'x'` prints `evaluated 2` and CPython
 ---
 
 # A hoisted argument temp escapes a conditional that lives inside an expression
+
+**RAISED TO 80 ON 2026-09-15: the sibling ticket
+`bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch` now carries a
+THIRD instance of this same root cause that CRASHES on correct Python**
+(`staged.pending() if staged is not None else {}` raises AttributeError, rc=217,
+where CPython prints a result), found on the lekkerzeilen demo. Same mechanism,
+same fix, one of them fatal. Fix once and close both; use the crashing row as
+the acceptance test, since it is the only member of the family that fails
+loudly.
 
 A call through a callable VALUE cannot resolve `*`, `**` or a keyword name at
 compile time, so the argument list is built at run time in a hoisted container

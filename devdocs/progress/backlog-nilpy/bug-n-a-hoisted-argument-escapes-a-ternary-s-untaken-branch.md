@@ -13,7 +13,7 @@ summary: >
   Fixing this is what would let those two paths merge.
 track: N
 type: bug
-prio: 55
+prio: 80
 owner: unassigned
 status: open
 ---
@@ -54,6 +54,106 @@ Two callers pay for it today and both are ordinary Python:
   start to a hidden local before the loop *deliberately* (once, not
   per-iteration), and that hoist is correct because a `for` header always runs.
   A hoist inside a ternary arm is the same mechanism where the arm may not.
+
+## A THIRD INSTANCE, AND IT IS A CRASH ON CORRECT PYTHON -- 2026-09-15
+
+This ticket's own summary predicted it: *"every construct in this frontend that
+hoists has the same escape."* It does, and the third one found is not a stray
+side effect -- it **raises and kills the program** on code CPython runs fine.
+**That is why this is now prio 80 and no longer 55.** The two rows already here
+produce a right answer with a wrong side effect; this one produces no answer at
+all.
+
+Found on the lekkerzeilen demo by lekkerzeilen-c8 (menu open, app.py:3130),
+reproduced independently here:
+
+```python
+class P:
+    def pending(self):
+        return {"x": 1}
+
+d = {}
+staged = d.get("miss")
+r = staged.pending() if staged is not None else {}
+print("len=%d" % len(r))
+```
+
+CPython prints `len=0`. pxx raises
+`AttributeError: 'NoneType' object has no attribute 'pending'`, rc=217.
+
+**The trigger is NAME RESOLUTION, which is what makes it look arbitrary:**
+
+| fixture | result |
+|---|---|
+| no class in the program defines `pending` | correct |
+| a class defines some OTHER method | correct |
+| a class defines `pending`, same module | **RAISES** |
+| a class defines `pending`, imported module | **RAISES** |
+| the same code as an `if`/`else` STATEMENT | correct |
+
+A sweep of short-circuit forms whose method name nothing defines comes back
+entirely clean -- c8 nearly filed "pxx does not have a short-circuit bug" on
+exactly that. **A fixture that does not define the method certifies this bug as
+absent**, which is CLAUDE.md's unrepresentative-population trap wearing a new
+dress.
+
+## THE MECHANISM, FROM `PXXDBG=a.ast`, AND IT CONFIRMS THE DIAGNOSIS ABOVE
+
+For `r = staged.pending() if staged is not None else {}` the frontend emits, at
+STATEMENT level, in this order:
+
+```
+1  AN_ASSIGN   __t549 := staged                          hoist the receiver
+2  AN_IF       cond NOT(<receiver-is-non-nil>(__t549))
+               then AN_CALL(__t549, "pending")            <- the RAISE (nil test)
+3  AN_ASSIGN   __t550 := getmem(48)                       <- the else arm's {} literal
+4  AN_ASSIGN   r := AN_TERNARY(cond, <the call>, __t550)
+```
+
+Steps 2 and 3 sit **outside** the `AN_TERNARY` at step 4. The attribute-missing
+guard is hoisted to statement level and runs unconditionally, whichever arm the
+ternary would select -- which is this ticket's mechanism exactly, with a raise
+instead of a side effect. It also explains the name-resolution trigger: the
+guard is only emitted when the attribute name resolves to a known method
+somewhere in the compilation, so with no such name there is nothing to hoist and
+the row is clean for the wrong reason.
+
+**WHAT THE GUARD EMITS ON AND WHAT IT TESTS ARE TWO DIFFERENT THINGS, and
+conflating them mis-states the acceptance test.** It is EMITTED when the
+attribute name resolves to a known method somewhere in the compilation (the
+table above), and what it TESTS is the receiver for NIL -- the message is just
+worded as an attribute failure. Both instruments agree: the fixture where
+nothing defines `pending` is clean because no guard is emitted, and on the demo
+`panel.more() if isinstance(panel, ui.Menu) else ""` runs for every plain Panel
+every frame without raising, because `more` resolves (on `Menu`) but the
+receiver is never nil. **So the family crashes iff the receiver CAN be None, not
+iff the attribute is missing** -- credit lekkerzeilen-c8, from the demo, against
+an earlier reading here that said attribute-presence.
+
+**THE WORST CALL SITE IS NOT THE ONE THIS WAS FOUND ON.** `ui.py:1020`
+`Stack.press` does `panel.press(...)` on `panel = self.at(px, py)`, and
+`Stack.at` returns None for a click that lands on no panel -- reached unguarded
+from `app.py:3298` for any left click that is not on the menu or the icon. If
+the hoist fires there, **a left click on open water kills the demo**, which is a
+far commoner action than opening the menu. 19 conditional expressions in that
+package call a method on an arm whose name resolves; 10 of them guard the very
+receiver being called, i.e. the author wrote the guard because it can be None.
+
+**Step 3 answers a question that was open on the demo side: the untaken arm's
+`{}` IS allocated, unconditionally, on every evaluation.** That is one wasted
+dict per evaluation in a per-frame path. Allocated is NOT the same as leaked --
+`__t550` is ARC-eligible and a rebind should release the previous one -- and
+nobody has measured whether it leaks. Do not fold it into a leak figure without
+that measurement.
+
+## THIS IS THE SAME BUG AS `bug-n-a-hoisted-argument-temp-escapes-a-conditional-that-lives-inside-an-expression`
+
+Same root cause, same fix, different symptom; that ticket carries the better
+boundary table (the three CORRECT rows -- `or` short-circuit, dead `for` body,
+untaken `if` arm -- which are what say the hoist is statement-local and
+working). **Fix once, close both, and check the third row above as the
+acceptance test** -- it is the only one of the three that fails loudly, so it is
+the cheapest positive control the family has.
 
 ## The shape of a fix, not yet chosen
 

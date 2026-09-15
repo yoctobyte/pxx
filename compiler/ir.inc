@@ -1303,6 +1303,7 @@ end;
   bug-a-a-discarded-managed-function-result-is-never-released }
 function IRDropManagedResult(astNode, irNode: Integer): Integer;
 var dmTmp, dmDepth, dmSaved: Integer; dmRet: TTypeKind;
+    dmRel, dmArg, dmStore, dmRelProc, dmCallee: Integer;
 begin
   IRDropManagedResult := irNode;
   if (irNode < 0) or (irNode >= IRCount) then Exit;
@@ -1320,6 +1321,60 @@ begin
      (ASTKind[astNode] = AN_CALL) and
      (Integer(ASTIVal[astNode]) >= 0) and (Integer(ASTIVal[astNode]) < ProcCount) then
     dmRet := Procs[Integer(ASTIVal[astNode])].RetType;
+  { A NilPy call whose tyClass result is DISCARDED at statement level. A NilPy
+    function hands back an OWNED reference (+1) and its consumer borrows; with
+    no consumer the +1 is dropped on the floor and the object never dies.
+    Settled by objtrace at d5a02f0bd32c, one call per shape, no loop: a method
+    returning `self` and one returning `self.q` each emit a RETAIN on the way
+    out (rc 1 -> 2), and one returning a fresh object arrives at rc=1. None is
+    released.
+
+    THE GATE IS THE CALLEE'S PROVENANCE, AND NOTHING WEAKER WORKS. Three
+    weaker ones were tried and all three SIGSEGV or under-reach:
+
+      PyProgramMode alone -- it is a whole-COMPILATION flag. lib/rtl's Pascal
+        units are compiled in the same run, so it separates nothing. The crash
+        is `TPyList.append_self` and `pylist_mark_tuple`: Pascal methods that
+        return their own receiver as a chaining convenience, BORROWED, with no
+        retain to balance. re.pas discards 27 such results.
+      ProcRetRecId >= REC_UCLASS_BASE -- TPyList's recId is 52, so every one of
+        those 27 sites passes it. (This is also where the "stale constant 52"
+        recorded in the ticket came from: 52 is not stale, it is TPyList.)
+      ProcUnitIdx = -1 -- correct for a def in the main .npy and WRONG for every
+        imported NilPy module, which gets a real unit index like any other. It
+        would silently skip the multi-module programs that are the whole point.
+
+    UnitIsPyModule is the recorded fact rather than a proxy, and PyModUnitIdx's
+    own comment in defs.inc says it exists because "the routine lives in another
+    unit" was being used as a proxy for "Pascal library facade" -- the identical
+    mistake, one ticket earlier.
+
+    THE TEMP IS tyPointer, NOT tyClass, AND THAT IS DELIBERATE.
+    PyClassSymArcEligible has no name filter and no hidden-temp filter, so a
+    tyClass local -- however it was minted -- earns a scope-exit SXR_OBJ release.
+    Spilling there and releasing here would release the same pointer twice.
+    tyPointer keeps the temp out of ARC and leaves this arm as the only release.
+    bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released }
+  if PyProgramMode and (dmRet = tyClass) and
+     (astNode >= 0) and (astNode < ASTNodeCount) and
+     (Integer(ASTIVal[astNode]) >= 0) and (Integer(ASTIVal[astNode]) < ProcCount) then
+  begin
+    dmCallee := Integer(ASTIVal[astNode]);
+    if (ProcUnitIdx[dmCallee] >= 0) and (not UnitIsPyModule(ProcUnitIdx[dmCallee])) then
+      Exit;   { a Pascal library facade: its result is BORROWED }
+    dmRelProc := FindProc('PXXObjRelease');
+    if dmRelProc < 0 then Exit;
+    dmTmp := AllocVar('', tyPointer);
+    SymIsHiddenArgTemp[dmTmp] := True;
+    dmStore := IRAppend(IR_STORE_SYM, dmTmp, irNode, -1, 0, Ord(tyPointer));
+    dmArg := IRAppend(IR_ARG,
+               IRAppend(IR_LOAD_SYM, dmTmp, -1, -1, 0, Ord(tyPointer)),
+               -1, -1, 0, Ord(tyPointer));
+    dmRel := IRAppendCall(dmRelProc, dmArg, -1, Ord(tyUnknown));
+    IRIVal[dmRel] := 1;   { statement: emit for effect }
+    IRDropManagedResult := IRAppend(IR_BLOCK, dmStore, dmRel, -1, 0, 0);
+    Exit;
+  end;
   if dmRet = tyAnsiString then
   begin
     dmTmp := AllocVar('', tyAnsiString);

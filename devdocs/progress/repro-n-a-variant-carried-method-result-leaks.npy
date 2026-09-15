@@ -1,0 +1,126 @@
+# A method whose result rides the VARIANT carrier leaks +1 reference per call.
+#
+# TWO RECEIVER LIFETIMES, DELIBERATELY, AND THE FIRST BLOCK IS A TRAP DETECTOR.
+# With a LONG-LIVED receiver the leak is a pure refcount climb: nothing is
+# allocated, so RSS reads 0 on every row and the fixture would certify the bug
+# as absent. With a FRESH receiver per iteration each leaked referent is a new
+# object and RSS can finally see it. Both blocks measure the same defect; only
+# the second one is visible in bytes. Run under -dPXX_OBJTRACE to see the
+# refcount climb directly (2 retains, 1 release per call, forever).
+#
+# scalar_* are the controls that must stay at 0: a variant-boxed float/int/bool
+# allocates nothing and retains nothing, so a fix that stops retaining variants
+# wholesale must not change them.
+
+class Leaf:
+    def __init__(self):
+        self.w = 1.0
+        self.x = 2.0
+        self.y = 3.0
+        self.z = 4.0
+
+class Mid:
+    def __init__(self):
+        self.leaf = Leaf()
+
+class H:
+    def __init__(self):
+        self.q = Leaf()
+        self.mid = Mid()
+        self.rows = [Leaf(), Leaf()]
+        self.lines = [1, 2, 3, 4, 5, 6]
+        self.level = 0.5
+        self.count = 7
+        self.muted = False
+
+    def g_obj(self):    return self.q            # tk=22 variant -- LEAKS
+    def g_chain(self):  return self.mid.leaf     # tk=22 variant -- LEAKS
+    def g_index(self):  return self.rows[0]      # tk=22 variant -- LEAKS
+    def g_slice(self):  return self.lines[1:4]   # tk=22 variant -- LEAKS, RSS-visible
+    def g_float(self):  return self.level        # scalar  -- control, clean
+    def g_int(self):    return self.count        # scalar  -- control, clean
+    def g_bool(self):   return self.muted        # scalar  -- control, clean
+    def g_self(self):   return self              # tk=6 class -- control, clean
+    def g_fresh(self):  return Leaf()            # tk=6 class -- control, clean
+
+def rss_kb():
+    f = open("/proc/self/statm")
+    s = f.read()
+    f.close()
+    return int(s.split()[1]) * 4
+
+N = 12000
+shared = H()
+
+# ---- block 1: LONG-LIVED receiver. Every row reads 0 even though the
+# ---- refcount climbs without bound. Kept to stop the next reader trusting it.
+def l_obj(n):
+    for i in range(n):
+        k = shared.g_obj()
+
+def l_slice(n):
+    for i in range(n):
+        k = shared.g_slice()
+
+# ---- block 2: FRESH receiver per iteration. Same defect, now in bytes.
+def f_base(n):
+    for i in range(n):
+        h = H()
+
+def f_obj(n):
+    for i in range(n):
+        h = H()
+        k = h.g_obj()
+
+def f_chain(n):
+    for i in range(n):
+        h = H()
+        k = h.g_chain()
+
+def f_index(n):
+    for i in range(n):
+        h = H()
+        k = h.g_index()
+
+def f_slice(n):
+    for i in range(n):
+        h = H()
+        k = h.g_slice()
+
+def f_float(n):
+    for i in range(n):
+        h = H()
+        k = h.g_float()
+
+def f_int(n):
+    for i in range(n):
+        h = H()
+        k = h.g_int()
+
+def f_bool(n):
+    for i in range(n):
+        h = H()
+        k = h.g_bool()
+
+def f_self(n):
+    for i in range(n):
+        h = H()
+        k = h.g_self()
+
+def f_fresh(n):
+    for i in range(n):
+        h = H()
+        k = h.g_fresh()
+
+rows = [("LONGLIVED obj", l_obj), ("LONGLIVED slice", l_slice),
+        ("base", f_base), ("obj", f_obj), ("chain", f_chain), ("index", f_index),
+        ("slice", f_slice), ("float", f_float), ("int", f_int), ("bool", f_bool),
+        ("self", f_self), ("fresh", f_fresh)]
+
+# Each shape runs once to settle, then the SECOND pass is the one reported.
+for nm, fn in rows:
+    fn(N)
+for nm, fn in rows:
+    b = rss_kb()
+    fn(N)
+    print("%-16s %d bytes/call" % (nm, ((rss_kb() - b) * 1024) // N))

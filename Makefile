@@ -34802,6 +34802,16 @@ lib-test: pxx-stable-check
 	# fix is in compiler/builtin/pylib.pas and the pin carries the old one.
 	./$(COMPILER) test/test_nilpy_a_user_object_does_not_leak_because_of_how_its_value_is_consumed.npy $(TESTTMP)/test_nilpy_objlife
 	tools/expect_same.sh test_nilpy_objlife "$$($(TESTTMP)/test_nilpy_objlife | tail -n 1)" "OBJLIFE OK"
+	# A discarded METHOD result must be released. Sibling of the row above and a
+	# different shape: that one discards a CONSTRUCTION, this one discards the
+	# value a method RETURNS. $(COMPILER), not $(PXX_STABLE) -- the fix is the
+	# tyClass arm in compiler/ir.inc's IRDropManagedResult and no pin carries it.
+	# Verified to FAIL on the pre-fix compiler d5a02f0bd32c (me 120, fresh 72
+	# bytes/call) rather than assumed to: a leak fixture whose rows all assert a
+	# number stays near zero passes on a dead instrument, which is why the file
+	# also carries a retain control that must MOVE.
+	./$(COMPILER) test/test_nilpy_a_discarded_method_result_is_released.npy $(TESTTMP)/test_nilpy_discardmeth
+	tools/expect_same.sh test_nilpy_discardmeth "$$($(TESTTMP)/test_nilpy_discardmeth | tail -n 1)" "DISCARDMETH OK"
 	# A thread nobody joins must give its stack back. --threadsafe is required:
 	# without it mimic_threading is not reachable and the row would pass by not
 	# testing anything. $(COMPILER), not $(PXX_STABLE) -- the fix is in

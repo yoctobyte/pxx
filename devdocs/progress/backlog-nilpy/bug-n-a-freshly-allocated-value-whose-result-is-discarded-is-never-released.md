@@ -120,29 +120,109 @@ Two things to fix in it regardless of which arm is chosen, both measured:
 * A `tyClass` temp must not be the ARC-eligible kind unless something also emits
   the rebind-release -- see refuted attempt 1.
 
-**OWNERSHIP IS SETTLED -- see the objtrace census above. Do not re-litigate it;
-the next step is the implementation, and the two defects below are why attempt 2
-crashed.** Both were measured with a `DMPROBE` WriteLn at the `IRDropManagedResult`
-site, not inferred:
+**OWNERSHIP IS SETTLED -- see the objtrace census above.** The arm is written
+and the class half is FIXED; what follows is the record of what was actually
+wrong, because both "defects" this ticket listed on 2026-09-15 were themselves
+wrong and a later reader would otherwise chase them.
 
-* `ResolveNodeRec(astNode)` at that site answers the STALE CONSTANT **52** on
-  every row. `REC_UCLASS_BASE` is 16, so the `>= REC_UCLASS_BASE` gate attempt 2
-  used to restrict itself to user classes **passed everything**, pylib and
-  Pascal callees included -- and released results those callees never handed out.
-  That alone accounts for the SIGSEGV. **`ResolveNodeRec` is not usable as a gate
-  here**; find the record another way or gate on something else.
-* `ASTKind[astNode]` answers **8 (`AN_CALL`) on every row that reaches the site,
-  never 32 (`AN_VIRTUAL_CALL`)**. Combined with attempt 1 leaving the method rows
-  untouched, that says the discarded METHOD call is not arriving here at all --
-  so widening the return-type fallback past `AN_CALL` is necessary but will not
-  by itself reach the leaking shape. **Establish where a discarded
-  `AN_VIRTUAL_CALL` statement actually goes before writing the arm**; the
-  container row (attempt 1, 328 -> 0) is the half that demonstrably does arrive.
+**RETRACTED -- neither of these was the problem.** Both came from one earlier
+probe run, and that probe ran against a `compiler/pascal26` that was not the
+fixedpoint of its own sources (see the instrument note at the end):
+
+* *"`ResolveNodeRec` answers the stale constant 52"* -- **52 is not stale, it is
+  `TPyList`'s recId.** The rows reaching the site were dominated by pylist
+  internals, so a true answer repeated on every row read as a constant. The
+  value was correct throughout.
+* *"`ASTKind` is 8 on every row, never 32"* -- **flatly false.** A probe at the
+  site prints `astkind=32` for the discarded method call, exactly as the AST
+  dump shows. The method call reaches `IRDropManagedResult` and always did.
+
+**WHAT WAS ACTUALLY WRONG, AND IT IS ONE THING: THERE WAS NO `tyClass` ARM.**
+The type is already resolved at that site -- `IRTk[irNode]` is `Ord(tyClass)`
+for a discarded method call (`irkind=30`, `IR_VIRTUAL_CALL`) -- so the
+`AN_CALL`-only return-type fallback never mattered for this shape either. The
+function simply fell through to `NodeDynDepth` and exited.
+
+**AND THE GATE IS THE CALLEE'S PROVENANCE. Three weaker gates were tried; all
+three fail, and the first two are what produced every SIGSEGV:**
+
+| gate | why it fails |
+|---|---|
+| `PyProgramMode` alone | a whole-COMPILATION flag. `lib/rtl`'s Pascal units compile in the same run, so it separates nothing. **SIGSEGV** |
+| `ProcRetRecId >= REC_UCLASS_BASE` | `TPyList`'s recId is 52, so every pylist site passes it. **SIGSEGV** |
+| `ProcUnitIdx = -1` | right for a def in the main `.npy`, wrong for every IMPORTED NilPy module (measured: `unitidx=669`). Silently skips multi-module programs, which is all the real ones |
+
+The crash is `TPyList.append_self` and `pylist_mark_tuple` -- Pascal methods
+returning their own receiver as a chaining convenience, **borrowed**, with no
+retain to balance. `re.pas` discards 27 such results, and releasing them
+free-lists a live object; the SIGSEGV then surfaces far away, inside `rss_kb()`,
+on the reused block.
+
+`UnitIsPyModule` (symtab.inc) is the RECORDED fact and is the gate that works.
+`PyModUnitIdx`'s own comment in `defs.inc` says it exists because *"the routine
+lives in another unit"* was being used as a proxy for *"Pascal library facade"*
+-- the identical mistake, one ticket earlier.
 
 **And whatever lands must cover CONTAINERS.** A discarded list costs 328 bytes
 against 72-120 for a small class -- a whole backing buffer, not an 8-byte
 reference -- so the container case is the expensive half, and attempt 1 already
 showed it is separable from the method case.
+
+## WHAT THE LANDED ARM FIXES, AND THE ONE ROW IT DOES NOT
+
+Measured on the committed repro at the arm's own compiler, CPython 0 on every
+row:
+
+| row | | before | after |
+|---|---|---|---|
+| `h = H()` | baseline | 0 | 0 |
+| `h.num()` | discards an INT | 0 | 0 |
+| `h.me()` | discards `self` | 120 | **0** |
+| `h.give()` | discards `self.q` | 72 | **72 -- UNFIXED** |
+| `h.fresh()` | discards a FRESH object | 72 | **0** |
+| `k = h.me()` | BINDS `self` | 0 | 0 |
+
+**`give` is a DIFFERENT CARRIER, not a missed case, and that is why it never
+appeared as a candidate at the site.** From the AST dump, the two discarded
+method calls differ in exactly one field:
+
+```
+h.give()   #8221 kind=32 tk=22     <- tyVariant
+h.me()     #8225 kind=32 tk=6      <- tyClass
+```
+
+A method returning an ATTRIBUTE (`return self.q`) types its result as
+**`tyVariant` (22)**, not `tyClass` -- an attribute read on a NilPy object comes
+back through the variant carrier -- so the object reference is leaked INSIDE a
+variant and `PXXObjRelease` is the wrong verb for it. objtrace still shows the
+retain (`R rc 1 -> 2`), so the +1 is real and owned; only the container differs.
+
+**The next step is a `tyVariant` arm, and it needs its own ownership question
+answered first, exactly as this one did.** `PXXVarClear` (`SXR_VAR`) is the
+verb, and `variants.pas:162` says every overwritten Variant slot already goes
+through it -- so spilling into a hidden `tyVariant` local may be sufficient on
+its own, the way the `tyAnsiString` arm is, with the overwrite in a loop doing
+the freeing. **Do not assume that.** Settle with objtrace whether a store into a
+variant temp RETAINS: if it does, spill+overwrite is balanced and leaks nothing,
+and if it does not, it is a move and the same borrowed/owned gate applies again.
+Variants are pervasive in pylib, so the blast radius here is larger than the
+class arm's -- gate on the same `UnitIsPyModule` provenance.
+
+## THE INSTRUMENT NOTE THAT EXPLAINS THE TWO RETRACTED DEFECTS
+
+`/home/neo/frank-user` is shared by more than one session and has ONE
+`compiler/pascal26`. On 2026-09-15 the binary on disk was `295f6c473475dea8`
+with a stamp claiming it, and `make compiler/pascal26` recomputed -- `converged
+after 1 round(s)`, the real rebuild verb, not the stamp path -- and landed on
+`d5a02f0bd32c` instead. Every probe run through the first binary is about a
+compiler nobody can identify. Both retracted defects above came from that
+window, and lekkerzeilen-c8 independently withdrew a whole family of
+percent-format findings (a dropped list element, two SIGSEGVs, a TypeError) that
+stopped reproducing the moment they re-ran against a known sha.
+
+**Print `sha256sum compiler/pascal26` beside every number, and check the `make`
+verb -- `converged` means a rebuild happened, `verified` means nothing was
+built.** A foreign binary does not error. It answers.
 
 ## NOT A LEKKERZEILEN FIX, AND THAT WAS CHECKED RATHER THAN ASSUMED
 
