@@ -17,6 +17,14 @@ Everything in this ticket's old headline was wrong in the same way: the
 attempt did not fix the leak, it FREED LIVE OBJECTS, and the fixture could not
 see the difference.
 
+**PRECISION ON THE SLUG, 2026-09-15: the shape that leaks is the one with a
+STATICALLY TYPED receiver (`h = H()` in scope); the unannotated-receiver shape
+this ticket was opened from is BALANCED today.** Both carry the result as a
+Variant and both lower to `IR_VIRTUAL_CALL`, so the slug is true of the leaking
+shape -- it is just not the discriminator. The discriminator is whether a
+hidden `__py_vt_N` temp intervenes and consumes the +1. See "SITE-ATTRIBUTED
+2026-09-15"; the slug is left alone because it is cited.
+
 | | true state at cfee5d6255237332 |
 |---|---|
 | `k = h.g()` bound | 72 bytes/call |
@@ -55,6 +63,101 @@ the 32-byte object, the Box the 24-byte one:
 So the caller's retain was NECESSARY -- a variant carried out of a virtual
 call is BORROWED, exactly like the `def` half the old table below calls
 borrowed -- and removing it did not touch the surplus +1 at all.
+
+## SITE-ATTRIBUTED 2026-09-15 -- THE PROBE THIS TICKET ASKED FOR, AND IT CORRECTS THE SECTION ABOVE
+
+The ticket's own instruction was *"the next instrument is not another objtrace
+run. It is a probe that prints at entry and exit of `Leaf.__init__`,
+`H.__init__` and `H.g`, so each `R`/`r` is attributed to a site rather than
+guessed from position."* Built, and it works because **a NilPy write is an
+UNBUFFERED syscall per call** -- `pystdout_flush`'s own comment records that
+there is no userspace buffer between a NilPy write and the fd -- so
+`sys.stderr.write("MARK ...")` interleaves with objtrace's raw writes in exact
+program order, on one stream, with no allocation of its own. The markers cost
+nothing and need no compiler change.
+
+`class H: def g(self): r = self.q; return r`, receiver STATICALLY TYPED
+(`h = H()` at module scope), steady-state iteration at `cfee5d6255237332`:
+
+```
+MARK g-enter      R rc 3->4    bind the local  r = self.q
+MARK g-return     R rc 4->5    THE RETURN MINTS +1
+                  r rc 5->4    local r released at g's scope exit
+                  R rc 4->5    caller retains, storing into k
+                  r rc 5->4    caller releases the PREVIOUS k
+MARK iter-bottom       net +1
+```
+
+Four shapes, same markers, same binary, one object each:
+
+| shape | current `cfee5d62` | `c304147c` (the reverted move) |
+|---|---|---|
+| direct receiver, `return self.q` | **+1 per call** | 0 -- correct |
+| Variant receiver (`def via(o): return o.g()`) | 0 -- correct | **-1 per call** |
+| `return Leaf()` (fresh object) | 0 | 0 |
+| `k = h.q`, no call at all | 0 | 0 |
+
+**BOTH BINARIES ARE WRONG, ON COMPLEMENTARY SHAPES, AT THE SAME ARM.** That is
+why each one had a fixture that blessed it: the leak fixture only ever drove
+the shape the move repairs, and the RECVLIVE fixture only ever drives the shape
+the move destroys.
+
+### The premature free, caught at its site
+
+`c304147c`, Variant-receiver shape, third iteration, at `MARK iter-top`:
+
+```
+objtrace r 0x...050 0
+objtrace F 0x...050 0     <- the Leaf freed while h.q still points at it
+MARK via-enter
+MARK g-enter
+objtrace R 0x...050 1     <- retain of a freed block
+...
+objtrace F 0x...050 0     <- and twice more in the same iteration
+```
+
+rc drifts down by exactly one per call and reaches zero on the **third** pass,
+which is the number
+`test_nilpy_a_method_result_does_not_free_the_receivers_attribute.npy` already
+records in its own header from the other end (*"the first two passes printed
+the correct list and only the third showed `[]`"*). Two instruments, two
+subsystems, the same integer -- and this one names the line.
+
+### What it corrects
+
+The section above ends *"a variant carried out of a virtual call is BORROWED"*.
+**That is true of the shape it measured and false as written.** Its repro takes
+the receiver as an unannotated parameter, so every row in that table is the
+Variant-receiver path -- the one column of the four that is already balanced.
+The direct-receiver path was never sampled, and there the same
+`IR_VIRTUAL_CALL` hands back **owned**. One population measured, all populations
+asserted; CLAUDE.md's "the clause to go measure is the QUANTIFIER" arriving in
+this ticket's own evidence.
+
+### What consumes the +1 on the Variant path -- the gating question, answered
+
+The hidden Variant temp does. On the `via(o)` path the result is copied into
+`__py_vt_N`, which retains on copy-in and releases at statement end; that
+release is the consumer. On the direct path there is no temp, so nothing
+consumes it. **So the fork is not "which convention do we want".** The +1 is
+minted **unconditionally at the return** and consumed **conditionally at the
+store**, and by the time control reaches the store the provenance is gone --
+which is exactly why every predicate tried at the store has been a correlate.
+`ProcVariantResultOwned`, recorded where the return is lowered, is unchanged as
+the direction; this measurement is the first evidence FOR it rather than
+against its alternatives.
+
+### The pair of fixtures is now two-sided
+
+`RECVLIVE` (values, wired) catches the move breaking the Variant path.
+Nothing yet catches the retain leaking the direct path in a way a gate can
+read -- the leak fixture is RSS-based and the direct-path leak is a leaked
+REFERENCE on a long-lived referent, which allocates nothing and moves RSS by
+zero. **Any future attempt must be measured with the marker probe, not with
+RSS**, and the four-row table above is the sheet to reproduce. Probe sources
+are ten lines each; rebuild them from this section rather than hunting for a
+scratch file.
+
 
 ## WHERE THE LEAK ACTUALLY IS: THE RECEIVER, NOT THE RESULT
 
