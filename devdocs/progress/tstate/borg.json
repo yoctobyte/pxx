@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-14T19:24:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e9598fcc8285d6d4588627fdfd330efce19abc40",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-14T19:30:18Z",
    "fixed": [],
    "new_red": [],
@@ -506,6 +497,15 @@
    "new_red": [],
    "sha": "03975f44d5d4ef22e3f5971afb8f95e3d7895980",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-15T06:55:37Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "03975f44d5d4ef22e3f5971afb8f95e3d7895980",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5307,7 +5307,7 @@
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip TIMEOUT-O0: casm_int3_traps.c test_assert_message_position.pas test_c_lazycasing.pas test_qplus_survives_ambient_units.pas test_xtensa_div_zero_check.pas | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_im\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124",
-  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), c304147cdebd (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
+  "test-uforth#src:tools/compiler_srchash.sh": "self-host fixedpoint: verified \u2014 1 round(s), 561c30f6409b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@1": "self-host fixedpoint: verified \u2014 1 round(s), 561c30f6409b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@10": "self-host fixedpoint: verified \u2014 1 round(s), 561c30f6409b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
   "test-uforth#src:tools/compiler_srchash.sh@11": "self-host fixedpoint: verified \u2014 1 round(s), 561c30f6409b (stamp read back; sources match it) | compiling uforth.py as Nil-Python ... | Segmentation fault | test-uforth: FAIL (exit 139) | timeout: the monitored command dumped core",
@@ -14907,14 +14907,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-15T06:55:08Z",
+  "date": "2026-09-15T06:55:37Z",
   "deadline": 3600.0,
   "sha": "03975f44d5d4ef22e3f5971afb8f95e3d7895980",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 1006.6
+  "wall": 18.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14965,14 +14965,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-15T06:01:18Z",
+   "date": "2026-09-15T06:55:37Z",
    "deadline": 3600.0,
-   "sha": "827fabcc7d6d134590694d3560af498967c6c7f0",
+   "sha": "03975f44d5d4ef22e3f5971afb8f95e3d7895980",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 21.6
+   "wall": 18.8
   }
  },
  "last_full": {
