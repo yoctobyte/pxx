@@ -419,7 +419,7 @@ _none_
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 50 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-struct-pack-with-a-computed-format-and-star-args-raises-typeerror | N | 50 | bug | > | — |
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
-| bug-n-the-demo-leaks-137-kb-s-on-a-real-world-and-it-is-not-in-the-render-path | N | 70 | bug | lekkerzeilen leaks ~137 kB/s on a real world, and the RENDER PATH IS RULED OUT | — |
+| bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path | N | 70 | bug | lekkerzeilen leaks ~16 MB per two minutes on a real world, and the RENDER PATH IS RULED OUT | — |
 | bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers | N | 40 | bug | The ~60-line __getitem__/__setitem__ subscript arm exists TWICE, character for character: compiler/pyparser.inc ~38087 and compiler/pasparser_lval.inc ~1290. Which one a NilPy statement reaches depends on which lvalue parser its statement path entered, so a fix applied to one and not the other silently leaves a shape behind. Both copies had to be edited to close the augmented-subscript ticket. | — |
 | bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point | N | 60 | bug | `'\\xNN'` for NN >= 0x80 puts a RAW BYTE in the string instead of code point U+00NN, producing a malformed string: '\\xe9' encodes to [233] not [195,169], and '\\x80' reports len() == 0 with ord() raising TypeError. chr(233), '\\u00e9' and a literal 'é' are all correct, so it is the \\x escape specifically. | — |
 | bug-n-the-lazy-builtin-constructors-and-divmod-are-still-not-values | N | 25 | bug | > | — |
@@ -1198,7 +1198,7 @@ _none_
 - [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- [p 70] [N] bug-n-the-demo-leaks-137-kb-s-on-a-real-world-and-it-is-not-in-the-render-path
+- [p 70] [N] bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - [p 70] [N] feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 - [p 70] [T] regression-cascade-e5cd18e4b220

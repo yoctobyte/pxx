@@ -3,10 +3,27 @@ type: bug
 track: N
 prio: 70
 status: open
-slug: bug-n-the-demo-leaks-137-kb-s-on-a-real-world-and-it-is-not-in-the-render-path
+slug: bug-n-the-demo-leaks-16-mb-per-two-minutes-on-a-real-world-and-it-is-not-in-the-render-path
 ---
 
-# lekkerzeilen leaks ~137 kB/s on a real world, and the RENDER PATH IS RULED OUT
+# lekkerzeilen leaks ~16 MB per two minutes on a real world, and the RENDER PATH IS RULED OUT
+
+**EVERY kB/s FIGURE IN THIS TICKET IS QUANTISED TO 8.5 kB/s AND THE DECIMALS
+ARE NOISE — corrected 2026-09-15 after lekkerzeilen-c8 found the cause in their
+own sampler.** It read `/proc` in kB and stored `int(total_kB / 1024)`, so each
+sample discards up to 1023 kB before the slope multiplies it back up. Every
+number below is therefore a whole number of MEGABYTES over 120 s wearing a
+decimal, and the MB columns in the tables are the honest reading. The tell was
+visible here the whole time and I wrote it into the ternary section myself —
+*"a per-sample quantisation of 8.5 kB/s"* — and then went on quoting 136.5 to
+one decimal in the headline, the slug and eleven other places. A resolution
+noted in one section does not travel to the rest of the document by itself.
+
+**The reproducibility claim needs the same haircut.** "136.5 in six legs,
+identical to the last digit" is six legs that all landed in the SAME 16 MB
+bucket. That is still a real agreement and it is agreement at 1 MB, not at
+100 bytes; the digits after the point were manufactured by the unit
+conversion.
 
 Measured by lekkerzeilen-c8 on 2026-09-15. This ticket exists to own the NUMBER
 and the list of things that have been eliminated, so the next bisect starts
@@ -20,7 +37,7 @@ interleaved legs, same harness throughout.
 Skipping ground, foliage, structures, traffic and the boat changes the leak by
 nothing at all:
 
-| skipped | run | t1 MB | t2 MB | kB/s | cpu (jiffies/s) |
+| skipped | run | t1 MB | t2 MB | kB/s (= the MB delta / 120s; decimals are an artefact) | cpu (jiffies/s) |
 |---|---|---|---|---|---|
 | NONE | 1 | 545 | 561 | 136.5 | 32.0 |
 | ground,foliage,traffic,vessel | 1 | 549 | 565 | 136.5 | 29.7 |
@@ -43,7 +60,7 @@ before it was believed: the `t1` baselines wander 543-549 run to run, so the
 sampler is reading live values and it is the DELTA that is flat. And the
 harness refuses to report unless the banner says the world loaded AND the probe
 line says it skipped what was asked -- a no-op `--skip=` fails the leg rather
-than printing a match. `lzworld` has now produced 136.5 kB/s in SIX legs across
+than printing a match. `lzworld` has now produced the same 16 MB bucket in SIX legs across
 two independent experiments against a moving baseline.
 
 **The frame-rate confound is measured, not argued away.** cpu goes 32.0 ->
@@ -52,16 +69,22 @@ done. The demo is not scene-bound on this world, so skipping the scene buys no
 materially higher frame rate and the flat leak is a real flat rather than a
 leak drop masked by an fps rise.
 
-## TONIGHT'S COMPILER WORK CUT IT 57.3%, AND THE CLAIM IS SMALLER THAN IT LOOKS
+## TONIGHT'S COMPILER WORK CUT IT ROUGHLY IN HALF, AND THE CLAIM IS SMALLER THAN IT LOOKS
 
-| binary | run | t1 MB | t2 MB | kB/s | cpu (jiffies/s) |
+| binary | run | t1 MB | t2 MB | kB/s (= the MB delta / 120s; decimals are an artefact) | cpu (jiffies/s) |
 |---|---|---|---|---|---|
 | lz6 | 1 | 558 | 595 | 315.7 | 31.7 |
 | lzworld | 1 | 543 | 559 | 136.5 | 31.9 |
 | lz6 | 2 | 550 | 588 | 324.2 | 31.7 |
 | lzworld | 2 | 545 | 561 | 136.5 | 32.2 |
 
-lz6 mean 319.9, lzworld mean 136.5, **reduction 57.3%**, interleaved.
+Read the MB columns, which are the quanta: lz6 grows 37 and 38 MB, lzworld 16
+and 16, over 120 s. Each sample truncates up to 1023 kB, so a delta of D MB is
+D +/- 1.
+
+**Reduction 53-61%, interleaved** — call it "a bit over half". The 57.3% that
+stood here was 16/37.5 quoted to three figures off an instrument whose smallest
+step is one of those megabytes.
 
 The cpu column is what makes it safe: 31.7 / 31.9 / 31.7 / 32.2. Both binaries
 do the same work per second, so neither is leaking less merely by rendering
@@ -72,9 +95,11 @@ NUMBER:**
 
 1. **This is not "the object-lifetime work cut the leak 57%".** lz6 is compiler
    `44a006699586f064` at pxx HEAD `17e5731a7`; lzworld is `cfee5d6255237332` at
-   `349c44e47`. The 57.3% is EVERYTHING landed between those two shas. Known
+   `349c44e47`. The reduction is EVERYTHING landed between those two shas. Known
    contents: the OPERATOR fix (priced separately the same day, 2026-09-15, at
    lz6 2170.9 -> lz7 1641.8 kB/s on open water, 24.4%, against a pre-registered
+   (those two survive the quantisation intact -- at ~255 and ~193 quanta a
+   single-MB step is 0.4%, where at 16 quanta it is 6%)
    20% floor), plus `2dc0d6878` (the discarded class-result arm) and
    `4e1840d95` (the ternary fix). **Neither seat can apportion it without more
    legs, and the honest statement is that the range contains all three** --
@@ -92,13 +117,15 @@ NUMBER:**
 2. **lzworld carries the probe edits**: a module-level print and four
    `if ... not in _SKIP` guards evaluated per frame. With no `--skip` passed
    they change no behaviour, and four set-membership tests per frame cannot
-   account for 183 kB/s, but it is a source difference between the two sides.
+   account for the gap -- 37 MB against 16 MB, so about 22 MB per two
+   minutes, NOT the "183 kB/s" this line used to carry -- but it is a source
+   difference between the two sides.
 3. **137 kB/s is progress, not a fix.** A long session still grows without
    bound.
 4. **STRUCK 2026-09-15 -- MEASURED AT ZERO, NOT NARROWED.** This caveat used
    to claim part of the reduction was wasted work stopping rather than a leak
    being fixed, and bounded the ternary fix's share at "a fifth to a third" of
-   the 183 kB/s from a census of fresh-literal arms. **That bound was wrong and
+   that gap from a census of fresh-literal arms. **That bound was wrong and
    is withdrawn rather than tightened.** Isolated directly, interleaved on
    `rijn`:
 
@@ -108,6 +135,9 @@ NUMBER:**
    | `cf9eac5905b3a912` ternary PRESENT | 136.5, 128.0, 136.5 | 133.7 |
 
    Difference **2.4 kB/s** against a per-sample quantisation of 8.5 kB/s
+   -- i.e. both legs are the same whole number of megabytes, which is the
+   strongest form this instrument can state a null in, and this line is where
+   the quantisation was correctly named while the rest of the ticket ignored it
    (1 MB of arena over 120 s); two of three pairs identical to the byte, the
    single 128.0 exactly one quantisation unit below its partner; cpu
    31.8-32.4 on every leg, so no frame-rate difference. **Indistinguishable
@@ -123,10 +153,10 @@ NUMBER:**
    because the census was RIGHT ABOUT THE SIZE and WRONG ABOUT THE MECHANISM,
    and a prediction that misses low still misses.
 
-## WHERE THE 183 kB/s ACTUALLY LIVES
+## WHERE THE MISSING ~22 MB ACTUALLY LIVES
 
 `f5c08154dcac1f53`, `cf9eac5905b3a912` and `cfee5d6255237332` all measure the
-same 136.5. So **neither the ternary fix nor the comprehension fix moves a
+same 16 MB. So **neither the ternary fix nor the comprehension fix moves a
 byte**, and the entire reduction happened in the range
 `44a006699586f064` -> `f5c08154dcac1f53`: the operator fix, the receiver fix,
 the four pylib fixes, and the discarded class-result arm at `2dc0d6878`.
@@ -151,7 +181,7 @@ which has no skip on it yet.
 result-that-rides-the-variant-carrier-leaks-a-reference-per-call` family leaks
 a REFERENCE, not bytes, and allocates nothing whenever the referent outlives
 the loop. A settled world is precisely that condition: every referent is
-resident. So if the residual 136.5 is that family, **a byte instrument reports a
+resident. So if the residual 16 MB is that family, **a byte instrument reports a
 flat number while the defect is present, and skipping the simulation will not
 move it either.**
 
