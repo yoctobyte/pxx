@@ -15130,6 +15130,7 @@
    "range": [
     "2dc0d6878b271544727fae895b96c46f36dc9b48"
    ],
+   "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15148,6 +15149,7 @@
    "range": [
     "2dc0d6878b271544727fae895b96c46f36dc9b48"
    ],
+   "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint",
    "status": "fail"
   }
