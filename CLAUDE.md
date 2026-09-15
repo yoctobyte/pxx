@@ -675,7 +675,19 @@ the harness read test sources from a tree that had moved, and — worse —
 **editing a shell script that is currently RUNNING corrupts that run**, because
 `/bin/sh` reads a script INCREMENTALLY, not into memory. That one returned
 `rc=2` on three shards: a shell parse error wearing the shape of a verdict. The
-tell is an rc that no test in the harness can produce. Land the edit, then start
+tell is an rc that no test in the harness can produce.
+**AND DO NOT RELY ON THAT TELL — THE CORRUPTION CAN LAND AFTER THE DATA, AND
+THEN THE RUN LOOKS COMPLETE.** Measured 2026-09-15 by the lekkerzeilen seat, a
+second subsystem: an in-place edit to a running bisect script died with
+`syntax error near unexpected token 'done'` at the END of its loop. All ten
+data rows had already printed, so nothing looked wrong — what died was the
+script's own aggregate tally, the guard that was supposed to say whether any
+leg had failed silently. **The step a corrupted script loses first is the
+SUMMARY, because it is last**, and a summary that never runs produces no
+output to miss. So the shapes are not "rc=2 or fine": one draw announces
+itself with an impossible verdict, the other removes your cross-check and
+leaves the rows. Neither tells you WHEN the mis-parse began, so no row is
+trustworthy on the strength of the rows around it. Land the edit, then start
 a clean run from a tree equal to origin, and say which.
 
 **Do not ask "is it verified" — ask "what would this be if it were false", and go
