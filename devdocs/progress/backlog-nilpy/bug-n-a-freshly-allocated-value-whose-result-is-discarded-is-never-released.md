@@ -50,7 +50,7 @@ does not, and binding the same value is clean. `num` and `me_bound` are the
 controls that pin it to the discarded class result rather than to method calls
 in general.
 
-## AND THEN THE OBVIOUS FIX REFUTED THE OWNERSHIP MODEL THAT TABLE IMPLIES
+## THE OBVIOUS FIX CRASHED, AND I READ THAT AS REFUTING OWNERSHIP. IT DOES NOT -- SETTLED 2026-09-15
 
 If every one of those results arrives owning +1 -- which is what
 `IRNodeOwnsFreshCallResult` and `IRNodeYieldsOwnedRef` both assert, and what the
@@ -70,12 +70,31 @@ leaks look like -- then releasing it once per call is exactly right. It is not.
    every pylib/Pascal callee -- **still SIGSEGV**. Patch:
    `$SCRATCH/ir_dropmanaged_class_arm_gated.patch`.
 
-Attempt 2 is the informative one: if `me()` and `give()` returned +1, one
-release per call could not over-release. **They leak AND they cannot be
-released, so the ownership model above is wrong and nobody has established what
-the real one is.** That is the open question this ticket now carries, and it
-must be answered with an objtrace retain/release census per shape -- not from
-the RSS numbers, which have already misled twice.
+I read attempt 2 as informative: if `me()` and `give()` returned +1, one release
+per call could not over-release, so a crash had to mean they were not owned.
+**That inference is the thing to retract.** A crash proves the PATCH is wrong,
+never that the model is -- and this patch had two independent defects (below),
+either of which releases an object nobody handed it.
+
+**THE objtrace CENSUS THIS TICKET ASKED FOR, RUN 2026-09-15 AT `d5a02f0bd32c`,
+the verified fixedpoint of `922cefa3a`.** `-dPXX_OBJTRACE`, one call per shape,
+no loop -- `A <addr> <rc> <size>` on alloc, `R <addr> <rc>` on retain:
+
+```
+--- base      A 0x...020 rc=1 size=16     (H)
+              A 0x...050 rc=1 size=16     (Q, as h.q)
+--- me        R 0x...020 rc=2             -> never released
+--- give      R 0x...050 rc=2             -> never released
+--- fresh     A 0x...080 rc=1 size=16     -> never released
+--- end
+```
+
+**All three discarded class results arrive owning +1**, and none is released.
+`me()` and `give()` each emit a RETAIN on the way out (1 -> 2) and `fresh()`
+arrives at rc=1 from its own allocation. So the RSS table above stands, the
+model `IRNodeOwnsFreshCallResult` and `IRNodeYieldsOwnedRef` both assert is
+correct, and one release per discarded call is the right shape after all.
+**There is no borrowed case among these three.** Nothing here is open.
 
 **THE CRASH LANDS NOWHERE NEAR THE CAUSE** and cost an hour: it surfaced inside
 `rss_kb()`'s `return` line, releasing a reused heap block, in a file where every
@@ -101,11 +120,24 @@ Two things to fix in it regardless of which arm is chosen, both measured:
 * A `tyClass` temp must not be the ARC-eligible kind unless something also emits
   the rebind-release -- see refuted attempt 1.
 
-**BEFORE WRITING THE ARM, SETTLE OWNERSHIP WITH objtrace**, per shape: does a
-NilPy method returning `self`, returning `self.q`, and returning a fresh object
-each emit a retain on the way out? The RSS table says all three leak; the
-release experiment says at least one of them is not owned. Those cannot both be
-true and no fix is safe until one of them is retracted.
+**OWNERSHIP IS SETTLED -- see the objtrace census above. Do not re-litigate it;
+the next step is the implementation, and the two defects below are why attempt 2
+crashed.** Both were measured with a `DMPROBE` WriteLn at the `IRDropManagedResult`
+site, not inferred:
+
+* `ResolveNodeRec(astNode)` at that site answers the STALE CONSTANT **52** on
+  every row. `REC_UCLASS_BASE` is 16, so the `>= REC_UCLASS_BASE` gate attempt 2
+  used to restrict itself to user classes **passed everything**, pylib and
+  Pascal callees included -- and released results those callees never handed out.
+  That alone accounts for the SIGSEGV. **`ResolveNodeRec` is not usable as a gate
+  here**; find the record another way or gate on something else.
+* `ASTKind[astNode]` answers **8 (`AN_CALL`) on every row that reaches the site,
+  never 32 (`AN_VIRTUAL_CALL`)**. Combined with attempt 1 leaving the method rows
+  untouched, that says the discarded METHOD call is not arriving here at all --
+  so widening the return-type fallback past `AN_CALL` is necessary but will not
+  by itself reach the leaking shape. **Establish where a discarded
+  `AN_VIRTUAL_CALL` statement actually goes before writing the arm**; the
+  container row (attempt 1, 328 -> 0) is the half that demonstrably does arrive.
 
 **And whatever lands must cover CONTAINERS.** A discarded list costs 328 bytes
 against 72-120 for a small class -- a whole backing buffer, not an 8-byte
