@@ -61,3 +61,7 @@ all. That is a census of the source on that date -- the idiom is absent, not
 prohibited -- so the exculpation is worth exactly as long as nobody writes
 `v: Vec3 = body.state.velocity.copy()` in the integrator, and the census row
 is what guards it after that.
+
+## Log
+
+- 2026-09-15 frankuser (Fable): found from the lekkerzeilen seat's TypeError repro, shape varied into four faces, fixed with three sibling rows and the owned-unbox leak, commit 3a91d13f1. Runtime dispatch half of the same evening: 0badcd665.
