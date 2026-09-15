@@ -167,6 +167,27 @@ wait; `notify_when_idle` for a peer. Clear any you have — `CronList` is
 per-session, so only you can. **Track T's watcher daemon is NOT affected**: the
 cost is a model re-reading context, not a timer on a box.
 
+**AND THE SECOND REASON IS NOT TOKENS: A `pgrep`/`pkill -f` WAIT MATCHES ITS OWN
+COMMAND LINE, SO IT CANNOT EXIT AND KILLS THE WRONG THING.** Measured
+2026-09-15, two seats, three subsystems in one night. `while pgrep -f 'make
+test-nilpy'; do sleep 60; done` never exits — the loop's own
+`/proc/<pid>/cmdline` contains the pattern, so the condition is permanently
+true; **eight had accumulated across context windows**, each created because the
+previous one never fired, all watching runs that had finished hours earlier, all
+surviving into later sessions. The other seat's cleanup `pkill -f` matched its
+own wrapper shell and killed the scripts that were supposed to stop two demos,
+leaving BOTH orphaned and contending for one GPU — which halves the frame rate
+of each, and leak rate scales with frame rate, so the contaminated run would
+have produced **a plausible table**. It burnt that seat three times in one
+session on the same pattern. This is the transcript-grep rule above ("a grep for
+a denial cannot tell a denial from a search for one, and the search is in the
+file by the time you read it") arriving in a second and third subsystem, so the
+general form earns the line: **any instrument that scans a namespace THE
+OBSERVER IS ALSO IN counts the observer**, and `ps`/`pgrep`/`pkill` are that by
+construction. Kill by explicit PID gathered from `/proc/*/exe`; match on
+something the query itself cannot contain; and prefer the backgrounded job's own
+completion notification, which needs no loop at all.
+
 **Peer-to-peer messages stay preferred** — bounded, and they carry a fact.
 
 **Fleet size is the owner's token dial.** He starts sessions; you never raise the

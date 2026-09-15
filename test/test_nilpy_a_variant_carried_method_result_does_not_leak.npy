@@ -132,14 +132,32 @@ def fresh(n):
         h = H()
         k = h.g_fresh()
 
+# DISCARDED results, the second half of the same defect and a SEPARATE fix.
+# The copy arm in ir_codegen.inc only sees results that are STORED; a result
+# thrown away at statement level never reaches it, and IRDropManagedResult had
+# no tyVariant arm at all. These leaked 72 and 200 bytes/call after the bound
+# rows above were already clean, which is why they are their own rows: a
+# fixture that only binds its results certifies half a fix as a whole one.
+def disc_obj(n):
+    for i in range(n):
+        h = H()
+        h.g_obj()
+
+def disc_slice(n):
+    for i in range(n):
+        h = H()
+        h.g_slice()
+
 def retain(n):
     for i in range(n):
         held.append([0] * 16)
 
 names = ["longlived_obj", "longlived_slice", "base", "obj", "chain", "index",
-         "slice", "float", "int", "bool", "self", "fresh"]
+         "slice", "float", "int", "bool", "self", "fresh",
+         "disc_obj", "disc_slice"]
 fns = [longlived_obj, longlived_slice, base, obj, chain, index,
-       slice_, flt, integer, boolean, selfret, fresh]
+       slice_, flt, integer, boolean, selfret, fresh,
+       disc_obj, disc_slice]
 
 # Each shape runs once to settle -- a first pass can move for one-off reasons
 # (an arena page, a cache) -- and the SECOND pass is the one asserted.
@@ -163,8 +181,8 @@ while i < len(fns):
         ok = False
     i = i + 1
 
-if measured != 12:
-    print("VARCARRY CONTROL DEAD -- measured %d rows, expected 12" % measured)
+if measured != 14:
+    print("VARCARRY CONTROL DEAD -- measured %d rows, expected 14" % measured)
     ok = False
 
 b = rss_kb()

@@ -95,23 +95,49 @@ NUMBER:**
    account for 183 kB/s, but it is a source difference between the two sides.
 3. **137 kB/s is progress, not a fix.** A long session still grows without
    bound.
-4. **Part of the reduction is WASTED WORK STOPPING, not a leak being fixed.**
-   The ternary fix stops the untaken arm's fresh literal being ALLOCATED at
-   all, so some of the 183 kB/s is allocation that no longer happens rather
-   than a reference that no longer leaks. Bounded rather than waved away, and
-   the census went looking for hot sites and found the obvious guesses cold:
-   18 conditional expressions in the package have a fresh-literal arm;
-   `world.py:116` sits inside an early return guarded by `len(points) < 2`
-   (cold), and `world.py:347` `Region.flow` is read only at `app.py:681` and
-   `app.py:1243`, i.e. region setup, NOT at frame rate. The genuinely
-   per-frame ones are all on the panel/overlay path -- `app.py:3130` and
-   `ui.py` 554/597/776 -- which measured 19% of the open-water leak and ~10%
-   of the world leak. Order of magnitude at ~7 panels, ~60 fps, 48-byte dict:
-   ~20 kB/s plus the three `ui.py` list arms. **Against 183 kB/s that bounds
-   this confound at roughly a fifth to a third: not dominant, too big to
-   ignore.** Turning the bound into a number needs `f5c08154dcac1f53` (the
-   binary at `2dc0d6878`: class-result arm present, ternary fix absent) rebuilt
-   and run interleaved against `cf9eac5905b3a912`.
+4. **STRUCK 2026-09-15 -- MEASURED AT ZERO, NOT NARROWED.** This caveat used
+   to claim part of the reduction was wasted work stopping rather than a leak
+   being fixed, and bounded the ternary fix's share at "a fifth to a third" of
+   the 183 kB/s from a census of fresh-literal arms. **That bound was wrong and
+   is withdrawn rather than tightened.** Isolated directly, interleaved on
+   `rijn`:
+
+   | binary | legs | mean |
+   |---|---|---|
+   | `f5c08154dcac1f53` ternary ABSENT | 136.5, 136.5, 135.4 | 136.1 |
+   | `cf9eac5905b3a912` ternary PRESENT | 136.5, 128.0, 136.5 | 133.7 |
+
+   Difference **2.4 kB/s** against a per-sample quantisation of 8.5 kB/s
+   (1 MB of arena over 120 s); two of three pairs identical to the byte, the
+   single 128.0 exactly one quantisation unit below its partner; cpu
+   31.8-32.4 on every leg, so no frame-rate difference. **Indistinguishable
+   from zero, at most ~2% of the reduction and most likely none of it.**
+
+   **WHY THE BOUND WAS WRONG, AND IT IS A REUSABLE ERROR:** it multiplied
+   ~7 panels x 60 fps x 48 bytes as though every dict built by an untaken
+   ternary arm SURVIVED. They do not -- the temp is a NilPy local, so it is
+   ARC-eligible and a rebind in a loop releases the previous one. **Allocated
+   is not leaked.** The untaken arm is real wasted work and contributes
+   nothing to arena growth. The author had been told exactly this before
+   building the bound and did not carry it into the arithmetic; recorded
+   because the census was RIGHT ABOUT THE SIZE and WRONG ABOUT THE MECHANISM,
+   and a prediction that misses low still misses.
+
+## WHERE THE 183 kB/s ACTUALLY LIVES
+
+`f5c08154dcac1f53`, `cf9eac5905b3a912` and `cfee5d6255237332` all measure the
+same 136.5. So **neither the ternary fix nor the comprehension fix moves a
+byte**, and the entire reduction happened in the range
+`44a006699586f064` -> `f5c08154dcac1f53`: the operator fix, the receiver fix,
+the four pylib fixes, and the discarded class-result arm at `2dc0d6878`.
+
+**The ternary fix's value is the CRASH** -- `Stack.press` on any click into open
+water -- **and not bytes.** It must not be credited with any share of the leak
+reduction.
+
+Note what this costs the earlier caveat about apportionment: the range is now
+much better resolved than "nobody can apportion it", and the resolution came
+from three archived compilers run against each other rather than from argument.
 
 ## WHAT IS LEFT, AND THE TRAP WAITING IN IT
 
