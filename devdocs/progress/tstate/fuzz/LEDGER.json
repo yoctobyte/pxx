@@ -1141,6 +1141,8 @@
       ],
       "first_seed": 27432,
       "first_sha": "35b8d3305dbc",
+      "fixed": "2026-09-15T20:59:02Z",
+      "fixed_sha": "3a91d13f1dec",
       "hits": 16,
       "kind": "trace-length",
       "last_seen": "2026-09-15T16:29:43Z",
@@ -1157,7 +1159,7 @@
         }
       ],
       "sig": "fpc-self_trace-length",
-      "status": "open",
+      "status": "fixed",
       "ticket": null
     },
     "pxx-reject_copy-dynamic-array-copy": {
