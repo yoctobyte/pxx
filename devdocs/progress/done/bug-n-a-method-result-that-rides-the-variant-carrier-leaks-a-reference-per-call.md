@@ -1445,13 +1445,40 @@ Everything touching `compiler/` or `lib/rtl/` since 05:30 that day:
 **The only executable compiler-source change between `cfee5d62` and `79551a1b`
 is this commit: one file, `compiler/ir.inc`, 64 insertions / 11 deletions.**
 
-### What this still rests on, stated rather than buried
+### The assumption was removed by RE-SPANNING the window, not by a build
 
-That the `cfee5d62` binary corresponds to the tree at 87d0fae10/bd35a383c. The
-record says the revert made it byte-identical and check 3 independently explains
-why that would be true — but **a binary sha is not a source identity**, and
-nobody has rebuilt at `bd35a383c` to compare. That single build would convert
-the last inference into a measurement.
+The paragraph this replaces said the argument rested on `cfee5d62` corresponding
+to the reverted tree, and offered a rebuild to settle it. lekkerzeilen-c8
+re-ran the enumeration independently and found the better framing: **span the
+window from `87d0fae10` (06:00) — one minute before the archive's 06:01:23
+mtime — rather than from the revert.**
+
+Across `87d0fae10 -> e59efc3f5^` the `compiler/` diff is **64 insertions and ZERO
+deletions, all comment text**. So nothing executable was added OR removed
+anywhere between the archive point and the fix's parent, and the byte-identity
+record is not load-bearing at all. The two failed attempts went in at 07:36 and
+08:30 and came out at 09:29 — **strictly after** the binary was archived, so
+they cannot be inside `cfee5d62` on timestamp grounds alone, independent of
+whether the revert was complete.
+
+**AND THE REBUILD THAT WAS OFFERED IS A ONE-DIRECTIONAL TEST**, which is why
+argument beat measurement here. A fresh tree seeds from the PIN, while
+`cfee5d62` was seeded from the then-current local binary — and by this
+handbook's own rule that yields **two valid fixedpoints, both self-reproducing**.
+So a MATCH would prove the correspondence and a MISMATCH would prove nothing.
+Offering it as "one build converts the last inference into a measurement"
+overstated it: it converts the inference only in the lucky direction.
+
+**AND IT WAS RUN ANYWAY, AND IT RETURNED A NON-RESULT — PRE-REGISTERED AS SUCH
+BEFORE IT STARTED.** `git archive 87d0fae10` into a scratch dir, then `make
+compiler/pascal26` there: rc=2, no sha, and the diagnostic is its own
+explanation — *"make bootstrap is the FPC cold start, for a tree with NO trusted
+binary at all"* (`Makefile:321`, `compiler/.pascal26.fixedpoint`). An extracted
+tree carries no seed, so the build never ran and there is no binary to compare.
+That is neither MATCH nor MISMATCH; it is the third outcome, and it was written
+down as the one-directional reading BEFORE the run so that a failure could not
+be re-read afterwards as evidence for anything. **The attribution rests on the
+enumeration, which is where it already rested.**
 
 Four converging lines, then: `lzmid` (the tree is null), the enumeration above
 (one executable commit in the window), the fixture control (VARCARRY 7 of 14

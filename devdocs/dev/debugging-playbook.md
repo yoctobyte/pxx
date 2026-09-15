@@ -26720,12 +26720,17 @@ sent the next person to the wrong function.
 attributed to the region open when it fires, and so is a free. Net = allocs −
 frees per region. Over 26153 steps:
 
-**"Per step" below means per VESSEL-step, not per simulation tick** — the step
-marker sits in a function with two call sites, which was found only after these
-tables were published; see "VERIFY WHAT YOUR STEP MARKER COUNTS" below. It does
-not affect anything here, because every comparison in this section is between
-two rows measured by the SAME counter. It would affect any conversion to a
-per-second rate, and this section makes none.
+**"Per step" below means per VESSEL-step in a PLAIN run — not per simulation
+tick, and not a constant unit.** The marker sits in a function with two call
+sites, found only after these tables were published, and the two callers'
+proportions are a property of the RUN: measured, 40.93 vessel-steps/s plain
+against 24.73 with traffic skipped, so traffic supplies ~40% of the
+denominator. See "VERIFY WHAT YOUR STEP MARKER COUNTS" below.
+
+It does not affect anything here, because every table in this section came from
+plain runs and every comparison is between two rows sharing that denominator.
+What it forbids is comparing a per-step figure ACROSS configurations, and any
+conversion to a per-second rate. This section does neither.
 
 | region | allocs | frees | net | per step |
 |---|---|---|---|---|
@@ -26836,7 +26841,27 @@ version that survives review, because nothing in the numbers looks off.
 is untouched, because both sides used the same counter: region against region,
 endpoint against difference, the negative regions collapsing to zero. What
 breaks is every conversion OUT of it — any per-step figure turned into a
-per-second one, which now needs a craft-per-tick count nobody has measured.
+per-second one, which needs a craft-per-tick count.
+
+**AND THE MIXTURE IS NOT A CONSTANT, WHICH IS WORSE THAN BEING MISLABELLED.**
+Measured with the traffic simulation skipped: 40.93 vessel-steps/s plain against
+24.73, so ~40% of the denominator is traffic craft — a proportion that is a
+property of the CONFIGURATION, not of the program. A mislabelled unit is at
+least stable and can be renamed after the fact; a unit whose composition moves
+with a flag cannot be compared across runs that set the flag differently, and
+nothing in the numbers says which run was which. **The first correction —
+"vessel-steps, not sim ticks" — was itself not conservative enough**, which is
+the ordinary shape of this error: the first retraction fixes the label and the
+second finds that the quantity was never one quantity.
+
+**A THIRD DISAGREEMENT BETWEEN SOURCE-READING AND A CLOCK, SAME NIGHT, SAME
+SEAT, CLOCK WINS ALL THREE.** With traffic skipped the only caller runs once per
+fixed tick, at 24.73/s, against a configured `SIM_HZ = 120.0` — the simulation
+sitting near a fifth of its own target, and removing work did not raise it.
+Unresolved at time of writing and possibly not a defect (a loop branch that
+zeroes the accumulator while paused or in an attract-mode fly-over would do
+this). It is recorded because the PATTERN is the lesson: every rate derived by
+reading a loop and its constants lost to a rate measured with a clock.
 
 **So ask what the marked function's callers are before you name the unit**, and
 prefer a normalisation whose denominator you can point at. A ratio taken within
