@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-14T14:35:14Z",
-   "fixed": [
-    "test-uforth#src:tools/compiler_srchash.sh@3"
-   ],
-   "new_red": [],
-   "sha": "5fdddb8301cda8209b1fd693204640c905f3982b",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-14T14:37:07Z",
    "fixed": [],
    "new_red": [],
@@ -496,6 +485,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-15T01:23:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5105,7 +5103,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
   "test-threads#src:tools/compiler_srchash.sh": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
-  "test-uforth#src:tools/compiler_srchash.sh": "e977f78c31996ef1d7d9274ca5078558b21105c8",
+  "test-uforth#src:tools/compiler_srchash.sh": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
   "test-uforth#src:tools/compiler_srchash.sh@1": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
   "test-uforth#src:tools/compiler_srchash.sh@10": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
   "test-uforth#src:tools/compiler_srchash.sh@11": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
@@ -14869,14 +14867,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-15T01:22:00Z",
+  "date": "2026-09-15T01:23:53Z",
   "deadline": 3600.0,
   "sha": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 950.6
+  "verdict": "GREEN",
+  "wall": 99.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -14927,9 +14925,9 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-15T00:22:51Z",
+   "date": "2026-09-15T01:23:53Z",
    "deadline": 3600.0,
-   "sha": "e977f78c31996ef1d7d9274ca5078558b21105c8",
+   "sha": "32a0a421a29285cac221a55a4ea858d66e1afd4c",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
