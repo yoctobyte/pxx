@@ -27154,3 +27154,194 @@ The `print then return` row deserves its own line: on the unfixed compiler,
 diagnostic print fixes it** — the worst property a defect can have, and a
 fixture written the ordinary way (print the value, then assert it) cannot see
 this class at all.
+
+## A WRITE KILLED BY ENOSPC ENDS ON A ROUND NUMBER, AND THAT IS THE ONLY TELL YOU GET
+
+A full disk does not produce an error here. `elfwriter.inc` checks no write, so
+the compiler prints `ok:` **with exact byte counts** for a binary that was
+truncated mid-write, and the failure surfaces somewhere else entirely as a
+segfault with empty output. The byte counts in the `ok:` line are what the
+compiler INTENDED to write, so they are correct and they are not evidence.
+
+Measured 2026-09-15, twice in one hour, two seats, two unrelated subsystems, and
+in both cases the discriminator was a size that was too round to be real:
+
+- **An ELF binary (Track N tier).** `test_nilpy_property26` compiled `ok:
+  [code=1335064B data=88532B bss=56436B]`, then segfaulted producing nothing, so
+  the diff against a full `.expected` showed every line deleted — which reads
+  exactly like a real regression in whatever landed last. The dead file was
+  **1421312 bytes = 4096 x 347**, precisely a filesystem block boundary. The
+  correct rebuild is **1423828**, not a multiple of anything. Recompiled on a
+  freed disk, byte-for-byte fine.
+- **A run log (lekkerzeilen seat).** An A/B experiment's log stopped at
+  **458752 bytes = 448 KiB exactly**. Every marker count in that experiment came
+  from `grep -c` over that file, so the arm would simply have reported fewer
+  frames and fewer vessel-steps, and the conclusion — "the annotated build is
+  slower" — would have been read straight off a table in which nothing looked
+  wrong. Both builds were clean, both arms shared a compiler, the guard passed.
+
+**The general form: a natural artefact ends on an arbitrary byte, a killed write
+ends on a page, a block or a power of two.** So `ls -l` the input before you
+believe an output derived from it, and treat 4096, 65536, 448 KiB and their
+relatives as suspect on sight. This is the same tell as
+`n*Sxx - Sx^2` landing on 65536 in the least-squares section — a power of two
+where the data has no reason to give one means the number came from the
+machinery, not the measurement.
+
+**AND THE CONTAMINATION IS NOT LIMITED TO THE ROW THAT DIED, WHICH IS THE
+EXPENSIVE HALF.** The tier above had printed `ok:` for **490 programs** before
+the one that segfaulted, every one of them compiled while the disk was on its
+way down. Any of those could be truncated and green, because a truncated binary
+only fails if the program reaches the part that is missing. **The run is void,
+not partially good** — there is no prefix of it that is trustworthy, and the
+temptation to keep the 490 and re-run the tail is the whole trap. Clear the
+scratch directory too: a stale truncated binary sitting at the path the next run
+writes to is an instrument that survives the cleanup.
+
+**The cheap guard, since none of the above is detectable from inside the run:**
+record free space BEFORE and AFTER the measurement in the log itself
+(`df -Pm`), and read them as part of reading the verdict. Bytes and inodes are
+separate ceilings — CLAUDE.md's seven incident died on inodes at 9% full — so
+record both if the host is a tmpfs. And note the two failures have opposite
+shapes: the ELF one announced itself with an impossible verdict, while the log
+one removed a cross-check and left the rows, so **neither seat could have caught
+theirs by looking harder at the output.** Only the size did it.
+
+**Provenance worth keeping: neither of us was looking for this.** The seat whose
+disk it was found theirs by noticing a round number and went back; the other
+inherited the same failure through a shared `/tmp` and confirmed it from the
+opposite side within the hour. Two independent instruments, one cause, and the
+only reason either was believed is that the two numbers were round in the same
+way.
+
+## A MINIMAL CASE FAILS BY SCOPE, NOT BY BEING WRONG — AND THE AXIS THAT BREAKS IT IS THE ONE YOU NEVER VARIED
+
+`normalise-dont-special-case.md` already says to move the interesting element,
+and CLAUDE.md states it for ORDER: a construct taking an ordered list must be
+tested with the interesting element LAST, because the passing arrangements are
+the population everyone writes. **This is the same failure on every OTHER axis,
+and order is just the one we happened to document first.**
+
+Measured 2026-09-15, five instances, two seats, one evening. In every one the
+minimal case was CORRECT about itself and FALSE about the real code, and in
+every one the author had varied the thing they suspected while holding the rest
+of the shape fixed at whatever the first draft happened to be:
+
+- **"Variant arithmetic is 50-100x."** Never measured; quoted from expectation.
+  The real figure is 25.8x — and the first benchmark written to check it was
+  INERT, because `ax = 0.0` is inferred as a double with no annotation, so both
+  arms compiled identically and it measured 2.7x of nothing. The axis not varied
+  was *how the value arrives*: the variant route only opens through an
+  unannotated PARAMETER.
+- **"Annotate the value type's constructor."** True for a fixture that reads
+  `v.x` — a FIELD, which the constructor types. Worth exactly ZERO on real code
+  (41 -> 41 hot variants) because that code never reads a field: every hot value
+  arrives from a METHOD CALL. Four return annotations bought thirteen. The axis
+  not varied was *what the caller does with the value*.
+- **"Annotating the callee's return rescues the class-annotated local."** True in
+  SIX constructed shapes — one hop, two hops over an annotated inner, two hops
+  over an unannotated inner, an unannotated receiver, a forward reference, a
+  plain function. False on the real file, byte-identically, twice. **The hop that
+  defeats it was never identified by either seat.**
+- **"The segfault is annotations inside a loop body."** The only structural
+  feature separating the five suspected lines. Not the loop — the same
+  annotation outside any loop fails identically. **Reverting those five would
+  have looked like a fix**, because they were also the five assigned from the
+  uninferrable call: right rows, wrong reason, and the rule would have gone into
+  the notes wrong.
+- **A census keyed by function NAME** where ten methods are all called
+  `accumulate`: nine silently overwrote each other and it reported 8 annotated
+  locals against 23.
+
+**The general form: a minimal case fixes every axis you did not think about, and
+those are exactly the axes you cannot enumerate — if you could, you would have
+varied them.** So "I reduced it to ten lines" is not evidence the ten lines are
+the same phenomenon; it is evidence they reproduce something.
+
+**What actually worked, both times it was tried:** the seat holding the REAL
+failing artefact ran the candidate and refuted it, in minutes, without
+constructing anything. Twice the refutation arrived before the recommendation
+had finished being written. So where a real reproducer exists, the division that
+pays is **mechanism from whoever has the source, verdict from whoever has the
+failing tree** — and a fixture result must be phrased as a measurement of the
+fixture, never as a recommendation for the tree.
+
+**And the structural escape, which is the part worth keeping:** prefer a fix
+whose correctness does not depend on the characterisation at all. The class of
+uninferrable calls was never pinned down and the fix does not need it — unboxing
+at the STORE is correct whatever made the value a variant. **When a minimal case
+keeps failing to transfer, that is a signal to look for a fix one layer down,
+where the distinction that keeps escaping you does not exist.**
+
+**NOT PROMOTED TO CLAUDE.md, and the reason rather than the verdict:** five
+instances is well past the bar on COUNT, and they fail the independence test —
+all five come from one night and one investigation, each found while chasing the
+previous, which is the same entanglement that kept the N-arm pattern out of that
+file six hours earlier. CLAUDE.md also prefers strengthening a neighbour to
+adding one, and the nearest neighbour is already there and already load-bearing:
+*"isolation guards the RUN, not the ROUTE"*. This is its third form — the probe
+is alone, reaches the subject, AND takes the right route, and is still not the
+same phenomenon, because an axis nobody enumerated is pinned. **If a second
+investigation on an unrelated subsystem produces it again, promote it as an
+extension of that clause and not as a new rule.**
+
+## PROFILING A PXX BINARY: THE `.map` IS ALREADY THERE, AND IT NEEDS NO REBUILD
+
+A pxx executable has **no section headers and `symtab entries: 0`**, which reads
+like the end of the idea. It is not. **pxx writes `<output>.map` beside every
+executable it produces** — no flag, no `-g`, no rebuild, on every build anyone
+has ever made:
+
+```
+# Frankonpiler Map File
+# Executable: .../lzann_no
+# Base Address: 0x00400000
+0x00000000005d018f Vec3.create
+0x00000000005d0e19 Vec3.__add__
+```
+
+The binary is **non-PIE**, so there is no load slide to correct: sample the PC,
+binary-search the sorted map, done. Verified 2026-09-15 — a trivial two-class
+NilPy program emits a 60 KB map; lekkerzeilen's is 4256 lines.
+
+**The property that matters is that it costs no rebuild.** A `-g` build is a
+DIFFERENT BINARY from the one whose timings you are trying to explain, so using
+its profile for the other one's numbers requires first proving the text bytes
+identical — which is real work and is exactly the kind of step that gets skipped.
+The map is emitted for the binary you already ran, including ones built hours
+ago. `-g` (DWARF line info) exists and gdb works (`--doctor` confirms), so line
+granularity is available when function granularity genuinely is not enough; take
+that step deliberately, with the identical-text check, rather than by default.
+
+**This was undocumented until 2026-09-15 and a seat with full repo access could
+not find a way to profile.** It is mentioned in this file, `debug-switches.md`
+and `valgrind.md`, and in none of them in connection with profiling,
+symbolisation or address lookup. That is a documentation failure, not a
+capability gap.
+
+**`ptrace_scope` IS 1 ON PLEXUS, SO gdb CANNOT ATTACH.** A tracer must be an
+ancestor of its tracee, and a gdb started beside a running demo is a SIBLING. So
+gdb must LAUNCH the program — `run &` (background execution), then
+`interrupt` / dump / `continue &` driven down a fifo. **Any instruction that says
+"attach and interrupt" fails on this host at the attach, not at the sampling**,
+which is a confusing place to be stopped if you are expecting the sampling to be
+the hard part. gdb also disables ASLR by default: harmless for a profile, but it
+is the same switch behind the `setarch -R` rule, so a fault that only happens
+under ASLR will not appear in these samples.
+
+**Two things to get right in the sampler itself:**
+
+- **Jitter the interval, never sample on a fixed grid.** A render loop is a
+  periodic workload and a periodic sampler aliases against it, which does not
+  look like noise — it looks like a clean, confident, wrong attribution.
+- **Validate the sampler on a fixture whose answer is known BY CONSTRUCTION,
+  not by estimate.** Two functions with BYTE-IDENTICAL bodies called 3:1 are
+  exactly 75/25, because identical code costs identical time per iteration. If
+  the sampler cannot recover 75/25 there, nothing it says about a real program
+  is evidence. This is the positive-control rule aimed at the one instrument
+  whose failure mode is to return a plausible distribution in silence.
+
+**Inclusive profiles are NOT available today** — with no `.eh_frame` the unwind
+past the leaf is best-effort, so report the leaf as measured and anything deeper
+as suggestive. Filed as
+`feature-a-emit-eh-frame-so-an-external-profiler-can-unwind-past-the-leaf-frame`.

@@ -1,7 +1,7 @@
 ---
 slug: bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
 track: A
-prio: 55
+prio: 70
 type: bug
 blocked-by: []
 status: backlog
@@ -94,3 +94,44 @@ Not the cause of the tier red it produced — that row is fine. Not a `/tmp`
 capacity ticket; the inode/space hazards are already in CLAUDE.md. The defect is
 the unchecked write, and it is a wrong answer on every filesystem that can fill,
 every quota, and every NFS mount that drops a write at close.
+
+## THIRD AND FOURTH OCCURRENCES, 2026-09-15 — two seats, one hour, one full /tmp
+
+Raised 55 -> 70 on recurrence, not on a new argument. The defect is unchanged;
+what is new is that it has now voided a measurement three times in four days,
+and each time the seat that hit it spent real effort attributing a red before
+finding the disk.
+
+**Track N tier.** `test_nilpy_property26` printed
+`ok: [code=1335064B data=88532B bss=56436B]` and then segfaulted with EMPTY
+output, so the diff against a full `.expected` deleted every line — the exact
+shape of a real regression in whatever landed last. It was read as one until the
+size was checked. The dead binary was **1421312 bytes = 4096 x 347**, exactly a
+filesystem block boundary; the correct rebuild is **1423828**, a multiple of
+nothing.
+
+**A NEW AND CHEAPER DISCRIMINATOR THAN THIS TICKET CURRENTLY RECORDS.** The
+existing guidance is to compare the size against a fresh build, which costs a
+build and needs a known-good tree. It is not needed: **a write killed by ENOSPC
+ends on a page, a block or a power of two, and a real one does not.** One
+`ls -l` answers it. The lekkerzeilen seat found the same signature independently
+the same hour in a completely different artefact — a run log that stopped at
+**458752 bytes = 448 KiB exactly** — and the round number was likewise the only
+thing that gave it away, since every count in that experiment was a `grep -c`
+over that file and would simply have reported fewer events.
+
+**AND THE BLAST RADIUS IS THE WHOLE RUN, WHICH THIS TICKET DOES NOT SAY.** The
+tier had printed `ok:` for **490 programs** before the one that died, all
+compiled while the disk was on its way down. A truncated binary only fails if
+the program reaches the missing part, so any of those 490 could be truncated and
+green. There is no trustworthy prefix: the run is void, and keeping the 490
+while re-running the tail is the trap. The stale truncated binaries must also be
+cleared from the scratch directory, or they survive into the next run at the
+path it writes to.
+
+**Cheap mitigation available to any caller today, independent of this fix:**
+record `df -Pm` before and after a long run INSIDE the log, and read it as part
+of the verdict. It does not prevent the corruption but it makes it attributable
+in one line instead of an evening. Worked, with both artefacts and the general
+form: `devdocs/dev/debugging-playbook.md`, "A WRITE KILLED BY ENOSPC ENDS ON A
+ROUND NUMBER".
