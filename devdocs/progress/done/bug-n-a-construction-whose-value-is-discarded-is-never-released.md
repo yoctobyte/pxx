@@ -59,3 +59,6 @@ borrowed references and are already clean.
 `test/test_nilpy_a_user_object_does_not_leak_because_of_how_its_value_is_consumed.npy`,
 row `ctor_discard`, beside `ctor_bound` as its control. Verified to FAIL on a
 pre-fix compiler (72 bytes/call) and pass after, with CPython agreeing.
+
+## Log
+- 2026-09-15 — fixed and closed in one commit, so the citation is the FIX itself and not a separate resolve — commit 32a0a421a.
