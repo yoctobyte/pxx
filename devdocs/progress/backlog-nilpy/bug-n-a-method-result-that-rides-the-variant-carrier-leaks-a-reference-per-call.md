@@ -241,6 +241,71 @@ and RECVLIVE is the half this one cannot be -- a premature free passes every
 byte row here, and a leak passes every value row there.
 
 
+## THE QUANTITY, 2026-09-15 -- k-1 PER CALL SITE PER SCOPE, AND "DOES THE FUNCTION RETURN" WAS A PROXY
+
+The factorial below has one wrong row and lekkerzeilen-c8 found it by reading
+the trace rather than the table: *"if the slot is overwritten without release on
+every call and drained once at scope exit, then the quantity that leaks is CALLS
+MINUS ONE PER INVOCATION, and 'does the enclosing function return' is not the
+factor -- it is a proxy that happens to separate your two rows because your
+no-return row had N calls and your returns-each-iteration row had exactly ONE
+call per invocation."*
+
+Correct, to the byte. A function that loops k times over one getter and then
+RETURNS, M=20000 invocations:
+
+| k | bytes/invocation | objects leaked |
+|---|---|---|
+| 1 | 0 | 0 |
+| 2 | 1096 | 1 = k-1 |
+| 5 | 4384 | 4 = k-1 |
+| 20 | 20824 | 19 = k-1 |
+
+20824 / 1096 = 19.0 exactly. Not a trend -- the identity.
+
+### And a half neither of us predicted: it is per call SITE
+
+```
+two straight-line calls, no loop, then return   ->  0 bytes
+```
+
+Two calls, k=2, nothing leaked. **Each call SITE owns one scratch slot.** Every
+execution of that site overwrites the slot without releasing what it held; the
+slot is drained once at scope exit. So two sites executed once each leak zero,
+and one site executed twice leaks one. The leaked quantity is
+**executions-of-one-site-per-scope, minus one.**
+
+### What that does to the population
+
+It is much wider than "inside a function that never returns", which is what I
+sent a peer seat twice. **Any getter call inside any loop leaks**, however
+short-lived the enclosing function -- a per-frame helper that probes p hulls
+through one getter leaks p-1 references per frame. The earlier framing survived
+because the shape that was supposed to disprove it made exactly one call.
+
+### Why this is the third correction to this ticket today, in one sentence each
+
+1. "a variant out of a virtual call is BORROWED" -- measured on the
+   unannotated-receiver shape, asserted of both.
+2. "receiver lifetime is the discriminator" -- it is the byte-visibility
+   condition, never the cause.
+3. "the enclosing function returning is the discriminator" -- a proxy for one
+   execution per site per scope.
+
+All three are the same failure: **a factor named from the rows that happened to
+be in front of me, when a row varying it was one program away.** The k-sweep
+that settled this cost five minutes and should have been the first thing in the
+file, not the ninth.
+
+### The fixture carries the k-sweep as a pair
+
+`ksweep_k1` (clean) and `ksweep_k8` (7672 = 7 x 1096) are in
+`test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy`.
+They are there because **a fixture written the ordinary way -- a helper called
+once per iteration -- is green on the broken compiler**, and that is the
+arrangement anyone would write.
+
+
 ## THE FACTORIAL, 2026-09-15 -- AND IT RETIRES TWO ATTRIBUTIONS OF MINE FROM EARLIER TODAY
 
 Three tables in this ticket each varied ONE factor and named it as the cause.

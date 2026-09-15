@@ -18,7 +18,7 @@
 # three:
 #
 #   receiver typing      static 1096   |  unannotated/Variant 1096   -- IRRELEVANT
-#   enclosing fn returns no     1096   |  yes                   0    -- DECISIVE
+#   executions of ONE call site, per enclosing scope:  k calls -> k-1 leaked
 #   what is returned     attribute 1096 | fresh object 0 | scalar 0  -- DECISIVE
 #   referent can die     yes    1096   |  no (long-lived)      0     -- bytes only
 #   dispatch             method 1096   |  plain function       0     -- DECISIVE
@@ -34,10 +34,31 @@
 # The rows below build the receiver inside the loop for exactly that reason --
 # to turn a reference leak into a byte leak an RSS gauge can see.
 #
+# THE QUANTITY IS EXECUTIONS-OF-ONE-CALL-SITE-PER-SCOPE, MINUS ONE. Predicted
+# by lekkerzeilen-c8 from the trace above and confirmed to the byte, M=20000
+# invocations of a function that loops k times over the getter and RETURNS:
+#
+#   k= 1        0 bytes/invocation      0 leaked
+#   k= 2     1096 bytes/invocation      1 leaked   = k-1
+#   k= 5     4384 bytes/invocation      4 leaked   = k-1
+#   k=20    20824 bytes/invocation     19 leaked   = k-1     (20824/1096 = 19.0)
+#
+#   two straight-line calls, no loop, then return:   0 bytes
+#
+# The last row is the half that makes it a SITE and not a call: two sites
+# executed once each leak nothing, one site executed twice leaks one. Each call
+# site owns one scratch slot; every execution overwrites it without releasing;
+# scope exit drains it once.
+#
+# "DOES THE ENCLOSING FUNCTION RETURN" WAS A PROXY AND IT WAS MINE. It
+# separated the rows in the first factorial only because the returning row made
+# exactly ONE call per invocation. A short-lived per-frame helper that calls a
+# getter in a loop leaks just as much as a main loop does.
+#
 # WHY THE LOOP IS INSIDE THE FUNCTION IN EVERY ROW: a fixture written the
-# ordinary way, with a helper called once per iteration, is CLEAN ON THE
-# BROKEN COMPILER. The scope exit drains the slot. That arrangement certifies
-# the bug instead of catching it.
+# ordinary way -- a helper called once per iteration, ONE execution of the site
+# per scope -- is CLEAN ON THE BROKEN COMPILER. That arrangement certifies the
+# bug instead of catching it, and it is the arrangement anyone would write.
 #
 #   plain_fn        a plain function returning the same value     0   route control
 #   bare            return self.q                              1095
@@ -194,6 +215,32 @@ def r_plain_fn(n):
         k = plain_returns_attr()
 
 
+# THE k-SWEEP, AS A ROW. One call site, k executions per enclosing scope, and
+# the function RETURNS between invocations -- the arrangement that reads clean
+# at k=1. At k=8 it must leak 7/8 of a full leak per call, so the ordinary
+# LEAK_LIMIT catches it; at k=1 the same code is clean, which is the pair.
+def r_ksweep_k8(n):
+    for i in range(n):
+        _frame8(KP)
+
+
+def _frame8(p):
+    for j in range(8):
+        z = p.refresh()
+    return 1
+
+
+def r_ksweep_k1(n):
+    for i in range(n):
+        _frame1(KP)
+
+
+def _frame1(p):
+    for j in range(1):
+        z = p.refresh()
+    return 1
+
+
 def r_control(n):
     for i in range(n):
         h = H()
@@ -207,7 +254,10 @@ def r_retain(n):
 ok = True
 P = H()
 GLOBAL_H = H()
-rows = [("plain_fn", r_plain_fn, None),("bare", r_bare, None), ("ifexp", r_ifexp, None),
+KP = H()
+rows = [("plain_fn", r_plain_fn, None),
+        ("ksweep_k1", r_ksweep_k1, None),
+        ("ksweep_k8", r_ksweep_k8, None),("bare", r_bare, None), ("ifexp", r_ifexp, None),
         ("vialocal", r_vialocal, None), ("computed", r_computed, None),
         ("discard", r_discard, None), ("index", r_index, None),
         ("chain", r_chain, None),
