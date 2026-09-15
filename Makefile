@@ -2441,6 +2441,22 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_chainret "$$($(TESTTMP)/test_nilpy_chainret26 | tail -n 1)" "CHAINRET OK"
 	./$(COMPILER) test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy $(TESTTMP)/test_nilpy_annunbox26
 	tools/expect_same.sh test_nilpy_annunbox "$$($(TESTTMP)/test_nilpy_annunbox26 | tail -n 1)" "ANNUNBOX OK"
+	@# `acc.force += v` where acc is an UNANNOTATED parameter and the field
+	@# holds a user-class instance: the variant-receiver field store built a
+	@# raw class-typed binop over two instance handles -- 0.0 read back, or a
+	@# segfault with `v` annotated. The demo's accumulator idiom. Plus the
+	@# plain-store, dynamic-fallback and list-field rows of the same store.
+	@# Every expected value differs from the raw right-hand side and from 0.
+	@# bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder
+	./$(COMPILER) test/test_nilpy_an_augmented_store_into_a_class_field_of_a_variant_receiver_reaches_the_dunder.npy $(TESTTMP)/test_nilpy_varfieldaug26
+	tools/expect_same.sh test_nilpy_varfieldaug "$$($(TESTTMP)/test_nilpy_varfieldaug26)" "$$(printf '2.0 4.0 6.0\n3.0\n2.0\n3.0\n4.0\n5.0\n[1, 2, 3] [1, 2, 3]\n12\n3.5\nVARFIELDAUG OK')"
+	@# THE CENSUS ROW IS THE GUARD. The annunbox fix above unboxed with an
+	@# OWNED retain on top of the retain the store already does: value right,
+	@# fixture green, one object leaked per annotated assignment (921 allocs,
+	@# 0 frees). A leak cannot fail a value row -- bound live instead.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_a_class_annotated_local_from_a_call_is_released.npy $(TESTTMP)/test_nilpy_annrelease26
+	tools/expect_same.sh test_nilpy_annrelease "$$($(TESTTMP)/test_nilpy_annrelease26 2>/dev/null | grep -v census)" "$$(printf '2001000.0 2000.0\nANNRELEASE OK')"
+	tools/assert_no_leak.sh nilpy_annotated_local_released 64 $(TESTTMP)/test_nilpy_annrelease26
 	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
 	@# selector (a double), so the Result store retained 3.0 as an object pointer
 	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.

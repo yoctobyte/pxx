@@ -226,3 +226,24 @@ that would close it, and it is still unbuilt.
 
 ## Log
 - 2026-09-15 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fc646c17a.
+
+## 2026-09-15 evening — the fix LEAKED, and the paragraph that said it would not was the cause
+
+The resolution above landed the unbox as OWNED (`pyvarobj_owned`), with a
+paragraph explaining that the variant temp's release would otherwise free the
+object under the slot. That paragraph was reasoned, not traced. Traced
+(`-dPXX_OBJTRACE`, 2026-09-15): the store into a class-typed local RETAINS the
+pointer itself -- `A 1; R 2 (box); r 1; R 2 (owned); R 3 (store); ... r 1` --
+so the owned retain was a second +1 nothing ever released. `g: Vec3 = mk()` in
+a 1000-iteration loop: **921 allocs, 0 frees**, value correct, fixture green.
+With the bare unbox: live=4, value identical under `-dPXX_HEAP_DEBUG`.
+
+"What the fix does NOT check" above listed no census row, and the assertion
+class was the wrong one for exactly this failure -- a leak cannot fail a
+value comparison (CLAUDE.md, "MATCH THE ASSERTION CLASS TO THE DEFECT CLASS").
+Fixed in the same commit as
+`bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder`,
+whose field twin had copied the same owned unbox; guarded by
+`test/test_nilpy_a_class_annotated_local_from_a_call_is_released.npy`
+(`assert_no_leak`, bound 64). The demo writes this idiom in its per-step
+integrator, so this is a candidate for the 16 MB ticket's residual.

@@ -196,3 +196,48 @@ bisect is a test of the BYTE leak only and must be labelled that way.
 Every figure here is c8's, measured and quoted with the caveats they stated.
 Filed in this tree at their request -- they measured it and declined to file in
 a tree they do not commit to.
+
+## 2026-09-15 evening — status from the lekkerzeilen seat, relayed by frankuser
+
+**Measured by that seat, 2026-09-15 12:59, two interleaved rounds, same demo
+source:** 131.4 kB/s at compiler cfee5d62 → 11.5 kB/s at 79551a1b, **91.3%
+removed**, CPU identical across legs. A second instrument (`-dPXX_OBJTRACE`
+birthplace census per vessel step) says 89.7% removed and puts the removed
+bytes in the Vec3-returning contributor loop — the hidden-destination defect
+fixed in `e59efc3f5` is the overwhelming candidate.
+
+**Attribution, settled by the binaries (same seat, 19:20):** the runtime edit
+in question added a NAMED function (`PyVarUserAug`), and every demo binary
+carries a `.map`, so each arm can be asked whether it was built with it:
+`lzwater_fix` (10:10, cfee5d62) ABSENT, 131.34 kB/s; `lzmid` (13:00,
+cfee5d62) PRESENT, 131.25 / 132.79; `lzafter` (12:31, 79551a1b) PRESENT,
+11.48 / 11.55. Two factors, one at a time: adding the runtime edit under the
+old compiler moved nothing; moving the compiler with the edit present in both
+arms removed the 91%. **The 91% is the compiler binary, by measurement.** The
+lesson that seat wrote down: the emitted artefact is better provenance than a
+build-time stamp -- where a fix adds a symbol, grep the map. `runtime_sha`
+(hash of `compiler/builtin/*.pas`) stays in the build script so the next such
+question is answerable up front.
+
+**Re-measured on the 18:26 binary (compiler 1a74a2318642, builtin tree
+4f69592e5), same seat, two interleaved rounds:** `lzafter` 11.73 / 11.36 kB/s
+against `newbin` 11.20 / 11.30, CPU flat at 33-34%, load moving 2.8 -> 5.4
+without moving the numbers. No regression, and `lzafter` reproduced its own
+12:59 figure six hours later. Queue-death census on the same binary: 20/20
+clean, BLOCKGET 0 -- the honest form is "frequent -> 0/20, twice", since the
+~25% baseline has no counted census behind it.
+
+**Residual:** ~11.5 kB/s. 21% of it is a small linear leak in the angular
+integrator inside `Body.step` (`angular` region, 47.85 bytes per vessel step,
+unticketed); the other 79% is in code that was never instrumented (`outside`
+is the complement of the marker set, not a place), so no single cause can be
+named for it. Unchanged on 1a74a2318642, so nothing since 79551a1b touched it.
+**A named candidate for it, 2026-09-15 evening (frankuser):** the annotated-
+local unbox landed at fc646c17a leaked one object per `g: Vec3 = mk()` (an
+owned unbox on top of a retaining store -- 921 allocs, 0 frees in a loop,
+value correct), and the demo writes that idiom per integrator step. Fixed the
+same evening; NOT yet measured on the demo. See
+`done/bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder`.
+
+**Standing caveat from that seat:** an RSS slope cannot distinguish a repaired
+leak from a premature free. Every figure above means "growth removed".

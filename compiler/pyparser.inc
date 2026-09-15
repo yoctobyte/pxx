@@ -733,6 +733,12 @@ function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
 function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind; forward;
 function PyChaseBareLocalClass(startIdx, endIdx: Integer;
                                var tk: TTypeKind; var ci: Integer): Boolean; forward;
+{ The augmented-store dunder dispatch and its marker predicate, defined with
+  the other PyAug* helpers ~14000 lines below the variant field store that
+  now asks them (PyVariantFieldStore / PyMakeVariantFieldSet). }
+function PyAugClassDunderNode(lhsNode: Integer; binTk: TTokenKind; rhsNode: Integer): Integer; forward;
+function PyAugMarkedTok(k: TTokenKind): Boolean; forward;
+function PyNodeListCi(n: Integer): Integer; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -3733,12 +3739,19 @@ function PyStoreRhsToClassSlot(symIdx, rhsNode: Integer): Integer;
   one, anything the expression chase gives up on. The set of such calls was never
   characterised and does not need to be -- this asks what the VALUE is, not why.
 
-  owned := True, and that is not a detail. An unboxed pointer is a bare
-  reference, while the variant TEMP it came out of is released at the end of the
+  owned := False, and the first version of this helper said True with a
+  paragraph of reasoning -- "the variant TEMP is released at the end of the
   statement and takes the object with it, so without the retain the slot points
-  at a freed block: correct at the assignment and garbage at the first read --
-  strictly worse than the bug being fixed. The dataclass keyword-argument site
-  records the same reasoning for the same reason.
+  at a freed block". MEASURED 2026-09-15 with -dPXX_OBJTRACE, that was wrong:
+  the store into a class-typed local RETAINS the pointer itself (the same
+  retain an unannotated `g = obj` store does), and the temp's release then
+  balances the box, so the owned retain was a SECOND +1 that nothing released.
+  `g: Vec3 = mk()` leaked one object per call -- 921 allocs, 0 frees over a
+  1000-iteration loop, on the very fix that made the value correct -- and the
+  demo writes exactly this idiom. With the bare unbox the loop ends at live=5,
+  the value is identical under -dPXX_HEAP_DEBUG (a freed block would read as
+  $DD), and the fixture is unchanged. The dataclass keyword-argument site is a
+  CALL ARGUMENT, not a store, and keeps its own reasoning.
 
   NOT called from the AUGMENTED-assignment site, deliberately. There the node
   becomes an OPERAND of an AN_BINOP rather than the stored value, so coercing it
@@ -3754,7 +3767,7 @@ begin
   if Syms[symIdx].RecName < REC_UCLASS_BASE then Exit;
   if IntToTypeKind(ASTTk[rhsNode]) <> tyVariant then Exit;
   Result := PyUnboxVariantToClassEx(rhsNode,
-                                    Syms[symIdx].RecName - REC_UCLASS_BASE, True);
+                                    Syms[symIdx].RecName - REC_UCLASS_BASE, False);
 end;
 
 
@@ -14699,18 +14712,60 @@ end;
   about the class. augOp is Ord(the binary token), or -1 for a plain store. }
 function PyVariantFieldStore(baseNode, ci, fi: Integer; const fname: AnsiString;
                              valNode, augOp: Integer): Integer;
-var rhs, binN: Integer;
+var rhs, binN, lhsN, dunN: Integer;
 begin
   rhs := valNode;
   if augOp >= 0 then
   begin
+    lhsN := PyVariantFieldArm(baseNode, ci, fi, fname);
+    { `b.xs += [..]` where the field holds a LIST: in-place extend, the whole
+      statement IS the call -- the typed-target arm's rule. The raw binop
+      below SEGFAULTED on it (two TPyList handles added). Same ticket. }
+    if (augOp = Ord(tkPlus)) and (PyNodeListCi(lhsN) >= 0) then
+    begin
+      Result := PyCallMeth1(PyNodeListCi(lhsN), 'extend', lhsN, valNode);
+      if Result < 0 then Error('Nil Python: pylib TPyList.extend not loaded');
+      Exit;
+    end;
+    { A field that HOLDS A USER-CLASS INSTANCE dispatches __i<op>__ / __<op>__
+      exactly as the typed-receiver twin does. This is the THIRD arm of one
+      family -- a bare name (PyAugClassDunder), a statically typed field
+      (PyAugClassDunderNode), and now a field reached through a VARIANT
+      receiver -- and it was the one left building a raw class-typed AN_BINOP
+      over two instance handles: `acc.force += v` on an unannotated `acc`
+      read back 0.0 with the dunder never called, and with `v` annotated (or
+      a read of the field in the same body) it SEGFAULTED. The demo's
+      accumulator idiom, `state.velocity += x`.
+      bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder }
+    dunN := PyAugClassDunderNode(lhsN, TTokenKind(augOp), valNode);
+    if dunN >= 0 then
+    begin
+      Result := dunN;
+      Exit;
+    end;
     binN := AllocNode(AN_BINOP);
     ASTIVal[binN] := augOp;
-    ASTLeft[binN] := PyVariantFieldArm(baseNode, ci, fi, fname);
+    ASTLeft[binN] := lhsN;
     ASTRight[binN] := valNode;
     ASTTk[binN] := UFldTk[fi];
+    { a VARIANT field takes the same marker the name and typed-field targets
+      take, so a list held there is extended IN PLACE and a user object held
+      there reaches its __i<op>__ (same ticket, the variant-field row) }
+    if PyAugMarkedTok(TTokenKind(augOp)) and (UFldTk[fi] = tyVariant) then
+      ASTSLen[binN] := PY_BINOP_AUGMENTED;
     rhs := binN;
   end;
+  { A VARIANT value going into a field that holds a USER-CLASS instance is
+    UNBOXED -- the field twin of PyStoreRhsToClassSlot, for the same reason:
+    `acc.force = acc.force + v` (the read is a variant, so the sum is) and
+    `acc.force = f` with `f` bound from that read both stored the raw variant
+    record into the class slot, which read back as 0.0 or segfaulted at the
+    first method call. Same ticket, the plain-store rows. NOT owned: the
+    field store retains what it stores, exactly as the local store does --
+    see PyStoreRhsToClassSlot for the trace that settled it. }
+  if (UFldTk[fi] = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) and
+     (IntToTypeKind(ASTTk[rhs]) = tyVariant) then
+    rhs := PyUnboxVariantToClassEx(rhs, UFldRec_[fi] - REC_UCLASS_BASE, False);
   Result := AllocNode(AN_ASSIGN);
   ASTLeft[Result] := PyVariantFieldArm(baseNode, ci, fi, fname);
   ASTRight[Result] := rhs;
@@ -14744,7 +14799,7 @@ end;
   `breeze.level = level` on a parameter that defaults to None is the write. }
 function PyMakeVariantFieldSet(baseNode: Integer; const fname: AnsiString;
                                valNode, augOp: Integer): Integer;
-var i, n, condN, pairN, ifN, asgN, unboxArg, unboxCall: Integer;
+var i, n, condN, pairN, ifN, asgN, unboxArg, unboxCall, dynBin: Integer;
     cands, candFi: TPyFieldCands;
     sameShape: Boolean;
     firstArm: Integer;
@@ -14767,7 +14822,25 @@ begin
     for a Variant-typed field that store first RELEASES whatever the foreign
     bytes decode to, which is the segfault half of the read's note above.
     Whoever fixes that ticket should give this arm the setter. }
-  Result := PyMakeDynAttrSet(baseNode, fname, valNode);
+  if augOp >= 0 then
+  begin
+    { an AUGMENTED store through the dynamic arm is a read-modify-write:
+      `pydynattr_set_v(v, name, pydynattr_get_v(v, name) op val)`. Until
+      2026-09-15 this arm stored `val` ITSELF, so `x.n += 1` on a receiver
+      whose class was not a candidate left `x.n` holding 1 -- silently, and
+      only through the fallback, which is the arm nobody's fixture reaches.
+      Same ticket as PyVariantFieldStore's dunder arm above. }
+    dynBin := AllocNode(AN_BINOP);
+    ASTIVal[dynBin] := augOp;
+    ASTLeft[dynBin] := PyMakeDynAttrGet(baseNode, fname);
+    ASTRight[dynBin] := valNode;
+    ASTTk[dynBin] := Ord(tyVariant);
+    if PyAugMarkedTok(TTokenKind(augOp)) then
+      ASTSLen[dynBin] := PY_BINOP_AUGMENTED;
+    Result := PyMakeDynAttrSet(baseNode, fname, dynBin);
+  end
+  else
+    Result := PyMakeDynAttrSet(baseNode, fname, valNode);
   firstArm := n - 1;
   for i := firstArm downto 0 do
   begin

@@ -1,0 +1,44 @@
+# The CENSUS row is the guard here and the value row is not. `g: Vec3 = mk()`
+# (an annotated local from a call whose result type cannot be inferred) was
+# fixed to unbox the variant -- with an OWNED unbox, a second +1 on top of the
+# retain the store already does. The value was right, the fixture was green,
+# and one object per call was never released: 921 allocs, 0 frees over this
+# loop. Same double retain in the field twin (`acc.force = acc.force + v`
+# through a variant receiver). Build -dPXX_ALLOC_CENSUS and bound `live`.
+# bug-n-a-class-annotated-local-assigned-from-an-uninferrable-call-holds-a-raw-variant-and-segfaults (the leak half)
+# bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder
+class Vec3:
+    def __init__(self, x: float, y: float, z: float):
+        self.x = x; self.y = y; self.z = z
+    def __add__(self, o: 'Vec3') -> 'Vec3':
+        return Vec3(self.x + o.x, self.y + o.y, self.z + o.z)
+
+class Acc:
+    def __init__(self):
+        self.force = Vec3(0.0, 0.0, 0.0)
+
+def mk(p, q):
+    return p + q
+
+def annotated_local(acc, v):
+    g: Vec3 = mk(acc.force, v)
+    h: Vec3 = mk(g, v)
+    return g.x + h.y
+
+def field_from_sum(acc, v):
+    acc.force = acc.force + v
+
+def field_from_local(acc, v):
+    t = acc.force
+    t += v
+    acc.force = t
+
+a = Acc()
+d = Vec3(1.0, 1.0, 1.0)
+total = 0.0
+for i in range(1000):
+    total += annotated_local(a, d)
+    field_from_sum(a, d)
+    field_from_local(a, d)
+print(total, a.force.x)
+print("ANNRELEASE OK")

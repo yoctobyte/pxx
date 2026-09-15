@@ -1,0 +1,90 @@
+# `acc.force += v` where acc is an UNANNOTATED parameter (a variant) and the
+# field holds a user-class instance: the variant-receiver field store built a
+# raw class-typed binop over two instance handles instead of calling the
+# dunder. Read back 0.0 with the dunder never called; with `v` annotated, or a
+# read of the field in the same body, it segfaulted. The demo's accumulator
+# idiom (`state.velocity += x`). Three sibling rows of the same store:
+#   - the plain store of a variant (`acc.force = acc.force + v`) went into the
+#     class slot unboxed and read back 0.0 or segfaulted;
+#   - the DYNAMIC fallback arm (a receiver whose class is not a candidate)
+#     stored the raw right-hand side, so `b.force += d` left b.force == d;
+#   - a LIST field extended through a variant receiver segfaulted.
+# Every value is chosen so that storing the raw right-hand side, or the
+# unfixed 0.0, prints something else. Compare against CPython.
+# bug-n-an-augmented-store-into-a-class-field-of-a-variant-receiver-never-reaches-the-dunder
+class Vec3:
+    def __init__(self, x: float, y: float, z: float):
+        self.x = x; self.y = y; self.z = z
+    def __add__(self, o: 'Vec3') -> 'Vec3':
+        return Vec3(self.x + o.x, self.y + o.y, self.z + o.z)
+    def __iadd__(self, o: 'Vec3') -> 'Vec3':
+        return Vec3(self.x + o.x, self.y + o.y, self.z + o.z)
+    def __sub__(self, o: 'Vec3') -> 'Vec3':
+        return Vec3(self.x - o.x, self.y - o.y, self.z - o.z)
+
+class Acc:
+    def __init__(self):
+        self.force = Vec3(0.0, 0.0, 0.0)
+        self.xs = [1]
+
+class Bag:
+    def __init__(self):
+        self.n = 1
+
+def aug_bare(acc, v):
+    acc.force += v
+
+def aug_annotated_rhs(acc, v: Vec3):
+    acc.force += v
+
+def aug_then_read(acc, v):
+    acc.force -= v
+    return acc.force.x
+
+def plain_sum(acc, v):
+    acc.force = acc.force + v
+
+def via_local(acc, v):
+    f = acc.force
+    f += v
+    acc.force = f
+
+def local_from_field(s, v):
+    state = s.force
+    state = state + v
+    s.force = state
+
+def grow(acc):
+    acc.xs += [2, 3]
+
+def bump(b):
+    b.n += 5
+    b.n *= 2
+
+def bumpforce(b):
+    b.force += Vec3(2.5, 2.5, 2.5)
+
+a = Acc()
+d = Vec3(1.0, 2.0, 3.0)
+aug_bare(a, d)
+aug_bare(a, d)
+print(a.force.x, a.force.y, a.force.z)
+aug_annotated_rhs(a, d)
+print(a.force.x)
+print(aug_then_read(a, d))
+plain_sum(a, d)
+print(a.force.x)
+via_local(a, d)
+print(a.force.x)
+local_from_field(a, d)
+print(a.force.x)
+alias = a.xs
+grow(a)
+print(a.xs, alias)
+b = Bag()
+bump(b)
+print(b.n)
+setattr(b, "force", Vec3(1.0, 1.0, 1.0))
+bumpforce(b)
+print(getattr(b, "force").x)
+print("VARFIELDAUG OK")
