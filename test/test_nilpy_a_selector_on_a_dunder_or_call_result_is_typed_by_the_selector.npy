@@ -1,0 +1,135 @@
+# `return (a + b).x` must be typed by the SELECTOR (`x`, a double), not by the
+# PRIMARY it is read off (`a + b`, a V).
+#
+# Before the fix this SEGFAULTED with no output. The return-type scan typed the
+# def as class V, so the double 3.0 was stored into a class-typed result slot:
+# retained as an object pointer, then dereferenced. `c = a + b; return c.x` --
+# one extra line -- was fine, because a local takes its type from the NODE and
+# the node was right all along. So the ordinary vector idioms `(a + b).x`,
+# `(p - q).length()`, `f(x).y` all died, and the workaround was invisible.
+#
+# Three chases had to agree, and the rows are shaped to hold each one:
+#   - the SELECTOR arm: a paren group or a plain call followed by `.name...`
+#     is typed by chasing the selectors off the primary's class (`_sel` rows);
+#   - the BARE-LOCAL chase: `a` inside `(a + b)` has no class identity in
+#     either typing pass, so the operand is chased token-only to its last
+#     assignment (`_paren_local`, and every `_sel` row through a dunder);
+#   - the RECEIVER chase: `c = a + b` bound a receiver no arm recognised, and
+#     the expression chase then claimed the receiver's class for `c.x`. That
+#     is the control row of the ticket and it REGRESSED mid-fix, which is why
+#     the `_bound_*` rows are here beside the rows that motivated the change.
+#
+# Every `_bad` row segfaulted on the pinned compiler (v410); every `_ok` row
+# was green there and must stay green -- they are the population an
+# indiscriminate fix would redden: a parenthesised int, a tuple, a str method.
+
+class V:
+    def __init__(self, x):
+        self.x = float(x)
+    def __add__(self, o):
+        return V(self.x + o.x)
+    def __sub__(self, o):
+        return V(self.x - o.x)
+    def norm(self):
+        return self.x * 2.0
+    def name(self):
+        return "v%d" % int(self.x)
+
+class H:
+    def __init__(self, a, b):
+        self.v = V(9.0)
+        self.s = (a + b).x          # a field typed off a dunder result
+        self.t = (a - b).name()     # ...and a method on one
+
+def mk(x):
+    return V(x)
+
+def sel_field():
+    a = V(1.0); b = V(2.0)
+    return (a + b).x
+
+def sel_method():
+    a = V(1.0); b = V(2.0)
+    return (a + b).norm()
+
+def sel_strmethod():
+    a = V(1.0); b = V(2.0)
+    return (a + b).name()
+
+def sel_call_field():
+    return mk(4.0).x
+
+def sel_call_method():
+    return mk(4.0).name()
+
+def sel_field_in_expr():
+    a = V(1.0); b = V(2.0)
+    return (a + b).x + 1.0
+
+def paren_local():
+    a = V(1.0)
+    return (a).x
+
+def bound_dunder():
+    a = V(1.0); b = V(2.0)
+    c = a + b
+    return c.x
+
+def bound_paren_dunder():
+    a = V(1.0); b = V(2.0)
+    c = (a + b)
+    return c.x
+
+def bound_call():
+    c = mk(5.0)
+    return c.x
+
+def bound_field(h):
+    c = h.v
+    return c.x
+
+def bound_method():
+    a = V(1.0); b = V(2.0)
+    c = a + b
+    return c.norm()
+
+def ok_paren_int(n):
+    return (n + 1)
+
+def ok_tuple():
+    return (1, 2)
+
+def ok_str(s):
+    return (s + "!").upper()
+
+ok = True
+
+def check(label, got, want):
+    global ok
+    if got != want:
+        print("%s FAIL got %r want %r" % (label, got, want))
+        ok = False
+
+check("sel_field_bad", sel_field(), 3.0)
+check("sel_method_bad", sel_method(), 6.0)
+check("sel_strmethod", sel_strmethod(), "v3")
+check("sel_call_field_bad", sel_call_field(), 4.0)
+check("sel_call_method", sel_call_method(), "v4")
+check("sel_field_in_expr", sel_field_in_expr(), 4.0)
+check("paren_local_bad", paren_local(), 1.0)
+check("bound_dunder_ok", bound_dunder(), 3.0)
+check("bound_paren_dunder_ok", bound_paren_dunder(), 3.0)
+check("bound_call_ok", bound_call(), 5.0)
+h = H(V(1.0), V(2.0))
+check("bound_field_ok", bound_field(h), 9.0)
+check("bound_method_ok", bound_method(), 6.0)
+check("ctor_field_bad", h.s, 3.0)
+check("ctor_method", h.t, "v-1")
+check("ok_paren_int", ok_paren_int(2), 3)
+check("ok_tuple", ok_tuple(), (1, 2))
+check("ok_str", ok_str("ab"), "AB!")
+
+if ok:
+    print("SELTYPE OK")
+else:
+    print("SELTYPE FAIL")

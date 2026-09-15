@@ -454,6 +454,7 @@ var
     bug-n-a-method-call-on-an-optional-class-field-returns-a-raw-pointer }
   PyInferHdrLo, PyInferHdrHi: Integer;
   PyInferBodyLo, PyInferBodyHi: Integer;
+  PyChaseBareDepth: Integer;   { recursion bound for PyChaseBareLocalClass; 0 at rest }
 
 { A parameter annotation NilPy could not read. CPython does not enforce
   annotations at all, so refusing the program over one breaks the
@@ -729,6 +730,9 @@ function PyBytesCi: Integer; forward;
   guard that now asks it (PyDottedRootIsLocal). }
 function PyNameBoundInDef(hdrFrom, hdrTo, bodyFrom, bodyTo: Integer;
                           const nm: AnsiString): Boolean; forward;
+function PyRetNameType(scanFrom, scanTo: Integer; const nm: AnsiString): TTypeKind; forward;
+function PyChaseBareLocalClass(startIdx, endIdx: Integer;
+                               var tk: TTypeKind; var ci: Integer): Boolean; forward;
 
 { Queue a setup statement to run before the current one — see PyHoistHead. }
 procedure PyHoistStmt(node: Integer);
@@ -5283,6 +5287,66 @@ begin
                              PyInferBodyLo, PyInferBodyHi, GetTokenStr(root));
 end;
 
+function PyChaseBareLocalClass(startIdx, endIdx: Integer;
+                               var tk: TTypeKind; var ci: Integer): Boolean;
+{ `tk`/`ci` are what PyInferExprType answered for [startIdx, endIdx). When that
+  answer carries NO CLASS IDENTITY and the range is one bare name (parentheses
+  allowed) bound in the def being scanned, chase the name's last assignment
+  token-only and take the class from there. True when it found one.
+
+  Why the walk cannot answer this itself: the return-type scan runs before the
+  body is parsed, so a local is either invisible (the shell pre-pass has no
+  PyLocals) or visible as a KIND with no identity (the body pass has PyLocals
+  but the walk's ident arm reads only TypeKind). Either way `(a + b)` with
+  `a = V(1.0)` is a class of nobody, and an arm that needs V's dunder table or
+  V's field table has nothing to open. The scan's own bare-ident chase
+  (PyRetNameType) was already the source of identity for `return a + b`; this
+  is the same chase reached from INSIDE an expression, so both passes still
+  answer the same thing.
+
+  Inert outside a def scan: the ranges are -1 there, and every other caller of
+  PyInferExprType keeps exactly the answer it had.
+
+  DEPTH-BOUNDED, and the bound is not decoration. The chase reads the name's
+  last assignment through PyInferExprType, whose dunder arm chases a bare
+  operand through THIS routine again -- so `total = total + i` chased `total`
+  to the assignment it was standing in, forever, and the COMPILER segfaulted
+  on the tier's first accumulator loop. A self-referential accumulator is the
+  ordinary spelling of a loop, so the bound is a correctness condition, not a
+  safety margin. Four levels is more than any chain of locals a class travels
+  through (`c = a + b; d = c + e; return (d + f).x` is three), and past it the
+  answer is what it was before this chase existed: no identity.
+  bug-n-attribute-access-directly-on-a-dunder-result-segfaults }
+const MAX_CHASE_DEPTH = 4;
+var s, e: Integer; t2: TTypeKind;
+begin
+  Result := False;
+  if (tk = tyClass) and (ci >= 0) then Exit;
+  if (tk <> tyUnknown) and (tk <> tyClass) and (tk <> tyVariant) then Exit;
+  if (PyInferBodyLo < 0) or (PyInferBodyHi <= PyInferBodyLo) then Exit;
+  if PyChaseBareDepth >= MAX_CHASE_DEPTH then Exit;
+  s := startIdx;
+  e := endIdx;
+  while (e - s > 2) and (Tokens[s].Kind = tkLParen) and
+        (Tokens[e - 1].Kind = tkRParen) and (PyEndOfGroup(s, e) = e) do
+  begin
+    Inc(s);
+    Dec(e);
+  end;
+  if (e <> s + 1) or (Tokens[s].Kind <> tkIdent) then Exit;
+  if not PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi, PyInferBodyLo, PyInferBodyHi,
+                          GetTokenStr(s)) then Exit;
+  Inc(PyChaseBareDepth);
+  t2 := PyRetNameType(PyInferBodyLo, s, GetTokenStr(s));
+  Dec(PyChaseBareDepth);
+  if (t2 = tyClass) and (PyInferLastCi >= 0) then
+  begin
+    tk := tyClass;
+    ci := PyInferLastCi;
+    Result := True;
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -5588,6 +5652,9 @@ begin
         tk := PyInferExprType(startIdx, k2);
         rcvCi := PyInferLastCi;
         PyInferLastCi := -1;
+        { a bare local operand has no identity here in either pass -- see
+          PyChaseBareLocalClass; without this `(a + b)` was a class of nobody }
+        PyChaseBareLocalClass(startIdx, k2, tk, rcvCi);
         if (tk = tyClass) and (rcvCi >= 0) then
         begin
           fi := FindUMeth(rcvCi, PyBinOpDunderName(Tokens[k2].Kind));
@@ -5760,6 +5827,60 @@ begin
       Result := tyClass;
       PyInferLastCi := ctorCi;
       Exit;
+    end;
+  end;
+  { A GROUP or a plain CALL followed by a SELECTOR CHAIN — `(a + b).x`,
+    `mk(4.0).x`, `(p - q).length()`. Every arm above keys on what the
+    expression STARTS with, and the general walk below types the PRIMARY and
+    then has nothing to do with the `.x` after it: `(a + b)` is a V by the
+    dunder arm and the walk kept V, so `def f(): return (a + b).x` registered
+    a CLASS result over a body that stores a DOUBLE. The Result store then
+    retained 3.0 as an object pointer and dereferenced it — SIGSEGV, no
+    output, no diagnostic — while `c = a + b; return c.x` was fine, because a
+    local takes its type from the NODE and the node was right all along.
+    `mk(4.0).x` is the same defect one primary over: the call arm skips the
+    argument group and keeps the callee's class.
+
+    The chase is PyCtorSelectorType, the same one the two construction arms
+    above already run after `Foo(...)`, so the three primaries answer one
+    way. A chain that does not resolve on a class-typed primary answers
+    tyVariant, not the class: the value IS dispatched at run time and comes
+    back boxed, which is exactly what the two-statement spelling gives, and
+    claiming the class is the defect this arm exists to remove. A primary that
+    is not a class (a string, a number) is left to the walk, which already
+    answers those. Construction primaries stay with their own arms — the
+    guard on FindUClass is what keeps this from re-deciding them.
+    bug-n-attribute-access-directly-on-a-dunder-result-segfaults }
+  if (startIdx < endIdx) and
+     ((Tokens[startIdx].Kind = tkLParen) or
+      ((Tokens[startIdx].Kind = tkIdent) and (startIdx + 1 < endIdx) and
+       (Tokens[startIdx + 1].Kind = tkLParen) and
+       (FindUClass(GetTokenStr(startIdx)) < 0) and
+       not PyIsBuiltinConvName(GetTokenStr(startIdx)))) then
+  begin
+    if Tokens[startIdx].Kind = tkLParen then
+      ctorEnd := PyEndOfGroup(startIdx, endIdx)
+    else
+      ctorEnd := PyEndOfGroup(startIdx + 1, endIdx);
+    if (ctorEnd + 1 < endIdx) and (Tokens[ctorEnd].Kind = tkDot) and
+       (Tokens[ctorEnd + 1].Kind = tkIdent) then
+    begin
+      tk := PyInferExprType(startIdx, ctorEnd);
+      ctorCi := PyInferLastCi;
+      PyInferLastCi := -1;
+      PyChaseBareLocalClass(startIdx, ctorEnd, tk, ctorCi);
+      if (tk = tyClass) and (ctorCi >= 0) then
+      begin
+        ctorTk := PyCtorSelectorType(ctorCi, ctorEnd, endIdx, ctorSelCi);
+        if ctorTk <> tyUnknown then
+        begin
+          Result := ctorTk;
+          PyInferLastCi := ctorSelCi;
+        end
+        else
+          Result := tyVariant;
+        Exit;
+      end;
     end;
   end;
   i := startIdx;
@@ -36604,7 +36725,7 @@ function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): In
   A second copy of the chase is a second chance for the two shapes to diverge,
   which is precisely how the method form stayed broken after the field form was
   fixed. }
-var k, pi: Integer;
+var k, pi, e2: Integer;
 begin
   PyRetRecvClass := -1;
   for k := scanFrom to scanTo - 1 do
@@ -36634,6 +36755,28 @@ begin
            (ProcRetRecId[pi] >= REC_UCLASS_BASE) then
           PyRetRecvClass := ProcRetRecId[pi] - REC_UCLASS_BASE;
       end;
+    end
+    else if (Tokens[k].Kind = tkIdent) and (k + 2 < TokCount) and
+            (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), recvNm) then
+    begin
+      { `c = a + b`, `c = (a + b)`, `c = h.a` -- any other right-hand side.
+        The two shapes above were the only ones this chase knew, so a receiver
+        bound from a DUNDER answered -1, the field and method arms fell
+        through, and the expression chase then widened over the receiver's
+        name and claimed ITS class for the value: `c = a + b; return c.x`
+        registered a V result over a body that stores a double, and the Result
+        store retained 3.0 as an object pointer. That is the same defect the
+        two shapes above were each fixed for, one right-hand side further
+        along, and it surfaced the moment PyChaseBareLocalClass made `a + b`
+        typeable -- before that the receiver was a class of nobody and the
+        arm happened to answer variant. PyInferExprType is token-only in this
+        position (see PyChaseBareLocalClass), so both passes still agree.
+        bug-n-attribute-access-directly-on-a-dunder-result-segfaults }
+      e2 := k + 2;
+      while (e2 < TokCount) and
+            not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do Inc(e2);
+      if (PyInferExprType(k + 2, e2) = tyClass) and (PyInferLastCi >= 0) then
+        PyRetRecvClass := PyInferLastCi;
     end;
 end;
 
@@ -37445,10 +37588,16 @@ begin
         integer expression keeps its scalar result and boxes nothing. A name
         followed by `(` is a call and a name after `.` is an attribute; neither
         is a local, and both keep their existing routes. }
+      { ...and a name followed by `.` is a RECEIVER, whose class is not the
+        value's type: `return c.x` with `c = a + b` widened over `c` and
+        registered V for a double once the receiver became typeable. The two
+        exclusions beside it were already this rule for `(` and for a member;
+        this is the third shape of one exclusion. }
       if ((cur = tyUnknown) or PyRetIsIntDefault(cur)) and (e > j + 2) then
         for k := j + 1 to e - 1 do
           if (Tokens[k].Kind = tkIdent) and
              not ((k + 1 < TokCount) and (Tokens[k + 1].Kind = tkLParen)) and
+             not ((k + 1 < TokCount) and (Tokens[k + 1].Kind = tkDot)) and
              not ((k > 0) and (Tokens[k - 1].Kind = tkDot)) then
           begin
             t2 := PyRetNameType(bodyScanStart, j, GetTokenStr(k));
@@ -39667,6 +39816,7 @@ begin
     the top of the file. }
   PyInferHdrLo := -1;  PyInferHdrHi := -1;
   PyInferBodyLo := -1; PyInferBodyHi := -1;
+  PyChaseBareDepth := 0;
       if mRet = tyUnknown then mRet := tyInteger;   { `-> None` / unannotated }
       { __repr__/__str__ return a str by contract — the SIGNATURE half of the
         forcing in PyParseDefHeader (see the note there). Without it an

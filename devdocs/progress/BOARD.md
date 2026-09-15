@@ -314,7 +314,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (176)
+## backlog-nilpy (175)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -400,7 +400,6 @@ _none_
 | bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver | N | 75 | bug | Annotating an operator dunder's operand (`def __add__(self, o: 'V')`) makes the operator raise `TypeError: expected a number, got object` whenever the RECEIVER is a variant. Bare works, annotated raises, matched pair one character apart. The annotation is the biggest codegen win we have measured, so it is a trap. | — |
 | bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type | N | 80 | bug | `t: Holder = Holder(); return t` types the CALLER's local as a variant where the unannotated `t = Holder()` types it correctly — the annotation makes the inference worse, and only at the call site. `return self.m()` is the same scan's second blind spot. | — |
 | bug-n-async-def-and-await-are-not-implemented | N | 60 | bug | `async def` is refused -- `undefined variable (async)`, so the keyword is not in the grammar at all. Python 3.5. Distinct from yield-from in that a correct implementation needs an event loop and not just a parser arm, so the honest first step may be deciding how far to go rather than typing. Found by the same probe suite as the sys.version_info ruling. | — |
-| bug-n-attribute-access-directly-on-a-dunder-result-segfaults | N | 85 | bug | `(a + b).x` SEGFAULTS with no output. Binding the temporary first — `c = a + b; c.x` — is correct. No annotations anywhere, ordinary Python, and the failure is silent. | — |
 | bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation | N | 70 | bug | An augmented assignment to an unannotated PARAMETER dispatches the plain dunder instead of the in-place one, so the caller never sees the mutation. Seven of twelve operators fixed 2026-09-15; `&= \|= ^= <<= >>=` remain, blocked on the plain bitwise binop not reaching its dunder either. | bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder |
 | bug-n-collections-counter-is-unreachable-through-its-qualified-spelling | N | 35 | bug | `collections.Counter()` is refused with `no member Counter came of the qualifier collections`, while the bare `Counter()` and `from collections import Counter` both work. Measured 2026-09-09. Cause: `collections` HAS a backing unit (lib/rtl/collections.pas, a Pascal generic TList unrelated to Python's module), so the qualifier resolves against it and asks it for a member it has never had. deque was fixed on 2026-09-09 by routing `collections.deque` through the frontend's stdlib-call table, which is consulted BEFORE unit-member lookup; Counter was deliberately NOT routed the same way, because that table re-targets by ARITY and cannot select by argument TYPE, and Counter's two 1-argument overloads differ only by type (TPyList vs AnsiString) -- an entry would compile `collections.Counter(s)` to whichever arity found first and answer a silently wrong count instead of today's honest refusal. So this is blocked on either type-aware selection in that table, or a different mechanism for qualified stdlib members. | — |
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
@@ -1079,9 +1078,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3772)
+## done (3773)
 
-3772 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3773 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1184,7 +1183,6 @@ _none_
 - [p 85] [P] feature-p-legacy-value-object-types (unblocks 1)
 - [p 85] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - [p 85] [N] bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
-- [p 85] [N] bug-n-attribute-access-directly-on-a-dunder-result-segfaults
 - [p 85] [T] bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - [p 84] [N] bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer
 - [p 80] [U] decide-release-signing-key-custody (unblocks 2)

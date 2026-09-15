@@ -2441,6 +2441,11 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_chainret "$$($(TESTTMP)/test_nilpy_chainret26 | tail -n 1)" "CHAINRET OK"
 	./$(COMPILER) test/test_nilpy_a_class_annotated_local_from_an_uninferrable_call_is_unboxed.npy $(TESTTMP)/test_nilpy_annunbox26
 	tools/expect_same.sh test_nilpy_annunbox "$$($(TESTTMP)/test_nilpy_annunbox26 | tail -n 1)" "ANNUNBOX OK"
+	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
+	@# selector (a double), so the Result store retained 3.0 as an object pointer
+	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.
+	./$(COMPILER) test/test_nilpy_a_selector_on_a_dunder_or_call_result_is_typed_by_the_selector.npy $(TESTTMP)/test_nilpy_seltype26
+	tools/expect_same.sh test_nilpy_seltype "$$($(TESTTMP)/test_nilpy_seltype26 | tail -n 1)" "SELTYPE OK"
 	./$(COMPILER) test/test_nilpy_class_attr_hoist_leak.npy $(TESTTMP)/test_nilpy_class_attr_hoist_leak26
 	$(TESTTMP)/test_nilpy_class_attr_hoist_leak26 | diff -u test/test_nilpy_class_attr_hoist_leak.expected -
 	# calling a NON-CALLABLE segfaulted instead of raising a catchable TypeError.
