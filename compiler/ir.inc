@@ -3494,6 +3494,46 @@ begin
   LastTypeRecId := savedRecId;
   if (Procs[procIdx].RetType = tyRecord) and RecordHasManagedFields(ProcRetRecId[procIdx]) then
     SymIsHiddenArgTemp[scratchSym] := True;
+  { THE SIBLING OF IRAppendCall's VARIANT HIDDEN-DEST ARM, and it was missing
+    here for as long as this helper has existed. Same defect, same words: a
+    variant hidden-dest call OVERWRITES the temp raw (the callee copies 16 bytes
+    into [dest]), so a managed payload from the temp's previous life -- the SAME
+    sym on every trip through a loop -- leaked once per call. The DIRECT path
+    bought the fix in IRAppendCall; the four call sites that route through this
+    helper (CALL_IND x3 and VIRTUAL_CALL) never did.
+
+    Measured 2026-09-15 before this line existed, N=40000: a method whose body
+    is `return self.q` leaked one reference per CALL SITE EXECUTION per scope --
+    exactly k-1 for k executions, 20824/1096 = 19.0 for k=20 -- while a PLAIN
+    FUNCTION returning the identical value through the identical store was
+    clean, because IRAppendCall clears and this did not. That asymmetry is the
+    whole bug and it is why three predicates tried at IR_VAR_STORE were all
+    correlates: the store is identical on both paths.
+
+    Unconditional, for IRAppendCall's own stated reason: the variant-slot
+    protocol is mode-universal (tag-6 payloads are managed refs even in frozen
+    builds), so this is about the SLOT's protocol and not about the callee's
+    ownership convention.
+
+    THE CALLER MUST BUILD THIS BEFORE ITS CALL NODE. The clear is an IR_CALL
+    with IRIVal=1, and the top-level emitter walks nodes in INDEX ORDER, so a
+    dest built after the call node would clear the slot AFTER the callee filled
+    it -- which frees the value being returned. All four sites hoist accordingly.
+    bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per-call }
+  if Procs[procIdx].RetType = tyVariant then
+  begin
+    { created mid-body, after the prologue zero-init pass -- mark it so codegen
+      nil-inits its extent, or the FIRST clear dispatches on a stale stack tag.
+      Same landmine IRAppendCall's arm names. }
+    SymIsHiddenArgTemp[scratchSym] := True;
+    savedRecId := FindProc('PXXVarClear');
+    if savedRecId >= 0 then
+      IRIVal[IRAppend(IR_CALL, savedRecId,
+               IRAppend(IR_ARG,
+                 IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer)),
+               -1, 0, Ord(tyUnknown))] := 1;
+  end;
   Result := IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer));
 end;
 
@@ -9638,6 +9678,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     lenArg: Integer;   { Length(<wide string>): the arg node, to halve the byte count }
     dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
     isRefArg: Boolean; argTk: TTypeKind; callRetType: TTypeKind; callVal: Integer;
+    hidDest: Integer;   { hidden aggregate/variant destination, BUILT BEFORE the call node -- see IRBuildHiddenDest }
     lstNode, varNode: Integer;   { NilPy list-vs-variant equality }
     recCmpId, recCmpSymA, recCmpSymB: Integer;   { field-wise record equality — see the tkEq/tkNeq record arm }
     startLabel, elseLabel, endLabel, startLabelNode, endLabelNode: Integer;
@@ -11466,9 +11507,12 @@ begin
                    Ord(tkPlus), 0, Ord(tyPointer));
       callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer)); { code }
 
+      { BUILD THE HIDDEN DEST BEFORE THE CALL NODE: it now emits a slot-clear
+        statement and the emitter walks in INDEX ORDER -- see IRBuildHiddenDest. }
+      hidDest := -1;
+      if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
-      if ABIRetViaHiddenDestProc(cpi) then
-        IRCallDest[Result] := IRBuildHiddenDest(cpi);
+      if hidDest >= 0 then IRCallDest[Result] := hidDest;
     end;
 
     AN_GUIDCONST:
@@ -16680,9 +16724,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         backtrace that names nothing. Checked here — at the site, where the
         compiler still knows the line. feature-a-emitted-nil-checks }
       callVal := IRWrapNilChk(callVal, node, True);
+      { BUILD THE HIDDEN DEST BEFORE THE CALL NODE: it now emits a slot-clear
+        statement and the emitter walks in INDEX ORDER -- see IRBuildHiddenDest. }
+      hidDest := -1;
+      if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
-      if ABIRetViaHiddenDestProc(cpi) then
-        IRCallDest[Result] := IRBuildHiddenDest(cpi);
+      if hidDest >= 0 then IRCallDest[Result] := hidDest;
       { copy-OUT the var/out open-array writebacks this call's args registered —
         the direct AN_CALL path already flushes these; the indirect path never
         did, so a static array / record field passed to a `var` open-array param
@@ -16806,9 +16853,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       callVal := IRAppend(IR_LOAD_MEM, outNode, -1, -1, 0, Ord(tyPointer));
       { IRC=0: the interface signature's ParamCount already counts Self (param 0),
         and Self is the first node in the arg chain, so no extra injected-Self. }
+      { BUILD THE HIDDEN DEST BEFORE THE CALL NODE: it now emits a slot-clear
+        statement and the emitter walks in INDEX ORDER -- see IRBuildHiddenDest. }
+      hidDest := -1;
+      if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       Result := IRAppend(IR_CALL_IND, callVal, first, 0, cpi, ASTTk[node]);
-      if ABIRetViaHiddenDestProc(cpi) then
-        IRCallDest[Result] := IRBuildHiddenDest(cpi);
+      if hidDest >= 0 then IRCallDest[Result] := hidDest;
     end;
 
     AN_IF:
@@ -18163,13 +18213,16 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         item := ASTRight[item];
         Inc(pathIdx);
       end;
+      { Aggregate / frozen-string / variant result: the IR node has no free
+        operand for the hidden caller-destination, so stash its IR_LEA in
+        IRCallDest (codegen loads it into the per-target dest register before
+        the dispatch). BUILT BEFORE THE CALL NODE -- IRBuildHiddenDest now emits
+        a slot-clear statement and the emitter walks in INDEX ORDER. }
+      hidDest := -1;
+      if ABIRetViaHiddenDestProc(cpi) then hidDest := IRBuildHiddenDest(cpi);
       { IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=VMT slot }
       Result := IRAppend(IR_VIRTUAL_CALL, first, last, cpi, slot, ASTTk[node]);
-      { Aggregate / frozen-string result: the IR node has no free operand for the
-        hidden caller-destination, so stash its IR_LEA in IRCallDest (codegen loads
-        it into the per-target dest register before the dispatch). }
-      if ABIRetViaHiddenDestProc(cpi) then
-        IRCallDest[Result] := IRBuildHiddenDest(cpi);
+      if hidDest >= 0 then IRCallDest[Result] := hidDest;
     end;
 
     AN_METACLASS_NEW:

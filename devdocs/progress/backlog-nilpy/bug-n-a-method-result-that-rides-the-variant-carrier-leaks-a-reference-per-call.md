@@ -8,10 +8,27 @@ slug: bug-n-a-method-result-that-rides-the-variant-carrier-leaks-a-reference-per
 
 # A method result on the VARIANT carrier leaks a reference per call
 
-**REOPENED IN FULL 2026-09-15 AND PRIO RESTORED 70 -> 85. Both halves of the
-"fix" are REVERTED; `compiler/pascal26` is byte-identical to
-`cfee5d6255237332` again. Nothing below the next two sections has been
-rewritten -- read it as the record of a wrong attempt, not as guidance.**
+**FIXED 2026-09-15 in `IRBuildHiddenDest` (`compiler/ir.inc`), after two wrong
+attempts that are both recorded below. The defect was the caller-owned scratch
+built for a hidden-destination return: it is the ONE write in the compiler that
+lands a managed payload without releasing what it displaced, because the two
+arms that do clear (`IR_VAR_STORE`, `IR_VAR_BOX`) are not on this path. One slot
+per call SITE, overwritten per EXECUTION, drained once at SCOPE EXIT, so the
+cost is k-1 leaked referents per site per scope. The direct-call path
+(`IRAppendCall`) ALREADY had the guard and the shared helper never got it.**
+
+**Verified against the NilPy tier (`TIER_EXIT=0`), which is the instrument that
+caught attempt 2 and which neither fixture could have been. Three fixtures wired
+in the fixing commit: `VARCARRY` and `GETTERLIVE` read bytes, `RECVLIVE` reads
+VALUES -- RSS cannot tell a repaired leak from a premature free, which is
+exactly how attempt 2 passed fourteen green rows while freeing live objects.
+Costs +14% on a bare dispatch loop and +8% method-heavy; filed honestly as
+`perf-o-the-variant-hidden-dest-clear-is-a-proc-call-where-the-store-arm-uses-an-inline-blob`
+rather than hidden.**
+
+**Everything between here and "FIXED 2026-09-15" at the foot is the record of
+two WRONG attempts and the measurements that retired three of my own
+attributions -- read it as history, not as guidance.**
 
 Everything in this ticket's old headline was wrong in the same way: the
 attempt did not fix the leak, it FREED LIVE OBJECTS, and the fixture could not
@@ -1118,3 +1135,154 @@ variant-typed call result, and give the variant-copy arm a predicate that asks.
 family's history were wrong because they were read off a probe run against a
 `compiler/pascal26` that was not the fixedpoint of its own sources; do not add a
 third.
+
+## FIXED 2026-09-15 -- THE DIRECT-CALL PATH ALREADY HAD THE GUARD; THE SHARED HELPER NEVER GOT IT
+
+**`IRAppendCall` has cleared the variant scratch slot before every hidden-dest
+call all along** (`ir.inc`, `if Procs[procIdx].RetType = tyVariant`), and its own
+comment describes this ticket's defect in this ticket's later words:
+
+> *"A variant hidden-dest call OVERWRITES the temp raw (the callee copies 16
+> bytes into [dest]), so a managed payload from the temp's previous life -- the
+> SAME sym on every trip through a loop -- leaked once per call: ~40 B/iter of
+> bound pairs in the uforth env-build."*
+
+The **four call sites that route through the shared helper `IRBuildHiddenDest`**
+-- three `IR_CALL_IND` arms and the `IR_VIRTUAL_CALL` one -- never got the
+sibling. That is the whole bug, and it is why a PLAIN FUNCTION returning the
+identical value through an identical `IR_VAR_STORE` was clean while a METHOD
+leaked: **one arm had the guard, the other never did.** The knowledge was not
+missing from the codebase; it was missing from the other path.
+
+`normalise-dont-special-case.md`'s *"fixed one arm of a double case, grep for
+the sibling before closing"* arriving from the wrong end, and invisible to any
+review that reads one path at a time.
+
+### The fix
+
+The clear moves INTO `IRBuildHiddenDest`, so all four sites inherit it, matching
+what `IRAppendCall` does. Unconditional, for `IRAppendCall`'s own stated reason:
+the variant-slot protocol is mode-universal, so this is about the SLOT's
+protocol and not about the callee's ownership convention. The scratch is also
+marked `SymIsHiddenArgTemp` so codegen nil-inits it -- without that the FIRST
+clear dispatches on a stale stack tag.
+
+### THE ORDERING CONSTRAINT, AND IT IS THE PART THAT WOULD HAVE BEEN UNATTRIBUTABLE
+
+**The hidden dest must be built BEFORE the call node.** The clear is an
+`IR_CALL` with `IRIVal=1`, and the top-level emitter walks nodes in **INDEX
+ORDER** (`ir_codegen.inc`, `IR_CALL: if IRIVal[i] = 1 then IREmitNode(i)`). All
+four sites previously read:
+
+```pascal
+Result := IRAppend(IR_VIRTUAL_CALL, ...);
+if ABIRetViaHiddenDestProc(cpi) then
+  IRCallDest[Result] := IRBuildHiddenDest(cpi);      { <- clear lands AFTER }
+```
+
+so a clear emitted from there would have run **after the callee filled the
+slot** -- freeing the value being returned. A use-after-free, in the same family
+that already shipped one, and it would have presented as a plausible patch
+failing somewhere unattributable. All four hoist the dest above the call node
+and assign `IRCallDest` afterwards.
+
+Raised by lekkerzeilen-c8 as deserving a line here rather than only in a commit
+message, which is why it is one.
+
+### Verification -- all three instruments the ticket named, plus the routes
+
+| | |
+|---|---|
+| `GETTERLIVE` (bytes) | all 13 rows LEAKFREE, control MOVES — was 5 rows leaking |
+| `RECVLIVE` (values) | all INTACT, control MUTATED — the premature-free half |
+| `VARCARRY` (bytes, the original repro) | all 14 rows LEAKFREE, **including `disc_obj` 72 and `disc_slice` 200** |
+| NilPy tier | see the resolution line |
+| short-circuit | 0 across `never`/`always`/`alt`, receiver's attribute intact, and the clear sits **inside** the branch (BB4) in the IR dump — not hoisted out of it |
+| objtrace, site-attributed | every `A` now has a matching `F`; previously the lists settled at rc=1 and were never freed |
+| self-host | `converged after 1 round(s)`, fixedpoint verified |
+| Pascal reach | an interface method returning a Variant, 200000 calls in a loop, holds at maxrss 392 kB |
+
+**The slice row is the same defect.** `disc_slice` at 200 bytes/call was written
+up in this ticket as "a separate surplus, deliberately not asserted". It is not
+separate; it went to zero with everything else.
+
+### What this retires
+
+The three predicates tried at `IR_VAR_STORE` were all correlates because **the
+store is identical on both paths** — the difference was upstream, in whether the
+slot had been cleared. No predicate at the store could have separated them, and
+the ticket's own `ProcVariantResultOwned` design (record ownership at return
+lowering) was aiming at the same wrong layer: ownership was never in doubt, the
+slot's previous occupant was.
+
+## THE NEIGHBOURING WRITE SITES ARE CLEAN — MEASURED 2026-09-15, NOT ASSUMED
+
+The fix repairs ONE write site: the caller-owned scratch built by
+`IRBuildHiddenDest`. The obvious question a reader will ask is whether the other
+sites that land a managed payload have the same hole, and it is worth answering
+with rows rather than with a grep, because the sibling arms
+(`IR_VAR_STORE:11774`, `IR_VAR_BOX:11821`) clear by inspection while the *field*
+store and the *operator* return path do not appear in that argument at all.
+
+Measured 200k iterations per row, under the fixed compiler (`79551a1b6d05f02e`)
+and under the archived `cfee5d62255237332`, identical results on both — so the
+fix neither repaired nor disturbed these sites.
+
+**READ THAT AS "UNDISTURBED BY THIS FIX", NOT AS "NEVER DEFECTIVE" — THE
+ARCHIVED BINARY IS NOT A BEFORE-CONTROL FOR TWO OF THESE ROWS.** The operator
+row and the discarded-constructor row were REAL defects, found and fixed
+2026-09-14/15 and already fixtured in
+`test_nilpy_a_user_object_does_not_leak_because_of_how_its_value_is_consumed.npy`
+(`PyUserArithCall1` retained the dunder's result on the way into the Variant
+when the NilPy routine already handed back an owned +1; the discarded `P(1, 2)`
+was the same conduit with nobody to consume it — 63-64 and 56 bytes/call
+respectively). `cfee5d62` POSTDATES those fixes, so both binaries contain them
+and the agreement between the two columns says nothing about whether the site
+was ever broken. This paragraph asserted the stronger claim for about an hour
+and it was a control drawn from the wrong population — the archived binary is a
+before-control for the HIDDEN-DEST defect and for nothing else. What the rows do
+establish is the thing they were run to establish: this fix opened no hole at
+the neighbouring sites.
+
+| shape | what it writes | bytes/op, both compilers |
+|---|---|---|
+| `A + B` on a user class (`__add__` -> fresh Vec3) | operator dispatch result | 0 |
+| `A * s` (`__mul__`) | operator dispatch result | 0 |
+| `A + B * 0.5` | nested operator dispatch | 0 |
+| `self.pos = self.pos + self.vel` | FIELD STORE over a live object | 0 |
+| `self.tag = "x%d" % i` | field store over a live string | 0 |
+| `self.trail = [i, i, i]` | field store over a live list | 0 |
+| `self.x = i * 1.0` | field store, unboxed payload | 0 |
+| `v = v + BD.vel` | local rebind, same expression | 0 |
+| `Vec3(...)` discarded | constructor result dropped | 0 |
+| *control:* `held.append(Vec3(...))` | deliberately retained | **129** |
+
+The CPython oracle agrees row-for-row on the field-store fixture, control
+included (105 bytes/op there).
+
+**BOTH CONTROLS ARE LOAD-BEARING AND THE FIRST CUT OF THIS PROBE HAD NEITHER.**
+Every row above asserts a number stays at zero, and zero is also what a probe
+prints when nothing ran — the collision this handbook names under "if the
+machinery did nothing at all, would this row still pass?". Two independent
+guards, because they fail differently:
+
+- **ROUTE control** — the fixture prints the computed value before the loops
+  (`route add -> 1.500 2.250 3.125`, `route step -> 2.0` after two steps), so a
+  row cannot read 0 because `__add__` was never reached or the rebind never took
+  effect. This is the "does my probe reach the thing under test BY THE ROUTE
+  under test" guard, and on an operator it is a real risk: a frontend that fell
+  back to a builtin numeric add would print the same zero.
+- **LEAK control** — a retained allocation per iteration, which must MOVE. It
+  reads 129 bytes/op on both pxx binaries and 105 under CPython, so the
+  instrument is demonstrably able to see a leak of exactly the size these rows
+  are asserting the absence of.
+
+**SCOPE, AND IT IS NARROWER THAN THE TABLE LOOKS.** Every attribute in the
+fixture holds a float, a str, a list or a Vec3 of floats. The rows say nothing
+about a field store over a nested container, a bound method, or a ctypes handle,
+and the residual for the lekkerzeilen demo's own per-step leak is NOT closed by
+them — that is the lekkerzeilen seat's stage-2 bisect, which has the demo landed
+on `body.step` at 44.2 net-unfreed objects/step by its own tier-1 marker census.
+What these rows do establish is that four families are off that list: the
+hidden-dest family repaired here, operator dispatch, the field store, and the
+discarded constructor.

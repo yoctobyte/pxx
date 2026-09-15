@@ -34866,6 +34866,30 @@ lib-test: pxx-stable-check
 	# $(COMPILER), not $(PXX_STABLE): this is about today's compiler.
 	./$(COMPILER) test/test_nilpy_a_method_result_does_not_free_the_receivers_attribute.npy $(TESTTMP)/test_nilpy_recvlive
 	tools/expect_same.sh test_nilpy_recvlive "$$($(TESTTMP)/test_nilpy_recvlive | tail -n 1)" "RECVLIVE OK"
+	# The two repros of that same family, WIRED 2026-09-15 now that the leak is
+	# fixed in IRBuildHiddenDest. Both were carried in test/UNWIRED.txt while the
+	# defect was open, deliberately: a red repro is not a gate.
+	#
+	# varcarry reads BYTES over 14 shapes and is the original repro. getterlive
+	# reads bytes too but carries the FACTORIAL that located the defect -- the
+	# k-sweep pair (ksweep_k1 / ksweep_k8) is the row that matters, because the
+	# leak is k-1 per call SITE per SCOPE and a fixture calling once per scope
+	# cannot see it at all. Keep the pair: dropping k8 would leave a file that
+	# passes on the unfixed compiler.
+	#
+	# NEITHER FILE CAN SEE A PREMATURE FREE -- both read RSS, and RSS gives
+	# memory back either way. That is recvlive's job, above, and it is why all
+	# three are wired and not just these two. Each carries a retain control that
+	# must MOVE, because every other row asserts a number stays near zero.
+	#
+	# Verified 2026-09-15 to FAIL at cfee5d6255237332 (GETTERLIVE FAIL, 5 leaking
+	# rows) and to pass at 79551a1b6d05f02e and under CPython, rather than
+	# assumed to. $(COMPILER), not $(PXX_STABLE): the fix is in compiler/ir.inc
+	# and no pin carries it.
+	./$(COMPILER) test/test_nilpy_a_variant_carried_method_result_does_not_leak.npy $(TESTTMP)/test_nilpy_varcarry
+	tools/expect_same.sh test_nilpy_varcarry "$$($(TESTTMP)/test_nilpy_varcarry | tail -n 1)" "VARCARRY OK"
+	./$(COMPILER) test/test_nilpy_a_method_returning_an_attribute_leaks_one_reference_per_call.npy $(TESTTMP)/test_nilpy_getterlive
+	tools/expect_same.sh test_nilpy_getterlive "$$($(TESTTMP)/test_nilpy_getterlive | tail -n 1)" "GETTERLIVE OK"
 	# A conditional expression must evaluate ONLY the selected arm. The arms are
 	# not statements, so an arm's hoisted setup used to land at the enclosing
 	# statement and run either way -- a stray side effect in two shapes and an
