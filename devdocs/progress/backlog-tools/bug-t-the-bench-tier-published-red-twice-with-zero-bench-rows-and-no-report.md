@@ -3,7 +3,7 @@ prio: 60
 track: T
 ---
 
-# bug(T): the bench tier published RED twice with ZERO bench rows and no report
+# bug(T): the bench tier has published RED with ZERO bench rows on EVERY run since 2026-09-11 -- the fleet has no bench data at all
 
 Two consecutive runs on seven, both RED, both with no rows for the measurement
 the tier is named after:
@@ -193,3 +193,57 @@ The cause. Zero bench rows with 550 conformance rows is the same pair in all 33
 runs and I did not go looking either — but note the pairing itself is a clue
 nobody has used: a run that produced 550 of one kind of row and 0 of another did
 not fail early.
+
+---
+
+## 2026-09-16 — THE TICKET'S OWN UNKNOWN IS ANSWERED: it is the steady state, and the fleet has had no bench data for five days
+
+The body above says *"Two runs in a row also means nobody can tell whether this
+is a new condition or the steady state, because there is no report to compare."*
+Measured today, from commit subjects across **every** host file rather than one:
+
+- **borg's last bench run WITH rows is `f3d420def`, 2026-07-31** (29 rows).
+  Every borg bench run since is `RED (0 bench rows, 550 conf)` — **54
+  consecutive**, the newest `733da5c0c` today.
+- **seven kept producing 30 rows the whole time**, up to `869b6743e`
+  2026-09-11T14:04:04Z — **2h25m before seven was retired** (16:29:49Z).
+- The first borg bench after the handover, `0c1aaa9a2` the same day, is RED(0),
+  and so is all 54 of the rest.
+
+So there are two facts and the ticket had neither: borg's bench has been empty
+for **six weeks**, and it did not matter to the fleet until seven — the host that
+was still producing rows — went away. **Since 2026-09-11 no host anywhere in the
+fleet has recorded a single bench row.**
+
+**This retires the benign reading.** The body offers *"bench needs a quiet box,
+the fleet has been running several sessions all day"*, which is a real mechanism
+and cannot explain a condition that is 54-for-54 across six weeks, survives a
+host migration, and is **perfectly correlated with the host rather than with the
+load**: seven answered 30 rows on a busy fleet on the same days borg answered
+zero.
+
+**And the reason five days passed without anyone noticing is the second half of
+this ticket's own complaint.** `tools/twatch.py --status` is thirteen lines and
+**the word `bench` does not appear in any of them** — the RED is published in a
+commit subject and in `borg.json`, and the fleet's health instrument does not
+read it. A tier can report RED on every run indefinitely without ever entering
+the open-regression list anyone actually consults.
+
+**Why this is not only Track T's problem.** CLAUDE.md gates every `-O` promotion
+on **PROMISE — delivered value, measured** — and bench is the instrument that
+measures it. With no rows since 2026-09-11 there is currently **no way to satisfy
+that gate at all**, which makes this a live blocker for Track O and not a
+bookkeeping complaint.
+
+**Not established, deliberately:** why borg produces zero rows. Nothing here says
+the tier is broken rather than correctly refusing — the suggested shape above is
+unchanged and still right. What is settled is the frequency, the host
+correlation, and that the two seven-runs in the body were the tail of a streak,
+not its start.
+
+**The filename still says "twice".** Left alone on purpose: a slug rename breaks
+every citation that resolves against it, and the H1 — which is what readers
+see — has been corrected instead.
+
+*Measured by the toko-watch seat, check-in 2b. Track T owns the fix; I own none
+of it and am not claiming the ticket.*
