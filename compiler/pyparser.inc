@@ -6212,6 +6212,35 @@ begin
           si := PyProgSym(name);
           if si >= 0 then tk := Syms[si].TypeKind;
         end;
+        { A bare PARAMETER typed only by its CALL SITES -- `return dt * 2`
+          where dt is Double by PyParamTypeFromSites but carries no annotation
+          and no local constraint. Without this the token walk joined dt
+          (unknown, the join's identity) with the literal 2 and answered Int64,
+          so a Double came back as its raw bits (4607182418800017408 for 1.0)
+          whenever the callee's class was lexically AFTER the caller and dt
+          therefore DID pick up a site type -- a first-wins ordering exposed
+          by class order (test_nilpy_a_site_typed_parameter_keeps_its_type,
+          2026-09-16; entered with 4e2507c6b, which made `self.f`/literal site
+          arguments typeable). PyRetExprHasUntypedParam already trusts this
+          same site type to SUPPRESS the variant safety-net, so the value must
+          match what it trusted. Scalar only, and guarded on a real published
+          def header and the re-entry depth, since PyInferExprType is itself
+          what PyParamTypeFromSites calls to type a site argument. }
+        if (tk = tyUnknown) and (Tokens[i].Kind = tkIdent) and
+           (name <> 'self') and (name <> 'cls') and
+           (PyInferHdrLo >= 0) and (PyInferHdrHi > PyInferHdrLo) and (PyPSDepth < 6) and
+           ((i + 1 >= endIdx) or (Tokens[i + 1].Kind <> tkLParen)) and
+           ((i <= startIdx) or (Tokens[i - 1].Kind <> tkDot)) and
+           PyHeaderHasParam(PyInferHdrLo, PyInferHdrHi, name) and
+           (PyHeaderParamType(PyInferHdrLo, PyInferHdrHi, name) = tyUnknown) then
+        begin
+          Inc(PyPSDepth);
+          qcTk := PyParamTypeFromSites(PyInferHdrLo, name,
+                                       PyDefSiteMode(PyInferHdrLo, smPName), smPName);
+          Dec(PyPSDepth);
+          if (qcTk = tyDouble) or (qcTk = tyAnsiString) or PyIsSiteIntTk(qcTk) then
+            tk := qcTk;
+        end;
         { obj.method(...) on a class-typed name: the expression's type is the
           METHOD's return type; skip the whole postfix chain. }
         { The receiver's class: a constrained local, or `self`, which never

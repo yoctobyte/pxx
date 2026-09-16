@@ -2523,6 +2523,8 @@ test-nilpy: $(COMPILER)
 	@# controls (a subclass rebinding, an external write, a tuple target, a class
 	@# attribute of the same name) stay variant and their value rows would break
 	@# under a wrong claim.
+	./$(COMPILER) test/test_nilpy_a_site_typed_parameter_keeps_its_type_in_the_return.npy $(TESTTMP)/test_nilpy_sitedret26
+	$(TESTTMP)/test_nilpy_sitedret26 | diff -u test/test_nilpy_a_site_typed_parameter_keeps_its_type_in_the_return.expected -
 	./$(COMPILER) test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.npy $(TESTTMP)/test_nilpy_famsites26
 	$(TESTTMP)/test_nilpy_famsites26 | diff -u test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.expected -
 	tools/expect_same.sh test_nilpy_famsites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.npy $(TESTTMP)/test_nilpy_famsites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_0-9]+[.][a-z_0-9]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites B.w mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites D.w mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites V.x mode=0 sites=11 gaveup=0 tk=19 PXXDBG n.psites V.y mode=0 sites=11 gaveup=0 tk=19 PXXDBG n.psites W.k mode=0 sites=2 gaveup=0 tk=19 PXXDBG n.psites attr.a mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites dot.o mode=1 sites=5 gaveup=1 tk=0 PXXDBG n.psites inv.v mode=1 sites=1 gaveup=0 tk=6 cls=V PXXDBG n.psites mix.m mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites norm2.w mode=1 sites=1 gaveup=0 tk=6 cls=V PXXDBG n.psites rot.v mode=1 sites=2 gaveup=0 tk=6 cls=V PXXDBG n.psites scale.s mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites twice.t mode=1 sites=1 gaveup=1 tk=0 ')"

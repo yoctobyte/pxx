@@ -1,0 +1,74 @@
+# A method or function whose parameter is typed only by its CALL SITES kept
+# that type when the parameter was READ in the body -- e.g. returned through
+# arithmetic -- ONLY when its declaring class was lexically before the caller.
+# Declared after, the parameter still picked up the site type (PyParamTypeFromSites
+# and PyRetExprHasUntypedParam both saw it), but the expression typer did not
+# apply it: it joined the bare name with the literal beside it and answered
+# Int64, so a Double came back as its raw bits -- 4607182418800017408 for 1.0.
+# The typer now consults the same site type the return-scan trusts.
+# Entered with 4e2507c6b (which made self.field/literal site arguments typeable).
+
+
+# caller BEFORE callee: the ordering that broke. update.dt is Double from the
+# one site; `dt * 2` must be Double, not Int64.
+class Caller:
+    def go(self):
+        return Callee().scale(0.5)
+
+
+class Callee:
+    def scale(self, dt):
+        return dt * 2
+
+
+# an INT-typed site parameter must STAY int (the fast path the site typing is
+# for): the literal does not widen it and the site does not narrow the return.
+class ICaller:
+    def go(self):
+        return ICallee().step(3)
+
+
+class ICallee:
+    def step(self, n):
+        return n * 2
+
+
+# a STR-typed site parameter returned through concatenation.
+class SCaller:
+    def go(self):
+        return SCallee().tag("x")
+
+
+class SCallee:
+    def tag(self, s):
+        return s + "!"
+
+
+# the self.field site shape, caller class first, returning the typed param.
+class W:
+    def __init__(self):
+        self.dt = 0.25
+
+    def go(self, v):
+        return v.tick(self.dt)
+
+
+class V:
+    def tick(self, dt):
+        return dt + dt
+
+
+# a module-level function typed from its own call sites, defined after its caller.
+def top():
+    return leaf(1.5)
+
+
+def leaf(x):
+    return x * 4
+
+
+print(Caller().go())
+print(ICaller().go())
+print(SCaller().go())
+print(W().go(V()))
+print(top())
