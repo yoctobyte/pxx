@@ -168,3 +168,69 @@ argument on.
 Freestanding C on wasm32 works and `tools/c_wasm32_entry.sh` is the guard. Do
 not let a wall-B or wall-C attempt regress it; its rows are all
 nonzero-expecting for a reason written at the top of that file.
+
+## RE-SCOPED 2026-09-16 (frankb-56) — it is NOT a missing prologue arm; BOTH SIDES are missing
+
+This ticket (and its sibling
+[[bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet]])
+says the obligation belongs to *"whoever adds a wasm32 PROLOGUE arm"*. Measured
+at HEAD (`b7f9f80c7d80`) with two probes chosen to reach one side each, that is
+half the job and the smaller half.
+
+**Callee side**, a variadic function DEFINED in the TU:
+
+```
+pascal26:2: error: variadic C functions (va_arg) are not yet supported on this cross target
+```
+
+**Caller side**, a variadic function CALLED and not defined — and this is the
+one nobody has recorded:
+
+```
+wasm32: 476 of 477 bodies lowered; 1 emitted as `unreachable`; 1 distinct gap(s) seen
+    main — call to pxx_probe_va passes more than its 1 parameters
+```
+
+A wasm function has a FIXED typed signature, so "pass three arguments to a
+function declared with one" has no encoding at all. The caller cannot marshal
+what the callee cannot receive, and neither end exists today.
+
+### Why the existing framing missed it, and it is a probe-route problem
+
+The obvious probe is `printf("%d", x)`. On wasm32 that dies FIRST at
+
+```
+pascal26:91: error: wasm: too many params+locals
+  in: ./compiler/../lib/crtl/src/stdio.c
+```
+
+— **wall B, an unrelated bound** (`MAX_WASM_BODY_VARS`), reached because
+`printf` pulls crtl's `stdio.c` in. So the natural caller-side probe never
+reaches the caller-side gap and misattributes it to wall B. The isolating probe
+is a variadic `extern` that is NOT a crtl function, so nothing is pulled and the
+only route to the refusal is the variadic call itself. CLAUDE.md, *"does my
+probe reach the thing under test BY THE ROUTE under test, and by no other?"*
+
+### And the caller-side gap is NOT a build failure
+
+`vacall2.wasm` was **written, 116955 bytes**, with the offending body lowered to
+`unreachable`. The build "succeeds"; the module validates; it traps when that
+body runs. So a variadic call on wasm32 today is a RUNTIME trap reported in a
+summary line, not a compile error — which is a different and quieter failure
+mode than the callee side's hard `Error`.
+
+### What the work actually is
+
+wasm32 has no argument registers AND no addressable incoming stack, so the
+six existing arms (spill registers, point `__va_overflow` at the incoming
+frame) have nothing to port. It needs a **convention designed for the target**:
+the caller marshals variadic arguments into linear memory — the backend already
+has a linear-memory frame stack (`devdocs/dev/wasm-target-findings.md`, "the
+shadow stack has no guard page") — and passes one pointer, which becomes the
+`va_list`. We control both ends, so there is no external ABI to match and the
+layout is ours to choose; matching clang's wasm32 convention is optional and
+worth deciding deliberately rather than by default.
+
+Consequently `vaRegSz = 0` for wasm32 is correct and insufficient, and the four
+consumer-set sites still must not be widened until a producer exists — the
+sibling's own warning, which stands.
