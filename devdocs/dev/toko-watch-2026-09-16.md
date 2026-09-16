@@ -549,3 +549,76 @@ closed. **The corpus is 2885 files, not the 1276 optdiff's own comment still cla
   survived only because a prefix of a SHUFFLED list is an unbiased sample. Its first
   attempt walked alphabetically and those 47 rows would have been worthless. Same
   instrument, same interruption, one usable and one not, decided by the order alone.
+
+### 2026-09-16, check-in 0i — quickjs-ng RUNS, verified here, and the pattern is FOUR
+
+**GOAL 3 RESULT: real third-party JavaScript executes under pxx.** frankb-56,
+`9d79f6124`. Compile-wall -> compiles-but-segfaults -> works, in one day.
+**Independently verified on THIS checkout with freshly fetched pinned trees:**
+
+```
+test-quickjs: PASS — curated JS smoke byte-exact
+test-quickjs: PASS — js-sha256 library KAT byte-exact (13 vectors)
+```
+
+13 RFC 4231 / FIPS 180-4 vectors. Not a compile claim — an execution claim.
+
+**Root cause, and it is not a quickjs bug and not an uninitialised field:** a struct
+passed BY VALUE through a pointer declared from a FUNCTION-TYPE typedef got the wrong
+ABI. `typedef void F(args); F *p;` and `typedef void (*P)(args); P p;` name the same
+callable thing in C and pxx registered a signature for both — **but only the pointer
+spelling recorded WHICH record each struct parameter is.** `ProcParamRecId` stayed
+`REC_NONE`, the SysV classifier had no `RecSize`, the argument went as a pointer while
+the callee read its registers per the true layout. quickjs stores class finalizers as
+`JSClassFinalizer *` and passes a 16-byte `JSValue` by value.
+
+### VERIFYING IT GAVE ME THREE HONEST ANSWERS TO ONE COMMAND — and the middle one is the trap
+
+1. `SKIP — no quickjs tree` → **exit 0.** The absent-tree arm. A green that means
+   nothing ran.
+2. Tree fetched: `FAIL — exit 216, nil reference`. **I nearly reported a contradiction
+   with frankb-56's result.**
+3. **`9d79f6124` was not in my tree yet.** I was testing a compiler that predates the
+   fix. Pulled, rebuilt: both PASS.
+
+**SKIP and FAIL are both loud, but a FAIL against a PRE-FIX tree is indistinguishable
+from a real refutation — and it arrives with all the authority of an independent
+reproduction.** The discriminator is `git merge-base --is-ancestor <sha> HEAD`, not
+anything about the test. This is the rule I had written AT frankb-56 this morning —
+*a verdict is a claim about a tree* — landing on me hours later, one `git pull` from
+telling the owner its result did not reproduce.
+
+Note also: `make compiler/pascal26` printed **`verified`, not `converged`**, so I
+removed the stamp and forced a real rebuild before trusting the FAIL. Same sha came
+back, so the binary had been right — but that check is what made the FAIL worth
+investigating instead of dismissing.
+
+### THE PATTERN IS FOUR, AND THE -O3 FRAMING WAS TOO NARROW
+
+frankb-56 corrected it and the wider form is right: **"one SPELLING fixed, the sibling
+never looked for."** Four instances, four seats, one day:
+
+1. `$cfnptr` recorded the param record id; **`$cfntype` never got those two lines**
+2. `ParseConstSection`'s loop called the shared `TryParseInitValForm`; **`ParseVarSection`'s was never wired to it**
+3. the inliner's ordinal-narrowing and float-RESULT guards, with **float->ORDINAL open**
+4. (parent, `done/`) a float assigned to an integer lvalue
+
+`normalise-dont-special-case.md` already says *fixed one arm of a double case, grep for
+the sibling before closing*. **The rule exists and is being rediscovered at regression
+time rather than applied at fix time.** One observation for the owner, not four tickets.
+
+### Method findings worth stealing, all frankb-56's
+
+- **The boundary was found by two probes that FAILED to reproduce** — a named local
+  through a fn-pointer typedef, and a compound literal. Those negatives narrowed it to
+  the SPELLING rather than the value, the call form or the ABI class. **The probe that
+  reproduces tells you less than the pair that brackets it.**
+- **Instrumentation made the SEGFAULT disappear while the values stayed wrong.** Anyone
+  bisecting on "does it still crash" concludes the probe fixed it. The wrong VALUE was
+  the signal; the crash was incidental.
+- **Scalars need no record identity, so every fixture passing one certified the broken
+  path.** The regression test keeps a scalar row DELIBERATELY so the next reader sees
+  which row is uninformative — the guard-that-cannot-fail rule built into the fixture
+  rather than written above it.
+- **The PINNED compiler is a ready-made unfixed control** — 6 of 7 rows fail, the one
+  that passes is the scalar. No revert->rebuild->restore->rebuild, so no seed-chain drift.
