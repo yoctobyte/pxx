@@ -63,22 +63,60 @@ def spawn(n, fn, daemon):
     return out
 
 
+def sweep():
+    # RECLAIM IS LAZY: a stack comes back during ReapSweep, which runs on thread
+    # CREATION, so a batch's own stacks are still mapped at the moment the batch
+    # finishes. Measuring straight after a batch therefore compares a swept state
+    # against an unswept one and the delta is whatever the scheduler happened to
+    # have finished -- which is what made this fixture host-dependent. One extra
+    # thread, waited for, puts every measurement point in the SAME state: all
+    # threads exited, one sweep since. The sweeper's own stack is the constant
+    # that cancels in the delta.
+    global SWEEPS
+    SWEEPS = SWEEPS + 1
+    t = threading.Thread(target=bump, daemon=True)
+    t.start()
+    t.join()
+
+
+def wait_total(target, secs):
+    # POLL THE CONDITION, NEVER THE CLOCK -- see "THE WAITS ARE CONDITIONS" in
+    # the header. Returns as soon as every thread of the batch has run, and
+    # gives up after `secs` so a batch that genuinely never runs still fails the
+    # row it belongs to instead of hanging the tier.
+    n = 0
+    limit = int(secs * 20)
+    while TOTAL < target and n < limit:
+        threading.Event().wait(0.05)
+        n = n + 1
+    # A thread bumps TOTAL and only THEN exits, so reaching the count is not yet
+    # the kernel having cleared its TidWord. This settle covers that last step
+    # and nothing else -- it is not a guess about how long 60 threads take to be
+    # scheduled, which is what the fixed waits here used to be.
+    threading.Event().wait(0.25)
+    return TOTAL
+
+
 ok = True
+SWEEPS = 0
 
 # A first batch pays any one-off cost (an arena page, the shim's own lock) so it
 # is not charged to the batches that get asserted.
 spawn(30, bump, True)
-threading.Event().wait(0.4)
+wait_total(30, 60)
 
 # ---- reclaim: daemon threads, nobody joins them ---------------------------
+sweep()
 m0 = maps()
 v0 = vsz_kb()
 spawn(60, bump, True)
-threading.Event().wait(0.4)
+wait_total(90 + SWEEPS, 60)
+sweep()
 m1 = maps()
 v1 = vsz_kb()
 spawn(60, bump, True)
-threading.Event().wait(0.4)
+wait_total(150 + SWEEPS, 60)
+sweep()
 m2 = maps()
 v2 = vsz_kb()
 print("daemon batch1  maps +%d  vsz +%d kB" % (m1 - m0, v1 - v0))
@@ -112,9 +150,9 @@ m5 = maps()
 held = spawn(40, slow_bump, False)
 alive = maps() - m5
 spawn(40, bump, True)
-threading.Event().wait(0.3)
 for t in held:
     t.join()
+wait_total(before + 80, 60)
 print("live    maps +%d while running" % alive)
 if alive >= 40:
     print("control MOVES")

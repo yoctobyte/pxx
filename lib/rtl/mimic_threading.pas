@@ -260,6 +260,8 @@ begin
   if not pycallback_is(t.FTarget) then
   begin
     PyThreadLiveDec;
+    { Thread.start's retain, given back. Last use of `t` on this path. }
+    PXXObjRelease(Pointer(t));
     Exit;
   end;
   n := 0;
@@ -292,6 +294,10 @@ begin
       drop arguments -- both worse than a message naming the limit. }
     WriteLn(StdErr, 'threading: Thread(args=...) supports at most 3 arguments');
   PyThreadLiveDec;
+  { THE RETAIN TAKEN IN Thread.start, GIVEN BACK. This must be the LAST use of
+    `t` in this procedure: at rc=0 it frees the block, so anything touching a
+    field afterwards is reading freed memory. }
+  PXXObjRelease(Pointer(t));
 end;
 
 { ---- Thread ---------------------------------------------------------------- }
@@ -341,8 +347,34 @@ begin
     Both halves of that asymmetry are kept -- parent counts up, child counts
     down -- and the up now happens before the child exists. }
   PyThreadLiveInc;
+  { THE RUNNING THREAD OWNS A REFERENCE TO THE OBJECT IT DEREFERENCES, and
+    until 2026-09-16 nothing did. ThreadLauncher receives `Self` as a RAW
+    pointer and reads FTarget/FArgs off it for the whole of the body, while the
+    only thing keeping the object alive was whatever the Python side happened
+    to still hold. `threading.Thread(target=f).start()` without binding the
+    result is ordinary CPython -- there the bootstrap and threading._active
+    hold it -- and here it freed the object out from under the child.
+
+    MEASURED 2026-09-16, 30 threads, target increments a counter under a lock:
+      refs kept      30/30 on 12 cpus, 30/30 on 1 cpu
+      refs dropped    0/30 on 12 cpus, 10/30 on 1 cpu
+    It is a RACE between the child reaching FTarget and the parent's release,
+    which is why it reads as load-dependent and why the same program passes
+    alone and fails under a full tier.
+
+    NOT A DAEMON-ONLY BUG, though that is where it was found. `LiveAdd` stores
+    the reference for non-daemon threads but a plain array store does not
+    retain, so the non-daemon path measured 1/30 and 9/30 with references
+    dropped -- the registry keeps a POINTER for the join at exit, never an
+    owning reference. Both paths need this, so the retain is here and not
+    inside the `if not daemon` below.
+
+    Given back in ThreadLauncher on every exit path, including the
+    not-callable one. }
+  PXXObjRetain(Pointer(Self));
   if PalThreadCreate(FHandlePtr^, @ThreadLauncher, Pointer(Self), 0) <> 0 then
   begin
+    PXXObjRelease(Pointer(Self));   { no child will run, so give it back here }
     PyThreadLiveDec;
     FreeMem(FHandlePtr);
     FHandlePtr := nil;
