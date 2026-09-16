@@ -187,6 +187,28 @@ OBSERVER IS ALSO IN counts the observer**, and `ps`/`pgrep`/`pkill` are that by
 construction. Kill by explicit PID gathered from `/proc/*/exe`; match on
 something the query itself cannot contain; and prefer the backgrounded job's own
 completion notification, which needs no loop at all.
+**BUT THAT NOTIFICATION REPORTS THE WRAPPER, NOT THE JOB — AND A DETACHED JOB
+MAKES IT REPORT SUCCESS FOR WORK STILL RUNNING.** This paragraph's own remedy is
+the thing that misleads, which is why the warning belongs beside it and not only
+in the gate bullet 1100 lines below, where it was and where nobody looking at
+`pgrep` would find it. Two subsystems: a backgrounded `gate.sh` said `exit code
+0` over `gate: RED (exit 1)` three times in one day; and on 2026-09-16
+`busybox_diff.sh` — which **execs a copy of itself** so a peer's `git pull` cannot
+rewrite a running script, and is therefore detached from the wrapper's lifetime —
+reported `completed (exit code 0)` at the wrapper's 10-minute cap while the real
+run carried on. **THE SECOND READING FAILED THE SAME WAY, WHICH IS WHY IT
+CONFIRMED THE FIRST:** a one-shot `/proc` scan for compiler processes answered
+ZERO, because a build sampled BETWEEN two compiler invocations has no compiler
+running. That is the false-NEGATIVE twin of this rule's own false positive — the
+scan counts too FEW, not too many — and it reads as corroboration. **Both
+instruments were about the OBSERVER'S RELATIONSHIP TO THE JOB rather than about
+the job**, so ask instead for a state the JOB maintains: a lock file, an output
+directory growing (objects went 101 -> 400 while it was being called dead), and
+above all **the script's own completion TOKEN** — `busybox_diff.sh` prints
+`BUSYBOX-DIFF-COMPLETE` for exactly this reason and its header says so outright.
+The seat that hit this had READ that header the same day and still believed an
+exit code over it an hour later. **Grep the log for the verdict the job printed;
+never the status the wrapper returned.**
 **AND THE BRACKET TRICK DOES NOT CLOSE THIS — IT CLOSES THE HALF EVERYONE KNOWS
 ABOUT.** `grep "[w]pbisect.sh"` stops the grep matching its OWN pattern and does
 nothing about the **PARENT SHELL**, whose command line contains the whole
