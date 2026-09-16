@@ -180,4 +180,4 @@ every membership row paired with a non-membership row so an over-approximating
 fold cannot pass, and the member under test not always first.
 
 ## Log
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit eaf776dd8.
