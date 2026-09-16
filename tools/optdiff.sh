@@ -128,7 +128,7 @@ FILES=$(ls test/*.pas test/*.c 2>/dev/null | awk -v s="$SHARD" -v n="$NSHARD" '
 fi
 
 n=0; pass=0; skip=0; diff=0
-skip_listed=""; skip_build=""; skip_timeout=""; recovered=""
+skip_listed=""; skip_build=""; skip_timeout=""; skip_execfail=""; recovered=""
 for t in $FILES; do
   [ -e "$t" ] || continue
   n=$((n + 1))
@@ -209,8 +209,26 @@ for t in $FILES; do
     fi
   fi
   o0=$(timeout "$TMO" "$TMP/d" </dev/null 2>&1); r0=$?
-  if [ "$r0" -ge 124 ]; then
+  # 124 IS A TIMEOUT. 125/126/127 ARE NOT, AND `-ge 124' CALLED THEM ALL ONE.
+  #
+  # `timeout' exits 124 when it fires and 137 when the child took SIGKILL, so
+  # those two are the timeout codes. 125 (timeout itself failed), 126 (found,
+  # not executable) and 127 (NOT FOUND / dynamic link failure) are the shell's
+  # exec-failure codes and mean the program never started. Lumping them under
+  # TIMEOUT-O0 is the name-is-not-the-thing failure in its cheapest form: the
+  # skip line is READ, it says the program was too slow, and a reader goes
+  # looking at performance for a binary that never ran.
+  #
+  # Measured 2026-09-16 on a 105-program random sample of the corpus:
+  # c_obj_import_host.c and c_obj_fnptr_b.c both exit 127 with
+  # `symbol lookup error: undefined symbol: pxx_sum' / `... call_handler',
+  # and both were being reported as TIMEOUT-O0. They are object-import tests;
+  # nothing about them is slow.
+  if [ "$r0" -eq 124 ] || [ "$r0" -eq 137 ]; then
     skip=$((skip + 1)); skip_timeout="$skip_timeout $b"; continue
+  fi
+  if [ "$r0" -ge 125 ] && [ "$r0" -le 127 ]; then
+    skip=$((skip + 1)); skip_execfail="$skip_execfail $b($r0)"; continue
   fi
   ok=1
   # -O1 was the one level with no coverage anywhere in the matrix: the gate
@@ -245,6 +263,10 @@ done
 # NOT covering, for a reason nobody has vouched for.
 [ -n "$skip_listed" ]  && echo "optdiff skip SKIPLIST:$skip_listed"
 [ -n "$skip_timeout" ] && echo "optdiff skip TIMEOUT-O0:$skip_timeout"
+# EXEC-FAIL is its own line because it is a DIFFERENT question from a timeout:
+# the program never started, so the sweep has no coverage of it AND something
+# is wrong with the build or its link. Each entry carries its rc in parens.
+[ -n "$skip_execfail" ] && echo "optdiff skip EXEC-FAIL-O0:$skip_execfail"
 [ -n "$skip_build" ]   && echo "optdiff skip BUILD-FAIL:$skip_build"
 # Name the recovered ones too. They are the population this sweep silently lost
 # once already, so the line has to be READ, not just counted -- an empty
