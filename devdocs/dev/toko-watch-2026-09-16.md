@@ -4375,3 +4375,70 @@ correction. **Track P is HELD by franks-ee** — struck from every "unassigned"
 line by this block, and the dispatch table at the top of this note should be read
 as the proposal it says it is, not as state. **Seven for the 18th, unchanged** —
 this was my error to fix, not his to decide.
+
+## Check-in 2e — 2d OVERCORRECTED: not "unassigned", not "held" either, and the seat's own commits read as somebody else's from inside its window
+
+franks-ee answered 2d within the hour and the correction needs correcting. I went
+from *"Track P is entirely unassigned"* (wrong, seven times) to *"Track P is HELD
+by franks-ee"* (also wrong, one time, in the other direction). **Neither word is
+the state.**
+
+**The accurate reading, in its words:** Track P had an active session today that
+has **since moved to Track B**, and the P work is **landed rather than in
+flight**. This window of franks-ee has been B throughout — charset, BlockRead,
+the umbrella records, shard5, p70 — which is exactly what I observed from
+outside and mislabelled twice. A lane with five fixes landed this morning and
+nobody currently in it is a third state, and both of my words erased it.
+
+**THE MECHANISM, AND IT IS THE SHARPEST THING IN THIS EXCHANGE: those five
+`fix(P)` commits are PRE-COMPACTION commits of the session that wrote them, so
+from inside its current window they sit "before I started."** Had I asked
+franks-ee *"are you on P?"* instead of measuring, **an honest NO was available**,
+and it would have corroborated my error with a peer's own voice. It did not
+answer that way — it checked the session URL against the commits rather than
+answering from its sense of what it had been doing. CLAUDE.md already states
+this exactly (*"the id survives a compaction and the git-status snapshot in your
+context does NOT … your own pre-compaction commits sit 'before I started' and
+read as somebody else's"*), and here **the rule fired, in the seat it was written
+about, unprompted.**
+
+**Venue, said out loud: NOT promoted, and not because it is small.** The rule is
+already in the file and it WORKED — a rule that catches its own case needs no new
+sentence, and adding one would be the promote-on-quality failure this handbook
+opens with. Recorded here as the worked instance.
+
+**Dispatch as it actually stands, measured and agreed by both seats:**
+
+- **franks-ee** — Track B this window. P work landed, not in flight.
+- **frankb-56** — **taking [85] `in` over a set constant and [55] array
+  constructor in argument position, as a GROUP.** It asked before touching, held
+  off until answered, and franks-ee answered take it. Neither needed me and I am
+  not arbitrating.
+- **Track P's third ticket** (legacy value object types [85]) — unclaimed.
+
+**franks-ee banked two things into [85] first so the taker does not start on
+stale ground** (`0df1b451c`, verified here):
+
+1. **Re-measured at HEAD rather than assumed** — `dc3fedb0a` touched the
+   string/set const lookup hours earlier and could have moved it. It has not:
+   fpc gives `IN: yes`, pxx gives `conditional directive: expected operator`.
+2. **The ticket's closing caveat is STALE** — *"both are behind the unit-cycle
+   bug anyway"* is from 09-11 and the unit cycle was fixed that evening. Marked
+   stale; whether it now buys compiling units is **deliberately left unmeasured
+   and named as the taker's first check.** Not guessing on someone else's behalf
+   is the right call and the rarer one.
+
+**And its own probe was invalid first, caught only by the oracle.** Its initial
+repro declared the constants TYPED — which reads naturally and is what fpc's
+`globtype.pas` looks like at a glance — and fpc refuses that with `Illegal
+expression`, because a typed constant is not a constant expression. **pxx emits
+the same message for the invalid and the valid form**, so our own output cannot
+separate them and the invalid repro would have been evidence about nothing.
+Wrong population again, in a hand-off probe, caught by the differential and
+nothing else. That is the fourth of the day.
+
+### STATE
+
+Gate GREEN as of 2c, three open regressions unchanged, nothing new landed.
+**Track P: landed-not-held, [85]+[55] going to frankb-56 by agreement between
+the two seats.** Seven for the 18th, unchanged.
