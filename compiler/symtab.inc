@@ -850,7 +850,25 @@ begin
   end;
 end;
 
-function FindStrConst(const name: AnsiString): Integer;
+function FindStrConstIn(const name: AnsiString; qUnit: Integer): Integer;
+{ qUnit is ConsumeUnitQualifier's result: -2 = `System.`, -1 = unqualified,
+  >= 0 = a named unit. A NAMED unit asks for THAT unit's constant by
+  construction, so a same-named constant declared anywhere else — including in
+  the current unit, innermost and otherwise winning — must not claim the
+  reference. Same filter the proc table already applies
+  (`(qUnit < 0) or (ProcUnitIdx[i] = qUnit)`), and the same class of defect as
+  bug-p-a-system-qualified-call-binds-a-same-named-user-routine: the qualifier
+  was consulted by the routine path and by nothing else, so the escape hatch
+  did not escape.
+
+  fpc's own compiler writes this deliberately. cfileutl.pas:142 declares
+  `const ExecuteProcess = 'Do not use' deprecated '...'` to hide SysUtils'
+  function from every unit that uses cfileutl, and then calls the real one as
+  `sysutils.ExecuteProcess(...)` twice in its own body. Without this filter the
+  constant took the call, the ARGUMENTS WERE SILENTLY DISCARDED, and the result
+  was the constant's text — a wrong program with no diagnostic wherever the
+  target type accepted a string.
+  bug-p-a-unit-qualified-reference-is-captured-by-a-same-named-string-const }
 { Innermost-wins, like FindSym: a constant declared in the CURRENT routine beats one
   declared at unit level, and one declared in some OTHER routine is not visible at all.
   Newest-first within each tier, so a redeclaration shadows an earlier one.
@@ -872,6 +890,7 @@ begin
   bestHop := 0;
   for i := StrConstCount - 1 downto 0 do
     if CaseEqual(StrConstName[i], name) and
+       ((qUnit < 0) or (StrConstUnitIdx[i] = qUnit)) and
        DeclVisibleSect(StrConstUnitIdx[i], StrConstDeclImpl[i], IMPLTAB_STRCONST, i) then
     begin
       hop := ScopeHopsToProc(StrConstOwner[i]);
@@ -880,24 +899,44 @@ begin
     end;
 end;
 
-function FindSetConst(const name: AnsiString): Integer;
+function FindStrConst(const name: AnsiString): Integer;
+{ Unqualified lookup — the ordinary spelling. One body, so the scoping rules
+  above cannot drift away from the qualified form. }
+begin
+  FindStrConst := FindStrConstIn(name, -1);
+end;
+
+function FindSetConstIn(const name: AnsiString; qUnit: Integer): Integer;
 { Innermost-wins, like FindStrConst and for the same reason. This table was FLAT
   and searched OLDEST-first, which is the worst of the three: `procedure A;
   const S = [1,2,3];` leaked into a SIBLING `procedure B; const S = [7,8];` and
   beat B's own — pxx answered `B TRUE FALSE` where fpc says `B FALSE TRUE`. No
-  nesting needed, and no diagnostic. }
+  nesting needed, and no diagnostic.
+
+  And FindStrConstIn's qUnit rule, same reason. Measured on
+  the same day and it fails WORSE: a shadowed `qunit.Thing('x')` whose shadow is
+  a set constant yielded the baked mask's ADDRESS printed as a string, i.e. a
+  memory dump rather than a wrong string. }
 var i, hop, bestHop: Integer;
 begin
   Result := -1;
   bestHop := 0;
   for i := SetConstCount - 1 downto 0 do
     if CaseEqual(SetConstName[i], name) and
+       ((qUnit < 0) or (SetConstUnitIdx[i] = qUnit)) and
        DeclVisibleSect(SetConstUnitIdx[i], SetConstDeclImpl[i], IMPLTAB_SETCONST, i) then
     begin
       hop := ScopeHopsToProc(SetConstOwner[i]);
       if (hop >= 0) and ((Result < 0) or (hop < bestHop)) then
       begin Result := i; bestHop := hop; end;
     end;
+end;
+
+function FindSetConst(const name: AnsiString): Integer;
+{ Unqualified lookup — the ordinary spelling, one body shared with the
+  qualified form. }
+begin
+  FindSetConst := FindSetConstIn(name, -1);
 end;
 
 procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer;

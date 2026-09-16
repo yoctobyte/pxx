@@ -8691,7 +8691,7 @@ begin
         is case-insensitive: a `set of char` const `C` would otherwise shadow a
         char var `c`) must win. }
       sci := -1;
-      if idx < 0 then sci := FindSetConst(name);
+      if idx < 0 then sci := FindSetConstIn(name, qUnit);
       if sci >= 0 then
       begin
         { Named set constant — yields the baked 32-byte mask's address, exactly
@@ -8706,7 +8706,11 @@ begin
         not-yet-bound NilPy def unbound above and let the ordinary call paths use
         it. See the comment at the unbind for why this is not left at -1. }
       if pyLateDefPi >= 0 then procIdx := pyLateDefPi;
-      sci := FindStrConst(name);
+      { qUnit, not -1: `sysutils.ExecuteProcess(...)` must reach SysUtils' routine
+        even where a constant of that name is in scope -- which is precisely how
+        fpc's own cfileutl.pas hides it and then calls it.
+        bug-p-a-unit-qualified-reference-is-captured-by-a-same-named-string-const }
+      sci := FindStrConstIn(name, qUnit);
       { A VARIABLE in scope beats an untyped string constant of the same name. The string
         constant table is not scoped -- a `const S = 'A string';` declared inside one method
         stays visible to every later one -- so without this test a later method's local
