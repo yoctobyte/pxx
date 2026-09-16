@@ -917,7 +917,8 @@ histogram. Two independent instances now, not one.
 | 3 | `object` constructor | language | **DECIDED AGAINST** (`decide-old-style-object-types`, option A) |
 | 4 | `var` = named string const | parser | **FIXED** `fa397c761` |
 | 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
-| 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **OPEN — the head**, Track P |
+| 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
+| 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **OPEN — the head**, Track P, franks-ee |
 
 **Two of the five are RTL types we simply do not declare** — no compiler change, no
 decision, nothing to reverse. That makes them the cheapest remaining lever by some
@@ -970,3 +971,68 @@ deliberately.
 
 **No ticket, and that is correct.** CLAUDE.md: filing instead of fixing is the error. The
 table above is the bookkeeping.
+
+## WALL 6 FIXED, AND ITS CENSUS IS THE SIXTH NULL ROW — PREDICTED AS ZERO IN ADVANCE, FOR THE SIXTH TIME
+
+**`a931bef4d` (franks-ee): a `FindSym` MISS kept `SizeOf` on the name path, which cannot
+index.** `SizeOf(<field>[index])` is accepted; 33/33 on the extended fixture, with a control
+that can fail — pin v410 and a purpose-built pre-fix binary both refuse it with
+`expected ')' before '['`, and `TR` is 12 bytes in that fixture so a pointer-width answer
+cannot pass for a correct one.
+
+**Four-arm census, against an expectation written down BEFORE the arms ran:**
+
+| arm | result |
+| --- | --- |
+| stubbed | 105 units first-failed at the sizeof wall; afterwards **zero** detail files name `expected ')' before '['` anywhere. Cleared, not moved. Units-OK 22 → 22. |
+| unstubbed | not one row changed. 21 → 21. No unit lost in either pair, compared unit by unit. |
+
+**The unstubbed null is the half that carries the ordering claim, and it is the discipline
+this umbrella wrote for itself working:** `finput` sits BEHIND the cpuinfo and versioncmp
+walls on the real corpus, so the fix is worth nothing today and worth the whole 105 the
+moment those clear. **Sixth null row, predicted as zero in advance for the sixth time** —
+which is the only thing that makes a null row information.
+
+**The absence instrument is the right one here.** "Zero detail files name the error string
+anywhere" cannot be produced by accident; a units-OK count can. Cleared rather than moved is
+a claim about error IDENTITY, not about a count, and this umbrella has been burned by the
+difference before.
+
+## WALL 7 — a one-cell defect, and this seat FAILED TO REPRODUCE IT (which refutes nothing)
+
+**`comphook.pas:386`, `system.str(getrealtime-starttime:0:3,hs2)`.** franks-ee read the site
+off the detail file's own `in:` line rather than inferring it — necessary, because the
+diagnostic prints **no file name** and the symbol leads a reader to `globals.pas:386`, which
+is a comment. (Verified here: it is `{ contains tpackageentry entries }`.) That is CLAUDE.md's
+same-line-number rule paying for itself a second time in this umbrella.
+
+Its reduction, eleven lines, with the two controls that make it one cell:
+
+| | shape | verdict |
+| --- | --- | --- |
+| A | overloaded, bare | REFUSED `undefined variable (grt)` |
+| B | overloaded, empty parens | COMPILES |
+| C | overloaded, bare, plain RHS | REFUSED |
+| D | the parameterful overload | COMPILES |
+| E | **control** — NOT overloaded, bare | COMPILES |
+| F | **control** — NOT overloaded, parens | COMPILES |
+
+**So only the intersection fails:** a parameterless call spelled without parentheses when the
+name is overloaded. Same shape as wall 6 — a door wired for one spelling of a reference and
+not the other, and **the passing spelling is the one everybody writes in a test.**
+
+**THIS SEAT COULD NOT REPRODUCE IT AND THAT IS A FACT ABOUT THIS SEAT'S FIXTURE.** Six
+reconstructed rows plus four more in the real site's `str(...:0:3, s)` shape ALL COMPILE at
+`a931bef4d`. **The reconstruction is worthless as a refutation, and the control says why: it
+compiles under PIN v410 too** — a binary that predates both walls. A fixture that passes on
+every compiler ever built cannot distinguish a fixed defect from one that was never there,
+which is this file's own "if the machinery did nothing at all, would this row still pass?"
+answering yes. **Recorded so nobody reads it as a contradiction of franks-ee's table**; the
+difference is in something the reconstruction did not copy, and the fixture to trust is the
+one with the failing rows in it. Asked for its eleven lines rather than guessing further.
+
+**The method note franks-ee volunteered is the one to keep:** its FIRST run of that table
+reported all six rows REFUSED, controls included, because the harness broke on spaces in a
+tag and it was reading *"no error line printed"* as success. **The controls caught it** —
+E and F are not decoration, they are what separates a finding from an instrument. It nearly
+shipped a table in which the instrument was the finding, and said so unprompted.

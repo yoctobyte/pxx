@@ -1062,3 +1062,60 @@ reason applies.
 shard; neo-a2 correctly declined O (it is the owner's own home session, not a frank) and
 nobody has been offered P. Both stay open for the first seat that frees — I am not starting
 one.
+
+## Check-in 0q — wall six landed, sixth null row, and I built a probe that could not fail
+
+**franks-ee landed `a931bef4d`** (a `FindSym` MISS kept `SizeOf` on the name path, which
+cannot index) and took wall seven, `comphook.pas:386`, from the P group I had offered. Both
+walls recorded in the umbrella with the census.
+
+**The census is the sixth null row and it was predicted as zero in advance for the sixth
+time**, which is the only thing that makes a null row information. Stubbed: 105 units
+first-failed at the sizeof wall and afterwards **zero** detail files name
+`expected ')' before '['` anywhere — cleared, not moved. Unstubbed: not one row changed,
+21 → 21, no unit lost in either pair. `finput` sits behind the cpuinfo and versioncmp walls
+on the real corpus, so the fix is worth nothing today and the whole 105 the moment those
+clear. **It re-ran unstubbed before claiming an ordering, which is what it said it would do
+and what the umbrella's own correction demands.**
+
+**IT ALSO RAN MY STALE-BINARY WARNING AND THE RESULT IS A THIRD-PARTY CORROBORATION.** HEAD
+never moved during its four arms, so the pull hazard did not apply — but it had seen
+`verified` rather than `converged` on both control builds, did the check anyway, and the
+rebuilt binary is byte-identical to the one the fix arm was measured with. Its pre-fix
+control is `1e6a9a3eae1d`, **which is the `compiler_sha256` borg recorded at
+`7080c92843fc`** — and it is also exactly what MY own forced rebuild produced at
+`5b1f51a25` an hour earlier. **Three parties, two machines, one binary identity for those
+sources.** That is what a sha printed beside a number is for.
+
+**I TRIED TO VERIFY ITS WALL-SEVEN TABLE INDEPENDENTLY AND BUILT A GUARD THAT CANNOT FAIL.**
+I reconstructed the six rows from its description, plus four more in the real site's
+`str(... :0:3, s)` shape. **All ten COMPILE at `a931bef4d`** — which looks like a
+contradiction of its table and is not one. **The control is what settles it: my fixture
+compiles under PIN v410 as well**, a binary predating both walls. A fixture that passes on
+every compiler ever built cannot tell a fixed defect from one that was never there. My
+reconstruction is missing something its eleven lines have, and **"if the machinery did
+nothing at all, would this row still pass?" answers YES for every row I wrote.**
+
+**So I have refuted nothing and I have said so to it in those words.** This is the third
+polarity from the playbook arriving pointed at me: not a false refutation from a tree
+without the commit — my tree HAS the commit — but a false refutation from a FIXTURE that
+was never the one that failed. The tell is identical (a confident table of passes) and the
+discriminator is the same one (run the control). I asked for its eleven lines rather than
+guessing a fourth variant; asking is bounded and carries a fact, guessing is neither.
+
+**A hypothesis I held and did not report as a finding:** `a931bef4d` fixes a `FindSym` miss
+on the NAME path and wall seven refuses with `undefined variable`, which is a name lookup
+failing — so the two could plausibly be one cause, and wall seven might already be closed by
+it. **The pin control kills that reading too**: if my fixture exercised the defect, the pin
+would have refused it. It did not, so my rows say nothing about whether `a931bef4d` reached
+wall seven either. Left as a question for franks-ee, who has the failing fixture.
+
+**Its own method disclosure is the better half of its report and I have banked it in the
+umbrella:** its FIRST run of that table reported all six rows REFUSED, controls included,
+because the harness broke on spaces in a tag and it read *"no error line printed"* as
+success. **The controls caught it.** E and F are not decoration — they are the difference
+between a finding and an instrument, and it nearly shipped a table in which the instrument
+WAS the finding. It volunteered that unprompted.
+
+**Shop unchanged otherwise:** 7 open regressions, Track T UP. Track O (`optdiff#shard5/12`)
+still unassigned; P now has franks-ee in it.
