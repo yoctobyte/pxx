@@ -34,3 +34,6 @@ ok: /tmp/testmgr-scratch-2021481/test_threadvar_var26  [code=331544B  data=34788
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-16 — auto-closed by the borg watcher: `test-core#src:test/test_a_threadvar_is_a_variable.pas` passes at 4b8603d23161 (tier native); it was red at 59afeadbceaa. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
