@@ -919,7 +919,8 @@ histogram. Two independent instances now, not one.
 | 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
 | 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
 | 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `PENDING-COMMIT` (franks-ee) |
-| 8 | `WriteMsgTypeColored` overload (`comphook.pas:397`) | unclassified | **OPEN — the head**, Track P |
+| 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **OPEN — the head**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
 This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
@@ -1091,3 +1092,37 @@ must-refuse control rather than as corpus bookkeeping.
 **Named by `file:line` throughout, per the caution in the table above** — I called
 `comphook.pas:386` "wall eight" in a commit message and in messages to a peer while this
 table calls it row 7, and both counts were honest. The subjects were never in dispute.
+
+## FOUR CONSECUTIVE WALLS IN ONE FILE, AND THE KINDS ALTERNATE — `comphook.pas` 386 → 397 → 399 → 474
+
+Measured 2026-09-16. `finput.pas:544` delivered its 105 units to `comphook.pas:386`,
+which delivered the same 105 to `:397`, which delivered the same 105 to `:474`. Three
+fixes, three null rows, **one file walked from line 386 to line 474**. This umbrella
+already recorded that shape for `cclasses.pas` (895 → 1327 → 1726); it is now the
+dominant pattern here and not an anecdote, and it is the reason the first-failure
+census cannot be read as a work estimate.
+
+**The kinds alternate, which is the part worth acting on:**
+
+| wall | kind | inert until a pin? |
+| --- | --- | --- |
+| `finput.pas:544` | parser (Track P) | yes |
+| `comphook.pas:386` | parser (Track P) | yes |
+| `comphook.pas:397` / `:399` | **RTL type (Track B)** | **NO — live immediately** |
+| `comphook.pas:474` | **RTL (Track B)** | **NO** |
+
+**So the head of this umbrella is currently an RTL wall, and RTL walls are worth
+strictly more per hour than compiler walls** — the umbrella's own earlier finding,
+now with a third instance (`TSystemTime`, then `StdErr`, and `FileAge` next). A
+`lib/**` fix is verifiable against the pin in place and reaches every other seat the
+moment it is pushed; a `compiler/**` fix sits inert until somebody pins, and nobody
+may pin while the owner is away. **Whoever picks this up next should take
+`comphook.pas:474` (`FileAge`) rather than looking for a parser wall.**
+
+**`StdErr` was misclassified as a parser wall for about an hour, by me, in the table
+above.** It reads like one — the diagnostic is an overload-resolution failure, which
+is what the two parser walls before it also were. It is an RTL type gap: `StdErr` was
+an integer fd constant with a parser special case, where FPC's is a `Text`. **The
+diagnostic names the door that refused, not the thing that is missing**, and three
+walls in a row arriving through overload resolution is exactly the run that makes the
+fourth look like more of the same.

@@ -252,6 +252,41 @@ var
   Input: Text;
   Output: Text;
 
+  { FPC's OTHER FOUR STANDARD TEXT FILES, and they are not decoration: real
+    Pascal PASSES them, which a compiler special case cannot serve.
+
+    `StdErr` already existed here as an INTEGER CONSTANT (the fd) that the
+    parser special-cases in the Write/WriteLn file-target position -- see
+    pasparser_stmt.inc, `Syms[vidx].Kind = skConst ... Name = 'StdErr'`. That
+    makes `WriteLn(StdErr, s)` work and nothing else: an fd is not a Text, so
+    `SomeProc(StdErr)` where the parameter is `var f: Text` cannot bind, and
+    neither can `Flush(StdErr)`. FPC's own compiler does both, three lines
+    apart, which is the corpus wall at comphook.pas:397 and :399:
+
+        WriteMsgTypeColored(StdErr, MsgTypeStr);
+        flush(StdErr);
+
+    `Output` is the control that shows the mechanism was never the problem:
+    passing it to a `var f: Text` parameter has always worked. The gap was
+    only that three of FPC's five standard files did not exist as Text.
+
+    THE INTEGER CONSTANT IS DELIBERATELY LEFT ALONE. A program that does not
+    use this unit still sees it and still takes the parser's fd path, so
+    nothing that compiles today stops compiling; a program that DOES use this
+    unit gets the Text, which shadows it, and the ordinary Text path handles
+    the same spellings -- measured, including `WriteLn(StdErr, s)` landing on
+    fd 2 with stdout untouched. Two doors to one concept is the smell
+    normalise-dont-special-case names, and retiring the parser arm is a
+    COMPILER change that would be inert until the next pin; this is the RTL
+    half, which is live immediately. Left as a deliberate seam, not an
+    oversight.
+
+    ErrOutput is FPC's name for stderr-as-Text and StdOut for stdout-as-Text;
+    FPC declares all of Input, Output, ErrOutput, StdOut and StdErr. }
+  ErrOutput: Text;
+  StdOut: Text;
+  StdErr: Text;
+
   { FPC's System.FileMode: the access mode `Reset` opens a TYPED or UNTYPED file
     with. 0 = read-only, 1 = write-only, anything else = read/write, and 2 is the
     default -- which is what makes the read-modify-write idiom (Reset, Seek,
@@ -1111,4 +1146,28 @@ initialization
   Output.Buffered := False;
   TFEnsureBuf(Output);
   TFResetBuf(Output);
+  { Same treatment for the other three, and unbuffered for the same reason:
+    these are shared descriptors and read-ahead on them is not ours to do.
+    StdOut and Output are two names for fd 1, ErrOutput and StdErr for fd 2 --
+    FPC's own arrangement, and they are separate Text records rather than
+    aliases because FPC's are separate too, so a program that redirects one by
+    assigning its Handle must not silently move the other. }
+  ErrOutput.Handle := 2;
+  ErrOutput.Name := '';
+  ErrOutput.HitEof := False;
+  ErrOutput.Buffered := False;
+  TFEnsureBuf(ErrOutput);
+  TFResetBuf(ErrOutput);
+  StdOut.Handle := 1;
+  StdOut.Name := '';
+  StdOut.HitEof := False;
+  StdOut.Buffered := False;
+  TFEnsureBuf(StdOut);
+  TFResetBuf(StdOut);
+  StdErr.Handle := 2;
+  StdErr.Name := '';
+  StdErr.HitEof := False;
+  StdErr.Buffered := False;
+  TFEnsureBuf(StdErr);
+  TFResetBuf(StdErr);
 end.

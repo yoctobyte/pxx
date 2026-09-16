@@ -36154,6 +36154,22 @@ endif
 	# 18:00 on the wrong day -- a plausible wrong answer, so both numbers are
 	# asserted. GetLocalTime is UTC here (no timezone database, same as Now) and
 	# is checked for AGREEMENT WITH Now rather than any absolute.
+	# FPC's five standard text files exist as Text and can be PASSED. StdErr was
+	# an integer CONSTANT (the fd) that the parser special-cases in the Write
+	# file-target position, so `WriteLn(StdErr, s)` worked and `Flush(StdErr)`
+	# and `SomeProc(StdErr)` with a `var f: Text` parameter could not -- which
+	# FPC's own comphook.pas does at :397 and :399, three lines apart.
+	# $(PXX_STABLE), NOT $(COMPILER): this is library-only, so it is live under
+	# the pin in place rather than inert until the next one, and building it
+	# with the pin is what proves that.
+	# THE STREAMS ARE CAPTURED SEPARATELY AND DIFFED SEPARATELY, and that is the
+	# assertion the fixture itself physically cannot make: both fds belong to
+	# the program, WriteLn reports nothing back, so a change that routed stderr
+	# to stdout would pass all 13 of its own checks. Only two streams can see it.
+	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
+	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
+	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"
+	tools/expect_same.sh lib_stdtext.stderr "$$($(TESTTMP)/lib_stdtext 2>&1 >/dev/null)" "$$(printf 'E1 via var param\nE2 via var param\nE3 direct')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_systemtime.pas $(TESTTMP)/lib_systemtime
 	tools/expect_same.sh lib_systemtime.1 "$$($(TESTTMP)/lib_systemtime | grep -c '=ok')" "27"
 	tools/expect_same.sh lib_systemtime.2 "$$($(TESTTMP)/lib_systemtime | tail -1)" "lib_systemtime: all ok"
