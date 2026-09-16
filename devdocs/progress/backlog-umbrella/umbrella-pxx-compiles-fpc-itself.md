@@ -916,7 +916,8 @@ histogram. Two independent instances now, not one.
 | 2 | array-of-set `var` init | parser | **FIXED** `14df2066b` |
 | 3 | `object` constructor | language | **DECIDED AGAINST** (`decide-old-style-object-types`, option A) |
 | 4 | `var` = named string const | parser | **FIXED** `fa397c761` |
-| 5 | `TSystemTime` | RTL type | Track B, **unticketed** |
+| 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
+| 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **OPEN — the head**, Track P |
 
 **Two of the five are RTL types we simply do not declare** — no compiler change, no
 decision, nothing to reverse. That makes them the cheapest remaining lever by some
@@ -928,3 +929,44 @@ walls 4 and 5 sit behind a wall nobody is authorised to remove. **Do not rank 1 
 the 138** — that count comes from the stubbed world. **Nine null rows in a row**; the
 yield of walls 1 and 5 stays unknown until wall 3 moves, and moving wall 3 requires a
 decision recorded below the existing one.
+
+## WALL 5 IS FIXED AND IT IS THE FIRST ONE THAT IS LIVE WITHOUT A PIN — rank RTL walls above compiler walls for that reason alone
+
+**Landed 2026-09-16 by franks-ee, `c52d5b31b`: `SysUtils.TSystemTime`, `GetLocalTime`,
+`DateTimeToSystemTime`, `SystemTimeToDateTime`.** Wall 5 of the five-wall table above is
+cleared. The new head is `finput.pas:544` — `ReallocMem(files,afiles*sizeof(files[0]))`,
+`sizeof` of an element reached by INDEXING A POINTER. That is a **parse** gap, not a type
+gap, so it is Track P and it does not join the two RTL rows.
+
+**The property that makes the kind-sort in the table ACTIONABLE, and it was not stated
+when the table was written.** A wall's kind said what it would COST to fix. It also says
+when the fix becomes REAL, and the two RTL rows differ from every other row on that axis:
+
+- A **compiler** fix (walls 2 and 4, and anything in `compiler/**`) is **inert until the
+  next pin.** `$(PXX_STABLE)` consumers keep the old behaviour until Track A pins.
+- An **RTL** fix is **live the moment it lands.** Verified here, independently of the
+  author's report: pin v410's directory contains no RTL at all (`builtin` and the binary,
+  no `sysutils`), `TSystemTime` enters the tree in exactly one commit — `c52d5b31b`, not an
+  ancestor of the pin — and the **pinned v410 binary compiles and runs a program using
+  `TSystemTime`, `DateTimeToSystemTime` and `SystemTimeToDateTime`**, answering
+  `1899 12 30` for `TDateTime(0.0)` and round-tripping to `0.0000`. The pin snapshots the
+  compiler and its builtin units; `lib/rtl` is read from the tree.
+
+**So "cheapest lever" understated it.** An RTL wall costs no compiler change, no decision,
+AND no pin — it is the only class of umbrella blocker whose fix is worth something to
+every other seat on the same day. Wall 1 (`TDoubleRec`) is the remaining member and should
+be ranked accordingly.
+
+**What this does NOT do is move the yield question.** Walls 4, 5 and 6 still sit behind
+wall 3, which is decided against, so nine null rows in a row remain nine. Live-without-a-pin
+is an argument about WHEN a fix pays, never about WHETHER this umbrella's count moves.
+
+**Two conventions franks-ee read out of FPC's source rather than guessing, recorded so
+nobody re-derives them:** `TSystemTime.DayOfWeek` is 0-based where `SysUtils.DayOfWeek`
+is 1-based (a fixture must assert the DIFFERENCE, or it passes under either convention);
+and `SystemTimeToDateTime` composes with a sign-correct `ComposeDateTime`, not by adding
+— 1899-12-29 06:00 is -1.25 composed and -0.75 added. `GetLocalTime` returns UTC
+deliberately.
+
+**No ticket, and that is correct.** CLAUDE.md: filing instead of fixing is the error. The
+table above is the bookkeeping.

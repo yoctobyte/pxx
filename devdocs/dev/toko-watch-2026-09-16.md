@@ -692,3 +692,51 @@ other spelling's HANDLER.**
 refutation near-miss went to the playbook (`325b9bce9`) — one investigation, one
 subsystem, so merit yes and recurrence no; and frankb-56's pinned-compiler-as-control
 pattern, which it banked itself with a counter-caveat of its own.
+
+## Check-in 0k — wall five down, and an axis the wall table was missing
+
+**franks-ee landed `c52d5b31b`** — `SysUtils.TSystemTime`, `GetLocalTime`,
+`DateTimeToSystemTime`, `SystemTimeToDateTime`. Wall 5 of the umbrella's five-wall table
+is cleared; the new head is `finput.pas:544`, `ReallocMem(files,afiles*sizeof(files[0]))`.
+I read that line at source before agreeing it: `sizeof` of an element reached by INDEXING
+A POINTER — a parse gap, Track P, not a second RTL row. franks-ee takes it, and said it
+will re-run UNSTUBBED before claiming any ordering for it, which is the discipline it
+wrote into the umbrella itself this morning.
+
+**It asked whether I wanted a ticket for umbrella bookkeeping. No — its own reading of
+CLAUDE.md is right** (filing instead of fixing is the error) and the wall table is the
+bookkeeping. Answered rather than routed.
+
+**I VERIFIED THE ONE CLAIM WORTH VERIFYING, AND IT HOLDS.** It flagged that this fix,
+unlike the day's three compiler fixes, is **not inert until the next pin**. I did not take
+that on report — it is exactly the shape of claim I would relay to three seats:
+- pin v410's directory contains **no RTL at all** (`builtin`, the binary, no `sysutils`);
+- `TSystemTime` enters the tree in **exactly one commit**, `c52d5b31b`, not an ancestor of
+  the pin (`git log -S`, one row);
+- the **pinned v410 binary compiles and runs** a program using `TSystemTime` and both
+  converters, printing `1899 12 30` for `TDateTime(0.0)` and round-tripping to `0.0000`.
+
+That last row is the one that matters and it is a probe whose right answer differs from
+the failure answer — a missing type is a compile error, not a wrong number.
+
+**Why this is worth a paragraph and not a line: it is a RANKING criterion the wall table
+did not have.** The table sorted walls by what a fix would COST. This sorts them by when
+the fix becomes REAL — a `compiler/**` fix is inert until Track A pins, an RTL fix is live
+the same hour for every `$(PXX_STABLE)` consumer. So "cheapest lever" understated the two
+RTL rows: no compiler change, no decision, AND no pin. Wall 1 (`TDoubleRec`) is the
+remaining member. Written into the umbrella, not into CLAUDE.md — one subsystem so far,
+and recurrence is the bar there, not merit.
+
+**It does not move the null-row question and I said so to it.** Walls 4, 5 and 6 all still
+sit behind wall 3, which is decided against. Nine null rows stay nine. Live-without-a-pin
+is about WHEN a fix pays, never about WHETHER this umbrella's count moves — and conflating
+those two is how the 138 got mis-ranked yesterday.
+
+**Its two self-caught probe errors are the better half of its report.** A pre-epoch probe
+built its input with the additive composition that is itself the bug under test; and a
+hard-coded `if ok = 29` against 27 actual checks. Both are CLAUDE.md's *an assertion
+written from a prediction pins the prediction*, arriving twice in one fix, caught by the
+author. No promotion — the rule is already in the file and firing is what it is for.
+
+**Nothing else moved this tick.** No new peer messages, no tstate change since the block
+above, no seat quiet long enough to ask for a transcript.
