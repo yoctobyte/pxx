@@ -15029,8 +15029,8 @@
   "wall": 1047.5
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-16T01:50:21Z",
+  "sha": "67f0878f2e594f042e00005391b213922d8f1047",
   "tier": "full"
  },
  "last_opt": {
@@ -15260,6 +15260,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_a_field_widens_across_methods.npy test/test_nilpy_a_field_widens_across_methods.expected",
    "status": "fail"
   },
@@ -15278,6 +15279,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_augmented_dunder_subscript.npy test/test_nilpy_augmented_dunder_subscript.expected",
    "status": "fail"
   },
@@ -15296,6 +15298,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_getitem_iteration_protocol.npy test/test_nilpy_getitem_iteration_protocol.expected",
    "status": "fail"
   },
@@ -15314,6 +15317,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_setitem_through_a_variant_receiver.npy test/test_nilpy_setitem_through_a_variant_receiver.expected",
    "status": "fail"
   },
@@ -15332,6 +15336,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_subscript_store_on_a_call_result.npy test/test_nilpy_subscript_store_on_a_call_result.expected",
    "status": "fail"
   },
@@ -15350,6 +15355,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
    "status": "fail"
   }
