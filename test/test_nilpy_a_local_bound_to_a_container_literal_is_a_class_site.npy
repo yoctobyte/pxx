@@ -1,0 +1,50 @@
+# A local bound exactly once to a list or dict LITERAL is a certain class site
+# (the runtime list/dict class), the same claim the field typer makes for
+# `self.items = []` and an annotation `out: list` makes by hand. Controls: a
+# local bound twice, a local also bound through `+=`, a set literal (no claim),
+# and a def whose sites disagree (a list at one, a dict at another).
+def fill(out):
+    out.append(1)
+    out.append(2)
+    return len(out)
+
+
+def count(seen, key):
+    seen[key] = seen.get(key, 0) + 1
+    return seen[key]
+
+
+def twice(xs):
+    return len(xs)
+
+
+def grown(ys):
+    return len(ys)
+
+
+def members(s):
+    return len(s)
+
+
+def mixed(c):
+    return len(c)
+
+
+def main():
+    out = []
+    print(fill(out), fill(out), out)
+    seen = {}
+    print(count(seen, "a"), count(seen, "a"), count(seen, "b"), seen)
+    xs = []
+    xs = [1, 2]
+    print(twice(xs))
+    ys = []
+    ys += [3]
+    print(grown(ys))
+    s = {1, 2, 3}
+    print(members(s))
+    print(mixed([1]), mixed({"k": 1}))
+    print("LITERAL SITES OK")
+
+
+main()

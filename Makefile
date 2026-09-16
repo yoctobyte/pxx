@@ -2503,6 +2503,12 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26
 	$(TESTTMP)/test_nilpy_modconst26 | diff -u test/test_nilpy_a_module_constant_is_a_typed_call_site.expected -
 	tools/expect_same.sh test_nilpy_modconst_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites chained.a mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites count.n mode=1 sites=1 gaveup=0 tk=13 PXXDBG n.psites flag.f mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites guarded.g mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites label.name mode=2 sites=1 gaveup=0 tk=23 PXXDBG n.psites scaled.v mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites step.dt mode=1 sites=2 gaveup=0 tk=19 ')"
+	@# A local bound once to a list or dict LITERAL is a certain class site (the
+	@# runtime list/dict class), like `self.items = []` for a field and `out: list`
+	@# by hand. Controls: bound twice, grown with +=, a set literal, disagreeing sites.
+	./$(COMPILER) test/test_nilpy_a_local_bound_to_a_container_literal_is_a_class_site.npy $(TESTTMP)/test_nilpy_litsites26
+	$(TESTTMP)/test_nilpy_litsites26 | diff -u test/test_nilpy_a_local_bound_to_a_container_literal_is_a_class_site.expected -
+	tools/expect_same.sh test_nilpy_litsites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_local_bound_to_a_container_literal_is_a_class_site.npy $(TESTTMP)/test_nilpy_litsites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites count.key mode=2 sites=3 gaveup=0 tk=23 PXXDBG n.psites count.seen mode=2 sites=3 gaveup=0 tk=6 cls=TPyDict PXXDBG n.psites fill.out mode=2 sites=2 gaveup=0 tk=6 cls=TPyList PXXDBG n.psites grown.ys mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites members.s mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites mixed.c mode=2 sites=2 gaveup=1 tk=0 PXXDBG n.psites twice.xs mode=2 sites=1 gaveup=1 tk=0 ')"
 	@# A lambda whose body is a CALL to a def returning a tuple, list or instance
 	@# hands that value back (it answered None; a def's return is an owned value).
 	./$(COMPILER) test/test_nilpy_a_lambda_returns_what_its_call_returns.npy $(TESTTMP)/test_nilpy_lamcall26

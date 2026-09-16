@@ -39585,6 +39585,21 @@ begin
             mEnd := PyEndOfGroup(m + 3, bodyHi);
             if (mEnd < bodyHi) and (Tokens[mEnd].Kind in [tkNewline, tkDedent]) then
               cand := GetTokenStr(m + 2);
+          end
+          else if (m + 3 < bodyHi) and (Tokens[m + 2].Kind in [tkLBrack, tkBegin]) then
+          begin
+            { a CONTAINER LITERAL as the whole statement -- `out = []`, `seen =
+              {}` -- binds the runtime list/dict class, exactly as the field
+              typer folds `self.items = []` (a local bound to `[]` was not a
+              site while the same field was; the lekkerzeilen seat's Arm E,
+              2026-09-16: 33 parameters, 148 sites, annotating seven of them
+              by hand was net -5617 B). A set literal is left alone. }
+            mEnd := PyEndOfGroup(m + 2, bodyHi);
+            if (mEnd < bodyHi) and (Tokens[mEnd].Kind in [tkNewline, tkDedent]) then
+            begin
+              if Tokens[m + 2].Kind = tkLBrack then cand := 'TPyList'
+              else if PyDictLiteralAt(m + 2) then cand := 'TPyDict';
+            end;
           end;
         end
         else if not (Tokens[m + 1].Kind in [tkLParen, tkDot, tkLBrack]) then
