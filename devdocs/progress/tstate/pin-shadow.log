@@ -883,3 +883,5 @@
 2026-09-16T21:20:52Z	borg	136975139a51b29942d97776a97c79f9ba696fb3	would-pin PENDING 136975139a51 — qualifies, streak 1/2
 2026-09-16T21:47:19Z	borg	89d37dc8df298de91a18850631566eb13058d29d	WOULD PIN 89d37dc8df29 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 2/2
 2026-09-16T21:47:19Z	borg	89d37dc8df298de91a18850631566eb13058d29d	AUTO-PIN DECLINED — HEAD is 6d32e532c4a3, not the tested 89d37dc8df29
+2026-09-16T22:13:31Z	borg	ba8cf629926a72f0fab8570409c80d24d65d443f	WOULD PIN ba8cf629926a — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 3/2
+2026-09-16T22:13:31Z	borg	ba8cf629926a72f0fab8570409c80d24d65d443f	AUTO-PIN DECLINED — HEAD is fb1746a4d8bf, not the tested ba8cf629926a
