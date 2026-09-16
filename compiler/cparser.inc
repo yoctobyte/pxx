@@ -16182,6 +16182,8 @@ var tk: TTypeKind; nm, tagName: AnsiString;
     ftRet, ftPType: TTypeKind; ftNParams, ftSig: Integer;
     ftPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     ftPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+    ftPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;
+    ftRi: Integer;
 begin
   Next; { consume 'typedef' }
 
@@ -16347,6 +16349,7 @@ begin
         else if ftNParams < MAX_PROC_PARAMS then
         begin
           ftPTypes[ftNParams] := ftPType;
+          ftPRecIds[ftNParams] := CTypeBaseRec;  { WHICH record, not just "a record" }
           ftPNames[ftNParams] := 'a';
           Inc(ftNParams);
         end;
@@ -16360,6 +16363,28 @@ begin
     ftSig := RegisterProc('$cfntype', True, ftRet, ftNParams, ftPNames, ftPTypes);
     Procs[ftSig].BodyAddr := -1;
     ProcCdecl[ftSig] := True;          { C ABI (System V) for the indirect call }
+    { THE RECORD IDS AND THE BY-VALUE DECISION -- the same two lines the
+      `ret (*name)(params)` path does at the $cfnptr registration, and their
+      absence here is a silent wrong-ABI call rather than a diagnostic.
+      ftPTypes carries tyRecord, which says "a record" and not WHICH record, so
+      without this the SysV classifier has no RecSize to classify and a
+      by-value struct argument is passed as though it were a pointer. The
+      CALLEE is compiled from the real declaration and reads its registers per
+      the true layout, so the two sides disagree and the callee sees garbage --
+      measured on quickjs, where a JSValue (16 bytes, INTEGER+INTEGER) arrived
+      at a class finalizer as a stack address with tag 70 instead of the object
+      and -1, and the engine then freed a -1 pointer.
+      Scalars were unaffected, which is why this survived: an int or a pointer
+      needs no record identity, so every fixture that used one passed.
+      bug-c-a-struct-passed-by-value-through-a-function-type-typedef-gets-the-wrong-abi }
+    for ftRi := 0 to ftNParams - 1 do
+      if ftRi < MAX_PROC_PARAMS then
+      begin
+        ProcParamRecId[ftSig * MAX_PROC_PARAMS + ftRi] := ftPRecIds[ftRi];
+        if ftPTypes[ftRi] = tyRecord then
+          Procs[ftSig].Params[ftRi].IsRef :=
+            not ABICRecordParamByValue(ftPRecIds[ftRi]);
+      end;
     CTypeIsVoid := False;
     AddCTypedefFnPtr(nm, ftSig);
     ci := FindCTypedef(nm);

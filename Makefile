@@ -23413,6 +23413,23 @@ test-core: $(COMPILER)
 	# being parsed, and an alias spells none, so `typedef T Alias` came out rank
 	# 0 against `typedef long Alias` rank 1 and the check refused a legal pair.
 	# gcc -O0 is the oracle at both widths; the transcript is width-independent.
+	# A STRUCT PASSED BY VALUE THROUGH A FUNCTION-TYPE TYPEDEF. `typedef void
+	# F(args); F *p;` and `typedef void (*P)(args); P p;` name the same callable
+	# thing, and only the pointer spelling recorded WHICH record each struct
+	# parameter is -- so the SysV classifier had no RecSize and passed a
+	# by-value struct as a pointer, while the callee read its registers per the
+	# true layout. Found on quickjs-ng, where a JSValue reached a class
+	# finalizer as a stack address with tag 70 and the engine freed a -1.
+	# THE SCALAR ROW IS WHY IT SURVIVED: an int needs no record identity, so
+	# every fixture that passed one certified the broken path. Positive control,
+	# measured: the PINNED (pre-fix) compiler fails 6 of the 7 rows and exits 1,
+	# and the int row is the one that passes.
+	./$(COMPILER) test/c_fntype_typedef_struct_abi.c $(TESTTMP)/c_fnttabi26
+	tools/expect_same.sh c_fnttabi26 "$$($(TESTTMP)/c_fnttabi26)" "fntype-typedef struct ABI: 7 rows OK"
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -w -O1 -o $(TESTTMP)/c_fnttabi_gcc test/c_fntype_typedef_struct_abi.c; \
+	  tools/expect_same.sh c_fnttabi/oracle "$$($(TESTTMP)/c_fnttabi_gcc)" "fntype-typedef struct ABI: 7 rows OK"; \
+	else echo "=== c_fnttabi: gcc absent, oracle NOT verified ==="; fi
 	gcc -O0 -o $(TESTTMP)/c_tdlegal_gcc test/c_typedef_repeat_is_legal.c
 	tools/expect_same.sh c_tdlegal/oracle "$$($(TESTTMP)/c_tdlegal_gcc)" "$$(cat test/c_typedef_repeat_is_legal.expected)"
 	./$(COMPILER) test/c_typedef_repeat_is_legal.c $(TESTTMP)/c_tdlegal26
