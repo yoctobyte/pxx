@@ -423,3 +423,32 @@ fixed section list is a small `--link` mode, not a linker project, and route 2
 removes the assembler for the stub as well. What this measurement changes is the
 starting point: whoever takes this begins at *write the entry stub*, not at
 *write a linker*.
+
+## THE FULL-SCALE VERDICT, 2026-09-16 — 663 cases, no libc
+
+`tools/busybox_diff.sh --freestanding --applets "<258 applets>"`, compiler
+`b7f9f80c7d80`:
+
+```
+  note    x86_64   400 objects linked separately with `ld -static -nostdlib -e _start .../pxxcrt_x86_64.o`
+  PASS    x86_64   freestanding: no PT_INTERP, entry 0x401000 == _start, no libc
+  PASS    x86_64   byte-identical to the gcc oracle over 663 cases
+busybox-diff: GREEN
+```
+
+`file` says `statically linked`, `ldd` says `not a dynamic executable`, zero
+PT_INTERP segments, `--list` prints 257 applets, 181281688 bytes.
+
+**Why this run exists when the previous one was already green.** The earlier
+report rested on a spread of applets *I chose* — cat, echo, sort, uniq, seq,
+tr, wc, basename, dirname, md5sum, sha256sum. That is a list a person writes
+when they want it to work, and it is the same shape as a suite grown by adding
+more of what already passes. This replaces it with the harness's own 663-case
+population. (The digests were the strong half regardless: md5 and sha256 of
+`abc` check against RFC vectors — an oracle outside this repo, this compiler
+and this harness — where an applet that merely exits 0 tells you only that it
+did not crash.)
+
+**What it does not claim.** The entry stub is assembled with `gcc -c`. No
+external *library* is in that binary; two external *tools* are still in the
+toolchain. Route 2 removes both.
