@@ -1471,3 +1471,108 @@ const. It had been MASKED here by the very defect above. **A pre-existing bug
 can sit behind a second bug, and fixing the front one looks exactly like
 causing the back one.**
 `bug-p-a-string-function-result-assigned-to-an-integer-compiles-silently`.
+
+## WALL FOURTEEN — `cfileutl.pas:714` `rmdir`, and cfileutl.pas is now CLEAR
+
+System's `MkDir` / `RmDir` / `ChDir`, added to `lib/rtl/textfile.pas` rather
+than SysUtils because they report through `IOResult` and nothing else — they
+raise nothing and return nothing — and `IOResult`/`LastIOResult` were already
+there. fpc's caller is `cfileutl.pas:709`:
+
+```pascal
+{$push}{$I-}
+ rmdir(d);
+{$pop}
+RemoveDir:=(ioresult=0);
+```
+
+Landed `387e1d4cc`. **RTL only, so it is LIVE ON PUSH** — built and verified
+under the pinned compiler, which resolves `lib/rtl` from the live tree.
+
+### The measurement that stopped a wrong reuse
+
+Every IOResult code was produced under fpc 3.2.2 by making the condition happen
+and reading it back. fpc documents none of them, and two rows disagree with the
+table this unit's FILE routines already use:
+
+| condition | errno | RmDir | MkDir | ChDir |
+| --- | --- | --- | --- | --- |
+| does not exist | ENOENT 2 | 2 | 2 | **3** |
+| name too long | ENAMETOOLONG 36 | **3** | **3** | **3** |
+| permission denied | EACCES 13 | 5 | 5 | 5 |
+| already exists | EEXIST 17 | — | 5 | — |
+| a plain file, not a directory | ENOTDIR 20 | 5 | 5 | 5 |
+| not empty | ENOTEMPTY 39 | 5 | — | — |
+
+**ENOENT is 2 for RmDir/MkDir and 3 for ChDir.** fpc separates "file not found"
+from "path not found" **by the operation, not by the errno** — the same errno,
+two answers — which no single errno→code map can express. And ENAMETOOLONG is 3
+here where the file table answers 2. So `DirErrnoToIO` is a second table **on
+evidence**, not a second path out of convenience, which is the distinction
+`normalise-dont-special-case.md` actually asks for.
+
+**The empty path is a no-op returning 0 in all three.** That is the row that
+matters most: passing `''` to the syscall reports ENOENT for a call meant to do
+nothing, and an implementation resolving `''` to the current directory would
+**delete or enter it**. `test/lib_dirio.pas` asserts the no-op's *absence of
+effect* as well as its code.
+
+FPC runs `test/lib_dirio.pas` itself and **also answers 31 / 31**, so the test
+is an oracle-agreeing spec rather than a spec of our own behaviour. Two positive
+controls, asserted and branched on: the pre-change `textfile.pas` refuses the
+probe, and a one-code perturbation (chdir ENOENT 3 → 2) drops it to 30 / 31
+naming exactly that row.
+
+### The corpus, against the expectation recorded first
+
+| | before | after | predicted? |
+| --- | --- | --- | --- |
+| units-OK (stubbed) | 22 | **22** | yes |
+| BOTH-OK / ORACLE-NO / PXX-FAIL | 22 / 10 / 175 | **22 / 10 / 175** | yes |
+| units whose verdict moved | — | **0** | yes |
+| the `:714` wall | 120 | **0** | yes |
+| detail files naming `rmdir` | 134 | **0** | yes (strong form) |
+| new head `globals.pas:1095` `Replace` | 12 | **132** | yes, 12 + 120 |
+| detail files without the wall, unchanged | — | **41 of 41** | yes (control) |
+
+A **thirteenth consecutive null row**, and the fourth in a row where clearing a
+shared dependency hands its whole population to the next wall in the same import
+chain.
+
+**`cfileutl.pas` now names itself ZERO times across all 207 detail files.** Four
+consecutive RTL walls (`FileAge`, the `FindFirst` family, `GetDir`, and these
+three) plus one compiler fix cleared the file entirely.
+
+### THE SHRINK, WHICH MY OWN EXPECTATION CALLED A REGRESSION TO EXPLAIN
+
+Total error lines went **776 → 642**, and the expectation said a shrink would
+have to be explained rather than accepted. It is exactly explained: 776 − 642 =
+134, all 134 wall files lost **exactly one line each**, that line was the
+`rmdir` line, and **every remaining error in every one of them is byte-identical
+to before**. Nothing was hidden behind this wall.
+
+**And that BOUNDS the wall-thirteen finding instead of leaving it open.** An
+`undefined variable` error does not truncate a unit's error list; a parser
+give-up does, because it abandons the block. So the detail instrument's
+blindness is specific to the **give-up class**, not to errors in general — which
+is a much smaller caveat than "any count may be low", and it is checkable: grep
+the detail files for `statement made no progress`.
+
+### The two, which was exact after all
+
+The pre-`dc3fedb0a` reading that "only two errors remain behind that wall" was
+recorded as a lower bound once the truncation was found. Measured across the
+three runs, `cfileutl.pas`'s own distinct error LINES were:
+
+| run | cfileutl.pas's own error lines |
+| --- | --- |
+| before the const fix | `:714`, `:1495` |
+| after the const fix | `:714` |
+| after `rmdir` | *(none)* |
+
+**So the two was exact, not a lower bound.** The give-up at `:1495` was the last
+thing in the file, so nothing of cfileutl's own was hidden behind it; the 357
+lines it concealed were all in OTHER units of the import chain. The caveat is
+real for the corpus-wide count and did not apply to that particular two — worth
+recording, because a correction that is itself imprecise costs the next reader
+the same measurement.
