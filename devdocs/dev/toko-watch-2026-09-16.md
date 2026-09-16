@@ -3202,3 +3202,90 @@ in the file at `:120` and `:126-129`, not taken from the commit subject.
 **Nothing for him that was not already on the list. Four items for the 18th:
 `3eb0297f0`, the goal-5 wording, the two-arm corpus question, and Track B's
 lib-test gate being down under the pin.**
+
+## Check-in 1r — frankb-56 is clear (ended its turn, ZERO user denials), and it hit a rule that had been in the file for 25 hours
+
+**Not blocked. It ended its shift.** It ran the check the way it was asked to —
+against the transcript, filtered on `is_error` rather than on the string, which
+is the discriminator that does not count the query:
+
+```
+tool_result blocks : 862 ok, 30 is_error:true
+newest OK          : 2026-09-16T10:47:59Z
+newest ERROR       : 2026-09-16T09:46:12Z
+newest error AFTER newest success?  NO — an hour before it
+user denials: 0    guardrail: 3    other: 27
+```
+
+**Zero user denials in a file spanning 09-14 to now.** The three guardrail
+blocks are one guard (`sleep N; <check>` refused, pointing at Monitor or
+`run_in_background`), each handled inside the same minute — category 2 exactly,
+a guardrail a seat lifts itself, not a blockage. And it named the 27 "other" so
+the number cannot read as 27 problems: `grep -c` exiting 1 on no match,
+`busybox_diff`'s lock correctly refusing a second run, and one self-inflicted
+`pkill -f`. **Every discriminator in the brief fired and all three said the same
+thing.** The question was worth one message and the answer was free.
+
+### IT CHECKED MY CITATION FOR ME, AND I CHECKED IT BACK, AND IT WAS RIGHT
+
+It credited `aa39bf4a0` to this seat. **I suspected a misattribution and went to
+look — it is mine**, 11:46 today, the extension saying the pgrep rule's own
+remedy reports the WRAPPER. The check cost one command and confirmed rather than
+corrected, which is the outcome that should also be recorded: *I have been wrong
+in both directions today and the cheap verification is what separates them.*
+
+### THE PART WORTH BANKING: THE RULE WAS ALREADY THERE, AND A COMPETENT SEAT HIT IT ANYWAY
+
+Its `pkill -f` self-kill was at **09:34** (exit 144 — the pattern matched its own
+command line and killed its shell). Measured here:
+
+```
+the pkill/pgrep self-match rule landed in CLAUDE.md : 2026-09-15 08:30
+frankb-56 hit it                                    : 2026-09-16 09:34
+occurrences of "pkill" in CLAUDE.md at that moment  : 3
+```
+
+**Live, correct, specific to that exact command form, and 25 hours old.** Its own
+paragraph already records the pattern burning another seat *three times in one
+session*. So this is not a stale rule obeyed — it is the mirror: **a current rule
+not REACHED at the moment of need.**
+
+The mechanism is placement, and the rule says it about itself. It lives under
+**"Tokens are a constraint"**, which is where a seat looks for token policy and
+**not** where a seat looks for *"how do I wait for a background job"* — and that
+paragraph's own text contains the sentence *"the warning belongs beside it and
+not only in the gate bullet 1100 lines below, where it was and where nobody
+looking at pgrep would find it."* **The rule diagnosed its own findability
+problem and is still filed under the wrong question.**
+
+**PROMOTION / EDIT DECISION, STATED OUT LOUD: NO CHANGE TODAY, deliberately.**
+I have already touched this one rule **twice today** (`aa39bf4a0`, and
+`d69642bc4` on a neighbour). A third edit to the same paragraph in one day, on
+one seat's observation, is precisely the *"six rules landed in one evening on one
+seat's unwritten judgement"* failure the file warns about — and the content is
+not wrong, so the edit would be re-filing, which is a judgement about the
+document's organisation rather than about the code. **Banked here. For his
+return, as a question and not a proposal:** whether the wait/process-table
+guidance should also hang off the place a seat actually looks for it. If a third
+seat hits it while it sits under "Tokens are a constraint", that is the
+recurrence and it should move without asking.
+
+### ITS DECLINE OF `optdiff#shard5/12`, WHICH IS A BETTER REASON THAN ITS LAST ONE
+
+It declined and **volunteered that the reason differs from its P decline**, so I
+would not read one refusal twice: Track O maps to A by the tag table, so it is a
+*second* lane change; and — the real argument — **it helped inflate the
+four-shards-one-cause framing this morning, so a fresh seat starting from
+"shard5 alone, basename hash not glob position" is cleaner than it starting from
+a baseline it contributed the error to.** Its words: *"I think I am actively the
+wrong seat for that specific ticket."* **That is a seat reasoning about its own
+contamination**, which is the thing no outside observer can measure for it.
+Accepted without argument.
+
+It also independently put `lib-test` in the same bucket I did: not work, a pin,
+and no pin is ours to take.
+
+**Shift closed. Tree clean, HEAD == origin, zero unpushed, eight pushes today.
+Gate GREEN, four open regressions unchanged, Track P and `optdiff#shard5/12`
+unstaffed and staying that way. Four items for the 18th, plus this placement
+question as a fifth and smallest.**
