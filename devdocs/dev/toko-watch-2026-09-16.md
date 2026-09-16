@@ -3728,3 +3728,103 @@ wording; the two-arm corpus question; Track B's `lib-test` gate down under the
 pin **with the 229/287 census number attached as one item, not two**; the
 pgrep-rule placement; and the census question itself. **Four open regressions
 unchanged, gate GREEN, Track P and `optdiff#shard5/12` unstaffed.**
+
+## Check-in 1x — A NEW RED: `optdiff#shard9/12`, 4 → 5. Two candidate causes, and I have NOT settled between them
+
+### THE RED, AND IT IS GENUINELY NEW
+
+```
+open regression: optdiff#shard9/12  bad=7e6029dca4ca (12 in range)
+  -- bad touches NO buildable file: the tested upper bound, not a lead
+```
+
+**`shard9` appears EXACTLY ONCE in the entire `runs-borg.ndjson` archive** — as
+`new_red` at `2026-09-16T15:40:48Z`. Not a re-surfacing, not a flap: first
+appearance. **Open regressions 4 → 5.** The other four are unchanged
+(`crtl_reachability.py`, `optdiff#shard5/12`, `tools-devtest#00`,
+`crtl_atexit.c`).
+
+### THE RANGE IS BOUNDED, WHICH IS THE FIRST THING THE BRIEF ASKS FOR
+
+The `opt` tier runs rarely, so the window is wide but it is closed at both ends:
+
+```
+f02aaea62be9  10:49:17Z  RED  still_red=[shard5]  fixed=[shard0, shard10, shard2]   <- shard9 NOT red
+7e6029dca4ca  15:40:48Z  RED  new_red=[shard9]    still_red=[shard5]
+```
+
+**Every commit in that range touching a buildable file is franks-ee's**
+(`session_011Yhc`) — nine by my count, two of them `compiler/`
+(`3926a4098` parameterless OVERLOAD, `dc3fedb0a` unit qualifier in the
+string/set const lookup) and seven `lib/rtl`. **None of mine are candidates: all
+twelve of my commits in the window are docs, zero buildable files.** Same for
+frankb-56's four. *Stated because the brief asks for the range before the seat,
+and here the range genuinely narrows to one author — which is a fact about who
+was working, not a finding about who broke it.*
+
+### BUT THERE IS A SECOND CANDIDATE AND IT IS NOT A COMPILER CHANGE AT ALL
+
+`tools/optdiff.sh:122` globs `test/*.pas test/*.c` and assigns each file to a
+shard by **a hash of its BASENAME**. Measured across the same range:
+
+```
+shard 9 membership at f02aaea62be9 : 273 files
+shard 9 membership at HEAD         : 276 files
+the three newcomers, all hashing to shard 9:
+   test/lib_blockio.pas                              (69ba50571)
+   test/lib_findfirst.pas                            (34e3a2fa8)
+   test/test_parenless_call_to_an_overloaded_name.pas (3926a4098)
+```
+
+**So shard 9 acquired three files it has never run before, inside the very range
+that reddened it.** The basename hash is working exactly as designed — its own
+header says *"stable under insertion: adding a file moves only that file"*, and
+that is what stopped the old glob-position scheme manufacturing phantom
+new-reds. **But stability under insertion does not mean a shard's CONTENT is
+constant**, and the shard index IS the job identity in tstate. A brand-new file
+that diffs across `-O` levels reddens a shard that nothing regressed.
+
+**Note `3926a4098` is in BOTH lists** — it is a `compiler/` change AND it adds a
+shard-9 test. So it is a candidate under either hypothesis, by two different
+mechanisms.
+
+### WHAT I AM NOT DOING: PICKING THE PLAUSIBLE ONE
+
+**Both stories fit every number I have.** The tempting one is "new tests landed,
+they diff, nothing regressed" — it is tidy, it exonerates the compiler, and
+**there is a second version that exonerates it just as neatly by blaming a peer's
+test.** The brief's warning is about the self-blaming reading terminating the
+search early; the mirror is that a reading which blames *the test corpus* also
+terminates it, and this shop has recorded a peer-blaming shortcut today already.
+
+**`tools/optdiff.sh --shard 9/12` is running now** and names the diffing file
+directly. 276 files x four levels, so it is slow; **the answer goes in the next
+block and this one records the question.** Until then the honest statement is:
+**a new red exists, the range is bounded, and the cause is one of two classes
+that the run in flight distinguishes.**
+
+### GATE: GREEN, AND THE CANARY DID NOT RUN
+
+```
+22 PASS, no FAIL
+SKIP  FPC seed canary (compiler/ unchanged, and seeded green at be9380d5489e)
+```
+
+**That is a SKIP and I am recording it as one, not as a pass.** Last tick the
+canary armed and passed; this tick `compiler/` has not moved since the seed, so
+the row that catches what the quick tier cannot see **did not run.** `binary
+b57f90696a01 @ 504a3476e`; nothing in the pull touched `compiler/` or `lib/`, so
+no rebuild was owed.
+
+### ONE SMALL THING, RECORDED BECAUSE IT WENT THE RIGHT WAY
+
+`.claude/hooks/no-full-suite.sh` **refused a shell loop of mine** — a `git
+cat-file -e` membership check over a `test/` glob, which compiles nothing and
+runs in milliseconds. The hook cannot tell that and **fired correctly on its own
+pattern.** I restructured it into one `git ls-tree` pass rather than lifting it
+with `PXX_ALLOW_FULL_SUITE=1`. The env escape was available and autonomous, and
+**not needing it was cheaper than using it.**
+
+**Five open regressions now. Gate GREEN with the canary skipped. Six for the
+18th. Track P and `optdiff#shard5/12` unstaffed; shard9 joins them unowned
+until the run says what it is.**
