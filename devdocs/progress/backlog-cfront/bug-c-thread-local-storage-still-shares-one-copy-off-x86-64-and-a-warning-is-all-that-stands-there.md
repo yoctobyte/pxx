@@ -1,5 +1,5 @@
 ---
-summary: "The RESIDUAL left by the __thread fix: on x86-64 with a scalar, `__thread` now gets real per-thread storage; everywhere else (any other target, an array, --emit-obj/--shared) it still compiles to ONE SHARED .bss object and only a warning says so. Multi-threaded C using __thread off x86-64 therefore still gets a silently wrong answer. Not a regression — this is byte-identical to the behaviour before the fix — but the exculpation needs an owner and this is it."
+summary: "The RESIDUAL left by the __thread fix: on x86-64 with a file-scope scalar, `__thread` gets real per-thread storage; everywhere else — any other target, an array, --emit-obj/--shared, and FUNCTION SCOPE — it still compiles to ONE SHARED object and only a warning says so, except at function scope where there is NO warning at all. Not a regression; this is byte-identical to the behaviour before the fix. NOTE the function-scope row is about SHARING ONLY: the separate bug that made it a wrong value single-threaded (the `static` being dropped) is fixed and is bug-c-a-block-scope-static-is-silently-dropped-when-a-thread-storage-class-precedes-the-type."
 type: bug
 track: C
 prio: 40
@@ -41,16 +41,29 @@ In every one of these the declaration compiles to **one shared `.bss` object**,
 exactly as it did before the fix, and a warning naming the specific reason is
 the only thing between that program and a wrong answer.
 
-**THE FUNCTION-SCOPE ROW IS THE WORST OF THEM AND IT IS THE ONE THAT WARNS
-NOTHING AT ALL.** The fix hooks the file-scope declaration parser, so a
-`static __thread int t;` inside a body is never seen by it — and the warning it
-replaced lived in the TOP-LEVEL walk, so that shape never warned before this
-change either. **No regression, and it is now the only silent member of the
-family**, which is exactly the property the parent ticket was filed about.
-Measured 2026-09-16: `static __thread int t = 3; t++;` prints 4 under both pxx
-and gcc single-threaded, and under threads pxx shares the one copy. Whoever
-takes this should do function scope FIRST: it is the smallest of the four and it
-is the only one where a user gets no signal.
+**THE FUNCTION-SCOPE ROW IS THE ONE THAT WARNS NOTHING AT ALL.** The fix hooks
+the file-scope declaration parser, so a `static __thread int t;` inside a body is
+never seen by it — and the warning it replaced lived in the TOP-LEVEL walk, so
+that shape never warned before this change either. **No regression, and it is now
+the only silent member of the family**, which is exactly the property the parent
+ticket was filed about.
+
+**SCOPING CORRECTED 2026-09-16 (frankuser), and the correction matters because
+the old wording misrouted.** This ticket's population is *"multi-threaded C
+off x86-64"*, and function scope was listed inside it — but function scope fails
+**on x86-64, with one thread**, so a reader filtering on either qualifier would
+skip it. That was true when written for a different reason than assumed: what
+made it fail single-threaded was **not** thread-local storage at all, it was the
+block-scope `static` being silently discarded when `__thread` stood between it
+and the type, which produced a wrong value with no threads anywhere near it.
+**That bug is fixed** —
+[[bug-c-a-block-scope-static-is-silently-dropped-when-a-thread-storage-class-precedes-the-type]].
+
+**So what remains at function scope is SHARING ONLY**, and it now genuinely does
+belong to this ticket's population: storage is correct, `static __thread int t;`
+counts 1, 2, 3 exactly as gcc does single-threaded, and every thread still uses
+the one copy. Whoever takes this should still do function scope FIRST — it is
+the smallest of the five and the only one where a user gets no signal at all.
 
 ## Why it warns instead of refusing, and why that is not being revisited here
 

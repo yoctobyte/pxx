@@ -15964,6 +15964,13 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cpthread_needs_threadsafe_b26; tools/expect_same.sh cpthread_needs_threadsafe_b26-rc "$$?" "42"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26
 	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	# A block-scope `static` must stay static when another storage class sits
+	# between it and the type: `static __thread int f;` compiled to an ORDINARY
+	# STACK LOCAL. Every row is called MORE THAN ONCE -- a discarded static and
+	# a real one agree on the first call, which is how this survived. The oracle
+	# is gcc on the same source.
+	./$(COMPILER) test/c_block_static_survives_a_storage_class.c $(TESTTMP)/c_blockstatic26
+	tools/expect_same.sh c_blockstatic26 "$$($(TESTTMP)/c_blockstatic26)" "block static survives a storage class: 6 rows OK"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c $(TESTTMP)/cfloat_conv_b17626
 	$(TESTTMP)/cfloat_conv_b17626; tools/expect_same.sh cfloat_conv_b17626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c $(TESTTMP)/csizeof_deref_field_b17726

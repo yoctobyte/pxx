@@ -8449,6 +8449,7 @@ end;
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmStart, asmLen: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
@@ -8480,16 +8481,53 @@ begin
     reaches the declaration. `static` is handled explicitly below (it needs BSS
     storage); skip the type-neutral ones here and fall through to the normal
     local-declaration path. `const`/`volatile` already route via IsCTypeTok. }
+  { block-scope storage-class specifiers, IN ANY ORDER, before the type.
+
+    ONE LOOP AND NOT A `static` SPECIAL CASE, because the old shape dropped the
+    `static` outright whenever anything stood between it and the type. It read
+    `static`, consumed it with Next, tested IsCTypeTok, and on a miss fell
+    through with CLocalStaticDecl still False -- so
+
+        static __thread int f;
+
+    parsed as an ORDINARY STACK LOCAL. Measured 2026-09-16, single-threaded,
+    x86-64, the default target: `static __thread int f; f++;` returned
+    4388880, 4388881, 4388882 against gcc's 1, 2, 3, and with `= 0` it returned
+    1, 1, 1 -- byte-identical to a plain `int f = 0;` and nothing like the
+    `3, 2, 1` the `static int` control gives. The clincher was calling it from a
+    DEEPER frame: the value resets, which a static cannot do. Silent wrong
+    value, no diagnostic, and it had nothing to do with thread-local storage --
+    the `__thread` merely stood in the way of the `static`.
+
+    THE FIRST PROBE SAID `= 0` WAS FINE AND IT WAS A FALSE NEGATIVE WORTH
+    RECORDING: 0 is what a broken stack local returns on its FIRST call, so a
+    one-call probe cannot tell a working static from a discarded one. The row
+    only discriminates from the second call on. That is the "would this row
+    still pass if the machinery did nothing at all" question, answered yes.
+
+    THE SET IS DELIBERATELY NARROW -- NOT CIsTopLevelSkipIdent. That set also
+    holds `asm`, `__asm__`, `_Static_assert` and `__attribute__`, every one of
+    which is a legal STATEMENT at block scope; skipping those here would eat an
+    `asm(...)` statement and a block-scope `_Static_assert` before anything
+    could parse them. Only the storage classes that may precede a local type
+    belong here. `extern` is left out on purpose: it is legal at block scope and
+    is not handled today, and adding it is a behaviour change this fix has no
+    measurement for. }
+  localSawStatic := False;
   while (CurTok.Kind = tkIdent) and
-        ((CurTok.SVal = 'register') or (CurTok.SVal = 'auto')) do
+        ((CurTok.SVal = 'register') or (CurTok.SVal = 'auto') or
+         (CurTok.SVal = 'static') or
+         (CurTok.SVal = '__thread') or (CurTok.SVal = '_Thread_local')) do
+  begin
+    if CurTok.SVal = 'static' then localSawStatic := True;
     Next;
+  end;
 
   { block-scope static declaration: parse as a normal local declaration but
     allocate the declared storage in BSS so pointers to it survive the block.
     This is needed for sqlite's `static sqlite3_vfs aVfs[]` registry table. }
-  if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'static') then
+  if localSawStatic then
   begin
-    Next;
     if IsCTypeTok then
     begin
       CLocalStaticDecl := True;
