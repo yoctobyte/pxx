@@ -203,4 +203,4 @@ NOT attributed to any work of mine in this session: the current pin v410
 the "repros under stable_pinned" line above no longer holds either.
 
 ## Log
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5d43fa076.
