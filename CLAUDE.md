@@ -716,6 +716,35 @@ name the measurement that would retire it.
 stale binary, a stale tree, a store-local `cat-file`, a truncated `tail`, a
 `grep -L` answering about a literal string. **None error. All answer.** So the
 guard cannot be "check for errors".
+**AND THE SOMETHING-ELSE IS OFTEN THE POPULATION, NOT THE TREE OR THE BINARY —
+THE INSTRUMENT IS CURRENT, CORRECTLY PARAMETERISED, AND ENUMERATES A SET THAT
+CANNOT CONTAIN YOUR SUBJECT.** Everything above is an instrument reading a stale
+or wrong VERSION of the right thing; this one reads the right version of the
+wrong SET, so every freshness check passes. Measured 2026-09-16, three
+instances, two seats, three subsystems, one day. `grep -o "663"` over a build
+log "confirmed" a case count — the hits were byte counts (`code=417346B`), and
+**any 400-object log contains `663` by arithmetic**, so that grep could not have
+failed. `git log --grep='pin v410'` returned a `docs(watch)` commit that merely
+QUOTES the pin in prose; the fix tested as an ancestor of that and **the verdict
+inverted** — and the ratio is not marginal: measured across the six most recent
+pins, `--grep 'pin vN'` returns **10, 11, 42, 19, 6 and 19 hits for exactly ONE
+real pin commit each**, so **prose about a pin outnumbers the pin by 5:1 to
+41:1**. It grows while you watch: v410 answered 5 in the morning and **19 by
+that evening**, every one of the fourteen added by the seat doing the
+investigating. **The instrument was degraded by the act of writing the
+investigation down.** And `crtl_decl_probe.sh` censused
+`lib/crtl/include/**` and answered `unimplemented: 0` for a symbol declared in
+`lib/rtl/palthread.pas`: **640/605/0/35 and rc=0 IDENTICAL under both the pinned
+and the HEAD compiler**, the two binaries `test/crtl_declaration_census.sh`
+separates by rc=1 versus rc=0 — a measured negative control showing the probe
+cannot see the difference, so its agreement was never corroboration. **A search
+for a NAME matches PROSE ABOUT the thing as readily as the thing**, and a census
+answers honestly about whatever it enumerates. So **print the set your
+instrument enumerates and check the subject is IN it**, and where one exists
+prefer an **identity the wrong population cannot imitate** — for a pin that is
+the binary sha in its own commit subject, matched against `sha256sum` of the
+pinned binary on disk, which settled the case above in one command after two
+instruments disagreed.
 
 **DO NOT TOUCH THE INSTRUMENT WHILE IT IS MEASURING.** Two runs lost on
 2026-09-02: a `git pull` mid-sweep left the binary snapshotted at one sha while
