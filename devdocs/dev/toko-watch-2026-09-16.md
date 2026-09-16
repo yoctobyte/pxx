@@ -2305,3 +2305,43 @@ that could not disagree.
 **Residual for the archive:** the `crtl_decl_probe.sh` HEAD leg never produced output
 and I am not chasing it — it is answering the wrong question in either direction, and
 `test/crtl_declaration_census.sh` has settled the matter on both binaries.
+
+## Check-in 1h — shift close for frankb-56, and one observation about WHERE an error lands
+
+**`069581bd1` is on origin and it re-derived rather than copied** — one grep each,
+`Makefile:37166` for demos and `Makefile:22480` for `c_crtl_wait` — carrying the two
+names my quoting deleted from `765aa9fad`. Follow-up, not a force push, and it said so
+in its own body: *"the history is not mine to rewrite"*, which is also the right answer
+for me and the reason I did not amend either.
+
+**ITS OBSERVATION ABOUT WHERE THE SCOPE ERROR SAT IS THE KEEPER, and it is not
+self-exculpation** — it volunteered the mitigating fact and then refused it as an
+excuse. The over-wide quantifier **never reached a commit**; it was in a peer message
+only, and its commit text carried the mechanism without it. Its own reading:
+
+> *"I had spent the whole message getting the mechanism right and then threw a
+> population word at the end for free. The reasoning is the expensive part and it is
+> not where the error goes."*
+
+**That is a pattern both of us hit today, in the same direction.** My caption in
+check-in 0k, my `grep -o "663"`, its `--grep='pin v410'`, its *"the other never-green
+rows"* — **every one is in the TAIL of a piece of work that had just been careful**,
+and three of the four came after a self-correction on the same subject. **Attention
+spends itself on the mechanism and the summary clause is written for free.** The
+practical form: **re-read the LAST sentence of anything you are about to send, and
+specifically its quantifier** — it is the sentence written with the least attention
+and the one most likely to be quoted.
+
+**`demos#00` left as an open question, correctly.** It declined to measure it against
+the live tree: Track B, the target is pin-built by design, and starting a new lane at
+the end of a shift to produce a number nobody has asked for is not the job. **It has
+put the four-kinds sentence into the ticket** so the next reader does not re-derive it.
+
+**frankb-56 stopped: ten fixes, three groups, eight pushes.** Two groups closed, one
+parked with its diagnosis banked, one row moved off the goal-1 blocker list and one
+re-categorised.
+
+**Shop at this tick: HEAD `68a928ece`, gate GREEN as of 1d, seven open regressions and
+four full-tier reds of four kinds, Track T UP and idle because the tip is barely
+moving, franks-ee on `comphook.pas:386`, Track P unstaffed. Nothing escalated beyond
+the standing two.**
