@@ -36225,6 +36225,31 @@ endif
 	# perturbation before that green was believed.
 	$(PXX_STABLE) -Fulib/rtl test/lib_dirio.pas $(TESTTMP)/lib_dirio
 	tools/expect_same.sh lib_dirio "$$($(TESTTMP)/lib_dirio $(TESTTMP)/dirio_sandbox | tail -1)" "total ok 31 / 31"
+	# BlockRead/BlockWrite at every count-out width FPC publishes. THE ROWS THAT
+	# MATTER ARE THE SENTINELS, not the counts: a count-out parameter written at
+	# a width wider than the caller's variable returns the RIGHT COUNT and
+	# destroys the adjacent local, so an assertion on the count alone passes
+	# through the bug. It also pins textfile.pas's overload DECLARATION ORDER,
+	# which is load-bearing until the compiler refuses a narrower var actual
+	# (bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it):
+	# resolution binds a widening actual to the first compatible row. FPC RUNS
+	# THIS SAME FILE AND ALSO ANSWERS 27 / 27, and the harness was made to redden
+	# (24 / 27) by restoring the old Int64-first ordering before that green was
+	# believed.
+	$(PXX_STABLE) -Fulib/rtl test/lib_blockio.pas $(TESTTMP)/lib_blockio
+	tools/expect_same.sh lib_blockio "$$($(TESTTMP)/lib_blockio $(TESTTMP) | tail -1)" "total ok 27 / 27"
+	# charset: FPC's codepage registry, which its own compiler consumes through
+	# widestr.pas. The reverse map is asserted ENTRY BY ENTRY rather than by
+	# length, because the one thing an "equivalent" rewrite gets wrong is the
+	# duplicate tie-break (keep the SMALLEST encoding, not the first the sort
+	# happened to leave), and every other row passes when that is wrong.
+	# FPC RUNS THIS SAME FILE in `parity` mode and also answers 95 / 95; the
+	# mode exists because FPC cannot reach the end of the full run -- it dies
+	# with runtime error 216 on its own documented getascii length query. The
+	# harness was made to redden (91 / 98, naming seven rows) by flipping that
+	# tie-break before the green was believed.
+	$(PXX_STABLE) -Fulib/rtl test/lib_charset.pas $(TESTTMP)/lib_charset
+	tools/expect_same.sh lib_charset "$$($(TESTTMP)/lib_charset $(TESTTMP) | tail -1)" "total ok 98 / 98"
 	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
 	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
 	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"
