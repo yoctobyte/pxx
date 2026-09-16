@@ -132,3 +132,6 @@ produce the same bytes" — is meaningless for a program whose output embeds its
 own binary name, PID and a timestamp. This ticket is an auto-filed stub about an
 optdiff red; the red goes away because the instrument stops asking a question it
 cannot express. Goal 1 (a full green pin) loses its longest-standing shard red.
+
+## Log
+- 2026-09-16 — the borg watcher saw `optdiff#shard5/12` GREEN at acbc6fa04482 (tier opt) and did NOT close this: the job's class is `opt`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
