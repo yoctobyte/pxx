@@ -68,4 +68,4 @@ its usage path and counts as a `pass`. After this fix these two pass honestly
 (all four levels agree) while covering nothing, which is a guard that cannot
 fail sitting inside the pass count. Sizing that population needs a full-corpus
 run, which this seat's gate does not include.
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 311649be0.
