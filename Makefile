@@ -15169,6 +15169,15 @@ test-core: $(COMPILER)
 	# pool, and cmc. The carry inputs are chosen so a dropped carry cannot pass.
 	./$(COMPILER) test/casm_gnu_operands.c $(TESTTMP)/casmgnuop26
 	tools/expect_same.sh casmgnuop26 "$$($(TESTTMP)/casmgnuop26)" "$$(printf 'add3 12\nadd8 0 0 0 0 0 0 0 0 carry=1\nmul1 4 18446744073709551614 0\nsubmod 1 18446744069414584320 18446744073709551615 4294967294')"
+	# A fixed-register OUTPUT and a fixed-register INPUT naming ONE register are
+	# TIED, not a collision -- the canonical hand-rolled syscall idiom (musl, the
+	# kernel's own headers). The three shapes that must STAY refused cannot be
+	# rows here (no must-not-compile form); they are in the ticket with the gcc
+	# measurement that fixes each answer. Row 3 is a real syscall checked against
+	# libc's answer to the same question, so it asserts a RELATION and carries no
+	# expected number.
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/c_asm_fixed_reg_tie.c $(TESTTMP)/c_asm_tie26
+	tools/expect_same.sh c_asm_tie26 "$$($(TESTTMP)/c_asm_tie26)" "asm fixed-reg tie: 4 rows OK"
 	# The byte-addressable classes Q and q, and the size modifiers %b and %w.
 	# Measured population, not a guessed family: across every header on this
 	# box the only letters of this kind are "=Q" and "=q" (SDL_endian.h, which

@@ -1225,6 +1225,10 @@ const
     and has to be raised WITH it. }
   TLS_USER_FIRST_OFF = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8;   { 1152 today }
   TLS_USER_BYTES     = 3072;
+  { who holds an inline-asm register in CAsmBuildBlock's used[] table. A plain
+    Boolean could not tell a legal output/input tie from two inputs colliding. }
+  CASM_REG_FREE    = -2;
+  CASM_REG_CLOBBER = -1;
   TLS_BLOCK_SIZE     = TLS_USER_FIRST_OFF + TLS_USER_BYTES;
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means

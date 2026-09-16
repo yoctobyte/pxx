@@ -8141,6 +8141,7 @@ function CAsmBuildBlock(isExt: Boolean): Integer;
 var
   i, j, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
   used: array[0..15] of Boolean;
+  usedBy: array[0..15] of Integer;   { who took used[r]: CASM_REG_FREE, CASM_REG_CLOBBER, or an operand index — see the fixed-register loop }
   opOwn: array[0..MAX_CASM_OPERANDS-1] of Boolean;
   saveReg: array[0..MAX_CASM_OPERANDS-1] of Integer;
   saveCount: Integer;
@@ -8180,7 +8181,7 @@ begin
   end;
 
   saveCount := 0;
-  for r := 0 to 15 do used[r] := False;
+  for r := 0 to 15 do begin used[r] := False; usedBy[r] := CASM_REG_FREE; end;
 
   { ---- registers the block has already spoken for ---- }
   rest := CAsmClobRegs;
@@ -8196,6 +8197,7 @@ begin
         Error('C: inline asm clobbers "' + nm + '", which is not a register'
               + ' this backend knows');
       used[reg] := True;
+      usedBy[reg] := CASM_REG_CLOBBER;
     end;
   end;
 
@@ -8207,9 +8209,55 @@ begin
     if fixed >= 0 then
     begin
       if used[fixed] then
+      begin
+        { A FIXED OUTPUT AND A FIXED INPUT NAMING ONE REGISTER ARE TIED, NOT A
+          COLLISION -- gcc's rule, and the shape of every hand-rolled syscall
+          wrapper (musl, the kernel's own headers, anything that talks to the
+          kernel without libc):
+
+              __asm__("syscall" : "=a"(r) : "a"(158L) : "rcx","r11","memory")
+
+          used[] recorded only THAT a register was spoken for, never BY WHAT, so
+          this legal pairing, two inputs colliding, and an operand colliding with
+          a clobber collapsed into one refusal. usedBy[] is that missing half.
+
+          NOT A BLANKET RELAXATION, and the three rows that must STAY errors were
+          measured against gcc rather than reasoned about (2026-09-16):
+
+            "=a"(r) : "a"(n)                 gcc accepts, runs        <- only this changes
+            "=&a"(r) : "a"(n)                gcc: impossible constraints
+            "=a"(r) : "a"(n) : "rax"         gcc: impossible constraints
+            "=r"(r) : "a"(a), "a"(b)         gcc: impossible constraints
+
+          EARLY-CLOBBER IS THE ONE THAT WOULD SILENTLY MISCOMPILE if it were let
+          through, which is why it is tested here and not left to the earlier
+          earlyclobber sweep: that sweep runs BEFORE this loop and reads TiedTo,
+          so a tie minted here is invisible to it. `&` says the output is written
+          before the inputs are read; tying an input into it asks for the sharing
+          the `&` forbids, and the input's value would be destroyed before the
+          block consumed it -- a wrong VALUE, no diagnostic. }
+        if (usedBy[fixed] >= 0) and (usedBy[fixed] < CAsmOutCount)
+           and (i >= CAsmOutCount) then
+        begin
+          if CAsmOps[usedBy[fixed]].Early then
+            Error('C: inline asm input "' + CAsmOps[i].Raw
+                  + '" names the same register as the earlyclobber output "'
+                  + CAsmOps[usedBy[fixed]].Raw + '", which is written before the'
+                  + ' inputs are read — drop the "&" if they really do share');
+          { tie it to that output and let the partner supply the register, the
+            same route the explicit "0" spelling already takes }
+          CAsmOps[i].TiedTo := usedBy[fixed];
+          Continue;
+        end;
+        if usedBy[fixed] = CASM_REG_CLOBBER then
+          Error('C: inline asm wants register constraint "' + CAsmOps[i].Raw
+                + '" but that register is in the clobber list — an operand and a'
+                + ' clobber cannot share a register');
         Error('C: inline asm wants register constraint "' + CAsmOps[i].Raw
-              + '" but that register is already taken by another operand or a'
-              + ' clobber');
+              + '" but that register is already taken by operand '
+              + AIntToStr(usedBy[fixed]) + ' ("' + CAsmOps[usedBy[fixed]].Raw
+              + '") — only a fixed OUTPUT and a fixed INPUT may share one');
+      end;
       { A FIXED-register constraint can name a register the caller expects to
         survive; the pool never picks one. `cpuid` writes ebx and busybox
         procps/powertop.c spells "=b", so there is nothing for us to re-choose
@@ -8228,6 +8276,7 @@ begin
       end;
       opReg[i] := fixed;
       used[fixed] := True;
+      usedBy[fixed] := i;
     end;
   end;
 
