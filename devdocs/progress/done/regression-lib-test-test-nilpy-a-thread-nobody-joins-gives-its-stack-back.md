@@ -43,3 +43,6 @@ expect_same: MISMATCH [test_nilpy_threadstack]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-16 — auto-closed by the borg watcher: `lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy` passes at 28d8539fec57 (tier full); it was red at e977f78c3199. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
