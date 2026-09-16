@@ -27575,3 +27575,73 @@ with `TR` at 8 bytes, `SizeOf(fld[0])` answering 8 cannot be told from the
 pointer-sized answer a half-working path emits. `TR` is 12 bytes in
 `test/test_sizeof_array_field.pas` for exactly that reason — see CLAUDE.md,
 "choose a probe whose right answer differs from the default".
+
+## TEST WHAT YOUR FIX SHOULD **NOT** CHANGE — your probe population is the DEFECTIVE inputs, and the damage lands in the correct ones
+
+CLAUDE.md already has the instrument form of this: *"a control from the wrong
+population passes and certifies the broken instrument."* This is the **fix**
+form, and it points the other way:
+
+> When you FIX a defect, your probe population is the **defective** inputs, and
+> the fix's damage lands in the **correct** inputs — the ones you are not
+> testing precisely because they were never broken.
+
+Measured 2026-09-16 (frankb-56, Track C), `_Static_assert` at file scope. The
+handler went in as
+
+```pascal
+else if (CurTok.Kind = tkIdent) and
+        ((CurTok.SVal = '_Static_assert') or (CurTok.SVal = 'static_assert')) then
+  if not CTryParseStaticAssert then Next     { <-- no begin/end }
+else if ...
+```
+
+Pascal binds the following `else` to the **inner** `if`, so the whole else-if
+chain silently re-parented. It compiled. It **self-hosted clean** — the
+fixedpoint cannot see a construct `compiler.pas` never writes, and
+`compiler.pas` is Pascal. And then a **true** assertion hung the top-level walk.
+
+**The false-assertion probe still PASSED.** That is the mechanism worth keeping,
+and it is not "I forgot a row". `Error()` longjmps out of the mangled chain
+before the mangled chain can do any damage, so the one input the entire ticket
+is about — a **failing** static assertion — takes an exit path that never
+reaches the defect the fix introduced. Every input that is *supposed* to
+compile walks straight into it.
+
+**A green on the defect you are fixing is the least informative row in the run,
+and it is the row everyone leads with.** It was caught only because the matrix
+happened to run the TRUE control immediately after the FALSE one.
+
+The discharge is one row and it is cheap: **for every case your fix makes fail,
+add the case it must still let through** — and vice versa. Concretely, in a
+diagnostics fix that means both truth values at every site, not just the one the
+ticket named:
+
+```
+scope         false assertion        true assertion
+file          must REFUSE            must COMPILE AND RUN   <-- the row that hung
+struct body   must REFUSE            must COMPILE AND RUN
+union body    must REFUSE            must COMPILE AND RUN
+block         must REFUSE            must COMPILE AND RUN
+```
+
+**Two corollaries from the same day, same seat:**
+
+- **A `begin`/`end` that exists to stop a re-parent must SAY SO**, because it
+  looks removable to the next reader and removing it is silent. The one in
+  `cparser.inc` carries a comment naming what it is load-bearing against.
+- **The complement instinct generalises past control flow.** The same fix puts
+  an assertion inside a `struct` body, so the fixture asserts the struct still
+  lays out identically (`7 9 16` under pxx and gcc). A struct whose assertion
+  perturbed its layout would compile, refuse correctly, and pass **every row in
+  the diagnostics table** — that table is entirely about messages and cannot see
+  a byte. Ask what your assertion is physically able to observe (CLAUDE.md,
+  *"match the assertion class to the defect class"*), then add the row that can
+  observe the other thing.
+
+**Venue, said out loud because CLAUDE.md asks for it:** playbook, not CLAUDE.md.
+Merit yes; **recurrence no** — one subsystem, one day. It is the third
+guard-that-cannot-fire of that day (this probe, the busybox banner control, and
+`_Static_assert` itself as a guard in user code), but all three are the
+**existing** rule working, which argues against a new line at startup cost
+rather than for one.

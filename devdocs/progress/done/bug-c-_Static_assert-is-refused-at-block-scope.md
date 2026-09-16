@@ -3,7 +3,7 @@ summary: "RESOLVED 2026-09-16: the title named the LOUD half. A FALSE _Static_as
 type: bug
 track: C
 prio: 70
-status: backlog
+status: done
 created: 2026-09-16
 found-by: frankb-56
 tags: [c-frontend, c11]
@@ -145,3 +145,13 @@ rows described the shape of the hole and not a verdict on the fix. I ran the sam
 rows here before acting on them.
 
 Gate: `make compiler/pascal26` converged after 1 round (7c0d39cb5e1b).
+
+## Log
+
+- 2026-09-16 — fixed: one `CTryParseStaticAssert` wired at file, block and
+  struct/union scope, evaluating through `CEvalConstExpr`; ten scope/truth
+  combinations agree with gcc, commit 76d6c6428. The method finding (a fix's
+  damage lands in the inputs that were never broken, and `Error()` escaping
+  means the ticket's own row still passes) is banked in
+  `devdocs/dev/debugging-playbook.md`, "TEST WHAT YOUR FIX SHOULD **NOT**
+  CHANGE".
