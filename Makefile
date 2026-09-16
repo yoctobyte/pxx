@@ -36196,6 +36196,14 @@ endif
 	# wrong-polarity filter reddens that diff, so it is a guard that can fail.
 	$(PXX_STABLE) -Fulib/rtl test/lib_findfirst.pas $(TESTTMP)/lib_findfirst
 	tools/expect_same.sh lib_findfirst "$$($(TESTTMP)/lib_findfirst $(TESTTMP)/ff_sandbox | tail -1)" "total ok 44 / 44"
+	# GetDir and the path-separator constants. The load-bearing rows are the
+	# two a CONSTANT would pass: the fixture changes the working directory and
+	# requires GetDir to follow, and pre-fills the var parameter with a
+	# sentinel and requires it overwritten. Values checked against fpc from one
+	# directory (eight rows, byte-identical), with the harness made to redden
+	# on a wrong separator set first.
+	$(PXX_STABLE) -Fulib/rtl test/lib_getdir.pas $(TESTTMP)/lib_getdir
+	tools/expect_same.sh lib_getdir "$$($(TESTTMP)/lib_getdir | tail -1)" "total ok 27 / 27"
 	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
 	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
 	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"

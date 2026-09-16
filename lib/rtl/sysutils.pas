@@ -1370,6 +1370,69 @@ function GetCurrentDir: string;
 function SetCurrentDir(const NewDir: string): Boolean;
 function RenameFile(const OldName, NewName: string): Boolean;
 
+{ ---- The path-separator constants and GetDir -----------------------------
+
+  PLACEMENT DIVERGES FROM FPC ON PURPOSE, AND IT IS A REAL DIVERGENCE, not a
+  detail: fpc declares all four of these in SYSTEM (systemh.inc:1509,
+  sysunixh.inc:31-36), so they are visible with no `uses` at all. pxx's System
+  is `compiler/builtin/builtin.pas`, which states in its own header that it
+  contains no syscalls -- and GetDir is getcwd. Putting it there would mean
+  layering the PAL into the one unit that documents having none, and it would
+  be INERT until the next pin besides, because the pinned compiler resolves
+  builtin from its OWN snapshot while resolving lib/rtl from the live tree.
+
+  So it lives here, where the machinery already is, and the cost is stated
+  rather than hidden: `GetDir(0, s)` in a program that does not use SysUtils
+  compiles under fpc and does not compile here. Every caller that has turned up
+  so far does filesystem work and already uses SysUtils -- fpc's own
+  cfileutl.pas among them -- so nothing real is blocked, but a program CAN
+  reach it. Moving them to System is a separate, pin-gated change. }
+const
+  { fpc sysunixh.inc:31. }
+  DirectorySeparator = '/';
+  { fpc sysunixh.inc:35, and the surprise is deliberate: BACKSLASH IS IN THIS
+    SET ON UNIX. fpc accepts either byte as a separator when TESTING a path
+    (this set is what `path_absolute` asks), while only ever WRITING '/'. A
+    reimplementation that "corrects" it to ['/'] silently changes how every
+    caller classifies a Windows-shaped path. }
+  AllowDirectorySeparators: set of Char = ['\', '/'];
+  { fpc sysunixh.inc:36. Empty on unix -- there are no drive letters. Carried
+    rather than omitted because callers TEST it, and an absent constant is a
+    compile error where an empty set is the correct answer. }
+  AllowDriveSeparators: set of Char = [];
+
+  { THE REST OF FPC'S sysunixh.inc:29-47 CONST BLOCK, added as one group rather
+    than one at a time. DriveSeparator was NOT in the first version of this
+    change -- only the two names the corpus wall happened to sit on -- and the
+    corpus promptly produced it as the next head 178 lines further down the
+    same file. One block in fpc's source is one group here; splitting it means
+    re-measuring the whole corpus for a one-line constant.
+
+    DRIVESEPARATOR IS AN EMPTY STRING ON UNIX, not a character. `Pos(DriveSeparator, s)`
+    is real fpc code (cfileutl.pas:696) and answers 0, which is how a
+    drive-letter scan is made to find nothing on a platform without drives. }
+  DriveSeparator = '';
+  ExtensionSeparator = '.';
+  PathSeparator = ':';
+  LFNSupport = True;
+  maxExitCode = 255;
+  { 4096 on Linux specifically -- the BSDs are 1024 in the same file. The value
+    tracks the KERNEL, so it is not a portable constant to reuse elsewhere. }
+  MaxPathLen = 4096;
+  UnusedHandle = -1;
+
+{ fpc sysunixh.inc:52-53. Typed constants, not `const`: fpc lets a program
+  ASSIGN to these to describe a mounted filesystem that differs from the
+  platform default, so they are writable here too. }
+const
+  FileNameCaseSensitive: Boolean = True;
+  FileNameCasePreserving: Boolean = True;
+
+{ fpc systemh.inc:1515. The current directory, WITHOUT a trailing separator
+  (measured against fpc, not assumed). `DriveNr` is accepted and IGNORED, as it
+  is on every fpc unix target -- it exists for DOS-descended ones. }
+procedure GetDir(DriveNr: Byte; var Dir: AnsiString);
+
 { Absolute, '.'/'..'-collapsed form of FileName, relative to the CURRENT
   directory. Purely lexical after the cwd prefix — it does not stat anything and
   does not resolve symlinks, which is what FPC does too (measured:
@@ -5875,6 +5938,15 @@ end;
 function SetCurrentDir(const NewDir: string): Boolean;
 begin
   Result := PalChdir(PChar(NewDir)) = 0;
+end;
+
+procedure GetDir(DriveNr: Byte; var Dir: AnsiString);
+begin
+  { DriveNr is ignored, not validated: fpc answers the cwd for ANY value on
+    unix -- measured, GetDir(3, s) equals GetDir(0, s) -- so refusing a
+    non-zero drive would reject code fpc accepts, for a parameter that means
+    nothing on this target. }
+  Dir := GetCurrentDir;
 end;
 
 function GetCurrentDir: string;

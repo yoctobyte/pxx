@@ -922,7 +922,8 @@ histogram. Two independent instances now, not one.
 | 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `d66f128a1` (franks-ee) — **live without a pin** |
 | 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `42e127d6d` (franks-ee) — **live without a pin** |
 | 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **FIXED** `34e3a2fa8` (franks-ee) — **live without a pin** |
-| 11 | `GetDir` (`cfileutl.pas:518`) | RTL | **OPEN — the head of the STUBBED arm**, Track B |
+| 11 | `GetDir` + the `sysunixh.inc` const block (`cfileutl.pas:518`, `:543`, `:696`) | RTL | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 12 | `MkDir`/`RmDir`/`ChDir` + `IOResult` plumbing (`cfileutl.pas:714`) | RTL | **OPEN — the head of the STUBBED arm**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
 This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
@@ -1113,7 +1114,8 @@ census cannot be read as a work estimate.
 | `comphook.pas:397` / `:399` | **RTL type (Track B)** | **NO — live immediately** |
 | `comphook.pas:474` | **RTL (Track B)** | **NO** |
 | `cfileutl.pas:282` | **RTL type (Track B)** | **NO** |
-| `cfileutl.pas:518` | **RTL (Track B)** | **NO** |
+| `cfileutl.pas:518` / `:543` / `:696` | **RTL (Track B)** | **NO** |
+| `cfileutl.pas:714` | **RTL (Track B)** | **NO** |
 
 **So the head of this umbrella is currently an RTL wall, and RTL walls are worth
 strictly more per hour than compiler walls** — the umbrella's own earlier finding,
@@ -1264,3 +1266,68 @@ unrelated assertions fail and looked exactly like an RTL defect. `PChar(literal)
 and `PChar(variable)` are both correct; only the double cast is wrong. Compiler-side
 and therefore inert until a pin, so it is going in as its own change rather than
 riding along with an RTL fix.
+
+## WALL TWELVE — `GetDir`, and the corpus catching a HALF-DONE GROUP mid-change
+
+Measured 2026-09-16, franks-ee. `GetDir` plus fpc's `sysunixh.inc:29-53` const
+block in `lib/rtl/sysutils.pas`. Library-only, **live under pin v410**.
+
+| | before | after |
+| --- | --- | --- |
+| units-OK (stubbed) | 22 | **22** |
+| the wall | 120 | **0** |
+| new head | — | `cfileutl.pas:714` `rmdir`, **120 units** |
+
+**Eleventh null row**, predicted as zero in advance, with the dependency caveat
+named again and again not firing.
+
+**THE FIRST VERSION OF THIS CHANGE WAS HALF A GROUP, AND THE CORPUS SAID SO IN
+ONE RUN.** `GetDir` and `AllowDirectorySeparators` are the two names the wall at
+`:518` and `:543` sat on, so those are what got written. The re-run moved the
+head to `cfileutl.pas:696` — `DriveSeparator`, **a member of the same const block
+in the same fpc include file**, 178 lines further down. The fix was one line.
+
+That is `normalise-dont-special-case`'s sibling rule arriving as a *declaration
+group* rather than as a code path: one `const` block in fpc's source is one group
+here, and taking the two names a diagnostic happened to name is the same mistake
+as fixing one arm of a double case. The whole block went in on the second pass —
+`DriveSeparator`, `ExtensionSeparator`, `PathSeparator`, `LFNSupport`,
+`maxExitCode`, `MaxPathLen`, `UnusedHandle`, and the two writable case flags.
+**The cost of getting this wrong is a full corpus re-measurement for a one-line
+constant**, which is what it cost here.
+
+**`DriveSeparator` is an EMPTY STRING on unix, not a character**, and the row
+that matters is what it DOES: `Pos(DriveSeparator, s)` is real fpc code at
+`cfileutl.pas:696` and must answer 0 — that is how a drive-letter scan finds
+nothing on a platform with no drives. Asserting `Length = 0` alone would pass for
+a constant that `Pos` then choked on, so both are asserted.
+
+**PLACEMENT IS A STATED DIVERGENCE, NOT AN OVERSIGHT.** fpc declares all of this
+in SYSTEM, visible with no `uses`. pxx's System is `compiler/builtin/builtin.pas`,
+whose own header says it contains no syscalls — and `GetDir` is `getcwd`. Putting
+it there would mean layering the PAL into the one unit documented as having none,
+**and it would be inert until the next pin**: measured, the pinned compiler
+resolves `lib/rtl` from the LIVE tree and `builtin` from its OWN snapshot
+(`stable_linux_amd64/default/builtin/`). The two snapshots are byte-identical
+right now, which is exactly the comparison that would wrongly read as "the
+location does not matter". So it lives in SysUtils, and the cost is written into
+the source: `GetDir(0, s)` without `uses SysUtils` compiles under fpc and does not
+compile here.
+
+**Behind this wall there are only TWO errors left in `cfileutl.pas`, and the
+second one is ours:** `rmdir` at `:714` (which needs `MkDir`/`RmDir`/`ChDir` and
+`IOResult` plumbing — fpc's caller wraps it in `{$I-}` and reads `ioresult`), and
+then **`internal parser bug: statement made no progress in block (would hang)` at
+`cfileutl.pas:1495`** — a Track P defect, not an RTL gap. The detail file is what
+shows this: it records every failure per unit, not just the first, which is the
+instrument this umbrella spent five null rows wishing for.
+
+**Values checked against fpc, harness checked for sensitivity.** The same probe
+under both compilers from one directory diffs byte-identical across eight rows,
+then ten more for the const block. The separator set was then deliberately
+narrowed to `['/']` in a scratch RTL copy and the diff reddens — and the FIRST
+attempt at that control was itself wrong: the `sed` did not match, nothing was
+built, and `diff` failed on missing files while the shell reported "CAUGHT IT".
+A guard reporting a verdict for rows where nothing was built is the exact failure
+this umbrella keeps recording; it was re-run with the build asserted and branched
+on before the green was believed.
