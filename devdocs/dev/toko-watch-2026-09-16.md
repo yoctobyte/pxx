@@ -1463,3 +1463,60 @@ before it could bite.
 **It took the CLAUDE.md correction cleanly:** *"I'd rather be told the rule already exists than
 have a paragraph of mine added on top of it."* Its ticket also went prio 30 → 70 in the same
 edit that resolved it — the frontmatter habit arriving about four hours early.
+
+## Check-in 0w — both its corrections accepted, and I flagged a peer for a gap I had myself
+
+**Everything is banked.** `76d6c6428` (`_Static_assert` at all four scopes) is on origin with
+a GREEN gate — self-host fixedpoint PASS, `testmgr quick` PASS, FPC seed canary PASS, and it
+read the verdict line rather than the wrapper. Six Track C/T fixes today, all pushed.
+
+**IT THEN FOUND AN UNBANKED THING I COULD NOT SEE, AND I HAD THE SAME GAP.** None of its six
+fixes had a `LOGBOOK` line; `037100b42` adds all six. I flagged that back — and then audited
+my own two code commits of the day, `47a5d356e` and `64de90285`. **Neither had a logbook line
+either, for six hours.** Banked in `843190d79`.
+
+**Eight unlogged fixes in one day across two seats, neither noticing.** *"Fix it, log one line
+in LOGBOOK.md, move on"* is ONE sentence in CLAUDE.md and the fleet has internalised the first
+clause. **The failure mode is quieter than an unpushed commit:** unpushed work dies at a
+restart and somebody eventually asks about it. An unlogged fix **survives every restart and is
+simply invisible to everyone who is not its author** — the same loss with a longer fuse.
+Recorded in the logbook itself rather than only here, because the logbook is where a reader
+looking for it would be.
+
+**BOTH ITS CORRECTIONS TO 0v ARE ACCEPTED.**
+
+1. **On why the fixedpoint was silent about the hang.** I framed it as "it was mid-gate". Its
+   correction is better and it is a rule, not an excuse: `make compiler/pascal26` **converged
+   CLEAN with the dangling else in the tree, because `compiler.pas` is Pascal and never writes
+   a C parse chain.** That is CLAUDE.md's second scope limit — *"it cannot see a construct the
+   compiler never writes"* — landing on a seat's own fix, and it means **the gate would not
+   have caught it either.** Track P's partial coverage being "worse than none because it looks
+   total" has a C-frontend twin, and this is it.
+
+2. **On which of its fixes was the biggest, it is right and it used my own ranking rule
+   against me.** I called `aceee115e` (busybox rung 1) the biggest. It argues `427769b0c` —
+   the block-scope static silently becoming a stack local — *"would have cost someone a week:
+   a plausible wrong number with no diagnostic, and a one-call test agrees with the bug."*
+   **That is exactly the rule I used one tick earlier** to rank `_Static_assert` above the
+   banner control: a guard OUR USERS wrote beats an instrument WE own. A silent wrong VALUE in
+   user code beats a dead instrument in our tooling by the same argument, and I contradicted
+   myself one tick later. **`427769b0c` is the biggest thing it did today.** `aceee115e` is
+   still nine days of a dead goal-5 criterion and still worth the paragraph.
+
+**It took the placement verdict the way it should be taken and improved on it:** it wrote the
+two-test result INTO the playbook section rather than only into the commit, so a later reader
+sees which test it met and which it did not without finding this exchange. And it named the
+thing it would have got wrong — *"I'd have counted three instances in a day and called that
+recurrence. Three instances of the EXISTING rule working is an argument against a new line,
+not for one."* **That distinction is the load-bearing half of the promotion test** and it is
+not written down anywhere as such; it is implicit in "recurrence, not quality". Noting it here
+rather than promoting it, which would be the same error it just avoided.
+
+**Track C closes.** Queue clear above p40; the two rows above are an idea and an umbrella,
+neither a unit of work. It moves to busybox as the next group — goal 5, and rung 1 is runnable
+for the first time in nine days, which is the right reason to go there now rather than a
+preference.
+
+**Still unresolved and correctly parked: whether `3eb0297f0` was its edit to make.** Neither of
+us settles it; it waits for the 18th, stated as a goal question. **That is the only thing
+today that either seat has escalated rather than decided**, which is the ratio this file wants.
