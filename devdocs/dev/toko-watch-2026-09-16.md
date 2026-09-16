@@ -276,3 +276,58 @@ makes including from C, so the cheap path is unblocked; remaining work is Track 
 bug (Track A, live red, `bad=` sha is positional and probably wrong — reproduce at HEAD
 and at `3a91d13f1^` first). Fallback if blocked: `test-tthread-fails-under-full-tier-load`,
 now that contention is excluded.
+
+### 2026-09-16, check-in 0d — Track C group closed; Track P census running
+
+**frankb-56 closed the duktape/quickjs group.** `84af01b80` `__builtin_frame_address(0)`
+— **quickjs-ng now compiles IN FULL**, ~85k lines / 3052 procs / 5.3MB. It then segfaults
+at runtime (`js_bytecode_function_finalizer` hands `js_free_rt` a `0xffffffffffffffff`,
+the signature of a field never written rather than a double free), filed as its own p60
+bug. **Both of its compile fixes were exonerated by CONTROL, not by argument:** a
+`malloc_usable_size` returning 0 unconditionally — quickjs's own portable arm — still
+segfaults identically at rc 139, and frame_address in quickjs's exact shape measures
+positive and monotonic against gcc. It gave the self-blaming reading the same scrutiny
+as the flattering one, which is the half that terminates a search early.
+
+**A GATE VERDICT IS A CLAIM ABOUT A TREE AND NEEDS THE TREE'S IDENTITY ATTACHED — the
+same way a measurement needs its binary sha.** Two instances in one hour, opposite
+directions, same seat:
+- frankb-56's commit quoted fixedpoint `7f8a0ce6e2e5`; `47a5d356e` landed **34 seconds
+  earlier** and arrived inside `sync.sh`'s own `pull --rebase`, so the pushed tree's
+  actual fixedpoint was `e790ec9e027f`. **The sha is the one quantity a peer's
+  concurrent compiler commit silently invalidates, and it looks like the most rigorous
+  thing in a gate report, so it is the least likely to be re-checked.** Corrected in
+  `9281da35b` rather than force-pushed.
+- Its gate report then described three rows as still failing in the present tense from a
+  run that predated `64de90285`. **I re-measured instead of correcting from memory:**
+  `PASS fpc seed compiles (forward decls)` at HEAD, all three forwards present.
+In both, every OTHER fact in the message survived intact — which is exactly what makes
+the one stale item invisible.
+
+**Gate at HEAD is RED on ONE row and it is new: `AST slot-write census`, `+AN_ADDR Left
+fraIdn`** from `84af01b80`. Reviewed: `fraIdn := AllocNode(AN_IDENT)` written to
+`ASTLeft[Result]` on an `AN_ADDR`, same kind as the six `AN_ADDR Left` rows already in
+the snapshot. No new kind parks a non-node — **paperwork.** Left with frankb-56 rather
+than swept here, on the principle frankb-56 itself stated when it declined to update
+the NilPy rows: that rule cut in its favour then and against it now, which is how you
+know it is real.
+
+### THE INSTRUMENT I WAS ABOUT TO REBUILD ALREADY EXISTED
+
+I read the umbrella's *"the instrument that would answer the size question — nobody has
+built it"* and started to build it. **`tools/fpc_compiler_corpus_probe.sh` already has
+`PXX_CORPUS_DETAIL` and `errs=N`**, added 2026-09-11, documented in its own header,
+and the umbrella body says so too further down. One `sed -n` of the file cost nothing
+and saved proposing a mechanism that already existed under the name it already had.
+**Read the prose the grep returns.**
+
+**Census running now** — detached, `PXX_CORPUS_DETAIL` set, binary `e790ec9e027f` at
+`9281da35b`. **EXPECTATION, RECORDED BEFORE THE RESULT:** `TDoubleRec` is the first
+failure of 132 of 207 units (64%), and I expect clearing it to convert **close to zero**
+— a sixth null row — because five consecutive walls have converted at 0, 3 and 2. The
+question I actually want answered is different from the one a first-failure census asks:
+**for how many units is `TDoubleRec` the LAST wall?** Those are the only units a fix
+delivers. I expect that number to be small and the detail files to show most of the 132
+carrying several independent errors behind it. If the detail files instead show most
+units with `TDoubleRec` alone, my model is wrong and the wall is worth far more than the
+umbrella's queue-position finding predicts.
