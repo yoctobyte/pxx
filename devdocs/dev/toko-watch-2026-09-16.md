@@ -396,3 +396,37 @@ was MEASURED at my tree, not predicted — but quoting it to a seat several comm
 turns a local measurement into something another tree gets checked against and read as a
 divergence. franks-ee's `e790ec9e027f` was right. Same family as frankb-56's fixedpoint
 catch: **a figure that was true about one tree, travelling without it.**
+
+### 2026-09-16, check-in 0f — the census answered, and the expectation held
+
+**My prediction was right and the useful part is what it was right ABOUT.** I said
+`TDoubleRec` would convert close to zero and that the real question was how many units
+have it as their LAST wall. Answer: **0 of 132.** Sixth null row confirmed, and confirmed
+cheaply because it was stated before the run.
+
+**The finding the first-failure census structurally could not show:** all 132 of those
+units hit **exactly two** errors and nothing else — `unknown type: TDoubleRec`
+(`x86_64/cpuinfo.pas:36`) and `too many array initializer elements` (`:281`). **Both
+walls are in ONE FILE.** Not a truncation artefact: 38 units report 1 error, 132 report
+exactly 2, and only one unit in the entire corpus reaches `MAX_REPORTED_ERRORS=20`.
+Totals 21 BOTH-OK / 10 ORACLE-NO / 176 PXX-FAIL, binary `e790ec9e027f` at `9281da35b`.
+
+**The second wall had no ticket.** Now `bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised`
+(p80), and it is **the UNFIXED SIBLING of the record-constant arm `138604b5e` fixed** —
+the exact case `normalise-dont-special-case.md` warns about, sitting unfound for five
+days. Repro is 4 lines; `array[0..0] of set of TF = ([])` is one element against one
+slot and still says "too many", so the DIAGNOSTIC NAMES A COUNT AND THE DEFECT IS NOT A
+COUNT. Isolated by probe: enum bound innocent, set type innocent, a set as an ARRAY
+CONSTANT's element is the whole cause.
+
+**Recorded before anyone starts, so it cannot be discovered as a disappointment:**
+clearing both walls most likely lands the 132 on a **third wall in the same file**, not
+on 132 compiling units. And a complete *reported* failure set is not a guarantee of
+compilation — `ErrorRecover` carries past SEMANTIC failures only, so a halting
+diagnostic later in a unit never appears in the detail file at all.
+
+**`cpuinfo.pas` is the third time this umbrella has recorded one file's contents wearing
+the shape of a population** (after `cclasses.pas` at :895, :1327, :1726). That is the
+pattern, not a coincidence, and it is why unit counts must not rank a ticket.
+
+Offered to franks-ee alongside optdiff shard5; frankb-56 has the glob pair.
