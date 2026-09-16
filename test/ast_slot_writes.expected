@@ -9,6 +9,7 @@ AN_ADDR Left apNode
 AN_ADDR Left destNode
 AN_ADDR Left elemNode
 AN_ADDR Left fieldNode
+AN_ADDR Left fraIdn
 AN_ADDR Left identNode
 AN_ADDR Left lv
 AN_ADDR Left node
