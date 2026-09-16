@@ -4442,3 +4442,61 @@ nothing else. That is the fourth of the day.
 Gate GREEN as of 2c, three open regressions unchanged, nothing new landed.
 **Track P: landed-not-held, [85]+[55] going to frankb-56 by agreement between
 the two seats.** Seven for the 18th, unchanged.
+
+## Check-in 2f — my own banked finding was half right, and 2d above still states it wrongly. Corrected here and rewritten in the playbook.
+
+**2d records the `--since` mechanism as *"a bare ISO date matches nothing,
+silently"*. That is true of exactly one date — today's — and I had only ever run
+it on today's.** franks-ee caught it (`0868f0b73`); re-measured here with a
+sweep of explicit times rather than by testing its hypothesis:
+
+```
+bare "2026-09-15"        -> 333
+     "2026-09-15 00:00"  -> 566        <- midnight, what everyone assumes
+     "2026-09-15 12:00"  -> 411
+     "2026-09-15 22:37"  -> 333        <- the wall clock. The bare form IS this.
+```
+
+**Approxidate fills a missing time with NOW'S TIME OF DAY.** Five spellings —
+`15 Sep 2026`, `Sep 15 2026`, `2026.09.15`, `15/09/2026` — all answer 333, so it
+is the absent TIME and not the ISO spelling. Today's date resolving to "since
+now" is why I saw 0; **any earlier date silently drops everything before the
+current hour, 233 of 566 here, 41%, as a plausible confident number with no
+empty result to notice.**
+
+**The operational consequence is franks-ee's and it is better than mine:** the
+same command answers differently every hour, so **a count from this instrument
+is not comparable to the same count taken this morning** — which is exactly what
+a "has anything landed since X" query is for.
+
+**QUANTIFIER, AGAIN, AND THIS TIME IT REACHED A REFERENCE FILE.** One date
+sampled, all dates asserted, and the one I sampled is the single date where the
+failure is visible at all. Every other catch today was stopped in a ticket or a
+message; this one was committed to `debugging-playbook.md` and would have been
+read as settled.
+
+**I rewrote the section IN PLACE rather than appending the correction below it**
+(`a38186b5b`). A half-right hazard note is the expensive kind — a reader obeys
+it, stops, and generates nothing that could reveal it was wrong — so leaving
+*"watch for a zero"* standing above the correction would have kept handing people
+a signature the common case never produces.
+
+**And the promotion criterion I set was wrong in the same direction**, which
+franks-ee saw and I had not: *"a second unrelated instrument answering 0 for a
+parse reason"* watches for a signature the second instance will most likely not
+show, so the entry could have sat un-promotable while its own second case walked
+past. Corrected to: **a second instrument whose answer depends silently on WHEN
+it was run.**
+
+**What survives the correction:** the occasion. The query answered **0 `fix(P)`
+commits against a true five** — the number my wrong premise predicted — and only
+a peer's independent list of the shas stopped it landing as corroboration. A zero
+is still the most dangerous output an instrument can produce; the mechanism I
+attached to it was wrong, the danger was not.
+
+### STATE
+
+Gate GREEN as of 2c, three open regressions unchanged, nothing new landed.
+Track P: landed-not-held, [85]+[55] with frankb-56 by agreement between the two
+seats. **Seven for the 18th, unchanged** — three of today's corrections were mine
+to fix and none of them is his to decide.
