@@ -3398,3 +3398,109 @@ Logged as a confirmation, not a promotion.
 **Four open regressions unchanged. Gate GREEN. Now SIX for the 18th:
 `3eb0297f0`, goal-5 wording, the two-arm corpus question, Track B's gate down
 under the pin, the pgrep-rule placement, and the census starving 229 rows.**
+
+## Check-in 1t — my correction was wrong, its masking rule reproduces, and ANY conversion masks, not just a widening one
+
+### I MADE THE EXACT ERROR I HAD APPLIED TO TWO PEOPLE TODAY
+
+In 1s I measured four arrangements, found declaration order irrelevant in all
+four, and wrote **"declaration order decides nothing"** — then told franks-ee to
+amend a comment, a ticket and a test on the strength of it. **Every row I ran was
+correct and the QUANTIFIER was the invention.** I varied declaration ORDER while
+holding the call shape fixed at a single parameter, and concluded about all call
+shapes. **My probe could not reach the subject**: with one `var` parameter and
+nothing else, there is no other argument available to mask anything.
+
+**Had it applied my correction, the corruption would have come back** in the exact
+spelling fpc's own `charset.pp` uses. It declined and went looking for a third
+variable instead of picking a winner between two measurements — which is the
+right move and not the tempting one.
+
+*This is the third time today this file records the quantifier rule firing, and
+the first time it fired on me. I applied it to a peer's "either way" at 1f and to
+another's "byte-identical" at 1m.*
+
+### ITS MATRIX REPRODUCES EXACTLY, ROW FOR ROW
+
+Two overloads, `var n: Int64` declared FIRST, the exact `var n: Integer` row also
+declared — the arrangement my rule says must always bind correctly:
+
+```
+procedure T(c: Int64; var n: Int64) / (c: Int64; var n: Integer)
+  T(w, a)            w is Int64, no conversion      a=7  guard=0   correct
+  T(Integer(5), a)   widening on c                  a=-1 guard=-1  CORRUPTS
+  T(10, a)           widening on c                  a=-1 guard=-1  CORRUPTS
+procedure T(c: Integer; ...)  — no conversion possible on c
+  T(Integer(5), a)                                  a=7  guard=0   correct
+  T(10, a)                                          a=7  guard=0   correct
+```
+
+**THE RULE: the `var` parameter's exact match is honoured only while every OTHER
+argument also matches exactly.** One by-value argument needing a conversion masks
+it, and then declaration order decides. Both our measurements were sound and
+**neither of our stated rules was the real one.**
+
+**And it is conditional on the CALL SITE**, which is the part that makes it
+vicious: same declarations, same callee, `BlockRead(f, buf, someInt64, c)` binds
+correctly while `BlockRead(f, buf, someLongInt, c)` corrupts. **A reader who
+probes with an Int64 count concludes the ordering does not matter and is correct
+about their probe.** That is this file's own isolation-versus-route rule in a
+fourth subsystem.
+
+### TWO EXTENSIONS I MEASURED, AND ONE OF THEM CORRECTS ITS RULE THE SAME WAY IT CORRECTED MINE
+
+```
+Q1  one converting arg, alongside an exactly-matching one:
+    T(w, w, a)    both exact         a=7  guard=0   correct
+    T(w, 10, a)   ONE converts       a=-1 guard=-1  CORRUPTS
+    T(10, 10, a)  both convert       a=-1 guard=-1  CORRUPTS
+
+Q2  is it specific to WIDENING?
+    c: SmallInt, T(w, a)   Int64 actual -> SmallInt param = NARROWING
+                                           a=-1 guard=-1  CORRUPTS
+    c: SmallInt, T(SmallInt(5), a)  exact  a=7  guard=0   correct
+```
+
+**Q1: a single converting argument masks even when another argument matches
+exactly** — so the var-exactness term is not outvoted by a majority, it is
+defeated by one dissenter.
+
+**Q2: it said "a widening conversion". Narrowing masks too.** The rule is **ANY
+conversion on any by-value argument**, which is strictly wider than what its
+ticket will say if it writes up what it measured. Sent to it, not filed by me —
+its ticket, its finding, and it is mid-run.
+
+Its read that the scorer is treating a `var` parameter's exactness as **one term
+in a sum rather than as a precondition** is consistent with all eleven rows now
+on the record, and Q1 is the row that most supports it. It is holding that as a
+**separable** second defect and declining to file it twice before separability is
+confirmed, which is the right call.
+
+### THE TWO JUDGEMENT CALLS IT MADE, BOTH BETTER THAN MINE
+
+- **It is holding the textfile.pas edit until the chunked corpus sweep finishes,
+  because `lib/rtl` is one of that sweep's inputs.** That is *do not touch the
+  instrument while it is measuring*, applied to a file it owns, against its own
+  urge to correct a comment it now knows is wrong. **I gave it a live-comment
+  argument for editing immediately and it was right to weigh the running
+  measurement higher.**
+- **It declined to move its two rows above the census** — and its reason beats
+  mine: rescuing 2 of 229 is arbitrary, makes the recipe harder to reason about
+  for a benefit that is its own and not the lane's, and **if the owner moves the
+  census, all 229 come back at once including its two.** I had offered the
+  reorder as permissible; it declined on the strength of my own number. Accepted.
+
+**It asked whether it or I should put the census question up. I hold the
+owner-facing seat, so I carry it** — with the 229/287 number attached, as a
+yes/no. It is not duplicating it at him.
+
+### THE SWEEP
+
+Killed twice by box memory at 196/207 and 128/207. It is now running **six
+foreground chunks with the partition ASSERTED** — union equals the glob, 207
+distinct, no overlap — so a kill costs one chunk rather than the run. That is a
+positive control on a partition, which is the correct shape and was prescribed
+in the probe's own header by its own earlier self. **Prediction and falsifier
+unchanged and still on the record before the result.**
+
+**Four open regressions unchanged. Gate GREEN. Six for the 18th.**
