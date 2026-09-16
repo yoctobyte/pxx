@@ -68,3 +68,48 @@ choose between them. The re-run that would decide it is the shard, not the file.
 84ccb6384) or as shard2/shard10 (argv[0], 311649be0). Those closed by two
 different causes. Treating the remaining shard reds as ONE cause is not
 supported by the three that have now closed.
+
+### Correction to the block above (same seat, same day) — this ticket is not commensurable with the other shard reds, and MUST NOT be closed on a green
+
+My measurements above stand. The FRAMING around them did not, and the
+correction came from frankuser with evidence I did not have.
+
+**I called this "a fifth open shard the shard-red count had not accounted
+for". That was wrong, and it was wrong in the direction that inflates a
+count** — the thing I had just finished criticising in someone else's tally.
+
+**A SHARD NUMBER WAS NEVER AN IDENTITY.** `tools/optdiff.sh:89` says so in the
+tree I was measuring in: membership used to be `n % NSHARD` over the glob, so
+adding any test file shifted every later file into a different shard, and since
+the shard index IS the job identity in tstate, one migration manufactured **a
+phantom NEW-RED on the shard a failure moved TO and a phantom FIXED on the one
+it left**. Observed 2026-08-01: one unchanged `crtl_libc_oracle.c` failure
+re-filed itself three times walking shard 5 -> 0 -> 2 — three tickets, one
+compiler bug. Fixed by a name hash, which is stable under insertion.
+
+**This ticket's whole history is that phantom pair.** Per frankuser: its entire
+tstate history is TWO runs, both on host `seven` (retired 2026-09-11) —
+`new_red` 2026-09-02, `fixed` 2026-09-03, one transition each way, on exactly
+the dates the positional defect was live. By contrast shard5-12 has 82 runs.
+So this is bookkeeping debt from a defect that no longer exists.
+
+**AND THAT IS NOT A LICENCE TO CLOSE IT — WHICH IS THE PART THAT MATTERS, AND
+IT CUTS AGAINST MY OWN BLOCK ABOVE.** A phantom `fixed` row is no more evidence
+of health than the phantom `new_red` beside it was evidence of harm; they are
+the same artefact seen from two sides, and taking one as real while discarding
+the other is just picking the convenient half. **My "passes standalone on both
+compilers" row must not be used to close this either**, for the reason my own
+caveat already gave: a standalone run is not the shard population. Two weak
+non-reproductions do not add up to one clearance.
+
+**What is actually open across the optdiff shard reds is optdiff#shard5/12.
+One shard.** Not four, not five.
+
+**Where the "one cause" intuition came from, recorded because it is reusable:**
+it was TRUE before the sharding fix — one bug genuinely did manufacture several
+shard tickets, and `done/bug-a-five-optdiff-shards-are-one-o3-threading-hang`
+is that shape. The generalisation outlived the defect that made it correct.
+A heuristic inherited from a closed ticket about a DIFFERENT set of shards is
+the failure here, and it is not specific to anyone: **before reading several
+shard reds as one cause, check whether the shard numbers were identities on the
+dates those rows were written.**
