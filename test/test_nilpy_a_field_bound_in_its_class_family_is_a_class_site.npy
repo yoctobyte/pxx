@@ -1,0 +1,97 @@
+# A field bound throughout its class FAMILY to one class is a class site for a
+# bare parameter, read token-only from every `self.fld = <expr>` binding, so a
+# method's parameter is typed from a site in a class the parser has not
+# registered yet (a later class in the file, or a later module) -- the
+# ordering wall the lekkerzeilen demo hit at Quat.rotate (2026-09-16). Also
+# `V.zero()`, a static method called through the class name, now types as V.
+# Controls that must stay variant: a field a subclass rebinds to another class
+# (scale.s), a field written from outside (`b.m = W(2.0)`, mix.m), a field
+# that is a tuple target (twice.t), and a class attribute of the same name
+# (attr.a). Every control's value row would break under a wrong claim.
+class V:
+    def __init__(self, x=0.0, y=0.0):
+        self.x = x
+        self.y = y
+
+    @staticmethod
+    def zero():
+        return V(0.0, 0.0)
+
+    def dot(self, o):
+        return self.x * o.x + self.y * o.y
+
+    def conj(self):
+        return V(-self.x, -self.y)
+
+    def rot(self, v):
+        return v.dot(self)
+
+    def inv(self, v):
+        return self.conj().rot(v)
+
+    def norm2(self, w):
+        return w.dot(w)
+
+    def scale(self, s):
+        return s.dot(self)
+
+    def mix(self, m):
+        return m.dot(self)
+
+    def twice(self, t):
+        return t.dot(t)
+
+    def attr(self, a):
+        return a.dot(self)
+
+
+class W:
+    def __init__(self, k):
+        self.k = k
+
+    def dot(self, o):
+        return self.k * 2.0
+
+
+class B:
+    c = 7
+    def __init__(self, w):
+        self.w = w
+        self.t = V.zero()
+        self.u = V(1.0, 2.0)
+        self.s = V(3.0, 4.0)
+        self.m = V(1.0, 1.0)
+        self.n = V(2.0, 2.0)
+        self.q = V(0.5, 0.5)
+        self.c = V(1.0, 0.0)
+
+    def reset(self):
+        self.n = V(0.0, 1.0)
+
+    def swap(self):
+        self.q, self.w = V(1.0, 0.0), 1
+
+    def step(self):
+        return self.t.dot(self.u) + self.u.rot(self.t) + self.u.inv(self.t) + self.t.norm2(self.n)
+
+    def more(self):
+        return self.u.scale(self.s) + self.u.mix(self.m) + self.u.twice(self.q) + self.u.attr(self.c)
+
+
+class D(B):
+    def __init__(self, w):
+        B.__init__(self, w)
+        self.s = W(1.5)
+
+
+b = B(3)
+print(b.step())
+b.reset()
+print(b.step())
+print(b.more())
+b.m = W(2.0)
+b.swap()
+print(b.more())
+d = D(4)
+print(d.more())
+print("FAMILY OK")

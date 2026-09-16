@@ -6029,6 +6029,35 @@ begin
        PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi, PyInferBodyLo, PyInferBodyHi,
                         GetTokenStr(i)) then
       tk := tyUnknown;
+    { The CLASS itself as a receiver -- `Vec3.zero()`, a static or class
+      method called through the class name -- is the method's return type,
+      exactly as through an instance. The token lookup above answers "class"
+      for the name, so the identifier arms below (which resolve a method on a
+      receiver) never saw it and the call was widened to a variant: `V.zero()`
+      was untyped while `V(0.0, 0.0)` beside it was V, so a field bound to
+      the former had no class (the field-chain probe, 2026-09-16). Only a
+      call: `Cls.attr` is a class attribute, not the instance field of that
+      name. A selector after the call is left to the walk as before. }
+    if (tk = tyClass) and (Tokens[i].Kind = tkIdent) and (i + 3 < endIdx) and
+       (Tokens[i + 1].Kind = tkDot) and (Tokens[i + 2].Kind = tkIdent) and
+       (Tokens[i + 3].Kind = tkLParen) and PyIsClassTypeExact(GetTokenStr(i)) and
+       ((PyEndOfGroup(i + 3, endIdx) >= endIdx) or
+        (Tokens[PyEndOfGroup(i + 3, endIdx)].Kind <> tkDot)) then
+    begin
+      ci := FindUClassNonRecord(GetTokenStr(i));
+      si := -1;
+      if ci >= 0 then si := FindUMeth(ci, GetTokenStr(i + 2));
+      if si >= 0 then
+      begin
+        tk := Procs[UMthProc_[si]].RetType;
+        if (tk = tyClass) and (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+          PyInferLastCi := ProcRetRecId[UMthProc_[si]] - REC_UCLASS_BASE;
+        if tk = tyUnknown then tk := tyVariant;
+        i := PyEndOfGroup(i + 3, endIdx);
+        Result := PyWiden(Result, tk);
+        Continue;
+      end;
+    end;
     { A type NAME followed by '(' is a conversion CALL, not a bare type: it must
       go through the call branch below, which knows the conversion's result type
       AND skips the argument group. Reading it as a type here typed `str(d)` as
@@ -6264,6 +6293,25 @@ begin
           end;
           if (fldAt > i) and (fldTk <> tyUnknown) then
           begin
+            { An UNRESOLVED trailing selector -- `self.inner.z` where `z` is not
+              a field of inner's class (a class attribute, a dynamic attribute)
+              -- is not the last field's class. The chain is a variant, and
+              the selectors (and a call on the last one) are consumed here so
+              nothing downstream widens them on their own. Reachable in a
+              pre-pass scan only since `self` resolves through PyInferSelfCi:
+              test_nilpy_annotated_class_attribute segfaulted on the tier
+              (2026-09-16) with `traverse` typed Inner, the class of
+              `self.inner`, while its body handed back the attribute. }
+            while (fldAt + 2 < endIdx) and (Tokens[fldAt + 1].Kind = tkDot) and
+                  (Tokens[fldAt + 2].Kind = tkIdent) do
+            begin
+              fldAt := fldAt + 2;
+              fldTk := tyVariant;
+              PyInferLastCi := -1;
+            end;
+            if (fldTk = tyVariant) and (fldAt + 1 < endIdx) and
+               (Tokens[fldAt + 1].Kind = tkLParen) then
+              fldAt := PyEndOfGroup(fldAt + 1, endIdx) - 1;
             { A SUBSCRIPT of the chain -- `self.items[idx]` -- is the ELEMENT,
               a variant, not the container: skip the bracket group(s), as the
               subscript-of-a-call arm below does for `f(x)[0]`. This arm was
@@ -39497,6 +39545,235 @@ begin
   end;
 end;
 
+{ ---- a field's class, token-only, from every binding in its class family ----
+
+  `self.torque` as a call-site ARGUMENT, in a method of a class the parser has
+  not registered yet. The expression typer answers a field only once the
+  field's class has had its members registered, and classes are registered
+  one module at a time in import order (and within a module, one class at a
+  time), so a site in sim.py's Body.step could not type `self.torque` while
+  math3d.py's Quat.rotate was asking -- and the answer is memoised at that
+  first ask. The FIELD'S class (Vec3) is registered by then; only the
+  ENCLOSING class (Body) is not. So read the field the way the field typer
+  will: every statement-level `self.<fld> = <expr>` in the class body and in
+  every class related to it by inheritance (base or derived, either way), the
+  expression typed with no def in hand, all agreeing on one class. Certain,
+  or nothing: any write to `.<fld>` through a receiver that is not a bare
+  `self` anywhere in the closure, an augmented, tuple, `for` or `as` binding,
+  a class attribute of that name, an annotated binding, or a binding the typer
+  cannot answer, and the field is unknown here exactly as before.
+  Memoised per (class, field); a name, not a class index, like the rest of
+  PyStaticReceiverClass. feature-n-register-every-module-s-classes-before-any-
+  module-s-methods-are-typed names the ordering wall this reads through. }
+var
+  PyTFCMemoCls: array[0..2047] of AnsiString;
+  PyTFCMemoFld: array[0..2047] of AnsiString;
+  PyTFCMemoAns: array[0..2047] of AnsiString;
+  PyTFCMemoN: Integer = 0;
+  PyTFCBusy: Boolean = False;
+
+function PyTokBodyEnd(bs, limit: Integer): Integer;
+{ the DEDENT closing the suite whose first token is bs, or -1. Bounded by
+  limit, not MainProgramTokCount: the class may sit in a module the parser has
+  not reached, past the current module's end. }
+var i, depth: Integer;
+begin
+  Result := -1;
+  depth := 1;
+  i := bs;
+  while i < limit do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Result := i; Exit; end;
+    end;
+    Inc(i);
+  end;
+end;
+
+function PyTokClassBody(ct, limit: Integer; var bs, be: Integer): Boolean;
+{ ct = a `class` token; [bs, be) = its suite, exactly as the hoist loop
+  takes it (first body token past `: NEWLINE INDENT`, up to the DEDENT). }
+var j, depth: Integer;
+begin
+  Result := False;
+  if (ct < 0) or (ct + 2 >= limit) or (Tokens[ct].Kind <> tkClass) then Exit;
+  j := ct + 2; depth := 0;
+  while j < limit do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(depth)
+    else if Tokens[j].Kind = tkRParen then Dec(depth)
+    else if (Tokens[j].Kind = tkColon) and (depth = 0) then Break
+    else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
+    Inc(j);
+  end;
+  if (j + 2 < limit) and (Tokens[j].Kind = tkColon) and (Tokens[j + 1].Kind = tkNewline) and
+     (Tokens[j + 2].Kind = tkIndent) then
+  begin
+    bs := j + 3;
+    be := PyTokBodyEnd(bs, limit);
+    Result := be > bs;
+  end;
+end;
+
+function PyTokStmtEnd(s, limit: Integer): Integer;
+{ the NEWLINE (or DEDENT/EOF) ending the statement that runs from s, groups
+  skipped, or -1 }
+var k: Integer;
+begin
+  Result := -1;
+  k := s;
+  while k < limit do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then k := PyEndOfGroup(k, limit)
+    else if Tokens[k].Kind in [tkNewline, tkDedent, tkEOF] then begin Result := k; Exit; end
+    else Inc(k);
+  end;
+end;
+
+function PyTokStmtHasAssign(s, limit: Integer): Boolean;
+{ is there a `=` at group depth 0 between s and the end of its statement? }
+var k: Integer;
+begin
+  Result := False;
+  k := s;
+  while k < limit do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then k := PyEndOfGroup(k, limit)
+    else if Tokens[k].Kind in [tkNewline, tkDedent, tkEOF] then Exit
+    else if Tokens[k].Kind = tkAssign then begin Result := True; Exit; end
+    else Inc(k);
+  end;
+end;
+
+function PyTokIsAugAssign(k: Integer): Boolean;
+begin
+  Result := Tokens[k].Kind in [tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq, tkModEq,
+                               tkTrueDivEq, tkAmpEq, tkPipeEq, tkXorEq, tkShlEq,
+                               tkShrEq, tkPowEq];
+end;
+
+function PyTokenFieldClass(const clsName, fld: AnsiString): AnsiString;
+var m, k, rIdx, lo, hi, bs, be, depth, e, ci, n, root: Integer;
+    cand, other, cname: AnsiString; veto, isSelf: Boolean; t: TTypeKind;
+    sHLo, sHHi, sBLo, sBHi, sSelf: Integer;
+begin
+  Result := '';
+  if PyTFCBusy then Exit;      { a binding's expression asked back into a site: unknown, unmemoised }
+  for m := 0 to PyTFCMemoN - 1 do
+    if (PyTFCMemoCls[m] = clsName) and (PyTFCMemoFld[m] = fld) then
+    begin Result := PyTFCMemoAns[m]; Exit; end;
+  PyTFCBusy := True;
+  cand := ''; veto := False; n := 0;
+  rIdx := 0;
+  while (not veto) and PyPyRangeAt(rIdx, lo, hi) do
+  begin
+    Inc(rIdx);
+    { 1. every `.fld` that is a WRITE through a receiver other than a bare `self` }
+    k := lo + 2;
+    while (k + 2 < hi) and not veto do
+    begin
+      if (Tokens[k].Kind = tkDot) and (Tokens[k + 1].Kind = tkIdent) and (GetTokenStr(k + 1) = fld) then
+      begin
+        isSelf := (Tokens[k - 1].Kind = tkIdent) and (GetTokenStr(k - 1) = 'self') and
+                  (Tokens[k - 2].Kind <> tkDot);
+        root := k - 1;
+        while (root >= 2) and (Tokens[root - 1].Kind = tkDot) and (Tokens[root - 2].Kind = tkIdent) do
+          root := root - 2;
+        if (Tokens[k + 2].Kind = tkAssign) or PyTokIsAugAssign(k + 2) then
+        begin
+          if not isSelf then veto := True;
+        end
+        else if (Tokens[k + 2].Kind = tkComma) and (root >= 1) and
+                (Tokens[root - 1].Kind in [tkNewline, tkIndent, tkDedent, tkComma]) and
+                PyTokStmtHasAssign(root, hi) then
+          veto := True                 { `a.fld, b = ...` -- a tuple target }
+        else if (root >= 1) and ((Tokens[root - 1].Kind = tkFor) or
+                ((Tokens[root - 1].Kind = tkIdent) and (GetTokenStr(root - 1) = 'as'))) then
+          veto := True;
+      end;
+      Inc(k);
+    end;
+    { 2. every class in the family: its own bindings of self.fld must agree }
+    k := lo;
+    while (k + 2 < hi) and not veto do
+    begin
+      if (Tokens[k].Kind = tkClass) and (Tokens[k + 1].Kind = tkIdent) and
+         ((k = lo) or (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkEOF])) then
+      begin
+        cname := GetTokenStr(k + 1);
+        if ((cname = clsName) or PyClassNamesRelated(clsName, cname)) and
+           PyTokClassBody(k, hi, bs, be) then
+        begin
+          depth := 0; m := bs;
+          while (m + 3 < be) and not veto do
+          begin
+            if Tokens[m].Kind = tkIndent then Inc(depth)
+            else if Tokens[m].Kind = tkDedent then Dec(depth)
+            else if (depth = 0) and (Tokens[m].Kind = tkIdent) and (GetTokenStr(m) = fld) and
+                    (Tokens[m - 1].Kind in [tkNewline, tkIndent, tkDedent]) and
+                    (Tokens[m + 1].Kind in [tkAssign, tkColon]) then
+              veto := True               { a class attribute of that name }
+            else if (Tokens[m].Kind = tkIdent) and (GetTokenStr(m) = 'self') and
+                    (Tokens[m - 1].Kind <> tkDot) and (Tokens[m + 1].Kind = tkDot) and
+                    (Tokens[m + 2].Kind = tkIdent) and (GetTokenStr(m + 2) = fld) then
+            begin
+              if Tokens[m + 3].Kind = tkAssign then
+              begin
+                if not (Tokens[m - 1].Kind in [tkNewline, tkIndent, tkDedent]) then veto := True
+                else
+                begin
+                  e := PyTokStmtEnd(m + 4, be);
+                  if (e < 0) or (e <= m + 4) or PyTokStmtHasAssign(m + 4, be) then veto := True
+                  else
+                  begin
+                    sHLo := PyInferHdrLo; sHHi := PyInferHdrHi;
+                    sBLo := PyInferBodyLo; sBHi := PyInferBodyHi; sSelf := PyInferSelfCi;
+                    PyInferHdrLo := -1; PyInferHdrHi := -1;
+                    PyInferBodyLo := -1; PyInferBodyHi := -1; PyInferSelfCi := -1;
+                    t := PyInferExprType(m + 4, e);
+                    ci := PyInferLastCi;
+                    PyInferLastCi := -1;
+                    PyInferHdrLo := sHLo; PyInferHdrHi := sHHi;
+                    PyInferBodyLo := sBLo; PyInferBodyHi := sBHi; PyInferSelfCi := sSelf;
+                    if (t = tyClass) and (ci >= 0) then
+                    begin
+                      other := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+                      if cand = '' then cand := other
+                      else if cand <> other then veto := True;
+                      Inc(n);
+                    end
+                    else veto := True;
+                  end;
+                end;
+              end
+              else if PyTokIsAugAssign(m + 3) or (Tokens[m + 3].Kind = tkColon) then veto := True
+              else if (Tokens[m + 3].Kind = tkComma) and
+                      (Tokens[m - 1].Kind in [tkNewline, tkIndent, tkDedent, tkComma]) and
+                      PyTokStmtHasAssign(m, be) then veto := True
+              else if (Tokens[m - 1].Kind = tkFor) or
+                      ((Tokens[m - 1].Kind = tkIdent) and (GetTokenStr(m - 1) = 'as')) then veto := True;
+            end;
+            Inc(m);
+          end;
+        end;
+      end;
+      Inc(k);
+    end;
+  end;
+  PyTFCBusy := False;
+  if (not veto) and (n > 0) then Result := cand;
+  if PyTFCMemoN < 2048 then
+  begin
+    PyTFCMemoCls[PyTFCMemoN] := clsName;
+    PyTFCMemoFld[PyTFCMemoN] := fld;
+    PyTFCMemoAns[PyTFCMemoN] := Result;
+    Inc(PyTFCMemoN);
+  end;
+end;
+
 function PyStaticReceiverClass(dotTok, encDef, bodyLo, bodyHi, fileLo, fileHi: Integer): AnsiString;
 { The class NAME of the receiver of a `.name(` site whose `.` sits at dotTok,
   when it is CERTAIN, else '': `self` (the enclosing def's class); a
@@ -39557,7 +39834,13 @@ begin
     ci := PyInferLastCi;
     PyInferLastCi := -1;
     if (t = tyClass) and (ci >= 0) then
-      Result := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+      Result := PyRawName(UClsNOff[ci], UClsNLen[ci])
+    else if (cs = rs - 2) and (GetTokenStr(cs) = 'self') and
+            (PyDefSiteMode(encDef, encl) = 1) then
+      { `self.fld.name(` in a method whose class the typer cannot see yet
+        (registered later in the stream): the field's class from every
+        binding in its class family, token-only -- see PyTokenFieldClass }
+      Result := PyTokenFieldClass(encl, GetTokenStr(rs));
     Exit;
   end;
   if encDef < 0 then Exit;
@@ -39652,6 +39935,27 @@ begin
   end;
 end;
 
+function PyRangeHasBigIntOp(lo, hi: Integer): Boolean;
+{ Does [lo, hi) contain a POWER or a LEFT SHIFT? An int either produces is
+  CPython's arbitrary-precision int, not a machine word: `bl(2 ** 100)` typed
+  bl's parameter Int64 from that site and the argument arrived truncated to 0
+  (test_nilpy_to_bytes, 2026-09-16). Such a site vetoes an int claim -- the
+  answer a foreign caller can defeat silently is the one this reader refuses
+  to give on a value it can see overflowing. }
+var k: Integer;
+begin
+  Result := False;
+  { the NilPy lexer has no binary `**` token: it is two adjacent stars (see
+    PyAugDunderName); tkPow is the Pascal spelling and is kept for symmetry }
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind in [tkPow, tkShl]) or
+       ((Tokens[k].Kind = tkStar) and (k + 1 < hi) and (Tokens[k + 1].Kind = tkStar)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function PyModuleConstType(const nm: AnsiString; lo, hi: Integer): TTypeKind;
 { The scalar type of the MODULE-LEVEL CONSTANT `nm` of the file [lo, hi), or
   tyUnknown: `SIM_DT = 1.0 / 60.0` at the top of sim.py, then `v.step(SIM_DT)`
@@ -39710,6 +40014,7 @@ begin
   PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
   PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
   if t = tyString then t := tyAnsiString;
+  if PyIsSiteIntTk(t) and PyRangeHasBigIntOp(exprS, exprE) then t := tyVariant;
   if (t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t) then Result := t;
   if PxxDbgEnabled('n.psites') then
     WriteLn('PXXDBG n.psites   module constant ', nm, ' binds=', nBind, ' tk=', Ord(t));
@@ -40121,6 +40426,9 @@ begin
         gaveUp := True; Break;
       end;
       t := PyInferExprType(argS, argE);
+      { `2 ** 100` is an int and not a machine word: an int claim is vetoed
+        (a variant is a site of a different kind below; PyRangeHasBigIntOp) }
+      if PyIsSiteIntTk(t) and PyRangeHasBigIntOp(argS, argE) then t := tyVariant;
       siteCls := '';
       if (t = tyClass) and (PyInferLastCi >= 0) then
         siteCls := PyRawName(UClsNOff[PyInferLastCi], UClsNLen[PyInferLastCi]);
@@ -40177,7 +40485,11 @@ begin
            (PyEndOfGroup(argS + 1, TokCount) = argE)) or
           ((argS + 3 < argE) and (Tokens[argS].Kind = tkIdent) and
            (Tokens[argS + 1].Kind = tkDot) and (Tokens[argS + 2].Kind = tkIdent) and
-           (Tokens[argS + 3].Kind = tkLParen) and (PyEndOfGroup(argS + 3, TokCount) = argE))) then
+           (Tokens[argS + 3].Kind = tkLParen) and (PyEndOfGroup(argS + 3, TokCount) = argE)) or
+          { exactly `self.fld`: the field's class from its class family's
+            bindings when the typer could not see it (PyTokenFieldClass) }
+          ((argE = argS + 3) and (Tokens[argS].Kind = tkIdent) and (GetTokenStr(argS) = 'self') and
+           (Tokens[argS + 1].Kind = tkDot) and (Tokens[argS + 2].Kind = tkIdent))) then
       begin
         siteCls := PyStaticReceiverClass(argE, best, PyInferBodyLo, PyInferBodyHi, scanLo, scanHi);
         if siteCls <> '' then t := tyClass;
@@ -41189,6 +41501,26 @@ begin
       end;
       if FindUField(ci, GetTokenStr(i)) >= 0 then
         Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
+      { The join over every method's `self.NAME = ...` (PyCollectClassFieldJoins),
+        consulted exactly as the declaring `self.NAME` arm below consults it: a
+        dataclass field annotated `x: int` and rebound `self.x = 0.5` in a
+        method is a variant FROM REGISTRATION. Since the pre-pass lends the
+        method its own class (PyInferSelfCi, 4e2507c6b), `return self.x` is
+        typed off the field as registered; typed off the annotation it was
+        Int64, the field widened only when the walk reached the method, and
+        the 0.5 stored in the variant came back 0 through the Int64 return
+        (test_nilpy_a_field_widens_across_methods, D(3).bump(), 2026-09-16).
+        One join for both spellings of "declare a field", not a second rule. }
+      fj := PyFJFind(ci, GetTokenStr(i));
+      if fj >= 0 then
+      begin
+        wtk := PyWidenBinding(tk, IntToTypeKind(PyFJTk[fj]));
+        if wtk <> tk then
+        begin
+          tk := wtk;
+          if wtk <> tyClass then fldSig := -1;
+        end;
+      end;
       sz := TypeSlotSize(tk);
       curOff := AlignTo(curOff, TypeFieldAlign(tk));
       LastTypeProcSig := fldSig;   { procedural field — see the capture above }

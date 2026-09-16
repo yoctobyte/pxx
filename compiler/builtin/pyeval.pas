@@ -1496,6 +1496,7 @@ begin
           PXXObjRetain(Pointer(NativeInt(pret)));
         end
         else if rk = 0 then res := MakeNone
+        else if rk = 2 then res := pyvar_of_bool(pret <> 0)   { a Boolean shares the register, not the Python type }
         else res := pyvar_of_int(pret);
       end;
       Exit;
@@ -1545,6 +1546,12 @@ begin
       PXXObjRetain(Pointer(NativeInt(pret)));   { slot owns +1 (magic-guarded) }
     end
     else if rk = 0 then res := MakeNone
+    else if rk = 2 then res := pyvar_of_bool(pret <> 0)
+    { A BOOLEAN return through the pointer family: `contains(self, x, z)`
+      with both parameters typed Int64 from their call sites (4e2507c6b) left
+      the all-variant arm below, whose re-box by kind this arm never had, and
+      printed 1 where CPython prints True (test_nilpy_open_world_method_dispatch,
+      2026-09-16). Same rule as the register family's, in its third home. }
     else res := pyvar_of_int(pret);
     Exit;
   end;

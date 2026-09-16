@@ -10,6 +10,9 @@ class Canopy:
     def contains(self, x, z):
         return x + z < self.n
 
+    def hot(self, t):
+        return t > self.n
+
     def zero(self):
         return "z" + str(self.n)
 

@@ -31,6 +31,10 @@ import nilpy_openworld_world
 # --- the real shape: a method the caller's module never sees ---------------
 c = nilpy_openworld_world.Canopy(10)
 print("cross", nilpy_openworld_user.blows(c, 1, 2), nilpy_openworld_user.blows(c, 20, 30))
+# both parameters of `contains` are typed Int64 from these two sites and the
+# answer is a bool: printed `1 0` once the typed shape left the all-variant
+# arm (2026-09-16). `warm` carries a float, the mixed family's shape.
+print("mixed", nilpy_openworld_user.warm(c, 1.5), nilpy_openworld_user.warm(c, 20.5))
 
 # --- every arity the runtime path marshals ---------------------------------
 print("arity", nilpy_openworld_user.a0(c), nilpy_openworld_user.a1(c),

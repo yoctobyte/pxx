@@ -59,3 +59,7 @@ runs PyPreScanImports, PyCollectModuleLocalsAST; the hoist head is
 saved/restored around it (savedHoist).
 
 Owner: the seat that built the typer (frankuser). Depends on nothing.
+
+## Log
+
+- 2026-09-16 frankuser (Fable): the token-only half landed without the unit-slot pre-pass -- PyTokenFieldClass reads a `self.fld` site from every `self.fld = <expr>` binding in the field's class family (the field's own class is registered by the first ask; only the ENCLOSING class is not), and `Cls.method()` through the class name types as the method's return. The probe in this ticket now types V.dot/rot/inv as V (fixture test_nilpy_a_field_bound_in_its_class_family_is_a_class_site). The DEMO's target is still out of reach for a different reason: `self.orientation = orientation or Quat.identity()` (an `or` of an untyped parameter) and `state.orientation = ...` writes from traffic.py/vessel.py/app.py, so no certain binding exists; 8 of 15 `.rotate(` receivers are `state.orientation` with `state` a parameter. What remains of THIS ticket is the closure-wide registration for fields whose class sits in a LATER module; the demo case needs the `x or Cls()` idiom and parameter-rooted receivers first.

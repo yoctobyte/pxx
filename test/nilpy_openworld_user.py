@@ -7,6 +7,13 @@ def blows(canopy, sx, sz):
     return canopy.contains(sx, sz)
 
 
+# a FLOAT argument and a bool answer: the receiver is still dynamic, so the
+# call goes through pyeval's mixed family (one double, a register result),
+# whose Boolean must come back as True/False and not as 1/0 (2026-09-16)
+def warm(canopy, t):
+    return canopy.hot(t)
+
+
 def a0(o):
     return o.zero()
 

@@ -2517,6 +2517,15 @@ test-nilpy: $(COMPILER)
 	@# and a class field's name no longer pre-creates a same-named global as variant.
 	./$(COMPILER) test/test_nilpy_negating_a_variant_zero_keeps_its_sign.npy $(TESTTMP)/test_nilpy_negzero26
 	$(TESTTMP)/test_nilpy_negzero26 | diff -u test/test_nilpy_negating_a_variant_zero_keeps_its_sign.expected -
+	@# A field bound throughout its class family to one class is a class site for
+	@# a bare parameter, read token-only, so a class the parser has not registered
+	@# yet still types a site; `V.zero()` through the class name types as V. The
+	@# controls (a subclass rebinding, an external write, a tuple target, a class
+	@# attribute of the same name) stay variant and their value rows would break
+	@# under a wrong claim.
+	./$(COMPILER) test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.npy $(TESTTMP)/test_nilpy_famsites26
+	$(TESTTMP)/test_nilpy_famsites26 | diff -u test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.expected -
+	tools/expect_same.sh test_nilpy_famsites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_field_bound_in_its_class_family_is_a_class_site.npy $(TESTTMP)/test_nilpy_famsites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_0-9]+[.][a-z_0-9]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites B.w mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites D.w mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites V.x mode=0 sites=11 gaveup=0 tk=19 PXXDBG n.psites V.y mode=0 sites=11 gaveup=0 tk=19 PXXDBG n.psites W.k mode=0 sites=2 gaveup=0 tk=19 PXXDBG n.psites attr.a mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites dot.o mode=1 sites=5 gaveup=1 tk=0 PXXDBG n.psites inv.v mode=1 sites=1 gaveup=0 tk=6 cls=V PXXDBG n.psites mix.m mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites norm2.w mode=1 sites=1 gaveup=0 tk=6 cls=V PXXDBG n.psites rot.v mode=1 sites=2 gaveup=0 tk=6 cls=V PXXDBG n.psites scale.s mode=1 sites=1 gaveup=1 tk=0 PXXDBG n.psites twice.t mode=1 sites=1 gaveup=1 tk=0 ')"
 	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
 	@# selector (a double), so the Result store retained 3.0 as an object pointer
 	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.
