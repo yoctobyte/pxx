@@ -100,3 +100,38 @@ work in it to successive seats — this is the second seat to re-derive it.
 **Re-laning note:** the auto-filer guessed track C from the failing step's path.
 That guess is not wrong (the guard lives in `compiler/cparser.inc`, C frontend)
 but it is also not useful, because no lane can act on this.
+
+## RE-VERIFIED 2026-09-16, both instruments — still inert-until-pinned, still nothing to fix
+
+Raised again as one of the rows standing between the tree and goal 1, quoting
+`crtl declares functions it does not define: c_pthread_create`. That reason is
+**true of the pinned compiler and false of the tree**, which is the whole
+content of this ticket and is worth re-measuring rather than re-reading.
+
+| | |
+| --- | --- |
+| census under `compiler/pascal26` | `601 declared, all defined, no libc imports`, rc=0 |
+| census under `$(PXX_STABLE)` | `FAIL: crtl declares functions it does not define: c_pthread_create` |
+| pin v410 (`764ee2ed2`) committed | 2026-09-14 **20:45:16** |
+| fix `e4c72bd15` committed | 2026-09-14 **21:03:57** — 18 minutes later |
+| `merge-base --is-ancestor e4c72bd15 764ee2ed2` | **no** |
+| pinned binary on disk | `c599e8546121`, which is the sha the pin commit records |
+
+So the row is **not work**: it is a fix that exists and is not yet carried by a
+pin. It clears itself at the next one. Counting it among the things that need
+FIXING overstates the distance to goal 1 by one.
+
+### A grep trap on the way, recorded because it nearly reversed the verdict
+
+`git log --grep='pin v410'` returned `c9af737b5` — a `docs(watch)` commit that
+merely **mentions** pin v410 in its prose. Tested against that, the fix came
+back as an ancestor, i.e. *"the pin contains the fix"*, which is the opposite of
+the truth and would have made this look like a live defect. The pin commit is
+`^chore(stable): pin v410`, anchored, and against the real one the fix is
+correctly NOT an ancestor.
+
+Same shape as the `grep -o "663"` that matched `code=417346B` an hour earlier in
+another seat's hands: **a grep for a name matches prose about the thing as
+readily as the thing.** Anchor the pattern to the commit-subject form, and
+prefer the recorded binary sha — `c599e8546121` appears in the pin's own subject
+line and on disk, and that pair is an identity no prose can imitate.
