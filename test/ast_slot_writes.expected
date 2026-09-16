@@ -526,6 +526,7 @@ AN_BINOP Left CloneAST(SetLenDimNode[k])
 AN_BINOP Left CurASTNode
 AN_BINOP Left PyClsAttrOvrGet(node, fieldName, cvIdx)
 AN_BINOP Left PyClsAttrOvrGet(node, fieldName, fldIdx)
+AN_BINOP Left PyMakeDynAttrGet(baseNode, fname)
 AN_BINOP Left PyMakeDynAttrGet(node, fieldName)
 AN_BINOP Left PyMakeIdent(caN)
 AN_BINOP Left PyMakeIdent(iSym)
@@ -534,7 +535,6 @@ AN_BINOP Left PyMakeIdent(sym)
 AN_BINOP Left PyMakeIdent(symIdx)
 AN_BINOP Left PyMakeTruthy(left)
 AN_BINOP Left PyMakeVariantGetItem(node, indexNode)
-AN_BINOP Left PyVariantFieldArm(baseNode, ci, fi, fname)
 AN_BINOP Left Result
 AN_BINOP Left a
 AN_BINOP Left acc
@@ -563,6 +563,7 @@ AN_BINOP Left left
 AN_BINOP Left leftExpr
 AN_BINOP Left lenNode
 AN_BINOP Left lhs
+AN_BINOP Left lhsN
 AN_BINOP Left lhsNode
 AN_BINOP Left lhsValIncNode
 AN_BINOP Left lhsValNode

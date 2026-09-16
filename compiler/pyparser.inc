@@ -725,6 +725,15 @@ function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUP
 function PyEnsureExceptionClass: Integer; forward; { pylib's Exception, shelled lazily — the bare-class `raise` resolver asks, ~12000 lines above the definition }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
 function PyIsClassMethodAt(defIdx: Integer): Boolean; forward; { ditto }
+function PyHeaderHasParam(methodStart, stopIdx: Integer; const name: AnsiString): Boolean; forward;
+function PyHeaderParamType(methodStart, stopIdx: Integer; const name: AnsiString): TTypeKind; forward;
+{ ^ the two above and the one below are called by the postfix-chain param typer
+  ~30000 lines before they are defined. Same cause, same commit: pxx resolves
+  across the unit and FPC resolves in source order. }
+function PyIsSiteIntTk(tk: TTypeKind): Boolean; forward; { defined ~32900 lines
+  below, beside the site typer it belongs to; the postfix-chain param typer
+  calls it here. pxx resolves across the unit, FPC resolves in source order,
+  so without this the tree self-hosts and only the FPC seed canary sees it. }
 { PyMakeIdent and PyHiddenName are likewise forward-declared in pasparser_*.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
 { PyCallMeth1 is forward-declared in pasparser_*.inc (included before this file),
