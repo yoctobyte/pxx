@@ -15003,8 +15003,8 @@
   "wall": 1044.4
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-16T00:57:04Z",
+  "sha": "5dbee723e228cfb986a5561e78ccffb7e9a153ec",
   "tier": "full"
  },
  "last_opt": {
@@ -15215,6 +15215,7 @@
    "range": [
     "5dbee723e228cfb986a5561e78ccffb7e9a153ec"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_module_member_as_a_value.npy test/test_nilpy_module_member_as_a_value.expected",
    "status": "fail"
   }
