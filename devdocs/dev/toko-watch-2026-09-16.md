@@ -813,3 +813,79 @@ shas: `984be7e19`/`53833e88e`/`554b4947c` → frankS, one session id; `ca92ef81b
 → frankB, one session id. Tree and id agree on every row.
 
 **Nothing asked of either seat this tick.** Neither has been quiet; both are landing.
+
+## Check-in 0m — the "four optdiff shards, ONE cause" framing was wrong TWICE, and frankb-56 caught the first half
+
+**frankb-56 refuted the framing I put in the baseline and repeated to the owner
+an hour ago.** It is right and I am recording the whole correction, because the second
+half is worse than the half it found.
+
+**FIRST WAY IT WAS WRONG — the causes are written down, and two are mine to have known.**
+Three of the four shards I called "one cause" are in `done/`, closed on 2026-09-16 by TWO
+different causes:
+
+| shard | cause | commit |
+| --- | --- | --- |
+| shard0-12 | a real `-O3` miscompile, dropped store in the inliner | `84ccb6384` frankS |
+| shard2-12 | `argv[0]` in the optdiff harness — never an optimiser defect | `311649be0` frankb-56 |
+| shard10-12 | same `argv[0]` artefact | `311649be0` frankb-56 |
+
+**I triaged shard0 to that miscompile myself yesterday and then wrote "one cause" anyway.**
+The refutation was sitting inside `regression-optdiff-shard0-12.md`, in a line I had
+re-laned and repriced with my own hands. A single first-red date is what a harness change
+and a codegen bug landing near each other look like; it is not evidence of a shared cause,
+and here the causes were already recorded.
+
+**SECOND WAY, WHICH frankb-56 DID NOT HAVE AND WHICH DISSOLVES THE COUNT ITSELF: A SHARD
+NUMBER WAS NEVER AN IDENTITY.** `tools/optdiff.sh:89` — *"Shard membership is derived from
+a hash of the BASENAME, not from position. It used to be `n % NSHARD` over the glob, so
+adding any test file moved tests between shards."* Two closed tickets say what that did:
+*"a phantom NEW-RED plus a phantom FIXED, for an unchanged failure"*, and the code comment
+records the damage — **`shard 5 -> 0 -> 2`, three tickets for ONE compiler bug.**
+
+So the "one cause" intuition has a real origin: before the hash fix, one bug genuinely did
+manufacture several shard tickets. **The intuition survived the fix that made it false.**
+That is a stale rule obeyed because obeying produces no signal — and there is a `done/`
+ticket, `bug-a-five-optdiff-shards-are-one-o3-threading-hang`, whose own summary was
+CORRECTED once already (*"the cause is DEAD-CODE ELIMINATION, not -O3"*). I inherited a
+generalisation from a closed ticket about a DIFFERENT set of shards and applied it to this
+one.
+
+**AND IT MAKES shard6 NOT A "FIFTH SHARD I MISSED" — IT MAKES IT INCOMMENSURABLE.**
+frankb-56 reports shard6-12 as open in `backlog/` and absent from my count, which is true.
+But its ENTIRE tstate history is **two runs, both on `seven`, a host retired 2026-09-11**:
+`new_red` 2026-09-02, `fixed` 2026-09-03. Two runs, one transition each way, on the exact
+dates the positional-identity defect was live — **that is the documented phantom pair, not
+a bug that appeared and was fixed.** shard5 has 82 runs for contrast. So shard6's open
+p70 ticket is bookkeeping debt from a defect that no longer exists, and **it must not be
+closed on the strength of that `fixed` either** — a phantom FIXED is not evidence of
+health any more than the phantom NEW-RED beside it was evidence of harm.
+
+**WHAT IS ACTUALLY OPEN:** `optdiff#shard5/12` — 82 runs, `still_red` through
+2026-09-16T02:29:39Z, first red 2026-09-01. One shard, not four, not five.
+
+**frankb-56's own measurement, with its own caveat kept:** both open subjects pass
+standalone today (`pass=1 skip=0 diff=0`), neither uses `ParamStr(0)` (so its own argv[0]
+fix does not explain them — it tried the self-crediting reading first and scored zero), and
+under the PINNED compiler `-O0 == -O3` for both. Its caveat is the honest part and I am not
+dropping it: the pinned check compared `-O0` against `-O3` directly, **not** through
+optdiff's full comparison (`-O1`/`-O2`, combined stdout+stderr, rc), and optdiff's own
+header warns that under full shard parallelism a tight timeout turns box load into false
+DIFFs. **"Does not reproduce alone" does not choose between a load artefact and a real
+defect needing shard context.** The deciding run is the shard, not the file. It declined to
+take it; the O group is still unclaimed and I am not assigning it.
+
+**THE GATE QUESTION IT RAISED IS A MISATTRIBUTION, AND THE ANSWER IS BETTER THAN IT
+EXPECTED.** It flagged `3eb0297f0` (`tools/py_surface_is_reachable.py`, wired into
+`gate.sh`) as possibly an owner-level call it had taken, offering to revert. **That commit
+is the OWNER'S OWN** — `yoctobyte`, 2026-09-14 — as are all three commits that file has
+ever had (`b092532e3`, `48f03e24a`, `3eb0297f0`). Nothing of frankb-56's is in it and there
+is nothing to revert. Better still, the owner ruled on this precise question in the commit
+message: *"the loosening rule is scoped to permission machinery (a hook, an allowlist, a
+refusal, a settings.json), and a correctness test in gate.sh is not that"* — written after
+another seat read it as his call and declined. **Net strictness goes UP** in that change,
+by his account and by its four controls. So the loosening rule was not engaged, and a seat
+worrying it had crossed it had simply misread whose commit it was.
+
+**What I owe the owner on his return:** the watch record said "one cause" to him in a
+summary. It is corrected here and he should read this block, not that sentence.
