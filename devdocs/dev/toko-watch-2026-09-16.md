@@ -483,3 +483,69 @@ message survived the pull intact."* It never measured that, and it was false —
 three-reds disclosure was stale too. **Two figures invalidated by one pull; one
 corrected, the other explicitly certified, in a commit about staleness.** I quoted that
 sentence approvingly and did not catch it either.
+
+### 2026-09-16, check-in 0h — I CAUSED A DUPLICATE-WORK COLLISION, and a pattern is now three
+
+**THE COLLISION WAS MINE AND IT IS THE ONE THIS SEAT EXISTS TO PREVENT.** I offered
+optdiff shard0 to franks-ee. Later I told frankb-56 *"I'm taking the -O3 shard0 bug, so
+it's owned as of now"* — **and never told franks-ee.** So I announced ownership to the
+seat that had DECLINED the work and not to the seat DOING it, and we both fixed it. Two
+diffs, same file, same hour, and git surfaced it only as a rebase conflict.
+
+**The rule is "ask who is on this TOPIC, never who is in this FILE", and the same rule
+binds the coordinator: an ownership change must reach the seat whose work it changes,
+not merely be announced somewhere.**
+
+**franks-ee's fix won on the merits and I verified that rather than conceding it.** Mine
+is discarded, unpushed. Rebuilt on `84ccb6384` and re-ran every arm I had built:
+Double->Integer 5, Single->Integer 5, Int64->Integer 3, Double->Single 0.33333334,
+fixture ALL OK at all four levels. I could not construct a reachable case my broader
+predicate covers and theirs does not.
+
+**Why theirs is better, and it is not politeness.** Mine unified both guards into
+`IntToTypeKind(ASTTk[rhs]) <> Syms[retSym].TypeKind` — the general rule the mirror arm's
+own comment already states. It also routes ordinal WIDENING and `tyUnknown` to shape 3,
+**a codegen change at `-O2`, not only `-O3`, and I had NO BLAST-RADIUS MEASUREMENT for
+it.** franks-ee did: 206 retentions in `compiler.pas` byte-identical to the pin, and
+`PXXDBG=a.inline` moving exactly one line, `RetInt shape=1 -> shape=3`, still RETAINED.
+**That measurement is the difference between a principled refactor and an unmeasured
+one**, and the unification is now a QUESTION left with franks-ee rather than a change.
+
+**Its statement of the bug is better than my ticket's:** I framed it as the uncovered
+`-O3` arm of the parent, which points at the conversion. It is one level up — shape 1
+retains the RHS EXPRESSION and throws the `AN_ASSIGN` away, so `ir.inc`'s float->int
+rewrite has nothing to fire on. **"There was no assignment left to convert."** Proved by
+probe: zero inlined assignments with a float RHS reach that arm.
+
+**And the probe hazard it caught is one to steal:** its first blast-radius run sent
+`a.inline` to `/dev/null` and the empty diff read as *"nothing changed"* — those lines go
+to STDOUT. **A blast-radius measurement that silently measures nothing returns exactly
+the answer you were hoping for.**
+
+### THE PATTERN, NOW THREE, FOR THE OWNER
+
+Three defects today were **one arm of a double case, with the sibling never looked for**:
+1. float->int on an integer Result, the `-O3` inliner arm (`84ccb6384`)
+2. a set in an ARRAY constant, sibling of the RECORD arm `138604b5e` fixed
+3. (parent, already in `done/`) a float assigned to an integer lvalue
+
+Found by three different seats, separately, none of them looking for a pattern.
+`normalise-dont-special-case.md` already says *fixed one arm of a double case, grep for
+the sibling before closing* — **the rule exists and is being rediscovered at regression
+time instead of applied at fix time.** That is worth the owner's attention as ONE
+observation, not three tickets.
+
+### frankb-56's census: ZERO, and the negative is the useful part
+
+0 argument-requiring programs in a 105-of-2885 shuffled sample beyond the two known, so
+the glob pair is plausibly most of that class; ticket re-priced 45 -> 20, low-prio, not
+closed. **The corpus is 2885 files, not the 1276 optdiff's own comment still claims.**
+- **It found a DIFFERENT defect the hypothesis-shaped filter would have missed:**
+  `[ "$r0" -ge 124 ]` classified 125/126/127 as TIMEOUT when those are the shell's
+  EXEC-FAILURE codes — two programs with `undefined symbol` were reported as TOO SLOW.
+  Fixed in `0a44a6cc7`. **A census that grepped for usage-shaped output would have
+  returned 0, confirmed itself, and never seen them.**
+- **SHUFFLE BEFORE A LONG SWEEP.** Killed at 105 of 400 for host memory; the data
+  survived only because a prefix of a SHUFFLED list is an unbiased sample. Its first
+  attempt walked alphabetically and those 47 rows would have been worthless. Same
+  instrument, same interruption, one usable and one not, decided by the order alone.
