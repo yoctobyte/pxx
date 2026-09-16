@@ -27345,3 +27345,47 @@ under ASLR will not appear in these samples.
 past the leaf is best-effort, so report the leaf as measured and anything deeper
 as suggestive. Filed as
 `feature-a-emit-eh-frame-so-an-external-profiler-can-unwind-past-the-leaf-frame`.
+
+## SHUFFLE A LONG SWEEP'S WORK LIST, BECAUSE A PREFIX OF A SHUFFLED LIST IS STILL A SAMPLE
+
+Any sweep long enough to be worth backgrounding is long enough to be killed —
+host memory, a session restart, a reaper, a harness fault. Whether the partial
+output is worth anything is decided **before the run starts**, by the order.
+
+Measured 2026-09-16, twice on one question, which is what makes the comparison
+clean — same instrument, same corpus, same kind of interruption, opposite
+outcomes:
+
+| attempt | order | killed at | usable? |
+| --- | --- | --- | --- |
+| first | `ls` (alphabetical) | 47 of 2885 | **no** — 47 files whose names start with `a`–`c` |
+| second | shuffled, fixed seed | 105 of 400 | **yes** — an unbiased 105-sample |
+
+Both runs died the same way. The second one answered the question anyway: 0 of
+90 programs that ran had the property under test, which was enough to re-price
+the ticket that prompted it from 45 to 20 and stop the work.
+
+**An alphabetical prefix is a sample of the ALPHABET.** In a corpus where naming
+carries meaning — and in `test/` it does, `c_*` for C, `test_*` for Pascal,
+`lib_*` for library programs — the first N files are a cluster of one kind of
+subject. The instrument is fine; every row it produced is true; the population
+those rows describe is not the one you meant to ask about.
+
+**Cost of insurance: one `sort -R`, or an `awk '{print rand()"\t"$0}' | sort`.**
+Use a fixed seed so the sample is reproducible by whoever re-runs it — a sample
+nobody else can redraw is a number they have to take on trust.
+
+Two things it does NOT buy:
+
+- **It does not make a partial run a COMPLETE one.** State n, and state the
+  bound. 0 of 90 is a 95% upper bound of 3.3% by the rule of three, not proof of
+  zero, and the temptation is to quote the observed 0.
+- **It does not help a sweep whose subjects must run in order** — a bisect, a
+  dependency chain, anything where row k depends on row k−1. Those are the
+  sweeps where a kill genuinely costs you everything, and shuffling would
+  break them outright.
+
+**The tell that you needed this and did not do it:** you are looking at a
+partial result and reasoning about whether the missing rows "would probably have
+been similar". With a shuffled list that question is answered by arithmetic;
+with an ordered one it cannot be answered at all.
