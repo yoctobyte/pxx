@@ -127,4 +127,4 @@ the regression test; a bespoke Makefile row would duplicate it.
 
 Self-host fixedpoint converged, `gate.sh quick` GREEN. **Inert for anything building
 against `$(PXX_STABLE)` until the next pin.**
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7c612d661.
