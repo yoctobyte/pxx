@@ -73,6 +73,19 @@
 #               reaches. Measured on a 3-TU C program at 39c7042211a7: 624856 ->
 #               336016 linked, and the cost of separate compilation 242568 ->
 #               42176. Ignored outside --separate: there are no objects to prune.
+#   --freestanding  link the pxx objects with `ld -static -nostdlib' over our
+#               own entry stub (tools/pxxcrt_x86_64.S) instead of `gcc', so the
+#               result carries NO libc and no PT_INTERP. Implies --separate,
+#               x86_64 only. THE POINT IS THE CLAIM, not the binary: measured
+#               2026-09-16 over 28 busybox objects, pxx emits exactly two
+#               relocation types (R_X86_64_PC32, R_X86_64_64) and of 70
+#               undefined references NOT ONE is unsatisfied by another object
+#               in the set -- so the `gcc' in the normal --separate link is a
+#               linker DRIVER and the glibc it pulls is not load-bearing. This
+#               mode makes that re-derivable in one command. It is scaffolding
+#               for feature-a-pxx-cannot-link-its-own-objects, whose route 2 (a
+#               pxx --link mode) removes the assembler and the stub together;
+#               do not grow this into a linker.
 #   --separate  build busybox the way BUSYBOX does -- one object per translation
 #               unit and a real link -- instead of as a unity. Which targets it
 #               can do is MEASURED per run by sep_probe, not stated here: this
@@ -183,6 +196,7 @@ TARGETS="x86_64 aarch64"
 APPLETS="cat echo"
 KEEP=0
 SEPARATE=0
+FREESTANDING=0
 OBJFLAGS=""
 
 while [ $# -gt 0 ]; do
@@ -192,6 +206,7 @@ while [ $# -gt 0 ]; do
     --targets) TARGETS="$2"; shift 2 ;;
     --applets) APPLETS="$2"; shift 2 ;;
     --separate) SEPARATE=1; shift ;;
+    --freestanding) FREESTANDING=1; SEPARATE=1; shift ;;
     --dce)     OBJFLAGS="--dce"; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
@@ -1647,6 +1662,66 @@ sep_probe() {
     SEP_WHY="pxx cannot emit an object for it: $(grep -a -E 'error:' "$WORK/sepprobe_$spt.log" | head -1)"
     return 1
   fi
+  # --freestanding: link with `ld -nostdlib' over OUR objects plus OUR entry
+  # stub, and nothing else. The candidate goes through the SAME probe as every
+  # other one below -- it has to link a real object AND run the result -- so a
+  # stub that assembles and then faults is a SKIP with a reason, not a green.
+  #
+  # WHAT THIS MODE IS FOR, and the scope it must not grow past: it captures the
+  # 2026-09-16 measurement that a pxx-built busybox needs no libc, so that claim
+  # is re-derivable in one command instead of living in a /tmp directory. The
+  # end state is a pxx --link mode (feature-a-pxx-cannot-link-its-own-objects,
+  # route 2), which removes the assembler and this file with it. This is not
+  # that, and reading it as a sanctioned architecture would be wrong.
+  if [ "$FREESTANDING" -eq 1 ]; then
+    # ASK THE FILESYSTEM, DO NOT ASSERT THE TARGET LIST. This read `[ "$spt" !=
+    # "x86_64" ]` for an hour and that is the same stale-name trap the --separate
+    # note above records: a hardcoded target set is wrong the day someone adds a
+    # stub, and it is wrong SILENTLY, by refusing something that now works.
+    if [ ! -f "$ROOT/tools/pxxcrt_$spt.S" ]; then
+      SEP_WHY="--freestanding needs an entry stub for this psABI and tools/pxxcrt_$spt.S does not exist (the stub is per-psABI: it reads argc/argv/envp off the entry stack and walks .init_array, neither of which is portable)"
+      return 1
+    fi
+    # And the linker has to be one that can link THAT target. Only the native
+    # case is wired: a cross stub would also want a cross ld, which nothing here
+    # has been measured against, so say so rather than trying `ld` and failing
+    # somewhere less legible.
+    if [ "$spt" != "x86_64" ] && ! command -v "$spt-linux-gnu-ld" >/dev/null 2>&1; then
+      SEP_WHY="--freestanding found tools/pxxcrt_$spt.S but no $spt-linux-gnu-ld to link it with"
+      return 1
+    fi
+    if [ "$spt" = "x86_64" ]; then fsld="ld"; else fsld="$spt-linux-gnu-ld"; fi
+    if ! gcc -c -o "$WORK/pxxcrt_$spt.o" "$ROOT/tools/pxxcrt_$spt.S" \
+         >> "$WORK/sepprobe_$spt.log" 2>&1; then
+      SEP_WHY="--freestanding could not assemble tools/pxxcrt_$spt.S: $(grep -a -E 'rror' "$WORK/sepprobe_$spt.log" | head -1)"
+      return 1
+    fi
+    spld="$fsld -static -nostdlib -e _start $WORK/pxxcrt_$spt.o"
+    if ! $spld -o "$WORK/sepprobe_$spt.bin" "$WORK/sepprobe_$spt.o" \
+         >> "$WORK/sepprobe_$spt.log" 2>&1; then
+      SEP_WHY="--freestanding: ld -nostdlib could not link a one-object probe: $(grep -a -E 'rror|undefined' "$WORK/sepprobe_$spt.log" | head -1)"
+      return 1
+    fi
+    # $sprun, not a bare exec: for a cross target the probe has to go through
+    # tools/run_target.sh like every other candidate below. (The ASSEMBLER above
+    # is still native `gcc' -- a cross stub would need a cross assembler wired
+    # too. Unreachable today because no cross pxxcrt_*.S exists, and said here
+    # so the next person to add one knows it is the second half of the job.)
+    if ! $sprun "$WORK/sepprobe_$spt.bin" >> "$WORK/sepprobe_$spt.log" 2>&1; then
+      SEP_WHY="--freestanding: the probe LINKED and then did not run, which is the entry stub's failure and not the linker's -- see $WORK/sepprobe_$spt.log"
+      return 1
+    fi
+    # THE CONTROL, and it is the whole reason this mode can be believed: assert
+    # the probe carries NO PT_INTERP. A dynamic binary here would mean the
+    # candidate below was silently used instead, and every downstream case would
+    # still pass -- a green measuring the gcc path and calling it freestanding.
+    if readelf -lW "$WORK/sepprobe_$spt.bin" 2>/dev/null | grep -q INTERP; then
+      SEP_WHY="--freestanding: the probe linked with an INTERP segment, so it is not freestanding and this mode would be measuring something else"
+      return 1
+    fi
+    SEP_LD="$spld"
+    return 0
+  fi
   for spld in "gcc" "gcc -m32" "$spt-linux-gnu-gcc" "$spt-linux-gcc"; do
     command -v "${spld%% *}" >/dev/null 2>&1 || continue
     $spld -o "$WORK/sepprobe_$spt.bin" "$WORK/sepprobe_$spt.o" \
@@ -1770,6 +1845,32 @@ for t in $TARGETS; do
     # next one anybody takes.
     printf '  note    %-8s %d objects linked separately with `%s` (%d bytes, per-TU flags: --emit-obj%s)\n' \
       "$t" "$nobj" "$SEP_LD" "$(stat -c%s "$out")" "${OBJFLAGS:+ $OBJFLAGS}"
+    # THE CLAIM --freestanding EXISTS TO MAKE, asserted on the REAL binary and
+    # not only on sep_probe's one-object probe. The probe proves the stub and
+    # the linker work; this proves the thing 400 objects actually produced.
+    # It must be able to FAIL: a PT_INTERP here means something linked this
+    # dynamically, in which case every case below would still pass and the
+    # whole mode would be reporting the gcc path under a freestanding name.
+    if [ "$FREESTANDING" -eq 1 ]; then
+      if readelf -lW "$out" 2>/dev/null | grep -q INTERP; then
+        printf '  FAIL    %-8s --freestanding produced a binary with a PT_INTERP segment -- it is not freestanding\n' "$t"
+        RC=1; continue
+      fi
+      # The complement, and it is the row that would catch a stub silently
+      # dropped from the link: the entry symbol must be OURS. A binary whose
+      # entry is `main' links, and segfaults, and a segfault in every case is
+      # a difference the transcript diff reports as a difference -- but it
+      # reports it as a busybox failure, which sends the reader to the wrong
+      # subsystem. Name the cause here instead.
+      fs_entry=$(readelf -hW "$out" 2>/dev/null | sed -n 's/.*Entry point address: *//p')
+      fs_start=$(readelf -sW "$out" 2>/dev/null | awk '$8=="_start"{print $2; exit}')
+      if [ -z "$fs_start" ]; then
+        printf '  FAIL    %-8s --freestanding linked no `_start` -- tools/pxxcrt_%s.S did not make it into the link\n' "$t" "$t"
+        RC=1; continue
+      fi
+      printf '  PASS    %-8s freestanding: no PT_INTERP, entry %s == _start at 0x%s, no libc\n' \
+        "$t" "$fs_entry" "$fs_start"
+    fi
   elif ! ( cd "$BB" && "$COMPILER" $targflag $INC "$UNITY" "$out" ) > "$WORK/build_$t.log" 2>&1; then
     printf '  FAIL    %-8s pxx could not build the unity\n' "$t"
     grep -v '^ok:' "$WORK/build_$t.log" | head -10

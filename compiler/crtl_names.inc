@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  614 functions across 63 headers. }
+  615 functions across 63 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -122,10 +122,11 @@ begin
       ' open:fcntl.h openat:fcntl.h opendir:dirent.h openlog:syslog.h ';
     'p': Result :=
       ' pause:unistd.h pclose:stdio.h perror:stdio.h personality:sys/personality.h pipe:unistd.h ' +
-      ' poll:poll.h popen:stdio.h posix_fallocate:fcntl.h posix_openpt:stdlib.h pow:math.h ' +
-      ' powf:math.h prctl:sys/prctl.h pread:unistd.h preadv:sys/uio.h printf:stdio.h ' +
-      ' ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h putc_unlocked:stdio.h putchar:stdio.h ' +
-      ' putchar_unlocked:stdio.h putenv:stdlib.h puts:stdio.h pwrite:unistd.h pwritev:sys/uio.h ';
+      ' pivot_root:sys/mount.h poll:poll.h popen:stdio.h posix_fallocate:fcntl.h ' +
+      ' posix_openpt:stdlib.h pow:math.h powf:math.h prctl:sys/prctl.h pread:unistd.h ' +
+      ' preadv:sys/uio.h printf:stdio.h ptsname:stdlib.h ptsname_r:stdlib.h putc:stdio.h ' +
+      ' putc_unlocked:stdio.h putchar:stdio.h putchar_unlocked:stdio.h putenv:stdlib.h ' +
+      ' puts:stdio.h pwrite:unistd.h pwritev:sys/uio.h ';
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
@@ -214,7 +215,7 @@ begin
     'm': Result := 262640;
     'n': Result := 352056;
     'o': Result := 208;
-    'p': Result := 113400;
+    'p': Result := 114424;
     'q': Result := 32;
     'r': Result := 8176;
     's': Result := 4620280;

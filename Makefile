@@ -15310,6 +15310,19 @@ test-core: $(COMPILER)
 	# must NOT leak, or every strict-ISO TU with a local named `index` breaks.
 	./$(COMPILER) test/ccrtl_string_strict_iso.c $(TESTTMP)/ccrtlstrict26
 	tools/expect_same.sh ccrtlstrict26 "$$($(TESTTMP)/ccrtlstrict26)" "7 4"
+	# pivot_root(2): the ONE symbol standing between a 258-applet pxx-built
+	# busybox and a link containing no libc at all (measured 2026-09-16 over 400
+	# objects: 780 undefined references, 779 satisfied by another pxx object,
+	# and this one). glibc carries a stub, so the ordinary `gcc -o out obj/*.o`
+	# link resolved it silently and nothing was ever red.
+	# `1 1` IS r==-1 AND errno NOT ENOSYS, and the second field is the whole
+	# row: `r == -1` alone is also what crtl's #else arm returns on a target
+	# with no SYS_pivot_root, so it agrees with having no implementation. Which
+	# refusal the kernel picks (EPERM / EINVAL / ENOENT) is environment-
+	# dependent and deliberately not asserted. Pinned control gives `1 0` and
+	# warns that crtl does not define it; gcc oracle gives `1 1`.
+	./$(COMPILER) test/ccrtl_pivot_root.c $(TESTTMP)/ccrtlpivot26
+	tools/expect_same.sh ccrtlpivot26 "$$($(TESTTMP)/ccrtlpivot26)" "1 1"
 	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
 	# the type through — crtl had the typedef only in <wchar.h>, so busybox's
 	# libbb/lineedit.c read `wchar_t` as a stray token at top level. C99 7.24.1

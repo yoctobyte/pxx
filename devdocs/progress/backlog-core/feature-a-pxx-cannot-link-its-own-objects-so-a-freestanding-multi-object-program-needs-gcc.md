@@ -10,7 +10,7 @@ created: 2026-09-10
 found: 2026-09-10
 found-by: frank-user, answering the owner's question
 owner: ""
-summary: "MEASURED 2026-09-10 at 546d4dcbd305. pxx writes static, libc-free ELF executables with NO external linker -- there is no shell-out to ld, gcc or cc anywhere in compiler/**, and `lib/crtl` is our own C library, so a C `#include <stdio.h>` resolves to our header. Proof, same source both sides: the busybox rung-1 unity (25 TUs, tools/busybox_diff.sh --applets cat) built by pxx is 539008 bytes, `statically linked`, `not a dynamic executable`, and cats a file; the gcc oracle built from the identical unity is 65888 bytes, `dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2`, needing libc.so.6. THE GAP IS THE OTHER DIRECTION: pxx cannot CONSUME an object. `pascal26 a.o b.o out` answers `pascal26:1: error: unexpected character` -- it parses the .o as source; there is no link mode and --help lists none. So a program too large for one translation unit cannot be built freestanding by pxx alone: busybox's real shape (`--separate`, 400-521 objects) emits every object with --emit-obj and then links with a plain `gcc -o out obj/*.o` (tools/busybox_diff.sh:1429), which is what makes that binary dynamic. The external dependency is a LINKER, not a library. Two routes: invoke `ld` over our own objects plus crtl (an external tool, no external library -- the owner has said make and link steps are fair game), or a pxx --link mode, which is the cleaner end state since elfwriter.inc already emits static executables. NOT the same work as [[meta-a-pxx-produces-linkable-code]], which is about being linked INTO something else; this is about being the linker. The one recorded obstacle is not one: mkkiosk.sh:80 says -static is refused because `errno is a non-TLS weak .bss object in every pxx object and ld refuses it against libc.a's TLS one` -- that is about linking our objects AGAINST glibc, and dropping glibc removes the conflict."
+summary: "ROUTE 1 MEASURED AND IT WORKS AT SCALE (2026-09-16, HEAD, binary b7f9f80c7d80): A 257-APPLET pxx-BUILT BUSYBOX LINKS AND RUNS WITH NO LIBC AND NO CRT. Over the 400 objects `busybox_diff.sh --separate` produces at 258 applets, pxx emits exactly TWO relocation types (R_X86_64_PC32 710066, R_X86_64_64 13891) over a fixed section set, and of 780 undefined references exactly ONE was unsatisfied by another object in the set: pivot_root, which glibc carries a stub for and the ordinary `gcc -o out obj/*.o` link therefore resolved SILENTLY -- the gap was invisible until a link was asked to use no library at all. Added to lib/crtl (sys/mount.c, six lines over the syscall bridge, Track C owns crtl). With it, `ld -static -nostdlib` links all 400 objects rc=0 with ZERO diagnostics and the result runs: cat, echo, sort, uniq, seq, tr, wc, basename, dirname, md5sum and sha256sum all correct (md5 and sha256 of 'abc' match the published vectors), `--list` prints 257 applets, `not a dynamic executable`. SO THE `gcc` IN THE NORMAL LINK IS A LINKER DRIVER AND THE GLIBC IS NOT LOAD-BEARING -- one symbol was, and it now is not. WHAT REMAINS IS THE PROCESS-ENTRY CONTRACT, NOT SYMBOL RESOLUTION: pxx objects define `main` and no `_start` because --emit-obj targets a toolchain supplying crt1.o. Both halves already existed and had never met -- elfwriter.inc:472 synthesises a _start for executables, cparser.inc:13150 emits an .init_array thunk taking (argc, argv, envp) under glibc's own DT_INIT convention. A 30-line stub joining them (tools/pxxcrt_x86_64.S) closes it. Repeatable as `tools/busybox_diff.sh --freestanding`, GREEN, byte-identical to the gcc oracle over 29 cases with two controls proven to FIRE (a gcc link has PT_INTERP; a stub-less link has no _start). ROUTE 2 (a pxx --link mode) IS STILL THE END STATE and removes the assembler too -- but two relocation types and a fixed section list is a small --link mode, not a linker project. Whoever takes this starts at \"write the entry stub\", not \"write a linker\". --- ORIGINAL (2026-09-10, 546d4dcbd305): pxx writes static, libc-free ELF executables with NO external linker -- no shell-out to ld/gcc/cc anywhere in compiler/**. THE GAP IS THE OTHER DIRECTION: pxx cannot CONSUME an object. `pascal26 a.o b.o out` answers `pascal26:1: error: unexpected character` -- it parses the .o as source. The external dependency is a LINKER, not a library."
 ---
 
 # pxx cannot link its own objects
@@ -268,3 +268,158 @@ Shipped in `tools/mkminimal.sh` — a bootable BIOS+EFI ISO whose entire userlan
 is this binary. `MINIMAL-IMAGE OK` under qemu: kernel boots, shell launches,
 on-board pascal26 compiles and runs a Pascal program, **0 shared libraries in the
 image**.
+
+## ROUTE 1 MEASURED 2026-09-16 (frankb-56) — it works, and the linker's hard part turns out to be already done
+
+This ticket said route 1 "is the cheap one to measure first". Measured, at HEAD,
+compiler binary `7c0d39cb5e1b`, on the 28 objects `tools/busybox_diff.sh
+--separate --applets "cat echo" --targets x86_64 --keep` leaves in `$WORK/obj`.
+
+**A pxx-built busybox links and runs with no libc and no crt.**
+
+```
+$ ld -static -nostdlib -e _start -o bb pxxcrt.o obj/*.o
+$ echo $?            # 0, and ZERO diagnostic lines
+$ file bb
+ELF 64-bit LSB executable, x86-64, statically linked
+$ ldd bb
+        not a dynamic executable
+$ ./bb cat t.txt     # prints the file;  ./bb echo / ./bb --list also correct
+```
+
+`pxxcrt.o` is a 30-line `_start` described below. Everything else is pxx output.
+
+### The three numbers that make this cheap
+
+| question | answer |
+| --- | --- |
+| distinct relocation types across all 28 objects | **2** — `R_X86_64_PC32` (47476), `R_X86_64_64` (799) |
+| undefined refs across all 28 objects | 70 |
+| **of those, not satisfied by another object in the set** | **0** |
+
+Sections are `.text .data .bss .init_array .fini_array` plus the matching
+`.rela.*`, `.symtab`, `.strtab`. Symbol bindings are LOCAL / WEAK / GLOBAL with
+`FUNC WEAK` dominant (11989) — the shape that lets two objects carrying the
+whole of crtl link at all.
+
+**So no library is load-bearing in the current build.** `gcc -o out obj/*.o`
+is being used as a *linker driver*, and the binary is dynamic because that is
+gcc's default — not because a glibc symbol is wanted. That is a sharper
+statement than this ticket could make before, and it is sharper than CLAUDE.md's
+goal-5 note, which reads the `gcc` in that command line as a dependency on
+glibc. The `gcc` is real; the glibc is not.
+
+### What is ACTUALLY missing: the process-entry contract, not symbol resolution
+
+pxx's objects define `main` and no `_start`, because `--emit-obj` targets a C
+toolchain that supplies `crt1.o`. Linking with `-e main` links clean and then
+**segfaults**, which is the correct shape: nothing has set up argc/argv/envp and
+nothing has run `.init_array`.
+
+Both halves of the fix already exist and have never been introduced to each
+other:
+
+- `elfwriter.inc:472` — the executable writer already synthesises a `_start`
+  and records it in the map.
+- `cparser.inc:13150` — the C frontend already emits an `.init_array` thunk
+  that takes `(argc, argv, envp)` and calls `__pxx_set_environ`, deliberately
+  under the same convention glibc uses for `DT_INIT` and `.init_array` alike.
+
+The stub that proved it (MEASUREMENT ONLY — not proposed as the shipping
+artefact, and assembled with `gcc -c`, which route 2 would remove):
+
+```asm
+_start:
+    xor  %rbp, %rbp
+    mov  (%rsp), %r12            /* argc */
+    lea  8(%rsp), %r13           /* argv */
+    lea  8(%r13,%r12,8), %r14    /* envp = argv + argc + 1 */
+    and  $-16, %rsp
+    lea  __init_array_start(%rip), %rbx     /* ld PROVIDEs both under -nostdlib */
+    lea  __init_array_end(%rip), %r15
+1:  cmp  %r15, %rbx
+    jae  2f
+    mov  %r12, %rdi ; mov %r13, %rsi ; mov %r14, %rdx
+    call *(%rbx)
+    add  $8, %rbx
+    jmp  1b
+2:  mov  %r12, %rdi ; mov %r13, %rsi ; mov %r14, %rdx
+    call main
+    mov  %eax, %edi ; mov $60, %eax ; syscall
+```
+
+Running `.init_array` is not optional dressing: skip it and `environ` is never
+set, which is a wrong-value failure rather than a crash.
+
+### Verified against the gcc-linked build, error paths included
+
+47 cases replicating `busybox_diff.sh`'s `run_cat_cases` / `run_echo_cases` /
+dispatch list, freestanding vs the harness's own `gcc`-linked binary from the
+SAME objects: **byte-identical**, 5694 bytes of transcript.
+
+**The three failing cases are the control** and they are why this is not a
+guard that cannot fail: a missing file gives `cat: can't open '...': No such
+file or directory` and exit 1; an unknown applet gives `applet not found` and
+exit 127; `--list` prints both applets. A binary that segfaulted on everything,
+or one that printed nothing, would agree with neither. 20 cases exit 0, 3 exit
+nonzero, and the nonzero ones match byte for byte.
+
+### THE QUANTIFIER, MEASURED — and it found the one thing the gcc link was hiding
+
+Everything above is 28 objects at 2 applets, so it was re-run at **258 applets,
+400 objects** (`--separate --targets x86_64`, GREEN, 663 cases byte-identical to
+the gcc oracle). The wide census was the point: more busybox means more libc
+surface, and **a genuinely needed glibc symbol would have been satisfied
+SILENTLY by the `gcc` link**, so no existing run could tell you either way.
+
+| | 28 objects | **400 objects** |
+| --- | --- | --- |
+| relocation types | 2 | **2** (PC32 710066, `R_X86_64_64` 13891) |
+| undefined references | 70 | 780 |
+| **unsatisfied by the set** | 0 | **1** |
+
+The one is **`pivot_root`**. busybox declares it itself
+(`util-linux/pivot_root.c:35`, a bare `extern` with no header, because no POSIX
+or glibc header declares it) and glibc carries a stub, so `gcc -o out obj/*.o`
+resolved it and **nothing was ever red**. It is exactly the shape this section
+predicted and it is the reason the wide run was worth an hour.
+
+Fixed in `lib/crtl/src/sys/mount.c` — six lines over the same syscall bridge as
+`mount`/`umount2`, plus a declaration in `<sys/mount.h>` so the crtl name map
+can route an undeclared call. crtl is **Track C's** by the lane table, so this
+needed no handover. Test: `test/ccrtl_pivot_root.c`, wired as `ccrtlpivot26`.
+
+**With it, the 400-object freestanding link is `rc=0` with ZERO diagnostics**, and
+the binary runs:
+
+```
+$ ./busybox --list | wc -l          257
+$ ./md5sum   <<< abc (no newline)   900150983cd24fb0d6963f7d28e17f72
+$ ./sha256sum                       ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+$ ldd busybox                       not a dynamic executable
+```
+
+`cat`, `echo`, `sort`, `uniq`, `seq`, `tr`, `wc`, `basename`, `dirname`, `true`
+and `false` all behave, and both digests match the published vectors — so this
+is not a binary that starts and prints something, it is one doing real work.
+
+### Repeatable, because a claim about an instrument decays like a lock
+
+`tools/busybox_diff.sh --freestanding` (implies `--separate`, x86_64). It goes
+through the SAME probe discipline as every other linker candidate — link a real
+object AND run it — so a stub that assembles and then faults is a skip with a
+reason rather than a green. **Two controls, both proven to FIRE rather than
+asserted:** a `gcc` link has `PT_INTERP` (so the mode cannot silently measure
+the gcc path under a freestanding name), and a stub-less `-e main` link has no
+`_start`. Verified end to end at 2 applets: GREEN, byte-identical to the gcc
+oracle over 29 cases.
+
+### Route 2 is still the end state
+
+`ld` is an external tool. The owner's own framing allows it — *"that we have to
+run make files and link steps is fair game"* — so route 1 is a legitimate
+shipping answer for "no external **libraries**". But two relocation types and a
+fixed section list is a small `--link` mode, not a linker project, and route 2
+removes the assembler for the stub as well. What this measurement changes is the
+starting point: whoever takes this begins at *write the entry stub*, not at
+*write a linker*.

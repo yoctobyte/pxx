@@ -99,5 +99,12 @@ int mount(const char *source, const char *target, const char *fstype,
 /* umount(target) is umount2(target, 0). */
 int umount(const char *target);
 int umount2(const char *target, int flags);
+/* pivot_root(2) has no POSIX home and no glibc header declares it -- callers
+   write their own `extern int pivot_root(const char *, const char *);', which
+   is exactly what busybox's util-linux/pivot_root.c does. Declared here anyway
+   so the crtl name map can route an undeclared call to a crtl body instead of
+   a glibc import; a caller that declares it itself gets an identical
+   signature and nothing collides. */
+int pivot_root(const char *new_root, const char *put_old);
 
 #endif
