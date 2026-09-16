@@ -68,3 +68,53 @@ pascal26:2178: error: undefined variable (SetString)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## 2026-09-16, 20:4x UTC — THE CURRENTLY-RECORDED REASON DOES NOT REPRODUCE AT THE TESTED TREE
+
+`borg.json` gives this job's reason, for the newest run, as:
+
+```
+... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60:
+warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include) …
+```
+
+That step is one command and it is reproducible off the tier. Run here at
+HEAD `b160f6305`:
+
+```
+tools/lib_units_compile.py                               ->  154 units compile, rc=0
+PXX_STABLE=compiler/pascal26 tools/lib_units_compile.py   ->  154 units compile, rc=0
+pinned  c599e8546121      HEAD compiler  b57f90696a01
+```
+
+**Under the PINNED compiler — the tier's own configuration, which is what the
+tool defaults to — it passes.** So this is not the RTL/compiler split that
+explains its sibling row `lib-test#44` (`crtl_atexit.c`), where the pinned
+diagnostic is genuinely stale; that control comes out green here.
+
+**And the tree is not the variable.** `git diff --name-only acbc6fa04482 HEAD`
+is **entirely under `devdocs/`** — no `lib/`, no `compiler/`, no `test/`. The
+tree that failed on borg and the tree that passes here are identical in every
+buildable file, so the difference is not something that landed since.
+
+**What that leaves, and what it does not.** The cause is not in the tree: it is
+flakiness or something about the box. I am NOT naming which — `lib_units_compile.py`
+compiles all 154 units concurrently (`min(cpu_count, 16)` workers) into one
+shared temp dir, and borg has more cores than this box, which makes a race a
+candidate rather than a finding. **Track T owns that residual question**; it owns
+the harness and the box, and neither is visible from here.
+
+**SCOPE, because this is one step of a 346-step recipe.** This does NOT say the
+job is green. It says the reason currently published for it does not reproduce
+at the tree it was published against. The failing step named in the auto-filed
+body above is a DIFFERENT one — line 84, `test/lib_synapse_tls_loopback.pas`,
+with `undefined variable (SetString)` — from the 2026-09-09 run. **A job that
+reports a different failing step on different runs is the shape a flaky harness
+makes**, and it is also the shape a genuinely moving target makes; nothing here
+separates those two.
+
+*Measured by the toko-watch seat, check-in 2c. Not claiming the ticket; not
+re-laning it. The `track: B` guess in the frontmatter was derived from the OLD
+failing step and may now be wrong for the same reason the job name is.*
