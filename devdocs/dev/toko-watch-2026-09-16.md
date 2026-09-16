@@ -1520,3 +1520,68 @@ preference.
 **Still unresolved and correctly parked: whether `3eb0297f0` was its edit to make.** Neither of
 us settles it; it waits for the 18th, stated as a goal question. **That is the only thing
 today that either seat has escalated rather than decided**, which is the ratio this file wants.
+
+## Check-in 0x — goal 5: the glibc is not load-bearing, and I corroborated the load-bearing half independently
+
+**BUSYBOX TREE IS HELD BY frankb-56 FOR A WIDE RUN. Nobody runs `busybox_diff.sh` until it
+says clear** — the script's own comment records that a second run against the same tree
+silently destroys the first, measured 2026-09-04. Recorded here so the next context window of
+this seat does not do it.
+
+**Its claim: a pxx-built busybox links and RUNS with no libc and no crt.** At HEAD, 28 real
+busybox objects from `--emit-obj --separate` at 2 applets: two relocation types only; of 70
+undefined references, the number NOT satisfied inside the same object set is **zero**;
+`ld -static -nostdlib` rc=0 with no diagnostics; and with a 30-line `_start` it wrote, a
+12.3MB static binary that is `not a dynamic executable` and runs `cat`, `echo` and the
+`busybox <applet>` dispatch — byte-identical to the gcc-linked build over 47 cases
+**including three ERROR paths**, so it is not passing by doing nothing.
+
+**I CORROBORATED THE LOAD-BEARING HALF ON MY OWN OBJECT, FROM DIFFERENT SOURCE.** Not its
+tree, not its objects, and not touched while it is measuring:
+
+- relocation types in a pxx `--emit-obj` object: **`R_X86_64_64` and `R_X86_64_PC32`, nothing
+  else.** Sections exactly `.text/.data/.bss/.init_array/.fini_array` plus the matching
+  `.rela`. Its list, independently reproduced.
+- undefined symbols in an object whose source calls `printf`: **exactly one, and it is the
+  `extern` I deliberately declared and never defined.** `printf` itself is **DEFINED inside
+  the object**, `FUNC WEAK` — pxx's own crtl supplies it. **No libc symbol is undefined.**
+
+**So the refinement is right: `gcc -o out obj/*.o` links against glibc and the glibc is NOT
+LOAD-BEARING.** gcc is a linker driver whose default happens to be dynamic. The external
+dependency is a **LINKER**, and the hard part of a linker — resolving against libraries — is
+not needed here at all.
+
+**WHAT IS ACTUALLY MISSING IS THE PROCESS-ENTRY CONTRACT, NOT SYMBOL RESOLUTION.** pxx objects
+define `main` and no `_start`, because `--emit-obj` targets a C toolchain that supplies
+`crt1.o`. **Both halves already exist and have never been introduced:** the executable writer
+synthesises a `_start` (`elfwriter.inc:472`), and the C frontend already emits an
+`.init_array` thunk taking `(argc, argv, envp)`.
+
+**I AM NOT AMENDING CLAUDE.md ON THIS AND THE REASON IS THE MEASUREMENT'S OWN QUANTIFIER.**
+The goal-5 note says busybox's green at **394** applets is not "without external libraries"
+because the final link is `gcc ... ` against glibc. This measurement is **28 objects at 2
+applets**. frankb-56 says explicitly it is not claiming the quantifier, and it is right that
+the 276-applet set is a different question — more of busybox means more libc surface, and **at
+that scale a needed glibc symbol would have been satisfied SILENTLY by the gcc link**, which
+is exactly why nobody has noticed either way. Editing the rules file from a 2-applet run would
+be the quantifier error the rules file is largest about. **The 276-applet census is running;
+the amendment waits for it.**
+
+**And the amendment is the OWNER'S anyway, because that note is his goal framing, not a
+technical fact.** CLAUDE.md's own next sentence already grants that **the unity build meets
+goal 5** — pxx links it itself, static, no libc — so the note is not wrong, it is imprecise
+about WHICH external thing the object path needs. For the 18th, in goal terms: *"busybox
+builds and runs with no libc; the only outside tool left is a linker, and nothing needs
+resolving against a library. Is 'no external libraries' met, or does the linker count?"*
+
+**MY ANSWER TO ITS ONE QUESTION: YES, put `--freestanding` in the harness, and its own reason
+is the right one.** A claim about an instrument decays like a lock, and this one currently
+exists in a `/tmp` directory and a message to me. That is the logbook lesson from an hour ago
+one level up: unbanked work is invisible to everyone who is not its author. It is Track T work
+and T owns its own tooling freely, so it needs nothing from me. **Scope I did name:** the mode
+should CAPTURE the measurement, not grow into a linker — the linker is Track A's p70 and the
+end state there is a pxx `--link` mode, not a gcc-assembled stub.
+
+**It is not building the linker and said so unprompted**, banking the measurement in the
+ticket so whoever takes that p70 starts from *"write the entry stub"* instead of *"write a
+linker"*. That is the difference between a ticket that gets picked up and one that does not.
