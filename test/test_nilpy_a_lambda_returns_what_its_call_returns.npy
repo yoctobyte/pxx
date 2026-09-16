@@ -1,0 +1,57 @@
+# A lambda whose body is a CALL returning a tuple, list or instance answered
+# None: the lifted body discarded every class-typed result that was not a
+# provably fresh container, and a def's `return` is an owned value. Found by the
+# lekkerzeilen seat when it wrapped its parity rows in `lambda:` (2026-09-16).
+# Controls: a captured object's self-returning method, a def returning a global
+# alias 2000 times (leak-checked with the alloc census), and pylib's own
+# `append` (returns its receiver, still discarded on purpose).
+class V:
+    def __init__(self, x):
+        self.x = x
+    def tup(self):
+        return (self.x, self.x + 1.0)
+    def flt(self):
+        return self.x * 2.0
+    def lst(self):
+        return [self.x]
+    def txt(self):
+        return "s%d" % int(self.x)
+
+def freetup():
+    return (1.0, 2.0)
+
+a = V(1.5)
+print("lambda -> tuple literal    %r" % ((lambda: (1.0, 2.0))(),))      # ok
+print("lambda -> free fn tuple    %r" % ((lambda: freetup())(),))       # None, want (1.0, 2.0)
+print("lambda -> method tuple     %r" % ((lambda: a.tup())(),))         # None, want (1.5, 2.5)
+print("lambda -> method float     %r" % ((lambda: a.flt())(),))         # ok
+print("lambda -> method list      %r" % ((lambda: a.lst())(),))         # None, want [1.5]
+print("lambda -> method str       %r" % ((lambda: a.txt())(),))         # ok
+print("lambda with arg -> tuple   %r" % ((lambda v: v.tup())(a),))      # None, want (1.5, 2.5)
+
+L = [1, 2]
+def gl():
+    return L
+class B2:
+    def __init__(self):
+        self.items = []
+    def add(self, x):
+        self.items.append(x)
+        return self
+def outer():
+    b = B2()
+    f = lambda s: b.add(s)
+    for i in range(2000):
+        r = f(i)
+    return len(b.items), r is b
+def alias_loop():
+    f = lambda: gl()
+    n = 0
+    for i in range(2000):
+        x = f()
+        n += len(x)
+    return n, L
+print("alias via user def %r" % (alias_loop(),))
+print("captured self-returning method %r" % (outer(),))
+print("captured pylib append still None: %r" % ((lambda: L.append(3))(),))
+print("L after %r" % (L,))

@@ -1,0 +1,11 @@
+lambda -> tuple literal    (1.0, 2.0)
+lambda -> free fn tuple    (1.0, 2.0)
+lambda -> method tuple     (1.5, 2.5)
+lambda -> method float     3.0
+lambda -> method list      [1.5]
+lambda -> method str       's1'
+lambda with arg -> tuple   (1.5, 2.5)
+alias via user def (4000, [1, 2])
+captured self-returning method (2000, True)
+captured pylib append still None: None
+L after [1, 2, 3]

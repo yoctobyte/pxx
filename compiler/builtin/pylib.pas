@@ -2222,6 +2222,7 @@ function pyconv_dict(const a0: Variant): Variant;
 function pyconv_set(const a0: Variant): Variant;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
+function pyvar_neg(const v: Variant): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
   boxes it through the ordinary call-argument path, which is the one place that
   knows how to make a variant out of any value — so an Integer field read and a
@@ -10089,6 +10090,30 @@ begin
   r := PPyVarRec(@Result);
   r^.VType := 2;
   r^.Payload := v;
+end;
+
+{ `-v` on a variant. The IR rewrites unary minus on a variant to `0 - v`, which
+  is right for every tag but a double holding ZERO: 0 - 0.0 is +0.0 where CPython
+  keeps -0.0 (Mat4.look_at's 13th element in the lekkerzeilen demo, found by its
+  parity sweep 2026-09-16; `copysign`, `1/x` and `atan2` all read that sign). A
+  double's sign bit is flipped; every other tag keeps the subtraction, whose
+  dispatch already raises for a non-number. }
+function pyvar_neg(const v: Variant): Variant;
+var p, r: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+  begin
+    r := PPyVarRec(@Result);
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := -PPyDouble(@p^.Payload)^;
+  end
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 8193) then
+    Result := 0 - v
+  else
+    { Pascal's own variant subtraction would raise EVariantError here; the
+      program wrote Python and gets Python's error }
+    raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
 end;
 
 function pyvar_of_bool(b: Boolean): Variant;

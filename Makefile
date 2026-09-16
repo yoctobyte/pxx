@@ -2503,6 +2503,14 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26
 	$(TESTTMP)/test_nilpy_modconst26 | diff -u test/test_nilpy_a_module_constant_is_a_typed_call_site.expected -
 	tools/expect_same.sh test_nilpy_modconst_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites chained.a mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites count.n mode=1 sites=1 gaveup=0 tk=13 PXXDBG n.psites flag.f mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites guarded.g mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites label.name mode=2 sites=1 gaveup=0 tk=23 PXXDBG n.psites scaled.v mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites step.dt mode=1 sites=2 gaveup=0 tk=19 ')"
+	@# A lambda whose body is a CALL to a def returning a tuple, list or instance
+	@# hands that value back (it answered None; a def's return is an owned value).
+	./$(COMPILER) test/test_nilpy_a_lambda_returns_what_its_call_returns.npy $(TESTTMP)/test_nilpy_lamcall26
+	$(TESTTMP)/test_nilpy_lamcall26 | diff -u test/test_nilpy_a_lambda_returns_what_its_call_returns.expected -
+	@# -0.0 survives unary minus on a variant (the IR's `0 - v` rewrite gave +0.0),
+	@# and a class field's name no longer pre-creates a same-named global as variant.
+	./$(COMPILER) test/test_nilpy_negating_a_variant_zero_keeps_its_sign.npy $(TESTTMP)/test_nilpy_negzero26
+	$(TESTTMP)/test_nilpy_negzero26 | diff -u test/test_nilpy_negating_a_variant_zero_keeps_its_sign.expected -
 	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
 	@# selector (a double), so the Result store retained 3.0 as an object pointer
 	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.

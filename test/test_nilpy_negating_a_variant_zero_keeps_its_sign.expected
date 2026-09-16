@@ -1,0 +1,8 @@
+global after field -0.0
+variant double zero -0.0
+variant double -2.5
+variant int -7
+variant bool -1
+variant big -9223372036854775808
+variant str TypeError
+in a tuple (-0.0, 0.0)

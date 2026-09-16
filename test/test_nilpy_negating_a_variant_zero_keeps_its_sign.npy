@@ -1,0 +1,23 @@
+# -0.0 through a variant: a module float global whose name a class field shares
+# (pre-created as a bare variant by the global allocator), and a bare parameter.
+# The IR rewrote `-v` on a variant to `0 - v`, and 0 - 0.0 is +0.0. Found in
+# lekkerzeilen Mat4.look_at by the demo seat's CPython parity sweep, 2026-09-16.
+class V:
+    def __init__(self, q):
+        self.z = q
+z = 0.0
+def neg(v):
+    return -v
+def show(label, x):
+    print("%s %r" % (label, x))
+show("global after field", -z)
+show("variant double zero", neg(0.0))
+show("variant double", neg(2.5))
+show("variant int", neg(7))
+show("variant bool", neg(True))
+show("variant big", neg(2**63))
+try:
+    show("variant str", neg("s"))
+except TypeError as e:
+    print("variant str TypeError")
+show("in a tuple", (-z, -neg(0.0)))

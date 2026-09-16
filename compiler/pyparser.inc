@@ -6017,6 +6017,18 @@ begin
       Continue;
     end;
     tk := PyTypeFromTokenIndex(i);
+    { A name that merely SPELLS a class but is BOUND in this def denotes the
+      local, not the class: `Box = Word(44); return Box.get() + v` typed the
+      return tyClass (identity 0) from the token, so the Int64 the body then
+      computed had no slot to store into (`invalid IR node reference in
+      store_sym`, test_nilpy_local_named_like_a_class on the tier, 2026-09-16,
+      once Word.get's own return became Int64). Same test the dotted-root arm
+      below already asks; a spelled-but-bound name falls through to the
+      honest tyVariant the non-colliding spelling gets. }
+    if (tk = tyClass) and (Tokens[i].Kind = tkIdent) and
+       PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi, PyInferBodyLo, PyInferBodyHi,
+                        GetTokenStr(i)) then
+      tk := tyUnknown;
     { A type NAME followed by '(' is a conversion CALL, not a bare type: it must
       go through the call branch below, which knows the conversion's result type
       AND skips the argument group. Reading it as a type here typed `str(d)` as
@@ -6154,7 +6166,16 @@ begin
           Inc(i);
           Continue;
         end;
-        if PyIsClassTypeExact(name) then tk := tyClass;
+        { ...unless the name is BOUND in this def: `Box = Word(44); return
+          Box.get() + v` denotes the local, whose constraint below carries
+          the class it holds (test_nilpy_local_named_like_a_class, red on the
+          tier 2026-09-16 once Word.get's return became Int64 and the tyClass
+          answer here had no slot for it: `invalid IR node reference in
+          store_sym`). PyDottedRootIsLocal asks the same question one arm on. }
+        if PyIsClassTypeExact(name) and
+           not PyNameBoundInDef(PyInferHdrLo, PyInferHdrHi, PyInferBodyLo,
+                                PyInferBodyHi, name) then
+          tk := tyClass;
         ci := PyFindConstraint(name);
         if (tk = tyUnknown) and (ci >= 0) then tk := PyLocals[ci].TypeKind
         else
@@ -35864,14 +35885,37 @@ begin
     PyProcIsFreshContainerCtor := CaseEqual(nm, 'sorted');
 end;
 
+{ A callee compiled from PYTHON source: the main program or a module on the
+  PyModUnitIdx list. Its `return` stores through the same AN_EXIT coercion a
+  lambda's exit uses, so its class-typed value arrives OWNED exactly as a
+  written `def l(): return f()` receives it -- the borrowed-Self shape the
+  refusal below guards against is a pylib method's, never a def's. }
+function PyProcIsPyDefined(pi: Integer): Boolean;
+var m: Integer;
+begin
+  PyProcIsPyDefined := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if ProcUnitIdx[pi] < 0 then begin PyProcIsPyDefined := True; Exit; end;
+  for m := 0 to PyModUnitCount - 1 do
+    if PyModUnitIdx[m] = ProcUnitIdx[pi] then begin PyProcIsPyDefined := True; Exit; end;
+end;
+
 function PyLambdaResultIsOwnedTemp(n, procIdx: Integer): Boolean;
 var s: Integer;
 begin
   PyLambdaResultIsOwnedTemp := False;
   if n < 0 then Exit;
-  if ASTKind[n] = AN_CALL then
+  if ASTKind[n] in [AN_CALL, AN_VIRTUAL_CALL] then
   begin
-    PyLambdaResultIsOwnedTemp := PyProcIsFreshContainerCtor(ASTIVal[n]);
+    { A call to a def the program wrote (module function or method) returning
+      a tuple, list or instance answered None: the body was emitted for its
+      side effect and $pyresult never stored. `(lambda: freetup())()` and
+      `(lambda: a.tup())()` -- found by the lekkerzeilen seat's parity sweep the
+      moment it wrapped its rows in `lambda:` (2026-09-16). Measured with the
+      alloc census: a def returning a captured global, and a captured object's
+      self-returning method, balance the same as the scalar shape. }
+    PyLambdaResultIsOwnedTemp := PyProcIsFreshContainerCtor(ASTIVal[n]) or
+                                 PyProcIsPyDefined(ASTIVal[n]);
     Exit;
   end;
   if ASTKind[n] <> AN_IDENT then Exit;
@@ -45659,7 +45703,13 @@ begin
           else if Tokens[j].Kind = tkDedent then Dec(k)
           else if (k > 0) and (k <= PY_ALLOCMOD_MAXDEPTH) and inDefStack[k] and
                   (not shadowStack[k]) and
-                  (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) then
+                  (Tokens[j].Kind = tkIdent) and (GetTokenStr(j) = nm) and
+                  { an ATTRIBUTE is not a read of the name: `self.z = q` in a
+                    class above `z = 0.0` pre-created the global as a bare
+                    tyVariant, and `-z` then lost the sign of zero through the
+                    variant's `0 - v` rewrite (Mat4.look_at, found by the
+                    lekkerzeilen parity sweep 2026-09-16) }
+                  not ((j > PyScanLo) and (Tokens[j - 1].Kind = tkDot)) then
           begin
             usedEarlier := True;
             Break;
@@ -51664,6 +51714,11 @@ begin
         if node < 0 then
           node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
       end
+      else if IntToTypeKind(ASTTk[left]) = tyVariant then
+        { the IR's variant arm rewrites `-v` to `0 - v`, and 0 - 0.0 is +0.0
+          where CPython keeps -0.0; pyvar_neg flips a double's sign and leaves
+          every other tag to that same subtraction }
+        node := PyCallProc1('pyvar_neg', left)
       else
       begin
         node := AllocNode(AN_NEG); ASTLeft[node] := left;
