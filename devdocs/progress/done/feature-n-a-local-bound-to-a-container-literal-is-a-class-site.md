@@ -27,4 +27,4 @@ is the standing instrument; the census only says which claims moved.
 
 ## Log
 
-- 2026-09-16 frankuser (Fable): built on a scratch binary while the subscript-fix tier ran; fixture green.
+- 2026-09-16 frankuser (Fable): built on a scratch binary while the subscript-fix tier ran; fixture green, commit d2c4bf4d9.
