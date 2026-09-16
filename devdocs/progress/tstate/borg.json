@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-16T06:03:07Z",
-   "fixed": [
-    "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas"
-   ],
-   "new_red": [],
-   "sha": "ab2ebb31ea1421f267a28b59c4965690d0cc85cc",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-16T06:23:24Z",
    "fixed": [],
    "new_red": [],
@@ -467,6 +456,17 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-16T15:40:48Z",
+   "fixed": [],
+   "new_red": [
+    "optdiff#shard9/12"
+   ],
+   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "borg",
@@ -687,16 +687,16 @@
   "lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "lib-test#src:test/test_tcomponent.pas": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "lib-test#src:test/test_tlist_notify.pas": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
-  "optdiff#shard0/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard1/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard10/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard11/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard2/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard3/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard4/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard6/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard7/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "optdiff#shard8/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
+  "optdiff#shard0/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard1/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard10/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard11/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard2/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard3/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard4/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard6/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard7/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "optdiff#shard8/12": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "optdiff#shard9/12": "f02aaea62be9f4688b4364f91465c8259c0edc05",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "size-canary#src:tools/size_canary.py": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
@@ -4729,11 +4729,11 @@
   "test-nilpy#src:test/test_var_init_from_named_string_const.pas": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-nilpy#src:tools/compiler_srchash.sh": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
-  "test-opt#src:compiler/compiler.pas@1": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "test-opt#src:compiler/compiler.pas@2": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "test-opt#src:compiler/compiler.pas@3": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "test-opt#src:test/test_atomic64.pas": "f02aaea62be9f4688b4364f91465c8259c0edc05",
-  "test-opt#src:tools/compiler_srchash.sh": "f02aaea62be9f4688b4364f91465c8259c0edc05",
+  "test-opt#src:compiler/compiler.pas@1": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "test-opt#src:compiler/compiler.pas@2": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "test-opt#src:compiler/compiler.pas@3": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "test-opt#src:test/test_atomic64.pas": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+  "test-opt#src:tools/compiler_srchash.sh": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-pascal-conformance#shard0/6": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-pascal-conformance#shard1/6": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-pascal-conformance#shard2/6": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
@@ -5300,6 +5300,7 @@
   "lib-test#src:test/crtl_atexit.c": "via-exit | child-exit | via-_Exit | lib-test: crtl_atexit is self-contained (no DT_NEEDED) | FAIL: crtl declares functions it does not define: | c_pthread_create",
   "lib-test#src:tools/crtl_reachability.py": "... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60: warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:60: warning: #include <linux/ioctl.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismat\u2026",
   "optdiff#shard5/12": "OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_multithreading.pas test_rtti_method_reflection_b254.pas test_rtti.pas | optdiff skip EXEC-FAIL-O0: test_c_lazycasing.pas(127) | optdiff skip BUILD-FAIL: casm_goto_fails.c c_obj_data_dup_a.c c_obj_data_import.c c_obj_import_pascal.pas c_pasunit_ansistring_fail.c c_pasunit_case_fail.c cquickjs_prereq.c crtl_tiny_rege\u2026",
+  "optdiff#shard9/12": "Segmentation fault | OPT DIFF -O3: test/test_foreign_thread_exception_chain.pas (rc 217 vs 139) | optdiff skip EXEC-FAIL-O0: c_abi_struct_byval_main.c(127) | optdiff skip BUILD-FAIL: constinit.pas c_pasunit_ovl_fail.c exception_helper.pas initsec_b.pas library_exports_not_cdecl_fail.pas qualified_a.pas test_a_class_body_alias_does_not_leak_to_the_unit.pas test_a_cross_unit_specialized_method_sees\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "tools-devtest#00": "ok   only .md files are tickets | RED  the working tree has no duplicate slug | twatch duplicate-slug BROKEN | the working tree has no duplicate slug | live duplicates: ['regression-cascade-e5cd18e4b220.md', 'regression-lib-test-lib-criticalsection-blocking.md', 'regression-lib-test-lib-fpc-thread-surface.md', 'regression-lib-test-lib-thread-handle-reports-exit-on-both-routes.md', 'regression-lib\u2026"
  },
@@ -10361,7 +10362,7 @@
   "optdiff#shard6/12": "pass",
   "optdiff#shard7/12": "pass",
   "optdiff#shard8/12": "pass",
-  "optdiff#shard9/12": "pass",
+  "optdiff#shard9/12": "fail",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "pass",
   "size-canary#src:tools/size_canary.py": "pass",
   "test-aarch64#src:test/c_crtl_cmsg_and_socket_levels.c": "pass",
@@ -14961,14 +14962,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-16T15:25:23Z",
+  "date": "2026-09-16T15:40:48Z",
   "deadline": 3600.0,
   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "GREEN",
-  "wall": 99.6
+  "verdict": "RED",
+  "wall": 910.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15008,14 +15009,14 @@
   },
   "opt": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-16T10:49:17Z",
+   "date": "2026-09-16T15:40:48Z",
    "deadline": 3600.0,
-   "sha": "f02aaea62be9f4688b4364f91465c8259c0edc05",
+   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
    "verdict": "RED",
-   "wall": 838.1
+   "wall": 910.8
   },
   "slow": {
    "code_fp": "1d5c476a6328",
@@ -15131,6 +15132,35 @@
     "934ba04180e95d273bc57583fc2d8311cd0a96e8"
    ],
    "src": "test/crtl_atexit.c tools/expect_same.sh +1",
+   "status": "fail"
+  },
+  {
+   "bad": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "f02aaea62be9f4688b4364f91465c8259c0edc05",
+   "job": "optdiff#shard9/12",
+   "name": "optdiff#shard9/12",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-16T15:40:48Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "3926a409856fe68dabd3c2b7051cdeb099ebb121",
+    "d66f128a1e80d087e9c7e5e3af6529a28408b93e",
+    "d69642bc43a68a1268e338346ab3c9fa5318aa20",
+    "42e127d6d94933f9764622552118ba9c7ad5845a",
+    "34e3a2fa8570f6686f27ce55df96885084313bb6",
+    "d7bf36ce027e9a749bb9169b0dfe237df2471fd6",
+    "dc3fedb0aa8d7aa1d8341ae34cbd00d20bd0541b",
+    "a29892c8cda4c1b65f05d8cd0cb1f4d583ddda13",
+    "387e1d4cc6b83a778fb3aa6e69a51f886ee56055",
+    "e0e2baac8ff79ce958957407b2199b3726ec184c",
+    "69ba505716b5bf6f15c57f5fc61e1c0a8fa5811e",
+    "6bc01579fc1d46578c42c557497acbcf232b2ba4"
+   ],
+   "src": "tools/optdiff.sh",
    "status": "fail"
   }
  ],
