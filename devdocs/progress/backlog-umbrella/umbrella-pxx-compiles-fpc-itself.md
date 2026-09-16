@@ -775,3 +775,48 @@ a claim about what the diagnostic emitted, not about what compiles. A halting
 diagnostic later in a unit never reaches the detail file at all, so "two errors"
 and "two fixes from compiling" are different statements — and the zero-yield rows
 above are consistent with that being true of some units here.
+
+## SCORING A WALL BY THIS CENSUS WILL REPORT A WORKING FIX AS A NULL RESULT
+
+**Measured 2026-09-16 (franks-ee), and it lands on the section above.** Three arms
+over all 207 units:
+
+| arm | compiler | cpuinfo walls | units OK | total errors |
+| --- | --- | --- | --- | --- |
+| base | pre-fix | both present | 21 | 396 |
+| fix | post-fix | TDoubleRec only | 21 | 396 |
+| stub | pre-fix | both stubbed out | 21 | 256 |
+
+**`base` and `fix` are identical unit-by-unit, identical by count, and identical in
+the first-error histogram — and the fix WORKED.** All 138 units traded the array
+wall for a different error in the same slot, so the count held at 2 and the first
+error stayed `TDoubleRec`:
+
+```
+aasmbase pre-fix : :36 TDoubleRec  /  :281 too many array initializer elements
+aasmbase post-fix: :36 TDoubleRec  /  :35  an object type cannot have a constructor
+```
+
+**AN ERROR COUNT IS NOT AN ERROR IDENTITY.** `PXX_CORPUS_DETAIL`'s summary reports
+counts and first errors, so scoring a wall with them alone reports a landed fix as
+nothing. **Diff the detail files unit-by-unit, on the error TEXT**, not on `errs=N`
+and not on the histogram. Same family as CLAUDE.md's line-31 finding: the
+instrument is honest and is answering a narrower question than the reader supplies.
+
+## SEVENTH NULL ROW — and the third wall is NOT in cpuinfo.pas
+
+**Stubbing BOTH walls out of a copy of `cpuinfo.pas` moved units-compiling by ZERO**
+(21 -> 21). The prediction that a third wall would swallow the population was right;
+the prediction that it would be in the same file was **wrong — `cpuinfo.pas` compiles
+clean with both stubbed.** The 138 land one file further on, at `an object type
+cannot have a constructor`, which goes **18 -> 156 of 207** and is now the largest
+single wall this corpus has recorded.
+
+**That distinction is the whole value of the measurement**: "another wall in
+cpuinfo" means keep grinding one file; "one shared wall one file on" means the next
+lever is `feature-p-legacy-value-object-types` / `bug-p-object-value-types-standard-meaning`.
+Ranking caveat fully intact — 156 is units QUEUED, and this umbrella has now
+converted seven walls at a yield of zero.
+
+**STUB BEFORE YOU FIX.** It answered the size question for almost nothing and
+BEFORE the work, and it is the only reason we know the next wall is elsewhere.
