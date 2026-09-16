@@ -2148,3 +2148,83 @@ the count:**
 
 **Two of the four have never been green here**, which is a harder class than a
 regression with a range to bisect, and **no pin is mine to take.**
+
+## Check-in 1f — the four are not four of a kind, and a peer's quantifier was one row too wide
+
+**frankb-56 accepted the mechanism and added the consequence, which is the better half
+of it** (`3884c62ed`): for a **pin-built** job the bisect range **was never going to
+contain the cause**. good `b984ad07e` 18:55 and bad `934ba0418` 19:34 are both before
+pin v410 existed, so *"the cause is not IN the range — it is the range's relationship
+to a binary OUTSIDE it. A bisect cannot represent that and will land on whichever
+commit first tripped the frozen diagnostic, which is a real commit doing a correct
+thing."* That is right, it is sharper than anything I wrote, and it is banked.
+
+**ITS SCOPE CLAUSE IS ONE ROW TOO WIDE AND I MEASURED IT RATHER THAN RELAYING IT.**
+The message ends *"worth knowing before anyone spends a bisect on **the other
+never-green rows**"* — a quantifier over a population of two, and the two do not
+build the same way:
+
+| row | built by | does the pin-built warning transfer? |
+| --- | --- | --- |
+| `demos#00` | **`$(PXX_STABLE)`** — the target's own echo says *"build ALL examples/* against `$(PXX_STABLE)`"* | **YES** |
+| `test-core#src:test/c_crtl_wait.c` | **`./$(COMPILER)`** — `Makefile:22480`, the LIVE compiler | **NO** |
+
+So the warning lands on exactly one of the two. This is CLAUDE.md's own clause-to-go-
+measure — *"the other X"*, *"anywhere else"* — and it cost one grep. **I am recording
+it as a correction to a scope word and not as an error of reasoning**, because the
+mechanism it generalises is correct and the seat found it against its own earlier
+claim.
+
+**AND CHECKING THAT TURNED UP SOMETHING BIGGER ABOUT `demos#00`: IT DECLARES ITSELF
+NOT TO BE A GATE, IN ITS OWN OUTPUT.** Its stored reason ends:
+
+```
+=== demos: 31/36 built into build/demos/ (esp32 skipped — cross-only) ===
+(demos is a dashboard, not a gate; FAILs -> file a ticket)
+```
+
+**A row that reports a property of the TREE grades; a row that restates the pin's own
+definition gates** — that is this repo's own distinction, and `demos#00` is on the
+grading side by its own declaration while being scored RED inside a tier I have been
+reading as the goal-1 blocker list. **I cannot recover WHICH five of the 36 fail**:
+the stored reason is truncated to 288 characters and keeps only the tail, and the
+report files carry no per-demo detail. So the five are not in the archive at all.
+
+**THE FOUR ARE FOUR DIFFERENT ANIMALS AND THE COUNT WAS HIDING THAT:**
+
+| row | what it actually is |
+| --- | --- |
+| `demos#00` | **pin-built AND self-declared a dashboard, not a gate.** 31/36. The live tree's number is unknown and unmeasured. |
+| `test-core#src:test/c_crtl_wait.c` | live-compiler built, **never green on borg**, no range — the only genuine unknown of the four |
+| `lib-test#src:tools/crtl_reachability.py` | a real open regression, 4 in range |
+| `tools-devtest#00` | a real open regression, 1 in range |
+
+**So "four blockers to goal 1" is itself a number that flatters nothing and explains
+nothing.** One is a dashboard whose red is informational by its own words; one is
+pin-built and may already be green in the tree with nobody able to see it; two are
+real regressions with ranges. **The honest sentence for his return is that the full
+tier has four red rows of four different kinds, not that goal 1 is four fixes away.**
+
+**Its reading of my null result is better than mine and I am keeping its framing.**
+*"A parameter an instrument silently ignores is worse than one it misreads."* My
+`PXX=` on `crtl_reachability.py` returned a RIGHT answer by a route that could not
+have produced a wrong one — agreement across two compilers, which is the shape of
+corroboration — where its grep trap at least returned a falsifiable wrong one. **The
+only tell was knowing the script does not read the variable**, and nothing in the
+output could have carried that.
+
+**Its amendment to the promotion note is accepted:** if source-ancestry-versus-binary-
+behaviour recurs, the sharper half is not *"ancestry answers about source"* but that
+**the pin records a BINARY SHA in its own subject line**, so an identity exists that
+prose cannot imitate and ancestry cannot fake. `c599e8546121` in the subject and on
+disk settled today's question in one command after two instruments had disagreed.
+Still one subsystem; still the note and not CLAUDE.md.
+
+**The `crtl_decl_probe.sh` run is still in flight and has produced no interim output
+by construction** — the script's result comes through a `tail`, so silence is its
+normal appearance, not a tell either way. Nothing recorded here or in 1e depends on
+it. **I am not going to `pgrep` for it.**
+
+**frankb-56 has stopped: nine fixes, three groups, seven pushes. franks-ee is on
+`comphook.pas:386`. Track P unstaffed all day, which is the report, not a problem I
+may solve by moving a seat.**
