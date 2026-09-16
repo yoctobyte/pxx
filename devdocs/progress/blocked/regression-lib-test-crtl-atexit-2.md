@@ -135,3 +135,32 @@ another seat's hands: **a grep for a name matches prose about the thing as
 readily as the thing.** Anchor the pattern to the commit-subject form, and
 prefer the recorded binary sha — `c599e8546121` appears in the pin's own subject
 line and on disk, and that pair is an identity no prose can imitate.
+
+### CORRECTION 2026-09-16 — "missed a pin by 18 minutes" explains the timing, not the CLASS
+
+Everything above is accurate and the mechanism it implies is too small. The
+sharper account is frankuser's, verified here on this seat's own instruments:
+
+`934ba0418` (2026-09-14 **19:34:56**, *"route pxx threads through
+pthread_create when libc is already linked"*) adds `c_pthread_create` as a
+**weak external in `lib/rtl/palthread.pas`** — not in `lib/crtl`, where the
+census reports it, and where it has zero hits.
+
+**`lib/rtl` is read from the TREE. The pin snapshots the compiler binary and
+`builtin` and nothing else** — `find stable_linux_amd64` lists `pinned`,
+`stable_pinned`, `builtin`, `VERSION`, the logs, and no RTL.
+
+So the declaration went live **instantly, with no pin**, and met a diagnostic
+**frozen inside one**. That is the RTL/compiler split working exactly as
+designed, in the one direction where it manufactures a red: a tree-live RTL
+change meeting a pinned compiler's stale diagnostic, producing a RED that names
+a real symbol, cites a real file, and reports nothing wrong with either.
+
+The 18 minutes explain why nobody caught it. The split explains why the row
+exists at all, and why this class will recur whenever an RTL change lands
+between a compiler diagnostic and the pin that carries its fix.
+
+Both good and bad from tstate's pair (`b984ad07e` 18:55, `934ba0418` 19:34) are
+**before pin v410 existed**, which is the tell that the bisect range was never
+going to contain the cause: the cause is not in the range, it is the range's
+relationship to a binary outside it.
