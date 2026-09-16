@@ -495,6 +495,21 @@ one-line logbook pointer.
   reachable through two shapes, normalise rather than grow a second path; the
   second path is the one that stays broken. **Fixed one arm of a double case?
   Grep for the sibling before closing.**
+  **AND THE SIBLING IS USUALLY A SPELLING, NOT A SHAPE — WHICH IS WHY GREPPING
+  FOR THE CONSTRUCT MISSES IT.** Measured 2026-09-16, six instances, four seats,
+  four subsystems, one day, none of them looking for a pattern: `$cfnptr`
+  recorded a struct param's record id and `$cfntype` never got those two lines
+  (a struct by value through a function-TYPE typedef got the wrong ABI, which is
+  what stopped quickjs RUNNING); `ParseConstSection`'s initializer loop called
+  the shared `TryParseInitValForm` and `ParseVarSection`'s was never wired to
+  it — **three separate times**, an array of sets, then a `var` initialised from
+  a `const`; and the inliner's ordinal-narrowing and float-RESULT guards left
+  float->ORDINAL open. **Both spellings mean the same thing to the person who
+  wrote the source, so neither the construct name nor the test corpus
+  distinguishes them** — grep for the OTHER SPELLING'S HANDLER, not for the
+  feature. The rule above was never missing; it is being rediscovered at
+  regression time instead of applied at fix time, and this sentence is the part
+  that makes it actionable at fix time.
   **AND WHERE A CONSTRUCT TAKES AN ORDERED LIST, THE POSITION OF THE
   INTERESTING ELEMENT IS A VARIABLE — SO PUT IT SOMEWHERE OTHER THAN LAST.**
   That is the whole discharge and it is one extra row: write the fixture with
