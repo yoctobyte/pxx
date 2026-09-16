@@ -19981,7 +19981,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_pascal_system_qualified_intrinsic.pas $(TESTTMP)/test_pascal_sysqual26
 	tools/expect_same.sh test_pascal_sysqual26 "$$($(TESTTMP)/test_pascal_sysqual26)" "$$(printf '4\n0\nalloc\n300\n0\n2\n99 98 97 96\n1 2')"
 	./$(COMPILER) test/test_qualified_units.pas $(TESTTMP)/test_qualified_units26
-	tools/expect_same.sh test_qualified_units26 "$$($(TESTTMP)/test_qualified_units26)" "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
+	# The last eight rows pin bug-p-a-unit-qualified-reference-is-captured-by-a-
+	# same-named-string-const, both directions: 501/602/703/504 are the QUALIFIED
+	# reads reaching qualified_a's routines past a program constant of the same
+	# name, and `do not use`/TRUE/FALSE/[] are the BARE reads still reaching the
+	# program's constants. Every value verified against fpc 3.2.2. The pinned
+	# compiler REFUSES this file (`expected ')' before '('` at the first of them),
+	# which is the positive control.
+	tools/expect_same.sh test_qualified_units26 "$$($(TESTTMP)/test_qualified_units26)" "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201\n501\n602\n703\n504\ndo not use\nTRUE\nFALSE\n[]')"
 	./$(COMPILER) test/test_uses_alias.pas $(TESTTMP)/test_uses_alias26
 	tools/expect_same.sh test_uses_alias26 "$$($(TESTTMP)/test_uses_alias26)" "$$(printf '42\n7\n2')"
 	./$(COMPILER) test/test_relpath_uses.pas $(TESTTMP)/test_relpath_uses26
