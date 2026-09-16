@@ -232,3 +232,47 @@ physically able to observe before quoting it.**
 own DOCS-ONLY watch-note commit and was the `bad=` sha for three rows; `3a91d13f1dec` is
 a NilPy commit and is the `bad=` for a C test. Both are tested upper bounds named by
 POSITION with 1-in-range. Neither is a lead.
+
+### 2026-09-16, check-in 0c — Track A thread-state group CLOSED; the backlog pattern recurred
+
+**franks-ee closed all three thread reds and both tickets.** `984be7e19` is the one that
+matters: `Thread.start` handed `ThreadLauncher` a raw `Pointer(Self)` with **nothing
+retaining the object**, so `threading.Thread(target=f).start()` unbound — the shape
+CPython itself documents — was a use-after-free. 30/30 with refs kept, 0/30 dropped,
+10/30 on one CPU. **Not daemon-only:** `LiveAdd` stores a pointer so the exit path can
+join and a plain array store does not retain, so "the registry holds it" is false
+(1/30, 9/30). Retain belongs in `start()`, not inside `if not daemon`.
+
+**THE P90 TICKET CLOSED BY EVENTS — carry this to the owner, it is about the backlog and
+not about one ticket.** `bug-a-a-nilpy-object-allocation-takes-no-heap-lock` was filed
+2026-09-13 at **p90, top of the queue**, and fixed the NEXT DAY by the owner's own
+`02b7f7250` — the allocator spinlock was gated `PXX_TS_SOFTLOCK` while x86-64 selects
+`PXX_TS_HARDLOCK`, so nine sites compiled out on the one target everything is built for.
+**Nobody closed it for three days.** That is the same mechanism as the `atan2` ticket
+found closed-by-events 26 days late, which is what produced goal 2. Three days rather
+than twenty-six, and the same failure. Re-measured verbatim before closing: list 0/10,
+dict 0/10, tuple 0/10 against the recorded 5/5.
+
+**Three method findings worth more than the fixes**, all from franks-ee, all now in the
+tickets:
+- **A control that PASSED when it must not**, because a `-Fu` override silently did not
+  take. The tell was the binary's **code size being byte-identical** to the unmodified
+  build — not the test result. Assert the PRECONDITION, not just the comparison.
+- **Reclaim is lazy.** A stack returns during `ReapSweep`, which runs on thread
+  CREATION, so measuring straight after a batch compares a swept state against an
+  unswept one. The measurement's own earlier steps supply what the later one reads.
+- **glibc recycles a finished thread's stack**, so a recycled gs-block address is
+  indistinguishable from two live threads sharing one. franks-ee's first run said the
+  OPPOSITE of its second. **Assert distinct WHILE CONCURRENT**; sampled across a
+  thread's death is a different claim, and it is the one that fails.
+
+**errno stays open, and its counts FELL an order of magnitude without being progress** —
+`errno.h:5` is still `extern int errno;`, nothing in that path changed, the thread route
+did. Flagged by franks-ee itself, which is the direction nobody checks. Its stated
+blocker ("fixes no FOREIGN thread") is measured FALSE for every thread a pxx program
+makes including from C, so the cheap path is unblocked; remaining work is Track C.
+
+**Reassigned:** franks-ee → `c_asm_in_inline_body.c@2` / the generic AST-walker cloner
+bug (Track A, live red, `bad=` sha is positional and probably wrong — reproduce at HEAD
+and at `3a91d13f1^` first). Fallback if blocked: `test-tthread-fails-under-full-tier-load`,
+now that contention is excluded.
