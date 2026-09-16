@@ -39,3 +39,32 @@ optdiff shard 5/12: pass=176 skip=43 diff=1
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Re-measured 2026-09-16 (frankb-56) — does NOT reproduce standalone, on EITHER compiler
+
+Not a claim that this is fixed, and not a claim to this ticket. Recorded so the
+next reader does not re-derive it.
+
+| measurement | result |
+| --- | --- |
+| current compiler, full optdiff comparison (-O0 vs -O1/-O2/-O3) | `pass=1 skip=0 diff=0` |
+| PINNED compiler (predates every fix landed today), -O0 vs -O3 | no difference either |
+| does the subject use `ParamStr(0)`/`argv[0]`? | **no** (0 occurrences) |
+
+**The argv[0] harness fix (311649be0) does NOT explain this**, which is the
+first thing to rule out given it closed two sibling shard tickets the same day:
+neither subject reads its own path, so that fix cannot have touched them. The
+flattering reading was checked and refused.
+
+**What this does NOT establish.** A standalone re-run is not the shard
+population. optdiff's own header warns that under full shard parallelism a tight
+timeout "turns box load into false DIFFs", and these rows were produced under
+that load. So "does not reproduce alone" is consistent with a load/timing
+artefact AND with a real defect that needs the shard context — it does not
+choose between them. The re-run that would decide it is the shard, not the file.
+
+**What it does establish:** whatever this is, it is not the same cause as
+`regression-optdiff-shard0-12` (a real `-O3` inliner dropped store, fixed in
+84ccb6384) or as shard2/shard10 (argv[0], 311649be0). Those closed by two
+different causes. Treating the remaining shard reds as ONE cause is not
+supported by the three that have now closed.
