@@ -881,3 +881,50 @@ twice in one session: a wall's population is a queue position, the arms are
 pxx-only (read deltas, not the absolute 21), and **an error count is not an
 error identity** — `fa397c761` is invisible in every summary quantity and is
 still a real fix.
+
+## A STUB ORDERS THE STUBBED WORLD ONLY — it says what is BEHIND a wall, never that a wall is in FRONT
+
+**Measured 2026-09-16 (franks-ee), correcting itself, and it corrects the advice in the
+section above.** "Stub before you fix" is right and it is what found walls 4 and 5 at
+all. What it does NOT do was never stated: **in the stubbed world the stubbed wall does
+not exist, so the ordering you read off it cannot tell you that wall sits in FRONT of
+what you found.**
+
+`globals.pas:502` was found with the object wall stubbed and reported as gating 138
+units and as the cheaper lever. **It gates nothing on the real corpus** — those 138 stop
+at the object constructor and never reach the var initialiser. Before and after on the
+unstubbed tree: 21 units OK, 396 total errors, identical unit-by-unit AND by error
+identity.
+
+**The discipline, with the missing line: stub to find the next wall, then RE-RUN
+UNSTUBBED before claiming an ordering.** One command.
+
+**Pair this with the count-vs-identity section above — they are the same family in
+opposite directions, twelve hours apart.** There the instrument could not see a real
+change; here it showed a real change in a world the measurer had built. Both honest,
+both answering something narrower than the reader supplied.
+
+**And `fa397c761` is the count-vs-identity rule biting a SECOND time**: a real fix,
+invisible in every summary quantity — same units, same counts, same first-error
+histogram. Two independent instances now, not one.
+
+## THE FIVE WALLS, and the first structural read that is not "one more wall in one more file"
+
+| # | wall | kind | state |
+| --- | --- | --- | --- |
+| 1 | `TDoubleRec` | RTL type | Track B, ticketed |
+| 2 | array-of-set `var` init | parser | **FIXED** `14df2066b` |
+| 3 | `object` constructor | language | **DECIDED AGAINST** (`decide-old-style-object-types`, option A) |
+| 4 | `var` = named string const | parser | **FIXED** `fa397c761` |
+| 5 | `TSystemTime` | RTL type | Track B, **unticketed** |
+
+**Two of the five are RTL types we simply do not declare** — no compiler change, no
+decision, nothing to reverse. That makes them the cheapest remaining lever by some
+distance, and it is the first time this umbrella's blockers have sorted into kinds
+rather than into files.
+
+**Wall 3 is the one to understand before ranking anything:** it is decided AGAINST, so
+walls 4 and 5 sit behind a wall nobody is authorised to remove. **Do not rank 1 or 5 on
+the 138** — that count comes from the stubbed world. **Nine null rows in a row**; the
+yield of walls 1 and 5 stays unknown until wall 3 moves, and moving wall 3 requires a
+decision recorded below the existing one.
