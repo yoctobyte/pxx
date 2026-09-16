@@ -3933,3 +3933,91 @@ rejected and `twatch` will list it until the next opt run clears it. Gate GREEN,
 a pass. **Seven for the 18th**, the new one being this skip-list edit. Track P
 and `optdiff#shard5/12` unstaffed — **and shard5 is now worth re-examining under
 exactly this lens before anyone works it.**
+
+## Check-in 1z — shard5 closed by a SPELLING, I declined the word "ratified", and I nearly sent a correction that was itself the wrong population
+
+### ITS SHARD5 FINDING, VERIFIED HERE
+
+```
+test_c_gtk3_stock.pas  ->  hashes to shard 5          (confirmed independently)
+pattern test_c_gtk_*.pas  vs  test_c_gtk3_stock.pas   ->  DOES NOT MATCH
+```
+
+`gtk3`, **no underscore.** The skiplist's `t_rw*` entry has described this exact
+failure for weeks — binary name, PID, millisecond timestamp, three varying fields
+in one `cannot open display:` line, and optdiff varies the binary name itself by
+compiling to `d0/d2/d3`. **The handler was already written and the sibling was a
+spelling.** That is CLAUDE.md's own rule, which says in terms that the sibling is
+usually a SPELLING and that grepping for the construct misses it. Here it cost
+**nine days** on the longest-standing obstacle to goal 1.
+
+**Its shape is different from shard9's and the difference is the stronger
+result:** deterministic, ten runs byte-identical, and it exits 0 at both levels
+**with a display reachable.** So both standalone re-runs — frankb-56's today
+included — were correct about a different question. `pass=1 skip=0 diff=0` is the
+right answer when the condition under test is the ABSENCE of a display, which is
+the watcher's environment and not a seat's. **Isolation guards the run, not the
+route**, and the discriminator `rc 1 vs 1` was in the artefact the whole time.
+
+### THE WORD I AM DECLINING
+
+It wrote that my skip-list edit is **"ratified"**. **It is not, and a peer cannot
+ratify it.** Its agreement is corroboration of the reasoning — worth having, and
+it re-ran the nondeterminism itself rather than relaying mine (30 runs at `-O0`:
+139 x3 / 217 x27; 30 at `-O2`: 0 x5 / 124 x1 / 139 x1 / 217 x23) — but **an
+escalation is not something a peer can grant**, and that holds when the peer
+agrees with me exactly as much as when it does not. The edit stands on its own
+justification and on the owner's reversal being one deleted line. **Recorded
+because a seat reading this file later should not find "ratified" and take it as
+settled.**
+
+### I NEARLY SENT IT A CORRECTION THAT WAS WRONG, FOR THE SEVENTH TIME TODAY
+
+It said it had measured *"the other two uncovered gtk sources"*. I enumerated and
+got **five**, and started composing the correction. Three of the five live under
+`test/gui/`, and **optdiff's glob is flat — it lists the `.pas` and `.c` files
+DIRECTLY in `test/`, not recursively.** It never sees them. I had used
+`git ls-tree -r`, a **recursive** listing, against a **non-recursive**
+instrument, so my population was a superset of the one that exists.
+
+Restricted to what optdiff actually enumerates, exactly **two** gtk-named files
+are uncovered — `test_c_gtk.pas` and `test_gtk3_pc_pchar_conversion.pas` — and
+**neither reaches a display** (zero hits for
+`gtk_init`/`gtk_window_new`/`gtk_widget_show`/`gtk_main`). **Its number was exact,
+and scoping the skip to one file rather than widening to a `gtk3` glob was
+right.**
+
+**The tell that saved it:** three of my five returned an EMPTY grep count rather
+than `0`, because the path did not exist. I noticed a blank where a zero belonged.
+**Seventh instance today of the wrong-population question, and the second where
+asking it protected a peer instead of catching one.**
+
+### WHAT IT DID WITH MY SHARD9 FINDING IS BETTER THAN WHAT I WROTE
+
+I established four outcomes at a fixed level and stopped. **It turned that into a
+working instruction**: the repro PASSES about one run in six, so **a single-run
+verification of any future fix reads FIXED on luck at that rate**, and the same
+coin decides whether a regression is seen. Its ticket now says verify over **>=30
+runs per level and report the distribution**. That is the actionable half and I
+had left it implicit. It also widened the summary, which had said only *"prints
+Unhandled exception"* — true, and under-describing a four-outcome observable
+enough to mislead.
+
+### AND IT LEFT SOMETHING UNEXPLAINED RATHER THAN INVENTING A CAUSE
+
+`74702c14d` (DISPLAY stripping) is 08-26, the file landed 08-29, **the red is
+09-07** — so something else decided when that shard began comparing it, and it
+says so in the ticket instead of supplying a plausible cause. **That is the harder
+half of the discipline this shop keeps recording**, and it is the opposite of the
+conclusion-as-caption failure both of us hit today.
+
+### STATE
+
+**Goal 1 loses its longest-standing shard red.** Both remaining optdiff reds are
+now explained and skipped as instrument-scope questions rather than defects, with
+the underlying p70 bug open and better characterised than it was this morning.
+`twatch` will keep listing shard5 and shard9 until the next opt run clears them —
+**that is the instrument lagging, not two open defects.**
+
+Gate GREEN, canary skipped this tick. **Seven for the 18th**, unchanged: the skip
+edits are one item with the two shard findings behind them.
