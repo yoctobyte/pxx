@@ -3669,3 +3669,62 @@ file. The defect is in the self-check's baseline, not in the guard's premise.
 
 **Four open regressions unchanged. Gate GREEN. Six for the 18th; the census
 question (229/287) remains mine to carry.**
+
+## Check-in 1w — fix verified, and this one IS promotable: second subsystem, extended rather than added
+
+**Verified by running the documented command as a later reader would**, not by
+reading the commit: the umbrella now answers **13 × `21 / 10 / 176`, 5 ×
+`22 / 10 / 175`**, and the baseline sentence spells its counts in words, so it is
+no longer a member of the digit population. **The structural fix works and
+survives a re-wording**, which the arithmetic fix would not have.
+
+### PROMOTION DECISION: YES, AND AS AN EXTENSION — `4d1a52af5`
+
+Stated out loud as the rule requires, and this is the opposite call from the two
+I made earlier today (`1p` symlink: banked, one instance; `1r` pgrep placement:
+escalated as a question, no edit).
+
+**What made this one different is recurrence, not quality.** The paragraph
+already carried *"the instrument was degraded by the act of writing the
+investigation down"* — measured on `--grep 'pin vN'` going 5 → 19 in a day, all
+fourteen added by the seat doing the investigating. **This is the same mechanism
+in a second, independent subsystem**: a document self-check rather than a git
+search. That is the file's stated bar and it is met.
+
+**And the second subsystem is strictly nastier, which is what earns the
+sentence:** in the search case the population drifts as a side effect of writing
+prose. In the self-check case **the artefact that changes the count IS the
+check's own published output, and the check exists to be re-run** — so the
+degradation is not a risk, it is guaranteed on first use by anyone else.
+
+Two things went in with it that are not restatements:
+
+- **Born red is not the sharpest criterion; the COST is.** *A guard that cries
+  wolf on its first outside run teaches that it can be ignored.* Born-red says
+  it fails; this says what the failure does to every later guard the reader
+  meets. franks-ee picked that line out of my message as the stronger statement
+  and it is.
+- **The remedy is structural, not arithmetic.** Restating 13/5 as 14/6 leaves
+  the sentence inside the population and breaks at the next re-wording. **Write a
+  baseline that cannot match its own pattern.**
+
+**Extension, not a new rule** — one paragraph gains an axis at the cost of a
+sentence, where a neighbour costs a paragraph every session pays for at startup.
+That is the file's own preference and three of today's edits have now honoured
+it.
+
+### THE THREAD IS CLOSED AND I AM NOT PROLONGING IT
+
+Eight exchanges with franks-ee since 1o, and the last four were each a
+correction of the previous one — mine of its overload rule, its of my
+quantifier, mine of its self-check baseline, its structural fix. **Every round
+produced a measured change to the tree and the rounds are now returning
+verification rather than new defects**, which is where a thread should stop. It
+has nothing outstanding and neither do I; I am not sending another round for
+politeness.
+
+**Running tally for the 18th, unchanged at six:** `3eb0297f0`; the goal-5
+wording; the two-arm corpus question; Track B's `lib-test` gate down under the
+pin **with the 229/287 census number attached as one item, not two**; the
+pgrep-rule placement; and the census question itself. **Four open regressions
+unchanged, gate GREEN, Track P and `optdiff#shard5/12` unstaffed.**
