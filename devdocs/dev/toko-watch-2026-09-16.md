@@ -2619,3 +2619,101 @@ recompute, not the `verified` stamp path), new binary `68d79522668e`, re-gate
 trimming it mid-watch — editing the record to look tidier is worse than a long
 record — but it is written here so the deletion at his return is not mistaken for
 losing something, and so the next watching seat writes shorter blocks than I did.
+
+## Check-in 1l — wall eleven, and the parked PChar bug has a boundary that hides it from the two shortest reductions
+
+**Wall eleven landed library-only.** `34e3a2fa8` — `FindFirst`/`FindNext`/`FindClose`,
+`TSearchRec`/`TRawByteSearchRec`, the nine `fa*` constants and `AllFilesMask` — touches
+`lib/rtl/sysutils.pas`, a test, a Makefile row and docs, **zero files under
+`compiler/`**. `faAnyFile = $000001FF` at `sysutils.pas:1233`, as it said. Corpus
+120 → 0, units-OK 22 → 22. **Tenth null row, and it named in advance the one shape
+that could have broken the prediction** — cfileutl being a dependency rather than a
+leaf — which did not fire.
+
+**New head `cfileutl.pas:518` `GetDir`, same 120 units, RTL again.** It is taking it
+next and it is right not to wait on the two-arm question: **`GetDir` is a real
+`SysUtils` gap under either reading of what the corpus number means**, so my call on
+the 18th does not gate it. I said so rather than letting silence read as a hold.
+
+**THE WALK-DOWNWARD SHAPE IS BACK IN A SECOND FILE** — `comphook.pas` terminated,
+`cfileutl.pas` started afresh 236 lines lower in a different procedure. **Both my 1i
+writeup and its correction to it survive**: the shape recurs *and* is not predictive.
+Its recorded expectation this time **explicitly declined to guess a next head** on the
+strength of exactly that finding, which is the correction being used rather than
+filed.
+
+### I REPRODUCED THE PARKED PChar BUG AND THE BYTE IS NOT GARBAGE — IT IS THE LENGTH
+
+`0467be745` banks `PChar(AnsiString('lit'))` yielding *"one garbage byte"*. Reproduced
+at HEAD `68d79522668e` against `fpc -O2` on the same source, five neighbouring
+spellings as controls in the same program; **only the double cast diverges, B–F are
+byte-identical on both compilers.** Then I printed the raw bytes instead of the string:
+
+```
+                pxx byte[0..3]        fpc
+'abc'           3  0 0 0              97 98 99 0
+'hello'         5  0 0 0              104 101 108 108
+'hello world'   11 0 0 0              104 101 108 108
+```
+
+**The observable is the string's own LENGTH read as characters** — the ticket's
+*"pointer to a length-prefix"* made visible, and **deterministic, not garbage.** That
+explains why two seats reported two symptoms from one defect: `WriteLn` of a `PChar`
+stops at the first NUL, so the length renders as a control code for a short string
+(**looks empty**), a printable character for lengths 32–126, and genuinely empty for
+any length that is **0 mod 256**. It saw "one garbage byte"; I first saw "empty".
+**Same byte. Assert on `Ord(p[0])`, never on the printed form.**
+
+**AND THE DEFECT DOES NOT FIRE BELOW LENGTH 2:**
+
+| literal | pxx | fpc | |
+| --- | --- | --- | --- |
+| `''` | `0 0 0` | `0 0 0` | **agree** |
+| `'x'` / `'A'` | `120 0 0` / `65 0 0` | same | **agree** |
+| `'ab'` | **`2 0 0`** | `97 98 0` | DIVERGE |
+| `'abc'` | **`3 0 0`** | `97 98 99 0` | DIVERGE |
+
+**The two shortest reductions anyone would write — the empty string and one
+character — both CERTIFY the bug as fixed.** That is the passing-arrangement rule with
+a measured boundary on it. Appended to the ticket (`d71e09a30`) with the requirement
+that any regression test use a literal of **length ≥ 2** and assert on bytes. I did
+**not** add a `test/` file: the fix is parked on purpose and a test for an unfixed
+defect belongs with the fix.
+
+**Its reason for parking is right and I am not second-guessing it.** The narrow fix at
+the `PChar` site is three lines and is **a second path guarding against a lying tag**,
+which normalise-don't-special-case says is the path that stays broken; the root fix
+materialises in the cast door, and every spelling that works today relies on the
+DESTINATION driving the coercion, so that interaction needs measuring first. Inert
+until a pin either way.
+
+### TWO OF ITS OWN CATCHES WORTH THE RECORD
+
+- **Its first `FindFirst` fixture passed while measuring nothing.** Run against
+  `test/`, `faAnyFile` and `faDirectory` return the IDENTICAL answer — **no
+  checked-in tree has a dotfile, a symlink, an unwritable file or a device node** — so
+  every attribute-filter row was vacuous and *a filter that ignored its argument
+  entirely would have scored full marks*. It now builds its own directory with all of
+  those plus a dangling symlink.
+- **A claim it had ALREADY WRITTEN INTO THE SOURCE was disproved by its own control,
+  in the same hour.** The comment said `faAnyFile` matters because `$3F` *"silently
+  drops `faNormal` and `faSymLink`"*. Measured: on unix the two select the **same**
+  entries in every arrangement it could construct. **A conclusion written as a
+  caption, committed before the output existed, which survived its own re-read because
+  the surrounding measurement was real.** The harness caught it only because it had
+  made it fail on purpose first — inverting the filter polarity in a scratch copy of
+  the RTL and confirming the diff reddens on six of ten rows **before** quoting its
+  green.
+
+**Three semantics it read off FPC's source rather than recalling:** `faAnyFile` is
+`$1FF` not `$3F`; `Attr` is a **PERMISSIVE** filter, so `faDirectory` still returns
+ordinary files and `faArchive`/`faReadOnly` must be forced in or the obvious call
+returns **nothing**; and `.` and `..` **are** returned — fpc's own `cfileutl.pas:287`
+filters them by hand, which is the evidence that they arrive.
+
+**Still not banked, unchanged at its instruction:**
+`test_threadsafe_heap_lock_deadlock_diag` and `fpc-bootstrap#src:compiler/compiler.pas`.
+
+**Shop unchanged from 1k: four open regressions, gate GREEN at `68d79522668e`,
+franks-ee working, frankb-56 stopped, Track P and `optdiff#shard5/12` unstaffed, three
+things escalated for the 18th.**
