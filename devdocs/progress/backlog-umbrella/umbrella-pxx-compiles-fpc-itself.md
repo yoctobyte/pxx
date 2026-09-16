@@ -820,3 +820,64 @@ converted seven walls at a yield of zero.
 
 **STUB BEFORE YOU FIX.** It answered the size question for almost nothing and
 BEFORE the work, and it is the only reason we know the next wall is elsewhere.
+
+---
+
+## 2026-09-16 (frankS, later) — the wall ORDER matters, and I got it wrong before measuring
+
+`fa397c761` fixes `var s: string = <named const>` (`globals.pas:502`). **It
+changes nothing here today**, and the reason is worth more than the fix.
+
+**I claimed this wall gated 138 units and was the cheaper lever than the object
+wall. It does not, and it is not in front of it.** `globals.pas:502` sits
+**BEHIND** the object-constructor wall: those units stop at the object
+constructor and never reach the var initialiser. Measured on the real tree,
+before and after:
+
+| | units OK | total errors | first-error histogram | unit-by-unit |
+| --- | --- | --- | --- | --- |
+| before `fa397c761` | 21 | 396 | unchanged | identical |
+| after | 21 | 396 | unchanged | identical |
+
+**It only appeared to be in front because I found it with the object wall
+STUBBED OUT.** The stub was there to reveal what was behind; I then read its
+output as an ordering over the unstubbed corpus. A stub tells you what is
+BEHIND a wall — it cannot tell you a wall is in FRONT of one, because in the
+stubbed world that wall does not exist. **The stub answers "what is next", and
+I read it as "what is first".**
+
+That is the same family as the count-versus-identity finding above and it
+arrives from the other side: there, an instrument that could not see a real
+change; here, an instrument that showed a real change in a world I had built.
+Both are honest and both are about a narrower question than the reader supplies.
+
+**What the fix does deliver, measured where it is reachable** (stubbed tree,
+cpuinfo ×2 + versioncmp's ctor):
+
+- all 138 move from `not a constant` to **`unknown type: TSystemTime`**
+- units compiling **22 → 22**
+
+**Wall six is `TSystemTime` — an RTL type gap, same family as `TDoubleRec`,
+Track B.** With that, the walls this umbrella has hit now alternate between
+Track P parser gaps and Track B RTL type coverage:
+
+```
+1  TDoubleRec                  RTL type      (B, ticketed)
+2  array-of-set var init       parser        (P, FIXED 14df2066b)
+3  object constructor          language      (DECIDED against; see decide-old-style-object-types)
+4  var = named string const    parser        (P, FIXED fa397c761)
+5  TSystemTime                 RTL type      (B, unticketed)
+```
+
+**So the binding constraint is not one subsystem.** Two of the five are RTL
+types we simply do not declare, and neither needs a compiler change or a
+decision — which makes them the cheapest remaining lever, and the first
+structural read this umbrella has had that is not "one more wall in one more
+file".
+
+**Ninth null row.** Five walls cleared or stubbed across the day, units
+compiling 21 → 22. The standing caveat holds and has now been demonstrated
+twice in one session: a wall's population is a queue position, the arms are
+pxx-only (read deltas, not the absolute 21), and **an error count is not an
+error identity** — `fa397c761` is invisible in every summary quantity and is
+still a real fix.
