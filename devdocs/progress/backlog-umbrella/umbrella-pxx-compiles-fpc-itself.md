@@ -918,9 +918,9 @@ histogram. Two independent instances now, not one.
 | 4 | `var` = named string const | parser | **FIXED** `fa397c761` |
 | 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
 | 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
-| 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `PENDING-COMMIT` (franks-ee) |
-| 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
-| 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `3926a4098` (franks-ee) |
+| 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `d66f128a1` (franks-ee) — **live without a pin** |
+| 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `42e127d6d` (franks-ee) — **live without a pin** |
 | 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **OPEN — the head of the STUBBED arm**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
