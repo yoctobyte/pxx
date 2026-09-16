@@ -282,10 +282,13 @@ procedure Truncate(var f: FileRec);
   is taken. `count` is Int64 in every row, so the ordinary spelling
   `BlockRead(f, buf, SizeOf(buf), c)` hands it a literal or an Integer length
   and is precisely that shape: the masking case is the COMMON call, not an
-  exotic one. Narrowest-first scores 27/27 in test/lib_blockio.pas; the same
-  five rows with Int64 declared first score 24/27, corrupting the caller's
-  frame on the three narrow widths. That control is why the order is written
-  this way -- do not tidy these into width order. }
+  exotic one. Narrowest-first scores 36/36 in test/lib_blockio.pas (fpc 3.2.2:
+  36/36); the same five rows with Int64 hoisted to the front score 34/36, and
+  fully reversed 33/36. Which rows die moves with the arrangement -- the damage
+  lands on whatever the frame put next -- but the exact-length rows survive
+  every arrangement, which is what says the effect is the CONVERSION and not
+  the order alone. That control is why this order is written this way -- do not
+  tidy these into width order. }
 procedure BlockRead(var f: FileRec; var Buf; count: Int64); overload;
 procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Word); overload;
 procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: LongInt); overload;
