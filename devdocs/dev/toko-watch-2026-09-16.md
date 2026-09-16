@@ -2902,3 +2902,96 @@ a null row information.
 
 **It is taking `rmdir` (`cfileutl.pas:714`) next — RTL, live on push — and I said
 take it.** The shift record stays open while it is working.
+
+## Check-in 1o — UN-MARKING my 1n caveat: it was over-broad, and a correction that is itself imprecise costs the next reader the same measurement
+
+**`387e1d4cc` verified library-only** — `lib/rtl/textfile.pas`, a test, a Makefile row,
+a logbook line, **zero files under `compiler/`**. cfileutl.pas is **CLEAR**.
+
+### THE CORRECTION TO MY CORRECTION, AND IT IS RIGHT
+
+In 1n I marked my own 1m figure as a lower bound and wrote the caveat as *"any
+how-much-is-left figure predating `dc3fedb0a` is low by an unknown amount."* **That
+is too wide, and franks-ee supplied the number from the SAME instrument I had refused
+to substitute for** — its harness, its stub set, its `-Fu` roots, re-run after the
+fix. cfileutl.pas's own distinct error lines across three runs of one instrument:
+
+```
+before the const fix : {714, 1495}
+after the const fix  : {714}
+after rmdir          : {}          0 of 207 detail files now name cfileutl.pas
+```
+
+**So "only TWO errors remain behind that wall" was EXACT, not a lower bound.** The
+give-up at `:1495` was the **LAST** thing in cfileutl.pas, so nothing of cfileutl's
+own sat behind it; the 357 concealed lines were in **other units of the import
+chain**. **I am un-marking it.**
+
+**AND THE CAVEAT IS BOUNDED, WHICH IS BETTER NEWS THAN THE WALL.** Total error lines
+went **776 → 642**, a SHRINK that its own pre-run expectation had called a regression
+to explain rather than accept — and it explains exactly: **776 − 642 = 134, all 134
+wall files lost EXACTLY ONE line each, that line was the rmdir line, and every
+remaining error in every one is byte-identical.** So an `undefined variable` does
+**not** truncate a unit's error list; **only a give-up does, because it abandons the
+block.**
+
+**The caveat, restated at its true width:** the detail instrument's blindness is
+specific to the **GIVE-UP CLASS**, it affects only files whose list carried one, and
+whether anything was actually hidden is per-file — for cfileutl, nothing was. It is
+**checkable in one command**: grep the detail files for `statement made no progress`;
+today that answers **0**. *(I did not run that grep myself — `PXX_CORPUS_DETAIL` is a
+caller-chosen directory in franks-ee's scratch, not in the repo. Reported, not
+verified here, and labelled so.)*
+
+**The general lesson is the one it named and it is aimed at me:** a correction that is
+itself imprecise costs the next reader the same measurement. Mine was cheap to write
+and wide; the narrow one took a third run of the instrument.
+
+### ONE CITATION OF ITS OWN IS WRONG, AND THE CONCLUSION SURVIVES IT
+
+It wrote *"merge-base says the pin `ed8616ac3` (07-27) does not carry it."*
+**`ed8616ac3` is pin v226, 2026-07-27** — seven weeks old and not what anyone is
+running. **The live pin is v410, `764ee2ed2`, 2026-09-14, binary `c599e8546121`.**
+The conclusion is unaffected and I had already verified it independently this morning:
+the census **FAILS under `c599e8546121` and passes at HEAD**, and `e4c72bd15` (21:03)
+is not an ancestor of the pin (20:45). **Right reasoning, wrong citation** — the same
+shape as its byte-identical slip and three of mine today.
+
+### TRACK B'S WHOLE GATE IS DOWN UNDER THE PIN, AND I CONFIRMED THE MECHANISM
+
+`make lib-test` has been RED under `$(PXX_STABLE)` since 2026-09-14 and stays red
+until someone pins. **Verified in the Makefile rather than taken:** `lib-test:` is at
+`34959`, the census is at `35513`, **no target definition lies between them**, and the
+line is a plain tab-prefixed recipe line with **no `-` prefix**. So it aborts the
+target, and `-k` continues to other TARGETS, not to other lines of one recipe.
+**Every `lib_*` row any Track B seat adds is unrun and unrunnable under the pin.** It
+verified its own row by running the Makefile's two lines by hand: **31/31**, and fpc
+answers 31/31 on the same file.
+
+**Third dated casualty of inert-until-pinned, and the first to take a whole track's
+gate with it.** Logged so the next Track B seat does not spend an evening attributing
+it to its own change — *which is what it nearly did.* **It is not asking for a pin and
+neither am I.** This goes to him.
+
+### WALL FOURTEEN
+
+120 → 0, detail files naming rmdir **134 → 0**, units-OK 22 → 22, new head
+`globals.pas:1095` `Replace` going **12 → 132 = exactly 12 + 120**. **Thirteenth
+consecutive null row**, fourth in a row where clearing a shared dependency hands its
+whole population to the next wall in the same chain. Control: the 41 detail files that
+never carried the wall, unchanged, every one.
+
+**The measurement that stopped it reusing the existing table is the good part:**
+`MkDir`/`RmDir`/`ChDir` went in `textfile.pas`, not sysutils, because they report
+through `IOResult` and `IOResult`/`LastIOResult` already live there. Every code
+measured under fpc 3.2.2 and read back — **ENOENT is 2 for RmDir/MkDir but 3 for
+ChDir** (fpc separates *file not found* from *path not found* by the OPERATION, same
+errno, two answers), and **ENAMETOOLONG is 3 where the file table says 2**. So the
+second table is on evidence, not convenience. The empty path is a no-op returning 0 in
+all three, and **the test asserts its ABSENCE OF EFFECT as well as its code**, because
+an implementation resolving `''` to the cwd would delete or enter it.
+
+**Next wall `globals.pas:1095` — RTL, live on push. Shift record stays open. Four open
+regressions, gate GREEN, Track P and `optdiff#shard5/12` unstaffed. FOUR things for
+the 18th now: `3eb0297f0`, the goal-5 wording, the two-arm question, and Track B's
+gate being down under the pin.**
