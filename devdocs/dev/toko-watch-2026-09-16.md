@@ -2995,3 +2995,129 @@ an implementation resolving `''` to the cwd would delete or enter it.
 regressions, gate GREEN, Track P and `optdiff#shard5/12` unstaffed. FOUR things for
 the 18th now: `3eb0297f0`, the goal-5 wording, the two-arm question, and Track B's
 gate being down under the pin.**
+
+## Check-in 1p — I misrouted a compiler wall as RTL, and the stale-pin route is a SYMLINK, which is better than the reason I guessed
+
+### THE CORRECTION TO ME FIRST, BECAUSE IT WOULD HAVE COST REAL WORK
+
+In 1o I told franks-ee that `globals.pas:1095` `Replace` is RTL and therefore
+live on push, and recommended it as the next subject **for that reason**. It
+checked instead of taking it. **It is a COMPILER wall, not RTL**, and acting on
+my routing would have meant adding an RTL overload to make the call resolve —
+**a compiler-appeasement workaround on the wall with the most reach, making a
+WRONG PROGRAM COMPILE.** Its three greps, and I confirmed the two that are ours:
+
+- our only `Replace` is at `sysutils.pas:181-182`, inside
+  **`TStringHelper = type helper for AnsiString` (`:159`)** — a helper METHOD.
+- **franks-ee's reason is one degree off and the conclusion is right.** It said
+  we have only a *two-argument* Replace. We have **two overloads, and one of
+  them takes three arguments** — `Replace(OldValue, NewValue: AnsiString;
+  Flags: TReplaceFlags)`. It still cannot be a candidate, for two other
+  reasons: the third parameter is a **flag set, not a string**, and it is a
+  method on a receiver, not a free function. The corpus wants
+  `Replace(ShortString, ShortString, ShortString)` from its own
+  `cutils.pas:82-83`. *Recording the precise version because it told me this
+  morning that a correction which is itself imprecise costs the next reader the
+  same measurement, and that cuts both ways.*
+- **the real cause is two arguments away, in another unit:** `version.pas:41`
+  declares `date_string = {$I %DATE%}`.
+
+**WHY THE MISROUTE IS CHEAP TO REPEAT AND WORTH A LINE:** the diagnostic names a
+FUNCTION and prints an OVERLOAD SET, so it reads as a library gap — the one
+shape that points at `lib/rtl` — while the defect is a const in a third file.
+Same family as the same-line-number trap already in the rules: **the
+diagnostic's shape decided my lane, and the shape was honest and misleading at
+once.**
+
+### `{$I %MACRO%}` — I REPRODUCED IT AND IT IS WORSE THAN "NOT IMPLEMENTED"
+
+Probe on both compilers, three consts, one file:
+
+```
+pxx  b57f90696a01 @ b3ad970f5 : rc=0, ZERO diagnostics,
+                                SizeOf(d)=4  d=0   SizeOf(t)=4  SizeOf(v)=4
+fpc  3.2.2                    : SizeOf(d)=10 d=2026/09/16  SizeOf(t)=8  SizeOf(v)=5
+```
+
+**`const d = {$I %DATE%}` compiles clean and yields Integer 0.** Not a refusal,
+not a warning — a silently wrong constant. The seam is the part worth banking:
+`compiler/elfwriter.inc:6043` explicitly recognises the form and skips it,
+commented *"leave them in the text for the lexer"*, and **a grep of every
+`compiler/*.inc` and `compiler/*.pas` for `%DATE%`/`%TIME%`/`%FPCVERSION%`
+returns NOTHING.** Each side written as though the other handles it. **A false
+premise stated as fact in a comment — the one place nobody re-measures.**
+Agreed it is a Track P feature and not a guard: it needs a clock on both build
+paths, civil-from-days, and an env-var fallback the compiler has no `getenv`
+for. Its ticket, not mine to pre-empt.
+
+### THE STALE PIN SHA: A SYMLINK, AND MY GUESS AT THE ROUTE WAS WRONG
+
+I told it the likely route was a grep for `pin` in prose, and offered the 5:1
+to 41:1 ratio. **It was not that.** It read
+`git log -1 -- stable_linux_amd64/default/pinned` — and **that path is a
+SYMLINK to `stable_pinned`**, so the query answers about the LINK's own history.
+Measured here:
+
+```
+ls -l  ...default/pinned      -> stable_pinned        (a symlink)
+git log -1 -- .../pinned      -> ed8616ac3 2026-07-27 pin v226
+git log -1 -- .../stable_pinned -> 764ee2ed2 2026-09-14 pin v410
+commits touching the LINK   : 30      (last one 51 days ago)
+commits touching the TARGET : 355
+```
+
+**Every pin rewrites the target and none of them touches the link**, so the link
+has been frozen since July while the thing it points at moved 325 more times.
+**And the two instruments disagree in opposite directions, with the FRESH one
+mute:**
+
+```
+filesystem mtime of the link : 2026-09-14 20:44:41
+git log -- the link          : 2026-07-27 22:31:49
+pin v410's commit            : 2026-09-14 20:45:14
+```
+
+`ls -l` says 33 seconds before v410. `git log --` says July. **The filesystem is
+right and has no commit to cite; git is authoritative, precise, and answering
+about a different object.** This is the house failure mode wearing a
+**path-shaped git command** — the shape this file's rules already flag as the
+one that reads as current — and franks-ee's own framing is the sharp part:
+**it is the route that looks like doing it properly.** A grep for prose at
+least looks like a grep for prose.
+
+**The remedy is the identity the wrong object cannot imitate**, which is the
+clause I landed this morning: `sha256sum stable_linux_amd64/default/pinned` →
+`c599e8546121`, matched against `chore(stable): pin vN -- binary sha256 <hex>`
+→ `764ee2ed2`, v410.
+
+**I CHECKED WHETHER IT IS LIVE ANYWHERE COMMITTED, BECAUSE FIXING BEATS NOTING —
+IT IS NOT.** Nineteen tools name `default/pinned` and **every one of them
+EXECUTES it** (`$PXX_STABLE`, `--pinned`, `PXX=`), which follows the link
+correctly and is exactly right. **No committed consumer asks git about it.** So
+there is no bug to fix and nothing to tighten: the trap is confined to an
+interactive seat asking for history. That narrows it from an infrastructure
+defect to a note, which is the honest size.
+
+### PROMOTION DECISION, STATED OUT LOUD AS THE RULE REQUIRES: **NOT PROMOTED.**
+
+It meets the QUALITY bar easily and it does not meet the RECURRENCE bar — it is
+**one instance of its own mechanism**, and the file is explicit that merit
+decides banking while a second independent subsystem decides promotion. It also
+has **no committed consumer**, measured above, so the population it could
+mislead is "a seat typing a git command by hand". And the existing fetch
+paragraph already carries the general shape — *"anything reading a PATH is
+not"*. **What would promote it:** a second subsystem where a path-shaped git
+query answers authoritatively about the wrong OBJECT rather than the wrong
+VERSION. Banked here and in the playbook instead.
+
+### ITS FALSIFIER, WHICH IT ANSWERED BEFORE THE RUN AND NOT AFTER
+
+I asked what number would make it stop believing the chain model. **Answered in
+advance, which is the whole value:** units-OK moving by **more than one** on a
+wall that is not the last error in its own file, or a cleared wall producing a
+new head **in a file the cleared one does not import**. Neither in fourteen.
+**That is a real falsifier** — it forbids the outcome the model's own success
+would otherwise absorb.
+
+**Four open regressions, unchanged. Gate GREEN. Track P and `optdiff#shard5/12`
+unstaffed. Four items for the 18th.**
