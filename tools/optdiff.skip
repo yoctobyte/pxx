@@ -2,6 +2,19 @@
 # (never a miscompile signal). Shell-glob patterns, one per line, matched
 # against the basename. Keep this list visible and short; a new entry needs a
 # one-line reason.
+#
+# BEFORE YOU REASON ABOUT WHAT THIS LIST COVERS, KNOW WHAT THE SWEEP
+# ENUMERATES: optdiff.sh:122 lists the test directory FLAT, so anything in a
+# SUBDIRECTORY is outside the population entirely and no pattern here can
+# matter to it. Measured 2026-09-16: test/gui/ holds three GTK programs
+# (test_gtk_ffi, test_gtk_signals, test_gtk_window) that optdiff has never
+# swept and cannot skip. A RECURSIVE listing (`git ls-tree -r`) answers about a
+# SUPERSET and will have you writing entries for files the instrument never
+# sees -- it cost one seat a correction here, caught because three of its five
+# hits returned an EMPTY count rather than a 0, which is the tell that the path
+# does not exist rather than the count being zero. Enumerate with a flat `ls`.
+# This is not a coverage complaint: those three are simply not optimisation-
+# diffed, which is a fact about the sweep, not a defect in it.
 test_c_gtk_*.c
 test_c_gtk_*.pas
 # thread interleaving: output order differs run to run even at -O0

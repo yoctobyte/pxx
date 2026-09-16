@@ -110,6 +110,22 @@ other two uncovered gtk sources (`test_c_gtk.pas`,
 `test_gtk3_pc_pchar_conversion.pas`) were measured the same way and are NOT
 affected: both exit 0 and agree with no display, because neither opens one.
 
+**The scoping was checked from both sides, and the check is worth recording
+because it nearly went the other way.** frankuser independently enumerated the
+uncovered gtk sources, got FIVE, and began correcting this entry's "two" --
+three of the five live under `test/gui/`, which optdiff never sees, because its
+listing is flat. A recursive listing answers about a superset of the
+instrument's population. Two is exact for the set optdiff enumerates, so
+scoping the skip to one file rather than widening to a gtk3 glob stands. Same
+question as everything else in this file: print the set your instrument
+enumerates and check the subject is in it.
+
+**Two peers agreeing does not settle the skiplist edits, and neither does this
+note.** Both entries — frankuser's for shard9 and mine for shard5 — stand on
+their own measured justification and on being reversible by deleting one line.
+A later reader who disagrees should delete the line and say why; they are not
+overturning a decision, because none was taken.
+
 **There is no bug here and nothing is being suppressed.** The program is
 correct, the compiler is correct, and optdiff's question — "do the levels
 produce the same bytes" — is meaningless for a program whose output embeds its
