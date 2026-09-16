@@ -922,7 +922,7 @@ histogram. Two independent instances now, not one.
 | 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `d66f128a1` (franks-ee) — **live without a pin** |
 | 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `42e127d6d` (franks-ee) — **live without a pin** |
 | 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **FIXED** `34e3a2fa8` (franks-ee) — **live without a pin** |
-| 11 | `GetDir` + the `sysunixh.inc` const block (`cfileutl.pas:518`, `:543`, `:696`) | RTL | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 11 | `GetDir` + the `sysunixh.inc` const block (`cfileutl.pas:518`, `:543`, `:696`) | RTL | **FIXED** `d7bf36ce0` (franks-ee) — **live without a pin** |
 | 12 | `MkDir`/`RmDir`/`ChDir` + `IOResult` plumbing (`cfileutl.pas:714`) | RTL | **OPEN — the head of the STUBBED arm**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
