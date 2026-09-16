@@ -15380,6 +15380,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_annotated_class_attribute.npy test/test_nilpy_annotated_class_attribute.expected",
    "status": "fail"
   },
@@ -15398,6 +15399,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected",
    "status": "fail"
   },
@@ -15416,6 +15418,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_dunder_getitem_setitem.npy tools/expect_same.sh",
    "status": "fail"
   },
@@ -15434,6 +15437,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_for_getitem_protocol.npy test/test_nilpy_for_getitem_protocol.expected",
    "status": "fail"
   },
@@ -15452,6 +15456,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_getitem_on_a_call_result.npy test/test_nilpy_getitem_on_a_call_result.expected",
    "status": "fail"
   },
@@ -15470,6 +15475,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_local_named_like_a_class.npy test/test_nilpy_local_named_like_a_class.expected",
    "status": "fail"
   },
@@ -15488,6 +15494,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_local_named_like_a_class.npy test/test_nilpy_local_named_like_a_class.expected",
    "status": "fail"
   },
@@ -15506,6 +15513,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_not_subscriptable.npy test/test_nilpy_not_subscriptable.expected",
    "status": "fail"
   },
@@ -15524,6 +15532,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_open_world_method_dispatch.npy test/test_nilpy_open_world_method_dispatch.expected",
    "status": "fail"
   },
@@ -15542,6 +15551,7 @@
    "range": [
     "4e2507c6b6973829eb0b4f9075bb10dea66a02f8"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_variant_method_pick_by_arity.npy tools/expect_same.sh",
    "status": "fail"
   }
