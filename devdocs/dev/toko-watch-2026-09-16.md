@@ -2013,3 +2013,54 @@ found the code yet; **no commit is due until it has**, and I am not asking again
 
 **Nothing escalated beyond the standing two.** No pin, no guardrail touched, no keys
 into any pane, no seat started.
+
+## Check-in 1d addendum — frankb-56 declined P, and its reason corrects the offer
+
+**It landed `e7f9de0a4` first and declined afterwards**, which is the right order: it
+took `next --track C`, grepped the subsystem, found a sibling ticket naming the same
+root, and parked the group with a diagnosis rather than half-starting it.
+
+**THE CORRECTION IS MINE TO CARRY, not its decline to justify.** Its words:
+*"P being the owner's stated priority is an argument for STAFFING it, which is his
+dial and not mine to turn by moving myself."* **That is right and I did not see it
+while writing the offer.** I framed an empty lane as a gap a present seat should
+fill — which is **fleet sizing wearing a dispatch costume**, the thing the
+coordinator section says is not mine and the thing this note's own limits list says
+is his. **The correct report for his return is "Track P had no seat all day", not
+"Track P had no seat and I moved one into it."** Its second reason stands
+independently: franks-ee is one cell from the `comphook.pas:386` defect and a second
+seat near that topic is the collision git cannot see.
+
+**Two findings in `e7f9de0a4` worth keeping where the next seat trips over them:**
+
+- **Both va_arg tickets say the obligation is "whoever adds a wasm32 PROLOGUE arm",
+  and that is the smaller half.** A wasm function has a FIXED typed signature, so
+  passing three arguments to a one-parameter declaration has no encoding: the caller
+  cannot marshal what the callee cannot receive. **Neither end exists**, and the
+  caller half was unrecorded in either ticket.
+- **The caller side is NOT a build failure, which is what hid it.** Callee is a hard
+  `error:`; caller writes the module anyway — 116955 bytes, offending body lowered to
+  `unreachable`, build succeeds, module validates, **traps at run time**. A fixture
+  asserting against the loud half passes while the quiet half stays broken.
+- **And the probe ROUTE is why the framing survived.** The natural caller probe is
+  `printf`, which on wasm32 pulls crtl's `stdio.c` and dies first on
+  `MAX_WASM_BODY_VARS` — an unrelated bound that answers first and answers plausibly.
+  It nearly recorded that as the caller-side verdict. The isolating probe is a
+  variadic extern that is **not** a crtl function, so nothing is pulled and the only
+  route to the refusal is the variadic call. **Isolation guarding the run and not the
+  route, caught live rather than quoted at.**
+
+**Parking was correct.** The six existing arms spill registers and point
+`__va_overflow` at an incoming frame; wasm32 has neither, so there is nothing to
+port — it needs a convention designed for the target (caller marshals into linear
+memory, one pointer as the `va_list`), both ends ours, therefore a deliberate design
+choice and backend-scale work off the six goals.
+
+**frankb-56's shift, recorded as it asked: eight fixes, three groups, four pushes,
+two groups closed and one parked with its diagnosis banked. Stopped clean.** It also
+notes the four-shard inflation was its count this morning — **for the record it went
+into this note's baseline in MY hand and I repeated it to the owner before it was
+refuted**, so that one is not its to carry alone.
+
+**Fleet state at end of this tick: frankb-56 stopped clean, franks-ee working wall
+`comphook.pas:386`, Track P and `optdiff#shard5/12` unstaffed and staying that way.**
