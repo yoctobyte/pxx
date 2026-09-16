@@ -1439,7 +1439,7 @@ begin
   else if op = '&' then PasCondOpPrecedence := 3
   else if op = '|' then PasCondOpPrecedence := 2
   else if (op = '=') or (op = '#') or (op = 'l') or (op = 'L') or
-          (op = 'g') or (op = 'G') then PasCondOpPrecedence := 1
+          (op = 'g') or (op = 'G') or (op = 'n') then PasCondOpPrecedence := 1
   else PasCondOpPrecedence := 0;
 end;
 
@@ -1449,6 +1449,15 @@ var
     PasCondValues), 1 = int (payload in PasCondInt). }
   PasCondValKind: array[0..63] of Integer;
   PasCondInt: array[0..63] of Int64;
+  { Kind 3 = SET, payload here. 32 bytes = 256 bits, which is not a capacity
+    this file chose: it is EXACTLY Pascal's set element limit, and it is the
+    same mask shape ConstSetTerm uses in pasparser_decl.inc, deliberately. That
+    walk cannot be reused -- it reads baked masks out of Data[] through
+    FindSetConst, and nothing is baked during LexAll, which is the same reason
+    every other PasCond* walk answers from the token stream instead of asking
+    the parser. Matching its REPRESENTATION is the part that is free, and it
+    keeps a set from having two spellings in one compiler. }
+  PasCondSet: array[0..63] of array[0..31] of Byte;
   PasCondOps: array[0..63] of Char;
   { The SOURCE SPELLING of a slot pushed from an identifier, '' for a literal or
     a computed slot. Carried only so a failed comparison can NAME the operand:
@@ -1529,6 +1538,7 @@ var
   SaveCondValues: array[0..63] of Boolean;
   SaveCondValKind: array[0..63] of Integer;
   SaveCondInt: array[0..63] of Int64;
+  SaveCondSet: array[0..63] of array[0..31] of Byte;
   SaveCondOps: array[0..63] of Char;
   SaveCondValName: array[0..63] of AnsiString;
   SaveCondValWhy: array[0..63] of AnsiString;
@@ -1575,7 +1585,7 @@ procedure PasCondProbeEnter;
   three probing questions all go through this pair rather than through
   PasProbeSaveLexState directly -- a fourth question added later gets the
   expression save for free instead of rediscovering why it needs one. }
-var i: Integer;
+var i, j: Integer;
 begin
   PasProbeSaveLexState;
   for i := 0 to 63 do
@@ -1583,6 +1593,7 @@ begin
     SaveCondValues[i] := PasCondValues[i];
     SaveCondValKind[i] := PasCondValKind[i];
     SaveCondInt[i] := PasCondInt[i];
+    for j := 0 to 31 do SaveCondSet[i][j] := PasCondSet[i][j];
     SaveCondOps[i] := PasCondOps[i];
     SaveCondValName[i] := PasCondValName[i];
     SaveCondValWhy[i] := PasCondValWhy[i];
@@ -1607,13 +1618,14 @@ begin
 end;
 
 procedure PasCondProbeLeave;
-var i: Integer;
+var i, j: Integer;
 begin
   for i := 0 to 63 do
   begin
     PasCondValues[i] := SaveCondValues[i];
     PasCondValKind[i] := SaveCondValKind[i];
     PasCondInt[i] := SaveCondInt[i];
+    for j := 0 to 31 do PasCondSet[i][j] := SaveCondSet[i][j];
     PasCondOps[i] := SaveCondOps[i];
     PasCondValName[i] := SaveCondValName[i];
     PasCondValWhy[i] := SaveCondValWhy[i];
@@ -1653,6 +1665,42 @@ begin
   end;
 end;
 
+{ SET PRIMITIVES. `shl` is deliberately not used: paslexer.inc is include #82 in
+  compiler.pas and Shl8_ lives in ir.inc, which is included far later, so a
+  `shl` here compiles under FPC and breaks the self-host. ConstSetTerm records
+  the same constraint and builds its bit with *2; this does too, for the same
+  reason and not by imitation. }
+procedure PasCondMaskClear(var mask: array of Byte);
+var i: Integer;
+begin
+  for i := 0 to 31 do mask[i] := 0;
+end;
+
+procedure PasCondMaskAdd(var mask: array of Byte; v: Integer);
+var bit, k: Integer;
+begin
+  if (v < 0) or (v > 255) then Exit;
+  bit := 1;
+  for k := 1 to (v mod 8) do bit := bit * 2;
+  mask[v div 8] := mask[v div 8] or bit;
+end;
+
+function PasCondMaskHas(var mask: array of Byte; v: Integer): Boolean;
+var bit, k: Integer;
+begin
+  PasCondMaskHas := False;
+  if (v < 0) or (v > 255) then Exit;
+  bit := 1;
+  for k := 1 to (v mod 8) do bit := bit * 2;
+  PasCondMaskHas := (mask[v div 8] and bit) <> 0;
+end;
+
+procedure PasCondMaskUnion(var dst: array of Byte; var src: array of Byte);
+var i: Integer;
+begin
+  for i := 0 to 31 do dst[i] := dst[i] or src[i];
+end;
+
 procedure PasCondPushBool(b: Boolean);
 begin
   if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
@@ -1669,6 +1717,16 @@ procedure PasCondPushBoolNamed(b: Boolean; const nm: AnsiString);
 begin
   PasCondPushBool(b);
   PasCondValName[PasCondValueCount - 1] := nm;
+end;
+
+procedure PasCondPushSet(var mask: array of Byte);
+var i: Integer;
+begin
+  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  PasCondValKind[PasCondValueCount] := 3;
+  for i := 0 to 31 do PasCondSet[PasCondValueCount][i] := mask[i];
+  PasCondValName[PasCondValueCount] := '';
+  Inc(PasCondValueCount);
 end;
 
 procedure PasCondPushInt(v: Int64);
@@ -1992,6 +2050,167 @@ begin
     end;
 end;
 
+function PasCondEnumOrdIn(const nm: AnsiString; lo, hi: Integer;
+                          var v: Int64): Boolean;
+{ `TYPE = ( m0, m1, m2 );` -- nm's ORDINAL if it is one of the members. The
+  shape is again the type check: only an enum declaration puts `= (` where this
+  looks, and a parenthesised expression cannot start a declaration.
+
+  AN EXPLICIT VALUE ANYWHERE IN THE BODY DECLINES THE WHOLE ENUM, and that is
+  the point rather than a shortcut. FPC allows `(a, b := 5, c)` and `(a, b = 5)`,
+  after which POSITION NO LONGER EQUALS ORDINAL -- c is 6, not 2. A walk that
+  counted commas would return a plausible wrong ordinal, and a wrong ordinal in
+  a set test does not fail, it takes the other branch. So the moment this sees
+  `:=` or `=` inside the body it stops and answers nothing, leaving the caller's
+  diagnostic in place. Same governing rule as PasCondConstIntIn's `high(...)`
+  arm: decline, never guess. }
+var k, m, idx: Integer;
+    done: Boolean;
+begin
+  { m, not k: FPC refuses assignment to a for-loop variable and pxx allows it,
+    so walking the enum body on `k` compiles here and breaks the FPC seed --
+    which is the whole defect class gate.sh's seed canary exists to catch, and
+    it caught this one. }
+  PasCondEnumOrdIn := False;
+  if nm = '' then Exit;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 2 < hi) and
+       (Tokens[k + 1].Kind = tkEq) and (Tokens[k + 2].Kind = tkLParen) and
+       PasCondDeclStartsAt(k, lo) then
+    begin
+      idx := 0;
+      done := False;
+      m := k + 3;
+      while (m < hi) and not done do
+      begin
+        if Tokens[m].Kind = tkIdent then
+        begin
+          { the member's own name is at m; an explicit value follows it }
+          if (m + 1 < hi) and
+             ((Tokens[m + 1].Kind = tkAssign) or (Tokens[m + 1].Kind = tkEq)) then
+          begin
+            done := True;   { positions stop meaning ordinals -- decline }
+          end
+          else
+          begin
+            if CaseEqual(PasCondTokText(m), nm) then
+            begin
+              v := idx;
+              PasCondEnumOrdIn := True;
+              Exit;
+            end;
+            Inc(idx);
+            Inc(m);
+            if (m < hi) and (Tokens[m].Kind = tkComma) then Inc(m)
+            else done := True;
+          end;
+        end
+        else
+          done := True;
+      end;
+      Exit;   { the enum that started here is answered or declined; do not rescan }
+    end;
+end;
+
+function PasCondSetConstIn(const nm: AnsiString; lo, hi: Integer;
+                           var mask: array of Byte; depth: Integer): Boolean;
+{ `NAME = <set expression> ;` where the expression is `+`-joined terms, each a
+  `[...]` literal or the NAME of another set constant. That is exactly the shape
+  FPC's own `supported_optimizerswitches = genericlevel1optimizerswitches +
+  genericlevel2optimizerswitches + ...` (x86_64/cpuinfo.pas:139) has, over
+  `genericlevel1optimizerswitches = [cs_opt_level1,cs_opt_peephole]`
+  (globtype.pas:428).
+
+  ELEMENTS RESOLVE AS ENUM MEMBERS FIRST, THEN AS INTEGER CONSTANTS, and an
+  element that resolves as NEITHER declines the whole set. A set with one
+  element silently dropped is the worst possible answer here -- `x in S` would
+  return False for a member that is present, with no diagnostic, and the
+  directive would take the other branch.
+
+  DEPTH-CAPPED for the same reason PasCondConstInt's hop loop is: `const A = B;
+  B = A;` is legal to write and would not terminate. }
+var k, p, elo, ehi: Integer;
+    ev: Int64;
+    term: array[0..31] of Byte;
+    ok, closed: Boolean;
+begin
+  PasCondSetConstIn := False;
+  if (nm = '') or (depth > 8) then Exit;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and (k + 2 < hi) and
+       (Tokens[k + 1].Kind = tkEq) and PasCondDeclStartsAt(k, lo) and
+       CaseEqual(PasCondTokText(k), nm) then
+    begin
+      PasCondMaskClear(mask);
+      p := k + 2;
+      ok := True;
+      while ok do
+      begin
+        if (p < hi) and (Tokens[p].Kind = tkLBrack) then
+        begin
+          PasCondMaskClear(term);
+          Inc(p);
+          closed := False;
+          if (p < hi) and (Tokens[p].Kind = tkRBrack) then
+          begin closed := True; Inc(p); end;
+          while ok and not closed do
+          begin
+            if (p < hi) and (Tokens[p].Kind = tkInteger) then
+            begin elo := Tokens[p].IVal; Inc(p); end
+            else if (p < hi) and (Tokens[p].Kind = tkIdent) and
+                    PasCondEnumOrdIn(PasCondTokText(p), lo, hi, ev) then
+            begin elo := ev; Inc(p); end
+            else if (p < hi) and (Tokens[p].Kind = tkIdent) and
+                    PasCondConstIntIn(PasCondTokText(p), lo, hi, ev) then
+            begin elo := ev; Inc(p); end
+            else begin ok := False; elo := 0; end;
+            ehi := elo;
+            if ok and (p < hi) and (Tokens[p].Kind = tkDotDot) then
+            begin
+              Inc(p);
+              if (p < hi) and (Tokens[p].Kind = tkInteger) then
+              begin ehi := Tokens[p].IVal; Inc(p); end
+              else if (p < hi) and (Tokens[p].Kind = tkIdent) and
+                      PasCondEnumOrdIn(PasCondTokText(p), lo, hi, ev) then
+              begin ehi := ev; Inc(p); end
+              else ok := False;
+            end;
+            if ok then
+            begin
+              while elo <= ehi do
+              begin PasCondMaskAdd(term, elo); Inc(elo); end;
+              if (p < hi) and (Tokens[p].Kind = tkComma) then Inc(p)
+              else if (p < hi) and (Tokens[p].Kind = tkRBrack) then
+              begin closed := True; Inc(p); end
+              else ok := False;
+            end;
+          end;
+          if ok then PasCondMaskUnion(mask, term);
+        end
+        else if (p < hi) and (Tokens[p].Kind = tkIdent) then
+        begin
+          PasCondMaskClear(term);
+          if PasCondSetConstIn(PasCondTokText(p), lo, hi, term, depth + 1) then
+          begin PasCondMaskUnion(mask, term); Inc(p); end
+          else ok := False;
+        end
+        else
+          ok := False;
+        if ok then
+        begin
+          if (p < hi) and (Tokens[p].Kind = tkPlus) then Inc(p)
+          else if (p < hi) and (Tokens[p].Kind = tkSemicolon) then
+          begin
+            PasCondSetConstIn := True;
+            Exit;
+          end
+          else ok := False;
+        end;
+      end;
+      Exit;   { this declaration is the one; a failed parse of it declines }
+    end;
+end;
+
 function PasCondTypeAliasIn(const nm: AnsiString; lo, hi: Integer;
                             var target: AnsiString): Boolean;
 { `NAME = <one token> ;`. The target is taken as TEXT and not as a token kind,
@@ -2044,9 +2263,15 @@ const
   PCQ_DECLARED  = 0;   { does a name exist -- the original question }
   PCQ_CONSTINT  = 1;   { ...and what integer does it equal }
   PCQ_TYPEALIAS = 2;   { ...and what one token does `type NAME = X;` name }
+  PCQ_ENUMORD   = 3;   { ...and what ordinal does it have as an enum MEMBER }
+  PCQ_SETCONST  = 4;   { ...and what set does `NAME = [..] + [..];` equal }
 var
   PasCondProbeInt: Int64 = 0;
   PasCondProbeStr: AnsiString = '';
+  { the fourth channel, and it is an array because a set does not fit the other
+    three. Same contract as its siblings: it describes THE LAST PROBE and is
+    read immediately, beside the call that set it. }
+  PasCondProbeSet: array[0..31] of Byte;
 
 function PasCondConstIntDirect(const nm: AnsiString; var v: Int64): Boolean;
 { This file first, then the units it names -- the order PasCondNameDeclared
@@ -2061,6 +2286,39 @@ begin
   Result := PasCondProbeUsedUnits(nm, 0, PCQ_CONSTINT);
   PasCondProbeLeave;
   if Result then v := PasCondProbeInt;
+end;
+
+function PasCondEnumOrd(const nm: AnsiString; var v: Int64): Boolean;
+{ This file, then the units it names -- the same cheap-first order and the same
+  probe as PasCondConstIntDirect above. }
+begin
+  Result := PasCondEnumOrdIn(nm, 0, TokCount, v);
+  if Result then Exit;
+  if PasCondQuiet then Exit;
+  PasCondProbeEnter;
+  Result := PasCondProbeUsedUnits(nm, 0, PCQ_ENUMORD);
+  PasCondProbeLeave;
+  if Result then v := PasCondProbeInt;
+end;
+
+function PasCondSetConst(const nm: AnsiString; var mask: array of Byte): Boolean;
+{ As above. NOTE WHAT THIS CANNOT REACH, because the limit is a decline and not
+  a wrong answer: probes do not nest (PasCondProbeUsedUnits refuses at
+  ProbeDepth > 0), so a set constant in unit B whose TERMS live in unit C is
+  resolved only when B's own lexed range already carries C -- otherwise the
+  nested term declines, the whole set declines, and the caller keeps its
+  diagnostic. That is the correct failure direction here: a set missing one
+  member answers `in` with a confident False. }
+var i: Integer;
+begin
+  Result := PasCondSetConstIn(nm, 0, TokCount, mask, 0);
+  if Result then Exit;
+  if PasCondQuiet then Exit;
+  PasCondProbeEnter;
+  Result := PasCondProbeUsedUnits(nm, 0, PCQ_SETCONST);
+  PasCondProbeLeave;
+  if Result then
+    for i := 0 to 31 do mask[i] := PasCondProbeSet[i];
 end;
 
 function PasCondTypeAlias(const nm: AnsiString; var target: AnsiString): Boolean;
@@ -2224,6 +2482,17 @@ end;
 function PasCondSlotAsBool(idx: Integer): Boolean;
 begin
   if PasCondValKind[idx] = 0 then Result := PasCondValues[idx]
+  { A SET IS NOT A BOOLEAN, and it must be refused BEFORE the int arms below:
+    kind 3 keeps its payload in PasCondSet and leaves PasCondInt holding
+    whatever the slot last held, so `not S` would read a stale integer and
+    answer False or True with total confidence. Refusing is the only reading
+    that cannot silently pick a branch. }
+  else if PasCondValKind[idx] = 3 then
+  begin
+    Result := False;
+    Error('conditional directive: a set is not a boolean here' +
+          ' -- `in` is what tests one');
+  end
   else if PasCondInt[idx] = 0 then Result := False
   else if PasCondInt[idx] = 1 then Result := True
   else begin Result := False;
@@ -2287,6 +2556,60 @@ begin
     PasCondValKind[PasCondValueCount - 1] := 0;
     if op = '&' then PasCondValues[PasCondValueCount - 1] := lhs and rhs
     else PasCondValues[PasCondValueCount - 1] := lhs or rhs;
+  end
+  else if op = 'n' then
+  begin
+    { `x in S`. The left operand is an ORDINAL and the right is a SET, which is
+      the one operator here whose two sides have different kinds -- so the
+      diagnostic has to say WHICH side failed, or it sends the reader to the
+      wrong declaration. Poison propagates exactly as it does for a relational:
+      `declared(S) and (x in S)` must stay compilable when S is absent. }
+    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    Dec(PasCondValueCount);
+    if (PasCondValKind[PasCondValueCount - 1] = 2) or
+       (PasCondValKind[PasCondValueCount] = 2) then
+    begin
+      if PasCondValKind[PasCondValueCount - 1] <> 2 then
+      begin
+        PasCondValWhy[PasCondValueCount - 1] := PasCondValWhy[PasCondValueCount];
+        PasCondValKind[PasCondValueCount - 1] := 2;
+      end;
+      PasCondValName[PasCondValueCount - 1] := '';
+      Exit;
+    end;
+    if (PasCondValKind[PasCondValueCount - 1] <> 1) or
+       (PasCondValKind[PasCondValueCount] <> 3) then
+    begin
+      if PasCondQuiet then
+      begin
+        PasCondUnresolved := True;
+        PasCondValKind[PasCondValueCount - 1] := 0;
+        PasCondValues[PasCondValueCount - 1] := False;
+        Exit;
+      end;
+      if PasCondValKind[PasCondValueCount] <> 3 then
+        why := 'conditional directive: the right operand of `in` is not a set' +
+               ' constant this pass can read'
+      else
+        why := 'conditional directive: the left operand of `in` is not an' +
+               ' ordinal here';
+      if (PasCondValKind[PasCondValueCount] <> 3) and
+         (PasCondValName[PasCondValueCount] <> '') then
+        why := why + ': `' + PasCondValName[PasCondValueCount] + '`'
+      else if (PasCondValKind[PasCondValueCount - 1] <> 1) and
+              (PasCondValName[PasCondValueCount - 1] <> '') then
+        why := why + ': `' + PasCondValName[PasCondValueCount - 1] + '`';
+      PasCondValKind[PasCondValueCount - 1] := 2;
+      PasCondValWhy[PasCondValueCount - 1] := why;
+      PasCondValName[PasCondValueCount - 1] := '';
+      Exit;
+    end;
+    li := PasCondInt[PasCondValueCount - 1];
+    res := (li >= 0) and (li <= 255) and
+           PasCondMaskHas(PasCondSet[PasCondValueCount], Integer(li));
+    PasCondValKind[PasCondValueCount - 1] := 0;
+    PasCondValues[PasCondValueCount - 1] := res;
+    PasCondValName[PasCondValueCount - 1] := '';
   end
   else
   begin
@@ -2360,6 +2683,7 @@ var word, name: AnsiString;
   op, c: Char;
   intval: Int64;
   declArity: Integer;   { `declared(TFoo<,>)`: parameter slots, 0 for a bare name }
+  wmask: array[0..31] of Byte;   { a set operand, built before it is pushed }
   expectValue, done: Boolean;
 begin
   PasCondUnresolved := False;
@@ -2437,10 +2761,18 @@ begin
         PasCondOps[PasCondOpCount] := '!';
         Inc(PasCondOpCount);
       end
-      else if CaseEqual(word, 'and') or CaseEqual(word, 'or') then
+      else if CaseEqual(word, 'and') or CaseEqual(word, 'or') or
+              CaseEqual(word, 'in') then
       begin
+        { `in` joins and/or here rather than getting an arm of its own because
+          the three are the same shape at this point: a WORD in operator
+          position, folded at its own precedence. It is relational (precedence
+          1) where and/or are 3 and 2, so `x in S and y in T` groups the way
+          FPC groups it. }
         if expectValue then Error('conditional directive: expected operand');
-        if CaseEqual(word, 'and') then op := '&' else op := '|';
+        if CaseEqual(word, 'and') then op := '&'
+        else if CaseEqual(word, 'in') then op := 'n'
+        else op := '|';
         while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') and
               (PasCondOpPrecedence(PasCondOps[PasCondOpCount - 1]) >= PasCondOpPrecedence(op)) do
           PasCondApplyOp;
@@ -2554,6 +2886,16 @@ begin
           `{$if FOO}` means and must keep meaning. }
         else if PasCondConstInt(word, intval) then
           PasCondPushInt(intval)
+        { AN ENUM MEMBER IS AN ORDINAL, and fpc agrees: asked for a bare
+          `{$if m2}` it answers `Wanted Boolean but got Int64`, i.e. it resolved
+          the member and then refused the TYPE -- so the ordinal reading is the
+          oracle's, not one this file invented. Asked only after every define
+          and const lookup has failed, so nothing that resolved before resolves
+          differently. }
+        else if PasCondEnumOrd(word, intval) then
+          PasCondPushInt(intval)
+        else if PasCondSetConst(word, wmask) then
+          PasCondPushSet(wmask)
         else
           PasCondPushBoolNamed(PasDefineExists(word), word);
         expectValue := False;
@@ -2595,6 +2937,15 @@ begin
     only the moment moved. }
   if PasCondValKind[0] = 2 then
     Error(PasCondValWhy[0]);
+  { A SET AT THE TOP IS NOT A CONDITION. `{$if supported_optimizerswitches}`
+    reduces to a set and nothing tested it -- answering True because it is
+    non-empty, or False because it is, would pick a branch from a value that
+    was never a question. fpc refuses the analogous bare ordinal outright
+    (`Wanted Boolean but got Int64`), so refusing here keeps us on the side
+    that cannot silently compile a different program. }
+  if PasCondValKind[0] = 3 then
+    Error('conditional directive: this expression is a SET, not a condition' +
+          ' -- it needs an `in` test');
   { Top-level bare integer is FPC-truthy (0=false, nonzero=true); covers the
     legacy {$IF 1}/{$IF 0} forms. Comparisons/idents already reduced to bool. }
   if PasCondValKind[0] = 1 then

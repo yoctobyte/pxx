@@ -6077,6 +6077,16 @@ begin
                 if PasCondTypeAliasIn(nm, savedTC, TokCount, PasCondProbeStr) then
                   Result := True;
               end
+              else if question = PCQ_ENUMORD then
+              begin
+                if PasCondEnumOrdIn(nm, savedTC, TokCount, PasCondProbeInt) then
+                  Result := True;
+              end
+              else if question = PCQ_SETCONST then
+              begin
+                if PasCondSetConstIn(nm, savedTC, TokCount, PasCondProbeSet, 0) then
+                  Result := True;
+              end
               else if PasCondNameDeclaredIn(nm, arity, savedTC, TokCount) then
                 Result := True;
               TokCount := savedTC;

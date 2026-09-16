@@ -4991,6 +4991,29 @@ test-nilpy: $(COMPILER)
 	elif ./$(COMPILER) test/test_p_a_conditional_directive_still_refuses_a_surviving_poison.pas $(TESTTMP)/test_condsurv26 2>&1 | grep -q 'NOPE_SURVIVING'; then \
 	  echo "ok: a poison nothing discards still raises, naming the operand"; \
 	else echo "FAIL: refused, but the message does not name NOPE_SURVIVING"; exit 1; fi
+	@# ...AND `in` OVER A SET CONSTANT, which is FPC's nld.pas:700 and needs four
+	@# things at once: a SET value kind, union folding across named constants, an
+	@# enum MEMBER's ordinal, and the operator. EVERY MEMBERSHIP ROW IS PAIRED
+	@# WITH A NON-MEMBERSHIP ROW: a fold that over-approximates answers `yes` to
+	@# every `in` and passes a file of positive rows only, so the `no` rows are
+	@# the ones that can fail. The member under test is deliberately not always
+	@# first -- a fold keeping only the left term of `A + B`, or only the first
+	@# element of a literal, passes every row whose answer sits at position zero.
+	@# Byte-identical to fpc 3.2.2 on all 10 rows.
+	@./$(COMPILER) test/test_p_a_conditional_directive_can_test_in_over_a_set_constant.pas $(TESTTMP)/test_condset26
+	@tools/expect_same.sh test_condset26 "$$($(TESTTMP)/test_condset26 | tail -n 2)" "$$(printf 'fails=0\nCONDSET OK')"
+	@# THE CONTROL THAT MUST NOT COMPILE. `(a, b := 5, c)` makes position stop
+	@# meaning ordinal -- c is 6, not 2 -- so the enum walk declines the whole
+	@# declaration rather than counting commas. Without this row, replacing the
+	@# decline with a comma count would look like an improvement and pass every
+	@# other row in this tree, while silently taking the other branch on any FPC
+	@# enum that assigns a value. fpc compiles this and answers correctly; we
+	@# refuse, which is the safe direction where guessing is the alternative.
+	@if ./$(COMPILER) test/test_p_a_conditional_directive_refuses_a_positional_enum_guess.pas $(TESTTMP)/test_enumguess26 >/dev/null 2>&1; then \
+	  echo "FAIL: a positional-ordinal guess COMPILED -- the enum walk now counts commas past an explicit value, so it can take a branch on an ordinal that is not the program's"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_conditional_directive_refuses_a_positional_enum_guess.pas $(TESTTMP)/test_enumguess26 2>&1 | grep -q 'NOPE_POSITIONAL'; then \
+	  echo "ok: an explicit-value enum still declines, and the message names the operand"; \
+	else echo "FAIL: refused, but the message does not name NOPE_POSITIONAL -- the refusal lost the operand it was carrying"; exit 1; fi
 	@# ...AND A CONST WHOSE VALUE IS NOT AN INTEGER LITERAL. FPC's rgobj.pas:1728
 	@# needs four hops for one directive: a const naming another CONST across two
 	@# UNITS (x86_64/cpubase.inc:90 -> x86/cpubase.pas:84), and high() over a
