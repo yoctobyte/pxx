@@ -4326,7 +4326,10 @@ committer-date trap — both dates sit hours inside the window. Had frankb-56 no
 listed the five shas in its message, that zero would have gone into this block as
 corroboration. **The broken instrument and the false belief agreed, and absence
 is unfalsifiable from the inside.** Banked in `debugging-playbook.md`, "`git log
---since=<BARE ISO DATE>` SILENTLY MATCHES NOTHING". **Venue said out loud:
+--since=<BARE ISO DATE>` SILENTLY MATCHES NOTHING" — **that section title no
+longer exists; it was rewritten in place at `a38186b5b` and is now "`git log
+--since=<A DATE WITH NO TIME>` MEANS \"SINCE THIS TIME OF DAY ON THAT DATE\"".
+See 2f below for why.** **Venue said out loud:
 playbook, not CLAUDE.md** — one instance, one subsystem, and the general class
 (*every instrument that lies, lies by being correct about something else*) is in
 the rules file three times already. What is new is a spelling, and a spelling is
@@ -4500,3 +4503,126 @@ Gate GREEN as of 2c, three open regressions unchanged, nothing new landed.
 Track P: landed-not-held, [85]+[55] with frankb-56 by agreement between the two
 seats. **Seven for the 18th, unchanged** — three of today's corrections were mine
 to fix and none of them is his to decide.
+
+## Check-in 2g (2026-09-17) — three compiler fixes landed clean, BOTH seats are on P now, and I skipped the rebuild I named out loud two blocks ago
+
+### I DROPPED THE REBUILD, AND THE GATE CAUGHT IT
+
+`gate.sh quick` came back **RED on `self-host fixedpoint`** with its own
+diagnosis attached: *"`compiler/pascal26` is OLDER than the last commit touching
+`compiler/` (`0728155f2`) … That is a STALE BINARY, not a miscompile."* Three
+commits in the pull touched `compiler/`. I gated without rebuilding.
+
+**In check-in 2c I wrote the rule out and said why:** *"no `compiler/**` or
+`lib/**` arrived and the rebuild step is genuinely not owed here. Said out loud
+because skipping it is usually the error."* That was correct for a pull of pure
+`devdocs/`. **The first tick where it actually applied, I skipped it** — the
+sequence is PUSH → LET THE PULL SETTLE → **REBUILD** → MEASURE, and the REBUILD
+is the step that gets dropped, which is why CLAUDE.md puts it on its own line.
+Naming a rule two hours earlier buys nothing.
+
+```
+make compiler/pascal26   ->  converged after 1 round(s)     <- the RECOMPUTE verb
+                             93200e4b45db  (was b57f90696a01)
+re-gate                  ->  PASS self-host fixedpoint (39s)
+                             SKIP FPC seed canary (compiler/ unchanged, seeded green at bd79efb9f090)
+                             gate: GREEN
+```
+
+**GREEN after the rebuild**, confirming the red was the binary and not the tree —
+the benign twin, which is indistinguishable at a glance from the serious one and
+arrives exactly when the tree feels settled. Canary **SKIP, not a pass.**
+
+### WHAT LANDED: 22 COMMITS, TWO SEATS, AND BOTH ARE ON P
+
+**Three compiler fixes**, attributed by session URL rather than by topic:
+
+| sha | seat | what |
+| --- | --- | --- |
+| `eaf776dd8` | **frankb-56** | `{$if}` evaluates `in` over a set constant — the [85] ticket |
+| `2f5fdda94` | **franks-ee** | a call RESULT is a typed side of an assignment, all three spellings |
+| `0728155f2` | **frankb-56** | the PRE-PASS raised an `{$error}` it reached only because it could not evaluate the question |
+
+**So the lane moved AGAIN and in the direction my vocabulary keeps missing:**
+franks-ee, which 2e recorded as having moved OFF P to Track B, is back on P;
+frankb-56 took [85] and delivered it. **Both seats are on Track P.** Third
+different P state in twenty-four hours — unassigned-as-I-wrongly-claimed, then
+landed-not-held, now two seats in it. **The dispatch table at the top of this
+note has been wrong about every seat at some point today**; read it as the
+proposal it says it is.
+
+**The check-in prompt itself is now stale on the same point** — it still says
+*"Track O's pascal/gtk3 optdiff shards and all of Track P are still
+unassigned."* Both optdiff shards cleared at 2b and P is staffed by two. Noted
+so a later reader does not take the prompt as state either; it was written at
+baseline and nothing updates it.
+
+### NO NEW RED, AND THE RANGE SAYS SO
+
+All three compiler fixes are **ancestors of `ba8cf629926a`**, the newest
+full-tier tree (10m old), checked with `merge-base --is-ancestor` rather than by
+date. The 5 commits since touch **no `compiler/` and no `lib/`**. **Open
+regressions unchanged at three** — same three, same shas.
+
+So: three compiler changes went through a full tier and **opened nothing**. That
+is the claim, and it is deliberately not "the tier is green" — the full tier at
+that tree is still RED, as it has been all watch, with these three standing.
+
+### THE [85] RESULT IS A NULL ROW, MEASURED AND SAID PLAINLY
+
+frankb-56's own heading: *"IT BUYS ZERO COMPILING UNITS AND THAT IS THE MEASURED
+RESULT, NOT AN EXCUSE."* It checked the stale caveat franks-ee had flagged and
+left unmeasured — the right division of labour, and the taker did the taking:
+
+```
+nld   `expected operator` at :2     ->  `Unsupported tcompilerwidechar size` at :3266
+ncnv  `expected operator` at :3440  ->  `unknown type: TDoubleRec` at :36
+```
+
+Both advance to **different, older walls**, and it recorded the before-state
+(`oracle-no=0` at this wall for both) so the null row is information rather than
+a shrug. **Fifth instance of CLAUDE.md's umbrella measurement** — clearing a wall
+moves units-compiling by zero because a first-failure census reports one error
+per subject. It also states nld's new wall is **exposed, not caused**, which is
+the distinction that keeps a fix from being blamed for what it revealed.
+
+### AND [55] WAS ATTEMPTED, REVERTED, AND BANKED
+
+`d7946acb6`: tree clean, no behaviour changed, the commit is the diagnosis.
+*"Filing instead of fixing is normally the error, and the reason this is the
+exception is that what I learned CHANGES THE FIX'S SHAPE."* Two findings worth
+the ticket:
+
+- **The lowering is not the problem.** With one candidate in scope,
+  `P(['x','yy'])` already compiles and prints 2, matching fpc — so the defect is
+  confined to overload RANKING and **the ticket's stated fix shape points one
+  layer too deep.**
+- **A general fix would regress a row that costs nothing today.** `Q([fA])` with
+  both a set candidate and an `array of Integer` candidate answers 1 under fpc
+  and pxx already agrees. *"Let the parameter type disambiguate" is too wide.*
+
+### THE COST OF MY IN-PLACE REWRITE, AND ONE GREP THAT WAS NOT MY COLLATERAL
+
+franks-ee (`984e34be7`) found that its LOGBOOK line quoted playbook wording I had
+**rewritten in place**, and marked it as history with a pointer rather than
+leaving a reader chasing a quotation that no longer exists. **That is a real cost
+of rewriting in place and I had not accounted for it** — my reasoning (a
+half-right hazard note is obeyed silently) still holds, but the complete move is
+*rewrite in place AND grep for citations of the old wording*, and I did only the
+first half. franks-ee did the second half, in its own file, for me.
+
+So I did the grep. **One more dead citation, mine: check-in 2d cites the
+playbook section by its old title.** Repaired in place with a pointer to the new
+one. **And one hit that was NOT my collateral** — the reflog-attribution decide
+ticket says *"matches nothing, silently"* about a **completely different
+mechanism**: `%h` is the ABBREVIATED sha, so a full 40-character id pasted in
+matches nothing. A grep for a phrase found prose about another subject, which is
+the class this note has recorded most today; reading the context before claiming
+it was the whole cost of checking.
+
+### STATE
+
+**Gate GREEN after a rebuild I should not have needed prompting for.** Three open
+regressions unchanged. Track P staffed by both seats with [85] landed, [55]
+diagnosed-and-parked, and the third P ticket unclaimed. **Seven for the 18th,
+unchanged.**
