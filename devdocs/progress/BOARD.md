@@ -80,7 +80,7 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (45)
+## backlog (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -105,7 +105,6 @@ _none_
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-annotated-class-attribute | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_annotated_class_attribute.npy at 67f0878f2e59 in step 2/2, `/tmp/test_nilpy_annotated_class_attribute26 \| diff -u test/test_nilpy_annotated_class_attribute.expected -` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-attribute-off-a-virtual-call-result | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_attribute_off_a_virtual_call_result.npy at 7e4f69a34350 in step 5/8, `out=$(./compiler/pascal26 test/test_nilpy_qualified_name_error_names_the_receiver.npy /tmp/test_nilpy_qualrecv26 2>&1);…` (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-bare-return-subscript-slice | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bare_return_subscript_slice.npy at ec4b9c6a1f22 in step 2/3, `tools/expect_same.sh test_nilpy_bare_ret_subslice26 "$(/tmp/test_nilpy_bare_ret_subslice26)" "$(printf 'a\na\nab\nprefi…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-delitem-dunder-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_delitem_dunder.npy at 67f0878f2e59 in step 2/5, `/tmp/test_nilpy_delitem26 \| diff -u test/test_nilpy_delitem_dunder.expected -` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dunder-getitem-setitem | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dunder_getitem_setitem.npy at 67f0878f2e59 in step 2/4, `tools/expect_same.sh test_nilpy_dundergetset26 "$(/tmp/test_nilpy_dundergetset26)" "$(printf '%b' '20\n99\n[10, 99, 30]…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-for-getitem-protocol | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_for_getitem_protocol.npy at 67f0878f2e59 in step 2/7, `/tmp/test_nilpy_gip26 \| diff -u test/test_nilpy_for_getitem_protocol.expected -` (auto-filed by twatch) | — |
@@ -119,7 +118,6 @@ _none_
 | regression-test-nilpy-test-nilpy-sqlite-crud-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy at 42d05b7c18c7 in step 1/14, `./compiler/pascal26 test/test_nilpy_sqlite_crud.npy /tmp/test_nilpy_sqlite_crud26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-to-bytes | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_to_bytes.npy at 5dbee723e228 in step 2/4, `tools/expect_same.sh test_nilpy_to_bytes26 "$(/tmp/test_nilpy_to_bytes26)" "$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-variant-method-pick-by-arity | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_method_pick_by_arity.npy at 67f0878f2e59 in step 2/4, `tools/expect_same.sh test_nilpy_arity26 "$(/tmp/test_nilpy_arity26)" "$(printf '42\n1')"` (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-variant-str-index | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_str_index.npy at ec4b9c6a1f22 in step 2/4, `tools/expect_same.sh test_nilpy_variant_str_index26 "$(/tmp/test_nilpy_variant_str_index26)" "$(printf 'a\na\nb\na d\nc…` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
@@ -1088,9 +1086,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3804)
+## done (3806)
 
-3804 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3806 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1246,7 +1244,6 @@ _none_
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-annotated-class-attribute [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-attribute-off-a-virtual-call-result [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-nilpy-test-nilpy-bare-return-subscript-slice
 - [p 70] [N] regression-test-nilpy-test-nilpy-delitem-dunder-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-nilpy-test-nilpy-dunder-getitem-setitem
 - [p 70] [N] regression-test-nilpy-test-nilpy-for-getitem-protocol [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -1260,7 +1257,6 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-nilpy-sqlite-crud-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-nilpy-test-nilpy-to-bytes
 - [p 70] [T] regression-test-nilpy-test-nilpy-variant-method-pick-by-arity
-- [p 70] [T] regression-test-nilpy-test-nilpy-variant-str-index
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5

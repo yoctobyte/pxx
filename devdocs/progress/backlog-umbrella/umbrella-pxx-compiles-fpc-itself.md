@@ -708,3 +708,70 @@ a **third wall in the same file**, not on 132 compiling units. A complete
 past SEMANTIC failures, and a halting diagnostic later in the unit would never
 appear. That is the honest caveat and it should not be dropped when this is
 quoted.
+
+---
+
+## 2026-09-16 (frankS) — the seventh null row, and the third wall is REAL but NOT in the same file
+
+`bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised` is fixed
+(`14df2066b`). Measured what that delivered, and measured the prediction that was
+put on record before the work, which is the part worth keeping.
+
+**Three arms, same probe, 207 units, pxx-only (no fpc oracle — read the DELTA
+between columns, never the absolute count):**
+
+| arm | compiler | cpuinfo walls | units OK | total errors |
+| --- | --- | --- | --- | --- |
+| `base` | pre-fix | both present | **21** | 396 |
+| `fix` | post-fix | TDoubleRec only | **21** | 396 |
+| `stub` | pre-fix | both stubbed out | **21** | 256 |
+
+**UNITS COMPILING MOVED BY ZERO IN BOTH DIRECTIONS — including with BOTH walls
+removed.** That is the seventh null row and it is consistent with every previous
+one. 138 units report exactly two errors, `TDoubleRec` first.
+
+**THE FIX WORKED AND THE COUNT CANNOT SEE IT.** `base` and `fix` are identical
+unit-by-unit *and* identical in total error count, which reads as "nothing
+happened". It is not what happened. Checked one unit directly:
+
+```
+aasmbase, pre-fix : pascal26:36  unknown type: TDoubleRec
+                    pascal26:281 too many array initializer elements
+aasmbase, post-fix: pascal26:36  unknown type: TDoubleRec
+                    pascal26:35  an object type cannot have a constructor
+```
+
+The array error is gone and a **different** error took its slot. All 138 units
+traded one wall for the next, so the count held at 2 and the first-error
+histogram — which is what the `PXX_CORPUS_DETAIL` summary reports — held at
+`TDoubleRec`. **An error COUNT is not an error IDENTITY**, and a wall census
+compared on counts will report a successful fix as a null result. Compare the
+message sets, not the totals.
+
+**The prediction, scored honestly.** It was: *"clearing both lands the 132 on a
+third wall in the same file."* Half right, and the wrong half matters.
+
+- **RIGHT that a third wall swallows the population.** With both walls stubbed,
+  **156 units** hit `an object type cannot have a constructor`
+  (`bug-p-object-value-types-standard-meaning`, already ticketed) — up from 18,
+  so 138 arrived there exactly as predicted.
+- **WRONG that it is in the same file.** With both stubbed, `cpuinfo.pas`
+  **compiles clean**. There is no third wall in that file; the next one is
+  further down each unit's own dependency chain.
+
+That distinction is worth keeping because it changes what the next fix should
+be. "Another wall in cpuinfo.pas" would mean keep grinding that file; "one
+shared wall one file further on" means the next lever is
+`bug-p-object-value-types-standard-meaning`, which now gates 156 of 207 units
+and is the largest single wall this corpus has.
+
+**And the ranking caveat still applies to that 156, unchanged.** It counts units
+QUEUED, not work, and this umbrella has now converted seven walls at a yield of
+zero additional compiling units. Predict before the next re-run; a null row is
+only information to someone who said what they expected.
+
+**`ErrorRecover` caveat, carried forward.** A complete *reported* failure set is
+a claim about what the diagnostic emitted, not about what compiles. A halting
+diagnostic later in a unit never reaches the detail file at all, so "two errors"
+and "two fixes from compiling" are different statements — and the zero-yield rows
+above are consistent with that being true of some units here.
