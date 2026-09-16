@@ -36211,6 +36211,20 @@ endif
 	# on a wrong separator set first.
 	$(PXX_STABLE) -Fulib/rtl test/lib_getdir.pas $(TESTTMP)/lib_getdir
 	tools/expect_same.sh lib_getdir "$$($(TESTTMP)/lib_getdir | tail -1)" "total ok 27 / 27"
+	# System's MkDir / RmDir / ChDir and the IOResult codes they report. The
+	# load-bearing rows are the ones a single shared errno table would fail: a
+	# missing directory is 2 for RmDir/MkDir but 3 for ChDir (fpc separates
+	# "file not found" from "path not found" by the OPERATION, both ENOENT),
+	# and a too-long name is 3 where the FILE table answers 2 for the same
+	# errno. Plus the empty path, which is a no-op returning 0 in fpc and is
+	# asserted for its ABSENCE OF EFFECT as well as its code -- an
+	# implementation resolving '' to the cwd would delete or enter it. Every
+	# code produced under fpc 3.2.2 and read back, never written from a
+	# specification; FPC RUNS THIS SAME FILE AND ALSO ANSWERS 31 / 31, and the
+	# harness was made to redden (30 / 31, naming the row) on a one-code
+	# perturbation before that green was believed.
+	$(PXX_STABLE) -Fulib/rtl test/lib_dirio.pas $(TESTTMP)/lib_dirio
+	tools/expect_same.sh lib_dirio "$$($(TESTTMP)/lib_dirio $(TESTTMP)/dirio_sandbox | tail -1)" "total ok 31 / 31"
 	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
 	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
 	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"

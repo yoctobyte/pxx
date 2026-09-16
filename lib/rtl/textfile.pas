@@ -130,6 +130,24 @@ procedure Rename(var f: Text; const NewName: AnsiString);
 
 function IOResult: Integer;
 
+{ System's three directory routines. They live HERE rather than in SysUtils
+  because they report through IOResult and nothing else -- they raise nothing,
+  return nothing, and are the only reason most callers pull this unit at all.
+  fpc's own compiler is the caller that matters: cfileutl.pas:709 wraps
+  `rmdir(d)` in `{$push}{$I-}` and reads `RemoveDir:=(ioresult=0)`.
+
+  THE EMPTY PATH IS A NO-OP RETURNING 0, IN ALL THREE. Measured against fpc
+  3.2.2 -- `RmDir('')` does nothing and leaves IOResult at 0, it does not
+  attempt the syscall and it does not report an error. Anything else would make
+  an unset path name the current directory.
+
+  SysUtils.CreateDir / RemoveDir / SetCurrentDir are the EXCEPTION-free Boolean
+  spellings of the same three operations and are unaffected; these are the
+  Pascal-statement spellings a `{$I-}` region uses. }
+procedure MkDir(const Path: AnsiString);
+procedure RmDir(const Path: AnsiString);
+procedure ChDir(const Path: AnsiString);
+
 procedure TextWrite(var f: Text; const s: AnsiString);
 procedure TextWriteLn(var f: Text; const s: AnsiString);
 procedure TextReadLn(var f: Text; var s: AnsiString);
@@ -719,6 +737,73 @@ function IOResult: Integer;
 begin
   Result := LastIOResult;
   LastIOResult := TF_OK;
+end;
+
+{ errno -> IOResult FOR THE DIRECTORY ROUTINES, which is NOT the same table the
+  file routines use and that is why it is a second function rather than a reuse.
+  Measured against fpc 3.2.2, every row produced by making the condition happen
+  and reading IOResult back -- fpc does not document these:
+
+    condition                     errno            RmDir  MkDir  ChDir
+    does not exist                ENOENT   2         2      2      3
+    name too long                 ENAMETOOLONG 36    3      3      3
+    permission denied             EACCES  13         5      5      5
+    already exists                EEXIST  17         -      5      -
+    a plain file, not a directory ENOTDIR 20         5      5      5
+    directory not empty           ENOTEMPTY 39       5      -      -
+
+  TWO ROWS DISAGREE WITH THE FILE TABLE ABOVE AND THEY ARE THE WHOLE REASON THIS
+  EXISTS. ENOENT is 2 for RmDir/MkDir but 3 for ChDir -- fpc distinguishes "file
+  not found" from "path not found" by the OPERATION, not by the errno, so a
+  single errno->code map cannot express it. And ENAMETOOLONG is 3 here where
+  ErrnoToIOResult answers 2. Do not merge the two tables. }
+function DirErrnoToIO(e, enoentCode: Integer): Integer;
+begin
+  case e of
+    2: Result := enoentCode;
+    36: Result := 3;
+    13, 17, 20, 21, 39: Result := 5;
+  else
+    Result := e;
+  end;
+end;
+
+{ Shared by all three: an empty path is fpc's documented no-op, and a negative
+  PAL result is a negated errno. `p` is a local rather than a cast of the
+  parameter on purpose -- see bug-p-pchar-of-an-ansistring-cast-of-a-literal-
+  yields-one-garbage-byte for why a PChar of a cast is not a spelling to reach
+  for in this RTL. }
+procedure DirSetIO(rc, enoentCode: Integer);
+begin
+  if rc < 0 then LastIOResult := DirErrnoToIO(-rc, enoentCode)
+  else LastIOResult := TF_OK;
+end;
+
+procedure MkDir(const Path: AnsiString);
+var p: AnsiString;
+begin
+  if Length(Path) = 0 then begin LastIOResult := TF_OK; Exit; end;
+  p := Path;
+  { 0o777; the process umask narrows it, which is what fpc's do_mkdir does. }
+  DirSetIO(PalMkdir(PChar(p), 511), 2);
+end;
+
+procedure RmDir(const Path: AnsiString);
+var p: AnsiString;
+begin
+  if Length(Path) = 0 then begin LastIOResult := TF_OK; Exit; end;
+  p := Path;
+  DirSetIO(PalRmdir(PChar(p)), 2);
+end;
+
+procedure ChDir(const Path: AnsiString);
+var p: AnsiString;
+begin
+  if Length(Path) = 0 then begin LastIOResult := TF_OK; Exit; end;
+  p := Path;
+  { 3, not 2: fpc answers "path not found" for a missing directory here and
+    "file not found" for the other two. Measured, not inferred. }
+  DirSetIO(PalChdir(PChar(p)), 3);
 end;
 
 procedure TextWrite(var f: Text; const s: AnsiString);
