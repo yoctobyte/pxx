@@ -69,7 +69,7 @@ _none_
 | refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths | A | 45 | refactor | WRITTEN AND PARKED 2026-08-31, one step from done: the collapse builds and self-hosts (0a7978a21cbc, 1 round) with both guard tests unchanged, and is committed as a PATCH at devdocs/progress/patches/refactor-a-durable-param-row-collapse.patch. It cannot LAND until a `make pin` — the nested PersistParamRow captures 21 fixed-size staging arrays and `pinned` predates fixed-array capture, so the pinned-seed fixedpoint goes RED and the tree would be unbuildable from the pin for every lane. Needs the pin, not more work. Was: ParseSubroutine registers a routine's params on THREE paths — `external` (which then Exits), forward/interface, and the body pass — and each hand-copies the ~20 durable ProcParam* columns. Measured 2026-08-30 BEFORE they were equalised: body wrote all of them, forward 14, external THREE, and that one asymmetry produced three divergences from fpc in both directions. All three copies are now complete, so no defect is open; the DUPLICATION is, and it is a standing trap because a new column added to one copy silently misses the other two. The collapse is written and blocked: the 21 staging arrays are fixed-size locals the compiler cannot capture in a nested routine, and ParseSubroutine is re-entrant so they cannot be globals. | bug-a-a-nested-routine-cannot-capture-a-fixed-size-array |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | THE MERGE IS DONE AND THIS TICKET'S SUMMARY WAS FALSE FOR THREE DAYS. `DynArrayNodeDepth` was DELETED on 2026-09-03 by `45391912a` (`fix(A): delete the second dyn-depth walker`); measured 2026-09-06, it has no definition anywhere in the tree and `NodeDynDepth` (ast_arena.inc) is the single walker, with callers in nine files. WHAT IS LEFT IS THE RESIDUAL, AND IT IS WHY THIS ROW STAYS OPEN: two comments still name the deleted function as though it existed -- `pasparser_decl.inc:1753` (which counts THREE mechanisms answering `how deep is this array` and is now wrong by one) and `symtab.inc:15898` (past tense, deliberate history, fine as written). The decl.inc one is load-bearing prose: it is the stated justification for a design decision taken on 2026-09-06, and it was written from a count relayed by this repo's coordinator that was already three days stale. Fix the two citations and close. NOTE the third mechanism the decl.inc comment names, `NodeArrNDInfo` (pasparser_call.inc), is REAL and still there -- so the live count is TWO, not one and not three. | — |
 
-## blocked (6)
+## blocked (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -78,15 +78,15 @@ _none_
 | feature-esp-gpio-and-adc-callback-slices | B+S | 30 | feature | ESP peripheral callback API — GPIO (slice 2) and ADC (slice 3) | — |
 | feature-port-freebsd-native | A | 25→55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
+| regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (43)
+## backlog (41)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | regression-cascade-e5cd18e4b220 | T | 70 | regression | regression CASCADE: 13 jobs newly red in 6f085e162..e5cd18e4b (1 commits) — auto-filed by twatch | — |
 | regression-fpc-bootstrap-compiler-4 | A | 40 | regression | advisory red: fpc-bootstrap#src:compiler/compiler.pas at d68ed2fe803c in step 1/1, `mkdir -p /tmp/p26_fpc_canary_u && fpc -Mobjfpc -O2 -Tlinux -Px86_64 -FU/tmp/p26_fpc_canary_u -FE/tmp/p26_fpc_canary_u -…` (auto-filed by twatch) | — |
-| regression-lib-test-crtl-atexit-2 | C | 70 | regression | regression: lib-test#src:test/crtl_atexit.c at 934ba04180e9 in step 15/17, `sh test/crtl_declaration_census.sh stable_linux_amd64/default/pinned /tmp` (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-9 | B | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at fca28056d8ec in step 84/346, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
 | regression-lib-test-lib-classes-tthread-2 | B | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas at 934ba04180e9 in step 1/5, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_classes_tthread.pas /tmp/lib_classes_tthread` (auto-filed by twatch) | — |
 | regression-lib-test-lib-criticalsection-blocking | B | 70 | regression | regression: lib-test#src:test/lib_criticalsection_blocking.pas at 934ba04180e9 in step 1/3, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_criticalsection_blocking.pas /tmp/lib_cs_blocking` (auto-filed by twatch) | — |
@@ -97,7 +97,6 @@ _none_
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
 | regression-test-c-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-c-abi-mixed-link#src:tools/compiler_srchash.sh at 95fc8aff2016 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
-| regression-test-core-c-alloca-expression-stack | C | 70 | regression | regression: test-core#src:test/c_alloca_expression_stack.c at 9b0c07c2d5a8 in step 9/37, `if command -v qemu-riscv32 >/dev/null 2>&1; then \ ./compiler/pascal26 --target=riscv32 test/c_alloca_expression_stack.…` (auto-filed by twatch) | — |
 | regression-test-core-c-asm-in-inline-body-3 | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 4fe0e6505042 in step 7/14, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-c-cross-time-and-exit-through-the-pal | T | 70 | regression | regression: test-core#src:test/c_cross_time_and_exit_through_the_pal.c at a8179a73ea84 in step 5/5, `overall=0; ran=0; want=0; \ for t in i386 aarch64 arm32 riscv32; do \ want=$((want+1)); \ case $t in i386) q=qemu-i386;…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
@@ -1085,9 +1084,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3807)
+## done (3808)
 
-3807 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3808 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1225,7 +1224,6 @@ _none_
 - [p 70] [T] bug-t-a-recipe-that-self-skips-a-missing-oracle-is-not-counted-as-a-coverage-hole
 - [p 70] [N] feature-n-a-call-cannot-unpack-a-sequence-into-its-arguments
 - [p 70] [T] regression-cascade-e5cd18e4b220
-- [p 70] [C] regression-lib-test-crtl-atexit-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-crtl-reachability-9 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-lib-classes-tthread-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-lib-criticalsection-blocking [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -1235,7 +1233,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard5-12
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash-2
-- [p 70] [C] regression-test-core-c-alloca-expression-stack [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-c-asm-in-inline-body-3
 - [p 70] [T] regression-test-core-c-cross-time-and-exit-through-the-pal
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]

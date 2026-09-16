@@ -43,3 +43,35 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-09 — the seven watcher saw `test-core#src:test/c_alloca_expression_stack.c` GREEN at ab1d60ab88f2 (tier native) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Resolution — CLOSED BY EVENTS (8cbe22841), verified at HEAD by running the row
+
+**The slug names alloca and the alloca rows were never the failure.** The
+mismatch was `riscv32/c_vla_rv`: expected 7 lines, actual 8, extra trailing
+`9 7 6`.
+
+**The EXPECTED side was the wrong one.** At HEAD, three independent producers
+agree and the Makefile literal was the only dissenter:
+
+| producer | output |
+| --- | --- |
+| pxx `--target=riscv32`, run under qemu-riscv32 | ends `24` / `9 7 6` |
+| gcc native | ends `24` / `9 7 6` |
+| pxx native | ends `24` / `9 7 6` |
+
+Fixed by **8cbe22841**, *"fix(T): the c_vla cross rows kept an expectation the
+x86-64 row had already grown"* — `Makefile:18773` (x86-64) had learned `9 7 6`
+while the riscv32/arm32/i386 rows (23130/23143/23156) kept the older 7-line
+literal. The ticket's bad sha `9b0c07c2d` predates it.
+
+**Verified, not inferred:** `tools/expect_same.sh` run with the HEAD literal
+against a live `qemu-riscv32` execution of a freshly compiled binary — PASSES.
+qemu-riscv32 is present on this host, so this is a real run and not a skip.
+
+**The qemu-class caveat, and why it does not apply.** This job's class is
+`qemu`, which testmgr treats as runtime-nondeterministic (`RUN_RETRY_CLASSES`),
+so a single green does not normally refute a red — and the 2026-09-09 log entry
+correctly declined to close on exactly that ground. That rule guards against a
+flaky RUN. Here the defect was a static string in the Makefile and the repair is
+a visible diff to it, so the discriminator is the COMMIT, not the run. Closing
+on a green alone would still have been wrong; closing on the diff is not.
