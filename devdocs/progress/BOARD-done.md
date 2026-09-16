@@ -3296,6 +3296,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
+| regression-optdiff-shard0-12 | A | 80 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
 | regression-optdiff-shard1-12 | T | 70 | regression | regression: optdiff#shard1/12 red at fffd29ea840d (auto-filed by twatch) | — |
 | regression-optdiff-shard10-12 | C | 70 | regression | regression: optdiff#shard10/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 10/12` (auto-filed by twatch) | — |

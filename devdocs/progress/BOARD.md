@@ -80,7 +80,7 @@ _none_
 | feature-release-checksums-repro | A | 50→80 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (46)
+## backlog (45)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,7 +93,6 @@ _none_
 | regression-lib-test-lib-fpc-thread-surface | B | 70 | regression | regression: lib-test#src:test/lib_fpc_thread_surface.pas at 934ba04180e9 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface` (auto-filed by twatch) | — |
 | regression-lib-test-lib-thread-handle-reports-exit-on-both-routes | B | 70 | regression | first-ever red: lib-test#src:test/lib_thread_handle_reports_exit_on_both_routes.pas at 06e40fb95b13 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_thread_handle_reports_exit_on_both_routes.pas /tmp/l…` (auto-filed by twatch) | — |
 | regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call | T | 70 | regression | first-ever red: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy at 5c7d6d650e5d in step 2/6, `tools/expect_same.sh test_nilpy_noleak "$(/tmp/test_nilpy_noleak \| tail -n 1)" "PYLEAK OK"` (auto-filed by twatch) | — |
-| regression-optdiff-shard0-12 | A | 80 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard5-12 | T | 70 | regression | regression: optdiff#shard5/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 5/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
@@ -1090,9 +1089,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3802)
+## done (3803)
 
-3802 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3803 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (81)
 
@@ -1208,7 +1207,6 @@ _none_
 - [p 80] [N] bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - [p 80] [N] bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
 - [p 80] [N] feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
-- [p 80] [A] regression-optdiff-shard0-12
 - [p 80] [A] umbrella-track-p-and-a-have-no-open-bugs [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults

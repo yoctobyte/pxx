@@ -2,6 +2,7 @@
 prio: 80
 track: A
 tags: [optimiser, O3, float, silent-wrong-value, unfixed-arm]
+status: done
 ---
 
 > **TRIAGED 2026-09-16 (frankuser). RE-LANED T -> A, and it is a REAL SILENT WRONG
@@ -81,3 +82,49 @@ optdiff shard 0/12: pass=210 skip=24 diff=1
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## RESOLVED 2026-09-16 (frankS, Track O/A) — `84ccb6384`
+
+**The parent's `-O3` arm was the INLINER, not a second copy of the conversion rule.**
+
+`ir.inc`'s float→int rewrite (wrap the RHS in the `-204` Round intrinsic) lives in the
+**`AN_ASSIGN` lowering**. For a single-statement body `Result := <float expr>` the
+inliner takes **shape 1**, which retains only the RHS *expression* and discards the
+`AN_ASSIGN`. Probed at the top of that arm: **zero** inlined assignments with a float
+RHS ever reach it. Nothing was wrong with the conversion — there was no assignment
+left to convert.
+
+What isolates it: out-of-line at `-O3` is correct, and the same body written to a
+**local** rather than `Result` is correct at `-O3` (`viaResult=-858993459`
+vs `viaLocal=5`). Shape 3 allocates a properly typed Result temp and stores through
+it, which *is* an `AN_ASSIGN` and does get the rewrite.
+
+**The fix reuses a precedent rather than adding a rule.** The guard directly above
+already covered the **mirror** case — a conversion *into* a float result, the `D2S`
+bug — and its own comment states the general rule: *"any RHS kind that is not ALREADY
+the result kind goes to shape 3"*. The implemented predicate was **narrower than its
+own stated intent**: keyed on the RESULT being float, so structurally blind to a float
+RHS landing in an integer result. Extended to the sibling, routing to
+`TryRetainInlineStmtBody`. Deliberately not a copy of the rounding rule — `ir.inc`'s
+arm says two dozen places build an `AN_ASSIGN` and exactly one lowers it.
+
+**Measured, not assumed:**
+
+| instrument | result |
+| --- | --- |
+| `PXXDBG=a.inline` on the repro | exactly ONE line moves: `RetInt shape=1` → `shape=3`. Still **RETAINED** — a change of shape, not a lost inline. |
+| same, across `compiler/compiler.pas` | all **206** retentions byte-identical to pin v410 — the guard fires on nothing in the compiler's own source. The instrument is proven live by the one repro line that does move. |
+| **positive control**: pin v410, byte-identical sources | still `-858993459`, `viaResult=-858993459`, `got 4616977747989548237 want 5`. This tree: `5` at `-O0/-O1/-O2/-O3`. |
+
+`viaLocal=5` on **both** sides is the aiming check: the guard did not blanket-disable
+the expression path, it diverted one shape.
+
+**No new fixture.** The optdiff sweep is the designed instrument for an opt-level
+disagreement and `test_double_to_integer_lvalue_rounds.pas` at `-O3` going green IS
+the regression test; a bespoke Makefile row would duplicate it.
+
+Self-host fixedpoint converged, `gate.sh quick` GREEN. **Inert for anything building
+against `$(PXX_STABLE)` until the next pin.**
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
