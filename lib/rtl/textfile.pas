@@ -254,9 +254,33 @@ procedure Seek(var f: FileRec; n: Int64);
 function FilePos(var f: FileRec): Int64;
 function FileSize(var f: FileRec): Int64;
 procedure Truncate(var f: FileRec);
+{ THE NARROW OVERLOADS ARE NOT CONVENIENCE -- WITHOUT THEM THE IDIOMATIC CALL
+  SILENTLY CORRUPTS THE CALLER'S STACK. fpc declares this count-out parameter at
+  four widths (Int64, Longint, Cardinal, Word; its fifth row differs only in the
+  COUNT type, since Integer = Longint) and real code overwhelmingly passes a
+  plain Integer -- fpc's own charset.pp does. We shipped only the Int64 row, and
+  a `var` parameter whose actual is narrower than its declared type is written
+  at the DECLARED width: eight bytes into a four-byte local, four of them
+  landing on whatever the frame put next to it.
+
+  Measured 2026-09-16 against fpc 3.2.2. `BlockRead(f, b[0], n, c)` with
+  `n, c: LongInt` reported c=10 correctly and left n = 0 -- the count came back
+  right, so nothing in the result says anything went wrong, and the caller then
+  indexes the buffer with a zeroed length. fpc refuses the same call outright:
+  "Call by var for arg no. 4 has to match exactly". That refusal is the real
+  fix and it belongs in the compiler
+  (bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it); these
+  rows are the surface fpc actually publishes, not a workaround for it -- they
+  are what makes the ordinary spelling correct rather than merely accepted. }
 procedure BlockRead(var f: FileRec; var Buf; count: Int64); overload;
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Word); overload;
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: LongInt); overload;
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Cardinal); overload;
 procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Int64); overload;
 procedure BlockWrite(var f: FileRec; var Buf; count: Int64); overload;
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Word); overload;
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: LongInt); overload;
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Cardinal); overload;
 procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Int64); overload;
 { The lowering targets for `Read(f, v)` / `Write(f, v)` over a file handle. One
   record each, at the current position — the statement hook emits one call per
@@ -1182,6 +1206,30 @@ begin
   SetIO(TF_OK);
 end;
 
+{ Each narrow row goes through the Int64 one and narrows on the way OUT, so
+  there is exactly one implementation of the semantics and the widths cannot
+  drift apart. }
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: LongInt);
+var got: Int64;
+begin
+  BlockRead(f, Buf, count, got);
+  numRead := LongInt(got);
+end;
+
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Cardinal);
+var got: Int64;
+begin
+  BlockRead(f, Buf, count, got);
+  numRead := Cardinal(got);
+end;
+
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Word);
+var got: Int64;
+begin
+  BlockRead(f, Buf, count, got);
+  numRead := Word(got);
+end;
+
 procedure BlockRead(var f: FileRec; var Buf; count: Int64);
 var got: Int64;
 begin
@@ -1202,6 +1250,27 @@ begin
   if n < 0 then begin SetIO(Integer(n)); Exit; end;
   numWritten := n div rs;
   SetIO(TF_OK);
+end;
+
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: LongInt);
+var put: Int64;
+begin
+  BlockWrite(f, Buf, count, put);
+  numWritten := LongInt(put);
+end;
+
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Cardinal);
+var put: Int64;
+begin
+  BlockWrite(f, Buf, count, put);
+  numWritten := Cardinal(put);
+end;
+
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Word);
+var put: Int64;
+begin
+  BlockWrite(f, Buf, count, put);
+  numWritten := Word(put);
 end;
 
 procedure BlockWrite(var f: FileRec; var Buf; count: Int64);
