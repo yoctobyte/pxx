@@ -95,4 +95,4 @@ and on a host provisioned by `tools/install_lib_candidates.sh duktape` without
 one.
 
 ## Log
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ca92ef81b.
