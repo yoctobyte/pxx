@@ -27776,3 +27776,66 @@ keyboard. CLAUDE.md's `git fetch` paragraph already carries the general shape
 second, unrelated subsystem has a path-shaped query answer authoritatively
 about the wrong OBJECT rather than the wrong VERSION — that is the axis this
 adds, and one instance is not a pattern.
+
+## `git log --since=<BARE ISO DATE>` SILENTLY MATCHES NOTHING — and the zero it returns is the answer a wrong premise wants
+
+**Measured 2026-09-16, on this repo, at `origin/master`:**
+
+```
+git log origin/master --since=2026-09-16         --oneline | wc -l   ->    0
+git log origin/master --since='2026-09-16 00:00' --oneline | wc -l   ->  326
+git log origin/master --since='24 hours ago'     --oneline | wc -l   ->  328
+git log origin/master --after=2026-09-15         --oneline | wc -l   ->  328
+```
+
+Same repo, same ref, same second. **A bare `YYYY-MM-DD` passed to `--since`
+returns nothing**; add a time and 326 commits appear. It does not warn, it does
+not exit nonzero, and `--since`/`--after` are the same option, so the working
+spelling is one character away from the silent one. The commits are not
+borderline: author AND committer dates both sit hours inside the window
+(`dc3fedb0a`, author `2026-09-16T15:31:41+02:00`, committer `…T15:32:00+02:00`),
+so this is not the usual `--since`-reads-COMMITTER-date trap. That trap is real
+and it is a DIFFERENT one; checking for it here finds nothing wrong and clears
+the query, which is how this survives a careful reader.
+
+**WHY IT IS WORTH A SECTION AND NOT A SHRUG: the failure mode is a ZERO, and a
+zero is what a "nobody is working on that" claim is looking for.** The query was
+run to test the claim *"Track P is entirely unassigned"* — a claim already in
+seven check-in blocks and already wrong. The truth was **five `fix(P)` commits
+that day, 09:16 to 15:31, all one session**. `--since=2026-09-16` answered
+**0 fix(P) commits today**, which is exactly the number the wrong premise
+predicts. **The broken instrument and the false belief agreed**, and the only
+reason the error did not land is that a peer had independently listed the five
+shas in a message.
+
+That is the census-built-on-its-own-hypothesis failure arriving through the
+OPTION PARSER rather than through the filter the author wrote. Nothing in the
+command restates the hypothesis; the hypothesis is restated by the tool, for
+free, in the direction of absence.
+
+**What to do instead.** For "has anything happened since X", prefer a form whose
+failure is loud or whose population you can see:
+
+- `--since='<date> 00:00'` — the same query, spelled so it works.
+- `--after='24 hours ago'` / `'2 days ago'` — approxidate's well-trodden path.
+- Better, when the question is about a RANGE you can name: `git log A..B`, which
+  has no date parsing in it at all and whose endpoints you chose.
+- **Best, for "is anyone working on this": do not ask about time.** Ask
+  `git log origin/master --grep=<the session URL>` and read the subjects. That
+  is a population you can print and count.
+
+**And the general rule this is an instance of, already in CLAUDE.md three times
+over:** every instrument that lies, lies by being correct about something else —
+here, correct about an empty approxidate window. **A count of ZERO is the single
+most dangerous output any instrument can produce**, because absence is
+unfalsifiable from the inside: a wrong filter, a wrong population and a true
+negative all print `0`, and only one of them is information. **Before believing
+a zero, produce a nonzero from the same instrument** — run the query in a form
+that MUST match something, and if it also answers 0, the instrument is the
+finding.
+
+*Banked here rather than promoted to CLAUDE.md: one instance, one subsystem.
+The general class it belongs to is already in the rules file and did not need
+restating; what is new is only the spelling, and a spelling is a playbook fact.
+Promote it if a second, unrelated instrument is found answering 0 for a
+parse reason and confirming a stated premise.*
