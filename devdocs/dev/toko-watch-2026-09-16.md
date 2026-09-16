@@ -113,13 +113,12 @@ themselves, and each one worth more than the assignment it replaced:**
   its entirety and committing the maps means ~1.4 MB of build artefacts. **That choice
   is the owner's.** Residual risk stated plainly by that seat: a `git clean` takes all
   of it, and the index makes the loss legible without preventing it.
-- **`c_asm_in_inline_body.c@2` is NOT Track C.** I grouped it with the syscall-idiom
-  ticket on the word `asm` and nothing else. frankb-56 read the test's header, which
-  names its own root cause: the inliner's generic cloners (`CloneToInlineRegion`,
-  `IRCloneInlineBody`) recursing into ASTLeft/ASTRight on kinds that overload those
-  slots as payload. Fires at -O3. **Track A/O.** Its `bad=3a91d13f1dec` is a NilPy
-  commit named by POSITION (1-in-range), not a demonstrated cause — reproduce at HEAD
-  and at `3a91d13f1^` before believing it.
+- **`c_asm_in_inline_body.c@2` — RETRACTED IN FULL, 2026-09-16, see check-in 0e.**
+  It was neither a Track C failure nor a Track A one: **it was never a C test failure
+  at all**, and `bad=3a91d13f1dec` was a CORRECT attribution, not a positional one.
+  I first mis-grouped it into C on the word `asm`; frankb-56 correctly pulled it out;
+  I then re-laned it to A/O on the strength of the JOB LABEL and was wrong again.
+  Left here as the worked example rather than deleted.
 
 **THE HOST IS CLEAN — contention and disk are EXCLUDED.** I recorded the expectation
 before asking and it held. borg: 66% by bytes, **5% by inodes** (2.7M of 61.9M used),
@@ -228,10 +227,11 @@ his fixture prints `4607182418800017408`, the exact tell from his commit message
 then does "his fixture still passes" mean his fix survived. **Ask what a green is
 physically able to observe before quoting it.**
 
-**Attribution trap, twice in one morning in one archive:** `ec4b9c6a1f22` is this seat's
-own DOCS-ONLY watch-note commit and was the `bad=` sha for three rows; `3a91d13f1dec` is
-a NilPy commit and is the `bad=` for a C test. Both are tested upper bounds named by
-POSITION with 1-in-range. Neither is a lead.
+**Attribution trap — and ONE OF MY TWO EXAMPLES WAS ITSELF WRONG.** `ec4b9c6a1f22` is
+this seat's own DOCS-ONLY watch-note commit and was the `bad=` sha for three rows: that
+one IS a tested upper bound and is not a lead. **`3a91d13f1dec` is NOT** — see check-in
+0e. I put them side by side because they looked alike, and the resemblance was the
+whole error.
 
 ### 2026-09-16, check-in 0c — Track A thread-state group CLOSED; the backlog pattern recurred
 
@@ -272,10 +272,9 @@ did. Flagged by franks-ee itself, which is the direction nobody checks. Its stat
 blocker ("fixes no FOREIGN thread") is measured FALSE for every thread a pxx program
 makes including from C, so the cheap path is unblocked; remaining work is Track C.
 
-**Reassigned:** franks-ee → `c_asm_in_inline_body.c@2` / the generic AST-walker cloner
-bug (Track A, live red, `bad=` sha is positional and probably wrong — reproduce at HEAD
-and at `3a91d13f1^` first). Fallback if blocked: `test-tthread-fails-under-full-tier-load`,
-now that contention is excluded.
+**Reassigned:** franks-ee → `c_asm_in_inline_body.c@2`. **THIS ASSIGNMENT WAS BUILT ON A
+MISREAD LABEL — see check-in 0e.** Its fallback, `test-tthread-fails-under-full-tier-load`,
+had already been dispositioned to `low-prio/` by franks-ee before I flagged it, correctly.
 
 ### 2026-09-16, check-in 0d — Track C group closed; Track P census running
 
@@ -331,3 +330,45 @@ delivers. I expect that number to be small and the detail files to show most of 
 carrying several independent errors behind it. If the detail files instead show most
 units with `TDoubleRec` alone, my model is wrong and the wall is worth far more than the
 umbrella's queue-position finding predicts.
+
+### 2026-09-16, check-in 0e — I WAS WRONG ABOUT `c_asm_in_inline_body`, TWICE, AND CONFIDENTLY
+
+**Nothing was broken. There was no defect, no re-laning to do, and the bisect I
+discredited was correct.** Corrected with all three seats I had told otherwise.
+
+**What it actually is:** `testmgr` keys a job by SOURCE FILE, and the
+`python3 tools/ast_slot_overloads.py` line sits in the same recipe region as the
+`c_asm_in_inline_body.c` rows — so an **AST-slot snapshot drift is reported under a C
+program's name**. The C test passes at HEAD, both rows, default and -O3, printing its
+expectation `35 14 5`. **The tier's own failure detail says "census diff" if you read
+it; I read the job key instead.**
+
+**And the cloner ticket I said it pinned has been in `done/` since 2026-09-02.**
+`tools/ast_slot_overloads.py` IS the guard that fix installed. Its summary records no
+observable instance across 2233 files and 238k firings. **Those rows are pins on shapes
+that WORK, not repros — them passing is the designed outcome, not a missed
+reproduction.**
+
+**THE CORRECTION THAT IS WORTH THE MOST, because it generalises:** `3a91d13f1dec` adds
+`ASTLeft[binN] := lhsN` and `ASTLeft[dynBin] := PyMakeDynAttrGet(baseNode, fname)` —
+**exactly** the two `+AN_BINOP Left` rows in the failure detail. The bisect was right.
+It looked positional because **it moved a SNAPSHOT, not BEHAVIOUR**, so nobody can find
+a defect at the sha — there isn't one — and *"no defect at the bad commit, 1-in-range"*
+is ALSO the exact signature of a positional false positive. **A snapshot-guard
+regression and a mis-bisected one are indistinguishable from outside the commit.** The
+only discriminator is reading the diff, which costs one command and which I skipped
+because the positional reading fit my prior. frankb-56 raised the doubt, I amplified it
+to two other seats as settled, and Track T — which had the right answer — was talked out
+of it.
+
+**The paperwork class has now cost THREE seats a diagnosis** (frankb-56, franks-ee, me).
+franks-ee's durable fix, relayed to Track T and left for the owner: **give the AST slot
+census its own job key** so a snapshot drift stops being reported as a C test. Not done
+here — it is Track T's tool. Suggested to Track T alongside: a fourth `bad=` qualifier,
+*"bad touches only a guard's expected-output file"*, which would have named this outright.
+
+**Also corrected:** I quoted binary sha `1d694b44d75d` to another seat as a landmark. It
+was MEASURED at my tree, not predicted — but quoting it to a seat several commits ahead
+turns a local measurement into something another tree gets checked against and read as a
+divergence. franks-ee's `e790ec9e027f` was right. Same family as frankb-56's fixedpoint
+catch: **a figure that was true about one tree, travelling without it.**
