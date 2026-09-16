@@ -36232,10 +36232,13 @@ endif
 	# through the bug. It also pins textfile.pas's overload DECLARATION ORDER,
 	# which is load-bearing until the compiler refuses a narrower var actual
 	# (bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it):
-	# resolution binds a widening actual to the first compatible row. FPC RUNS
-	# THIS SAME FILE AND ALSO ANSWERS 27 / 27, and the harness was made to redden
-	# (24 / 27) by restoring the old Int64-first ordering before that green was
-	# believed.
+	# the exact row is honoured only while every OTHER argument binds with no
+	# conversion, and one converting argument -- widening or narrowing, variable
+	# or literal -- masks it and lets declaration order decide. FPC RUNS THIS
+	# SAME FILE AND ALSO ANSWERS 36 / 36, and the harness was made to redden by
+	# reordering textfile.pas before that green was believed: 34 / 36 with Int64
+	# hoisted to the front, 33 / 36 fully reversed. The exact-length rows pass in
+	# all three, which is what pins the CONVERSION rather than the order.
 	$(PXX_STABLE) -Fulib/rtl test/lib_blockio.pas $(TESTTMP)/lib_blockio
 	tools/expect_same.sh lib_blockio "$$($(TESTTMP)/lib_blockio $(TESTTMP) | tail -1)" "total ok 36 / 36"
 	# charset: FPC's codepage registry, which its own compiler consumes through
