@@ -61,6 +61,10 @@ close the parent-shell half), no keystrokes into a peer's pane, and no polling
   through 2026-09-16T02:29:39Z.** Four shards of twelve, one first-red date — treat as
   ONE cause until proven otherwise. Fifteen days is the longest-standing obstacle to
   goal 1.
+  **^ RETRACTED 2026-09-16, see check-in 0m. Wrong twice: three of the four are closed
+  under TWO causes (`84ccb6384`, `311649be0` x2), and a shard NUMBER was a POSITION in a
+  glob until `optdiff.sh` moved to a basename hash — so the count itself was not a
+  population. Only `optdiff#shard5/12` is open. Do not read this bullet as live.**
 
 ## Dispatch, 2026-09-16 (offers sent; a reply is what makes one real)
 
@@ -973,3 +977,88 @@ actually fail: pin v410 and a purpose-built pre-fix binary both refuse the exten
 with `expected ')' before '['`, and `TR` is 12 bytes in that fixture so a pointer-width
 answer cannot pass for a correct one. Four corpus arms running, expectation written down
 first, no claim until they land.
+
+## Check-in 0p — a quiet tick on commits, a GREEN gate, and the gate's own stale-binary note doing its job
+
+**Commits: nothing new.** `9c8ada206..origin/master` was empty at the start of this tick;
+what landed in the window was already covered in 0m–0o (frankb-56's `1c1c1bfe5` and
+`5e90a3329`, my own retractions) plus Track T's own tstate rows. Both peers are mid-work,
+neither has gone quiet, and no seat needed a transcript check.
+
+**Open regressions: SEVEN, unchanged from the previous tick.** `crtl_reachability.py`,
+`crtl_atexit.c`, `tools-devtest#00`, and optdiff shards 0/2/5/10. Against the note's own
+baseline that is 11 → 7 and holding. **Nothing cleared and nothing new.** Track T UP,
+newest full tier 6m old, one testable commit behind.
+
+**I have marked the baseline's optdiff bullet as RETRACTED in place** rather than editing
+it, because the head of this note is what a fresh reader reads first and that bullet still
+said "one cause until proven otherwise". The correction is 0m; the short form is now beside
+the claim.
+
+**A reminder the status line itself carries, and it bears repeating every tick:** the four
+optdiff rows all say `bad touches NO buildable file`. That sha is the tested upper bound,
+never the culprit. And borg's open-regression timestamps date from the 2026-09-11 plexus
+handover, **not** from first occurrence — do not quote them as first-seen.
+
+**GATE: GREEN at `5b1f51a25`** — every row PASS, `testmgr --tier quick` included. The FPC
+seed canary is SKIP with its reason stated (`compiler/ unchanged, and seeded green at
+5b1f51a25374`), which is the legitimate skip, not an absent-FPC one; `fpc seed compiles
+(forward decls)` passed on its own row.
+
+**THE FIRST RUN WAS RED AND I DID NOT REPORT IT AS ONE, BECAUSE THE GATE DIAGNOSED ITSELF.**
+`self-host fixedpoint` FAILED with *"the fixedpoint reached from PINNED differs from
+compiler/pascal26"* — and the gate's own note underneath said why: `compiler/pascal26` was
+OLDER than `fa397c761`, a sibling's `compiler/` commit that arrived in my sync. **A stale
+binary, not a miscompile.** This is the exact red CLAUDE.md says is correct and means
+nothing, arriving exactly where it says it will — right after a landing, when the tree feels
+settled because you just settled it.
+
+**And the rebuild had a second trap in it worth recording.** `make compiler/pascal26` came
+back `self-host fixedpoint: verified — 1 round(s)` — the STAMP path, which recomputes
+nothing. The rule is that `verified` where you expected `converged` means no fixedpoint ran,
+so the binary is unproven for the change. I removed `compiler/.pascal26.fixedpoint`
+(spelled literally) and re-ran: `converged after 1 round(s)`, **same sha `1e6a9a3eae1d`**.
+So the binary had in fact been correct and the stamp was telling the truth — but I could not
+have known that from the word `verified`, and the cost of checking was twelve seconds.
+
+**Peer movement, both healthy:**
+- **franks-ee (A):** accepted the heap-lock correction and tightened it — `53833e88e`
+  touches `compiler/ir_codegen.inc`, is not an ancestor of `881fdee59b6f`, IS an ancestor of
+  `ab2ebb31ea14`, and in that report the deadlock-diag row sits under `## FIXED` on the
+  FIRST run carrying the commit. Still-red at the last tree without it, FIXED at the first
+  tree with it, silent in the nine since. **Still not closed** — the residual stands. Its
+  own method correction is the better half and I am banking it: *look for the repair in the
+  thing the test MEASURES, not in the test* — it had run merge-base against the FIXTURE's
+  history, got zero commits, and read an empty lookup as a fact about the world. Four-arm
+  corpus census at 103/207, tracking the recorded base.
+- **frankb-56 (C):** verified my reversal in both directions before acting on it — correctly,
+  having been twice-reversed on a peer's word. Withdrew its self-criticism for the right
+  reason. Has claimed `bug-c-__thread-is-accepted-and-silently-ignored` (p60).
+
+**Its specimen is the sharpest thing either of us produced today and it goes in the
+playbook, not here:** *a field that discriminates nothing is harmless when it contradicts
+you and dangerous when it CONFIRMS you, because confirmation is the only time nobody looks
+further.* `%an` did not mislead me by being wrong; it misled me by agreeing. CLAUDE.md has
+both halves of that rule for git RANGES (the flattering delta and the self-blaming one) and
+has no line for AUTHOR IDENTITY. **Recurrence test: one subsystem so far, so playbook.** If
+it bites a second seat in a different subsystem, it is an extension to the range rule, not a
+neighbour.
+
+**THE ONE FORK I WAS ASKED TO WEIGH, ANSWERED RATHER THAN ROUTED.** frankb-56 is departing
+from its ticket's prescription — the ticket says C inherits "refused under `--emit-obj`/
+`--shared`, x86-64 only, scalars only"; it will implement x86-64+scalars and keep TODAY's
+behaviour (one shared copy plus the existing warning, now naming the reason) where the
+mechanism cannot work, rather than refusing. **I agree, and the reason is a rule rather than
+a preference: an assertion written from a PREDICTION pins the prediction.** That refusal was
+specified before x86-64 worked; re-derived against the built thing it would break programs
+that compile today, and for a single-threaded program one shared copy IS one copy per
+thread, so those programs are correct. Net: strict improvement on x86-64, byte-identical
+elsewhere, no regression anywhere. **Residual I named to it rather than leaving implied:**
+the population still silently served wrong is multi-threaded C using `__thread` off x86-64
+— unchanged by this work, not worsened by it, and now carrying a message that says which
+reason applies.
+
+**Track O and Track P remain unassigned.** `optdiff#shard5/12` is the only genuinely open
+shard; neo-a2 correctly declined O (it is the owner's own home session, not a frank) and
+nobody has been offered P. Both stay open for the first seat that frees — I am not starting
+one.
