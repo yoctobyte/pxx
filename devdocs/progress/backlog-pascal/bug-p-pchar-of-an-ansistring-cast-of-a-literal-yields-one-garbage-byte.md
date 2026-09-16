@@ -10,7 +10,7 @@ found-by: franks-ee
 created: 2026-09-16
 tags: [typecast, strings, managed-strings, pchar, silent-wrong-value]
 blocked-by: []
-summary: "`PChar(AnsiString('hello'))` answers a 1-byte garbage string where fpc answers `hello`. No diagnostic. `AnsiString('hello')` re-TAGS its node tyAnsiString (23) while the value underneath is still a FROZEN literal, so the tag lies about the representation; PChar's lowering then reads that tag, takes the managed-handle route through PXXPCharOf, and hands it a pointer to a length prefix. Every neighbouring spelling is correct -- `PChar(lit)`, `PChar(var)`, `PChar(string(lit))`, `PChar(expr)`, `s := AnsiString(lit)`, `Length(AnsiString(lit))`, `WriteLn(AnsiString(lit))` -- so it is invisible to anything but this exact double cast. Found by writing it in a test fixture: it created a symlink whose target was one garbage byte, and the dangling link then failed four UNRELATED assertions in a way that read exactly like an RTL defect. Diagnosed to the node level, NOT fixed: the real question is where a frozen->managed coercion gets triggered, which is a representation seam affecting every cast spelling, not a PChar special case."
+summary: "`PChar(AnsiString('hello'))` answers a 1-byte string whose single byte is the literal's LENGTH where fpc answers `hello`. No diagnostic. THE BYTE IS NOT GARBAGE -- it is the length prefix read as the first character, so it is deterministic, and the defect CANNOT FIRE BELOW LENGTH 2 (measured: 'abc'->3, 'hello'->5, 'hello world'->11, while `''` and any single character agree with fpc exactly). Any regression test must therefore use a literal of length >= 2 and assert on `Ord(p[0])`, never on the printed form -- a one-character probe certifies the bug as fixed. `AnsiString('hello')` re-TAGS its node tyAnsiString (23) while the value underneath is still a FROZEN literal, so the tag lies about the representation; PChar's lowering then reads that tag, takes the managed-handle route through PXXPCharOf, and hands it a pointer to a length prefix. Every neighbouring spelling is correct -- `PChar(lit)`, `PChar(var)`, `PChar(string(lit))`, `PChar(expr)`, `s := AnsiString(lit)`, `Length(AnsiString(lit))`, `WriteLn(AnsiString(lit))` -- so it is invisible to anything but this exact double cast. Found by writing it in a test fixture: it created a symlink whose target was one garbage byte, and the dangling link then failed four UNRELATED assertions in a way that read exactly like an RTL defect. Diagnosed to the node level, NOT fixed: the real question is where a frozen->managed coercion gets triggered, which is a representation seam affecting every cast spelling, not a PChar special case."
 ---
 
 # `PChar(AnsiString('lit'))` yields one garbage byte
@@ -22,8 +22,33 @@ program c; var p: PChar;
 begin p := PChar(AnsiString('hello')); WriteLn('[', p, ']'); end.
 ```
 
-`fpc` prints `[hello]`. pxx prints `[]` (and `[<tab>]`, length 1, in the
-variant that reaches a syscall). No warning, no error.
+`fpc` prints `[hello]`. pxx prints a 1-character string, no warning, no error.
+
+**CORRECTED 2026-09-16 — the byte is the LENGTH, not garbage.** Found by
+frankuser and re-measured here rather than taken on trust. `Ord(p[0])`, pxx
+against fpc:
+
+| literal | pxx | fpc |
+| --- | --- | --- |
+| `''` | 0 | 0 |
+| `'a'` | 97 | 97 |
+| `'ab'` | **2** | 97 |
+| `'abc'` | **3** | 97 |
+| `'hello'` | **5** | 104 |
+| `'hello world'` | **11** | 104 |
+
+**THE BOUNDARY IS LENGTH >= 2, AND IT IS THE PART THAT CHANGES WHAT A TEST MUST
+DO.** At length 0 and length 1 pxx and fpc agree, so a probe written with `''`
+or a single character CERTIFIES THIS BUG AS FIXED while it is still present --
+the failing-arrangement rule in one row. The original wording ("garbage byte")
+also invited a test asserting on the PRINTED form, which for a length of 5 is an
+unprintable control character and reads as an empty or corrupted string rather
+than as the number 5. Assert `Ord(p[0])` on a literal of length >= 2.
+
+The mechanism below already said "a pointer to a length prefix", so the
+mechanism was right and only the OBSERVABLE was described wrongly -- which is
+the worse half to get wrong, because the observable is what a test is written
+from.
 
 ## What is correct, which is the reason nobody has hit it
 

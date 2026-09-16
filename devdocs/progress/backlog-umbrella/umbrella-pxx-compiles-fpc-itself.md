@@ -1353,3 +1353,121 @@ was wrong in a way that made the surrounding argument sound MORE careful.
 tree and is live on push; `compiler/**` is inert until a pin; `compiler/builtin/**`
 is inert until a pin AND is currently three files behind it, so two nilpy fixes
 that landed today reach nothing running under the pin.
+
+## WALL THIRTEEN — `cfileutl.pas:1495`, and it is not a wall, it is a BLINDFOLD
+
+`internal parser bug: statement made no progress in block (would hang)`. Taken
+out of order, ahead of `rmdir`, on frankuser's argument that characterising is
+not subject to the inert-until-pin discount: a reduction and a ticket land live
+whatever the pin does, so the RTL-first rule simply does not apply to them.
+That argument was right, and it turned out to be right twice over, because the
+thing behind this error was not a wall at all.
+
+### What it is
+
+fpc's own `cfileutl.pas:142` declares
+
+```pascal
+{ hide Sysutils.ExecuteProcess in units using this one after SysUtils}
+const
+  ExecuteProcess = 'Do not use' deprecated 'Use cfileutil.RequotedExecuteProcess instead, ...';
+```
+
+— a constant whose entire job is to SHADOW a function — and then calls the real
+one qualified, twice, in its own body (`:1494`, `:1496`). We consulted the unit
+qualifier in the proc table (`(qUnit < 0) or (ProcUnitIdx[i] = qUnit)`) and in
+neither constant table, so the constant took the call.
+
+Three faces, and the parser message is the least of them:
+
+| shape | what pxx did | fpc |
+| --- | --- | --- |
+| assignment, const type fits | **printed the constant's text, arguments discarded, no diagnostic** | the function's result |
+| set-const shadow | **the baked mask's ADDRESS printed as a string** — a memory dump | the function's result |
+| argument position | `expected ')' before '('` | the function's result |
+| inside an `if` arm | `statement made no progress in block (would hang)` | the function's result |
+
+The boundary was measured, not assumed: **only an untyped string const of length
+≠ 1** captures the reference. A char const (`'S'`), a typed const
+(`Thing: AnsiString = '…'`), an integer const and a float const all resolve
+correctly — because only the string and set constants live in separate name
+tables keyed without a unit. `const T = ''` is the nastiest row: it prints
+nothing at all, which is indistinguishable from a blank.
+
+Fixed at `dc3fedb0a` (one body per table, the existing name a thin wrapper, so
+the scoping rules cannot drift between the qualified and unqualified forms),
+pinned by a test at `a29892c8c`. **Both are `compiler/**`, so both are INERT
+UNTIL THE NEXT PIN** — the test runs under `./$(COMPILER)` and so is live for
+anyone who builds, but nothing on `$(PXX_STABLE)` sees the fix.
+
+### The expectation, and the half of it that was wrong
+
+Recorded before the re-run, as required. Right about the verdicts:
+
+| | before | after |
+| --- | --- | --- |
+| units-OK (stubbed) | 22 | **22** |
+| BOTH-OK / ORACLE-NO / PXX-FAIL | 22 / 10 / 175 | **22 / 10 / 175** |
+| units whose verdict moved | — | **0** |
+
+A **twelfth consecutive null row**, and this one null BY CONSTRUCTION rather
+than by surprise: `:1495` was never a HEAD. It sits behind `:714` `rmdir` in the
+same file, so no unit ever reported it first.
+
+**What I got wrong is the finding.** I predicted the give-up appeared in ONE
+detail file, because I had only looked at the head. It was in **134** — one wall
+seen through 134 importers, which the `in:` line confirms is `cfileutl.pas`
+every single time.
+
+### THE PART THAT MATTERS: A PARSER GIVE-UP IS A SECOND BLINDNESS, INSIDE THE INSTRUMENT BUILT TO CURE THE FIRST
+
+`PXX_CORPUS_DETAIL` exists because a first-error census ranks by queue position
+and hides everything behind the head. It reports EVERY failure per unit. That is
+true and it is not sufficient, because **`statement made no progress in block`
+is the parser ABANDONING THE BLOCK**, and everything after the abandoned block
+is invisible to a per-unit error list just as thoroughly as it is to a head.
+
+Total error lines across the 207 detail files:
+
+| | before | after |
+| --- | --- | --- |
+| error lines | 419 | **776** |
+| detail files naming the give-up | 134 | **0** |
+
+**357 error lines were behind that one give-up**, including three error KINDS
+that had never been seen in this corpus at all (`cannot override: no virtual
+method found in parent chain: freeinstance`, `no overload of tostr`,
+`undefined variable (ppureal_bytes)`).
+
+The control is what makes that attributable rather than alarming: of the 41
+detail files that never carried the give-up, **grew=0, shrank=0, same=41**.
+Every one byte-for-byte unchanged. The growth is confined, without exception, to
+the files where the parser previously stopped reading — so this is the
+instrument getting its sight back, not a regression.
+
+**So the corpus number has a third caveat, alongside the two already recorded
+(a head is a queue position; a units-blocked count is not a work count):** a
+unit's error LIST is truncated wherever the parser gave up, and nothing in the
+output says so. Any future census of "how much is left" that predates
+`dc3fedb0a` undercounts, and undercounts invisibly.
+
+### Behind the head, now
+
+`cfileutl.pas` has exactly one error left before it: `rmdir` at `:714`. That is
+the next wall and it is RTL — `MkDir`/`RmDir`/`ChDir` plus `IOResult` plumbing,
+fpc's caller wrapping it in `{$push}{$I-}` … `RemoveDir:=(ioresult=0)`, with
+`IOResult`/`LastIOResult` living in `lib/rtl/textfile.pas:131`/`:314`, i.e.
+cross-unit state.
+
+### Banked separately, and NOT caused by this fix
+
+`n := F('x')` for a string-returning `F` and an Integer `n` compiles with no
+diagnostic and prints a pointer as a number. It was the one row of a 17-row
+differential matrix that still diverged from fpc after the fix, which is
+precisely the shape that reads as a confession — so it was attributed to a
+RANGE before being attributed to the change, and the pinned pre-fix compiler
+reproduces it on a program containing neither a qualifier nor a shadowing
+const. It had been MASKED here by the very defect above. **A pre-existing bug
+can sit behind a second bug, and fixing the front one looks exactly like
+causing the back one.**
+`bug-p-a-string-function-result-assigned-to-an-integer-compiles-silently`.
