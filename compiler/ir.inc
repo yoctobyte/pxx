@@ -240,8 +240,37 @@ begin
         tk := IntToTypeKind(ASTTk[node]);
         AssignSideKind := (tk <> tyUnknown);
       end;
-    AN_INDEX, AN_FIELD, AN_DEREF:
-      { An ELEMENT, a FIELD, a DEREF. The identifier arm above is the only one
+    AN_INDEX, AN_FIELD, AN_DEREF, AN_CALL, AN_VIRTUAL_CALL, AN_INTF_CALL:
+      { An ELEMENT, a FIELD, a DEREF, or a CALL RESULT.
+
+        THE CALL KINDS ARE THE FOURTH INSTANCE OF THIS FUNCTION'S ONE SHAPE,
+        and its header predicted them: "a side this function cannot type is a
+        side the rule never sees, and the failure is silent in the safe
+        direction". `n := F('x')` for an AnsiString-returning F and an Integer n
+        compiled with NO diagnostic and printed a POINTER as a number
+        (1660944456, measured), while `n := s` for an AnsiString VARIABLE was
+        refused correctly by the AN_IDENT arm. So the check existed and one
+        spelling of the source never reached it -- not dialect breadth, an
+        inconsistency inside our own type checker, which is what settles this as
+        a bug rather than the accepting-what-fpc-rejects case CLAUDE.md exempts.
+        fpc refuses both: `Incompatible types: got "AnsiString" expected
+        "LongInt"`.
+        bug-p-a-string-function-result-assigned-to-an-integer-compiles-silently
+
+        ALL THREE CALL KINDS, NOT AN_CALL ALONE. They are one spelling family
+        carrying the Procs[] index in IVal, and ir.inc enumerates exactly this
+        trio twice already, with IsNodePChar's arm 4 giving the reason: a method
+        reached through a VMT or an interface returns just as concrete a value
+        as a direct call does, so "an enumeration that lists only AN_CALL is
+        wrong for every override."
+
+        They need no new logic. The parser already resolves the result type into
+        ASTTk (verified with PXXDBG=a.ast: the AN_CALL node for the repro above
+        carries tk=23, tyAnsiString), which is the same place this arm already
+        reads, and every guard below is node-based rather than lvalue-specific:
+        the dyn-array, record and reference-shaped bails all ask the node.
+
+        An ELEMENT, a FIELD, a DEREF. The identifier arm above is the only one
         this function had, so the AN_ASSIGN type check never RAN for any of
         these -- it short-circuited on a False and looked like a check that had
         fired and passed. Five of six lvalue shapes were unchecked, and

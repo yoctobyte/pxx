@@ -19619,6 +19619,29 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:51: error: cannot assign to the result of a function call' \
 	   && test ! -e $(TESTTMP)/test_scalarmisuse26 \
 	  || { echo "test_scalar_misuse_is_refused_fail: FAIL - rc=$$rc (want rc=1, eight diagnostics on lines 44-51, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# A CALL RESULT is a typed side of an assignment. `n := F('x')` for a
+	# string-returning F and an Integer n compiled SILENTLY and stored a pointer
+	# as a number (the pinned v410 compiler prints 4265512 on this very file),
+	# while the same assignment from a string VARIABLE was refused correctly --
+	# so the check existed and one spelling of the source never reached it.
+	# The positive file comes FIRST and is the guard against the fix being one
+	# shape too wide: nine legal call-result assignments, .expected taken from
+	# fpc 3.2.2's own output on the same source.
+	./$(COMPILER) test/test_call_result_assign_typecheck_positive.pas $(TESTTMP)/test_crapos26
+	tools/expect_same.sh test_crapos26 "$$($(TESTTMP)/test_crapos26)" "$$(cat test/test_call_result_assign_typecheck_positive.expected)"
+	@# ...and the refusals, in ALL THREE call spellings. AN_CALL,
+	@# AN_VIRTUAL_CALL and AN_INTF_CALL are one family and ir.inc's own comment
+	@# says an enumeration listing only AN_CALL "is wrong for every override",
+	@# so a fix reaching only the direct call would pass a one-row test. fpc
+	@# refuses all three at these same lines.
+	@out=$$(./$(COMPILER) test/test_call_result_assign_typecheck_fail.pas $(TESTTMP)/test_crafail26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:41: error: incompatible types: cannot assign AnsiString to Integer' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:42: error: incompatible types: cannot assign AnsiString to Integer' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: incompatible types: cannot assign AnsiString to Integer' \
+	   && test ! -e $(TESTTMP)/test_crafail26 \
+	  || { echo "test_call_result_assign_typecheck_fail: FAIL - rc=$$rc (want rc=1, three refusals on lines 41-43 for the direct, virtual and interface call, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# ...and the MECHANISM behind that last one: ParseStatementAST's catch-all
 	@# `else` used to skip to the `;` in silence, so any construct another arm
 	@# left tokens pending on became a silently discarded statement. Five

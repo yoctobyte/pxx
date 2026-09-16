@@ -1,0 +1,10 @@
+int<-int 7
+dbl<-int 7.0
+dbl<-dbl 1.5
+i64<-int 7
+str<-str a!
+str<-chr z
+chr<-chr z
+rec<-rec 12
+dyn<-dyn 9
+controls done
