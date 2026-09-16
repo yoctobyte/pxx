@@ -2345,3 +2345,24 @@ re-categorised.
 four full-tier reds of four kinds, Track T UP and idle because the tip is barely
 moving, franks-ee on `comphook.pas:386`, Track P unstaffed. Nothing escalated beyond
 the standing two.**
+
+### 1g addendum — the blind probe's second leg landed, and it is the CONTROL I had only argued for
+
+The `crtl_decl_probe.sh` HEAD leg finished. Both legs, byte for byte:
+
+```
+under the PIN   c599e8546121   declared: 640  implemented: 605  unimplemented: 0  build-fail: 35   rc=0
+under HEAD      b7f9f80c7d80   declared: 640  implemented: 605  unimplemented: 0  build-fail: 35   rc=0
+```
+
+**Identical on the two binaries that the real census separates by rc=1 versus rc=0.**
+In 1g I argued this probe was scoped away from the subject; **this is the measurement
+that shows it, and it is the negative control that claim needed** — the instrument
+cannot distinguish a compiler that fails the census from one that passes it, so its
+agreement was never corroboration. **A guard that cannot fail, printing PASS, twice,
+for nine minutes each.**
+
+I had said I would not chase it; it arrived free and it is worth more than the run I
+would have spent on it. **The 35 `build-fail` rows (termios and siblings) are
+identical on both and unchanged by either compiler — a standing condition, not a
+finding, and not mine this shift.**
