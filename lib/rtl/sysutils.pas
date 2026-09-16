@@ -1178,6 +1178,34 @@ function GetTickCount: LongWord;
   the handle is not stat-able. Unix FPC returns st_mtime raw here — it is NOT
   a TDateTime and NOT the DOS-packed value the name suggests on other targets;
   FileDateToDateTime is the converter. }
+{ Last-modification time of a file BY PATH, as Unix epoch SECONDS, and -1 when
+  the path cannot be stat'd OR NAMES A DIRECTORY. The directory case is FPC's,
+  read out of its source rather than assumed (rtl/unix/sysutils.pp: `if
+  (fpstat(...)<0) or fpS_ISDIR(info.st_mode) then exit(-1)`), and it is a real
+  observable: a caller that hands this a directory gets -1, not a timestamp.
+
+  Int64 rather than LongInt to match FPC trunk, and because epoch seconds in a
+  LongInt stop working in 2038 -- a narrowing assignment into a caller's
+  Longint still compiles, which is what FPC's own comphook.pas:474 does. }
+function FileAge(const FileName: string): Int64;
+
+{ The converters between the epoch seconds above and TDateTime.
+
+  UTC, DELIBERATELY, AND THAT IS A DIVERGENCE FROM FPC'S `FileDateToDateTime`
+  worth stating: FPC's unix arm calls EpochToLocal and applies the local
+  timezone, while ours does not -- it matches FPC's `FileDateToUniversal`
+  instead. This unit has no timezone database, and `Now` and `GetLocalTime`
+  already answer in UTC for that reason.
+
+  THE PROPERTY REAL CODE DEPENDS ON IS INTERNAL CONSISTENCY, NOT THE OFFSET:
+  `FileDateToDateTime(FileAge(f)) < Now` is the question people actually ask,
+  and it is correct here precisely because both sides use the same clock.
+  Applying a timezone to one and not the other is what would break it, so
+  matching FPC on this one function would make the pair WRONG rather than
+  compatible. When a timezone database arrives, both move together. }
+function FileDateToDateTime(FileDate: Int64): TDateTime;
+function DateTimeToFileDate(DateTime: TDateTime): Int64;
+
 function FileGetDate(Handle: Integer): Integer;
 
 { The process environment, FPC's spelling. Read from /proc/self/environ, whose
@@ -5129,6 +5157,33 @@ begin
     Result := -1
   else
     Result := Integer(info.MTimeSec);
+end;
+
+function FileAge(const FileName: string): Int64;
+var info: TPalFileStat;
+begin
+  { A DIRECTORY IS -1, not its mtime. Same shape as FileExists just below,
+    which is also False for a directory -- one rule, two callers. }
+  if (PalStat(PChar(FileName), info) <> 0) or info.IsDir then
+    Result := -1
+  else
+    Result := info.MTimeSec;
+end;
+
+function FileDateToDateTime(FileDate: Int64): TDateTime;
+begin
+  { One linear conversion, not a date/time COMPOSITION -- so the pre-epoch sign
+    trap that DateTimeToSystemTime has to handle does not arise here. A negative
+    FileDate is a pre-1970 file and divides correctly. }
+  Result := UnixDateDelta + FileDate / 86400.0;
+end;
+
+function DateTimeToFileDate(DateTime: TDateTime): Int64;
+begin
+  { Round, not Trunc: Trunc would bias every conversion towards the epoch --
+    down for later times and UP for pre-epoch ones -- so a round trip through
+    the pair would drift in opposite directions on either side of 1970. }
+  Result := Round((DateTime - UnixDateDelta) * 86400.0);
 end;
 
 function TextToFloat(Buffer: PChar; var Value: Extended): Boolean;

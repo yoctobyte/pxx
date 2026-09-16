@@ -920,7 +920,8 @@ histogram. Two independent instances now, not one.
 | 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
 | 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `PENDING-COMMIT` (franks-ee) |
 | 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
-| 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **OPEN — the head**, Track B |
+| 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **OPEN — the head of the STUBBED arm**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
 This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
@@ -1110,6 +1111,7 @@ census cannot be read as a work estimate.
 | `comphook.pas:386` | parser (Track P) | yes |
 | `comphook.pas:397` / `:399` | **RTL type (Track B)** | **NO — live immediately** |
 | `comphook.pas:474` | **RTL (Track B)** | **NO** |
+| `cfileutl.pas:282` | **RTL type (Track B)** | **NO** |
 
 **So the head of this umbrella is currently an RTL wall, and RTL walls are worth
 strictly more per hour than compiler walls** — the umbrella's own earlier finding,
@@ -1126,3 +1128,62 @@ an integer fd constant with a parser special case, where FPC's is a `Text`. **Th
 diagnostic names the door that refused, not the thing that is missing**, and three
 walls in a row arriving through overload resolution is exactly the run that makes the
 fourth look like more of the same.
+
+## WALL TEN — `SysUtils.FileAge`, and the FIFTH consecutive wall is where the pattern BREAKS
+
+Measured 2026-09-16, franks-ee. `FileAge`, `FileDateToDateTime` and
+`DateTimeToFileDate` implemented in `lib/rtl/sysutils.pas`. Library-only, so it is
+**live under pin v410 and inert for nobody**.
+
+**Expectation, recorded before the run** (`w10_expectation.txt`, and it was written
+before the first attempt, not after): the 105 leave the wall; units-OK does NOT move
+from 22; the likeliest next head is `comphook.pas:1012` or something further down the
+same file, because that file had produced four walls in a row and
+`FileDateToDateTime` was already visible at `:1012` with 12 units on it.
+
+**The first half was right and the second half was wrong, which is the finding.**
+
+| arm | units-OK | the wall | the new head |
+| --- | --- | --- | --- |
+| stubbed | 22 → **22** | 105 → **0** | `cfileutl.pas:282` `TRawByteSearchRec`, **120 units** |
+| unstubbed | 21 → **21** | 105 → **0** | `x86_64/cpuinfo.pas:36` `TDoubleRec`, **132 units** |
+
+**CLEARED, NOT MOVED, in the strong form:** zero detail files name `FileAge`
+*anywhere* — not merely as a first error — across all 207 units in both arms. The
+same is true of `FileDateToDateTime`, whose own 12-unit wall at `:1012` went with it,
+because the one fix supplied both names. **No unit compiled before and fails now**,
+and none newly compiles, in either arm, compared unit by unit. The `ORACLE-NO` set is
+identical. Ninth null row, ninth time predicted as zero in advance.
+
+**`comphook.pas` is now out of the picture entirely** — it holds zero first errors and
+appears in zero detail files as a location. Four consecutive walls in one file, and
+then the file cleared rather than yielding a fifth. **So the "one file walks
+downward" shape is real but it TERMINATES**, and the section above it should not be
+read as predicting where a head goes next: it predicted `:1012`, the fix took `:1012`
+out along with `:474`, and the head left the file. The `cclasses.pas` precedent
+(895 → 1327 → 1726) says the same thing in hindsight — a file stops producing walls
+when you run out of its distinct RTL dependencies, not when you reach its end.
+
+**THE UNSTUBBED HEAD IS ROW 1 OF THE TABLE ABOVE.** `TDoubleRec` has been wall #1 in
+this umbrella from the beginning and is still open, and on the REAL corpus it is what
+132 of 207 units hit first. Everything the stubbed arm reports is downstream of
+somebody agreeing to look past it.
+
+**And the stub is TWO files, not one** — `versioncmp.pas` and `x86_64/cpuinfo.pas`.
+This seat wrote "only one file differs" after diffing `fpcsrc/*.pas`, which is the
+corpus ROOT only; the probe also passes `-Fu$F/x86_64 -Fu$F/systems -Fu$F/x86`, and
+`cpuinfo.pas` — the file that carries the whole 132-unit difference between the two
+arms — lives in one of those. **A glob scoped to one directory answering about a
+tree is the ordinary shape of this mistake**, and the tell was free: the two arms
+reported different heads, which one stubbed file in a unit almost nothing imports
+cannot explain.
+
+**Instrument note, for whoever runs this next:** two full background corpus runs were
+KILLED at ~150 of 207 units, both reported as system memory pressure while the box
+had 35GB free and 56GB available. The run was confirmed genuinely dead rather than
+detached-and-still-running by checking whether the output file was still GROWING —
+not by a process scan, which cannot tell a finished run from one sampled between two
+compiler invocations. The corpus now takes a `PXX_CORPUS_LIST` of unit paths, and
+three ~2.5-minute FOREGROUND chunks complete where one background run does not. The
+three lists are asserted to be an exact partition of the glob before the run, and the
+assembled output is checked at 207 rows / 207 distinct units after it.

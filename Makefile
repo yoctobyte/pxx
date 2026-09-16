@@ -36166,6 +36166,24 @@ endif
 	# assertion the fixture itself physically cannot make: both fds belong to
 	# the program, WriteLn reports nothing back, so a change that routed stderr
 	# to stdout would pass all 13 of its own checks. Only two streams can see it.
+	# SysUtils.FileAge by PATH, and the epoch<->TDateTime converters. We had
+	# FileGetDate (by open HANDLE) and nothing by path, which is the corpus head
+	# at comphook.pas:474 (`Result := FileAge(F)`).
+	# THE DIRECTORY ROW IS THE NON-OBVIOUS ONE: FPC returns -1 for a directory
+	# rather than its mtime, read out of rtl/unix/sysutils.pp rather than assumed.
+	# And -1 is ALSO what a completely broken FileAge returns for everything, so
+	# the two -1 rows are asserted in the same run as a real file answering a
+	# real timestamp -- that row is what makes them mean anything.
+	# The cross-check row is the strongest: FileAge(path) and FileGetDate(handle)
+	# reach one kernel field by two syscalls that share no code, and the open is
+	# asserted BEFORE the comparison, because FileGetDate(-1) is -1 and a broken
+	# FileAge is -1, so an unopened file would make the two agree about nothing.
+	# UTC deliberately -- FPC applies the local timezone here and we have no
+	# timezone database; ours matches FPC FileDateToUniversal, consistently with
+	# Now and GetLocalTime. Library-only, so $(PXX_STABLE) builds it and that is
+	# what proves it is live under the pin in place rather than inert.
+	$(PXX_STABLE) -Fulib/rtl test/lib_fileage.pas $(TESTTMP)/lib_fileage
+	tools/expect_same.sh lib_fileage "$$($(TESTTMP)/lib_fileage | tail -1)" "total ok 17 / 17"
 	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
 	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
 	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"
