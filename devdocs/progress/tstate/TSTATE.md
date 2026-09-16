@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `881fdee59b6f` | 2026-09-16T04:54:55Z | RED (native) | 304.9s | `67f0878f2e59` RED |
+| borg | `881fdee59b6f` | 2026-09-16T05:15:49Z | RED (full) | 1054.6s | `881fdee59b6f` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `67f0878f2e59` on borg, 2026-09-16T02:10:46Z (2h ago).**
+**Newest full tier in the fleet: `881fdee59b6f` on borg, 2026-09-16T05:15:49Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `67f0878f2e59` | RED | 2h | — (newest) |
+| borg | `881fdee59b6f` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -37,16 +37,5 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
 - **lib-test#src:test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy** — test/test_nilpy_a_thread_nobody_joins_gives_its_stack_back.npy tools/expect_same.sh (borg): bad `e977f78c3199`, last good `19bcd974455c`, 1 commit(s) in range
 - **test-core#src:test/c_asm_in_inline_body.c@2** — test/c_asm_in_inline_body.c tools/expect_same.sh +2 (borg): bad `3a91d13f1dec`, last good `176f40b31608`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_to_bytes.npy** — test/test_nilpy_to_bytes.npy tools/expect_same.sh (borg): bad `5dbee723e228`, last good `1704e17de6f3`, 1 commit(s) in range
 - **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_annotated_class_attribute.npy** — test/test_nilpy_annotated_class_attribute.npy test/test_nilpy_annotated_class_attribute.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_delitem_dunder.npy** — test/test_nilpy_delitem_dunder.npy test/test_nilpy_delitem_dunder.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_dunder_getitem_setitem.npy** — test/test_nilpy_dunder_getitem_setitem.npy tools/expect_same.sh (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_for_getitem_protocol.npy** — test/test_nilpy_for_getitem_protocol.npy test/test_nilpy_for_getitem_protocol.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_getitem_on_a_call_result.npy** — test/test_nilpy_getitem_on_a_call_result.npy test/test_nilpy_getitem_on_a_call_result.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_local_named_like_a_class.npy@1** — test/test_nilpy_local_named_like_a_class.npy test/test_nilpy_local_named_like_a_class.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_local_named_like_a_class.npy@2** — test/test_nilpy_local_named_like_a_class.npy test/test_nilpy_local_named_like_a_class.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_not_subscriptable.npy** — test/test_nilpy_not_subscriptable.npy test/test_nilpy_not_subscriptable.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_open_world_method_dispatch.npy** — test/test_nilpy_open_world_method_dispatch.npy test/test_nilpy_open_world_method_dispatch.expected (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_variant_method_pick_by_arity.npy** — test/test_nilpy_variant_method_pick_by_arity.npy tools/expect_same.sh (borg): bad `67f0878f2e59`, last good `e572bd42501e`, 1 commit(s) in range
 - **test-threads#src:test/test_a_threadvar_is_per_thread.pas** — test/test_a_threadvar_is_per_thread.pas tools/expect_same.sh (borg): bad `881fdee59b6f`, last good `67f0878f2e59`, 4 commit(s) in range
