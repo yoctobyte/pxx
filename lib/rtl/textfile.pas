@@ -271,7 +271,21 @@ procedure Truncate(var f: FileRec);
   fix and it belongs in the compiler
   (bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it); these
   rows are the surface fpc actually publishes, not a workaround for it -- they
-  are what makes the ordinary spelling correct rather than merely accepted. }
+  are what makes the ordinary spelling correct rather than merely accepted.
+
+  THE DECLARATION ORDER BELOW IS LOAD-BEARING, AND THE REASON IS THAT DECLARING
+  THE EXACT ROW IS NOT ENOUGH. Measured the same day by varying the CALL with
+  all five rows declared: the `var` parameter's exact-type match is honoured
+  only when EVERY OTHER argument binds with NO conversion at all. One by-value
+  argument needing ANY conversion -- widening or narrowing, from a variable or
+  from a literal -- masks it, and the declaration order then decides which row
+  is taken. `count` is Int64 in every row, so the ordinary spelling
+  `BlockRead(f, buf, SizeOf(buf), c)` hands it a literal or an Integer length
+  and is precisely that shape: the masking case is the COMMON call, not an
+  exotic one. Narrowest-first scores 27/27 in test/lib_blockio.pas; the same
+  five rows with Int64 declared first score 24/27, corrupting the caller's
+  frame on the three narrow widths. That control is why the order is written
+  this way -- do not tidy these into width order. }
 procedure BlockRead(var f: FileRec; var Buf; count: Int64); overload;
 procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Word); overload;
 procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: LongInt); overload;

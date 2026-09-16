@@ -10,12 +10,18 @@
   ten-byte buffer with a zero length.
 
   IT ALSO PINS THE DECLARATION ORDER IN textfile.pas, WHICH IS LOAD-BEARING
-  UNTIL THE COMPILER IS FIXED. Overload resolution binds a WIDENING actual to
-  the first compatible row, so whichever row is declared first swallows every
-  narrower actual: with the Int64 row first, LongInt/Integer/Word all bound to
-  it and wrote eight bytes into four. The rows are declared narrowest-first for
-  that reason, and reordering them reddens the Word row here. The real fix is
-  the compiler refusing a narrower actual outright, as fpc does
+  UNTIL THE COMPILER IS FIXED -- AND IT PINS THE CONDITION, NOT JUST THE
+  SYMPTOM. The exact-width row is declared and still loses, but only sometimes:
+  a `var` parameter's exact match is honoured exactly when EVERY OTHER argument
+  binds with NO conversion, and one by-value argument needing ANY conversion --
+  widening or narrowing, variable or literal -- masks it, after which
+  declaration order decides. `count` is Int64 in every row, so the ordinary
+  `BlockRead(f, b[0], n, c)` with an Integer `n` IS the masking shape. The
+  CaseExact* procedures below pass an Int64 length, convert nothing, and are
+  correct under BOTH orderings; the CaseLongInt/Integer/Cardinal/Word ones
+  convert and are correct only under narrowest-first. That asymmetry is the
+  pin -- neither half alone shows it. The real fix is the compiler refusing a
+  narrower actual outright, as fpc does
   ("Call by var for arg no. 4 has to match exactly") --
   bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it.
 
@@ -123,6 +129,49 @@ begin
   Close(f); FreeMem(b);
 end;
 
+{ ---- the same call with NOTHING to convert ----
+
+  Identical to the four cases above except that the LENGTH is already Int64, so
+  every argument binds exactly. Under the masking rule these must be correct
+  whatever order textfile.pas declares its rows in, where the four above are
+  correct only narrowest-first. Measured under both orderings, not reasoned. }
+
+procedure CaseExactWord;
+var f: File of Byte; b: PByte; n: Int64; guard: LongInt; c: Word;
+begin
+  guard := SENTINEL;
+  Assign(f, path); Reset(f); n := FileSize(f); GetMem(b, n); c := 0;
+  BlockRead(f, b[0], n, c);
+  Chk(c = N, 'exact/Word: the count came back');
+  Chk(n = N, 'exact/Word: the LENGTH variable survived the call');
+  Chk(guard = SENTINEL, 'exact/Word: the adjacent local survived the call');
+  Close(f); FreeMem(b);
+end;
+
+procedure CaseExactLongInt;
+var f: File of Byte; b: PByte; n: Int64; guard: LongInt; c: LongInt;
+begin
+  guard := SENTINEL;
+  Assign(f, path); Reset(f); n := FileSize(f); GetMem(b, n); c := 0;
+  BlockRead(f, b[0], n, c);
+  Chk(c = N, 'exact/LongInt: the count came back');
+  Chk(n = N, 'exact/LongInt: the LENGTH variable survived the call');
+  Chk(guard = SENTINEL, 'exact/LongInt: the adjacent local survived the call');
+  Close(f); FreeMem(b);
+end;
+
+procedure CaseExactCardinal;
+var f: File of Byte; b: PByte; n: Int64; guard: LongInt; c: Cardinal;
+begin
+  guard := SENTINEL;
+  Assign(f, path); Reset(f); n := FileSize(f); GetMem(b, n); c := 0;
+  BlockRead(f, b[0], n, c);
+  Chk(c = N, 'exact/Cardinal: the count came back');
+  Chk(n = N, 'exact/Cardinal: the LENGTH variable survived the call');
+  Chk(guard = SENTINEL, 'exact/Cardinal: the adjacent local survived the call');
+  Close(f); FreeMem(b);
+end;
+
 { BlockWrite has the same signature shape and the same hazard, so it gets the
   same treatment rather than being assumed to follow. }
 procedure WriteWidths;
@@ -162,6 +211,9 @@ begin
   CaseCardinal;
   CaseWord;
   CaseInt64;
+  CaseExactWord;
+  CaseExactLongInt;
+  CaseExactCardinal;
   WriteWidths;
 
   WriteLn('total ok ', ok, ' / ', total);

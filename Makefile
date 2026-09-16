@@ -36237,7 +36237,7 @@ endif
 	# (24 / 27) by restoring the old Int64-first ordering before that green was
 	# believed.
 	$(PXX_STABLE) -Fulib/rtl test/lib_blockio.pas $(TESTTMP)/lib_blockio
-	tools/expect_same.sh lib_blockio "$$($(TESTTMP)/lib_blockio $(TESTTMP) | tail -1)" "total ok 27 / 27"
+	tools/expect_same.sh lib_blockio "$$($(TESTTMP)/lib_blockio $(TESTTMP) | tail -1)" "total ok 36 / 36"
 	# charset: FPC's codepage registry, which its own compiler consumes through
 	# widestr.pas. The reverse map is asserted ENTRY BY ENTRY rather than by
 	# length, because the one thing an "equivalent" rewrite gets wrong is the
