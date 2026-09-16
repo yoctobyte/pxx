@@ -430,3 +430,56 @@ the shape of a population** (after `cclasses.pas` at :895, :1327, :1726). That i
 pattern, not a coincidence, and it is why unit counts must not rank a ticket.
 
 Offered to franks-ee alongside optdiff shard5; frankb-56 has the glob pair.
+
+### 2026-09-16, check-in 0g — two of the four optdiff shards were never defects, and one is worse than it looked
+
+**frankb-56 closed shard2 and shard10 (`311649be0`): NEITHER WAS A COMPILER DEFECT.**
+optdiff built the four `-O` levels to four different paths and compared stdout+stderr;
+both programs require an argument, optdiff supplies none, so each exits 2 on its usage
+line — **and that line prints `argv[0]`.** The entire diff, all three arms, **nine
+days**, was `/tmp/optdiff.N/d0` against `/tmp/optdiff.N/d1`.
+
+**IT INVALIDATED MY OWN REASONING AND I HAD ALREADY HANDED IT TO ANOTHER SEAT.** I told
+franks-ee that matching exit codes on both sides mean the programs ran to completion and
+disagree on stdout, so "whatever this is, it is real codegen." Matching exit codes are
+ALSO what you get when both arms die on the same usage line. **Same rc, same mechanism,
+opposite conclusion** — and `rc 2 vs 2` was in both tickets from the day they were filed.
+
+So I re-measured the other two instead of leaving the steer standing:
+- **shard5 `test_c_gtk3_stock.pas` — PASSES** on a direct re-run. Possibly the same
+  class. **Re-verify before working it.**
+- **shard0 `test_double_to_integer_lvalue_rounds.pas` — REAL, and worse than the red
+  said.** `function RetInt(F: Double): Integer; begin Result := F; end` gives 5 at
+  `-O0`/`-O1`/`-O2` and **-858993459 at `-O3`**. The fixture's `got
+  4616977747989548237` unpacks as the IEEE-754 bits of **4.7** — the conversion is
+  dropped and the bits are moved. **That is the signature of
+  `bug-a-a-float-assigned-to-an-integer-lvalue-moves-the-bits-instead-of-converting`,
+  which is in `done/`: the general case was fixed and `-O3` was never checked.**
+  Re-laned T -> A, repriced 70 -> 80, triage written into the regression ticket.
+
+**SECOND UNFIXED ARM FOUND TODAY**, after the set-in-array-constant sibling. Both were
+found by re-measuring something already believed settled, neither by reading a backlog.
+
+**frankb-56's own three, all worth keeping:**
+- **Its first fix was wrong and only the control caught it.** Per-level directories with
+  the same basename look like they fix `argv[0]` and do not — the loop invokes by
+  ABSOLUTE path. Its hand-check passed because it `cd`'d in and ran `./d`: **the probe
+  reached the subject by a route the harness does not use.** "Isolation guards the RUN,
+  not the ROUTE", in a subsystem that rule had never been written about.
+- **`OPTDIFF_FILES` is not a convenience.** The header told the next person to build a
+  new positive control without saying how, while there was no way to run over anything
+  but all 1276 files — so reasoning was always cheaper than measuring, which is how a
+  `-O2`-against-`-O2` baseline survived as a guard that could not fail. I used it within
+  the hour to check two rows.
+- **Its fix turned a LOUD WRONG ANSWER into a SILENT EMPTY ONE** — both rows now pass
+  honestly while covering nothing, putting a guard that cannot fail inside the PASS
+  count rather than in the SKIPLIST lines the harness prints by name. Filed as
+  `bug-t-optdiff-counts-an-argument-taking-program-as-a-pass-...`, p45, rather than
+  buried in a resolution.
+
+**AND THE QUANTIFIER FAILURE HAPPENED INSIDE A CORRECTION OF ITSELF.** frankb-56's
+`9281da35b` corrected a stale fixedpoint sha and asserted *"every OTHER figure in that
+message survived the pull intact."* It never measured that, and it was false — the
+three-reds disclosure was stale too. **Two figures invalidated by one pull; one
+corrected, the other explicitly certified, in a commit about staleness.** I quoted that
+sentence approvingly and did not catch it either.
