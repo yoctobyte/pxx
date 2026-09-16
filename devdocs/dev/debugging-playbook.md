@@ -27777,65 +27777,82 @@ second, unrelated subsystem has a path-shaped query answer authoritatively
 about the wrong OBJECT rather than the wrong VERSION — that is the axis this
 adds, and one instance is not a pattern.
 
-## `git log --since=<BARE ISO DATE>` SILENTLY MATCHES NOTHING — and the zero it returns is the answer a wrong premise wants
+## `git log --since=<A DATE WITH NO TIME>` MEANS "SINCE THIS TIME OF DAY ON THAT DATE" — so the same command answers differently every hour, and on TODAY'S date it answers zero
 
-**Measured 2026-09-16, on this repo, at `origin/master`:**
+**Measured 2026-09-16 at 22:37 local, on `origin/master`. The control is a SWEEP
+of explicit times, not a test of one hypothesis — the question is which time the
+bare form EQUALS:**
 
 ```
-git log origin/master --since=2026-09-16         --oneline | wc -l   ->    0
-git log origin/master --since='2026-09-16 00:00' --oneline | wc -l   ->  326
-git log origin/master --since='24 hours ago'     --oneline | wc -l   ->  328
-git log origin/master --after=2026-09-15         --oneline | wc -l   ->  328
+bare "2026-09-15"          ->  333
+     "2026-09-15 00:00"    ->  566      <- midnight, what everyone assumes
+     "2026-09-15 04:00"    ->  521
+     "2026-09-15 08:00"    ->  472
+     "2026-09-15 12:00"    ->  411
+     "2026-09-15 16:00"    ->  383
+     "2026-09-15 20:00"    ->  349
+     "2026-09-15 22:37"    ->  333      <- the wall clock. THIS is the bare form.
+     "2026-09-15 23:59"    ->  331
 ```
 
-Same repo, same ref, same second. **A bare `YYYY-MM-DD` passed to `--since`
-returns nothing**; add a time and 326 commits appear. It does not warn, it does
-not exit nonzero, and `--since`/`--after` are the same option, so the working
-spelling is one character away from the silent one. The commits are not
-borderline: author AND committer dates both sit hours inside the window
-(`dc3fedb0a`, author `2026-09-16T15:31:41+02:00`, committer `…T15:32:00+02:00`),
-so this is not the usual `--since`-reads-COMMITTER-date trap. That trap is real
-and it is a DIFFERENT one; checking for it here finds nothing wrong and clears
-the query, which is how this survives a careful reader.
+**Approxidate fills a missing time with NOW'S TIME OF DAY, not with midnight.**
+Not the ISO spelling — `15 Sep 2026`, `Sep 15 2026`, `2026.09.15` and
+`15/09/2026` all answer **333** too, so it is the absent TIME and nothing else.
 
-**WHY IT IS WORTH A SECTION AND NOT A SHRUG: the failure mode is a ZERO, and a
-zero is what a "nobody is working on that" claim is looking for.** The query was
-run to test the claim *"Track P is entirely unassigned"* — a claim already in
-seven check-in blocks and already wrong. The truth was **five `fix(P)` commits
-that day, 09:16 to 15:31, all one session**. `--since=2026-09-16` answered
-**0 fix(P) commits today**, which is exactly the number the wrong premise
-predicts. **The broken instrument and the false belief agreed**, and the only
-reason the error did not land is that a peer had independently listed the five
-shas in a message.
+**THE CONSEQUENCE THAT MATTERS IS NOT THE WRONG NUMBER, IT IS THAT THE NUMBER IS
+NOT REPRODUCIBLE.** The same command run this morning and run tonight returns
+different counts from an unchanged history, with nothing in the output saying so.
+**A count from this instrument cannot be compared to the same count taken
+earlier in the day** — which is exactly what a "has anything landed since X"
+query is usually FOR.
 
-That is the census-built-on-its-own-hypothesis failure arriving through the
-OPTION PARSER rather than through the filter the author wrote. Nothing in the
-command restates the hypothesis; the hypothesis is restated by the tool, for
-free, in the direction of absence.
+**Two faces, and the quiet one is the dangerous one:**
 
-**What to do instead.** For "has anything happened since X", prefer a form whose
-failure is loud or whose population you can see:
+- **TODAY'S date resolves to "since now" and returns 0.** Loud, in the sense
+  that zero is obviously suspicious — though see below for how readily a 0 gets
+  believed when it agrees with you.
+- **ANY EARLIER date silently drops every commit before the current hour.** Here
+  that is **233 of 566, 41%**, returned as a plausible, confident, wrong number
+  with no empty result to raise an eyebrow at. This is the common case and it
+  leaves no tell at all.
 
-- `--since='<date> 00:00'` — the same query, spelled so it works.
-- `--after='24 hours ago'` / `'2 days ago'` — approxidate's well-trodden path.
-- Better, when the question is about a RANGE you can name: `git log A..B`, which
-  has no date parsing in it at all and whose endpoints you chose.
-- **Best, for "is anyone working on this": do not ask about time.** Ask
-  `git log origin/master --grep=<the session URL>` and read the subjects. That
-  is a population you can print and count.
+**HOW THIS ENTRY WAS WRONG WHEN FIRST WRITTEN, which is the reason it is worth
+reading twice.** The first version of this section recorded the mechanism as
+*"a bare ISO date matches nothing"* and set the guard as **"before believing a
+zero, produce a nonzero from the same instrument."** That was measured, real,
+and **drawn entirely from the one date on which the failure is visible at all** —
+the author had only ever run it on today's date. The quantifier was the
+invention, again: one date sampled, all dates asserted. **A reader who took the
+guard literally would be watching for a `0` that the common case never
+produces.** Corrected by franks-ee, 2026-09-16, `0868f0b73`, and re-measured here
+with the sweep above before rewriting.
 
-**And the general rule this is an instance of, already in CLAUDE.md three times
-over:** every instrument that lies, lies by being correct about something else —
-here, correct about an empty approxidate window. **A count of ZERO is the single
-most dangerous output any instrument can produce**, because absence is
-unfalsifiable from the inside: a wrong filter, a wrong population and a true
-negative all print `0`, and only one of them is information. **Before believing
-a zero, produce a nonzero from the same instrument** — run the query in a form
-that MUST match something, and if it also answers 0, the instrument is the
-finding.
+**The guard, corrected:**
 
-*Banked here rather than promoted to CLAUDE.md: one instance, one subsystem.
-The general class it belongs to is already in the rules file and did not need
-restating; what is new is only the spelling, and a spelling is a playbook fact.
-Promote it if a second, unrelated instrument is found answering 0 for a
-parse reason and confirming a stated premise.*
+- **Always give `--since`/`--after` a time.** `--since='2026-09-15 00:00'`.
+- Prefer `--since='36 hours ago'` or `'2 days ago'` — approxidate's well-trodden
+  path, and the relative form is honest about being relative.
+- **Best, when the question is about a range you can name:** `git log A..B`.
+  No date parsing in it at all, and you chose both endpoints.
+- **Best of all, for "is anyone working on this": do not ask about time.**
+  `git log origin/master --grep=<the session URL>` and read the subjects — a
+  population you can print and count.
+
+**The original occasion, kept because the shape recurs.** The query was run to
+test *"Track P is entirely unassigned"* — a claim already in seven check-in
+blocks and already false. It answered **0 `fix(P)` commits today** against a true
+**five**, 09:16 to 15:31, one session. **The broken instrument returned exactly
+the number the wrong premise predicted**, and the error was caught only because
+a peer had independently listed the five shas in a message. **A zero is the most
+dangerous output any instrument can produce** — a wrong filter, a wrong
+population and a true negative all print it, and absence is unfalsifiable from
+the inside. That part of the original entry survives its own correction.
+
+*Banked here rather than promoted to CLAUDE.md: one instrument, one subsystem,
+and the general class — every instrument that lies, lies by being correct about
+something else — is in the rules file three times over. **The promotion criterion
+stated in the first version was also wrong** and is corrected with the rest: do
+not watch for "a second instrument answering 0 for a parse reason", because the
+second instance will most likely NOT answer 0. Watch instead for **a second
+instrument whose answer depends silently on WHEN it was run**, which is the
+property that makes this one uncomparable rather than merely wrong.*
