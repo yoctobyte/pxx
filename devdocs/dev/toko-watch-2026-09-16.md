@@ -2064,3 +2064,87 @@ refuted**, so that one is not its to carry alone.
 
 **Fleet state at end of this tick: frankb-56 stopped clean, franks-ee working wall
 `comphook.pas:386`, Track P and `optdiff#shard5/12` unstaffed and staying that way.**
+
+## Check-in 1e — the goal-1 distance is FOUR, and the row that moved needed a pin, not a fix
+
+**frankb-56 took the one item I flagged in its lane and it is not work.** `09314adf6`.
+`lib-test#src:test/crtl_atexit.c` — the row whose reason names
+`crtl declares functions it does not define: c_pthread_create` — **is true of the
+PINNED compiler and false of the tree.** It clears itself at the next pin. **So the
+distance to goal 1 is four, not the five I reported an hour ago.**
+
+**I verified it on five instruments that fail differently, because a peer's verdict
+about a pin is exactly the shape I got wrong twice today:**
+
+| instrument | reading |
+| --- | --- |
+| pin v410 commit, anchored `^chore(stable): pin v410` | `764ee2ed2`, 2026-09-14 **20:45:14** |
+| the fix | `e4c72bd15`, 2026-09-14 **21:03:48** — **18 minutes later** |
+| `merge-base --is-ancestor e4c72bd15 764ee2ed2` | **NO** — the pin predates the fix |
+| pinned binary on disk, `sha256sum` | **`c599e8546121`** = the sha in the pin commit's own subject |
+| tstate's own metadata for the job | **`pin_built: true`** — written by the watcher, not by any census |
+| `grep -r c_pthread_create lib/crtl/` | **0 hits**; it lives in `lib/rtl/palthread.pas` |
+
+**AND THE MECHANISM IS SHARPER THAN "IT NEEDS A PIN" — IT IS THE RTL/COMPILER SPLIT
+DOING EXACTLY WHAT IT IS BUILT TO DO, IN THE ONE DIRECTION THAT LOOKS LIKE A DEFECT.**
+tstate's `good`/`bad` pair dates it precisely: good `b984ad07e` (18:55:20), bad
+`934ba0418` (19:34:53), **both on 09-14, before pin v410 existed.** `934ba0418` is
+*"route pxx threads through pthread_create when libc is already linked"*, and it adds
+`c_pthread_create` as a **weak external in `lib/rtl/palthread.pas`**.
+
+**`lib/rtl` is read from the TREE; the pin snapshots the compiler and `builtin` only.**
+So the new weak declaration went live **instantly, with no pin**, and met a compiler
+whose over-strict diagnostic was **frozen in the pin**. A weak external is optional by
+construction — unresolved, its GOT slot is zero and the call site takes its guarded
+branch — so it is not an implicit import and the warning's premise was false for it.
+**A tree-live RTL change meeting a pinned compiler's stale diagnostic is a RED that
+names a real symbol, cites a real file, and reports nothing wrong with either.**
+
+**THE GREP TRAP IT HIT, AND IT NEARLY INVERTED THE VERDICT.** `git log --grep='pin
+v410'` returns **five** commits here, the first being `09314adf6` and the second
+`c9af737b5` — *a `docs(watch)` commit of mine that merely MENTIONS pin v410 in its
+prose.* Tested against that, `e4c72bd15` **IS** an ancestor, so the pin "contains" the
+fix, so the row is a live defect, so there is real work. **Exactly backwards.** I
+reproduced both readings: ancestor of `c9af737b5` = YES, ancestor of `764ee2ed2` = NO.
+
+**This is my `grep -o "663"` an hour later in another seat's hands, and the general
+form is worth both of us having: a grep for a NAME matches PROSE ABOUT the thing as
+readily as the thing — and in this repo prose about a pin OUTNUMBERS the pin**,
+because every watch note quotes pins by number. My own check-ins are the noise.
+Anchor to the commit-subject form (`^chore(stable): pin vN`), and prefer the
+instrument prose cannot imitate: **the recorded binary sha in the pin's subject,
+matched against `sha256sum` of the pinned binary on disk.** That pair is an identity.
+
+**ONE LINE FOR THE "A FIX IS INERT UNTIL PINNED" RULE, and it is the half that rule
+does not say:** `merge-base --is-ancestor <fix> <pin commit>` answers about **SOURCE**.
+What decides behaviour is what the pinned **BINARY** does. Today they agreed; they are
+different questions and the cheap instrument is to run the thing under
+`$(PXX_STABLE)` and watch it fail.
+
+**A NULL RESULT OF MINE, RECORDED BECAUSE IT COULD NOT HAVE FAILED.** My first
+attempt to reproduce this ran `tools/crtl_reachability.py` with `PXX=` set to each
+binary in turn. Both passed — **because that script reads no compiler at all**; it is
+a static closure walk over headers and modules, and `PXX` is not a variable it looks
+at. **I varied nothing and got agreement, which is the shape that reads as
+corroboration.** The instrument that actually takes a compiler is
+`tools/crtl_decl_probe.sh`, via `PXX_STABLE`, and **it defaults to the pinned binary
+by design.** That run is still in flight at the time of writing — 601 declarations,
+one compile each — and **nothing above depends on it**; it is the behavioural
+confirmation of a conclusion five other instruments already carry.
+
+**frankb-56 has stopped: nine fixes, three groups, six pushes, two groups closed, one
+parked with its diagnosis banked, one row moved off the goal-1 blocker list.**
+
+**Goal-1 blocker list as it now stands — FOUR, and the shape of each matters more than
+the count:**
+
+| row | shape |
+| --- | --- |
+| `demos#00` | **never green on borg** (`last_pass: None`) — not a regression, no range |
+| `test-core#src:test/c_crtl_wait.c` | **never green on borg** — same class |
+| `lib-test#src:tools/crtl_reachability.py` | a real open regression, 4 in range |
+| `tools-devtest#00` | a real open regression, 1 in range |
+| ~~`lib-test#src:test/crtl_atexit.c`~~ | **pin-only; clears at the next pin** |
+
+**Two of the four have never been green here**, which is a harder class than a
+regression with a range to bisect, and **no pin is mine to take.**
