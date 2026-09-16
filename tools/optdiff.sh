@@ -27,6 +27,37 @@ if [ "${1:-}" = "--shard" ] && [ -n "${2:-}" ]; then
   SHARD=${2%%/*}; NSHARD=${2##*/}
 fi
 mkdir -p "$TMP" || exit 1
+# ONE PATH FOR ALL FOUR LEVELS -- NOT d0/d1/d2/d3, AND NOT L0/d .. L3/d EITHER.
+#
+# The comparison is on stdout+stderr, and a program is entitled to print its
+# own argv[0]. Building the levels as $TMP/d0 .. $TMP/d3 put a DIFFERENT
+# argv[0] into each run, so any program that prints it reported DIFF on all
+# three arms forever, at every O level, with nothing wrong with the compiler.
+# Measured 2026-09-16: test/c_crtl_glob.c and test/c_crtl_glob_no_leak.c, two
+# standing auto-filed regressions (regression-optdiff-shard10-12 and
+# -shard2-12, both p70, both `rc 2 vs 2` -- matching exit codes, so the
+# programs ran to completion and disagreed only on text). The whole diff was
+#     -usage: /tmp/optdiff.N/d0 <empty-dir>
+#     +usage: /tmp/optdiff.N/d1 <empty-dir>
+# Overwriting one path is safe because o0 is captured into a shell variable
+# before the loop starts; nothing reads the -O0 binary again.
+#
+# THE FIRST FIX FOR THIS WAS WRONG AND THE CONTROL IS WHAT CAUGHT IT, which is
+# the reason OPTDIFF_FILES below exists. Same basename in per-level directories
+# ($TMP/L0/d .. $TMP/L3/d) looks like it fixes argv[0] and does not: this loop
+# invokes the binary by ABSOLUTE PATH, so argv[0] still carries the directory
+# and still differs. It survived a hand-check only because that check cd'd into
+# each directory and ran ./d -- the manual probe reached the subject by a route
+# the harness does not use. Run through this script the pair still reported
+# `diff=2`. A fix verified by a probe that does not share the harness's calling
+# convention is not verified.
+#
+# POPULATION, MEASURED RATHER THAN GREPPED: 14 corpus files reference argv[0]
+# or ParamStr(0); built twice under two names and run, exactly TWO produce
+# path-dependent output, and they are exactly the two that were red. The grep
+# over-counts 7x because most uses compare argv[0] or print a basename, so the
+# census had to be the running one -- the greppable property is not the
+# property that breaks the sweep.
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 # C tests include crtl headers by path, and the Makefile passes these on every
@@ -71,12 +102,30 @@ skip_match() {
 #
 # One awk pass, no per-file process spawn: 1276 files x NSHARD shards would be
 # thousands of forks otherwise.
+#
+# OPTDIFF_FILES OVERRIDES THE CORPUS, FOR CONTROLS ONLY -- never set it in the
+# tier. This file's header records that its last positive control is SPENT and
+# tells the next person to build a new one without saying how, and there was no
+# way to run this loop over anything but all 1276 files: making a control meant
+# a multi-minute shard run, so the cheap thing to do instead was to reason about
+# the diff and not measure it. That is exactly how the -O2-against--O2 baseline
+# survived -- a guard that could not fail, printing PASS for every program in
+# the corpus, for as long as the bug existed. With this, a control costs one
+# file and about a second, so there is no longer a reason to skip it.
+#
+# Pass space-separated paths (absolute is fine). The skiplist still applies, so
+# a control file must not match a skip pattern; the shard hash does not, since
+# an explicit list is already the selection.
+if [ -n "${OPTDIFF_FILES:-}" ]; then
+  FILES=$OPTDIFF_FILES
+else
 FILES=$(ls test/*.pas test/*.c 2>/dev/null | awk -v s="$SHARD" -v n="$NSHARD" '
   BEGIN { for (i = 32; i < 127; i++) ord[sprintf("%c", i)] = i }
   { name = $0; sub(/^.*\//, "", name); h = 0
     for (i = 1; i <= length(name); i++)
       h = (h * 31 + ord[substr(name, i, 1)]) % 1000003
     if (h % n == s) print }')
+fi
 
 n=0; pass=0; skip=0; diff=0
 skip_listed=""; skip_build=""; skip_timeout=""; recovered=""
@@ -118,7 +167,7 @@ for t in $FILES; do
   # baseline reports PASS for every program in the corpus, which is what it did
   # for as long as the bug existed and is exactly what a dead control looks like
   # from the outside.
-  if ! "./$CC" $CF -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
+  if ! "./$CC" $CF -O0 "$t" "$TMP/d" >/dev/null 2>&1; then
     # RETRY WITH --threadsafe BEFORE CALLING IT A SKIP. Any program that reaches
     # __pxxclone -- through palthread, classes, TThread, the parallel-for
     # lowering -- is REFUSED without the flag since the directive-without-flag
@@ -152,14 +201,14 @@ for t in $FILES; do
     # (carry the directive, which makes the flagless build a hard error), not
     # here, because a harness cannot tell "needs the flag" from "does not" by
     # looking at a program that builds either way.
-    if [ "${t%.c}" = "$t" ] && "./$CC" --threadsafe -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
+    if [ "${t%.c}" = "$t" ] && "./$CC" --threadsafe -O0 "$t" "$TMP/d" >/dev/null 2>&1; then
       CF="$CF --threadsafe"; recovered="$recovered $b"
     else
       skip=$((skip + 1)); skip_build="$skip_build $b"
       continue                            # doesn't build at -O0: not a diff
     fi
   fi
-  o0=$(timeout "$TMO" "$TMP/d0" </dev/null 2>&1); r0=$?
+  o0=$(timeout "$TMO" "$TMP/d" </dev/null 2>&1); r0=$?
   if [ "$r0" -ge 124 ]; then
     skip=$((skip + 1)); skip_timeout="$skip_timeout $b"; continue
   fi
@@ -177,11 +226,11 @@ for t in $FILES; do
   # rather than a request. Revert by dropping the 1.
   for L in 1 2 3; do
     # shellcheck disable=SC2086  # CF is a flag list, split on purpose
-    if ! "./$CC" $CF "-O$L" "$t" "$TMP/d$L" >/dev/null 2>&1; then
+    if ! "./$CC" $CF "-O$L" "$t" "$TMP/d" >/dev/null 2>&1; then
       echo "OPT COMPILE-DIFF -O$L: $t"
       ok=0; continue
     fi
-    oL=$(timeout "$TMO" "$TMP/d$L" </dev/null 2>&1); rL=$?
+    oL=$(timeout "$TMO" "$TMP/d" </dev/null 2>&1); rL=$?
     if [ "$oL" != "$o0" ] || [ "$rL" -ne "$r0" ]; then
       echo "OPT DIFF -O$L: $t (rc $r0 vs $rL)"
       ok=0

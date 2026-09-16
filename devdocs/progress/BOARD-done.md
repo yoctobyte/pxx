@@ -3298,6 +3298,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-optdiff-o3-stack-frame-intrinsics | O | 70 | regression | -O3 differential: test_stack_frame_intrinsics_b270.pas (optdiff, persistent) | — |
 | regression-optdiff-shard0-6 | T | 70 | regression | regression: optdiff#shard0/6 red at 0ceeeaa004dc (auto-filed by twatch) | — |
 | regression-optdiff-shard1-12 | T | 70 | regression | regression: optdiff#shard1/12 red at fffd29ea840d (auto-filed by twatch) | — |
+| regression-optdiff-shard10-12 | C | 70 | regression | regression: optdiff#shard10/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 10/12` (auto-filed by twatch) | — |
+| regression-optdiff-shard2-12 | C | 70 | regression | regression: optdiff#shard2/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 2/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard2-6 | T | 70 | regression | regression: optdiff#shard2/6 red at d87301219197 (auto-filed by twatch) | — |
 | regression-optdiff-shard4-12 | T | 70 | regression | regression: optdiff#shard4/12 at d74c7fbe9ffe in step 1/1, `tools/optdiff.sh --shard 4/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |

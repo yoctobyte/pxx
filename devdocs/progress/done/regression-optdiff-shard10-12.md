@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: C
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 1 of 1 is `tools/optdiff.sh --shard 10/12`. The job's own `src` (`tools/optdiff.sh`, 1 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -39,3 +40,32 @@ optdiff shard 10/12: pass=186 skip=34 diff=1
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolution (2026-09-16, frankb-56, Track C)
+
+**NOT A COMPILER DEFECT. The harness manufactured the difference, and the
+difference was `argv[0]`.** optdiff built the four levels to four different
+paths and compared stdout+stderr. `test/c_crtl_glob.c` requires an argument,
+optdiff supplies none, so it exits 2 on its usage line — and that line prints
+`argv[0]`. The entire diff was the binary's own path:
+
+    -usage: /tmp/optdiff.N/d0 ...
+    +usage: /tmp/optdiff.N/d1 ...
+
+`rc 2 vs 2` was the tell and it was in the ticket from the start: matching exit
+codes on both sides mean the program ran to completion and disagreed only on
+text. Fixed in tools/optdiff.sh by building every level to ONE path.
+
+**THE COMPILER WAS NEVER IMPLICATED, AND I MEASURED THAT RATHER THAN INFERRING
+IT.** Run properly with its argument at each level, c_crtl_glob.c is byte-identical
+across -O0/-O1/-O2/-O3 — 37 glob rows against glibc. This is the first time this
+program has actually been swept at four O levels, because under optdiff it only
+ever reached the usage path.
+
+**RESIDUAL, AND IT IS NOT CLOSED BY THIS FIX — owner: Track T.** optdiff cannot
+supply arguments, so any argument-taking program in the corpus is swept only on
+its usage path and counts as a `pass`. After this fix these two pass honestly
+(all four levels agree) while covering nothing, which is a guard that cannot
+fail sitting inside the pass count. Sizing that population needs a full-corpus
+run, which this seat's gate does not include.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
