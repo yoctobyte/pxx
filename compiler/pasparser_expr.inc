@@ -13181,6 +13181,7 @@ end;
 function TryParseInitValForm(tk: TTypeKind; ptrElemTk: Integer;
                              var kind: Integer; var val: Int64; var aux: Integer): Boolean;
 var pi, si, ci, mi, gNode: Integer;
+    strOff, strLen: Integer;   { TakeStrInitSpan's out-params }
 begin
   TryParseInitValForm := False;
   kind := 0; val := 0; aux := 0;
@@ -13191,12 +13192,45 @@ begin
     `C: Char = 'Z'` printed garbage (test_typed_const_record). Same hazard the
     array-of-record path documents a few hundred lines below; it is the token
     being ambiguous, so only the target can decide. }
-  if (CurTok.Kind = tkString) and InitValDestTakesStrLit(tk, ptrElemTk) then
+  { A NAMED STRING CONSTANT IS A STRING INITIALISER TOO, and this arm used to
+    test the TOKEN KIND, so it could only ever see a literal:
+
+      const DefName = 'main';
+      var   a: string = DefName;     -> "not a constant"
+      const a: string = DefName;     -> compiles
+
+    Third instance of one double case in the initialiser paths, and the same
+    var-vs-const shape as the set-element bug (14df2066b) a few hours earlier.
+    Measured 2026-09-16, and the boundary is narrow: Integer, Char and Double
+    named constants ALL worked as var initialisers, and a string LITERAL worked
+    -- it was the string family, from a NAME, in a VAR, and nothing else.
+
+    THE MACHINERY ALREADY EXISTED AND THIS DOOR WAS NOT USING IT.
+    TakeStrInitSpan resolves a literal, a named multi-character const (via
+    FindStrConst) and a one-character const (which lives in the ordinal table
+    instead, and it MINTS a span for), and the array-element callers in
+    _decl.inc have gone through it for a while. This helper -- the one door the
+    record-field, array-element, const and var paths all share -- had its own
+    hand-written literal-only spelling, so everything reaching a scalar var
+    initialiser fell through to ConstEval, which cannot evaluate a string AND
+    DOES NOT CONSUME IT, giving "not a constant" from the ordinal path.
+
+    THE GUARD IS ASKED FIRST AND THAT ORDER IS LOAD-BEARING. The destination
+    type decides whether text is wanted here -- a one-character literal into a
+    tyChar is an ordinal, not a string -- and InitValDestTakesStrLit is purely
+    type-based, so it is safe to ask before consuming anything. Asking it first
+    also means TakeStrInitSpan is never reached for a tyChar destination, so the
+    one-char-const arm cannot hijack `var c: Char = SomeCharConst` into text.
+    TakeStrInitSpan returns False WITHOUT consuming when the token is neither a
+    literal nor a known string const, so the fallthrough below is unchanged.
+
+    Gates 138 of FPC's 207 compiler units at globals.pas:502
+    (`var mainaliasname : string = defaultmainaliasname`). }
+  if InitValDestTakesStrLit(tk, ptrElemTk) and TakeStrInitSpan(strOff, strLen) then
   begin
     kind := 1;
-    val  := Tokens[TokPos - 1].SOffset;
-    aux  := Tokens[TokPos - 1].SLen;
-    Next;
+    val  := strOff;
+    aux  := strLen;
     TryParseInitValForm := True;
     Exit;
   end;

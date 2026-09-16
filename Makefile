@@ -5234,6 +5234,19 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_var_array_of_sets.pas $(TESTTMP)/test_vasets26
 	@$(TESTTMP)/test_vasets26 | diff -u test/test_var_array_of_sets.expected - \
 	  || { echo 'test_var_array_of_sets: FAIL - set element of a var array'; exit 1; }
+	@# A `var` initialised from a NAMED string constant, where the `const` spelling
+	@# always compiled -- FPC's globals.pas:502 (`var mainaliasname : string =
+	@# defaultmainaliasname`), which gates 138 of its 207 compiler units. The shared
+	@# TryParseInitValForm keyed its string arm on the TOKEN KIND, so it saw a
+	@# literal and never a name; TakeStrInitSpan already resolved all three
+	@# spellings and this door was not using it. The ordinal rows are the guard:
+	@# Char/Integer/Double from a named const must NOT start being read as text, and
+	@# Ord(c1)=65 is what catches the destination guard being asked after consuming
+	@# rather than before. Lengths are asserted so a span pointing at the wrong end
+	@# of TokChars cannot print correctly.
+	@./$(COMPILER) test/test_var_init_from_named_string_const.pas $(TESTTMP)/test_vinitsc26
+	@$(TESTTMP)/test_vinitsc26 | diff -u test/test_var_init_from_named_string_const.expected - \
+	  || { echo 'test_var_init_from_named_string_const: FAIL - var initialised from a named string const'; exit 1; }
 	@# `p^[i]` over a pointer to a FIXED array, every element kind, read AND
 	@# write, each row beside the direct `a[i]` spelling. Compare VALUES: four of
 	@# the rows this test was written for exited 0 while being wrong, and one of
