@@ -9277,11 +9277,20 @@ begin
         end;
         Exit;
       end
-      else if (idx < 0) and (procIdx >= 0) and Procs[procIdx].IsFunc and
-              ((Procs[procIdx].ParamCount = 0) or
-               ((Procs[procIdx].ParamCount > 0) and
-                ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + 0])) then
+      else if (idx < 0) and (FindProcParenless(name, procIdx, True) >= 0) then
       begin
+        { OVERLOAD-AWARE, and it used to test the representative alone.
+          FindProc returns whichever member of a same-named set the chain
+          reaches first; if that one takes parameters, this arm concluded
+          there was no parameterless routine of the name and dropped the
+          identifier through to the variable read, which reported
+          "undefined variable" over a name that is right there in scope.
+          DECLARATION ORDER decided it: parameterless-first compiled,
+          parameterless-SECOND did not. FPC globals.pas:728-729 declares
+          the parameterful one first, which is wall eight. The helper
+          returns the representative UNCHANGED when it already qualifies,
+          so nothing that worked before takes a different path. }
+        procIdx := FindProcParenless(name, procIdx, True);
         { Bare paramless function called by name in an expression. Guarded on
           `idx < 0`: a variable in scope with the same name (PXX is
           case-insensitive, so a local `clauseCount` collides with a function

@@ -918,7 +918,8 @@ histogram. Two independent instances now, not one.
 | 4 | `var` = named string const | parser | **FIXED** `fa397c761` |
 | 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
 | 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
-| 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **OPEN — the head**, Track P, franks-ee |
+| 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `PENDING-COMMIT` (franks-ee) |
+| 8 | `WriteMsgTypeColored` overload (`comphook.pas:397`) | unclassified | **OPEN — the head**, Track P |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
 This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
@@ -929,7 +930,6 @@ wrong and neither is quotable. **Nothing downstream may key on the number**; the
 subjects are unambiguous and the two seats never disagreed about those —
 `finput.pas:544` is FIXED at `a931bef4d`, `comphook.pas:386` is OPEN. Name walls by
 `file:line` in tickets, commits and messages.
-
 **Two of the five are RTL types we simply do not declare** — no compiler change, no
 decision, nothing to reverse. That makes them the cheapest remaining lever by some
 distance, and it is the first time this umbrella's blockers have sorted into kinds
@@ -1046,3 +1046,48 @@ reported all six rows REFUSED, controls included, because the harness broke on s
 tag and it was reading *"no error line printed"* as success. **The controls caught it** —
 E and F are not decoration, they are what separates a finding from an instrument. It nearly
 shipped a table in which the instrument was the finding, and said so unprompted.
+## WALLS 6 AND 7 WERE THE SAME DEFECT CLASS IN TWO TABLES, AND WALL 8 IS ELEVEN LINES BELOW WALL 7
+
+Measured 2026-09-16, unstubbed AND stubbed, expectation recorded before each run.
+
+- **`finput.pas:544`** (`a931bef4d`, written up in full above): `SizeOf`'s
+  operand scan asked `FindSym` about the identifier before the `[` and only left
+  the name path on a POSITIVE identification of a non-array symbol. A field is
+  not a symbol in scope, so the lookup MISSED and the operand kept the path that
+  cannot index what it cannot find.
+- **`comphook.pas:386`** (this commit): `FindProc` returns the REPRESENTATIVE of a same-named
+  set, and both parenless call doors tested that one proc's arity and gave up —
+  so a parameterful overload declared FIRST made the bare spelling unreachable.
+
+**Both are a lookup answering about the wrong member of a set and the caller
+reading that as a fact about the whole set**, once through a miss and once
+through a representative. Neither is a missing check; both fired a confident
+diagnostic about the wrong thing. That is a sharper grouping than "two parser
+walls" and it predicts where to look next: any door that resolves a name ONCE and
+then reasons about arity, kind or type from the single answer.
+
+**The yield is still zero and it was predicted as zero both times.** Wall 6
+cleared 105 units onto wall 7; wall 7 cleared the same 105 onto wall 8, which is
+`comphook.pas:397` — **eleven lines below wall 7 in the same file**. That is the
+`cclasses.pas` shape this umbrella already recorded (895 → 1327 → 1726): a
+first-failure census walking one file's contents and reporting each step as a
+new population. Units-compiling: 22 → 22 → 22 stubbed, 21 throughout unstubbed,
+where not one row changed either time because everything still dies earlier at
+walls 1 and 3.
+
+**A caution for whoever reads the next histogram.** `comphook.pas:397` nearly did not appear
+in it: the compiler mints a per-instantiation suffix (`WriteMsgTypeColored$151860`), so grouping the raw message split one 105-unit wall into 105 singletons, each
+ranking below every genuine small wall, and the visible rows were IDENTICAL to
+the previous run. Normalise `$[0-9]+` before grouping, and check the buckets sum
+to the population. Worked up in `debugging-playbook.md`.
+
+**Eleven null rows in a row now.** Walls 6, 7 and 8 all sit behind wall 3, which
+is decided against, so the count of units compiling cannot move by clearing them
+and nobody should rank them on it. What they buy is that the queue behind wall 3
+is being drained in advance, and each one is a real defect that real Pascal hits
+outside this corpus — the overload one in particular is reachable by any program with an
+overloaded parameterless routine, which is why it landed with fixtures and a
+must-refuse control rather than as corpus bookkeeping.
+**Named by `file:line` throughout, per the caution in the table above** — I called
+`comphook.pas:386` "wall eight" in a commit message and in messages to a peer while this
+table calls it row 7, and both counts were honest. The subjects were never in dispute.

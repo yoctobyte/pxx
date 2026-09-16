@@ -10343,6 +10343,96 @@ begin
                    (ProcPyDefTok[cand] > ProcPyDefTok[cur]);
 end;
 
+{ FindProc hands back the REPRESENTATIVE of a same-named set and its own comment
+  says so. For a parenless call site that is not enough: the representative is
+  whichever overload the chain reaches first, and if THAT one takes parameters,
+  the call site concludes there is no parameterless routine of the name and
+  declines -- so `getrealtime` resolves to `getrealtime(const st: TSystemTime)`
+  and the bare spelling dies, while `getrealtime()` is fine.
+
+  DECLARATION ORDER DECIDES IT, which is why no fixture caught it. Declared
+  parameterless-first the same program compiles; parameterless-SECOND it does
+  not. FPC's own globals.pas:728-729 declares the parameterful one first, which
+  is how the FPC corpus hits it and a casually written test never does. That is
+  CLAUDE.md's ordered-list rule in a symbol table: the arrangement that passes is
+  the one everybody writes.
+
+  Returns `rep` UNCHANGED whenever it already qualifies, so a non-overloaded name
+  and an already-parameterless representative take a bit-identical path and
+  nothing existing moves. Only a representative that does NOT qualify searches
+  the chain, and only for a same-named routine that does. Returns -1 when the set
+  holds none -- the caller then declines exactly as it used to.
+
+  The gates are FindProc's, deliberately copied rather than factored: require-
+  forward, DeclVisibleBareRoutine, and the current-scope preference that exists
+  because used units register before the compiling scope's own routines
+  (bug-p-program-function-does-not-shadow-used-unit). Diverging from them here
+  would let this door see a routine the ordinary lookup cannot.
+
+  Wall eight of umbrella-pxx-compiles-fpc-itself, comphook.pas:386. }
+function ProcTakesNoArgs(pi: Integer): Boolean;
+begin
+  ProcTakesNoArgs := (pi >= 0) and
+                     ((Procs[pi].ParamCount = 0) or
+                      ((Procs[pi].ParamCount > 0) and
+                       ProcParamHasDefault[pi * MAX_PROC_PARAMS + 0]));
+end;
+
+function FindProcParenless(const name: AnsiString; rep: Integer;
+                           needFunc: Boolean): Integer;
+var i, own, last: Integer; lo: AnsiString;
+begin
+  { The representative already qualifies -> hand it straight back, so every
+    call site that works today takes a bit-identical path. }
+  if rep < 0 then begin FindProcParenless := -1; Exit; end;
+  if ProcTakesNoArgs(rep) and ((not needFunc) or Procs[rep].IsFunc) then
+  begin FindProcParenless := rep; Exit; end;
+  lo := name;
+  own := -1; last := -1;
+  i := ProcChainHead(lo);
+  while i >= 0 do
+  begin
+    if (Procs[i].Name = lo) and ProcTakesNoArgs(i) and
+       ((not needFunc) or Procs[i].IsFunc) and
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
+       DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, name) then
+    begin
+      if ProcUnitIdx[i] = CurrentUnitIdx then
+      begin
+        if own < 0 then own := i
+        else if PyDefPosBeats(i, own) then own := i;
+      end;
+      if last < 0 then last := i;
+    end;
+    i := ProcHashNext[i];
+  end;
+  if own >= 0 then last := own;
+  if last >= 0 then begin FindProcParenless := last; Exit; end;
+  { Case-insensitive second pass, matching FindProc's, for case-insensitive
+    non-external symbols only. }
+  i := ProcChainHead(lo);
+  while i >= 0 do
+  begin
+    if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
+       CaseEqual(Procs[i].Name, lo) and ProcTakesNoArgs(i) and
+       ((not needFunc) or Procs[i].IsFunc) and
+       not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
+       DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, name) then
+    begin
+      if ProcUnitIdx[i] = CurrentUnitIdx then
+      begin
+        if own < 0 then own := i
+        else if PyDefPosBeats(i, own) then own := i;
+      end;
+      if last < 0 then last := i;
+    end;
+    i := ProcHashNext[i];
+  end;
+  if own >= 0 then last := own;
+  if last >= 0 then begin FindProcParenless := last; Exit; end;
+  FindProcParenless := -1;
+end;
+
 function FindProc(const name: AnsiString): Integer;
 var i, own, last: Integer; lo: AnsiString;
 begin

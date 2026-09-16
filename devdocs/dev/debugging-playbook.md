@@ -27645,3 +27645,65 @@ guard-that-cannot-fire of that day (this probe, the busybox banner control, and
 `_Static_assert` itself as a guard in user code), but all three are the
 **existing** rule working, which argues against a new line at startup cost
 rather than for one.
+## A DIAGNOSTIC CAN MANUFACTURE DISTINCTNESS AS EASILY AS AN EQUIVALENCE CLASS — and the splitting direction HIDES the wall instead of inventing one
+
+CLAUDE.md records the merging direction: two subjects failing at *the identical
+line number* read as one shared dependency, and the shared cause turns out to be
+an artefact of a message format that prints no file name. **This is the same
+mechanism running backwards, and it is the more dangerous of the two**, because a
+manufactured equivalence class produces a claim someone can go and check, while
+manufactured distinctness produces *no claim at all* — the wall drops below
+whatever cut you are looking at and simply is not in the report.
+
+Measured 2026-09-16 (frankS, Track P, FPC corpus wall eight → nine). After the
+parenless-overload fix, the 105 units that had been stopped at
+`comphook.pas:386` were re-censused and the first-error histogram came back:
+
+```
+ 17 an object type cannot have a constructor ...
+ 15 unknown type: TRawByteSearchRec
+ 12 undefined variable (FileDateToDateTime)
+ 10 Unsupported tcompilerwidechar size
+```
+
+The real top row was **105**, and it is not in that list. Every one of those 105
+units reported
+
+```
+no overload of WriteMsgTypeColored$151860 matches these arguments
+no overload of WriteMsgTypeColored$159575 matches these arguments
+...
+```
+
+— the compiler appends a **per-instantiation disambiguator** to the symbol, so
+`sort | uniq -c` counted 105 distinct messages of one unit each, each ranking
+below every genuine small wall. **The instrument was working and the histogram
+was a lie of arithmetic.** I read it as "the population fragmented across
+several walls, so the one-wall-behind-another pattern has broken here" and wrote
+that down before noticing; the population had not fragmented at all.
+
+**The tell is that the counts you DO see are suspiciously equal to the ones from
+the previous run.** 17 / 15 / 12 / 10 were identical before and after the fix,
+which is exactly what you would expect if the cleared population had gone
+somewhere invisible rather than into those buckets. A histogram whose visible
+rows do not move after a fix that demonstrably moved 105 units is telling you
+where it is NOT looking.
+
+**The guard is one `sed` and it belongs in any grouping over compiler output:**
+normalise anything the compiler mints per-instantiation, per-symbol or per-node
+before you group — `sed 's/\$[0-9][0-9]*//g'` here — and, better, **check that
+the bucket totals sum to the population you are grouping.** 17+15+12+10+6 does
+not come near 207, and that discrepancy is visible without knowing the cause.
+
+Generally: **before grouping any machine-generated string, ask what part of it
+the machine varies per occurrence.** Mangled names, node ids, temp names,
+addresses, generic instantiation tags and scratch paths all split one class into
+N; line numbers and file-less messages merge N into one. Both directions are the
+same failure — a grouping key that is not the thing you mean to group by.
+**Venue, said out loud because CLAUDE.md asks for it:** playbook, not CLAUDE.md.
+Merit yes; **recurrence no** — one subsystem (the FPC-corpus probe), one day.
+It is the SPLITTING half of a rule CLAUDE.md already carries in its merging
+form, and an existing rule gaining a second direction is an argument for
+extending the playbook entry rather than for a new line every session pays
+for at startup. Promote it if a second, unrelated subsystem groups on a
+machine-minted string and loses a population that way.

@@ -8745,11 +8745,15 @@ begin
           ASTIVal[node] := procIdx;
           ASTLeft[node] := argsHead;
         end
-        else if (si < 0) and (procIdx >= 0) and
-                ((Procs[procIdx].ParamCount = 0) or
-                 ((Procs[procIdx].ParamCount > 0) and
-                  ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + 0])) then
+        else if (si < 0) and (FindProcParenless(name, procIdx, False) >= 0) then
         begin
+          { THE SIBLING ARM, and it wore a DIFFERENT DIAGNOSTIC -- this one
+            fell through to the arity report below ("wrong number of
+            parameters in call to X -- called with none") while the
+            expression arm said "undefined variable". Same cause, and a
+            grep for either message finds only one of them. See the
+            expression arm in pasparser_expr.inc for the mechanism. }
+          procIdx := FindProcParenless(name, procIdx, False);
           { Bare paramless call statement. Guarded on `si < 0` (FindSym above): a
             variable in scope with the same name shadows the function, so
             `counter := ...` where a local `counter` collides with a function

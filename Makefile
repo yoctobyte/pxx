@@ -5175,6 +5175,30 @@ test-nilpy: $(COMPILER)
 	@# identically -- so the rows deliberately vary both. The parenthesised rows
 	@# are the control: a fix that made the bare form work by breaking the call
 	@# form fails here. Oracle: FPC.
+	@# A PARAMETERLESS OVERLOAD IS REACHABLE WITHOUT PARENTHESES WHATEVER ORDER
+	@# THE SET IS DECLARED IN. FindProc returns the REPRESENTATIVE of a
+	@# same-named set -- whichever member the hash chain reaches first -- and
+	@# both parenless doors tested that one proc's arity and gave up, so a
+	@# parameterful overload declared FIRST made the bare spelling vanish:
+	@# `undefined variable (f)` in an expression, `wrong number of parameters
+	@# ... called with none` as a statement. ONE defect, TWO diagnostics, so a
+	@# grep for either message finds half of it -- both doors are asserted.
+	@# Every pair in the fixture is declared parameterful-FIRST because that
+	@# is the losing arrangement; declared the other way round every row
+	@# passes on the UNFIXED compiler. FPC globals.pas:728-729 is in the
+	@# losing order, which is how the corpus hit it (wall eight,
+	@# comphook.pas:386 `getrealtime`) and no test ever did.
+	@# POSITIVE CONTROL MEASURED against pin v410 AND against the immediately
+	@# preceding compiler: both refuse, at line 80 (the expression door) and
+	@# line 97 (the statement door) -- two rows, so the fixture is proven to
+	@# reach both arms and not just one.
+	@./$(COMPILER) test/test_parenless_call_to_an_overloaded_name.pas $(TESTTMP)/test_parenlessovl26
+	tools/expect_same.sh test_parenlessovl26 "$$($(TESTTMP)/test_parenlessovl26 | tail -1)" "total ok 15 / 15"
+	@# ...and the direction that would make all fifteen of those rows
+	@# worthless: a set with NO parameterless member must still be an arity
+	@# error. Without this row the suite passes if the doors were simply made
+	@# to accept any bare name, which is the way the fix could be wrong.
+	! ./$(COMPILER) test/test_parenless_call_to_an_overloaded_name_still_needs_one.pas $(TESTTMP)/test_parenlessneg26 2>&1 | grep -q 'ok:'
 	@./$(COMPILER) test/test_parenless_call_of_any_procedural_designator.pas $(TESTTMP)/test_pvbare26
 	@$(TESTTMP)/test_pvbare26 | diff -u test/test_parenless_call_of_any_procedural_designator.expected - \
 	  || { echo 'test_parenless_call_of_any_procedural_designator: FAIL - a parenless call of a non-identifier designator'; exit 1; }
