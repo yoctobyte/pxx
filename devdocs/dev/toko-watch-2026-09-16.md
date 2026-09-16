@@ -622,3 +622,73 @@ time rather than applied at fix time.** One observation for the owner, not four 
   rather than written above it.
 - **The PINNED compiler is a ready-made unfixed control** — 6 of 7 rows fail, the one
   that passes is the scalar. No revert->rebuild->restore->rebuild, so no seed-chain drift.
+
+### 2026-09-16, check-in 0j — I ARGUED A SEAT INTO WORK THE PROJECT HAD DECIDED AGAINST
+
+**franks-ee declined the object wall and was right to.** `decide-old-style-object-types`
+is in `decided/`, `status: decided`, **option A: we do NOT implement `object` types**,
+with frankH's 2026-09-11 re-measurement saying in bold *"The decision is NOT changed
+here"* and naming what would retire it — *"a decision recorded below it"* — which
+nothing has. So the question was never "is this a Track U fork"; it was **"do we
+reverse a decided Track U ticket"**, which a peer cannot hand anyone. franks-ee would
+have been the SECOND seat to decline it after frankH.
+
+**Both pieces of evidence I gave were wrong, and one is a rule I had corrected franks-ee
+about THIS MORNING:**
+1. I quoted `feature-p-legacy-value-object-types` at **p85. It is `prio: 15` in the
+   file**; 85 is the inherited `effective_prio`. This morning I told franks-ee *"go by
+   the file — the frontmatter is the fact and the ranker is a derived view."* Then I
+   read a ranker number off `ready` and quoted it as a human's priority.
+2. **"Already in the umbrella's `blocked-by`" is what a GATED ticket looks like**, not
+   evidence the gate opened. I used a ticket's blocked status as proof its work was
+   sanctioned.
+
+**Knowing a rule and applying it under your own argument are different things**, and
+the seat least able to notice is the one making the argument.
+
+**franks-ee did the productive half rather than escalating, and it dissolved the
+question:**
+- **The wall is `versioncmp.pas:35`, not `cgbase.pas:381`** — the line-31 hazard, with
+  BOTH the umbrella and the feature ticket carrying the wrong file. The `in:` line
+  settles it for free and neither of us read it.
+- **The VMT half is unreachable in this corpus.** 15 of 35 `= object` declarations need
+  a VMT; **14 are in `browcol.pas`, which nothing imports**, and the 15th sits behind an
+  `UNITALIASES` defined nowhere. The corpus asks only for `constructor` on a VMT-less
+  object — an ordinary in-place initialiser needing no VMT by the decide's own table.
+- **Stub3 = 22 units (+1 from three walls cleared). EIGHTH NULL ROW.** Caveat theirs and
+  honest: pxx-only arms, no fpc oracle, so read deltas not the absolute 21; and 17 units
+  still reach the object wall through other files.
+
+**Next lever is `globals.pas:502`** — a `var` initialised from a `const`, refused where
+the `const` spelling compiles. **THIRD instance of the same var/const asymmetry in
+`ParseVarSection`**, gating the identical 138, no decision required. You do not reverse
+a decided ticket to reach a population something cheaper already gates.
+
+**FOR THE OWNER, NOT ESCALATED (he is away and it is no longer blocking).** If the object
+question is ever put, franks-ee's sentence is the one to send — much better than the VMT
+framing and answerable in a word:
+> *"Do we want `object` types with constructors — the initialise-in-place kind, no
+> virtual methods — to compile, so the FPC-compiler proof can continue?"*
+Its own reason for wanting it put formally is the one to respect: *"I'd rather the
+object question go up as a decision than get taken because two agents agreed with each
+other about it."* That is the second time today that exact failure — two agents each
+treating the other's reasoning as corroboration — has been the thing to watch for.
+
+### PROMOTED TO CLAUDE.md (`338445e98`), and the test it met
+
+**Extension, not a neighbour**, to the existing *fixed one arm of a double case, grep
+for the sibling* rule: **the sibling is usually a SPELLING, not a shape, which is why
+grepping for the construct misses it.** Six instances, four seats, four subsystems, one
+day, none looking for a pattern — `$cfnptr`/`$cfntype`, `ParseConstSection`/`ParseVarSection`
+**three times**, and the inliner's two result-store guards. Recurrence, not merit, is the
+bar and this is well past it.
+
+**What is NEW is not "follow the rule"** — a rule saying to obey the previous rule is
+noise. It is that both spellings mean the same thing to whoever wrote the source, so
+neither the construct name nor the test corpus distinguishes the arms: **grep for the
+other spelling's HANDLER.**
+
+**NOT promoted, and said out loud so it does not read as undervalued:** the false-
+refutation near-miss went to the playbook (`325b9bce9`) — one investigation, one
+subsystem, so merit yes and recurrence no; and frankb-56's pinned-compiler-as-control
+pattern, which it banked itself with a counter-caveat of its own.
