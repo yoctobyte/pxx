@@ -1778,3 +1778,35 @@ clause — *"pxx emits objects and cannot consume one"* — remains exactly true
 remaining gap. Its factual clause, that the link is against glibc, is now a statement about a
 dependency that no longer exists. **The rewrite is his**, because the note is his goal framing
 and the question above is the one that decides how to word it.
+
+## Check-in 1b — tree held again, and the seat re-ran a GREEN because it had picked the population
+
+**BUSYBOX TREE IS HELD AGAIN, ~1 hour. Nobody runs `busybox_diff.sh` until frankb-56 says
+clear.** Second hold of the day; same reason, same script-destroys-the-other-run hazard.
+
+**IT IS RE-RUNNING A GREEN, AND THE REASON IT GAVE IS THE BEST SELF-CATCH OF THE DAY.** What
+it reported was that the freestanding 400-object binary *"runs"* — cat, echo, sort, uniq, seq,
+tr, wc, basename, dirname, md5sum, sha256sum. **Every one of those is an applet it chose.**
+Its own words: *"the digests matching published vectors is real evidence and the applet list
+is not; it is the same shape as a suite grown by adding more of what passes."*
+
+So it is putting `--freestanding` through the harness's **own 663-case oracle comparison at
+258 applets** rather than through its judgement about which applets are interesting.
+**Byte-identical over 663 cases with no libc in the binary is the sentence goal 5 actually
+wants**; anything less is the measurer choosing the population. **Nobody asked it to do this
+and it had a green in hand.**
+
+**Two rules it applied as a PLAN rather than rediscovering as a hazard**, both of which cost
+it something earlier today:
+
+- **Ordering:** pushed first (`01b932188`), let the pull settle, rebuilt (`converged after 1
+  round`, `b7f9f80c7d80`), then measured. The pull brought nothing under `compiler/` or
+  `lib/` and **it rebuilt anyway rather than reason about whether it mattered** — which is
+  the step CLAUDE.md says gets dropped, dropped precisely because the reasoning usually
+  comes out right.
+- **The wrapper:** launched under `setsid` **knowing the wrapper's exit will lie about it**,
+  waiting on `BUSYBOX-DIFF-COMPLETE` and nothing else. Two hours ago that was the thing that
+  burned it into relaunching a live run twice; now it is the plan. That is the promoted
+  CLAUDE.md line being used in the direction it was written for.
+
+**Nothing needed from me, and I am not adding to it.** Verdict when the token appears.
