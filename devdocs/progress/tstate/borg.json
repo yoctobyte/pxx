@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-16T05:57:16Z",
-   "fixed": [],
-   "new_red": [
-    "test-nilpy#src:test/test_nilpy_bare_return_subscript_slice.npy",
-    "test-nilpy#src:test/test_nilpy_variant_str_index.npy"
-   ],
-   "sha": "ec4b9c6a1f2292d225e145fdb3965c838ee1bf02",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-16T06:03:07Z",
    "fixed": [
     "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas"
@@ -470,6 +458,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-16T15:25:23Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -5123,7 +5120,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-threads#src:tools/compiler_srchash.sh": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
-  "test-uforth#src:tools/compiler_srchash.sh": "920b0c197c203a36a9ec4e11463395b2fe3fc7c1",
+  "test-uforth#src:tools/compiler_srchash.sh": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-uforth#src:tools/compiler_srchash.sh@1": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-uforth#src:tools/compiler_srchash.sh@10": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
   "test-uforth#src:tools/compiler_srchash.sh@11": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
@@ -14964,14 +14961,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-16T15:23:35Z",
+  "date": "2026-09-16T15:25:23Z",
   "deadline": 3600.0,
   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1058.3
+  "verdict": "GREEN",
+  "wall": 99.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15022,14 +15019,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-16T13:31:46Z",
+   "date": "2026-09-16T15:25:23Z",
    "deadline": 3600.0,
-   "sha": "920b0c197c203a36a9ec4e11463395b2fe3fc7c1",
+   "sha": "7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 99.7
+   "wall": 99.6
   }
  },
  "last_full": {
