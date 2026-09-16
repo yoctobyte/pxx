@@ -118,4 +118,4 @@ approximately.
 this ticket does not claim it is.
 
 ## Log
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 052eb5e6a.
