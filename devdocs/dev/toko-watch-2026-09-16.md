@@ -4057,3 +4057,100 @@ census-placement number as ONE item; the pgrep-rule placement; **my
 reversed by deleting one line; `no-full-suite.sh` reading commit-message prose).
 
 Nothing else moved this tick. Gate GREEN as of 1z, canary skipped.
+
+## Check-in 2b — BOTH optdiff shards CLEARED (4 → 3 open), and a tier has been publishing RED into a blind spot for five days
+
+### THE PULL: ten commits, none of them a seat's
+
+`9505b5b44..733da5c0c`. All ten are borg's own tstate bookkeeping plus one
+auto-append to `regression-optdiff-shard5-12.md`. **Nothing outside
+`devdocs/progress/tstate/` except that ticket** — checked with `git diff
+--name-only` rather than read off the subjects — so no `compiler/**` or `lib/**`
+arrived and the PUSH → PULL → **REBUILD** → MEASURE rebuild step is genuinely
+not owed here. Said out loud because skipping it is usually the error.
+
+### THE CLEARING, AND IT IS STRUCTURAL RATHER THAN LUCKY
+
+`fd3e18ca5` — **`acbc6fa04482` GREEN (opt), FIXED: `optdiff#shard5/12`,
+`optdiff#shard9/12`.** The report is clean on every axis that could hide a hole:
+`skips: 0`, `skip_holes: 0`, `flaky: 0`, wall 640s.
+
+**Open regressions 4 → 3** (five → three if shard9 is counted separately as 1x/1y
+did). Remaining: `crtl_reachability.py`, `tools-devtest#00`, `crtl_atexit.c` —
+all three the same rows that have stood all watch, two of them C-lane and one T.
+
+**A green on a coin-flip repro would prove nothing, so I checked the mechanism
+instead of the verdict.** All three skiplist commits — `1699fbadf` (mine,
+shard9), `ed52e9b0d` (franks-ee, shard5) and `fc1fbad84` (the header) — are
+ancestors of the tested tree `acbc6fa04482`, confirmed with `merge-base
+--is-ancestor`. The two files are **out of the swept population**, so the shards
+cannot resurrect on a re-run the way a lucky pass would. **Attribution is a
+RANGE and it is two seats, not one:** shard5 is franks-ee's spelling fix and
+skip, shard9 is mine. Neither of us "fixed optdiff"; we removed two files that
+were never tests from a sweep that enumerates files.
+
+### THE AUTO-TICKET HANDLER DECLINED TO CLOSE, AND IT IS RIGHT FOR A REASON THAT IS NOT THE OPERATIVE ONE
+
+`a3ba427b4`: *"regression-optdiff-shard5-12 green but NOT closed (race-unsafe on
+one green)."* That is the correct default and I am not overriding it. But its
+reason is generic — *one green does not clear a race* — and the actual reason
+this one holds is that the subject is no longer in the population at all. **The
+two readings agree today and would diverge the moment someone deletes a skip
+line**, which is exactly the reversal both entries were written to stay open to.
+Leave it for the 18th with everything else.
+
+### A TIER HAS BEEN PUBLISHING RED INTO A PLACE NOBODY READS
+
+`733da5c0c`: `bench acbc6fa04482 RED (0 bench rows, 550 conf)`. I nearly filed
+this as "the same string every time, therefore a permanently-red row" — and
+**bench has seven other wordings in its history, with 12 to 30 rows**, so that
+sentence would have been a quantifier invented from one host's file. Measured
+across every host instead:
+
+- **borg's last bench run WITH rows is `f3d420def`, 2026-07-31.** 54 consecutive
+  `RED (0 bench rows)` since.
+- **seven answered 30 rows the whole time**, through `869b6743e`
+  2026-09-11T14:04:04Z — **2h25m before seven was retired at 16:29:49Z.**
+- First borg bench after the handover, same day, is RED(0). So is all 54.
+
+**Since 2026-09-11 no host in this fleet has recorded a single bench row.** The
+ticket's own benign reading — *"bench needs a quiet box and the fleet has been
+busy"* — cannot survive it: the condition tracks the **HOST**, not the load, and
+seven answered 30 rows on the same busy days borg answered zero.
+
+**Why it ran five days unseen:** `tools/twatch.py --status` is thirteen lines and
+**the word `bench` appears in none of them**. The RED lives in a commit subject
+and in `borg.json`. A tier can report RED on every run forever without entering
+the list anyone consults — the open-regression list I have been diffing all
+watch included.
+
+**And it is not only T's problem, which is why it is in this note at all.**
+CLAUDE.md gates every `-O` promotion on **PROMISE — delivered value, measured**.
+Bench is that instrument. With no rows since 09-11 there is currently **no way to
+satisfy the O-lane promotion gate at all**, and O is one of the four tracks he
+named. Landed as a correction to the existing ticket
+`bug-t-the-bench-tier-published-red-twice-...` (its H1 said *twice*, which reads
+as a flake; the filename is left alone so citations resolve). **Track T owns the
+fix. I have not claimed the ticket and am not going to** — this is P+C+A+O watch,
+and diagnosing why borg collects nothing is T's tool and T's box.
+
+### GATE
+
+**GREEN.** `self-host fixedpoint` PASS (39s); **FPC seed canary SKIP** —
+`compiler/ unchanged, and seeded green at be9380d5489e`. **A skip, not a pass**,
+and legitimate: nothing in the pull touched `compiler/`.
+
+### PEERS
+
+No messages this tick. franks-ee closed its thread at 2a and said nothing
+outstanding; frankb-56 has not moved since its last report. **Track P is still
+entirely unassigned and the O group has just lost its only two open shards**, so
+if either seat frees, P is the offer — the three FPC-corpus blockers in the
+dispatch table, unchanged.
+
+### STATE
+
+**Three open regressions, gate GREEN, goal 1's oldest obstacle gone.** Both
+optdiff reds are closed at the instrument and the p70 bug behind shard9 stays
+open and better characterised than it was this morning. **Seven for the 18th,
+unchanged** — the bench finding is a measured ticket, not a decision he owes.
