@@ -4154,3 +4154,111 @@ dispatch table, unchanged.
 optdiff reds are closed at the instrument and the p70 bug behind shard9 stays
 open and better characterised than it was this morning. **Seven for the 18th,
 unchanged** — the bench finding is a measured ticket, not a decision he owes.
+
+## Check-in 2c — nothing landed, and the quiet made room for the oldest open regression: its published reason does not reproduce
+
+### THE PULL: ZERO commits
+
+`b160f6305..HEAD` is empty. No seat pushed and borg published nothing in the
+interval — the first genuinely still tick of the watch. `twatch --status`
+identical to 2b: **three open regressions**, same three, Track T UP, newest full
+tier 2h old, pin v409 unchanged at 80 testable commits behind.
+
+### GATE
+
+**GREEN.** `self-host fixedpoint` PASS (39s); **FPC seed canary SKIP** —
+`compiler/ unchanged, and seeded green at be9380d5489e`. A skip, not a pass.
+The gate also noted Track T tooling on the box and warned its own timings would
+run 2-3x long; they did not, and that note is not a verdict either way.
+
+### WITH NOTHING TO REPORT, I WENT AT THE OLDEST OPEN RED — AND ITS REASON IS NOT REPRODUCIBLE
+
+`lib-test#src:tools/crtl_reachability.py` has stood since **2026-09-09**, the
+oldest of the three. Two things, and the first is already known:
+
+**The display name is an alias and the tool is fine.** `borg.json` gives the
+real `name` as **`lib-test#00`**, with `src` = *"tools/crtl_reachability.py
+tools/gen_crtl_map.py +50"* — 52 files, first one wins the label. I ran the tool
+at HEAD: `crtl-reachability: OK -- 148 headers, 66 modules`, rc=0. It was ALSO
+green **inside the run that reported the job red** — the auto-filed ticket's own
+log tail says so. **Already filed and CLOSED** as
+`done/bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step`,
+so this is a rediscovery, not a finding, and I am recording it as one.
+
+**The part that is new: the step currently blamed passes here, twice.**
+`borg.json`'s reason for the newest run is `lib-units: FAIL
+mimic_reportlab_pdfgen`. That step is one command off the tier:
+
+```
+tools/lib_units_compile.py                              ->  154 units compile, rc=0
+PXX_STABLE=compiler/pascal26 tools/lib_units_compile.py ->  154 units compile, rc=0
+pinned c599e8546121        HEAD compiler b57f90696a01   (= the opt report's compiler_sha256)
+```
+
+The tool **defaults to `stable_linux_amd64/default/pinned`**, so the first row is
+the tier's own configuration, not a HEAD-only green.
+
+**And the tree is not the variable.** `git diff --name-only acbc6fa04482 HEAD`
+is **entirely under `devdocs/`** — no `lib/`, no `compiler/`, no `test/`. The
+tree that failed on borg and the tree that passes here are identical in every
+buildable file, so nothing landed that could have fixed it.
+
+**This is NOT frankb-56's mechanism, and checking that is the point.** Its
+crtl_atexit finding (`lib-test#44`) is a tree-live RTL declaration meeting a
+diagnostic frozen inside the pin — real, verified on two instruments, and it
+clears at the next pin. I ran that same pinned control on `#00` **expecting it
+to be the same story**, which is exactly the shape of a census built on its own
+hypothesis. It came out green. **Same lane, adjacent rows, different causes**;
+had I not run the pinned arm I would have written the tidy version.
+
+**What it leaves:** the cause is not in the tree — flake, or the box. I am NOT
+naming which. `lib_units_compile.py` compiles all 154 units concurrently
+(`min(cpu_count,16)` workers) into one shared temp dir and borg has more cores
+than plexus, which makes a race a CANDIDATE and not a finding. **Track T owns
+that residual question** — its harness, its box, neither visible from here.
+
+**SCOPE, stated because it is one step of 346.** This does not say the job is
+green. It says the reason published for it does not reproduce at the tree it was
+published against. The 2026-09-09 body names a **different** failing step — line
+84, `test/lib_synapse_tls_loopback.pas`, `undefined variable (SetString)`. A job
+reporting a different step on different runs is the shape a flaky harness makes
+and also the shape a moving target makes; nothing here separates them.
+
+Appended to `regression-lib-test-crtl-reachability-9.md` with that scope in the
+text. Not claiming it, not re-laning it — though its `track: B` was guessed from
+the OLD failing step and may now be wrong for the same reason the name is.
+
+### WHERE THAT PUTS THE THREE
+
+- `lib-test#44` `crtl_atexit.c` — **waiting on a pin**, not on a seat
+  (frankb-56, verified). I am not pinning; it stays red and that is correct.
+- `lib-test#00` `crtl_reachability.py` — **published reason does not reproduce**;
+  residual is T's.
+- `tools-devtest#00` — untouched this tick, T's lane, `bad` touches no buildable
+  file.
+
+**So none of the three is currently a defect in the tree that a P/C/A/O seat
+could fix**, which is a better statement of the distance to goal 1 than "three
+open regressions" — and it is a statement for his return, not a licence to pin.
+
+### PEERS
+
+**frankb-56 has not committed since 12:45 local, about eight hours.** ListAgents
+shows it interactive/**idle**. That is a harness state, not a transcript, and
+**a pane is not a session** — so I asked it to check its own record rather than
+judging from outside: filter on `is_error: true` rather than the string (a grep
+counts itself), read WHO refused (a hook decline wears a user denial's string,
+and `no-full-suite.sh` is a guardrail it may lift itself), and read WHEN (does
+the newest denial fall after the last successful tool call). Told it plainly that
+"ended my turn" is a complete answer and nothing is owed. Sent it the `#00`
+measurement above, since it is the one seat that had earned the right to be told
+its mechanism does not extend, and **offered Track P** — the three FPC-corpus
+blockers as a GROUP — as an offer, not an assignment.
+
+franks-ee idle since `fc1fbad84` (18:51 local); it closed its thread at 2a with
+nothing outstanding and I am not poking it.
+
+### STATE
+
+Nothing landed, gate GREEN, three open regressions unchanged **in count** and
+better understood by one. **Seven for the 18th, unchanged.**
