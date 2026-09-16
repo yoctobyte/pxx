@@ -4262,3 +4262,116 @@ nothing outstanding and I am not poking it.
 
 Nothing landed, gate GREEN, three open regressions unchanged **in count** and
 better understood by one. **Seven for the 18th, unchanged.**
+
+## Check-in 2d — "TRACK P IS UNASSIGNED" WAS WRONG SEVEN TIMES, AND I TURNED MY OWN PROPOSAL INTO A FINDING BY REPEATING IT
+
+### THE CORRECTION, VERIFIED HERE AND NOT TAKEN ON TRUST
+
+frankb-56 declined the Track P offer on the grounds that the lane is held. It is
+right. Five `fix(P)` commits on origin/master today, all one session id, all
+ancestors of origin/master:
+
+```
+14df2066b  09:16  a set as a VAR array element's initializer spun the element loop
+fa397c761  09:52  a named string constant is a string initialiser too
+a931bef4d  10:33  a FindSym MISS kept SizeOf on the name path, which cannot index
+3926a4098  12:54  a parameterless OVERLOAD was unreachable without parentheses
+dc3fedb0a  15:31  a unit qualifier is ignored by the string/set const lookup
+```
+
+All five carry `Claude-Session: …session_011YhcxF39gnp76VjpnFFbhv` — **that is
+franks-ee**, the seat this note's dispatch table has listed under **A /
+thread-state** all day. Six hours of continuous P work.
+
+**So the table was wrong about the SEAT as well as about the LANE**, and
+franks-ee moved through three areas today — P in the morning, the umbrella/wall
+work at midday, optdiff in the evening — while my table held it at one.
+
+### HOW I GOT SEVEN BLOCKS OUT OF A SENTENCE I WROTE MYSELF
+
+`grep -c` on this note: **seven** blocks assert Track P is unassigned or
+unstaffed. The earliest sits in check-in 1f — **hours after `14df2066b` at
+09:16**, so the claim was already false the first time I wrote it.
+
+**I never measured it once.** Every instance traces back to the dispatch table at
+the top of this file, which I wrote at baseline and which says, in its own last
+line: *"An offer is not an assignment. … Until a seat replies naming what it
+took, this table is a proposal."* **I wrote the caveat and then quoted the
+proposal as state, seven times, for thirteen hours.** A stale row does not error;
+it points somewhere, and a WARNING decays like a LOCK — this one succeeded at
+stopping me from looking.
+
+The other half is the one CLAUDE.md names outright: the three P tickets do carry
+`owner: ""` and they do sit in `backlog-pascal`, so the QUEUE looks free. **`owner:`
+is attribution, not a claim, and the separator is the TOPIC, not the folder.**
+Two of franks-ee's five — `dc3fedb0a` and `14df2066b` — are set-constant and
+initialiser work, which is the same question as the `in`-over-a-set-constant
+ticket I was offering away. Two diffs that both apply cleanly and no letter sees
+the collision.
+
+### AND THE INSTRUMENT I REACHED FOR WOULD HAVE CONFIRMED THE ERROR
+
+Checking frankb-56's claim I ran `git log origin/master --since=2026-09-16 …
+| grep -c 'fix(P)'` and got **0** — the number my wrong premise predicts. The
+five commits were sitting on origin the whole time.
+
+```
+--since=2026-09-16          ->    0 commits
+--since='2026-09-16 00:00'  ->  326 commits
+--after=2026-09-15          ->  328 commits
+```
+
+**A bare ISO date passed to `--since` matches nothing, silently.** Not the
+committer-date trap — both dates sit hours inside the window. Had frankb-56 not
+listed the five shas in its message, that zero would have gone into this block as
+corroboration. **The broken instrument and the false belief agreed, and absence
+is unfalsifiable from the inside.** Banked in `debugging-playbook.md`, "`git log
+--since=<BARE ISO DATE>` SILENTLY MATCHES NOTHING". **Venue said out loud:
+playbook, not CLAUDE.md** — one instance, one subsystem, and the general class
+(*every instrument that lies, lies by being correct about something else*) is in
+the rules file three times already. What is new is a spelling, and a spelling is
+a playbook fact. It promotes if a second unrelated instrument is found answering
+0 for a parse reason and confirming a stated premise.
+
+### frankb-56 IS NOT BLOCKED, AND IT ANSWERED THE RIGHT QUESTION
+
+From its transcript, filtered as asked:
+
+```
+tool_result blocks: 869 ok, 30 is_error:true
+newest OK     2026-09-16T14:33:24Z
+newest ERROR  2026-09-16T09:46:12Z     (4h47m BEFORE the newest success)
+user denials 0    guardrail 2    other 28
+```
+
+It fails the WHEN test cleanly, so it is not stuck and never was. **Reading WHO:**
+the two guardrail entries are both the timed-callback block on `sleep N; <check>`,
+which it handled by switching to a backgrounded until-loop — *"not a blockage, and
+not something I would want lifted."* The 28 others are deliberate nonzero exits
+(a `grep -c` with no match, the busybox lock correctly refusing a second run, its
+own `pkill` self-kill at exit 144 — the self-matching `pkill` this handbook has a
+paragraph about). **Nothing is waiting behind a guardrail, so the list for the
+18th gains nothing from it, and nothing needs loosening.**
+
+### IT ALSO CORRECTED ITSELF, WHICH IS THE PART WORTH COPYING
+
+Its earlier decline of Track P gave two reasons and it retracted one unprompted:
+*"staffing is the owner's dial, not something a present seat turns by moving
+itself"* — wrong as stated, since the fleet-size rule is about STARTING sessions
+and the ticket instruction is the opposite (*just take it, no grant to request*).
+The other half — that franks-ee held the lane — turns out right **for a different
+reason than it gave**. A seat separating "my conclusion was right" from "my
+reasoning was right" is rarer than either.
+
+**It has asked franks-ee directly** whether it holds the set-constant
+neighbourhood, offering three answers including *take a different P
+neighbourhood instead*, and claimed nothing pending the reply. That is the
+correct move and it is not mine to arbitrate.
+
+### STATE
+
+Gate GREEN as of 2c, three open regressions unchanged, nothing landed but this
+correction. **Track P is HELD by franks-ee** — struck from every "unassigned"
+line by this block, and the dispatch table at the top of this note should be read
+as the proposal it says it is, not as state. **Seven for the 18th, unchanged** —
+this was my error to fix, not his to decide.
