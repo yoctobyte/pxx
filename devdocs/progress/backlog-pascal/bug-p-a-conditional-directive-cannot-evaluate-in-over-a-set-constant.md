@@ -13,6 +13,47 @@ blocked-by: []
 summary: "SPLIT OUT of bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal on 2026-09-11, whose other half is now fixed. `{$if (cs_opt_use_load_modify_store in supported_optimizerswitches)}` (FPC nld.pas:700) needs the `in` operator over a SET constant that is itself folded from three other set constants (`supported_optimizerswitches = genericlevel1optimizerswitches + ...`, x86_64/cpuinfo.pas:139 over globtype.pas:428-430), plus resolution of an enum MEMBER name. pxx answers `conditional directive: expected operator` at the `in`. 2 units of FPC's 207 stop here (nld, and ncnv whose interface uses nld -- ONE directive reached twice, not two). It is much larger than the half that was fixed: a third value kind on the directive's value stack, set-union folding, and enum-member resolution, where the fixed half reused walks that already existed. Both are behind the unit-cycle bug anyway, so neither buys a compiling unit today."
 ---
 
+
+## Still live at HEAD 2026-09-16, with a standalone repro the ORACLE ACCEPTS
+
+Re-measured because this ticket's last line — "both are behind the unit-cycle
+bug anyway, so neither buys a compiling unit today" — was written 2026-09-11 and
+the unit cycle was fixed that same evening. **That caveat is stale; whether this
+now buys units is unmeasured and is the first thing to check.** The defect
+itself has not moved:
+
+```pascal
+program s2;
+type toptswitch = (cs_opt_level1, cs_opt_level2, cs_opt_use_load_modify_store);
+const genericlevel1 = [cs_opt_level1];
+      genericlevel2 = [cs_opt_use_load_modify_store];
+      supported_optimizerswitches = genericlevel1 + genericlevel2;
+begin
+{$if (cs_opt_use_load_modify_store in supported_optimizerswitches)}
+  WriteLn('IN: yes');
+{$else}
+  WriteLn('IN: no');
+{$endif}
+end.
+```
+
+| compiler | result |
+| --- | --- |
+| fpc 3.2.2 | `IN: yes` |
+| pxx at HEAD | `pascal26:0: error: conditional directive: expected operator` |
+
+It exercises all three things the summary names — set-union folding across two
+constants, an enum MEMBER name, and `in` on the directive's value stack.
+
+**THE FIRST VERSION OF THIS REPRO WAS INVALID AND THE ORACLE IS WHAT SAID SO.**
+It declared the constants as TYPED (`const x : toptimizerswitches = [...]`),
+which reads naturally and is what FPC's own globtype.pas looks like at a glance.
+fpc refuses that with `Illegal expression` — a typed constant is not a constant
+expression — so pxx's failure on it would have been evidence about nothing.
+Only the untyped form is a question about us. Recorded because the invalid
+version fails in pxx with the *same message* as the valid one, so nothing in our
+output distinguishes them.
+
 # `{$if}` over a set-valued constant
 
 Split from
