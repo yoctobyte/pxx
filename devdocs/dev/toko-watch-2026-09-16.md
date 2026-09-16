@@ -3504,3 +3504,92 @@ in the probe's own header by its own earlier self. **Prediction and falsifier
 unchanged and still on the record before the result.**
 
 **Four open regressions unchanged. Gate GREEN. Six for the 18th.**
+
+## Check-in 1u — wall 15 verified where I can verify it, and the baseline error survived because the file said BOTH numbers in two different SPELLINGS
+
+### WHAT I CHECKED MYSELF, AND WHAT I AM TAKING ON ITS WORD
+
+**Verified here, independently:**
+
+```
+./stable_linux_amd64/default/pinned -Fulib/rtl test/lib_blockio.pas ...
+  -> build rc=0, total ok 36 / 36
+Makefile:36243  expects "total ok 36 / 36"   (updated from the old 27/27)
+```
+
+**36/36 under the PINNED compiler**, which is the configuration that matters —
+`lib/rtl` is read from the live tree, so the row is real today and not waiting on
+a pin. The Makefile expectation was moved with it; **a test grown from 27 rows to
+36 while its `expect_same` still said 27 would have been red on arrival**, which
+is the failure this file has recorded twice, and it did not happen here.
+
+**My Q2 landed correctly and completely.** `textfile.pas:280` now reads *"One
+by-value argument needing ANY conversion — widening or narrowing, from a variable
+or from a literal — masks it"*, with the call-site conditionality, the measured
+three-ordering control (36/36 shipped, 34/36 Int64-hoisted, 33/36 reversed), and
+the operative line for the next reader: **"do not tidy these into width order."**
+That last sentence is the one that does the work.
+
+**Taken as reported, and labelled:** the corpus A/B itself — 21/10/176 on both
+legs, 0 of 207 rows changed. That is a 207-unit sweep in six chunks and I am not
+re-running it to check arithmetic; I am recording that **I did not verify it** and
+that its method (asserted partition, union equal to the glob, rows = distinct
+units = 207 per leg) is the right shape.
+
+### THE BASELINE ERROR IS REAL, AND THE MECHANISM IS WORSE THAN IT SAID
+
+It reported that walls 13 and 14 recorded `22 / 10 / 175` and were wrong on
+arrival, BOTH-OK copied from the `units-OK (stubbed)` row above and PXX-FAIL
+derived by subtraction — `207 − 22 − 10 = 175`, arithmetic that checks out, which
+is why nobody re-derived it. Confirmed. But the part it did not name is why it
+survived a whole day in a file people read:
+
+```
+summary field, present at b1b61eeff~1 : "21 BOTH-OK, 10 ORACLE-NO, 176 PXX-FAIL"
+wall-13 table, written at b1b61eeff   : "22 / 10 / 175"
+```
+
+**The document contradicted itself, in the same file, from the moment wall 13 was
+written** — and the two statements are in **different NOTATIONS**. A grep for
+`21 / 10 / 176` does not find `21 BOTH-OK, 10 ORACLE-NO, 176 PXX-FAIL`, and vice
+versa. **So no self-consistency check on that file could have caught it without
+normalising two spellings first**, and every reader who looked at one region saw
+a number that was internally coherent.
+
+**This is the same wrong-population mechanism the rules carry for INSTRUMENTS,
+arriving in a DOCUMENT.** The record was not silent and was not merely stale: it
+held the right answer and the wrong answer simultaneously, and the notation
+difference kept them from ever meeting.
+
+### AND I NEARLY REPORTED IT AS A FALSE CLAIM, ONE COMMAND EARLIER
+
+My first check was `git log -S'21 / 10 / 176'`, which returned **today's
+correction as the oldest commit introducing that string** — i.e. it read as
+*"the summary did NOT say it all along, that is a retrofit."* **That would have
+been an accusation, and it would have been wrong.** I had searched one spelling of
+a two-spelling quantity, which is the exact error I have now documented in a
+grep (`663`), a `--grep` (pin prose), a census (`crtl_decl_probe.sh`) and a
+symlink today. **The discriminator was asking which population my instrument
+enumerates before believing its silence** — the same question, the fifth time,
+and the first time it protected a peer rather than catching one.
+
+### ITS TWO SELF-CORRECTIONS, BOTH UNPROMPTED
+
+- It wrote *"correct under both orderings"* into the comment **before running the
+  control**, caught it on re-read, and replaced it with the measured table
+  (`dfbec5720`). **That is the conclusion-as-caption failure, self-caught, in the
+  same hour it was correcting mine for the same class.**
+- It retired the 24/27 control figure as unreproducible against the current file
+  — **and traced it to four places** rather than fixing the one it was looking at.
+
+It also recorded the moving casualty set (which locals die changes with the
+arrangement) as **an observation and explicitly not as the population**, which is
+the distinction that was missing from my 1s framing.
+
+**Wall 15 is the fourteenth consecutive null row, in its strongest form yet:
+not units-OK unchanged but all 207 rows byte-identical. Prediction was right on
+movement and wrong on level, and the level was wrong because of its own stale
+table — which it found by A/B rather than by reading the number forward.**
+
+**Four open regressions unchanged. Gate GREEN. Six for the 18th; census question
+(229/287) still mine to carry.**
