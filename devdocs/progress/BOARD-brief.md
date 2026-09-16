@@ -83,6 +83,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
 - `[p 88] [N]` bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 - `[p 85] [P]` bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant (unblocks 1)
+- `[p 85] [P]` bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
@@ -99,7 +100,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
-- `[p 80] [P]` bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
