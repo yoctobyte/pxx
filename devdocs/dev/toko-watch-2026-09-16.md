@@ -2228,3 +2228,26 @@ it. **I am not going to `pgrep` for it.**
 **frankb-56 has stopped: nine fixes, three groups, seven pushes. franks-ee is on
 `comphook.pas:386`. Track P unstaffed all day, which is the report, not a problem I
 may solve by moving a seat.**
+
+### 1f erratum — my own commit message ate the two names the finding turns on
+
+**`765aa9fad`'s body says "demos#00 builds against  (the target's own echo)" and
+"builds with ./ at Makefile:22480".** The two Makefile variables are GONE, and they
+are the entire discriminator. `git commit -m "...$(PXX_STABLE)..."` in bash is
+**command substitution**: the shell ran `PXX_STABLE` as a command, got
+`command not found` on stderr, substituted the empty string, and committed. **The
+commit succeeded.** The error text scrolled past above a successful `sync.sh` line.
+
+**This repo is the worst possible place for that habit** — every lane cites Makefile
+variables by name (`$(PXX_STABLE)`, `$(COMPILER)`, `$(PXX_TMP)`, `$(COMPILER_STAMP)`),
+and every one of them is a live command substitution inside a double-quoted `-m`.
+**The note file was unaffected** because its heredoc is `<<'EOF'` — quoted — which is
+the same defence and the reason the damage is one-sided.
+
+**Use `-F` with a quoted-heredoc file, or single-quote the `-m`.** Not fixed by
+amending: `765aa9fad` is pushed, and a force push is the owner's call, not mine. The
+text stands corrected here and in the follow-up commit instead.
+
+**The finding itself is unharmed and reads, in full:** `demos#00` builds against
+`$(PXX_STABLE)`, so the pin-built warning transfers to it; `test-core#c_crtl_wait.c`
+builds with `./$(COMPILER)` at `Makefile:22480`, so it does not.
