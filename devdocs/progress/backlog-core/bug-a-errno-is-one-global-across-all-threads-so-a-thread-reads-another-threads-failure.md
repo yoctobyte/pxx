@@ -440,3 +440,63 @@ The probe that reproduces the root cause is at
 reaped after 6h — it is ~90 lines and the section above gives its full design
 (two arms, control in the same binary, assert distinctness never non-zero), so
 rebuild rather than hunt for it.
+
+## STILL LIVE at `7addc40f08af`, and THE STATED BLOCKER DOES NOT HOLD — 2026-09-16 (frankS, Track A)
+
+**Reproduced a FOURTH time**, separately written probe, same relation (a thread
+only ever sees the errno its own call produced), 200000 iterations each:
+
+| build | thread A wrong | thread B wrong |
+| --- | --- | --- |
+| gcc / glibc (oracle) | 0, 0, 0 | 0, 0, 0 |
+| pxx x86-64 `--threadsafe`, `7addc40f08af` | 8 / 3 / 1 / 2 / 0 / 1 | 0 / 4 / 2 / 2 / 0 / 0 |
+
+Nonzero and varying as a race should; the oracle is 0 every run. The counts are
+an order of magnitude below the 4-84 recorded above — **do not read that as
+progress toward a fix**, nothing in the errno path changed; the thread route
+did (`02b7f7250`, `bc3ab775e`, and the pthread route), so the window moved.
+`errno.h:5` is still `extern int errno;`.
+
+### The target-set objection was the thing blocking this, and it is measured false for OUR threads
+
+This ticket's own superseded note concluded the storage already exists (GS-relative,
+`TLS_SLOT_FIRST_FREE = 13`, three free slots, `__pxxTlsBase` returns the caller's
+block) and then parked the fix on: *"it fixes no FOREIGN thread on any target
+because one that libc created never runs the clone stub that carves the block."*
+
+**That is true of a genuinely foreign thread and NOT true of any thread a pxx
+program makes, including from C.** `lib/crtl` declares its own `pthread_create`
+(`lib/crtl/include/pthread.h:76`), so C code compiled by pxx does not reach
+glibc's — it reaches `PalThreadCreate`, and on x86-64 with libc linked that takes
+the pthread route through `PxxPthreadStart`, whose job is *"exactly what the clone
+stub's child leg does for a cloned one — install pxx's `gs` block"*. Measured both
+routes, every thread PROVABLY ALIVE AT ONCE (see the method note below):
+
+| route | distinct gs blocks |
+| --- | --- |
+| Pascal `PalThreadCreate`, 4 threads | **4/4**, none equal to main |
+| C `pthread_create` (crtl's), 3 threads, gs read by `arch_prctl(ARCH_GET_GS)` | **3/3**, none equal to main |
+
+So the per-thread block exists for the population this ticket is about, and the
+cheap path — a free TLS slot plus `#define errno (*__pxx_errno_location())`,
+mirroring glibc's own header — needs no CLONE_SETTLS, no `AN_CLONE` arity, no
+`.tbss` and no per-access `gettid`.
+
+**METHOD, because the first attempt got the opposite answer and it was the probe,
+not the tree.** Short thread bodies gave 2 of 3 blocks EQUAL — glibc recycles a
+finished thread's stack, the block is carved off that stack, so a recycled
+address reads exactly like two live threads sharing one. Holding every child at
+a spin until the parent has seen all of them arrive gives 4/4 and 3/3. Assert
+DISTINCT WHILE CONCURRENT; distinctness sampled across a thread's death is not
+the same claim, and it is the claim that fails.
+
+**Residual, narrow and real:** a thread created by an EXTERNAL shared object
+calling glibc's `pthread_create` directly never runs `PxxPthreadStart` and does
+inherit the creator's `gs` (`PxxPthreadStart`'s own comment says so). Such a
+thread would share errno. That is a smaller population than "every libc-made
+thread", which is what this ticket had assumed.
+
+Not fixed here: the remaining work is Track C (every crtl site that SETS errno
+must go through the accessor), which is a lane and a scope beyond this session's
+group. The diagnosis is the deliverable; nothing above is inert until a pin,
+because nothing above changed code.

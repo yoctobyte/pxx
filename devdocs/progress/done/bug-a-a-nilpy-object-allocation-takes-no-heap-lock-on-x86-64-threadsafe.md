@@ -1,4 +1,8 @@
 ---
+status: done
+---
+
+---
 slug: bug-a-a-nilpy-object-allocation-takes-no-heap-lock-on-x86-64-threadsafe
 title: "a NilPy object allocation takes NO heap lock on x86-64 --threadsafe, so two threads get the same block"
 track: A
@@ -156,3 +160,47 @@ routines). Fixed by keying the arm on `PXX_THREADSAFE`. **It does not fix this
 ticket** and was measured not to: the heap-debug report rate is 29 vs 27 over 20
 runs either way, because the allocation race dominates. Recorded so the next
 reader does not mistake one for the other.
+
+## CLOSED BY EVENTS 2026-09-14, verified 2026-09-16 (frankS, Track A)
+
+**Fixed two days after this was filed, by the owner's own `02b7f7250`
+("fix(A): the allocator spinlock was gated on the wrong threadsafe define"),
+and nobody closed the ticket.** Picked up at the top of the queue at p90; the
+diagnosis here was correct and the work was already done.
+
+`02b7f7250` names this exact mechanism in its own body -- *"the hard lock does
+not cover the gap: it is emitted by the CODEGEN around the tkGetMem/tkFreeMem
+sites and PXXAlloc does not take it -- so an allocation reached from a Pascal
+HELPER (PXXObjAlloc -> PXXAlloc, which is how every TPyList/TPyDict/tuple is
+born) held nothing."* The spinlock guarding FreeList/HeapPtr/HeapEnd inside
+PXXAlloc/PXXFree was gated `PXX_TS_SOFTLOCK`; x86-64 `--threadsafe` selects
+`PXX_TS_HARDLOCK`, so those nine sites compiled out on the one target
+everything is built for. The gate is now `PXX_THREADSAFE`. `bc3ab775e`
+(2026-09-13, object refcounts not atomic on x86-64 --threadsafe) is the
+sibling mis-gating one layer up.
+
+**`PXXObjAlloc` STILL DOES NOT TAKE THE LOCK ITSELF and that is no longer the
+defect** -- the mutual exclusion moved INSIDE `PXXAlloc`, which is the better
+place for it, so reading this ticket's "Where it is" section against today's
+source will show the quoted code unchanged and invite a re-fix. It is correct
+as it stands.
+
+Re-measured at `7addc40f08af`, this ticket's own repro verbatim, 10 runs per
+row against the 5/5 recorded above:
+
+| both threads allocate | segfaults then | segfaults now |
+| --- | --- | --- |
+| list `[1, 2, 3]` | 5/5 | **0/10** |
+| dict `{"a": 1}` | 5/5 | **0/10** |
+| tuple `(1.0, 2.0, 3.0)` | 5/5 | **0/10** |
+
+Two independent sources agree and they fail differently: the owner's own
+measured table in `02b7f7250` (list/tuple/dict racing, int/str clean -- the
+same split this ticket found) and this re-run.
+
+NOT attributed to any work of mine in this session: the current pin v410
+(`06e40fb95b13`, 2026-09-14 18:44) already postdates both fixes, which is why
+the "repros under stable_pinned" line above no longer holds either.
+
+## Log
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
