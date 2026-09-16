@@ -2539,3 +2539,83 @@ and `fpc-bootstrap#src:compiler/compiler.pas`.**
 **Shop: franks-ee working, frankb-56 stopped, Track P unstaffed, four full-tier reds
 of four kinds. Escalated for the 18th is now THREE — `3eb0297f0`, the goal-5 wording,
 and which corpus arm the FPC number means.**
+
+## Check-in 1k — THREE REDS CLEARED, and I had already established that two hours before I re-reported them as open
+
+**OPEN REGRESSIONS 7 → 4. `optdiff#shard0/12`, `shard2/12` and `shard10/12` are
+FIXED.** tstate's own words, from the `opt` tier at `f02aaea62be9`,
+2026-09-16T10:49:17Z: `fixed: ['optdiff#shard0/12', 'optdiff#shard10/12',
+'optdiff#shard2/12']`, `still_red: ['optdiff#shard5/12']`. **Attributed to a RANGE
+and not to a seat**, as the brief requires: `67f0878f2e59..f02aaea62be9`, 154
+commits.
+
+**AND THE RANGE CONTAINS EXACTLY THE TWO COMMITS I NAMED IN THE RETRACTION THIS
+MORNING** — `311649be0` (08:52, *optdiff compared each `-O` level's own binary PATH*)
+and `84ccb6384` (09:02, *`-O3` inliner dropped the float→int conversion on an integer
+Result*). Neither is an ancestor of the previous `opt` run. **The instrument has now
+agreed with a reading I took from the FIXES eight hours before it ran.**
+
+### THE FINDING IS ABOUT ME, AND IT IS THE SHARPEST ONE OF THE DAY
+
+| time | what happened |
+| --- | --- |
+| 08:52 / 09:02 | `311649be0` and `84ccb6384` land |
+| ~10:30 | **check-in 0m: I RETRACT the baseline's four-shards-one-cause bullet**, naming those two commits, and write *"Only `optdiff#shard5/12` is open. Do not read this bullet as live."* |
+| **12:31** | **check-in 1d: I report "seven open regressions, unchanged … the four optdiff shards"** |
+| 12:49 | the `opt` tier finally runs and reports three fixed |
+| 14:23 | I read it |
+
+**I had the right answer, in my own hand, in the file I was appending to, and two
+hours later I quoted the instrument over my own verified reading.** The retraction
+was written so a future seat would not read the bullet as live. **The future seat was
+me, and I did not apply it.**
+
+**A RETRACTION DOES NOT PROPAGATE TO THE NEXT READING OF THE INSTRUMENT.** Correcting
+a document corrects the document. The tool goes on answering the old way until it is
+re-run, and the next reading arrives fresh, carrying the tool's authority and none of
+your correction. **The document and the instrument are two stores and only one of
+them got the fix.** The cheap guard is to re-read your own most recent correction
+about a number BEFORE quoting that number again — which costs one grep of the note I
+am already writing in.
+
+**AND THE INSTRUMENT'S OWN LAG IS THE OTHER HALF, MEASURED:** `--status`'s
+open-regression list reports the last time a TIER RAN, not the state of the tree. The
+`opt` tier's last ten gaps run **46 minutes to 8h19m**, and today's gap was the
+8h19m — 02:29Z to 10:49Z. **A row can be fixed at 08:52 and still listed at 12:31,
+correctly.** For an `opt`-tier row specifically, treat `--status` as up to ~8 hours
+behind. That is not a defect; it is the sampling rate, and I read it as a state.
+
+### GATE WENT RED AND IT WAS THE STALE-BINARY RED, WHICH I CAUSED BY DROPPING ONE STEP
+
+`gate.sh quick` RED on `self-host fixedpoint`, with the gate's **own** diagnosis:
+*"`compiler/pascal26` is OLDER than the last commit touching `compiler/`
+(`3926a4098`) … a STALE BINARY, not a miscompile."* franks-ee's parser fix arrived in
+my pull and **I gated without rebuilding** — the exact step CLAUDE.md says gets
+dropped, *"because the reasoning usually comes out right"*, on a day I have spent
+writing about instrument discipline. **Two valid fixedpoints, not a miscompile.**
+
+Recovered: `make compiler/pascal26` → **`converged after 1 round(s)`** (a real
+recompute, not the `verified` stamp path), new binary `68d79522668e`, re-gate
+**GREEN**. Canary **SKIPPED** — `compiler/` unchanged since, seeded green at
+`653c5f82e5c4` — which I report as a skip and not a pass.
+
+### THE SHOP
+
+- **Open regressions FOUR:** `optdiff#shard5/12`, `lib-test#crtl_reachability.py`,
+  `tools-devtest#00`, `lib-test#crtl_atexit.c` (pin-only, clears at the next pin).
+- **`optdiff#shard5/12` is now the whole of Track O**, and its reason is worth having:
+  `OPT DIFF -O3: test/test_c_gtk3_stock.pas (rc 1 vs 1)` — **both sides exit 1, so the
+  divergence is in OUTPUT, not in the exit code.** Still unassigned; I am not starting
+  a seat.
+- **franks-ee's `42e127d6d` introduced nothing**: native at that sha is `new_red: []`,
+  `still_red: ['test-core#src:test/c_crtl_wait.c']` — the one never-green row. The
+  `slow` tier at `7d9a3295b49a` is **GREEN, 0 still_red**.
+- frankb-56 stopped. Track P unstaffed. Three things escalated for the 18th.
+
+### AND A NOTE ABOUT THIS NOTE
+
+**It is 2541 lines / 169KB.** Its own header says it is a session-lifetime note and
+*"do not grow it into a second handbook."* **I am the one growing it.** I am not
+trimming it mid-watch — editing the record to look tidier is worse than a long
+record — but it is written here so the deletion at his return is not mistaken for
+losing something, and so the next watching seat writes shorter blocks than I did.
