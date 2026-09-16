@@ -732,7 +732,22 @@ real pin commit each**, so **prose about a pin outnumbers the pin by 5:1 to
 41:1**. It grows while you watch: v410 answered 5 in the morning and **19 by
 that evening**, every one of the fourteen added by the seat doing the
 investigating. **The instrument was degraded by the act of writing the
-investigation down.** And `crtl_decl_probe.sh` censused
+investigation down.** **AND A SELF-CHECK IS THE NASTIEST PLACE FOR THIS,
+BECAUSE THE CHECK'S OWN PUBLISHED BASELINE JOINS THE POPULATION IT COUNTS AND
+THE CHECK IS BUILT TO BE RE-RUN.** Measured 2026-09-16, a second subsystem: a
+guard added to stop one document carrying a total in two notations recorded its
+baseline as **13 and 5** and the criterion *"a sixth is a live claim and is
+wrong"* — and the sentence stating that baseline contains one of each spelling,
+so the file answered **14 and 6** to the very next reader, who would have hunted
+a live error that did not exist. **Deleting that one line restores 13 and 5
+exactly.** It is BORN RED for everyone except its author, and the cost is not
+the false hit: **a guard that cries wolf on its first outside run teaches that
+it can be ignored.** Note the author had applied this rule one level down in the
+same paragraph — predicting correctly that a grep would count the note's own
+QUOTATION — and missed it on the numbers, because they were measured **before
+the sentence stating them existed**. So do not restate the count; **write a
+baseline that cannot match its own pattern** (spell it in words), or the guard
+breaks again at the next re-wording. And `crtl_decl_probe.sh` censused
 `lib/crtl/include/**` and answered `unimplemented: 0` for a symbol declared in
 `lib/rtl/palthread.pas`: **640/605/0/35 and rc=0 IDENTICAL under both the pinned
 and the HEAD compiler**, the two binaries `test/crtl_declaration_census.sh`
