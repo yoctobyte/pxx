@@ -17406,7 +17406,13 @@ test-core: $(COMPILER)
 	grep -q 'absolute. overlays a specific' $(TESTTMP)/tv_3.err
 	printf 'program a; threadvar s: string; begin end.\n' > $(TESTTMP)/tv_str.pas
 	! ./$(COMPILER) $(TESTTMP)/tv_str.pas $(TESTTMP)/tv_4 >$(TESTTMP)/tv_4.err 2>&1
-	grep -q 'only ordinal, pointer and floating-point threadvars' $(TESTTMP)/tv_4.err
+	# The noun is NOT pinned: this diagnostic is now produced by ONE routine
+	# serving both frontends (TryAssignThreadVarStorage), so it says "thread-local
+	# variables" rather than "threadvars" and would say something else again if a
+	# third frontend arrived. What the row is about is the TYPE RULE, so it greps
+	# the claim and not the spelling. Reworded 2026-09-16 after the C frontend
+	# started sharing the allocator; the refusal itself never stopped firing.
+	grep -q 'only ordinal, pointer and floating-point' $(TESTTMP)/tv_4.err
 	printf 'program a; type TC = class public threadvar F: LongInt; end; begin end.\n' > $(TESTTMP)/tv_cls.pas
 	! ./$(COMPILER) $(TESTTMP)/tv_cls.pas $(TESTTMP)/tv_5 >$(TESTTMP)/tv_5.err 2>&1
 	grep -q 'not allowed in a class or record body' $(TESTTMP)/tv_5.err

@@ -154,3 +154,22 @@ emulator, the row goes green — which is stronger than the original elimination
 but still not the mechanism. It costs one search for anyone with network
 access, and it is no longer urgent.
 - 2026-09-06 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ce8567b28.
+
+## 2026-09-16 (frankb-56) — does not reproduce here, 5/5 identical to gcc. Not a claim it is fixed.
+
+Checked only because this row appeared as STILL-RED in the borg native report at
+`7f8188ce5fe5`, whose range contains my own compiler commits — so the question
+was whether I had caused it, and the answer is no.
+
+At HEAD, `test/c_crtl_wait.c` under pxx is **byte-identical to the gcc oracle**,
+five consecutive runs, no diff on any row.
+
+**The reported rows were `after-cont` and `wait`** — the stopped/continued pair,
+which drive SIGSTOP/SIGCONT and then read a reconstructed status word. That is a
+timing shape, and borg was running a full native tier when it was sampled.
+
+**What this does NOT establish:** five local runs on an idle box are not the
+population that produced the red, and this is exactly the class where "does not
+reproduce alone" cannot choose between a load artefact and a real defect needing
+the tier's contention. Recorded as evidence, not as a clearance. Not claimed,
+not closed.
