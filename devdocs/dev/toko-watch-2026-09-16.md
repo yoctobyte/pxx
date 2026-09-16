@@ -2717,3 +2717,100 @@ filters them by hand, which is the evidence that they arrive.
 **Shop unchanged from 1k: four open regressions, gate GREEN at `68d79522668e`,
 franks-ee working, frankb-56 stopped, Track P and `optdiff#shard5/12` unstaffed, three
 things escalated for the 18th.**
+
+## Check-in 1m — GetDir landed, and the builtin snapshot has ALREADY diverged, which is the opposite of what the seat measured
+
+**`d7bf36ce0` verified library-only** — `lib/rtl/sysutils.pas`, a test, a Makefile row
+and docs, **zero files under `compiler/`**. 120 → 0, units-OK 22 → 22, eleventh null
+row. Both values it flagged confirmed in the tree:
+`AllowDirectorySeparators: set of Char = ['\', '/']` at `:1398` — **backslash
+included** — and `DriveSeparator = ''` at `:1414`, an **empty string, not a
+character**.
+
+### THE CORRECTION, AND IT MAKES ITS OWN CAUTION STRONGER RATHER THAN WEAKER
+
+It wrote: *"the two builtin snapshots are byte-identical right now, which is exactly
+the comparison that would wrongly read as 'location does not matter'."* **They are
+not.** Measured:
+
+```
+diff -rq compiler/builtin/  stable_linux_amd64/default/builtin/
+  builtinheap.pas differs
+  pyeval.pas      differs
+  pylib.pas       differs
+tree hashes: live 10bf1f177870   pinned d515f8596626
+```
+
+**All three changed AFTER pin v410** (`764ee2ed2`, 09-14 20:45) — `builtinheap.pas` at
+`445ce3e25`, 1h45m after the pin, and `pyeval.pas`/`pylib.pas` today at `dea6cf762`
+(06:03) and `334680199` (04:30), both nilpy fixes. So its caution was better founded
+than it knew: **the divergence is not hypothetical, it is live in three files.**
+
+**AND THAT GIVES THE LEDGER A THIRD STATE, WHICH I HAD BEEN COLLAPSING INTO TWO.** Its
+mechanism is right and is the part worth keeping — *"it is not that `compiler/` is
+special, it is that `builtin` is SNAPSHOTTED and `lib/rtl` is not"*, measured with
+`--where` rather than assumed:
+
+| tree | reached by the pinned compiler from | status today |
+| --- | --- | --- |
+| `lib/rtl/**` | the **LIVE** tree | a fix is live on push |
+| `compiler/**` | the pinned **binary** | inert until a pin |
+| `compiler/builtin/**` | the pin's **own snapshot** | inert until a pin **and already 3 files behind** |
+
+**Two nilpy fixes that landed today are in that third row** and are reaching nothing
+that runs under the pin. I am not pinning; it is a line for his return.
+
+**Its placement call is a divergence chosen for a stated reason:** fpc declares this
+in SYSTEM, visible with no `uses`; pxx's System is `compiler/builtin/builtin.pas`,
+whose own header says it contains **no syscalls**, and `GetDir` is `getcwd`. So it
+went in `SysUtils`, and the cost is stated in the source — `GetDir(0,s)` without
+`uses SysUtils` compiles under fpc and does not here.
+
+### THE CORPUS CAUGHT IT SHIPPING HALF A DECLARATION GROUP, IN ONE RUN
+
+It wrote only the two names the wall named — `GetDir` at `:518`,
+`AllowDirectorySeparators` at `:543` — and the re-run moved the head to
+`cfileutl.pas:696`, `DriveSeparator`: **the same `const` block in the same fpc include
+file**, 178 lines down, one line to fix. **That is normalise-don't-special-case's
+sibling rule arriving as a DECLARATION GROUP rather than a code path** — a spelling
+neither of us had seen. *One `const` block in fpc's source is one group here, and
+taking the names a diagnostic happens to mention is the same mistake as fixing one arm
+of a double case.* Cost of getting it wrong: a full corpus re-measurement for a
+one-line constant.
+
+**And it produced the unbuilt-rows-report-a-verdict failure in the same hour it was
+writing that hazard up:** its first positive control printed `CAUGHT IT` having caught
+nothing — the `sed` did not match, nothing was built, `diff` failed on two missing
+files, and the `||` arm reported a verdict for rows where nothing existed. Re-run with
+the build asserted **and branched on**, narrowing the separator set does redden it.
+Same class I owned this morning; third instance today of a `||` arm speaking for a
+step that never ran.
+
+### ITS QUESTION, AND I GAVE IT A STRAIGHT ANSWER
+
+New head `cfileutl.pas:714` `rmdir`, and **the detail file says only TWO errors remain
+behind that wall** — `rmdir` (MkDir/RmDir/ChDir plus IOResult plumbing, which is
+cross-unit state in `textfile.pas`, so a separate change), then
+`internal parser bug: statement made no progress in block (would hang)` at
+`cfileutl.pas:1495`. It offered to switch to characterising `:1495` while the unit is
+fresh.
+
+**I said characterise `:1495` first, and the reason dissolves the conflict rather than
+trading it off: CHARACTERISING IS NOT SUBJECT TO THE INERT-UNTIL-PIN DISCOUNT.** The
+whole live-vs-inert argument applies to *fixing*, and the artefact of characterising
+is a reduction and a ticket, which land live whatever the pin does. So the RTL-first
+rule simply does not bear on this choice. What is left is: the advantage is
+**perishable and one-directional** (the unit is in hand now, `rmdir` will still be
+there tomorrow), it is **Track P without a lane change** on the day Track P has been
+unstaffed and is the owner's named priority, `rmdir` is by its own account *"a
+separate change"* rather than the cheap one, and **"made no progress in block (would
+hang)" is the compiler refusing about ITSELF** — a guard against a spin, which is the
+class you want reduced while it reproduces.
+
+**It is still its call.** I am answering a question the seat holding the work asked
+me, which is not dispatch.
+
+**Shop: four open regressions, gate GREEN, frankb-56 stopped, Track P about to be
+touched by the A/B seat rather than staffed, `optdiff#shard5/12` unstaffed, three
+things escalated for the 18th.** Still not banked at its instruction:
+`test_threadsafe_heap_lock_deadlock_diag`, `fpc-bootstrap#src:compiler/compiler.pas`.
