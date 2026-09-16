@@ -3289,3 +3289,112 @@ and no pin is ours to take.
 Gate GREEN, four open regressions unchanged, Track P and `optdiff#shard5/12`
 unstaffed and staying that way. Four items for the 18th, plus this placement
 question as a fifth and smallest.**
+
+## Check-in 1s — the var-param bug reproduces, its OVERLOAD explanation does not, and the census starves 229 of 287 rows
+
+### THE BUG IS REAL AND WORSE THAN A WIDTH ERROR — REPRODUCED INDEPENDENTLY
+
+```
+procedure Take(var n: Int64);  ...  a, guard: Integer;  Take(a);
+pxx  b57f90696a01 : rc=0, ZERO diagnostics ->  a=-1 guard=-1
+fpc  3.2.2        : Error: Call by var for arg no. 1 has to match exactly:
+                    Got "SmallInt" expected "Int64"
+```
+
+**`guard` is never mentioned at the call site.** The eight-byte store through a
+four-byte `var` actual takes whatever the frame put next, so the casualty is a
+layout accident and **a bug report from the victim points at the wrong code
+entirely.** franks-ee's framing of why it survived is the sharp part and I
+confirm it: **the returned count is CORRECT in the broken case**, so the value
+you asked for says nothing happened. prio 75 is right.
+
+### BUT ITS OVERLOAD EXPLANATION IS WRONG, AND IT JUST PINNED THAT EXPLANATION IN CODE
+
+It wrote: *"widening counts as compatible, so the FIRST declared compatible row
+wins and swallows every narrower actual"*, reordered `textfile.pas` narrowest-
+first, pinned the order with `test/lib_blockio.pas`, and said **in the code and
+in the ticket** that the ordering is a property of the bug. **Four arrangements
+measured here, actual always `Integer`:**
+
+```
+Int64 then Integer          -> a=7  guard=0   CORRECT
+Integer then Int64          -> a=7  guard=0   CORRECT
+Int64, SmallInt, Integer    -> a=7  guard=0   CORRECT  (exact row LAST)
+Int64, SmallInt (no exact)  -> a=-1 guard=-1  CORRUPTS
+```
+
+**Declaration order did not decide a single one of them.** The rule is:
+**an exact-width row wins wherever it is declared; corruption happens only when
+NO exact row exists**, and then a wider row is accepted instead of refused.
+
+So **its fix is correct and its reason is not.** What repaired `BlockRead` was
+**publishing the missing widths** — the exact row now EXISTS — not the order it
+published them in. This matters beyond pedantry: a later reader who believes the
+order is load-bearing will **reorder them and think they broke something**, or
+will **rely on order in a new unit while omitting a width** and get silent
+corruption back. And it is a live comment asserting something false, which is
+the one case CLAUDE.md says to decide rather than leave: *comment and code
+disagree, one is wrong, and here the measurement says which.*
+
+### ON THE QUESTION IT ACTUALLY ASKED ME: YES, BUT ITS TWO ROWS ARE NOT THE PROBLEM
+
+It asked whether landing two ungated rows while the owner is away is the wrong
+call, and offered to reorder them above the census. **Measured before answering:**
+
+```
+lib-test recipe  : 34959 -> 37248      census row : 35513 (plain tab, no '-')
+expect_same rows still reached :  58
+expect_same rows DEAD          : 229      <- 80% of Track B's gate
+```
+
+**Its two rows at 36239 and 36251 are two of two hundred and twenty-nine.**
+So: **yes, move them up if it wants them gated** — that is not loosening
+anything (the census still runs, still fails, `lib-test` stays RED) and the
+recipe already has 554 lines of rows ahead of the census, so it is consistent
+with the existing shape. But it must not read as a fix: **moving two rows past a
+row that is starving 229 of them is a workaround for one seat's week.**
+
+**The real question is whether a known-red census belongs 554 lines into a
+2289-line recipe, and that is the owner's** — not because it is irreversible,
+but because it changes which failure a developer sees first across a whole
+lane's gate. **Escalating it WITH the number**, which is what makes it a
+narrow call rather than an architecture fork. Its instinct to ask was right and
+the answer is bigger than the thing it asked about.
+
+**On landing ungated in the meantime: correct, and the rules say so outright.**
+*Never wait for a pin* — land forward, say what is inert, take the next ticket.
+It verified both rows by hand under both compilers with reddening controls
+(24/27, 91/98) and said so in the commits instead of claiming a green. **That is
+the prescribed behaviour, not a compromise.**
+
+### THE `charset` POPULATION CHOICE: IT IS NOT JUST DEFENSIBLE, THE RULES DECIDE IT
+
+It flagged, unprompted, that its 86-line differential probe carries a trailing
+comment on every mapping line because **fpc's own loader scans hex past the end
+of a ShortString and reads the previous line's residue** — bisected to
+`0x8E<tab>#DBCS LEAD BYTE` followed by a shorter line leaving `AD` behind, so
+fpc parses `$4E00AD` and registers U+4E00 as U+00AD. It called this steering
+around an fpc bug and invited pushback.
+
+**No pushback: matching that would be emulating a defect, which is explicitly
+not a goal** — *"we just care for correct compiling pascal code, not emulating
+every behaviour"*, and a divergence is a bug only where correct Pascal breaks.
+Reproducing fpc's residue read would be **chasing parity into a buffer bug.**
+**The one thing to fix is the CLAIM'S WORDING, not the probe:** "byte-identical
+to fpc" overstates a result measured on inputs where fpc's loader is correct.
+Say that at the claim site and the population is honest. It put the caveat in
+the header, which is right; the sentence that travels is the one that needs it.
+
+### AND A THIRD SUBSYSTEM FOR THE WRAPPER RULE, INDEPENDENTLY
+
+Its backgrounded `make lib-test` reported `exit code 0` while the log said
+`Error 1`, caught only by grepping the log. **That is the third subsystem today
+by its count and the fourth by mine** (the gate three times, `busybox_diff.sh`,
+the `/proc` scan, now this). The rule is already in the file and I extended it
+this morning at `aa39bf4a0`. **Not touching it again today** — third edit to one
+paragraph in a day on one seat's data is the failure mode the file warns about.
+Logged as a confirmation, not a promotion.
+
+**Four open regressions unchanged. Gate GREEN. Now SIX for the 18th:
+`3eb0297f0`, goal-5 wording, the two-arm corpus question, Track B's gate down
+under the pin, the pgrep-rule placement, and the census starving 229 rows.**
