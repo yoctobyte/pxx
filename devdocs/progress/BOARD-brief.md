@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:6 backlog:49 backlog-umbrella:11 backlog-core:165 backlog-nilpy:178 backlog-tools:60 backlog-pascal:9 backlog-decide:46 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:76 known-incompat:5 float:23 done-followup:3 decided:151 done:3799 rejected:81`
+`working:30 unfinished:21 blocked:6 backlog:48 backlog-umbrella:11 backlog-core:165 backlog-nilpy:178 backlog-tools:60 backlog-pascal:10 backlog-decide:46 backlog-libs:26 backlog-cfront:14 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:76 known-incompat:5 float:23 done-followup:3 decided:151 done:3800 rejected:81`
 
 ## Held now (working/ — do not touch these files)
 
@@ -99,11 +99,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - `[p 80] [N]` bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
+- `[p 80] [P]` bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
-- `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 
 _524 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
