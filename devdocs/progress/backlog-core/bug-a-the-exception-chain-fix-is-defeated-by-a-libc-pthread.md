@@ -8,10 +8,51 @@ created: 2026-09-02
 found-by: frankC
 owner: ""
 blocked-by: [decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]
-summary: "`bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash` moved TLS_SLOT_EXC_TOP into the per-thread TLS block, and its own note says a fresh thread gets a ZEROED block from the clone stub. A libc pthread never runs that stub, so it INHERITS a chain head pointing at its creator's live frames -- and the fix is defeated for exactly the thread kind DOSBox, SDL and every threaded C library create. MEASURED: main thread and one pthread_create'd thread each doing 300k try/except, 3 runs of 3 print `Unhandled exception`; the identical 600k of work on ONE thread in the SAME binary is 3 of 3 clean. At 2k each, one run of three produced no output at all. Repro is test/test_foreign_thread_exception_chain.pas, NOT WIRED because it fails."
+summary: "`bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash` moved TLS_SLOT_EXC_TOP into the per-thread TLS block, and its own note says a fresh thread gets a ZEROED block from the clone stub. A libc pthread never runs that stub, so it INHERITS a chain head pointing at its creator's live frames -- and the fix is defeated for exactly the thread kind DOSBox, SDL and every threaded C library create. MEASURED: main thread and one pthread_create'd thread each doing 300k try/except, 3 runs of 3 print `Unhandled exception`; the identical 600k of work on ONE thread in the SAME binary is 3 of 3 clean. At 2k each, one run of three produced no output at all. Repro is test/test_foreign_thread_exception_chain.pas, NOT WIRED because it fails -- AND ITS EXIT CODE IS A COIN FLIP AT A FIXED LEVEL WITH A FIXED BINARY, which is the part that decides how to verify a fix: 30 runs at -O2 (2026-09-16) gave 0 x5, 124 x1, 139 x1, 217 x23, and 30 at -O0 gave 139 x3, 217 x27. IT PASSES ABOUT ONE RUN IN SIX AT -O2, so a single-run verification of any fix here reads FIXED on luck at that rate; verify over >=30 runs per level and report the distribution. tools/optdiff.skip carries the file because optdiff enumerates every source file under the test directory and swept a program the suite deliberately excludes -- that skip is on the INSTRUMENT and this bug is untouched and open."
 ---
 
 # A libc pthread inherits its creator's exception chain
+
+## RE-MEASURED 2026-09-16 -- THE REPRO IS A COIN FLIP, AND ONE RUN CANNOT VERIFY A FIX
+
+Everything below this section stands. What it does not say, and what anyone who
+works this ticket needs before they start, is that **the repro's exit code is
+nondeterministic at a FIXED optimisation level with a FIXED binary** -- and one
+of its outcomes is SUCCESS.
+
+Measured 2026-09-16, compiler `b57f90696a01`, `--threadsafe`, 30 runs per level,
+one binary per level built once:
+
+| level | exit 0 | 124 (timeout) | 139 (SIGSEGV) | 217 (unhandled exception) |
+| --- | --- | --- | --- | --- |
+| `-O0` | -- | -- | 3 | 27 |
+| `-O2` | **5** | 1 | 1 | 23 |
+
+**The row that matters is `-O2` exit 0: the repro PASSES about one run in six.**
+So a future fix for this ticket, verified the ordinary way with a single run,
+has roughly a one-in-six chance of reading as FIXED on luck alone -- and the
+same coin decides whether a REGRESSION is seen. **Verify any change here over
+at least 30 runs per level and report the distribution, never a single exit
+code.** The 139 and 124 rows say the same thing from the other side: this
+defect's observable is not one behaviour but four, and a ticket that says only
+"prints `Unhandled exception`" under-describes it enough to mislead.
+
+Found from the other end, by frankuser, because `optdiff#shard9/12` went red
+naming a 12-commit range with no cause in it. The mechanism is a population
+error in the harness: `tools/optdiff.sh:122` enumerates every `.pas` and `.c`
+file under the `test/` directory, so this program is swept even though its own
+summary says it is NOT WIRED because it fails. That population is "files in
+`test/`", not "tests". A one-run-per-level differential cannot express a
+question about a program whose exit code is a coin flip, so `tools/optdiff.skip`
+now carries it; **the skip is on the INSTRUMENT and this bug is untouched and
+still open at p70**, which is the right split and is recorded here so nobody
+reads the skip as a downgrade. The auto-filed regression ticket naming that
+range was corrected and moved to `rejected/` -- nothing in the range is causal,
+and the PINNED v410 compiler, which predates all of it, flakes identically.
+
+The numbers above are this seat's own runs, not a relay: the distributions
+differ in detail from frankuser's (they saw outcomes at levels where I did not),
+which is what a race looks like and is itself part of the finding.
 
 ## RE-MEASURED 2026-09-15 at `561c30f6409b9376` -- STILL LIVE, AND THE BLAST RADIUS IS NOW BOUNDED
 

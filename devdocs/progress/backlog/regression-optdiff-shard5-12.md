@@ -68,3 +68,51 @@ choose between them. The re-run that would decide it is the shard, not the file.
 84ccb6384) or as shard2/shard10 (argv[0], 311649be0). Those closed by two
 different causes. Treating the remaining shard reds as ONE cause is not
 supported by the three that have now closed.
+
+## RESOLVED 2026-09-16 (frankS) — the cause is the GTK warning line, and it reached optdiff by a SPELLING
+
+Cause established, not guessed, and it is the same cause as the `t_rw*` entry
+that `tools/optdiff.skip` has carried all along. The subject is
+`test/test_c_gtk3_stock.pas`. With no display reachable:
+
+```
+rc=1, both levels          <- exactly the shard log's own `rc 1 vs 1`
+(d0:654383): Gtk-WARNING **: 18:44:48.983: cannot open display:
+(d2:654398): Gtk-WARNING **: 18:44:49.097: cannot open display:
+```
+
+**Three independent varying fields in that one line**: the binary name — which
+optdiff varies *by construction*, compiling the levels to `d0`/`d2`/`d3` — the
+PID, and a millisecond timestamp. It cannot compare equal at any level, ever.
+
+**Why it was never skipped: the patterns are `test_c_gtk_*` and the file is
+`test_c_gtk3_stock` — gtk3, no underscore.** The skiplist already described this
+exact failure for `t_rw*`, in the file, correctly, for weeks. This is CLAUDE.md's
+"the sibling is usually a SPELLING, not a shape" — grepping for the construct
+finds the handler that already exists and misses the one name it does not cover.
+
+**Why the two standalone re-runs refuted nothing, including frankb-56's on
+2026-09-16.** With a display reachable the program exits 0 at both levels and
+the outputs agree — 10 runs byte-identical. The red needs the *absence* of a
+display, which is the watcher's environment and not an interactive seat's. So
+`pass=1 skip=0 diff=0` standalone is the correct answer to a different question,
+and the `rc 1 vs 1` in the log above was the discriminator sitting in the
+artefact the whole time. That re-measurement was right to record what it did
+establish and right to refuse the flattering argv[0] reading; the missing step
+was reproducing the *precondition*, which is one `env -u DISPLAY`.
+
+**Not nondeterministic** — this is NOT the shape frankuser found on shard9. It
+is deterministic and different, which is a stronger and simpler statement.
+
+**Action taken:** `test_c_gtk3_stock*` added to `tools/optdiff.skip` with the
+measurement, deliberately as ONE file rather than a widened gtk3 glob — the
+other two uncovered gtk sources (`test_c_gtk.pas`,
+`test_gtk3_pc_pchar_conversion.pas`) were measured the same way and are NOT
+affected: both exit 0 and agree with no display, because neither opens one.
+
+**There is no bug here and nothing is being suppressed.** The program is
+correct, the compiler is correct, and optdiff's question — "do the levels
+produce the same bytes" — is meaningless for a program whose output embeds its
+own binary name, PID and a timestamp. This ticket is an auto-filed stub about an
+optdiff red; the red goes away because the instrument stops asking a question it
+cannot express. Goal 1 (a full green pin) loses its longest-standing shard red.

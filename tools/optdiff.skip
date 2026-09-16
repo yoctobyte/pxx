@@ -9,6 +9,25 @@ test_multithreading*
 # prints RTTI/prop POINTER values — binary-layout-dependent, differs
 # between binaries by construction
 test_rtti*
+# SAME CAUSE AS t_rw* BELOW, AND IT REACHED optdiff BY A SPELLING: the two
+# patterns above are `test_c_gtk_*`, which does NOT match `test_c_gtk3_stock`
+# -- gtk3, no underscore. This is optdiff#shard5/12, red since 2026-09-07 and
+# the longest-standing of the shard reds. Verified before skipping, as this
+# list requires, and the criterion is the PROGRAM'S BEHAVIOUR rather than its
+# name: with no display reachable it exits 1 at every level (which is the shard
+# log's own `rc 1 vs 1`) and prints
+#   (d0:654383): Gtk-WARNING **: 18:44:48.983: cannot open display:
+# whose THREE varying fields are the binary name -- which optdiff itself varies
+# by compiling to d0/d2/d3 -- the PID, and a millisecond timestamp. It cannot
+# compare equal at any level, ever, for three independent reasons.
+# NOT nondeterministic in the shard9 sense: 10 runs are byte-identical, and
+# WITH a display reachable both levels exit 0 and agree, which is why a
+# standalone re-run reports diff=0 and refutes nothing. The other two uncovered
+# gtk sources were measured too and are NOT affected (both exit 0 and agree
+# with no display -- they never open one), so this entry is deliberately ONE
+# file and not a widened gtk3 glob. bug: none -- the program is correct and the
+# instrument's question is meaningless here.
+test_c_gtk3_stock*
 # a GTK3 GUI program: with no display gtk_init prints a warning carrying the
 # BINARY NAME, the PID and a millisecond timestamp — and optdiff compiles the
 # three levels to d0/d2/d3, so the first of those differs by construction.
