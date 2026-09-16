@@ -3,7 +3,7 @@ track: U
 prio: 55
 type: decide
 blocked-by: []
-summary: "CLAUDE.md's -O3 promotion gate defines proof as a full run with `skip_holes == 0`. Measured 2026-08-31 over seven's whole archive: 121 full-tier runs, 120 with skip_holes=1 and one with 2 — NONE at 0, ever. The hole is a permanently unrunnable rdrand job, and it is structural: seven is dual E5645 (Westmere, no RDRAND) while plexus has it. Since Track T moved to seven on 2026-08-29, the gate as written can never be met, so NO -O3 pass can ever be promoted. Needs a ruling on what proof-grade means in the presence of a permanent host hole; recommendation is an enumerated per-host allowlist so a NEW hole still fails."
+summary: "CLAUDE.md's -O3 promotion gate defines proof as a full run with `skip_holes == 0`. Measured 2026-08-31 over seven's whole archive: 121 full-tier runs, 120 with skip_holes=1 and one with 2 — NONE at 0, ever. The hole is a permanently unrunnable rdrand job, and it is structural: seven is dual E5645 (Westmere, no RDRAND) while plexus has it. Since Track T moved to seven on 2026-08-29, the gate as written can never be met, so NO -O3 pass can ever be promoted. Needs a ruling on what proof-grade means in the presence of a permanent host hole; recommendation is an enumerated per-host allowlist so a NEW hole still fails. PREMISE PARTLY OVERTAKEN BY EVENTS 2026-09-16: the sweeping host is BORG now, not seven (plexus retired to borg 2026-09-11), and borg SATISFIES the literal gate -- 114 full-tier runs since the handover, every one at skip_holes=0, and ZERO borg full runs at skip_holes>0, ever. So the gate is no longer unsatisfiable where the sweeping happens and NO promotion is blocked by it today. The fork is NOT closed: it was always about what proof-grade MEANS in the presence of a structural host hole, and that question survives a host move -- it just stops being urgent. Re-read option 1 in this light: it costs nothing today, which it did not when this was written."
 ---
 
 # A gate that cannot pass is not a gate either
@@ -29,6 +29,36 @@ sweeping happens.
 So the promotion gate has been unsatisfiable since that move, and nothing
 reports it as unsatisfiable — the flag is described in CLAUDE.md as **not built
 yet**, which is the only reason this has not already blocked a promotion.
+
+## OVERTAKEN IN PART, 2026-09-16 — the host moved, and the measurement moved with it
+
+**This ticket's blocking claim is no longer true, and the reason is that the
+sweeping host changed rather than that anyone acted on it.** Track T ran on seven
+when this was filed; plexus retired to **borg** on 2026-09-11. Measured today over
+`devdocs/progress/tstate/runs-borg.ndjson`:
+
+```
+borg full-tier runs: 672   with skip_holes == 0: 114   with skip_holes > 0: 0
+earliest zero: 2026-09-11T19:51:21Z   latest: 2026-09-16T10:01:36Z
+```
+
+The 114 begin at the handover, so **every borg full run has met the literal
+`skip_holes == 0` gate**, and the newest one also records `skips=0`,
+`timed_out=False`, `unreached=0`. The rdrand hole was seven's hardware — dual
+E5645, Westmere, no RDRAND — and seven is not the sweeping host any more.
+
+**What this does NOT settle, and the distinction is the whole reason not to close
+this.** The fork was never "is the gate currently passable"; it was **what
+proof-grade should MEAN when a host has a structural hole**, and that question is
+exactly as open as it was. What changed is its urgency: nothing is blocked today,
+so a ruling costs nothing and buys the property before the next host move rather
+than after it. **Option 1 (literal `skip_holes == 0`) now has a price of zero on
+the current host**, which it did not when this was written, and that is new
+information about the option rather than a decision.
+
+**This is the shape the owner named on 2026-09-10** — a ticket closed by events,
+sitting in a folder, its own body recording that its blocker was gone. It was
+found by a watch check-in reading the archive for something else, not by triage.
 
 ## Why this is the exact mirror of the rule that generated it
 

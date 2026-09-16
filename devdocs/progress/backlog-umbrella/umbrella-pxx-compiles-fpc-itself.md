@@ -908,7 +908,7 @@ both answering something narrower than the reader supplied.
 invisible in every summary quantity — same units, same counts, same first-error
 histogram. Two independent instances now, not one.
 
-## THE FIVE WALLS, and the first structural read that is not "one more wall in one more file"
+## THE WALLS, and the first structural read that is not "one more wall in one more file"
 
 | # | wall | kind | state |
 | --- | --- | --- | --- |
@@ -919,6 +919,16 @@ histogram. Two independent instances now, not one.
 | 5 | `TSystemTime` | RTL type | **FIXED** `c52d5b31b` (franks-ee) |
 | 6 | `sizeof(files[0])` on a pointer-indexed element (`finput.pas:544`) | parser | **FIXED** `a931bef4d` (franks-ee) |
 | 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **OPEN — the head**, Track P, franks-ee |
+
+**THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
+This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
+disagreed in writing about which wall `comphook.pas:386` is: this table calls it 7,
+franks-ee calls it 8, and **both counts are honest** — the umbrella's prose above
+counts walls CLEARED historically, and this table numbers its own rows. Neither is
+wrong and neither is quotable. **Nothing downstream may key on the number**; the
+subjects are unambiguous and the two seats never disagreed about those —
+`finput.pas:544` is FIXED at `a931bef4d`, `comphook.pas:386` is OPEN. Name walls by
+`file:line` in tickets, commits and messages.
 
 **Two of the five are RTL types we simply do not declare** — no compiler change, no
 decision, nothing to reverse. That makes them the cheapest remaining lever by some

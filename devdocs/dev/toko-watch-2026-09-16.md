@@ -1882,3 +1882,134 @@ seat.** What remains on goal 5 is Track A's: route 2 for the stub, and
 
 **Still exactly two things escalated for the 18th**, both unchanged: `3eb0297f0`, and the
 goal-5 wording, which now reads as one sentence about what we want.
+
+## Check-in 1d — the open-regression list is NOT the red list, and a decide ticket has been closed by events for five days
+
+**Quiet tick on the tree and a loud one in the archive.** Nothing has landed since
+`c28c693d0` (my own 1c). HEAD unchanged, no tier delta to attribute to anyone, Track T
+UP and idle *because the tip has not moved*, not because it is stuck — newest full tier
+`e9bc308de99a`, aging from 21m to 25m across two check-ins with the same sha.
+
+**`gate.sh quick` GREEN, and I am going to report the canary row honestly rather than
+as a pass:** it **SKIPPED** — *"compiler/ unchanged, and seeded green at
+`f8547e7bd5f4`"*. That is a legitimate skip and the right behaviour, and it is still
+not a fresh measurement. The last real canary pass on this tree is frankb-56's at
+`f8547e7bd`. Self-host fixedpoint PASS (39s).
+
+### THE FINDING: two instruments, seven rows and five rows, overlapping in THREE
+
+I have been quoting "seven open regressions" as the shop's distance from goal 1 all
+day, and the baseline table in this note does the same. **It is the wrong number, and
+not because it is stale — because it is a different question.** Newest full tier at
+`e9bc308de99a`, read out of `runs-borg.ndjson` rather than off `--status`:
+
+| | in the full tier's `still_red` | in `open_regressions` |
+| --- | --- | --- |
+| `lib-test#src:test/crtl_atexit.c` | yes | yes |
+| `lib-test#src:tools/crtl_reachability.py` | yes | yes |
+| `tools-devtest#00` | yes | yes |
+| `demos#00` | **yes** | **no** |
+| `test-core#src:test/c_crtl_wait.c` | **yes** | **no** |
+| `optdiff#shard0 / 2 / 5 / 10 of 12` | **no** | **yes** |
+
+**Both absences have a mechanism and neither is a bug.** `demos#00` and
+`c_crtl_wait.c` carry **`last_pass: None`** — they have never passed on borg, so there
+is no good→bad transition to bisect and they cannot be *regressions* by construction.
+The four optdiff shards are tier **`opt`**, not `full`, so they can never appear in a
+full-tier row at all.
+
+**The consequence is the part that matters for goal 1.** A full GREEN pin is a
+statement about the FULL TIER, so the number standing between this tree and the
+owner's first goal is **five**, not seven, and **two of the five have never been
+green on this host** — which is a different and harder class than a regression with a
+range to bisect. Quoting seven flatters the shop by counting four `opt` shards that a
+full tier does not run, and hides two rows that a full tier does.
+
+**This is `--status` being correct about something else.** It says
+*"open regression"* and it means it: a list of things that USED to pass. I read a
+list of things that are RED, because that is the question I had. The instrument never
+claimed otherwise.
+
+**Stability, which is the good news:** five consecutive full runs from
+2026-09-16T07:47:43Z to 10:01:36Z, **the same five reds every time**, `new_red: []`,
+`fixed: []`, `skips=0`, `timed_out=False`, `unreached=0`. Nothing is flapping.
+
+### A DECIDE TICKET HAS BEEN CLOSED BY EVENTS SINCE 2026-09-11 AND NOBODY NOTICED
+
+Reading the archive for the above, `skip_holes == 0` on every recent row — which is
+supposed to be impossible on the sweeping host. Measured over all 672 borg full runs:
+
+```
+with skip_holes == 0: 114      with skip_holes > 0: 0
+earliest zero: 2026-09-11T19:51:21Z    latest: 2026-09-16T10:01:36Z
+```
+
+The 114 begin **at the plexus→borg handover**. `decide-the-proof-grade-gate-is-
+unsatisfiable-on-the-host-that-does-the-sweeping` (Track U, prio 55) says in its own
+summary that the `-O3` promotion gate *"can never be met"* because seven is dual E5645
+Westmere with no RDRAND. **Seven is not the sweeping host any more**, and borg has met
+the literal gate 114 times in five days.
+
+**I have updated the summary and added a dated section; I have NOT closed it, and the
+distinction is deliberate.** The fork was never *"is the gate passable today"* — it is
+*"what should proof-grade MEAN when a host has a structural hole"*, and that question
+survives a host move. What changed is its price: **option 1, the literal
+`skip_holes == 0`, now costs nothing on the current host**, which it did not when the
+ticket was written. That is new information about an option, not a decision, and the
+decision is still Track U's.
+
+**This is the exact shape the owner complained about on 2026-09-10** — a ticket whose
+own body records that its blocker is gone, sitting in a folder `ready`/`next` scan.
+It was found by a watch check-in reading the archive for a different question. That is
+the second time today that the useful thing came out of *"go look at the data behind
+the summary line"*.
+
+### Peer movement — both seats answered, and one caught its own instrument
+
+**frankb-56: both groups CLOSED.** Four commits today all gated green and on origin
+(`76d6c6428`, `037100b42`, `01b932188`, `f8547e7bd`); C is clear above p40. I have
+offered it **Track P** (the owner's named priority — the three FPC-corpus walls) or
+**Track O** (`optdiff#shard5/12` alone, explicitly without my retracted four-shards-
+one-cause framing), with my read that P is worth more, and said plainly that banking
+and stopping is a legitimate end to a shift. **An offer, not an assignment.**
+
+**franks-ee: NOT STUCK, and it proved it the way the rule asks.** Newest successful
+tool call 10:27:54Z, newest `is_error: true` 08:34:12Z — **the last denial is nearly
+two hours OLDER than the last success**, which is the only comparison that separates a
+blocked seat from a working one. Six refusals all session, **zero user denials**: one
+`no-full-suite.sh` hook decline (it complied rather than lifting, because the per-fix
+gate was sufficient — there was nothing to lift it FOR), four nonzero exits from its
+own commands, and **the newest one is the compiler refusing its eleven-line repro,
+i.e. the defect reproducing — a success wearing an error's shape.**
+
+**Its method caught a bug in its own instrument, which is worth more than the
+answer.** Its first parse reported the newest success at 08:35Z — a session that had
+stopped dead. **408 of 426 `tool_result` blocks carry `content` as a STRING and only
+18 as a list**, and it was iterating list-shaped blocks only. What caught it was the
+transcript file's own **mtime** being live while the parse claimed two silent hours.
+**A transcript-liveness check is a cross-check on any transcript parser and they fail
+differently** — banking that here because the next seat to run this check will write
+the same loop.
+
+### A WALL NUMBER IS A ROW POSITION AND TWO SEATS DISAGREED ABOUT ONE IN WRITING
+
+franks-ee: *"comphook.pas:386 is wall EIGHT. Wall seven was finput.pas:544."* This
+note and the umbrella table say 6 and 7. **Both counts are honest** — the umbrella's
+prose counts walls CLEARED historically, the table numbers its own rows — and the
+table's heading still said **"THE FIVE WALLS"** over **seven** rows. **The two seats
+never disagreed about a subject**, only about an index.
+
+Fixed the caption and recorded the collision in the umbrella: the number is a row
+position, nothing downstream may key on it, and walls are named by `file:line`.
+`finput.pas:544` FIXED at `a931bef4d`; `comphook.pas:386` OPEN.
+
+**And its diagnosis of my failed reconstruction is better than my own write-up.** My
+ten rows compiling under pin v410 *and* at HEAD means the failing shape is not in
+them, and the **missing axis is the OVERLOAD**: the minimum is two declarations
+sharing a name, one taking a parameter, and the call site spelled with no parentheses.
+My row E — a single parameterless function called bare — is green *on purpose*, as its
+control. It has the defect narrowed to one cell with both controls green and has not
+found the code yet; **no commit is due until it has**, and I am not asking again.
+
+**Nothing escalated beyond the standing two.** No pin, no guardrail touched, no keys
+into any pane, no seat started.
