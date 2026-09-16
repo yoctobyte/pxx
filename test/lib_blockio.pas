@@ -17,10 +17,20 @@
   widening or narrowing, variable or literal -- masks it, after which
   declaration order decides. `count` is Int64 in every row, so the ordinary
   `BlockRead(f, b[0], n, c)` with an Integer `n` IS the masking shape. The
-  CaseExact* procedures below pass an Int64 length, convert nothing, and are
-  correct under BOTH orderings; the CaseLongInt/Integer/Cardinal/Word ones
-  convert and are correct only under narrowest-first. That asymmetry is the
-  pin -- neither half alone shows it. The real fix is the compiler refusing a
+  CaseExact* procedures below pass an Int64 length and convert nothing; the
+  CaseLongInt/Integer/Cardinal/Word ones convert. Measured across three
+  declaration orders in textfile.pas, 2026-09-16:
+
+    narrowest-first (shipped)          36 / 36   (fpc 3.2.2: 36 / 36)
+    Int64 hoisted to the front         34 / 36   LongInt count, Integer guard
+    fully reversed, widest-first       33 / 36   + Word guard
+
+  EVERY CaseExact* ROW PASSES IN ALL THREE. That is the pin, and neither half
+  of the file shows it alone: the converting rows show that order matters, the
+  exact rows show that order matters ONLY when something converts. Note also
+  that WHICH converting row dies moves with the arrangement -- the casualty is
+  whatever the frame put next, so do not read the specific names above as the
+  population. The real fix is the compiler refusing a
   narrower actual outright, as fpc does
   ("Call by var for arg no. 4 has to match exactly") --
   bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it.
