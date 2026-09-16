@@ -833,6 +833,43 @@ begin
       TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
       Exit;
     end;
+    { ...AND THE SAME HOLE IN THE OTHER DIRECTION: a FLOAT rhs into an INTEGER
+      result. The guard above is keyed on the RESULT being float, so it cannot
+      see this one, and the comment it carries already states the rule this
+      restores -- "any RHS kind that is not ALREADY the result kind goes to
+      shape 3". The predicate was narrower than its own stated intent.
+
+      Same mechanism, worse symptom. Dropping the store drops the CONVERSION,
+      and float->int is not a widening: it moves the IEEE-754 payload.
+      Measured 2026-09-16, `function RetInt(F: Double): Integer; begin
+      Result := F; end` with `D := 4.7`:
+
+        -O0/-O1/-O2   5          (correct, and correct out-of-line at -O3 too)
+        -O3           -858993459 (0xCCCCCCCD -- the low half of 4.7's bits)
+
+      The conversion lives in ir.inc's AN_ASSIGN arm, which wraps the RHS in the
+      -204 Round intrinsic. Shape 1 retains only the RHS EXPRESSION and throws
+      the assignment away, so there is no AN_ASSIGN left for that arm to fire
+      on -- measured: zero inlined assignments with a float RHS reach it. Shape
+      3 allocates a properly typed Result temp and stores through it, which is
+      an AN_ASSIGN and does get the rewrite.
+
+      Deliberately NOT a copy of the rounding rule. Routing to shape 3 is the
+      same escape the float-result arm above takes, and it keeps the rule in the
+      one place ir.inc's arm says it belongs: "two dozen places build an
+      AN_ASSIGN and exactly one lowers it".
+
+      Language-agnostic, like the arm above, and it is a DECLINE rather than a
+      conversion -- it only gives up the expression shortcut for a shape whose
+      store is load-bearing, so C's truncate rule and Python's rebind reach
+      their own store paths instead of this one dropping the store for them.
+      test_double_to_integer_lvalue_rounds.pas, the `function Result` row. }
+    if TypeIsMachineInt(Syms[retSym].TypeKind) and
+       TypeIsFloat(IntToTypeKind(ASTTk[rhs])) then
+    begin
+      TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
+      Exit;
+    end;
     if not InlineExprSimple(rhs, procIdx, False, retSym, False) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 48 >= INLINE_AST_RESERVE then Exit;    { budget guard }
