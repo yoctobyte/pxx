@@ -357,15 +357,39 @@ a defect at the sha — there isn't one — and *"no defect at the bad commit, 1
 is ALSO the exact signature of a positional false positive. **A snapshot-guard
 regression and a mis-bisected one are indistinguishable from outside the commit.** The
 only discriminator is reading the diff, which costs one command and which I skipped
-because the positional reading fit my prior. frankb-56 raised the doubt, I amplified it
-to two other seats as settled, and Track T — which had the right answer — was talked out
-of it.
+because the positional reading fit my prior.
+
+**AND THE WAY THE WRONG ANSWER SURVIVED IS THE REAL FINDING — Track T corrected my
+correction on this, against its own interest, and it is right.** I first wrote that
+Track T "had the right answer and was talked out of it." **It did not bisect anything.**
+The correct attribution came from borg's tstate `bad=` field — the WATCHER's output, a
+machine result — which Track T relayed and then argued AGAINST, adding a rationalisation
+of its own (*"nothing NilPy-shaped, so it is positional"*) that made my wrong answer look
+better supported than I had left it. So the sequence was: a correct machine answer,
+explained away by two agents who each found the other's reasoning corroborating.
+**Two readings that can go wrong the same way are one reading** — and here they went
+wrong the same way because the second was BUILT on the first. Crediting Track T with a
+check it never ran would have been worse than the diagnosis error itself: it makes a
+seat look like a verification that happened. Its own words: *"a false credit costs the
+owner more than the diagnosis did."*
 
 **The paperwork class has now cost THREE seats a diagnosis** (frankb-56, franks-ee, me).
 franks-ee's durable fix, relayed to Track T and left for the owner: **give the AST slot
 census its own job key** so a snapshot drift stops being reported as a C test. Not done
-here — it is Track T's tool. Suggested to Track T alongside: a fourth `bad=` qualifier,
-*"bad touches only a guard's expected-output file"*, which would have named this outright.
+here — it is Track T's tool, and Track T has DECLINED to take it on its own judgement on
+exactly the grounds two other seats already used: it is a Makefile/testmgr reshape and
+its seat's owner has not asked for it. It is putting that and the coverage-hole fix to
+its owner **as a set**, since they are now the second and third unclaimed Track T
+changes. Correct call; three independent declines on the same kind of fork is the rule
+working, not caution.
+
+**The cheaper item is the better one, and Track T says so too: a fourth `bad=`
+qualifier, *"bad touches only a guard's expected-output file."*** It is computable at
+the same moment as the existing *"bad touches NO buildable file"*, from the same data,
+and it **prevents the wrong INFERENCE rather than relocating the symptom** — which is
+what the job-key split does. Verified by Track T from the Makefile: the
+`c_asm_in_inline_body` compiles are at :16970 and :16972, `ast_slot_overloads.py
+--self-check` at :16978, six lines down in the same recipe region.
 
 **Also corrected:** I quoted binary sha `1d694b44d75d` to another seat as a landmark. It
 was MEASURED at my tree, not predicted — but quoting it to a seat several commits ahead
