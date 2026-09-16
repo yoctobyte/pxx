@@ -889,3 +889,87 @@ worrying it had crossed it had simply misread whose commit it was.
 
 **What I owe the owner on his return:** the watch record said "one cause" to him in a
 summary. It is corrected here and he should read this block, not that sentence.
+
+## Check-in 0n — I READ THE AUTHOR LINE AND EVERY SEAT IN THIS REPO COMMITS AS `yoctobyte`
+
+**Two attributions in 0l and 0m are WRONG, one of them consequentially, and both came from
+the same mistake: I ran `git show -s --format='%an'` and believed it.** Every agent in this
+fleet commits as `yoctobyte <rene.tegel@gmail.com>` — that is the git user of the checkout,
+not a claim about who wrote the change. **That is the entire reason `tools/whose_commit.sh`
+and the `Claude-Session` trailer exist**, and CLAUDE.md says in as many words that
+`Co-Authored-By` does not discriminate because every agent shares it. I used the one field
+that discriminates nothing.
+
+**CORRECTION 1 — `3eb0297f0` IS frankb-56'S OWN COMMIT, AND I TOLD IT TO STAND DOWN.**
+Session trailer `session_01QGwDdzytppqN5b5iLbGCSX`; `whose_commit.sh` says frankB. Both
+instruments agree. I told it *"that commit is the OWNER'S OWN ... nothing of yours is in
+that file ... he ruled on this precise question ... stand down."* **Every clause of that is
+false.** What I quoted as the owner's ruling — *"the loosening rule is scoped to permission
+machinery ... and a correctness test in gate.sh is not that"* — is **frankb-56's own
+sentence in its own commit message**, and I handed it back to it as the owner's authority.
+
+**That is the exact failure CLAUDE.md names: a peer cannot grant an escalation, and an
+agent relaying the owner's authority secondhand is not the owner.** I did worse than relay
+it — I manufactured it, out of an author field. A seat asked whether it had overstepped on
+permission machinery and I answered with a fabricated permission. The question it raised is
+**live and unresolved**, and it was right to raise it.
+
+**The history of that file is mine, which is why the collision exists:** `b092532e3` (the
+guard) and `48f03e24a` (its first correction) are both **this session's** commits. So I
+wrote the guard, declined to act when it reddened frankb-56's work, read the fork as the
+owner's call — and frankb-56 disagreed in writing and changed it anyway. That disagreement
+is genuine, it is two days old, the tree is green, and **nobody needs to settle it while he
+is away.** It goes to him on return, stated as a goal question and not a mechanism one:
+*"when a gate check is wrong about our own architecture, may the seat it reds fix the
+check, or must that wait for you?"* I am not reverting frankb-56's commit — that would be a
+second unilateral change to a guard, by the seat that already got the attribution wrong.
+
+**CORRECTION 2 — `b9bb74d37` IS THIS SESSION'S COMMIT, NOT THE OWNER'S.** 0l called the two
+nilpy subscript regressions *"the third regression from the owner's own last commit"* and I
+repeated that to him in summary. Wrong: trailer `session_01FcK7gV4FyP2pctkY9QUaPV`, this
+seat. **So the regression was mine and the fix (`47a5d356e`) was mine too** — I broke it and
+I fixed it, which is a smaller and less interesting story than the one I told, and it
+removes a claim about his work that he never earned.
+
+**What survives untouched:** the frankS and frankB attributions in 0l were run through
+`whose_commit.sh` at the time and are correct. It is the two I checked with `%an` that were
+wrong — I used the good instrument where I had no prior, and the bad one where I already
+had a guess. **The author line agreed with what I expected, which is why I did not check
+it.**
+
+## Check-in 0o — franks-ee's ancestry discriminator holds, and it applies to the row it said had none
+
+**franks-ee is right about the threadvar row and I was wrong to file it with the other two.**
+Measured rather than taken: `554b4947c` (the fixture's positive-control repair) landed
+2026-09-16T05:37Z and **is NOT an ancestor of `ec4b9c6a1f22`**, the green I called a flap —
+so that reading was correct about that green and does not reach the current state. Since
+the repair there are **11 borg runs on trees containing it — 7 native, 4 full, `skip_holes=0`
+on every one — and the threadvar row is red in none.** (franks-ee said eight native and
+three full; the split is 7/4, the total 11 is right.) So the honest status is *green for the
+right reason on eleven runs since the instrument was aimed*, not *a flap*. It declined to
+close it on its own say-so, having written both the fix and the repair, which is the correct
+instinct.
+
+**AND ITS DISCRIMINATOR REFUTES ITS OWN VERDICT ON THE HEAP-LOCK ROW.** franks-ee wrote that
+`test_threadsafe_heap_lock_deadlock_diag` has *"no repair to credit and no mechanism to point
+at"* because nothing has touched that fixture in 24h — which is true, and it is a fact about
+the **fixture**, not about the **compiler**. Its own `53833e88e`, *"a signal handler was
+GRANTED the heap lock, which killed the 212 diagnosis"*, splits exactly the same way: **absent
+at `881fdee59b6f`, the 04:54Z still-red whose failure was `-212 | +124`, and present in all
+eleven green runs.** The commit names the 212 diagnosis; the red was a 212. That is the same
+before/after ancestry split it taught me, on the row it said had none — because it looked for
+a change to the test and the mechanism was in the compiler.
+
+**So both thread rows are probably green for a reason and neither is closed.** The residual
+is real and unchanged: a race-sensitive row cannot be closed on absence, and the mechanism
+being plausible is not the mechanism being proven. **The generalisable part is franks-ee's
+and it earns a line somewhere:** the open-regression list cannot carry this, because *"green"*
+and *"green on a tree that contains the repair"* are the same word in it — and the
+discriminator is one `git merge-base --is-ancestor <repair> <tested sha>` per report. **Not
+promoted to CLAUDE.md:** one subsystem, and recurrence is the bar. It goes in the playbook.
+
+**Wall seven is in** — `SizeOf(<field>[index])` accepted, 33/33, with a control that can
+actually fail: pin v410 and a purpose-built pre-fix binary both refuse the extended fixture
+with `expected ')' before '['`, and `TR` is 12 bytes in that fixture so a pointer-width
+answer cannot pass for a correct one. Four corpus arms running, expectation written down
+first, no claim until they land.
