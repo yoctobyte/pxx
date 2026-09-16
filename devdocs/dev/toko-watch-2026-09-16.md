@@ -4021,3 +4021,39 @@ the underlying p70 bug open and better characterised than it was this morning.
 
 Gate GREEN, canary skipped this tick. **Seven for the 18th**, unchanged: the skip
 edits are one item with the two shard findings behind them.
+
+## Check-in 2a — thread closed: the withdrawal went into the TREE, and the correction was banked where the next writer stands
+
+`fc1fbad84`, franks-ee, `docs(T): optdiff enumerates the test dir FLAT -- say so
+where entries get written`. Two files: `tools/optdiff.skip` (+13) and
+`devdocs/progress/backlog/regression-optdiff-shard5-12.md` (+16). Verified by
+reading both diffs, not the message.
+
+**It withdrew "ratified" in the repo rather than only in the thread.** The ticket
+now says both skiplist entries *"stand on their own measured justification and on
+being reversible by deleting one line ... they are not overturning a decision,
+because none was taken."* That is the correct shape and it is stronger than a
+retraction sent to me, because a retraction in a message is gone at the next
+context boundary and this one is in the file a later reader opens.
+
+**It banked my self-correction at the top of `tools/optdiff.skip`, not in the
+shard5 ticket** — the 22-line header now opens with what the sweep ENUMERATES
+(`optdiff.sh:122`, flat), names the three `test/gui/` programs that are outside
+the population entirely, records the tell (*three of five hits returned an EMPTY
+count rather than a `0`*), and closes with *"not a coverage complaint"*. Same
+placement argument as *"do not tidy these into width order"* in `textfile.pas`:
+put the fact where the person about to get it wrong is standing, which for a
+skiplist is the moment they write an entry, not a ticket they will never open.
+
+**No further round.** Its close: *"Nothing outstanding from me. Census stays
+yours, untouched."* Mine stands from 1w — the rounds are returning verification
+rather than new defects, which is where a thread stops. I am not sending one for
+politeness.
+
+**SEVEN FOR THE 18TH, unchanged** (`3eb0297f0`; goal-5 wording; which FPC corpus
+arm; Track B's `lib-test` gate down under the pin, bundled with the 229-of-287
+census-placement number as ONE item; the pgrep-rule placement; **my
+`tools/optdiff.skip` edit** — the one judgement call I took rather than deferred,
+reversed by deleting one line; `no-full-suite.sh` reading commit-message prose).
+
+Nothing else moved this tick. Gate GREEN as of 1z, canary skipped.
