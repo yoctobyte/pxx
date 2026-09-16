@@ -2814,3 +2814,91 @@ me, which is not dispatch.
 touched by the A/B seat rather than staffed, `optdiff#shard5/12` unstaffed, three
 things escalated for the 18th.** Still not banked at its instruction:
 `test_threadsafe_heap_lock_deadlock_diag`, `fpc-bootstrap#src:compiler/compiler.pas`.
+
+## Check-in 1n — the detail instrument was undercounting, so a number in MY 1m is a lower bound, not a count
+
+**`dc3fedb0a` + `a29892c8c` landed**: a unit qualifier was ignored by the string/set
+const lookup. `dc3fedb0a` touches **2 files under `compiler/`** — **inert until the
+next pin** — and `a29892c8c` touches **2 under `test/`** and none under `compiler/`,
+so the test is live for anyone who builds. Corrections both landed too (`2f3df27f8`):
+the false byte-identical claim is out of the umbrella and the LOGBOOK, **and its own
+post-mortem names the mechanism better than I did** — it was `cmp` on ONE file with
+the conclusion asserted about the whole DIRECTORY, *committed while writing a
+paragraph about sampling*. The third ledger state is written in beside it.
+
+### THE BY-PRODUCT IS BIGGER THAN THE WALL, AND IT LANDS ON MY OWN RECORD
+
+`statement made no progress in block` is the parser **ABANDONING THE BLOCK**, so a
+unit's error list is **TRUNCATED wherever the give-up fires and nothing in the output
+says so.** Measured by franks-ee across the 207 detail files: total error lines
+**419 → 776**, all 357 new ones inside give-up files, three error KINDS never before
+seen in this corpus; control, the **41 files that never carried the give-up are
+unchanged, every one, grew=0 shrank=0.** The give-up was in **134** files, not the
+one its recorded expectation predicted.
+
+**So the instrument built to cure first-error blindness had a blindness of its own,
+and I quoted it.** In check-in 1m I wrote: *"the detail file says only TWO errors
+remain behind that wall."* **`cfileutl.pas:1495` is where the give-up fired, so
+cfileutl's own detail file was truncated BY CONSTRUCTION.** That "two" is a **LOWER
+BOUND, not a count**, and I am marking it as one rather than editing 1m — the record
+stands and the correction sits beside it.
+
+**A third caveat on the corpus number, next to the two already banked:** a head is a
+queue position; a units-blocked count is not a work count; **and any "how much is
+left" figure predating `dc3fedb0a` is low by an unknown amount.**
+
+### AND I NEARLY REPLACED THE LOWER BOUND WITH A NUMBER FROM A THIRD CONFIGURATION
+
+I rebuilt (`converged after 1 round(s)`, `b57f90696a01`) and drove `cfileutl` through
+a three-line wrapper program to get the corrected count myself. It answered **4**, and
+the four are `PInt`, `PUInt`, `PUint` and an unresolved `AWord` — **all in
+`globtype.pas`, a dependency, before cfileutl's own body is reached.**
+
+**That number is not a correction to "two"; it is an answer from a different
+experiment.** franks-ee's figures come from its harness with its stub set and its
+`-Fu` roots; my ad-hoc invocation is a **THIRD configuration** and is comparable to
+neither arm. **Publishing it as the fixed count would have been today's wrong-
+population failure for the fourth time, by me, an hour after I promoted the rule to
+CLAUDE.md.** The corrected number has to come from the harness that produced the
+original, re-run after `dc3fedb0a`. I have asked for it and I am not substituting
+mine.
+
+### WHAT THE DEFECT ACTUALLY WAS — THE PARSER MESSAGE IS THE LEAST OF ITS THREE FACES
+
+fpc's `cfileutl.pas:142` declares `const ExecuteProcess = 'Do not use' deprecated`, a
+constant whose entire job is to **shadow a function**, then calls the real one
+qualified twice in its own body. The qualifier was consulted in the PROC table and in
+**neither CONSTANT table**. Three faces, and the loud one is the least bad:
+
+- **In an assignment: SILENT.** Returned the constant's text with the call arguments
+  discarded — fpc `[FUNC:x]`, us `[SHADOW]`, **no diagnostic.**
+- **With a set-const shadow:** printed the baked mask's **ADDRESS as a string** — a
+  memory dump.
+- **`const T = ''`:** prints nothing at all, **indistinguishable from a blank.**
+
+**Boundary measured rather than assumed:** only an untyped string const of length
+`<> 1`; char, typed, integer and float consts all resolve correctly, because **only
+string and set consts live in name tables keyed without a unit.** Same class as
+`bug-p-a-system-qualified-call-binds-a-same-named-user-routine`, in the sibling
+spelling — *grepping for the construct finds nothing; only grepping for the other
+handler does.*
+
+### ONE BANKED, NOT COUNTED, AND ITS RANKING TENSION LEFT OPEN ON PURPOSE
+
+`n := F('x')` for a string-returning `F` and an `Integer n` **compiles with no
+diagnostic and prints a pointer as a number**; the same assignment from a string
+VARIABLE is correctly refused. It was the single row of a 17-row matrix still
+diverging AFTER the fix — *"the shape that reads as a confession and terminates the
+search"* — so it **attributed to a range first**, and the pinned pre-fix compiler
+reproduces it on a program with **neither a qualifier nor a shadowing const**. It was
+masked here by the const interception. Filed with the tension stated rather than
+silently resolved: *"accepting what fpc rejects is not a defect"* argues `rejected/`;
+the counter is that this is a missing CHECK rather than dialect breadth. **It did not
+settle it and neither will I** — that is a ranking call for whoever takes it.
+
+**Corpus: twelfth consecutive null row, 22/10/175 unchanged — null BY CONSTRUCTION,
+since `:1495` was never a head.** Said in advance, which is the only thing that makes
+a null row information.
+
+**It is taking `rmdir` (`cfileutl.pas:714`) next — RTL, live on push — and I said
+take it.** The shift record stays open while it is working.
