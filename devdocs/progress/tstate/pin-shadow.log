@@ -876,3 +876,4 @@
 2026-09-16T14:56:54Z	borg	d3fcdf0dcd7de40585e011fc3fbed13c17db2458	AUTO-PIN DECLINED — HEAD is 37b4ba09a781, not the tested d3fcdf0dcd7d
 2026-09-16T15:23:35Z	borg	7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194	WOULD PIN 7e6029dca4ca — 6 red(s), none new, 6 inherited from the current pin, self-host clean, streak 16/2
 2026-09-16T15:23:35Z	borg	7e6029dca4cadefc2ab87f6b0b4a7252b9a9f194	AUTO-PIN DECLINED — HEAD is ed61de8236e9, not the tested 7e6029dca4ca
+2026-09-16T16:08:07Z	borg	ef63997823eb87315b5bab5fd7864458ac0bf257	would NOT pin ef63997823eb — 1 red(s) the current pin does not have, 6 inherited from the current pin: optdiff#shard9/12
