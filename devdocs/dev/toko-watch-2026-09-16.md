@@ -1268,3 +1268,73 @@ sweep runs earlier and reads `TiedTo` — **a tie minted later is invisible to i
 
 **C group is three fixes deep** (`__thread` storage, the asm tie, the block static) plus a
 rescoped residual ticket. Shop otherwise unchanged.
+
+## Check-in 0t — a NEW RED (7 → 8), self-found by its author, and `new_red: []` is not an exculpation
+
+**Open regressions are 8, up from 7.** The new row is
+`test-core#src:test/test_a_threadvar_is_a_variable.pas`, first RED 2026-09-16T08:51:33Z at
+`59afeadbceaa`, still_red through 09:03:24Z. **It is frankb-56's, it found it itself by
+chasing the borg report rather than being told, and it is fixing it before `_Static_assert`.**
+Cause: making the threadvar refusal diagnostic serve both frontends changed the NOUN — *"only
+ordinal, pointer and floating-point threadvars"* became *"...thread-local variables are
+supported"* — and `tv_str` greps the message. **The refusal never stopped firing and the type
+rule is unchanged; the test pinned the spelling, not the claim.** That is "the name is not the
+thing" in a test fixture. Fixed by grepping the CLAIM, with a comment saying why the noun
+cannot be pinned (one routine now serves two frontends and would say something else again if a
+third arrived), and the control re-checked: a clean compile still does not match the grep, so
+the row can still fail.
+
+**I VERIFIED ITS `new_red: []` FINDING AND IT IS SHARPER THAN IT STATED.** Its account: the
+report at `7f8188ce5fe5` said RED with `new_red: []`, which reads as *"nothing new, not
+yours"*, and it was not new because the previous run already had the commit in. Measured:
+
+```
+08:51:33Z  59afeadbceaa  native  new_red=1  still_red=1   tv_is_a_variable = NEW_RED
+08:57:32Z  7f8188ce5fe5  native  new_red=0  still_red=2   tv_is_a_variable = still_red
+09:03:24Z  2bac32c14db1  native  new_red=0  still_red=2   tv_is_a_variable = still_red
+```
+
+**The instrument was not silent — it named the row exactly ONCE, in the run before the one
+frankb-56 read.** That is the generalisable form and it is better than "the range swallowed
+it": **`new_red` is a diff between consecutive runs, so it names your commit in exactly one
+report, and EVERY later report shows `still_red` with an empty `new_red` that reads like an
+exculpation.** The remedy is mechanical: do not read the newest report alone — walk back to
+where the row first appears. `twatch.py --job-history` does it in one command and prints
+`first recorded RED` outright.
+
+**Where it sits against CLAUDE.md:** the existing rule has two measured forms, the flattering
+delta (a pull improved your numbers) and the self-blaming one (you blamed your own diff). This
+is a third — **a range that already contains you, where the instrument reports no change and
+is CORRECT.** Recurrence is not met: all three live in Track T's breadth verdicts, one
+subsystem. **Playbook, not CLAUDE.md, and said out loud so it does not read as undervalued.**
+What would promote it: the same shape in a different instrument — an empty or zero field read
+as exculpation in a conformance diff or an optdiff summary. Then it is an EXTENSION sentence
+on the existing rule, not a neighbour.
+
+**AND I MANUFACTURED A NULL WHILE CHECKING IT, FOR THE SECOND TIME TODAY.** My first query
+used the key `test-threads#src:test/test_a_threadvar_is_a_variable.pas` and returned
+`job_in_still_red=False` — the job is `test-core`. **A wrong key does not error, it answers**,
+and it answers with the reading that says "not there". Same class as this morning's `nreds=0`
+from fields that did not exist on those rows. Both times the false answer was the quiet,
+nothing-to-see one. The fix both times was to print the keys the data actually has before
+filtering on a key I believed in.
+
+**Its gate scoping note is correct and worth keeping:** `gate.sh quick` was GREEN every time,
+and that row is test-core on the native tier. **Quick-GREEN is not evidence about a test-core
+row** — no complaint about the gate, which is correctly scoped; the error is reading a green
+from one tier as coverage of another.
+
+**`c_crtl_wait.c` is NOT frankb-56's and it established that properly:** byte-identical to the
+gcc oracle five consecutive runs at HEAD, the reported rows being the SIGSTOP/SIGCONT pair
+reading a reconstructed status word, sampled while borg ran a full native tier. It appended
+the measurement to the existing ticket **with the caveat that five runs on an idle box are not
+the population that produced the red** — evidence, not a clearance. Not claimed, not closed.
+That is the same discipline it applied to the optdiff shards and it is the right one.
+
+**On `_Static_assert` it agreed and named its own error better than I did:** it had ranked the
+ticket as a diagnostic gap because *refusing is the honest failure* — which covers BLOCK scope,
+where pxx refuses loudly, and not FILE scope, where the assertion is skipped and a false one
+passes silently. **Two different defects sharing one ticket**, and it had written that ticket's
+own last section pointing at the guard-that-cannot-fail **without re-ranking the ticket on what
+it had just written.** Taking both halves next; the banner control is already landed and green,
+so nothing is displaced.
