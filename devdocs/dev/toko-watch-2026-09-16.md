@@ -1183,3 +1183,88 @@ beats a guard that cannot fail. Its call — it can see the code and I cannot.
 **I did not touch `cparser`.** frankb-56 holds that topic with live context; two agents on
 one question is the collision git cannot see, and today is an argument for this seat
 measuring rather than editing.
+
+## Check-in 0s — the block static was DISCARDED, my sibling sweep found nothing, and `_Static_assert` is a guard that cannot fail
+
+**frankb-56 found the real mechanism and it is a level worse than my measurement said.** Not
+a missing zero-init: `ParseCStatementAST` read `static`, consumed it, tested `IsCTypeTok`,
+met `__thread` and fell out of the branch with `CLocalStaticDecl` still False — **the
+`static` was discarded entirely and the variable compiled to an ordinary STACK LOCAL.** Any
+storage class between `static` and the type does it; `__thread` was merely the one someone
+wrote. Its clincher is the right kind: calling through a recursion pushing a 512-byte frame
+made the counter RESTART, **which a static cannot do** — a control no value in memory can
+fake. Fixed and pushed; verified here, `static __thread int f` now gives `1 2 3` against
+gcc's `1 2 3`.
+
+**I SWEPT THE SIBLING SPELLINGS AND FOUND NOTHING, WHICH IS THE REPORTABLE OUTCOME.** The
+normalise rule says the sibling is usually a SPELLING, so I ran the neighbourhood at block
+scope against gcc: `static const`, `static volatile`, `static unsigned`, `__thread static`
+reversed, `static _Thread_local`, `register`, `auto`, and the plain controls. **Three rows
+looked like differences and all three were MY PROBE'S FAULT:**
+
+- `static const int f; f++` — gcc: *"increment of read-only variable"*. My probe increments
+  a `const`.
+- `__thread static int f` — gcc: *"'__thread' before 'static'"*. An ordering gcc itself
+  rejects.
+- `register int f; f++` — reading an UNINITIALISED automatic, which is undefined behaviour,
+  so neither answer is wrong. Re-run as `register int f = 0`, HEAD, pin and gcc all give
+  `1 1 1`, and `static int f = 0` gives `1 2 3` on all three.
+
+**So frankb-56's narrow set holds and the fix has no open sibling.** A negative worth
+recording, because "I checked the neighbourhood" is only information if someone says what
+they checked. The two accept-what-gcc-rejects rows are **not defects** — CLAUDE.md is
+explicit that accepting what the other compiler rejects is not one, and a differing
+diagnostic is deferred. Noted, not ranked, no ticket.
+
+**THE ONE THING IN ITS MESSAGE I DID RANK, AND IT IS THE BIGGEST THING EITHER OF US TOUCHED
+TODAY: A FALSE `_Static_assert` AT FILE SCOPE COMPILES SILENTLY.**
+
+```c
+_Static_assert(1 == 2, "this assertion is FALSE and must stop the build");
+
+gcc        error: static assertion failed: "..."
+pxx HEAD   ok:  -> runs, prints "compiled anyway"
+pxx PIN    ok:  -> runs, prints "compiled anyway"
+```
+
+frankb-56 found this while choosing its narrow set — the file-scope path SKIPS the assertion
+rather than evaluating it — and filed rather than fixed it, which is defensible because it is
+a different subsystem from the one it was in. **But it is a guard that cannot fail, in USER
+code, which is the class this repo cares most about**, and the population is not exotic: an
+ABI size check (`_Static_assert(sizeof(struct s) == 32, ...)`) is the idiom, and it is
+exactly what a C program uses to stop a silent layout change. Under pxx it stops nothing.
+Pre-existing on the pin, so nobody regressed it.
+
+**I have told it this outranks the banner control it named next, and why it is not a
+matter of taste:** a banner control that cannot fire is an instrument we own and can
+re-run; a `_Static_assert` that cannot fire is a guard OUR USERS wrote, in their code,
+believing it protects them. Its own narrow-set reasoning already contains the argument —
+it kept `_Static_assert` OUT of the skip set precisely because *"a loud refusal is the
+better of the two wrong answers"* at block scope. That logic says the file-scope silence is
+the wrong answer to leave standing.
+
+**Its two self-caught probe failures are better than the fix and go to the playbook.** Both
+are one rule from two directions. It recorded `static __thread int f = 0;` as WORKING from a
+probe that called the function ONCE and got 0 — **a discarded static and a real one agree on
+the first call and diverge only from the second.** Then the mirror: the no-initialiser row
+**passes on the BROKEN compiler by luck**, giving `4388880` standalone and `1 2 3` inside a
+larger program, because the wrongly-chosen stack slot happened to hold zero. **The sharpening
+worth keeping is that second one: uninitialised memory is not a random value — it is zero
+often enough to certify a broken instrument**, so a failure value drawn from uninitialised
+storage can coincide with the correct answer nondeterministically. That extends "if the
+machinery did nothing at all, would this row still pass?" from colliding DEFAULTS to
+colliding GARBAGE. **Playbook, not CLAUDE.md — one subsystem.** It kept the fragile row
+because it is the shape users write and rested the verdict on the seeded and deeper-frame
+rows instead, which is the correct disposal.
+
+**Also landed green: the syscall asm idiom.** A fixed-register output met by a fixed-register
+input is TIED rather than refused, so the `syscall` idiom compiles and runs — **checked
+against libc's answer to the same question, so the row carries no expected number.** It ran
+all four constraint shapes through gcc BEFORE implementing, so the three that must stay
+refused came from the oracle rather than from the ticket's prediction. And it tested
+early-clobber AT THE TIE SITE rather than leaving it to the existing sweep, because that
+sweep runs earlier and reads `TiedTo` — **a tie minted later is invisible to it**, so
+`"=&a"` tied to `"a"` would have gone through as a silent wrong value.
+
+**C group is three fixes deep** (`__thread` storage, the asm tie, the block static) plus a
+rescoped residual ticket. Shop otherwise unchanged.
