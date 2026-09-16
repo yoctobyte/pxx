@@ -3913,8 +3913,29 @@ begin
       { ErrorAt, not Error: Error() prints CurTok.Line, which during the lex
         pass is the last token BEFORE this directive -- a {$error} on line 2
         reported line 1, and every one of these guards is written near the top
-        of a file where that is most misleading. }
-      ErrorAt(SrcLine, messageText)
+        of a file where that is most misleading.
+
+        ...AND NOT AT ALL DURING THE PRE-PASS, which is PasCondQuiet's own
+        contract stated where it is declared: "it must not HALT there either --
+        the real pass is the authority and will raise the error itself". An
+        unresolvable `{$if}` answers False in the pre-pass, so a width ladder
+        `{$if sizeof(X)=2}` / `{$elseif =4}` / `{$else}` walks every arm down to
+        the `{$else}` -- and in a COMPILER's source that arm is routinely
+        `{$error}`. The pre-pass then halted the compile on a branch it reached
+        only because it could not evaluate the question.
+
+        Measured 2026-09-16, three files and twenty lines: with
+        `tcompilerwidechar = word` one unit further than the directive, pxx
+        raised FPC's own `Unsupported tcompilerwidechar size` where fpc prints
+        2; with the type in the SAME unit as the directive it answers correctly,
+        so the extra hop is the whole variable. That header's RESIDUAL paragraph
+        predicted this class and named the tell as an INCLUDE inside such an
+        arm; an `{$error}` is the same residual arriving through a louder door.
+        Suppressing it here costs nothing a real `{$error}` needs: the real pass
+        evaluates the same text and raises it with a position. }
+      begin
+        if not PasCondQuiet then ErrorAt(SrcLine, messageText);
+      end
     else if CaseEqual(command, 'fatal') or CaseEqual(command, 'stop') then
       { The directive whose ENTIRE PURPOSE is to stop the compile. Ignoring it
         does not change a message, it changes whether an artifact exists: found

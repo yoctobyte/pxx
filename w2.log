@@ -1,0 +1,7 @@
+Free Pascal Compiler version 3.2.2+dfsg-49 [2026/02/27] for x86_64
+Copyright (c) 1993-2021 by Florian Klaempfl and others
+Target OS: Linux for x86-64
+Compiling wtop.pas
+Fatal: Cannot open file "wtop.pas"
+Fatal: Compilation aborted
+Error: /usr/bin/ppcx64 returned an error exitcode

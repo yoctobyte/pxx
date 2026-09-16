@@ -139,3 +139,11 @@ test/c_abi_struct_byval_pxx.c  the pxx-compiled half of the pair above; same rea
 # decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 # is answered and the install lands -- it is already the acceptance test for it.
 test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creator's exception chain and an exception escapes its own try; measured failing 3 of 3. Blocked on bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread and the decide- it names; wire it when a foreign thread gets its own TLS block
+
+# A FIXTURE UNIT, not a test: it exists only to be one hop further away than
+# the directive that asks its type's width. prepasserr_mid.pas holds the width
+# ladder and test_p_a_prepass_cannot_raise_an_error_directive.pas runs it; this
+# file is the third level, and the third level IS the defect -- with the type
+# declared in prepasserr_mid the same ladder answers correctly, so a two-unit
+# fixture would pass on the unfixed compiler and prove nothing.
+test/prepasserr_base.pas  fixture unit for test_p_a_prepass_cannot_raise_an_error_directive.pas: declares the type ONE UNIT FURTHER than the directive, which is the variable the test turns on; nothing runs it directly by design

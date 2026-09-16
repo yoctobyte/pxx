@@ -5014,6 +5014,26 @@ test-nilpy: $(COMPILER)
 	elif ./$(COMPILER) test/test_p_a_conditional_directive_refuses_a_positional_enum_guess.pas $(TESTTMP)/test_enumguess26 2>&1 | grep -q 'NOPE_POSITIONAL'; then \
 	  echo "ok: an explicit-value enum still declines, and the message names the operand"; \
 	else echo "FAIL: refused, but the message does not name NOPE_POSITIONAL -- the refusal lost the operand it was carrying"; exit 1; fi
+	@# ...AND THE PRE-PASS MAY NOT RAISE AN {$$error}. PasCondQuiet's contract says
+	@# the pre-pass must not HALT -- the real pass is the authority. An
+	@# unresolvable `{$$if}` answers False, so a width ladder walks every arm down
+	@# to the `{$$else}`, and in a compiler's own source that arm is routinely
+	@# `{$$error}` (FPC ncon.pas:968, symsym.pas:2800). THREE FILES, because the
+	@# type must sit ONE UNIT FURTHER than the directive: with it in the same unit
+	@# the ladder answers correctly, so a two-unit fixture passes on the unfixed
+	@# compiler. The PINNED compiler refuses this file with
+	@# `Unsupported tprepasswidechar size`, which is what makes the row a guard.
+	@./$(COMPILER) test/test_p_a_prepass_cannot_raise_an_error_directive.pas $(TESTTMP)/test_prepasserr26
+	@tools/expect_same.sh test_prepasserr26 "$$($(TESTTMP)/test_prepasserr26 | tail -n 2)" "$$(printf 'fails=0\nPREPASSERR OK')"
+	@# THE CONTROL THAT MUST NOT COMPILE, and it guards the direction that would
+	@# be WORSE than the bug: gating {$$error} on the pre-pass trades a false halt
+	@# for a SILENT one if the real pass stops raising it too, and {$$error} exists
+	@# to stop a build.
+	@if ./$(COMPILER) test/test_p_a_real_error_directive_still_halts.pas $(TESTTMP)/test_realerr26 >/dev/null 2>&1; then \
+	  echo "FAIL: a real {$$error} COMPILED -- the pre-pass gate is swallowing errors the real pass must still raise"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_real_error_directive_still_halts.pas $(TESTTMP)/test_realerr26 2>&1 | grep -q 'NOPE_REAL_ERROR'; then \
+	  echo "ok: a real {$$error} still halts, and the message survives"; \
+	else echo "FAIL: refused, but the message does not name NOPE_REAL_ERROR"; exit 1; fi
 	@# ...AND A CONST WHOSE VALUE IS NOT AN INTEGER LITERAL. FPC's rgobj.pas:1728
 	@# needs four hops for one directive: a const naming another CONST across two
 	@# UNITS (x86_64/cpubase.inc:90 -> x86/cpubase.pas:84), and high() over a
