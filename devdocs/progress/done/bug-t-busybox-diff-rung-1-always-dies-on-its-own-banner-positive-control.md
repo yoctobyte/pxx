@@ -10,7 +10,7 @@ created: 2026-09-10
 found: 2026-09-10
 found-by: frank-user
 owner: ""
-summary: "MEASURED 2026-09-10 at 546d4dcbd305: `tools/busybox_diff.sh --applets cat --targets x86_64` dies before building the pxx subject at all, on `the banner normaliser matched nothing`. It is not a banner-format change and it is not a tree problem -- at one applet the transcript legitimately contains NO banner, so the control at :1578 cannot fire by construction. run_cases (:1227) branches on NAPPLETS == 1 and runs ONLY run_cat_cases, whose 12 cases are all `cat <files>` plus a stdin case; the banner comes from run_dispatch_cases (`--help`, bare busybox), which that branch skips. The normaliser and its control were added 3e77e3f1f (2026-09-01) for the UPSTREAM cross-check, inside `if [ -n \"$UPSTREAM\" ]`, and configure_tree builds $BB/busybox itself, so UPSTREAM is always found and the block always runs. Confirmed two ways that fail differently: the live run (0 `BusyBox` lines in oracle_gcc.out over 72 lines) and the code path. Rung 1 is the script's own stated success criterion (:7) and it has been unrunnable for nine days -- unnoticed because the recent busybox work is all at 2 to 394 applets, where the banner IS printed and the control is correct. THE COST IS THE MESSAGE, not just the exit: `either the banner format changed or these transcripts never print it` sends a reader after a busybox or harness regression that does not exist. The control is right to exist and is simply mis-scoped: assert it only where a banner is expected (NAPPLETS > 1), and for the one-applet transcript either skip the normalisation or make its absence the asserted fact. Do NOT weaken it to `grep -q || true` -- that is the silent no-op it was written to prevent."
+summary: "RESOLVED 2026-09-16: the banner positive control was drawn from the wrong population — at ONE applet run_cases never calls run_dispatch_cases, so the transcript legitimately has no banner and the assert could not fire by construction, killing rung 1 (the script's own success criterion) for nine days. Scoped to NAPPLETS > 1, with the one-applet arm asserting the COMPLEMENT (there must be NO banner) rather than being weakened to `|| true`. Both arms driven with synthetic transcripts to prove each can FAIL. Rung 1 now runs and is GREEN: byte-identical to the gcc oracle over 12 cases."
 ---
 
 # Rung 1 dies on a control that cannot fire at one applet
@@ -94,3 +94,69 @@ I copied a busybox tree from another checkout into
 naming. It does not reach this finding: `configure_tree` reconfigures and
 rebuilds the tree (the `$BB/busybox` it compares against is stamped during the
 run), and the cause is a branch in `run_cases` that no tree state can change.
+
+## RESOLVED 2026-09-16 (frankb-56)
+
+**Reproduced at HEAD first, not taken from the 2026-09-10 reading** — a claim
+about an instrument decays like a lock, silently, in the direction of doing
+nothing. It still dies, identically:
+
+```
+busybox-diff: the banner normaliser matched nothing -- either the banner format
+  changed or these transcripts never print it, ...
+```
+
+and the transcript now has **76 lines and 0 matching `^BusyBox`** (72 when
+filed — the tree moved, the conclusion did not).
+
+### The fix: scope it to the population that has a banner, and assert BOTH ways
+
+The control was right to exist and was drawn from the wrong population. At one
+applet `run_cases` takes the `run_cat_cases` branch and never calls
+`run_dispatch_cases` — the only thing that runs `--help` or the bare multi-call
+binary — so the transcript legitimately contains no banner and the assert could
+not fire by construction.
+
+**Not weakened to `|| true`**, which is the silent no-op it was written to
+prevent. The one-applet arm asserts the **complement**: there must be NO banner.
+A banner appearing there means `run_cases` changed shape and the normaliser is
+silently in play on a comparison nobody scoped it for — which is the same class
+of defect the original control was guarding against, seen from the other side.
+
+### Both arms proved able to FAIL, which is the thing this ticket is about
+
+A guard that cannot fail is not a guard, so the new one was driven with
+synthetic transcripts rather than trusted:
+
+| arm | transcript | expected | got |
+| --- | --- | --- | --- |
+| one applet | no banner | PASS | PASS |
+| one applet | a banner | **FAIL** | FAIL |
+| multi applet | normalised banner | PASS | PASS |
+| multi applet | un-normalised banner | **FAIL** | FAIL |
+| multi applet | no banner at all | **FAIL** | FAIL |
+
+### Rung 1 now runs, and it is GREEN
+
+```
+busybox-diff: applets=cat  translation units=25
+  ORACLE  gcc unity build (12 cases)
+  ORACLE  busybox agrees with the gcc build
+  PASS    x86_64   byte-identical to the gcc oracle over 12 cases
+busybox-diff: GREEN
+```
+
+The script's own stated success criterion (`:7`) had been unrunnable for nine
+days, and the result behind it was a pass the whole time. The multi-applet arm was re-run with real data as well, since that is the
+population the original control was written for and the one this change must not
+disturb — `--applets "cat echo"`, 28 translation units, **GREEN, byte-identical
+to the gcc oracle over 29 cases**. That arm PASSING is itself the evidence that
+the normaliser still fires there: the assert is what it has to get past.
+
+### Method note
+
+`sh -n` reported a syntax error at line 538 on this file — and on the pristine
+HEAD copy too. The script is `#!/usr/bin/env bash` and uses process
+substitution; `sh -n` was the wrong checker, not the file the wrong shape. The
+instrument answered correctly about a different shell. `bash -n` is clean on
+both.

@@ -1575,8 +1575,34 @@ if [ -n "$UPSTREAM" ]; then
   norm_banner < "$WORK/oracle_upstream.out" > "$WORK/oracle_upstream.norm"
   # Positive control: the normaliser must actually have fired, or this comparison
   # silently becomes the un-normalised one it was written to replace.
-  grep -q '^BusyBox vX (X) multi-call binary\.$' "$WORK/oracle_gcc.norm" \
-    || die "the banner normaliser matched nothing -- either the banner format changed or these transcripts never print it, and in both cases this comparison is not the one it claims to be"
+  #
+  # SCOPED TO THE POPULATION THAT HAS A BANNER, AND ASSERTED BOTH WAYS. The
+  # control was right to exist and was drawn from the wrong population: at ONE
+  # applet run_cases takes the run_cat_cases branch and never calls
+  # run_dispatch_cases, which is the only thing that runs `--help` or the bare
+  # multi-call binary -- so the transcript legitimately contains NO banner and
+  # this assert could not fire by construction. Rung 1 is this script's own
+  # stated success criterion and it died on that for nine days, unnoticed
+  # because the recent busybox work is all at 2..394 applets, where the banner
+  # IS printed and the control is correct.
+  #
+  # THE COST WAS THE MESSAGE, NOT JUST THE EXIT: "either the banner format
+  # changed or these transcripts never print it" sent a reader after a busybox
+  # or harness regression that did not exist.
+  #
+  # NOT WEAKENED TO `|| true` -- that is the silent no-op this control was
+  # written to prevent. The one-applet arm asserts the COMPLEMENT instead, so
+  # both populations have a guard that can fail: with no dispatch cases there
+  # must be no banner, and a banner appearing here means run_cases changed shape
+  # and the normaliser is now silently in play on a transcript nobody scoped it
+  # for.
+  if [ "$NAPPLETS" -eq 1 ]; then
+    grep -q '^BusyBox v' "$WORK/oracle_gcc.out" \
+      && die "a banner appeared in a ONE-APPLET transcript, which run_cases cannot produce -- it takes the run_cat_cases branch and never calls run_dispatch_cases. Either run_cases changed shape or an applet now prints one, and in both cases the banner normaliser is silently in play on a comparison nobody scoped it for"
+  else
+    grep -q '^BusyBox vX (X) multi-call binary\.$' "$WORK/oracle_gcc.norm" \
+      || die "the banner normaliser matched nothing -- either the banner format changed or these transcripts never print it, and in both cases this comparison is not the one it claims to be"
+  fi
   if cmp -s "$WORK/oracle_gcc.norm" "$WORK/oracle_upstream.norm"; then
     printf '  ORACLE  %s agrees with the gcc build\n' "$(basename "$UPSTREAM")"
   else
