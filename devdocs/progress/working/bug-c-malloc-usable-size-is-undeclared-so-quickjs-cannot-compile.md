@@ -2,8 +2,8 @@
 track: C
 prio: 60
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankb-56
 created: 2026-09-10
 found-by: frank-seven
 tags: [c-frontend, crtl, malloc, corpus, quickjs]

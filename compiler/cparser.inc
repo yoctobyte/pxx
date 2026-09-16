@@ -2404,6 +2404,43 @@ begin
           ASTTk[Result] := Ord(tyInteger);
           Exit;
         end;
+        { gcc builtin `__builtin_inf()`: the double +infinity, as a CONSTANT and
+          not a call. duktape's duk_config.h:2256 is
+          `#define DUK_DOUBLE_INFINITY (__builtin_inf())`, and that one line is
+          the whole of what stood between test-duktape and its first verdict on
+          any host.
+
+          AN_FLOAT_LIT carries IEEE-754 double BITS in ASTIVal (see the tkFloat
+          arm above and the replay path around :11043), so +Inf is the literal
+          bit pattern 0x7FF0000000000000. That is why this needs nothing below
+          the parser -- no IR op, no codegen arm, no crtl helper. A crtl
+          function would also have worked and would have been WORSE: gcc's is a
+          constant expression, usable where a call is not.
+
+          TAKES NO ARGUMENTS, so argHead is -1 here and must not be required --
+          the `and (argHead >= 0)` that guards __builtin_expect and alloca would
+          make this silently fall through to `call to undeclared function`.
+
+          NO FindProc GUARD, unlike alloca just below: `alloca` is a plain name
+          a program may legitimately define, and `__builtin_inf` is reserved to
+          the implementation.
+
+          THE FAMILY IS DELIBERATELY NOT ADDED, and this was measured rather
+          than assumed 2026-09-16. Grepping the corpus for __builtin_inff,
+          __builtin_infl, __builtin_huge_val{,f}, __builtin_nan{,f} returns hits
+          -- and READING them shows every one is inside tcc/include/tccdefs.h,
+          where tcc DEFINES them as macros for its own users. They are
+          definitions in another compiler's header, not calls anything here
+          makes. Each is one line in this same shape if a corpus ever calls one;
+          adding them now would be building on a grep that was not read.
+          bug-c-builtin-inf-is-undeclared-so-duktape-cannot-compile }
+        if name = '__builtin_inf' then
+        begin
+          Result := AllocNode(AN_FLOAT_LIT);
+          ASTIVal[Result] := Int64($7FF0000000000000);   { IEEE-754 double +Inf }
+          ASTTk[Result] := Ord(tyDouble);
+          Exit;
+        end;
         { alloca(n) / __builtin_alloca(n): dynamic stack allocation in the
           current frame, freed at function return — a malloc shim would leak
           per call (QuickJS allocates every JS call frame with it). A USER
