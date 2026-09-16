@@ -50,9 +50,15 @@ It declared the constants as TYPED (`const x : toptimizerswitches = [...]`),
 which reads naturally and is what FPC's own globtype.pas looks like at a glance.
 fpc refuses that with `Illegal expression` — a typed constant is not a constant
 expression — so pxx's failure on it would have been evidence about nothing.
-Only the untyped form is a question about us. Recorded because the invalid
-version fails in pxx with the *same message* as the valid one, so nothing in our
-output distinguishes them.
+Only the untyped form is a question about us.
+
+**So in this area the oracle is not a nice-to-have, it is the ONLY instrument**
+— pxx emits `conditional directive: expected operator` for the typed form and
+for the untyped form alike, so our own output can never separate a valid repro
+from an invalid one here. Any probe against this defect must be compiled under
+fpc FIRST; a pxx-only reading of it cannot fail, and it was written as a
+hand-off artefact, which is the thing whose whole job is to be trusted by
+someone who did not build it.
 
 # `{$if}` over a set-valued constant
 
