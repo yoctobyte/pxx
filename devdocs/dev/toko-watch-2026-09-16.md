@@ -1692,3 +1692,89 @@ number to come out.
 promotion was correct — second subsystem, a genuine internal contradiction, an extension not a
 neighbour — and the paragraph that carried it contained the very defect it describes, for one
 hour, unnoticed by me and caught by the seat whose incident it documents.
+
+## Check-in 1a — the census found a falsifier, which is why the wide run was not a formality
+
+**`01b932188` on origin, gate GREEN, 23 PASS rows including self-host fixedpoint.
+`BUSYBOX-DIFF-COMPLETE` present. 400 objects, 663 cases byte-identical to the gcc oracle at
+258 applets.** And then:
+
+| | 28 objects | 400 objects |
+| --- | --- | --- |
+| relocation types | 2 | 2 |
+| undefined references | 70 | 780 |
+| **unsatisfied by the set** | **0** | **1** |
+
+**The one is `pivot_root`.** busybox declares it itself as a bare extern — no POSIX or glibc
+header declares it — and glibc carries a stub, so `gcc -o out obj/*.o` **resolved it silently
+and nothing was ever red.** Six lines in `lib/crtl/src/sys/mount.c` over the same syscall
+bridge as `mount`/`umount2`; crtl is Track C's by the lane table so it needed no handover.
+With it: `ld -static -nostdlib` over all 400 objects, rc=0, **zero diagnostics**; 257 applets
+listed; `not a dynamic executable`; and `md5sum`/`sha256sum` of `abc` matching the published
+vectors — **it does real work, not just start.**
+
+**VERIFIED HERE, WITH A CONTROL THAT FIRES:**
+
+```
+PIN    undefined=[pivot_root]   pivot_root sym = NOTYPE GLOBAL   <- the symbol glibc supplied
+HEAD   undefined=[]             pivot_root sym = FUNC WEAK       <- now from crtl
+```
+
+The pin row is what makes the HEAD row readable: the symbol CAN be undefined, so an empty
+undefined list is a discrimination and not my reader failing.
+
+**MY DECISION NOT TO AMEND CLAUDE.md ON THE 2-APPLET RUN WAS VINDICATED BY MEASUREMENT, NOT BY
+LUCK — AND THAT IS THE ONLY REASON IT COUNTS.** I held because the note says 394 applets and
+the measurement was 28 objects at 2, citing the quantifier rule. **The wide population
+contained a falsifier.** Had I edited the rules file that afternoon it would have asserted
+"no libc needed" while one symbol was still coming from glibc.
+
+**AND I MUST CORRECT MY OWN REPORT: I TOLD THE OWNER "THE GLIBC IS NOT LOAD-BEARING". IT WAS,
+FOR EXACTLY ONE SYMBOL.** frankb-56 corrected it first and against its own credit.
+
+**MY "INDEPENDENT CORROBORATION" IN 0x WAS NARROWER THAN IT LOOKED, AND THIS IS THE PRECISION
+THAT MATTERS.** I checked relocation types and undefined symbols **in an object I wrote**, and
+my source did not call `pivot_root`. So I corroborated *"a pxx object needs no libc symbol"*
+for **that object** — true, and it is not the general claim. **It read as strengthening the
+wide statement and it only strengthened the narrow one.** A second reading that samples the
+same narrow population is not a second population.
+
+**frankb-56's own correction is the sharpest sentence in its report: *"flagging a claim as
+narrow is not the same as not making it."*** It is right, and **it is an instance of a rule
+CLAUDE.md already has** — *"a careful-sounding caveat on the CONCLUSION makes an unmeasured
+NUMBER more credible, not less"* — so it is not promotable and I told it so. It also observed
+that the corrected sentence is the better one anyway: **"load-bearing for one symbol, which is
+now in crtl" is a stronger goal-5 statement than "not load-bearing" ever was, because it names
+what was checked.**
+
+**The instrument's structural blindness is the transferable part:** *a link against a library
+cannot tell you which symbols the library supplied.* **A green link is not evidence of
+self-containment — it is evidence that SOMETHING resolved every symbol**, and nothing in the
+harness separates those two until the library is taken away.
+
+**The test row's second field is the row, and it is the complement-population instinct again.**
+`pivot_root(...) == -1` is **also** what crtl's own `#else` arm returns on a target without
+`SYS_pivot_root` — so a row asserting `-1` agrees with having no implementation at all, which
+is the state the function was in this morning. The assertion is `1 1`: `r == -1` **and** errno
+not `ENOSYS`. Pinned control gives `1 0` and warns in its own words that crtl does not define
+it; gcc oracle gives `1 1`. Which refusal the kernel picks is environment-dependent and
+**deliberately unasserted** — pinning `EPERM` would make the row a report about this box.
+
+**`--freestanding` is committed and verified end to end:** GREEN, byte-identical to the gcc
+oracle over 29 cases, both controls proven to fire. **The scope line held** — it captures the
+measurement and did not grow into a linker. The remaining gap is the process-entry contract
+only, and the ticket's summary now says so, so whoever takes route 2 starts at *"write the
+entry stub"*.
+
+**FOR THE 18TH — the goal-5 question is now answerable in a word**, and it is the second and
+last thing either seat escalated today:
+
+> *"busybox builds and runs at 257 applets with no libc and no crt; the only outside tools
+> left are a linker and an assembler for a 30-line entry stub, and nothing resolves against a
+> library. Is 'no external libraries' met, or does the toolchain count?"*
+
+**CLAUDE.md's goal-5 note is now half stale and I am still not touching it.** Its causal
+clause — *"pxx emits objects and cannot consume one"* — remains exactly true and is the whole
+remaining gap. Its factual clause, that the link is against glibc, is now a statement about a
+dependency that no longer exists. **The rewrite is his**, because the note is his goal framing
+and the question above is the one that decides how to word it.
