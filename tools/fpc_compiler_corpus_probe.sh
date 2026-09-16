@@ -44,8 +44,29 @@
 # Usage:  tools/fpc_compiler_corpus_probe.sh [<fpc-compiler-dir>]
 #         PXX_CORPUS_DETAIL=<dir>  also write <dir>/<unit>.err with every
 #                                  diagnostic, for the walls-behind-the-wall
+#         PXX_CORPUS_LIST=<file>   run only the units named in it (one path per
+#                                  line) -- a full sweep is ~8 min and has been
+#                                  lost twice when backgrounded; three
+#                                  foreground chunks of an ASSERTED partition
+#                                  finish. Assert it: the lists must union to
+#                                  the glob, and the run must end with as many
+#                                  distinct units as rows.
+#         PXXBIN=<path>            the compiler under test (default: the tree's
+#                                  own compiler/pascal26). Set it to compare two
+#                                  binaries with everything else held fixed --
+#                                  and note that lib/rtl reaches from the LIVE
+#                                  tree even for the pinned binary, so a run
+#                                  with PXXBIN=...pinned measures the OLD
+#                                  compiler against the CURRENT RTL.
 # Output: one line per unit -- BOTH-OK / ORACLE-NO / PXX-FAIL <unit> <first error>
 #         PXX-FAIL rows carry `errs=N` when the unit reported more than one.
+#         A final SUMMARY line carries the three counts and `truncated=N`.
+#
+# READ `truncated=` BEFORE YOU READ ANY errs= COUNT. It is the number of units
+# whose error list was cut short by a parser give-up; while it is nonzero every
+# errs= above is a LOWER BOUND, and so is any how-much-is-left figure derived
+# from them. Measured 2026-09-16: one give-up hid 357 error lines across 134
+# units. truncated=0 is what turns these counts into counts.
 set -u
 R=$(cd "$(dirname "$0")/.." && pwd)
 F=${1:-/home/neo/src/fpc-trunk/compiler}
@@ -55,16 +76,31 @@ if ! command -v fpc >/dev/null 2>&1; then
   exit 2
 fi
 OPT="-dx86_64 -Fu$F -Fu$F/x86_64 -Fu$F/systems -Fu$F/x86 -Fi$F -Fi$F/x86_64 -Fi$F/x86"
+PXXBIN=${PXXBIN:-$R/compiler/pascal26}
+if [ ! -x "$PXXBIN" ]; then echo "no compiler at $PXXBIN" >&2; exit 2; fi
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 cd "$R" || exit 1
-for p in "$F"/*.pas; do
+
+# PXX_CORPUS_LIST: run only the units named in this file, one PATH per line.
+# A full sweep is ~8 minutes, and a backgrounded one has been lost twice at
+# ~150/207 with the wrapper reporting an unrelated cause; three foreground
+# chunks of a partition finish, and a partition can be ASSERTED (the lists must
+# union to the glob, and the run must end with as many distinct units as rows).
+if [ -n "${PXX_CORPUS_LIST:-}" ]; then
+  SUBJECTS=$(cat "$PXX_CORPUS_LIST")
+else
+  SUBJECTS=$(ls "$F"/*.pas)
+fi
+
+n_ok=0; n_oracle=0; n_fail=0; n_trunc=0
+for p in $SUBJECTS; do
   u=$(basename "$p" .pas)
   printf 'program d;\nuses %s;\nbegin end.\n' "$u" > "$W/d.pas"
   fo=$(timeout 120 fpc -Mobjfpc $OPT -FU"$W" -o"$W/dfpc" "$W/d.pas" 2>&1 \
        | grep -E '^[^ ].*(Error|Fatal):' | head -1)
-  if [ -n "$fo" ]; then printf 'ORACLE-NO  %-16s %s\n' "$u" "$fo"; continue; fi
-  timeout 120 "$R"/compiler/pascal26 -Mobjfpc --mimic-fpc-compiler $OPT \
+  if [ -n "$fo" ]; then n_oracle=$((n_oracle + 1)); printf 'ORACLE-NO  %-16s %s\n' "$u" "$fo"; continue; fi
+  timeout 120 "$PXXBIN" -Mobjfpc --mimic-fpc-compiler $OPT \
        "$W/d.pas" "$W/dpxx" > "$W/pxx.out" 2>&1
   grep -v 'warning:' "$W/pxx.out" | grep -v '^ok:' > "$W/pxx.err"
   po=$(head -1 "$W/pxx.err")
@@ -72,7 +108,24 @@ for p in "$F"/*.pas; do
   if [ -n "${PXX_CORPUS_DETAIL:-}" ] && [ -s "$W/pxx.err" ]; then
     mkdir -p "$PXX_CORPUS_DETAIL" && cp "$W/pxx.err" "$PXX_CORPUS_DETAIL/$u.err"
   fi
-  if [ -z "$po" ]; then printf 'BOTH-OK    %s\n' "$u"
-  elif [ "$ne" -gt 1 ]; then printf 'PXX-FAIL   %-16s errs=%-3s %s\n' "$u" "$ne" "$po"
-  else printf 'PXX-FAIL   %-16s %s\n' "$u" "$po"; fi
+  # A PARSER GIVE-UP TRUNCATES THIS UNIT'S ERROR LIST, and nothing else in the
+  # output says so. `internal parser bug: statement made no progress in block`
+  # ABANDONS THE BLOCK, so every failure after it is invisible -- to the detail
+  # file just as thoroughly as to the head. Measured 2026-09-16: one such
+  # give-up in cfileutl.pas hid 357 error lines across 134 units, three of them
+  # error KINDS this corpus had never reported. That is a blindness INSIDE the
+  # instrument built to cure first-error blindness, so it is counted here rather
+  # than left for a reader to grep for: a summary saying trunc=0 is the only
+  # thing that makes an errs= count a count instead of a lower bound.
+  if grep -q 'statement made no progress' "$W/pxx.err"; then n_trunc=$((n_trunc + 1)); fi
+  if [ -z "$po" ]; then n_ok=$((n_ok + 1)); printf 'BOTH-OK    %s\n' "$u"
+  elif [ "$ne" -gt 1 ]; then n_fail=$((n_fail + 1)); printf 'PXX-FAIL   %-16s errs=%-3s %s\n' "$u" "$ne" "$po"
+  else n_fail=$((n_fail + 1)); printf 'PXX-FAIL   %-16s %s\n' "$u" "$po"; fi
 done
+
+printf 'SUMMARY    both-ok=%s oracle-no=%s pxx-fail=%s truncated=%s\n' \
+       "$n_ok" "$n_oracle" "$n_fail" "$n_trunc"
+if [ "$n_trunc" -gt 0 ]; then
+  echo "SUMMARY    WARNING: $n_trunc unit(s) hit a parser give-up -- their error" \
+       "lists are TRUNCATED and every errs= count above is a LOWER BOUND" >&2
+fi
