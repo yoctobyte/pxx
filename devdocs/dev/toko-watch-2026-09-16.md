@@ -3121,3 +3121,84 @@ would otherwise absorb.
 
 **Four open regressions, unchanged. Gate GREEN. Track P and `optdiff#shard5/12`
 unstaffed. Four items for the 18th.**
+
+## Check-in 1q — a quiet tick on the instruments, and both of my 1p corrections were taken up in the tree within four minutes
+
+**Gate GREEN.** 23 rows, no FAIL, no SKIP, and the **FPC seed canary ARMED and
+PASSED** rather than skipping — so the row that catches what the quick tier
+cannot see actually ran this time. Verdict read off `gate-1q.log`, not off the
+wrapper's exit code, which said `0` and would have said `0` either way.
+
+**Four open regressions, unchanged from 1n/1o/1p:** `crtl_reachability.py`,
+`optdiff#shard5/12`, `tools-devtest#00`, `crtl_atexit.c`. Against **this note's
+original baseline of eight**, the standing delta is unchanged: the three A-lane
+thread rows cleared, `c_asm_in_inline_body.c@2` was retracted in full (0e), and
+three of the four optdiff shards cleared. **Nothing moved in either direction
+this tick** — and per the brief, a red that clears is as reportable as one that
+appears, so the absence is the report.
+
+Breadth healthy: newest full tier 19m old, 2 testable commits behind. Pin v409's
+17 reds unchanged and still not to be read as 17 defects — 4 corroborate in the
+later full tier, 13 are noise.
+
+### THE PULL, ATTRIBUTED TO A RANGE AND THEN TO A SEAT
+
+Three commits arrived since 1p; **none touches `compiler/` or `lib/`, so no
+rebuild was owed** — recorded because that is the step that gets dropped, and
+the red it produces is correct and means nothing. Attribution by **session id,
+not by author line** — every seat in this repo commits as `yoctobyte`, which is
+check-in 0n's finding and the reason the author column cannot be used here:
+
+```
+be9380d54 16:19  franks-ee   docs(logbook): correct my own Replace count -- three-arg overload
+3c90bdd73 16:18  franks-ee   ticket(P): {$I %MACRO%} is unimplemented and silently yields 0
+d6c58350c 16:17  THIS SEAT   docs(playbook): a path-shaped git query answers about the path
+```
+
+**Both of my 1p corrections were acted on in the tree, not merely acknowledged**,
+and the second one is the interesting one: `be9380d54` is franks-ee correcting
+**its own** logbook entry because I pointed out we DO have a three-argument
+`Replace`. Its conclusion never depended on that detail, and it went back and
+fixed the detail anyway. That is the behaviour the un-marking exchange this
+morning was arguing for, arriving unprompted four minutes later.
+
+### AND IT MADE THE STANDING CHECK STANDING, WHICH IS BETTER THAN WHAT I ASKED FOR
+
+I suggested the probe emit its own give-up count so the question stops being
+answered by hand. `e0e2baac8` does that and goes further —
+`tools/fpc_compiler_corpus_probe.sh` now prints
+
+```
+SUMMARY    both-ok=N oracle-no=N pxx-fail=N truncated=N
+SUMMARY    WARNING: N unit(s) hit a parser give-up -- their error ...
+```
+
+with a header instructing the reader to **read `truncated=` BEFORE any `errs=`
+count**, because *"truncated=0 is what turns these counts into counts."* **The
+caveat is now enforced by the instrument instead of remembered by two seats**,
+and `tools/` is not `compiler/`, so it is live on push and needs no pin. Verified
+in the file at `:120` and `:126-129`, not taken from the commit subject.
+
+### PEER MOVEMENT
+
+- **franks-ee (A/thread-state, working the FPC-corpus walls):** active, 32
+  commits in 8h, last 16:19. Filed the `{$I %MACRO%}` ticket as it said it would.
+  Next from it by its own statement: the live RTL heads — charset/unixcp/heaptrc
+  missing units, swapendian/align System routines. **I am not routing it
+  anywhere this tick**, having misrouted it once today already.
+- **frankb-56 (C):** last commit 12:45, ~3h30m quiet, `idle` in the session
+  list. **Asked it to read its own transcript** rather than judging from here,
+  with the three discriminators spelled out: whether anything is pending at all;
+  WHO refused, since a hook decline and a user denial wear the same string and
+  both live hooks are ones a seat may handle itself; and WHEN, since the newest
+  denial may be days old in a seat working fine, and a grep for the denial
+  string counts the grep. **A pane is not a session and I read no pane.**
+- **neo-a2** is the owner's own home session, not a frank — do not offer it
+  compiler work. **lekkerzeilen-c8** parked and correctly so.
+- **Still unstaffed: all of Track P, and `optdiff#shard5/12`.** Offered to
+  frankb-56 as availability, explicitly *not* as a gap a present seat should
+  fill — its own correction on that stands and staffing P is the owner's dial.
+
+**Nothing for him that was not already on the list. Four items for the 18th:
+`3eb0297f0`, the goal-5 wording, the two-arm corpus question, and Track B's
+lib-test gate being down under the pin.**
