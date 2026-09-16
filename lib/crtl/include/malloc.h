@@ -34,4 +34,20 @@
    that checks it gets a truthful no. */
 int mallopt(int param, int value);
 
+/* The ACTUAL usable bytes of a block, which is what glibc answers and is more
+   than the caller asked for whenever the allocator rounded up -- and PXXAlloc
+   rounds every allocation up to 8. So this is a real number read from the
+   block's own header, NOT the requested size: returning the request would be
+   wrong for every size that is not already a multiple of 8, and wrong in the
+   silent direction, because a caller using it for memory accounting would
+   under-report a total rather than crash.
+
+   quickjs-ng is what brought this in (cutils.h js__malloc_usable_size, reached
+   because we define __linux__), and it uses it for exactly that accounting.
+   Its own portable #else arm returns 0 on platforms that cannot report a size,
+   so 0 -- which this returns for NULL or an implausible header -- is a value
+   that library is already built to survive.
+   bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile */
+size_t malloc_usable_size(void *ptr);
+
 #endif

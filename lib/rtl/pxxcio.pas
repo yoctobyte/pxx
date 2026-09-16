@@ -48,6 +48,7 @@ function __pxx_getsockerror(fd: Integer): Integer;
   fresh mmap) so no program prologue is needed — libc-free, one heap with Pascal.
   PXXAlloc returns zeroed memory, so calloc needs no extra clear. }
 function __pxx_malloc(n: NativeInt): Pointer;
+function __pxx_malloc_usable_size(p: Pointer): NativeInt;
 procedure __pxx_free(p: Pointer);
 function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 
@@ -199,6 +200,13 @@ type
   PLongWord = ^LongWord;
   PInteger = ^Integer;
   PInt64 = ^Int64;
+  { Pointer-sized, deliberately NOT PInt64: the heap header is a machine WORD,
+    so it is 8 bytes on 64-bit and 4 on 32-bit. PInt64 would read 8 either way
+    and would be silently wrong on every 32-bit target -- i386, arm32, riscv32
+    -- which is the class of defect x86-64-only testing cannot see.
+    builtinheap declares the same type in its IMPLEMENTATION, so it is not
+    importable from here. }
+  PMachineWord = ^NativeInt;
 
 function __pxx_write(fd: Integer; buf: Pointer; n: Int64): Int64;
 begin
@@ -376,6 +384,37 @@ end;
 function __pxx_realloc(p: Pointer; n: NativeInt): Pointer;
 begin
   Result := PXXRealloc(p, n, 8);
+end;
+
+{ C's malloc_usable_size: the ACTUAL usable bytes, which exceed the request
+  whenever PXXAlloc rounded up -- and it rounds every allocation up to 8. The
+  size lives in a machine word immediately below the block, and PXXFree reads
+  the same word with this same plausibility guard.
+
+  THE HEADER OFFSET IS BUILTINHEAP'S INVARIANT AND IT IS DUPLICATED HERE ON
+  PURPOSE. The obvious design -- an accessor in builtinheap.pas beside PXXFree,
+  with this as a pass-through -- was written first and REVERTED, because it does
+  not build: lib/rtl is compiled by $(PXX_STABLE), the pin ships its OWN
+  snapshot of compiler/builtin, and a new export there is not merely inert until
+  the next pin, it breaks the pinned build of every lib/rtl unit. Measured
+  2026-09-16: gate.sh quick went RED with `undefined variable (PXXUsableSize)`
+  on pil, termio, ucomplex and vecmath. So this is the build layering, not a
+  workaround for a bug, and moving it back needs a pin to land first.
+  See bug-a-the-pinned-compiler-cannot-build-live-lib-rtl-and-nothing-tracks-it.
+
+  What keeps the duplicate honest: the guard is PXXFree's exactly -- a size is
+  believed only if it is >= 8 and 8-aligned. If the header ever moves, this
+  answers 0 rather than garbage, and 0 is a value C callers survive, because
+  quickjs's own portable arm returns 0 on platforms that cannot report a size. }
+function __pxx_malloc_usable_size(p: Pointer): NativeInt;
+var
+  addr, sz: Int64;
+begin
+  Result := 0;
+  addr := Int64(p);
+  if addr = 0 then Exit;
+  sz := PMachineWord(addr - 8)^;
+  if (sz >= 8) and ((sz and 7) = 0) then Result := NativeInt(sz);
 end;
 
 { THROUGH THE PAL, and the incident below is why the numbers no longer live here.

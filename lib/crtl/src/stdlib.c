@@ -24,6 +24,7 @@
 extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
 extern void *__pxx_realloc(void *p, long n);
+extern long  __pxx_malloc_usable_size(void *p);
 extern void  __pxx_exit(int code);
 extern int   __pxx_atexit(void (*func)(void));
 extern void  __pxx_atexit_run(void);
@@ -33,6 +34,11 @@ extern void  __pxx_atexit_run(void);
 void *malloc(size_t size) { return __pxx_malloc((long)size); }
 void  free(void *ptr)     { __pxx_free(ptr); }
 void *realloc(void *ptr, size_t size) { return __pxx_realloc(ptr, (long)size); }
+
+/* Reads the block's own header through the bridge -- see malloc.h for why this
+   is the rounded-up TRUE size and not the requested one. NULL and an
+   implausible header both answer 0. */
+size_t malloc_usable_size(void *ptr) { return (size_t)__pxx_malloc_usable_size(ptr); }
 
 void *calloc(size_t count, size_t size) {
   /* PXXAlloc already zeroes; just guard the multiply overflow. */

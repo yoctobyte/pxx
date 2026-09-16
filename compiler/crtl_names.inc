@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  613 functions across 63 headers. }
+  614 functions across 63 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -101,13 +101,14 @@ begin
       ' log1p:math.h log2:math.h log2f:math.h logf:math.h lremovexattr:sys/xattr.h lrint:math.h ' +
       ' lround:math.h lseek:unistd.h lsetxattr:sys/xattr.h lstat:sys/stat.h ';
     'm': Result :=
-      ' malloc:stdlib.h mallopt:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
-      ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
-      ' memset:string.h mkdir:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h mknod:sys/stat.h ' +
-      ' mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h mktime:time.h mlock:sys/mman.h ' +
-      ' mmap:sys/mman.h modf:math.h modff:math.h mount:sys/mount.h mprotect:sys/mman.h ' +
-      ' mremap:sys/mman.h msgctl:sys/msg.h msgget:sys/msg.h msgrcv:sys/msg.h msgsnd:sys/msg.h ' +
-      ' msync:sys/mman.h munlock:sys/mman.h munmap:sys/mman.h ';
+      ' malloc:stdlib.h malloc_usable_size:malloc.h mallopt:malloc.h memccpy:string.h ' +
+      ' memchr:string.h memcmp:string.h memcpy:string.h memmem:string.h memmove:string.h ' +
+      ' mempcpy:string.h memrchr:string.h memset:string.h mkdir:sys/stat.h mkdtemp:stdlib.h ' +
+      ' mkfifo:sys/stat.h mknod:sys/stat.h mkostemp:stdlib.h mkstemp:stdlib.h mktemp:stdlib.h ' +
+      ' mktime:time.h mlock:sys/mman.h mmap:sys/mman.h modf:math.h modff:math.h ' +
+      ' mount:sys/mount.h mprotect:sys/mman.h mremap:sys/mman.h msgctl:sys/msg.h ' +
+      ' msgget:sys/msg.h msgrcv:sys/msg.h msgsnd:sys/msg.h msync:sys/mman.h munlock:sys/mman.h ' +
+      ' munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h nextafter:math.h nice:unistd.h ' +
       ' ns_get16:arpa/nameser.h ns_get32:arpa/nameser.h ns_initparse:arpa/nameser.h ' +
@@ -210,7 +211,7 @@ begin
     'i': Result := 227296;
     'k': Result := 144;
     'l': Result := 7928;
-    'm': Result := 496;
+    'm': Result := 262640;
     'n': Result := 352056;
     'o': Result := 208;
     'p': Result := 113400;
