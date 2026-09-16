@@ -15012,12 +15012,12 @@
  },
  "last_bench": {
   "conf_rows": 550,
-  "date": "2026-09-16T02:31:23Z",
+  "date": "2026-09-16T10:51:00Z",
   "hw_fp": "cbbf05e09b3a",
-  "probe_ratio": 1.01,
+  "probe_ratio": 1.073,
   "rc": 1,
   "rows": 0,
-  "sha": "67f0878f2e594f042e00005391b213922d8f1047"
+  "sha": "f02aaea62be9f4688b4364f91465c8259c0edc05"
  },
  "last_breadth_try": {
   "date": "2026-09-11T19:34:07Z",
