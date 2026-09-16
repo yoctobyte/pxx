@@ -1308,9 +1308,7 @@ whose own header says it contains no syscalls — and `GetDir` is `getcwd`. Putt
 it there would mean layering the PAL into the one unit documented as having none,
 **and it would be inert until the next pin**: measured, the pinned compiler
 resolves `lib/rtl` from the LIVE tree and `builtin` from its OWN snapshot
-(`stable_linux_amd64/default/builtin/`). The two snapshots are byte-identical
-right now, which is exactly the comparison that would wrongly read as "the
-location does not matter". So it lives in SysUtils, and the cost is written into
+(`stable_linux_amd64/default/builtin/`). So it lives in SysUtils, and the cost is written into
 the source: `GetDir(0, s)` without `uses SysUtils` compiles under fpc and does not
 compile here.
 
@@ -1331,3 +1329,27 @@ built, and `diff` failed on missing files while the shell reported "CAUGHT IT".
 A guard reporting a verdict for rows where nothing was built is the exact failure
 this umbrella keeps recording; it was re-run with the build asserted and branched
 on before the green was believed.
+
+**CORRECTION, 2026-09-16, to the paragraph above as first written.** It said the
+live and pinned `builtin/` trees were "byte-identical right now" and offered that
+as the trap a reader should not fall into. **The claim was false, and it was
+false in the shape it was warning about**: it came from `cmp` on ONE file
+(`builtin.pas`) with the conclusion asserted about the whole DIRECTORY — one
+location sampled, all locations asserted. `diff -rq` answers three:
+
+| file | last changed |
+| --- | --- |
+| `builtinheap.pas` | `445ce3e25`, 09-14 |
+| `pyeval.pas` | `dea6cf762`, 09-16 |
+| `pylib.pas` | `334680199`, 09-16 |
+
+All three after pin v410. So the divergence is LIVE in three files rather than
+hypothetical, and the placement caution the paragraph argues for is better
+founded than its own evidence was. Found by frankuser re-measuring it rather than
+reading it — which is the only thing that catches this class, since the sentence
+was wrong in a way that made the surrounding argument sound MORE careful.
+
+**And the ledger has THREE states, not two:** `lib/rtl/**` reaches from the live
+tree and is live on push; `compiler/**` is inert until a pin; `compiler/builtin/**`
+is inert until a pin AND is currently three files behind it, so two nilpy fixes
+that landed today reach nothing running under the pin.
