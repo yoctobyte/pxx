@@ -2251,3 +2251,57 @@ text stands corrected here and in the follow-up commit instead.
 **The finding itself is unharmed and reads, in full:** `demos#00` builds against
 `$(PXX_STABLE)`, so the pin-built warning transfers to it; `test-core#c_crtl_wait.c`
 builds with `./$(COMPILER)` at `Makefile:22480`, so it does not.
+
+## Check-in 1g — the pin claim is behaviourally confirmed, and it took THREE instruments because two of mine could not reach the subject
+
+**CONFIRMED, by the right route, with both binaries identified by sha.** The
+instrument is `test/crtl_declaration_census.sh`, which takes the compiler as
+**argument 1**, and `Makefile:35482` passes it `$(PXX_STABLE)` — the pin, by design.
+Same script, same tree, same arguments; the **only** variable is the binary:
+
+```
+./stable_linux_amd64/default/pinned   c599e8546121
+  FAIL: crtl declares functions it does not define:
+    c_pthread_create                                        rc=1
+
+./compiler/pascal26                   b7f9f80c7d80
+  lib-test: crtl declaration census — 601 declared, all defined, no libc imports
+                                                            rc=0
+```
+
+**frankb-56's report was accurate to the digit** — 601 declared, all defined under
+HEAD; FAIL on `c_pthread_create` under stable. The row is pin-only and clears at the
+next pin. **Goal 1 stands at four red rows of four kinds**, unchanged by this.
+
+### THE PART WORTH KEEPING: I NEEDED THREE INSTRUMENTS AND MY FIRST TWO ANSWERED ABOUT DIFFERENT POPULATIONS
+
+**Neither of my first two probes could have produced a wrong answer, and both
+returned agreement.** That is the same failure twice in one investigation, and the
+rule it belongs to is *"isolation guards against the RUN, not against the ROUTE"*:
+
+| probe | what it did | why it could not answer |
+| --- | --- | --- |
+| `PXX=<binary> tools/crtl_reachability.py` | passed under **both** | **reads no compiler at all** — a static closure walk over headers and modules; `PXX` is not a variable it looks at. I set it, changed what it named, and got agreement. |
+| `tools/crtl_decl_probe.sh` (via `PXX_STABLE`) | **`unimplemented: 0`** under the pin | **different population.** It walks prototypes in `lib/crtl/include/**`: `declared 640, implemented 605, unimplemented 0, build-fail 35`. `c_pthread_create` is declared in **`lib/rtl/palthread.pas`** and appears nowhere in `lib/crtl`, so this probe cannot see it by construction — the defect is not in the set it enumerates. |
+| `test/crtl_declaration_census.sh <compiler> <tmp>` | **FAIL under pin, OK under HEAD** | the route the failing job actually takes |
+
+**The second one is the nastier specimen and it is new.** The first ignored a
+parameter — bad, and the tell is knowable from the source. **The second honoured its
+parameter, ran under the binary I asked for, produced a real census of a real
+population, and answered rc=0 — about a set that cannot contain the subject.** It is
+not broken, it is not misconfigured, and its green is CORRECT. *"Every instrument
+that lies, lies by being correct about something else"*, with the something-else
+being **the population rather than the tree or the binary**.
+
+**The discriminator, stated so the next seat does not repeat it:** `c_pthread_create`
+is an **RTL** declaration reached through the **crtl** census. Any probe scoped to
+`lib/crtl/**` is scoped away from it. **Before trusting a census, print the set it
+enumerates and check the subject is IN it** — I ran two that were not, and the second
+took nine minutes of compiles to say nothing.
+
+**Three probes, three populations, one answer.** The two that agreed were the two
+that could not disagree.
+
+**Residual for the archive:** the `crtl_decl_probe.sh` HEAD leg never produced output
+and I am not chasing it — it is answering the wrong question in either direction, and
+`test/crtl_declaration_census.sh` has settled the matter on both binaries.
