@@ -4,7 +4,7 @@ title: "A string-returning function's result assigned to an Integer compiles wit
 track: P
 prio: 30
 type: bug
-status: open
+status: done
 owner: ""
 found-by: franks-ee
 created: 2026-09-16
@@ -62,3 +62,57 @@ The variable path produces `incompatible types: cannot assign AnsiString to
 Integer`, so the message and the check both exist. The question is which
 assignment-compatibility site the call-result path takes instead, and whether
 it is the same seam as any other "result of a call" typing gap.
+
+## Log
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## FIXED 2026-09-16 — and the RANKING QUESTION IS SETTLED BY MEASUREMENT
+
+This ticket deliberately left its own ranking unresolved: a missing check (bug)
+versus accepting-what-fpc-rejects (not a defect, per CLAUDE.md). **It is the
+first, and one command decides it rather than an argument.** The same assignment
+from a string VARIABLE was ALREADY refused, identically to fpc:
+
+| spelling | pxx before the fix | fpc 3.2.2 |
+| --- | --- | --- |
+| `n := s` (variable) | `cannot assign AnsiString to Integer` | refused |
+| `n := F('x')` (call result) | **compiles, prints 1660944456** | refused |
+
+So this was never dialect breadth. The check existed and one spelling of the
+source did not reach it — an inconsistency inside our own type checker, which
+produces a silently wrong value from an ordinary typo.
+
+**Cause.** `AssignSideKind` (ir.inc) had arms for `AN_IDENT`, the literals,
+`AN_BINOP` and `AN_INDEX`/`AN_FIELD`/`AN_DEREF`, and none for a call — so it
+returned False, `AN_ASSIGN`'s check short-circuited, and it looked exactly like
+a check that had fired and passed. **The fourth instance of that function's one
+shape, and its own header predicted it:** *"a side this function cannot type is
+a side the rule never sees, and the failure is silent in the safe direction."*
+
+**Fix.** The three call kinds joined the existing arm's case label and needed no
+new logic. The parser already resolves the result type into `ASTTk` — verified
+with `PXXDBG=a.ast` rather than assumed, the repro's `AN_CALL` node carries
+`tk=23` — which is where that arm already reads, and its dyn-array, record and
+reference-shaped guards all ask the node rather than an lvalue.
+
+**All three spellings, not `AN_CALL` alone.** `AN_CALL`, `AN_VIRTUAL_CALL` and
+`AN_INTF_CALL` are one family carrying the `Procs[]` index in `IVal`; ir.inc
+enumerates exactly this trio twice already and says an enumeration listing only
+`AN_CALL` *"is wrong for every override"*. The fail test writes all three, the
+virtual one dispatched through a base-class reference so it cannot devirtualise
+into the direct case — a one-row test would have passed a one-spelling fix.
+
+**Both controls asserted, neither assumed.** The PINNED v410 compiler accepts
+the fail file and prints `4265512` — a pointer as a number — in all three
+spellings, so the guard genuinely reddens on the unfixed compiler. And nine
+legal call-result assignments still compile and run, with `.expected` taken from
+fpc's own output on the same source: a false REJECT of working code would be a
+worse defect than the false accept being fixed, and that is the half most likely
+to go wrong when a type check gains a node kind.
+
+`test/test_call_result_assign_typecheck_positive.pas` and
+`…_fail.pas`, both wired. `make compiler/pascal26` converged after 1 round;
+`gate.sh quick` GREEN, read off the log rather than the wrapper's exit code.
+
+**`compiler/**`, so INERT UNTIL THE NEXT PIN** — nothing on `$(PXX_STABLE)`,
+`make lib-test` included, sees this yet.
