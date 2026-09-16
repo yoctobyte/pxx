@@ -219,3 +219,110 @@ else on this page is engineering and belongs to whoever takes it.
 
 **What would retire THIS note:** a decision recorded below it, or a measurement
 showing the corpus no longer reaches `cgbase.pas:381`.
+
+---
+
+## RE-MEASURED 2026-09-16 (frankS) — the fork is MUCH SMALLER than either version of this page says, and the corpus does NOT need a VMT
+
+**The decision is again NOT changed here.** Same reason as the 2026-09-11 note:
+whoever changes it should have a narrow call. That note's framing — *"accepting
+that it needs a second object model — a value type that can carry a VMT"* — is
+what I set out to price, and it does not survive measurement.
+
+### The wall is not where either note says it is
+
+Both this page and `feature-p-legacy-value-object-types` name `cgbase.pas:381`.
+Measured at `14df2066b`, with cpuinfo's two walls stubbed so the object wall is
+reached first, the corpus stops at:
+
+```
+pascal26:35: error: an object type cannot have a constructor ...
+  in: .../compiler/versioncmp.pas
+  near: ; fnum : cardinal ; public >>> constructor init (
+```
+
+**`versioncmp.pas:35`, not `cgbase.pas:381`.** The error carries no file name in
+its first line, which is the line-31 hazard in CLAUDE.md — a reader supplies the
+file they expected. The `in:` line is the discriminator and it costs nothing.
+
+### And that declaration needs no VMT
+
+```pascal
+tversion = object
+ private fstr: string; fnum: cardinal;
+ public
+  constructor init(const str: string; major: byte; minor: word; patch: byte);
+  constructor invalidate;
+  function relationto(const other: tversion): shortint;
+  ...
+end;
+```
+
+Two constructors. **No `virtual`, no `destructor`, no inheritance.** By this
+page's own table, a VMT is *"present only if the type has a virtual method"* —
+so for `tversion` a `constructor` is exactly an in-place initialiser with no
+VMT to set, i.e. an ordinary method. The value semantics it needs (stack
+storage, copy on assign, real `SizeOf`) are **already what pxx does**, because
+pxx lowers `object` as a value type.
+
+### The VMT half is UNREACHABLE in this corpus
+
+Census of every `= object` in the reachable set (top level + `x86_64/` +
+`systems/` + `x86/`): **35 declarations, 15 of which need a VMT** (`virtual` or
+`abstract`). Where they live is the whole finding:
+
+- **14 of the 15 are in `browcol.pas`** — and `grep -rlwi browcol` over the
+  reachable set returns **browcol.pas and nothing else**. No unit imports it, so
+  none of those 14 is ever parsed.
+- **The 15th is `symtable.pas`'s `tunit_alias`**, which sits inside
+  `{$ifdef UNITALIASES}`. `UNITALIASES` is defined nowhere in the corpus and we
+  pass only `-dx86_64`, so it is conditionally compiled out.
+
+**So the FPC-compiler proof does not need a second object model to get past this
+wall.** It needs `constructor`/`destructor` accepted on a VMT-less `object` and
+lowered as ordinary methods. That is not option B, and it is larger than option
+C only by admitting `constructor` — C's own text refused the keyword outright.
+
+### What is behind it, stubbed before fixing
+
+Stub = the proposed lowering applied by hand (`constructor` respelled
+`procedure` in `versioncmp.pas`), plus cpuinfo's two walls, over a full copy of
+the tree. Four arms, 207 units:
+
+| arm | walls removed | units OK |
+| --- | --- | --- |
+| base | none | 21 |
+| fix | cpuinfo array-of-set (`14df2066b`) | 21 |
+| stub | both cpuinfo walls | 21 |
+| **stub3** | **both cpuinfo + versioncmp ctor** | **22** |
+
+**Three walls cleared, +1 unit.** The eighth null row. The 138 do not scatter —
+they land as one group on a **fifth** wall, `globals.pas:502`:
+
+```pascal
+const defaultmainaliasname = 'main';
+var   mainaliasname : string = defaultmainaliasname;   { -> "not a constant" }
+```
+
+Three-line repro, and it is the **same var-vs-const asymmetry** as
+`bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised`, fixed
+hours earlier: the `const` spelling of that declaration compiles, the `var`
+spelling does not. Third instance of one double case in `ParseVarSection`'s
+initializer handling. **That is Track P, needs no decision, and gates the same
+138** — so it is the cheaper lever by a wide margin, and it should be taken
+before anyone reopens this page.
+
+17 units still reach the object wall through declarations in other files, so the
+feature is not fully retired by the versioncmp case alone.
+
+### The question, restated at its measured size
+
+Not *"do we want a second object model with a VMT."* That is not what the corpus
+asks for. The measured question is:
+
+> *Do we want `object` types with constructors — the initialise-in-place kind,
+> with no virtual methods — to compile, so the FPC-compiler proof can continue?*
+
+**What would retire THIS note:** a decision recorded below it; or a measurement
+showing the corpus reaches a `virtual`/inheriting `object` after all (which
+would mean `browcol.pas` acquired an importer or `UNITALIASES` got defined).
