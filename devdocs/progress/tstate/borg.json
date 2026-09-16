@@ -15050,8 +15050,8 @@
   "wall": 1054.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-16T05:36:42Z",
+  "sha": "ec4b9c6a1f2292d225e145fdb3965c838ee1bf02",
   "tier": "full"
  },
  "last_opt": {
@@ -15262,6 +15262,7 @@
    "range": [
     "b9bb74d3704e0a2c62c23f69bacb52b3a984cd1f"
    ],
+   "range_non_causal": false,
    "src": "compiler/compiler.pas",
    "status": "fail"
   }
