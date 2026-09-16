@@ -36184,6 +36184,18 @@ endif
 	# what proves it is live under the pin in place rather than inert.
 	$(PXX_STABLE) -Fulib/rtl test/lib_fileage.pas $(TESTTMP)/lib_fileage
 	tools/expect_same.sh lib_fileage "$$($(TESTTMP)/lib_fileage | tail -1)" "total ok 17 / 17"
+	# FindFirst/FindNext/FindClose. The fixture BUILDS ITS OWN DIRECTORY under
+	# $(TESTTMP) -- a dotfile, an unwritable file, a symlink to a file, a
+	# symlink to a directory and a DANGLING symlink -- because the assertions
+	# are about attribute bits and no checked-in tree sets them. Run against
+	# test/ instead, faAnyFile and faDirectory return the identical answer and
+	# the suite certifies a filter that does nothing.
+	# The attribute VALUES are not from the specification: the same probe was
+	# compiled under fpc and under pxx against one directory and the outputs
+	# diffed byte for byte, attribute integers included. A deliberately
+	# wrong-polarity filter reddens that diff, so it is a guard that can fail.
+	$(PXX_STABLE) -Fulib/rtl test/lib_findfirst.pas $(TESTTMP)/lib_findfirst
+	tools/expect_same.sh lib_findfirst "$$($(TESTTMP)/lib_findfirst $(TESTTMP)/ff_sandbox | tail -1)" "total ok 44 / 44"
 	$(PXX_STABLE) -Fulib/rtl test/lib_standard_text_files.pas $(TESTTMP)/lib_stdtext
 	tools/expect_same.sh lib_stdtext.checks "$$($(TESTTMP)/lib_stdtext 2>/dev/null | tail -1)" "total ok 13 / 13"
 	tools/expect_same.sh lib_stdtext.stdout "$$($(TESTTMP)/lib_stdtext 2>/dev/null | grep '^O')" "$$(printf 'O1 via var param\nO2 direct\nO3 plain')"

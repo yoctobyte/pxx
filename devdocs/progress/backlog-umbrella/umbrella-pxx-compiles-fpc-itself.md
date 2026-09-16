@@ -921,7 +921,8 @@ histogram. Two independent instances now, not one.
 | 7 | parameterless call spelled WITHOUT parens when the name is OVERLOADED (`comphook.pas:386`) | parser | **FIXED** `3926a4098` (franks-ee) |
 | 8 | `StdErr` is an fd, not a `Text` (`comphook.pas:397`, `:399`) | RTL type | **FIXED** `d66f128a1` (franks-ee) — **live without a pin** |
 | 9 | `SysUtils.FileAge` (`comphook.pas:474`) | RTL | **FIXED** `42e127d6d` (franks-ee) — **live without a pin** |
-| 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **OPEN — the head of the STUBBED arm**, Track B |
+| 10 | `TRawByteSearchRec` + `FindFirst` (`cfileutl.pas:282`) | RTL type | **FIXED** `PENDING-COMMIT` (franks-ee) — **live without a pin** |
+| 11 | `GetDir` (`cfileutl.pas:518`) | RTL | **OPEN — the head of the STUBBED arm**, Track B |
 
 **THE NUMBER IN COLUMN 1 IS A ROW POSITION, NOT AN IDENTITY — CITE THE `file:line`.**
 This heading said FIVE while the table held SEVEN rows, and on 2026-09-16 two seats
@@ -1112,6 +1113,7 @@ census cannot be read as a work estimate.
 | `comphook.pas:397` / `:399` | **RTL type (Track B)** | **NO — live immediately** |
 | `comphook.pas:474` | **RTL (Track B)** | **NO** |
 | `cfileutl.pas:282` | **RTL type (Track B)** | **NO** |
+| `cfileutl.pas:518` | **RTL (Track B)** | **NO** |
 
 **So the head of this umbrella is currently an RTL wall, and RTL walls are worth
 strictly more per hour than compiler walls** — the umbrella's own earlier finding,
@@ -1187,3 +1189,78 @@ compiler invocations. The corpus now takes a `PXX_CORPUS_LIST` of unit paths, an
 three ~2.5-minute FOREGROUND chunks complete where one background run does not. The
 three lists are asserted to be an exact partition of the glob before the run, and the
 assembled output is checked at 207 rows / 207 distinct units after it.
+
+## WALL ELEVEN — `FindFirst`, and the walk-downward shape RECURS in a second file
+
+Measured 2026-09-16, franks-ee. `FindFirst` / `FindNext` / `FindClose`,
+`TSearchRec` / `TRawByteSearchRec`, the nine `fa*` attribute constants and
+`AllFilesMask`, in `lib/rtl/sysutils.pas`. None of it existed — not the record
+type, the whole family. Library-only, **live under pin v410**.
+
+**Expectation, recorded before the run:** the 120 units leave `cfileutl.pas:282`
+and the whole procedure clears rather than the head advancing a few lines (`:287`
+`findfirst` and `:290` sat right behind it, and one fix supplies all three names);
+units-OK stays at 22, *"and I am saying so for the tenth time in a row"*, with the
+one shape that could move it named in advance — `cfileutl` is a DEPENDENCY, not a
+leaf, so if it compiled, everything blocked only on it would compile too. **Next
+head deliberately NOT guessed**, on the strength of wall ten's finding.
+
+| | before | after |
+| --- | --- | --- |
+| units-OK (stubbed) | 22 | **22** |
+| the wall | 120 | **0** |
+| new head | — | `cfileutl.pas:518` `GetDir`, **120 units** |
+
+Both halves held. No unit lost, none gained. **Tenth null row.**
+
+**THE WALK-DOWNWARD SHAPE IS BACK, IN A SECOND FILE:** `282 → 518`, the same 120
+units, `cfileutl.pas` both times. Wall ten's section says that shape *terminates*
+and does not predict the next head, and both statements survive this: it did
+terminate in `comphook.pas`, and it has now started afresh in `cfileutl.pas` 236
+lines lower, in a different procedure. **So the shape recurs without being
+predictive** — which is why the expectation above declined to name a next head and
+was right to. A file stops producing walls when its distinct RTL dependencies run
+out, and `cfileutl.pas` has more of them.
+
+**The fixture is where the real risk was, and the first version of it passed while
+measuring nothing.** Run against `test/`, `faAnyFile` and `faDirectory` return the
+IDENTICAL answer — there is no dotfile, no symlink, no unwritable file and no
+device node in a checked-in tree, so every attribute-filter row is vacuous and a
+filter that ignores its argument entirely scores full marks. The fixture therefore
+builds its own directory: a dotfile, an unwritable file, a symlink to a file, a
+symlink to a directory, and a **dangling** symlink.
+
+**The strongest control is differential, and it was checked for sensitivity.** The
+same probe compiled under `fpc` and under `pxx` against one directory produces
+byte-identical output across ten rows — names, counts and the raw attribute
+integers. That is only worth something if it can go red, so the filter's polarity
+was deliberately inverted (`any bit` instead of `all bits`) in a scratch copy of
+the RTL: the diff reddens on six of ten rows. **A guard that cannot fail prints
+PASS**, and this one was made to fail on purpose before its green was quoted.
+
+**A claim written into the source comment was disproved by that control, in the
+same hour it was written.** The comment said `faAnyFile` being `$1FF` rather than
+the widely-quoted `$3F` matters because `$3F` "silently drops faNormal and
+faSymLink". **Measured: on unix the two select exactly the same entries**, in every
+arrangement probed — `faNormal` is never set by the unix attribute mapping, and
+`faSymLink` only appears when the caller already requested it, which puts the bit
+in the filter either way. The reason to carry FPC's value is that a caller may
+COMPARE against it, not that the other one filters. The comment now says the
+measured thing.
+
+**Two behaviours that look like bugs and are FPC's, both asserted:** `.` and `..`
+are returned (fpc's own `cfileutl.pas:287` filters them by hand, which is only
+necessary because they arrive), and `Attr` is a PERMISSIVE filter rather than a
+requirement — `faDirectory` still returns ordinary files, because every unix entry
+carries `faArchive` and the filter accepts an entry when every bit it HAS is
+covered. `faArchive` and `faReadOnly` are forced into the filter unconditionally,
+as FPC does, or the obvious call returns nothing at all.
+
+**Found on the way, NOT fixed here, and it is a silent wrong value:**
+`PChar(AnsiString('literal'))` yields **one garbage byte** under this compiler where
+fpc yields the string. It was found because the fixture used that spelling to create
+a symlink and got a dangling link with a one-byte target — which then made four
+unrelated assertions fail and looked exactly like an RTL defect. `PChar(literal)`
+and `PChar(variable)` are both correct; only the double cast is wrong. Compiler-side
+and therefore inert until a pin, so it is going in as its own change rather than
+riding along with an RTL fix.

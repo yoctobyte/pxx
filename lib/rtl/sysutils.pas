@@ -1208,6 +1208,84 @@ function DateTimeToFileDate(DateTime: TDateTime): Int64;
 
 function FileGetDate(Handle: Integer): Integer;
 
+{ ---- Directory traversal: FindFirst / FindNext / FindClose ---------------
+
+  THE ATTRIBUTE WORD IS DOS'S, NOT UNIX'S, and every value below was read off
+  FPC's filutilh.inc:177-189 rather than recalled -- faAnyFile is $1FF there,
+  not the widely-quoted $3F.
+
+  MEASURED, because the obvious claim about that is wrong: on unix the two
+  values select THE SAME ENTRIES, in every arrangement probed against fpc
+  itself. faNormal is never set by the unix attribute mapping below, and
+  faSymLink is only ever set when the caller already asked for it -- which
+  puts the bit in the filter either way. So $3F is not a silent filter here;
+  it is simply a different number, and the reason to carry FPC's is that a
+  caller may compare against faAnyFile rather than only pass it. }
+const
+  faReadOnly   = $00000001;
+  faHidden     = $00000002;
+  faSysFile    = $00000004;
+  faVolumeId   = $00000008;
+  faDirectory  = $00000010;
+  faArchive    = $00000020;
+  faNormal     = $00000080;
+  faSymLink    = $00000400;
+  faAnyFile    = $000001FF;
+
+  { fpc sysunixh.inc:44. It is '*' on unix and '*.*' on DOS-descended targets,
+    so code that concatenates it is portable and code that hardcodes '*' is
+    not -- which is why FPC exports the constant at all. }
+  AllFilesMask = '*';
+
+type
+  { fpc filutilh.inc:81. `Time` is Unix epoch SECONDS here, as it is on FPC's
+    unix arm -- NOT a packed DOS timestamp -- so FileDateToDateTime converts it
+    and the same UTC reasoning stated above applies unchanged.
+
+    `Mode` is the raw st_mode and is unix-only in FPC too. It is carried
+    because the DOS attribute word cannot express the permission bits, and a
+    caller that wants them has nowhere else to look. }
+  TRawByteSearchRec = record
+    Time: Int64;
+    Size: Int64;
+    Attr: LongInt;
+    Name: AnsiString;
+    ExcludeAttr: LongInt;
+    FindHandle: Pointer;
+    Mode: Integer;
+  end;
+  TSearchRec = TRawByteSearchRec;
+
+{ Open a search. `Path` is a directory path with a FILENAME MASK on the end
+  (`IncludeTrailingPathDelimiter(dir) + AllFilesMask`); `*` and `?` are the
+  only metacharacters, which is FPC's FNMatch exactly -- it has no character
+  classes, so `[abc]` is three literal characters here as it is there.
+
+  Returns 0 when something was found and NONZERO when nothing was, which is
+  the opposite polarity from most of this unit and is FPC's.
+
+  `.` AND `..` ARE RETURNED, and that is not an oversight -- FPC returns them
+  and real code depends on it: fpc's own cfileutl.pas:287 asks for
+  `faAnyFile or faDirectory` and then filters both names out by hand, which is
+  only necessary because they arrive. A caller that does not want them must do
+  the same.
+
+  Attr is a permissive FILTER, not a requirement: an entry is returned when
+  every attribute bit it HAS is also set in Attr (`(entry and not Attr) = 0`),
+  so faAnyFile returns everything and faDirectory alone returns only plain
+  directories. faArchive and faReadOnly are added to the filter unconditionally,
+  as FPC does, because every unix entry carries faArchive and an unwritable one
+  carries faReadOnly -- without that, the obvious call returns nothing at all.
+
+  EVERY SUCCESSFUL SEARCH MUST BE CLOSED WITH FindClose, including one you stop
+  reading early: the handle owns a directory fd and a heap record. }
+function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TRawByteSearchRec): LongInt;
+{ Next match, same 0-is-found polarity. Safe to call after a failure: it stays
+  failed rather than rewinding. }
+function FindNext(var Rslt: TRawByteSearchRec): LongInt;
+{ Release the search. Idempotent, and safe on a FindFirst that failed. }
+procedure FindClose(var Rslt: TRawByteSearchRec);
+
 { The process environment, FPC's spelling. Read from /proc/self/environ, whose
   records are NUL-separated `NAME=VALUE` pairs — Linux-only, and deliberately so
   for now: the environment block sits on the initial stack, but reaching it
@@ -4852,6 +4930,304 @@ begin
 
   if n < 0 then Result := False;
   fd := PalClose(fd);
+end;
+
+{ ---- FindFirst / FindNext / FindClose ------------------------------------
+
+  Streams the directory with PalGetDents64 rather than snapshotting it into an
+  array. GetDirectoryContents just above does snapshot, and reusing it was the
+  obvious move -- it is rejected on a SEMANTIC ground, not a performance one:
+  it drops `.` and `..`, and FindFirst must return them. Building on a filter
+  this surface is required not to have would have been correct on every test a
+  casual fixture writes and wrong for fpc's own cfileutl.pas. }
+
+const
+  { POSIX st_mode bits. Spelled here because this unit has no <sys/stat.h> to
+    include and platform_types carries the raw Mode without interpreting it. }
+  SU_S_IFMT   = $F000;
+  SU_S_IFDIR  = $4000;
+  SU_S_IFCHR  = $2000;
+  SU_S_IFBLK  = $6000;
+  SU_S_IFIFO  = $1000;
+  SU_S_IFLNK  = $A000;
+  SU_S_IFSOCK = $C000;
+  SU_S_IWUSR  = $0080;
+
+type
+  TFindState = record
+    fd: Integer;
+    dirPrefix: AnsiString;
+    mask: AnsiString;
+    searchAttr: LongInt;
+    buf: array[0..4095] of Byte;
+    bufLen: Integer;
+    bufOff: Integer;
+    exhausted: Boolean;
+    oneShot: Boolean;   { a wildcard-free path: exactly one candidate }
+  end;
+  PFindState = ^TFindState;
+
+{ fpc's FNMatch (rtl/unix/sysutils.pp:809), reduced to what it actually
+  supports: `*` and `?`, no character classes. Recursive on `*` for the same
+  reason FPC is -- a greedy scan cannot backtrack, and `*a*b` needs to.
+
+  `?` matches a byte, not a codepoint. FPC's does UTF-8 codepoint stepping when
+  the name's codepage says UTF-8; this unit has no per-string codepage, so the
+  byte reading is the honest one rather than a silently different one. }
+function FNMatch(const pattern, name: AnsiString): Boolean;
+
+  function DoMatch(i, j: Integer): Boolean;
+  var found: Boolean;
+  begin
+    found := True;
+    while found and (i <= Length(pattern)) do
+    begin
+      if pattern[i] = '?' then
+      begin
+        found := j <= Length(name);
+        Inc(j);
+        Inc(i);
+      end
+      else if pattern[i] = '*' then
+      begin
+        { Collapse a run of '*' and account for any '?' inside it. }
+        while (i <= Length(pattern)) and (pattern[i] = '*') do Inc(i);
+        if i > Length(pattern) then
+        begin
+          { Trailing '*' eats the rest, whatever is left. }
+          DoMatch := True;
+          Exit;
+        end;
+        { Try every remaining position. j..Length+1 rather than j..Length, so
+          a pattern whose tail can match EMPTY still gets its chance. }
+        while j <= Length(name) + 1 do
+        begin
+          if DoMatch(i, j) then
+          begin
+            DoMatch := True;
+            Exit;
+          end;
+          Inc(j);
+        end;
+        DoMatch := False;
+        Exit;
+      end
+      else
+      begin
+        found := (j <= Length(name)) and (pattern[i] = name[j]);
+        Inc(i);
+        Inc(j);
+      end;
+    end;
+    DoMatch := found and (j = Length(name) + 1);
+  end;
+
+begin
+  FNMatch := DoMatch(1, 1);
+end;
+
+{ fpc's LinuxToWinAttr (rtl/unix/sysutils.pp:688), which is where the DOS
+  attribute word for a unix entry comes from. Every entry carries faArchive --
+  that is FPC's, and it is why faArchive is forced into the search filter. }
+function UnixModeToAttr(const baseName: AnsiString; mode: Integer; isLink, linkIsDir: Boolean): LongInt;
+var a: LongInt; fmt: Integer;
+begin
+  a := faArchive;
+  fmt := mode and SU_S_IFMT;
+  if fmt = SU_S_IFDIR then a := a or faDirectory;
+  { A leading dot hides it -- but `.` and `..` are NOT hidden, which is what the
+    second-character test is for and why it is not just `[1] = '.'`. }
+  if (Length(baseName) >= 2) and (baseName[1] = '.') and (baseName[2] <> '.') then
+    a := a or faHidden;
+  if (mode and SU_S_IWUSR) = 0 then a := a or faReadOnly;
+  if (fmt = SU_S_IFSOCK) or (fmt = SU_S_IFBLK) or (fmt = SU_S_IFCHR) or (fmt = SU_S_IFIFO) then
+    a := a or faSysFile;
+  if isLink then
+  begin
+    a := a or faSymLink;
+    { FPC reports a link to a directory AS a directory, matching Windows. }
+    if linkIsDir then a := a or faDirectory;
+  end;
+  UnixModeToAttr := a;
+end;
+
+{ Stat one candidate and, if the filter accepts it, fill the record. Returns
+  False when the entry vanished between readdir and stat (a race that is
+  ordinary, not an error) or when the filter rejects it. }
+function FindFillOne(st: PFindState; const fullPath, baseName: AnsiString;
+                     var Rslt: TRawByteSearchRec): Boolean;
+var info, linkInfo: TPalFileStat; attr: LongInt; isLink, linkIsDir: Boolean;
+begin
+  FindFillOne := False;
+  isLink := False;
+  linkIsDir := False;
+  { Follow links unless the caller asked for faSymLink, which is FPC's rule:
+    without it a link reports its TARGET and never carries faSymLink at all. }
+  if (st^.searchAttr and faSymLink) <> 0 then
+  begin
+    if PalLstat(PChar(fullPath), info) <> 0 then Exit;
+    isLink := (info.Mode and SU_S_IFMT) = SU_S_IFLNK;
+    if isLink then
+      linkIsDir := (PalStat(PChar(fullPath), linkInfo) = 0) and linkInfo.IsDir;
+  end
+  else
+    if PalStat(PChar(fullPath), info) <> 0 then Exit;
+
+  attr := UnixModeToAttr(baseName, info.Mode, isLink, linkIsDir);
+  { THE FILTER, and its polarity is the whole subtlety: an entry is accepted
+    when every bit it HAS is also in searchAttr -- not when it has any bit the
+    caller asked for. So faDirectory alone accepts a plain directory and
+    rejects a hidden one, because faHidden is a bit the entry has and the
+    caller did not ask for. }
+  if (attr and not st^.searchAttr) <> 0 then Exit;
+
+  Rslt.Name := baseName;
+  Rslt.Attr := attr;
+  Rslt.Size := info.Size;
+  Rslt.Time := info.MTimeSec;
+  Rslt.Mode := info.Mode;
+  FindFillOne := True;
+end;
+
+{ Pull the next raw name out of the dirent stream, refilling the buffer as
+  needed. Returns '' at end of directory. }
+function FindNextRawName(st: PFindState): AnsiString;
+var reclen: Integer; n: Int64;
+begin
+  FindNextRawName := '';
+  if st^.exhausted then Exit;
+  while True do
+  begin
+    if st^.bufOff >= st^.bufLen then
+    begin
+      n := PalGetDents64(st^.fd, @st^.buf[0], 4096);
+      if n <= 0 then
+      begin
+        st^.exhausted := True;
+        Exit;
+      end;
+      st^.bufLen := Integer(n);
+      st^.bufOff := 0;
+    end;
+    reclen := DirentWordLE(@st^.buf[0], st^.bufOff + 16);
+    { A zero or negative reclen would loop forever on a corrupt buffer. Treat
+      it as end-of-directory rather than spinning. }
+    if reclen <= 0 then
+    begin
+      st^.exhausted := True;
+      Exit;
+    end;
+    FindNextRawName := DirentName(@st^.buf[0], st^.bufOff + 19);
+    st^.bufOff := st^.bufOff + reclen;
+    if FindNextRawName <> '' then Exit;
+  end;
+end;
+
+procedure FindClose(var Rslt: TRawByteSearchRec);
+var st: PFindState;
+begin
+  st := PFindState(Rslt.FindHandle);
+  if st = nil then Exit;
+  if st^.fd >= 0 then st^.fd := PalClose(st^.fd);
+  { Drop the managed fields before the record's storage goes away. }
+  st^.dirPrefix := '';
+  st^.mask := '';
+  Dispose(st);
+  Rslt.FindHandle := nil;
+end;
+
+function FindNext(var Rslt: TRawByteSearchRec): LongInt;
+var st: PFindState; nm: AnsiString;
+begin
+  FindNext := -1;
+  st := PFindState(Rslt.FindHandle);
+  if st = nil then Exit;
+  { A wildcard-free path is a single candidate, already answered by FindFirst. }
+  if st^.oneShot then
+  begin
+    st^.exhausted := True;
+    Exit;
+  end;
+  if st^.fd < 0 then Exit;
+  while True do
+  begin
+    nm := FindNextRawName(st);
+    if nm = '' then Exit;
+    if FNMatch(st^.mask, nm) then
+      if FindFillOne(st, st^.dirPrefix + nm, nm, Rslt) then
+      begin
+        FindNext := 0;
+        Exit;
+      end;
+  end;
+end;
+
+function FindFirst(const Path: AnsiString; Attr: LongInt; out Rslt: TRawByteSearchRec): LongInt;
+var st: PFindState; i, cut: Integer; openDir: AnsiString;
+begin
+  Rslt.Time := 0;
+  Rslt.Size := 0;
+  Rslt.Attr := 0;
+  Rslt.Name := '';
+  Rslt.ExcludeAttr := 0;
+  Rslt.FindHandle := nil;
+  Rslt.Mode := 0;
+  FindFirst := -1;
+  if Path = '' then Exit;
+
+  New(st);
+  st^.fd := -1;
+  st^.dirPrefix := '';
+  st^.mask := '';
+  st^.bufLen := 0;
+  st^.bufOff := 0;
+  st^.exhausted := False;
+  st^.oneShot := False;
+  { faArchive and faReadOnly go in unconditionally -- fpc's own comment says
+    "We always also search for readonly and archive, regardless of Attr", and
+    without it every call returns nothing, because every unix entry carries
+    faArchive. }
+  st^.searchAttr := Attr or faArchive or faReadOnly;
+  Rslt.FindHandle := st;
+  { ExcludeAttr stays 0. FPC's modern path zeroes the record and never writes
+    it -- the field is a leftover from the Dos-unit surface -- so computing a
+    plausible `not Attr` here would be this RTL inventing a value the oracle
+    does not produce, on a field callers can read. }
+
+  { No metacharacter means the path names ONE file, and FPC does not open a
+    directory at all in that case. Keeping that matters: `FindFirst(exactName)`
+    is how callers test existence-with-attributes, and a directory scan would
+    give a different answer for a path whose parent is unreadable. }
+  cut := 0;
+  for i := 1 to Length(Path) do
+    if (Path[i] = '*') or (Path[i] = '?') then cut := -1;
+  if cut = 0 then
+  begin
+    st^.oneShot := True;
+    if FindFillOne(st, Path, ExtractFileName(Path), Rslt) then
+      FindFirst := 0
+    else
+      FindClose(Rslt);
+    Exit;
+  end;
+
+  { Split at the last separator: everything up to and including it is the
+    directory to open, the rest is the mask. }
+  cut := 0;
+  for i := 1 to Length(Path) do
+    if Path[i] = '/' then cut := i;
+  st^.dirPrefix := Copy(Path, 1, cut);
+  st^.mask := Copy(Path, cut + 1, Length(Path) - cut);
+  if st^.dirPrefix = '' then openDir := './' else openDir := st^.dirPrefix;
+
+  st^.fd := PalOpen(PChar(openDir), PAL_OPEN_READ or PAL_OPEN_DIRECTORY, 0);
+  if st^.fd < 0 then
+  begin
+    FindClose(Rslt);
+    Exit;
+  end;
+  FindFirst := FindNext(Rslt);
+  if FindFirst <> 0 then FindClose(Rslt);
 end;
 
 function ExecutePipeline(const cmd: AnsiString; const args: array of AnsiString; var childStdinFd, childStdoutFd: Integer): Integer;
