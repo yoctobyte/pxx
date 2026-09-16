@@ -15953,6 +15953,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cbool_normalise_b26; tools/expect_same.sh cbool_normalise_b26-rc "$$?" "42"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/cpthread_needs_threadsafe_b.c $(TESTTMP)/cpthread_needs_threadsafe_b26
 	$(TESTTMP)/cpthread_needs_threadsafe_b26; tools/expect_same.sh cpthread_needs_threadsafe_b26-rc "$$?" "42"
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26
+	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c $(TESTTMP)/cfloat_conv_b17626
 	$(TESTTMP)/cfloat_conv_b17626; tools/expect_same.sh cfloat_conv_b17626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c $(TESTTMP)/csizeof_deref_field_b17726

@@ -158,6 +158,7 @@ procedure ParseCSubroutine; forward;
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
+function CDeclSawThreadLocal(typeIdx: Integer): Boolean; forward;
 function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
@@ -10169,6 +10170,53 @@ begin
 end;
 
 
+procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
+{ Give one `__thread` / `_Thread_local` global its per-thread slot, or leave it
+  on the shared storage it has today and say why.
+
+  WHERE C DELIBERATELY DIVERGES FROM PASCAL, AND IT IS THE ONLY PLACE. Both
+  frontends reach the same allocator (TryAssignThreadVarStorage) and the same
+  four refusal reasons. Pascal turns every refusal into an Error; this does not,
+  and the reason is a REGRESSION and not a preference: `__thread` COMPILES TODAY.
+  It is skipped, the variable gets one shared copy, and for a single-threaded
+  program one copy shared IS one copy per thread -- so those programs are
+  correct right now and refusing would break working programs to protect broken
+  ones. `threadvar` has never compiled at any scope, so Pascal has no such
+  population and refusing there costs nothing.
+
+  The measured population of `__thread` under test/, lib/ and examples/ is ZERO
+  (re-counted at this commit), so a refusal would be free IN THIS TREE. That is
+  exactly why it is not the argument -- what it costs is real C from outside it,
+  which is the corpus this frontend exists for.
+
+  SO THE NET EFFECT IS: STRICTLY BETTER ON x86-64 SCALARS, BYTE-IDENTICAL
+  EVERYWHERE ELSE. Nothing that compiles today stops compiling, and nothing that
+  was correct today becomes wrong. A degraded declaration behaves exactly as it
+  did before this change -- one shared object in .bss -- and now says which of
+  the four reasons applied, where before it said only that `__thread` was
+  "being IGNORED" with no way to tell a target limit from a type limit.
+
+  ONE WARNING PER COMPILATION, NOT PER DECLARATION, keeping the existing
+  CTlsIgnoredWarned contract: a warning that fires on everything is not a
+  warning. The first refusal names its reason and the rest are silent, which is
+  the same trade the original warning made.
+
+  bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
+var why: AnsiString;
+begin
+  if not sawThread then Exit;
+  if idx < 0 then Exit;
+  if TryAssignThreadVarStorage(idx, '__thread', why) then Exit;
+  if not CTlsIgnoredWarned then
+  begin
+    CTlsIgnoredWarned := True;
+    Warn(why + ' — this declaration therefore gets ONE copy shared by every '
+       + 'thread, not one per thread, exactly as it did before thread-local '
+       + 'storage existed. Single-threaded code is unaffected; threaded code '
+       + 'will read and write another thread''s value with no further warning');
+  end;
+end;
+
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
@@ -10184,6 +10232,7 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     declSawExtern, declSawStatic, declSymIsNew: Boolean;
+    declSawThread: Boolean;
     gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
     gStars: Integer;      { stars on THIS declarator, counted rather than skipped }
     gFirstDecl: Boolean;  { the first declarator's stars were eaten by ParseCDeclType }
@@ -10195,6 +10244,7 @@ begin
     question ParseCSubroutine already asks. }
   declSawExtern := CDeclSawExtern(TokPos - 1);
   declSawStatic := CDeclSawStatic(TokPos - 1);
+  declSawThread := CDeclSawThreadLocal(TokPos - 1);
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
@@ -10440,6 +10490,7 @@ begin
       function-pointer global needs to be linkable is decided here; nothing
       about it made it invisible except which branch registered it. }
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
+    CApplyThreadLocalStorage(idx, declSawThread);
     if idx >= 0 then
     begin
       { An ARRAY of callable pointers carries its ELEMENT signature in
@@ -10803,6 +10854,7 @@ begin
     end
     else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
     CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
+    CApplyThreadLocalStorage(idx, declSawThread);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
     if (idx >= 0) and wasArr and (dimCount >= 2) then
@@ -12829,14 +12881,18 @@ begin
         Pascal REFUSES `threadvar` outright, which is the honest failure and is
         why the C side is the one that needed this line.
         bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
-      if not CTlsIgnoredWarned then
-      begin
-        CTlsIgnoredWarned := True;
-        Warn('''' + CurTok.SVal + ''' is not implemented and is being IGNORED — ' +
-             'the variable gets ONE copy shared by every thread, not one per ' +
-             'thread. Single-threaded code is unaffected; threaded code will ' +
-             'read and write another thread''s value with no further warning');
-      end;
+      { NO WARNING HERE ANY MORE, AND THE TOKEN IS STILL SKIPPED. This arm runs
+        BEFORE the declaration is parsed, so it cannot know whether the variable
+        will get real per-thread storage or fall back to the shared copy -- it
+        would have to warn on every `__thread` including the ones that now work.
+        The answer is known one layer down, where the symbol and its type exist:
+        CApplyThreadLocalStorage warns, once per compilation, and only when it
+        actually degrades, naming which of the four reasons applied.
+
+        The skip itself stays because it is how the declaration is REACHED: the
+        loop re-dispatches on the type token and CDeclSawThreadLocal reads the
+        specifier back off the token stream, the same way `static` and `extern`
+        are recovered. }
       Next;
     end
     else
@@ -13131,6 +13187,29 @@ end;
 function CDeclSawStatic(typeIdx: Integer): Boolean;
 begin
   CDeclSawStatic := CDeclSawSpecifier(typeIdx, 'static');
+end;
+
+function CDeclSawThreadLocal(typeIdx: Integer): Boolean;
+{ Did this declaration carry `__thread` or `_Thread_local`?
+
+  BOTH SPELLINGS, ONE QUESTION. C11's `_Thread_local` and GCC's `__thread` mean
+  the same thing and a header may use either (glibc picks by __STDC_VERSION__),
+  so a caller that asked about only one would be correct for half the corpus --
+  the shape normalise-dont-special-case warns about, where the arm nobody tests
+  is the arm that stays broken.
+
+  The same backward scan as CDeclSawStatic/CDeclSawExtern, for the same reason:
+  both keywords are in CIsTopLevelSkipIdent and are skipped without being
+  recorded, in three separate top-level loops, so the token stream is the only
+  place the answer still exists. Inheriting that scan also inherits its
+  conservatism -- an intervening shape it does not model answers False, which
+  leaves the declaration on the pre-existing shared-storage behaviour rather
+  than inventing per-thread storage for something we did not really parse. That
+  is the safe direction here: a missed `__thread` is today's bug, unchanged, and
+  a hallucinated one would silently move a variable nobody asked to move. }
+begin
+  CDeclSawThreadLocal := CDeclSawSpecifier(typeIdx, '__thread')
+                      or CDeclSawSpecifier(typeIdx, '_Thread_local');
 end;
 
 function CDeclSawExtern(typeIdx: Integer): Boolean;

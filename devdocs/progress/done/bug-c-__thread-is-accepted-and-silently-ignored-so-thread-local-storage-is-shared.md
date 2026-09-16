@@ -2,13 +2,13 @@
 track: C
 prio: 60
 type: bug
-status: backlog
-owner: ""
+status: working
+owner: frankb-56
 created: 2026-09-06
 found-by: frankA
 tags: [tls, threads, c-frontend, errno]
 blocked-by: []
-summary: "IT NOW WARNS, so it is no longer SILENT; the storage is still shared and the ticket stays open for the mechanism. `__thread` and `_Thread_local` are in cparser.inc's CIsTopLevelSkipIdent -- the tolerate-by-skipping set -- so `__thread int tv = 7;` COMPILES, RUNS, prints 7, and emits an ordinary GLOBAL OBJECT in .bss. There is no .tbss or .tdata section in any pxx object. Every thread therefore shares one copy of a variable the programmer declared per-thread, with no diagnostic anywhere. This is the GENERAL form of [[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]]: errno is one instance of a mechanism that does not exist. AND THE TWO FRONTENDS DISAGREE ABOUT THE SAME MISSING FEATURE -- Pascal REFUSES `threadvar` loudly (`expected 'begin' before 'threadvar'`), which is the honest failure; C accepts and ignores it, and C is where errno lives. Measured 2026-09-06 at 1b903c1dd. A SECOND MEASUREMENT BOUNDS ANY FIX: pxx programs run with FS BASE ZERO in every thread -- arch_prctl(ARCH_GET_FS) returns rc=0 and value 0 in both the main thread and a pthread_create'd one, against distinct non-zero values under glibc -- so emitting TLS symbols alone cannot work, because every fs-relative access in every thread would resolve to the same place. Whatever fixes this has to set a per-thread FS base (or the per-target equivalent) BEFORE the object writer's TLS support is worth anything. CONSTRAINT CORRECTED 2026-09-06 (frankC): the `FS base is zero in every thread` reading that bounded this ticket was taken on a register pxx DELIBERATELY DOES NOT USE -- thread_emit.inc:142 installs a per-thread block with arch_prctl(ARCH_SET_GS), `GS, not fs: fs belongs to libc`. Re-measured on a pxx-native BeginThread with the same sentinel control: GS is DISTINCT and non-zero per thread (main 42D110 in .bss, child 7BDB21FF7A80 off its own stack), FS is 0 in both. So step (1), `a per-thread TCB with a distinct base`, is ALREADY DONE on x86-64, with a slot map (TLS_SLOT_*, TLS_BLOCK_SIZE=1152, three free map slots plus a 64-slot tail) that ir_codegen.inc:78 records as unused rather than absent. Two real constraints replace the wrong one: (a) GS-relative is NOT the psABI, so this serves pxx-compiled code and not TLS relocations in gcc-built objects -- a fork to be ruled on, not defaulted; (b) a thread pxx did not create INHERITS the parent`s GS base rather than getting its own (measured: glibc pthread_create gives main and child the IDENTICAL 4298F0), which is the same hazard the clone stub`s comment cites -- a valid-looking pointer into another thread`s storage, not a null you could test for. The ticket does not get smaller: __thread still compiles to one shared .bss object. UNBLOCKED 2026-09-09: THE MECHANISM IS BUILT AND IS FRONTEND-AGNOSTIC. 7a166c995 (frankH, Track P) shipped Pascal `threadvar` on it, so C can reuse it as-is and none of it needs re-deriving. Storage is SymTlsOffset[sym] (a FLAG, -1 = not thread-local) plus a bump allocator over TLS_USER_BYTES (3072) past slot 143 -- so constraint (c) recorded here, `the block is exactly full, three free slots`, is RESOLVED and the trap it warned about was avoided: frankH added a user area rather than spending the slack on a demo. The GS-vs-psABI fork (a) is RULED by implementation in the recommended direction -- GS-only, with --emit-obj/--shared and every non-x86-64 target REFUSED in code -- and the shipped reason is sharper than the one filed: `gs:` with no base FAULTS, and inside a glibc host it SUCCEEDS and returns glibc`s TCB, so the boundary is a correctness hazard and not merely an absent feature. (b), the foreign-created thread inheriting its creator`s GS, is NOT this ticket`s and is not new: bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine owns it, measured 2026-09-01 at 18 SIGSEGV in 100 runs. WHAT IS LEFT FOR C IS ONE REWRITE, NOT A MECHANISM: the equivalent of ThreadVarRewriteRange at the C frontend`s own single lowering entry, turning a thread-local ident into AN_DEREF(AN_TLSBASE + const). Same constraints as shipped: x86-64, scalars only."
+summary: "RESOLVED 2026-09-16: `__thread`/`_Thread_local` now get real per-thread storage on x86-64 scalars, reusing the Pascal TLS mechanism (no new mechanism). Verified against gcc as oracle and against the PINNED compiler as positive control (1/4 kept, main-copy=103, FAIL). Degrades to today's shared copy with a specific reason where the mechanism cannot work, rather than refusing, because __thread compiles today and single-threaded programs using it are CORRECT. Residual owned by bug-c-thread-local-storage-still-shares-one-copy-off-x86-64."
 ---
 
 # `__thread` is accepted and silently ignored
@@ -333,3 +333,94 @@ both frontends.
 mechanism now exists to make it so, but `errno` is declared in the crtl and
 reached by the whole C runtime; that is a separate change with its own
 measurement.
+
+## RESOLVED 2026-09-16 (frankb-56) — `__thread` gets real per-thread storage on x86-64 scalars
+
+**No new mechanism was written.** `7a166c995`'s TLS block, `SymTlsOffset` and
+`ThreadVarRewriteRange` are frontend-agnostic — the rewrite runs from
+`CompileAST` and fires on any `AN_IDENT` whose symbol has an offset — so C
+needed declaration-side work only. Verified the precondition rather than
+assuming it: a C global read lowers as `AN_IDENT` carrying its symbol index
+(`PXXDBG=a.ast`, `kind=3 ival=294`).
+
+### What landed
+
+- **`TryAssignThreadVarStorage(idx, spelling, var why)`** — the Pascal allocator
+  split so the refusal list and the bump allocator exist **once**. Pascal's
+  `AssignThreadVarStorage` is now a four-line wrapper that `Error`s on `why`.
+  A second allocator is the path that stays broken.
+- **`CDeclSawThreadLocal`** — the same backward token scan as
+  `CDeclSawStatic`/`CDeclSawExtern`, covering **both** spellings. `__thread` and
+  `_Thread_local` are skipped without being recorded in three separate top-level
+  loops, so the token stream is the only place the answer survives.
+- **`CApplyThreadLocalStorage`**, called from **both** declarator arms of
+  `ParseCGlobalVarDecl`. There are two, both registering through
+  `CRecordGlobalLinkage`; hooking one would have left the sibling shape broken.
+- The pre-emptive top-level warning is **retired**. It ran before the
+  declaration was parsed, so it could not tell a variable that now works from
+  one that degrades; the reason is known one layer down and that is where the
+  warning now lives.
+
+### The fork, decided against this ticket's own prescription, with the reason
+
+This ticket specified C inherits *"refused under `--emit-obj`/`--shared`, x86-64
+only, scalars only"*. **That was written before x86-64 worked — a prediction —
+and it does not survive re-derivation against the built thing.** `__thread`
+COMPILES TODAY: it is skipped, the variable gets one shared copy, and **for a
+single-threaded program one copy shared IS one copy per thread**, so those
+programs are correct and refusing them would break working programs to protect
+broken ones. That is this ticket's own warn-not-refuse argument, which does not
+expire because x86-64 started working. Pascal refuses because `threadvar` has
+never compiled at any scope and has no population to break.
+
+So C **implements where it can and degrades where it cannot**, naming which of
+the four reasons applied. Net effect: **strictly better on x86-64 scalars,
+byte-identical everywhere else, no regression anywhere.**
+
+The in-tree population of `__thread` is **zero** (re-counted), so a refusal
+would have been free here — which is exactly why that is not the argument. What
+it costs is real C from outside this tree, the corpus this frontend is for.
+
+### Measured
+
+`test/c_thread_local_is_per_thread.c`, six rows, asserting the RELATION and no
+per-target constant. Wired into `test-core`.
+
+| compiler | kept | zeroed-on-entry | no-crosstalk | distinct-tids | main-copy | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| **pxx, fixed** | 4/4 | 4/4 | 4/4 | 4/4 | 7 | OK |
+| **gcc -O2 (oracle)** | 4/4 | 4/4 | 4/4 | 4/4 | 7 | OK |
+| **pxx, PINNED (unfixed)** | 1/4 | 0/4 | 1/4 | 4/4 | **103** | **FAIL** |
+
+**THE POSITIVE CONTROL IS THE PINNED COMPILER AND IT IS NOT PASSING FOR AN
+UNRELATED REASON** — the caveat that usually sinks this instrument. Its run
+emits the OLD `'__thread' is not implemented and is being IGNORED` warning,
+which proves it reached the subject code path rather than feature-detecting
+around it.
+
+**Under `taskset -c 0` the fixed compiler still passes 6/6 and the pinned one
+still FAILS** — `kept` and `no-crosstalk` stop discriminating when threads do not
+overlap (a plain global reads back each thread's own last write), and the
+verdict survives on `zeroed-on-entry=0/4` and `main-copy=103`. That property is
+inherited from the Pascal twin, which measured it after a load-dependent control
+went red on a busy box, and is documented in the C file so nobody trims the two
+rows that look redundant on a 12-core host.
+
+Also verified: `_Thread_local` behaves identically; a mixed TU
+(`__thread` + two ordinary globals) matches gcc exactly (`6 12 23`); a program
+with no thread-locals is untouched (`TlsUserUsed = 0` short-circuits the
+rewrite); all three degradation paths compile with their specific reason.
+
+### Residual, with an owner — this is not an all-clear
+
+**"No regression anywhere" is true and is not the whole finding.** Multi-threaded
+C using `__thread` off x86-64, or on an array, or under `--emit-obj`, or **at
+function scope** still gets one shared copy. That is byte-identical to the
+behaviour before this fix and it is still a wrong answer, so it is filed rather
+than left implied:
+[[bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there]].
+**Function scope is the only member with no diagnostic at all** and should be
+taken first.
+
+Gate: `make compiler/pascal26` **converged after 1 round** (85e4f3c83aeb);
+`tools/gate.sh quick` **GREEN**.

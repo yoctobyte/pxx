@@ -2712,55 +2712,85 @@ begin
   end;
 end;
 
-procedure AssignThreadVarStorage(idx: Integer);
-{ Give one `threadvar` its slot in the TLS block's user area, or refuse it with
-  a diagnostic that says which of the four reasons applied.
+function TryAssignThreadVarStorage(idx: Integer; const spelling: AnsiString;
+                                  var why: AnsiString): Boolean;
+{ Give one thread-local variable its slot in the TLS block's user area, or
+  answer False with the reason in `why`. THE CALLER DECIDES WHAT A REFUSAL
+  MEANS, which is the whole point of the split.
+
+  IT IS A FUNCTION AND NOT A PROCEDURE BECAUSE THE TWO FRONTENDS MUST DIFFER
+  HERE, AND ONLY HERE. Pascal turns every `why` into an Error: `threadvar` has
+  never compiled, so refusing costs nothing and is the honest failure. C must
+  NOT, because `__thread` compiles TODAY -- it is skipped, the variable gets one
+  shared copy, and for a single-threaded program one copy shared IS one copy per
+  thread, so those programs are correct and refusing would break them. See the
+  C caller, which warns and leaves the shared storage in place.
+
+  Everything ABOVE that fork is identical for both and lives here once: the same
+  four refusal reasons, the same bump allocator, the same TlsUserUsed. A second
+  copy of this list is the thing normalise-dont-special-case names -- two
+  spellings of "may this be thread-local" that agree today and drift the first
+  time one of them learns a fifth reason.
 
   THE STORAGE IS THE ONLY THING THIS DECIDES. Addressing happens later and in
   one place -- ThreadVarRewriteRange, run from CompileAST -- which is why there
-  is no second copy of "is this a threadvar" anywhere between here and the
-  backend. AllocFromDeclTypeDesc has ALREADY given the symbol ordinary global
-  BSS storage by the time this runs; that storage is simply never used. Leaving
-  it costs a few bytes per threadvar and buys the failure mode argued for at
-  SymTlsOffset: a path nobody taught reads a process-wide global instead of a
-  wild address.
+  is no second copy of "is this thread-local" anywhere between here and the
+  backend, and why the C frontend needs no addressing code at all. The symbol
+  has ALREADY been given ordinary global BSS storage by the time this runs; that
+  storage is simply never used. Leaving it costs a few bytes and buys the
+  failure mode argued for at SymTlsOffset: a path nobody taught reads a
+  process-wide global instead of a wild address.
 
-  REFUSING IS A FEATURE HERE, not a gap to apologise for. The sibling ticket
-  bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared
-  is this same missing mechanism one frontend over, and the whole complaint
-  about it is that it says nothing and shares the storage. Every refusal below
-  names what would have to change.
-
-  feature-p-threadvar-is-not-supported-at-any-scope }
+  feature-p-threadvar-is-not-supported-at-any-scope
+  bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
 var tk: TTypeKind; sz, align, off: Integer;
 begin
+  { EVERY `why` BELOW STATES A FACT AND NEVER A CONSEQUENCE. One caller refuses
+    on it and the other degrades on it, so a reason that says "this refuses
+    instead" is wrong in C's mouth -- it was, for one build -- and a reason that
+    says "one copy is shared" would be wrong in Pascal's. Each caller appends
+    what it did. }
+  TryAssignThreadVarStorage := False;
+  why := '';
   if TargetArch <> TARGET_X86_64 then
-    Error('threadvar is x86-64 only: a per-thread block is installed with '
-        + 'arch_prctl(ARCH_SET_GS) by the clone stub, and the other targets have '
-        + 'a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but no '
-        + 'way to SET one yet. Answering with the parent thread''s block would be '
-        + 'a plausible wrong address, so this refuses instead -- the same refusal '
-        + '__pxxTlsBase gives, for the same reason.');
+  begin
+    why := spelling + ' is x86-64 only: a per-thread block is installed with '
+         + 'arch_prctl(ARCH_SET_GS) by the clone stub, and the other targets have '
+         + 'a readable thread register (aarch64 tpidr_el0, arm32 tpidruro) but no '
+         + 'way to SET one yet. Answering with the parent thread''s block would be '
+         + 'a plausible wrong address rather than a null anything could test for '
+         + '-- the same reason __pxxTlsBase refuses off x86-64.';
+    Exit;
+  end;
   if not TlsMainInstalled then
-    Error('threadvar needs the per-thread block the program entry point installs, '
-        + 'and --emit-obj/--shared have no ELF entry point, so nothing installs '
-        + 'one. `gs:` with no base does not read 0, it FAULTS -- and inside a '
-        + 'glibc host it succeeds and returns glibc''s TCB, which is worse.');
+  begin
+    why := spelling + ' needs the per-thread block the program entry point installs, '
+         + 'and --emit-obj/--shared have no ELF entry point, so nothing installs '
+         + 'one. `gs:` with no base does not read 0, it FAULTS -- and inside a '
+         + 'glibc host it succeeds and returns glibc''s TCB, which is worse.';
+    Exit;
+  end;
 
   tk := Syms[idx].TypeKind;
   if Syms[idx].IsArray or (SymDynDepth[idx] > 0) then
-    Error('threadvar ' + Syms[idx].Name + ': an array threadvar is not supported yet. '
-        + 'The mechanism is the TLS block''s user area and an array fits it; what is '
-        + 'missing is that several paths reach an array through its SYMBOL (bounds, '
-        + 'dynamic-array handles, the element type) and a threadvar reference is '
-        + 'rewritten into a pointer dereference before they see it. Scalars first.');
+  begin
+    why := spelling + ' ' + Syms[idx].Name + ': an array is not supported yet. '
+         + 'The mechanism is the TLS block''s user area and an array fits it; what is '
+         + 'missing is that several paths reach an array through its SYMBOL (bounds, '
+         + 'dynamic-array handles, the element type) and a thread-local reference is '
+         + 'rewritten into a pointer dereference before they see it. Scalars first.';
+    Exit;
+  end;
   if not (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
-    Error('threadvar ' + Syms[idx].Name + ': only ordinal, pointer and floating-point '
-        + 'threadvars are supported. A managed type (string, interface, dynamic array, '
-        + 'Variant) additionally needs per-thread INITIALISATION and FINALISATION at '
-        + 'thread start and exit, which no thread hook exists for yet; a record or set '
-        + 'is reached through its symbol by paths that never see the rewritten '
-        + 'reference. Both are rungs above this one.');
+  begin
+    why := spelling + ' ' + Syms[idx].Name + ': only ordinal, pointer and floating-point '
+         + 'thread-local variables are supported. A managed type (string, interface, '
+         + 'dynamic array, Variant) additionally needs per-thread INITIALISATION and '
+         + 'FINALISATION at thread start and exit, which no thread hook exists for yet; '
+         + 'a record or set is reached through its symbol by paths that never see the '
+         + 'rewritten reference. Both are rungs above this one.';
+    Exit;
+  end;
 
   sz := SymAllocSize[idx];
   if sz <= 0 then sz := TypeSlotSize(tk);
@@ -2768,14 +2798,31 @@ begin
   if align < 1 then align := 1;
   off := AlignTo(TlsUserUsed, align);
   if off + sz > TLS_USER_BYTES then
-    Error('threadvar ' + Syms[idx].Name + ': the per-thread variable area is full ('
-        + AIntToStr(TLS_USER_BYTES) + ' bytes, TLS_USER_BYTES in defs.inc). It is a '
-        + 'fixed cap and not a shortage of memory: the block is reserved by '
-        + 'EmitTlsMainInstall, which runs before parsing, so its size is baked in '
-        + 'before any threadvar has been seen. Raise TLS_USER_BYTES and the carve '
-        + 'stated in lib/rtl/palthread.pas with it.');
+  begin
+    why := spelling + ' ' + Syms[idx].Name + ': the per-thread variable area is full ('
+         + AIntToStr(TLS_USER_BYTES) + ' bytes, TLS_USER_BYTES in defs.inc). It is a '
+         + 'fixed cap and not a shortage of memory: the block is reserved by '
+         + 'EmitTlsMainInstall, which runs before parsing, so its size is baked in '
+         + 'before any thread-local has been seen. Raise TLS_USER_BYTES and the carve '
+         + 'stated in lib/rtl/palthread.pas with it.';
+    Exit;
+  end;
   SymTlsOffset[idx] := TLS_USER_FIRST_OFF + off;
   TlsUserUsed := off + sz;
+  TryAssignThreadVarStorage := True;
+end;
+
+procedure AssignThreadVarStorage(idx: Integer);
+{ Pascal's arm of the fork above: every refusal is an Error.
+
+  REFUSING IS A FEATURE HERE, not a gap to apologise for -- `threadvar` has
+  never compiled at any scope, so no working program can regress, and every
+  refusal names what would have to change. The C frontend reaches the same
+  allocator and does NOT do this; see TryAssignThreadVarStorage for why the two
+  are allowed to differ at exactly this point and nowhere else. }
+var why: AnsiString;
+begin
+  if not TryAssignThreadVarStorage(idx, 'threadvar', why) then Error(why);
 end;
 
 procedure ParseVarSection;
