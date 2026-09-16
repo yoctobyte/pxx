@@ -86,3 +86,69 @@ stand, the single-element case does not refuse at all -- it is the silent arm.
 The remembered spelling was a refusal variant with the extra arguments still on
 it. Recording that because the header comment still quotes the old spelling as
 the reason it uses variables, and the reason is sound either way.
+
+## MEASURED 2026-09-16 (frankb-56) — the fix is NARROWER than this ticket assumed, and an attempt is reverted
+
+Attempted, not landed. The work is reverted and the tree is clean; what follows
+is what the attempt established, so the next seat does not re-derive it.
+
+**THE LOWERING IS NOT THE PROBLEM. ONLY RANKING IS BLIND.** With exactly ONE
+candidate in scope, this already works today:
+
+```pascal
+function P(const c: array of AnsiString): Integer;   { no overload }
+begin P := Length(c); end;
+begin WriteLn(P(['x', 'yy'])); end.        { fpc 2, pxx 2 }
+```
+
+So the `AN_SET_LIT -> AN_ARRAY_CTOR` retag (`RetagSetLitAsArrayCtor`, ir.inc)
+is reached and correct for an argument. This ticket's "shape of the fix" says
+the candidate's parameter type must reach the constructor's TYPING; measured,
+the typing downstream is already fine and it is **overload ranking alone** that
+never lets the array candidate compete.
+
+**THE AMBIGUOUS CASE MUST NOT MOVE, AND A GENERAL FIX WOULD MOVE IT.** With an
+ordinal element and BOTH candidates in scope, fpc picks the SET:
+
+| source | fpc | pxx |
+| --- | --- | --- |
+| `Q([fA])`, `Q(const c: TF)` + `Q(const c: array of Integer)` | 1 | **1 — already correct** |
+| `P(['x'])`, `P(const c: AnsiString)` + `P(const c: array of AnsiString)` | 2 | refuses |
+| `P(['xy'])`, same candidates | 2 | refuses |
+| ...with a set-typed DEFAULT on both | 2 | **1, silently** |
+
+So "let the parameter type disambiguate" is too wide — it would regress row 1,
+which costs nothing today. Only the not-a-set literal may be re-presented.
+
+**FOUR THINGS THE ATTEMPT ESTABLISHED, each one a dead end closed:**
+
+1. `MatchArgArray` alone is NOT enough. Setting it moves the diagnostic from
+   `argument types: (set)` to `(array of set)` and still refuses — the
+   argument's KIND must also present as the ELEMENT kind, which is how every
+   real array argument presents (`an array symbol's TypeKind is its element
+   kind`, symtab.inc).
+2. `AssignKindsIncompatible` (symtab.inc:4678, `(dstTk = tySet) <> (srcTk =
+   tySet)`) is a kind-pair function and is CORRECT as it stands. The fix does
+   not belong there; the architecture's own answer is a side channel, since
+   every existing channel exists because "the kind pair alone gave a WRONG
+   ANSWER".
+3. **There are TWO argTk sites, a sibling pair** — `FindUMethOverloadAhead`
+   (pasparser_call.inc, methods) and `MatchCallDelphiProcAddr`
+   (pasparser_lval.inc, free functions, whose `argTypes` is built by FOUR
+   callers). Patching one leaves the other; normalising inside
+   `MatchCallDelphiProcAddr` reaches all four, and its existing `litTypes` /
+   `litRetry` corrected-copy retry is the right vehicle.
+4. **THE PARSER ALREADY COMPUTES THE SIGNAL AND IT DID NOT FIRE.**
+   `ParseSetLiteralAST` sets `SetLitNonSet` for a string element and parks it as
+   `ASTSLen[node] := 1` (pasparser_lval.inc), precisely so a later consumer can
+   tell the two spellings apart. Keying off that flag still produced no change
+   for `P(['xy'])`.
+
+**THE ONE PROBE THE NEXT SEAT SHOULD RUN FIRST**, because everything above is
+downstream of it: dump the argument node (`PXXDBG=a.ast`) at the call and check
+whether `ASTSLen` is actually 1 on the node the matcher receives, and whether
+that node is the `AN_SET_LIT` at all. Either the flag is not being set on this
+path, or the matcher is handed a different node — and which of those it is
+decides the whole fix. Do not re-derive the element kind from the elements: an
+attempt to do that answered `tyUnknown` for exactly the shape the flag already
+had right, which is the two-tables defect one scope down.
