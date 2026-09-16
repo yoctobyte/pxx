@@ -2366,3 +2366,73 @@ I had said I would not chase it; it arrived free and it is worth more than the r
 would have spent on it. **The 35 `build-fail` rows (termios and siblings) are
 identical on both and unchanged by either compiler — a standing condition, not a
 finding, and not mine this shift.**
+
+## Check-in 1i — three walls landed, the umbrella's head is now an RTL wall, and the day's one promotion
+
+**franks-ee landed three and the useful finding is none of them.** Verified by file
+paths, not relayed:
+
+| wall | fix | touches `compiler/**`? | reach |
+| --- | --- | --- | --- |
+| `finput.pas:544` | `a931bef4d` | yes | **inert until a pin** |
+| `comphook.pas:386` | `3926a4098` — `pasparser_expr.inc`, `pasparser_stmt.inc`, `symtab.inc` | yes | **inert until a pin** |
+| `comphook.pas:397` | `d66f128a1` — `lib/rtl/textfile.pas`, a test, a Makefile row, docs | **ZERO files under `compiler/`** | **LIVE NOW** |
+| `comphook.pas:474` | open — `Result := FileAge(F)` in `def_GetNamedFileTime` | — | RTL, Track B |
+
+**I checked the head myself: `FileAge` has ZERO hits anywhere in `lib/rtl`.** It is a
+genuine `SysUtils` gap, so the open head of this umbrella is an **RTL** wall.
+
+**AND THAT IS THE ACTIONABLE PART WHILE HE IS AWAY, WHICH IS A SCHEDULING FACT AND
+NOT A TASTE.** A `lib/**` fix is verifiable against the pin in place and reaches every
+seat the moment it is pushed. A `compiler/**` fix sits inert **until someone pins, and
+nobody may pin while he is away.** So for the next ~36 hours an RTL wall is worth
+strictly more per hour than a parser wall, and the head happens to be one. franks-ee
+has written that into the umbrella so it survives its context; **recorded here so it
+survives mine.** Third instance of the umbrella's own live-without-a-pin finding —
+`TSystemTime`, then `StdErr`, and `FileAge` next.
+
+**The structural row: three fixes walked ONE FILE from 386 to 474.** `finput.pas:544`
+delivered 105 units to `comphook.pas:386`, which delivered the same 105 to `:397`,
+which delivered the same 105 to `:474`. **Units-compiling 22 → 22 → 22 → 22.** That is
+the `cclasses.pas` shape (895 → 1327 → 1726) the umbrella already recorded, now the
+dominant pattern rather than an anecdote — **eight null rows, each predicted as zero
+in advance**, which is the only thing that makes a null row information.
+
+**Its four self-caught errors are ONE shape and it named the shape better than I
+would have:** *"an empty lookup read as a fact about the world rather than a fact
+about where I looked."* The sharpest of the four: it reported the 105 as *"fragmented
+across several walls"* when they had not moved at all — the compiler mints a
+per-instantiation suffix (`WriteMsgTypeColored$151860`), so `uniq -c` split **one
+105-unit wall into 105 singletons**, each ranking below every small wall. **A
+machine-minted string dissolved a population and the histogram looked like progress.**
+
+### THE DAY'S ONE PROMOTION — `d69642bc4`, and it is an EXTENSION, not a neighbour
+
+CLAUDE.md's *"every instrument that lies, lies by being CORRECT ABOUT SOMETHING
+ELSE"* lists a stale binary, a stale tree, a store-local `cat-file`, a truncated
+`tail`, a `grep -L`. **Every one is the right THING at the wrong VERSION**, so every
+example is caught by a freshness check. **Today produced three that are the right
+version of the WRONG SET**, which no freshness check can see: my `grep -o "663"`
+matching byte counts, frankb-56's `--grep 'pin v410'` matching prose about the pin,
+and my `crtl_decl_probe.sh` censusing `lib/crtl/include/**` for a symbol declared in
+`lib/rtl`. **Three instances, two seats, three subsystems, one day** — recurrence, so
+promoted; **one paragraph extended rather than a rule added**, per the file's own
+preference.
+
+**I MEASURED THE QUANTIFIER THIS TIME, because today is the day I invented one.**
+Across the six most recent pins, `--grep 'pin vN'` returns **10, 11, 42, 19, 6 and 19
+hits for exactly ONE real pin commit each** — prose outnumbers the pin **5:1 to
+41:1**. And **v410 answered 5 this morning and 19 this evening**, all fourteen added
+by the seat doing the investigating. **The instrument was degraded by the act of
+writing the investigation down**, inside one day, by me.
+
+**Venue call said out loud, since an author reads silence as "not valued":**
+franks-ee's own splitting-half rule — a population lost by grouping on a
+machine-minted string — it routed to the **playbook**, not CLAUDE.md, on the grounds
+that CLAUDE.md already carries the MERGING form and one subsystem is not recurrence.
+**That call is correct and I am not overriding it.** Promote it if a second unrelated
+subsystem loses a population the same way.
+
+**Shop: HEAD `d69642bc4`, franks-ee working and productive, frankb-56 stopped after
+ten fixes, Track P still unstaffed, four full-tier reds of four kinds, two things
+escalated for the 18th.**
