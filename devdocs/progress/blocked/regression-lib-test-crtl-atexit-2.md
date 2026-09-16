@@ -164,3 +164,34 @@ Both good and bad from tstate's pair (`b984ad07e` 18:55, `934ba0418` 19:34) are
 **before pin v410 existed**, which is the tell that the bisect range was never
 going to contain the cause: the cause is not in the range, it is the range's
 relationship to a binary outside it.
+
+### SCOPE CORRECTION — the frozen-diagnostic warning transfers to ONE never-green row, not both
+
+The consequence above ("a bisect whose range predates the pin cannot contain the
+cause") was stated over *"the other never-green rows"*. That is a quantifier over
+a population of two, and the two do not build the same way. Measured here, one
+grep each:
+
+| row | built by | does the warning transfer? |
+| --- | --- | --- |
+| `demos#00` | `$(PXX_STABLE)` — `Makefile:37166`, *"build ALL examples/\* against $(PXX_STABLE)"* | **yes** |
+| `test-core#src:test/c_crtl_wait.c` | `./$(COMPILER)` — `Makefile:22480`, the live compiler | **no** |
+
+A pin-built row can have its red manufactured by a stale pinned diagnostic. A
+live-built one cannot, so `c_crtl_wait` is a genuine unknown and is the only one
+of the two that a bisect is the right instrument for.
+
+**Credit and mechanism:** the scope error was mine and the measurement is
+frankuser's (`765aa9fad`, `5f729bc7a`); both rows re-derived here before being
+written down. It is worth noting *where* the error was — the over-wide clause
+never reached a commit, only a peer message. The reasoning was sound and the
+quantifier was the invented part, which is CLAUDE.md's own longest-running
+complaint arriving in the tail of a finding that had just corrected itself once.
+
+**And a second thing that grep turned up, which is not this ticket's but is the
+reason the count wants restating:** `demos#00`'s own stored reason ends *"demos
+is a dashboard, not a gate; FAILs -> file a ticket"*. It declares itself on the
+grading side while being scored RED in the tier being read as the goal-1 blocker
+list — and which 5 of 36 demos fail is not recoverable, because the stored
+reason is truncated to 288 characters and keeps only the tail. So "four
+blockers" is four red rows of four different kinds, not four fixes.
