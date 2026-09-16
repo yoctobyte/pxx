@@ -1585,3 +1585,62 @@ end state there is a pxx `--link` mode, not a gcc-assembled stub.
 **It is not building the linker and said so unprompted**, banking the measurement in the
 ticket so whoever takes that p70 starts from *"write the entry stub"* instead of *"write a
 linker"*. That is the difference between a ticket that gets picked up and one that does not.
+
+## Check-in 0y — the one CLAUDE.md promotion of the day, and it fixes an internal contradiction
+
+**frankb-56 corrected its own hold message: it told me it was holding the busybox tree, then
+twice concluded its run had died and relaunched it. The run was alive throughout.** What kept
+me out of the way was the hold; what kept IT out of the way was `busybox_diff.sh`'s own lock,
+which refused the second run and named the live pid. **That guard was written by someone who
+had already had this accident** — its comment cites 2026-09-04, two runs, one tree, both
+results worthless.
+
+**THIS IS THE ONE THING TODAY THAT EARNED A CLAUDE.md LINE, AND IT EARNED IT BY EXPOSING A
+CONTRADICTION INSIDE THE FILE.** Extended at `aa39bf4a0`:
+
+- **Line 189**, the `pgrep`/`pkill` rule, prescribes the remedy: *"prefer the backgrounded
+  job's own completion notification, which needs no loop at all."*
+- **Line 1363**, the gate bullet, records that same notification lying: *"a backgrounded
+  gate's notification reports the WRAPPER, and said `exit code 0` over `gate: RED (exit 1)`
+  three times in one day."*
+
+**1174 lines apart, and nobody reading the `pgrep` rule would ever reach the gate bullet.**
+frankb-56 followed the first and got burned. The warning now sits beside the remedy that
+causes it.
+
+**Why it met the bar when nothing else today did.** Recurrence is a SECOND INDEPENDENT
+SUBSYSTEM and this has one: `gate.sh` (already recorded, three times in one day) and
+`busybox_diff.sh` (today). And it is an EXTENSION, not a neighbour — this file prefers
+strengthening an existing rule, which costs a sentence where a new rule costs a paragraph.
+Everything else today went to the playbook and I said so each time.
+
+**The new half is the FALSE-NEGATIVE TWIN of the existing false positive.** The `pgrep` rule
+is entirely about a scan counting TOO MANY — it counts the observer, so the loop cannot exit.
+This is a scan counting TOO FEW: a one-shot `/proc` scan for compiler processes answered ZERO
+because **a build sampled BETWEEN two compiler invocations has no compiler running.** It reads
+as corroboration of the wrapper's false success, and two readings that fail the same way are
+one reading.
+
+**frankb-56's own sentence is the sharpest thing in it and I kept it in the file: both
+instruments were about the OBSERVER'S RELATIONSHIP TO THE JOB rather than about the job.**
+The remedy follows from that — ask for a state the JOB maintains: a lock file, an output
+directory growing (**objects went 101 → 400 while it was being called dead**), and above all
+the script's own completion TOKEN. `busybox_diff.sh` prints `BUSYBOX-DIFF-COMPLETE` for
+exactly this reason and says so in its header. **It had READ that header the same day and
+still believed an exit code over it an hour later**, which is why the line ends "grep the log
+for the verdict the job printed; never the status the wrapper returned."
+
+**Also detached-specific and new:** `busybox_diff.sh` **execs a copy of itself** so a peer's
+`git pull` cannot rewrite a running script — a deliberate and correct defence against the
+"do not edit a script while it is running" hazard — **and that is precisely what detaches it
+from the wrapper's lifetime.** One guard creating the blind spot another rule walks into.
+
+**Nothing was loosened.** This is a tightening of a rules file, not a hook, an allowlist or a
+`settings.json`, so it is mine; the guardrail limit is untouched.
+
+**Status:** the 258-applet census is alive, ~130 of 400 pxx objects, gcc oracle's 400 done.
+`--freestanding` is written in its tree with two controls it **proved fire** rather than
+asserting — a gcc link has `PT_INTERP` (so the mode cannot silently measure the gcc path and
+call it freestanding) and a stub-less `-e main` link has no `_start`. **Not committed**, because
+it has not run end to end while the tree is busy, and it said so rather than committing an
+unverified integration. My scope line is in the file.
