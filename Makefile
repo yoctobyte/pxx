@@ -5220,6 +5220,20 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_const_array_of_sets.pas $(TESTTMP)/test_casets26
 	@$(TESTTMP)/test_casets26 | diff -u test/test_const_array_of_sets.expected - \
 	  || { echo 'test_const_array_of_sets: FAIL - set element of a const array'; exit 1; }
+	@# The VAR twin of the row above, and it stayed broken for as long as the const
+	@# one was fixed: ParseVarSection's element loop was never wired to the shared
+	@# TryParseInitValForm helper, so a `[` reached an ordinal fallback that neither
+	@# evaluates nor CONSUMES it, the loop spun, and the element counter tripped the
+	@# length check -- `too many array initializer elements` with the position still
+	@# on the FIRST element. FPC's own x86_64/cpuinfo.pas is the real case
+	@# (`cpu_capabilities : array[tcputype] of set of tcpuflags = ([], ...)`), one of
+	@# the two errors reported by 132 of its 207 compiler units. Rows cover the
+	@# empty set FIRST (the shape that spins), an enum bound, a routine-LOCAL array
+	@# (LocalInit rather than PendingInit), and a STORE after init -- the row a const
+	@# array cannot have, which is what proves these are real writable slots.
+	@./$(COMPILER) test/test_var_array_of_sets.pas $(TESTTMP)/test_vasets26
+	@$(TESTTMP)/test_vasets26 | diff -u test/test_var_array_of_sets.expected - \
+	  || { echo 'test_var_array_of_sets: FAIL - set element of a var array'; exit 1; }
 	@# `p^[i]` over a pointer to a FIXED array, every element kind, read AND
 	@# write, each row beside the direct `a[i]` spelling. Compare VALUES: four of
 	@# the rows this test was written for exited 0 while being wrong, and one of

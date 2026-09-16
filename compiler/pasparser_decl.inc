@@ -3350,6 +3350,52 @@ begin
 	                                  Ord(tyPointer), vIsLocal);
 	              Next;
 	            end
+	            { THE SHARED HELPER, AND THIS IS THE VAR ARM OF A DOUBLE CASE THE
+	              CONST ARM ALREADY CLOSED. ParseConstSection's element loop calls
+	              TryParseInitValForm right here and this one did not, so every
+	              non-ordinal element form the helper carries -- a SET literal, a
+	              PChar, an `@X` -- reached the ordinal fallback below, which
+	              cannot evaluate them AND DOES NOT CONSUME THEM EITHER. The loop
+	              then spun on one token while Inc(initElem) counted a slot per
+	              spin, until the length check tripped:
+
+	                var a: array[0..0] of set of TF = ([]);
+	                -> too many array initializer elements
+	                   near: of set of TF = ( >>> [ ] )
+
+	              ONE element, ONE slot. The count in that message is not the
+	              defect and never was -- `array[0..5]` with three elements fails
+	              identically, and the `near:` marker stays on the FIRST element
+	              through every spin, which is the tell: a size complaint about a
+	              correct size, with TokPos never moving. The const loop's own
+	              comment records this same paragraph four times over (string,
+	              PChar, set, `@X`) and concluded it had to be a shared helper
+	              rather than a fifth hand-written arm. It was right; the var side
+	              was simply never wired to it.
+
+	              Measured 2026-09-16, and the storage class is the whole
+	              discriminator -- eight of the nine cells were already green:
+
+	                const array of set   OK      var array of set   REFUSED
+	                var   plain set      OK      var array of Int   OK
+	                var   array[TF] of set                          REFUSED
+
+	              So neither the set type nor the enum bound is implicated; it is
+	              a set AS AN ARRAY ELEMENT, in a VAR. FPC's own
+	              compiler/x86_64/cpuinfo.pas opens `cpu_capabilities` with `[]`,
+	              which is one of the two walls behind 132 of its 207 compiler
+	              units.
+
+	              Placed AFTER the string and class-reference arms above, not
+	              before: those two key on the DESTINATION type and decide a
+	              genuinely ambiguous token (a one-char literal into a tyChar
+	              element is an ordinal, not a string), so moving the helper ahead
+	              of them would re-open a bug they were written to close.
+	              bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised }
+	            else if TryParseInitValForm(elemTk, Ord(Syms[idx].PtrElemTk),
+	                                        fvKind, fvVal, fvAux) then
+	              RegisterVarInitElem(idx, arrLo + initElem, fvKind, fvVal, fvAux,
+	                                  Ord(elemTk), vIsLocal)
 	            else
 	            begin
 	              initVal := ParseInitValTk(tk);
