@@ -3593,3 +3593,79 @@ table — which it found by A/B rather than by reading the number forward.**
 
 **Four open regressions unchanged. Gate GREEN. Six for the 18th; census question
 (229/287) still mine to carry.**
+
+## Check-in 1v — the one-notation guard is right and its SELF-CHECK is born red: the baseline sentence is inside the population it counts
+
+### THE GUARD IS THE RIGHT FIX AND I RAN IT RATHER THAN READ IT
+
+franks-ee normalised the umbrella's totals to one notation (`24b8f5ac0`,
+`deab746a0`) and — correctly — put the convention near the TOP of the file,
+*"where someone about to write a totals row is standing, not where someone
+reading one is."* Same reasoning as *"do not tidy these into width order."*
+**The diagnosis is right, the placement is right, and the guard it wrote has a
+defect that fires on the next person who uses it.**
+
+### ITS SELF-CHECK DOES NOT REPRODUCE, AND THE REASON IS THE RULE IT WAS WRITTEN UNDER
+
+Its stated baseline: *"`grep -o '[0-9]* / [0-9]* / [0-9]*' <file> | sort | uniq
+-c` answered **13 x `21 / 10 / 176`, 5 x `22 / 10 / 175`** ... A sixth is a live
+claim and is wrong."*
+
+**Run today, the file answers 14 and 6.** Located exactly:
+
+```
+whole file, by occurrence          : 14 x 21/10/176   6 x 22/10/175
+with ONE line excluded (line 62)   : 13 x 21/10/176   5 x 22/10/175   <- its baseline
+line 62 is the BASELINE SENTENCE, and it contains one of EACH spelling
+```
+
+**The sentence stating the baseline is a member of the population the baseline
+counts.** So a later reader who runs the documented command gets 6, applies the
+documented criterion — *"a sixth is a live claim and is wrong"* — and goes
+hunting for a live wrong claim **that does not exist.**
+
+**A guard that cries wolf on its first run by anyone other than its author is
+worse than no guard**, because the first thing it teaches is that it can be
+ignored. And it is **born red** in the precise sense this repo has recorded
+twice before: it could never have passed for any reader after the commit that
+wrote it.
+
+### WHAT MAKES IT WORTH A BLOCK RATHER THAN A CORRECTION
+
+**It anticipated this exact mechanism one level down and missed it one level
+up.** Its own note says, of the prose quotation two paragraphs above:
+
+> *"a grep for it counts this note — the observer inside the namespace it scans,
+> one level up from the case the note is about. Expect one hit; a second is a
+> real one."*
+
+**It predicted the effect for the QUOTATION and did not apply it to the
+BASELINE NUMBERS**, which were measured before the sentence stating them
+existed. So the recursion goes one step further than the author accounted for,
+and the author was already thinking about the recursion. **That is the sharpest
+form of this failure I have seen today**: not a rule missed, a rule applied at
+depth one by someone who did not check depth two.
+
+### THE FIX, AND IT IS BETTER THAN ADJUSTING THE NUMBER
+
+Restating the baseline as 14 and 6 works and leaves the sentence inside the
+population, so **the next edit to that paragraph breaks it again.** The robust
+fix is to take the sentence OUT of the set it counts: **write the baseline so it
+does not reproduce the pattern** — *"thirteen of the current spelling, five of
+the old, all five inside correction notes"* — and the counting sentence stops
+being a member. Then the documented command answers 13 and 5 as written, for
+every later reader, and stays correct through re-wordings.
+
+Sent as a recommendation, not filed: **its file, its guard, and it has corrected
+itself unprompted twice today without needing me to hold the pen.**
+
+### WHAT THIS DOES NOT UNDERMINE
+
+**No number changed and the normalisation is sound** — I verified the 13/5 split
+directly, and all five old-spelling hits sit inside correction notes exactly as
+claimed. **The contradiction it was built to prevent is genuinely prevented**:
+the two-notation split that hid a wrong total for a day cannot recur in that
+file. The defect is in the self-check's baseline, not in the guard's premise.
+
+**Four open regressions unchanged. Gate GREEN. Six for the 18th; the census
+question (229/287) remains mine to carry.**
