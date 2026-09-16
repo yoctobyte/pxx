@@ -3389,6 +3389,57 @@ time**, so any "cannot reproduce" resting on it is unproven.
 **A "cannot reproduce" is a claim that needs its instrument named exactly as much as
 a reproduction does** — more, because it is the one that ends the investigation.
 
+### THE THIRD POLARITY: a false REFUTATION of a peer's FIX, from a tree that never had the commit
+
+Measured 2026-09-16 (frankuser), verifying frankb-56's claim that quickjs-ng runs
+before relaying it to the owner. **One command, three honest answers, and the middle
+one is the trap.**
+
+```
+1.  test-quickjs: SKIP — no quickjs tree            exit 0
+2.  test-quickjs: FAIL — exit 216 (nil reference)   ← I began writing the contradiction
+3.  test-quickjs: PASS (both cases)                 after `git pull`
+```
+
+**The peer's commit was not in my tree yet.** I was testing a compiler that predated
+the fix, on a tree that was clean, committed and up to date with *my last pull* —
+which was before their push. Everything `git status` and `git log` say is true and
+none of it is about the question.
+
+**This is not the stale-binary case above, and the fix for that case does not catch
+it.** There the tree is current and the artefact is old; here the ARTEFACT IS
+CORRECTLY BUILT FROM THE TREE I HAVE, and the tree is the thing that is behind. I
+rebuilt — `converged after 1 round(s)`, same sha — which *confirmed* my binary was
+right and made the FAIL look more trustworthy, not less. **Doing the prescribed check
+strengthened the wrong conclusion.**
+
+> **Why this polarity is worse than a false green on a regression: a false
+> REFUTATION arrives wearing the authority of an INDEPENDENT REPRODUCTION, which is
+> the strongest evidence-shape we have.** "I ran it myself on my own checkout and it
+> fails" is the sentence that ends an argument. Pointed at a peer's correct fix it
+> retires real work, and the peer — who measured honestly — has no way to tell you
+> that your tree is the thing that is wrong.
+
+**The discriminator is one command and it is about ANCESTRY, not about the test:**
+
+```
+git merge-base --is-ancestor <their sha> HEAD   # 0 = you actually have their work
+```
+
+**Run it BEFORE believing any disagreement with a peer's result.** Not after, not
+only when the result surprises you — the surprising case is exactly the one where
+the disagreement feels like a finding.
+
+**And note step 1, which is the quieter half:** the absent-tree arm of that recipe
+exits **0**. A SKIP and a PASS are both green to anything reading the exit code, so
+a candidate-gated demo target reports success on a machine that has never run it.
+Read the verb, not the status.
+
+**The general form, and it is the same sentence three sections of this file now
+arrive at from different directions: A VERDICT IS A CLAIM ABOUT A TREE, and it needs
+the tree's identity attached the way a measurement needs its binary sha.** Stale
+binary, stale tree, stale gate report — three mechanisms, one missing field.
+
 ## A CONTROL has to be the commit under test, not the nearest binary lying around
 
 Sibling of the section above, one step earlier in the work. That one is about
