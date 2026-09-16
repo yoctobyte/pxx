@@ -64,7 +64,7 @@ assignment-compatibility site the call-result path takes instead, and whether
 it is the same seam as any other "result of a call" typing gap.
 
 ## Log
-- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-16 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bf7077de0.
 
 ## FIXED 2026-09-16 — and the RANKING QUESTION IS SETTLED BY MEASUREMENT
 
