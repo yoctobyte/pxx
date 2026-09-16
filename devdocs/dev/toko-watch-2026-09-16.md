@@ -1644,3 +1644,51 @@ asserting — a gcc link has `PT_INTERP` (so the mode cannot silently measure th
 call it freestanding) and a stub-less `-e main` link has no `_start`. **Not committed**, because
 it has not run end to end while the tree is busy, and it said so rather than committing an
 unverified integration. My scope line is in the file.
+
+## Check-in 0z — I put an invented quantifier INTO the rule about invented quantifiers
+
+**Corrected at `5b859f6fb`.** The line I promoted an hour ago said *"objects went 101 -> 400
+while it was being called dead"*. **Only the 101 was a reading.** 400 is the translation-unit
+count, never an object count anyone observed, and it was still false when frankb-56 wrote to
+me — the run was at 290, twenty minutes after the line landed.
+
+**Two things make this worse than a digit, and both are mine.**
+
+1. **I put it in the rules file IN THE COMMIT CODIFYING THE RULE ABOUT INSTRUMENTS THAT ANSWER
+   CONFIDENTLY AND WRONGLY.** CLAUDE.md's longest-running complaint is a claim whose VERB was
+   checked and whose QUANTIFIER was invented, with the checked half lending its credibility to
+   the unchecked one. `101 -> 400` is that exact shape, in the file, in a line about it.
+2. **I took the number from a peer's message and never asked which half was measured.** The
+   file says a conclusion handed to you already carrying a quantifier *"is not a measurement
+   you may build a rule on: ask which population it was drawn from before you quote it,
+   especially when it arrives labelled as a finding."* It arrived labelled as a finding. I
+   quoted it.
+
+**And the second half of the sentence was wrong independently.** frankb-56 counted the 101
+**after** the lock had already refused its relaunch — so at the moment it declared the run
+dead it had not looked at that directory at all. It had looked at a process table and at an
+**OLD work directory left by a finished run** (28 objects). The growing directory therefore
+played **no evidential role in the failure**, and my sentence gave it one.
+
+**I FIXED IT BY REMOVING THE QUANTIFIER RATHER THAN SUBSTITUTING ANOTHER.** frankb-56 offered
+a defensible series (101, 126, 153, 168, 239, 270, 290) and I did not take it — **I did not
+measure that either, and importing a second unverified series into the same line to repair the
+first is the mistake repeating itself with better manners.** The rule-worthy content needs no
+number at all.
+
+**The corrected shape is stronger for the rule, which is frankb-56's point and it is right:**
+the growing output directory was **not an instrument consulted and misread — it was the
+instrument NOT CONSULTED**, sitting there available the whole time, while a process table was
+consulted instead. *"Ask for a state the job maintains"* lands harder when the state was
+available and ignored than when it was merely slow to update.
+
+**It declined to edit CLAUDE.md itself** — *"I'd rather not edit CLAUDE.md on my own initiative
+when the line is yours and the error is mine to report"* — which is the correct instinct and
+the reverse of the failure mode this file warns about. It reported the error against its own
+credit; the line made its incident look more damning, not less, and it still asked for the
+number to come out.
+
+**This is the day's clearest case of the rules file working on the person writing it.** The
+promotion was correct — second subsystem, a genuine internal contradiction, an extension not a
+neighbour — and the paragraph that carried it contained the very defect it describes, for one
+hour, unnoticed by me and caught by the seat whose incident it documents.
