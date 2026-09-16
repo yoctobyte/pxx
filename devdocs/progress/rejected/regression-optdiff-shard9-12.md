@@ -1,7 +1,21 @@
 ---
+slug: regression-optdiff-shard9-12
+track: A
 prio: 70
-track: T
+type: regression
+status: rejected
+created: 2026-09-16
+found-by: twatch (auto-filed)
+owner: ""
+summary: "NOT A REGRESSION -- REJECTED 2026-09-16 on measurement. The diffing program is test/test_foreign_thread_exception_chain.pas, a KNOWN-FAILING repro that its own ticket (bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread, p70, open) says is NOT WIRED because it fails. optdiff globs test/*.pas, so a program the suite deliberately excludes is swept anyway. It is NONDETERMINISTIC: 20 runs at -O0, 20 at -O2 and 16 under the PINNED v410 compiler give FOUR distinct exit codes -- 0, 124, 139 (SIGSEGV), 217 -- at a FIXED optimisation level. This ticket\'s OWN log tail proves it without any re-run: `217 vs 0` at -O2 and `217 vs 139` at -O3, three codes in one sweep. So the DIFF is a coin flip, the 12-commit range is a red herring, and nothing in it is causal -- the pinned control predates the whole range and flakes identically. Skipped in tools/optdiff.skip with the verification that list requires. THE UNDERLYING BUG IS REAL, OPEN AND OWNED at p70; only this regression report is wrong."
 ---
+
+> **REJECTED 2026-09-16 — read the summary before the stub below.** Everything
+> under this line is the auto-filer's original text, kept as the record of what
+> was reported. Its "Range" section is correct that `7e6029dca4ca` cannot be the
+> cause, and wrong to imply the cause is below it: there is no cause in the
+> range at all. The real defect is
+> `bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread` (p70, open).
 
 > **Track T by default: the FAILING STEP named no owner.** Line 1 of 1 is `tools/optdiff.sh --shard 9/12`. The job's own `src` (`tools/optdiff.sh`, 1 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
 

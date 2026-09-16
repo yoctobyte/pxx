@@ -44,3 +44,16 @@ t_rw*
 test_thread_writeln_interleave*
 test_threadsafe_io_lock_foreign*
 test_parallel_writeln_atomic*
+# a KNOWN-FAILING repro, deliberately NOT WIRED into the suite by its own
+# ticket (bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread, p70):
+# it raises 300k exceptions on a raw pthread_create'd FOREIGN thread, which
+# inherits its creator's exception chain. optdiff globs test/*.pas, so a
+# program the suite deliberately excludes is swept anyway -- the glob's
+# population is "files in test/", not "tests". Verified before skipping, as
+# this list requires: 20 runs at -O0, 20 at -O2 and 16 under the PINNED v410
+# compiler give FOUR distinct exit codes -- 0, 124, 139 (SIGSEGV) and 217 --
+# at a FIXED level. One optdiff run reported `217 vs 0` at -O2 and `217 vs
+# 139` at -O3, three codes in one sweep. A one-run-per-level differential
+# cannot express a question about a program whose exit code is a coin flip.
+# The BUG stays open and owned at p70; this skips the INSTRUMENT, not the bug.
+test_foreign_thread_exception_chain*
