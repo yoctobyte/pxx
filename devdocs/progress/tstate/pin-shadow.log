@@ -880,3 +880,4 @@
 2026-09-16T16:34:39Z	borg	482dbd011ffbcd0d1bec981d247a795031cd5b37	would NOT pin 482dbd011ffb — 1 red(s) the current pin does not have, 6 inherited from the current pin: optdiff#shard9/12
 2026-09-16T17:04:48Z	borg	1699fbadf5710ab34706448d93d38a26967539aa	would NOT pin 1699fbadf571 — 1 red(s) the current pin does not have, 6 inherited from the current pin: optdiff#shard9/12
 2026-09-16T17:30:42Z	borg	acbc6fa04482351dac2122a9addaa1a4ad98a18f	would NOT pin acbc6fa04482 — 1 red(s) the current pin does not have, 6 inherited from the current pin: optdiff#shard9/12
+2026-09-16T21:20:52Z	borg	136975139a51b29942d97776a97c79f9ba696fb3	would-pin PENDING 136975139a51 — qualifies, streak 1/2
