@@ -27285,6 +27285,43 @@ same phenomenon, because an axis nobody enumerated is pinned. **If a second
 investigation on an unrelated subsystem produces it again, promote it as an
 extension of that clause and not as a new rule.**
 
+
+### THE COMPLEMENT: A PROBE THAT FAILS TO REPRODUCE IS EVIDENCE, AND THE PAIR THAT BRACKETS THE BOUNDARY BEATS THE ONE THAT REPRODUCES
+
+Everything above is about a probe that DOES reproduce and is false about the
+real code. This is the other direction and it is under-used: **when a probe
+built to reproduce a bug comes back clean, the axis you varied is not the
+cause, and that is a measurement rather than a wasted run.**
+
+Measured 2026-09-16 (`9d79f6124`), diagnosing a quickjs-ng runtime crash. Three
+probes, in order, each varying one axis of the same 16-byte by-value struct
+argument:
+
+| probe | result | what the result licensed |
+| --- | --- | --- |
+| named local, fn-POINTER typedef, indirect call | **passed** | not "indirect call", not the 16-byte class |
+| compound literal (the macro's actual spelling) | **passed** | not the literal, not the call form |
+| same call through a FUNCTION-TYPE typedef | **failed** | the typedef's SPELLING is the axis |
+
+The two passes are what made the third one conclusive. Had the first probe
+reproduced, the obvious reading — "16-byte structs through function pointers
+are broken" — would have been wrong in a way that survives review, because it
+is true of the failing case and false as a characterisation. **A single
+reproducing probe names a superset of the cause; a reproducing probe with a
+non-reproducing sibling one axis away names the cause.**
+
+So when a probe fails to reproduce, do not discard it and reach for a bigger
+one. **Record what it rules out, change exactly one thing, and run it again** —
+the boundary is the pair, and the pair is what you will write in the ticket.
+
+**The corollary for a hypothesis handed to you:** two hypotheses died this way
+before the real one, and the second was a pattern a peer had found hours
+earlier and confirmed twice that same afternoon (an optimiser dropping a store).
+It was wrong here, and one run at `-O0/-O1/-O2/-O3` killed it — identical crash
+at all four. **A fresh pattern is exactly what makes a wrong hypothesis feel
+supported**, so a borrowed hypothesis earns a cheap decisive check BEFORE it
+earns any reading of the code.
+
 ## PROFILING A PXX BINARY: THE `.map` IS ALREADY THERE, AND IT NEEDS NO REBUILD
 
 A pxx executable has **no section headers and `symtab entries: 0`**, which reads
@@ -27389,3 +27426,44 @@ Two things it does NOT buy:
 partial result and reasoning about whether the missing rows "would probably have
 been similar". With a shuffled list that question is answered by arithmetic;
 with an ordered one it cannot be answered at all.
+
+## THE PINNED COMPILER IS A READY-MADE UNFIXED COMPILER — USE IT AS THE POSITIVE CONTROL INSTEAD OF REVERTING
+
+A fix needs a control that FAILS, and the obvious way to get one is
+revert → rebuild → restore → rebuild. CLAUDE.md warns what that costs: each
+rebuild seeds from the previous local binary, so a few cycles walk your checkout
+off the pin-derived chain and `gate.sh quick` goes RED with *"the fixedpoint
+reached from PINNED differs"* — two valid fixedpoints, not a miscompile, and a
+red that costs a reseed to clear.
+
+**`stable_linux_amd64/default/pinned` is already a compiler without your fix.**
+It costs one command, touches nothing, and cannot disturb `compiler/pascal26`:
+
+    ./stable_linux_amd64/default/pinned <flags> test/your_new_test.c /tmp/ctl
+    /tmp/ctl; echo "rc=$?"          # MUST be nonzero
+
+Measured 2026-09-16 on the function-type-typedef ABI fix (`9d79f6124`): the new
+fixture passes 7 rows under the fixed compiler and gcc, and under the pin it
+**fails 6 of 7 and exits 1**. The row it passes is the scalar one — which is
+the finding itself (scalars need no record identity, so every fixture using one
+certified the broken path) restated as a measurement rather than as a claim in
+a comment.
+
+**This also answers the assertion-written-after-the-fix problem.** A test
+authored once the bug is fixed pins the fix, not the bug, and nothing in a green
+run can tell you which. Running it against the pin is what converts it from an
+assertion into a control.
+
+**THE CAVEAT, AND IT CUTS THE OTHER WAY — CLAUDE.md STATES IT AS A HAZARD FOR
+EXACTLY THIS INSTRUMENT.** The pin is *correctly* older, so a subject whose
+SOURCE branches on the compiler's age takes a different arm under it: a feature
+guarded by `__GNUC__`, a version macro, or any feature detection that landed
+after the pin. There, the pin can PASS for a reason that has nothing to do with
+your fix — a green that is correct about a different compiler. So the pin is a
+valid control only when **the subject does not branch on compiler identity**,
+which a small self-contained fixture does not and a real library very well may.
+Check that before trusting either direction of the result.
+
+**When the pin cannot serve** — your fix is newer than the pin in a way the
+fixture depends on, or the subject does feature-detect — fall back to the
+revert cycle, and reseed from the pin and `touch` the sources afterwards.
