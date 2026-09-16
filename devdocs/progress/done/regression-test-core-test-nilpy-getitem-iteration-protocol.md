@@ -64,3 +64,6 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-16 — auto-closed by the borg watcher: `test-core#src:test/test_nilpy_getitem_iteration_protocol.npy` passes at 881fdee59b6f (tier native); it was red at 67f0878f2e59. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
