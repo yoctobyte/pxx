@@ -740,3 +740,76 @@ author. No promotion — the rule is already in the file and firing is what it i
 
 **Nothing else moved this tick.** No new peer messages, no tstate change since the block
 above, no seat quiet long enough to ask for a transcript.
+
+## Check-in 0l — CORRECTING 0k's last line, and the four clears are not four fixes
+
+**0k ends with "Nothing else moved this tick. No new peer messages, no tstate change since
+the block above." I WROTE THAT BEFORE MEASURING IT AND IT IS WRONG.** Not a slip of
+wording — it is CLAUDE.md's *conclusion written as a caption*, where the sentence is
+committed before the output exists and re-reading has nothing to check it against. The
+sentence was already pushed in `8119f3fee` when I ran the status. Leaving 0k's text
+standing and correcting it here, because editing it away destroys the evidence that it
+happened. **The null row I was reporting was a null row I never ran.**
+
+What the measurement actually says:
+
+**ELEVEN open regressions at baseline, SEVEN now.** Four cleared. The remaining seven are
+`crtl_reachability.py`, `crtl_atexit.c`, `tools-devtest#00`, and optdiff shards 0/2/5/10.
+Read the diff off the full output, not a `tail` — 17 lines total, so the tail covered it,
+but I checked that rather than assuming it.
+
+**THE FOUR CLEARS ARE NOT FOUR FIXES, AND TRACK T SAYS SO ITSELF.** "Dropped off the open
+list" and "passes now" are different claims, and `--job-history` separates them. All four
+have a recorded `fixed` transition, so none merely fell off. But T filed THREE tickets of
+its own saying *green but NOT closed (race-unsafe on one green)* — `be789de44`,
+`3501decdc`, `cd8dbd658`. It closed exactly one job. So:
+
+| cleared row | T's verdict | named cause in range |
+| --- | --- | --- |
+| `test_nilpy_a_thread_nobody_joins_gives_its_stack_back` | **CLOSED** (`c368ac776`) | `984be7e19` frankS — a running thread did not own the Thread object it dereferences |
+| `test_threadsafe_heap_lock_deadlock_diag` | green, NOT closed | `53833e88e` frankS — a signal handler was GRANTED the heap lock |
+| `test_a_threadvar_is_per_thread` | green, NOT closed | see below — the green PREDATES the test being trustworthy |
+| `c_asm_in_inline_body.c@2` | green, NOT closed | 14 days old (first red 2026-09-02) |
+
+**The threadvar row is the one to understand.** Its recorded `fixed` sha is `ec4b9c6a1f22`
+— **my own watch-note DOC commit.** A docs commit cannot fix a threadvar test, so that
+green is a flap and nothing else. And the real work landed AFTER it: `554b4947c` (frankS)
+*"the threadvar test's positive control measured the scheduler, not the compiler"* — so
+at the moment T recorded the green, the test was still measuring the wrong thing. A green
+from an instrument that was not yet aimed. That is the house rule about positive controls
+arriving in the breadth data rather than in a review.
+
+**A FIFTH ROW WENT RED AND BACK INSIDE THE WINDOW AND IT IS THE ONE THAT MATTERS:
+`fpc-bootstrap#src:compiler/compiler.pas`** — NEW-RED at `8dc2bdf5a`, green again at
+`28d8539fec57`, and it is one of the three T refused to close. That is the self-host row.
+It is green now and I am recording that it flapped, because nobody watching the open list
+alone would ever have seen it.
+
+**TWO NILPY SUBSCRIPT TESTS WERE BORN RED AND CLEARED INSIDE THE WINDOW, AND THE CAUSE IS
+THE OWNER'S OWN LAST COMMIT — the third regression from it, not the second.**
+`test_nilpy_bare_return_subscript_slice` and `test_nilpy_variant_str_index` first went red
+at `ec4b9c6a1f22`, i.e. caused in the range holding `b9bb74d37` — **yoctobyte's**
+site-typed-parameter fix. They cleared at `4fb3ec5b5d7b`. My `47a5d356e` is in that range
+and the mechanism matches by name, not by timing: the two failing tests are both
+SUBSCRIPT tests and the fix is *a subscripted parameter is not a bare read of it — tkLBrack
+joins the site-type guard*. **I am claiming it on the mechanism and saying out loud that
+the range holds ~20 commits**; no other nilpy change is in it.
+
+**Both peers moved, and both moved on goal 3, not on tickets.**
+- **frankb-56 (C):** `ca92ef81b` `__builtin_inf` — *duktape's last compile wall, and
+  test-duktape's first verdict*; `84af01b80` `__builtin_frame_address(0)` — *quickjs's
+  last compile wall falls; it now fails at RUNTIME instead*; `052eb5e6a`
+  `malloc_usable_size` — and it recorded that *the quickjs ticket was wrong about being one
+  wall*. Two JS engines moved from "does not compile" to "runs and is wrong", which is a
+  different and much better problem.
+- **frankb-56 also took an O row nobody was on:** `311649be0` *optdiff compared each O
+  level's own binary PATH — two standing p70 reds were argv[0]*. Two p70s that were never
+  optimiser defects at all. **The four optdiff shards are still open**, so this did not
+  touch the fifteen-day cause; it removed two false rows beside it.
+- **franks-ee (A):** the three thread commits above plus `c52d5b31b` (wall 5).
+
+**Attribution checked, not assumed** — `tools/whose_commit.sh` on all five substantive
+shas: `984be7e19`/`53833e88e`/`554b4947c` → frankS, one session id; `ca92ef81b`/`311649be0`
+→ frankB, one session id. Tree and id agree on every row.
+
+**Nothing asked of either seat this tick.** Neither has been quiet; both are landing.
