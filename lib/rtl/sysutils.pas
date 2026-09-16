@@ -206,6 +206,34 @@ type
     Date: Integer;
   end;
 
+  { FPC SysUtils.TSystemTime -- a broken-down wall-clock time.
+
+    THE TWO ARMS ARE ONE STORAGE, DELIBERATELY. FPC declares this as a variant
+    record so the same eight words can be read under the plain names or under
+    the `w`-prefixed Win32 names (`SYSTEMTIME` in the Windows API has the
+    latter), and real source uses both spellings interchangeably. Copying the
+    shape rather than picking one arm is what keeps `st.Year` and `st.wYear`
+    the same field; a two-record version would compile every program and
+    silently give one of them zeros.
+
+    DayOfWeek IS 0-BASED HERE AND SysUtils.DayOfWeek IS 1-BASED, which is the
+    one detail in this type that cannot be guessed from the field names. FPC
+    writes `Dec(SystemTime.DayOfWeek)` in DateTimeToSystemTime and
+    `DayOfWeek(...)-1` in the unix GetLocalTime -- both read, not inferred. So
+    0 = Sunday in the FIELD, 1 = Sunday from the FUNCTION.
+
+    First consumer: FPC's own compiler (globals.pas `startsystime`,
+    `getrealtime(const st: TSystemTime)`), which reads Year/Month/Day and
+    Hour/Minute/Second/MilliSecond -- the plain arm. }
+  TSystemTime = record
+    case Integer of
+      0: (Year, Month, Day, DayOfWeek: Word;
+          Hour, Minute, Second, MilliSecond: Word);
+      1: (wYear, wMonth, wDay, wDayOfWeek: Word;
+          wHour, wMinute, wSecond, wMilliseconds: Word);
+  end;
+  PSystemTime = ^TSystemTime;
+
 const
   { Days from the TDateTime epoch (1899-12-30) to the Unix epoch (1970-01-01). }
   UnixDateDelta = 25569;
@@ -1031,6 +1059,22 @@ procedure DecodeTime(aTime: TDateTime; out Hour, Min, Sec, MSec: Word);
   a Saturday = 7. First consumer: Synapse synautil's RFC-822 date rendering
   (feature-synapse-compile-check). }
 function DayOfWeek(DateTime: TDateTime): Integer;
+
+{ TSystemTime <-> TDateTime, and the wall clock as a TSystemTime.
+
+  GetLocalTime IS UTC HERE, and that is this RTL's existing stance rather than
+  an oversight: `Now` reads CLOCK_REALTIME through the PAL and there is no
+  timezone database (see Now's own note above, and the POSIX/C fixed-locale
+  position). FPC's unix GetLocalTime applies the zone; ours cannot, so it
+  agrees with OUR Date/Time/Now rather than disagreeing with them. A program
+  that formats what GetLocalTime returns gets a consistent answer; one that
+  compares it against an external local timestamp does not, and that is the
+  same limitation Now already carries.
+
+  MilliSecond is real, not a zero: Now is built on PalRealtime's nanoseconds. }
+procedure GetLocalTime(var SystemTime: TSystemTime);
+procedure DateTimeToSystemTime(DateTime: TDateTime; out SystemTime: TSystemTime);
+function SystemTimeToDateTime(const SystemTime: TSystemTime): TDateTime;
 
 { Gregorian leap-year test (FPC SysUtils.IsLeapYear). }
 function IsLeapYear(Year: Word): Boolean;
@@ -4955,6 +4999,38 @@ begin
     rounding is introduced by a round trip through EncodeTime. }
   frac := DateTime - Trunc(DateTime);
   Result := EncodeDate(Word(ny), Word(nm), d) + frac;
+end;
+
+procedure DateTimeToSystemTime(DateTime: TDateTime; out SystemTime: TSystemTime);
+begin
+  DecodeDate(DateTime, SystemTime.Year, SystemTime.Month, SystemTime.Day);
+  DecodeTime(DateTime, SystemTime.Hour, SystemTime.Minute, SystemTime.Second,
+             SystemTime.MilliSecond);
+  { 1..7 from the function, 0..6 in the field -- FPC's own `Dec(...)`. }
+  SystemTime.DayOfWeek := Word(DayOfWeek(DateTime) - 1);
+end;
+
+function SystemTimeToDateTime(const SystemTime: TSystemTime): TDateTime;
+var
+  d, t: TDateTime;
+begin
+  d := EncodeDate(SystemTime.Year, SystemTime.Month, SystemTime.Day);
+  t := EncodeTime(SystemTime.Hour, SystemTime.Minute, SystemTime.Second,
+                  SystemTime.MilliSecond);
+  { FPC's ComposeDateTime, NOT `d + t`. Before the epoch the integer part runs
+    negative while the time-of-day fraction is always positive, so adding them
+    moves the clock BACKWARDS through the day: 1899-12-29 06:00 is -1 + 0.25 =
+    -0.75, which decodes as 18:00 on the wrong side. dateutils' EncodeDateTime
+    in this tree still adds, and sysutils' own DecodeDate notes carry the -0.75
+    worked example; this routine takes the sign-correct form because a
+    TSystemTime carries no indication that its date is pre-1900. }
+  if d < 0 then Result := Trunc(d) - Abs(Frac(t))
+  else Result := Trunc(d) + Abs(Frac(t));
+end;
+
+procedure GetLocalTime(var SystemTime: TSystemTime);
+begin
+  DateTimeToSystemTime(Now, SystemTime);
 end;
 
 function DayOfWeek(DateTime: TDateTime): Integer;

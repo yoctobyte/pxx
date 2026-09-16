@@ -36044,6 +36044,21 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_dateparse.pas $(TESTTMP)/lib_dateparse
 	tools/expect_same.sh lib_dateparse.1 "$$($(TESTTMP)/lib_dateparse | grep -c '=ok')" "36"
 	tools/expect_same.sh lib_dateparse.2 "$$($(TESTTMP)/lib_dateparse | tail -1)" "lib_dateparse: all ok"
+	# SysUtils.TSystemTime and its converters. FPC's own compiler is the first
+	# consumer (globals.pas `startsystime`, `getrealtime(const st: TSystemTime)`)
+	# and we simply did not declare the type. Three rows carry the weight: the
+	# VARIANT ARMS ARE ONE STORAGE (written through the plain names, read through
+	# the Win32 `w` ones, SizeOf=16 -- a two-record version would compile and hand
+	# one arm zeros); DayOfWeek is 0-based in the FIELD and 1-based from the
+	# FUNCTION, asserted as the difference so the row cannot pass under whichever
+	# convention it was written against; and the PRE-EPOCH compose is -1.25 under
+	# FPC's ComposeDateTime against -0.75 for naive date+time, which decodes as
+	# 18:00 on the wrong day -- a plausible wrong answer, so both numbers are
+	# asserted. GetLocalTime is UTC here (no timezone database, same as Now) and
+	# is checked for AGREEMENT WITH Now rather than any absolute.
+	$(PXX_STABLE) -Fulib/rtl test/lib_systemtime.pas $(TESTTMP)/lib_systemtime
+	tools/expect_same.sh lib_systemtime.1 "$$($(TESTTMP)/lib_systemtime | grep -c '=ok')" "27"
+	tools/expect_same.sh lib_systemtime.2 "$$($(TESTTMP)/lib_systemtime | tail -1)" "lib_systemtime: all ok"
 	# GetExceptionMask/SetExceptionMask. Deliberately NOT named lib_*.pas: it is
 	# x86-64 only by design, and lib_cross_sweep.sh builds the lib_* glob for
 	# four other targets where the intrinsics are a compile-time refusal.
