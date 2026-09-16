@@ -1401,3 +1401,65 @@ One handler serves both scopes so there is no second "is this a static assertion
 it evaluates through `CEvalConstExpr`, the evaluator every array bound and case label already
 uses, **so it did not invent a constant-ness rule** — the same instinct as reusing
 `AssignThreadVarStorage` rather than writing a second allocator.
+
+## Check-in 0v — the new red CLEARED (8 → 7), rung 1 was dead for nine days, and a fix whose damage was entirely in the passing population
+
+**The red from 0t is gone. Open regressions back to SEVEN.**
+`test-core#src:test/test_a_threadvar_is_a_variable.pas` fixed by `406c54783` and **closed by
+Track T itself** — `90a2b705e`, *"job green again"*, which is T's own closure and not a seat's
+claim. Self-found, self-fixed, self-closed inside one tick.
+
+**`aceee115e` IS THE BIGGEST THING IN THIS TICK AND IT IS GOAL-5 WORK.** `busybox_diff.sh`'s
+banner normalisation is guarded by a positive control — the normaliser must actually have
+matched — and **that control is scoped to the wrong population.** At ONE applet, `run_cases`
+takes the `run_cat_cases` branch and returns; it never calls `run_dispatch_cases`, the only
+thing that runs `--help` or the bare multi-call binary. **So the transcript legitimately
+contains no banner and the assert cannot fire by construction.** Rung 1 is that script's own
+stated success criterion and **it has been unrunnable since 2026-09-01 — nine days** —
+unnoticed because all recent busybox work is at 2..394 applets, where the banner IS printed
+and the control is correct.
+
+**The cost was the MESSAGE, not the exit:** *"either the banner format changed or these
+transcripts never print it"* sends a reader after a busybox or harness regression that does
+not exist. And it **reproduced at HEAD first** rather than trusting the 2026-09-10 filing,
+citing the reason in its own words — a claim about an instrument decays like a lock, silently,
+in the direction of doing nothing.
+
+**THE NEAR-MISS IT VOLUNTEERED IS THE ONE I WOULD HAVE WANTED TOLD.** Its `_Static_assert`
+file-scope arm went in as a bare `if not CTryParseStaticAssert then Next` inside an else-if
+chain — **a dangling else: Pascal binds the following `else` to the INNER if and silently
+re-parents the remaining chain into that arm.** It compiled and self-hosted clean. A TRUE
+assertion then **hung the top-level walk**. And the false-assertion probe still PASSED,
+because `Error()` escaped before the damage could show.
+
+**So the one row a reader runs first — the row the entire ticket is about — reported success
+while the compiler hung on a correct program.** It caught it only because the matrix ran the
+TRUE control on the next line and stalled there.
+
+**The generalisable form, and I grepped CLAUDE.md before claiming it is absent: it is.** The
+file has *"a control from the wrong population passes and certifies the broken instrument"*,
+which is the instrument case. **This is the FIX case and it is sharper: when you fix a defect,
+your probe population IS the defective inputs, and a fix's damage lands in the CORRECT inputs
+— the ones you are not testing precisely because they were never broken.** "Test what your fix
+should NOT change" is the one-line version. **Playbook, not CLAUDE.md — one subsystem** — and
+said out loud so it does not read as undervalued. It is the third instance today of a guard
+that cannot fire (this probe, the banner control, `_Static_assert` itself in user code), but
+all three are the EXISTING rule working, not evidence for a new one.
+
+**`_Static_assert` IS NOT PUSHED and that is the one thing I flagged back.** Five of its six
+C-group fixes are on origin (`126797d19`, `9f256b94d`, `427769b0c`, `aceee115e`, `406c54783`);
+the `_Static_assert` work — three scopes, ten combinations, the dangling-else repair — exists
+only in its tree. **A local commit is not banking; a restart takes it and the next session is
+told to distrust a diff it cannot explain.** It is mid-gate, which is correct practice, so
+this is a reminder and not a correction.
+
+**Struct and union confirmed fixed in its tree**, one handler closing both because unions
+reach the same member loop. It also asserted that **the struct still lays out identically with
+an assertion in the body** (7 9 16 under both pxx and gcc) rather than assuming it — a struct
+whose assertion perturbed its layout would still compile and every row in its table would
+still pass. That is the same complement-population instinct that caught the hang, applied
+before it could bite.
+
+**It took the CLAUDE.md correction cleanly:** *"I'd rather be told the rule already exists than
+have a paragraph of mine added on top of it."* Its ticket also went prio 30 → 70 in the same
+edit that resolved it — the frontmatter habit arriving about four hours early.
