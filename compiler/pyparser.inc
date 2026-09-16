@@ -5187,8 +5187,13 @@ begin
   k := openIdx;
   while k < limit do
   begin
-    if Tokens[k].Kind in [tkLParen, tkLBrack] then Inc(depth)
-    else if Tokens[k].Kind in [tkRParen, tkRBrack] then
+    { `{`/`}` too (tkBegin/tkEnd): a dict or set literal in argument position
+      -- `get({'a': 1}, 'a')` -- ran to the limit, its comma split the call
+      into the wrong positionals, the arity filter dropped the site, and the
+      str it carried never vetoed the int claim from the other sites
+      (test_nilpy_subscript_dunder_spellings, the tier on 1a0b42411) }
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then
     begin
       Dec(depth);
       if depth = 0 then
@@ -6168,7 +6173,13 @@ begin
         rcvCi := -1;
         if (ci >= 0) and (PyLocals[ci].RecCi >= 0) then rcvCi := PyLocals[ci].RecCi
         else if (name = 'self') and (CurSelfClass >= REC_UCLASS_BASE) then
-          rcvCi := CurSelfClass - REC_UCLASS_BASE;
+          rcvCi := CurSelfClass - REC_UCLASS_BASE
+        else if (name = 'self') and (PyInferSelfCi >= 0) then
+          { a PRE-PASS scan of a method body, where no parse-time self exists:
+            the class lent by PyRegisterClassMembers / PyParamTypeFromSites,
+            so `self.u` in a call site's argument reads the field's declared
+            class (the class-typed lever, 2026-09-16) }
+          rcvCi := PyInferSelfCi;
         { A plain FIELD READ on a class-typed receiver — `self.n`, with NO '('.
           The method branch below requires one, so a field read fell straight
           through and the expression took its type from the RECEIVER instead:
@@ -39538,6 +39549,100 @@ begin
   if (nb = 1) and (nOther = 0) then Result := cand;
 end;
 
+function PyTokBindsName(k, lo: Integer): Boolean;
+{ Is the identifier at token k a BINDING of its name: a statement `nm = ..`,
+  `nm op= ..`, `nm: T = ..`, `nm, y = ..`, a chain link `x = nm = ..`, `for nm
+  in`, `as nm`, `global`/`nonlocal nm`, `def nm`/`class nm`? Token-only; a
+  keyword argument `f(nm=1)` and an attribute `x.nm` are not bindings; a
+  statement that starts with `nm` and is not a call, a subscript or an
+  attribute read is taken as one. Shared by PyBodyBindsName (a def body) and
+  PyModuleConstType (a whole file). }
+var cs: Integer; prevK: TTokenKind; prevS: AnsiString;
+begin
+  Result := False;
+  if (k < 1) or (k + 1 >= TokCount) or (Tokens[k].Kind <> tkIdent) or (Tokens[k - 1].Kind = tkDot) then Exit;
+  prevK := Tokens[k - 1].Kind;
+  prevS := '';
+  if prevK = tkIdent then prevS := GetTokenStr(k - 1);
+  if (prevS = 'as') or (prevS = 'global') or (prevS = 'nonlocal') or
+     (prevK in [tkFor, tkFunction, tkClass]) then
+    Result := True
+  else if (prevK in [tkNewline, tkIndent, tkDedent, tkSemicolon]) or (k = lo) then
+    Result := not (Tokens[k + 1].Kind in [tkLParen, tkDot, tkLBrack])
+  else if prevK in [tkAssign, tkColon] then
+    Result := (Tokens[k + 1].Kind = tkAssign)
+  else if prevK = tkComma then
+  begin
+    cs := k - 1;
+    while (cs > lo) and (Tokens[cs].Kind = tkComma) and (Tokens[cs - 1].Kind = tkIdent) do
+      cs := cs - 2;
+    Result := Tokens[cs].Kind in [tkNewline, tkIndent, tkDedent, tkFor];
+  end;
+end;
+
+function PyModuleConstType(const nm: AnsiString; lo, hi: Integer): TTypeKind;
+{ The scalar type of the MODULE-LEVEL CONSTANT `nm` of the file [lo, hi), or
+  tyUnknown: `SIM_DT = 1.0 / 60.0` at the top of sim.py, then `v.step(SIM_DT)`
+  in a def below it. The name must be bound EXACTLY ONCE in the whole file, at
+  indentation depth 0 (not inside an `if`/`try` at module level), as a plain
+  `NAME = expr` (no chain, no tuple, no augmented step), never named by an
+  import statement, and the expression must type as a float, int or str with
+  no def scope (a bool is not claimed, like a bool site). The lekkerzeilen
+  seat's count (2026-09-16): 474 module-level bindings in the demo, 472 bound
+  once, 284 to a literal or literal arithmetic; Vessel.step's `dt` gave up on
+  exactly this shape. The caller has already established that the enclosing
+  def neither declares nor binds the name (else it is a local). }
+var k, depth, nBind, exprS, exprE, sHLo, sHHi, sBLo, sBHi: Integer;
+    t: TTypeKind; inImport: Boolean;
+begin
+  Result := tyUnknown;
+  if (lo < 0) or (hi <= lo) or (nm = '') then Exit;
+  depth := 0; nBind := 0; exprS := -1; exprE := -1; inImport := False;
+  k := lo;
+  if k < 1 then k := 1;
+  while k + 1 < hi do
+  begin
+    case Tokens[k].Kind of
+      tkIndent: Inc(depth);
+      tkDedent: Dec(depth);
+      tkNewline: inImport := False;
+    end;
+    if (Tokens[k].Kind = tkUses) or
+       ((Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = 'from') and
+        ((k = lo) or (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent]))) then
+      inImport := True;
+    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) and (Tokens[k - 1].Kind <> tkDot) then
+    begin
+      if inImport then Exit;           { an imported name is not this file's constant }
+      if PyTokBindsName(k, lo) then
+      begin
+        Inc(nBind);
+        if (nBind > 1) or (depth <> 0) or (Tokens[k + 1].Kind <> tkAssign) or
+           not ((k = lo) or (Tokens[k - 1].Kind in [tkNewline, tkDedent])) then Exit;
+        exprS := k + 2;
+        exprE := PyStmtEndFrom(exprS);
+        if exprE <= exprS then Exit;
+      end;
+    end;
+    Inc(k);
+  end;
+  if nBind <> 1 then Exit;
+  for k := exprS to exprE - 1 do
+    if Tokens[k].Kind = tkAssign then Exit;   { `A = B = 1`, a chain }
+  sHLo := PyInferHdrLo;  sHHi := PyInferHdrHi;
+  sBLo := PyInferBodyLo; sBHi := PyInferBodyHi;
+  PyInferHdrLo := -1; PyInferHdrHi := -1;
+  PyInferBodyLo := -1; PyInferBodyHi := -1;
+  t := PyInferExprType(exprS, exprE);
+  PyInferLastCi := -1;
+  PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
+  PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
+  if t = tyString then t := tyAnsiString;
+  if (t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t) then Result := t;
+  if PxxDbgEnabled('n.psites') then
+    WriteLn('PXXDBG n.psites   module constant ', nm, ' binds=', nBind, ' tk=', Ord(t));
+end;
+
 function PyBodyBindsName(bodyLo, bodyHi: Integer; const nm: AnsiString): Boolean;
 { Does the def body [bodyLo, bodyHi) BIND `nm` anywhere: a statement `nm = ..`,
   `nm op= ..`, `nm: T = ..`, `nm, y = ..`, a chain link `x = nm = ..`, `for nm
@@ -39548,30 +39653,15 @@ function PyBodyBindsName(bodyLo, bodyHi: Integer; const nm: AnsiString): Boolean
   argument `f(nm=1)` and an attribute `x.nm` are not bindings; a statement
   that starts with `nm` and is not a call, a subscript or an attribute read
   is taken as one. Over-reporting costs a claim, under-reporting a value. }
-var k, cs: Integer; prevK: TTokenKind; prevS: AnsiString;
+var k: Integer;
 begin
   Result := False;
   if (bodyLo < 1) or (bodyHi <= bodyLo) then Exit;
   for k := bodyLo to bodyHi - 2 do
-    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) and (Tokens[k - 1].Kind <> tkDot) then
+    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) and PyTokBindsName(k, bodyLo) then
     begin
-      prevK := Tokens[k - 1].Kind;
-      prevS := '';
-      if prevK = tkIdent then prevS := GetTokenStr(k - 1);
-      if (prevS = 'as') or (prevS = 'global') or (prevS = 'nonlocal') or (prevK = tkFor) then
-        Result := True
-      else if prevK in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
-        Result := not (Tokens[k + 1].Kind in [tkLParen, tkDot, tkLBrack])
-      else if prevK in [tkAssign, tkColon] then
-        Result := (Tokens[k + 1].Kind = tkAssign)
-      else if prevK = tkComma then
-      begin
-        cs := k - 1;
-        while (cs > bodyLo) and (Tokens[cs].Kind = tkComma) and (Tokens[cs - 1].Kind = tkIdent) do
-          cs := cs - 2;
-        Result := Tokens[cs].Kind in [tkNewline, tkIndent, tkDedent, tkFor];
-      end;
-      if Result then Exit;
+      Result := True;
+      Exit;
     end;
 end;
 
@@ -39643,10 +39733,11 @@ var i, k, e, pos, cur, depth, nSites, argIdx, argS, argE, dfltS, dfltE: Integer;
     hdrN, hdrPosN, nPos, nKw, selfOff, rIdx, j2: Integer;
     hdrStar, hdrKw, hdrOverflow, ours, known, dbg: Boolean;
     siteEncl, ownCls, recvCls, agreedCls, siteCls, clsNote: AnsiString;
-    dfltNone: Boolean; psCi: Integer;
+    dfltNone: Boolean; psCi, savedSelfCi: Integer;
 begin
   Result := tyUnknown;
   PyPSLastCi := -1;
+  savedSelfCi := PyInferSelfCi;
   if (defTok < 0) or (defTok + 2 >= TokCount) or (Tokens[defTok].Kind <> tkFunction) then Exit;
   { memo: the same question from the shell, the pre-pass and the body parse }
   for m := PyPSMemoN - 1 downto 0 do
@@ -39795,12 +39886,13 @@ begin
     begin
       if mode = 1 then
         { a METHOD site is `.name(`, and not `Cls.name(` (unbound: the
-          arguments are shifted by one) -- the class by the token stream
-          too, since the closure lexes classes the parser has not reached }
+          arguments are shifted by one) -- the class by the token stream,
+          CASE-SENSITIVELY (PyClassDeclTok): FindUClass answered `V` for
+          the local `v` in `v.dot(self)` and the site was silently skipped
+          (probe, 2026-09-16), the case-insensitive-lookup family again }
         isSite := (Tokens[k - 1].Kind = tkDot) and
                   not ((k >= 2) and (Tokens[k - 2].Kind = tkIdent) and
-                       ((FindUClass(GetTokenStr(k - 2)) >= 0) or
-                        (PyClassDeclTok(GetTokenStr(k - 2)) >= 0)))
+                       (PyClassDeclTok(GetTokenStr(k - 2)) >= 0))
       else
         { a construction or a function call, bare or MODULE-QUALIFIED:
           `shapes.Box(2)` in another module is a site of this Box now that
@@ -39830,6 +39922,7 @@ begin
         end;
         Dec(d);
       end;
+      PyInferSelfCi := -1;
       if best >= 0 then
       begin
         PyInferHdrLo := best;
@@ -39837,6 +39930,13 @@ begin
         if PyInferHdrHi < 0 then PyInferHdrHi := best;
         PyInferBodyLo := PyInferHdrHi;
         PyInferBodyHi := PySkipNestedSuite(best);
+        { the enclosing METHOD's class, lent to the expression typer exactly
+          as the class pre-pass lends it around PyMethodRetType: without it
+          `self.u` in a site's argument is untypeable even when `u` is a
+          class-typed field, which is what kept every `self.<field>` site
+          from feeding the class-typed lever (probe, 2026-09-16) }
+        if PyDefSiteMode(best, siteEncl) = 1 then
+          PyInferSelfCi := FindUClassNonRecord(siteEncl);
       end
       else
       begin
@@ -39980,6 +40080,14 @@ begin
         t := PyLocalScalarType(best, PyInferBodyLo, PyInferBodyHi, GetTokenStr(argS));
         Dec(PyPSDepth);
       end;
+      { A MODULE-LEVEL CONSTANT of the site's file as the argument:
+        `v.step(SIM_DT)`. Not a parameter and not a local of the enclosing
+        def (those arms ran above and answered nothing), so the name is the
+        module's, and PyModuleConstType says whether it is a constant. }
+      if (t = tyUnknown) and (argE = argS + 1) and (Tokens[argS].Kind = tkIdent) and
+         ((best < 0) or (not PyHeaderHasParam(best, PyInferBodyLo, GetTokenStr(argS)) and
+                         not PyBodyBindsName(PyInferBodyLo, PyInferBodyHi, GetTokenStr(argS)))) then
+        t := PyModuleConstType(GetTokenStr(argS), scanLo, scanHi);
       { A CLASS SITE -- the class-typed lever. The argument is CERTAINLY an
         instance of one class when it is exactly `self`, exactly a
         construction `Cls(...)` / `mod.Cls(...)`, or a local of the enclosing
@@ -40022,7 +40130,8 @@ begin
       end;
       if dbg then
         WriteLn('PXXDBG n.psites   site@', k, ' arg ', argS, '..', argE, ' "',
-                GetTokenStr(argS), '" encl=', best, ' t=', Ord(t), ' cls=', siteCls);
+                GetTokenStr(argS), '" encl=', best, ' t=', Ord(t), ' cls=', siteCls,
+                ' selfci=', PyInferSelfCi);
       { THE DEFAULT ANCHORS; A SITE CAN CONTRADICT IT BUT NOT WEAKEN IT. A
         site the scanner cannot type at all (an argument that is another
         def's bare parameter, a subscript of a variant, the class's OWN field
@@ -40085,6 +40194,7 @@ begin
   end;
   PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
   PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
+  PyInferSelfCi := savedSelfCi;
   if (PyPSMemoN < PY_PSMEMO_MAX) and (PyPSDepth = 0) then
   begin
     PyPSMemoDef[PyPSMemoN] := defTok;

@@ -2490,9 +2490,19 @@ test-nilpy: $(COMPILER)
 	@# local or a caller's class-typed parameter; a ctor parameter typed that way
 	@# makes a class-typed field (Body.pos). Vetoes: `= None` default, two classes
 	@# across sites, an explicit None site, a body that rebinds the parameter.
+	@# step.dt: `body.step(0.5)` on a local spelled like its class was SKIPPED as an
+	@# unbound Body.step( by a case-insensitive lookup; the skip is case-sensitive now.
 	./$(COMPILER) test/test_nilpy_a_bare_parameter_is_typed_as_a_class_from_its_call_sites.npy $(TESTTMP)/test_nilpy_clssites26
 	$(TESTTMP)/test_nilpy_clssites26 | diff -u test/test_nilpy_a_bare_parameter_is_typed_as_a_class_from_its_call_sites.expected -
-	tools/expect_same.sh test_nilpy_clssites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_bare_parameter_is_typed_as_a_class_from_its_call_sites.npy $(TESTTMP)/test_nilpy_clssites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites Body.pos mode=0 sites=1 gaveup=0 tk=6 cls=Vec PXXDBG n.psites Body.vel mode=0 sites=1 gaveup=0 tk=6 cls=Vec PXXDBG n.psites Node.nxt mode=0 sites=1 gaveup=1 tk=0 PXXDBG n.psites Node.val mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites Vec.x mode=0 sites=8 gaveup=0 tk=19 PXXDBG n.psites Vec.y mode=0 sites=8 gaveup=0 tk=19 PXXDBG n.psites describe.o mode=2 sites=2 gaveup=1 tk=0 PXXDBG n.psites dot.o mode=1 sites=3 gaveup=0 tk=6 cls=Vec PXXDBG n.psites first.v mode=2 sites=2 gaveup=1 tk=0 PXXDBG n.psites plus.o mode=1 sites=2 gaveup=1 tk=0 PXXDBG n.psites rebound.v mode=2 sites=1 gaveup=0 tk=0 ')"
+	tools/expect_same.sh test_nilpy_clssites_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_bare_parameter_is_typed_as_a_class_from_its_call_sites.npy $(TESTTMP)/test_nilpy_clssites26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites Body.pos mode=0 sites=1 gaveup=0 tk=6 cls=Vec PXXDBG n.psites Body.vel mode=0 sites=1 gaveup=0 tk=6 cls=Vec PXXDBG n.psites Node.nxt mode=0 sites=1 gaveup=1 tk=0 PXXDBG n.psites Node.val mode=0 sites=1 gaveup=0 tk=13 PXXDBG n.psites Vec.x mode=0 sites=8 gaveup=0 tk=19 PXXDBG n.psites Vec.y mode=0 sites=8 gaveup=0 tk=19 PXXDBG n.psites describe.o mode=2 sites=2 gaveup=1 tk=0 PXXDBG n.psites dot.o mode=1 sites=3 gaveup=0 tk=6 cls=Vec PXXDBG n.psites first.v mode=2 sites=2 gaveup=1 tk=0 PXXDBG n.psites plus.o mode=1 sites=2 gaveup=1 tk=0 PXXDBG n.psites rebound.v mode=2 sites=1 gaveup=0 tk=0 PXXDBG n.psites step.dt mode=1 sites=1 gaveup=0 tk=19 ')"
+	@# A MODULE-LEVEL CONSTANT passed as an argument is a typed call site: bound
+	@# once in the file, at depth 0, as a plain `NAME = expr` of scalar type
+	@# (step.dt from DT = 1.0 / 60.0). Controls keep the variant: a `global`
+	@# rebinding, an imported name, a binding inside a module-level if, a chain
+	@# A = B = 3, a bool constant.
+	./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26
+	$(TESTTMP)/test_nilpy_modconst26 | diff -u test/test_nilpy_a_module_constant_is_a_typed_call_site.expected -
+	tools/expect_same.sh test_nilpy_modconst_census "$$(PXXDBG=n.psites ./$(COMPILER) test/test_nilpy_a_module_constant_is_a_typed_call_site.npy $(TESTTMP)/test_nilpy_modconst26 2>&1 | grep -E '^PXXDBG n.psites [A-Za-z_]+[.][a-z]+ ' | grep -v 'sites=0 gaveup=0' | LC_ALL=C sort -u | tr '\n' ' ')" "$$(printf 'PXXDBG n.psites chained.a mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites count.n mode=1 sites=1 gaveup=0 tk=13 PXXDBG n.psites flag.f mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites guarded.g mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites label.name mode=2 sites=1 gaveup=0 tk=23 PXXDBG n.psites scaled.v mode=2 sites=1 gaveup=1 tk=0 PXXDBG n.psites step.dt mode=1 sites=2 gaveup=0 tk=19 ')"
 	@# `return (a + b).x` was typed by the PRIMARY (class V) instead of by the
 	@# selector (a double), so the Result store retained 3.0 as an object pointer
 	@# and dereferenced it: SIGSEGV, no output. `c = a + b; return c.x` was fine.

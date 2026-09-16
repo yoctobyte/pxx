@@ -1,0 +1,75 @@
+# A MODULE-LEVEL CONSTANT passed as an argument is a typed call site
+# (PyModuleConstType): bound exactly once in the file, at depth 0, as a plain
+# `NAME = expr` that types as a scalar. Controls: a name rebound through
+# `global`, an imported name, a binding inside a module-level `if`, a chain
+# `A = B = 3`, and a bool constant all keep the parameter a variant.
+from nilpy_mc_consts import SCALE
+
+DT = 1.0 / 60.0
+STEPS = 10
+NAME = "sim"
+FLAG = True
+LIMIT = 5
+if STEPS > 3:
+    GUARDED = 2.5
+else:
+    GUARDED = 1.5
+A = B = 3
+
+
+class Body:
+    def __init__(self):
+        self.t = 0.0
+        self.n = 0
+
+    def step(self, dt):
+        self.t = self.t + dt
+        return self.t
+
+    def count(self, n):
+        self.n = self.n + n
+        return self.n
+
+
+def label(name):
+    return name + "!"
+
+
+def bump():
+    global LIMIT
+    LIMIT = LIMIT + 1
+    return LIMIT
+
+
+def scaled(v):
+    return v * 2
+
+
+def guarded(g):
+    return g
+
+
+def chained(a):
+    return a
+
+
+def flag(f):
+    return f
+
+
+def main():
+    b = Body()
+    for i in range(STEPS):
+        b.step(DT)
+    print(round(b.t, 6))
+    print(b.count(STEPS))
+    print(label(NAME))
+    print(bump(), scaled(LIMIT))
+    print(scaled(SCALE))
+    print(guarded(GUARDED), chained(A), flag(FLAG))
+    DT2 = 0.5
+    print(b.step(DT2))
+    print("MODULE CONST OK")
+
+
+main()
