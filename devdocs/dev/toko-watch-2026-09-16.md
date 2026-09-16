@@ -200,3 +200,35 @@ not a live cluster** — fifteen of the seventeen NilPy rows are recorded FIXED 
 closed in borg's own tstate commits (`1e955c708`, `68c71af13`, `93c866526`,
 `39ee741b3`) between that sha and `881fdee59b6f`. Verified from the archive, not from
 memory. Do not open a ticket on it.
+
+### 2026-09-16, check-in 0b — `b9bb74d37` landed ONE fix and TWO regressions
+
+**This is the shape to remember from this window**, and Track T's sentence for it is
+better than mine: *one of the two regressions was patched within hours in a way that
+makes the tree LOOK repaired.* The FPC-bootstrap row going green is exactly the signal
+a reader uses to conclude a commit was dealt with — and it would have covered the
+second regression for as long as anyone trusted it. Track T caught it by tracing the
+bisect WINDOW rather than the headline, and by checking that `64de90285` was purely
+forward declarations and therefore could not have fixed the other rows. That last step
+is the one a seat skips.
+
+**Root cause, fixed:** `b9bb74d37` added an arm to the bare-identifier branch of
+`PyInferExprType` letting an unannotated parameter take its CALL-SITE type. It guarded
+two shapes that are not reads of the parameter itself — a following `tkLParen` (a call)
+and a preceding `tkDot` (attribute) — and **missed `tkLBrack`.** So `s[0]` typed the
+SUBSCRIPT as the container's type instead of the element's, and the character came back
+as raw bytes: `first("ab")` printed a space, `last("abc")` printed `P`. Only the
+unannotated-parameter shapes broke; the for-loop variant, the container-of-strings and
+every annotated shape never enter the arm. Fix: `tkLBrack` joins the other two.
+
+**The verification that actually cost something, and why it was worth it.** The author's
+own fixture still passing proves NOTHING on its own — a fixture insensitive to the arm
+passes whether or not I reverted him. So I disabled the whole arm, rebuilt, and confirmed
+his fixture prints `4607182418800017408`, the exact tell from his commit message. Only
+then does "his fixture still passes" mean his fix survived. **Ask what a green is
+physically able to observe before quoting it.**
+
+**Attribution trap, twice in one morning in one archive:** `ec4b9c6a1f22` is this seat's
+own DOCS-ONLY watch-note commit and was the `bad=` sha for three rows; `3a91d13f1dec` is
+a NilPy commit and is the `bad=` for a C test. Both are tested upper bounds named by
+POSITION with 1-in-range. Neither is a lead.

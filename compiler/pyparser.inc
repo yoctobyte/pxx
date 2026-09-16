@@ -6234,11 +6234,19 @@ begin
           same site type to SUPPRESS the variant safety-net, so the value must
           match what it trusted. Scalar only, and guarded on a real published
           def header and the re-entry depth, since PyInferExprType is itself
-          what PyParamTypeFromSites calls to type a site argument. }
+          what PyParamTypeFromSites calls to type a site argument.
+          tkLBrack joins tkLParen and tkDot in the guard for the same reason:
+          `s[0]` is not a read OF s, it is a read of an ELEMENT of s, so the
+          site type is the container's and not the expression's. Without it a
+          str-site parameter made `s[0]` answer AnsiString and the character
+          came back as raw bytes -- `first("ab")` printed a space and
+          `last("abc")` printed 'P' (test_nilpy_variant_str_index,
+          test_nilpy_bare_return_subscript_slice, 2026-09-16). }
         if (tk = tyUnknown) and (Tokens[i].Kind = tkIdent) and
            (name <> 'self') and (name <> 'cls') and
            (PyInferHdrLo >= 0) and (PyInferHdrHi > PyInferHdrLo) and (PyPSDepth < 6) and
-           ((i + 1 >= endIdx) or (Tokens[i + 1].Kind <> tkLParen)) and
+           ((i + 1 >= endIdx) or ((Tokens[i + 1].Kind <> tkLParen) and
+                                  (Tokens[i + 1].Kind <> tkLBrack))) and
            ((i <= startIdx) or (Tokens[i - 1].Kind <> tkDot)) and
            PyHeaderHasParam(PyInferHdrLo, PyInferHdrHi, name) and
            (PyHeaderParamType(PyInferHdrLo, PyInferHdrHi, name) = tyUnknown) then
