@@ -2436,3 +2436,106 @@ subsystem loses a population the same way.
 **Shop: HEAD `d69642bc4`, franks-ee working and productive, frankb-56 stopped after
 ten fixes, Track P still unstaffed, four full-tier reds of four kinds, two things
 escalated for the 18th.**
+
+## Check-in 1j — wall ten is live, my "one file walks downward" finding was corrected by its own author, and I nearly filed a 25-file number that is 2
+
+**Wall ten landed and I verified the property that matters: `42e127d6d` touches
+`lib/rtl/sysutils.pas`, a test, a Makefile row and docs — ZERO files under
+`compiler/`.** `FileAge` is now at `sysutils.pas:1190`. **Live under pin v410, inert
+for nobody.** Corpus 105 → 0 in both arms, and cleared in the strong form: zero detail
+files name `FileAge` anywhere across 207 units, not merely as a first error.
+`FileDateToDateTime`'s own 12-unit wall at `:1012` went with it — one fix, two names.
+Ninth null row, ninth predicted as zero in advance.
+
+**THE CORRECTION IS TO MY OWN WRITEUP AND ITS AUTHOR MADE IT AGAINST HIMSELF.** In
+1i I recorded the one-file-walks-downward shape as *"now the dominant pattern rather
+than an anecdote."* franks-ee's recorded expectation was that the next head would be
+`comphook.pas:1012` or further down that file, on the strength of four consecutive
+walls there. **It is neither: `comphook.pas` now holds ZERO first errors and appears
+in zero detail files as a location.** The file **CLEARED** rather than yielding a
+fifth. **So the shape is real and it TERMINATES, and it does not predict where a head
+goes next** — which is the half I wrote as though it did. It put that beside the
+section that made the prediction rather than quietly updating the table, which is the
+right way to leave a failed prediction.
+
+**Its other self-catch is the better instrument lesson:** it had told me only ONE file
+differs between the stubbed and unstubbed arms. It is two — `versioncmp.pas` and
+`x86_64/cpuinfo.pas` — because it diffed `fpcsrc/*.pas`, the corpus ROOT, while the
+probe also passes `-Fu$F/x86_64 -Fu$F/systems -Fu$F/x86`. **`cpuinfo.pas` carries the
+entire difference between the arms.** The tell was free and it walked past it: the two
+arms reported different heads, which one stubbed unit almost nothing imports cannot
+explain.
+
+### THE OPEN QUESTION IT RAISES IS REAL AND IS NOT MINE TO SETTLE
+
+- **STUBBED arm head:** `cfileutl.pas:282`, `TRawByteSearchRec` + `FindFirst`, 120
+  units, RTL type, Track B.
+- **UNSTUBBED arm head:** `x86_64/cpuinfo.pas:36`, `TDoubleRec`, 132 of 207 units —
+  **row 1 of this umbrella's own table, open since the umbrella started.**
+
+**Everything the stubbed arm reports is downstream of somebody having agreed to look
+past `TDoubleRec`.** franks-ee declined to pick the more convenient arm and I am
+declining too: picking an arm decides what the corpus MEASURES, and the two arms
+answer different questions. **Carried for the 18th** — and stated as a goal sentence,
+not a representation: *"does the FPC-corpus number mean 'compiles as FPC ships it', or
+'compiles once we supply a type FPC gets from its own RTL'?"*
+
+### A DIVERGENCE RECORDED AS CHOSEN, WHICH IS THE RIGHT FORM
+
+It read FPC's source rather than recalling it, and FPC changed the implementation
+twice: **`FileAge` returns −1 for a DIRECTORY as well as for a failed stat**
+(`rtl/unix/sysutils.pp:645`) — a directory HAS an mtime, so the obvious implementation
+disagrees with the oracle silently. Handled and documented in ours. And FPC's unix
+`FileDateToDateTime` applies the local timezone where ours is **UTC deliberately**,
+matching `FileDateToUniversal`, because this RTL has no timezone database and `Now`
+and `GetLocalTime` already answer in UTC. **Matching FPC on that one function would
+make the PAIR worse** — `FileDateToDateTime(FileAge(f)) < Now` is correct only if both
+sides use one clock. Stated in the source as chosen, never as tolerated.
+
+### AND I NEARLY FILED A 25-FILE FINDING WHOSE MEASURED SIZE IS 2
+
+It filled three `PENDING-COMMIT` placeholders in the umbrella (`137d99f56`), noting
+that `sync.sh` fills those in **resolve citations only**, so one written anywhere else
+is never filled and reads as an identifier. I went to census the rest:
+
+```
+grep -rl PENDING-COMMIT devdocs/progress/   ->  25 files, 107 occurrences
+   ...of which CITATION-shaped                ->  12
+   ...genuinely unfillable frontmatter        ->  2, both in rejected/
+```
+
+**The population is dominated by PROSE ABOUT THE MECHANISM** — including
+`bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill`, a ticket whose
+entire SUBJECT is this placeholder, quoting the shape in its own worked example.
+**This is the rule I promoted to CLAUDE.md two hours ago (`d69642bc4`), hitting me a
+third time in the same day, on a grep I ran BECAUSE of that rule.** A search for a
+name matches prose about the thing, and here the prose is a ticket about the thing.
+
+**I measured whether fixing the two is worth anything and the answer is no, so I did
+not.** Of 81 `rejected/` tickets, **only 5 carry a `resolved:` field at all**, and
+those 5 hold three different value shapes (two shas, one date, two placeholders) —
+**76 of 81 carry no such field, which is the convention.** `tools/progress.sh check`
+does not flag either row. There is no target value to restore, no tool is tripped, and
+changing frontmatter in terminal tickets to match nothing, at the end of a day, with
+him away, is tidying with no signal behind it. **Recorded, not fixed, and that is the
+finding.**
+
+### ONE RECURRENCE NOTED AND DELIBERATELY NOT RE-PROMOTED
+
+Two of its full BACKGROUND corpus runs were killed at ~150 of 207 units, **both
+reported as low memory while the box had 35GB free and 56GB available**. It confirmed
+the job was genuinely dead **by checking whether the output file was still GROWING —
+not by a process scan**, on the stated grounds that a scan cannot tell a finished run
+from one sampled between two compiler invocations. **That is `aa39bf4a0` — this
+morning's extension — being used in the direction it was written for, by a seat that
+did not have the incident, in a third subsystem.** It is already in CLAUDE.md; a rule
+being obeyed is not a reason to write it again. It rebuilt `probe_snap.sh` to take a
+`PXX_CORPUS_LIST` and runs three ~2.5-minute foreground chunks, asserting the lists
+partition the glob BEFORE the run and checking 207 rows / 207 distinct units after.
+
+**Still not banked, at its own instruction: `test_threadsafe_heap_lock_deadlock_diag`
+and `fpc-bootstrap#src:compiler/compiler.pas`.**
+
+**Shop: franks-ee working, frankb-56 stopped, Track P unstaffed, four full-tier reds
+of four kinds. Escalated for the 18th is now THREE — `3eb0297f0`, the goal-5 wording,
+and which corpus arm the FPC number means.**
