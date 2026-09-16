@@ -6810,17 +6810,31 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_tls_base26 "$$($(TESTTMP)/test_tls_base26)" "$$(printf 'errors=0\nTLS OK')"
 	# ...and the SOURCE-LEVEL spelling of the same storage: `threadvar`. Four
 	# threads hammer a threadvar and a plain global in one loop, 200000 times
-	# each. THE PLAIN GLOBAL IS THE POSITIVE CONTROL and `control-raced` asserts
-	# it actually raced -- if a threadvar were an ordinary global both rows would
-	# fail together, and if the harness were inert neither would. Replacing
-	# `threadvar` with `var` in this exact file yields kept=1/4, zeroed=0/4,
-	# no-crosstalk=1/4 and main-copy=103 (measured 2026-09-09), so the row is not
-	# merely "it ran". zeroed-on-entry is the second claim: a child's block is
-	# carved off its own reused stack and the clone stub zeroes it, so a
-	# threadvar must not start life holding the previous thread's value.
+	# each. THE PLAIN GLOBAL IS THE POSITIVE CONTROL. Replacing `threadvar` with
+	# `var` in this exact file fails 0/10 runs on 12 cores AND 0/10 pinned to
+	# one, so the row is not merely "it ran". zeroed-on-entry is the second
+	# claim: a child's block is carved off its own reused stack and the clone
+	# stub zeroes it, so a threadvar must not start life holding the previous
+	# thread's value.
+	# THE CONTROL USED TO BE `control-raced` AND IT MEASURED THE HOST, NOT THE
+	# TREE -- it asserted that the deliberate race on the plain global actually
+	# MANIFESTED, which is a property of the scheduler. It went NEW-RED on borg
+	# at 881fdee59b6f with all four feature rows still passing and only
+	# control-raced flipping; `taskset -c 0` reproduces that 5/5 while the same
+	# binary is 30/30 green on 12 cores, because the race window is two
+	# instructions wide and nothing lands in it when the threads are time-sliced
+	# onto one CPU. That 30/30 also ACQUITS the compiler of the alternative --
+	# a non-threadvar wrongly rewritten by RewriteThreadVarRefs (the failure the
+	# row below exists for) would kill cross-talk on every core count.
+	# The two replacements need no scheduler cooperation: `distinct-tids` is the
+	# inertness claim the race stood in for (four children, four distinct
+	# PalThreadSelf values), and `control-shared` reads the plain global back in
+	# MAIN after the join, where a child's write must be visible and a
+	# per-thread copy would still read 7. It asserts `<> 7` and not a value:
+	# which child wrote last is scheduling-dependent.
 	# feature-p-threadvar-is-not-supported-at-any-scope
 	./$(COMPILER) --threadsafe test/test_a_threadvar_is_per_thread.pas $(TESTTMP)/test_threadvar_pt26
-	tools/expect_same.sh test_threadvar_pt26 "$$($(TESTTMP)/test_threadvar_pt26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ncontrol-raced=TRUE\nmain-copy=7\nTHREADVAR OK')"
+	tools/expect_same.sh test_threadvar_pt26 "$$($(TESTTMP)/test_threadvar_pt26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=TRUE\nmain-copy=7\nTHREADVAR OK')"
 	# THE OTHER HALF OF THE SAME PASS, and it fails by printing a WRONG NUMBER
 	# rather than by crashing. RewriteThreadVarRefs arms on the program declaring
 	# any threadvar and rewrites every AN_IDENT whose SymTlsOffset is >= 0; -1 is
