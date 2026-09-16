@@ -123,6 +123,7 @@ function PyNodeIsPyDict(n: Integer): Boolean; forward;                   { Nil P
 procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
 procedure PyLexModuleForClosure(const src, path: AnsiString); forward;   { import-closure lexing: lex a module and, recursively, what it imports; parse nothing (pyparser.inc) }
 function PyLexedRangeStart(const path: AnsiString): Integer; forward;    { the token a lexed source file starts at, or -1 (pyparser.inc) }
+function PyEndOfGroup(openIdx, limit: Integer): Integer; forward;   { just past the bracket matching openIdx, or limit (pyparser.inc) }
 function PyPyRangeAt(idx: Integer; var lo, hi: Integer): Boolean; forward;         { the idx-th Python source range of the token stream (pyparser.inc) }
 function PyNameIsImportedModule(const q: AnsiString; lo, hi: Integer): Boolean; forward;   { is q bound by an import statement in [lo, hi) (pyparser.inc) }
 { PyCallMeth1's forward lives in forwards.inc (FPC-seed catch-all, gated on

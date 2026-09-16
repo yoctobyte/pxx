@@ -6243,6 +6243,19 @@ begin
           end;
           if (fldAt > i) and (fldTk <> tyUnknown) then
           begin
+            { A SUBSCRIPT of the chain -- `self.items[idx]` -- is the ELEMENT,
+              a variant, not the container: skip the bracket group(s), as the
+              subscript-of-a-call arm below does for `f(x)[0]`. This arm was
+              unreachable in a pre-pass scan until `self` resolved through
+              PyInferSelfCi (2026-09-16), and __getitem__ then registered a
+              TPyList result for `return self.items[idx]` -- a segfault in
+              test_nilpy_for_getitem_protocol, on the tier. }
+            while (fldAt + 1 < endIdx) and (Tokens[fldAt + 1].Kind = tkLBrack) do
+            begin
+              fldAt := PyEndOfGroup(fldAt + 1, endIdx) - 1;
+              fldTk := tyVariant;
+              PyInferLastCi := -1;
+            end;
             Result := PyWiden(Result, fldTk);
             i := fldAt + 1;
             Continue;

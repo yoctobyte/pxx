@@ -35,4 +35,5 @@ import SCALE`) is not typed in the importing file (the binding is elsewhere);
 
 ## Log
 
-- 2026-09-16 frankuser (Fable): built on a scratch binary while Arm B's tier ran; fixture green, the four site-typing fixtures green.
+- 2026-09-16 frankuser (Fable): built on a scratch binary while Arm B's tier ran; fixture green, the four site-typing fixtures green, commit 4e2507c6b.
+- 2026-09-16 lekkerzeilen seat's score of a7f5e0817948428f (Arm C + the three fixes): value parity 52 lines bit-identical to CPython (284 constants claimed, 131 int, nothing truncated); full-map diff Arm B -> C 126 symbols, net +7252 B; baseline -> C 292 symbols, net -60541 B. SailRig.best_sheet 2414 -> 607 B, 81 -> 8 calls, sse 1 -> 3. One regression, _read_furniture +8471 B / +354 calls: its `into` parameter's two sites both pass `self.furniture`, a field bound to `[]`, so the self-field typing (fix d) gave `into` a TPyList class claim -- the same claim an annotation `into: list` makes -- and the typed list receiver compiles LARGER with no arithmetic gained. Banked as an observation: a claim removes dispatch, and whether that shrinks or grows a body is a codegen property the census cannot see; the map diff can.
