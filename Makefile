@@ -15971,6 +15971,34 @@ test-core: $(COMPILER)
 	# is gcc on the same source.
 	./$(COMPILER) test/c_block_static_survives_a_storage_class.c $(TESTTMP)/c_blockstatic26
 	tools/expect_same.sh c_blockstatic26 "$$($(TESTTMP)/c_blockstatic26)" "block static survives a storage class: 6 rows OK"
+	# _Static_assert is EVALUATED at every scope C11 allows one. The file above is
+	# the must-COMPILE half (true assertions must be invisible, and a struct
+	# carrying one must lay out unchanged -- the sizeof rows are what make that
+	# testable rather than assumed).
+	./$(COMPILER) test/c_static_assert.c $(TESTTMP)/c_static_assert26
+	tools/expect_same.sh c_static_assert26 "$$($(TESTTMP)/c_static_assert26)" "static assert: 4 scopes, layout intact"
+	# ...AND THE FOUR REFUSALS, WHICH ARE THE ACTUAL POINT. A false assertion
+	# compiled SILENTLY at file, struct and union scope; block scope refused with
+	# the wrong message. ONE FILE PER SITE: a single source carrying all four
+	# reports the first and hides three behind it, which is how a negative test
+	# quietly stops testing what it names.
+	#
+	# The leading `!` is the PRECONDITION and it is BRANCHED ON: a compile that
+	# unexpectedly SUCCEEDS fails the row, instead of falling through to a grep of
+	# an empty error log -- which passes for the wrong reason on exactly the
+	# regression this guards against, and that regression is this bug.
+	printf '_Static_assert(1 == 2, "file");\nint main(void){return 0;}\n' > $(TESTTMP)/sa_file.c
+	! ./$(COMPILER) $(TESTTMP)/sa_file.c $(TESTTMP)/sa_1 >$(TESTTMP)/sa_1.err 2>&1
+	grep -q 'static assertion failed' $(TESTTMP)/sa_1.err
+	printf 'struct s { int a; _Static_assert(1 == 2, "struct"); };\nint main(void){return 0;}\n' > $(TESTTMP)/sa_struct.c
+	! ./$(COMPILER) $(TESTTMP)/sa_struct.c $(TESTTMP)/sa_2 >$(TESTTMP)/sa_2.err 2>&1
+	grep -q 'static assertion failed' $(TESTTMP)/sa_2.err
+	printf 'union u { int a; double b; _Static_assert(1 == 2, "union"); };\nint main(void){return 0;}\n' > $(TESTTMP)/sa_union.c
+	! ./$(COMPILER) $(TESTTMP)/sa_union.c $(TESTTMP)/sa_3 >$(TESTTMP)/sa_3.err 2>&1
+	grep -q 'static assertion failed' $(TESTTMP)/sa_3.err
+	printf 'int main(void){ _Static_assert(1 == 2, "block"); return 0; }\n' > $(TESTTMP)/sa_block.c
+	! ./$(COMPILER) $(TESTTMP)/sa_block.c $(TESTTMP)/sa_4 >$(TESTTMP)/sa_4.err 2>&1
+	grep -q 'static assertion failed' $(TESTTMP)/sa_4.err
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cfloat_conv_b176.c $(TESTTMP)/cfloat_conv_b17626
 	$(TESTTMP)/cfloat_conv_b17626; tools/expect_same.sh cfloat_conv_b17626-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/csizeof_deref_field_b177.c $(TESTTMP)/csizeof_deref_field_b17726

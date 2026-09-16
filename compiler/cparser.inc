@@ -163,6 +163,7 @@ function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
+function CTryParseStaticAssert: Boolean; forward;
 function CEvalConstFloatExpr: Double; forward;
 function CBraceTopLevelInitCountAt(openIdx: Integer): Integer; forward;
 procedure CSkipCInitElement; forward;
@@ -8481,6 +8482,11 @@ begin
     reaches the declaration. `static` is handled explicitly below (it needs BSS
     storage); skip the type-neutral ones here and fall through to the normal
     local-declaration path. `const`/`volatile` already route via IsCTypeTok. }
+  { A block-scope static assertion is a DECLARATION (C11 6.7.10), so it is
+    offered here beside the other declaration forms. Before the storage-class
+    loop, because it is not one and the loop must not eat its name. }
+  if CTryParseStaticAssert then begin Result := -1; Exit; end;
+
   { block-scope storage-class specifiers, IN ANY ORDER, before the type.
 
     ONE LOOP AND NOT A `static` SPECIAL CASE, because the old shape dropped the
@@ -12219,6 +12225,73 @@ begin
        'definition to lib/crtl/src)');
 end;
 
+function CTryParseStaticAssert: Boolean;
+{ `_Static_assert ( constant-expression , "message" ) ;` — C11 6.7.10.
+
+  False unless the current token actually starts one, so a caller can offer this
+  door first and fall through untouched.
+
+  THE ASSERTION IS EVALUATED, WHICH IS THE ENTIRE POINT AND IS WHAT WAS MISSING.
+  `_Static_assert` sat in CIsTopLevelSkipIdent, so at file scope the whole
+  construct was SKIPPED token by token and a FALSE assertion compiled clean:
+
+      _Static_assert(1 == 2, "must stop the build");   gcc: error. pxx: ran.
+
+  That is a guard OUR USERS wrote, in their code, believing it protects them --
+  and the idiom it is written for is the ABI size check,
+  `_Static_assert(sizeof(struct s) == 32, ...)`, which exists precisely to stop
+  a silent layout change. Under pxx it stopped nothing. A skipped assertion is a
+  guard that cannot fail, and this repo pays more for those than for refusals.
+
+  AT BLOCK SCOPE IT WAS REFUSED, and that was the better of the two wrong
+  answers but still wrong: C11 puts a static assertion wherever a declaration
+  may appear, which includes a function body, and real C uses it there to pin a
+  layout next to the code depending on it. It reached expression parsing and
+  came out as `call to undeclared function: _Static_assert`.
+
+  `static_assert` is accepted as a spelling too. C23 promotes it to a keyword
+  and <assert.h> has defined it as a macro for `_Static_assert` since C11, so
+  code reaches us under both names depending on whose header ran.
+
+  THE MESSAGE IS OPTIONAL (C23 6.7.11) and its ABSENCE IS NOT A DEFAULT WE
+  INVENTED: a one-operand form is the standard's, so it is accepted and reported
+  without one rather than refused. }
+var v: Int64; msg: AnsiString; ln: Integer;
+begin
+  CTryParseStaticAssert := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if (CurTok.SVal <> '_Static_assert') and (CurTok.SVal <> 'static_assert') then Exit;
+  CTryParseStaticAssert := True;
+  ln := CurTok.Line;
+  Next;
+  Expect(tkLParen, '(');
+  { the controlling expression is an INTEGER constant expression -- the same
+    evaluator every array bound and case label already uses, so a construct that
+    is constant enough for `int a[N]` is constant enough here }
+  v := CEvalConstExpr;
+  msg := '';
+  if CurTok.Kind = tkComma then
+  begin
+    Next;
+    if CurTok.Kind <> tkString then
+      Error('_Static_assert: the second operand must be a string literal');
+    msg := CurTok.SVal;
+    Next;
+  end;
+  Expect(tkRParen, ')');
+  Expect(tkSemicolon, ';');
+  if v = 0 then
+  begin
+    { the LINE is the assertion's own, not wherever the parser now stands: the
+      operands may span several lines and the reader needs the one they wrote }
+    CurTok.Line := ln;
+    if msg <> '' then
+      Error('static assertion failed: "' + msg + '"')
+    else
+      Error('static assertion failed');
+  end;
+end;
+
 { True for identifiers that may legitimately appear at the top level without
   being a type/typedef the dispatch already recognizes — storage-class and
   function specifiers pxx does not model as type tokens but tolerates by
@@ -12940,6 +13013,23 @@ begin
     end
     else if (CurTok.Kind = tkSemicolon) or ((TokPos - 1) >= userTokEnd) then
       Next  { stray top-level `;` (empty decl, legal C), or an appended pulled-unit token }
+    else if (CurTok.Kind = tkIdent) and
+            ((CurTok.SVal = '_Static_assert') or (CurTok.SVal = 'static_assert')) then
+      { EVALUATED, not skipped. It is still in CIsTopLevelSkipIdent so the
+        backward specifier scans keep their stopping behaviour, but this arm
+        comes FIRST, so the skip below never sees it. Before this, a FALSE
+        assertion at file scope compiled clean. }
+    begin
+      { begin/end IS LOAD-BEARING, not style. Written as a bare
+        `if not CTryParseStaticAssert then Next` this is a DANGLING ELSE: Pascal
+        binds the following `else` to the INNER if, silently re-parenting the
+        whole remaining chain into this arm. It compiles, and a TRUE assertion
+        then HANGS the top-level walk -- measured, the first thing this wiring
+        did. The false-assertion row still passed, because Error() escaped
+        before the damage showed, so the one probe a reader runs first says the
+        feature works. }
+      if not CTryParseStaticAssert then Next;
+    end
     else if (CurTok.Kind = tkIdent) and not CIsTopLevelSkipIdent(CurTok.SVal) then
       { An unknown identifier at top level is not a declaration — gcc rejects it
         (e.g. code accidentally exposed by a comment ending early). Storage-class
@@ -15671,6 +15761,21 @@ begin
   bitPos := 0;
   while CBlockContinues do
   begin
+    { A STATIC ASSERTION IS A STRUCT-DECLARATION (C11 6.7.2.1), so it is a member
+      position and not an expression. This is the THIRD site the same handler
+      serves, after file and block scope, and it is arguably the one that matters
+      most: the idiom a static assertion exists for is the ABI layout check, and
+      `struct S { ...; _Static_assert(sizeof(struct S) == 32, ""); };` writes it
+      exactly here, next to the layout it is about.
+
+      It was SILENT before -- a false assertion inside a struct or union body
+      compiled clean. It parsed and skipped rather than choking, so the struct
+      stayed well-formed and nothing looked wrong, which is why it survived.
+      Measured on origin at 427769b0c: file, struct and union bodies all silent;
+      block scope already refused. Unions reach this same routine (isUnion), so
+      one door closes both. }
+    if CTryParseStaticAssert then Continue;
+
     { Nested inline aggregate member: struct or union with an inline body followed
       by member name(s). Lay the body out as a sub-record (recursively) and buffer
       the member(s) as record-typed fields, so outer.name.member resolves (lua
