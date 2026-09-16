@@ -1702,6 +1702,7 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaRecId, ptrNode, diagIdx: Integer;
     vaN8, vaC0, vaC1, vaMask, vaTmp, vaSavedRec, vaSeq: Integer;
     vaA64Cnt, vaSzArg: Integer;
+    fraSym, fraIdn, fraArg: Integer;   { __builtin_frame_address }
     vaRvBytes, vaRvAlign: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
     vaRvByVal: Boolean;
     vaA32Bytes, vaA32Align: Integer;  { AAPCS32 variadic tail slot, per ABIA32VaArgDesc }
@@ -2439,6 +2440,65 @@ begin
           Result := AllocNode(AN_FLOAT_LIT);
           ASTIVal[Result] := Int64($7FF0000000000000);   { IEEE-754 double +Inf }
           ASTTk[Result] := Ord(tyDouble);
+          Exit;
+        end;
+        { gcc builtin `__builtin_frame_address(0)`: an address in the CURRENT
+          frame. quickjs is what wants it -- quickjs.c:1723,
+          `js_get_stack_pointer()` returns `(uintptr_t)__builtin_frame_address(0)`
+          and the engine subtracts two of them to measure recursion depth.
+
+          WHY WE REACH IT AT ALL, which is the part that makes this C's problem:
+          that function has THREE arms and the GNU one is chosen by
+          `#if defined(__clang__) || defined(__GNUC__)`. We announce __GNUC__, so
+          a portable library takes its GNU arm. The `#else` arm is the same idea
+          written portably -- it takes the address of a `char` on the stack, with
+          a volatile store to stop the compiler moving it off -- so "an address
+          in this frame" IS the library's own sanctioned implementation of what
+          it is asking for, not an approximation we invented.
+
+          So: a hidden local, and its address. That is a parser-level reduction
+          needing no IR op, no codegen arm and no ABI change -- the same family
+          as __builtin_expect and __builtin_constant_p above.
+
+          NOT alloca, AND THIS IS THE TRAP WORTH RECORDING. AN_ALLOCA is sitting
+          right there, it yields a current-frame address, and it would be WRONG:
+          alloca MOVES the stack pointer, and quickjs calls js_get_stack_pointer
+          on every JS call. The frame would grow without bound and the engine
+          would run out of stack while measuring how much stack it had left --
+          a failure that looks exactly like the deep recursion it was added to
+          detect. An unused local costs a slot and moves nothing.
+
+          INLINING MAKES THIS MORE CORRECT, NOT LESS: js_get_stack_pointer is
+          `static inline`, so the local lands in the CALLER's frame, which is
+          the frame whose depth the engine is actually asking about.
+
+          ONLY THE CONSTANT 0 IS ACCEPTED AND EVERY OTHER SHAPE REFUSES LOUDLY.
+          `__builtin_frame_address(1)` asks for the CALLER's frame, which needs a
+          real frame-pointer chain walk this reduction cannot do. A plausible
+          wrong address there is the most expensive thing this compiler could
+          return: no crash, no diagnostic, and a stack-depth check that silently
+          mis-fires under deep recursion, debugged in the wrong file. A compile
+          error costs one line instead.
+          bug-c-malloc-usable-size-is-undeclared-so-quickjs-cannot-compile }
+        if name = '__builtin_frame_address' then
+        begin
+          fraArg := -1;
+          if argHead >= 0 then fraArg := ASTLeft[argHead];
+          if (fraArg < 0) or (ASTKind[fraArg] <> AN_INT_LIT) or
+             (ASTIVal[fraArg] <> 0) then
+            Error('__builtin_frame_address: only the constant 0 (this ' +
+                  'function''s own frame) is supported. A non-zero level asks ' +
+                  'for a CALLER''s frame, which needs a frame-pointer chain ' +
+                  'walk pxx does not do -- refusing rather than returning a ' +
+                  'plausible wrong address');
+          { A hidden local, and its address. Anonymous, so nothing can name it. }
+          fraSym := AllocVar('', tyInteger);
+          fraIdn := AllocNode(AN_IDENT);
+          ASTIVal[fraIdn] := fraSym;
+          ASTTk[fraIdn] := Ord(tyInteger);
+          Result := AllocNode(AN_ADDR);
+          ASTLeft[Result] := fraIdn;
+          ASTTk[Result] := Ord(tyPointer);
           Exit;
         end;
         { alloca(n) / __builtin_alloca(n): dynamic stack allocation in the
