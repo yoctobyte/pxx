@@ -27707,3 +27707,72 @@ form, and an existing rule gaining a second direction is an argument for
 extending the playbook entry rather than for a new line every session pays
 for at startup. Promote it if a second, unrelated subsystem groups on a
 machine-minted string and loses a population that way.
+
+## A PATH-SHAPED GIT QUERY ANSWERS ABOUT THE *PATH*, AND WHEN THE PATH IS A SYMLINK THAT IS A DIFFERENT OBJECT'S HISTORY
+
+Measured 2026-09-16 (franks-ee found it; verified independently here). A seat
+needed the current pin and ran the query that looks like the careful one:
+
+```
+git log -1 -- stable_linux_amd64/default/pinned     -> ed8616ac3 2026-07-27 pin v226
+```
+
+It got a real pin commit, with a plausible subject, **51 days stale**. That path
+is a **symlink to `stable_pinned`**, so the query answered about the LINK's own
+blob history. Every `make pin` rewrites the target and none of them touches the
+link:
+
+```
+commits touching the LINK   :  30   (last one 2026-07-27)
+commits touching the TARGET : 355   (last one 764ee2ed2, 2026-09-14, pin v410)
+```
+
+**The two instruments disagree in opposite directions and the FRESH one is
+mute:**
+
+```
+filesystem mtime of the link : 2026-09-14 20:44:41   <- 33s before v410's commit
+git log -1 -- the link       : 2026-07-27 22:31:49
+```
+
+`ls -l` is right and has no commit to cite. `git log` is authoritative, precise,
+and about a different object. **Neither errors.**
+
+**Why this one is worth a section rather than a shrug: it is the route that
+looks like doing it properly.** Every other way of getting a pin sha — grepping
+the log for `pin v410`, reading it out of prose — *looks* like a shortcut, and a
+reader distrusts it accordingly. Asking git about the pinned binary's own path
+looks like the rigorous move, which is exactly why nobody re-checks it.
+
+**The remedy is an identity the wrong object cannot imitate:**
+
+```
+sha256sum stable_linux_amd64/default/pinned        -> c599e8546121
+git log --grep='pin v.* -- binary sha256 c599e8546121'  -> 764ee2ed2 = v410
+```
+
+The binary's own hash cannot be produced by a link, by prose about a pin, or by
+a stale commit.
+
+**Scope, measured, because it bounds how much this matters:** nineteen committed
+tools name `stable_linux_amd64/default/pinned` and **every one of them EXECUTES
+it** (`$PXX_STABLE`, `--pinned`, `PXX=`) — which follows the symlink correctly
+and is right. **No committed consumer asks git about that path.** So this is not
+an infrastructure defect; it is a trap for a seat typing a git command by hand.
+Do not "fix" the tools.
+
+Generally: **`git log -- <path>`, `git log -S -- <path>` and friends take a
+PATHSPEC, and a pathspec matches the entry in the tree, not what it resolves
+to.** Wherever a repo keeps a stable name pointing at a moving artefact — a
+`pinned` link, a `current` symlink, a `latest` — the stable name's history is
+the history of the POINTER and is usually frozen at its creation. Ask the
+artefact for its own identity instead.
+
+**Venue, said out loud because CLAUDE.md asks for it:** playbook, not CLAUDE.md.
+Merit yes; **recurrence no** — one instance of its own mechanism, one day, and
+**no committed consumer**, so the population it can mislead is one seat at a
+keyboard. CLAUDE.md's `git fetch` paragraph already carries the general shape
+(*"anything reading a PATH is not"*) in its staleness form. Promote it if a
+second, unrelated subsystem has a path-shaped query answer authoritatively
+about the wrong OBJECT rather than the wrong VERSION — that is the axis this
+adds, and one instance is not a pattern.
