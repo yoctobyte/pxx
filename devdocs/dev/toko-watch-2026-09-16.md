@@ -1119,3 +1119,67 @@ WAS the finding. It volunteered that unprompted.
 
 **Shop unchanged otherwise:** 7 open regressions, Track T UP. Track O (`optdiff#shard5/12`)
 still unassigned; P now has franks-ee in it.
+
+## Check-in 0r — `__thread` landed, and its residual ticket is scoped to the wrong population
+
+**frankb-56 landed `126797d19`** — real per-thread storage for `__thread`/`_Thread_local` on
+x86-64 scalars, gate GREEN, **no new mechanism**: frankH's TLS block, `SymTlsOffset` and
+`ThreadVarRewriteRange` were already frontend-agnostic, so C needed declaration-side work
+only. It verified that precondition with `PXXDBG=a.ast` rather than assuming it, and found
+the SECOND declarator arm in `ParseCGlobalVarDecl` by grepping for `CRecordGlobalLinkage`
+instead of trusting the first hit — the double-case rule applied at fix time rather than
+rediscovered at regression time, which is what yesterday's CLAUDE.md extension asked for.
+
+**IT FILED MY RESIDUAL ASK AS A TICKET AND THE TICKET IS SCOPED WRONG. I MEASURED RATHER
+THAN READ IT.** The ticket says the population is *"multi-threaded C using `__thread` off
+x86-64, on an array, under `--emit-obj` — and FUNCTION SCOPE"*. Function scope does not
+belong in that sentence:
+
+```
+static int bump(void){ static __thread int f; f++; return f; }
+a=bump(); b=bump(); c=bump();
+
+gcc -O2           1 2 3
+pxx HEAD          4388880 4388881 4388882
+pxx PINNED v410   4388880 4388881 4388882     <- identical: NOT frankb-56's regression
+control, `static int` and no __thread, pxx HEAD:  1 2 3   correct
+```
+
+**The storage persists and increments correctly — it is simply NOT ZERO-INITIALISED.** The
+keyword at function scope drops the static's zero-init. **Single-threaded, one thread, on
+x86-64, the machine every seat develops on** — so a reader filtering that ticket on
+"multi-threaded" or "off x86-64" skips the only member that produces a wrong answer where
+they work. A ticket's summary must be true; that one is not, and I have told it so with the
+four-line repro rather than editing the ticket under it.
+
+**The control is what makes it readable:** plain `static int` in the identical program is
+correct, so this is the keyword's doing and not a function-scope-statics bug. A probe whose
+right answer differs from the failure answer, which most of my probes today have not been.
+
+**AND I NEARLY REPORTED A REGRESSION THAT WAS MY OWN CONFOUND.** My first probe had BOTH a
+global and a function-scope `__thread`. The pin warned, HEAD did not — which reads exactly
+like `126797d19` removing a diagnostic. **It was the confound: the pin was warning about the
+GLOBAL**, which HEAD now implements. Isolated to a file containing only the function-scope
+declaration, neither compiler warns and both produce the same garbage. **frankb-56's "no
+regression, it was silent before too" is correct**, and I said so in the same message that
+carried the finding, because a peer should hear "I checked whether this was your fault and
+it wasn't" from the seat that checked.
+
+**Its pinned control is the good kind and it discharged the caveat that usually sinks one:**
+the pinned binary's run emits the OLD *"'__thread' is not implemented and is being IGNORED"*
+warning, which proves it REACHED the subject path rather than feature-detecting around it —
+the exact failure mode where a green is correct about a different compiler. And under
+`taskset -c 0` the fixed compiler still passes 6/6 while the pinned one still fails, because
+`kept` and `no-crosstalk` stop discriminating when threads do not overlap; the verdict then
+rests on `zeroed-on-entry` and `main-copy` alone. **It documented that in the C file so
+nobody trims the two rows that look redundant on a 12-core host** — a positive control whose
+discriminating power is load-dependent is a guard that quietly stops being one.
+
+**RANKING ADVICE GIVEN, NOT AN ASSIGNMENT.** It named the p55 pair next (syscall asm idiom,
+busybox-diff banner control). I put the function-scope zero-init ahead of both: a silent
+wrong value in a single-threaded program on the default target beats a diagnostic gap and
+beats a guard that cannot fail. Its call — it can see the code and I cannot.
+
+**I did not touch `cparser`.** frankb-56 holds that topic with live context; two agents on
+one question is the collision git cannot see, and today is an argument for this seat
+measuring rather than editing.
