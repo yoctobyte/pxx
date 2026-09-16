@@ -93,7 +93,7 @@ _none_
 | regression-lib-test-lib-fpc-thread-surface | B | 70 | regression | regression: lib-test#src:test/lib_fpc_thread_surface.pas at 934ba04180e9 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_fpc_thread_surface.pas /tmp/lib_fpc_thread_surface` (auto-filed by twatch) | — |
 | regression-lib-test-lib-thread-handle-reports-exit-on-both-routes | B | 70 | regression | first-ever red: lib-test#src:test/lib_thread_handle_reports_exit_on_both_routes.pas at 06e40fb95b13 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_thread_handle_reports_exit_on_both_routes.pas /tmp/l…` (auto-filed by twatch) | — |
 | regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call | T | 70 | regression | first-ever red: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy at 5c7d6d650e5d in step 2/6, `tools/expect_same.sh test_nilpy_noleak "$(/tmp/test_nilpy_noleak \| tail -n 1)" "PYLEAK OK"` (auto-filed by twatch) | — |
-| regression-optdiff-shard0-12 | T | 70 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
+| regression-optdiff-shard0-12 | A | 80 | regression | regression: optdiff#shard0/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 0/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard5-12 | T | 70 | regression | regression: optdiff#shard5/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 5/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
@@ -1208,6 +1208,7 @@ _none_
 - [p 80] [N] bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
 - [p 80] [N] bug-n-annotating-a-local-that-is-returned-destroys-the-defs-inferred-return-type
 - [p 80] [N] feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
+- [p 80] [A] regression-optdiff-shard0-12
 - [p 80] [A] umbrella-track-p-and-a-have-no-open-bugs [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -1238,7 +1239,6 @@ _none_
 - [p 70] [B] regression-lib-test-lib-fpc-thread-surface [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [B] regression-lib-test-lib-thread-handle-reports-exit-on-both-routes [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call
-- [p 70] [T] regression-optdiff-shard0-12
 - [p 70] [T] regression-optdiff-shard5-12
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash-2

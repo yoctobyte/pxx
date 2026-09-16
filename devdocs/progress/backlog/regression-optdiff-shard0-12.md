@@ -1,7 +1,51 @@
 ---
-prio: 70
-track: T
+prio: 80
+track: A
+tags: [optimiser, O3, float, silent-wrong-value, unfixed-arm]
 ---
+
+> **TRIAGED 2026-09-16 (frankuser). RE-LANED T -> A, and it is a REAL SILENT WRONG
+> VALUE AT -O3.** The Track T default was correct to be a fallback: the defect is not
+> the harness. **This is the uncovered `-O3` ARM of
+> [[bug-a-a-float-assigned-to-an-integer-lvalue-moves-the-bits-instead-of-converting]],
+> which is in `done/`** — the general case was fixed and `-O3` was never checked.
+>
+> **Minimal repro, and `-O3` is the only level that is wrong:**
+>
+> ```pascal
+> program m;
+> function RetInt(F: Double): Integer;
+> begin
+>   Result := F;
+> end;
+> var v: Integer;
+> begin v := RetInt(4.7); WriteLn(v); end.
+> ```
+>
+> | level | output |
+> | --- | --- |
+> | -O0 | `5` |
+> | -O1 | `5` |
+> | -O2 | `5` |
+> | **-O3** | **`-858993459`** |
+>
+> The full fixture prints `got 4616977747989548237 want 5`, and
+> `struct.unpack('<d', struct.pack('<Q', 4616977747989548237))` is **4.7** — the raw
+> double bit pattern, not a number. So at `-O3` the float->int conversion on a
+> function RESULT is dropped and the bits are moved, exactly the parent bug's
+> signature.
+>
+> **Why this is worth prio 80 and not 70:** `-O3` is on track for `-O2` (CLAUDE.md),
+> and this is a wrong VALUE with no diagnostic in an utterly ordinary construct. It
+> does not crash; it returns a plausible-looking integer.
+>
+> **NOT a harness artefact — checked, because the two sibling shards WERE.** frankb-56
+> closed optdiff shard2/shard10 on 2026-09-16 (`311649be0`): those compared `argv[0]`,
+> which differs per `-O` level directory, so nine days of red were a path string. I
+> re-ran this row under the new `OPTDIFF_FILES` and then compared the program's own
+> stdout directly at `-O0` and `-O3`. It differs. **`test_c_gtk3_stock.pas`
+> (shard5) PASSES on a direct re-run and should be re-verified before anyone works
+> it.**
 
 > **Track T by default: the FAILING STEP named no owner.** Line 1 of 1 is `tools/optdiff.sh --shard 0/12`. The job's own `src` (`tools/optdiff.sh`, 1 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
 
