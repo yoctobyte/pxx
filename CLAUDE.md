@@ -203,8 +203,10 @@ running. That is the false-NEGATIVE twin of this rule's own false positive — t
 scan counts too FEW, not too many — and it reads as corroboration. **Both
 instruments were about the OBSERVER'S RELATIONSHIP TO THE JOB rather than about
 the job**, so ask instead for a state the JOB maintains: a lock file, an output
-directory growing (objects went 101 -> 400 while it was being called dead), and
-above all **the script's own completion TOKEN** — `busybox_diff.sh` prints
+directory whose contents were growing the whole time **and which the seat never
+looked at** — it consulted a process table, and an OLD work directory left by a
+FINISHED run, instead — and above all **the script's own completion TOKEN** —
+`busybox_diff.sh` prints
 `BUSYBOX-DIFF-COMPLETE` for exactly this reason and its header says so outright.
 The seat that hit this had READ that header the same day and still believed an
 exit code over it an hour later. **Grep the log for the verdict the job printed;
