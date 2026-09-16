@@ -14076,8 +14076,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	tools/expect_same.sh test_rtl_math_float_frexp26 "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" "total ok 14 / 14"
 	# SizeOf of an ARRAY field reports the array's size, not the element's
+	# 22 -> 33 on 2026-09-16: eleven SUBSCRIPTED-FIELD rows. SizeOf's operand scan
+	# asked FindSym about the identifier before the '[' and only left the name path
+	# when it POSITIVELY identified a non-array symbol -- so a field, which is not a
+	# symbol in scope, MISSED and kept the name path, which cannot index what it
+	# cannot find. Every SizeOf(<field>[i]) spelling was `expected ')' before '['`.
+	# The local-variable rows beside them are the control: they always worked, so
+	# they prove the scan is reached and the lookup, not the subscript, was the
+	# variable. TR is 12 bytes so a pointer-width answer cannot pass for the right
+	# one. From FPC's finput.pas:544.
 	./$(COMPILER) test/test_sizeof_array_field.pas $(TESTTMP)/test_sizeof_array_field26
-	tools/expect_same.sh test_sizeof_array_field26 "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" "total ok 22 / 22"
+	tools/expect_same.sh test_sizeof_array_field26 "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" "total ok 33 / 33"
 	@# bug-p-sizeof-through-a-pointer-to-a-string-n-answers-pointer-width
 	@# `SizeOf(p^)` for a `^string[10]` answered 8 against fpc's 11 -- the deref
 	@# shape the 2026-09-02 capacity fix did not reach. Rows A B D E F are fpc

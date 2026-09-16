@@ -27518,3 +27518,60 @@ Check that before trusting either direction of the result.
 **When the pin cannot serve** — your fix is newer than the pin in a way the
 fixture depends on, or the subject does feature-detect — fall back to the
 revert cycle, and reseed from the pin and `touch` the sources afterwards.
+
+## A TWO-WAY DISPATCH KEYED ON A LOOKUP ELECTS ONE ARM ON A *MISS*, AND THE FIXTURES THAT PASS ARE EXACTLY THE NAMES THAT RESOLVE
+
+Measured 2026-09-16 (frankS, Track P, FPC corpus wall seven, `finput.pas:544`).
+FPC's own compiler writes:
+
+```pascal
+ReallocMem(files, afiles*sizeof(files[0]));   { files is a FIELD of the class }
+```
+
+pxx answered `expected ')' before '['`. `SizeOf`'s operand scan decides between a
+name path and an expression path, and the divert read:
+
+```pascal
+szRec := FindSym(GetTokenStr(szScan - 1));
+if (szRec >= 0) and (not Syms[szRec].IsArray) then szIsExpr := True;
+```
+
+**It only left the name path when it had POSITIVELY IDENTIFIED a non-array
+symbol.** A field is not a symbol in scope, so `FindSym` MISSED, `szRec` came
+back `< 0`, the condition was false, and the operand stayed on the name path —
+which cannot index something it cannot find. The inversion is the whole fix:
+
+```pascal
+if (szRec < 0) or (not Syms[szRec].IsArray) then szIsExpr := True;
+```
+
+**The shape, and it is not "a missing check".** There is no absent line to grep
+for and no diagnostic's absence: a diagnostic fired, promptly, about the wrong
+thing. The defect is a POLARITY — a predicate that needs a successful lookup in
+order to be true, guarding the arm you take when the name is unknown. Every
+lookup failure therefore elects the arm that assumes findability, silently and by
+construction. Ask of any `if Find...(x) >= 0 and <property>` dispatch: **which
+arm does a MISS select, and is that the arm that can cope with not knowing?**
+
+**And the reason it survived a suite that was already testing SizeOf: the rows
+that pass are precisely the names the broken predicate resolves.** The fixture
+had 22 checks and every one of them named a local variable or a plain type —
+all findable, all correct, all green, for eighteen months. That is not a thin
+sample of SizeOf operands; it is **the complete population on the working side
+of the bug**, and a suite grown by adding more of what already passes can never
+cross the line. It is the ordered-list rule in CLAUDE.md ("the passing
+arrangements are not a sample, they are the population everyone writes")
+arriving through name resolution instead of through element position: there the
+variable is WHERE the interesting element sits, here it is WHETHER the
+identifier resolves. The generalisation — *the axis your fixtures hold constant
+is the axis the predicate is wrong about* — is the same animal both times.
+**So vary the RESOLVABILITY of the operand, not just its type**: a field, a
+field through explicit `Self`, a field of a record-typed field, a pointer field.
+Eleven such rows took the fixture from 22 to 33, and the local-variable rows
+beside them are the control that proves the scan was reached at all.
+
+**One trap in writing those rows.** The element type must not be pointer-width:
+with `TR` at 8 bytes, `SizeOf(fld[0])` answering 8 cannot be told from the
+pointer-sized answer a half-working path emits. `TR` is 12 bytes in
+`test/test_sizeof_array_field.pas` for exactly that reason — see CLAUDE.md,
+"choose a probe whose right answer differs from the default".

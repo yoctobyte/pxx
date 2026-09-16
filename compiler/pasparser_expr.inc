@@ -3840,12 +3840,44 @@ begin
               begin
                 { The name path indexes only a genuine ARRAY symbol. `s[1]` on a
                   string reaches it too and dies on the '[' with "expected )",
-                  so a subscript on anything else is an expression. }
+                  so a subscript on anything else is an expression.
+
+                  A FindSym MISS USED TO KEEP THE NAME PATH, AND A MISS IS NOT
+                  EVIDENCE OF ANYTHING. The test was `(szRec >= 0) and (not
+                  IsArray)` -- so it only diverted when it had positively
+                  identified a non-array SYMBOL, and when FindSym found nothing
+                  at all it fell through to the very path that cannot handle a
+                  subscript. A FIELD is exactly that case: it is not a symbol in
+                  scope, so `FindSym('files')` misses inside the method that
+                  owns `files`, and the operand went to the name path and died
+                  on the '[':
+
+                    procedure TMgr.Grow;
+                    begin ReallocMem(files, n * SizeOf(files[0])); end;
+                    -> expected ')' before '['
+
+                  Measured 2026-09-16, and the boundary is the SYMBOL LOOKUP
+                  rather than the type: with a LOCAL of each type every row
+                  already worked (`SizeOf(p[0])` = 12, `SizeOf(arr[0])` = 12),
+                  and as a FIELD both were refused -- pointer field, array
+                  field, with and without an explicit `Self.`, and through a
+                  record variable (`SizeOf(r.fa[0])`) too. Everything without a
+                  subscript was fine throughout (`SizeOf(fp^)`, `SizeOf(fa)`,
+                  `SizeOf(fp)`), which is what isolates it to this scan.
+
+                  Inverted to `szRec < 0`: stay on the name path ONLY when the
+                  base is known to be an array symbol. A miss now means "the
+                  name path certainly cannot do this", which is the truth -- the
+                  name path resolves through FindSym as well, so anything it
+                  cannot find it cannot index either. Strictly a widening of the
+                  expression path into cases that were hard errors.
+
+                  FPC's own compiler, finput.pas:544. }
                 if (szBd = 0) and (szScan > 0) and
                    (Tokens[szScan - 1].Kind = tkIdent) then
                 begin
                   szRec := FindSym(GetTokenStr(szScan - 1));
-                  if (szRec >= 0) and (not Syms[szRec].IsArray) then szIsExpr := True;
+                  if (szRec < 0) or (not Syms[szRec].IsArray) then szIsExpr := True;
                 end;
                 Inc(szBd);
               end

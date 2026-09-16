@@ -39,6 +39,7 @@ type
     D: array of Integer;
     P: array[0..1] of TPt;
     N: TPt;
+    PP: ^TPt;                       { a POINTER field, for the p[i] spelling }
     procedure SelfChecks;
   end;
   TOuter = record Q: TR; end;
@@ -66,10 +67,38 @@ begin
 end;
 
 procedure TC.SelfChecks;
+var lp: ^TPt; la: array[0..2] of Integer;
 begin
   { the same walk from inside a method, where the receiver is Self }
   Check('self.A', SizeOf(Self.A), SizeOf(vA));
   Check('self.M', SizeOf(Self.M), SizeOf(vM));
+
+  { --- A SUBSCRIPTED FIELD, which is the row this fixture did not have ---
+    SizeOf's operand scan decided "is this an expression?" by FindSym on the
+    identifier before the '['. A FIELD is not a symbol in scope, so the lookup
+    MISSED -- and a miss kept the name path, which cannot index anything it
+    cannot find, so the operand died on the '[' with `expected ')' before '['`.
+    Absence of evidence read as evidence.
+
+    Every one of these was a hard compile error and each reaches the scan by a
+    different spelling: the bare field, the same field through an explicit
+    Self, and a pointer field (where the subscript is a DEREF, not an array
+    index). The LOCAL rows beside them already worked and are the control --
+    they prove the scan is reached and that what changed is the lookup, not
+    the subscript.
+
+    Asserted against the plain-variable form, like every other row here, so
+    nothing freezes a width. FPC's own compiler is the real case:
+    `ReallocMem(files, afiles * sizeof(files[0]))`, finput.pas:544. }
+  lp := nil; la[0] := 0;
+  Check('self bare field[i]',   SizeOf(A[0]),         SizeOf(la[0]));
+  Check('self explicit  [i]',   SizeOf(Self.A[0]),    SizeOf(la[0]));
+  Check('self ptr field[i]',    SizeOf(PP[0]),        SizeOf(TPt));
+  Check('self ptr expl  [i]',   SizeOf(Self.PP[0]),   SizeOf(TPt));
+  Check('self rec field[i]',    SizeOf(P[0]),         SizeOf(vP[0]));
+  { the controls: locals of the same shapes, which always worked }
+  Check('local arr[i] (control)', SizeOf(la[0]),      SizeOf(vA[0]));
+  Check('local ptr[i] (control)', SizeOf(lp[0]),      SizeOf(TPt));
 end;
 
 begin
@@ -126,6 +155,14 @@ begin
   Check('Length(rec.A)', Length(r.A), 3);
   Check('High(rec.A)', High(r.A), 2);
   Check('Length(cls.A)', Length(c.A), 3);
+
+  { --- the subscripted field from OUTSIDE a method, through a variable ---
+    Same scan, same FindSym miss: the token before the '[' is the FIELD name,
+    not `r`. These were refused too. }
+  Check('rec.A[i]', SizeOf(r.A[0]), SizeOf(vA[0]));
+  Check('rec.P[i]', SizeOf(r.P[0]), SizeOf(vP[0]));
+  Check('cls.A[i]', SizeOf(c.A[0]), SizeOf(vA[0]));
+  Check('nested.Q.A[i]', SizeOf(o.Q.A[0]), SizeOf(vA[0]));
 
   WriteLn('total ok ', ok, ' / ', total);
 end.
