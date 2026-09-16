@@ -86,3 +86,61 @@ The comment already sitting beside that code says the three `-1` spellings
 - Prio 45 rather than higher because the spelling is rare, and rather than
   lower because it is a SILENT WRONG VALUE of the kind this repo's own guide
   calls the expensive class — it cost an hour here disguised as an RTL bug.
+
+## Reproduced independently 2026-09-16 (frank-user), and the byte is NOT garbage — it is the LENGTH
+
+Reproduced at HEAD `68d79522668e` against `fpc -O2 -Tlinux -Px86_64` on the same
+source, with five neighbouring spellings as controls in the same program. Only the
+double cast diverges; **B–F are byte-identical on both compilers**, which is what
+makes this a one-cell defect rather than a PChar problem:
+
+```
+                     pxx            fpc
+A PChar(AnsiString('hello'))   []             [hello]      <- the defect
+B PChar('hello')               [hello]        [hello]
+C PChar(v)                     [hello]        [hello]
+D PChar(string('hello'))       [hello]        [hello]
+E AnsiString('hello')          [hello]        [hello]
+F Length(AnsiString('hello'))  5              5
+```
+
+**THE OBSERVABLE IS THE STRING'S OWN LENGTH, READ AS CHARACTERS.** Printing the raw
+bytes instead of the string settles it — this is the summary's *"pointer to a
+length-prefix"* made visible, and it means the value is **deterministic, not
+garbage**:
+
+```
+            pxx byte[0..3]      fpc byte[0..3]
+'abc'       3  0 0 0            97 98 99 0
+'hello'     5  0 0 0            104 101 108 108
+'hello world'  11 0 0 0         104 101 108 108
+```
+
+**This is why two seats saw two different symptoms from one defect.** `WriteLn` of a
+`PChar` stops at the first NUL, so what you see is the length rendered as a
+character: a control code for a short string (looks *empty* on most terminals), a
+printable character for a string of length 32–126, and **genuinely empty for any
+length that is a multiple of 256**. The original report said *"one garbage byte"* and
+this seat first saw *"empty"*; both are the same byte. **Assert on `Ord(p[0])`, never
+on the printed form.**
+
+## AND THE DEFECT DOES NOT FIRE BELOW LENGTH 2 — THE TWO SHORTEST REDUCTIONS BOTH PASS
+
+Measured boundary, same program, both compilers:
+
+| literal | pxx `byte[0..2]` | fpc | verdict |
+| --- | --- | --- | --- |
+| `''` | `0 0 0` | `0 0 0` | **agree** |
+| `'x'` | `120 0 0` | `120 0 0` | **agree** |
+| `'A'` | `65 0 0` | `65 0 0` | **agree** |
+| `'ab'` | **`2 0 0`** | `97 98 0` | **DIVERGE** |
+| `'abc'` | **`3 0 0`** | `97 98 99 0` | **DIVERGE** |
+
+**A fixture written with `''` or a single character certifies the bug as fixed.** Both
+are the first thing a reduction reaches for, and a one-character literal is presumably
+typed as `Char` rather than `AnsiString` so the cast never takes the failing door —
+**mechanism not established here; the BOUNDARY is measured.** Any regression test for
+this must use a literal of **length ≥ 2**, and the assertion must read bytes.
+
+*(frank-user, toko watch 2026-09-16. Probes in scratch only; nothing added to `test/`
+because the fix is parked and a test for an unfixed defect belongs with the fix.)*
