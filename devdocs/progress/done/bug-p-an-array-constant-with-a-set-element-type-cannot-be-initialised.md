@@ -48,6 +48,15 @@ opens a set literal is being read as the start of a nested initializer.
 So the enum index is innocent and so is the set type itself. It is specifically
 **a set as an ARRAY CONSTANT's element**.
 
+> **^ WRONG, AND THE ERROR IS THE MISSING CELL, NOT THE READING — see the
+> correction below.** The three probes above vary the ELEMENT TYPE and the
+> BOUND and hold the `var` spelling fixed, so they cannot see the axis that
+> actually discriminates: **`const` compiles and `var` does not.** The record
+> probe in the same table was a `const` and that is why it passed — I read it
+> as "records are fine, arrays are not" when it was telling me "const is fine,
+> var is not". A census that holds the deciding variable fixed agrees with
+> whatever hypothesis it was built for.
+
 ## Why it matters now
 
 `x86_64/cpuinfo.pas:281`:
