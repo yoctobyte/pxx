@@ -58,11 +58,30 @@ namespace it scans, one level up from the case the note is about. Expect one
 hit; a second is a real one.)*
 
 **The check, with its baseline, so a later reader knows what clean looks like:**
-`grep -o '[0-9]* / [0-9]* / [0-9]*' <this file> | sort | uniq -c` answered
-**13 x `21 / 10 / 176`, 5 x `22 / 10 / 175`** on 2026-09-16, and all five of the
-latter are quotations inside the correction notes rather than live claims. A
-sixth is a live claim and is wrong. That command could not be written at all
-while the totals had two spellings, which is the entire point.
+`grep -o '[0-9]* / [0-9]* / [0-9]*' <this file> | sort | uniq -c` should answer
+**thirteen** of the corrected triple and **five** of the superseded one, and all
+five of the latter are quotations inside the correction notes rather than live
+claims. A sixth of the superseded triple is a live claim and is wrong. That
+command could not be written at all while the totals had two spellings, which is
+the entire point.
+
+**Those two counts are spelled as WORDS deliberately, and the reason is that the
+first version of this sentence spelled them as digits and was BORN RED.** It
+quoted one instance of each triple, so it was a member of the population it was
+counting: the documented command answered fourteen and six while the sentence
+claimed thirteen and five, and it could never have passed for any reader after
+the commit that wrote it. A later reader would have run it, got the extra hit,
+applied the criterion one line above, and gone hunting for a live wrong claim
+that does not exist -- and a guard that cries wolf on its first outside run
+teaches the reader to ignore it, which is worse than having no guard. Caught by
+frankuser running the check instead of reading it, 2026-09-16. Note the depth:
+the paragraph above already applies the observer-in-the-namespace rule to the
+QUOTATION, and missed it on the BASELINE NUMBERS, which were measured before the
+sentence stating them existed. Words take the sentence out of the set, so the
+command answers as documented for every later reader and keeps answering that
+way if someone re-words this paragraph -- the same move as putting the
+convention at the top of the file rather than beside the tables: change the
+structure so the failure cannot recur, instead of correcting the instance.
 
 # The target
 
