@@ -1810,3 +1810,75 @@ it something earlier today:
   CLAUDE.md line being used in the direction it was written for.
 
 **Nothing needed from me, and I am not adding to it.** Verdict when the token appears.
+
+## Check-in 1c — the verdict arrived, I checked it off the ARTEFACT, and my own corroboration grep was a substring coincidence
+
+**Tree is CLEAR.** `busybox_diff.sh` is free again; the hold lasted ~20 minutes, not the hour
+frankb-56 budgeted.
+
+**THE VERDICT, AND I RE-DERIVED EVERY ROW OF IT MYSELF RATHER THAN RELAYING IT.** `f8547e7bd`.
+The seat's three rows and what I measured on the binary and the transcripts in
+`/tmp/bbdiff-4XqXTw`, with nothing taken from its log:
+
+| its claim | my instrument | answer |
+| --- | --- | --- |
+| no PT_INTERP | `readelf -lW \| grep -c INTERP` | **0** |
+| no libc | `readelf -dW \| grep -c NEEDED` | **0** |
+| entry == `_start` | `readelf -hW` / `readelf -sW` | **0x401000 == 0x401000** |
+| nothing unresolved | `readelf -sW`, UND rows | **none** |
+| not dynamic | `ldd` | *not a dynamic executable* |
+| 257 applets | `busybox --list \| wc -l` | **257** |
+| 400 objects | `ls obj/*.o \| wc -l` | **400** |
+| a 30-line stub | `tools/pxxcrt_x86_64.S`, non-comment lines | **29** of 76 |
+| digests against RFC vectors | `printf abc \| busybox md5sum`, `sha256sum` | **both match** |
+
+**663 cases and byte-identity, counted with the harness's own definition and not read off its
+PASS line:** `grep -a '^### ' | grep -avc '^### exit='` — the spelling `busybox_diff.sh:799`
+documents, `-a` because one case cats 4KB of `/dev/urandom` and the `exit=` exclusion because
+one marker is glued mid-line by `nonl.txt`. Oracle transcript **663**, pxx transcript **663**,
+`cmp` says **IDENTICAL**, same sha256 `6ce78c8273`, and **41961 bytes each** — the size is the
+row that says the comparison had something to compare, because two empty files are also
+byte-identical.
+
+**THE POSITIVE CONTROL FIRES, which is the only reason the table above means anything.** Every
+one of those readings would also be produced by an instrument that had silently answered about
+nothing. Run the same four commands on the **gcc oracle binary in the same work directory**:
+`ELF ... pie executable, dynamically linked`, **1** PT_INTERP, `NEEDED libc.so.6`. The
+instrument separates the two binaries, on the same box, in the same minute.
+
+**AND HERE IS THE ONE I GOT WRONG, IN THE HOUR AFTER WRITING UP A RULE ABOUT EXACTLY THIS.**
+My first pass at checking the case count was `grep -a -o "663" build_x86_64.log`, which
+returned hits, and for a moment that read as corroboration. **The hits were byte counts** —
+`ok: .../archival_cpio.o [code=417346B ...]`, `418300B`, `417481B`. A three-digit substring
+inside a six-digit number. The log did not error and it did not return nothing; it **answered
+a different question**, which is this file's own sentence about every instrument that lies.
+The grep could not have failed: any build log of 400 objects contains `663` somewhere by
+arithmetic alone. **A digit string is not a measurement**, and the fix was to count the cases
+myself with the predicate the harness uses.
+
+**WHAT THE RE-RUN ACTUALLY BOUGHT, in the seat's own accounting and I think it is exactly
+right:** *"it did not make the binary more correct, it removed ME from the population."* 663
+cases it did not choose against 11 applets it did. The digests were always the strong half —
+an oracle outside this repo, this compiler and this harness — and they are untouched.
+
+**WHAT IS NOT CLAIMED, and it arrived in the same message as the good news, which is the part
+worth recording as behaviour:** the entry stub is assembled with `gcc -c`. **No external
+LIBRARY is in the binary; two external TOOLS are still in the chain** — an assembler and a
+linker. Route 2 (`feature-a-pxx-cannot-link-its-own-objects`) removes both and is the end
+state. The honest sentence is *"busybox builds and runs at 257 applets with nothing linked
+against it"*, not *"pxx needs no toolchain"*.
+
+**Shop otherwise:** `gate.sh quick` **GREEN**, all 24 rows, self-host fixedpoint PASS, FPC seed
+canary PASS. **Seven open regressions, unchanged from the 11 → 7 baseline** — the four optdiff
+shards, `lib-test#src:tools/crtl_reachability.py`, `tools-devtest#00`,
+`lib-test#src:test/crtl_atexit.c`. Nothing cleared, nothing new; every `opened` timestamp still
+predates today. Track T **UP**, tested through `f02aaea62be9`, newest full tier 21m old.
+
+**TRACK C AND THE BUSYBOX GROUP BOTH CLOSE HERE.** Four commits today, all gated green and all
+on origin: `76d6c6428`, `037100b42`, `01b932188`, `f8547e7bd`. The C queue is clear above p40.
+**Track O (`optdiff#shard5/12`) and all of Track P remain unassigned and I am not starting a
+seat.** What remains on goal 5 is Track A's: route 2 for the stub, and
+`feature-a-object-output-for-arm32-and-aarch64` for the other architecture.
+
+**Still exactly two things escalated for the 18th**, both unchanged: `3eb0297f0`, and the
+goal-5 wording, which now reads as one sentence about what we want.
