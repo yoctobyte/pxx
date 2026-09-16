@@ -41,3 +41,6 @@ pascal26:40: error: no overload of get matches these arguments
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-16 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy` passes at 67f0878f2e59 (tier full); it was red at 5dbee723e228. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
