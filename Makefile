@@ -6707,6 +6707,23 @@ test-threads: $(COMPILER)
 	  tools/expect_same.sh test_ts_hl_diag26_exit "$$rc" "212" && \
 	  tools/expect_same.sh test_ts_hl_diag26_control "$$(printf '%s\n' "$$out" | sed -n 1p)" "contention-workers-finished=12" && \
 	  tools/expect_same.sh test_ts_hl_diag26_named "$$(printf '%s\n' "$$out" | sed -n 2p)" "Runtime error 212: the heap lock was never released."
+	# ...and THE OTHER SIDE OF THAT REFUSAL. The row above asserts a handler that
+	# allocates while the flow HELD the lock is named; this asserts a handler that
+	# allocates while it held NOTHING is still SERVED. Both used to take the same
+	# path -- the reentrant owner check handed a handler the lock because it runs
+	# on the thread it interrupted and presents that thread's tid -- so neither
+	# case was distinguishable and the 212 diagnosis was dead. Refusing the grant
+	# for handlers routes THIS case down the ordinary acquire, which is a path a
+	# handler had not taken before, and a regression here shows up as a FALSE 212
+	# rather than as a hang. `hits` is exact and not `> 0`: a directed tkill to
+	# self is delivered before the syscall returns, so a handler that ran once and
+	# wedged is caught too. BOTH magazine spellings -- with the magazine on the
+	# handler's traffic never reaches the lock, so that build would pass with the
+	# acquire path entirely broken and is the control, not the measurement.
+	./$(COMPILER) --threadsafe -dPXX_NO_HEAP_MAG test/test_threadsafe_handler_alloc_no_lock_held.pas $(TESTTMP)/test_ts_sigalloc26
+	tools/expect_same.sh test_ts_sigalloc26 "$$($(TESTTMP)/test_ts_sigalloc26)" "$$(printf 'hits=20000\nspin-nonzero=TRUE\nSIGALLOC OK')"
+	./$(COMPILER) --threadsafe test/test_threadsafe_handler_alloc_no_lock_held.pas $(TESTTMP)/test_ts_sigalloc_mag26
+	tools/expect_same.sh test_ts_sigalloc_mag26 "$$($(TESTTMP)/test_ts_sigalloc_mag26)" "$$(printf 'hits=20000\nspin-nonzero=TRUE\nSIGALLOC OK')"
 	# A CAUGHT exception must release its managed FIELDS, not just the object.
 	# PXXObjFree runs PXXClassFinalize, whose managed pass is compiled out under
 	# PXX_TS_HARDLOCK (x86-64 --threadsafe), and this lowering did not emit the

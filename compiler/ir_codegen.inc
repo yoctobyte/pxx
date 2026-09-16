@@ -3393,6 +3393,15 @@ procedure EmitHeapLockStubs;
   DIAGNOSIS survives for the case that is still a real deadlock (a foreign
   thread, a signal handler) while the case that never was one stops hanging.
 
+  THAT SENTENCE WAS HALF TRUE WHEN WRITTEN AND IS ENFORCED NOW. It held for the
+  foreign thread, whose gettid genuinely differs. It did NOT hold for the signal
+  handler, which runs on the thread it interrupted and so presented the very tid
+  the owner check was looking for: the handler was GRANTED the lock and the
+  diagnosis never fired at all. Measured 2026-09-16 -- the deadlock probe hung to
+  the harness timeout (rc=124, no message) and exited 212 correctly only under
+  -dPXX_NO_REENTRANT_HEAPLOCK. The sigaltstack test in the acquire below is what
+  makes the handler half true; see the comment on the owner compare.
+
   THE OWNER TID, AND THE CHECK THAT MAKES READING IT SAFE. Copied deliberately
   from EmitIoLockStubs rather than reinvented: read the cached tid from
   TLS_SLOT_TID, but ONLY when the reader's own rsp lies inside the
@@ -3426,6 +3435,7 @@ procedure EmitHeapLockStubs;
   this lock and pays the identity check. That is a measurement-speed cost, not a
   shipped one. }
 var jePatch, jzPatch, callStart, unlockJnzPatch: Integer;
+    asyncPatch, syncLoPatch, syncHiPatch, bumpPatch: Integer;
 begin
   if HeapLockAddr <> 0 then Exit;
   if not ThreadSafeMode then Exit;
@@ -3446,6 +3456,13 @@ begin
     straight at. }
 
   if PasDefineExists('PXX_NO_REENTRANT_HEAPLOCK') then Exit;   { A/B probe }
+
+  { The alt-stack bounds are read below to tell ASYNC re-entry from SYNC. This is
+    idempotent and every driver reaches it anyway (EmitProgramRuntimeStubsForTarget
+    calls it unconditionally, before its NoSignals exit); calling it here only
+    fixes the ORDER, so the bounds are allocated before this stub reads them
+    rather than after. }
+  EnsureSignalBss;
 
   HeapLockAddr := CodeLen;
   EmitAsmX64(['push rax', 'push rcx', 'push rsi', 'push r11']);
@@ -3478,10 +3495,76 @@ begin
       'mov rsi, rax'
     ]);
 
-  { Already ours? Then this is re-entry: bump the depth and return WITHOUT
-    touching the lock word. }
+  { Already ours? Then this MAY be re-entry -- but only the SYNCHRONOUS kind.
+
+    A SIGNAL HANDLER RUNS ON THE THREAD IT INTERRUPTED, so it presents the same
+    tid and used to match here, and matching here GRANTS it the lock: depth 1->2,
+    return, and the handler allocates inside a heap the interrupted flow left
+    half-updated. That is not re-entry, it is the async-signal-safety bug this
+    lock's own diagnosis exists to NAME (option 3 of
+    bug-a-the-threadsafe-allocator-is-not-async-signal-safe), and granting it
+    defeated the diagnosis completely: measured 2026-09-16, the deadlock probe
+    HANGS to the harness timeout (rc=124, no message) with this layer on and
+    exits 212 with the message under -dPXX_NO_REENTRANT_HEAPLOCK. The comment on
+    EmitHeapLockSlowStub claiming the diagnosis "survives for a foreign thread or
+    a signal handler" was true of the foreign thread and false of the handler.
+
+    THE STACK-BOUNDS CHECK ABOVE DOES NOT COVER THIS and cannot: a handler's rsp
+    is off its thread's own stack, so it takes the .hlgettid arm -- and gettid
+    answers with the SAME tid, which is the right answer to the wrong question.
+    That fallback was designed against a FOREIGN THREAD, where gettid genuinely
+    differs. Here both arms agree and both are wrong.
+
+    So ask the question that actually separates them, and ask it statelessly:
+    every hook is installed with SA_ONSTACK (flags $1C000004, EmitSignalRuntime),
+    so a handler runs ON THE SIGALTSTACK and nothing else does. rsp inside those
+    bounds == this is an interrupt, not a call. No counter to increment, and
+    therefore none to leak if a handler unwinds abnormally -- which a depth
+    counter in the dispatch stub would, permanently misdiagnosing every later
+    legitimate re-entry.
+
+    Refusing the grant does NOT hard-code a verdict: it falls into the ordinary
+    acquire below, which is what makes this correct in BOTH directions. A handler
+    that interrupted a flow NOT holding the lock finds the word free, takes it
+    properly and releases it -- the common case, still working. One that
+    interrupted a flow holding it spins on a word that cannot be released and
+    trips the existing budget into Runtime error 212.
+
+    RESIDUAL, and it is not closed here: sigaltstack is PER-THREAD and only the
+    installing thread registers one (item 2 of the same ticket), so a handler
+    taken on a clone(2) thread runs on that thread's OWN stack, passes the bounds
+    check, and is still granted. This restores the diagnosis for the thread that
+    installed the hook, which is what the test covers and what every current
+    caller does. }
   EmitAsmX64(['cmp [@glob], rsi', BSS_HEAP_OWNER]);
-  EmitB($74); jePatch := CodeLen; EmitB(0);          { je -> .bump }
+  EmitB($75); jePatch := CodeLen; EmitB(0);          { jne -> .acquire }
+
+  asyncPatch := -1;
+  if BSS_SIG_ALTSTK <> 0 then
+  begin
+    { BSS_SIG_ALTSS is allocated IMMEDIATELY after the alt stack, so its address
+      is the buffer's upper bound and no immediate has to be materialised. That
+      is a layout coupling, so it is asserted rather than trusted -- a guard that
+      fails loudly at build time if EnsureSignalBss is ever reordered. }
+    if BSS_SIG_ALTSS <> BSS_SIG_ALTSTK + SIG_ALTSTACK_SIZE then
+      Error('compiler error: the heap lock reads BSS_SIG_ALTSS as the sigaltstack upper bound, so EnsureSignalBss must keep it immediately after BSS_SIG_ALTSTK');
+    EmitAsmX64(['mov rcx, rsp', 'mov rax, @glob', BSS_SIG_ALTSTK, 'cmp rcx, rax']);
+    EmitB($72); syncLoPatch := CodeLen; EmitB(0);    { jb  -> .sync, below the alt stack }
+    EmitAsmX64(['mov rax, @glob', BSS_SIG_ALTSS, 'cmp rcx, rax']);
+    EmitB($73); syncHiPatch := CodeLen; EmitB(0);    { jae -> .sync, above it }
+    { fallthrough: rsp is INSIDE the alt stack -- a handler. Refuse the grant. }
+    EmitB($EB); asyncPatch := CodeLen; EmitB(0);     { jmp -> .acquire }
+    PatchRel8(syncLoPatch);
+    PatchRel8(syncHiPatch);
+  end;
+  { .sync -- a genuine synchronous re-entry: bump the depth and return WITHOUT
+    touching the lock word. }
+  EmitB($EB); bumpPatch := CodeLen; EmitB(0);        { jmp -> .bump }
+
+  { .acquire -- reached when the lock is not ours at all, AND when it is ours but
+    the asker is a signal handler. }
+  PatchRel8(jePatch);
+  if asyncPatch >= 0 then PatchRel8(asyncPatch);
 
   { Not ours: today's acquire, byte for byte — the TTAS fast path and the 5-byte
     call to the contended stub, so every number measured on it still stands. }
@@ -3499,7 +3582,8 @@ begin
   { We hold it now, so we are the owner. Depth is 0 here — the releaser zeroed
     it — and the bump below makes it 1. }
   EmitAsmX64(['mov [@glob], rsi', BSS_HEAP_OWNER]);
-  PatchRel8(jePatch);
+  { .bump }
+  PatchRel8(bumpPatch);
   EmitAsmX64([
     'inc qword [@glob]', BSS_HEAP_DEPTH,
     'pop r11', 'pop rsi', 'pop rcx', 'pop rax',
