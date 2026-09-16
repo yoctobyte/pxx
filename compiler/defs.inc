@@ -1614,6 +1614,7 @@ const
     all ask `PyAugMarkedTok`, which is the only place the set is written down. }
   PY_BINOP_AUGMENTED = 2;
   PY_PSMEMO_MAX = 8192;   { PyParamTypeFromSites memo entries }
+  PY_PS_HDR_MAX = 64;     { PyParamTypeFromSites: parameters per def it can attribute sites by arity for }
   { `Assigned(x)` desugars at PARSE time into the SAME `x <> 0` AN_BINOP that
     `x <> nil` produces — but FPC treats the two OPPOSITELY for a procedural
     variable: `Assigned(fp)` tests the pointer in every mode, while `fp <> nil`
@@ -3994,6 +3995,7 @@ var
   PyStarSpliceDepth : Integer;  { open `f(*[...])` argument splices: the elements are parsed as ordinary comma-separated arguments and the closing ']' is consumed by the ParseExpr call that lands on it. }
   SoftUnitResolve : Boolean;  { while resolving the imports in a `try:` that has an `except ImportError:` — a module that cannot be found sets SoftUnitMissed instead of erroring, so the fallback branch can be compiled instead (feature-nilpy-fallback-import). }
   SoftUnitMissed : Boolean;
+  PyLexClosureMode : Boolean;  { PyLexImportClosure is asking ParseUsesUnitBody to LEX a .py module and nothing more: no unit slot, no parse, no edge, no error -- the real import does all of that later and finds the tokens already there (feature-n-lex-the-import-closure-before-parsing-so-call-site-typing-sees-every-caller) }
   SoftArmDead : Boolean;  { a guarded import run has ALREADY missed, so every LATER import in that same arm is unreachable and must not be resolved. Distinct from SoftUnitMissed, which is per-statement: this one says the ARM is over. PyParseFallbackImportTry's own header records the sibling case it does NOT cover -- a module that resolved BEFORE the failing one stays loaded, which is unused weight in the binary; a module imported AFTER it is compiled too, and THAT one raises the imported module's own errors out of a branch CPython never enters. bug-n-a-dead-guarded-import-arm-still-compiles-the-module-it-imports }
   CRuntimeStubsEmitted : Boolean;  { the C runtime primitive stubs (__pxx_setjmp/longjmp, __pxx_fe*round) are emitted once per compile, from whichever path first needs them — the C program driver or a pulled .c unit. }
   DefaultCIncludeDirsAdded : Boolean;  { AddDefaultCIncludeDirs has run: it is called both from the C-program path and from every C unit pull, and must register the crtl header root exactly once. }

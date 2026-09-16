@@ -6463,7 +6463,7 @@ begin
     already-compiled guard below — a warn/count pass over
     bug-pascal-uses-is-transitive wants every clause, not just first-loads,
     since visibility is per-importer, not per-load. }
-  RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
+  if not PyLexClosureMode then RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
   { ...and the RESOLVED edge, when the spelling is an alias for something else.
     The edge above points at the SPELLING (`codecs`, `xml.dom`), but visibility
     is per REAL unit and a shim's symbols live in `mimic_codecs`. Recording both
@@ -6479,7 +6479,7 @@ begin
     bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
     meta-a-lookups-that-ask-about-the-spelling-not-the-resolved-unit }
   aliasEdgeIdx := FindUnitOrAlias(Strs[strIdx].Text);
-  if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) then
+  if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) and (not PyLexClosureMode) then
     RecordUsesEdge(CurrentUnitIdx, aliasEdgeIdx, InInterface);
   isAmbientLoad := UsesInjected or UnitIsAmbient(CurrentUnitIdx);
   if UsesInjected then
@@ -6630,6 +6630,30 @@ begin
                         pasLookupOK, pyLookupOK, pyImportLang, pyDotted,
                         pyDottedIsPath, pyRelLevel, path, isCUnit, isCHeader,
                         isPyUnit, emsg);
+{$ifndef PXX_NO_NILPY}
+  { IMPORT-CLOSURE LEXING. PyLexImportClosure walks the import statements of
+    the main program and of every module it reaches, through THIS resolver,
+    so a module is looked up exactly as its real import will look it up --
+    and asks for one thing: that a `.py` module be LEXED onto the token
+    stream now. Parsed nothing, registered nowhere: the unit slot claimed
+    above is released, no edge was recorded, and the real import claims the
+    slot again later and finds the tokens already there (PyLexedRangeStart
+    in the .py arm below). Why: the token-only pre-pass scanners
+    (PyParamTypeFromSites) see only what has been lexed, and modules were
+    lexed in import order, so which callers a def could see depended on who
+    imported whom first -- math3d.py saw sim.py's call sites and never
+    rig.py's. A module that does not resolve is not an error HERE: the real
+    import reports it, or its guarded arm absorbs it (SoftUnitResolve is on).
+    feature-n-lex-the-import-closure-before-parsing-so-call-site-typing-sees-every-caller }
+  if PyLexClosureMode then
+  begin
+    CompiledUnitCount := savedCUC;
+    CurrentCLibrary := savedCurrentCLibrary;
+    if isPyUnit and (Length(UnitContent) > 0) then
+      PyLexModuleForClosure(UnitContent, path);
+    Exit;
+  end;
+{$endif}
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
     name — `mimic_<module>` — so no file in the tree carries an upstream package
     name and the tree says what each shim is. The mapping is consulted only
@@ -6882,12 +6906,22 @@ begin
     savedUnitImplCU := InUnitImpl;
     InUnitImpl := False;
 
-    startPos := PyLexAppend(UnitContent, path);
-    { -g: give the module its own .debug_line file entry, so a breakpoint
-      inside it resolves and its frames show real lines instead of the line-0
-      treatment every appended source otherwise gets. Registered BEFORE the
-      parse: AllocNode consults the range as it builds the module's nodes. }
-    DbgMarkTokFile(startPos, DbgFileId(path));
+    { Lexed already, when the import closure reached this file first
+      (PyLexImportClosure): parse from where its tokens sit. }
+    startPos := PyLexedRangeStart(path);
+    if startPos < 0 then
+    begin
+      startPos := PyLexAppend(UnitContent, path);
+      { -g: give the module its own .debug_line file entry, so a breakpoint
+        inside it resolves and its frames show real lines instead of the line-0
+        treatment every appended source otherwise gets. Registered BEFORE the
+        parse: AllocNode consults the range as it builds the module's nodes.
+        Not repeated for a closure-lexed module: the closure marked it in
+        stream order, and DbgFileOfTok assumes the marks ascend. }
+      DbgMarkTokFile(startPos, DbgFileId(path));
+    end
+    else if PxxDbgEnabled('n.closure') then
+      WriteLn('PXXDBG n.closure import ', path, ' reuses tokens from ', startPos);
     TokPos := startPos;
     Next;
     ParsePyUnit(lo);

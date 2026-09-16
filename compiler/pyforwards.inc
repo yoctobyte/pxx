@@ -121,6 +121,8 @@ function PyMakeListBinCall(const fname: AnsiString; a, b: Integer): Integer; for
 function PyMakeDictBinCall(const fname: AnsiString; a, b: Integer): Integer; forward; { dict binop -> TPyDict call, PEP 584 `|` (pyparser.inc) }
 function PyNodeIsPyDict(n: Integer): Boolean; forward;                   { Nil Python: node typed TPyDict? (pyparser.inc) }
 procedure ParsePyUnit(const uname: AnsiString); forward;   { a `.py` MODULE pulled in by an import (pyparser.inc) }
+procedure PyLexModuleForClosure(const src, path: AnsiString); forward;   { import-closure lexing: lex a module and, recursively, what it imports; parse nothing (pyparser.inc) }
+function PyLexedRangeStart(const path: AnsiString): Integer; forward;    { the token a lexed source file starts at, or -1 (pyparser.inc) }
 { PyCallMeth1's forward lives in forwards.inc (FPC-seed catch-all, gated on
   PXX_NEED_FORWARDS) — a second one here duplicated it and FPC rejects a
   Function declared Public/Forward twice (regression-fpc-seed-drift-b1976-

@@ -1,0 +1,28 @@
+# Call-site parameter typing sees EVERY module's sites, because the import
+# closure is lexed before any module body is parsed (PyLexImportClosure).
+# Sites are attributed by receiver class and by arity, so same-named methods
+# in different classes do not veto each other. Ints are claimed again.
+try:
+    import definitely_missing_module_xyz
+    HAVE = True
+except ImportError:
+    HAVE = False
+
+import nilpy_clo_geom
+import nilpy_clo_user
+import nilpy_clopkg.shapes
+import nilpy_clopkg.late
+
+# Grid.at: x, z float from user.py's g.at(1.5, 2.25) and this file's site.
+# measure.scale: int from user.py's measure("abc", 2) and the keyword site here.
+print(nilpy_clo_user.use())
+print(nilpy_clo_geom.measure("hello", scale=3))
+print(nilpy_clo_geom.Grid(2, 2).at(0.5, 0.25))
+# Box.w: late.py constructs Box(2.5) and this line constructs Box(2) through a
+# module-qualified name; the two disagree, so w stays a variant and this prints
+# 4, not 4.0 (the dotted construction once did not count as a site: 4.0).
+print(nilpy_clopkg.late.run())
+print(nilpy_clopkg.shapes.scaled(3))
+print(nilpy_clopkg.shapes.Box(2).area(2))
+print(HAVE)
+print("CLOSURE OK")

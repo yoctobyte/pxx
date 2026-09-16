@@ -464,6 +464,12 @@ var
   PyPSMemoTk: array[0..8191] of TTypeKind;
   PyPSDepth: Integer;          { PyParamTypeFromSites re-entry depth (a bare argument that is the caller's own parameter) }
   PyPSEnclN: Integer;          { memo: def token -> (mode, class name) }
+  { PyClassDeclTok memo: class name -> its `class` token, over every lexed
+    module, parsed or not (a miss remembers the stream size it was scanned at) }
+  PyClsDeclN: Integer;
+  PyClsDeclName: array[0..511] of AnsiString;
+  PyClsDeclTok: array[0..511] of Integer;
+  PyClsDeclSeen: array[0..511] of Integer;
   PyPSEnclDef: array[0..8191] of Integer;
   PyPSEnclMode: array[0..8191] of Integer;
   PyPSEnclCls: array[0..8191] of AnsiString;
@@ -39179,12 +39185,337 @@ begin
     end;
     if (pass = 0) and (base = tyUnknown) then ok := False;
   end;
-  if ok and ((base = tyDouble) or (base = tyAnsiString)) then
+  if ok and ((base = tyDouble) or (base = tyAnsiString) or PyIsSiteIntTk(base)) then
     Result := base;
-  { an int local is never an answer either -- see the int-site veto in
-    PyParamTypeFromSites; the int base still serves the accumulator check }
+  { an int base is an answer since 2026-09-16, when ints became claimable again
+    (the import closure is lexed first -- see the bool veto in
+    PyParamTypeFromSites); a bool never is, and PyIsSiteIntTk excludes it }
   if PxxDbgEnabled('n.psites') then
     WriteLn('PXXDBG n.psites   local ', nm, ' of def@', defTok, ' ok=', Ord(ok), ' tk=', Ord(Result));
+end;
+
+function PyPathIsPython(const p: AnsiString): Boolean;
+var n: Integer;
+begin
+  n := Length(p);
+  Result := ((n >= 3) and (p[n] = 'y') and (p[n - 1] = 'p') and (p[n - 2] = '.')) or
+            ((n >= 4) and (p[n] = 'y') and (p[n - 1] = 'p') and (p[n - 2] = 'n') and
+             (p[n - 3] = '.'));
+end;
+
+function PyLexedRangeStart(const path: AnsiString): Integer;
+{ The token at which the source file `path` was lexed onto the stream, by the
+  file mark PyLexAppend plants (PasMarkTokFile), or -1. The marks move with
+  the tokens (AdjustSrcRanges), which a private copy of the start would not. }
+var m: Integer;
+begin
+  Result := -1;
+  for m := 0 to PasSrcRangeCount - 1 do
+    if KeyStrs[PasSrcRangeId[m]] = path then
+    begin
+      Result := PasSrcRangeStart[m];
+      Exit;
+    end;
+end;
+
+function PyLexedRangeEnd(startTok: Integer): Integer;
+{ The first source-file mark after startTok, else TokCount: where the file
+  that starts at startTok ends. }
+var m: Integer;
+begin
+  Result := TokCount;
+  for m := 0 to PasSrcRangeCount - 1 do
+    if (PasSrcRangeStart[m] > startTok) and (PasSrcRangeStart[m] < Result) then
+      Result := PasSrcRangeStart[m];
+end;
+
+function PyPyRangeAt(idx: Integer; var lo, hi: Integer): Boolean;
+{ The idx-th PYTHON source range of the token stream, in stream order: 0 is
+  the main file when the program is NilPy, then every appended .py/.npy
+  module. False past the last. Pascal units share the stream (pylib, the RTL)
+  and are skipped: an unbounded scan met `parts.at(k)` in pylib.pas -- Pascal,
+  one argument -- and vetoed Grid.at's `z` (2026-09-15, token 68229). }
+var m, n: Integer;
+begin
+  Result := False;
+  n := 0;
+  if isNilPy then
+  begin
+    if idx = 0 then
+    begin
+      lo := 0;
+      hi := PyLexedRangeEnd(0);
+      Result := True;
+      Exit;
+    end;
+    n := 1;
+  end;
+  for m := 0 to PasSrcRangeCount - 1 do
+    if (PasSrcRangeStart[m] > 0) and PyPathIsPython(KeyStrs[PasSrcRangeId[m]]) then
+    begin
+      if n = idx then
+      begin
+        lo := PasSrcRangeStart[m];
+        if m + 1 < PasSrcRangeCount then hi := PasSrcRangeStart[m + 1] else hi := TokCount;
+        Result := True;
+        Exit;
+      end;
+      Inc(n);
+    end;
+end;
+
+function PyClassDeclTok(const name: AnsiString): Integer;
+{ The `class name` header token of a Python class declared anywhere in the
+  token stream -- every lexed module, PARSED OR NOT -- or -1. Token-only on
+  purpose: the import closure lexes every module before any is parsed, and a
+  receiver's class may sit in a module the parser has not reached, where the
+  class table (FindUClass) cannot see it yet. Memoised by name; a miss is
+  re-scanned once the stream has grown. }
+var m, found, rIdx, lo, hi, k: Integer;
+begin
+  Result := -1;
+  found := -1;
+  for m := 0 to PyClsDeclN - 1 do
+    if PyClsDeclName[m] = name then
+    begin
+      found := m;
+      Break;
+    end;
+  if (found >= 0) and ((PyClsDeclTok[found] >= 0) or (PyClsDeclSeen[found] = TokCount)) then
+  begin
+    Result := PyClsDeclTok[found];
+    Exit;
+  end;
+  rIdx := 0;
+  while (Result < 0) and PyPyRangeAt(rIdx, lo, hi) do
+  begin
+    Inc(rIdx);
+    k := lo;
+    while (k + 1 < hi) and (Result < 0) do
+    begin
+      if (Tokens[k].Kind = tkClass) and (Tokens[k + 1].Kind = tkIdent) and
+         (GetTokenStr(k + 1) = name) and
+         ((k = lo) or (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkEOF])) then
+        Result := k;
+      Inc(k);
+    end;
+  end;
+  if found < 0 then
+  begin
+    if PyClsDeclN >= 512 then Exit;
+    found := PyClsDeclN;
+    Inc(PyClsDeclN);
+    PyClsDeclName[found] := name;
+  end;
+  PyClsDeclTok[found] := Result;
+  PyClsDeclSeen[found] := TokCount;
+end;
+
+function PyClassNthBase(declTok, n: Integer): AnsiString;
+{ The n-th base named in the `class X(A, m.B, metaclass=M)` header at declTok
+  (the last identifier of the item, so `m.B` reads B; a `k=v` item is not a
+  base), or '' past the last. }
+var i, depth, idx: Integer; last: AnsiString; isKw: Boolean;
+begin
+  Result := '';
+  i := declTok + 2;
+  if (i >= TokCount) or (Tokens[i].Kind <> tkLParen) then Exit;
+  depth := 1; Inc(i); idx := 0; last := ''; isKw := False;
+  while (i < TokCount) and (depth > 0) do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        if (idx = n) and (not isKw) then Result := last;
+        Exit;
+      end;
+    end
+    else if depth = 1 then
+    begin
+      if Tokens[i].Kind = tkComma then
+      begin
+        if (idx = n) and (not isKw) then
+        begin
+          Result := last;
+          Exit;
+        end;
+        Inc(idx); last := ''; isKw := False;
+      end
+      else if Tokens[i].Kind = tkIdent then last := GetTokenStr(i)
+      else if Tokens[i].Kind = tkAssign then isKw := True;
+    end;
+    Inc(i);
+  end;
+end;
+
+function PyClassNameDescends(const a, b: AnsiString; depth: Integer): Boolean;
+{ Is class `a` class `b` or a descendant of it, by the `class` headers in the
+  token stream? A class or a base the stream does not declare (`object`
+  aside: a shim's class, a base bound through an alias) answers TRUE -- the
+  caller uses "unrelated" to DROP a site, and a dropped site is the one way
+  a wrong claim could get through, so the unknown is read as related. }
+var d, n: Integer; base: AnsiString;
+begin
+  Result := (a = b);
+  if Result or (depth > 32) then Exit;
+  d := PyClassDeclTok(a);
+  if d < 0 then
+  begin
+    Result := True;
+    Exit;
+  end;
+  n := 0;
+  base := PyClassNthBase(d, n);
+  while (base <> '') and not Result do
+  begin
+    if base = b then Result := True
+    else if base = 'object' then Result := False
+    else if PyClassDeclTok(base) < 0 then Result := True
+    else Result := PyClassNameDescends(base, b, depth + 1);
+    Inc(n);
+    base := PyClassNthBase(d, n);
+  end;
+end;
+
+function PyClassNamesRelated(const a, b: AnsiString): Boolean;
+begin
+  Result := PyClassNameDescends(a, b, 0) or PyClassNameDescends(b, a, 0);
+end;
+
+function PyNameIsImportedModule(const q: AnsiString; lo, hi: Integer): Boolean;
+{ Is `q` bound by an import statement in the tokens [lo, hi) -- `import q`,
+  `import q.x`, `import a.b as q`, `from x import q`? Token-only. }
+var i: Integer;
+begin
+  Result := False;
+  i := lo;
+  while (i + 1 < hi) and not Result do
+  begin
+    if (Tokens[i].Kind = tkUses) and
+       ((i = lo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkEOF])) then
+    begin
+      if (Tokens[i + 1].Kind = tkIdent) and (GetTokenStr(i + 1) = q) then Result := True;
+    end
+    else if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'as') and
+            (Tokens[i + 1].Kind = tkIdent) and (GetTokenStr(i + 1) = q) then
+      Result := True
+    else if (Tokens[i].Kind = tkUses) and (Tokens[i + 1].Kind = tkIdent) and
+            (GetTokenStr(i + 1) = q) and (i >= 2) then
+      Result := True;      { `from x import q` }
+    Inc(i);
+  end;
+end;
+
+function PyStaticReceiverClass(dotTok, encDef, bodyLo, bodyHi, fileLo, fileHi: Integer): AnsiString;
+{ The class NAME of the receiver of a `.name(` site whose `.` sits at dotTok,
+  when it is CERTAIN, else '': `self` (the enclosing def's class); a
+  construction as the receiver, `Cls(...).name(` or `mod.Cls(...).name(` with
+  `mod` imported in this file; a local of the enclosing def bound exactly
+  once, as a whole statement, to a construction, and bound nowhere else (no
+  `for`, `as`, `global`, augmented or tuple binding, not a parameter); or a
+  dotted read `a.b.name(` the expression typer answers with a class (a
+  field's declared class). Names, not class indices: a class in a module the
+  parser has not reached is a name in the token stream and nothing else
+  (PyClassDeclTok). A wrong answer here DROPS a real site, and a dropped site
+  is the one way the attribution could let a wrong claim through, so every
+  arm is one that cannot be wrong rather than one that is usually right;
+  anything else answers '' and the site counts. }
+var rs, cs, depth, m, nb, nOther, mEnd, ci: Integer;
+    nm, encl, cand: AnsiString; t: TTypeKind;
+begin
+  Result := '';
+  rs := dotTok - 1;
+  if rs < 1 then Exit;
+  if Tokens[rs].Kind = tkRParen then
+  begin
+    depth := 0;
+    while rs > 0 do
+    begin
+      if Tokens[rs].Kind in [tkRParen, tkRBrack, tkEnd] then Inc(depth)
+      else if Tokens[rs].Kind in [tkLParen, tkLBrack, tkBegin] then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Dec(rs);
+    end;
+    if (depth <> 0) or (rs < 1) or (Tokens[rs].Kind <> tkLParen) or
+       (Tokens[rs - 1].Kind <> tkIdent) then Exit;
+    nm := GetTokenStr(rs - 1);
+    if (rs >= 3) and (Tokens[rs - 2].Kind = tkDot) then
+    begin
+      { `mod.Cls(...)`: a construction only when `mod` is an imported module;
+        `obj.Cls(...)` is a method's result and is not read }
+      if (Tokens[rs - 3].Kind <> tkIdent) or
+         ((rs >= 4) and (Tokens[rs - 4].Kind = tkDot)) or
+         (not PyNameIsImportedModule(GetTokenStr(rs - 3), fileLo, fileHi)) then Exit;
+    end
+    else if (rs >= 2) and (Tokens[rs - 2].Kind = tkDot) then Exit;
+    if PyClassDeclTok(nm) >= 0 then Result := nm;
+    Exit;
+  end;
+  if Tokens[rs].Kind <> tkIdent then Exit;
+  if Tokens[rs - 1].Kind = tkDot then
+  begin
+    cs := rs;
+    while (cs >= 2) and (Tokens[cs - 1].Kind = tkDot) and (Tokens[cs - 2].Kind = tkIdent) do
+      cs := cs - 2;
+    if (cs >= 1) and (Tokens[cs - 1].Kind in [tkRParen, tkRBrack]) then Exit;
+    if encDef < 0 then Exit;
+    t := PyInferExprType(cs, dotTok);
+    ci := PyInferLastCi;
+    PyInferLastCi := -1;
+    if (t = tyClass) and (ci >= 0) then
+      Result := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+    Exit;
+  end;
+  if encDef < 0 then Exit;
+  nm := GetTokenStr(rs);
+  if nm = 'self' then
+  begin
+    if PyDefSiteMode(encDef, encl) <> 2 then Result := encl;
+    Exit;
+  end;
+  if (bodyLo < 0) or (bodyHi <= bodyLo) then Exit;
+  if PyHeaderHasParam(encDef, bodyLo, nm) then Exit;
+  nb := 0; nOther := 0; cand := '';
+  for m := bodyLo to bodyHi - 2 do
+    if (Tokens[m].Kind = tkIdent) and (GetTokenStr(m) = nm) and
+       (Tokens[m - 1].Kind <> tkDot) then
+    begin
+      if Tokens[m - 1].Kind in [tkNewline, tkIndent, tkDedent] then
+      begin
+        if Tokens[m + 1].Kind = tkAssign then
+        begin
+          Inc(nb);
+          if (m + 3 < bodyHi) and (Tokens[m + 2].Kind = tkIdent) and
+             (Tokens[m + 3].Kind = tkLParen) and (PyClassDeclTok(GetTokenStr(m + 2)) >= 0) then
+          begin
+            mEnd := PyEndOfGroup(m + 3, bodyHi);
+            if (mEnd < bodyHi) and (Tokens[mEnd].Kind in [tkNewline, tkDedent]) then
+              cand := GetTokenStr(m + 2);
+          end;
+        end
+        else if not (Tokens[m + 1].Kind in [tkLParen, tkDot, tkLBrack]) then
+          Inc(nOther);      { `x += ...`, `x, y = ...`, `x: T = ...` }
+      end
+      else if (Tokens[m - 1].Kind in [tkFor, tkFunction, tkClass]) or
+              ((Tokens[m - 1].Kind = tkIdent) and
+               ((GetTokenStr(m - 1) = 'as') or (GetTokenStr(m - 1) = 'global') or
+                (GetTokenStr(m - 1) = 'nonlocal'))) then Inc(nOther)
+      else if Tokens[m - 1].Kind = tkComma then
+      begin
+        { `a, x = ...` / `for a, x in`: walk back over `ident ,` to the start }
+        cs := m - 1;
+        while (cs > bodyLo) and (Tokens[cs].Kind = tkComma) and (Tokens[cs - 1].Kind = tkIdent) do
+          cs := cs - 2;
+        if Tokens[cs].Kind in [tkNewline, tkIndent, tkDedent, tkFor] then Inc(nOther);
+      end;
+    end;
+  if (nb = 1) and (nOther = 0) then Result := cand;
 end;
 
 function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
@@ -39219,19 +39550,24 @@ function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
   stream, split the arguments, take the one for this parameter (positional or
   keyword, else the header's default), type it with PyInferExprType under the
   enclosing def's scan ranges. Every site must agree on ONE scalar type --
-  float, a machine int, bool, str -- or the answer is unknown and the field
-  stays a variant exactly as before. int against float is a disagreement, not
-  a widening: `range(self.n)` on a float field would be a new error.
+  float, a machine int, str (a bool is not claimed, see the site loop) -- or
+  the answer is unknown and the field stays a variant exactly as before. int
+  against float is a disagreement, not a widening: `range(self.n)` on a
+  float field would be a new error.
 
-  ONLY THIS MODULE'S SITES ARE VISIBLE. Imports are lexed one module at a
-  time, so a construction in another module cannot be consulted. Measured on
-  the demo: 38 of the 45 constructed classes are constructed only inside their
-  own module, and the cross-module ones (Vec3, Quat) have 13 and 10 own-module
-  literal sites. A foreign site that disagrees meets a typed field: the store
-  coerces through pyvar_to_float / pyvar_to_int and RAISES on a string, so the
-  failure is loud, never a silent wrong value. A class-typed answer is
-  deliberately NOT given yet: a variant-into-class-field store needs the unbox
-  arm and that is a second step with its own fixture.
+  EVERY MODULE'S SITES ARE VISIBLE, since 2026-09-16: PyLexImportClosure lexes
+  the whole import closure before the main program's first pre-pass, and the
+  scan walks every Python range of the stream (PyPyRangeAt). Until then only
+  the def's OWN file was scanned, and 38 of the demo's 45 constructed classes
+  are constructed only inside their own module -- but a METHOD's callers are
+  mostly elsewhere (Quat.rotate: one own-file site, eleven in sim.py), and
+  which of them had been lexed depended on import order. A site the scan
+  still cannot see (`getattr(o, 'f')(x)`, a module imported by a path the
+  closure does not walk) meets a typed parameter: the coercion RAISES on a
+  string and widens an int into a float exactly, and truncates a double
+  into an int silently -- the one residual, pyvar_to_int. A class-typed
+  answer is deliberately NOT given yet: a variant-into-class-field store
+  needs the unbox arm and that is a second step with its own fixture.
 
   Returns tyUnknown for: no site, any site with `*`/`**` arguments, a
   keyword-only parameter, a site whose argument the scanner cannot type, or
@@ -39243,6 +39579,13 @@ var i, k, e, pos, cur, depth, nSites, argIdx, argS, argE, dfltS, dfltE: Integer;
     found, isKw, gaveUp, seenStar, isSite: Boolean;
     sHLo, sHHi, sBLo, sBHi, d, suiteEnd, best, scanLo, scanHi: Integer;
     encl: AnsiString;
+    { the def's own arity, for site attribution -- see the site loop }
+    hdrNames: array[0..PY_PS_HDR_MAX - 1] of AnsiString;
+    hdrDflt: array[0..PY_PS_HDR_MAX - 1] of Boolean;
+    kwNames: array[0..PY_PS_HDR_MAX - 1] of AnsiString;
+    hdrN, hdrPosN, nPos, nKw, selfOff, rIdx, j2: Integer;
+    hdrStar, hdrKw, hdrOverflow, ours, known, dbg: Boolean;
+    siteEncl, ownCls, recvCls: AnsiString;
 begin
   Result := tyUnknown;
   if (defTok < 0) or (defTok + 2 >= TokCount) or (Tokens[defTok].Kind <> tkFunction) then Exit;
@@ -39258,6 +39601,7 @@ begin
   if mode = 0 then siteName := clsName else siteName := GetTokenStr(defTok + 1);
   { 1. the parameter's POSITION (self counts as 0) and its default, if any }
   pos := -1; dfltS := -1; dfltE := -1; cur := -1; seenStar := False;
+  hdrN := 0; hdrPosN := 0; hdrStar := False; hdrKw := False; hdrOverflow := False;
   i := methodStart;
   while (i < hdrStop) and (Tokens[i].Kind <> tkLParen) do Inc(i);
   if i >= hdrStop then Exit;
@@ -39272,14 +39616,24 @@ begin
          (Tokens[i - 1].Kind in [tkLParen, tkComma]) then
       begin
         Inc(cur);
+        { every parameter's name and whether it has a default -- the def's
+          ARITY, which is what tells a same-named def's site apart below;
+          `name = expr` or `name: T = expr`, the default up to the next comma }
+        k := i + 1;
+        if Tokens[k].Kind = tkColon then
+          while (k < hdrStop) and not (Tokens[k].Kind in [tkAssign, tkComma, tkRParen]) do Inc(k);
+        if cur < PY_PS_HDR_MAX then
+        begin
+          hdrNames[cur] := GetTokenStr(i);
+          hdrDflt[cur] := (Tokens[k].Kind = tkAssign);
+          hdrN := cur + 1;
+          if not seenStar then hdrPosN := cur + 1;
+        end
+        else hdrOverflow := True;
         if GetTokenStr(i) = pname then
         begin
           if seenStar then Exit;      { keyword-only: no positional index }
           pos := cur;
-          { a default: `name = expr` or `name: T = expr`, up to the next comma }
-          k := i + 1;
-          if Tokens[k].Kind = tkColon then
-            while (k < hdrStop) and not (Tokens[k].Kind in [tkAssign, tkComma, tkRParen]) do Inc(k);
           if Tokens[k].Kind = tkAssign then
           begin
             dfltS := k + 1; dfltE := dfltS;
@@ -39291,7 +39645,15 @@ begin
           end;
         end;
       end
-      else if (Tokens[i].Kind in [tkStar, tkPow]) then seenStar := True;
+      else if Tokens[i].Kind = tkStar then
+      begin
+        seenStar := True;
+        if (i + 1 < hdrStop) and (Tokens[i + 1].Kind = tkIdent) then hdrStar := True;
+      end
+      else if Tokens[i].Kind = tkPow then
+      begin
+        seenStar := True; hdrKw := True;
+      end;
     end;
     Inc(i);
   end;
@@ -39315,32 +39677,48 @@ begin
     t := PyInferExprType(dfltS, dfltE);
     PyInferLastCi := -1;
     if t = tyString then t := tyAnsiString;
-    if (t = tyDouble) or (t = tyAnsiString) then
+    if (t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t) then
     begin
       agreed := t; nSites := 1;
     end
     else if Tokens[dfltS].Kind <> tkNil then gaveUp := True;
-    { an int or bool default (`scale=2`, `v=True`) vetoes like an int site -- see the site loop }
-    { `= None` is not a type and does not veto the call sites either }
+    { a bool default (`v=True`) vetoes like a bool site -- see the site loop;
+      `= None` is not a type and does not veto the call sites either }
   end;
-  { ONLY THE DEF'S OWN SOURCE FILE IS SCANNED. Every imported module AND every
-    builtin Pascal unit is appended to the one token stream, so an unbounded
-    scan meets `x.at(` in pylib.pas -- Pascal, one argument -- and vetoes
-    Grid.at's `z` with a site that is not even Python (measured 2026-09-15:
-    token 68229, pylib.pas:3985). The file marks PyLexAppend plants
-    (PasSrcRangeStart) bound the file; the main file is everything before
-    the first mark. A cross-module site is therefore invisible: a caller in
-    another module passing a different scalar meets the typed parameter's
-    coercion, which raises on a string and never yields a silent wrong value. }
-  scanLo := 0; scanHi := TokCount;
-  for m := 0 to PasSrcRangeCount - 1 do
+  { EVERY PYTHON SOURCE OF THE COMPILATION IS SCANNED -- the main file and
+    each imported .py module, all lexed before the first pre-pass by
+    PyLexImportClosure -- and nothing else: the builtin Pascal units share the
+    token stream, and an unbounded scan met `parts.at(k)` in pylib.pas
+    (Pascal, one argument) and vetoed Grid.at's `z` (2026-09-15, token 68229).
+    PyPyRangeAt walks the Python ranges by the file marks PyLexAppend plants.
+
+    ATTRIBUTION. A `.name(` site is matched by SELECTOR, and the demo declares
+    79 of its 465 method names in more than one class (`.at` in six), so a
+    same-named def's sites arrive here too. Two filters, both sound for any
+    program CPython runs, decide whether a site is THIS def's before it is
+    counted. (1) ARITY: fewer positionals than the def's parameters without
+    defaults, more than it takes without *args, or a keyword it does not
+    declare, is a call of some OTHER def (it would be a TypeError on this
+    one) -- skipped, not vetoed. (2) The RECEIVER, when its class is CERTAIN
+    (PyStaticReceiverClass) and unrelated to the def's class, is another
+    class's method. A receiver nobody can type still counts, which loses a
+    claim to a disagreement and never yields a wrong value. Measured before
+    building, by the lekkerzeilen seat against the demo (2026-09-16): nine
+    1-argument `Route.at(distance)` sites vetoed `Grid.at(x, z)`; `Grid.at`
+    and `TiledGrid.at` share a signature and stay conflated -- they agree or
+    both lose. }
+  ownCls := ''; siteEncl := '';
+  if mode = 0 then ownCls := clsName
+  else if (mode = 1) and (PyDefSiteMode(defTok, siteEncl) = 1) then
+    ownCls := siteEncl;
+  if mode = 2 then selfOff := 0 else selfOff := 1;
+  dbg := PxxDbgEnabled('n.psites');
+  rIdx := 0;
+  while (not gaveUp) and PyPyRangeAt(rIdx, scanLo, scanHi) do
   begin
-    if (PasSrcRangeStart[m] <= defTok) and (PasSrcRangeStart[m] > scanLo) then
-      scanLo := PasSrcRangeStart[m];
-    if (PasSrcRangeStart[m] > defTok) and (PasSrcRangeStart[m] < scanHi) then
-      scanHi := PasSrcRangeStart[m];
-  end;
-  k := scanLo + 1;
+  Inc(rIdx);
+  k := scanLo;
+  if k < 1 then k := 1;
   while (k + 1 < scanHi) and not gaveUp do
   begin
     isSite := (Tokens[k].Kind = tkIdent) and (Tokens[k + 1].Kind = tkLParen) and
@@ -39349,67 +39727,33 @@ begin
     begin
       if mode = 1 then
         { a METHOD site is `.name(`, and not `Cls.name(` (unbound: the
-          arguments are shifted by one) }
+          arguments are shifted by one) -- the class by the token stream
+          too, since the closure lexes classes the parser has not reached }
         isSite := (Tokens[k - 1].Kind = tkDot) and
                   not ((k >= 2) and (Tokens[k - 2].Kind = tkIdent) and
-                       (FindUClass(GetTokenStr(k - 2)) >= 0))
+                       ((FindUClass(GetTokenStr(k - 2)) >= 0) or
+                        (PyClassDeclTok(GetTokenStr(k - 2)) >= 0)))
       else
-        isSite := not (Tokens[k - 1].Kind in [tkFunction, tkClass, tkDot]);
+        { a construction or a function call, bare or MODULE-QUALIFIED:
+          `shapes.Box(2)` in another module is a site of this Box now that
+          every module is visible (it used to be skipped as "another
+          module's", which was true of a same-file scan and let `Box(2.5)`
+          in one module type the field float while `pkg.shapes.Box(2)` in
+          another wanted an int -- 4.0 for CPython's 4). An `obj.name(`
+          that is really a METHOD of some class lands here for a module
+          function of the same name and can only add a veto: counting a
+          site never makes a wrong claim, missing one can. }
+        isSite := not (Tokens[k - 1].Kind in [tkFunction, tkClass]);
     end;
     if isSite then
     begin
       e := PyEndOfGroup(k + 1, TokCount);      { just past the ')' }
-      { split the arguments at depth 0; find ours }
-      found := False; argIdx := 0; i := k + 2; argS := -1; argE := -1;
-      while (i < e - 1) and not found and not gaveUp do
-      begin
-        if Tokens[i].Kind in [tkStar, tkPow] then
-        begin
-          gaveUp := True;
-          if PxxDbgEnabled('n.psites') then
-            WriteLn('PXXDBG n.psites   site@', k, ' star-args -> veto');
-        end
-        else
-        begin
-          isKw := (Tokens[i].Kind = tkIdent) and (i + 1 < e - 1) and
-                  (Tokens[i + 1].Kind = tkAssign);
-          argS := i;
-          if isKw then argS := i + 2;
-          argE := argS;
-          while (argE < e - 1) and (Tokens[argE].Kind <> tkComma) do
-            if Tokens[argE].Kind in [tkLParen, tkLBrack, tkBegin] then
-              argE := PyEndOfGroup(argE, e - 1)
-            else Inc(argE);
-          if isKw then found := (GetTokenStr(i) = pname)
-          else begin
-            if mode = 2 then found := (argIdx = pos) else found := (argIdx = pos - 1);
-            Inc(argIdx);
-          end;
-          i := argE + 1;
-        end;
-      end;
-      if gaveUp then Break;
-      if not found then
-      begin
-        if dfltS < 0 then
-        begin
-          if PxxDbgEnabled('n.psites') then
-            WriteLn('PXXDBG n.psites   site@', k, ' no argument and no default -> veto  (', PasSrcOfTok(k), ':', Tokens[k].Line, ')');
-          gaveUp := True; Break;
-        end;
-        argS := dfltS; argE := dfltE;
-      end;
-      if argE <= argS then
-      begin
-        if PxxDbgEnabled('n.psites') then
-          WriteLn('PXXDBG n.psites   site@', k, ' empty argument -> veto');
-        gaveUp := True; Break;
-      end;
-      { 3. type the argument under the scan ranges of the def that contains
-           the site (the nearest preceding def whose suite reaches it),
-           else the module scope (ranges -1, every def-scoped arm inert) }
+      { the def that ENCLOSES the site (the nearest preceding def whose suite
+        reaches it), for the scan ranges its arguments and receiver are typed
+        under; else the module scope (ranges -1, every def-scoped arm inert).
+        Bounded to this file: a def in an earlier module cannot enclose it. }
       best := -1; d := k - 1;
-      while (d >= 0) and (best < 0) do
+      while (d >= scanLo) and (best < 0) do
       begin
         if Tokens[d].Kind = tkFunction then
         begin
@@ -39430,6 +39774,111 @@ begin
       begin
         PyInferHdrLo := -1; PyInferHdrHi := -1;
         PyInferBodyLo := -1; PyInferBodyHi := -1;
+      end;
+      ours := True;
+      if (mode = 1) and (ownCls <> '') then
+      begin
+        recvCls := PyStaticReceiverClass(k - 1, best, PyInferBodyLo, PyInferBodyHi,
+                                         scanLo, scanHi);
+        if (recvCls <> '') and not PyClassNamesRelated(recvCls, ownCls) then
+        begin
+          ours := False;
+          if dbg then
+            WriteLn('PXXDBG n.psites   site@', k, ' receiver is a ', recvCls,
+                    ', not a ', ownCls, ' -> not this def''s site');
+        end;
+      end;
+      { split the arguments at depth 0: find ours, count the positionals,
+        collect the keywords }
+      found := False; argIdx := 0; i := k + 2; argS := -1; argE := -1;
+      nPos := 0; nKw := 0;
+      while ours and (i < e - 1) and not gaveUp do
+      begin
+        if Tokens[i].Kind in [tkStar, tkPow] then
+        begin
+          gaveUp := True;
+          if dbg then
+            WriteLn('PXXDBG n.psites   site@', k, ' star-args -> veto');
+        end
+        else
+        begin
+          isKw := (Tokens[i].Kind = tkIdent) and (i + 1 < e - 1) and
+                  (Tokens[i + 1].Kind = tkAssign);
+          j2 := i;
+          if isKw then j2 := i + 2;
+          d := j2;
+          while (d < e - 1) and (Tokens[d].Kind <> tkComma) do
+            if Tokens[d].Kind in [tkLParen, tkLBrack, tkBegin] then
+              d := PyEndOfGroup(d, e - 1)
+            else Inc(d);
+          if isKw then
+          begin
+            if (not found) and (GetTokenStr(i) = pname) then
+            begin
+              found := True; argS := j2; argE := d;
+            end;
+            if nKw < PY_PS_HDR_MAX then
+            begin
+              kwNames[nKw] := GetTokenStr(i); Inc(nKw);
+            end;
+            if (not hdrOverflow) and (not hdrKw) then
+            begin
+              known := False;
+              for m := 0 to hdrN - 1 do
+                if hdrNames[m] = GetTokenStr(i) then known := True;
+              if not known then
+              begin
+                ours := False;
+                if dbg then
+                  WriteLn('PXXDBG n.psites   site@', k, ' keyword ', GetTokenStr(i),
+                          ' is not a parameter of this def -> not this def''s site');
+              end;
+            end;
+          end
+          else
+          begin
+            if (not found) and (argIdx = pos - selfOff) then
+            begin
+              found := True; argS := j2; argE := d;
+            end;
+            Inc(argIdx); Inc(nPos);
+          end;
+          i := d + 1;
+        end;
+      end;
+      if gaveUp then Break;
+      if ours and not hdrOverflow then
+      begin
+        if (nPos > hdrPosN - selfOff) and not hdrStar then ours := False;
+        for m := selfOff to hdrPosN - 1 do
+          if ours and (not hdrDflt[m]) and (m - selfOff >= nPos) then
+          begin
+            known := False;
+            for j2 := 0 to nKw - 1 do
+              if kwNames[j2] = hdrNames[m] then known := True;
+            if not known then ours := False;
+          end;
+        if (not ours) and dbg then
+          WriteLn('PXXDBG n.psites   site@', k, ' ', nPos, ' positional + ', nKw,
+                  ' keyword arguments do not fit this def -> not this def''s site');
+      end;
+      if ours then
+      begin
+      if not found then
+      begin
+        if dfltS < 0 then
+        begin
+          if dbg then
+            WriteLn('PXXDBG n.psites   site@', k, ' no argument and no default -> veto  (', PasSrcOfTok(k), ':', Tokens[k].Line, ')');
+          gaveUp := True; Break;
+        end;
+        argS := dfltS; argE := dfltE;
+      end;
+      if argE <= argS then
+      begin
+        if dbg then
+          WriteLn('PXXDBG n.psites   site@', k, ' empty argument -> veto');
+        gaveUp := True; Break;
       end;
       t := PyInferExprType(argS, argE);
       PyInferLastCi := -1;
@@ -39459,35 +39908,24 @@ begin
         Dec(PyPSDepth);
       end;
       if t = tyString then t := tyAnsiString;
-      { AN INT SITE IS A VETO, NOT A CLAIM. An int-typed parameter is the one
-        answer a caller this scan cannot see can defeat SILENTLY: only the
-        def's own file is scanned, a caller in another module passing 1.25
-        meets pyvar_to_int and is truncated to 1 with no diagnostic (a static
-        1.25 is refused at compile time, which is loud but refuses a program
-        CPython runs). Measured 2026-09-15 on the demo by the lekkerzeilen
-        seat: text.measure(line, scale=2) typed int from its ONE own-file
-        site while all four real callers sit in ui.py/app.py, and 80 of the
-        357 typed parameters were int on a single site. A float claim is
-        safe in both directions (an int widens exactly, a str raises), so
-        floats, strs and bools are claimed and ints are not -- and an int
-        site vetoes a float claim too, because CPython computes `n * 2` as an
-        int there and a float claim would print 6.0 for 6. Re-enable when
-        the import closure is lexed before parsing, so every site is visible:
-        feature-n-lex-the-import-closure-before-parsing-so-call-site-typing-sees-every-caller }
-      if PyIsMachineIntTk(t) then
+      { A BOOL SITE IS A VETO, NOT A CLAIM: a bool field typed from `v=True`
+        turned a later `self.icon.visible = 11` into True where CPython keeps
+        11 (test_nilpy_chained_assign_nested_attr, on the tier), and a bool
+        parameter handed 2 computes with True. Ints ARE claimed, since
+        2026-09-16: the import closure is lexed first, so every static caller
+        is a visible site (until then one own-file int site typed
+        text.measure's `scale` while its four real callers sat in ui.py and
+        app.py, and the residual scan below could not see them). What still
+        cannot be seen -- `getattr(o, 'f')(1.5)` -- meets pyvar_to_int, which
+        truncates a double silently; a float or str claim fails loudly. }
+      if t = tyBoolean then
       begin
-        { ...and a BOOL is the same silent class: a bool field typed from
-          `v=True` turned a later `self.icon.visible = 11` into True where
-          CPython keeps 11 (test_nilpy_chained_assign_nested_attr, on the
-          tier), and a bool parameter handed 2 computes with True. Only a
-          float (an int widens exactly) and a str (anything else raises)
-          fail loudly or not at all. }
-        if PxxDbgEnabled('n.psites') then
-          WriteLn('PXXDBG n.psites   site@', k, ' int/bool argument -> veto (ints and bools are not claimed)');
+        if dbg then
+          WriteLn('PXXDBG n.psites   site@', k, ' bool argument -> veto (bools are not claimed)');
         gaveUp := True;
         Break;
       end;
-      if PxxDbgEnabled('n.psites') then
+      if dbg then
         WriteLn('PXXDBG n.psites   site@', k, ' arg ', argS, '..', argE, ' "',
                 GetTokenStr(argS), '" encl=', best, ' t=', Ord(t));
       { THE DEFAULT ANCHORS; A SITE CAN CONTRADICT IT BUT NOT WEAKEN IT. A
@@ -39499,16 +39937,18 @@ begin
         wrong guess meets the coercion loudly. With no default there is no
         anchor, and an untypeable site is a veto. A site of a DIFFERENT scalar
         type is a veto either way. }
-      if not ((t = tyDouble) or (t = tyAnsiString)) then
+      if not ((t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t)) then
       begin
         if (dfltS < 0) or (agreed = tyUnknown) or (t <> tyUnknown) then gaveUp := True;
       end
       else if nSites = 0 then agreed := t
       else if agreed <> t then gaveUp := True;
       Inc(nSites);
+      end;
       k := e - 1;
     end;
     Inc(k);
+  end;
   end;
   if (not gaveUp) and (nSites > 0) then
   begin
@@ -44305,6 +44745,143 @@ end;
   covered the hoisted STATEMENTS and not the queued INITIALIZERS, which is the
   other thing an import run leaves behind.
   regression-test-core-test-nilpy-star-methods-and-targets }
+{ ===== Import-closure lexing =====
+  Every Python module the program can reach is LEXED onto the token stream
+  before the main program's first pre-pass parses anything, so that the
+  token-only scanners see every module's call sites whatever the import order
+  (PyParamTypeFromSites: which callers a def could see depended on who
+  imported whom first -- math3d.py saw sim.py's sites and never rig.py's).
+  Resolution is the real importer's (PyClosureImport -> ParseUsesUnit under
+  PyLexClosureMode), so a module is looked up exactly as its import will look
+  it up, and the import later parses the tokens the closure left
+  (PyLexedRangeStart in ParseUsesUnitBody's .py arm).
+  feature-n-lex-the-import-closure-before-parsing-so-call-site-typing-sees-every-caller }
+procedure PyLexImportClosureRange(lo, hi: Integer); forward;
+
+procedure PyClosureImport(const name: AnsiString; level: Integer);
+{ Ask the unit resolver to LEX the module `name`, as an import statement at
+  relative level `level` would resolve it, and nothing more. A miss is
+  silent (SoftUnitResolve): the real import reports it, or its guarded arm
+  absorbs it. The globals an import statement claims are set exactly as
+  PyParseImportUnitAs sets them, and restored. }
+var savedSoft, savedMissed, savedMode: Boolean; savedLang: AnsiString;
+begin
+  savedSoft := SoftUnitResolve; savedMissed := SoftUnitMissed;
+  savedMode := PyLexClosureMode; savedLang := PyImportLang;
+  PyRelativeLevel := level;
+  PyImportLang := 'py';
+  SoftUnitResolve := True;
+  PyLexClosureMode := True;
+  ParseUsesUnit(name);
+  PyLexClosureMode := savedMode;
+  PyImportLang := savedLang;
+  SoftUnitResolve := savedSoft; SoftUnitMissed := savedMissed;
+end;
+
+procedure PyLexModuleForClosure(const src, path: AnsiString);
+{ The .py arm of ParseUsesUnitBody under PyLexClosureMode: lex the module
+  once (a second importer finds it by path), mark its -g range in stream
+  order, and walk ITS imports with the module's own directory as the
+  relative-import root, exactly as the real import sets CurUnitDir. }
+var startPos, endPos: Integer; savedDir: AnsiString;
+begin
+  if PyLexedRangeStart(path) >= 0 then Exit;
+  startPos := PyLexAppend(src, path);
+  DbgMarkTokFile(startPos, DbgFileId(path));
+  endPos := TokCount;
+  if PxxDbgEnabled('n.closure') then
+    WriteLn('PXXDBG n.closure lexed ', path, ' tokens ', startPos, '..', endPos);
+  savedDir := CurUnitDir;
+  CurUnitDir := GetFilePath(path);
+  PyLexImportClosureRange(startPos, endPos);
+  CurUnitDir := savedDir;
+end;
+
+procedure PyLexImportClosureRange(lo, hi: Integer);
+{ Walk the import statements of the tokens [lo, hi) -- one lexed Python
+  source -- and lex what they name, recursively. At EVERY depth: an import
+  inside a def or a `try:` names a module the program may load, and a module
+  lexed that is never imported costs tokens, not correctness -- its sites can
+  only add a veto, or type a def nobody else calls. The statement shapes are
+  PyParseOneImport's, read with the same cursor helpers; the cursor is
+  borrowed and put back. }
+var i, savedTokPos, level, savedLine: Integer; impName, impRoot: AnsiString;
+    savedKind: TTokenKind; savedSVal: AnsiString; savedIVal: Int64;
+begin
+  savedTokPos := TokPos; savedKind := CurTok.Kind; savedSVal := CurTok.SVal;
+  savedIVal := CurTok.IVal; savedLine := CurTok.Line;
+  i := lo;
+  while i < hi do
+  begin
+    if ((Tokens[i].Kind = tkUses) or
+        ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
+         (i + 1 < hi) and (Tokens[i + 1].Kind in [tkIdent, tkDot]))) and
+       ((i = lo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
+    begin
+      TokPos := i;
+      Next;
+      if PyIsIdent('from') then
+      begin
+        Next;
+        level := PyRelativeImportLevel;
+        if CurTok.Kind = tkIdent then
+        begin
+          impName := PyConsumeDottedModule(impRoot);
+          if not PyImportIsConsumedOnly(impRoot, impName) then
+            PyClosureImport(impName, level);
+        end
+        else if (level > 0) and (CurTok.Kind = tkUses) then
+        begin
+          { `from . import a, b` -- the names are MODULES (PyParseRelImportNames) }
+          Next;
+          if Eat(tkLParen) then PySkipNewlines;
+          while CurTok.Kind = tkIdent do
+          begin
+            impName := CurTok.SVal;
+            Next;
+            PyDottedImport := '';
+            PyClosureImport(impName, level);
+            if PyIsIdent('as') then
+            begin
+              Next;
+              if CurTok.Kind = tkIdent then Next;
+            end;
+            if not Eat(tkComma) then Break;
+            PySkipNewlines;
+          end;
+        end;
+      end
+      else
+      begin
+        Next;
+        while CurTok.Kind = tkIdent do
+        begin
+          impName := PyConsumeDottedModule(impRoot);
+          if not PyImportRootPlainIsConsumedOnly(impRoot) then
+            PyClosureImport(impName, 0);
+          if PyIsIdent('as') then
+          begin
+            Next;
+            if CurTok.Kind = tkIdent then Next;
+          end;
+          if not Eat(tkComma) then Break;
+        end;
+      end;
+      if TokPos - 1 > i then i := TokPos - 1;
+    end;
+    Inc(i);
+  end;
+  TokPos := savedTokPos; CurTok.Kind := savedKind; CurTok.SVal := savedSVal;
+  CurTok.IVal := savedIVal; CurTok.Line := savedLine;
+end;
+
+procedure PyLexImportClosure;
+{ The main program's closure: every module it imports, transitively. }
+begin
+  if not isNilPy then Exit;
+  PyLexImportClosureRange(0, MainProgramTokCount);
+end;
+
 procedure PyPreScanImports;
 { THIS WALK HAS NO NOTION OF REACHABILITY, and that is the whole of
   bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved.
@@ -44900,7 +45477,10 @@ begin
   { the pre-passes below scan "the compilation unit": for a module that is its
     own token span, not the program's }
   PyScanLo := TokPos - 1;
-  MainProgramTokCount := TokCount;
+  { ...and END at the next source-file mark: with the import closure lexed
+    first, other modules' tokens sit after this one (PyLexedRangeEnd). Before,
+    a module was always the last thing lexed, so TokCount was its end. }
+  MainProgramTokCount := PyLexedRangeEnd(PyScanLo);
 
   { The pre-passes TRIAL-PARSE: they emit no code, and anything they queue on
     the global hoist list is a leftover of a parse that is about to be redone.
@@ -45446,6 +46026,7 @@ begin
     the program body so their symbols are registered for the main code.
     `from dataclasses|typing import ...` is consumed and ignored (those
     names are built in); any other from-import is a clean unsupported. }
+  PyLexImportClosure;   { every module the program can reach, lexed before any is parsed }
   PyParseImportRun;
 
   { Module-local type collection runs AFTER the units above so proc return
