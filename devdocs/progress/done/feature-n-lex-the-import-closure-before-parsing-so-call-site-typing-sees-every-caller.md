@@ -70,4 +70,4 @@ positive control.
 
 ## Log
 
-- 2026-09-16 frankuser (Fable): built and measured; 130 Makefile rows of every NilPy test that imports a sibling module green on the scratch binary before the rebuild.
+- 2026-09-16 frankuser (Fable): built and measured; 130 Makefile rows of every NilPy test that imports a sibling module green on the scratch binary before the rebuild, commit 5dbee723e.

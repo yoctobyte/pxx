@@ -1,0 +1,93 @@
+# A bare parameter whose call sites all pass an instance of ONE class is typed
+# as that class (PyParamTypeFromSites answers tyClass, the class-typed lever),
+# and a constructor parameter typed that way makes a class-typed field. The
+# sites that count are the certain ones: `self`, a construction, a local bound
+# once to a construction, a caller's parameter its own sites typed. Negative
+# controls: a `= None` default, two classes across sites, an explicit None
+# site, and a body that rebinds the parameter all keep the variant.
+class Vec:
+    def __init__(self, x=0.0, y=0.0):
+        self.x = x
+        self.y = y
+
+    def dot(self, o):
+        return self.x * o.x + self.y * o.y
+
+    def plus(self, o):
+        return Vec(self.x + o.x, self.y + o.y)
+
+    def sq(self):
+        return self.dot(self)
+
+
+class Body:
+    def __init__(self, pos, vel):
+        self.pos = pos
+        self.vel = vel
+
+    def step(self, dt):
+        self.pos = self.pos.plus(Vec(self.vel.x * dt, self.vel.y * dt))
+        return self.pos
+
+
+class Node:
+    def __init__(self, val, nxt=None):
+        self.val = val
+        self.nxt = nxt
+
+    def total(self):
+        t = self.val
+        n = self.nxt
+        while n is not None:
+            t = t + n.val
+            n = n.nxt
+        return t
+
+
+class Base:
+    def name(self):
+        return "base"
+
+
+class Sub(Base):
+    def name(self):
+        return "sub"
+
+
+def describe(o):
+    return o.name()
+
+
+def rebound(v):
+    v = v.plus(v)
+    return v.x
+
+
+def norm2(v):
+    return v.dot(v)
+
+
+def first(v):
+    if v is None:
+        return 0.0
+    return v.x
+
+
+def main():
+    a = Vec(1.5, 2.0)
+    b = Vec(0.5, 4.0)
+    print(a.dot(b))
+    print(a.sq())
+    print(norm2(a))
+    print(norm2(Vec(3.0, 4.0)))
+    body = Body(Vec(0.0, 0.0), Vec(1.0, 2.0))
+    p = body.step(0.5)
+    print(p.x, p.y)
+    print(Node(1, Node(2, Node(3))).total())
+    print(describe(Sub()), describe(Base()))
+    print(rebound(a))
+    print(first(a), first(None))
+    print("CLASS SITES OK")
+
+
+main()

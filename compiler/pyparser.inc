@@ -462,6 +462,8 @@ var
   PyPSMemoDef: array[0..8191] of Integer;
   PyPSMemoName: array[0..8191] of AnsiString;
   PyPSMemoTk: array[0..8191] of TTypeKind;
+  PyPSMemoCi: array[0..8191] of Integer;   { the class index beside a tyClass answer }
+  PyPSLastCi: Integer;   { set beside a tyClass result of PyParamTypeFromSites, like PyAnnLastCi }
   PyPSDepth: Integer;          { PyParamTypeFromSites re-entry depth (a bare argument that is the caller's own parameter) }
   PyPSEnclN: Integer;          { memo: def token -> (mode, class name) }
   { PyClassDeclTok memo: class name -> its `class` token, over every lexed
@@ -17298,15 +17300,25 @@ function PyClassUsedAsValueEx(const nm: AnsiString; precise: Boolean): Boolean;
   per-instance copy for one shared slot), so neither `print(Plain.n)` nor a local
   spelled like its class may demote a class nobody ever holds.
   bug-nilpy-class-attribute-through-a-class-reference-reads-garbage }
-var j: Integer;
-    atStmtStart, inSkipStmt: Boolean;
+var j, rIdx, lo, hi: Integer;
+    atStmtStart, inSkipStmt, qualified: Boolean;
 begin
   PyClassUsedAsValueEx := False;
   if nm = '' then Exit;
-  j := 0;
+  { EVERY Python range of the stream, not this module's tokens: since the
+    import closure is lexed first (PyLexImportClosure, 2026-09-16) a class's
+    constructor is typed from sites in OTHER modules, so a value use in another
+    module -- `BoxRef = mod.Box` in the importer, `ref = Box` after a `from`
+    import -- must widen it too, or PyClassRefNew meets a ctor with an Int64
+    parameter and raises (test_nilpy_module_member_as_a_value, on the tier). }
+  rIdx := 0;
+  while PyPyRangeAt(rIdx, lo, hi) do
+  begin
+  Inc(rIdx);
+  j := lo;
   atStmtStart := True;
   inSkipStmt := False;
-  while j < MainProgramTokCount do
+  while j < hi do
   begin
     if Tokens[j].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
     begin
@@ -17335,9 +17347,15 @@ begin
         PyClassRefNew rather than here. Widening a class that is only annotated
         costs boxing and nothing else, which is the trade the whole family
         already makes. }
-      if not (((j + 1 < MainProgramTokCount) and (Tokens[j + 1].Kind = tkLParen)) or
-              ((j > 0) and (Tokens[j - 1].Kind = tkDot)) or
-              (precise and (j + 1 < MainProgramTokCount) and
+      { `mod.Cls` with `mod` an imported module of that file is the class
+        reached through its module, and a value use like the bare name;
+        `o.Cls` on anything else is an attribute and is not }
+      qualified := (j >= 2) and (Tokens[j - 1].Kind = tkDot) and (Tokens[j - 2].Kind = tkIdent) and
+                   not ((j >= 3) and (Tokens[j - 3].Kind = tkDot)) and
+                   PyNameIsImportedModule(GetTokenStr(j - 2), lo, hi);
+      if not (((j + 1 < hi) and (Tokens[j + 1].Kind = tkLParen)) or
+              ((j > 0) and (Tokens[j - 1].Kind = tkDot) and not qualified) or
+              (precise and (j + 1 < hi) and
                (Tokens[j + 1].Kind = tkDot)) or
               PyInTypeTestCall(j)) then
       begin
@@ -17346,6 +17364,7 @@ begin
       end;
     end;
     Inc(j);
+  end;
   end;
 end;
 
@@ -35150,6 +35169,7 @@ begin
         PyParamTypeFromSites(hdrDefIdx, PyHdrPNames[PyHdrNParams], 2, '');
       if PyHdrPTypes[PyHdrNParams] = tyUnknown then PyHdrPTypes[PyHdrNParams] := tyVariant;
       PyHdrPCis[PyHdrNParams] := -1;
+      if PyHdrPTypes[PyHdrNParams] = tyClass then PyHdrPCis[PyHdrNParams] := PyPSLastCi;
       PyHdrPSigs[PyHdrNParams] := -1;
     end
     else
@@ -39518,6 +39538,43 @@ begin
   if (nb = 1) and (nOther = 0) then Result := cand;
 end;
 
+function PyBodyBindsName(bodyLo, bodyHi: Integer; const nm: AnsiString): Boolean;
+{ Does the def body [bodyLo, bodyHi) BIND `nm` anywhere: a statement `nm = ..`,
+  `nm op= ..`, `nm: T = ..`, `nm, y = ..`, a chain link `x = nm = ..`, `for nm
+  in`, `as nm`, `global`/`nonlocal nm`? A CLASS-typed parameter must not be
+  rebound at all: there is no scalar-shaped rebinding to check for agreement
+  (PyLocalScalarTypeFrom does that for scalars), and `v = v.norm()` or `v =
+  None` would store something else into a class slot. Token-only. A keyword
+  argument `f(nm=1)` and an attribute `x.nm` are not bindings; a statement
+  that starts with `nm` and is not a call, a subscript or an attribute read
+  is taken as one. Over-reporting costs a claim, under-reporting a value. }
+var k, cs: Integer; prevK: TTokenKind; prevS: AnsiString;
+begin
+  Result := False;
+  if (bodyLo < 1) or (bodyHi <= bodyLo) then Exit;
+  for k := bodyLo to bodyHi - 2 do
+    if (Tokens[k].Kind = tkIdent) and (GetTokenStr(k) = nm) and (Tokens[k - 1].Kind <> tkDot) then
+    begin
+      prevK := Tokens[k - 1].Kind;
+      prevS := '';
+      if prevK = tkIdent then prevS := GetTokenStr(k - 1);
+      if (prevS = 'as') or (prevS = 'global') or (prevS = 'nonlocal') or (prevK = tkFor) then
+        Result := True
+      else if prevK in [tkNewline, tkIndent, tkDedent, tkSemicolon] then
+        Result := not (Tokens[k + 1].Kind in [tkLParen, tkDot, tkLBrack])
+      else if prevK in [tkAssign, tkColon] then
+        Result := (Tokens[k + 1].Kind = tkAssign)
+      else if prevK = tkComma then
+      begin
+        cs := k - 1;
+        while (cs > bodyLo) and (Tokens[cs].Kind = tkComma) and (Tokens[cs - 1].Kind = tkIdent) do
+          cs := cs - 2;
+        Result := Tokens[cs].Kind in [tkNewline, tkIndent, tkDedent, tkFor];
+      end;
+      if Result then Exit;
+    end;
+end;
+
 function PyParamTypeFromSites(defTok: Integer; const pname: AnsiString;
                               mode: Integer; const clsName: AnsiString): TTypeKind;
 { A BARE parameter of the def at defTok: what type do its CALL SITES pass?
@@ -39585,15 +39642,18 @@ var i, k, e, pos, cur, depth, nSites, argIdx, argS, argE, dfltS, dfltE: Integer;
     kwNames: array[0..PY_PS_HDR_MAX - 1] of AnsiString;
     hdrN, hdrPosN, nPos, nKw, selfOff, rIdx, j2: Integer;
     hdrStar, hdrKw, hdrOverflow, ours, known, dbg: Boolean;
-    siteEncl, ownCls, recvCls: AnsiString;
+    siteEncl, ownCls, recvCls, agreedCls, siteCls, clsNote: AnsiString;
+    dfltNone: Boolean; psCi: Integer;
 begin
   Result := tyUnknown;
+  PyPSLastCi := -1;
   if (defTok < 0) or (defTok + 2 >= TokCount) or (Tokens[defTok].Kind <> tkFunction) then Exit;
   { memo: the same question from the shell, the pre-pass and the body parse }
   for m := PyPSMemoN - 1 downto 0 do
     if (PyPSMemoDef[m] = defTok) and (PyPSMemoName[m] = pname) then
     begin
       Result := PyPSMemoTk[m];
+      PyPSLastCi := PyPSMemoCi[m];
       Exit;
     end;
   methodStart := defTok;
@@ -39662,7 +39722,7 @@ begin
        `class Cls(`, not `mod.Cls(` (a qualified name is another module's) }
   sHLo := PyInferHdrLo;  sHHi := PyInferHdrHi;
   sBLo := PyInferBodyLo; sBHi := PyInferBodyHi;
-  nSites := 0; agreed := tyUnknown; gaveUp := False;
+  nSites := 0; agreed := tyUnknown; gaveUp := False; agreedCls := ''; dfltNone := False;
   { The DEFAULT is a site of its own -- a value the parameter takes, written
     beside the declaration, with no blind spot at all. `Vec3(x=0.0, y=0.0,
     z=0.0)` types its three fields from this line alone, and the demo
@@ -39675,13 +39735,21 @@ begin
     PyInferHdrLo := -1; PyInferHdrHi := -1;
     PyInferBodyLo := -1; PyInferBodyHi := -1;
     t := PyInferExprType(dfltS, dfltE);
+    if (t = tyClass) and (PyInferLastCi >= 0) then
+      agreedCls := PyRawName(UClsNOff[PyInferLastCi], UClsNLen[PyInferLastCi]);
     PyInferLastCi := -1;
     if t = tyString then t := tyAnsiString;
     if (t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t) then
     begin
       agreed := t; nSites := 1;
     end
-    else if Tokens[dfltS].Kind <> tkNil then gaveUp := True;
+    else if (t = tyClass) and (agreedCls <> '') then
+    begin
+      { `def __init__(self, pos=Vec3())`: a class default is a class site }
+      agreed := tyClass; nSites := 1;
+    end
+    else if Tokens[dfltS].Kind = tkNil then dfltNone := True
+    else gaveUp := True;
     { a bool default (`v=True`) vetoes like a bool site -- see the site loop;
       `= None` is not a type and does not veto the call sites either }
   end;
@@ -39881,6 +39949,9 @@ begin
         gaveUp := True; Break;
       end;
       t := PyInferExprType(argS, argE);
+      siteCls := '';
+      if (t = tyClass) and (PyInferLastCi >= 0) then
+        siteCls := PyRawName(UClsNOff[PyInferLastCi], UClsNLen[PyInferLastCi]);
       PyInferLastCi := -1;
       { A bare argument that is the CALLER's own parameter -- `boat.step(dt,
         env)` inside `def tick(self, dt)` -- has no type in the tokens, but the
@@ -39897,6 +39968,8 @@ begin
         t := PyParamTypeFromSites(best, GetTokenStr(argS),
                                   PyDefSiteMode(best, encl), encl);
         Dec(PyPSDepth);
+        if (t = tyClass) and (PyPSLastCi >= 0) then
+          siteCls := PyRawName(UClsNOff[PyPSLastCi], UClsNLen[PyPSLastCi]);
       end
       else if (t = tyUnknown) and (argE = argS + 1) and (Tokens[argS].Kind = tkIdent) and
               (best >= 0) and (PyPSDepth < 6) then
@@ -39906,6 +39979,28 @@ begin
         Inc(PyPSDepth);
         t := PyLocalScalarType(best, PyInferBodyLo, PyInferBodyHi, GetTokenStr(argS));
         Dec(PyPSDepth);
+      end;
+      { A CLASS SITE -- the class-typed lever. The argument is CERTAINLY an
+        instance of one class when it is exactly `self`, exactly a
+        construction `Cls(...)` / `mod.Cls(...)`, or a local of the enclosing
+        def bound once to a construction: the same reader that types a
+        receiver (PyStaticReceiverClass, given the argument's end where the
+        `.` would sit), plus a caller's parameter that its own sites typed as
+        a class (the recursion above, PyPSLastCi). `q.rotate(v)` with every
+        caller passing a Vec3 types `v` as Vec3, and the body's `v.x` is a
+        field read instead of a variant attribute lookup. Not `a + Vec3(..)`:
+        an expression that merely ENDS in a construction is whatever the
+        operator returns. }
+      if (t = tyUnknown) and (siteCls = '') and (best >= 0) and
+         ((argE = argS + 1) or
+          ((Tokens[argS].Kind = tkIdent) and (Tokens[argS + 1].Kind = tkLParen) and
+           (PyEndOfGroup(argS + 1, TokCount) = argE)) or
+          ((argS + 3 < argE) and (Tokens[argS].Kind = tkIdent) and
+           (Tokens[argS + 1].Kind = tkDot) and (Tokens[argS + 2].Kind = tkIdent) and
+           (Tokens[argS + 3].Kind = tkLParen) and (PyEndOfGroup(argS + 3, TokCount) = argE))) then
+      begin
+        siteCls := PyStaticReceiverClass(argE, best, PyInferBodyLo, PyInferBodyHi, scanLo, scanHi);
+        if siteCls <> '' then t := tyClass;
       end;
       if t = tyString then t := tyAnsiString;
       { A BOOL SITE IS A VETO, NOT A CLAIM: a bool field typed from `v=True`
@@ -39927,7 +40022,7 @@ begin
       end;
       if dbg then
         WriteLn('PXXDBG n.psites   site@', k, ' arg ', argS, '..', argE, ' "',
-                GetTokenStr(argS), '" encl=', best, ' t=', Ord(t));
+                GetTokenStr(argS), '" encl=', best, ' t=', Ord(t), ' cls=', siteCls);
       { THE DEFAULT ANCHORS; A SITE CAN CONTRADICT IT BUT NOT WEAKEN IT. A
         site the scanner cannot type at all (an argument that is another
         def's bare parameter, a subscript of a variant, the class's OWN field
@@ -39937,7 +40032,19 @@ begin
         wrong guess meets the coercion loudly. With no default there is no
         anchor, and an untypeable site is a veto. A site of a DIFFERENT scalar
         type is a veto either way. }
-      if not ((t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t)) then
+      if (t = tyClass) and (siteCls <> '') then
+      begin
+        { A CLASS CLAIM needs every site to name the SAME class and no `=
+          None` default: a class slot holds no None, and a subclass at one
+          site with its base at another is a disagreement, not a widening.
+          An untypeable site vetoes a class claim even beside a default (a
+          variant reaching a class slot is not a loud coercion). }
+        if dfltNone then gaveUp := True
+        else if nSites = 0 then begin agreed := tyClass; agreedCls := siteCls; end
+        else if (agreed <> tyClass) or (agreedCls <> siteCls) then gaveUp := True;
+      end
+      else if agreed = tyClass then gaveUp := True
+      else if not ((t = tyDouble) or (t = tyAnsiString) or PyIsSiteIntTk(t)) then
       begin
         if (dfltS < 0) or (agreed = tyUnknown) or (t <> tyUnknown) then gaveUp := True;
       end
@@ -39959,7 +40066,22 @@ begin
     if PyInferHdrHi < 0 then PyInferHdrHi := defTok;
     PyInferBodyLo := PyInferHdrHi;
     PyInferBodyHi := PySkipNestedSuite(defTok);
-    Result := PyLocalScalarTypeFrom(defTok, PyInferBodyLo, PyInferBodyHi, pname, agreed);
+    if agreed = tyClass then
+    begin
+      { the class must be REGISTERED by now (FindUClassNonRecord: a class in
+        a module the parser has not reached is a name and nothing else), and
+        the answer is memoised, so the shell, the pre-pass and the body parse
+        all see the same one; and the body must not rebind the parameter at
+        all -- `v = v.norm()` or `v = None` would store something else into
+        a class slot (PyBodyBindsName) }
+      psCi := FindUClassNonRecord(agreedCls);
+      if (psCi >= 0) and not PyBodyBindsName(PyInferBodyLo, PyInferBodyHi, pname) then
+      begin
+        Result := tyClass; PyPSLastCi := psCi;
+      end;
+    end
+    else
+      Result := PyLocalScalarTypeFrom(defTok, PyInferBodyLo, PyInferBodyHi, pname, agreed);
   end;
   PyInferHdrLo := sHLo;  PyInferHdrHi := sHHi;
   PyInferBodyLo := sBLo; PyInferBodyHi := sBHi;
@@ -39968,11 +40090,16 @@ begin
     PyPSMemoDef[PyPSMemoN] := defTok;
     PyPSMemoName[PyPSMemoN] := pname;
     PyPSMemoTk[PyPSMemoN] := Result;
+    PyPSMemoCi[PyPSMemoN] := PyPSLastCi;
     Inc(PyPSMemoN);
   end;
   if PxxDbgEnabled('n.psites') then
+  begin
+    clsNote := '';
+    if Result = tyClass then clsNote := ' cls=' + agreedCls;
     WriteLn('PXXDBG n.psites ', siteName, '.', pname, ' mode=', mode, ' sites=', nSites,
-            ' gaveup=', Ord(gaveUp), ' tk=', Ord(Result));
+            ' gaveup=', Ord(gaveUp), ' tk=', Ord(Result), clsNote);
+  end;
 end;
 
 procedure PyInferFieldDecl(j, fldAnn, methodStart, bodyStart, bodyEnd: Integer;
@@ -40228,6 +40355,9 @@ begin
                                                UClsNLen[PyInferFieldCi]));
         if tk = tyUnknown then tk := tyVariant;
         fldRec := REC_NONE;
+        { a class-typed parameter makes a class-typed FIELD: `self.pos = pos`
+          with every construction passing a Vec3 }
+        if tk = tyClass then fldRec := REC_UCLASS_BASE + PyPSLastCi;
       end;
     end
     else if not isCtor then
@@ -41803,6 +41933,7 @@ begin
         else
           ptypes[nparams] := PyParamTypeFromSites(psDefTok, pnames[nparams], 1, '');
         if ptypes[nparams] = tyUnknown then ptypes[nparams] := tyVariant;
+        if ptypes[nparams] = tyClass then pcis[nparams] := PyPSLastCi;
       end;
       if CurTok.Kind = tkAssign then PySkipParamDefaultAtCursor;
     end
