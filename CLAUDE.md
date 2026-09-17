@@ -1173,7 +1173,11 @@ paragraph's own mistake made one layer in.** It is correct about PROCESS EXIT
 STATUS, which is not the question: a deliberate probe that exits nonzero is a
 successful measurement. Measured 2026-09-17 across THREE seats with unrelated
 workloads, every one of them running this very check: **15, 25 and 30
-`is_error` blocks against ZERO, ZERO and ZERO actual blockages.** The
+`is_error` blocks against ZERO, ZERO and ZERO actual blockages** — and **all
+three were ANSWERING, so the sample cannot contain a blocked seat and is silent
+about one by construction. A real denial DOES arrive as `is_error: true`.** That
+is precisely why the COUNT is the wrong instrument and the ordering below is the
+right one. The
 non-blockages are the ordinary day's work — a differential that exits 1 because
 the two sides differ, a compile that fails because the refusal IS the finding, a
 `grep -c` with no match, a lock correctly refusing a second run, a guardrail
