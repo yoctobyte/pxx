@@ -5070,3 +5070,96 @@ finding yet.
 Gate GREEN as of 2k, three tracked open regressions, nothing landed but the
 clause. franks-ee has pulled, so its 15-commit gap is closed; tree clean,
 nothing in flight. **Still awaiting frankb-56's state.** Eight for the 18th.
+
+## Check-in 2n (2026-09-17 10:2x) — work resumed, two 2j predictions confirmed, and I disturbed my own gate
+
+### frankb-56 IS ALIVE, AND IT ANSWERED BY WORKING
+
+Two commits at **08:50 and 08:53**, after my 08:23 state-check message:
+`ec8a4d88c fix(P): a conditional-directive refusal named the LEXER's line, not
+the directive's` and `8ae9e38c5 docs(P,U): the FPC corpus retires the
+globals.pas:502 prediction`. **Commits landing after the question are a stronger
+answer than a reply**, and I am not chasing the reply. Both seats accounted for;
+the state check is closed.
+
+### TWO THINGS 2j PREDICTED, BOTH CONFIRMED
+
+2j called borg's six-hour silence *an idle tree, not a stall*, on the grounds
+that all twelve commits since its last tested sha touched nothing outside
+`devdocs/`. **Borg resumed within the hour of buildable work landing** — full,
+native, slow and opt runs at `2f290fdbfdb9`, newest full tier now **1h old** —
+and the **breadth-STALE banner has cleared**. The benign reading was the right
+one and it was checked rather than hoped.
+
+### I REBUILT — AND THEN DISTURBED THE GATE I HAD ALREADY STARTED
+
+`compiler/` moved, so this time I rebuilt (`converged after 1 round(s)`,
+`ca7c039b4808`). **But I had already launched `gate.sh quick` in the same block
+as the pull, before knowing what landed**, and the rebuild then ran while that
+gate was in flight. Both gates printed **GREEN**. The first one should not be
+believed, and its own `fixedpoint.log` says why:
+
+```
+NOTE compiler/pascal26 changed DURING this check — a concurrent build
+     replaced it, so the agreement check compared against a binary that
+     no longer exists. This is NOT a self-host failure.
+     Convergence (the real gate) passed. Re-run to check agreement.
+```
+
+**The voided half is the half that catches local-seed contamination** — the
+two-valid-fixedpoints condition, which is exactly what 2g caught. So that run
+proved the sources define a fixedpoint and proved **nothing about the binary on
+disk**.
+
+**And the summary line said `gate: GREEN (exit 0)`.** CLAUDE.md tells you to
+background the gate and **grep the log for the verdict** — correct, measured,
+and **precisely what hides this**, because the NOTE is in `fixedpoint.log` and
+not on the verdict line. A seat following the instruction exactly sees a clean
+green.
+
+**The tell was an accident.** The same tree gated twice within ten minutes gave
+`FPC seed canary (concurrent)` and then `SKIP (compiler/ unchanged, seeded green
+at 35ebaee75923)`. **One tree cannot have two canary dispositions** — only a
+moving one can — and that oddity is what sent me into the per-check log rather
+than accepting two greens as agreement.
+
+**This is "do not touch the instrument while it is measuring" from the other
+side:** the playbook has editing-a-running-script and pulling-mid-sweep; the
+gate's SUBJECT is `compiler/pascal26`, and a rebuild replaces it. Easy to reach,
+because the rebuild is genuinely owed after a `compiler/` pull — 2g's lesson
+pushed me toward exactly this one. **The sequence is serial: PULL → REBUILD →
+wait → GATE → grep the verdict AND `fixedpoint.log`.** A gate already running
+when the pull lands is about a tree you no longer have; let it finish and discard
+it. Banked in `debugging-playbook.md`; **not promoted** — one instrument, one
+instance, and it qualifies a live CLAUDE.md instruction rather than
+contradicting it, so the rules file is unchanged.
+
+**The valid gate is the second: GREEN, fixedpoint PASS, canary SKIP.**
+
+### THE FIFTEENTH CONSECUTIVE NULL ROW
+
+frankb-56 re-measured the 207-unit FPC corpus and retired a prediction from
+`decided/decide-old-style-object-types.md` — that the 138 blocked units *"land as
+one group on a fifth wall, `globals.pas:502`"*. After franks-ee took that lever
+(`fa397c761`), **`globals.pas:502` is now the first failure of ZERO of 207 units
+— the lever worked — and units-OK moved by zero.** The 138 were QUEUED behind
+that wall, not gated by it; they landed on `x86_64/cpuinfo.pas:36`, where
+`TDoubleRec` has gone 4 → 132 → 140 across three measurements while buying
+nothing.
+
+**Three things it did that make this a result rather than a shrug:** it recorded
+the expectation ("another null") **before** the run; it checked that the
+prediction had never actually been re-measured (`fa397c761` is not an ancestor of
+the tree the old totals came from, with 25 `compiler/`/`lib/` commits between);
+and it **attributed each of five cleared walls individually** so the delta is not
+read as one seat's. Totals **21 / 10 / 176, unchanged.**
+
+**Fifteen consecutive nulls, and the fourth time the histogram was one file's
+contents.** That is CLAUDE.md's umbrella measurement holding at N=15. Not an
+escalation — the instrument that would answer the size question reports EVERY
+failure per subject and still nobody has built it, which is engineering and ours.
+
+### STATE
+
+Gate GREEN (the valid one). Three tracked open regressions unchanged. Both seats
+working. **Eight for the 18th.** He is back tomorrow.
