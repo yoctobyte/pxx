@@ -10,7 +10,7 @@ found-by: frankH
 created: 2026-09-11
 tags: [overload-resolution, open-arrays, sets, array-constructor]
 blocked-by: []
-summary: "A `[...]` constructor in an argument position is typed as a SET unconditionally, so an `array of T` parameter can never be selected for one. Two outcomes, and the SECOND is the reason this is not a diagnostic ticket: with no set-typed candidate in scope pxx REFUSES (`no overload of P matches these arguments / argument types: (set)`) where fpc compiles; with a set-typed parameter in scope -- including one that is only a DEFAULT, `f: TF = []` -- pxx compiles and SILENTLY SELECTS THE WRONG OVERLOAD, answering 1 where fpc answers 2 on the same six-line source. Found while writing test/lib_sysutils_executeprocess.pas, whose real declarations have exactly the default-set shape; the fixture passes variables rather than literals to stay a test of ExecuteProcess."
+summary: "A `[...]` constructor in an argument position is typed as a SET whenever there is more than one candidate, so an `array of T` parameter can never be selected for one: `P(['x'])` against an `AnsiString` / `array of AnsiString` overload pair is REFUSED (`argument types: (set)`) where fpc compiles and answers 2. With exactly ONE candidate it already works -- the lowering is fine and only overload RANKING is blind (measured 2026-09-16, frankb-56). The DEFAULT-PARAMETER arm this summary used to describe as the worse half -- `f: TF = []` making pxx compile and silently answer 1 -- turned out NOT to be about sets at all: it was [[bug-p-a-defaulted-trailing-parameter-disables-argument-type-checking]], a defaulted trailing parameter switching off argument type checking for every type, fixed 2026-09-17. pxx now selects fpc's candidate there (2) and still presents the argument as a SET, so the callee reads a garbage length -- one defect where there were two, not a fix. The remaining divergence is exactly the multi-candidate rows; the binding rule fpc actually follows is measured below and is narrower than this ticket's own \"shape of the fix\"."
 ---
 
 # `['x']` is a set, even where only an array can go
@@ -152,3 +152,81 @@ path, or the matcher is handed a different node — and which of those it is
 decides the whole fix. Do not re-derive the element kind from the elements: an
 attempt to do that answered `tyUnknown` for exactly the shape the flag already
 had right, which is the two-tables defect one scope down.
+
+## MEASURED 2026-09-17 (frankS) — the derived rule, and one of the two arms was a different bug
+
+Picking this up from `d7946acb6` as instructed rather than from the body above.
+Two things changed since that handoff.
+
+### The named next probe cannot be run, and the code answers it anyway
+
+`d7946acb6` ends by naming one probe: dump the argument node with
+`PXXDBG=a.ast` and check whether `ASTSLen` is 1 on the node the matcher
+receives. **That probe cannot answer it.** The refusing compile aborts before
+any AST dump runs, and there is no `PXXDBG` topic for overload matching at all
+(`a.ast`, `a.ir`, `n.locals`, `n.ctorargs` are the four). Read instead:
+`ParseSetLiteralAST` parks the flag as `if SetLitNonSet then ASTSLen[node] := 1
+else ASTSLen[node] := 0` (pasparser_lval.inc), and the save/restore around a
+nested `[...]` at 4267-4270 is correct — the restore happens before the string
+check, so a nested literal cannot clear an outer tally.
+
+### THE FLAG IS NOT THE DISCRIMINATOR, AND THE ONE-CHARACTER ROW PROVES IT
+
+A ONE-character string literal is folded as a **Char**, so `['x']` is a
+perfectly good set and `SetLitNonSet` never fires on it. Yet:
+
+```pascal
+procedure P(const c: array of AnsiString);   { the ONLY candidate }
+begin WriteLn('count=', Length(c), ' [0]=', c[0]); end;
+begin P(['x']); end.        { fpc: count=1 [0]=x   pxx: count=1 [0]=x }
+```
+
+pxx already lowers that correctly. So the single-candidate success **does not
+depend on the non-set flag**, and the banked framing *"only a literal that
+cannot be a set may be re-presented"* is not the rule — it would have to refuse
+this row, which works. Whatever decides the single-candidate case
+(`TryParseBracketArgForSlot`, which asks the PARAMETER) is already the right
+mechanism; ranking simply never consults it.
+
+### The boundary, measured
+
+All rows fpc 3.2.2 `-Mobjfpc` against pxx at HEAD **after** the defaulted-
+parameter fix. "receiving param" is the parameter at the argument's own
+position, in each candidate.
+
+| # | receiving-param candidates | literal | fpc | pxx |
+| --- | --- | --- | --- | --- |
+| n | `AnsiString` / `array of AnsiString` | `['x']` | 2 | **REFUSES** `(set)` |
+| c5 | same, plus a later set-typed default `f: TF = []` | `['x']` | 2 | **2, garbage arg** |
+| c3 | `set of Char` / `array of AnsiString` | `['x']` | 1 | 1 |
+| c4 | `set of Char` / `array of AnsiString` | `['xy']` | refuses | refuses |
+| c6 | `array of AnsiString` ONLY | `['xy']` | 2 | 2 |
+| c7 | `set of Char` ONLY | `['x']` | 1 | 1 |
+| c8 | `array of AnsiString` ONLY | `['x']` (set-able) | 2 | 2 |
+| Q | `TF` set / `array of Integer` | `[fA]` | 1 | 1 |
+
+**Derived rule, and it reproduces all eight:** the `[...]` binds as a SET when
+the RECEIVING parameter is a set type, and may be an array constructor
+otherwise. A set-typed parameter **elsewhere in the signature** does not make it
+a set — c5 is the row that settles that, and it is the row the old summary read
+as the set machinery misfiring.
+
+That rule keeps `Q([fA])` at 1 (its receiving parameter IS a set) without any
+appeal to what the elements can be, so it satisfies frankb-56's constraint —
+*"let the parameter type disambiguate is too wide"* — by being about the
+RECEIVING parameter rather than about the signature. The divergence narrows to
+exactly two rows, n and c5, and both are "no candidate's receiving parameter at
+this position is a set type".
+
+### What the defaulted-parameter fix changed here, and what it did not
+
+`bug-p-a-defaulted-trailing-parameter-disables-argument-type-checking` (done,
+2026-09-17) removed the fallback that was rescuing the `AnsiString` candidate
+in row c5. pxx now picks fpc's candidate there. **The argument is still a set**:
+instrumented, the array overload runs and reports `count=17297991344808736`.
+So c5 moved from "wrong overload, garbage" to "right overload, garbage" — worth
+recording because a bare re-run of the old six-line repro now prints **2**,
+fpc's own answer, and reads as fixed. It is not. Instrument the callee before
+believing that row.
+
+Rows n, c3, c4, c6, c7, c8 and Q are unmoved by that fix.

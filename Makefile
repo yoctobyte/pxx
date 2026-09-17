@@ -19711,6 +19711,35 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: incompatible types: cannot assign AnsiString to Integer' \
 	   && test ! -e $(TESTTMP)/test_crafail26 \
 	  || { echo "test_call_result_assign_typecheck_fail: FAIL - rc=$$rc (want rc=1, three refusals on lines 41-43 for the direct, virtual and interface call, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# A DEFAULTED TRAILING PARAMETER used to disable argument type checking on
+	# the arguments that WERE supplied. TryFillTrailingDefaults picked its
+	# candidate on NAME and ARITY alone, and it is a fallback reached only
+	# where the ordinary match has already refused -- so it rescued exactly the
+	# calls that had just been type-rejected. No overload and no exotic type
+	# needed: `P(const c: AnsiString; k: Integer = 0)` called with a record
+	# compiled under pin v410 and the binary SEGFAULTS. The same call with the
+	# trailing argument written out was refused correctly, which is what makes
+	# this the sibling-spelling class rather than a missing check.
+	# The positive file comes FIRST because this fix can only fail by being too
+	# WIDE: anything the gate refuses becomes "no overload matches". Its
+	# procedural-address and nil rows are the ones a fix that forgets to fill
+	# the argument side channels turns red, and they fail differently from the
+	# rest of the file. .expected is fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_default_arg_typecheck_positive.pas $(TESTTMP)/test_dfltpos26
+	tools/expect_same.sh test_dfltpos26 "$$($(TESTTMP)/test_dfltpos26)" "$$(cat test/test_default_arg_typecheck_positive.expected)"
+	@# ...and the refusals. The last two rows put the bad argument in position
+	@# 2 and 3, behind good ones: a gate that checked only argument 0 passes
+	@# both and this file would certify it. fpc 3.2.2 refuses all four at these
+	@# same four lines.
+	@out=$$(./$(COMPILER) test/test_default_arg_typecheck_fail.pas $(TESTTMP)/test_dfltfail26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:44: error: no overload of TakesStr matches these arguments' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: no overload of TakesInt matches these arguments' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:46: error: no overload of TwoThenBad matches these arguments' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:47: error: no overload of ThreeThenBad matches these arguments' \
+	   && test ! -e $(TESTTMP)/test_dfltfail26 \
+	  || { echo "test_default_arg_typecheck_fail: FAIL - rc=$$rc (want rc=1, four refusals on lines 44-47, the last two with the bad argument in position 2 and 3, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# ...and the MECHANISM behind that last one: ParseStatementAST's catch-all
 	@# `else` used to skip to the `;` in silence, so any construct another arm
 	@# left tokens pending on became a silently discarded statement. Five

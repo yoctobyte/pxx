@@ -2069,6 +2069,15 @@ begin
   ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
 end;
 
+{ "Would the arguments the caller ACTUALLY WROTE be accepted by this candidate?"
+  -- forwarded because its body belongs beside FillMatchArgChannelsAt, which is
+  the machinery it drives and which is declared several hundred lines below
+  TryFillTrailingDefaults's only caller-visible use. Same-file forward rather
+  than a second copy of the fill: the channels are globals with a fill/valid/
+  clear protocol, and two spellings of that protocol is the shape
+  normalise-dont-special-case.md is about. }
+function TrailingDefaultArgsAcceptable(cand, nArgs, argsHead: Integer): Boolean; forward;
+
 { A call written with FEWER arguments than any overload declares, where the
   missing ones all carry defaults — `filedialog.askopenfilename()` against
   `askopenfilename(title=''; filetypes=...; ...)`. The method paths have filled
@@ -2097,6 +2106,23 @@ begin
       begin
         if not ProcParamHasDefault[i * MAX_PROC_PARAMS + k] then ok := False;
       end;
+      { ...AND THE ARGUMENTS THE CALLER DID SUPPLY MUST FIT. This scan asked
+        NAME and ARITY only until 2026-09-17, and it runs exactly where the
+        ordinary match has already refused -- so a call that was refused for
+        being WRONGLY TYPED was rescued here and bound anyway, with the
+        argument passed raw. It needs no overload to reach: a lone
+        `function P(const c: AnsiString; k: Integer = 0)` called as `P(rec)`
+        or `P(['x'])` compiled and read the record's bytes as a string
+        (Length(c) = 17297991344808736); `P(c: Integer; k: Integer = 0)`
+        called with an AnsiString printed the string's ADDRESS. fpc 3.2.2
+        refuses all three ("Incompatible type for arg no. 1"). The SAME
+        signature with the trailing argument WRITTEN OUT is refused by pxx
+        too, which is what says the defect is this door and not the check:
+        the defaulted spelling and the supplied one are the two spellings of
+        one call and only one of them was wired to the type rule.
+        bug-p-a-defaulted-trailing-parameter-disables-argument-type-checking }
+      if ok and not TrailingDefaultArgsAcceptable(i, nArgs, argsHead) then
+        ok := False;
       if ok then
       begin
         cand := i;
@@ -3845,6 +3871,80 @@ begin
     formal is spelled all three ways across the RTL and the C bindings.
     bug-p-a-pchar-and-a-pwidechar-parameter-are-one-overload }
   MatchArgPtrElemTk[i] := NodePtrElemTkCertain(node, argTk);
+end;
+
+function TrailingDefaultArgsAcceptable(cand, nArgs, argsHead: Integer): Boolean;
+{ The gate TryFillTrailingDefaults grew on 2026-09-17; see the forward
+  declaration above it for what it is for.
+
+  It asks MatchParamAccepted -- the UNION of what MatchProcCall's phases
+  accept -- rather than a stricter predicate of its own, because this function
+  is a FALLBACK: anything it refuses becomes "no overload matches", so a rule
+  narrower than the real one turns a working call into a diagnostic. Three
+  callers share it (the expression site, the statement site and NilPy's), so
+  the union is also the only answer all three can live with.
+
+  The channels are filled here for the same reason the method probe fills its
+  own: MatchParamCompatible reaches MatchArgNilOk and MatchArgProcAddrOk, and
+  with the channels INVALID both answer False -- which would refuse a
+  procedure-address argument against a procedural parameter, a shape that
+  compiles today. Unlike the method probe there is no rewind to schedule
+  around: the argument list is fully parsed by the time this runs, so the fill
+  reads finished nodes and no nested probe can overwrite it.
+
+  ABSTAINS ON tyUnknown rather than refusing. That is the sentinel for "this
+  node's type was never settled", which is ordinary under NilPy and for a
+  poisoned node downstream of an earlier error; a refusal there would report a
+  type mismatch as the second diagnostic of one mistake. Untyped, array and
+  `nil` parameters/arguments abstain for the reasons the method probe states
+  at its own copy of this skip list. }
+var j, argSeq, node: Integer; aTk: TTypeKind;
+begin
+  Result := True;
+  if (cand < 0) or (cand >= ProcCount) then Exit;
+
+  argSeq := argsHead; j := 0;
+  while (argSeq >= 0) and (j < nArgs) and (j < MAX_PROC_PARAMS) do
+  begin
+    node := ASTLeft[argSeq];
+    if node >= 0 then
+      FillMatchArgChannelsAt(j, node, IntToTypeKind(ASTTk[node]));
+    argSeq := ASTRight[argSeq];
+    Inc(j);
+  end;
+  MatchArgRecValid := True;
+  MatchArgAliasValid := True;
+  MatchArgNilValid := True;
+  MatchArgScalarValid := True;
+  MatchArgArrayValid := True;
+  MatchArgElemValid := True;
+  MatchArgProcAddrValid := True;
+
+  argSeq := argsHead; j := 0;
+  while (argSeq >= 0) and (j < nArgs) and (j < MAX_PROC_PARAMS) do
+  begin
+    node := ASTLeft[argSeq];
+    if (node >= 0) and (j < Procs[cand].ParamCount) then
+    begin
+      aTk := IntToTypeKind(ASTTk[node]);
+      if (aTk <> tyUnknown) and
+         (not Procs[cand].Params[j].IsArray) and
+         (not ProcParamUntyped[cand * MAX_PROC_PARAMS + j]) and
+         (not IsNilLiteralNode(node)) then
+        if not MatchParamAccepted(cand, j, aTk) then Result := False;
+    end;
+    argSeq := ASTRight[argSeq];
+    Inc(j);
+  end;
+
+  { Nothing downstream may read a fill made for THIS argument list. }
+  MatchArgProcAddrValid := False;
+  MatchArgRecValid := False;
+  MatchArgAliasValid := False;
+  MatchArgNilValid := False;
+  MatchArgScalarValid := False;
+  MatchArgArrayValid := False;
+  MatchArgElemValid := False;
 end;
 
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
