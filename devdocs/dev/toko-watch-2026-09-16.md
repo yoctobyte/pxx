@@ -4830,3 +4830,66 @@ Gate GREEN. Five tier failures, three tracked. **Eight for the 18th**, the
 eighth now sharper and cheaper than when I raised it four hours ago. The open
 rv32 ticket has a measured cross-check it did not have this morning, and my own
 2h is corrected in the note and in the ticket rather than only here.
+
+## Check-in 2j (2026-09-17 06:2x) — quiet, and the one thing that looked like an alarm is an idle tree
+
+Zero commits since 2i. Gate **GREEN**, fixedpoint PASS, canary **SKIP**
+(`compiler/` unchanged, seeded green at `bd79efb9f090`). Three tracked open
+regressions unchanged; five tier failures as corrected in 2h.
+
+### A NEW MARKER APPEARED AND IT IS NOT A DOWN VERDICT
+
+`twatch --status` now prints, where it did not at 2h or 2i:
+
+```
+breadth — newest full tier is 6h old  [STALE — no cross-target verdict on this
+tree; native GREEN does NOT cover i386/arm32/riscv32/aarch64]
+```
+
+**`twatch --status` exits 0.** CLAUDE.md is explicit that the proof of T being
+down is **`--status` exiting 1** after a fetch, and that slow or stale is not
+proven either. So **no lane may widen its gate on this, mine included**, and I
+am not treating a staleness banner as permission.
+
+### BORG'S SILENCE IS THE LONGEST IN 0.4% OF ITS HISTORY, AND IT IS EXPLAINED
+
+Borg last published at **2026-09-17T00:28**, ~6h ago, having published every few
+minutes all watch. Measured against its whole record rather than against my
+sense of it — 3611 publishes, 2026-07-07 to now:
+
+```
+median gap 0.07 h    p90 0.27 h    p99 2.57 h
+gaps longer than the current 5.9 h silence:  14 of 3610
+```
+
+So it is in the top 0.4% — **and a first, narrower sample of 120 said 0 of 119,
+which would have read as unprecedented.** Widening the population changed the
+finding from "never happened" to "happens rarely", and the largest gap in the
+record (1009.7 h, ending 2026-09-11 21:33) is **not an outage at all** — it is
+the plexus handover, i.e. an artefact of when borg's record begins. The same
+caveat this note's brief carries for `open_regression` timestamps.
+
+**Then the actual explanation, which is boring and which I checked rather than
+assumed:** every one of the **12 commits since borg's last tested sha
+`ba8cf629926a` touches nothing outside `devdocs/`**. `--status` measures watcher
+liveness from *untested commits* against a grace window. **Nothing buildable has
+landed since 2026-09-16T22:15Z, so a healthy watcher has nothing to publish.**
+An idle tree and a stalled watcher produce the same silence — the same
+two-causes-one-silence shape as "no commits in N hours" — and the discriminator
+here is not the watcher at all, it is whether anything testable exists.
+
+**No alarm raised, no seat asked, no gate widened.** Recording it because the
+alarming reading was available, cheap to believe, and wrong.
+
+### PEERS
+
+franks-ee and frankb-56 both last committed ~23:30, seven hours. Both answered
+messages within the six hours before that, both ended turns after landing work,
+and there is nothing testable outstanding for either. **Not poking them**: I have
+no fact to send, the one open question (borg's qemu) belongs to a Track T seat
+that is not up, and "are you alive" is the message the handbook says not to send.
+
+### STATE
+
+Gate GREEN. Nothing moved. **Eight for the 18th**, unchanged. The shop is quiet
+and was watched.
