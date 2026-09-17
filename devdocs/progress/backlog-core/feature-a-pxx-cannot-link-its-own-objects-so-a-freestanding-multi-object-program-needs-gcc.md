@@ -494,3 +494,42 @@ duplicate-definition rules; section and symbol-table merging across 400 inputs;
 expected; and the i386 story is NOT the x86-64 story — that target already has a
 text-relocation history (`bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils`),
 so **x86-64 is the small case and must not be quoted as the size of the others.**
+
+## SCOPE, settled with the owner 2026-09-17 — three rungs, and they are not one slope
+
+He raised the harder shapes himself and took the scoping below. **Read this
+before estimating: the difficulty is not a gradient, and rung 3 is a different
+kind of thing rather than a harder version of rung 1.**
+
+**RUNG 1 — our objects, `ld` still present. THIS IS THE TICKET.** And the design
+is **shadow `ld`, do not replace it**: keep the external linker a supported
+backend and add `--link` beside it, selectable. Two reasons, both practical.
+The differential harness stays alive permanently instead of only during
+bring-up; and a missing relocation or a bad layout decision is then one flag
+away from a known-good build rather than a regression. Our emitter already
+knows six relocation types and the 400-object corpus exercises exactly two.
+
+**RUNG 2 — third-party (`gcc`/`fpc`) objects. NOT THIS TICKET, and probably not
+a goal.** The cost is not the relocation count, it is the **RELAXATIONS**: gcc
+emits `GOTPCRELX` and TLS `GD` sequences *expecting the linker to rewrite the
+instructions* (GOTPCRELX collapsing to a direct `lea`; TLS going GD -> IE -> LE
+by what the final link turns out to be). Applying those faithfully without
+relaxing gives slow code at best and, for TLS, frequently something that does
+not work. Then COMDAT section groups, archive pull-until-fixpoint semantics,
+`.eh_frame_hdr` synthesis, `.init_array` ordering. **The nearest decided
+precedent is the owner's own, 2026-09-09: *"the dialect is the target and the
+implementation is not"* — binary interop with another toolchain is not a goal.**
+Take rung 2 only when something we actually want to build needs it, and say
+which thing.
+
+**RUNG 3 — consume a `.so` as if it were a `.o`. DECIDED NO** — see
+`decide-linking-a-so-as-if-it-were-an-object`. Not hard; mostly not coherent. A
+`.so` has already been linked and the link-time information was discarded.
+
+**Say the scope in `--link`'s own help text**, so a later reader does not read
+the omission as a defect.
+
+**Background for whoever takes this and wants the concepts first:**
+`devdocs/dev/linking-in-this-tree.md`, ~130 lines / ~2k tokens — a MAP onto our
+own source, not a tutorial. Its first pointer is `tools/pxxcrt_x86_64.S`, 76
+lines, which is the entry contract end to end.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:21 blocked:7 backlog:41 backlog-umbrella:11 backlog-core:165 backlog-nilpy:178 backlog-tools:60 backlog-pascal:10 backlog-decide:46 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3818 rejected:82`
+`working:31 unfinished:21 blocked:7 backlog:41 backlog-umbrella:11 backlog-core:165 backlog-nilpy:178 backlog-tools:60 backlog-pascal:10 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3818 rejected:82`
 
 ## Held now (working/ — do not touch these files)
 
@@ -75,7 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 544, ranked
+## Ready — top 30 of 545, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
@@ -108,4 +108,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 
-_514 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_515 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
