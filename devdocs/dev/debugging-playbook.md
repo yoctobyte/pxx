@@ -9800,7 +9800,19 @@ the entire difference between a correct answer and an inverted one.
 *"Anchor to `^chore(stable): pin vN`, and prefer the sha pair, which prose
 cannot imitate"* — is itself the **top hit of the unanchored query**. The
 statement of the remedy is the noise the remedy exists to filter, and its author
-wrote both. **A hazard note about a namespace is written INTO that namespace**,
+wrote both. **AND THE ANCHOR'S CORRECTNESS RESTS ON A WRITING
+CONVENTION, WHICH IS THE RETIREMENT CONDITION THIS BLOCK NEEDS.** `^` in
+`--grep` pins to a LINE start, not to the subject, so the anchor excludes those
+two prose commits only because they happen to quote the pin mid-sentence or
+indented. **The day a note quotes a pin subject at a line start — a block quote,
+a fenced snippet, a bullet whose text begins there — it is back in the set, the
+newest hit inverts again, and nothing errors.** Dated and falsifiable rather
+than a worry: **measured 2026-09-17, two hundred and eighty-eight of two hundred
+and eighty-eight anchored hits have it as the SUBJECT and none are body-only.
+The day that second figure is nonzero, this anchor is broken in exactly the old
+way** — and the counts are spelled in words here so that re-running the census
+does not count this paragraph. **The sha pair rests on no convention at all**,
+which is why it, and not the anchor, is the half that sits in CLAUDE.md. **A hazard note about a namespace is written INTO that namespace**,
 so every correct warning of this class degrades the instrument it warns about by
 exactly one row. There is no wording that escapes it; only the identity check
 does, which is why the sha pair and not the anchor is the rule that got promoted

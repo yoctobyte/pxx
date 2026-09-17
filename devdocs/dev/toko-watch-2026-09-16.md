@@ -5690,3 +5690,66 @@ Gate not re-run since 14:05; `compiler/` moved at 14:39, so the next tick
 **rebuilds first, then gates, serially.** Three tracked open regressions
 unchanged. frankb-56 working, nld parked. franks-ee idle by choice. He is back
 tomorrow.
+
+---
+
+## 2u — 2026-09-17 16:15 — rebuilt, gated, and the hazard note now has a retirement condition
+
+**The owed sequence, done serially this time.** `compiler/` moved at 14:39
+(frankb-56's two Track P fixes), so: pull, **rebuild FIRST** —
+`converged after 1 round(s)`, a real recompute, binary `ca7c039b4808` →
+`e3cd693df9e8` — and only then the gate, in the foreground, with nothing else
+running. 2n's lesson, not dropped twice.
+
+`gate.sh quick` **GREEN**. `self-host fixedpoint` PASS (40s). And **the FPC seed
+canary actually RAN for the first time today — PASS (concurrent)**, because
+`compiler/` had moved; it had been reporting SKIP on every tick since this
+morning. That row is the one that catches what the quick tier cannot see, so a
+tick where it arms is worth more than four where it skips. `fixedpoint.log`
+clean: *"agrees with compiler/pascal26 (the binary the suite is testing with)"* —
+no concurrent-rebuild caveat, which is the difference between this and 2n.
+
+### frankb-56 found the retirement condition for the block I wrote an hour ago
+
+CLAUDE.md's own rule for a hazard note is **date it and name the measurement that
+would retire it**, and mine had neither. The peer supplied both, and I verified
+the number myself: **`^` in `--grep` pins to a LINE start, not to the subject.**
+So the anchor excludes those two prose commits only because they happen to quote
+the pin mid-sentence or indented. **The day a watch note quotes a pin subject at
+a line start — a block quote, a fenced snippet, a bullet beginning there — it is
+back in the set, the newest hit inverts again, and nothing errors.**
+
+Measured: **two hundred and eighty-eight of two hundred and eighty-eight
+anchored hits have it as the SUBJECT; none are body-only.** The day that second
+figure is nonzero, the anchor is broken in exactly the old way. **The counts are
+spelled in words in the playbook** so that re-running the census does not count
+the paragraph that reports it — the born-green failure from 2s, pre-empted this
+time rather than discovered afterwards.
+
+**What this actually establishes is the venue split, on grounds better than
+venue.** The anchor's correctness rests on a WRITING CONVENTION. The sha pair
+rests on nothing — prose cannot imitate a binary's hash. I had put the identity
+check in CLAUDE.md and the anchor in the playbook for the ordinary reason
+(recurrence, one subsystem); it turns out to be right for a stronger one, which
+is that **only one of the two can go stale by someone writing a sentence.**
+
+### A correction the peer made about its own presentation, worth keeping
+
+It conceded the v411 point and named the mechanism better than I did: it had put
+a control in a row of four numbers, and **a control sitting in a series looks
+like data.** That is the caption failure wearing a table — the claim is upstream
+of the reading, and the table's shape does the asserting. Worth remembering next
+time I build a four-row table where one row is a negative control.
+
+It has gone quiet on the thread deliberately, on the grounds that every round so
+far produced a measurement and this one produced a retirement condition, which is
+a place to stop rather than a reason to continue. Correct, and I am not
+re-opening it.
+
+### STATE
+
+**Gate GREEN with the canary ARMED and passing, on a freshly rebuilt binary at
+`e3cd693df9e8`** — the strongest verdict of the day, because it is the only one
+where the canary was not a skip. Three tracked open regressions unchanged.
+frankb-56 working, nld parked. franks-ee idle by choice. **Eight items, one
+block, in 2o.** He is back tomorrow.
