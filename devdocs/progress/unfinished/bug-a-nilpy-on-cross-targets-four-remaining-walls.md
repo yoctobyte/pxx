@@ -3,7 +3,7 @@ track: A
 prio: 85
 type: bug
 blocked-by: []
-summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **BUT THE UNIT GAPS ARE NOT WHAT BLOCKS ESP: `print('hi')` under NilPy is ~1.74 MB on i386 and ~3.14 MB on arm32, against an ESP32-C3 SRAM region of 262,144 bytes TOTAL — 6.6x to 12x over, for the smallest program there is. The ranked prerequisite is wiring DCE for the NilPy frontend — and DCE has TWO gates, BOTH blocking: dce.inc:226 refuses any non-x86-64 target (the one an ESP build actually hits, and the expensive half — per-backend call/jmp re-patching) and dce.inc:241 refuses any non-Pascal/C frontend. It cuts 71% of code when it runs (Pascal control). Cheap diagnostic first: measure NilPy's live/dead ratio on x86-64, which needs only the frontend gate lifted.** ~53 .npy tests stay cross-blind on everything but arm32."
+summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **BUT THE UNIT GAPS ARE NOT WHAT BLOCKS ESP: `print('hi')` under NilPy is ~1.74 MB on i386 and ~3.14 MB on arm32, against an ESP32-C3 SRAM region of 262,144 bytes TOTAL — 6.6x to 12x over, for the smallest program there is. The ranked prerequisite is wiring DCE for the NilPy frontend — and DCE has TWO gates, BOTH blocking: dce.inc:226 refuses any non-x86-64 target (the one an ESP build actually hits, and the expensive half — per-backend call/jmp re-patching) and dce.inc:241 refuses any non-Pascal/C frontend. It cuts 71% of code when it runs (Pascal control). DONE (a5419adbf): NilPy's real ratio is 44.7% of bytes (1,347,352 -> 745,240), verified by a self-differential over 29 .npy programs with differ=0 and zero DCE-only failures. IT STILL DOES NOT FIT: ~881 KB projected for riscv32 against ~400 KB of usable C3 SRAM, over at every ceiling. ESCALATED as decide-is-a-whole-python-program-meant-to-fit-inside-an-esp32; do not price the riscv32/xtensa re-patching work until that is answered.** ~53 .npy tests stay cross-blind on everything but arm32."
 status: unfinished
 owner: claude-A
 ---
@@ -487,4 +487,67 @@ If after (1) a NilPy image still cannot fit 262,144 bytes, the fork is not an
 engineering one and belongs to the owner: SRAM-only bare metal may simply be the
 wrong target for the full NilPy runtime, and external flash / PSRAM / a reduced
 runtime profile are different products rather than different implementations.
+
+## 2026-09-17 (frankS) — (1) IS DONE: DCE wired for NilPy and MEASURED
+
+`a5419adbf`. The frontend gate is lifted (`IsNilPyFrontend`, added to the one
+assignment `defs.inc` names, plus a term in `dce.inc`). Measured on x86-64,
+`print('hi')`, the smallest NilPy program there is:
+
+    bodies 1889   live 696 (739,617B)   dead 1189 (603,451B)
+    code 1,347,352 -> 745,240           = 44.7% of BYTES, 63% of bodies
+
+**NilPy's real ratio is 44.7%, not the 71% the Pascal control gave.** The Pascal
+number does not transfer and is retired as an estimate for this work.
+
+### Correctness — because a code-DELETION pass cannot be verified by one program
+
+`print('hi')` is exactly the shape that certifies such a pass as correct: it
+exercises almost nothing, so a dropped live body cannot show. Self-differential
+over the `.npy` corpus, same source `--dce` off vs on, stdout AND exit code must
+match — no CPython oracle, because the question is *"did DCE delete something
+LIVE"*, not *"is the answer right"*:
+
+    compared=29   differ=0   skipped=11
+
+**The skip class then had to be broken down, because the first instrument was
+blind in the direction of the hypothesis**: it recorded a `--dce`-ONLY compile
+failure as a "skip", which is precisely the failure being tested for. Classified:
+
+    compile-fail in BOTH modes (pre-existing, unrelated) = 9
+    timed out                                            = 2
+    DCE-ONLY failures                                    = 0
+
+### AND IT DOES NOTHING FOR ESP — read this before quoting the number
+
+`dce.inc:226` refuses a non-x86-64 target BEFORE the frontend gate, so an ESP
+build never reaches what `a5419adbf` changed. (1) was always diagnostic: it runs
+on the target DCE already supports and answers whether the approach is viable at
+all. Step (2) — teaching DCE riscv32/xtensa reference re-patching — is untouched
+and is the larger job.
+
+### THE ANSWER (1) WAS ASKED TO PRODUCE: it does not fit, at any ceiling
+
+Projecting the measured 0.553 factor onto i386's 1,593,196 gives ~881 KB for
+riscv32 (bulkier than i386):
+
+| ceiling | source | over by |
+| --- | --- | --- |
+| 262,144 | the region we map today | 3.4x |
+| ~400 KB | `docs/targets/esp32.md:118`, C3 usable SRAM | ~2.2x |
+| ~512 KB | ESP32-S3 | ~1.7x |
+
+Quote the **400 KB** row, not our own 262,144 — our map leaves ~140 KB unused
+and "widen the map" would otherwise retire the argument without touching it. The
+conclusion survives every ceiling, on the smallest program that exists.
+
+**So this is no longer an engineering question and it is ESCALATED**:
+`decide-is-a-whole-python-program-meant-to-fit-inside-an-esp32` (Track U, p70).
+Flash/PSRAM and a reduced runtime profile are different PRODUCTS rather than
+different implementations, which is what makes it the owner's. **Do not price
+(2) until that is answered** — per-backend re-patching is real work spent on an
+image that would still be ~2x over.
+
+Both `2b2ec3fee` and `a5419adbf` are **inert until the next pin** (v411,
+`8d9d69bdc`, predates both).
 

@@ -28381,3 +28381,45 @@ no null row to warn you** — the wall really did fall, the commit is real, the
 green is real, and nothing anywhere reports that the goal is no closer. That is
 why it needs saying out loud in the resolution rather than being left for the
 next probe to discover.
+
+### …AND THE INSTRUMENT YOU SCOPE WITH IS NOT EXEMPT FROM IT
+
+Extension, same day, same ticket, and it caught the author of the section above
+while he was writing it — which is the argument for the extension rather than a
+separate entry.
+
+Having established that a single ticket's named wall hides the expensive one, I
+went to price the next prerequisite and reported: *"DCE is not wired for the
+NilPy frontend — that is the prerequisite."* Sourced from `dce.inc:241`,
+confirmed by the compiler's own words, and **incomplete in the direction that
+costs work.** `DceRun` refuses a non-x86-64 target at `dce.inc:226`, BEFORE it
+ever looks at the frontend. An ESP build never reaches the gate I named. Acting
+on my recommendation would have wired NilPy into DCE and delivered nothing for
+ESP.
+
+**The mechanism is the section above, one level in.** Each probe saw exactly one
+gate, because a first refusal hides the second:
+
+    --dce-report t.py                    -> off: only the Pascal and C frontends...
+    --dce-report --target=i386  x.pas    -> off: target is not x86-64
+    --dce-report --target=esp32c3 x.pas  -> off: target is not x86-64
+
+Neither probe alone can show that a second refusal sits behind the first. The
+instrument was honest, current, correctly parameterised, and reported the first
+of two guards — **the same property the section above is about, operating on the
+tool being used to measure it.** That is not irony; it is the reason the class is
+hard. An instrument that reports first-failures cannot exempt itself from
+first-failure blindness, and a seat is least suspicious of a probe at the exact
+moment it is using that probe to be suspicious of something else.
+
+**The cheap discharge: when a probe reports a refusal, read the refusal CHAIN in
+source, not just the message you got.** One `sed -n` over `DceRun`'s preamble
+shows both guards in the order they fire. A message names the first condition
+that matched; it says nothing about what would have matched next — and a
+sequence of `else if` is the shape where that gap is invisible from the outside.
+
+**And vary the axis the probe FIXES.** Both my probes held one thing constant
+and it was the wrong thing: I varied the frontend while holding x86-64, then
+varied the target while holding Pascal, and never held both away from the
+default at once. `--target=esp32c3` with a `.py` source — the actual
+configuration under discussion — was the one combination neither probe covered.
