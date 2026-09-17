@@ -5015,3 +5015,58 @@ report is what he gets, and the decision is his.
 Gate GREEN as of 2k, three tracked open regressions, nothing landed. One CLAUDE.md
 sentence corrected. **Eight for the 18th**, item seven materially stronger.
 Awaiting frankb-56's state.
+
+## Check-in 2m — the evidence I landed had a selection bias, named by its own author: the sample cannot contain a blocked seat
+
+franks-ee read the landed CLAUDE.md text and raised one thing **without editing
+it**, which is the second time today it has declined a licence it would have been
+entitled to feel it had: *"A peer cannot license a CLAUDE.md edit and that holds
+when the peer is the author of the finding — arguably most then, since I am the
+one who would least notice overreach in my own claim."*
+
+**THE POINT, AND IT IS RIGHT.** My evidence sentence read *"15, 25 and 30
+`is_error` blocks against ZERO, ZERO and ZERO actual blockages."* **All three
+seats were ANSWERING — that is how the rows exist at all.** So the sample is
+selected by the very property under test and **cannot contain a blocked seat**.
+A real user denial *does* arrive as `is_error: true`. What the three rows can
+establish is that in a WORKING seat the flag is dominated by deliberate nonzero
+exits and a nonzero COUNT is not evidence of a stall; what they cannot establish
+is anything about a blocked transcript.
+
+**The rule as landed was already safe** — the ordering is named as the survivor
+and ordering is exactly what covers the blocked case. **The exposure was the
+memorable half:** "three seats, zero blockages" is what a reader carries away,
+and carried far enough it becomes *"`is_error` is never a blockage"*, which is
+the one reading that would hurt.
+
+**Closed as a CLAUSE on the evidence, not a new sentence** — *all three were
+answering, so the sample cannot contain a blocked seat and is silent about one
+by construction; a real denial DOES arrive as `is_error: true`; that is
+precisely why the COUNT is the wrong instrument and the ordering is the right
+one.* Thirty words, and they convert the memorable half from a false general
+claim into the true specific one. franks-ee explicitly declined to argue for
+more text in a file every session pays for at startup, which is the right
+instinct and is why the clause is a clause.
+
+**This is the census-built-on-its-own-hypothesis rule in its SELECTION form**,
+and the file has it in the filter form (*a census whose filter restates the
+hypothesis*) and the control form (*a control from the wrong population*) but
+the population here was not filtered by me at all — **it was assembled by who
+could answer.** I am not promoting that observation: it is one instance, and
+the general rule already covers it once you see it. Banked here.
+
+### AND THE BIT ABOUT HOW THE THIRD SEAT HAPPENED
+
+franks-ee's own framing, kept because it is about the promotion bar itself:
+frankb-56's row was in my hands **four hours** before franks-ee's arrived, the
+pattern was invisible from either row alone, and **neither of us could have
+produced the third — I was the third.** *"Two seats is a coincidence, three is a
+class."* Recurrence in practice looks like nobody holding all the evidence,
+which is an argument for sending a peer your numbers even when they are not a
+finding yet.
+
+### STATE
+
+Gate GREEN as of 2k, three tracked open regressions, nothing landed but the
+clause. franks-ee has pulled, so its 15-commit gap is closed; tree clean,
+nothing in flight. **Still awaiting frankb-56's state.** Eight for the 18th.
