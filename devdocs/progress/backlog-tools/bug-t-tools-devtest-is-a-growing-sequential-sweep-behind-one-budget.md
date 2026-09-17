@@ -74,3 +74,28 @@ it from. `600.1s` is censored, not a duration, and the 600 it replaced was
 itself derived from an idle box — *"a budget calibrated against a broken run is
 a budget that punishes the fix"*, which the class comment recorded before this
 happened and which recurred verbatim with "broken" replaced by "unloaded".
+
+## 2026-09-17 — ONE MEMBER OF THE SUM WAS 99.7% OF ONE FILE'S SCAN, and it is gone
+
+`host_dev_lib_skip_devtest.py` -- one script in this sweep -- was taking **over
+seventeen minutes on its own** and timing the whole job out at 1200.1s. It now
+runs in **4.8s**. The cause was a quadratic `^\s*uses` under `re.M` in
+`testmgr._USES_RE`, where one source (`compiler/builtin/pylib.pas`) accounted
+for 194.241s of a 194.8s total across 1902 files; see
+[[bug-t-host-dev-lib-skip-devtest-outgrew-its-budget-and-times-out-the-whole-guards-job]].
+
+**THIS DOES NOT CLOSE THIS TICKET AND THE ARGUMENT IS UNCHANGED.** The wall time
+is still the SUM of a set everyone is encouraged to add to, and the budget is
+still a constant; that a single member happened to hold a 1082x pathology says
+nothing about the next one. What HAS changed is the pressure: the immediate
+cause of the current red is fixed, so the sharding work is no longer racing a
+tier that cannot complete.
+
+**AND THE NUMBERS IN THE SUMMARY ABOVE ARE NOW STALE IN A WAY THAT MATTERS.**
+207s / 354.5s were measured 2026-09-01 and 09-06, BEFORE this pathology grew
+into the set. Any growth-rate argument built on those two points now has a third
+point that is not on the same curve, because one member's cost was a defect
+rather than a trend. **Re-measure the sweep before quoting 1.71x in five days as
+evidence for anything** -- it was honest when written and it is now a slope
+drawn partly through a bug.
+

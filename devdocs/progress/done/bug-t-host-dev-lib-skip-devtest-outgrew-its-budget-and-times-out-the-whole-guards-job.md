@@ -3,8 +3,8 @@ slug: bug-t-host-dev-lib-skip-devtest-outgrew-its-budget-and-times-out-the-whole
 type: bug
 track: T
 prio: 45
-status: open
-summary: tools/host_dev_lib_skip_devtest.py step 7 rescans >1500 recipes per run and now exceeds 1200s, timing out tools-devtest#00 and reddening any full tier
+status: done
+summary: FIXED 2026-09-17 — the cause was a QUADRATIC REGEX, not repetition: `_USES_RE` was `^\s*uses` under re.M, and `compiler/builtin/pylib.pas` alone was 194.241s of a 194.8s total over the 1902 sources scanned. `[ \t]*` makes it line-scoped: whole set 0.2s (1082x), step-7 leg 196s -> 2.01s, devtest 18 guards / 0 FAIL / 4.8s from a 1200.1s TIMEOUT. Match set unchanged, measured byte-identical on all 1902 files. THE PRESCRIBED FIX BELOW ("memoise the parse") WAS WRONG and is left standing as written: the scan opens 1902 DISTINCT files across 2562 jobs, so a memo removes a quarter of the calls and none of the cost — it was built, proved equivalent, measured at ~1x and reverted. ORIGINALLY: tools/host_dev_lib_skip_devtest.py step 7 rescans >1500 recipes per run and now exceeds 1200s, timing out tools-devtest#00 and reddening any full tier
 ---
 
 ## What
@@ -60,3 +60,10 @@ Found during the pin v411 tier and recorded in `8d9d69bdc` as one of three
 graded reds. It does not gate a pin — only the self-host fixedpoint does — but
 it reddens every full tier until fixed, and a tier that is red for a known
 tooling reason is a tier whose real reds are harder to see.
+
+## FIXED 2026-09-17 (frankb-56) — and BOTH prescribed shapes were wrong
+
+FIXED: the cause was not repetition but a QUADRATIC REGEX on one file. _USES_RE was `^\s*uses` with re.M -- `^` matches at every line start and `\s` matches newlines, so the scan restarts through blank lines from each line start. `[ \t]*` makes it line-scoped. Measured over the 1902 sources the guard opens: compiler/builtin/pylib.pas ALONE was 194.241s of a 194.8s total, the other 1901 files 0.6s; whole set now 0.2s, 1082x. Full step-7 leg 196s -> 2.01s (min of 3, interleaved). Devtest: 18 guards, 0 FAIL, 4.8s, from a 1200.1s TIMEOUT. THE TICKET'S PRESCRIBED SHAPE WAS WRONG AND SO WAS MY FIRST ATTEMPT: 'memoise the parse' was written, proved equivalent over 2399 files, and measured at ROUGHLY 1x -- the scan opens 1902 DISTINCT files across 2562 jobs, so a cache removes a quarter of the calls and none of the cost. Memo reverted rather than shipped beside the real fix. The stack sample named testmgr.py:1909 correctly and a stack says WHERE, never WHY; repetition and per-call cost land on the same line. Match set unchanged and MEASURED: names byte-identical on all 1902 files. Assertions untouched -- 0 false skips on a provisioned box, absent-roots control still fires on 11 jobs
+
+## Log
+- 2026-09-17 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
