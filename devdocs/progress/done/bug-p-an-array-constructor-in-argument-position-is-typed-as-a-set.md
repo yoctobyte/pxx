@@ -4,13 +4,13 @@ title: "`['x']` in argument position is typed as a set, so an `array of` overloa
 track: P
 prio: 55
 type: bug
-status: working
+status: done
 owner: frankS
 found-by: frankH
 created: 2026-09-11
 tags: [overload-resolution, open-arrays, sets, array-constructor]
 blocked-by: []
-summary: "A `[...]` constructor in an argument position is typed as a SET, so an `array of T` parameter could never be selected for one on the FREE-function path. NARROWED AND HALF-FIXED 2026-09-17 (`160684761`): the overload ranking is NOT blind, which this ticket and its handoff both assumed. `BracketCandRank` already encodes fpc's rule -- measured against a 72-row fpc 3.2.2 matrix -- and is consulted in exactly ONE place, `FindUMethOverloadAhead`, the METHOD path. Same two candidates, same literal: `o.P(['x'])` answers 2 byte-identically to fpc while the free `P(['x'])` refused. The rule existed and one of two doors was never wired to it. The SILENT arm is now closed by `RetagSetLitArgsForProc`, called from BOTH free-path doors -- the matcher AND `TryFillTrailingDefaults`, since a call that omits a trailing defaulted argument never reaches the matcher and wiring only the first left that spelling still reading `Length(c)` = 17297991344808736. Both `ExecuteProcess` rows this ticket was filed on now match fpc exactly (rc=4 and rc=2, against refused and 0); `Q([fA])` is unmoved at 1, structurally, because the retag runs only after the match is decided. STILL OPEN: the bare two-candidate refusal with NO defaults, where the match fails outright so no candidate is ever named and there is nothing to retag -- that needs the failed-match retry presenting the set literal as its element kind with the array channel forced."
+summary: "A `[...]` constructor in an argument position was typed as a SET on the FREE-function path, so an `array of T` parameter could never be selected for one. FIXED 2026-09-17 (`160684761`, `170197a54`). The diagnosis this ticket and its handoff both carried was wrong in a useful way: the overload ranking is NOT blind. `BracketCandRank` already encodes fpc's rule, measured against a 72-row fpc 3.2.2 matrix, and is consulted in exactly ONE place -- `FindUMethOverloadAhead`, the METHOD path. Same two candidates, same literal: `o.P(['x'])` answered 2 byte-identically to fpc while the free `P(['x'])` refused. One of two doors was never wired to a rule that already existed. Fixed in two parts, both on the free path: `RetagSetLitArgsForProc` where the matcher has already NAMED an array parameter (called from BOTH doors -- the matcher and `TryFillTrailingDefaults`, since a call omitting a trailing defaulted argument never reaches the matcher, and wiring only the first left that spelling reading `Length(c)` = 17297991344808736), and a failed-match RETRY presenting the literal as its element kind with `MatchArgArray` forced. Every measured row now matches fpc, including both `ExecuteProcess` rows this ticket was filed on (rc=4 and rc=2, against refused and 0) and the must-not-move `Q([fA])` = 1, which is safe STRUCTURALLY rather than by a guard: neither part runs where the set reading matched. FPC corpus 21/10/176 with ZERO per-unit verdict changes across all 207 units. INERT UNTIL THE NEXT PIN: `compiler/**`."
 ---
 
 # `['x']` is a set, even where only an array can go
@@ -230,3 +230,123 @@ fpc's own answer, and reads as fixed. It is not. Instrument the callee before
 believing that row.
 
 Rows n, c3, c4, c6, c7, c8 and Q are unmoved by that fix.
+
+## RESOLVED 2026-09-17 (frankS) — and the diagnosis was one layer up from where everyone looked
+
+### The ranking was never blind
+
+This ticket's "shape of the fix" and the 09-16 handoff both concluded that
+overload ranking could not see the constructor. It can. `BracketCandRank`
+(pasparser_call.inc) scores a bracket argument against a candidate's parameter,
+measured against a 72-row fpc 3.2.2 matrix over six candidate pairs x six
+element lists x both declaration orders, and it already encodes the rule fpc
+follows -- a set parameter beats an array for ORDINAL elements and is not
+viable for string or char ones.
+
+It is consulted in exactly one place: `FindUMethOverloadAhead`, the METHOD
+path. The decisive probe is two spellings of one call:
+
+```
+type TC = class ... P(const c: AnsiString) / P(const c: array of AnsiString)
+o.P(['x'])   fpc 2, pxx 2   -- `array count=1 [0]=x`, byte-identical
+P(['x'])     fpc 2, pxx REFUSES
+```
+
+The method path settles the question BEFORE parsing -- it reads the element
+class off the TOKENS and hands the chosen `Procs[]` row to
+`TryParseBracketArgForSlot`, so the argument is parsed as a constructor in the
+first place. The free path has no equivalent. That is the whole divergence, and
+it is `normalise-dont-special-case.md`'s sibling clause: **grep for the other
+spelling's HANDLER, not for the feature.**
+
+### Two parts, and TWO DOORS on the first one
+
+1. **`RetagSetLitArgsForProc`** -- once the matcher has NAMED an array parameter
+   for a set-literal node, that node is provably an array constructor, because a
+   set cannot bind to an open array at all. No appeal to what the elements are.
+   **It is called from two doors.** A free call whose candidate is named by
+   `TryFillTrailingDefaults` never passes through `MatchCallDelphiProcAddr`;
+   with the retag written into the matcher alone, the defaulted spelling still
+   reported `Length(c)` = 17297991344808736. Finding that cost a measurement,
+   not a reading.
+2. **A failed-match RETRY** in `MatchCallDelphiProcAddr`, for the arm where no
+   candidate is ever named, presenting the literal as its element kind.
+
+### Why `Q([fA])` is safe without a guard
+
+Both parts are reached only after the set reading has already lost: one runs
+after the match chose an array parameter, the other only when the match
+returned -1. So a matching set candidate is never displaced, and the row the
+previous attempt refused to regress stays at 1 **structurally**. That is the
+difference between this and "let the parameter type disambiguate", which is too
+wide and would have moved it.
+
+### `MatchArgArray` must be FORCED, or the retry picks the wrong candidate
+
+Presenting `['x']` as `tyChar` alone makes it compatible with the `AnsiString`
+parameter too -- char->string is a PREFERRED conversion at rank 1 -- so both
+candidates match, declaration order decides, and the answer is 1 where fpc says
+2. The channel is what refuses an array-shaped argument at a scalar parameter.
+A retry without it fails by choosing wrongly rather than by refusing, which is
+the quieter failure.
+
+### The rows
+
+All fpc 3.2.2 `-Mobjfpc`. "before" is pin v410 / this tree this morning.
+
+| row | before | after | fpc |
+| --- | --- | --- | --- |
+| `P(['x'])`, AnsiString + array pair (the repro above) | refused | **2** | 2 |
+| `P(['xy'])`, same pair | refused | **2** | 2 |
+| same pair + trailing `k: Integer = 0` | 1, then 2 with `count=17297991344808736` | **2, `count=1`** | 2 |
+| `set of Char` + array, `['x']` | 1 | 1 | 1 |
+| `set of Char` + array, `['xy']` | refused | refused | refused |
+| `array of AnsiString` alone, `['x']` | 2 | 2 | 2 |
+| `set of Char` alone, `['x']` | 1 | 1 | 1 |
+| **`Q([fA])`, TF set + `array of Integer`** | **1** | **1** | **1** |
+| `ExecuteProcess('/bin/sh', ['-c', 'exit 4'])` | refused | **rc=4** | rc=4 |
+| `ExecuteProcess('/bin/sh', ['x'])` | 0 | **rc=2** | rc=2 |
+
+The two `ExecuteProcess` rows are this ticket's own real-world examples, from
+the section arguing the silent arm mattered more than the refusal. Both now
+match fpc.
+
+### Corpus, expectation recorded before the run
+
+This change only WIDENS -- the retry fires solely after a failed match and the
+retag only on a parameter already chosen -- so no previously-matching call can
+start failing. Expected **unchanged or up; a DROP would mean the retag
+corrupted a node in a unit that used to compile.**
+
+Measured at `170197a54` over FPC's own compiler, three foreground chunks of a
+partition asserted to union exactly to the glob: **21 / 10 / 176, 207 rows, 207
+distinct units** -- and, joined per unit against the pre-fix sweep, **zero
+verdict changes in either direction.** That is the stronger claim: equal totals
+alone would permit two units swapping places.
+
+### Test
+
+`test/test_array_ctor_in_arg_position.pas`, 18/18 under fpc and pxx.
+
+**The LENGTH assertions are the test.** Checking which overload ran passes on
+the exact defect this file exists for -- the call selected the RIGHT candidate,
+returned fpc's own answer, and the callee read a set mask as an array handle. It
+holds all THREE doors (plain free call, default-fill door, method spelling)
+because the bug was one of them being unwired while the others worked, so a
+later change that re-breaks the free path cannot pass by fixing the spelling
+everyone tests. `Q([fA])` is in it as the must-not-move control. Positive
+control fires: pin v410 refuses the file outright, at the repro at the top of
+this ticket.
+
+### What is NOT claimed
+
+A `[...]` whose elements are mixed in any way other than string WIDTH answers
+`tyUnknown` and the retry does not run -- the ordinary diagnostic stands rather
+than a guessed element type. And the free path still has no equivalent of the
+method path's pre-parse bracket scoring; it reaches the same answers by retag
+and retry instead. Unifying the two doors onto one mechanism is a refactor this
+did not attempt, and the fixture above is what would catch it going wrong.
+
+
+## Log
+- 2026-09-17 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
