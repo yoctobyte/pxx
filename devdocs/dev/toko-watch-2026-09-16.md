@@ -5266,6 +5266,18 @@ the sentence that reverses it.
    names three times. **Nothing here is a fork for him**: no pin happens while
    he is away, by my own hard limit, and a pin is the first thing he does on
    return. So this is a SIZE on item 8, not a new question.
+   **ADDENDUM 2 — 2026-09-17 17:10, and it raises item 8's SEVERITY rather than
+   its count.** franks-ee landed `2de677672`, and I verified the positive control
+   myself end to end: `test/test_default_arg_typecheck_fail.pas` **compiles rc=0
+   under pin v410 and the binary SEGFAULTS** (rc=139, core dumped); at HEAD it is
+   refused rc=1, every line named, no binary written. So **the pin the whole
+   fleet is running on accepts a call whose argument types do not match, passes
+   the argument raw, and produces either a garbage value or a crash — with no
+   diagnostic.** The fix is `compiler/**` and inert until a pin. **This is still
+   not a ninth escalation and still not a reason for anyone to sit** — it is
+   fixed in source, it is one `make pin` away, and a pin is the first thing he
+   does on return. It belongs here because it changes what item 8 COSTS, not what
+   it asks.
 
 **Also standing, and NOT escalations:** franks-ee's `2f5fdda94` is `compiler/**`
 and inert until a pin. Neither that nor item 8 is a reason for a seat to wait;
@@ -5824,3 +5836,124 @@ Gate GREEN on `e3cd693df9e8`. Three tracked open regressions unchanged.
 **Today's three compiler fixes are through breadth with a zero delta.**
 frankb-56 working, `nld` parked. franks-ee asked, not judged. **Eight items, one
 block, in 2o.** He is back tomorrow.
+
+---
+
+## 2w — 2026-09-17 17:10 — franks-ee answered by landing a silent miscompile fix, and my own repro of it was a probe that lied
+
+franks-ee was not stuck. It answered the 17-hour health check by reporting
+`2de677672`, and the ticket I had just offered it — `[55]`, array constructor in
+argument position — **led one layer up into something considerably worse.**
+
+### The bug, verified here rather than accepted
+
+`TryFillTrailingDefaults`, the fallback that supplies omitted trailing default
+arguments, **selected its candidate on NAME and ARITY alone and never checked
+the types of the arguments the caller actually wrote.** It runs ONLY where the
+ordinary overload match has already refused — so **its entire population is
+calls that just failed type checking, and it bound them anyway, passing the
+argument raw.**
+
+I ran the positive control myself, both directions:
+
+| compiler | `test_default_arg_typecheck_fail.pas` |
+| --- | --- |
+| **pin v410** (`c599e8546121`) | **compiles rc=0** → binary **SEGFAULTS**, rc=139, core dumped |
+| **HEAD** (`578b158524a5`, rebuilt) | **refused rc=1**, every line named, **no binary written** |
+
+The positive fixture is **10/10 under HEAD and matches its `.expected`**. Gate
+`quick` **GREEN, 23 PASS**, `self-host fixedpoint` PASS (40s), **canary ARMED and
+passed (concurrent)**, `fixedpoint.log` clean. Sequence was serial: pull →
+rebuild (`converged after 1 round(s)`, `e3cd693df9e8` → `578b158524a5`) → gate
+alone.
+
+No overload needed, no set literal, no exotic type. A record passed where an
+`AnsiString` is declared, with a defaulted trailing parameter, is enough.
+
+### Why it survived, which is the part worth carrying
+
+**The check was never missing.** The same calls with the trailing argument
+WRITTEN OUT are refused correctly and always were — that spelling never reached
+the fallback. So the defect was *"one of two spellings of one call was not wired
+to the rule"*, which is `normalise-dont-special-case`'s sibling clause in its
+**grep-for-the-other-spelling's-HANDLER** form, and that clause's own CLAUDE.md
+note says it keeps being rediscovered at regression time instead of applied at
+fix time. **Third time today that a Track P defect has had that exact shape**
+(`$cfnptr`/`$cfntype`, `a931bef4d` vs `5c1db8c6b`, and now this).
+
+And it is **structurally unreachable by any corpus of correct programs**, because
+the fallback only runs on calls that already failed to match. A test suite of
+working code cannot contain it. That combination — right rule, one unwired door,
+invisible to correct programs — is why it sat there.
+
+### MY OWN REPRO WAS A PROBE THAT LIED, AND IT LIED BY BEING PLAUSIBLE
+
+Before running the authored fixture I hand-rolled the shape from the message:
+a three-`Int64` record passed to `function P(const c: AnsiString; k: Integer = 0)`.
+**It compiled rc=0 under the pin, ran cleanly, and printed `3`.** A small,
+sensible-looking integer. Had I stopped there I would have reported *"does not
+reproduce"* about a real and serious bug.
+
+It was not a false instance. **At HEAD my program is refused too** — same bug,
+same fallback, same fix catches it. What differed was only the CONSEQUENCE: the
+authored fixture's record shape makes `Length(c)` read bytes that crash, mine
+made it read bytes that happened to be a valid small length. **The defect's
+observable is a function of the victim's memory layout**, so a reduction of it is
+free to look completely healthy.
+
+This is CLAUDE.md's *"choose a probe whose right answer differs from the
+default"* arriving from an angle that rule does not name: here the collision is
+not with a default or a zero but with **a perfectly ordinary correct-looking
+answer**. The authored fixture is the right instrument and I should have reached
+for it first — it exists, it is in the tree, and it was written by the person
+who found the bug. **Prefer the repo's own fixture to a reconstruction from a
+message**, and where you do reconstruct, check whether the reconstruction can
+distinguish a fix from luck.
+
+### The fix's shape, and one thing it deliberately did NOT do
+
+One gate, `TrailingDefaultArgsAcceptable`, asking `MatchParamAccepted` — **the
+UNION predicate, deliberately, not a stricter one**, because anything this
+fallback refuses degrades to *"no overload matches"*, so **the only way the fix
+can fail is by being too WIDE.** Behind it, a fill of the argument side channels,
+without which `MatchArgNilOk`/`MatchArgProcAddrOk` both answer False and
+`CallsIt(@Sub)` / `TakesPtr(nil)` would be wrongly refused. Abstains on
+`tyUnknown`. One gate serves all three callers. **That is picking the failure
+direction on purpose**, which is the same discipline as the `*`-refusal in
+`5ce561a11`.
+
+### Two corrections it made, and a warning on `[55]`
+
+- **`[55]` is still open, unclaimed, and it did NOT claim it.** Its
+  default-parameter arm was never about sets — **it was this bug** — so pxx now
+  picks fpc's candidate there and still passes a set. **A bare re-run of that
+  repro prints fpc's own answer and reads as FIXED while the callee reads a
+  garbage length.** Flagged in the ticket in as many words. That is a booby trap
+  for the next taker and exactly the kind of thing that gets a ticket closed
+  wrongly.
+- It corrected two of frankb-56's banked conclusions from `d7946acb6` — the
+  named next probe cannot run (`a.ast` never fires on an aborting compile, and
+  there is no overload-matching topic), and the *"only a non-set-able literal may
+  be re-presented"* framing is refuted by a one-char literal, which folds as a
+  `Char` and still lowers correctly with one candidate. It messaged frankb-56
+  directly, which is the right route.
+- **Its wrapper said `exit 0` over `gate: RED (exit 1)` on its first run today.**
+  That rule earned its keep again; it grepped the log.
+
+### Process note it raised, no action
+
+`progress.sh check` told it its checkout was **34 commits behind**, which it only
+learned because that warning exists. It had measured everything BEFORE the pull,
+then rebuilt on the merged tree (3 of those commits touched `compiler/`) and
+re-gated, and the numbers held. **That is the PUSH → LET THE PULL SETTLE →
+REBUILD → MEASURE sequence run in the right order by a seat that noticed it was
+stale**, which is the failure mode this note has recorded twice against itself.
+
+### STATE
+
+Gate GREEN, 23 PASS, canary ARMED, on `578b158524a5`. Three tracked open
+regressions unchanged. **Both seats working; neither was ever blocked.** Item 8
+of the handover now carries this as ADDENDUM 2 — **severity, not a ninth
+question**: the pin the fleet runs on compiles a program that segfaults, the fix
+exists, and a pin is the first thing he does tomorrow. **Eight items, one block,
+in 2o.**
