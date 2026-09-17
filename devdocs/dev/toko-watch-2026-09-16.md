@@ -5163,3 +5163,97 @@ failure per subject and still nobody has built it, which is engineering and ours
 
 Gate GREEN (the valid one). Three tracked open regressions unchanged. Both seats
 working. **Eight for the 18th.** He is back tomorrow.
+
+---
+
+## 2o — 2026-09-17 12:35 — quiet tick, and THE HANDOVER LIST
+
+**Nothing to report.** No commits since 2n (`a4bd6c451`); no `compiler/` or
+`lib/` movement, so **no rebuild owed** — binary `ca7c039b4808` still matches
+`.pascal26.fixedpoint`. Pulled FIRST this time (2n's lesson), and only then
+started the gate, serially.
+
+`tools/gate.sh quick` **GREEN**, 22 PASS, `self-host fixedpoint` PASS (39s),
+**FPC seed canary SKIP** — `compiler/ unchanged, and seeded green at
+35ebaee75923`; **a skip, not a pass.** And per the playbook entry added at
+`97594dccf`, I read the gate's own `fixedpoint.log` rather than the verdict
+line: *"converged after 1 round(s) from pinned ... agrees with
+compiler/pascal26 (the binary the suite is testing with)"* — no
+concurrent-rebuild caveat, which is exactly the note that WAS there in 2n and
+that the summary line did not carry. This is the clean shape; 2n was not.
+
+`twatch.py --status` rc=0, T UP, **three tracked open regressions unchanged**
+(`crtl_reachability.py`, `tools-devtest#00`, `crtl_atexit.c`). franks-ee last
+committed 2026-09-16T23:16 and messaged this morning — alive, tree clean, idle
+by choice. frankb-56 last committed 2026-09-17T08:53.
+
+### THE EIGHT FOR THE 18TH — one place, so the handover is one read
+
+Grepped before writing this: **"Eight for the 18th" appears at lines 4743, 4829,
+4894, 4935, 5016, 5072 and 5165 and enumerates nothing.** The fullest list is at
+line 4053 and it says SEVEN; the eighth was introduced separately at line 4726.
+So the handover, as it stood, was an archaeology exercise across fifty blocks of
+a note that is over five thousand lines long and violates its own header. This
+block is the fix. **Read only this block; the rest is working.**
+
+Four are FORKS ONLY HE CAN SETTLE. Four are things I or a peer DID, each with
+the sentence that reverses it.
+
+**HIS CALL — forks of intent**
+
+1. **Do we want busybox's goal-5 claim to count the toolchain, or only the
+   produced program?** It builds and runs at **257 applets with no libc and no
+   crt**; the unity build links itself, static. The wording in the goal list is
+   *"without external libraries"*, and the honest answer depends on whether
+   `gcc` invoked as a linker for the non-unity path counts as one. One word from
+   him closes it. (Mechanism, because he wants it: pxx writes its own ELF but
+   cannot CONSUME an object, so the non-unity path ends in `gcc -o out obj/*.o`
+   against glibc.)
+2. **Which corpus arm does the FPC number mean — as-shipped, or with a type we
+   supply?** Two arms have been quoted interchangeably for days and they are not
+   the same population. Pick one and every future total is comparable.
+3. **Do we want a second breadth host — or, cheaper, borg's qemu brought to the
+   version the other boxes run?** Track T has run on ONE host since 2026-09-11.
+   Two of its reds do not reproduce anywhere else, and a third
+   (`bug-a-wait4-does-not-write-rusage-on-riscv32`) turns out to depend on that
+   host's **emulator version** rather than on our code: riscv32 under qemu here
+   gives `rusage=written`; borg is qemu 8.2.2, plexus 10.2.1. **This is not an
+   exculpation** — the oracle runs under the same emulator and prints `written`
+   on borg — which is why it is a question about the fleet and not a ticket.
+4. **Where does the `pgrep` rule belong?** It sits under *"Tokens are a
+   constraint"*, which is not where a seat looks for **how to wait for a job**.
+   The rule is right; its address is wrong. A move is a loosening-adjacent edit
+   to the file every session pays for at startup, so it is his.
+
+**MINE OR A PEER'S — each reversible in one line**
+
+5. **`tools/optdiff.skip`: I added `test_foreign_thread_exception_chain*`**
+   (line 91). Judgement call taken while he was out. **Reverse by deleting that
+   one line.**
+6. **`3eb0297f0` — frankb-56 edited a gate-wired correctness test I authored**
+   (`fix(T): py_surface`, 2026-09-14, `tools/py_surface_is_reachable.py`
+   +137 lines). The edit looks right to me and I did not contest it. The
+   question is **process, not code**: was that its edit to make on a row that
+   arms before a pin?
+7. **`no-full-suite.sh` reads PROSE — now three instances, two seats, two
+   doors.** Two of mine at commit time; franks-ee's one inside a *file edit*
+   (a python heredoc whose patch text quoted optdiff's glob). franks-ee's
+   sentence for it is the right one: **the hook is scanning a namespace that
+   contains descriptions of itself.** **NEITHER OF US LOOSENED IT** — tightening
+   is ours, loosening is his, and this is a loosening.
+8. **Track B's `lib-test` gate has been down under the pin since 2026-09-14**,
+   bundled deliberately with the **229/287 census-placement number** as ONE
+   item, because they have one cause. `make lib-test` stays red under
+   `$(PXX_STABLE)` until a pin: `e4c72bd15` postdates v410 by **18 minutes**.
+   Not a reason for anyone to sit — it is inert, not blocking — but it is the
+   first thing a pin clears.
+
+**Also standing, and NOT escalations:** franks-ee's `2f5fdda94` is `compiler/**`
+and inert until a pin. Neither that nor item 8 is a reason for a seat to wait;
+both are sentences for a resolution.
+
+### STATE
+
+Gate GREEN (the clean shape, verified in `fixedpoint.log`, not off the summary
+line). Three tracked open regressions unchanged. Both seats working. **The eight
+are now in one block.** He is back tomorrow, and this note gets deleted then.
