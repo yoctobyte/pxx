@@ -238,8 +238,9 @@ begin
     on from one measurement would leave the failing one unidentified. }
   else if EmitSharedMode then why := '--shared: .dynsym/GOT surface is unmeasured against this pass'
   else if DebugInfo then why := '-g line/frame tables carry code offsets'
-  else if (not IsPascalFrontend) and (not IsCFrontend) then
-    why := 'only the Pascal and C frontends are wired up so far'
+  else if (not IsPascalFrontend) and (not IsCFrontend) and
+          (not IsNilPyFrontend) then
+    why := 'only the Pascal, C and NilPy frontends are wired up so far'
   else if AsmEntryOff <> 0 then why := 'the .asm frontend overrides the entry point';
   if why <> '' then begin DceReportLine('off: ' + why); Exit; end;
 

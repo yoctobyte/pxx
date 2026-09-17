@@ -8731,6 +8731,11 @@ var
     languages" -- a different question that merely agrees on a two-frontend
     build. }
   IsCFrontend: Boolean;
+  { ...and the same for NilPy, spelled in the same ONE place for the same
+    reason. Exists because DceRun needs to ask "is this NilPy" rather than
+    "is this not Pascal and not C", which is a question about eleven other
+    languages that merely agrees on a three-frontend build. }
+  IsNilPyFrontend: Boolean;
   { PyLexAll is APPENDING to the token stream (a `.py` MODULE pulled in by an
     import) rather than lexing the main program: it must not reset TokCount or
     the shared token-char buffer (feature-nilpy-py-module-loader). }

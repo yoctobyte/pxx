@@ -2140,6 +2140,7 @@ begin
   IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isRust or isAda
                            or isZig or isLol or isWs or isF90 or isAlgol or isErl);
   IsCFrontend := isC;
+  IsNilPyFrontend := isNilPy;
 
   { NilPy string model: a NilPy `""` must be a real zero-length block, not nil,
     so `is None` can tell None from the empty string
