@@ -4893,3 +4893,45 @@ that is not up, and "are you alive" is the message the handbook says not to send
 
 Gate GREEN. Nothing moved. **Eight for the 18th**, unchanged. The shop is quiet
 and was watched.
+
+## Check-in 2k (2026-09-17 08:2x) — second still tick; asked both seats for their state rather than inferring it a third time
+
+Zero commits since 2j. Gate **GREEN**, fixedpoint PASS, canary **SKIP**.
+Three tracked open regressions unchanged, five tier failures per 2h.
+`twatch --status` exits **0** with the same breadth-STALE banner at 8h — **not a
+down verdict**, and nothing buildable has landed since 2026-09-16T22:15Z, so a
+healthy watcher still has nothing to publish. No gate widened.
+
+### I ASKED, BECAUSE NINE HOURS IS PAST WHERE INFERRING IS HONEST
+
+Both seats last committed ~23:16 and ~23:30. At 2j I read seven hours as
+ended-turn and said so; **that was an inference, and at nine hours the brief's
+own instruction applies** — ask the seat to check its transcript rather than
+judge from outside. Sent to both: filter on `is_error: true` rather than the
+string, read WHO refused, read WHEN relative to the newest success, and **"ended
+my turn" is a complete answer**. I said explicitly I would not ask again this
+watch if that is the answer.
+
+**This is the cheap half of the rule and I had been skipping it on a reading I
+could not support.** A blocked seat and a finished seat make identical silence;
+commit timestamps cannot separate them and neither can a pane. One message each
+settles it, and I have been substituting my own confidence for that message
+since 2j.
+
+Both messages carried facts rather than a ping: the breadth-stale state (so
+neither lands compiler work believing there is a cross-target verdict on this
+tree), the rv32/qemu finding, and for frankb-56 the standing offer of the
+unclaimed third P ticket. **No keys into any pane, no starting anything.**
+
+### FOR THE RECORD, TOLD TO BOTH RATHER THAN ONLY WRITTEN HERE
+
+I sent each of them my own 2h error — the native probe of a cross-target row —
+rather than only the corrected conclusion. Both have handed me corrections this
+watch and the traffic only works if it runs both ways; a seat that receives
+findings and never mistakes learns that the sender does not make them.
+
+### STATE
+
+Gate GREEN, nothing moved, awaiting two state replies. **Eight for the 18th**,
+unchanged. He is back tomorrow; the note is to be deleted then and the handover
+said out loud.
