@@ -158,7 +158,7 @@ skip	terecs20.pp	terecs	gap	REASON CORRECTED 2026-09-06 at compiler 0d77c1e48ea4
 pass	terecs21.pp	terecs	-	
 pass	terecs2.pp	terecs	-	
 pass	terecs3.pp	terecs	-	
-pass	terecs4.pp	terecs	-	
+fail	terecs4.pp	terecs	UNKNOWN-TAG:accepted-invalid	%FAIL test compiled
 pass	terecs5.pp	terecs	-	
 pass	terecs6.pp	terecs	-	
 pass	terecs7.pp	terecs	-	
