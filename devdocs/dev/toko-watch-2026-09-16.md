@@ -5257,3 +5257,83 @@ both are sentences for a resolution.
 Gate GREEN (the clean shape, verified in `fixedpoint.log`, not off the summary
 line). Three tracked open regressions unchanged. Both seats working. **The eight
 are now in one block.** He is back tomorrow, and this note gets deleted then.
+
+---
+
+## 2p — 2026-09-17 14:05 — quiet tick, and I audited my own handover block
+
+**Nothing new landed.** Zero commits since 2o (`7bb26b706`), and — the number
+that matters more — **zero commits touching `compiler/`, `lib/`, `test/` or
+`tools/` since 08:54.** Nearly four hours of no buildable work with both seats
+alive. borg is idle for the same reason it was idle this morning: the tree is
+idle, not the watcher.
+
+`twatch --status` rc=0, T UP, newest full tier 5h old at `2f290fdbfdb9`.
+**Three tracked open regressions, unchanged** (`crtl_reachability.py`,
+`tools-devtest#00`, `crtl_atexit.c`). `gate.sh quick` **GREEN**, fixedpoint PASS
+(39s), **canary SKIP** (`compiler/ unchanged, seeded green at 35ebaee75923`),
+and `fixedpoint.log` clean — *"agrees with compiler/pascal26 (the binary the
+suite is testing with)"*, no concurrent-rebuild caveat. Identical tree to 2o, so
+an identical verdict is what it should say.
+
+Messaged frankb-56: a health check carrying the four-hour fact, the ORDERING
+discriminator (newest `is_error` AFTER the newest success, not a count and not
+the string), and the Track P offer again. No keys into any pane.
+
+### THE PART WORTH THE TICK: I audited the block I wrote in 2o, and found two things
+
+A handover block is a HAZARD BLOCK — he obeys it and generates no signal if it
+is wrong. I built 2o's list out of fifty of my own blocks across a rolled
+context, which is exactly the population that goes stale. So I re-derived it.
+
+**1. `--grep 'pin v410'` fired on me, and I caught it — but only just.** Looking
+up item 8's timing, my first instrument was `git log --grep='pin v410'`. It
+returned **`09314adf6`, a `docs(C)` commit that merely QUOTES the pin in prose**,
+dated **2026-09-16T12:33**. Had I taken that as the pin, `e4c72bd15` (09-14
+21:03) would have read as landing **two days BEFORE** the pin instead of
+eighteen minutes after — **the conclusion inverts, not degrades.**
+
+Seven hits for exactly ONE real pin commit, and **four of the six prose hits are
+MY OWN watch blocks from this window.** CLAUDE.md names v410 as the worked
+example of this rule, and the instrument has been degraded further by the act of
+writing this watch down — which is the rule's own second half, arriving by my
+hand. The identity that cannot be imitated settled it in one command:
+`sha256sum stable_linux_amd64/default/pinned` = `c599e8546121`, matched against
+the commit subject that carries it.
+
+**Pin v410 is `764ee2ed2`, 2026-09-14T20:45:14.** `e4c72bd15` is 21:03:48.
+**Delta 18m34s. Item 8's number SURVIVES** — and it survives measured, not
+recalled.
+
+**And the mechanism behind item 8 is now measured rather than argued.**
+`e4c72bd15` touches `compiler/builtin/pylib.pas` and `compiler/cparser.inc` —
+no `lib/` at all. The question that leaves open is whether a BUILTIN is live or
+snapshotted, since bootstrap links the LIVE `compiler/builtin/`. The pinned
+binary answers for itself: `pinned --where` prints
+`stable_linux_amd64/default/builtin/   [builtin units]`, and that snapshot
+**differs** from the live `pylib.pas` (`d0b9b360aaf2` vs `321708e0b620`) and
+does not carry the later text. So the fix is genuinely inert under
+`$(PXX_STABLE)`. The same output prints `[MISSING]` for
+`../lib/rtl/platform/posix/` and `../lib/crtl/include/`, which fall through to
+the CWD-relative live tree. **That is the reach ledger confirmed from the tool's
+own mouth: `lib/**` LIVE, `compiler/builtin/**` SNAPSHOTTED.** I had been
+carrying it as an assertion.
+
+**2. A correction to 2o, and it is mine.** I wrote that franks-ee's `2f5fdda94`
+is *"`compiler/**` and inert until a pin"*. **It is not `compiler/**` only.** It
+touches `Makefile` (+23), `compiler/ir.inc`, and THREE test files. Only the
+`ir.inc` half is pin-gated; the Makefile row and the tests run against the LOCAL
+compiler and are **live on push**. "Inert until a pin" over-stated it in the
+direction that tells a reader to ignore something that is already running.
+**Corrected here; 2o's sentence is wrong and this supersedes it.**
+
+Not an escalation and not a CLAUDE.md edit — both rules involved are already in
+the file, correct and dated. This is them working, one of them at the last
+possible moment.
+
+### STATE
+
+Gate GREEN. Three tracked open regressions unchanged. Both seats alive, tree
+idle of buildable work for ~4h. **The eight for the 18th are in 2o, one
+block — with item 8's number now re-derived from the binary sha, and 2o's
+`2f5fdda94` sentence corrected above.** He is back tomorrow.
