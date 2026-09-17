@@ -27336,6 +27336,44 @@ same phenomenon, because an axis nobody enumerated is pinned. **If a second
 investigation on an unrelated subsystem produces it again, promote it as an
 extension of that clause and not as a new rule.**
 
+**THAT TRIGGER FIRED 2026-09-17, AND THE PROMOTION IS DONE IN THE FORM THIS
+SECTION PRESCRIBED** — an extension of *"isolation guards the RUN, not the
+ROUTE"* in CLAUDE.md, not a new rule. The second investigation is frankb-56's,
+Track P, on the Pascal conditional-directive evaluator: a different seat, a
+different lane, and no code in common with the variant-annotation evening above.
+Two instances, one day apart:
+
+- **The prepass bug, 2026-09-16 night.** Written up by that seat at the time.
+- **`5ce561a11`, 2026-09-17.** It expected a set constant built with `-` rather
+  than `+` to clear FPC's `nld.pas` wall. **It did not**, and the commit subject
+  says so in its own title: *"and it does NOT fix nld"*. The three-level
+  reduction varied the CONSTRUCT (`+` versus `-`) while holding fixed the axis
+  that decides the outcome — **how many units away the set's terms live**.
+  `supported_optimizerswitches` is declared in `cpuinfo.pas`, its terms
+  (`genericlevel1optimizerswitches`, `globtype.pas:487`) are one unit further
+  out, that is a SECOND probe hop, and probes do not nest.
+
+**The part that earns the promotion is not the recurrence, it is what the
+recurrence proves: the seat had hit this shape the night before and documented
+it, and knowing the rule did not fire it.** The real corpus caught it both
+times. A class that survives its own author remembering it is a class that
+needs a procedural answer rather than a warning, and the procedural answer is
+already in this section — run the candidate against the real failing artefact
+before believing a fixture.
+
+**Also worth keeping from the same message, because it is this file's other
+standing hazard arriving in a fresh subsystem:** that seat told me three hours
+earlier that the three corpus walls were *"one group, my lane"*, and corrected
+itself after measuring — **they are THREE CAUSES.** The grouping came from all
+three being conditional-directive refusals naming constants in one file, which
+is **a shared message format and a shared file, not a shared cause** — the
+diagnostic manufacturing the equivalence class, exactly as CLAUDE.md describes
+it. Measured: one PARKED behind the probe-nesting limit, one FIXED
+(`5c1db8c6b`), one **not ours to fix and not a defect** (`sizeof` of a record
+type, refused by design because there is no layout during `LexAll`, and the
+record is `TDoubleRec` so it sits behind the 140-unit wall regardless). Net
+units: **zero — the sixteenth consecutive null**, predicted before the run.
+
 
 ### THE COMPLEMENT: A PROBE THAT FAILS TO REPRODUCE IS EVIDENCE, AND THE PAIR THAT BRACKETS THE BOUNDARY BEATS THE ONE THAT REPRODUCES
 

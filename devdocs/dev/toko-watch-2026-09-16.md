@@ -5443,3 +5443,88 @@ Gate GREEN. Three tracked open regressions unchanged. **frankb-56 not blocked an
 now working a named group; franks-ee idle by choice.** Track P has exactly ONE
 open item and it has a warning attached. The dispatch table is marked dead. The
 eight for the 18th are in 2o. He is back tomorrow.
+
+---
+
+## 2r — 2026-09-17 15:05 — frankb-56's group landed, corrected ITSELF, and tripped a promotion trigger
+
+Verified on my own instruments first: `5ce561a11` (14:33) and `5c1db8c6b`
+(14:39) are both ancestors of origin/master; `a931bef4d` (09-16) is the
+expression-path sibling it names. borg has already published
+`5ce561a111d3 RED (native)`.
+
+### It corrected itself before I could be wrong about it
+
+Three hours ago it told me the three corpus walls were *"one group, my lane"*.
+It came back after measuring: **they are THREE CAUSES.** The grouping came from
+all three being conditional-directive refusals naming constants in
+`x86_64/cpuinfo.pas` — **a shared message format and a shared file, not a shared
+cause.** That is CLAUDE.md's *"a diagnostic can manufacture the equivalence class
+itself"* in a fresh subsystem, and the seat named the parallel to my dispatch
+table unprompted: a plausible grouping read as state.
+
+1. **nld / `supported_optimizerswitches` — PARKED, not fixed.** The set constant
+   is in `cpuinfo`; its terms (`genericlevel1optimizerswitches`,
+   `globtype.pas:487`) are one unit further out. **A second probe hop, and probes
+   do not nest.** The limit is documented in `PasCondSetConst`'s own comment —
+   written by that seat yesterday — calling it *"the correct failure direction"*,
+   because a set missing one member answers `in` with a confident False. Lifting
+   it needs a probe stack and removal of the `ProbeDepth` re-entrancy guard:
+   **a design step, not a fix, and correctly not started at the end of a
+   session.**
+2. **hlcgobj / `aintmax` — FIXED** (`5c1db8c6b`): `sizeof` of a LOCAL VARIABLE in
+   a directive, where the arm resolved type names only. This is the
+   conditional-directive SPELLING of `a931bef4d`, which fixed `sizeof` of a
+   PARAMETER on the expression path — **same feature, different door.** It says
+   plainly it did NOT find it by grepping for the sibling; **the corpus named
+   it.** That is CLAUDE.md's own sibling-spelling rule failing to fire at fix
+   time and being caught at regression time, which is what that rule predicts
+   about itself.
+3. **nadd / `bestrealrec` — NOT OURS AND NOT A DEFECT.** `sizeof` of a RECORD
+   type, refused by design (no layout during `LexAll`), and the record is
+   `TDoubleRec`, so it sits behind the 140-unit wall regardless.
+
+`5ce561a11` itself: a conditional set constant can be built with `-`, not only
+`+`. `cpuinfo.pas:205` unions three named constants then subtracts
+`[cs_opt_level1..3]`. **`*` is REFUSED rather than folded, deliberately** — it
+binds tighter, so a left-to-right fold computes `(a+b)*c` where the source wrote
+`a+(b*c)`. Fourteen rows byte-identical to fpc 3.2.2. Net units **ZERO — the
+sixteenth consecutive null, and it said so before running.**
+
+### The promotion trigger, and it was written in advance by someone else
+
+It expected `5ce561a11` to fix nld. It did not. **The three-level reduction
+varied the CONSTRUCT (`+` versus `-`) while holding fixed the axis that decides
+the outcome — how many units away the terms live.** It had hit the identical
+shape the night before on the prepass bug and **written it up itself**, and
+knowing the rule did not fire it; the corpus caught it both times.
+
+`debugging-playbook.md`'s section *"A MINIMAL CASE FAILS BY SCOPE, NOT BY BEING
+WRONG"* had declined promotion in its own words and left a criterion:
+**"if a second investigation on an unrelated subsystem produces it again,
+promote it as an extension of that clause and not as a new rule."** A different
+seat, a different lane, no code in common with the variant-annotation evening
+that section was built from. **The criterion is met, so I promoted it — in
+exactly the prescribed form**, as an extension of *"isolation guards the RUN,
+not the ROUTE"* rather than a new rule, and appended both of frankb-56's rows to
+the playbook section with the trigger recorded as fired.
+
+**Saying the decision out loud, per CLAUDE.md:** promoted on RECURRENCE, not on
+quality — two independent subsystems, two seats. And the sentence that earns the
+line is not the recurrence but what it proves: **the author had documented this
+exact shape the previous night and it happened again anyway.** A class that
+survives its own author remembering it needs a procedural answer, not a warning,
+and the procedural answer already existed — run the candidate against the real
+failing artefact before believing a fixture.
+
+**This was not a peer asking me to edit CLAUDE.md**, which I have declined twice
+this window. frankb-56 said *"nothing needed from you"*. The trigger is a written
+criterion in a repo doc, I verified on my own instruments that it is now met, and
+the edit is a STRENGTHENING.
+
+### STATE
+
+Gate: not re-run for this block; `compiler/` moved, so the next tick rebuilds
+FIRST and then gates, serially — 2n's lesson, not to be dropped twice. Three
+tracked open regressions unchanged as of 14:05. frankb-56 working. franks-ee
+idle by choice. **The eight for the 18th are in 2o.** He is back tomorrow.

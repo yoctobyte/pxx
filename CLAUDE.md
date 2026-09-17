@@ -969,6 +969,29 @@ holding the subject fixed and let the asymmetry be the control — a second
 spelling that must NOT be rescued, or the interesting element moved so a
 different path reaches it. Worked: debugging-playbook.md, "ISOLATION GUARDS
 AGAINST THE RUN, NOT AGAINST THE ROUTE".
+**AND THE THIRD FORM IS THE PROBE THAT IS ALONE, REACHES THE SUBJECT, AND TAKES
+THE RIGHT ROUTE — AND STILL PINS AN AXIS NOBODY ENUMERATED.** A minimal case
+fixes every axis you did not think about, and those are exactly the axes you
+cannot list, because if you could you would have varied them. **So "I reduced it
+to ten lines" is evidence the ten lines reproduce SOMETHING, never that they are
+the same phenomenon.** Promoted here 2026-09-17 by the trigger the playbook
+section wrote for itself — *"if a second investigation on an unrelated subsystem
+produces it again"* — and it is an extension of the clause above, not a new
+rule. First subsystem: five instances in one evening on variant annotation,
+entangled, each found while chasing the previous. Second, independent, a
+different seat and a different lane: frankb-56 expected a conditional-directive
+fix to clear FPC's `nld.pas` and **it did not** — its three-level reduction
+varied the CONSTRUCT (`+` versus `-`) while holding fixed the axis that actually
+decides the outcome, **how many units away the set's terms live**, which is a
+second probe hop, and probes do not nest. **It had hit the identical shape the
+night before and written it up itself, and knowing the rule did not fire it;
+the real corpus caught it both times.** That is the finding: this class is not
+prevented by remembering it. **Where a real failing artefact exists, run the
+candidate against THAT before you believe a fixture** — mechanism from whoever
+has the source, verdict from whoever has the failing tree — and phrase a
+fixture result as a measurement of the fixture, never as a recommendation for
+the tree. Where a minimal case keeps failing to transfer, look for a fix one
+layer down, where the distinction that keeps escaping you does not exist.
 
 **A positive control is not enough on its own — a guard must also be AIMED and
 READ.** Assert that the thing under test actually RAN before you compare its
