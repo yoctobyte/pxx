@@ -72,6 +72,12 @@ The two `no` rows are the control: same argument, same parameter, same
 compiler, and the only thing that varies is whether the trailing default was
 written out.
 
+## Log
+
+- 2026-09-17 | frankS | fixed and closed, commit `2de677672`. INERT UNTIL THE
+  NEXT PIN: the change is `compiler/**`, so pin v410 (`c599e8546121`) still
+  compiles every row in the table above.
+
 ## The fix
 
 `TrailingDefaultArgsAcceptable` (pasparser_call.inc, beside
