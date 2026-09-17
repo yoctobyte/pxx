@@ -27,7 +27,22 @@ program test_p_a_conditional_directive_can_test_in_over_a_set_constant;
   deferred, not a defect. That control must not compile, so it is asserted by
   the Makefile row beside this one.
 
-  Byte-identical to fpc 3.2.2 on all 10 rows below, measured. }
+  AND SET DIFFERENCE IS PART OF THE SAME FEATURE, NOT A NEIGHBOUR. FPC's
+  supported_optimizerswitches (x86_64/cpuinfo.pas:205) is three named constants
+  joined with `+` and then `- [cs_opt_level1,cs_opt_level2,cs_opt_level3]`,
+  with its own source comment saying why it takes them back out. A walk that
+  knows only `+` does not merely decline that shape -- wired naively it would
+  OVER-APPROXIMATE it, and an over-approximating set answers `yes` for an
+  element the program removed deliberately. The REMOVED_* rows below are the
+  ones that can fail; the present-after-difference rows cannot.
+
+  `*` (intersection) is deliberately absent and is REFUSED by the walk rather
+  than folded: it binds tighter than `+` and `-`, so a left-to-right fold would
+  compute (a + b) * c where the source wrote a + (b * c). Same reason as the
+  explicit-value enum above -- a wrong set does not fail, it takes the other
+  branch.
+
+  Byte-identical to fpc 3.2.2 on all 14 rows below, measured. }
 var fails: Integer;
 
 procedure Check(const nm: AnsiString; got, want: Boolean);
@@ -46,6 +61,10 @@ const
   gempty = [];
   grange = [s1..s4];
   glast = [s0, s2, s6];  { the interesting element is LAST }
+  gbig = [s0, s1, s2, s3, s4];
+  gdrop = [s1, s4];      { s4 is LAST in the subtrahend, s1 is first }
+  gdiff = gbig - gdrop;  { the shape cpuinfo.pas:205 has }
+  gmix = g1 + grange - gdrop;   { `+` then `-`, left to right }
 
 { A member of the FIRST union term. }
 {$if (s0 in gu)}
@@ -94,6 +113,31 @@ const
 {$else}
   ABSENT_FROM_LAST = False;
 {$endif}
+{ SET DIFFERENCE. A member the subtraction did NOT touch survives... }
+{$if (s2 in gdiff)}
+  SURVIVES_DIFF = True;
+{$else}
+  SURVIVES_DIFF = False;
+{$endif}
+{ ...the FIRST element of the subtrahend is gone... }
+{$if (s1 in gdiff)}
+  REMOVED_FIRST = True;
+{$else}
+  REMOVED_FIRST = False;
+{$endif}
+{ ...and so is its LAST, which a fold keeping only the first term would leave. }
+{$if (s4 in gdiff)}
+  REMOVED_LAST = True;
+{$else}
+  REMOVED_LAST = False;
+{$endif}
+{ `+` and `-` in one expression, applied left to right: g1 = [s0,s1] unioned
+  with grange = [s1..s4], then [s1,s4] taken out, leaves s0, s2, s3. }
+{$if (s1 in gmix)}
+  MIXED_REMOVED = True;
+{$else}
+  MIXED_REMOVED = False;
+{$endif}
 { `in` composes with `and`, at relational precedence: both sides must be
   evaluated as memberships before the `and` sees them. }
 {$if (s1 in g1) and (s3 in g2)}
@@ -120,6 +164,10 @@ begin
   Check('ABSENT_FROM_LAST', ABSENT_FROM_LAST, False);
   Check('BOTH_IN', BOTH_IN, True);
   Check('NOT_MEMBER', NOT_MEMBER, True);
+  Check('SURVIVES_DIFF', SURVIVES_DIFF, True);
+  Check('REMOVED_FIRST', REMOVED_FIRST, False);
+  Check('REMOVED_LAST', REMOVED_LAST, False);
+  Check('MIXED_REMOVED', MIXED_REMOVED, False);
   WriteLn('fails=', fails);
   WriteLn('CONDSET OK');
 end.

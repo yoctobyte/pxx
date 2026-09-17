@@ -1735,6 +1735,19 @@ begin
   for i := 0 to 31 do dst[i] := dst[i] or src[i];
 end;
 
+procedure PasCondMaskSubtract(var dst: array of Byte; var src: array of Byte);
+{ Set DIFFERENCE, the sibling of the union above. FPC's own
+  supported_optimizerswitches (x86_64/cpuinfo.pas:205) joins three named set
+  constants with `+` and then takes `- [cs_opt_level1,cs_opt_level2,
+  cs_opt_level3]` back out, with its own comment saying why -- so a walk that
+  knows only `+` does not merely miss this constant, it would OVER-APPROXIMATE
+  it, and an over-approximating set answers `yes` to an `in` test for an element
+  the program removed on purpose. Declining was the only safe alternative. }
+var i: Integer;
+begin
+  for i := 0 to 31 do dst[i] := dst[i] and (not src[i]);
+end;
+
 procedure PasCondPushBool(b: Boolean);
 begin
   if PasCondValueCount >= 64 then PasCondError('conditional directive expression overflow');
@@ -2167,6 +2180,7 @@ var k, p, elo, ehi: Integer;
     ev: Int64;
     term: array[0..31] of Byte;
     ok, closed: Boolean;
+    op: Char;   { the separator BEFORE the term about to be read: '+' or '-' }
 begin
   PasCondSetConstIn := False;
   if (nm = '') or (depth > 8) then Exit;
@@ -2178,6 +2192,7 @@ begin
       PasCondMaskClear(mask);
       p := k + 2;
       ok := True;
+      op := '+';   { the first term unions onto an empty mask, which is itself }
       while ok do
       begin
         if (p < hi) and (Tokens[p].Kind = tkLBrack) then
@@ -2219,20 +2234,38 @@ begin
               else ok := False;
             end;
           end;
-          if ok then PasCondMaskUnion(mask, term);
+          if ok then
+          begin
+            if op = '-' then PasCondMaskSubtract(mask, term)
+            else PasCondMaskUnion(mask, term);
+          end;
         end
         else if (p < hi) and (Tokens[p].Kind = tkIdent) then
         begin
           PasCondMaskClear(term);
           if PasCondSetConstIn(PasCondTokText(p), lo, hi, term, depth + 1) then
-          begin PasCondMaskUnion(mask, term); Inc(p); end
+          begin
+            if op = '-' then PasCondMaskSubtract(mask, term)
+            else PasCondMaskUnion(mask, term);
+            Inc(p);
+          end
           else ok := False;
         end
         else
           ok := False;
         if ok then
         begin
-          if (p < hi) and (Tokens[p].Kind = tkPlus) then Inc(p)
+          { `+` and `-` share one precedence and associate left to right, so a
+            straight fold is correct for them. `*` does NOT: it binds tighter,
+            and folding it left to right here would silently compute
+            (a + b) * c where the source wrote a + (b * c). No set constant in
+            the corpus uses it, so this declines rather than guessing -- the
+            same direction the element walk above takes, and for the same
+            reason: a wrong set does not fail, it takes the other branch. }
+          if (p < hi) and (Tokens[p].Kind = tkPlus) then
+          begin op := '+'; Inc(p); end
+          else if (p < hi) and (Tokens[p].Kind = tkMinus) then
+          begin op := '-'; Inc(p); end
           else if (p < hi) and (Tokens[p].Kind = tkSemicolon) then
           begin
             PasCondSetConstIn := True;
