@@ -4744,3 +4744,89 @@ dashboard, one is T's own devtest. **Eight for the 18th.** Also for the record:
 v409's *"17 red"* is **13 shards of ONE subject** (`test-uforth#src:tools/
 compiler_srchash.sh@1..13`) plus four others, so it is about five subjects, not
 seventeen — third time this watch that a shard count read as a population.
+
+## Check-in 2i (2026-09-17 04:2x) — 2h's `c_crtl_wait` "does not reproduce" WAS A NATIVE PROBE OF A CROSS-TARGET ROW, and the real variable is the emulator
+
+### THE TICK
+
+Zero commits again. Gate **GREEN**, fixedpoint PASS, canary **SKIP** (`compiler/`
+unchanged, seeded green at `bd79efb9f090`). No rebuild owed, checked. Three
+tracked open regressions unchanged; five tier failures per 2h's correction.
+Peers quiet since ~23:30, five hours, both having answered within the last six.
+
+### THE CORRECTION, AND IT IS MINE
+
+**2h reported `test-core#src:test/c_crtl_wait.c` as "does not reproduce here",
+from a NATIVE x86-64 run. The failing arm is `riscv32`.** There is an open
+ticket that says so in its own summary —
+`backlog-core/bug-a-wait4-does-not-write-rusage-on-riscv32`, prio 55, measured
+2026-09-12 on borg: `expect_same MISMATCH [riscv32/c_wait26]`, with **i386,
+arm32 and aarch64 all passing the same row**.
+
+So x86-64 is not merely the wrong arm — **it is not one of the arms the row
+compares at all.** I ran a probe that could not reach the subject, got the
+answer I expected, and stopped. The stored `job_reason` names no target, so
+**the reader supplies the one they invoked**, which is the same shape as a
+diagnostic printing a line number with no file name. Seventh instance of the
+wrong-population class this watch and the first where I published it.
+
+**2h's "three findings point at the host" is therefore TWO**: bench's zero rows,
+and `lib-test#00`'s reason. The third was a known, open, target-specific defect
+whose own summary says *"NOT environmental."* **The eighth escalation stands but
+is weaker than I wrote it** — two, not three.
+
+### RUNNING THE RIGHT ARM FOUND SOMETHING BETTER
+
+```
+--target=riscv32, under qemu-riscv32 here  ->  wait4-rusage  rusage=written
+```
+
+**It does not fail on the arm it is supposed to fail on, here.** And the source
+cannot be the difference: `lib/rtl/platform/posix/platform_backend.pas` — which
+holds the entire rv32 `SYS_waitid` path, rv32 being the one target with no
+`wait4` syscall — was last touched **2026-09-06 (`677e75495`), six days before
+the ticket's measurement**, and is an ancestor of the tree that still fails.
+
+**The one recorded difference is the emulator: qemu 8.2.2 on borg, 10.2.1 here**
+(from the tier's own `toolchain:` header, which exists because a Track T ticket
+added toolchain fingerprinting).
+
+**AND THE ORACLE IS WHY THIS IS NOT AN EXCULPATION.** `expect_same` runs a
+gcc-built oracle **under the same emulator**, and on borg the oracle prints
+`written` while pxx prints `UNTOUCHED`. **So qemu 8.2.2 can deliver rusage and
+pxx's route does not get it.** The sharpened claim is narrower than either "pxx
+is wrong" or "environmental": the divergence is between **pxx's rv32 `waitid`
+route and the oracle's, under 8.2.2 specifically**, and it vanishes under 10.2.1.
+
+**A control separates you from the variable it moved, and from no other.** The
+ticket's control is sound — the other rows went green with multilib and this one
+did not — and it rules out multilib. **Nobody varied the emulator**, because
+nobody had reason to. Appended to the ticket with prio left at 55 and nothing
+re-laned or re-ranked: if it is an emulator gap the
+invisible-to-x86-64 argument in its body still holds for a different reason, and
+if it is not, nothing I measured weakened it.
+
+**What would settle it — and I can run none of them:** that row under qemu 8.2.2
+here, or under 10.2.1 on borg, or on real rv32 hardware. Two are a Track T
+operation on borg; the third is hardware.
+
+### WHAT THIS DOES TO THE EIGHTH ITEM
+
+It sharpens it rather than retiring it, and in a way he can act on:
+
+> **Track T has run on one host since 2026-09-11. Two of its reds do not
+> reproduce anywhere else, and a third turns out to depend on that host's
+> EMULATOR VERSION rather than on our code. Do we want a second breadth host —
+> or, cheaper, do we want borg's qemu brought to the version the other boxes
+> run?**
+
+The second half is the better question and I only have it because the first
+finding was wrong. **A qemu upgrade is a box operation, not a purchase**, which
+makes it a far smaller ask than a second machine.
+
+### STATE
+
+Gate GREEN. Five tier failures, three tracked. **Eight for the 18th**, the
+eighth now sharper and cheaper than when I raised it four hours ago. The open
+rv32 ticket has a measured cross-check it did not have this morning, and my own
+2h is corrected in the note and in the ticket rather than only here.
