@@ -28172,3 +28172,151 @@ work") — and CLAUDE.md prefers STRENGTHENING an existing rule to adding a
 neighbour. **What would promote it: a second, unrelated subsystem** where an
 exhaustive report was trusted and was scoped one dependency level deep. One
 subsystem, however expensive the miss, is a playbook entry.
+
+## A SOLE INSTRUMENT CANNOT BE DISCOUNTED BY A WIDER ONE — AND A LABEL SUFFIX IS NOT A VERDICT QUALIFIER
+
+Dated 2026-09-17, caught by two peers independently within one minute, one
+sentence before it went into a pin record.
+
+**The slip.** `tools/gate.sh quick` printed `PASS  FPC seed canary
+(concurrent)` and this seat recorded it as *"not a plain PASS"*, then proceeded
+on the reasoning *"the full tier is the wider instrument and it is the one the
+2026-09-07 rule actually names."* Both halves are wrong and they are wrong in
+different ways.
+
+**Half one: the contrast was invented, not misread.** `(concurrent)` is
+unconditional. `gate.sh` emits the canary at FOUR sites:
+
+    1086:  say "  PASS  FPC seed canary (concurrent)"
+    1094:  say "  FAIL  FPC seed canary (concurrent)  $LOGDIR/fpc-seed.log"
+    1138:  say "  SKIP  FPC seed canary (compiler/ unchanged, and seeded green at ${seed_green:0:12})"
+    1140:  say "  SKIP  FPC seed canary (fpc not installed)"
+
+It is `if wait "$seed_pid"; then PASS … else FAIL`, and the parenthetical is in
+the string on BOTH arms — it says the seed build was started first and
+backgrounded so wall time is `max()` and not `sum()`, which is a fact about
+scheduling and carries no information about the outcome. **A real skip is spelled
+completely differently**, and that is the discriminator: a skip names the reason
+(`compiler/ unchanged`, `fpc not installed`), a pass names nothing. So *"not a
+plain PASS"* presupposes a plain-PASS spelling **that does not exist in the
+script**. This is not a misreading of a verdict; it is a contrast constructed
+out of a parenthetical and then reasoned from. **The check costs one grep of
+the emitter** — and the seat had the log open.
+
+**Half two, and it is the one that would have mattered if the canary HAD
+failed.** *"The wider instrument runs next"* is not a reason to discount a
+check. CLAUDE.md is specific that the canary is the **ONLY** thing that catches
+the declaration-order class — pxx prescans headers and FPC is single-pass, so a
+routine called from an include earlier in `compiler.pas` than the file defining
+it, or a duplicate forward across two `.inc` files, passes `make
+compiler/pascal26` AND `--tier quick`. **Wider in general is not a superset
+here.** The class was live in that pin's own range from two seats' hands: two
+new forwards in two `.inc` files (`RefuseExtendedNewDispose` in
+`frontend_forwards.inc`, `ConstEnumCastWidth` in `pyforwards.inc`) inside 79
+commits from four sessions all editing `.inc` files; and a peer had hit the
+defect the day before — an enum body walked on the `for` variable, which pxx
+allows and FPC refuses, which **built, self-hosted, and passed all ten of its
+own rows** with the canary the only thing that saw it.
+
+**AND THE QUESTION BOTH OVERCLAIMS SILENCED IS THE ONLY ONE THAT MATTERED.**
+Two peers sent corrections within the same minute and BOTH had grepped
+`concurrent` — the keyword they were already reasoning about — and reported a
+property of the whole emitter, so the two SKIP sites were invisible to their
+instrument by construction. Two seats, the same wrong-population failure,
+committed **inside the message correcting a third instance of it**: the failure
+survives being the explicit subject of the sentence you are writing, which is
+why "print the set your instrument enumerates" has to be a mechanical step and
+not a thing you hold in mind. One of them then found the consequence, and it
+reframes the entry: the two strings their grep erased are the only ones that
+carry information.
+
+    SKIP  FPC seed canary (compiler/ unchanged, and seeded green at <sha12>)
+    SKIP  FPC seed canary (fpc not installed)
+
+**That is how the canary reports WITHOUT having verified the tree in front of
+it**, and CLAUDE.md says outright that FPC being absent is a SKIP and never a
+pass. So **the audit question for a pin is not "was the PASS qualified" — it is
+"did the canary RUN, or did it SKIP".** One overclaim put a hedge on the row
+that stops a reader asking; the other declared there was nothing to
+distinguish, which makes the question unaskable. Different errors, one silenced
+question. For that pin the answer was clean both ways: PASS, and `compiler/`
+moved in the range so the seeded-green skip could not have fired — a real arm
+against a real delta, not a no-op that reads like a pass.
+
+**The general rule, which is what earns the entry:** when a check is the SOLE
+instrument for a defect class, no broader suite substitutes for it, and the
+sentence *"a wider instrument runs next"* is a reason to read its result more
+carefully, not less. Ask **what this check is the only one that can see** before
+discounting its row.
+
+**And the cost of the hedge is not the hedge.** Both peers reached the same
+conclusion from opposite ends: a qualified verdict on the one check guarding a
+class nothing else sees **decays like a LOCK, not like a fact** — the next
+reader meets a caveat, stops, and generates nothing that could reveal it was
+wrong. A hedge is not a cheap safety margin when it lands on a sole instrument;
+it is a silent retirement of it.
+
+**What retires this entry:** `gate.sh` growing a genuinely qualified pass
+spelling for the canary, i.e. a PASS arm whose parenthetical differs by outcome.
+Check `grep -n 'FPC seed canary' tools/gate.sh` — while all PASS arms carry one
+unconditional suffix, this entry stands.
+
+**FOURTH INSTANCE THE SAME DAY, AND IT IS THE STRUCTURAL FORM: THE UNSTATED
+SCOPE IS ON THE SUBJECT, NOT ON THE VERB.** A peer read `repo_tree_state()` in
+`tools/testmgr.py` correctly — HEAD is unscoped while only the dirty digest is
+scoped to `compiler` and `lib`, and the docstring says in its own words that it
+moves for *"a pull, a rebase, a commit AND an uncommitted edit"* — and concluded
+that a docs push from a held peer would trip `WARNING the source tree MOVED
+during this run` on a tier at minute ninety. Every cited line was true. The
+premise that failed was never written down anywhere: the function runs with
+`cwd=REPO`, so **all four verbs are verbs in the TREE TESTMGR IS READING**, and
+the three seats are in three different checkouts (`whose_commit.sh`: frankS,
+frankB, frank-user; twenty-nine checkouts on the box). A push to origin moves no
+other checkout's HEAD — only a PULL does. **The experiment had already run and
+nobody had looked:** three peer commits were on origin, and the tier's
+`tree_state` was byte-identical in both halves.
+
+**THE LADDER, IN THE ORDER THEY HAPPENED, EACH A LEVEL BELOW THE LAST** (the
+framing is frankb-56's, retracting its own): **WRONG SPELLING, WRONG POPULATION,
+WRONG HOST.** An invented contrast about a string that does not exist in the
+emitter; a grep of the KEYWORD asserting a property of the whole emitter; and a
+function read correctly and evaluated against the wrong checkout. The
+descending order matters, because each level is invisible to the check that
+catches the one above it: reading the emitter fixes the first and not the
+second, printing the enumerated set fixes the second and not the third. **The
+question that catches the bottom rung costs one line and its answer is never in
+the function: WHICH CHECKOUT DOES THIS CODE RUN IN.** Here it was
+`REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))` — read, and
+not evaluated. Twenty checkouts answer `ls -d /home/neo/*/compiler/builtin` on
+this box.
+
+So the four instances of one day were: a contrast invented from a parenthetical
+without reading the emitter; two seats grepping the KEYWORD they were reasoning
+about rather than the SUBJECT, erasing the two spellings that carried the
+information; and a correct reading of the right function whose subject had an
+unstated scope. **None was an error of care and every one would pass review** —
+which is why the remedy cannot be attentional. **Name the population in the
+sentence, out loud, even when it is redundant**, because sound reasoning is
+precisely what carries a wrong premise past a reviewer.
+
+**FIFTH INSTANCE, FOUND BY THE PIN ITSELF — THE WRONG COMPILER, WHICH IS THE
+POPULATION AXIS THIS TREE HAS A DEDICATED RULE FOR AND STILL MISSED.** The
+tier's `lib-test#55` reported `crtl declares functions it does not define:
+c_pthread_create`. This seat re-ran `test/crtl_declaration_census.sh` by hand,
+got `601 declared, all defined, no libc imports`, and wrote the row down as
+non-reproducible. **The census row runs `$(PXX_STABLE)`** — `Makefile:35714` —
+because Track B builds with the pin and never rebuilds; the hand-run used
+`compiler/pascal26`. `c_pthread_create` is a `weakexternal 'libc.so.6'`
+introduced by `984be7e19`, and `git merge-base --is-ancestor 984be7e19
+764ee2ed2` answers NO, so **pin v410 genuinely did not define it**. Both legs in
+fresh directories: pinned `c599e8546121` FAILs naming exactly that symbol, HEAD
+`bc884808fda5` passes 601/601 with zero DT_NEEDED. The red was true about the
+binary it was handed and stale about the tree — the inert-until-pinned class —
+and the correct record is **"red under pin v410, green at HEAD, cleared by this
+pin"**, not "non-reproducible". CLAUDE.md already carries this axis under
+**B/E** (*"say which compiler a green was measured with"*), written for the
+direction where the PIN gives a false PASS. **This was the mirror: the pin
+giving a true FAIL that a HEAD re-run erases**, and the rule read as being about
+the other direction. So the five of one day were **wrong spelling, wrong
+population, wrong host, wrong compiler** — and the last one had a dedicated rule
+pointing straight at it.
