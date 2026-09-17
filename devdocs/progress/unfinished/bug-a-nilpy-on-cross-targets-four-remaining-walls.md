@@ -329,6 +329,17 @@ Positive control run (temporarily raising the stack reserve): it fires with the
 overshoot in bytes. Its first draft named the arena on a Pascal build that had
 none — fixed to report the arena only when one was reserved.
 
+### INERT UNTIL THE NEXT PIN
+
+`2b2ec3fee` landed AFTER pin v411 (`8d9d69bdc`), so **anything building with
+`$(PXX_STABLE)` still gets the old refusal.** Track B/E demos, `lib-test` and any
+`.npy` built against the pinned compiler see `a heap arena needs mmap` until the
+next pin carries this. Not a reason to pin again — v411 is hours old and pins are
+cadence, not releases — but it is the reason a bare-metal ESP measurement taken
+with the pinned compiler will disagree with one taken at HEAD, and CLAUDE.md's
+two dated casualties of this class were a fix inert for a MONTH and one landing
+three hours after a pin.
+
 ### THE NEXT WALL IS MUCH BIGGER THAN THIS ONE, and it was hidden behind it
 
 `PXXVarBinOp` is not a small gap. `--esp-profile=bare` pulls **no `builtin` unit

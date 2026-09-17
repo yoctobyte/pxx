@@ -28320,3 +28320,64 @@ giving a true FAIL that a HEAD re-run erases**, and the rule read as being about
 the other direction. So the five of one day were **wrong spelling, wrong
 population, wrong host, wrong compiler** — and the last one had a dedicated rule
 pointing straight at it.
+
+## A SINGLE TICKET HAS FIRST-FAILURE BLINDNESS TOO — ONE REFUSAL HIDES THE WALL THAT COSTS
+
+We have this rule for CORPORA: an attempt reports the FIRST error per subject, so
+the walls behind it are invisible, and the biggest number in the histogram is
+usually one file's contents. It has five null rows behind it and an umbrella
+bullet in CLAUDE.md.
+
+**Nobody had written it for a SINGLE ticket, where the same structure operates
+with N=1.** A ticket names one refusal because one refusal is what anybody can
+see. That refusal is not a measurement of the work; it is a measurement of what
+is REACHABLE, and everything behind it is unquoted — not underestimated,
+*absent*.
+
+Measured 2026-09-17 (`2b2ec3fee`), and the tell is that the estimate was written
+by careful people and was still structurally blind. `the-goal-cross-cross.md`
+said, correctly and from a real compile:
+
+> a Mandelbrot `.npy` that runs correctly on the host is refused for `esp32s3`
+> AND `esp32c6` by **one wall** — *"a heap arena needs mmap, which bare metal has
+> not"*. One wall, both ESP architectures.
+
+Every word true. The wall fell — the arena does not need *obtaining* on bare
+metal, it needs to BE the image, so it is BSS now — and all three chips moved
+straight onto `undefined variable (PXXVarBinOp)`: `--esp-profile=bare` pulls no
+`builtin` unit at all, which is a far larger job than the arena was. **The
+expensive wall was not underestimated. It was unnameable until the cheap one
+fell.**
+
+### Why this is not just "there might be more bugs"
+
+The asymmetry is what makes it actionable. The cleared wall was ~150 lines and
+needed no new relocation kind; the revealed one is a unit that does not compile
+for the target. **A first refusal is uncorrelated with the size of what follows
+it**, because the ordering is by REACHABILITY, not by cost — exactly the corpus
+rule, with the queue of length one.
+
+And it degrades the claim in the flattering direction: clearing a wall *feels*
+like progress toward the goal it gates, so the pull is to soften the verdict.
+Here the correct edit left `"pxx compiles Python to ESP32" is FALSE` untouched
+and retired only the DESCRIPTION. **The claim did not move; only the reason did.**
+
+### What to do instead
+
+- **Never quote a ticket's named wall as a scope estimate.** It is the first
+  reachable refusal and says nothing about the rest.
+- **Before closing, re-run the probe and report where it lands now.** That is one
+  command and it is the only thing that converts an invisible wall into a named
+  one. It is what produced `PXXVarBinOp` here.
+- **Write the next wall into the ticket even when you are not taking it** — the
+  next reader's estimate is otherwise built from the same blind first refusal.
+- **Say what the fix does NOT deliver.** "No NilPy program runs on ESP bare metal
+  yet; what changed is that the arena is no longer why" is the sentence that
+  stops a landing being read as the goal arriving.
+
+The corpus version of this rule was learned from five null rows, where the
+instrument said ZERO and the seat had to notice. **The single-ticket version has
+no null row to warn you** — the wall really did fall, the commit is real, the
+green is real, and nothing anywhere reports that the goal is no closer. That is
+why it needs saying out loud in the resolution rather than being left for the
+next probe to discover.
