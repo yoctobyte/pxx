@@ -60,6 +60,25 @@ franks-ee). One wall, both ESP architectures. **Until it falls: "pxx runs on
 ESP32" is TRUE (Pascal reaches xtensa) and "pxx compiles Python to ESP32" is
 FALSE, and neither goes into public copy in the other's place.**
 
+**THE ARENA WALL FELL THE SAME DAY (`2b2ec3fee`) AND THE CLAIM IS STILL FALSE —
+READ BOTH HALVES.** Bare metal has no kernel to ask for an arena, so the arena
+does not need obtaining; it needs to BE part of the image, and it is BSS now.
+All three of `esp32s3`, `esp32c6` and `esp32c3` move past that refusal. **What
+they move ONTO is bigger than what they moved past**: `undefined variable
+(PXXVarBinOp)`, which is `--esp-profile=bare` pulling no `builtin` unit at all —
+deliberately, and `espassert.pas:24` records that `uses builtin` under that
+profile *"really does fail"*, measured, on `PXXVarBinOp` and `PxxSciDigits17`.
+NilPy's driver requires `builtin`. So the remaining work is making `builtin`
+compile for ESP, which is a different and far larger job than the arena was.
+
+**"One wall, both ESP architectures" is retired as a description, and the
+conclusion it supported is UNCHANGED.** That sentence was true of what could be
+seen, and clearing the wall is what showed it was never the expensive one —
+the first-failure pattern arriving inside a single ticket. **"pxx compiles
+Python to ESP32" is still FALSE**, no NilPy program runs on ESP bare metal
+today, and the arena landing does not move that line into public copy. What it
+changes is only the reason: the arena is no longer why.
+
 Linking — a `pxx --link` mode — was discussed the same day and **explicitly
 POSTPONED by him**, both his reading and our implementing. It is scoped in
 `feature-a-pxx-cannot-link-its-own-objects-...` and is not current work.
