@@ -312,6 +312,23 @@ initializer handling. **That is Track P, needs no decision, and gates the same
 138** — so it is the cheaper lever by a wide margin, and it should be taken
 before anyone reopens this page.
 
+> **MEASURED 2026-09-17 (frankB) — THE LEVER WAS TAKEN AND THE "GATES THE SAME
+> 138" HALF IS WRONG.** `fa397c761` (frankS, 2026-09-16, *"a named string
+> constant is a string initialiser too"*) fixed it; both spellings of the
+> declaration now compile under fpc and pxx. A full 207-unit corpus re-run at
+> `17b8561f2` — the first since the lever landed, and `fa397c761` is not an
+> ancestor of the tree the previous totals came from — gives **21 / 10 / 176,
+> unchanged**, with `globals.pas:502` the first failure of **zero** units. The
+> 138 were QUEUED behind that wall, not gated by it: they moved as one group to
+> `x86_64/cpuinfo.pas:36`, which is now the first failure of 140 of 207.
+>
+> So the pricing above stands and the *recommendation* does not: taking the
+> cheap lever did not change what this page is deciding, because a wall's
+> population counts units queued behind it and never work. That is the
+> umbrella's own finding, now recorded fifteen consecutive times — see the
+> 09-17 section of `backlog-umbrella/umbrella-pxx-compiles-fpc-itself.md`.
+> **This page's instruction is discharged; nothing here is reopened by it.**
+
 17 units still reach the object wall through declarations in other files, so the
 feature is not fully retired by the versioncmp case alone.
 

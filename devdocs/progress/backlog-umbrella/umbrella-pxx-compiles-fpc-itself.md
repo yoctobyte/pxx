@@ -9,7 +9,7 @@ created: 2026-09-09
 found-by: frankuser
 tags: [pascal, corpus, real-world, fpc, application-driven]
 blocked-by: [bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised, feature-p-legacy-value-object-types, bug-p-a-conditional-directive-cannot-read-a-const-whose-value-is-not-an-integer-literal, bug-p-a-conditional-directive-cannot-evaluate-in-over-a-set-constant, feature-p-unaligned-is-a-transparent-lvalue-not-a-function, bug-p-a-semantic-diagnostic-in-a-used-unit-names-no-file-at-all, bug-p-a-method-parameter-typed-through-a-forward-pointer-alias-never-matches-its-own-body, feature-p-the-element-count-form-of-initialize-and-finalize, bug-p-a-set-valued-record-field-cannot-be-written-in-a-record-constant, feature-b-sysutils-has-no-executeprocess-and-no-texecuteflags, feature-b-rtl-has-no-tdoublerec, feature-b-rtl-has-no-termio-unit-and-no-isatty, bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero]
-summary: "WALL 15 (charset) CLEARED 2026-09-16 -- lib/rtl/charset.pas, FPC's codepage registry, the largest LIVE head remaining -- AND IT IS THE FOURTEENTH CONSECUTIVE NULL ROW IN ITS STRONGEST FORM YET: not merely units-OK unchanged but ALL 207 ROWS BYTE-IDENTICAL, verdict and first error alike, proven by A/B over the whole corpus rather than inferred. Totals 21 / 10 / 176 on both legs. AND THE WALL-13 AND WALL-14 TABLES IN THIS FILE RECORDED 22 / 10 / 175 AND WERE WRONG ON ARRIVAL: the BOTH-OK count was derived from the `units-OK (stubbed)` row directly above it and PXX-FAIL by subtraction (207-22-10=175), never read off the probe -- corrected in place, with the mechanism, because a stale row is not inert and this one was consumed as a premise by the next prediction that cited it. MEASURED 2026-09-16 WITH PXX_CORPUS_DETAIL, AND IT ANSWERS THE SIZE QUESTION THIS UMBRELLA ASKED FOR SIX NULL ROWS: 132 of 207 units report EXACTLY TWO errors and nothing else -- `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36) and `too many array initializer elements` (:281) -- BOTH IN ONE FILE, with the 20-error recovery cap not in play (one unit in the whole corpus reaches it). So the 132 are not merely QUEUED behind TDoubleRec; those two are their COMPLETE reported failure set. The second wall had no ticket and now does: bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised, the UNFIXED SIBLING of the record-constant arm that 138604b5e fixed. THE SIXTH NULL ROW IS CONFIRMED AND WAS PREDICTED BEFORE THE RUN: TDoubleRec ALONE delivers ZERO units -- 0 of the 132 have it as their only error. Expect a third wall in the same file rather than 132 units; what is new is that this is the first proposal with a complete failure set behind it instead of a queue position. Totals at 9281da35b: 21 / 10 / 176 (BOTH-OK / ORACLE-NO / PXX-FAIL). Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at 4c7c88d36 (attempt 7, probe #12): 20 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 177 fail. THE FOUR CONSECUTIVE NULL ROWS ENDED AND THEY ENDED CHEAPLY: cclasses.pas compiles, and the per-unit join says the +3 is exactly that unit plus its two direct dependents (crefs, rabase) -- so clearing the wall 150 units were stacked on was worth THREE, which is this umbrella's own queue-position finding confirmed rather than refuted. It took two bugs, both found by converting one halting diagnostic to ErrorRecover so a unit reports EVERY failure instead of the first: a method parameter typed through a forward pointer alias never matching its own body (ee560d0ad), and the element-count form of Initialize/Finalize (d095cb08d), which had been a DELIBERATE refusal. SEVEN walls cleared now; BOTH-OK has gone 9 -> 15 -> 15 -> 15 -> 15 -> 18. THE TExecuteFlags WALL IS CLEARED (2026-09-11, frankH): sysutils gained ExecuteProcess and TExecuteFlags, and cfileutl.pas:136 no longer stops anyone. It bought ZERO units -- a FIFTH null row -- and an A/B on ONE binary shows why: cfileutl, rgobj and aasmbase were all stopped at that SAME LINE, and they now stop at `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36) and `undefined variable (IsATTY)` (comptty.pas:66) respectively, the latter again ONE line reached by two units. BOTH NEW WALLS ARE NOW SETTLED TOO, SAME EVENING, AND BOTH LANDED ON THE UNIT CYCLE. termio.IsATTY was added (d57a1efaa) and rgobj+aasmbase moved to `comphook.pas:251 undefined variable (V_Status)`. I recorded that as the unit cycle, then CORRECTED myself to 'not the unit cycle, that ticket is done and its minimal shape passes' -- AND THE CORRECTION WAS ALSO WRONG. It IS the unit cycle, in an ORDER-DEPENDENT shape the fixed ticket's fixture structurally cannot express: CycleWaitUnit is a global and ParseUnitImplSection re-enters itself, so a unit named AFTER the cycle-closer in the same clause cleared the pending park. Both of my claims measured a real shape and generalised it to the bug; the quantifier was the invention each time. FIXED 2026-09-11, same evening, and the V_Status wall is CLEARED. TDoubleRec was NOT built: measured instead, and it buys zero, because cfileutl's implementation uses Comphook+Globals and `globals` alone already fails at that same V_Status; it was re-laned P and repriced 40->25 blocked-by the cycle. So THREE walls cleared or priced in one evening delivered every unit involved into ONE new wall -- which was then cleared too, the same evening, as the order-dependent residual of the unit cycle. globals, rgobj, aasmbase, comphook and cfileutl ALL now reach `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36), which is feature-b-rtl-has-no-tdoublerec, already in blocked-by and already repriced. MEASURED, AND THE SIXTH NULL ROW IS CONFIRMED -- A/B over all 207 units on TWO BINARIES differing by exactly 401c00f2b: BOTH-OK 21 before and 21 after, ZERO units newly compiling, ZERO regressed, and 101 of 207 units changed their first error -- ALL 101 from `undefined variable (V_Status)` and ALL 101 to `unknown type: TDoubleRec`. One wall into one wall, nothing scattered, half the corpus moved and the conversion rate was zero. TDoubleRec is now the first failure of 132 of 207 (64%). That is the largest single-wall transfer this umbrella has recorded and it is the cleanest possible statement of the queue-position finding: a wall's population counts units QUEUED behind it, never work. A SIXTH NULL ROW IS THE DEFAULT EXPECTATION FOR THE NEXT RE-RUN AND IT IS STATED HERE BEFORE THE RUN, not after: five walls in a row have converted at 0, 3 and 2 units, and every unit this one freed landed on the same next wall, which is the signature of a queue rather than a population. AND THE INSTRUMENT THIS UMBRELLA SAYS NOBODY BUILT ALREADY EXISTS: the compiler recovers up to MAX_REPORTED_ERRORS=20 semantic errors per unit, and tools/fpc_compiler_corpus_probe.sh pipes it through `head -1`. Taking that off shows the wall BEHIND the first one for free -- behind cfileutl's TDoubleRec sits `too many array initializer elements` at cpuinfo.pas:281 -- so the every-failure-per-subject census this umbrella has wanted for five null rows is a harness change, not a compiler feature. DO NOT RANK ANY OF THEM ON UNIT COUNT: attempt 7 measured the conversion rate of a cleared wall at three units. A second row went the same evening -- a set-valued record field (138604b5e), which is how tokens.pas writes its ~400-row token table -- and probe #12 says it bought TWO (tokens, rescmn) while eight more moved up to the TExecuteFlags wall. THREE WALLS, THREE JOINS, YIELDS OF 3 AND 2: a wall's population says how many units are QUEUED behind it, and the units that turn BOTH-OK are the ones for which it was the LAST wall. Near-disjoint sets; only the second is worth a number."
+summary: "FIFTEENTH CONSECUTIVE NULL ROW, 2026-09-17 @ 17b8561f2: 21 / 10 / 176, IDENTICAL TOTALS ACROSS 25 COMMITS TOUCHING compiler/ OR lib/ -- AND IT RETIRES A PREDICTION. decided/decide-old-style-object-types.md said the 138 blocked units \"do not scatter -- they land as one group on a fifth wall, globals.pas:502\" and instructed that this Track P lever be taken first because it \"gates the same 138\". It was taken (frankS, fa397c761, 2026-09-16), which is NOT an ancestor of 9281da35b where the previous totals were measured, so this run tests the claim rather than repeating it. globals.pas:502 is now the first failure of ZERO of 207 units and units-OK moved by ZERO: the 138 were QUEUED behind it, never gated by it. FIVE walls cleared between the two measurements (tcompilerwidechar 0728155f2, charset 6bc01579f, sizeof-of-a-PARAMETER a931bef4d, TExecuteFlags, `expected operator` eaf776dd8) and the whole population is now on x86_64/cpuinfo.pas:36 -- TDoubleRec has gone 4 -> 132 -> 140 across three measurements while buying nothing, the cclasses.pas one-file histogram for the fourth time. THE 21-UNIT BOTH-OK SET IS NOW RECORDED BY NAME in the 09-17 section; it had only ever been a count, and the by-name join is the half this file's own method notes call valuable. Three precise one-unit Track P walls replaced two anonymous ones (nld.pas:700 supported_optimizerswitches, nadd.pas:1352 bestrealrec, hlcgobj.pas:4156 aintmax) -- and those LINE NUMBERS are a fix (ec8a4d88c): the evaluator reported the lexer's position, not the directive's, so the probe had said 1334/1112/1821. PREVIOUSLY: WALL 15 (charset) CLEARED 2026-09-16 -- lib/rtl/charset.pas, FPC's codepage registry, the largest LIVE head remaining -- AND IT IS THE FOURTEENTH CONSECUTIVE NULL ROW IN ITS STRONGEST FORM YET: not merely units-OK unchanged but ALL 207 ROWS BYTE-IDENTICAL, verdict and first error alike, proven by A/B over the whole corpus rather than inferred. Totals 21 / 10 / 176 on both legs. AND THE WALL-13 AND WALL-14 TABLES IN THIS FILE RECORDED 22 / 10 / 175 AND WERE WRONG ON ARRIVAL: the BOTH-OK count was derived from the `units-OK (stubbed)` row directly above it and PXX-FAIL by subtraction (207-22-10=175), never read off the probe -- corrected in place, with the mechanism, because a stale row is not inert and this one was consumed as a premise by the next prediction that cited it. MEASURED 2026-09-16 WITH PXX_CORPUS_DETAIL, AND IT ANSWERS THE SIZE QUESTION THIS UMBRELLA ASKED FOR SIX NULL ROWS: 132 of 207 units report EXACTLY TWO errors and nothing else -- `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36) and `too many array initializer elements` (:281) -- BOTH IN ONE FILE, with the 20-error recovery cap not in play (one unit in the whole corpus reaches it). So the 132 are not merely QUEUED behind TDoubleRec; those two are their COMPLETE reported failure set. The second wall had no ticket and now does: bug-p-an-array-constant-with-a-set-element-type-cannot-be-initialised, the UNFIXED SIBLING of the record-constant arm that 138604b5e fixed. THE SIXTH NULL ROW IS CONFIRMED AND WAS PREDICTED BEFORE THE RUN: TDoubleRec ALONE delivers ZERO units -- 0 of the 132 have it as their only error. Expect a third wall in the same file rather than 132 units; what is new is that this is the first proposal with a complete failure set behind it instead of a queue position. Totals at 9281da35b: 21 / 10 / 176 (BOTH-OK / ORACLE-NO / PXX-FAIL). Owner-set direction 2026-09-09: 'we are going to be more application driven, not just hunting down theoretical bugs but just.. let's get stuff rolling. so, we had practical targets like busybox. or compiling FPC itself.' NO TICKET FOR THIS EXISTED ANYWHERE IN devdocs/progress -- measured, zero hits. FPC's own compiler is ~400k lines of Object Pascal written by people who were not testing us, which makes it the largest and least self-serving Pascal corpus available, and it is the application-driven form of exactly what Track P has been doing by hand: every bug the P seats hunted from the backlog tonight would have been found by this target, in the order that actually matters. BLOCKED-BY IS GROWN BY ATTEMPTING, NEVER BY TRIAGE -- CLAUDE.md: 'Each failure names a ticket in the order it actually matters. What the attempt never touches was not blocking real-world usage.' STATE at 4c7c88d36 (attempt 7, probe #12): 20 of 207 units compile under both fpc and pxx, 10 are ORACLE-NO and can never be evidence about us, 177 fail. THE FOUR CONSECUTIVE NULL ROWS ENDED AND THEY ENDED CHEAPLY: cclasses.pas compiles, and the per-unit join says the +3 is exactly that unit plus its two direct dependents (crefs, rabase) -- so clearing the wall 150 units were stacked on was worth THREE, which is this umbrella's own queue-position finding confirmed rather than refuted. It took two bugs, both found by converting one halting diagnostic to ErrorRecover so a unit reports EVERY failure instead of the first: a method parameter typed through a forward pointer alias never matching its own body (ee560d0ad), and the element-count form of Initialize/Finalize (d095cb08d), which had been a DELIBERATE refusal. SEVEN walls cleared now; BOTH-OK has gone 9 -> 15 -> 15 -> 15 -> 15 -> 18. THE TExecuteFlags WALL IS CLEARED (2026-09-11, frankH): sysutils gained ExecuteProcess and TExecuteFlags, and cfileutl.pas:136 no longer stops anyone. It bought ZERO units -- a FIFTH null row -- and an A/B on ONE binary shows why: cfileutl, rgobj and aasmbase were all stopped at that SAME LINE, and they now stop at `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36) and `undefined variable (IsATTY)` (comptty.pas:66) respectively, the latter again ONE line reached by two units. BOTH NEW WALLS ARE NOW SETTLED TOO, SAME EVENING, AND BOTH LANDED ON THE UNIT CYCLE. termio.IsATTY was added (d57a1efaa) and rgobj+aasmbase moved to `comphook.pas:251 undefined variable (V_Status)`. I recorded that as the unit cycle, then CORRECTED myself to 'not the unit cycle, that ticket is done and its minimal shape passes' -- AND THE CORRECTION WAS ALSO WRONG. It IS the unit cycle, in an ORDER-DEPENDENT shape the fixed ticket's fixture structurally cannot express: CycleWaitUnit is a global and ParseUnitImplSection re-enters itself, so a unit named AFTER the cycle-closer in the same clause cleared the pending park. Both of my claims measured a real shape and generalised it to the bug; the quantifier was the invention each time. FIXED 2026-09-11, same evening, and the V_Status wall is CLEARED. TDoubleRec was NOT built: measured instead, and it buys zero, because cfileutl's implementation uses Comphook+Globals and `globals` alone already fails at that same V_Status; it was re-laned P and repriced 40->25 blocked-by the cycle. So THREE walls cleared or priced in one evening delivered every unit involved into ONE new wall -- which was then cleared too, the same evening, as the order-dependent residual of the unit cycle. globals, rgobj, aasmbase, comphook and cfileutl ALL now reach `unknown type: TDoubleRec` (x86_64/cpuinfo.pas:36), which is feature-b-rtl-has-no-tdoublerec, already in blocked-by and already repriced. MEASURED, AND THE SIXTH NULL ROW IS CONFIRMED -- A/B over all 207 units on TWO BINARIES differing by exactly 401c00f2b: BOTH-OK 21 before and 21 after, ZERO units newly compiling, ZERO regressed, and 101 of 207 units changed their first error -- ALL 101 from `undefined variable (V_Status)` and ALL 101 to `unknown type: TDoubleRec`. One wall into one wall, nothing scattered, half the corpus moved and the conversion rate was zero. TDoubleRec is now the first failure of 132 of 207 (64%). That is the largest single-wall transfer this umbrella has recorded and it is the cleanest possible statement of the queue-position finding: a wall's population counts units QUEUED behind it, never work. A SIXTH NULL ROW IS THE DEFAULT EXPECTATION FOR THE NEXT RE-RUN AND IT IS STATED HERE BEFORE THE RUN, not after: five walls in a row have converted at 0, 3 and 2 units, and every unit this one freed landed on the same next wall, which is the signature of a queue rather than a population. AND THE INSTRUMENT THIS UMBRELLA SAYS NOBODY BUILT ALREADY EXISTS: the compiler recovers up to MAX_REPORTED_ERRORS=20 semantic errors per unit, and tools/fpc_compiler_corpus_probe.sh pipes it through `head -1`. Taking that off shows the wall BEHIND the first one for free -- behind cfileutl's TDoubleRec sits `too many array initializer elements` at cpuinfo.pas:281 -- so the every-failure-per-subject census this umbrella has wanted for five null rows is a harness change, not a compiler feature. DO NOT RANK ANY OF THEM ON UNIT COUNT: attempt 7 measured the conversion rate of a cleared wall at three units. A second row went the same evening -- a set-valued record field (138604b5e), which is how tokens.pas writes its ~400-row token table -- and probe #12 says it bought TWO (tokens, rescmn) while eight more moved up to the TExecuteFlags wall. THREE WALLS, THREE JOINS, YIELDS OF 3 AND 2: a wall's population says how many units are QUEUED behind it, and the units that turn BOTH-OK are the ones for which it was the LAST wall. Near-disjoint sets; only the second is worth a number."
 ---
 
 # Why this exists and what it replaces
@@ -1727,3 +1727,116 @@ in the ShortString buffer; fpc's hex scan is unbounded, eats it, parses
 input, no diagnostic. Recorded here, not filed and not repaired: per the probe's
 own header, FPC is the corpus and the question is only ever whether it compiles.
 Our bounded scan is one of the three deliberate divergences above.
+
+## 2026-09-17, frankB — the 09-17 probe @ `17b8561f2`: the `globals.pas:502` prediction is measured, and it is the FIFTEENTH null row
+
+**Measured at `17b8561f2`, binary `93200e4b45db`**, three foreground chunks of a
+partition ASSERTED to union back to the glob exactly (69 + 69 + 69, rows =
+distinct units = 207, no overlap, nothing dropped). The binary was rebuilt after
+the pull and before the run — `converged after 1 round(s)` — per PUSH → LET THE
+PULL SETTLE → REBUILD → MEASURE.
+
+### Why this run happened, and what it was testing
+
+`decided/decide-old-style-object-types.md` prices the object feature at +1 unit
+and then names a cheaper lever: the 138 blocked units *"do not scatter — they
+land as one group on a fifth wall, `globals.pas:502`"*, the `var`-spelling of a
+string initialiser, with the instruction **"That is Track P, needs no decision,
+and gates the same 138 — so it is the cheaper lever by a wide margin, and it
+should be taken before anyone reopens this page."**
+
+That lever was taken on 2026-09-16 by frankS (`fa397c761`, *"a named string
+constant is a string initialiser too"*), and `fa397c761` is **not** an ancestor
+of `9281da35b`, the tree the last recorded corpus totals were measured on. So
+the prediction had never been re-measured and this run is a test of it rather
+than a re-confirmation. **25 commits touching `compiler/**` or `lib/**` sit
+between the two trees**, including the lever and a run of Track B RTL additions
+(charset, FindFirst/FindNext, MkDir/RmDir/ChDir, GetDir, StdErr/StdOut as real
+Text files, the SysUtils date converters).
+
+**THE EXPECTATION WAS RECORDED BEFORE THE RUN**, verbatim: *"Given this
+umbrella's FOURTEEN consecutive null rows, my actual expectation is ANOTHER NULL
+— the 138 land together on a sixth wall. I am recording that so the result is
+information either way."*
+
+### The result
+
+| | wall 15 @ `9281da35b` | 09-17 @ `17b8561f2` |
+| --- | --- | --- |
+| BOTH-OK | 21 | **21** |
+| ORACLE-NO | 10 | **10** |
+| PXX-FAIL | 176 | **176** |
+
+**A fifteenth consecutive null row, and the prediction it was testing is now
+measured stale in this umbrella's own recorded shape.** `globals.pas:502` is the
+first failure of **zero** of 207 units — the lever is taken, and both spellings
+of the declaration compile under fpc and pxx when probed directly. The 138 were
+QUEUED behind it, not gated by it. They landed on the next wall.
+
+*(Scope: "zero units" is a statement about FIRST failures, which is what the
+probe reports. It is not a claim that no unit reaches that line behind an
+earlier error.)*
+
+### Where the population went, and it is one file again
+
+| first failure | probe #12 | **09-17** |
+| --- | --- | --- |
+| `unknown type: TDoubleRec` — `x86_64/cpuinfo.pas:36` | 4 | **140** |
+| `an object type cannot have a constructor` | 18 | 18 |
+| `unknown type: PUnicodeChar` | — | **7** |
+| `unknown type: TExecuteFlags` | 127 | **0** |
+| `Unsupported tcompilerwidechar size` | 10 | **0** |
+| `uses: unit source not found: charset` | 6 | **0** |
+| `unknown type: d` (`sizeof(<a PARAMETER>)`) | 4 | **0** |
+| `conditional directive: expected operator` | 2 | **0** |
+| conditional directive, three named operands | — | **3** |
+
+**Five walls cleared between the two probes and units-OK moved by zero.** The
+whole delivered population is now standing on `x86_64/cpuinfo.pas:36`, which is
+the `cclasses.pas` picture for the fourth time: a histogram of one file's
+contents. TDoubleRec has gone 4 → 132 → 140 across three measurements while buying
+nothing, which is the cleanest available statement of this umbrella's own
+finding — **a wall's population counts units QUEUED behind it, never work.**
+
+Attributions for the cleared walls, so the delta is not read as one seat's:
+`tcompilerwidechar` is `0728155f2` (the pre-pass must not raise an `{$error}`),
+`charset` is `6bc01579f`, `sizeof(<a PARAMETER>)` is `a931bef4d`, `expected
+operator` is `eaf776dd8`. Only the first and last are mine.
+
+### The BOTH-OK set, BY NAME — recorded because it never has been at 21
+
+Every previous attempt that moved reported the join by name and it was the
+valuable half; the 21 has only ever been a count. The next run now has
+something to join against:
+
+```
+cclasses  cdynset  compinnr  comptty  constexp  crefs  cstreams  cutils
+dbgdwarfconst  dwarfbase  fpchash  globtype  macho  optbase  rabase  rescmn
+symconst  systems  tokens  version  wasmbase
+```
+
+### Three named walls this run produced in Track P's own conditional evaluator
+
+`eaf776dd8` replaced the blunt `conditional directive: expected operator` with
+refusals that name the operand, and the corpus turned that into three precise
+one-unit walls rather than two anonymous ones:
+
+| unit | directive | refusal |
+| --- | --- | --- |
+| `nld` | `nld.pas:700` | right operand of `in` is not a set constant this pass can read: `supported_optimizerswitches` |
+| `nadd` | `nadd.pas:1352` | sizeof cannot size this type here: `bestrealrec` |
+| `hlcgobj` | `hlcgobj.pas:4156` | sizeof cannot size this type here: `aintmax` |
+
+`supported_optimizerswitches` is `x86_64/cpuinfo.pas:205`, a set constant built
+by `+`-joining other named set constants across units — the next step of
+`eaf776dd8`'s own feature, not a new subsystem. `bestrealrec` and `aintmax` are
+both `x86_64/cpuinfo.pas` again.
+
+**AND THE LINE NUMBERS IN THAT TABLE ARE A FIX, NOT A READING.** The probe
+originally reported these at 1334, 1112 and 1821 — two pointing backwards, one
+forwards, all three at ordinary statements. `Error` prints the CURRENT TOKEN's
+line and the evaluator runs from the directive handler. Fixed in `ec8a4d88c`,
+after this run; the directives above were grepped out of FPC's sources
+independently, before anything was changed. **Nothing about the verdicts moved —
+the fix changes only where a diagnostic points** — so the totals in this section
+stand for `17b8561f2` as measured.
