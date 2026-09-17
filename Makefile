@@ -19711,6 +19711,24 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: incompatible types: cannot assign AnsiString to Integer' \
 	   && test ! -e $(TESTTMP)/test_crafail26 \
 	  || { echo "test_call_result_assign_typecheck_fail: FAIL - rc=$$rc (want rc=1, three refusals on lines 41-43 for the direct, virtual and interface call, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	# `[...]` IN ARGUMENT POSITION, and the LENGTH assertions are the test.
+	# Checking only which overload ran passes on the exact defect this file
+	# pins: the call selected the RIGHT `array of AnsiString` candidate,
+	# returned fpc's own answer, and the callee read Length(c) =
+	# 17297991344808736 -- the set's mask read as an array handle. Every array
+	# row therefore asserts the count and the elements.
+	# It holds THREE doors deliberately, because the bug was one of them being
+	# unwired while the others worked: the plain free call, the free call that
+	# omits a trailing defaulted argument (a different function entirely), and
+	# the METHOD spelling, which already worked because the bracket scoring
+	# table is reached from FindUMethOverloadAhead. A later change that
+	# re-breaks the free path cannot pass by fixing only the spelling everyone
+	# tests. Q([fA]) is the must-not-move control: fpc gives the SET the slot
+	# for ordinal elements even against `array of Integer`, and a fix that lets
+	# the parameter type disambiguate in general regresses exactly that row.
+	# Control: pin v410 refuses this file outright at the ticket's own repro.
+	./$(COMPILER) test/test_array_ctor_in_arg_position.pas $(TESTTMP)/test_arrctor26
+	tools/expect_same.sh test_arrctor26 "$$($(TESTTMP)/test_arrctor26)" "$$(cat test/test_array_ctor_in_arg_position.expected)"
 	# A DEFAULTED TRAILING PARAMETER used to disable argument type checking on
 	# the arguments that WERE supplied. TryFillTrailingDefaults picked its
 	# candidate on NAME and ARITY alone, and it is a fallback reached only

@@ -8054,6 +8054,49 @@ end;
   `Q([fA])` with both a set and an `array of Integer` candidate keeps answering
   the set, which is fpc''s answer and cost nothing before.
   bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set }
+function SetLitArgElemTk(node: Integer): TTypeKind;
+{ The ELEMENT kind an `[...]` argument would have AS AN ARRAY CONSTRUCTOR, or
+  tyUnknown when it has no single answer.
+
+  Read off the parsed ELEMENTS, not off the tokens, because by the time the free
+  path matches, the argument is an AST node and the token stream has moved on --
+  the METHOD path answers the same question from tokens (BracketArgElemClass)
+  precisely because it runs BEFORE the parse.
+
+  MIXED STRING WIDTHS COLLAPSE TO tyAnsiString, and that row is the whole reason
+  this is not just "the first element''s kind": a ONE-character literal folds as
+  a Char, so `[''x'', ''yy'']` presents tyChar then tyAnsiString -- two kinds for
+  one list that fpc binds to a single `array of AnsiString`. Anything else mixed
+  answers tyUnknown and the retry does not run, which leaves the ordinary
+  diagnostic rather than guessing an element type. `[]` is tyUnknown too: an
+  empty literal names no element type and is a legitimate empty SET.
+
+  NOT A SECOND CLASSIFIER. It answers a narrower question than
+  BracketArgElemClass (a kind, not a class) and is used for one thing: the type
+  presented in the retry below. The scoring table stays the method path''s. }
+var item, el: Integer; tk, first: TTypeKind; allStr, mixed: Boolean;
+begin
+  Result := tyUnknown;
+  if (node < 0) or (ASTKind[node] <> AN_SET_LIT) then Exit;
+  item := ASTLeft[node];
+  if item = -1 then Exit;
+  first := tyUnknown; allStr := True; mixed := False;
+  while item <> -1 do
+  begin
+    el := ASTLeft[item];
+    if el < 0 then Exit;
+    tk := IntToTypeKind(ASTTk[el]);
+    if tk = tyUnknown then Exit;
+    if first = tyUnknown then first := tk
+    else if tk <> first then mixed := True;
+    if not ((tk = tyChar) or (tk = tyString) or (tk = tyAnsiString) or
+            (tk = tyShortString) or (tk = tyFixedString)) then allStr := False;
+    item := ASTRight[item];
+  end;
+  if not mixed then Result := first
+  else if allStr then Result := tyAnsiString;
+end;
+
 procedure RetagSetLitArgsForProc(procIdx, nArgs, argsHead: Integer);
 { TWO DOORS REACH THIS, WHICH IS WHY IT IS A ROUTINE AND NOT A LOOP INSIDE ONE
   OF THEM. A free call's candidate is named either by MatchCallDelphiProcAddr or
@@ -8093,8 +8136,89 @@ end;
 
 function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
   const argTypes: array of TTypeKind): Integer;
+{ ...AND THE ARM WHERE NO CANDIDATE IS EVER NAMED, which the retag alone cannot
+  reach. `P([''x''])` against `P(const c: AnsiString)` + `P(const c: array of
+  AnsiString)` -- no defaults, nothing to fall back to -- fails the match
+  outright, so there is no chosen parameter to retag from and pxx refused where
+  fpc answers 2. THE SAME CALL AS A METHOD ALREADY WORKED, byte-identically to
+  fpc, which is what says this is one door missing and not a missing rule.
+
+  A RETRY, on the failed match only, in the shape this function already uses
+  twice (litRetry for value-typed integer literals, pcharRetry for
+  PChar->string). That placement is the whole safety argument and it is
+  structural rather than a guard: where the SET reading matched, this never
+  runs. `Q([fA])` with both a `TF` set candidate and an `array of Integer` one
+  keeps answering 1 -- fpc''s answer, and the row the previous attempt at this
+  ticket correctly refused to regress.
+
+  MatchArgArray IS FORCED, and without it the retry picks the wrong candidate
+  rather than failing. Presenting `[''x'']` as tyChar alone makes it compatible
+  with the `AnsiString` parameter too (char->string is a PREFERRED conversion,
+  rank 1), so both candidates match and declaration order decides -- answering 1
+  where fpc answers 2. The channel is what refuses an array-shaped argument at a
+  scalar parameter, which is the same discrimination the free path already
+  relies on for a real array variable. ElemTk stays tyUnknown: "unconstrained",
+  since the literal''s own element kind is the thing being offered, not a
+  second constraint on it.
+  bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set }
+var i, currArg, node: Integer; anySet, quiet0: Boolean; ek: TTypeKind;
+    retry: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
 begin
   Result := MatchCallDelphiProcAddrInner(name, qUnit, nArgs, argsHead, argTypes);
+
+  if (Result < 0) and (nArgs > 0) and (nArgs <= MAX_PROC_PARAMS) then
+  begin
+    anySet := False;
+    currArg := argsHead;
+    for i := 0 to nArgs - 1 do
+    begin
+      retry[i] := argTypes[i];
+      node := ASTLeft[currArg];
+      if (node >= 0) and (ASTKind[node] = AN_SET_LIT) and SetLitElemsArePlain(node) then
+      begin
+        ek := SetLitArgElemTk(node);
+        if ek <> tyUnknown then
+        begin
+          retry[i] := ek;
+          anySet := True;
+        end;
+      end;
+      currArg := ASTRight[currArg];
+    end;
+
+    if anySet then
+    begin
+      currArg := argsHead;
+      for i := 0 to nArgs - 1 do
+      begin
+        FillMatchArgChannelsAt(i, ASTLeft[currArg], retry[i]);
+        if retry[i] <> argTypes[i] then
+        begin
+          MatchArgArray[i] := True;
+          MatchArgArrayElemTk[i] := tyUnknown;
+        end;
+        currArg := ASTRight[currArg];
+      end;
+      MatchArgRecValid := True;
+      MatchArgAliasValid := True;
+      MatchArgNilValid := True;
+      MatchArgScalarValid := True;
+      MatchArgArrayValid := True;
+      MatchArgElemValid := True;
+      quiet0 := MatchQuiet;
+      MatchQuiet := True;   { a failed retry must leave the caller''s diagnostic alone }
+      if qUnit >= 0 then Result := MatchProcCallInUnit(name, qUnit, nArgs, retry)
+      else Result := MatchProcCall(name, nArgs, retry, qUnit = -1);
+      MatchQuiet := quiet0;
+      MatchArgRecValid := False;
+      MatchArgAliasValid := False;
+      MatchArgNilValid := False;
+      MatchArgScalarValid := False;
+      MatchArgArrayValid := False;
+      MatchArgElemValid := False;
+    end;
+  end;
+
   RetagSetLitArgsForProc(Result, nArgs, argsHead);
 end;
 
