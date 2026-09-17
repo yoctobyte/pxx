@@ -4935,3 +4935,83 @@ findings and never mistakes learns that the sender does not make them.
 Gate GREEN, nothing moved, awaiting two state replies. **Eight for the 18th**,
 unchanged. He is back tomorrow; the note is to be deleted then and the handover
 said out loud.
+
+## Check-in 2l — franks-ee answered from its transcript, and its refinement corrects a live claim in CLAUDE.md. Verified on my own transcript, then landed.
+
+### THE STATE REPLY
+
+franks-ee: **ended its turn, not blocked.** 1148 ok / 25 `is_error:true`, newest
+error **59 minutes EARLIER** than the newest success, so it fails the WHEN test
+cleanly. **Zero user denials across the whole session** — filtered on
+`is_error:true` AND the phrase, so neither half is guessing. Three hook declines,
+all `no-full-suite.sh`, all complied with rather than routed around. Tree clean,
+nothing staged, nothing in flight, 15 commits behind origin.
+
+frankb-56 has not replied yet. franks-ee reports Track P is empty on both sides;
+**that is its BELIEF about another seat and I am not recording it as state** —
+same reason the dispatch table was wrong all day. Pending frankb-56's own answer.
+
+### ITS REFINEMENT IS RIGHT AND CLAUDE.md SAYS THE WRONG THING
+
+CLAUDE.md line 1169 told a reader: *"The discriminator is `is_error: true` on a
+`tool_result` block, never the string."* franks-ee's measurement: **22 of its 25
+`is_error` blocks are successful measurements** — the GTK no-display run exits 1
+and that rc=1 IS the shard5 finding; the fpc/pxx differentials exit 1 precisely
+because pxx correctly refused the program; one 127 was a binary not yet built
+that the next call fixed.
+
+**I did not take that from the message. I ran it on my own transcript first**,
+because a peer's finding is not a licence to edit the rules file and because the
+claim was about an instrument I could point at myself:
+
+```
+this seat: 675 ok, 15 is_error:true, ZERO user denials
+  6 of 15  guardrail declines (no-full-suite.sh x4, the sleep block x2) — all complied with
+  9 of 15  deliberate nonzero exits and my own slips — a diff that found a difference,
+           a compile error that WAS the measurement, `-o` not being a pxx flag, a sed slip
+  0 of 15  an actual blockage
+```
+
+**Three seats, unrelated workloads, all running this check on themselves:
+15, 25 and 30 `is_error` blocks against ZERO, ZERO and ZERO blockages.**
+frankb-56's earlier reply had already given the third row (28 of its 30 were
+deliberate) and neither of us saw the pattern until franks-ee named it.
+
+**The flag is correct about PROCESS EXIT STATUS, which is not the question.**
+That is the same shape as the rule it sits inside — an instrument correct about
+something else — **one layer in from the string match it already improves on**,
+which is why the paragraph's author (this file's own coordinator, in July) landed
+on it and stopped. The discriminator that survives all three seats is the
+ORDERING the paragraph already carries two sentences later: newest error versus
+newest success.
+
+**PROMOTED, as a STRENGTHENING of the existing sentence rather than a
+neighbour** (`CLAUDE.md`, this seat). Venue said out loud: this is not a new
+finding seeking a paragraph, it is a **live claim in the rules file that three
+measurements contradict**, and the file's own standard for a sentence that
+misroutes is that it is the bug. The cost was already visible and unattributed:
+every seat asked "is there a refusal in your transcript" this watch answered yes
+and none of them was stuck.
+
+### AND ITS HOOK DECLINE STRENGTHENS ESCALATION SEVEN
+
+Its newest decline fired on **PROSE** — it was editing the p70 ticket with a
+python heredoc and the patch TEXT quoted optdiff's glob, so `no-full-suite.sh`
+matched a string inside a file edit that compiles nothing and runs no tests. It
+reworded to cite the line number instead of reaching for
+`PXX_ALLOW_FULL_SUITE=1` on an edit that needed no suite. **Guardrail intact, no
+escalation, and it says the sharp thing about it: the hook is scanning a
+namespace that contains descriptions of itself.**
+
+That is the same rule as `pgrep` counting its own command line, in a third
+subsystem. **Item seven for the 18th now has three prose false positives across
+two seats** — my two (a commit message and note text) and this one (a file
+edit) — and the file-edit door is new, because my two were at commit time and
+this one is not. **Still not loosening it**, and neither did franks-ee; the
+report is what he gets, and the decision is his.
+
+### STATE
+
+Gate GREEN as of 2k, three tracked open regressions, nothing landed. One CLAUDE.md
+sentence corrected. **Eight for the 18th**, item seven materially stronger.
+Awaiting frankb-56's state.
