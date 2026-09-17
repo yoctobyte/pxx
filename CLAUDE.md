@@ -1473,7 +1473,12 @@ not a reason to skip the gate, and FPC being absent is a SKIP, never a pass.
 **`tools/gate.sh quick` (~30s) is OPTIONAL per fix, REQUIRED before a pin.**
 Background it and **grep the log for the verdict** — a backgrounded gate's
 notification reports the WRAPPER, and said `exit code 0` over `gate: RED (exit 1)`
-three times in one day. Check its own stale-binary diagnosis before believing a
+three times in one day. **HOW TO WAIT FOR ANY BACKGROUNDED JOB is under "Tokens
+are a constraint" — the `pgrep`/`pkill -f` rule — and that is not where anyone
+looks for it.** Read it before you write a wait loop: the short of it is that a
+process-table scan counts the observer, the bracket trick does not close it, the
+wrapper's exit status is not the job's, and the thing to wait on is a state the
+JOB maintains — its own completion token in its log, first choice. Check its own stale-binary diagnosis before believing a
 RED; `git stash` produces exactly that condition.
 
 **Do NOT widen this loop — the repo refuses.** `.claude/hooks/no-full-suite.sh`
