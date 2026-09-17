@@ -452,3 +452,45 @@ did not crash.)
 **What it does not claim.** The entry stub is assembled with `gcc -c`. No
 external *library* is in that binary; two external *tools* are still in the
 toolchain. Route 2 removes both.
+
+## The owner confirmed route 2, 2026-09-17, and named the thing that makes it tractable
+
+> *"having 'pxx --link' feature would bring its own set of headaches, still a fun
+> project, and well testable against ld"*
+
+**`ld` is the differential oracle, and the harness that uses it already exists.**
+`tools/busybox_diff.sh --freestanding` links the pxx objects with
+`ld -static -nostdlib` and asserts the result carries no libc and no
+`PT_INTERP`. Route 2 does not need a new test rig: it needs **the same run with
+`pxx --link` substituted for `ld`**, over the same 400 objects and the same 29
+behavioural cases, with the two controls that are already proven to FIRE (a gcc
+link has `PT_INTERP`; a stub-less link has no `_start`). That is a rare position
+to start a project from — a reference implementation, a real corpus, a passing
+baseline, and a positive control, all in place before the first line is written.
+
+**Compare the OUTPUT and the BEHAVIOUR, and do not require byte-identity with
+`ld`.** Two linkers may lay out sections differently and both be correct; that is
+the same class as `SizeOf` reporting each compiler's own representation
+faithfully. The claim to hold is *"the program `pxx --link` produces behaves
+identically to the program `ld` produces"*, which the 29 cases already measure.
+A byte-diff against `ld` is a useful tripwire, never the acceptance bar.
+
+**THE ONE FORK THAT DECIDES THE SIZE, and it should be settled before starting:
+do we link OUR objects, or ANYONE'S?** The measured two relocation types
+(`R_X86_64_PC32`, `R_X86_64_64`) over a fixed section set is a fact about **pxx's
+own output**, which is why this is a `--link` mode and not a linker project. The
+moment it must consume a gcc- or fpc-produced object it inherits the full x86-64
+psABI — GOT, PLT and TLS relocation families, archive (`.a`) semantics, section
+groups — and that IS a linker project. The existing decided answer next door
+points the same way: *"the dialect is the target and the implementation is not"*
+(owner, 2026-09-09, on FPC interop). **Linking foreign objects is the same shape
+of want, and nothing in the six goals requires it.** Scope route 2 to pxx's own
+objects, and say so in the flag's help text so nobody later reads the omission as
+a defect.
+
+**Known headaches, named so the estimate is honest:** symbol resolution order and
+duplicate-definition rules; section and symbol-table merging across 400 inputs;
+`--function-sections` already exists, so dead-strip becomes both possible and
+expected; and the i386 story is NOT the x86-64 story — that target already has a
+text-relocation history (`bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils`),
+so **x86-64 is the small case and must not be quoted as the size of the others.**
