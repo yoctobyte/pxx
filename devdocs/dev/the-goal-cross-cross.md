@@ -71,6 +71,18 @@ profile *"really does fail"*, measured, on `PXXVarBinOp` and `PxxSciDigits17`.
 NilPy's driver requires `builtin`. So the remaining work is making `builtin`
 compile for ESP, which is a different and far larger job than the arena was.
 
+**AND THE REMAINING BLOCKER IS SIZE, NOT MISSING CODE — measured the same day.**
+`print("hi")`, the smallest NilPy program there is, comes to **~1.74 MB** on i386
+and **~3.14 MB** on arm32. The ESP32-C3 SRAM region is **262,144 bytes total**,
+stack included. That is 6.6x to 12x over *before* adding back anything bare
+metal currently excludes. The named prerequisite is **wiring DCE for the NilPy
+frontend**: `dce.inc:241` gates it on `IsPascalFrontend`/`IsCFrontend`, so
+`--dce` is inert for NilPy on every target including x86-64 — and when it does
+run it cuts **71%** of code (`67642B -> 19328B`, Pascal control). 71% off 1.59 MB
+is ~460 KB: still over, but the right order of magnitude. **NilPy's own live/dead
+ratio is unmeasured and that 71% is a Pascal number** — it argues for measuring,
+not for assuming it fits.
+
 **"One wall, both ESP architectures" is retired as a description, and the
 conclusion it supported is UNCHANGED.** That sentence was true of what could be
 seen, and clearing the wall is what showed it was never the expensive one —

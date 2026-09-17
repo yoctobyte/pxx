@@ -3,7 +3,7 @@ track: A
 prio: 85
 type: bug
 blocked-by: []
-summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32."
+summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **BUT THE UNIT GAPS ARE NOT WHAT BLOCKS ESP: `print('hi')` under NilPy is ~1.74 MB on i386 and ~3.14 MB on arm32, against an ESP32-C3 SRAM region of 262,144 bytes TOTAL — 6.6x to 12x over, for the smallest program there is. The ranked prerequisite is wiring DCE for the NilPy frontend (dce.inc:241 gates it on IsPascalFrontend/IsCFrontend, so `--dce` is inert for NilPy on EVERY target, x86-64 included); it cuts 71% of code when it runs, measured on a Pascal control.** ~53 .npy tests stay cross-blind on everything but arm32."
 status: unfinished
 owner: claude-A
 ---
@@ -367,4 +367,87 @@ untouched and are not part of any ESP estimate.
 
 These are why `SocBareArenaSize` is a capability: when a part with a different
 map is measured, the divergence belongs there and not in a new constant.
+
+## 2026-09-17 (frankS) — SCOPING THE NEXT WALL, and it is not the one the error names
+
+Having cleared the arena, I scoped `PXXVarBinOp` before estimating it. **The unit
+gaps are real and they are not what blocks the goal.** Measured, all at
+`bb4f3f186fab`.
+
+### The unit gaps (bounded, and NOT the blocker)
+
+`PXXVarBinOp` lives in `builtinheap.pas` inside `{$ifndef PXX_ESP}` — a
+deliberate, documented PROFILE statement (`builtinheap.pas:544`): no file I/O,
+managed dynarray/record retain/release, variant, or float formatting on bare.
+Its own words: *"none of these bodies is unimplementable on an ESP chip … Do not
+read the list as 'ESP cannot do this'."* `builtin.pas` calls into that family
+UNGUARDED, which is the mismatch the error reports.
+
+Sizes, so nobody re-derives them: the exclusion is **553 lines in 5 blocks, 8% of
+builtinheap**; `builtin.pas` is 2839 lines, 128 bodies, of which ~14 carry
+Variant/Double/Single in their signature.
+
+Two false trails I checked and discarded:
+
+- **Guarding the Variant family out of `builtin.pas` is the WRONG fix.** It makes
+  the error go away and makes the goal impossible: NilPy's marshalling types
+  ARE `Variant` (with `TPyBytes`/`TPyList`). Excluding variants excludes NilPy.
+- **Pulling `softfloat` on bare is necessary but not sufficient.** Removing the
+  `not EspBareBoot` guard at `frontend_prologue.inc:161` moves the wall from
+  `__pxx_d2i64_rne is not linked` back to `PXXVarBinOp`. Tried, measured,
+  reverted — the compiler is byte-identical again.
+
+### WHAT ACTUALLY BLOCKS IT: the NilPy runtime is 6.6x larger than the whole chip
+
+`print("hi")` — the smallest NilPy program there is:
+
+| target | code | data | bss | total |
+| --- | --- | --- | --- | --- |
+| i386 | 1,593,196 | 85,940 | 60,672 | **~1.74 MB** |
+| arm32 | 2,994,028 | 85,940 | 60,672 | **~3.14 MB** |
+
+The ESP32-C3 SRAM region is `0x40380000..0x403C0000` = **262,144 bytes TOTAL**,
+and that must also hold the stack. So the NilPy runtime is **6.6x to 12x the
+entire address space it has to fit in**, for the smallest possible program,
+*before* adding back the 553 excluded lines and softfloat. riscv32 codegen is
+bulkier than i386, so the ESP figure is worse than the i386 row.
+
+**This is why `CheckBareImageFitsSram` matters more than it looked**: without it
+the overflow is silent and lands as a stack growing into the heap.
+
+### THE NAMED PREREQUISITE: DCE is not wired for NilPy, on any target
+
+`dce.inc:241` — `if (not IsPascalFrontend) and (not IsCFrontend) then why :=
+'only the Pascal and C frontends are wired up so far'`. It is a **FRONTEND** gate,
+not an architecture one, so `--dce` is inert for NilPy on x86-64 too. The
+compiler will say so itself:
+
+    pascal26 --dce-report t.py     -> dce: off: only the Pascal and C frontends
+                                            are wired up so far
+    pascal26 --dce-report x.pas    -> dce: bodies 140  live 51  dead 88
+                                      dce: code 67642B -> 19328B
+
+That Pascal control is the positive control this claim needs — without it,
+"`--dce` changed nothing" cannot tell *"DCE does not apply here"* from *"DCE does
+nothing at all"*, and my first reading of it could not. **When it runs it cuts
+71% of code.**
+
+**So the ranked prerequisite for "pxx compiles Python to ESP32" is wiring DCE for
+the NilPy frontend, not guarding units.** 71% off 1.59 MB is ~460 KB — still over
+262,144, and the right order of magnitude rather than the wrong one. **NilPy's own
+live/dead ratio is UNMEASURED and 71% is a Pascal number**; do not carry it over
+as a prediction. It is an argument for measuring NilPy's ratio next, not for
+assuming it fits.
+
+### Suggested order for whoever takes this
+
+1. Wire DCE for the NilPy frontend and measure its real live/dead ratio.
+2. Only then decide the `PXX_ESP` block: with DCE, most of those 553 lines may be
+   dropped as dead rather than needing a profile guard at all.
+3. `softfloat` on bare comes with (2) — it is one line and already tried.
+
+If after (1) a NilPy image still cannot fit 262,144 bytes, the fork is not an
+engineering one and belongs to the owner: SRAM-only bare metal may simply be the
+wrong target for the full NilPy runtime, and external flash / PSRAM / a reduced
+runtime profile are different products rather than different implementations.
 
