@@ -896,3 +896,4 @@
 2026-09-17T15:47:36Z	borg	d0cad59b99e35e27e9e30c0ba5022b70e7f9f2f7	WOULD PIN d0cad59b99e3 — 5 red(s), none new, 5 inherited from the current pin, self-host clean, streak 8/2
 2026-09-17T15:47:36Z	borg	d0cad59b99e35e27e9e30c0ba5022b70e7f9f2f7	AUTO-PIN DECLINED — HEAD is 9a7638b7195c, not the tested d0cad59b99e3
 2026-09-17T16:27:03Z	borg	cc03b4a51933a51b3e30c3334797c209f534504f	would NOT pin cc03b4a51933 — 2 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_object_value_type.pas, test-pascal-conformance#shard3/6
+2026-09-17T16:59:31Z	borg	a3ccf3f6986b60800f96ef11e936d29444428f1c	would NOT pin a3ccf3f6986b — 2 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_object_value_type.pas, test-pascal-conformance#shard3/6
