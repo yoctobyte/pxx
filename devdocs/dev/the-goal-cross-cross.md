@@ -25,6 +25,45 @@ as the reasoning that produced it:
 5. **busybox compiles without external libraries**, as a demo.
 6. **Beta 0.1.**
 
+### ADDED 2026-09-17, IN HIS OWN WORDS — WHERE THE SIX GET WORKED RIGHT NOW
+
+The six above are unchanged. This says which of them is being worked and on what
+hardware, because he set it out loud and a direction that lives only in a peer
+message is a direction the next context boundary loses. **Heard firsthand by the
+seat that wrote this**, which is the only way a line may enter this section:
+
+> *"get back to our original goals. so, for PC platforms — this is demo
+> applications like lekkerzeilen. which proven to be a very nice all-round test
+> subject. but the other part would be to focus on ESP32 once more."*
+
+So goal 3 (working demos) has **two halves and they are different hardware**:
+lekkerzeilen carries the PC half and is explicitly valued as *an all-round test
+subject* rather than as one demo among many; **ESP32 is back on, as the other
+half.** That is a return to origin, not a new direction — pxx began as an
+ESP32 Python-like language.
+
+**His framing for why ESP matters now**, prompted by Adafruit shipping
+CircuitPython "Turbo" the same week (host-compiled `@native`/`@viper` functions
+delivered to the board as `.mpy`, a 2-3 KB loader and **no on-board compiler**,
+`-march` covering `xtensa`, `xtensawin` and `rv32imc`):
+
+> *"before we had to recompile micropython for builtins, which still left it up
+> to the interpreter, this is a slightly other class of optimization. there's
+> still no 'we build a static python application for your ESP'. where we still
+> shine."*
+
+**That is the claim to aim at, and it is NOT TRUE YET.** Measured 2026-09-17: a
+Mandelbrot `.npy` that runs correctly on the host is refused for `esp32s3` AND
+`esp32c6` by one wall — *"a heap arena needs mmap, which bare metal has not"*
+(`bug-a-nilpy-on-cross-targets-four-remaining-walls`, re-ranked to 85, held by
+franks-ee). One wall, both ESP architectures. **Until it falls: "pxx runs on
+ESP32" is TRUE (Pascal reaches xtensa) and "pxx compiles Python to ESP32" is
+FALSE, and neither goes into public copy in the other's place.**
+
+Linking — a `pxx --link` mode — was discussed the same day and **explicitly
+POSTPONED by him**, both his reading and our implementing. It is scoped in
+`feature-a-pxx-cannot-link-its-own-objects-...` and is not current work.
+
 **Why this is at the top of this file and not in a ticket.** The owner's
 frustration the same evening: *"i'm a bit frustrated about our backlog and never
 get to a beta release if we keep hunting such ... that's also why we put all

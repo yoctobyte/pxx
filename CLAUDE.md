@@ -158,9 +158,17 @@ An **umbrella** is a GOAL: a real program that must work. `backlog-umbrella/`,
   nobody had built it, five null rows running, and that is retired.** But read
   its own header before quoting a number off it: **it does not answer the size
   question either**, because a recovered-error count is not a cause count and
-  one missing `uses` binding raised twenty rows. It answers *"is there anything
-  behind this wall"*, which is the question that was actually blocking, and
-  **nothing yet answers "how much"**.
+  one missing `uses` binding raised twenty rows. **AND IT ANSWERS THE OTHER
+  QUESTION WRONG, WHICH IS WORSE — measured 2026-09-17.** It answers *"is there
+  anything behind this wall"* **only where the wall is in the SUBJECT's own
+  source**; where the wall is in an IMPORTED unit it inherits first-failure
+  blindness once per import and **answers NO with confidence.** For 17 of 18
+  units it reported a complete set of EXACTLY ONE diagnostic — its own way of
+  saying nothing is behind this — and there was: two walls, twenty-five and
+  seventy-seven lines down the same dependency files. The seat cleared the wall
+  expecting eighteen units and got one. **What DID predict correctly was the
+  decide page's stub arm: it said twenty-two and the fix delivered twenty-two.
+  Stub the wall; do not deepen the census.** Nothing yet answers "how much".
 - **An umbrella with no blockers means nobody has attempted that cell** — that is
   information, not missing paperwork.
 - `next` will not hand you an umbrella; take something it blocks.
