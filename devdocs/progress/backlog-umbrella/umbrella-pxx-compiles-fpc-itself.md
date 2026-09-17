@@ -1815,8 +1815,24 @@ unit by unit, which reports zero verdict changes in either direction rather than
 an unchanged count.
 
 That is strictly stronger and it is nearly free, but only if the rows still
-exist: the probe writes them to a session scratchpad that is reaped at six
-hours. **So keep the rows when you finish a sweep** — franks-ee did the per-unit
+exist: the probe writes them to a session scratchpad under `/tmp`, which
+`/etc/tmpfiles.d/tmp.conf` cleans with `D /tmp ... 6h`.
+
+**CHECK, DO NOT ASSUME, IN EITHER DIRECTION — and this sentence is a correction
+of the one that stood here for four hours.** I first wrote "reaped at six
+hours" flatly, from the configured age. Measured 2026-09-17 at 18:45 on plexus:
+my own three chunk files, written 08:29-08:35, were all still present with 207
+rows intact at TEN hours, and the oldest surviving file anywhere under
+`/tmp/claude-1000` was 24 hours old. systemd-tmpfiles requires atime, mtime and
+ctime all to be older than the age, so an active session's tree outlives the
+number. **Six hours is the configured age, not an observed deadline**, and
+reading it as one costs an unnecessary eight-minute sweep — which is the same
+error as trusting it the other way, just in the direction nobody notices
+because the work still gets done. One box, one tree, one reading: `ls` the rows
+before re-running, and `ls` them before relying on them. Note also that seven's
+`/tmp` is a tmpfs on a different regime, so none of this travels there.
+
+**So keep the rows when you finish a sweep** — franks-ee did the per-unit
 join on the first attempt after the [55] fixes purely because a pre-fix sweep
 was still sitting in the same directory from an hour earlier, and said plainly
 that coming to it cold he would have compared three numbers like anyone else.
