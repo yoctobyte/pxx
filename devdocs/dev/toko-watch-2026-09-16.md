@@ -68,13 +68,24 @@ close the parent-shell half), no keystrokes into a peer's pane, and no polling
 
 ## Dispatch, 2026-09-16 (offers sent; a reply is what makes one real)
 
+**DEAD AS STATE — 2026-09-17, check-in 2q. Read this table as a record of what was
+OFFERED on 09-16 and never as what is open now.** It has produced the same error
+TWICE from this seat: *"Track P is entirely unassigned"* asserted in seven blocks
+(corrected in 2d/2e), and then on 09-17 I re-offered its Track P row verbatim to
+frankb-56 **including a ticket that closed at 22:53 the night before**
+(`eaf776dd8`; the ticket is in `done/`, open in no folder — counted by FOLDER, not
+by a glob). Both times the mechanism was the same: I wrote the caveat below, and
+then read the proposal as state anyway. **The banner is here, at the point of
+reading, because the caveat at the bottom did not stop either one.**
+
+
 | seat | group | why a group and not a ticket |
 | --- | --- | --- |
 | **franks-ee** | A — thread state | three tier reds + heap-lock + errno-is-one-global; one topic |
 | **frankb-56** | C — inline asm / crtl, + duktape & quickjs | asm red and the syscall-idiom ticket are plausibly one thing; the two undeclared builtins are the cheapest demo wins we have |
 | **neo-a2** | O — the four optdiff shards | one first-red date across four shards |
 | **lekkerzeilen-c8** | unchanged (goal 4) | outside the named focus; told to route compiler-lane walls to me |
-| *unassigned* | **P — the FPC-corpus blockers** | hand to the first seat that frees: conditional directive cannot evaluate `in` over a set constant [85]; array constructor in argument position typed as a set [55]; legacy value object types [85] |
+| *unassigned* | **P — the FPC-corpus blockers** | ~~hand to the first seat that frees: conditional directive cannot evaluate `in` over a set constant [85]; array constructor in argument position typed as a set [55]; legacy value object types [85]~~ **STALE. Current state 2026-09-17: (1) the `in`-over-a-set-constant blocker is DONE — `eaf776dd8`, 09-16T22:53, in `done/`, and it bought ZERO compiling units; (2) legacy value object types is a decided NO, reaffirmed twice, and flipping it is an OWNER call — frankb-56 re-measured the cheaper lever the decision file prescribed and it was the fifteenth consecutive null; (3) array constructor in argument position [55] is the ONE genuinely open item, and whoever takes it should start from `d7946acb6`, not from the ticket body — four dead ends are closed there and the ticket points one layer too deep, since with exactly one candidate the lowering already works and only overload ranking is blind.** |
 
 **An offer is not an assignment.** Each seat was asked what it already holds, because
 an idle row and a stuck row look identical from outside and a seat cannot see its own
@@ -5337,3 +5348,98 @@ Gate GREEN. Three tracked open regressions unchanged. Both seats alive, tree
 idle of buildable work for ~4h. **The eight for the 18th are in 2o, one
 block — with item 8's number now re-derived from the binary sha, and 2o's
 `2f5fdda94` sentence corrected above.** He is back tomorrow.
+
+---
+
+## 2q — 2026-09-17 14:30 — frankb-56 answered, and I had been offering a CLOSED ticket
+
+Not a quiet tick after all. The health check I sent in 2p came back with a full
+answer, and **the seat was right about me on the first point.**
+
+### It is not blocked, and it used the right instrument
+
+**Newest `is_error` tool_result 2026-09-16T21:18:37.883Z; newest successful tool
+call 2026-09-17T06:53:23.019Z — the error falls 9.5h BEFORE the success.** Not
+blocked. It also gave the counts I had told it were the wrong question, which is
+the honest way to answer one: **1124 ok / 33 `is_error`, ZERO user denials**, and
+it characterised all 33 as ordinary work — a differential exiting 1 because the
+sides differ, a compile whose refusal IS the finding, a `grep -c` with no match.
+That is the `is_error` measurement landing a fourth time and agreeing with the
+other three. **This is the "stopped short vs stuck" case and it was the first
+one**: it finished at 08:53, reported, and ended its turn. The silence had one
+cause and it was the benign one.
+
+### I re-offered a ticket that had been CLOSED for fifteen hours
+
+The Track P group I offered has three items. **The first one is DONE** —
+`eaf776dd8`, landed 2026-09-16T22:53, by frankb-56 itself; the ticket is in
+`done/` and open in no folder (counted by FOLDER, not by a glob across all of
+them). It buys **zero** compiling units and its own commit subject says so.
+
+**This is the dispatch table again, and it is the second time.** The first was
+*"Track P is entirely unassigned"* in seven blocks (2d/2e). Same mechanism both
+times: the table is a 09-16 PROPOSAL, its own last line says *"until a seat
+replies naming what it took, this table is a proposal"* — **I wrote that caveat,
+and then read the proposal as state anyway, twice.** A caveat at the bottom of a
+table does not survive a context roll; the reader arrives at the row, not at the
+footnote.
+
+**So I did not write a third correction block — I marked the table dead at the
+point of reading**, in the same shape as the retracted optdiff bullet above it,
+with the Track P row struck through and replaced by current state. Tightening my
+own note, which is mine to do.
+
+The corrected row, for the record:
+1. **`in` over a set constant — DONE** (`eaf776dd8`), zero units.
+2. **Legacy value object types — a decided NO, reaffirmed twice.** frankb-56
+   declined again, but with a NEW measurement rather than the old argument:
+   `decide-old-style-object-types` instructed that the cheaper lever
+   `globals.pas:502` be taken first because it *"gates the same 138"*; frankS
+   took it at `fa397c761`, which was **not an ancestor of the tree the old
+   totals came from**, so nobody had re-measured. Re-run at `17b8561f2`:
+   **21 / 10 / 176, unchanged; `globals.pas:502` is now the first failure of
+   ZERO of 207 units.** The 138 were queued behind it, never gated by it.
+   Fifteenth consecutive null. The instruction is discharged, the pricing
+   (+1 unit) stands, and **flipping it is an owner call — not mine to hand
+   anyone.** Correct, and I should not have re-offered it either.
+3. **Array constructor in argument position [55] — genuinely open**, and this is
+   the useful part: it attempted it, failed four times, reverted, and banked the
+   diagnosis at `d7946acb6`. **The ticket points one layer too deep** — with
+   exactly one candidate the lowering ALREADY works, so only overload ranking is
+   blind. Start from that commit, not from the ticket body.
+
+### What `ec8a4d88c` was — the only buildable commit in my window
+
+Worth recording because it is this file's own house failure mode, caught by the
+author: the corpus reported conditional-directive refusals at `nld.pas:1334`,
+`nadd.pas:1112`, `hlcgobj.pas:1821` — and **the directives are at 700, 1352,
+4156.** `Error` prints the CURRENT TOKEN's line while the evaluator runs from the
+directive handler. It burned two probes chasing 1334 to an ordinary
+`eq:=compare_defs(...)` before checking the number itself. **Its positive control
+is the sharp part: the pinned compiler answers 29 for a line-30 directive — an
+off-by-one, which is exactly the reading that gets trusted.** Two fixtures, because
+the `in` arm poisons rather than raises and its diagnostic site takes a variable
+argument, so sweeping the literal spelling fixed two of three units and left `nld`
+wrong.
+
+### Taking now, and one thing for someone else
+
+frankb-56 has taken **the three conditional-evaluator walls that corpus run
+named** — `supported_optimizerswitches` (nld), `bestrealrec` (nadd), `aintmax`
+(hlcgobj), all constants in `x86_64/cpuinfo.pas`. One group, its lane, named by
+attempting the target. **It declined to claim a unit count in advance**, which on
+this umbrella is the correct posture fifteen times over.
+
+**Unowned, and not mine to act on: `TDoubleRec` is now the first failure of 140
+of 207 units, up from 132**, because five walls cleared into it. The umbrella has
+already measured that `TDoubleRec` ALONE delivers zero — no unit has it as its
+only error — and the wall behind it in the same file has a ticket. **A pair, not
+a 140-unit prize.** Recorded here so it is not read as an opening by whoever sees
+the number next.
+
+### STATE
+
+Gate GREEN. Three tracked open regressions unchanged. **frankb-56 not blocked and
+now working a named group; franks-ee idle by choice.** Track P has exactly ONE
+open item and it has a warning attached. The dispatch table is marked dead. The
+eight for the 18th are in 2o. He is back tomorrow.
