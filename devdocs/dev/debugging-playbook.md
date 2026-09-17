@@ -9779,6 +9779,33 @@ cannot match its own pattern** (spell the count in words; break the search
 string, or quote it somewhere the probe does not read), or the next reader is
 measuring your write-up and not the thing.
 
+**AND A TIGHTER-LOOKING SPELLING IS NOT A TIGHTER QUERY — IT JUST MAKES THE
+WRONG ANSWER LOOK AUTHORITATIVE.** Measured 2026-09-17, same pair of seats, same
+afternoon, in the neighbouring instrument. Looking for the newest pin, the
+careful spelling is the one that includes the subject prefix rather than the
+version alone — and `git log --grep='chore(stable): pin v' -1` answers a
+**`docs(watch)` commit quoting the pin in prose.** Two of that query's three
+recent hits are prose. **The seat that hit it knew the rule and chose the
+tighter spelling BECAUSE of the rule, and still got prose**, which is the
+failure worth recording: a query that looks disciplined recruits more trust,
+not less.
+
+**What actually rescues it is the ANCHOR, and it is one character:** `--grep`
+takes a regex over the whole message, so `^` pins the match to the start of a
+line. Measured: unanchored **292** hits, anchored **288**, and the newest under
+the anchored form is the real pin commit rather than a watch note. Four hits is
+the entire difference between a correct answer and an inverted one.
+
+**The part that is not a joke:** the commit whose body PRESCRIBES that anchor —
+*"Anchor to `^chore(stable): pin vN`, and prefer the sha pair, which prose
+cannot imitate"* — is itself the **top hit of the unanchored query**. The
+statement of the remedy is the noise the remedy exists to filter, and its author
+wrote both. **A hazard note about a namespace is written INTO that namespace**,
+so every correct warning of this class degrades the instrument it warns about by
+exactly one row. There is no wording that escapes it; only the identity check
+does, which is why the sha pair and not the anchor is the rule that got promoted
+to CLAUDE.md.
+
 ## TWO PATHS, ONE QUESTION — perturb the operand so only one can claim it
 
 **The technique in one line: when two mechanisms can answer the same question,

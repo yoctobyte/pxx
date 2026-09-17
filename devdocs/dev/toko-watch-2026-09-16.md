@@ -5258,6 +5258,14 @@ the sentence that reverses it.
    `$(PXX_STABLE)` until a pin: `e4c72bd15` postdates v410 by **18 minutes**.
    Not a reason for anyone to sit — it is inert, not blocking — but it is the
    first thing a pin clears.
+   **ADDENDUM 2026-09-17 15:50, and it stays inside item 8 rather than becoming
+   a ninth:** the pin in place is v410 from 09-14, so the fleet has now been on
+   it **three days**, and frankb-56's five Track P compiler fixes landed today
+   are inert for every `lib/**` consumer until the next one. It is stating the
+   cost, not asking and not waiting — which is the failure mode the rules file
+   names three times. **Nothing here is a fork for him**: no pin happens while
+   he is away, by my own hard limit, and a pin is the first thing he does on
+   return. So this is a SIZE on item 8, not a new question.
 
 **Also standing, and NOT escalations:** franks-ee's `2f5fdda94` is `compiler/**`
 and inert until a pin. Neither that nor item 8 is a reason for a seat to wait;
@@ -5601,3 +5609,84 @@ the search string, and the count is still ONE after the edit, checked.
 gates, serially.** Three tracked open regressions unchanged as of 14:05.
 frankb-56 working, nld parked with a design step named. franks-ee idle by choice.
 **The eight for the 18th are in 2o.** He is back tomorrow.
+
+---
+
+## 2t — 2026-09-17 15:55 — the commit that prescribes the anchor is the top hit of the unanchored grep, and it is mine
+
+frankb-56 re-measured instance #1 while checking my inversion. Everything below
+I re-ran myself.
+
+### The series is live, not stale
+
+| pin | `--grep 'pin vN'` hits | real pin commits |
+| --- | --- | --- |
+| v408 | 19 | one |
+| v409 | six | one |
+| v410 | **29** | one |
+| v411 | zero | **none — this row is a CONTROL, not a data point** |
+
+CLAUDE.md records v410 as five in the morning and nineteen that evening. It is
+twenty-nine today. **That figure is not stale and must not be "corrected" — it is
+dated, it is a time series, and the series did what the note predicted one day
+further on.** The v411 row is there because a version that does not exist answers
+zero, which is the negative control; read as a series point it would say the
+noise is falling.
+
+### The narrow spelling does not rescue it — and the peer knew the rule when it fell in
+
+Looking for the newest pin, the careful spelling includes the subject prefix
+rather than the version alone. `git log --grep='chore(stable): pin v' -1`
+answers **`94d6fce45  docs(watch): 1e`** — a watch note quoting the pin in prose.
+Two of that query's three recent hits are prose. **It chose the tighter spelling
+BECAUSE of the rule and still got prose**: a query that looks disciplined
+recruits more trust, not less.
+
+**The anchor does rescue it, and it is one character.** `--grep` is a regex over
+the whole message, so `^` pins to a line start: unanchored **292**, anchored
+**288**, and the newest under the anchored form is `764ee2ed2` — the real pin.
+Four hits is the entire difference between a correct answer and an inverted one.
+
+### And here is the part that is not a joke
+
+`94d6fce45` is the commit whose body says, in my own words:
+
+> *"A grep for a name matches prose ABOUT the thing, and in this repo prose about
+> a pin outnumbers the pin, my own check-ins being the noise. **Anchor to
+> `^chore(stable): pin vN`**, and prefer the sha pair, which prose cannot
+> imitate."*
+
+**The commit that prescribes the anchor is the top hit of the unanchored query.**
+The statement of the remedy is the noise the remedy exists to filter. It is
+mine — `session_01FcK7gV4FyP2pctkY9QUaPV`, checked, not assumed.
+
+That generalises and it is the line worth keeping: **a hazard note about a
+namespace is written INTO that namespace**, so every correct warning of this
+class degrades the instrument it warns about by exactly one row. No wording
+escapes it. **Only the identity check does** — which is precisely why the sha
+pair, and not the anchor, is what sits in CLAUDE.md. The peer confirmed the same
+thing from the other end: it separated the three hits in one command with
+`sha256sum stable_linux_amd64/default/stable_pinned` = `c599e8546121` against the
+pin's own subject, and said it would not have separated them otherwise. **That
+rule earned its place twice today, on two seats, within an hour.**
+
+Landed in the playbook beside the wrapped-prose section, not in CLAUDE.md: the
+general form is already there and it is already correct; what is new is the
+worked anchor and the self-reference, which is playbook material.
+
+### Item 8 sized, and deliberately NOT a ninth item
+
+frankb-56 flagged that the pin in place is three days old and its five Track P
+fixes today are inert for every `lib/**` consumer until the next one. It stated
+it, did not ask, and is not waiting — correct. **I added it as an ADDENDUM
+INSIDE item 8 rather than as a ninth escalation**, because it is a size on a
+question he already has, not a new question: no pin happens while he is away by
+my own hard limit, and a pin is the first thing he does on return. **The
+handover stays eight items and one read.**
+
+### STATE
+
+Gate not re-run since 14:05; `compiler/` moved at 14:39, so the next tick
+**rebuilds first, then gates, serially.** Three tracked open regressions
+unchanged. frankb-56 working, nld parked. franks-ee idle by choice. He is back
+tomorrow.
