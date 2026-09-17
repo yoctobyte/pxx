@@ -114,6 +114,38 @@ the call sites would have been three spellings of one rule.
   are refused by a version of this fix that forgets the channel fill, and the
   two- and three-argument rows are passed by a gate that checks only argument 0.
 
+## A REDUCTION OF THIS CAN LOOK COMPLETELY HEALTHY — the record shape is load-bearing
+
+Measured 2026-09-17 by frankuser while verifying the control, and worth more
+than the verification. Reconstructing the repro from a description — a record of
+**three Int64s** rather than this ticket's one-Integer `TR` — compiles under the
+pin, runs cleanly, and prints **3**. A small, sensible-looking integer. Reported
+from that run alone it reads as *does not reproduce*, with a clean run to point
+at.
+
+It was never a false instance: HEAD refuses that program too, by the same
+fallback. Only the CONSEQUENCE differed. `Length(c)` reads whatever bytes sit at
+the argument, and a wide record happens to put a plausible small number there
+where a narrow one puts a crash. **The observable is a function of the victim's
+memory layout, so the severity of any given reduction is luck.** Use
+`test/test_default_arg_typecheck_fail.pas` rather than a reconstruction — it is
+in the tree, its shapes are chosen, and a reader who reduces this to "some
+record, some string parameter" can get a healthy run and close the ticket on it.
+
+## Corpus: no cost (expectation stated before the run)
+
+This fix makes the compiler STRICTER, which on a corpus can only lose units and
+never gain them — and `gate.sh quick` cannot see that. Expectation recorded
+before the sweep: **21 / 10 / 176 unchanged; any movement in BOTH-OK is a
+regression, not a win.**
+
+Measured at `2de677672` over FPC's own compiler, 207 units, run as three
+foreground chunks of a partition asserted to union exactly to the glob (the
+probe's own header records that a backgrounded full sweep has been lost twice):
+**21 BOTH-OK / 10 ORACLE-NO / 176 PXX-FAIL, 207 rows, 207 distinct units.**
+Unchanged. The null row is reportable only because the expectation was written
+down first.
+
 ## What this does NOT fix
 
 `bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set` [55] is a
