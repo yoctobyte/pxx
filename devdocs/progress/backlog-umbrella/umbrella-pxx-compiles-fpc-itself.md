@@ -1803,6 +1803,26 @@ Attributions for the cleared walls, so the delta is not read as one seat's:
 `charset` is `6bc01579f`, `sizeof(<a PARAMETER>)` is `a931bef4d`, `expected
 operator` is `eaf776dd8`. Only the first and last are mine.
 
+### The join instrument is the PREVIOUS SWEEP'S ROWS — keep them
+
+Recorded here because this section gets the join half right and the other half
+wrong, and the next reader should not repeat it. The by-name BOTH-OK set below
+lets a later run join the units that COMPILE. The first-failure table above is
+an aggregate, so it cannot see two units swapping inside one error class —
+**equal totals are satisfiable by a regression and a gain that cancel.** The
+instrument that closes that is the previous sweep's 207 per-unit rows, joined
+unit by unit, which reports zero verdict changes in either direction rather than
+an unchanged count.
+
+That is strictly stronger and it is nearly free, but only if the rows still
+exist: the probe writes them to a session scratchpad that is reaped at six
+hours. **So keep the rows when you finish a sweep** — franks-ee did the per-unit
+join on the first attempt after the [55] fixes purely because a pre-fix sweep
+was still sitting in the same directory from an hour earlier, and said plainly
+that coming to it cold he would have compared three numbers like anyone else.
+Not judgement; kept rows. I ran this total three times on 2026-09-17 and joined
+per unit on none of them.
+
 ### The BOTH-OK set, BY NAME — recorded because it never has been at 21
 
 Every previous attempt that moved reported the join by name and it was the
