@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `d0cad59b99e3` | 2026-09-17T15:58:41Z | GREEN (opt) | 543.0s | `d0cad59b99e3` RED |
+| borg | `cc03b4a51933` | 2026-09-17T16:06:28Z | RED (native) | 309.9s | `d0cad59b99e3` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `d0cad59b99e3` on borg, 2026-09-17T15:47:36Z (11m ago).**
+**Newest full tier in the fleet: `d0cad59b99e3` on borg, 2026-09-17T15:47:36Z (18m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `d0cad59b99e3` | RED | 11m | — (newest) |
+| borg | `d0cad59b99e3` | RED | 18m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -31,3 +31,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **lib-test#src:test/crtl_atexit.c** — test/crtl_atexit.c tools/expect_same.sh +1 (borg): bad `934ba04180e9`, last good `b984ad07e38f`, 1 commit(s) in range
+- **test-core#src:test/test_object_value_type.pas** — test/test_object_value_type.pas tools/expect_same.sh +3 (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
