@@ -2115,6 +2115,7 @@ function pymul_v(const a: Variant; const b: Variant): Variant;
   number; there is no complex type here, so it degrades to NaN.
   feature-nilpy-power-operator-and-divmod }
 function pypow_v(const a: Variant; const b: Variant): Variant;
+function pyaugpow_v(const a: Variant; const b: Variant): Variant;
 { Python's `divmod(a, b)` -- (a // b, a % b) as a 2-tuple, both of which are
   already correct on negative operands via pyfloordiv_v/pyfloormod_v. }
 function pydivmod_v(const a: Variant; const b: Variant): TPyList;
@@ -2129,7 +2130,9 @@ function pyvar_to_char(const v: Variant): Char;
 function pyor_v(const a: Variant; const b: Variant): Variant;
 function pyand_v(const a: Variant; const b: Variant): Variant;
 function pyfloordiv_v(const a: Variant; const b: Variant): Variant;
+function pyaugfloordiv_v(const a: Variant; const b: Variant): Variant;
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
+function pyaugfloormod_v(const a: Variant; const b: Variant): Variant;
 { Arithmetic / bitwise / compare over VARIANTS, for the pyeval tree-walker
   (feature-lib-pyexec): its operands are always variants and Python dispatches
   on the runtime tag. `+` concatenates two strings, else numeric add (float if
@@ -2140,6 +2143,7 @@ function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 function pyadd_v(const a: Variant; const b: Variant): Variant;
 function pyaugadd_v(const a: Variant; const b: Variant): Variant;
 function pysub_v(const a: Variant; const b: Variant): Variant;
+function pyaugsub_v(const a: Variant; const b: Variant): Variant;
 function pymod_v(const a: Variant; const b: Variant): Variant;
 function pybitand_v(const a: Variant; const b: Variant): Variant;
 function pybitor_v(const a: Variant; const b: Variant): Variant;
@@ -2156,6 +2160,7 @@ function pycmp_v(const a: Variant; const b: Variant): Int64;   { -1/0/1 }
   that turned a str handle into a number
   (bug-nilpy-mixed-type-arithmetic-silently-does-pointer-math). }
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
+function pyaugtruediv_v(const a: Variant; const b: Variant): Variant;
 { The ORDERING operators over variants. Each is pycmp_v plus a test, exposed as
   its own function so the lowering emits one call returning a Boolean rather
   than hand-building a compare against pycmp_v's Int64. pycmp_v raises for a
@@ -2217,6 +2222,7 @@ function pyconv_dict(const a0: Variant): Variant;
 function pyconv_set(const a0: Variant): Variant;
 function pyvar_of_int(v: Int64): Variant;
 function pyvar_of_bool(b: Boolean): Variant;
+function pyvar_neg(const v: Variant): Variant;
 { Identity on a Variant. Its use is the ARGUMENT side: passing a scalar here
   boxes it through the ordinary call-argument path, which is the one place that
   knows how to make a variant out of any value — so an Integer field read and a
@@ -2888,6 +2894,14 @@ function pyvar_slice_step(const v: Variant; lo, hi, step: Integer): Variant;
   kept test-uforth red. Returns a variant so the del arm can swap the read's
   proc in place, as every other arm there does. }
 function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
+{ `del s[i]` / `del s[a:b]` on a value the compiler KNOWS is a str: CPython's
+  run-time TypeError, in its wording, instead of a compile error. Reached
+  once the call-site typing (PyParamTypeFromSites) made `def f(vm): del
+  vm[1:2]` a str parameter where it used to be a variant, and the variant
+  path raised at run time -- a program that catches the TypeError has to
+  keep running the same way. Same swap-the-read's-proc shape as the twins. }
+function pystr_del_at(const s: AnsiString; i: Integer): Variant;
+function pystr_del_slice(const s: AnsiString; lo, hi: Integer): Variant;
 { `type(x).__name__` for any value — see the body for why the frontend cannot
   answer this from RTTI alone (tuple and list share one class). }
 function pytype_name_v(const v: Variant): AnsiString;
@@ -5544,6 +5558,18 @@ end;
   Bounds and the shift live in pylist_del_slice, called rather than copied --
   an open-ended `[n:]` reaches it with whatever `hi` the READ computed, because
   the del arm reuses the read's own argument nodes. }
+function pystr_del_at(const s: AnsiString; i: Integer): Variant;
+begin
+  Result := pyvar_of_int(0);
+  raise TypeError.Create('''str'' object doesn''t support item deletion');
+end;
+
+function pystr_del_slice(const s: AnsiString; lo, hi: Integer): Variant;
+begin
+  Result := pyvar_of_int(0);
+  raise TypeError.Create('''str'' object does not support item deletion');
+end;
+
 function pyvar_del_slice(const v: Variant; lo, hi: Integer): Variant;
 var o: TObject;
 begin
@@ -6469,6 +6495,26 @@ begin
   pb := PyVarUserObj(PPyVarRec(@b));
   if (pa = nil) and (pb = nil) then Exit;
   Result := PyUserObjArith(pa, pb, a, b, dunder, rdunder, res);
+end;
+
+{ `p += x` where p is a VARIANT holding a user object: the IN-PLACE dunder, on
+  the LEFT operand only. Deliberately NOT PyVarUserArith, which also tries the
+  reflected dunder on the right operand -- there is no such thing as a reflected
+  in-place operation. Python's rule is "__iadd__ on the left, else fall back to
+  the binary form and REBIND", and the fallback is the caller's job.
+
+  Answers False when the left operand is not a user object, which is what keeps
+  `xs += ys` on a list out of here: PyVarUserObj excludes TPyList/TPyDict/
+  TPyBytes, so the list arm above it still owns that case.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function PyVarUserAug(const a, b: Variant; const idunder: AnsiString;
+                      var res: Variant): Boolean;
+var pa: TObject;
+begin
+  Result := False;
+  pa := PyVarUserObj(PPyVarRec(@a));
+  if pa = nil then Exit;
+  Result := PyUserArithCall1(pa, PyVarUserObj(PPyVarRec(@b)), b, idunder, res);
 end;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
@@ -7451,6 +7497,12 @@ begin
   ks := keylist;
   vs := vallist;
   for i := 0 to ks.count - 1 do Result.store(ks.at(i), vs.at(i));
+  { store() copies each element out, so both snapshots are pure temporaries.
+    Measured 2026-09-14: 1168 bytes per call on a 32-entry dict -- the SAME
+    number dict(d) leaked before 88a55bb9f fixed it, because d.copy() is a
+    DIFFERENT function reaching the same operation. }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
 end;
 
 function TPyDict.popitem: TPyList;
@@ -7458,7 +7510,12 @@ var ks, vs: TPyList; n: Integer; k: Variant;
 begin
   ks := keylist;
   if ks.count = 0 then
+  begin
+    { release BEFORE raising: the early exit leaks ks otherwise, and vs does
+      not exist yet on this path }
+    PXXObjRelease(Pointer(ks));
     raise KeyError.Create('popitem(): dictionary is empty');
+  end;
   vs := vallist;
   n := ks.count - 1;                  { LIFO, matching CPython 3.7+ }
   k := ks.at(n);
@@ -7467,6 +7524,9 @@ begin
   Result.append(k);
   Result.append(vs.at(n));
   remove(k);
+  { both snapshots are read-only temporaries here -- measured 656 bytes/call }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
 end;
 
 function TPyDict.pop(const k: Variant): Variant;
@@ -8085,8 +8145,17 @@ begin
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8107,8 +8176,17 @@ begin
     pair.append(a.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8165,8 +8243,17 @@ begin
     pair.append(b.at(i));
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
 end;
 
@@ -8493,6 +8580,14 @@ begin
   if kl <> nil then
   begin
     for i := 0 to kl.count - 1 do r.add(kl.at(i));
+    { kl IS OURS TO RELEASE and it is a full copy, not an alias: every arm of
+      pyseq_of_obj returns a fresh list -- the list, bytes and range arms copy
+      through list(), the dict arm builds one in keylist, the iter and
+      user-object arms drain into a new one. Measured 2026-09-14: set(L) for a
+      32-element L leaked 583 bytes per call, linear, which is exactly that
+      copy (32 Variants at 16 bytes plus header). A Pascal local does not
+      participate in refcounting; see the note on pystr_format. }
+    PXXObjRelease(Pointer(kl));
     Exit;
   end;
   raise TypeError.Create('set() argument must be iterable');
@@ -8669,6 +8764,12 @@ begin
     pair.append(vs.at(idx[i]));
     res.append(pair);
   end;
+  { measured 3855 bytes/call on a 16-entry dict. This releases the two
+    SNAPSHOTS only: the pairs reach res through res.append(pair) -- an object,
+    not a boxed variant like the four eager sites -- so whether that retains is
+    not established here and is not patched on an assumption. }
+  PXXObjRelease(Pointer(ks));
+  PXXObjRelease(Pointer(vs));
   Result := res;
 end;
 
@@ -8833,13 +8934,22 @@ begin
     pair.FKind := PYSEQ_TUPLE;   { dict.items() yields (key, value) tuples }
     pair.append(kl.at(i));
     pair.append(vl.at(i));
-    { box the pair as a VT_OBJECT slot and retain it — the same shape a nested
-      list literal gets when it is appended }
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     r.append(pv);
+    { pv is a RAW-written scratch box and must never own a reference: append ->
+      PyVarSlotSet already retains an object payload, so the result list takes
+      its own. Raw-clear it so no finalization of pv can release a pair the list
+      still holds, then drop the CONSTRUCTOR's rc=1 -- without that the pair
+      ends at rc>=2 against one real owner and can never reach zero.
+      Measured 2026-09-14: 200 bytes per entry, forever, CPython 0;
+      -dPXX_OBJTRACE showed rc climbing 1->2->3 and never returning. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
   end;
+  PXXObjRelease(Pointer(kl));
+  PXXObjRelease(Pointer(vl));
   itemlist := r;
 end;
 
@@ -9467,9 +9577,16 @@ function pymul_v_inplace(const a: Variant; const b: Variant): Variant;
 
   A tuple and a frozenset are immutable and take the ordinary path — the kind
   check lives in pylist_repeat_inplace, which is the one place that knows it.
+  A USER class declaring __imul__ mutates and hands back self, and it is tried
+  BEFORE the list arm because a user class can hold a list and still mean its
+  own operator. Without it `c *= 3` fell to __mul__, which builds a NEW object
+  and binds it to the local — the caller's object never changed, silently.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation
+
   bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds }
 var o: TObject;
 begin
+  if PyVarUserAug(a, b, '__imul__', Result) then Exit;
   { BOTH integer tags: a boxed literal wears VT_INT (1) and a boxed Int64
     VT_INT64 (2), and testing only one is how the arm silently never fired. }
   if (pyvartag(a) = 7) and (pyvarobj(a) <> nil) and
@@ -9664,6 +9781,26 @@ begin
   end;
   PXXPromoToVariant(dst, @pr);
   PXXPromoClear(@pb); PXXPromoClear(@pr); PXXPromoClear(@pt);
+end;
+
+
+{ `t **= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pypow_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __ipow__/__pow__ rule was skipped for
+  exactly that target shape, and `p **= 2` fell to __pow__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugpow_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ipow__', Result) then Exit;
+  Result := pypow_v(a, b);
 end;
 
 function pypow_v(const a: Variant; const b: Variant): Variant;
@@ -9875,6 +10012,26 @@ begin
   end;
 end;
 
+
+{ `t //= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pyfloordiv_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __ifloordiv__/__floordiv__ rule was skipped for
+  exactly that target shape, and `n //= 4` fell to __floordiv__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugfloordiv_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__ifloordiv__', Result) then Exit;
+  Result := pyfloordiv_v(a, b);
+end;
+
 function pyfloormod_v(const a: Variant; const b: Variant): Variant;
 var
   pa, pb, r: PPyVarRec;
@@ -9933,6 +10090,30 @@ begin
   r := PPyVarRec(@Result);
   r^.VType := 2;
   r^.Payload := v;
+end;
+
+{ `-v` on a variant. The IR rewrites unary minus on a variant to `0 - v`, which
+  is right for every tag but a double holding ZERO: 0 - 0.0 is +0.0 where CPython
+  keeps -0.0 (Mat4.look_at's 13th element in the lekkerzeilen demo, found by its
+  parity sweep 2026-09-16; `copysign`, `1/x` and `atan2` all read that sign). A
+  double's sign bit is flipped; every other tag keeps the subtraction, whose
+  dispatch already raises for a non-number. }
+function pyvar_neg(const v: Variant): Variant;
+var p, r: PPyVarRec;
+begin
+  p := PPyVarRec(@v);
+  if p^.VType = 3 then
+  begin
+    r := PPyVarRec(@Result);
+    r^.VType := 3;
+    PPyDouble(@r^.Payload)^ := -PPyDouble(@p^.Payload)^;
+  end
+  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 4) or (p^.VType = 8193) then
+    Result := 0 - v
+  else
+    { Pascal's own variant subtraction would raise EVariantError here; the
+      program wrote Python and gets Python's error }
+    raise TypeError.Create('bad operand type for unary -: ''' + PyVarTypeNameOf(v) + '''');
 end;
 
 function pyvar_of_bool(b: Boolean): Variant;
@@ -10015,6 +10196,26 @@ begin
                         ((x < 0) and (y > 0) and (r >= 0))
   else
     PyIntOpOverflows := (x <> 0) and ((r div x) <> y);
+end;
+
+
+{ `t %= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pyfloormod_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __imod__/__mod__ rule was skipped for
+  exactly that target shape, and `n %= 7` fell to __mod__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugfloormod_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__imod__', Result) then Exit;
+  Result := pyfloormod_v(a, b);
 end;
 
 function pyadd_v(const a: Variant; const b: Variant): Variant;
@@ -10146,6 +10347,22 @@ begin
       Exit;
     end;
   end;
+  { A USER class declaring __iadd__ MUTATES IN PLACE and hands back self, so the
+    caller's object must see the change. Without this the fallback below reached
+    __add__, which builds a NEW object and binds it to the local -- the value
+    inside the function was right and the CALLER'S OBJECT WAS NEVER TOUCHED. A
+    silent wrong answer on the ordinary accumulator idiom, and silent precisely
+    because declaring both __iadd__ and __add__ is the normal way to write the
+    class; with only __iadd__ declared it was instead a loud "expected a number,
+    got object".
+
+    This is the runtime half of a dispatch the parser does statically. The
+    compile-time arm (PyAugClassDunder) keys on Syms[].TypeKind = tyClass, which
+    an UNANNOTATED PARAMETER never is -- it arrives as a variant -- so the whole
+    __iadd__/__add__ rule was skipped for exactly that one target shape. Same
+    structure, and the same comment, as the __add__ arm in pyadd_v.
+    bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+  if PyVarUserAug(a, b, '__iadd__', Result) then Exit;
   Result := pyadd_v(a, b);
 end;
 
@@ -10401,6 +10618,26 @@ begin
   else Result := 0;
 end;
 
+
+{ `t -= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pysub_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __isub__/__sub__ rule was skipped for
+  exactly that target shape, and `n -= 3` fell to __sub__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugsub_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__isub__', Result) then Exit;
+  Result := pysub_v(a, b);
+end;
+
 function pytruediv_v(const a: Variant; const b: Variant): Variant;
 var r: PPyVarRec; da, db: Double;
 begin
@@ -10430,6 +10667,26 @@ end;
   rather than ordering the tag-0 payload as 0 and answering False.
   bug-nilpy-comparing-none-with-a-number-answers-instead-of-raising.
   `==`/`!=` are pyeq_v's business and stay total — `None == 3` is False. }
+
+{ `t /= x` where t reads as a VARIANT and holds a user object: the IN-PLACE
+  dunder first, on the LEFT operand only — there is no reflected in-place
+  operation. Falls through to pytruediv_v, CALLED rather than re-implemented, so every
+  row that already worked is provably unchanged.
+
+  The runtime half of a dispatch the parser does statically. PyAugClassDunder
+  keys on Syms[].TypeKind = tyClass, which an unannotated parameter never is —
+  it arrives as a variant — so the whole __itruediv__/__truediv__ rule was skipped for
+  exactly that target shape, and `n /= 4` fell to __truediv__, which builds a NEW object
+  and binds it to the local. The caller's object is never touched: a SILENT
+  wrong value, silent precisely because declaring both dunders is the normal
+  way to write the class.
+  bug-n-augmented-assignment-to-an-unannotated-parameter-silently-loses-the-mutation }
+function pyaugtruediv_v(const a: Variant; const b: Variant): Variant;
+begin
+  if PyVarUserAug(a, b, '__itruediv__', Result) then Exit;
+  Result := pytruediv_v(a, b);
+end;
+
 function pylt_v(const a: Variant; const b: Variant): Boolean;
 begin
   PyOrdCheck(a, b, '<');
@@ -13961,7 +14218,16 @@ begin
     which only shows up when a .pas program `uses pylib` directly, never on the
     NilPy path. The `Result := pynone` assignment form below is fine. }
   FBox.append(pynone());
-  PXXObjRetain(Pointer(FBox));
+  { NO PXXObjRetain HERE, and the asymmetry with FSrc/FUp/FUp2 is the point.
+    Those are BORROWED -- handed in by the caller, who may drop them while the
+    cursor lives -- so the constructor takes a reference and PyObjFinalize
+    drops it. FBox is CONSTRUCTED on the line above, so it arrives already
+    owning rc=1 on behalf of this field; retaining it again made it rc=2
+    against a single release in the finalizer, so every cursor leaked its
+    prefetch box even though the cursor itself was freed correctly.
+    Measured 2026-09-14 with -dPXX_OBJTRACE: `A rc=1, R rc=2, r rc=1` and no F,
+    exactly 3 boxes per list(zip(...)) call -- flat across 4, 8 and 32 elements,
+    which is what identified it as per-CALL machinery rather than per-pair. }
   FPos := 0;
   FStart := 0;
   FHas := False;
@@ -14361,8 +14627,17 @@ begin
     Inc(it.FPos);
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;
@@ -14462,8 +14737,17 @@ begin
     if pair = nil then begin it.FEnd := True; Exit; end;   { zip() of nothing }
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;
@@ -14494,8 +14778,17 @@ begin
     end;
     PPyVarRec(@pv)^.VType := 7;
     PPyVarRec(@pv)^.Payload := Int64(NativeInt(Pointer(pair)));
-    PXXObjRetain(Pointer(pair));
     it.FBox.put(0, pv);
+    { put -> PyVarSlotSet retains the incoming value and releases the slot's
+      previous occupant, so the box owns its reference. pv must own none (raw
+      box), and the CONSTRUCTOR's rc=1 is surplus: without dropping it the pair
+      ends at rc>=2 against one owner and never reaches zero. The consumer takes
+      its own reference before the next put displaces the box's.
+      Measured 2026-09-14: list(zip(...)) 7000 bytes/call, list(enumerate(...))
+      6800, both CPython 0. }
+    PPyVarRec(@pv)^.VType := 0;
+    PPyVarRec(@pv)^.Payload := 0;
+    PXXObjRelease(Pointer(pair));
     it.FHas := True;
     Result := True;
     Exit;
@@ -16720,6 +17013,15 @@ begin
   args := TPyList.Create;
   args.append(a);
   pystr_format := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 { `"{} and {}".format(a, b)` — a SEPARATE proc, not a second pystr_format
@@ -16740,6 +17042,15 @@ begin
   args.append(a);
   args.append(b);
   pystr_format2 := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 { THREE OR MORE placeholders. The arity-suffixed-name trick above does not
@@ -16765,6 +17076,15 @@ begin
   if n > 6 then args.append(a6);
   if n > 7 then args.append(a7);
   pystr_formatn := PyFormatApply(fmt, args);
+  { RELEASE THE TEMPORARY. pxx objects ARE refcounted (PXXObjRetain/Release,
+    finalizer on zero) but a PASCAL LOCAL does not participate -- the frontend
+    emits retain/release for NilPy locals, and pylib is Pascal, so a list built
+    here and dropped here is never released by anything. Measured 2026-09-14:
+    ~200 bytes leaked per .format() call, linear, against 0 under CPython.
+    PyFormatApply returns an AnsiString and retains nothing, so `args` is
+    unreachable the moment it returns. Same shape as the `snap` release in
+    pydict_update_from. }
+  PXXObjRelease(Pointer(args));
 end;
 
 function pypercent_format(const fmt: AnsiString; const args: Variant): AnsiString;
@@ -18447,6 +18767,15 @@ begin
     ks := d.keylist;
     vs := d.vallist;
     for i := 0 to ks.count - 1 do r.store(ks.at(i), vs.at(i));
+    { Release the key/value snapshots. keylist and vallist each CONSTRUCT a
+      fresh TPyList; they are read here and dropped, and a Pascal local does
+      not participate in refcounting, so nothing else ever releases them.
+      Measured 2026-09-14 on a 32-entry dict: ~584 bytes leaked per list, per
+      call. Safe because neither list ESCAPES -- the values are copied out
+      through .at(), which retains any object it hands on, so the wrapper is
+      the only thing being freed. }
+    PXXObjRelease(Pointer(ks));
+    PXXObjRelease(Pointer(vs));
   end;
   Result := r;
 end;
@@ -20029,6 +20358,38 @@ type
   TPyArithD = function(self: Pointer; const other: Variant): Double;
   TPyArithB = function(self: Pointer; const other: Variant): Boolean;
   TPyArithO = function(self: Pointer; const other: Variant): Pointer;
+  { ...and the three shapes an ANNOTATED `other` takes. `def __add__(self,
+    o: 'V')` arrives as a class POINTER (tk=6), `def __mul__(self, k: float)`
+    as a Double in an xmm register (tk=19), `def __getitem__(self, i: int)` as
+    an Int64 (tk=13). The comment above said only the Variant shape existed
+    because nothing GENERATED the others; hand-written annotations do, and
+    the operand annotation is the single largest code-generation win measured
+    on this compiler (feature-n-specialise-a-dunder-body-on-the-operand-type-
+    the-call-site-already-knows). Declining them here meant the annotation
+    that produces that codegen broke the operator at every VARIANT receiver --
+    a bare parameter, a container element, an untyped field -- with
+    `TypeError: expected a number, got object` from the numeric fallback arm,
+    pointing nowhere near the annotation the user added. Same ABI facts as
+    TPyEqObjFn above, measured with PXXDBG=a.ir:V.__add__ on both spellings.
+    bug-n-annotating-a-dunder-operand-breaks-the-operator-on-a-variant-receiver }
+  TPyArithPV = function(self: Pointer; other: Pointer): Variant;
+  TPyArithPS = function(self: Pointer; other: Pointer): AnsiString;
+  TPyArithPI = function(self: Pointer; other: Pointer): Int64;
+  TPyArithPD = function(self: Pointer; other: Pointer): Double;
+  TPyArithPB = function(self: Pointer; other: Pointer): Boolean;
+  TPyArithPO = function(self: Pointer; other: Pointer): Pointer;
+  TPyArithDV = function(self: Pointer; other: Double): Variant;
+  TPyArithDS = function(self: Pointer; other: Double): AnsiString;
+  TPyArithDI = function(self: Pointer; other: Double): Int64;
+  TPyArithDD = function(self: Pointer; other: Double): Double;
+  TPyArithDB = function(self: Pointer; other: Double): Boolean;
+  TPyArithDO = function(self: Pointer; other: Double): Pointer;
+  TPyArithIV = function(self: Pointer; other: Int64): Variant;
+  TPyArithIS = function(self: Pointer; other: Int64): AnsiString;
+  TPyArithII = function(self: Pointer; other: Int64): Int64;
+  TPyArithID = function(self: Pointer; other: Int64): Double;
+  TPyArithIB = function(self: Pointer; other: Int64): Boolean;
+  TPyArithIO = function(self: Pointer; other: Int64): Pointer;
   { ...and the ARITY-3 shape, for `__setitem__(self, k, v)`. Both extra
     parameters are unannotated in the ordinary spelling, so both arrive tk=22.
     The RESULT is ignored — Python's __setitem__ returns nothing — but the ABI
@@ -20396,6 +20757,13 @@ function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
 var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
     fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
     fb: TPyArithB; fo: TPyArithO;
+    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
+    pb: TPyArithPB; po: TPyArithPO;
+    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
+    db: TPyArithDB; dob: TPyArithDO;
+    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
+    ib: TPyArithIB; io: TPyArithIO;
+    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
     sres: AnsiString; ores: Pointer; r: PPyVarRec;
 begin
   PyUserArithCall1 := False;
@@ -20415,40 +20783,119 @@ begin
   if mi^.Arity <> 2 then Exit;
   if mi^.ParamKinds = nil then Exit;
   pk := PInt64(mi^.ParamKinds);
-  if pk[1] <> 22 then Exit;               { `other` must be a Variant }
+  { `other`'s parameter SHAPE decides how the operand is DELIVERED; the RetKind
+    below decides how the result comes back. Four shapes, and the three
+    annotated ones were declined outright until 2026-09-15 -- see the
+    TPyArithP*/D*/I* types for what that cost.
+
+    An operand the annotated shape cannot take -- a float where the dunder
+    asks for `'V'`, an object where it asks for `float` -- DECLINES rather
+    than raises, so the reflected dunder on the other operand still gets its
+    turn (that is CPython's order) and, failing that, the caller's numeric arm
+    raises the TypeError it always raised. Inside NilPy a parameter
+    annotation is a TYPE, not a hint: an instance of some other class is
+    handed to a class-typed `other` the way the compiled method-call path
+    already hands one (by tag, not by class), because the RTTI records only
+    the parameter's KIND, and refusing every cross-class pair would refuse
+    `Quat.__mul__(self, v: 'Vec3')`, the ordinary spelling of a rotation.
+    A promotable bignum (VType 8193) is outside every annotated scalar shape
+    and declines with the rest. }
+  mode := -1; op := nil; od := 0.0; oi := 0;
+  ot := PPyVarRec(@otherV)^.VType;
+  if pk[1] = 22 then
+    mode := 0
+  else if pk[1] = 6 then
+  begin
+    op := Pointer(PyVarUserObj(PPyVarRec(@otherV)));
+    if op = nil then Exit;
+    mode := 1;
+  end
+  else if pk[1] = 19 then
+  begin
+    if (ot <> 3) and (ot <> 1) and (ot <> 2) and (ot <> 4) then Exit;
+    od := pyvar_to_float(otherV);
+    mode := 2;
+  end
+  else if (pk[1] = 13) or (pk[1] = 1) or (pk[1] = 11) or (pk[1] = 15) then
+  begin
+    if (ot <> 1) and (ot <> 2) and (ot <> 4) then Exit;
+    oi := PPyVarRec(@otherV)^.Payload;
+    mode := 3;
+  end
+  else
+    Exit;
   rk := mi^.RetKind;
   r := PPyVarRec(@res);
   if rk = 22 then
   begin
-    fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV);
+    if mode = 0 then begin fv := TPyArithV(mi^.Code); res := fv(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pv := TPyArithPV(mi^.Code); res := pv(Pointer(selfObj), op); end
+    else if mode = 2 then begin dv := TPyArithDV(mi^.Code); res := dv(Pointer(selfObj), od); end
+    else begin iv := TPyArithIV(mi^.Code); res := iv(Pointer(selfObj), oi); end;
   end
   else if (rk = 23) or (rk = 4) then
   begin
-    fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV);
+    if mode = 0 then begin fs := TPyArithS(mi^.Code); sres := fs(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin ps := TPyArithPS(mi^.Code); sres := ps(Pointer(selfObj), op); end
+    else if mode = 2 then begin ds := TPyArithDS(mi^.Code); sres := ds(Pointer(selfObj), od); end
+    else begin is_ := TPyArithIS(mi^.Code); sres := is_(Pointer(selfObj), oi); end;
     r^.VType := 6; PPyAnsiString(@r^.Payload)^ := sres;
   end
   else if (rk = 13) or (rk = 1) or (rk = 11) or (rk = 15) then
   begin
-    fi := TPyArithI(mi^.Code);
-    r^.VType := 2; r^.Payload := fi(Pointer(selfObj), otherV);
+    r^.VType := 2;
+    if mode = 0 then begin fi := TPyArithI(mi^.Code); r^.Payload := fi(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pi_ := TPyArithPI(mi^.Code); r^.Payload := pi_(Pointer(selfObj), op); end
+    else if mode = 2 then begin di := TPyArithDI(mi^.Code); r^.Payload := di(Pointer(selfObj), od); end
+    else begin ii := TPyArithII(mi^.Code); r^.Payload := ii(Pointer(selfObj), oi); end;
   end
   else if (rk = 19) or (rk = 18) then
   begin
-    fd := TPyArithD(mi^.Code);
-    r^.VType := 3; PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV);
+    r^.VType := 3;
+    if mode = 0 then begin fd := TPyArithD(mi^.Code); PPyDouble(@r^.Payload)^ := fd(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin pd := TPyArithPD(mi^.Code); PPyDouble(@r^.Payload)^ := pd(Pointer(selfObj), op); end
+    else if mode = 2 then begin dd := TPyArithDD(mi^.Code); PPyDouble(@r^.Payload)^ := dd(Pointer(selfObj), od); end
+    else begin id_ := TPyArithID(mi^.Code); PPyDouble(@r^.Payload)^ := id_(Pointer(selfObj), oi); end;
   end
   else if rk = 2 then
   begin
-    fb := TPyArithB(mi^.Code);
     r^.VType := 4;
-    if fb(Pointer(selfObj), otherV) then r^.Payload := 1 else r^.Payload := 0;
+    r^.Payload := 0;
+    if mode = 0 then begin fb := TPyArithB(mi^.Code); if fb(Pointer(selfObj), otherV) then r^.Payload := 1; end
+    else if mode = 1 then begin pb := TPyArithPB(mi^.Code); if pb(Pointer(selfObj), op) then r^.Payload := 1; end
+    else if mode = 2 then begin db := TPyArithDB(mi^.Code); if db(Pointer(selfObj), od) then r^.Payload := 1; end
+    else begin ib := TPyArithIB(mi^.Code); if ib(Pointer(selfObj), oi) then r^.Payload := 1; end;
   end
   else if rk = 6 then
   begin
-    fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV);
+    if mode = 0 then begin fo := TPyArithO(mi^.Code); ores := fo(Pointer(selfObj), otherV); end
+    else if mode = 1 then begin po := TPyArithPO(mi^.Code); ores := po(Pointer(selfObj), op); end
+    else if mode = 2 then begin dob := TPyArithDO(mi^.Code); ores := dob(Pointer(selfObj), od); end
+    else begin io := TPyArithIO(mi^.Code); ores := io(Pointer(selfObj), oi); end;
     if ores = nil then Exit;
+    { NO RETAIN. The dunder's result is ALREADY OWNED (+1) -- every NilPy
+      routine hands back an owned reference and the consumer borrows -- so
+      writing the handle into the variant TAKES OVER that rc=1; the variant's
+      own clear releases it. The retain that used to stand here made it rc=2
+      against one release, so `a + b` on a user class leaked the whole result,
+      once per operation, forever.
+
+      It is the RUNTIME arm, which is why a small fixture misses it: the
+      compile-time dispatch in the parser fires whenever both operands have a
+      static class type and is balanced. This path is reached only when an
+      operand's static type is a Variant -- an unannotated parameter, a
+      for-loop variable, a container element, an attribute -- which in real
+      Python is nearly every operand. Measured on `c = a + b` in a loop: 100
+      iterations, 100 leaked instances; the IDENTICAL method spelled
+      `c = a.add(b)` leaked none.
+
+      `return self` is covered by the same removal and was measured separately,
+      because a borrowed return here would turn a leak into a use-after-free:
+      with the dunder returning self, the method route nets +1 (the module
+      global's own reference) and the operator route netted +51 over 50 calls.
+      So self is handed back owned too, and one release still balances it.
+      bug-n-a-user-operator-on-a-variant-operand-leaks-its-result }
     r^.VType := 7; r^.Payload := Int64(NativeInt(ores));
-    PXXObjRetain(ores);
   end
   else
     Exit;
@@ -20926,6 +21373,8 @@ begin
     k := ks.at(i);
     Result := Result + pyvar_repr(k) + ': ' + pyvar_repr(d.fetch(k));
   end;
+  { see dict(): keylist constructs a fresh list that nothing else releases }
+  PXXObjRelease(Pointer(ks));
   Result := Result + '}';
 end;
 
