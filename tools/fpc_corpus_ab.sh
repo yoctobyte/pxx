@@ -153,12 +153,23 @@ fi
 # reported the LEXER's position until ec8a4d88c, so rows from either side of that
 # fix differ in a column that says nothing about the corpus.
 awk '
+  function splitrow(row, parts,   e) {
+    # A PXX-FAIL row may carry a leading `errs=N`. Pull it off so the wall and
+    # the count can be compared independently; see the split in the body below.
+    e = ""
+    if (match(row, /^errs=[0-9]+[ \t]+/)) {
+      e = substr(row, 6, RLENGTH - 5); sub(/[ \t]+$/, "", e)
+      row = substr(row, RLENGTH + 1)
+    }
+    parts["errs"] = e; parts["msg"] = row
+  }
   FNR==NR {
     if ($1 == "SUMMARY") { sumA = sumA $0; next }
-    u = $1; v = $2
-    if (u != "BOTH-OK" && u != "ORACLE-NO" && u != "PXX-FAIL") next
+    v = $1; u = $2
+    if (v != "BOTH-OK" && v != "ORACLE-NO" && v != "PXX-FAIL") next
     $1 = ""; $2 = ""; sub(/^[ \t]+/, "")
-    vA[v] = u; msgA[v] = $0
+    vA[u] = v; msgA[u] = $0
+    splitrow($0, P); mA_msg[u] = P["msg"]; eA[u] = P["errs"]
     next
   }
   {
@@ -167,6 +178,7 @@ awk '
     if (vb != "BOTH-OK" && vb != "ORACLE-NO" && vb != "PXX-FAIL") next
     $1 = ""; $2 = ""; sub(/^[ \t]+/, "")
     mb = $0
+    splitrow(mb, Q); mb_msg = Q["msg"]; eb = Q["errs"]
     seen[u] = 1
     if (!(u in vA)) { printf "ONLY-IN-B  %-16s %s\n", u, vb; nonly++; next }
     if (vA[u] != vb) {
@@ -175,16 +187,31 @@ awk '
       if (tag == "REGRESSED") nreg++; else if (tag == "GAINED") ngain++; else nverd++
       next
     }
-    if (msgA[u] != mb) {
-      printf "MOVED      %-16s\n  A: %s\n  B: %s\n", u, msgA[u], mb
+    # SEPARATE THE WALL FROM THE ERROR COUNT, because keying on the whole row
+    # conflates them and over-reports. Measured 2026-09-17, the first real run:
+    # it called 163 units MOVED, and only 29 had a different
+    # FIRST ERROR -- the other 134 sat at the identical wall with `errs=` risen.
+    # That is not a smaller finding, it is a DIFFERENT one: on the sampled unit
+    # the count rose because a SECOND error was fixed and the compiler then
+    # reached three more files, so a rising errs= is newly VISIBLE ground. The
+    # raw row cannot tell that from a regression, so it is split here.
+    if (mA_msg[u] != mb_msg) {
+      printf "WALL-MOVED %-16s\n  A: %s\n  B: %s\n", u, msgA[u], mb
       nmoved++; next
+    }
+    if (eA[u] != eb) {
+      printf "ERRS       %-16s  %s -> %s   (same first error)\n",
+             u, (eA[u] == "" ? "1" : eA[u]), (eb == "" ? "1" : eb)
+      nerrs++
+      if ((eb+0 ? eb+0 : 1) > (eA[u]+0 ? eA[u]+0 : 1)) nerrup++; else nerrdn++
+      next
     }
     nsame++
   }
   END {
     for (u in vA) if (!(u in seen)) { printf "ONLY-IN-A  %-16s %s\n", u, vA[u]; nonly++ }
-    printf "\nJOIN       identical=%d moved=%d gained=%d regressed=%d other-verdict=%d only-in-one=%d\n",
-           nsame+0, nmoved+0, ngain+0, nreg+0, nverd+0, nonly+0
+    printf "\nJOIN       identical=%d wall-moved=%d errs-only=%d (up %d / down %d) gained=%d regressed=%d other-verdict=%d only-in-one=%d\n",
+           nsame+0, nmoved+0, nerrs+0, nerrup+0, nerrdn+0, ngain+0, nreg+0, nverd+0, nonly+0
     printf "A          %s\n", sumA
     printf "B          %s\n", sumB
   }
