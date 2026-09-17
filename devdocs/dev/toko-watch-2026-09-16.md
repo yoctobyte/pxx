@@ -5753,3 +5753,74 @@ re-opening it.
 where the canary was not a skip. Three tracked open regressions unchanged.
 frankb-56 working, nld parked. franks-ee idle by choice. **Eight items, one
 block, in 2o.** He is back tomorrow.
+
+---
+
+## 2v — 2026-09-17 16:30 — quiet tick, one positive result, and a near-name collision caught before it became a third stale offer
+
+**Nothing landed but borg.** The six commits since 2u are all `tstate(borg)`
+publishes for `86c1ceb060c4`; **no `compiler/` or `lib/` movement**, so no
+rebuild owed — binary `e3cd693df9e8` still matches `.pascal26.fixedpoint`.
+
+`gate.sh quick` **GREEN**, `self-host fixedpoint` PASS (39s), `fixedpoint.log`
+clean. **Canary SKIP — but the SEED SHA ADVANCED**, `compiler/ unchanged, and
+seeded green at fab1d5e9e71b`, where every skip earlier today named
+`35ebaee75923`. A skip against a seed that just moved is a different state from a
+skip against a stale one: it means the canary armed, ran and passed at 2u, and
+this tick is skipping because there is genuinely nothing new to check.
+
+`twatch --status` rc=0, **T UP, breadth 1h old** — borg has caught up from 5h.
+**Three tracked open regressions, unchanged** (`crtl_reachability.py`,
+`tools-devtest#00`, `crtl_atexit.c`), and the same 4 of v409's 17 still
+corroborated at the newest tier.
+
+### The positive result, attributed to a RANGE
+
+The range borg newly tested, `2f290fdbfdb9..86c1ceb060c4`, contains exactly two
+buildable commits — **frankb-56's `5ce561a11` and `5c1db8c6b`, both Track P** —
+plus docs. **The open-regression list did not move.** So both Track P fixes went
+through breadth and added nothing, and so did franks-ee's `2f5fdda94` in the
+window before. That is the result nobody writes down because nothing happened,
+and it is the only evidence that today's compiler work is clean. Full tier is
+still RED, and it is the SAME red: the delta is zero, which is the number I went
+looking for rather than one I noticed.
+
+### franks-ee has been quiet 17 hours — asked, did not judge
+
+Last three commits all 2026-09-16T23:14–23:16 (`2f5fdda94`, `bf7077de0`,
+`9fe4e0a67`). It messaged this morning, so it was alive at ~11:00 — **a fact
+about 11:00, not about now**, which is the scope-word failure this note keeps
+re-learning. Sent it the ORDERING discriminator (newest `is_error` after or
+before the newest success), not a request for its state, and not a keystroke.
+`ListAgents` shows it `idle`; I am not treating that as evidence, because the
+one row on that list carrying `requires_action` is a **Remote Control** session
+and I have not established that an interactive tmux row can produce that value
+at all. **Print the set your instrument enumerates and check the subject is in
+it** — I cannot, so it is not an instrument.
+
+### The check working: a near-name collision, one letter apart
+
+Before offering the one open Track P item I checked it by FOLDER, and the search
+returned two things:
+
+- `backlog-pascal/bug-**p**-an-array-constructor-in-argument-position-is-typed-as-a-set.md` — **open**
+- `done/bug-**a**-an-array-constructor-in-argument-position-leaks-its-dynamic-array.md` — **closed**
+
+**Same lane-adjacent prefix, same eight-word phrase, different letter, different
+ticket, opposite status.** Reading the folder rather than the name is what
+separated them. That is precisely the shape that produced today's stale offer —
+and this time the check ran first, because it had already cost something. I named
+only what I verified and said so in the message, rather than reading the dispatch
+table, which stays dead.
+
+Also stated to it explicitly, so it does not have to ask: the `in`-over-a-set
+blocker is DONE, legacy value object types is a decided NO and an owner call,
+both optdiff shards are clear (**no optdiff row appears in `--status` at all**),
+and frankb-56 holds the cpuinfo conditional-evaluator group.
+
+### STATE
+
+Gate GREEN on `e3cd693df9e8`. Three tracked open regressions unchanged.
+**Today's three compiler fixes are through breadth with a zero delta.**
+frankb-56 working, `nld` parked. franks-ee asked, not judged. **Eight items, one
+block, in 2o.** He is back tomorrow.
