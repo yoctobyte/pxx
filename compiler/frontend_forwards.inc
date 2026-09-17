@@ -74,6 +74,7 @@ procedure EmitIoLockStubsArm32; forward;
 { The per-arch dispatcher every frontend driver must call instead of picking a
   stub itself — see its body in ir_codegen.inc for why that is not optional. }
 procedure EmitIoLockStubsForTarget; forward;
+procedure EmitBareHeapArenaInit; forward;
 procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer); forward;
 procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;

@@ -90,6 +90,16 @@ begin
     BSS_HEAP_END  := BSSSize; Inc(BSSSize, 8);
     BSS_FREE_LIST := BSSSize; Inc(BSSSize, 8);
     BSS_HEAP_LOCK := BSSSize; Inc(BSSSize, 8);
+    { BARE METAL: the arena is not mmapped, it IS BSS, so it has to be reserved
+      here with the four slots that point INTO it -- before the entry stub, for
+      the same reason they are. Costs nothing in the file (BSS is memsz-only, so
+      `filesz` does not move); it costs SRAM, which CheckBareImageFitsSram is
+      what bounds. Hosted targets leave it 0 and mmap as before. }
+    if EspBareBoot then
+    begin
+      BSS_HEAP_ARENA := BSSSize;
+      Inc(BSSSize, SocBareArenaSize(TargetSoc));
+    end;
   end;
   EmitProgramEntryForTarget(withHeapArena, jmpPatch);
 

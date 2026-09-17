@@ -2283,6 +2283,12 @@ const
   ESP_BARE_IRAM_BASE_XT = $40378000; { S3: SRAM_DIRAM_I_START (shared I/D SRAM) }
   ESP_BARE_STACK_TOP = $403C0000;  { top of stack (grows down toward image);
                                      valid IRAM on both C3 and S3 }
+  { Headroom the stack must still have BELOW the top once the image, its data
+    and BSS (the heap arena included) are laid out. Not a measured minimum for
+    any particular program -- it is the margin CheckBareImageFitsSram enforces
+    so that an oversized arena is a BUILD error instead of a stack that grows
+    down into the heap and produces a plausible wrong value. }
+  ESP_BARE_STACK_MIN = $4000;      { 16 KiB }
 
 { ===== ESP SoC capability table ============================================
 
@@ -6415,6 +6421,15 @@ var
   BSS_HEAP_END    : Integer;
   BSS_FREE_LIST   : Integer;  { head of GetMem/FreeMem free list; 0 = empty (BSS zero-init) }
   BSS_HEAP_LOCK   : Integer;  { spinlock for heap allocations }
+  { BARE METAL ONLY: the arena ITSELF, reserved as BSS rather than mmapped.
+    A hosted target asks the kernel for HEAP_ARENA_SIZE and publishes what it
+    gets back; bare metal has no kernel to ask, so the arena has to BE part of
+    the image's memory footprint. It stays 0 on every hosted target, where
+    nothing reads it. See EmitBareHeapArenaInit for why this needs no new
+    relocation kind: EmitGlobRef already patches bssBase + offset, so a ref to
+    BSS_HEAP_ARENA yields &arena and a ref to BSS_HEAP_ARENA + size yields the
+    end pointer with no runtime arithmetic at all. }
+  BSS_HEAP_ARENA  : Integer;
   { REENTRANCY, added 2026-09-06 (feature-a-make-the-heap-lock-reentrant, owner
     decision arm (a)). BSS_HEAP_OWNER holds the OWNING THREAD'S tid, 0 = free,
     and it is the lock word -- the same shape BSS_IO_OWNER has had since the I/O
@@ -8290,6 +8305,26 @@ begin
   SocHasAtomicISA := SocIsXtensa(soc) or
                      (soc = SOC_ESP32C6) or (soc = SOC_ESP32H2) or
                      (soc = SOC_ESP32P4);
+end;
+
+function SocBareArenaSize(soc: Integer): Integer;
+{ How much SRAM a bare-metal program may keep as its NilPy heap arena.
+
+  A CAPABILITY and not a constant, per this table's own rule, even though every
+  part answers the same today -- because the thing it is really derived from is
+  the SRAM region between SocIramBase(soc) and the stack top, and that is
+  uniform today only because ESP_BARE_STACK_TOP is. That constant documents
+  itself as valid for C3 and S3 and is used for all six, so the moment a part
+  with a different map is measured, the divergence belongs HERE rather than in
+  a seventh top-level constant.
+
+  64 KiB against a 256 KiB region (C3: 0x40380000..0x403C0000) leaves the image,
+  its data and the stack the remaining three quarters. It is not a guess that
+  has to be right: CheckBareImageFitsSram refuses the build if the image plus
+  this arena plus a minimum stack does not fit, so being wrong here is a
+  compile-time error and never a program that overruns its stack at runtime. }
+begin
+  SocBareArenaSize := 64 * 1024;
 end;
 
 function SocIramBase(soc: Integer): Int64;

@@ -2895,6 +2895,55 @@ begin
   end;
 end;
 
+procedure EmitBareHeapArenaInit;
+{ Publish BSS_HEAP_PTR/BSS_HEAP_END for a BARE-METAL arena -- the same two
+  stores the hosted path performs after EmitMmapArena, minus the syscall.
+
+  ONE routine for both ISAs on purpose. This was two Errors in two branches
+  saying the same thing in two spellings ("which bare metal has not" on xtensa,
+  "which this profile has not" on riscv32), which is precisely the shape
+  devdocs/dev/normalise-dont-special-case.md is about: a second path that stays
+  broken because nobody greps for the sibling. The branch below is register
+  names and store mnemonics; the DECISION lives here once.
+
+  NO NEW RELOCATION KIND, and that is the whole reason this is cheap. The stub
+  is emitted during codegen, long before the ELF writer knows bssBase -- but
+  EmitGlobRef(off) already records a fixup the writer patches with
+  bssBase + off. So:
+      EmitGlobRef(BSS_HEAP_ARENA)              -> &arena
+      EmitGlobRef(BSS_HEAP_ARENA + arenaSize)  -> &arena + arenaSize
+  The end pointer needs no add instruction at all, which also sidesteps both
+  ISAs' 12-bit immediate limit (the arena is far larger than either can encode).
+  Safe against the .data encoding: DATA_SYM_BIAS is $20000000 and the whole SRAM
+  region is measured in hundreds of KB, so these offsets cannot be mistaken for
+  data-resident ones by SymOffIsData.
+
+  Bare metal only. Registers are scratch at this point: the Call0 ABI is
+  mandatory for bare xtensa (compiler.pas refuses windowed), so there is no
+  register window to preserve, and on riscv32 nothing has run yet. }
+var arenaEnd: Integer;
+begin
+  arenaEnd := BSS_HEAP_ARENA + SocBareArenaSize(TargetSoc);
+  if TargetArch = TARGET_XTENSA then
+  begin
+    EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_HEAP_ARENA);   { a8 = &arena }
+    EmitLoadGlobAddrXtensa(reg_xtensa_a9, BSS_HEAP_PTR);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a9, 0);
+    EmitLoadGlobAddrXtensa(reg_xtensa_a8, arenaEnd);         { a8 = &arena+size }
+    EmitLoadGlobAddrXtensa(reg_xtensa_a9, BSS_HEAP_END);
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a9, 0);
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    EmitLoadGlobAddrRISCV32(reg_t0, BSS_HEAP_ARENA);         { t0 = &arena }
+    EmitLoadGlobAddrRISCV32(reg_t1, BSS_HEAP_PTR);
+    rv32_sw(reg_t0, reg_t1, 0);
+    EmitLoadGlobAddrRISCV32(reg_t0, arenaEnd);               { t0 = &arena+size }
+    EmitLoadGlobAddrRISCV32(reg_t1, BSS_HEAP_END);
+    rv32_sw(reg_t0, reg_t1, 0);
+  end;
+end;
+
 procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer);
 { THE one place that emits a program's entry stub. Every frontend driver calls
   this; none of them may spell out the per-arch choice itself.
@@ -2980,8 +3029,15 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then
   begin
-    if withHeapArena then
-      Error('target xtensa: a heap arena needs mmap, which bare metal has not '
+    { Bare metal reserves the arena in BSS (EmitBareHeapArenaInit) and needs no
+      mmap at all. What is still refused is the HOSTED arm: EmitMmapArena has no
+      xtensa encoding, so there is nothing to call. Scoped with `not EspBareBoot`
+      rather than left unconditional because the old message fired on BOTH and
+      told a hosted build it was bare metal. }
+    if withHeapArena and (not EspBareBoot) then
+      Error('target xtensa (hosted): a heap arena needs mmap and EmitMmapArena '
+            + 'has no xtensa arm. Bare metal (--esp-profile=bare) reserves the '
+            + 'arena in BSS and does not need one '
             + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
     { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
       top of SRAM before entering main. EmitLoadConstXtensa drops a literal
@@ -2998,6 +3054,10 @@ begin
       xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
       xtensa_j(0);                                  { any other core: spin }
       EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
+      { AFTER sp is established: these are ordinary loads and stores, but they
+        belong with the rest of the bare-metal setup and before anything can
+        allocate. }
+      if withHeapArena then EmitBareHeapArenaInit;
     end;
     { Hosted (qemu-xtensa user mode): save the kernel-provided initial sp, which
       points at argc, so ParamCount/ParamStr/ArgStr can find argv -- the same
@@ -3145,9 +3205,13 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    if withHeapArena then
-      Error('target riscv32: a heap arena needs mmap, which this profile has '
-            + 'not (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+    { Same split as xtensa above: bare metal uses the BSS arena; the HOSTED
+      riscv32 Linux profile is what still has no mmap encoding. }
+    if withHeapArena and (not EspBareBoot) then
+      Error('target riscv32 (hosted linux): a heap arena needs mmap and '
+            + 'EmitMmapArena has no riscv32 arm. Bare metal '
+            + '(--esp-profile=bare) reserves the arena in BSS and does not need '
+            + 'one (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
     { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
       (grows down toward the image) before entering main. lui+addi covers any
       low bits in the stack-top constant. }
@@ -3155,6 +3219,7 @@ begin
     begin
       EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
       EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
+      if withHeapArena then EmitBareHeapArenaInit;
     end;
     { Hosted: save the kernel-provided initial sp (points at argc) for
       ParamCount/ParamStr, like the other hosted targets. }

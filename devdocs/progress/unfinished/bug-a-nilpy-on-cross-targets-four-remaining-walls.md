@@ -3,7 +3,7 @@ track: A
 prio: 85
 type: bug
 blocked-by: []
-summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32 and xtensa `a heap arena needs mmap`, wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32."
+summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32."
 status: unfinished
 owner: claude-A
 ---
@@ -266,3 +266,94 @@ delivered value, measured, not opportunity inferred.
 
 **Ranked at 85, not 90:** it is one wall with a named mechanism, not a research
 question, and nothing is blocked on it today except a claim we are not making.
+
+## 2026-09-17 (frankS) — the bare-metal heap arena, and what it exposed
+
+**The mmap wall is gone for BARE METAL on both ISAs.** It was never really an
+mmap problem: bare metal has no kernel to ask, so the arena does not need to be
+*obtained* at all — it needs to BE part of the image. It is BSS now.
+
+| target | before | after |
+| --- | --- | --- |
+| esp32s3 (xtensa, bare) | `a heap arena needs mmap, which bare metal has not` | `undefined variable (PXXVarBinOp)` |
+| esp32c6 (riscv32, bare) | `a heap arena needs mmap, which this profile has not` | `undefined variable (PXXVarBinOp)` |
+| esp32c3 (riscv32, bare) | same | `undefined variable (PXXVarBinOp)` |
+| riscv32 (hosted linux) | same | **still refuses, deliberately** |
+| xtensa (hosted) | same | **still refuses, deliberately** |
+
+### What was actually built
+
+`BSS_HEAP_ARENA`, reserved beside the four slots that point into it, sized by a
+new SoC capability `SocBareArenaSize` (64 KiB today, uniform across the parts,
+and a capability rather than a seventh top-level constant because what it is
+really derived from is the region between `SocIramBase` and the stack top).
+`EmitBareHeapArenaInit` publishes `BSS_HEAP_PTR`/`BSS_HEAP_END` — the same two
+stores the hosted path does after `EmitMmapArena`, minus the syscall.
+
+**No new relocation kind was needed, which is why this is 151 lines.** The stub
+is emitted during codegen, long before the ELF writer knows `bssBase` — but
+`EmitGlobRef(off)` already records a fixup patched with `bssBase + off`. So
+`EmitGlobRef(BSS_HEAP_ARENA + size)` *is* the end pointer, with no add
+instruction at all, which also sidesteps both ISAs' 12-bit immediate limits.
+And BSS is memsz-only (`filesz = codeOffset + CodeLen + DataLen`), so a 64 KiB
+arena costs nothing in the file.
+
+**ONE helper, not two.** The two refusals were two spellings of one refusal
+("which bare metal has not" / "which this profile has not") — the
+normalise-dont-special-case shape. The old xtensa message also fired on the
+HOSTED arm while telling the reader it was bare metal; both messages now name
+which profile they mean.
+
+### Verified rather than believed
+
+The stub is not reachable by any program yet (see below), so it was forced onto
+the bare Pascal path temporarily and the emitted bytes decoded, then reverted —
+the compiler is byte-identical (`bb4f3f186fab`) before and after the revert.
+
+    riscv32   &arena 0x4038ec98   &arena+size 0x4039ec98   delta 65536  OK
+              &HEAP_PTR 0x4038ec78  &HEAP_END 0x4038ec80   delta 8      OK
+              both stores 0x00532023 = sw t0,0(t1)                      OK
+    xtensa    0x40383ea8 -> 0x40393ea8                      delta 65536  OK
+              0x40383e88 -> 0x40383e90                      delta 8      OK
+
+BSS grew by exactly 65536 on both; code by 72 bytes (riscv32: 4 address loads of
+16 + 2 stores of 4) and 56 (xtensa). `gate.sh quick` GREEN with **FPC seed canary
+PASS, not SKIP** — which matters here because this adds a forward in
+`frontend_forwards.inc` with its body in `ir_codegen.inc`, exactly the
+declaration-order class that canary is the only instrument for.
+
+`CheckBareImageFitsSram` is the guard that makes a compile-time-chosen arena size
+safe: the size is picked before any code length exists, so it is a REQUEST, and
+the writer refuses the build if image+data+bss+a minimum stack does not fit.
+Positive control run (temporarily raising the stack reserve): it fires with the
+overshoot in bytes. Its first draft named the arena on a Pascal build that had
+none — fixed to report the arena only when one was reserved.
+
+### THE NEXT WALL IS MUCH BIGGER THAN THIS ONE, and it was hidden behind it
+
+`PXXVarBinOp` is not a small gap. `--esp-profile=bare` pulls **no `builtin` unit
+at all**, deliberately — `espassert.pas:24` says `uses builtin` under that profile
+"really does fail", measured, on `PXXVarBinOp` and `PxxSciDigits17`, both in
+companion units bare does not get. NilPy's driver requires `builtin`. So
+NilPy-on-bare is blocked on making `builtin` compile for ESP, which is a
+different and far larger job than this was.
+
+This is the first-failure pattern the umbrella rule warns about, arriving inside
+one ticket: the arena wall was the only thing anyone could see, and clearing it
+revealed that it was never the expensive one. **No NilPy program runs on ESP bare
+metal yet, and this change does not claim one does** — what it claims is that the
+arena is no longer why.
+
+Scope held deliberately to the arena wall: i386, aarch64 and wasm32 are
+untouched and are not part of any ESP estimate.
+
+### Adjacent, flagged, NOT chased
+
+- `ESP_BARE_STACK_TOP` is one constant whose own comment claims validity only
+  for C3 and S3, and it is used for all six SoCs.
+- `SocIramBase` branches only xtensa-vs-not, so C6 inherits C3's base.
+- The repo records no C6 memory map at all.
+
+These are why `SocBareArenaSize` is a capability: when a part with a different
+map is measured, the divergence belongs there and not in a new constant.
+

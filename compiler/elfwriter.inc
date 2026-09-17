@@ -1731,6 +1731,40 @@ end;
   (SocIramBase is a per-chip constant, not something this file controls). An
   Error here is a build that stops; the alternative is a program that faults on
   xtensa and runs everywhere else. }
+{ THE BOUND ON THE BARE-METAL HEAP ARENA, checked where the layout is finally
+  known rather than where the size is chosen.
+
+  SocBareArenaSize picks a number at parse time, when neither the code length
+  nor the data length exists yet. That number is therefore a REQUEST, and this
+  is what makes it safe to be wrong: the image, its data, its BSS (arena
+  included) and a minimum stack all have to fit in the SRAM region between the
+  load org and the stack top. If they do not, the build stops here.
+
+  Without this the failure is the expensive kind -- no diagnostic, a stack
+  growing down into the top of the heap arena, and a program that returns a
+  plausible wrong value somewhere unrelated. A refused build names the number
+  to change. }
+procedure CheckBareImageFitsSram(loadBase, memsz: Int64);
+var top, need: Int64; msg: AnsiString;
+begin
+  if not EspBareBoot then Exit;
+  top  := ESP_BARE_STACK_TOP;
+  need := loadBase + memsz + ESP_BARE_STACK_MIN;
+  if need <= top then Exit;
+  msg := 'bare-metal image does not fit in SRAM: image+data+bss ends at 0x'
+    + IntToHexStr(loadBase + memsz, 8) + ', the stack needs '
+    + AIntToStr(ESP_BARE_STACK_MIN) + ' bytes below 0x' + IntToHexStr(top, 8)
+    + ' -- over by ' + AIntToStr(need - top) + ' bytes';
+  { Name the arena ONLY when one was actually reserved. withHeapArena is false
+    for Pascal and C, and a message that blamed SocBareArenaSize on a build with
+    no arena in it would send the reader to the wrong number -- which is what
+    the first draft of this message did. }
+  if BSS_HEAP_ARENA > 0 then
+    msg := msg + '. The NilPy heap arena is ' + AIntToStr(SocBareArenaSize(TargetSoc))
+      + ' bytes of that (SocBareArenaSize)';
+  ErrorNoPos(msg);
+end;
+
 procedure CheckDataBaseAligned(dataBase: Int64);
 begin
   if (dataBase mod ELF_DATA_ALIGN) <> 0 then
@@ -2272,6 +2306,7 @@ begin
   entry    := loadBase + codeOffset + AsmEntryOff;
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - loadBase) + BSSSize;
+  CheckBareImageFitsSram(loadBase, memsz);
 
   { DWARF -g for the 32-bit hosted targets (i386/arm32). esp (bare/xtensa/riscv32)
     is excluded. Section headers placed past p_filesz, like the 64-bit path. }
