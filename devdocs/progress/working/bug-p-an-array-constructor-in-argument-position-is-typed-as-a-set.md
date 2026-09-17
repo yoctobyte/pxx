@@ -4,8 +4,8 @@ title: "`['x']` in argument position is typed as a set, so an `array of` overloa
 track: P
 prio: 55
 type: bug
-status: open
-owner: ""
+status: working
+owner: frankS
 found-by: frankH
 created: 2026-09-11
 tags: [overload-resolution, open-arrays, sets, array-constructor]

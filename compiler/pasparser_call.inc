@@ -2152,6 +2152,8 @@ begin
     lastArg := argSeq;
   end;
   nArgs := Procs[cand].ParamCount;
+  { THE SECOND DOOR onto the set-literal retag. See RetagSetLitArgsForProc. }
+  RetagSetLitArgsForProc(cand, nArgs, argsHead);
   TryFillTrailingDefaults := cand;
 end;
 

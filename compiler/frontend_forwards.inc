@@ -96,6 +96,7 @@ procedure EmitProgramRuntimeStubsForTarget; forward;        { THE finish-the-run
   file but used earlier needs a forward here, or `make bootstrap` breaks while every
   pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
+procedure RetagSetLitArgsForProc(procIdx, nArgs, argsHead: Integer); forward;   { real body beside ParamIsVarRecArray in pasparser_lval.inc, because it asks that question and ParamElemKind in the same breath. pasparser_call.inc's TryFillTrailingDefaults is the SECOND door onto it: a free call that omits a trailing defaulted argument never reaches MatchCallDelphiProcAddr, so a retag wired only there left that spelling passing a set literal into an open-array parameter (bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set) }
 { The per-CANDIDATE form. ParamIsVarRecArray above asks the whole visible
   overload SET by name, which is right for deciding how to PARSE a `[...]`
   and wrong for ranking one candidate against another -- it answers the same

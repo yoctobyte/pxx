@@ -7756,7 +7756,7 @@ begin
   ASTRight[lastArg] := aSeq; lastArg := aSeq; Inc(nArgs);
 end;
 
-function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
+function MatchCallDelphiProcAddrInner(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
   const argTypes: array of TTypeKind): Integer;
 var i, currArg, exprNode, pi, sidx, node, match0: Integer;
     procCand: array[0..MAX_PROC_PARAMS-1] of Boolean; retryTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -8007,6 +8007,95 @@ begin
     end;
     currArg := ASTRight[currArg];
   end;
+end;
+
+{ A SET LITERAL THAT THE CHOSEN CANDIDATE RECEIVES IN AN ARRAY PARAMETER IS AN
+  ARRAY CONSTRUCTOR, AND NOTHING ELSE IT COULD BE.
+
+  `[...]` is ambiguous by construction in this dialect and only the receiving
+  parameter disambiguates it. The METHOD path settles that BEFORE parsing:
+  FindUMethOverloadAhead reads the bracket's element class off the TOKENS
+  (ArgListBracketElemMask / BracketCandRank, a scoring table measured against a
+  72-row fpc 3.2.2 matrix) and hands the chosen Procs[] row to
+  TryParseBracketArgForSlot, so the argument is parsed as a constructor in the
+  first place. The FREE path has no equivalent and never consults that table --
+  measured 2026-09-17, and it is the whole of the divergence:
+
+    type TC = class ... P(const c: AnsiString) / P(const c: array of AnsiString)
+    o.P([''x''])   fpc 2, pxx 2   -- `array count=1 [0]=x`, byte-identical
+    P([''x''])     fpc 2, pxx REFUSES / passes a set
+
+  Same two candidates, same literal, two spellings. So this is the sibling
+  spelling again (normalise-dont-special-case.md), not a missing rule: the rule
+  exists, is measured, and one of the two doors was never wired to it.
+
+  THIS HALF IS THE SILENT ONE. Once the matcher has NAMED an array parameter for
+  a set-literal node, the node is provably an array constructor -- a set cannot
+  bind to an open array at all -- so the retag is unconditional there and needs
+  no appeal to what the elements are. Without it the callee reads the set''s
+  32-byte mask as an array handle: measured, `Length(c)` came back
+  17297991344808736 while the call had selected the RIGHT overload and printed
+  fpc''s own answer beside it. That is the shape that reads as fixed.
+
+  A WRAPPER, because the inner function has five exits and every one of them
+  leaves Result holding the final match. A retag written inside it would have to
+  be repeated at each, which is the second path that stays broken.
+
+  THREE GUARDS, each closing a shape the retag must not touch:
+  - `ParamElemKind <> tySet`, so an `array of TSomeSet` keeps set elements.
+  - ParamIsVarRecArray: `array of const` carries TVarRec, not a plain element
+    type, and its own door builds the record list.
+  - SetLitElemsArePlain: a literal holding a RANGE (`[1..3]`) is a set and
+    cannot be an element list, which is the guard every other RetagSetLitAsArrayCtor
+    caller already asks.
+
+  What it deliberately does NOT do is make an array candidate WIN where the set
+  reading matched -- the match is already decided when this runs, so
+  `Q([fA])` with both a set and an `array of Integer` candidate keeps answering
+  the set, which is fpc''s answer and cost nothing before.
+  bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set }
+procedure RetagSetLitArgsForProc(procIdx, nArgs, argsHead: Integer);
+{ TWO DOORS REACH THIS, WHICH IS WHY IT IS A ROUTINE AND NOT A LOOP INSIDE ONE
+  OF THEM. A free call's candidate is named either by MatchCallDelphiProcAddr or
+  -- when the call omits a trailing defaulted argument -- by
+  TryFillTrailingDefaults, and only the first of those is the one anybody thinks
+  of. Measured 2026-09-17: with the retag written into the matcher alone,
+  `P([''x''])` against a pair whose second candidate carries `k: Integer = 0`
+  still reported Length(c) = 17297991344808736, because that call never went
+  through the matcher at all. Wiring one door and not the other is the defect
+  this ticket is about, one layer up. }
+var i, currArg, node, d: Integer; ek: TTypeKind;
+begin
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
+  currArg := argsHead;
+  i := 0;
+  while (currArg >= 0) and (i < nArgs) and (i < MAX_PROC_PARAMS) do
+  begin
+    node := ASTLeft[currArg];
+    if (node >= 0) and (ASTKind[node] = AN_SET_LIT) and
+       (i < Procs[procIdx].ParamCount) and
+       Procs[procIdx].Params[i].IsArray and
+       (not ParamIsVarRecArray(procIdx, i)) and
+       SetLitElemsArePlain(node) then
+    begin
+      ek := ParamElemKind(procIdx, i);
+      if (ek <> tyUnknown) and (ek <> tySet) then
+      begin
+        d := ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i];
+        if d < 1 then d := 1;
+        RetagSetLitAsArrayCtor(node, ek, d);
+      end;
+    end;
+    currArg := ASTRight[currArg];
+    Inc(i);
+  end;
+end;
+
+function MatchCallDelphiProcAddr(const name: AnsiString; qUnit, nArgs, argsHead: Integer;
+  const argTypes: array of TTypeKind): Integer;
+begin
+  Result := MatchCallDelphiProcAddrInner(name, qUnit, nArgs, argsHead, argTypes);
+  RetagSetLitArgsForProc(Result, nArgs, argsHead);
 end;
 
 function TryElideVariadicBrackets(const name: AnsiString; qUnit: Integer;
