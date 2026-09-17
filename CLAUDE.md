@@ -1166,9 +1166,19 @@ ABOUT THE WHOLE SESSION.** Measured 2026-09-08 on this seat's own transcript:
 the truth was **5**. The phrase is in the command text of every search for it and
 in the output of every earlier one — **a grep for a denial cannot tell a denial
 from a search for one, and the search is in the file by the time you read it.**
-The discriminator is `is_error: true` on a `tool_result` block, never the string;
+`is_error: true` on a `tool_result` block is a better FILTER than the string —
 frankS reached the same place independently the same day and its own count was
-inflated 4x. **And the AGE is the bigger trap: all five of mine were real and the
+inflated 4x — **but it is not the discriminator, and calling it one is this
+paragraph's own mistake made one layer in.** It is correct about PROCESS EXIT
+STATUS, which is not the question: a deliberate probe that exits nonzero is a
+successful measurement. Measured 2026-09-17 across THREE seats with unrelated
+workloads, every one of them running this very check: **15, 25 and 30
+`is_error` blocks against ZERO, ZERO and ZERO actual blockages.** The
+non-blockages are the ordinary day's work — a differential that exits 1 because
+the two sides differ, a compile that fails because the refusal IS the finding, a
+`grep -c` with no match, a lock correctly refusing a second run, a guardrail
+complied with. **The discriminator that survives all three is the ORDERING
+below**, and it is the only thing that separated any of them. **And the AGE is the bigger trap: all five of mine were real and the
 newest was SIX DAYS OLD**, in a session that had been working fine throughout —
 so "is there a refusal in your transcript" answers YES for a seat that is not
 stuck and never was. Ask whether the newest denial falls AFTER the last
