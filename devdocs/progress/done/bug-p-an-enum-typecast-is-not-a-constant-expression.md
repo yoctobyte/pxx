@@ -66,4 +66,4 @@ identifies it: the diagnostic's first line carries no file name, and reading the
 line number against the subject unit gives the wrong file every time.
 
 ## Log
-- 2026-09-17 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-17 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fc482e82e.
