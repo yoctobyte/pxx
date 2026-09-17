@@ -5528,3 +5528,76 @@ Gate: not re-run for this block; `compiler/` moved, so the next tick rebuilds
 FIRST and then gates, serially — 2n's lesson, not to be dropped twice. Three
 tracked open regressions unchanged as of 14:05. frankb-56 working. franks-ee
 idle by choice. **The eight for the 18th are in 2o.** He is back tomorrow.
+
+---
+
+## 2s — 2026-09-17 15:40 — the peer verified my rules edit, and its check produced a better finding than the one it offered
+
+frankb-56 checked `dc634ed01` before accepting it — *"CLAUDE.md growth on an
+invented precondition is that file's own worst-documented failure and 'a peer
+said so' is not a check"* — and it is right to have done so. Its four checks all
+hold, and I re-ran the one that matters: `git show --stat dc634ed01` is **146
+insertions, ZERO deletions across three files**, so nothing I did can have broken
+a citation into the playbook. That was the failure I caused earlier this window
+with an in-place rewrite, and it is the one I was watching for.
+
+### Its finding, and then the part it could not see
+
+**Offered:** a line-anchored `grep` for the trigger sentence returned zero,
+because the sentence WRAPS after its second word. It was one step from telling me
+the precondition did not exist — i.e. that I had edited the rules file on an
+invented one, which is the most expensive wrong answer available in that moment.
+It widened the window before writing the sentence it had half-drafted. **Caption
+failure caught in flight rather than after landing**, which is the version nobody
+gets to record.
+
+**What I measured when I went to verify it, and it inverts the direction:**
+
+| when | line-anchored | flattened |
+| --- | --- | --- |
+| at `dc634ed01^` (its measurement) | **zero** | one |
+| at HEAD, today | **one** | two |
+
+**Its statement *"it still answers 0 on that file today"* was true when it
+measured and false when it sent** — because the single line-anchored hit is
+**line 27341, written by me in `dc634ed01`**, the write-up of the investigation,
+where the phrase happens to fall unwrapped. `git log -S` names the commit; I did
+not have to guess.
+
+So this is not merely the wrap. **CLAUDE.md's self-check rule describes a guard
+born RED for everyone but its author. This is the mirror, and it is worse: a
+hazard note born GREEN.** A reader who reproduces the peer's command now gets a
+clean hit, concludes the wrap problem was imagined, and learns the opposite of
+the lesson. Nothing errors.
+
+**Three instruments degraded by the act of writing this watch down, in two
+days**: prose about a pin outnumbering the pin 7:1 (2p, and four of the six prose
+hits were mine); this file's own quotation of a phrase it counts; and now a
+write-up that silently REPAIRS a demonstration of a hazard. The pattern is not
+that greps go stale — it is that **the record and the corpus are the same file**,
+so every honest write-up is also an edit to the instrument.
+
+### Venue, said out loud
+
+**Playbook, NOT CLAUDE.md**, and I agree with the peer's own reasoning rather
+than merely accepting its conclusion: one subsystem, and the general rule it
+instantiates is already in the rules file twice — *"every instrument that lies,
+lies by being CORRECT ABOUT SOMETHING ELSE"* and the self-check/baseline clause.
+**My added reason:** the actionable half here is a HABIT, not a judgement, and
+this file's own test is that an extension costs a sentence where a new rule costs
+a paragraph — so it belongs beside the existing instrument section, which is
+where I put it, under *"A FILTERED grep answers about your filter list"*. Its
+suggestion and mine were the same heading independently.
+
+The rule as landed is two sentences: flatten the newlines before searching
+wrapped prose for a quoted sentence (an absence from a wrapped file is not an
+absence), and **write a recorded baseline so it cannot match its own pattern** —
+which I obeyed in the section itself: it describes the probe without reproducing
+the search string, and the count is still ONE after the edit, checked.
+
+### STATE
+
+`compiler/` moved at 14:39 (`5c1db8c6b`), so the next tick **rebuilds first, then
+gates, serially.** Three tracked open regressions unchanged as of 14:05.
+frankb-56 working, nld parked with a design step named. franks-ee idle by choice.
+**The eight for the 18th are in 2o.** He is back tomorrow.

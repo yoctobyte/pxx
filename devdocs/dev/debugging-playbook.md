@@ -9734,6 +9734,51 @@ again a clean, correct, useless zero. **A zero from a scoped instrument owes you
 a positive control: run it scoped the same way against something you KNOW is
 there.** If that also returns nothing, the scope is the bug, not the subject.
 
+
+### THE LINE IS A FILTER TOO — A HARD-WRAPPED SENTENCE IS INVISIBLE TO A LINE-ANCHORED grep, AND THE WRITE-UP THEN REPAIRS THE SYMPTOM AND HIDES IT
+
+Everything above is about a filter you CHOSE. This is the filter nobody
+chooses: `grep` matches within one line, prose in this repo is hard-wrapped at
+about 78 columns, and **a quoted sentence that straddles a wrap cannot match,
+does not error, and exits 1 exactly like a real absence.**
+
+Measured 2026-09-17, frankb-56, verifying a promotion before accepting it — the
+right instinct, which is what makes the near-miss worth recording. It searched
+this file for the trigger sentence in the section *"A MINIMAL CASE FAILS BY
+SCOPE, NOT BY BEING WRONG"* and got **zero**. It was one step from reporting
+that the precondition did not exist and that a rules-file edit had been made on
+an invented one — **the single most expensive wrong answer available in that
+moment.** The sentence is really there; it wraps after its second word.
+Flattening first (`tr '\n' ' '`) answers one. It widened the window before
+writing the sentence it had half-drafted, which is the caption failure caught
+in flight rather than after landing.
+
+**THE SECOND HALF IS WHY THIS IS NOT JUST THE WRAP, AND IT INVERTS THE USUAL
+DIRECTION.** Re-run that same command on this file today and it answers **one**,
+not zero — because the write-up of the investigation contains the phrase
+UNWRAPPED, on a single line, and the write-up landed between the measurement
+and the message reporting it. So the peer's *"it still answers zero today"* was
+true when it measured and false when it sent. CLAUDE.md's self-check rule
+describes a guard **born red** for everyone but its author; this is the mirror,
+and it is worse: **a hazard note born GREEN.** A reader who reproduces the
+command now gets a clean hit, concludes the wrap problem was imagined, and
+learns the opposite of the lesson — and nothing anywhere errors.
+
+**Three instruments degraded by the act of writing the investigation down, in
+two days, on this one watch**: prose about a pin outnumbering the pin, this
+file's own quotation of a phrase it is counting, and now a write-up that
+silently FIXES a demonstration of a hazard. The pattern is not "greps go stale";
+it is that **the record and the corpus are the same file**, and every honest
+write-up is also an edit to the instrument.
+
+**The rule, and it is two sentences.** Searching hard-wrapped prose for a quoted
+sentence: **flatten the newlines first**, or search a distinctive fragment short
+enough to fit between two wraps — an absence from a wrapped file is not an
+absence. And when you record what a probe answered, **write the baseline so it
+cannot match its own pattern** (spell the count in words; break the search
+string, or quote it somewhere the probe does not read), or the next reader is
+measuring your write-up and not the thing.
+
 ## TWO PATHS, ONE QUESTION — perturb the operand so only one can claim it
 
 **The technique in one line: when two mechanisms can answer the same question,
