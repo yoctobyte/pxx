@@ -28034,3 +28034,63 @@ CLAUDE.md instruction rather than contradicting it, so the rules file is
 unchanged and this is the place a reader following that instruction would look
 next. Promote if a second check is found reporting a green summary over a
 self-declared void sub-check.*
+
+## BEFORE CONCLUDING A MATCHING RULE IS MISSING, WRITE THE SAME CALL BOTH WAYS — one door may already know the answer
+
+**The probe is one file and it settles the question that four attempts could
+not.** Where a construct is reachable through two spellings — a METHOD call and
+a FREE call, a statement site and an expression site, a written-out argument and
+a defaulted one — write the identical call in both and compare. If one spelling
+already answers correctly, the rule you are about to go and implement **is
+already in the tree, measured, under a name you have not grepped for**, and the
+job is to find the call site that is missing, not to design the rule.
+
+Measured 2026-09-17, `bug-p-an-array-constructor-in-argument-position-is-typed-as-a-set`:
+
+```pascal
+type TC = class ... P(const c: AnsiString) / P(const c: array of AnsiString)
+o.P(['x'])   fpc 2, pxx 2   { `array count=1 [0]=x`, byte-identical to fpc }
+P(['x'])     fpc 2, pxx REFUSES
+```
+
+Same two candidates, same literal, two spellings. The ticket said overload
+ranking could not see an array constructor and the handoff agreed; both were
+wrong. `BracketCandRank` already encoded fpc's rule — scored against a 72-row
+fpc 3.2.2 matrix over six candidate pairs × six element lists × both
+declaration orders — and was consulted from exactly one place,
+`FindUMethOverloadAhead`. **One seat spent four attempts and a revert hunting a
+rule that was in the tree the whole time.** Nothing in the ticket could have
+revealed that. The two-spelling A/B would have, in one file, before any of the
+four.
+
+**WHY THE EXISTING RULE DID NOT FIRE, WHICH IS THE POINT OF BANKING THIS AS A
+PROBE.** CLAUDE.md already says the sibling is usually a SPELLING and to grep
+for the other spelling's HANDLER. That is a WARNING, and it is aimed at someone
+who has already decided to fix something. It says nothing to someone still at
+the earlier question — *does the rule exist at all* — and that is exactly where
+the four attempts were spent. A warning tells you what not to conclude; this
+tells you what to run. **The warning form of this was present, correct and
+twice-stated, and did not fire for the seat it was written for.**
+
+**The corollary, and it is what the probe buys after it fires:** a defect
+located this way is a missing CALL, not a missing rule, so the fix inherits the
+existing rule's measurements — including the rows that must not move. Here the
+ordinal row (`Q([fA])`, a set candidate beating `array of Integer`, which fpc
+gives to the set) stayed correct with no guard written for it, because the
+repair was placed where the set reading had already lost rather than expressed
+as a new rule that would have had to re-derive it.
+
+**And count the doors onto the RESULT, not just onto the question.** The same
+ticket: the retag was wired into the overload matcher, which is the choke point
+everyone names — and a free call whose candidate is named by the trailing-
+defaults fallback never passes through that matcher at all, so the defaulted
+spelling still handed a set literal to an open-array parameter and the callee
+read `Length(c)` = 17297991344808736. Two spellings of the question, and two
+doors onto the answer; finding the second cost a measurement, not a reading.
+
+*Banked here, not promoted: three instances on 2026-09-17, all in ONE subsystem
+(Pascal call resolution — `pasparser_call.inc` / `pasparser_lval.inc`), so by
+CLAUDE.md's own test this is an INSTANCE of "the sibling is usually a SPELLING,
+not a shape" rather than a neighbour to it. Promote as an EXTENSION of that
+clause — one sentence, not a paragraph — if the two-spelling A/B locates a
+missing call site in an unrelated lane. That call is the coordinator's.*
