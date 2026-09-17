@@ -19757,6 +19757,17 @@ test-core: $(COMPILER)
 	grep -q '^pascal26:54: error: Dispose with a constructor/destructor argument is not supported' $(TESTTMP)/objctorfail26.ROW_DISPOSE.log
 	./$(COMPILER) test/test_object_value_ctor_fail.pas $(TESTTMP)/objctorfail26ok
 	test -e $(TESTTMP)/objctorfail26ok
+	# A TYPECAST TO AN ENUM TYPE IN A CONSTANT EXPRESSION. pxx has no tyEnum,
+	# so TypeIsOrdinal has no enum family and the const-cast door's alias arm
+	# could not answer for one: `const K = TE(2)` was `not a constant`.
+	# The K_ALIAS and K_BUILTIN rows are the load-bearing controls and they sit
+	# MID-FILE on purpose -- this touches ConstCastWidth, which exists to own
+	# the alias-before-builtin ORDER, and a third arm inserted in the wrong
+	# place still passes every enum row. K_REG proves the width came from
+	# EnumStorageTypeKind: $ffffffff on a 4-byte SIGNED enum is -1, fpc's own
+	# answer for its cgbase.pas:401 declaration. Byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_const_enum_cast.pas $(TESTTMP)/test_cenumcast26
+	tools/expect_same.sh test_cenumcast26 "$$($(TESTTMP)/test_cenumcast26)" "$$(cat test/test_const_enum_cast.expected)"
 	# A DEFAULTED TRAILING PARAMETER used to disable argument type checking on
 	# the arguments that WERE supplied. TryFillTrailingDefaults picked its
 	# candidate on NAME and ARITY alone, and it is a fallback reached only

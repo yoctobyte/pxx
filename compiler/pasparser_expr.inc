@@ -12418,6 +12418,37 @@ begin
   Result := True;
 end;
 
+function ConstEnumCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
+{ True if `nm` is an ENUM type name, and therefore usable as a const typecast.
+
+  It needs its own arm because pxx has NO tyEnum -- symtab.inc:4482 says so
+  outright, and TypeIsOrdinal consequently has no enum family, so the alias arm
+  above cannot answer for one however the name is declared. An enum's values
+  travel in an ordinary integer kind with the identity carried beside them in
+  SymSemId, and EnumStorageTypeKind is the ONE place that says which kind; ask
+  it rather than re-deriving a width from the member list, or a {$PACKENUM}d
+  enum gets cast at the wrong width here while every other site uses the frozen
+  one.
+
+  fpc's own compiler needs this at cgbase.pas:401 --
+  `NR_INVALID = tregister($ffffffff)`, where tregister is an enum declared with
+  explicit `Low(longint)`/`High(longint)` bounds so that it is incompatible with
+  tsuperregister. That freezes it at 4 bytes signed, so the fold is -1, which is
+  what fpc prints. The explicit bounds are NOT what made this fail, though they
+  are what makes the value interesting: `type TE=(a,b,c); const K=TE(2);` was
+  refused just the same.
+  bug-p-an-enum-typecast-is-not-a-constant-expression }
+var etid: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  etid := FindEnumType(nm);
+  if etid < 0 then Exit;
+  tk := EnumStorageTypeKind(etid);
+  bytes := TypeSlotSize(tk);
+  signed := TypeSigned(tk);
+  Result := True;
+end;
+
 function ConstCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
 { THE ONE ENTRY POINT for "is `nm` a type name a CONST expression may cast
   through, and how wide is it". It exists to own the ORDER, because the order is
@@ -12435,6 +12466,12 @@ function ConstCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Bo
   refactor-p-five-dispatch-sites-for-one-named-type-cast }
 begin
   Result := ConstAliasCastWidth(nm, bytes, signed);
+  { ...and the ENUM arm sits on the SOURCE-DECLARATION side of the order this
+    door exists to own: an enum is something the program declared, so like an
+    alias it outranks the builtin table. Alias-versus-enum order is free -- one
+    name is one declaration and cannot be both. }
+  if not Result then
+    Result := ConstEnumCastWidth(nm, bytes, signed);
   if not Result then
     Result := ConstIntCastWidth(nm, bytes, signed);
 end;
@@ -12526,7 +12563,7 @@ function ConstEvalFactor: Int64;
 { Primary of a const expression: literal / true / false / single-char literal /
   named const / parenthesised expr / integer typecast. Unary +/- binds tightest
   (so -2*3 = -(2)*3 = -6 and 2*-3 = -6). No code emitted. }
-var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
+var r: Int64; idx: Integer; castBytes: Integer; castEnumId: Integer; castSigned: Boolean;
     cName: AnsiString; cQUnit, ceOrd: Integer; hasConstCast, hlHigh: Boolean; sofTk: TTypeKind;
     ccBaseCi, ccReg: Integer;
 begin
@@ -12574,6 +12611,11 @@ begin
       site used to fold to 5 while the runtime cast of the same expression in
       the same program answered 4294967301. }
     hasConstCast := ConstCastWidth(CurTok.SVal, castBytes, castSigned);
+    { The door owns the WIDTH; the IDENTITY is CEEnumId's business and is read
+      here while CurTok is still the type name -- the same spelling the
+      `TEnum.member` arm below uses. -1 for every non-enum cast, which is what
+      this site set unconditionally before. }
+    castEnumId := FindEnumType(CurTok.SVal);
   end;
   if hasConstCast then
   begin
@@ -12591,7 +12633,7 @@ begin
       329 casts a signed bound up and then compares unsigned. }
     if (castBytes = 8) and (not castSigned) then CEOrdTk := tyUInt64
     else CEOrdTk := tyInteger;
-    CEEnumId := -1;
+    CEEnumId := castEnumId;
   end
   else if CurTok.Kind = tkInteger then
   begin

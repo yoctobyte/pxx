@@ -1,0 +1,8 @@
+K_PLAIN   = 2
+K_ZERO    = 0
+K_REG     = -1
+K_REG_POS = 7
+K_ALIAS   = 4294967301
+K_BUILTIN = 5
+K_ORD     = 2
+assigned  = 2
