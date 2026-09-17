@@ -152,8 +152,15 @@ An **umbrella** is a GOAL: a real program that must work. `backlog-umbrella/`,
   at the top of a file and are structurally over-represented as first errors.
   **So do not rank a blocker on how many subjects name it**, and record the
   expectation BEFORE the re-run — a null row is only information to someone who
-  said what they expected. The instrument that would answer the size question
-  reports EVERY failure per subject, and on both umbrellas nobody had built it.
+  said what they expected. **The all-failures instrument HAS been built now
+  (2026-09-17): `tools/fpc_compiler_corpus_probe.sh` takes `PXX_CORPUS_DETAIL=<dir>`
+  and writes every diagnostic per unit, not just the first — this line said
+  nobody had built it, five null rows running, and that is retired.** But read
+  its own header before quoting a number off it: **it does not answer the size
+  question either**, because a recovered-error count is not a cause count and
+  one missing `uses` binding raised twenty rows. It answers *"is there anything
+  behind this wall"*, which is the question that was actually blocking, and
+  **nothing yet answers "how much"**.
 - **An umbrella with no blockers means nobody has attempted that cell** — that is
   information, not missing paperwork.
 - `next` will not hand you an umbrella; take something it blocks.
