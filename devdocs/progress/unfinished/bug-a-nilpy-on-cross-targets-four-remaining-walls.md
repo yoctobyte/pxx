@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 40
+prio: 85
 type: bug
 blocked-by: []
 summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32 and xtensa `a heap arena needs mmap`, wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32."
@@ -220,3 +220,49 @@ refactor harder.
 
 **Parked here.** The campaign's next step is the refactor ticket, not another
 patch in this one.
+
+
+## RE-RANKED 40 -> 85, 2026-09-17, on the owner's ESP refocus
+
+**Not on merit — on POSITION.** The owner turned the shop back to the ESP32 the
+same day Adafruit shipped CircuitPython "Turbo": host-compiled `@native`/`@viper`
+functions delivered to the board as `.mpy`, with a 2-3 KB loader and **no
+on-board compiler**, `-march` values including `xtensa`, `xtensawin` and
+`rv32imc`, verified on ESP32-S2/S3 and ESP32-C5.
+
+**What that establishes is an audience, not a competitor.** Turbo accelerates
+functions inside a running VM; the interpreter is still there. Nobody ships
+*"your Python program IS the firmware"* — one web search, so read that as
+consistent-with rather than proven, but it matches the landscape (Nuitka and
+Cython need CPython, Codon/mypyc/Shed Skin are desktop, Zerynth was a VM and is
+gone). **That claim is ours to make and we cannot make it yet, and THIS TICKET
+IS WHY.** Measured 2026-09-17 at `578b158524a5`, a 20-line Mandelbrot `.npy`
+that runs correctly on the host:
+
+```
+$ pascal26 --target=esp32s3 mandel.npy out
+pascal26:1: error: target xtensa: a heap arena needs mmap, which bare metal has not
+$ pascal26 --target=esp32c6 mandel.npy out
+pascal26:1: error: target riscv32: a heap arena needs mmap, which this profile has not
+```
+
+**ONE WALL, BOTH ESP ARCHITECTURES.** The summary above counts five walls across
+six targets and that is right, but they are not equally placed: the mmap arena is
+the *only* one standing between us and the ESP pair, and xtensa is the primary
+ESP target while riscv32 is the other one. i386, aarch64 and wasm32 are real and
+are not on this path — **do not bundle them into an ESP estimate.**
+
+**The claim to protect while this is open, because the two are not the same
+sentence:** *"pxx runs on ESP32"* is TRUE today (Pascal reaches xtensa). *"pxx
+compiles Python to ESP32"* is FALSE today. Neither goes into public copy in the
+other's place.
+
+**And there is now an outside benchmark to be measured against**, which we have
+never had for ESP: Turbo's published Mandelbrot inner loop, twelve boards,
+ESP32-C5 at 172 ms and 44x over float bytecode. Once this wall falls, running
+that same loop under pxx on an S3 and a C5 produces the first pxx number an
+outsider can compare — which is exactly what Track O's PROMISE gate asks for:
+delivered value, measured, not opportunity inferred.
+
+**Ranked at 85, not 90:** it is one wall with a named mechanism, not a research
+question, and nothing is blocked on it today except a claim we are not making.

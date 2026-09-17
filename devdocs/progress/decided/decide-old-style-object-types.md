@@ -7,6 +7,18 @@ status: decided
 
 # Decide: do we implement Turbo Pascal `object` types?
 
+> **STATUS 2026-09-17 — READ THIS FIRST; THE PAGE BELOW IS THE HISTORY.**
+> Old-style `object` types **work**: fields, methods, and since `efe06a903`
+> **`constructor` and `destructor` too**. What is still refused, deliberately and
+> with its own named diagnostic at the declaration, is the **VMT half** —
+> `virtual`, `dynamic`, `override`, `abstract`, and an ancestor. The paragraph
+> immediately below and the section "Option C stays refused" were both TRUE WHEN
+> WRITTEN and are false now; they are kept because the reasoning is the record.
+> **AFFIRMED by this seat, 2026-09-17, holding the shop** — see the dated note at
+> the end of this page for who decided what, and the one line that reverses it.
+> **The VMT fork remains OPEN and remains the owner's**, because that one is a
+> question about what `object` MEANS, not an acceptance tweak.
+
 `type TFoo = object ... end;` — the pre-Delphi class construct — is **entirely
 unsupported**. Not partially: the parser stops at the first field.
 
@@ -132,6 +144,22 @@ VMT / constructor protocol / `SizeOf`), and it wants its own ticket chain rather
 than one item.
 
 ## Option C stays refused
+
+**SUPERSEDED 2026-09-17 — heading kept so citations resolve, but do not read it
+as state.** Option C as this page DEFINES it (no VMT, no `virtual`, **no
+`constructor`**) is not what shipped: `efe06a903` accepts `constructor` and
+`destructor` and still refuses the VMT half. **Both objections below were
+measured and neither survived.** (1) The "worse message deeper in" does not
+happen — `virtual` on an `object` still produces its own named diagnostic AT THE
+DECLARATION, verified independently on a rebuilt compiler: *"an object type
+cannot have a virtual method -- pxx lowers `object` as a value type with no VMT
+... use a class for dynamic dispatch"*. (2) "Accepting the keyword while refusing
+the half that motivates it" assumes that half is reachable: of 35 `= object`
+declarations in the reachable FPC corpus, 15 need a VMT, **14 of them are in one
+file no unit imports** and the 15th sits behind an `{$ifdef}` defined nowhere.
+
+The reasoning below is kept as the record of why the middle looked bad before
+anyone had measured it.
 
 The ticket calls it *"the bad middle"* and that reading holds: accepting the
 keyword while silently refusing `virtual` trades today's clean error for a worse

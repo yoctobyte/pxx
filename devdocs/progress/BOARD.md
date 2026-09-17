@@ -47,7 +47,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32 and xtensa `a heap arena needs mmap`, wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32. | — |
+| bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 85 | bug | ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32 and xtensa `a heap arena needs mmap`, wasm32 `undefined variable (SYS_openat)`. Five walls, not four. ~53 .npy tests stay cross-blind on everything but arm32. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-n-a-local-named-after-its-own-def-aliases-the-function-result | N | 60 | bug | A NilPy local whose name equals its enclosing def's name aliases the function result instead of being an ordinary local: `def mode(label): tonic, mode = label.split(' '); return tonic, mode` returns ('C', None) where CPython returns ('C', 'minor'). Silent wrong value, no diagnostic. | — |
 | bug-nilpy-render-backend-py-compile-does-not-terminate | N | 55→68 | bug | It loops forever after a known point emitting nothing — not slowness. PXXDBG=all output is byte-identical at 20s and 45s (54,577 lines, cmp-clean) with VmRSS flat at 7,616 kB, so it is a tight non-allocating spin entered right after _text's parameter list (render_backend.py:244); the method-block bisect agrees independently. NOT minimised: seven candidate shapes are recorded as DISPROVED, including the tuple-unpack cycle that was the leading suspect. | — |
@@ -1189,6 +1189,7 @@ _none_
 - [p 85] [P] bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
 - [p 85] [P] feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - [p 85] [P] feature-p-legacy-value-object-types (unblocks 1)
+- [p 85] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 85] [N] bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - [p 85] [N] bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
 - [p 85] [T] bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
@@ -1470,7 +1471,6 @@ _none_
 - [p 40] [A] bug-a-i386-esi-and-edi-are-callee-saved-in-the-abi-and-scratch-in-this-backend
 - [p 40] [A] bug-a-i386-has-no-float-writer-helper-so-three-frontends-cannot-print-a-real
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
-- [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only
