@@ -898,3 +898,4 @@
 2026-09-17T16:27:03Z	borg	cc03b4a51933a51b3e30c3334797c209f534504f	would NOT pin cc03b4a51933 — 2 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_object_value_type.pas, test-pascal-conformance#shard3/6
 2026-09-17T16:59:31Z	borg	a3ccf3f6986b60800f96ef11e936d29444428f1c	would NOT pin a3ccf3f6986b — 2 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_object_value_type.pas, test-pascal-conformance#shard3/6
 2026-09-17T17:29:26Z	borg	9b8475d4e99e968a404b7fbe0b04dd37af430079	would NOT pin 9b8475d4e99e — 2 red(s) the current pin does not have, 5 inherited from the current pin: test-core#src:test/test_object_value_type.pas, test-pascal-conformance#shard3/6
+2026-09-17T18:11:43Z	borg	2b2ec3fee1c5c5f34462f649a12fa17b66eec278	would NOT pin 2b2ec3fee1c5 — 1 red(s) the current pin does not have, 6 inherited from the current pin: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy
