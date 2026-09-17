@@ -27856,3 +27856,59 @@ not watch for "a second instrument answering 0 for a parse reason", because the
 second instance will most likely NOT answer 0. Watch instead for **a second
 instrument whose answer depends silently on WHEN it was run**, which is the
 property that makes this one uncomparable rather than merely wrong.*
+
+## `gate.sh` PRINTS **GREEN** WHEN A CONCURRENT REBUILD VOIDS ITS AGREEMENT CHECK — and the note saying so is not on the verdict line
+
+**Measured 2026-09-17, self-inflicted.** A `gate.sh quick` was backgrounded; a
+`make compiler/pascal26` was then started while it was still running, because
+the pull had brought a `compiler/` commit and the rebuild was owed. The gate's
+`fixedpoint.log` says exactly what happened:
+
+```
+converged after 1 round(s) from pinned: the compiler reproduces itself
+NOTE compiler/pascal26 changed DURING this check — a concurrent build
+     replaced it, so the agreement check compared against a binary that
+     no longer exists. This is NOT a self-host failure.
+     Convergence (the real gate) passed. Re-run to check agreement.
+```
+
+**And the summary line said `gate: GREEN (exit 0)`.**
+
+The tool is being honest and is arguably right: convergence IS the gate, and it
+passed. **But the half that was voided is the half that catches local-seed
+contamination** — the `the fixedpoint reached from PINNED differs from
+compiler/pascal26` condition, i.e. two valid fixedpoints, which is the one thing
+a stale or contaminated binary produces. So the run proved the sources define a
+fixedpoint and proved nothing about the binary on disk.
+
+**WHY THIS BEATS THE PRESCRIBED CHECK.** CLAUDE.md says to background the gate
+and **grep the log for the verdict** rather than trust the wrapper's exit code —
+correct, and the reason is a measured one (a backgrounded gate said `exit code 0`
+over `gate: RED` three times in one day). **A seat that follows that instruction
+exactly gets `gate: GREEN (exit 0)` and never sees the NOTE**, which lives in
+`fixedpoint.log`. The prescribed behaviour is what hides this.
+
+**The tell, and it was an accident:** the same tree gated twice within ten
+minutes gave `FPC seed canary (concurrent)` on the first run and `SKIP
+(compiler/ unchanged, and seeded green at …)` on the second. Two different canary
+dispositions for one tree is not something a tree can do — only a moving one
+can — and that oddity is what sent the reader into the per-check log.
+
+**The rule, and it is the house one in a place it had not been written:** *do not
+touch the instrument while it is measuring.* The gate's SUBJECT is
+`compiler/pascal26`; a rebuild replaces it. The existing entries on this cover
+editing a running script and pulling mid-sweep; **replacing the binary a
+running gate is comparing against is the same act on the other side of the
+instrument**, and it is easy to reach because the rebuild is genuinely owed after
+a `compiler/` pull.
+
+**Sequence, serially, never overlapped:** PULL → **REBUILD** → *wait for it* →
+GATE → grep the verdict **and** `fixedpoint.log`. If a gate was already running
+when the pull landed, let it finish and discard it; its answer is about the tree
+you no longer have.
+
+*Banked here, not promoted: one instrument, one instance. It QUALIFIES a live
+CLAUDE.md instruction rather than contradicting it, so the rules file is
+unchanged and this is the place a reader following that instruction would look
+next. Promote if a second check is found reporting a green summary over a
+self-declared void sub-check.*
