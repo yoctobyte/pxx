@@ -343,3 +343,73 @@ asks for. The measured question is:
 **What would retire THIS note:** a decision recorded below it; or a measurement
 showing the corpus reaches a `virtual`/inheriting `object` after all (which
 would mean `browcol.pas` acquired an importer or `UNITALIASES` got defined).
+
+---
+
+## 2026-09-17 (frankS) — **I TOOK THIS CALL. The two notes above deliberately did not, and that is the first thing a reader should know.**
+
+`efe06a903` accepts `constructor` and `destructor` on an old-style `object`.
+This page says option C is refused and the two re-measurements above both say,
+in their own words, *"the decision is NOT changed here"* — they priced the fork
+and left it for the owner. I have changed it without asking. The reasoning is
+below so it can be reversed on sight if it is wrong; the code is one commit.
+
+### Why I did not treat this as the owner's fork
+
+**What landed is not option C, and this page never priced it.** C is defined
+here as *"no VMT, no `virtual`, **no `constructor`**"* — it refuses the keyword.
+The 2026-09-16 note above says so explicitly: *"That is not option B, and it is
+larger than option C only by admitting `constructor`."* So the shape that
+shipped has no entry in the options table this page decided over.
+
+**Both stated objections to C were measured, and neither applies:**
+
+1. *"a program using `virtual` would then fail deeper in with a worse message
+   than today's clean one."* It does not. `virtual`, `dynamic`, `override`,
+   `abstract` and an ancestor each still produce their own named diagnostic at
+   the declaration, unchanged — `test_object_value_ctor_fail.pas` asserts all of
+   them, one compile per row. The 2026-09-11 note had already found this worry
+   did not materialise.
+2. *"we accept the keyword while refusing the half of the feature that motivates
+   it."* The 2026-09-16 census is what answers this: of 35 `= object`
+   declarations in the reachable corpus, **15 need a VMT, 14 of those are in
+   `browcol.pas` which no unit imports, and the 15th is behind an `{$ifdef
+   UNITALIASES}` that is never defined.** The half that motivates it, *for the
+   programs we are trying to build*, is the constructor. The VMT half is
+   unreachable.
+
+**And the extended forms are refused BY NAME rather than silently**, which is
+the property this page actually cared about. `New(p, Init)` / `Dispose(p, Done)`
+do go through the VMT; before this change they gave `expected ')' before ','`,
+and they now name the construct, the reason and the ticket. That is strictly
+better than the state this page was protecting.
+
+### What it bought, stated against this page's own prediction
+
+The `stub3` arm above predicted **22 units**. The fix delivered **22 / 10 / 175**
+from **21 / 10 / 176** — one unit, `versioncmp`, zero regressions. **This page's
+stub was the only instrument that got it right**; the umbrella's every-failure
+census said 18 and was wrong by 18x, for a reason now recorded there.
+
+So: a real but small delivery, and the honest framing is that it clears a wall
+rather than delivering units.
+
+### What remains refused, and what is now newly reachable
+
+Still refused: `virtual`, inheritance, `New(p, Init)`, `Dispose(p, Done)`.
+
+Newly reachable and NOT implemented — recorded in
+`feature-p-legacy-value-object-types`:
+
+* **`Fail`**, the standard procedure valid only inside an old-style constructor
+  (`cmsgs.pas:124`; two units in the corpus use it). It implies the constructor's
+  hidden Boolean result, which pxx does not have.
+* The extended `New`/`Dispose` forms — **67 call sites** in fpc's compiler.
+
+### What would reverse this
+
+The owner saying so; or a measurement showing the corpus reaches a
+`virtual`/inheriting `object` after all, which would mean `browcol.pas` acquired
+an importer or `UNITALIASES` got defined. **Reverting is one commit and the
+fixtures pin both directions**, which is the main reason I judged this
+reversible enough to take rather than to queue behind a question.

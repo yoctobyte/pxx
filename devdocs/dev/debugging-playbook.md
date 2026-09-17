@@ -28094,3 +28094,81 @@ CLAUDE.md's own test this is an INSTANCE of "the sibling is usually a SPELLING,
 not a shape" rather than a neighbour to it. Promote as an EXTENSION of that
 clause — one sentence, not a paragraph — if the two-spelling A/B locates a
 missing call site in an unrelated lane. That call is the coordinator's.*
+
+## AN EVERY-FAILURE CENSUS IS COMPLETE ONLY FOR THE SUBJECT — IT INHERITS FIRST-FAILURE BLINDNESS ONCE PER IMPORT
+
+Measured 2026-09-17 (frankS), on `umbrella-pxx-compiles-fpc-itself`, and the
+number is the point: **the census predicted 18 and the answer was 1.**
+
+### The setup
+
+A first-failure census over a corpus reports one error per subject, so walls
+behind the first are invisible and a shared dependency's single call site shows
+up as a huge population. That failure mode is well documented — the umbrella had
+recorded it four times on one file (`cclasses.pas` 895 -> 1327 -> 1726). The cure
+built for it was an **every-failure census**: turn off the `head -1`, let the
+compiler recover up to its 20-error cap, and record each subject's COMPLETE set
+of diagnostics. Eighteen units came back whose complete set was a single wall.
+That reads as a genuine population rather than a queue, and it was written up as
+*"the first proposal with a complete failure set behind it instead of a queue
+position."*
+
+### What happened
+
+The wall was cleared. **One unit converted.** The other seventeen moved to walls
+**25 lines** and **77 lines** further down — inside the very files that had
+raised the original diagnostic.
+
+```
+18 = 1 + 14 + 3
+  1  versioncmp   declares the construct IN ITS OWN SOURCE   -> converted
+ 14  importers of cgbase.pas   :376 -> :401   (25 lines later, same file)
+  3  importers of cmsgs.pas    :46  -> :123   (77 lines later, same file)
+```
+
+### The mechanism, and it is one sentence
+
+**The census is complete about the SUBJECT unit. Every unit the subject IMPORTS
+is still truncated at that unit's own first failure.** Error recovery runs in
+the unit being compiled; a dependency that fails to parse stops being parsed,
+and everything after that point in the dependency is never analysed. So for any
+subject whose wall lives in a dependency — which is most of them, since a wall
+big enough to notice is a wall in something widely imported — the "complete set"
+is complete about a truncated import, and it reports one error with total
+confidence.
+
+That is the ORIGINAL blindness, moved one level down and made invisible by the
+instrument built to cure it. The one unit that converted is exactly the one
+where the wall was in its own source with nothing behind it.
+
+### What to use instead: STUB THE WALL AND RE-RUN
+
+Apply the proposed change by hand over a copy of the tree — respell the
+construct, stub the missing type — and re-run the corpus. A stub removes the
+wall **for the importing units too**, so their next failure becomes visible,
+which no amount of diagnostic recovery inside a single compile can achieve.
+
+On this exact question a stub arm run the day before had predicted **22 units**;
+the real fix delivered **22**. The census said 18 more. The two instruments
+disagreed by 18x and the cheap one was right.
+
+### The general form, because this is not about compilers
+
+Whenever an analysis is **staged** — imports, layers, a pipeline where stage N
+consumes stage N-1's output — an "all the errors" report from the final stage
+enumerates all the errors *it reached*, and each upstream stage contributes at
+most the errors before its own first stop. Making the last stage exhaustive does
+nothing about that. Ask: **does my instrument keep going past a failure in the
+things it DEPENDS on, or only past a failure in the thing it is looking at?**
+If only the latter, its completeness claim is scoped one level deep, and the
+honest way to size the work behind a wall is to remove the wall.
+
+### The promotion test, stated so a later reader can apply it
+
+This is banked here and NOT promoted to CLAUDE.md. It is a sharper instance of
+a rule that file already carries in its umbrella section ("a first-failure
+census ranks by queue position, and a count of units blocked is not a count of
+work") — and CLAUDE.md prefers STRENGTHENING an existing rule to adding a
+neighbour. **What would promote it: a second, unrelated subsystem** where an
+exhaustive report was trusted and was scoped one dependency level deep. One
+subsystem, however expensive the miss, is a playbook entry.
