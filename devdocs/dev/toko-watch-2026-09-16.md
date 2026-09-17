@@ -4626,3 +4626,121 @@ it was the whole cost of checking.
 regressions unchanged. Track P staffed by both seats with [85] landed, [55]
 diagnosed-and-parked, and the third P ticket unclaimed. **Seven for the 18th,
 unchanged.**
+
+## Check-in 2h (2026-09-17 02:2x) — "THREE OPEN REGRESSIONS" WAS THE WRONG SET ALL WATCH: the tier has FIVE reds, and two of them cannot enter the list I keep diffing
+
+### THE TICK ITSELF
+
+Zero commits since 2g. No `compiler/` or `lib/` movement, so no rebuild owed —
+**checked this time rather than assumed**, which is the whole lesson of 2g.
+Gate **GREEN**, `self-host fixedpoint` PASS, **FPC seed canary SKIP** (`compiler/
+unchanged, seeded green at bd79efb9f090`). Both peers last committed ~23:16 and
+~23:30, about three hours ago, after a burst of P work; both answered messages
+within the last four hours, so this is ended-turn and not silence. Not poking
+them — I have no fact to send, and "are you alive" is the message CLAUDE.md says
+not to send.
+
+### THE ERROR: I HAVE BEEN QUOTING `open_regressions` AS IF IT WERE THE TIER'S REDS
+
+`twatch --status` lists **three** open regressions and I have reported three at
+every tick. `borg.json`'s `jobs` dict, for the same newest full tier, has **five
+failures**:
+
+| job | in the open-regression list? | last recorded pass on borg |
+| --- | --- | --- |
+| `lib-test#src:test/crtl_atexit.c` | yes | `b984ad07e` |
+| `lib-test#src:tools/crtl_reachability.py` | yes | none |
+| `tools-devtest#00` | yes | `9e3fd48ad` |
+| **`demos#00`** | **no — never reported by me** | none |
+| **`test-core#src:test/c_crtl_wait.c`** | **no — never reported by me** | none |
+
+**The mechanism is the reason it lasted:** an open regression is a job that
+REGRESSED — it needs a recorded pass to have fallen from. A job with no recorded
+pass on this host cannot be a regression, so it never enters the list, and the
+list is the only thing I have been diffing. **Print the set your instrument
+enumerates and check the subject is in it** — I did not, for six check-ins.
+`--status` is not lying; it is answering honestly about regressions while I read
+it as "the tier's reds".
+
+**Second time this watch with the same consequence and a different mechanism.**
+The bench tier (2b) publishes RED on every run and the word `bench` appears
+nowhere in `--status`. Now two tier failures are absent because they never
+passed. **Two instances, one instrument family (tstate/twatch), so NOT promoted**
+— CLAUDE.md's bar is a second independent SUBSYSTEM and this is one. Banked here.
+
+**And the `last_pass: none` rows must not be read as "never passed ever."** Borg's
+records begin at the 2026-09-11 handover, the same caveat this note's brief
+carries for `open_regression` timestamps. It means *no pass on borg's record*.
+
+### WHAT THE TWO UNREPORTED REDS ACTUALLY ARE
+
+**`demos#00` declares itself not a gate**, in its own output: *"demos is a
+dashboard, not a gate; FAILs -> file a ticket"*, with **31/36 built** (esp32
+skipped, cross-only). So it is legitimately non-blocking — and it is **goal 3**
+(*a nice list of working demos*), which makes 31/36 a number worth having in
+front of him rather than one to leave out of the report because it is not a gate.
+
+**`test-core#src:test/c_crtl_wait.c` has a real, sharp symptom:**
+
+```
+-wait4-rusage     rusage=written
++wait4-rusage     rusage=UNTOUCHED
+```
+
+`wait4()` not filling the rusage struct. I traced the whole chain and **every hop
+is correct**: `lib/crtl/src/sys/wait.c:48` passes `rusage` through to
+`__pxx_wait4`; `pxxcio.pas:983` forwards it to `PalWait4`; `platform.pas:931`
+forwards to `PalBackendWait4`; the x86-64 arm issues
+`__pxxrawsyscall(SYS_wait4, pid, wstatus, options, Int64(rusage), 0, 0)` — rusage
+in argument four, which is where wait4 wants it. `struct rusage` in
+`lib/crtl/include/sys/resource.h` is the kernel's layout, two `timeval` plus
+sixteen `long`.
+
+**So I stopped reading and reproduced it:**
+
+```
+./compiler/pascal26              test/c_crtl_wait.c  ->  wait4-rusage  rusage=written
+./stable_linux_amd64/default/pinned test/c_crtl_wait.c ->  wait4-rusage  rusage=written
+```
+
+**`written` under BOTH compilers, here, now**, at a tree with **zero** differences
+from the tier's `ba8cf629926a` in `compiler/`, `lib/` or `test/`. The red does not
+reproduce.
+
+### THREE THINGS THIS WATCH NOW POINT AT THE HOST, NOT THE TREE
+
+1. **bench** (2b): zero rows on borg since 2026-07-31, 54 consecutive, while
+   **seven answered 30 rows** until 2h25m before it was retired on 09-11.
+2. **`lib-test#00`** (2c): its published reason `lib-units: FAIL
+   mimic_reportlab_pdfgen` gives 154/154 rc=0 here under the pinned compiler.
+3. **`c_crtl_wait.c`** (this block): `rusage=written` here under both compilers.
+
+**Since 2026-09-11, borg is the ONLY breadth host.** Plexus and seven are both
+retired, so there is no second instrument and every one of these is "borg says X,
+this box says not-X" with nothing to break the tie. One environment difference is
+on the record and I am naming it as a CANDIDATE and not a cause: borg's reports
+say `kernel=7.0.0-29-generic`, this box is `7.0.0-31-generic`. Two patch levels
+is not a plausible mechanism for wait4 declining to write rusage, and saying so
+is the honest version — **I do not have the cause and Track T owns the box.**
+
+### EIGHTH ITEM FOR THE 18TH, and it is genuinely his
+
+The previous seven stand. This one is new and it is his because it is fleet and
+hardware, which is his dial:
+
+> **Track T has run on one host since 2026-09-11, and three separate things it
+> reports do not reproduce anywhere else. Do we want a second breadth host, or is
+> one enough and we treat borg's verdicts as needing a confirm?**
+
+Stated that way it is answerable in a word. The engineering half is ours and is
+already in tickets; what I cannot decide is whether a machine comes back up.
+
+### STATE
+
+Gate GREEN. **Five failing jobs in the newest full tier, of which three are
+tracked regressions and two I had never reported** — the honest count, corrected.
+Of the five: one waits on a pin, two do not reproduce here, one declares itself a
+dashboard, one is T's own devtest. **Eight for the 18th.** Also for the record:
+v409's *"17 red"* is **13 shards of ONE subject** (`test-uforth#src:tools/
+compiler_srchash.sh@1..13`) plus four others, so it is about five subjects, not
+seventeen — third time this watch that a shard count read as a population.
