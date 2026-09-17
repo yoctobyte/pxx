@@ -5034,6 +5034,34 @@ test-nilpy: $(COMPILER)
 	elif ./$(COMPILER) test/test_p_a_real_error_directive_still_halts.pas $(TESTTMP)/test_realerr26 2>&1 | grep -q 'NOPE_REAL_ERROR'; then \
 	  echo "ok: a real {$$error} still halts, and the message survives"; \
 	else echo "FAIL: refused, but the message does not name NOPE_REAL_ERROR"; exit 1; fi
+	@# ...AND A REFUSAL MUST NAME THE DIRECTIVE'S LINE, WHICH IS NOT WHERE THE
+	@# LEXER IS STANDING. `Error` prints the CURRENT TOKEN's line and the
+	@# expression evaluator runs from the directive handler, so the number came
+	@# from wherever the last tokenised line left it. Measured 2026-09-17 on
+	@# FPC's own compiler: nld/nadd/hlcgobj reported 1334/1112/1821 for
+	@# directives at 700/1352/4156 -- two backwards, one forwards, all at
+	@# ordinary statements. The PINNED compiler reports 29 for the line-30
+	@# directive below, an OFF-BY-ONE, which is what makes this worth a row: a
+	@# near-miss line is read as correct and sends the reader one line away.
+	@# The expected line is READ OUT OF THE FILE, never copied, so it cannot rot.
+	@L=$$(grep -n 'sizeof(nosuchtypeatall)' test/test_p_a_conditional_directive_refusal_names_the_directive_s_line.pas | cut -d: -f1); \
+	if ./$(COMPILER) test/test_p_a_conditional_directive_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condline26 >/dev/null 2>&1; then \
+	  echo "FAIL: an unsizeable type COMPILED -- the refusal this row locates is gone"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_conditional_directive_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condline26 2>&1 | grep -q "pascal26:$$L: error: conditional directive: sizeof"; then \
+	  echo "ok: a conditional-directive refusal names the directive's own line ($$L)"; \
+	else echo "FAIL: refused at the wrong line -- expected $$L, got: $$(./$(COMPILER) test/test_p_a_conditional_directive_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condline26 2>&1 | head -1)"; exit 1; fi
+	@# THE SECOND DOOR. The `in` arm POISONS its operand and one site turns the
+	@# poison into a diagnostic -- `Error(PasCondValWhy[0])`, whose argument is a
+	@# variable, so a sweep of every `Error('conditional directive...')` literal
+	@# misses it entirely. Measured: after that sweep nadd and hlcgobj were right
+	@# and nld still said 1334 for a directive on 700. Separate row because a
+	@# future sweep of the direct door must not be able to certify this one.
+	@L=$$(grep -n 'in NOPE_NOT_A_SET' test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas | head -1 | cut -d: -f1); \
+	if ./$(COMPILER) test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condpoison26 >/dev/null 2>&1; then \
+	  echo "FAIL: a non-set was accepted as the right operand of \`in\`"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condpoison26 2>&1 | grep -q "pascal26:$$L: error: conditional directive: the right operand of"; then \
+	  echo "ok: a DEFERRED conditional refusal names the directive's own line ($$L)"; \
+	else echo "FAIL: the deferred door refused at the wrong line -- expected $$L, got: $$(./$(COMPILER) test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condpoison26 2>&1 | head -1)"; exit 1; fi
 	@# ...AND A CONST WHOSE VALUE IS NOT AN INTEGER LITERAL. FPC's rgobj.pas:1728
 	@# needs four hops for one directive: a const naming another CONST across two
 	@# UNITS (x86_64/cpubase.inc:90 -> x86/cpubase.pas:84), and high() over a

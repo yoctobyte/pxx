@@ -1513,6 +1513,33 @@ var
   PasCondQuiet: Boolean = False;
   PasCondUnresolved: Boolean = False;
 
+  { The line the DIRECTIVE is on, which is not where the lexer is standing when
+    the expression is evaluated -- and every diagnostic below used to report the
+    latter. `Error` prints the CURRENT TOKEN's line; the evaluator runs from the
+    directive handler, at which point the token stream is wherever the last
+    tokenised line left it. Measured 2026-09-17 on FPC's own compiler: three
+    units reported a conditional-directive refusal at nld.pas:1334,
+    nadd.pas:1112 and hlcgobj.pas:1821, and the directives are at 700, 1352 and
+    4156 -- so two of the three pointed BACKWARDS and one FORWARDS, all three at
+    ordinary lines of code that explain nothing. A ten-line reduction reports
+    line 1 for a directive on line 5.
+
+    This is the failure CLAUDE.md names under "The name is not the thing": a
+    stale line number does not error, it points somewhere, and the reader
+    supplies the meaning. The handlers a few hundred lines below already got
+    this right with ErrorAt(SrcLine, ...); only the EXPRESSION evaluator did
+    not, and it is the half that raises the interesting refusals. }
+  PasCondErrLine: Integer = 0;
+
+procedure PasCondError(const msg: AnsiString);
+{ Every refusal the conditional-expression evaluator raises, located at the
+  directive rather than at the lexer's position. One helper rather than 36
+  ErrorAt(PasCondErrLine, ...) call sites, so a later diagnostic cannot be
+  added through the wrong door -- `Error` in this region is now the tell. }
+begin
+  ErrorAt(PasCondErrLine, msg);
+end;
+
 var
   { ...and ONE saved copy of all of it, because a probe launched from the
     MIDDLE of an expression re-enters the evaluator that owns these.
@@ -1546,6 +1573,7 @@ var
   SaveCondExprText: AnsiString;
   SaveCondExprPos: Integer;
   SaveCondQuiet, SaveCondUnresolved: Boolean;
+  SaveCondErrLine: Integer;
   { ...AND THE {$if} NESTING STACK ITSELF, which is the one that produces the
     most confusing symptom. PasCondCount/Parent/Active/Taken are per-FILE state
     in globals, and a probe lexes another file through the same lexer: the
@@ -1608,6 +1636,11 @@ begin
     nested pre-pass silently answers for the outer one. }
   SaveCondQuiet := PasCondQuiet;
   SaveCondUnresolved := PasCondUnresolved;
+  { ...and the directive's line, for the same reason as the two flags above: a
+    probe lexes ANOTHER unit, so the nested evaluator restamps this from that
+    unit's SrcLine and the outer expression's refusals would name a line in a
+    file the reader never opened. }
+  SaveCondErrLine := PasCondErrLine;
   for i := 0 to MAX_PAS_CONDS - 1 do
   begin
     SaveCondParent[i] := PasCondParent[i];
@@ -1636,6 +1669,7 @@ begin
   PasCondExprPos := SaveCondExprPos;
   PasCondQuiet := SaveCondQuiet;
   PasCondUnresolved := SaveCondUnresolved;
+  PasCondErrLine := SaveCondErrLine;
   for i := 0 to MAX_PAS_CONDS - 1 do
   begin
     PasCondParent[i] := SaveCondParent[i];
@@ -1703,7 +1737,7 @@ end;
 
 procedure PasCondPushBool(b: Boolean);
 begin
-  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  if PasCondValueCount >= 64 then PasCondError('conditional directive expression overflow');
   PasCondValKind[PasCondValueCount] := 0;
   PasCondValues[PasCondValueCount] := b;
   PasCondValName[PasCondValueCount] := '';
@@ -1722,7 +1756,7 @@ end;
 procedure PasCondPushSet(var mask: array of Byte);
 var i: Integer;
 begin
-  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  if PasCondValueCount >= 64 then PasCondError('conditional directive expression overflow');
   PasCondValKind[PasCondValueCount] := 3;
   for i := 0 to 31 do PasCondSet[PasCondValueCount][i] := mask[i];
   PasCondValName[PasCondValueCount] := '';
@@ -1731,7 +1765,7 @@ end;
 
 procedure PasCondPushInt(v: Int64);
 begin
-  if PasCondValueCount >= 64 then Error('conditional directive expression overflow');
+  if PasCondValueCount >= 64 then PasCondError('conditional directive expression overflow');
   PasCondValKind[PasCondValueCount] := 1;
   PasCondInt[PasCondValueCount] := v;
   PasCondValName[PasCondValueCount] := '';
@@ -2490,24 +2524,24 @@ begin
   else if PasCondValKind[idx] = 3 then
   begin
     Result := False;
-    Error('conditional directive: a set is not a boolean here' +
+    PasCondError('conditional directive: a set is not a boolean here' +
           ' -- `in` is what tests one');
   end
   else if PasCondInt[idx] = 0 then Result := False
   else if PasCondInt[idx] = 1 then Result := True
   else begin Result := False;
-    Error('conditional directive: and/or/not require boolean operands'); end;
+    PasCondError('conditional directive: and/or/not require boolean operands'); end;
 end;
 
 procedure PasCondApplyOp;
 var op: Char; lhs, rhs, res: Boolean; li, ri: Int64; why: AnsiString;
 begin
-  if PasCondOpCount <= 0 then Error('conditional directive: missing operator');
+  if PasCondOpCount <= 0 then PasCondError('conditional directive: missing operator');
   Dec(PasCondOpCount);
   op := PasCondOps[PasCondOpCount];
   if op = '!' then
   begin
-    if PasCondValueCount < 1 then Error('conditional directive: missing operand');
+    if PasCondValueCount < 1 then PasCondError('conditional directive: missing operand');
     { `not <poison>` is still unknown, and negating it must not invent True. }
     if PasCondValKind[PasCondValueCount - 1] = 2 then Exit;
     PasCondValues[PasCondValueCount - 1] := not PasCondSlotAsBool(PasCondValueCount - 1);
@@ -2515,7 +2549,7 @@ begin
   end
   else if (op = '&') or (op = '|') then
   begin
-    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    if PasCondValueCount < 2 then PasCondError('conditional directive: missing operand');
     Dec(PasCondValueCount);
     { SHORT-CIRCUIT, AND ONLY FROM THE LEFT. `False and <poison>` is False and
       `True or <poison>` is True -- that is what lets FPC's
@@ -2564,7 +2598,7 @@ begin
       diagnostic has to say WHICH side failed, or it sends the reader to the
       wrong declaration. Poison propagates exactly as it does for a relational:
       `declared(S) and (x in S)` must stay compilable when S is absent. }
-    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    if PasCondValueCount < 2 then PasCondError('conditional directive: missing operand');
     Dec(PasCondValueCount);
     if (PasCondValKind[PasCondValueCount - 1] = 2) or
        (PasCondValKind[PasCondValueCount] = 2) then
@@ -2614,7 +2648,7 @@ begin
   else
   begin
     { relational: =  #(<>)  l(<)  L(<=)  g(>)  G(>=) }
-    if PasCondValueCount < 2 then Error('conditional directive: missing operand');
+    if PasCondValueCount < 2 then PasCondError('conditional directive: missing operand');
     Dec(PasCondValueCount);
     if (PasCondValKind[PasCondValueCount] <> 1) or
        (PasCondValKind[PasCondValueCount - 1] <> 1) then
@@ -2672,7 +2706,7 @@ begin
     else if op = 'L' then res := li <= ri
     else if op = 'g' then res := li > ri
     else if op = 'G' then res := li >= ri
-    else begin res := False; Error('conditional directive: bad operator'); end;
+    else begin res := False; PasCondError('conditional directive: bad operator'); end;
     PasCondValKind[PasCondValueCount - 1] := 0;
     PasCondValues[PasCondValueCount - 1] := res;
   end;
@@ -2686,6 +2720,7 @@ var word, name: AnsiString;
   wmask: array[0..31] of Byte;   { a set operand, built before it is pushed }
   expectValue, done: Boolean;
 begin
+  PasCondErrLine := SrcLine;
   PasCondUnresolved := False;
   PasCondExprText := text;
   PasCondExprPos := 1;
@@ -2700,18 +2735,18 @@ begin
       done := True
     else if PasCondExprText[PasCondExprPos] = '(' then
     begin
-      if not expectValue then Error('conditional directive: expected operator');
-      if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+      if not expectValue then PasCondError('conditional directive: expected operator');
+      if PasCondOpCount >= 64 then PasCondError('conditional directive nesting overflow');
       PasCondOps[PasCondOpCount] := '(';
       Inc(PasCondOpCount);
       Inc(PasCondExprPos);
     end
     else if PasCondExprText[PasCondExprPos] = ')' then
     begin
-      if expectValue then Error('conditional directive: expected operand');
+      if expectValue then PasCondError('conditional directive: expected operand');
       while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') do
         PasCondApplyOp;
-      if PasCondOpCount <= 0 then Error('conditional directive: unexpected )');
+      if PasCondOpCount <= 0 then PasCondError('conditional directive: unexpected )');
       Dec(PasCondOpCount);
       Inc(PasCondExprPos);
       while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] = '!') do
@@ -2721,7 +2756,7 @@ begin
             (PasCondExprText[PasCondExprPos] = '>') or
             (PasCondExprText[PasCondExprPos] = '=') then
     begin
-      if expectValue then Error('conditional directive: expected operand');
+      if expectValue then PasCondError('conditional directive: expected operand');
       c := PasCondExprText[PasCondExprPos];
       Inc(PasCondExprPos);
       if c = '=' then op := '='
@@ -2745,7 +2780,7 @@ begin
       while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') and
             (PasCondOpPrecedence(PasCondOps[PasCondOpCount - 1]) >= PasCondOpPrecedence(op)) do
         PasCondApplyOp;
-      if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+      if PasCondOpCount >= 64 then PasCondError('conditional directive nesting overflow');
       PasCondOps[PasCondOpCount] := op;
       Inc(PasCondOpCount);
       expectValue := True;
@@ -2753,11 +2788,11 @@ begin
     else
     begin
       word := ReadPasCondExprIdent;
-      if word = '' then Error('conditional directive: unexpected character');
+      if word = '' then PasCondError('conditional directive: unexpected character');
       if CaseEqual(word, 'not') then
       begin
-        if not expectValue then Error('conditional directive: expected operator');
-        if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+        if not expectValue then PasCondError('conditional directive: expected operator');
+        if PasCondOpCount >= 64 then PasCondError('conditional directive nesting overflow');
         PasCondOps[PasCondOpCount] := '!';
         Inc(PasCondOpCount);
       end
@@ -2769,33 +2804,33 @@ begin
           position, folded at its own precedence. It is relational (precedence
           1) where and/or are 3 and 2, so `x in S and y in T` groups the way
           FPC groups it. }
-        if expectValue then Error('conditional directive: expected operand');
+        if expectValue then PasCondError('conditional directive: expected operand');
         if CaseEqual(word, 'and') then op := '&'
         else if CaseEqual(word, 'in') then op := 'n'
         else op := '|';
         while (PasCondOpCount > 0) and (PasCondOps[PasCondOpCount - 1] <> '(') and
               (PasCondOpPrecedence(PasCondOps[PasCondOpCount - 1]) >= PasCondOpPrecedence(op)) do
           PasCondApplyOp;
-        if PasCondOpCount >= 64 then Error('conditional directive nesting overflow');
+        if PasCondOpCount >= 64 then PasCondError('conditional directive nesting overflow');
         PasCondOps[PasCondOpCount] := op;
         Inc(PasCondOpCount);
         expectValue := True;
       end
       else
       begin
-        if not expectValue then Error('conditional directive: expected operator');
+        if not expectValue then PasCondError('conditional directive: expected operator');
         if CaseEqual(word, 'defined') then
         begin
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> '(') then
-            Error('conditional directive: defined requires (NAME)');
+            PasCondError('conditional directive: defined requires (NAME)');
           Inc(PasCondExprPos);
           name := ReadPasCondExprIdent;
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> ')') then
-            Error('conditional directive: defined requires (NAME)');
+            PasCondError('conditional directive: defined requires (NAME)');
           Inc(PasCondExprPos);
           PasCondPushBool(PasDefineExists(name));
         end
@@ -2804,7 +2839,7 @@ begin
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> '(') then
-            Error('conditional directive: declared requires (NAME)');
+            PasCondError('conditional directive: declared requires (NAME)');
           Inc(PasCondExprPos);
           name := ReadPasCondQualifiedName;
           { …and the optional GENERIC ARITY, `TFoo<,>`. A bare name asks arity 0
@@ -2812,14 +2847,14 @@ begin
             `declared(TTestDelphi)` when only `TTestDelphi<T>` exists. }
           declArity := ReadPasCondGenericArity;
           if declArity < 0 then
-            Error('conditional directive: declared(' + name + '<...>) takes only '
+            PasCondError('conditional directive: declared(' + name + '<...>) takes only '
                   + 'empty parameter slots -- `<>`, `<,>`, `<,,>` -- because it '
                   + 'asks whether a TEMPLATE of that arity is declared, not '
                   + 'whether an instantiation exists');
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> ')') then
-            Error('conditional directive: declared requires (NAME)');
+            PasCondError('conditional directive: declared requires (NAME)');
           Inc(PasCondExprPos);
           PasCondPushBool(PasCondNameDeclared(name, declArity));
         end
@@ -2845,13 +2880,13 @@ begin
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> '(') then
-            Error('conditional directive: sizeof requires (TYPENAME)');
+            PasCondError('conditional directive: sizeof requires (TYPENAME)');
           Inc(PasCondExprPos);
           name := ReadPasCondExprIdent;
           SkipPasCondExprSpaces;
           if (PasCondExprPos > Length(PasCondExprText)) or
              (PasCondExprText[PasCondExprPos] <> ')') then
-            Error('conditional directive: sizeof requires (TYPENAME)');
+            PasCondError('conditional directive: sizeof requires (TYPENAME)');
           Inc(PasCondExprPos);
           { ...through any ALIAS the source declares, not only builtin names:
             `bestreal = extended` and `TConstPtrUInt = PUint = qword` are how
@@ -2865,7 +2900,7 @@ begin
             intval := 0;
           end
           else if intval < 0 then
-            Error('conditional directive: sizeof cannot size this type here: ' + name);
+            PasCondError('conditional directive: sizeof cannot size this type here: ' + name);
           PasCondPushInt(intval);
         end
         else if PasCondWordIsDigits(word) then
@@ -2873,7 +2908,7 @@ begin
           { Reject float literals loudly rather than mis-evaluating. }
           if (PasCondExprPos <= Length(PasCondExprText)) and
              (PasCondExprText[PasCondExprPos] = '.') then
-            Error('conditional directive: float literals not supported');
+            PasCondError('conditional directive: float literals not supported');
           PasCondPushInt(PasCondWordToInt(word));
         end
         else if PasDefineLookupValue(word, intval) then
@@ -2904,10 +2939,10 @@ begin
       end;
     end;
   end;
-  if expectValue then Error('conditional directive: expected operand');
+  if expectValue then PasCondError('conditional directive: expected operand');
   while PasCondOpCount > 0 do
   begin
-    if PasCondOps[PasCondOpCount - 1] = '(' then Error('conditional directive: expected )');
+    if PasCondOps[PasCondOpCount - 1] = '(' then PasCondError('conditional directive: expected )');
     PasCondApplyOp;
   end;
   if PasCondValueCount <> 1 then
@@ -2920,7 +2955,7 @@ begin
       EvalPasCondExprText := False;
       Exit;
     end;
-    Error('conditional directive: malformed expression');
+    PasCondError('conditional directive: malformed expression');
   end;
   { AN OPERAND WE HAD TO INVENT MAKES THE WHOLE EXPRESSION FALSE, whatever
     arithmetic it then survived: `0 = 0` is True and means nothing. Only the
@@ -2936,7 +2971,7 @@ begin
     the message was written for. Same words, same named operand, same position;
     only the moment moved. }
   if PasCondValKind[0] = 2 then
-    Error(PasCondValWhy[0]);
+    PasCondError(PasCondValWhy[0]);
   { A SET AT THE TOP IS NOT A CONDITION. `{$if supported_optimizerswitches}`
     reduces to a set and nothing tested it -- answering True because it is
     non-empty, or False because it is, would pick a branch from a value that
@@ -2944,7 +2979,7 @@ begin
     (`Wanted Boolean but got Int64`), so refusing here keeps us on the side
     that cannot silently compile a different program. }
   if PasCondValKind[0] = 3 then
-    Error('conditional directive: this expression is a SET, not a condition' +
+    PasCondError('conditional directive: this expression is a SET, not a condition' +
           ' -- it needs an `in` test');
   { Top-level bare integer is FPC-truthy (0=false, nonzero=true); covers the
     legacy {$IF 1}/{$IF 0} forms. Comparisons/idents already reduced to bool. }
