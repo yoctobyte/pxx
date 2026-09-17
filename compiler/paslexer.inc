@@ -2315,6 +2315,66 @@ begin
     end;
 end;
 
+function PasCondVarTypeIn(const nm: AnsiString; lo, hi: Integer;
+                          var typeName: AnsiString): Boolean;
+{ `NAME : TYPE ;` -- the DECLARED TYPE of a variable, so `sizeof(<a variable>)`
+  can be answered in a conditional directive.
+
+  FPC's hlcgobj.pas:4156 asks `{$if sizeof(aintmax) = 8}` where `aintmax` is a
+  LOCAL VARIABLE of the enclosing procedure (hlcgobj.pas:4023), not a type. The
+  sizeof arm here resolved a TYPE NAME only, and said so in its own comment, so
+  the whole unit stopped. This is the conditional-directive SPELLING of what
+  a931bef4d fixed on the expression path (`array[0..sizeof(d)-1]` for a
+  PARAMETER `d`, entfile.pas:371) -- the same feature behind a different door,
+  which is the shape CLAUDE.md warns is invisible to a grep for the construct.
+
+  THE AMBIGUITY RULE IS THE WHOLE DESIGN, because this walk has NO SCOPE. One
+  name can be declared in several procedures, as a record field, and as a
+  parameter, and nothing in the token stream says which one a directive sits
+  inside. So: collect every `NAME : TYPE` in range, and DECLINE THE MOMENT TWO
+  DISAGREE about the type. Answering from the first match would size whichever
+  declaration happens to be lexically first, and a wrong size in a conditional
+  does not fail -- it takes the other branch.
+
+  Matches accept the comma list (`a, b, c: integer`) and stop at `;` or `)` so
+  a parameter reads the same way a local does. The TYPE is taken as TEXT for
+  PasCondTypeAliasIn's reason: a builtin may lex as a dedicated token. }
+var k, p: Integer;
+    found: Boolean;
+    this: AnsiString;
+begin
+  Result := False;
+  typeName := '';
+  found := False;
+  if nm = '' then Exit;
+  for k := lo to hi - 1 do
+    if (Tokens[k].Kind = tkIdent) and CaseEqual(PasCondTokText(k), nm) then
+    begin
+      p := k + 1;
+      while (p + 1 < hi) and (Tokens[p].Kind = tkComma) and
+            (Tokens[p + 1].Kind = tkIdent) do Inc(p, 2);
+      if (p + 2 < hi) and (Tokens[p].Kind = tkColon) and
+         ((Tokens[p + 2].Kind = tkSemicolon) or
+          (Tokens[p + 2].Kind = tkRParen)) then
+      begin
+        this := PasCondTokText(p + 1);
+        if this <> '' then
+        begin
+          if not found then
+          begin typeName := this; found := True; end
+          else if not CaseEqual(this, typeName) then
+          begin
+            { two declarations, two types, no scope to choose with }
+            typeName := '';
+            Result := False;
+            Exit;
+          end;
+        end;
+      end;
+    end;
+  Result := found;
+end;
+
 { How many units this file NAMED but the probe could not read. Set by
   PasCondNameDeclaredInUses, read once, immediately, by the caller below --
   it describes THE LAST PROBE and nothing else. }
@@ -2436,6 +2496,24 @@ begin
     cur := nxt;
     Result := PasCondSizeOfTypeName(cur);
     Inc(hops);
+  end;
+  { ...and only then as a VARIABLE. Last, deliberately: a name that is both a
+    type and a variable is answered as the TYPE, which is what the source means
+    by `sizeof(T)`, and the variable door cannot shadow it. }
+  if Result < 0 then
+  begin
+    if PasCondVarTypeIn(nm, 0, TokCount, nxt) then
+    begin
+      cur := nxt;
+      Result := PasCondSizeOfTypeName(cur);
+      hops := 0;
+      while (Result < 0) and (hops < 8) and PasCondTypeAlias(cur, nxt) do
+      begin
+        cur := nxt;
+        Result := PasCondSizeOfTypeName(cur);
+        Inc(hops);
+      end;
+    end;
   end;
 end;
 

@@ -5062,6 +5062,27 @@ test-nilpy: $(COMPILER)
 	elif ./$(COMPILER) test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condpoison26 2>&1 | grep -q "pascal26:$$L: error: conditional directive: the right operand of"; then \
 	  echo "ok: a DEFERRED conditional refusal names the directive's own line ($$L)"; \
 	else echo "FAIL: the deferred door refused at the wrong line -- expected $$L, got: $$(./$(COMPILER) test/test_p_a_deferred_conditional_refusal_names_the_directive_s_line.pas $(TESTTMP)/test_condpoison26 2>&1 | head -1)"; exit 1; fi
+	@# ...AND `sizeof` IN A DIRECTIVE MUST REACH A VARIABLE, NOT ONLY A TYPE.
+	@# FPC hlcgobj.pas:4156 asks `{$$if sizeof(aintmax) = 8}` where aintmax is a
+	@# LOCAL VARIABLE (hlcgobj.pas:4023). This is the conditional-directive
+	@# spelling of a931bef4d, which fixed the same thing on the EXPRESSION path.
+	@# The comma list is asserted at BOTH ends: a walk expecting `:` right after
+	@# the name answers for the first and declines the last, one scanning back to
+	@# the list head does the opposite, so neither arrangement certifies the
+	@# other. BYTE_IS_NOT_EIGHT is the row that cannot pass by accident -- 8 is a
+	@# pointer width, so every `= 8` row here would be satisfied by machinery
+	@# that did nothing. The PINNED compiler refuses this file at `plain`.
+	@./$(COMPILER) test/test_p_a_conditional_directive_can_size_a_variable.pas $(TESTTMP)/test_condvarsize26
+	@tools/expect_same.sh test_condvarsize26 "$$($(TESTTMP)/test_condvarsize26 | tail -n 2)" "$$(printf 'fails=0 0\nCONDVARSIZE OK')"
+	@# THE CONTROL THAT MUST NOT COMPILE: the walk has NO SCOPE, so two
+	@# declarations of one name with different types must DECLINE rather than
+	@# pick the lexically first. fpc compiles it and is right; we refuse, and a
+	@# wrong size in a conditional is a different program, not a different value.
+	@if ./$(COMPILER) test/test_p_a_conditional_directive_refuses_an_ambiguous_variable_size.pas $(TESTTMP)/test_condambig26 >/dev/null 2>&1; then \
+	  echo "FAIL: an ambiguous variable size COMPILED -- the walk is picking a declaration it cannot know is the right one"; exit 1; \
+	elif ./$(COMPILER) test/test_p_a_conditional_directive_refuses_an_ambiguous_variable_size.pas $(TESTTMP)/test_condambig26 2>&1 | grep -q 'NOPE_AMBIGUOUS_SIZE'; then \
+	  echo "ok: two declarations of one name still decline, and the message names it"; \
+	else echo "FAIL: refused, but the message does not name NOPE_AMBIGUOUS_SIZE"; exit 1; fi
 	@# ...AND A CONST WHOSE VALUE IS NOT AN INTEGER LITERAL. FPC's rgobj.pas:1728
 	@# needs four hops for one directive: a const naming another CONST across two
 	@# UNITS (x86_64/cpubase.inc:90 -> x86/cpubase.pas:84), and high() over a
