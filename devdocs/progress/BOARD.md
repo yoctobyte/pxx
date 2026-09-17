@@ -81,7 +81,7 @@ _none_
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (42)
+## backlog (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -119,6 +119,7 @@ _none_
 | regression-test-nilpy-test-nilpy-to-bytes | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_to_bytes.npy at 5dbee723e228 in step 2/4, `tools/expect_same.sh test_nilpy_to_bytes26 "$(/tmp/test_nilpy_to_bytes26)" "$(printf '8\n10\n0\n10\n254\n255\n-2\n255\n…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-variant-method-pick-by-arity | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_variant_method_pick_by_arity.npy at 67f0878f2e59 in step 2/4, `tools/expect_same.sh test_nilpy_arity26 "$(/tmp/test_nilpy_arity26)" "$(printf '42\n1')"` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard3-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 at cc03b4a51933 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 3/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 at 6e00f29b0d93 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 5/6` (auto-filed by twatch) | — |
 | regression-test-record-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-record-abi-mixed-link#src:tools/compiler_srchash.sh at 4c7c88d3614b in step 1/25, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
@@ -1260,6 +1261,7 @@ _none_
 - [p 70] [T] regression-test-nilpy-test-nilpy-to-bytes
 - [p 70] [T] regression-test-nilpy-test-nilpy-variant-method-pick-by-arity
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 70] [T] regression-test-pascal-conformance-shard3-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5
 - [p 70] [T] regression-test-pascal-conformance-shard5-6-5
 - [p 70] [T] regression-test-record-abi-mixed-link-compiler-srchash-2

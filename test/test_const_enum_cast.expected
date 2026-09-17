@@ -6,3 +6,6 @@ K_ALIAS   = 4294967301
 K_BUILTIN = 5
 K_ORD     = 2
 assigned  = 2
+case cast = hit
+case range= hit
+bare memb = hit

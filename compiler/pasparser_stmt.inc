@@ -3833,6 +3833,7 @@ end;
   the selector's type and validates label kinds against it. }
 function ParseCaseLabelValue(const what: AnsiString): Integer;
 var node, si, prevTok: Integer; neg, isChrFold: Boolean;
+    clBytes: Integer; clSigned: Boolean;
 begin
   neg := False;
   if CurTok.Kind = tkMinus then
@@ -3885,6 +3886,27 @@ begin
     node := AllocNode(AN_INT_LIT);
     ASTIVal[node] := ConstEval();
     if isChrFold then ASTTk[node] := Ord(tyChar);
+    Result := node;
+    Exit;
+  end
+  else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLParen) and
+          ConstCastWidth(CurTok.SVal, clBytes, clSigned) then
+  begin
+    { A TYPECAST case label -- `case e of TE(1): ...` and `case n of Byte(300):`.
+      THE SIBLING OF THE ARM ABOVE, and its comment is what named this one: the
+      five intrinsics were delegated to ConstEval precisely because this
+      function "parses case labels with its own narrow grammar that never called
+      into it", and the cast spelling was left behind in the same grammar. Found
+      by varying the SPELLING rather than the feature, after
+      bug-p-an-enum-typecast-is-not-a-constant-expression fixed the const-
+      DECLARATION arm -- `const K = TE(1)` folded and `case e of TE(1)` did not,
+      the same construct refused in one of the two places it is written.
+      Delegated, not duplicated: ConstCastWidth owns the alias-before-builtin
+      order and re-deciding it here is exactly what that door exists to prevent.
+      normalise-dont-special-case.md }
+    node := AllocNode(AN_INT_LIT);
+    ASTIVal[node] := ConstEval();
     Result := node;
     Exit;
   end

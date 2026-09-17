@@ -62,4 +62,34 @@ begin
     to a variable of the enum type without a cast }
   T := K_PLAIN;
   WriteLn('assigned  = ', Ord(T));
+
+  { THE SECOND SPELLING, and it is the reason these rows are in this file and
+    not a separate one. `case` labels are parsed by their own narrow grammar
+    that does not call the const-declaration evaluator -- its own comment says
+    so -- so fixing the cast in a `const` left `case e of TE(1)` still refused:
+    one construct, two places the language lets you write it, one of them fixed.
+    Found by varying the SPELLING rather than the feature. A single-arm fix
+    passes every row above this line. }
+  T := eB;
+  case T of
+    TE(1): WriteLn('case cast = hit');
+  else
+    WriteLn('case cast = MISS');
+  end;
+
+  { ...and the RANGE form of the same label, which is a third grammar position }
+  case T of
+    TE(0)..TE(1): WriteLn('case range= hit');
+  else
+    WriteLn('case range= MISS');
+  end;
+
+  { CONTROL: a bare enum member must still work as a label, and a non-constant
+    must still be refused -- the latter is asserted in the Makefile, not here,
+    since a refusal cannot be a row in a program that must run. }
+  case T of
+    eB: WriteLn('bare memb = hit');
+  else
+    WriteLn('bare memb = MISS');
+  end;
 end.
