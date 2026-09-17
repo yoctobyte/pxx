@@ -17,6 +17,27 @@
 
 { ===== Statement parser ===== }
 
+{ THE EXTENDED `New(p, Init)` / `Dispose(p, Done)` FORMS, refused by name.
+  Reachable only since old-style objects gained constructors (2026-09-17): before
+  that the object declaration itself failed, so nobody got this far. In fpc these
+  two forms allocate and then dispatch the constructor THROUGH THE VMT, which is
+  the one piece of an old-style object pxx does not have -- and the equivalent
+  pxx does support is two statements, `New(p); p^.Init(...)`. Refused rather than
+  quietly rewritten because the fpc form also sets the VMT pointer, so silently
+  accepting it would be the "parses, compiles, and does none of the thing it was
+  written to do" failure the constructor refusal was originally written to avoid.
+  FPC's own compiler uses these forms at 67 call sites (rgobj, verbose, browcol,
+  aoptda, nllvmbas), so this is a MEASURED remaining wall and not a hypothetical.
+  feature-p-legacy-value-object-types }
+procedure RefuseExtendedNewDispose(const which: string);
+begin
+  if CurTok.Kind <> tkComma then Exit;
+  Error(which + ' with a constructor/destructor argument is not supported -- '
+        + 'that form dispatches through the VMT and pxx lowers `object` as a '
+        + 'value type with no VMT (feature-p-legacy-value-object-types); write '
+        + '`New(p); p^.Init(...)` and `p^.Done; Dispose(p)` as two statements');
+end;
+
 procedure ParseStatement; forward;
 { Does unary minus on this operand type yield an Int64, the way FPC's does?
   True for every INTEGER type and nothing else — see the long note at
@@ -8021,6 +8042,7 @@ begin
         Next; Expect(tkLParen, '(');
         if CurTok.Kind <> tkIdent then Error('New: expected pointer variable');
         valNode := ParseIntrinsicDestLValue(idx);
+        RefuseExtendedNewDispose('New');
         Expect(tkRParen, ')');
         { Same normalisation as SetLength above: a qualified class var (`TC.P`)
           resolves the CLASS name here, so idx is -1 and the element size below
@@ -8075,6 +8097,7 @@ begin
           Guarded like New above. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
+        RefuseExtendedNewDispose('Dispose');
         Expect(tkRParen, ')');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
         node := AllocNode(AN_CALL);
@@ -8193,6 +8216,7 @@ begin
           Guarded like New above. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
+        RefuseExtendedNewDispose('Dispose');
         Expect(tkRParen, ')');
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
         node := AllocNode(AN_CALL);

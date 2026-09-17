@@ -1,0 +1,5 @@
+a.str=3.2.2 a.num=770
+b.str=<none> b.num=0
+after copy+init  a.num=770 b.num=2313
+after done       a.str=[] a.num=999
+after done       b.num=999

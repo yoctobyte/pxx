@@ -5754,7 +5754,18 @@ begin
     the implicit initialisation. FPC rejects both the no-parameter form and the form whose
     only parameter has a DEFAULT, since that one is still callable with none: terecs17a's
     `constructor Create(I: integer = 0)` is the same hole spelled differently. }
-  if isCtor then
+  { ...AND IT IS A RECORD RULE, NOT A CONSTRUCTOR RULE -- `isObjectType` excludes
+    the old-style object, 2026-09-17. The reason above is the whole discriminator:
+    the collision is with the IMPLICIT INITIALISATION of a value produced by
+    `TR.Create(...)` as an EXPRESSION, which is the Delphi record spelling. An
+    old-style object's constructor is called on an ALREADY EXISTING instance as a
+    STATEMENT -- `v.init;` -- so there is no default state to be indistinguishable
+    from and nothing to collide with, and fpc accepts the parameterless form
+    accordingly. FPC's own versioncmp.pas:35 declares `constructor invalidate;`
+    with no parameters at all, so this rule applied to objects would refuse the
+    corpus source that motivated accepting them.
+    feature-p-legacy-value-object-types }
+  if isCtor and not isObjectType then
   begin
     rmMandatory := 0;
     for k := 1 to nP - 1 do    { param 0 is the implicit Self — not a user parameter }
@@ -6446,22 +6457,28 @@ begin
       Next;
       continue;
     end;
-    { OLD-STYLE OBJECT, refused half: `constructor` / `destructor` are the two
-      members whose job in an old-style object is the VMT -- the constructor sets
-      the VMT pointer that `virtual` dispatch then reads, and the destructor is
-      what `Dispose(p, Done)` calls through it. pxx lowers `object` as a
-      record-with-methods, which has no VMT (bug-p-object-value-types-standard-meaning),
-      so a constructor here would parse, compile, and do none of the thing it was
-      written to do. The record machinery would happily take `constructor` -- that
-      is exactly why this has to be an explicit refusal rather than an omission.
-      Silence is what the earlier decide-old-style-object-types rejected. }
-    if isObjectType and (CurTok.Kind = tkIdent) and
-       (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'destructor')) then
-      Error('an object type cannot have a ' + CurTok.SVal +
-            ' -- pxx lowers `object` as a value type with no VMT ' +
-            '(bug-p-object-value-types-standard-meaning); use a plain method, or a class');
+    { OLD-STYLE OBJECT, `constructor` / `destructor`: ACCEPTED as plain methods,
+      2026-09-17, and the refusal this replaces was guarding a case that cannot
+      arise here. Its reasoning was that a constructor's job is to set the VMT
+      pointer `virtual` dispatch reads -- true, and pxx hard-errors on BOTH ways
+      an object can acquire a VMT: an ancestor (see the `object(TParent)` arm)
+      and a `virtual`/`dynamic`/`override`/`abstract` method directive (see the
+      method-directive arm). So every `object` that reaches this loop is VMT-less
+      BY CONSTRUCTION, and on a VMT-less object a `constructor` is semantically a
+      plain method -- there is nothing for it to set, under fpc either. The old
+      message refused the only shape we can already represent correctly.
+      MEASURED, not reasoned: FPC's own compiler declares three such objects and
+      not one of them has a parent or a virtual member -- versioncmp.pas:29
+      (`constructor init` / `constructor invalidate`), cgbase.pas:376
+      (`constructor init` / `copyfrom` / `destructor done`), cmsgs.pas:46
+      (`constructor Init` / `destructor Done`). They are 161 of the diagnostics
+      across the 207-unit corpus and 18 units' COMPLETE failure set.
+      STILL REFUSED, and deliberately: `virtual`, inheritance, and the extended
+      `New(p, Init)` / `Dispose(p, Done)` forms, which DO go through the VMT.
+      feature-p-legacy-value-object-types }
     if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) or
-       ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'constructor')) then
+       ((CurTok.Kind = tkIdent) and (CaseEqual(CurTok.SVal, 'constructor') or
+                                     CaseEqual(CurTok.SVal, 'destructor'))) then
     begin
       ParseRecordMethodDecl(ci, isObjectType, curVis);
       continue;

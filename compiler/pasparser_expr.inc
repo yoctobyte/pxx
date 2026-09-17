@@ -4848,6 +4848,7 @@ begin
         Next; Expect(tkLParen, '(');
         aliasIdx := FindTypeAlias(CurTok.SVal);
         Next;                                  { the pointer type name }
+        RefuseExtendedNewDispose('New');
         Expect(tkRParen, ')');
         { The array-pointee arm the statement form carries, on this form's own
           carrier: AliasElemTk is the ELEMENT kind for `P1D = ^T1D`, so without

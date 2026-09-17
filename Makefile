@@ -19729,6 +19729,34 @@ test-core: $(COMPILER)
 	# Control: pin v410 refuses this file outright at the ticket's own repro.
 	./$(COMPILER) test/test_array_ctor_in_arg_position.pas $(TESTTMP)/test_arrctor26
 	tools/expect_same.sh test_arrctor26 "$$($(TESTTMP)/test_arrctor26)" "$$(cat test/test_array_ctor_in_arg_position.expected)"
+	# AN OLD-STYLE `object` MAY HAVE A CONSTRUCTOR AND A DESTRUCTOR. They are
+	# plain methods: pxx hard-errors on BOTH routes to a VMT -- an ancestor and
+	# a virtual/dynamic/override/abstract directive -- so every `object` that
+	# compiles at all is VMT-less, and a constructor on one has nothing to set.
+	# The parameterless `Reset` is the row that matters and is deliberately NOT
+	# last: the Delphi RECORD rule ("at least one parameter without a default")
+	# applied to objects refuses exactly it, and FPC's own versioncmp.pas:35
+	# writes that shape. Output is byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_object_value_ctor.pas $(TESTTMP)/test_objctor26
+	tools/expect_same.sh test_objctor26 "$$($(TESTTMP)/test_objctor26)" "$$(cat test/test_object_value_ctor.expected)"
+	# ...and the positive control, which is FOUR COMPILES OF ONE SOURCE. Every
+	# one of these diagnostics HALTS, so a single compile reports only the first
+	# and would certify the other three rows without reaching them; -d selects
+	# one row per run. Each run writes its OWN output path -- no shared name to
+	# clear between rows, so `test ! -e` cannot be satisfied by a leftover
+	# deletion instead of by a refusal. The fifth run takes no define and must
+	# COMPILE, which is what makes each refusal attributable to its own row
+	# rather than to the file. fpc compiles and runs all four.
+	for row in ROW_VIRTUAL ROW_ANCESTOR ROW_NEW ROW_DISPOSE; do \
+	  ./$(COMPILER) -d$$row test/test_object_value_ctor_fail.pas $(TESTTMP)/objctorfail26.$$row.bin > $(TESTTMP)/objctorfail26.$$row.log 2>&1; \
+	  test ! -e $(TESTTMP)/objctorfail26.$$row.bin || { echo "FAIL test_objctorfail26: $$row produced a binary"; exit 1; }; \
+	done
+	grep -q '^pascal26:24: error: an object type cannot have a virtual method' $(TESTTMP)/objctorfail26.ROW_VIRTUAL.log
+	grep -q '^pascal26:29: error: an object type cannot have an ancestor' $(TESTTMP)/objctorfail26.ROW_ANCESTOR.log
+	grep -q '^pascal26:48: error: New with a constructor/destructor argument is not supported' $(TESTTMP)/objctorfail26.ROW_NEW.log
+	grep -q '^pascal26:54: error: Dispose with a constructor/destructor argument is not supported' $(TESTTMP)/objctorfail26.ROW_DISPOSE.log
+	./$(COMPILER) test/test_object_value_ctor_fail.pas $(TESTTMP)/objctorfail26ok
+	test -e $(TESTTMP)/objctorfail26ok
 	# A DEFAULTED TRAILING PARAMETER used to disable argument type checking on
 	# the arguments that WERE supplied. TryFillTrailingDefaults picked its
 	# candidate on NAME and ARITY alone, and it is a fallback reached only
