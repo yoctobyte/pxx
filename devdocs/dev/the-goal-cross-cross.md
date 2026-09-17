@@ -76,9 +76,12 @@ compile for ESP, which is a different and far larger job than the arena was.
 and **~3.14 MB** on arm32. The ESP32-C3 SRAM region is **262,144 bytes total**,
 stack included. That is 6.6x to 12x over *before* adding back anything bare
 metal currently excludes. The named prerequisite is **wiring DCE for the NilPy
-frontend**: `dce.inc:241` gates it on `IsPascalFrontend`/`IsCFrontend`, so
-`--dce` is inert for NilPy on every target including x86-64 — and when it does
-run it cuts **71%** of code (`67642B -> 19328B`, Pascal control). 71% off 1.59 MB
+frontend AND teaching DCE this target**. It has TWO independent gates and both
+block: `dce.inc:226` refuses any non-x86-64 target (*"the reference shapes this
+pass knows how to re-patch are x86-64's rel32 call/jmp"*) — that is the one an
+ESP build hits, and the expensive half — and `dce.inc:241` refuses any
+non-Pascal/C frontend. When it does run it cuts **71%** of code
+(`67642B -> 19328B`, Pascal control). 71% off 1.59 MB
 is ~460 KB: still over, but the right order of magnitude. **NilPy's own live/dead
 ratio is unmeasured and that 71% is a Pascal number** — it argues for measuring,
 not for assuming it fits.
