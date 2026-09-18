@@ -28657,3 +28657,40 @@ reach a reader who never gets to it**, and a grep for "arena" does not land on
 the file carrying the warning. See also the sibling-is-a-SPELLING-not-a-shape
 rule in CLAUDE.md: there two spellings of one guard diverged, here two names
 for one quantity converged, and both are invisible to a grep for the feature.
+## A LIVE INSTANCE OF THE CANARY'S DEFECT CLASS — DECLARATION ORDER PASSES THE BUILD *AND* THE QUICK TIER, AND ONLY THE FPC SEED SEES IT
+
+Measured 2026-09-18 (frankB, Track A). Recorded because the rule is in CLAUDE.md
+and a rule with no recent instance beside it gets read as historical.
+
+Added one procedure to `elfwriter.inc` and placed it beside the predicate it
+belonged with, `ObjDataIsLocal`. It calls `ObjDataIsReferenced`, which is
+declared ~60 lines further down.
+
+    make compiler/pascal26     converged after 1 round(s)   <- GREEN
+    the new Makefile row        rc=0, asserted both legs      <- GREEN
+    testmgr --tier quick        PASS                          <- GREEN
+    gate.sh quick               FAIL  fpc seed compiles (forward decls)
+      elfwriter.inc:3397: calls ObjDataIsReferenced, declared at
+      elfwriter.inc:3453, which FPC has not seen yet
+
+**Three green instruments and one red, and the red is the only one that could
+have been anything else.** PXX prescans headers; FPC is single-pass. So the
+self-host fixedpoint — the thing CLAUDE.md calls the build rather than a test,
+and the one property a pin exists to carry — is structurally incapable of seeing
+this, because the compiler that reproduces itself is the one that does not care.
+
+**The part worth internalising is WHICH greens they were.** Not a thin smoke
+test: the fixedpoint, the tier, and a purpose-written row that exercised the new
+code and asserted its output on both legs of a positive control. Everything you
+would reach for to convince yourself, agreeing, on a tree that cannot be seeded
+from FPC. The seed is not a redundant check with a lower hit rate; it is the
+only instrument pointed at this axis at all.
+
+Which is the whole reason CLAUDE.md says **FPC being absent is a SKIP, never a
+pass** — on a box without FPC every row above is still green and the defect
+ships. And it is why "my repro passed" is a different claim from "the compiler
+still works": the repro ran under PXX.
+
+Cost of the fix: move the definition below its callees, one rebuild. Cost of
+missing it: a tree that cannot be bootstrapped, discovered by whoever next tries,
+with the cause an arbitrary distance back.

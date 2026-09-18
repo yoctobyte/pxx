@@ -2561,6 +2561,7 @@ begin
   if IsPascalFrontend or isNilPy then
   begin
     EmitRTTI;
+    ReportRTTIWeight;
     { After EmitRTTI so it shares the same static-data region and the same
       MethodFixups pass that patches code addresses into data. }
     EmitPySignatures;

@@ -1197,6 +1197,98 @@ begin
   end;
 end;
 
+procedure ReportRTTIWeight;
+{ What each class's RTTI costs, in the two currencies it is paid in.
+
+  feature-a-unreferenced-class-rtti-keeps-every-method-alive proposes dropping
+  the blob of a class nothing can reach, which frees the blob's DATA bytes and,
+  because every VMT slot is a MethodFixups root, the method BODIES behind them.
+  It has been open since 2026-08-21 with the flash half quoted (~3.2 KB) and the
+  data half named but never measured.
+
+  AN INSTRUMENT, NOT THE PASS. Nothing here decides reachability and nothing is
+  dropped; this only prices what a drop WOULD free, per class, so the pass can
+  be justified or declined on a number. The same order the extern-only ticket
+  was settled in: measure the prize, then decide.
+
+  THE TWO CURRENCIES ARE NOT INTERCHANGEABLE AND THE PROFILE DECIDES WHICH
+  MATTERS. Under --esp-profile=bare the whole image loads into one RWX IRAM
+  region (defs.inc's map), so code AND data are SRAM and the two columns add.
+  Under --platform=esp the code can be flash-mapped and only the data column is
+  SRAM. Hosted, neither is. They are printed separately for that reason and must
+  not be summed without naming the profile.
+
+  `streamable=1` marks a class in the RTTI registry, reachable BY NAME at run
+  time. Those can never be dropped, and printing the flag is what stops a reader
+  quoting the total as if they could. }
+var ci, k, vmtBytes, methBytes, nMeth, blobBytes: Integer;
+    totData, totCode, dropData, dropCode: Int64;
+    nCls, nStream: Integer;
+    nm: AnsiString;
+begin
+  if not PxxDbgEnabled('a.rttiweight') then Exit;
+  totData := 0; totCode := 0; dropData := 0; dropCode := 0;
+  nCls := 0; nStream := 0;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsRTTIOff[ci] < 0 then continue;
+    Inc(nCls);
+    nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+    if UClsIsRecord[ci] then blobBytes := 0 else blobBytes := RTTI_CLS_SIZE;
+    vmtBytes := 0;
+    if UClsVMTOffset[ci] >= 0 then
+    begin
+      if UClsVirtCount[ci] > 0 then vmtBytes := UClsVirtCount[ci] * 8
+      else vmtBytes := 8;
+      vmtBytes := vmtBytes + 16;   { the header this VMT sits behind }
+    end;
+    { The bodies this class's VMT slots hold alive. Counted through MethodFixups
+      rather than through the class's own method list, because that IS the edge
+      the pass would cut -- a fixup into this VMT is exactly what makes the body
+      a root.
+
+      IT IS NEITHER BOUND CLEANLY, AND BOTH DIRECTIONS ARE NAMED SO NOBODY
+      QUOTES IT AS ONE. It OVER-counts where a subclass inherits a slot, because
+      a body reached from two VMTs is counted once per VMT. And it UNDER-counts
+      far more, because it is the DIRECT edge only: the ticket's own ~3.2 KB
+      figure is dominated by PXXTIOGetInterface, PXXIntfIMTOf, PXXVarStrAppend
+      and PXXVarClear, which are runtime routines the methods REACH rather than
+      methods in any VMT. The transitive closure is not computed here; dropping
+      a class frees this number plus whatever becomes unreachable behind it,
+      which only the code-side walk in dce.inc can answer. }
+    methBytes := 0; nMeth := 0;
+    if UClsVMTOffset[ci] >= 0 then
+      for k := 0 to MethodFixCount - 1 do
+        if (MethodFixups[k].DataPos >= UClsVMTOffset[ci]) and
+           (MethodFixups[k].DataPos < UClsVMTOffset[ci] + vmtBytes) and
+           (MethodFixups[k].ProcIdx >= 0) and (MethodFixups[k].ProcIdx < ProcCount) then
+        begin
+          Inc(nMeth);
+          if ProcBodyEnd[MethodFixups[k].ProcIdx] > Procs[MethodFixups[k].ProcIdx].BodyAddr then
+            methBytes := methBytes +
+              (ProcBodyEnd[MethodFixups[k].ProcIdx] - Procs[MethodFixups[k].ProcIdx].BodyAddr);
+        end;
+    totData := totData + blobBytes + vmtBytes;
+    totCode := totCode + methBytes;
+    if ClassIsStreamable(ci) then Inc(nStream)
+    else
+    begin
+      dropData := dropData + blobBytes + vmtBytes;
+      dropCode := dropCode + methBytes;
+    end;
+    WriteLn('PXXDBG a.rttiweight cls ', nm,
+            ' blob=', blobBytes, ' vmt=', vmtBytes,
+            ' vmtslotprocs=', nMeth, ' directmethbytes=', methBytes,
+            ' streamable=', Ord(ClassIsStreamable(ci)),
+            ' iface=', Ord(UClsIsInterface[ci]),
+            ' record=', Ord(UClsIsRecord[ci]));
+  end;
+  WriteLn('PXXDBG a.rttiweight total classes=', nCls, ' streamable=', nStream,
+          '  data=', totData, ' directmeth=', totCode,
+          '  NOT-streamable data=', dropData, ' directmeth=', dropCode,
+          '  DataLen=', DataLen, ' CodeLen=', CodeLen);
+end;
+
 { Map pxx's internal TTypeKind onto FPC's TTypeKind ORDINAL (typinfo.pas
   declares the same 30-member enum, in FPC's own declared order, purely so a
   vendor source doing `array[TTypeKind] of X` or a stray numeric comparison

@@ -20068,6 +20068,30 @@ test-core: $(COMPILER)
 	grep -q "class TChild" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Id tk=1 getField@8 setField@8" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "meth Notify proc=" $(TESTTMP)/test_rtti_emit_dump26.log
+	# WHAT A CLASS'S RTTI COSTS, and the one fact that decides whether
+	# feature-a-unreferenced-class-rtti-keeps-every-method-alive can do
+	# anything at all: a class declared with NO visibility keyword defaults to
+	# PUBLISHED, so ClassIsStreamable says yes, so it is in the RTTI registry,
+	# so it is reachable BY NAME at run time -- which that ticket's own "Watch
+	# out" lists as the thing that makes a blob undroppable. Adding `public`
+	# and changing nothing else flips it. Measured 2026-09-18; the pass as
+	# specified would therefore drop almost nothing on ordinary Pascal.
+	#
+	# THE POSITIVE CONTROL IS THE PAIR AND IT IS THE WHOLE ROW. One keyword
+	# apart, same four virtual methods, same blob and VMT weight -- so a row
+	# asserting only `streamable=1` would pass on an instrument that answered 1
+	# for everything, and one asserting only `streamable=0` on an instrument
+	# that answered 0. The identical blob/vmt figures either side are what say
+	# the two programs really are the same but for visibility.
+	@printf 'program rw1;\ntype TU = class\n procedure A; virtual;\n procedure B; virtual;\nend;\nprocedure TU.A; begin end;\nprocedure TU.B; begin end;\nbegin end.\n' > $(TESTTMP)/rw_default.pas
+	@sed 's/type TU = class/type TU = class public/' $(TESTTMP)/rw_default.pas > $(TESTTMP)/rw_public.pas
+	@PXXDBG=a.rttiweight ./$(COMPILER) $(TESTTMP)/rw_default.pas $(TESTTMP)/rw_default26 > $(TESTTMP)/rw_default.log 2>&1
+	@PXXDBG=a.rttiweight ./$(COMPILER) $(TESTTMP)/rw_public.pas $(TESTTMP)/rw_public26 > $(TESTTMP)/rw_public.log 2>&1
+	@grep -qE 'a.rttiweight cls TU .*streamable=1' $(TESTTMP)/rw_default.log || { echo "test-core: a class with no visibility keyword is no longer streamable -- if the default section stopped being published that is a LANGUAGE change and this row is the alarm; if the registry predicate moved, re-read feature-a-unreferenced-class-rtti-keeps-every-method-alive, whose whole prize depends on it"; grep rttiweight $(TESTTMP)/rw_default.log; exit 1; }
+	@grep -qE 'a.rttiweight cls TU .*streamable=0' $(TESTTMP)/rw_public.log || { echo "test-core: an explicitly PUBLIC class is reported streamable -- ClassIsStreamable is answering yes for everything, so the instrument cannot discriminate and the measurement on the RTTI ticket is void"; grep rttiweight $(TESTTMP)/rw_public.log; exit 1; }
+	@a=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_default.log); b=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_public.log); \
+	 [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-core: the two visibility variants no longer carry the same blob/vmt weight ($$a vs $$b), so the pair is not a controlled comparison any more"; exit 1; }; \
+	 echo "test-core: a.rttiweight prices a class's RTTI, and the default (published) section is what puts it in the registry -- $$a"
 	grep -q "prop Caption tk=23" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Owner tk=6" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" $(TESTTMP)/test_rtti_emit_dump26.log
