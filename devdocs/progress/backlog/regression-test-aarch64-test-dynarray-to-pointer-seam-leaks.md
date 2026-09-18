@@ -67,3 +67,6 @@ assert_no_leak[x86-64/dynarray_to_pointer_seam]: LEAK — live=999 exceeds 50
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-18 — the borg watcher saw `test-aarch64#src:test/test_dynarray_to_pointer_seam_leaks.pas` GREEN at 2b8480963d5f (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
