@@ -966,7 +966,7 @@ end;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
+var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
 begin
@@ -2845,6 +2845,21 @@ begin
   DerefWalkReport;
   TokPoolReport;
   RequireOutputArtefact(outFile);
-  writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
-          'B  bss=',BSSSize,'B  procs=',ProcCount,']');
+  { code= IS EMITTED BYTES; codeseg= IS THE PADDED SEGMENT. Until 2026-09-18
+    code= was CodeLen after the ELF writer had appended its filler, i.e. the
+    page CEILING on every hosted target: `--no-signals` removes 405 bytes and
+    read as a no-op in all seven configurations measured, because 405 bytes
+    cannot cross a 4 KiB boundary, and a seat went looking for a parser bug.
+    CodePadStart is where the writer's first filler byte went (-1 if it did not
+    pad). codeseg= is kept for the readers that want the LAYOUT -- the
+    esp-bare-*-data-align8 rows add the header to it to get the data offset.
+    Appended rather than inserted, because size_canary.py's regex wants
+    `code=NB  data=` adjacent.
+    bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work }
+  if (CodePadStart >= 0) and (CodePadStart < CodeLen) then
+    emittedCode := CodePadStart
+  else
+    emittedCode := CodeLen;
+  writeln('ok: ',outFile,'  [code=',emittedCode,'B  data=',DataLen,
+          'B  bss=',BSSSize,'B  procs=',ProcCount,'  codeseg=',CodeLen,'B]');
 end.

@@ -61,5 +61,30 @@ else
   echo "ok   compiling to /dev/null still succeeds — a discard sink is not a failed write"
 fi
 
+# (4) code= MUST BE EMITTED BYTES, not the page-padded segment. Until
+#     2026-09-18 it was CodeLen after the ELF writer's filler, so every hosted
+#     build reported a 4 KiB ceiling and `--no-signals` (405 bytes) read as a
+#     no-op in every configuration. The control is the ticket's own pair: the
+#     same program with and without --no-signals must report DIFFERENT code=,
+#     and a page-quantised readout prints the same number for both.
+#     bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work
+printf "program h;\nbegin\n  WriteLn('hello');\nend.\n" > "$W/h.pas"
+codeof() { sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p'; }
+segof()  { sed -n 's/.* codeseg=\([0-9]*\)B.*/\1/p'; }
+l1=$("$PXX" "$W/h.pas" "$W/h1" 2>&1 | grep '^ok:')
+l2=$("$PXX" --no-signals "$W/h.pas" "$W/h2" 2>&1 | grep '^ok:')
+c1=$(echo "$l1" | codeof); c2=$(echo "$l2" | codeof); s1=$(echo "$l1" | segof)
+if [ -z "$c1" ] || [ -z "$c2" ] || [ -z "$s1" ]; then
+  echo "FAIL could not read code=/codeseg= off the ok: line — nothing was compared:"
+  echo "     [$l1]"; echo "     [$l2]"; rc=1
+elif [ "$c2" -ge "$c1" ]; then
+  echo "FAIL code= is not emitted bytes: --no-signals reports $c2, default $c1"
+  echo "     (the pair differs by ~405 bytes; equal numbers mean a padded extent)"; rc=1
+elif [ "$c1" -gt "$s1" ]; then
+  echo "FAIL code=$c1 exceeds codeseg=$s1 — emitted bytes cannot outgrow the segment"; rc=1
+else
+  echo "ok   code= is emitted bytes: $c1 vs $c2 with --no-signals (segment $s1)"
+fi
+
 [ $rc -eq 0 ] && echo "PASS ok_line_means_a_file" || echo "FAIL ok_line_means_a_file"
 exit $rc

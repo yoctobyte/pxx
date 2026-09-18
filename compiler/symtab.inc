@@ -14855,7 +14855,7 @@ procedure EmitXtensaFrameReserve(var patchPos: Integer);
 
   It costs 13-16 bytes and two extra instructions per procedure against the old
   single ADDI -- +2456 bytes on hello, +1.13%, measured as .text out of an
-  --emit-obj build because the compiler's own `code=` line is page-quantised and
+  --emit-obj build because the compiler's own `code=` line was then page-quantised and
   reported this change as costing NOTHING. That is the arm32 trade, taken here
   for the same reason: the alternative is a cap that a large enough routine
   walks straight through.

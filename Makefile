@@ -11756,12 +11756,12 @@ test-core: $(COMPILER)
 	#
 	# Checked from the `ok:` line rather than with readelf because the data
 	# section is not a section header here: file offset = ELF32 ehdr + 2 phdrs
-	# (ESP_CODE_OFFSET32 = 116) + code, and the load base is 8-aligned, so this
+	# (ESP_CODE_OFFSET32 = 116) + codeseg= -- the PADDED length; code= is emitted bytes and is 4 mod 8 here -- and the load base is 8-aligned, so this
 	# is the data VADDR's alignment. bug-a-a-perf-commit-silently-fixed-41-xtensa-windowed-divergences-and-nobody-knows-why
 	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_xt > $(TESTTMP)/test_socf_align_xt.log
-	tools/expect_same.sh esp-bare-xtensa-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_xt.log) + 116 ) % 8 ))" "0"
+	tools/expect_same.sh esp-bare-xtensa-data-align8 "$$(( ( $$(sed -n 's/.* codeseg=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_xt.log) + 116 ) % 8 ))" "0"
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_bare_float.pas $(TESTTMP)/test_socf_align_rv > $(TESTTMP)/test_socf_align_rv.log
-	tools/expect_same.sh esp-bare-riscv32-data-align8 "$$(( ( $$(sed -n 's/.*\[code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_rv.log) + 116 ) % 8 ))" "0"
+	tools/expect_same.sh esp-bare-riscv32-data-align8 "$$(( ( $$(sed -n 's/.* codeseg=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_socf_align_rv.log) + 116 ) % 8 ))" "0"
 	./$(COMPILER) test/test_esp_bare_float.pas $(TESTTMP)/test_socf_oracle26
 	tools/expect_same.sh test_socf_oracle26 "$$($(TESTTMP)/test_socf_oracle26 | tr '\n' '|')" "7|16|32|75|1234567|-32|65537|ESP BARE FLOAT OK|"
 	# ...and a float-free bare program must still pay NOTHING for it: the pull is
