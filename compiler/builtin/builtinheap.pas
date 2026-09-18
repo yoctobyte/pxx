@@ -878,13 +878,54 @@ end;
 
 const
 {$if defined(PXX_ESP)}
-  { THE 64 KiB IN EVERY BARE ESP IMAGE'S BSS. Not to be confused with the
+  { THE BARE ESP HEAP SIZE, AND IT IS A KNOB: pass one of
+      -dPXX_ESP_HEAP_8K  -dPXX_ESP_HEAP_16K  -dPXX_ESP_HEAP_32K
+      -dPXX_ESP_HEAP_128K
+    to move it; the default with none of them is 64 KiB. A command-line -d
+    DOES reach this unit -- verified 2026-09-18, not assumed, because a
+    source-level {$define} does NOT cross unit boundaries and builtin.pas:62
+    records a {$ifndef} there that never ran for exactly that reason. The
+    measurement: the same bare hello is bss=70,936 plain and bss=21,784 with a
+    -d selecting 16 KiB.
+
+    QUANTISED TO POWERS OF TWO ON PURPOSE rather than taking a byte count. A
+    define carries no VALUE usable in a const expression -- {$IF} can compare
+    one but a Pascal const cannot be a term of it -- so an arbitrary size would
+    need a new compiler option and a parser change to inject. Five rungs cost
+    nothing and need neither, and a heap arena is not a quantity anyone tunes
+    to the byte.
+
+    IT IS A LEVER, NOT THE ANSWER. The arena exists at all because the program
+    pulls the heap, and every Pascal program pulls it unconditionally --
+    PasApplyDefaults defines PXX_MANAGED_STRING, pasparser_prog.inc:104 turns
+    that into needsAnsiRuntime and :199 into needsHeap, which {$H-} cannot
+    reach. A program that never allocates should not pay 64 KiB at ALL, and
+    that is bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce, which
+    is upstream of this knob rather than competing with it.
+
+    SHRINKING THIS IS SAFE TO GET WRONG, AND ONLY SINCE TODAY. Exhaustion used
+    to hang a bare chip silently; PXXHeapExhausted now reports through the
+    UART and halts 203. CheckBareImageFitsSram does NOT cover this -- it bounds
+    image+stack FIT, not heap ADEQUACY -- so the runtime report is the only
+    thing that makes a too-small arena loud. Verified at 8 KiB.
+    umbrella-an-esp32-image-is-as-small-as-it-can-be }
+  { NOT to be confused with SocNilPyArenaSize. Not to be confused with the
     compiler-side SocNilPyArenaSize (defs.inc), which is a different 64 KiB,
     reserved by the NilPy driver only and zero in a Pascal or C build -- that
     name said "BareArena" until 2026-09-18 and cost a seat a wrong diagnosis.
     This one is the RTL buffer every bare program links. EspArena below is
     sized FROM this constant; do not restate it. }
-  HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
+  {$if defined(PXX_ESP_HEAP_8K)}
+  HEAP_ARENA = 8192;
+  {$elseif defined(PXX_ESP_HEAP_16K)}
+  HEAP_ARENA = 16384;
+  {$elseif defined(PXX_ESP_HEAP_32K)}
+  HEAP_ARENA = 32768;
+  {$elseif defined(PXX_ESP_HEAP_128K)}
+  HEAP_ARENA = 131072;
+  {$else}
+  HEAP_ARENA = 65536;       { default: single 64 KiB static arena }
+  {$endif}
 {$elseif defined(CPU_WASM32)}
   { MUST equal the WasmArena byte size below. PXXAlloc rounds any request up to
     HEAP_ARENA and then sets HeapEnd := HeapPtr + arena, so a HEAP_ARENA larger

@@ -69,6 +69,20 @@ Notes for the bare profile:
 
 - `writeln`/`readln` are intentionally no-ops — there is no console. Output
   goes through your own UART writes, as above.
+- **The heap is a fixed static arena, 64 KiB by default, and it is the single
+  largest thing in a bare image's SRAM.** Size it with one of
+  `-dPXX_ESP_HEAP_8K`, `-dPXX_ESP_HEAP_16K`, `-dPXX_ESP_HEAP_32K`,
+  `-dPXX_ESP_HEAP_128K`. Measured on an esp32c3 hello-world, total bss:
+
+  | | 8K | 16K | 32K | 64K (default) | 128K |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | bss | 13,592 | 21,784 | 38,168 | 70,936 | 136,472 |
+
+  Running out is reported, not silent: the program writes
+  `pxx: out of memory (bare static heap arena exhausted; HEAP_ARENA)` to UART0
+  and halts with code 203. Note the compiler cannot check this for you —
+  it refuses a build whose image plus arena plus stack does not FIT, but an
+  arena that fits and is too small for your program is only found at runtime.
 - A program that falls off the end parks in a self-loop (there is no OS to
   exit to). End interactive experiments with `while True do ;`.
 - Interrupt handlers: mark a routine `interrupt;` for a raw hardware-vector
