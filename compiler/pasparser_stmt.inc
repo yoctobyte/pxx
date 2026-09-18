@@ -4676,6 +4676,38 @@ begin
   node := AllocNode(AN_WRITE);
   if isLn then ASTKind[node] := AN_WRITELN;
 
+  { SAY ONCE that this statement will emit nothing, on the profiles where the
+    backend drops it. The no-op itself is intended and documented
+    (docs/targets/esp32.md:70, "writeln/readln are intentionally no-ops --
+    there is no console"); the SILENCE is the defect. Measured 2026-09-18:
+    an empty program and a writeln hello-world compile BYTE-IDENTICALLY for
+    --esp-profile=bare on both esp32c3 and esp32s3, with `ok:` and exact byte
+    counts either way -- the same signature CLAUDE.md names for the ENOSPC
+    case, where `ok:` plus byte counts is not evidence anything was emitted.
+
+    CurrentUnitIdx = -1 restricts this to the MAIN PROGRAM. Without it the
+    linked RTL's own writeln calls fire it and every ESP compile warns,
+    including a program with no console output at all -- measured, that was
+    the first cut of this warning and it was useless.
+
+    THE CONDITION MIRRORS THE TWO BACKEND ARMS AND THEY DO NOT AGREE:
+    ir_codegen_xtensa.inc asks `TargetPlatform = PLATFORM_ESP` (so it drops
+    writeln on the IDF profile too), ir_codegen_riscv32.inc asks
+    `EspBareBoot` (so riscv32 EMITS it under IDF, into the syscall write
+    path). Spelled out here rather than simplified, because simplifying it
+    would hide the divergence -- which has its own ticket.
+    bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok }
+  if (CurrentUnitIdx = -1) and (not EspWriteNoopWarned) and
+     ((((TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_ESP)) or
+       ((TargetArch = TARGET_RISCV32) and EspBareBoot))) then
+  begin
+    EspWriteNoopWarned := True;
+    Warn('write/writeln emits nothing on this ESP profile: there is no '
+      + 'console. Write to the UART from your own code '
+      + '(docs/targets/esp32.md:70), or build a hosted image with '
+      + '--platform=posix.');
+  end;
+
   if CurTok.Kind = tkLParen then
   begin
     Next;

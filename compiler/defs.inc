@@ -5954,6 +5954,19 @@ var
     runtime. The entry stub sets sp; output (PutC) goes to UART0 MMIO from the
     program itself. Defines PXX_ESP_BARE for the source. xtensa/riscv32 only. }
   EspBareBoot : Boolean;
+  { Set once the first write/writeln has been reported as a no-op on an ESP
+    profile, so the diagnostic is one per compilation rather than one per
+    statement. The no-op itself is INTENDED and documented (docs/targets/
+    esp32.md:70, "writeln/readln are intentionally no-ops -- there is no
+    console"); what was not intended is the SILENCE. Measured 2026-09-18:
+    empty.pas and a writeln hello-world compile BYTE-IDENTICALLY on
+    --esp-profile=bare for both esp32c3 and esp32s3, and the compiler prints
+    `ok:` with exact byte counts either way, so a flashed image boots into
+    nothing having been told it was fine. That is the same signature as the
+    ENOSPC-lies-green case CLAUDE.md names: `ok:` plus exact byte counts is
+    not evidence that anything was emitted.
+    bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok }
+  EspWriteNoopWarned : Boolean;
   { --no-default-rtl: suppress the default standard-unit surface (textfile +
     its builtin numeric-format backing). Set for compiler self-build, where
     textfile would drag the PAL platform_backend onto a search path the

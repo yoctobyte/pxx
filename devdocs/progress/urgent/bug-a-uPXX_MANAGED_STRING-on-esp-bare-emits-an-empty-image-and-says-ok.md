@@ -90,3 +90,89 @@ emitted. Anyone re-measuring this should compare the pair, not read `procs`.
 Also corrected in the same pass: `code=` is **page-quantised**, so the `20B`
 above is a floor-of-a-segment figure and not a code measurement — see the
 2026-09-18 logbook entry and `symtab.inc:14858`, which already said so.
+
+## Correction 2026-09-18 (frankS) — THE FLAG IS NOT INVOLVED, AND THE NO-OP IS DOCUMENTED
+
+Took this with the discriminator the correction above prescribes — compare the
+empty/hello PAIR including `data=`, do not read `procs`. Applying it one step
+further than the ticket did retires the headline.
+
+**`-uPXX_MANAGED_STRING` is not implicated.** `empty.pas` and `hello.pas` are
+byte-identical on `--esp-profile=bare` **with and without the flag**, on both
+architectures:
+
+| build | flag | empty | hello | identical? |
+| --- | --- | --- | --- | --- |
+| esp32c3 bare | `-uPXX_MANAGED_STRING` | `code=20 data=296` | `code=20 data=296` | **yes** |
+| esp32c3 bare | *(none)* | `code=57900 data=616` | `code=57900 data=616` | **yes** |
+| esp32s3 bare | *(none)* | `code=46436 data=616` | `code=46436 data=616` | **yes** |
+| x86-64 | `-uPXX_MANAGED_STRING` | `data=296` | `data=336` | no (the 40-byte literal) |
+
+The flag removed 57 KB of unrelated runtime and made an identity that was
+already there **visible**. It is the messenger.
+
+**And the program is not gone.** An assignment survives the same build:
+
+    empty.pas   code=20B  bss=37560B
+    assign.pas  code=52B  bss=37564B     { i := 12345 }
+    hello.pas   code=20B  bss=37560B     { writeln('hello') }
+
+Codegen works. **`writeln` specifically lowers to nothing** — for a string and
+for an integer alike.
+
+**The mechanism is an empty branch, and it is deliberate.**
+`ir_codegen_riscv32.inc:3569`:
+
+```pascal
+IR_WRITE, IR_WRITELN:
+  begin
+    if EspBareBoot then
+    begin
+      { Bare-metal: write/writeln does nothing (UART output is explicit
+        MMIO in user code, see test_esp_bare.pas). }
+    end
+```
+
+`docs/targets/esp32.md:70` states it as a feature, scoped to this profile:
+*"`writeln`/`readln` are intentionally no-ops — there is no console. Output
+goes through your own UART writes."* So the emitted image is CORRECT. **What
+was wrong was that nobody was told**, which is the half this ticket got right.
+
+## FIXED — the silence, not the no-op
+
+A once-per-compilation warning at the parse choke point
+(`ParsewriteArgsAST`, `pasparser_stmt.inc`):
+
+    pascal26:3: warning: write/writeln emits nothing on this ESP profile:
+    there is no console. Write to the UART from your own code
+    (docs/targets/esp32.md:70), or build a hosted image with --platform=posix.
+
+Four controls, all measured: hello on bare c3 **warns** (with a real line);
+hello on bare s3 **warns**; an EMPTY program **does not**; hosted x86-64 does
+not and still prints `hello`. Three `writeln`s produce one warning.
+
+**Why the parse site and not the backend.** The first cut put it in the two
+codegen arms and it fired on a program with no console output at all — the
+linked RTL's own `writeln` calls reach that arm. `CurrentUnitIdx = -1`
+restricts it to the main program, and only the parse site knows that. **A
+warning that fires on every ESP compile is not a warning**, and the empty-program
+negative control is what caught it; without that row this would have shipped.
+
+## What this ticket should NOT be closed on: a bigger defect it was sitting on
+
+The two backends spell the guard differently and **disagree on the IDF
+profile**, which is not documented as a no-op anywhere:
+
+| backend | guard | bare | IDF profile |
+| --- | --- | --- | --- |
+| xtensa | `TargetPlatform = PLATFORM_ESP` | drops | **drops — objects byte-identical** |
+| riscv32 | `EspBareBoot` | drops | **emits, into the syscall write path** |
+
+Measured with `--emit-obj`: xtensa `--platform=esp` gives `code=208948` for both
+empty and hello; riscv32 `--platform=esp` gives `258788` vs `258828`, a 40-byte
+delta in code AND data. The riscv32 object has **32 `ecall`s** against the bare
+object's 2, and `write` is **not** an external — only `calloc` and `free` are —
+so that path traps to IDF's machine-mode handler rather than printing.
+
+xtensa is the primary ESP target and the one that silently drops. Filed as
+[[bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile]].

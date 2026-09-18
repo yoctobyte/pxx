@@ -1063,6 +1063,7 @@ begin
   EmitAsmTextMode := False;
   CodePadStart := -1;   { no ELF page padding until the writer appends it }
   EspBareBoot := False;
+  EspWriteNoopWarned := False;
   NoDefaultRtl := False;
   StrictIR := True;   { DEFAULT ON since 2026-07-11: IRVerify rejects any IR_UNSUPPORTED
                         node (frontend failed to lower an AST node) — fail loud instead of
