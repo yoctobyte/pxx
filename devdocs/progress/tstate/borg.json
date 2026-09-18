@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-17T15:49:25Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d0cad59b99e35e27e9e30c0ba5022b70e7f9f2f7",
-   "tier": "slow",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-17T15:58:41Z",
    "fixed": [],
    "new_red": [],
@@ -505,6 +496,17 @@
    "new_red": [],
    "sha": "b291b321f18566a7874e1e56b6483615b85140ce",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-18T12:47:05Z",
+   "fixed": [],
+   "new_red": [
+    "test-esp-idf#src:tools/compiler_srchash.sh"
+   ],
+   "sha": "b291b321f18566a7874e1e56b6483615b85140ce",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5203,7 +5205,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "b291b321f18566a7874e1e56b6483615b85140ce",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "b291b321f18566a7874e1e56b6483615b85140ce",
   "test-threads#src:tools/compiler_srchash.sh": "b291b321f18566a7874e1e56b6483615b85140ce",
-  "test-uforth#src:tools/compiler_srchash.sh": "ad85bf019f9629788f2a0e0a5b40fa3aa6a3ebb5",
+  "test-uforth#src:tools/compiler_srchash.sh": "b291b321f18566a7874e1e56b6483615b85140ce",
   "test-uforth#src:tools/compiler_srchash.sh@1": "b291b321f18566a7874e1e56b6483615b85140ce",
   "test-uforth#src:tools/compiler_srchash.sh@10": "b291b321f18566a7874e1e56b6483615b85140ce",
   "test-uforth#src:tools/compiler_srchash.sh@11": "b291b321f18566a7874e1e56b6483615b85140ce",
@@ -5383,6 +5385,7 @@
   "lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy": "expect_same: MISMATCH [lib_mimic_xmlreader.1] | --- expected | +++ actual | @@ -1 +1 @@ | -25 | +24",
   "lib-test#src:tools/crtl_reachability.py": "... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60: warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:60: warning: #include <linux/ioctl.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismat\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "+PXX timer: tick=1 | +PXX timer: tick=2 | PXX timer: tick=3 | PXX timer: tick=4 | PXX timer: tick=5 | esp32c3 esp_timer callback MISMATCH",
   "test-pascal-conformance#shard3/6": "SKIP tover4.pp \u2014 gap: 80-bit extended/cextended float type and overload resolution across single/double/extended | SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault) | SKIP tstring3.pp \u2014 gap: THE CHAR HALF IS FIXED (2026-09-06, compiler 3fa98ccccf88) -- a one-character named const is a string initialiser now, so `FDivChars = (c1,c2)`\u2026",
   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124",
   "tools-devtest#00": "ok   only .md files are tickets | RED  the working tree has no duplicate slug | twatch duplicate-slug BROKEN | the working tree has no duplicate slug | live duplicates: ['regression-cascade-e5cd18e4b220.md', 'regression-lib-test-lib-criticalsection-blocking.md', 'regression-lib-test-lib-fpc-thread-surface.md', 'regression-lib-test-lib-thread-handle-reports-exit-on-both-routes.md', 'regression-lib\u2026"
@@ -8486,6 +8489,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "full",
   "test-esp-bare#src:test/test_esp_varparam.pas": "full",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "full",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "slow",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "full",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "full",
   "test-fgl#src:tools/compiler_srchash.sh": "full",
@@ -13356,6 +13360,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "pass",
   "test-esp-bare#src:test/test_esp_varparam.pas": "pass",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "pass",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "fail",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "pass",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "pass",
   "test-fgl#src:tools/compiler_srchash.sh": "pass",
@@ -15129,14 +15134,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-18T12:41:18Z",
+  "date": "2026-09-18T12:47:05Z",
   "deadline": 3600.0,
   "sha": "b291b321f18566a7874e1e56b6483615b85140ce",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 997.2
+  "wall": 334.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15187,14 +15192,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-18T07:56:58Z",
+   "date": "2026-09-18T12:47:05Z",
    "deadline": 3600.0,
-   "sha": "ad85bf019f9629788f2a0e0a5b40fa3aa6a3ebb5",
+   "sha": "b291b321f18566a7874e1e56b6483615b85140ce",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 100.3
+   "verdict": "RED",
+   "wall": 334.5
   }
  },
  "last_full": {
@@ -15326,6 +15331,22 @@
    ],
    "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
+   "status": "fail"
+  },
+  {
+   "bad": "b291b321f18566a7874e1e56b6483615b85140ce",
+   "bad_untestable": true,
+   "first_seen": true,
+   "good": "",
+   "job": "test-esp-idf#src:tools/compiler_srchash.sh",
+   "name": "test-esp-idf#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-18T12:47:05Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [],
+   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2",
    "status": "fail"
   }
  ],
