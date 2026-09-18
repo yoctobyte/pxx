@@ -66,7 +66,6 @@ const
     bug-a-x86-64-paramstr-expression-smashes-its-frozen-temp }
   FROZEN_CSTR_CAP = 255;
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
-  LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   { HISTORY, kept deliberately: MAX_STRS is gone (2026-09-06, the string table
     grows), and so is MAX_FIXUPS, but this paragraph records the measurement
     that raised MAX_STRS from 8192 to 65536 and it turned out to explain
@@ -6565,7 +6564,7 @@ var
   BSS_EXC_OBJ     : Integer;
   BSS_EXC_CLS     : Integer;
   BSS_EXC_ADDR    : Integer;  { code address of the RAISE SITE of the exception in flight — the return address the `call` to the raise stub pushed. Read by System/SysUtils ExceptAddr. }
-  BSS_LINE_BUF    : Integer;  { readln line buffer }
+  BSS_LINE_BUF    : Integer;  { POINTER to the builtin's readln line buffer }
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   BSS_PEEK_VALID  : Integer;  { Eof one-byte stdin pushback: 1 if a byte is held }

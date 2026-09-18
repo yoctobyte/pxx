@@ -869,7 +869,12 @@ begin
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
   BSS_PEEK_VALID  := BSSSize; Inc(BSSSize, 8);
   BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
-  BSS_LINE_BUF    := BSSSize; Inc(BSSSize, LINE_BUF_SIZE);
+  { EIGHT bytes, not a buffer: BSS_LINE_BUF holds a POINTER to the builtin
+    unit's demand-allocated line buffer (builtinheap.pas, PXXLineEnsure).
+    It was LINE_BUF_SIZE = 4096 bytes of bss reserved here in EVERY Pascal
+    program, on every target — including the five backends that never emit
+    a reference to it, and ESP, where the PAL refuses fd 0 outright. }
+  BSS_LINE_BUF    := BSSSize; Inc(BSSSize, 8);
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   { BSS_IO_OWNER / BSS_IO_DEPTH are NOT allocated here any more: they belong to
     EmitIoLockStubsForTarget, alongside the stubs that are their only reader.

@@ -49,6 +49,11 @@ them in one umbrella would rank by the wrong currency.
   and with no read-only segment to put it in.
 - The bss floor is 41,800 B, of which **32,768 is the signal alt stack**,
   reserved unconditionally, `--no-signals` included.
+- **Both of those are fixed now.** The alt stack went first (−32,792 B of bss
+  on every ESP image); the readln line buffer followed and is measured on its
+  own baseline, 70,936 -> 66,848 on all four bare SoCs. What is left is
+  dominated by the 64 KiB heap arena, which is a knob
+  (`-dPXX_ESP_HEAP_8K` .. `_128K`) and not waste.
 
 **RUNG 0 IS NOW MEASURED (2026-09-18, frankS) — the budget is a number:**
 
@@ -91,6 +96,15 @@ static table cannot see the 10,584 B startup allocates).
 5. **Stop reserving SRAM for opted-out facilities.**
    [[bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss]] — 32 KB,
    8% of a C3's usable SRAM, for a facility the program said no to.
+   **AND THE READLN LINE BUFFER, DONE 2026-09-18: −4,088 B of bare ESP bss on
+   all four SoCs** (70,936 -> 66,848, size canary, esp32 / esp32c3 / esp32s2 /
+   esp32s3 alike), and −8,168 hosted x86-64 where the SAME buffer was reserved
+   TWICE. It was 4,096 bytes reserved by the Pascal driver in every image on
+   every target — including ESP, where the PAL refuses fd 0 and the buffer could
+   never be read into. It is now a pointer to a demand-allocated growable block
+   in `builtinheap.pas`, so a program that never touches stdin reserves nothing
+   and a line longer than the buffer is read WHOLE instead of truncated with its
+   tail left in the fd for the next readln to pick up as a phantom line.
    [[bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program]]
    is the same shape one size up.
 6. **Stop the always-linked surface growing.**

@@ -2857,27 +2857,65 @@ end;
 
 
 {$ifndef PXX_ESP_BARE}
-{ ===== Console input (read/readln) for the cross targets =====
-  x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
-  BSS_LINE_* scratch); the 32-bit/cross backends lower IR_READLINE /
-  IR_READ_VAR / IR_READ_DISCARD to these portable helpers instead. Semantics
-  mirror the x86-64 asm: one shared line buffer + cursor; a string target takes
-  the rest of the line; a char one byte; integer kinds skip blanks then parse
-  [-]digits. See feature-cross-readln-console-input. }
+{ ===== Console input (read/readln) — ONE line buffer for every backend =====
+  i386 / arm32 / aarch64 / riscv32 / xtensa lower IR_READLINE / IR_READ_VAR /
+  IR_READ_DISCARD straight to these helpers. x86-64 keeps its hand-rolled asm
+  for the PARSING (EmitReadVarParse over the BSS_LINE_* scratch) but takes its
+  STORAGE from here, via PXXLineEnsure — so the two spellings cannot disagree
+  about capacity, which they did: the asm stopped at LINE_BUF_SIZE-1 and this
+  loop at 4096, so one program read the same 5000-byte line as 4095 bytes on
+  x86-64 and 4096 on riscv32.
+
+  DEMAND-ALLOCATED AND GROWABLE, and both halves of that are the fix:
+  - a program that never touches stdin reserves NO line buffer at all. This was
+    4096 bytes of bss in every image, ESP included, where the PAL refuses fd 0
+    and the buffer could never be read into;
+  - a line longer than the buffer is read WHOLE. It used to be truncated AND
+    the tail left in the fd, so the NEXT readln returned the remainder of the
+    previous line — a wrong value in a later, unrelated read, which is the
+    failure you cannot see from the statement that caused it.
+  See feature-cross-readln-console-input. }
+const
+  PXX_LINE_BUF_INIT = 256;   { first chunk; doubles on demand, no ceiling }
 var
-  PXXLineBuf: array[0..4095] of Byte;
+  PXXLineBuf: Pointer;
+  PXXLineCap: Int64;
   PXXLineLen: Int64;
   PXXLinePos: Int64;
   PXXPeekByte: Byte;      { pushed-back stdin byte held by PXXStdinEof }
   PXXPeekValid: Int64;
 
+{ Grow the shared line buffer to hold at least `need` bytes and return its base.
+  The base MOVES on growth, so never cache it across a call. }
+function PXXLineEnsure(need: NativeInt): Pointer;
+var ncap: Int64;
+begin
+  if need > PXXLineCap then
+  begin
+    ncap := PXXLineCap;
+    if ncap < PXX_LINE_BUF_INIT then ncap := PXX_LINE_BUF_INIT;
+    while ncap < need do ncap := ncap * 2;
+    PXXLineBuf := PXXRealloc(PXXLineBuf, ncap, 8);
+    PXXLineCap := ncap;
+  end;
+  Result := PXXLineBuf;
+end;
+
+{ Byte `i` of the line buffer, recomputed from PXXLineBuf every time on purpose
+  (see PXXLineEnsure). }
+function PXXLineAt(i: Int64): Byte;
+begin
+  Result := PByte(Int64(PXXLineBuf) + i)^;
+end;
+
 procedure PXXReadLine;
-var n: Int64; b: Byte;
+var n: Int64; b: Byte; more: Boolean;
 begin
   if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
   PXXLinePos := 0;
   PXXLineLen := 0;
-  while PXXLineLen < 4096 do
+  more := True;
+  while more do
   begin
     { consume the byte Eof peeked (else it would be lost) before reading }
     if PXXPeekValid <> 0 then
@@ -2888,11 +2926,14 @@ begin
     end
     else
       n := PXXSysRead(0, Int64(@b), 1);
-    if n <= 0 then Break;                 { EOF / error: empty or short line }
-    if b = 13 then Continue;              { skip \r }
-    if b = 10 then Break;                 { \n ends the line (not stored) }
-    PXXLineBuf[PXXLineLen] := b;
-    PXXLineLen := PXXLineLen + 1;
+    if n <= 0 then more := False          { EOF / error: empty or short line }
+    else if b = 10 then more := False     { \n ends the line (not stored) }
+    else if b <> 13 then                  { \r skipped }
+    begin
+      PXXLineEnsure(PXXLineLen + 1);
+      PByte(Int64(PXXLineBuf) + PXXLineLen)^ := b;
+      PXXLineLen := PXXLineLen + 1;
+    end;
   end;
 end;
 
@@ -2926,7 +2967,7 @@ var len: Int64; oldp, newp: Pointer;
 begin
   len := PXXLineLen - PXXLinePos;
   if len < 0 then len := 0;
-  newp := PXXStrFromLit(len, @PXXLineBuf[PXXLinePos]);
+  newp := PXXStrFromLit(len, Pointer(Int64(PXXLineBuf) + PXXLinePos));
   PXXLinePos := PXXLineLen;
   oldp := Pointer(PMachineWord(slot)^);
   PMachineWord(slot)^ := Int64(newp);
@@ -2938,7 +2979,7 @@ procedure PXXReadVarChar(dst: Pointer);
 begin
   if PXXLinePos < PXXLineLen then
   begin
-    PByte(dst)^ := PXXLineBuf[PXXLinePos];
+    PByte(dst)^ := PXXLineAt(PXXLinePos);
     PXXLinePos := PXXLinePos + 1;
   end
   else
@@ -2951,10 +2992,10 @@ procedure PXXReadVarInt(dst: Pointer; sz: NativeInt);
 var v: Int64; neg: Boolean; b: Byte; d: Int64;
 begin
   while (PXXLinePos < PXXLineLen) and
-        ((PXXLineBuf[PXXLinePos] = 32) or (PXXLineBuf[PXXLinePos] = 9)) do
+        ((PXXLineAt(PXXLinePos) = 32) or (PXXLineAt(PXXLinePos) = 9)) do
     PXXLinePos := PXXLinePos + 1;
   neg := False;
-  if (PXXLinePos < PXXLineLen) and (PXXLineBuf[PXXLinePos] = 45) then
+  if (PXXLinePos < PXXLineLen) and (PXXLineAt(PXXLinePos) = 45) then
   begin
     neg := True;
     PXXLinePos := PXXLinePos + 1;
@@ -2962,7 +3003,7 @@ begin
   v := 0;
   while PXXLinePos < PXXLineLen do
   begin
-    b := PXXLineBuf[PXXLinePos];
+    b := PXXLineAt(PXXLinePos);
     if (b < 48) or (b > 57) then Break;
     v := v * 10 + (b - 48);
     PXXLinePos := PXXLinePos + 1;

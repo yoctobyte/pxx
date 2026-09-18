@@ -55,7 +55,14 @@ Pascal program pulls `builtinheap` and `{$H-}` cannot reach it.
    Nothing below can be graded without it — a 405-byte win reads as zero.
 2. **Stop paying for facilities the program opted out of.**
    [[bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss]] is 78% of
-   the bss floor on its own, and the readln line buffer is another 10%.
+   the bss floor on its own. **The readln line buffer — the other 10% — is DONE
+   2026-09-18, and it was worth DOUBLE what this line said: 8,168 B, not 4,096,
+   because the same buffer was reserved TWICE** in an x86-64 image, once by the
+   Pascal driver (`BSS_LINE_BUF`) and once by the builtin unit (`PXXLineBuf`),
+   and only the first was ever read. Empty program, x86-64: bss 46,596 ->
+   38,428. i386 / arm32 / riscv32: 42,316 -> 34,140. aarch64: 42,356 -> 34,188.
+   It is a pointer to a demand-allocated growable block now, so a program that
+   never touches stdin reserves nothing at all.
 3. **Make the default converge on the floor.**
    [[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]] — the
    unconditional `PXX_MANAGED_STRING`. This is the single largest default-path

@@ -20218,6 +20218,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_record_multifield26 "$$($(TESTTMP)/test_record_multifield26)" "$$(printf '11 22\n0 1 2\n0 10 20')"
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_readln26
 	tools/expect_same.sh test_readln26 "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_readln26)" "$$(printf -- '100\n200\n300\n-5\n30\nhello world\nQ')"
+	# ...and a line LONGER than the internal buffer, which had no test at all.
+	# Two assertions and the SECOND is the one that cost real values: the long
+	# line comes back WHOLE, and the NEXT readln gets the NEXT line. It used to
+	# get the TAIL of the previous one — the reader stopped at its ceiling and
+	# left the remainder in the fd, so one long line silently became two and
+	# every later readln in the program was shifted by one. On the pre-fix pin
+	# this prints len=4095 and next=[AAAA...]; FPC 3.2.2 {$$H+} prints the rows
+	# below. No size constant appears anywhere: the point is that there is no
+	# ceiling now, not that the ceiling moved.
+	./$(COMPILER) test/test_readln_line_longer_than_the_buffer.pas $(TESTTMP)/test_readln_long26
+	tools/expect_same.sh test_readln_long26 "$$(printf '%5000s\nSECOND\n' '' | tr ' ' 'A' | $(TESTTMP)/test_readln_long26)" "$$(printf 'len=5000\nallA=TRUE\nnext=[SECOND]')"
 	# ...and reading into a FROZEN string, at BOTH doors, which had no test at
 	# all. From a Text file it SEGFAULTED (a `var AnsiString` RTL parameter
 	# handed an inline [len][chars] slot); from stdin it silently wrote the
@@ -26280,6 +26291,11 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_readln.pas $(TESTTMP)/test_i386_readln
 	./$(COMPILER) test/test_readln.pas $(TESTTMP)/test_i386_readln_x64
 	tools/expect_same.sh i386/test_i386_readln "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln)" "$$(printf '100 200 300\n42\n10 20\nhello world\nQ\nSKIP\n-5\n' | $(TESTTMP)/test_i386_readln_x64)"
+	# The long line on i386 too, which is NOT a duplicate of the x86-64 row: i386
+	# lowers readln to the portable builtin where x86-64 uses inline asm, and the
+	# two spellings answered 4096 and 4095 on exactly this input. One buffer now.
+	./$(COMPILER) --target=i386 test/test_readln_line_longer_than_the_buffer.pas $(TESTTMP)/test_i386_readln_long
+	tools/expect_same.sh i386/test_i386_readln_long "$$(printf '%5000s\nSECOND\n' '' | tr ' ' 'A' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln_long)" "$$(printf 'len=5000\nallA=TRUE\nnext=[SECOND]')"
 	./$(COMPILER) --target=i386 test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof_x64
 	tools/expect_same.sh i386/test_i386_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"

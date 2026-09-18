@@ -5663,10 +5663,24 @@ begin
 end;
 
 procedure EmitReadLine;
-{ Read one line from stdin (fd 0) into BSS_LINE_BUF, byte at a time, stopping at
-  '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets BSS_LINE_POS. }
-var loopStart, j1, j2, jSkip, jPeek, jHave: Integer;
+{ Read one line from stdin (fd 0) into the shared line buffer, byte at a time,
+  stopping at '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets
+  BSS_LINE_POS.
+
+  BSS_LINE_BUF IS A POINTER, NOT A BUFFER. The storage is the builtin unit's
+  demand-allocated PXXLineBuf (builtinheap.pas), grown by PXXLineEnsure and
+  shared with every other backend, so x86-64 and the five backends that lower
+  IR_READLINE to PXXReadLine cannot disagree about capacity — they did, 4095
+  against 4096, on the same program and the same input. It also removes the
+  ceiling: a line longer than any fixed buffer used to be truncated with its
+  tail left in the fd, which made the NEXT readln return the remainder of the
+  previous line. The base moves on growth, so it is re-read after every
+  PXXLineEnsure and never cached across one. }
+var loopStart, j1, j2, jSkip, jPeek, jHave, procIdx: Integer;
 begin
+  procIdx := FindProc('PXXLineEnsure');
+  if procIdx < 0 then Error('compiler error: PXXLineEnsure not found in builtin unit');
+
   EmitAsmX64([
     'mov rax, [@glob]', BSS_LINE_POS,
     'mov rcx, [@glob]', BSS_LINE_LEN,
@@ -5678,11 +5692,22 @@ begin
     'mov qword [@glob], 0', BSS_LINE_POS,
     'mov qword [@glob], 0', BSS_LINE_LEN
   ]);
+  { Publish a non-nil base before the first read, so an immediate EOF still
+    leaves EmitReadVarParse a valid (empty) buffer to point at. }
+  EmitAsmX64(['mov rdi, %', 1]);
+  EmitCallProc(procIdx);
+  EmitAsmX64(['mov [@glob], rax', BSS_LINE_BUF]);
+
   loopStart := CodeLen;
   EmitAsmX64([
-    'lea rsi, [@glob]', BSS_LINE_BUF,
-    'mov rax, [@glob]', BSS_LINE_LEN,
-    'add rsi, rax'
+    'mov rdi, [@glob]', BSS_LINE_LEN,
+    'inc rdi'
+  ]);
+  EmitCallProc(procIdx);                                { rax = buffer base }
+  EmitAsmX64([
+    'mov [@glob], rax', BSS_LINE_BUF,
+    'mov rsi, rax',
+    'add rsi, [@glob]', BSS_LINE_LEN
   ]);
   { If Eof left a pushed-back byte, consume it here instead of reading, so the
     byte it peeked is not lost. Otherwise read one byte from stdin (fd 0). }
@@ -5707,12 +5732,8 @@ begin
   EmitB($0F); EmitB($84); EmitI32(loopStart - (CodeLen + 4));                  { je loopStart (skip \r) }
   EmitAsmX64(['cmp rcx, %', 10]);
   EmitB($0F); EmitB($84); j2 := CodeLen; EmitI32(0);                           { je done (\n) }
-  EmitAsmX64([
-    'inc qword [@glob]', BSS_LINE_LEN,
-    'mov rax, [@glob]', BSS_LINE_LEN,
-    'cmp rax, %', LINE_BUF_SIZE - 1
-  ]);
-  EmitB($0F); EmitB($8C); EmitI32(loopStart - (CodeLen + 4));                  { jl loopStart }
+  EmitAsmX64(['inc qword [@glob]', BSS_LINE_LEN]);
+  EmitB($E9); EmitI32(loopStart - (CodeLen + 4));                              { jmp loopStart }
   Patch32(j1, CodeLen - (j1 + 4));
   Patch32(j2, CodeLen - (j2 + 4));
   Patch32(jSkip, CodeLen - (jSkip + 4));
@@ -5778,7 +5799,7 @@ begin
       'mov rax, [@glob]', BSS_LINE_LEN,
       'sub rax, [@glob]', BSS_LINE_POS,
       'mov rdi, rax',                    { length }
-      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'mov rsi, [@glob]', BSS_LINE_BUF,
       'add rsi, [@glob]', BSS_LINE_POS   { src }
     ]);
     IREmitCodeCall(AnsiStrFromLiteralAddr);                                        { rax = new managed handle }
@@ -5804,7 +5825,7 @@ begin
       'mov rcx, [@glob]', BSS_LINE_LEN,
       'sub rcx, [@glob]', BSS_LINE_POS,
       'mov [rdi], rcx',
-      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'mov rsi, [@glob]', BSS_LINE_BUF,
       'add rsi, [@glob]', BSS_LINE_POS,
       'add rdi, %', 8,
       'rep movsb',
@@ -5824,7 +5845,7 @@ begin
     ]);
     EmitB($0F); EmitB($8D); jDone := CodeLen; EmitI32(0);                         { jge nochar }
     EmitAsmX64([
-      'lea rsi, [@glob]', BSS_LINE_BUF,
+      'mov rsi, [@glob]', BSS_LINE_BUF,
       'add rsi, rdx',
       'movzx rax, byte [rsi]',
       'inc rdx',
@@ -5839,7 +5860,7 @@ begin
     'mov rdi, rax',
     'mov rdx, [@glob]', BSS_LINE_POS,
     'mov rcx, [@glob]', BSS_LINE_LEN,
-    'lea rsi, [@glob]', BSS_LINE_BUF,
+    'mov rsi, [@glob]', BSS_LINE_BUF,
     'xor r8, r8',    { neg flag }
     'xor r9, r9'     { acc }
   ]);
