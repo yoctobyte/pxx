@@ -79,9 +79,17 @@ const
     is the second copy and the stub is the first.
 
     The block was 1152 bytes until `threadvar` landed. It is now 1152 bytes of
-    compiler-owned slot map plus TLS_USER_BYTES (3072) of source-declared
-    per-thread variables -- a FIXED cap, so this number does not move with the
-    program. Raise both together or not at all. }
+    compiler-owned slot map plus the source-declared per-thread variable area,
+    3072 bytes BY DEFAULT and settable per compile with -dPXX_TLS_USER_0 / _1K /
+    _2K / _4K / _8K / _16K.
+
+    IT IS A CAP AND NOT A BUDGET, which is the property that matters here: a
+    program that outgrows the area is REFUSED at compile time, so this minimum
+    can never be too small for a program that actually built. It is also fixed
+    BEFORE the compile starts and cannot move during one, which is what makes
+    the __pxxTlsBlockSize fold below sound at any setting. Do NOT restate the
+    size in a third place -- PalThreadTrampoline reads the real one from the
+    compiler, and that is the copy that follows the knob. }
   PAL_MIN_STACK = 128 * 1024;
 
 { Spawn a thread running entry(arg) on a fresh mmap'd stack. stackSize <= 0 picks
@@ -271,8 +279,9 @@ begin
   h := PThreadHandle(a);
   { Read from the COMPILER rather than restated. PAL_MIN_STACK above already
     restates these two and says in its own comment that it is the second copy;
-    a third copy of a number that has moved once already (TLS_BLOCK_SIZE grew
-    when `threadvar` landed) is silent corruption waiting for the next change,
+    a third copy of a number that has moved once already (the block grew when
+    `threadvar` landed, and is a -dPXX_TLS_USER_* knob now) is silent corruption
+    waiting for the next change,
     because too small a block means gs-relative slots write past the mapping.
     LOCALS AND NOT CONSTANTS only because the const-expression evaluator is a
     different path from ParseFactorCore and does not see these builtins; they

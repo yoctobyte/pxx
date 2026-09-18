@@ -1018,12 +1018,12 @@ const
     zeroes the whole block, and a zeroed magazine reads as "every size class
     empty", which is the correct initial state and not a special case.
     feature-a-reentrant-heap-lock-and-per-thread-arenas }
-  { TLS_BLOCK_SIZE is DEFINED BELOW THE MAP, not here, because it is now the sum
+  { TlsBlockSize is DEFINED BELOW THE MAP, not here, because it is now the sum
     of the map and the source-declared `threadvar` area and the map's own extent
     is computed from TLS_SLOT_HEAP_MAGN. It used to be the literal 1152 at this
     line, which was the map's size and the block's size at once -- true while
     nothing else lived in the block, and a second meaning waiting to drift the
-    moment something did. See TLS_USER_BYTES. }
+    moment something did. See TlsUserBytes. }
   { The child's HIDDEN-DESTINATION SCRATCH, carved off the very top of a cloned
     thread's stack (above the alt stack) by the same stub.
 
@@ -1233,18 +1233,36 @@ const
     with a diagnostic is honest, and the diagnostic names this constant.
 
     3072 bytes = 384 slots. Costs that much of every thread's stack and of the
-    main thread's BSS whether or not the program declares a threadvar: against
-    palthread's PAL_MIN_STACK of 128 KiB and a carve that was already ~34 KiB,
-    it is affordable and it is why this is not a variable. Raise it if a real
-    program hits the diagnostic; lib/rtl/palthread.pas states the carve in prose
-    and has to be raised WITH it. }
+    main thread's BSS whether or not the program declares a threadvar.
+
+    IT IS A VARIABLE NOW, AND THE PARAGRAPH ABOVE IS WHY THAT IS SAFE RATHER
+    THAN WHY IT IS NOT. The ordering argument is intact and it is the whole
+    constraint: the size must be FIXED BEFORE THE COMPILE STARTS, because
+    EmitTlsMainInstall bakes it into the reservation and the clone carve before
+    a single `threadvar` is seen, and because __pxxTlsBlockSize folds to an
+    integer literal at its use site in palthread. A command-line `-d` satisfies
+    that by construction -- argv is parsed before any of it runs -- so what is
+    forbidden is a size that VARIES DURING a compile, not a size that differs
+    BETWEEN compiles.
+
+    This line used to say "it is affordable and it is why this is not a
+    variable", which read as a soundness claim and is an AFFORDABILITY one.
+    Measured 2026-09-18, both directions: at 0 bytes test_atomic_counter still
+    prints 800000/800000 across four threads with the mmap, the gs install and
+    the alt stack all correct (bss 61,580 -> 58,508), and a program that
+    outgrows whatever the cap is gets REFUSED at compile with the diagnostic in
+    pasparser_decl.inc -- verified at 3072 (v384 refused) and at 0 (the first
+    threadvar refused). The failure direction is loud at every setting.
+
+    lib/rtl/palthread.pas states the carve in prose and reads the real number
+    through __pxxTlsBlockSize, so it follows the knob without being edited.
+    feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
   TLS_USER_FIRST_OFF = (TLS_SLOT_HEAP_MAGN + HEAP_MAG_BINS) * 8;   { 1152 today }
-  TLS_USER_BYTES     = 3072;
+  TLS_USER_BYTES_DEFAULT = 3072;
   { who holds an inline-asm register in CAsmBuildBlock's used[] table. A plain
     Boolean could not tell a legal output/input tie from two inputs colliding. }
   CASM_REG_FREE    = -2;
   CASM_REG_CLOBBER = -1;
-  TLS_BLOCK_SIZE     = TLS_USER_FIRST_OFF + TLS_USER_BYTES;
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.
@@ -6602,8 +6620,10 @@ var
     item 4). Allocated in EnsureSignalBss, NOT in one arch's emitter -- see the
     note there. }
   TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
-  BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TLS_BLOCK_SIZE bytes); cloned threads carve theirs off their own stack }
-  TlsUserUsed     : Integer;     { bytes of TLS_USER_BYTES handed out to `threadvar` declarations so far; the bump allocator's only state }
+  BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TlsBlockSize bytes); cloned threads carve theirs off their own stack }
+  TlsUserUsed     : Integer;     { bytes of TlsUserBytes handed out to `threadvar` declarations so far; the bump allocator's only state }
+  TlsUserBytes    : Integer;     { the source-declared `threadvar` area, in bytes. TLS_USER_BYTES_DEFAULT unless -dPXX_TLS_USER_<rung> asked otherwise; set ONCE by ApplyTlsUserBytesOption before EmitTlsMainInstall and never touched again during a compile -- that invariant is the whole reason the fold of __pxxTlsBlockSize is sound. }
+  TlsBlockSize    : Integer;     { DERIVED, never spelled twice: TLS_USER_FIRST_OFF + TlsUserBytes. The slot map plus the threadvar area; what EmitTlsMainInstall reserves, what the clone stub carves, and what __pxxTlsBlockSize folds to. }
   ThreadVarRewriteHigh: Integer; { how far into the PERMANENT AST region (below ASTArenaFloor) ThreadVarRewriteRange has swept. Never a high-water mark of ASTNodeCount: the arena is rolled back per statement and node indices are REUSED -- see the routine, which records the one-statement bug that came of assuming otherwise }
   ParsingThreadVar: Boolean;     { ParseVarSection is running for a `threadvar` section, not a `var` one }
   BSS_SIG_NUM     : Integer;

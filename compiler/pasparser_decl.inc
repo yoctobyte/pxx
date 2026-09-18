@@ -2797,14 +2797,16 @@ begin
   align := TypeAlign(tk);
   if align < 1 then align := 1;
   off := AlignTo(TlsUserUsed, align);
-  if off + sz > TLS_USER_BYTES then
+  if off + sz > TlsUserBytes then
   begin
     why := spelling + ' ' + Syms[idx].Name + ': the per-thread variable area is full ('
-         + AIntToStr(TLS_USER_BYTES) + ' bytes, TLS_USER_BYTES in defs.inc). It is a '
-         + 'fixed cap and not a shortage of memory: the block is reserved by '
-         + 'EmitTlsMainInstall, which runs before parsing, so its size is baked in '
-         + 'before any thread-local has been seen. Raise TLS_USER_BYTES and the carve '
-         + 'stated in lib/rtl/palthread.pas with it.';
+         + AIntToStr(TlsUserBytes) + ' bytes). It is a fixed cap and not a shortage '
+         + 'of memory: the block is reserved by EmitTlsMainInstall, which runs before '
+         + 'parsing, so its size is baked in before any thread-local has been seen. '
+         + 'Raise it on the COMMAND LINE and recompile this program -- no compiler '
+         + 'rebuild: -dPXX_TLS_USER_4K, _8K or _16K (also _0, _1K, _2K to shrink it). '
+         + 'lib/rtl/palthread.pas reads the real size through __pxxTlsBlockSize, so '
+         + 'it follows without being edited.';
     Exit;
   end;
   SymTlsOffset[idx] := TLS_USER_FIRST_OFF + off;

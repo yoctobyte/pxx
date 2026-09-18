@@ -114,7 +114,7 @@ procedure EmitAcquireHeapLock;
   1152 to hold it, which is stack the thread already owns. Both numbers in
   this paragraph were one lower when it was written; a slot count in prose is a
   census with an owner elsewhere, and it goes stale the next time someone takes
-  a slot -- as 1152 did: TLS_BLOCK_SIZE is now that map PLUS TLS_USER_BYTES of
+  a slot -- as 1152 did: TlsBlockSize is now that map PLUS TlsUserBytes of
   `threadvar` storage, and the map's own extent is what the 1152 above names.
 
   THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
@@ -1628,6 +1628,53 @@ begin
   EmitIoLockStubsForTarget;
 end;
 
+procedure ApplyTlsUserBytesOption;
+{ Fix the size of the source-declared `threadvar` area, ONCE, from the command
+  line, before anything that bakes it in runs.
+
+    -dPXX_TLS_USER_0     0 bytes -- a program with no threadvar pays nothing
+    -dPXX_TLS_USER_1K    1024
+    -dPXX_TLS_USER_2K    2048
+    (default)            3072, TLS_USER_BYTES_DEFAULT, unchanged
+    -dPXX_TLS_USER_4K    4096
+    -dPXX_TLS_USER_8K    8192
+    -dPXX_TLS_USER_16K   16384
+
+  WHY A KNOB IS SOUND HERE AND GROWING THE BLOCK DURING A COMPILE IS NOT.
+  __pxxTlsBlockSize folds to an integer literal at its use site
+  (pasparser_expr.inc), and EmitTlsMainInstall bakes TlsBlockSize into the main
+  thread's BSS reservation and into the clone stub's carve before ParseProgram
+  has seen one declaration. Both are captures of a value at a moment. A capture
+  is safe exactly when the value cannot move afterwards -- so the constraint is
+  DO NOT LET THE SIZE VARY DURING A COMPILE, and it is not "do not change the
+  size". argv is parsed before any of this, so a `-d` cannot violate it; a
+  scheme that grew the area as `threadvar`s were parsed would, and that is the
+  route this one exists instead of.
+
+  Measured 2026-09-18 at both ends before it was made adjustable: at 0 bytes
+  test_atomic_counter still prints 800000/800000 over four threads, and a
+  program that outgrows the area is REFUSED at compile by the cap in
+  pasparser_decl.inc -- at 3072 the 385th scalar threadvar, at 0 the first. The
+  failure direction is loud at every setting, which is what makes shipping the
+  lever safe.
+
+  QUANTISED TO POWERS OF TWO for the same reason the ESP heap arena is: a
+  define carries no value usable in an expression, so an arbitrary byte count
+  would mean a new command-line option and a parser change. A per-thread
+  variable area is not tuned to the byte, and the diagnostic names the rung to
+  raise to. }
+begin
+  TlsUserBytes := TLS_USER_BYTES_DEFAULT;
+  if      PasDefineExists('PXX_TLS_USER_0')   then TlsUserBytes := 0
+  else if PasDefineExists('PXX_TLS_USER_1K')  then TlsUserBytes := 1024
+  else if PasDefineExists('PXX_TLS_USER_2K')  then TlsUserBytes := 2048
+  else if PasDefineExists('PXX_TLS_USER_4K')  then TlsUserBytes := 4096
+  else if PasDefineExists('PXX_TLS_USER_8K')  then TlsUserBytes := 8192
+  else if PasDefineExists('PXX_TLS_USER_16K') then TlsUserBytes := 16384;
+  { DERIVED, never a second spelling. }
+  TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;
+end;
+
 procedure EmitTlsMainInstall;
 { The MAIN thread's TLS block. Cloned threads get theirs from the clone stub
   (thread_emit.inc); the main thread passes through no stub, and a static pxx
@@ -1666,7 +1713,7 @@ begin
   { The block, plus 16 bytes past its end used ONCE, here, as the `struct
     rlimit` getrlimit writes into. Past the end rather than in a slot, because
     the slot map is an ABI other code reads and this scratch is not part of it. }
-  BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TLS_BLOCK_SIZE + 16);
+  BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TlsBlockSize + 16);
   EmitAsmX64([
     { hi = the stack pointer at process entry. Every later frame is BELOW it, so
       it is a conservative high bound and needs no rounding. Captured first:
@@ -1679,11 +1726,11 @@ begin
       span from it beats picking a constant, and a failure needs no branch: the
       scratch is BSS, so rlim_cur reads 0, the span is 0, and the bounds test
       can never pass. }
-    'lea rsi, [r9+%]', TLS_BLOCK_SIZE,
+    'lea rsi, [r9+%]', TlsBlockSize,
     'mov edi, %', 3,                           { RLIMIT_STACK }
     'mov eax, %', 97,                          { getrlimit }
     'syscall',
-    'mov rcx, [r9+%]', TLS_BLOCK_SIZE,         { rlim_cur }
+    'mov rcx, [r9+%]', TlsBlockSize,         { rlim_cur }
     { Clamp to 64 MiB. Not a safety margin on the limit itself -- it is the one
       case the kernel's gap does NOT cover: for an rlimit above ~5/6 of the
       address space the gap is capped below it, and RLIM_INFINITY would make

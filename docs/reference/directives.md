@@ -175,6 +175,39 @@ Each takes `ON` / `OFF` and has a matching command-line flag — see
 | `{$MESSAGE text}` | Emit a compile-time message. | |
 | `{$ERROR text}` | Emit a compile-time error and stop. | |
 
+### The per-thread variable area
+
+`threadvar` storage comes out of a fixed area carved into every thread's block,
+3072 bytes by default. It costs that much of BSS and of each thread's stack
+whether or not the program declares a single `threadvar`, so it is settable per
+compile — as a define, because a define needs no new option:
+
+| Define | `threadvar` area | Block size (`__pxxTlsBlockSize`) |
+| --- | --- | --- |
+| `-dPXX_TLS_USER_0` | 0 | 1152 |
+| `-dPXX_TLS_USER_1K` | 1024 | 2176 |
+| `-dPXX_TLS_USER_2K` | 2048 | 3200 |
+| *(default)* | 3072 | 4224 |
+| `-dPXX_TLS_USER_4K` | 4096 | 5248 |
+| `-dPXX_TLS_USER_8K` | 8192 | 9344 |
+| `-dPXX_TLS_USER_16K` | 16384 | 17536 |
+
+Measured on an x86-64 `hello`, BSS at each rung: 35,324 / 36,348 / 37,372 /
+38,396 / 39,420 / 43,516 / 51,708 — exactly the area's own difference each time.
+`-dPXX_TLS_USER_0` is the right setting for a program with no `threadvar`, which
+is most of them.
+
+**It is a cap, not a budget.** A program whose `threadvar`s do not fit is
+refused at compile time, with a diagnostic naming the rung to raise to; it is
+never quietly given storage the reserved block does not contain. That is what
+makes the setting safe in both directions, and it is why the size must be fixed
+on the command line rather than grown as declarations are parsed: the block is
+reserved, and `__pxxTlsBlockSize` folds to a literal, before the first line of
+the program is read.
+
+The RTL follows the setting without being rebuilt — `lib/rtl/palthread.pas`
+reads the real block size through `__pxxTlsBlockSize` rather than restating it.
+
 ## Next
 
 - [Command line](./cli.md)

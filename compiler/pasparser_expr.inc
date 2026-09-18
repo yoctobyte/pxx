@@ -4441,14 +4441,14 @@ begin
           own comment -- "if either grows, this is the second copy and the stub
           is the first". A THIRD copy arrived the moment a pthread_create path
           had to allocate the same regions itself, and a third copy of a number
-          that moves (TLS_BLOCK_SIZE changed once already, when `threadvar`
+          that moves (TlsBlockSize changed once already, when `threadvar`
           landed) is a silent-corruption bug waiting for the next change: too
           small a block means gs-relative slots write past the mapping.
 
           Constants, not calls -- they fold to an AN_INT_LIT here, so a `const`
           in the RTL can be defined from them.
           bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state }
-        if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TLS_BLOCK_SIZE
+        if CaseEqual(name, '__pxxTlsBlockSize') then i64v := TlsBlockSize
         else i64v := SIG_ALTSTACK_SIZE;
         Next;
         if CurTok.Kind = tkLParen then begin Next; Expect(tkRParen, ')'); end;

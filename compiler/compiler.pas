@@ -2327,6 +2327,13 @@ begin
     bug-a-threadsafe-segfaults-on-every-nilpy-program. Skipped for .asm, whose
     program IS the emitted bytes and whose entry point is overridable
     (AsmEntryOff). x86-64 only, inside the emitter. }
+  { The threadvar area's size, fixed ONCE from argv, and it MUST be here: both
+    EmitTlsMainInstall below and the __pxxTlsBlockSize fold capture the value,
+    and a capture is safe exactly while the value cannot move afterwards. Not
+    inside EmitTlsMainInstall, which returns early on every target but x86-64 --
+    the cap in pasparser_decl.inc and the fold are target-independent and would
+    read a zero. }
+  ApplyTlsUserBytesOption;
   if not isAsm then EmitTlsMainInstall;
 
   { Before ANY frontend runs -- see ResetDeclScopeSentinels. Only ParseProgram

@@ -7,7 +7,7 @@ prio: 45
 status: new
 created: 2026-09-18
 owner: ""
-summary: "`TLS_BLOCK_SIZE = TLS_USER_FIRST_OFF (1152) + TLS_USER_BYTES (3072)`, reserved as BSS_TLS_MAIN + 16 by EmitTlsMainInstall, and 3,072 of it is the source-declared `threadvar` area — held whether or not the program has one. MEASURED by flipping TLS_USER_BYTES to 0 and rebuilding (2026-09-18): x86-64 hosted empty program 38,444 -> 35,372 bss, **-3,072**; i386 34,156 -> 34,156, aarch64 34,204 -> 34,204, riscv32 bare ESP 66,856 -> 66,856, **ZERO on all three**. THAT IS THE HEADLINE AND IT IS THE OPPOSITE OF THE DAY'S OTHER TWO SIZE ITEMS: `EmitTlsMainInstall` returns immediately unless `TargetArch = TARGET_X86_64` (ir_codegen.inc), so this belongs to [[umbrella-a-hosted-program-is-as-small-as-it-can-be]] ONLY and must NOT be wired under the ESP umbrella or ranked on ESP SRAM. After the signal alt stack it is the largest single item in the hosted floor: 3,072 of 38,444 is 8%. THE FAILURE DIRECTION IS SAFE and that is measured too — `TryAssignThreadVarStorage` (pasparser_decl.inc:2800) REFUSES a threadvar that does not fit, with a diagnostic, so under-detection is a compile error and never a wrong binary."
+summary: "ROUTE C SHIPPED 2026-09-18 — the area is a command-line knob (-dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K, default unchanged at 3072), so `-dPXX_TLS_USER_0` gives the whole 3,072 of bss back to any program with no `threadvar` with no detection at all. Measured on an x86-64 hello, bss 38,396 -> 35,324 at rung 0 and exact at every rung; test_atomic_counter is correct at 0, 1K, 8K and 16K; palthread follows without an edit because it reads __pxxTlsBlockSize. STILL OPEN because the knob is OPT-IN: a program that does not pass the flag still pays 3,072 it may not use. Route A (prescan for the `threadvar` token before EmitTlsMainInstall, `uses` forcing it back on) buys the same bytes without the user asking, and reaches 11 of 49 Pascal files under examples/ — 22%, counted, which is the honest ceiling on it. Route B (size the area from what parsing used) buys it on every program and is the only one that is UNSOUND today: it makes the size vary DURING a compile, which is exactly what the reserve and the __pxxTlsBlockSize fold both capture. The soundness rule, measured both directions: the fold works because TLS_BLOCK_SIZE is a compile-time CONSTANT, not because it is 3072 — at 0 bytes test_atomic_counter still prints 800000/800000 over four threads, and a program that outgrows whatever the cap is gets refused at compile with a diagnostic naming the rung to raise to."
 ---
 
 # Why it is a fixed cap, in the code's own words
@@ -18,6 +18,83 @@ reserves the block and bakes the size into emitted immediates before a single
 `threadvar` has been seen. `defs.inc` says so and calls growing it out of scope
 for the first rung. That is still true; what follows is about getting the 3,072
 back for programs that never needed it.
+
+# ROUTE C SHIPPED 2026-09-18 — the size is a command-line knob
+
+`-dPXX_TLS_USER_0 / _1K / _2K / _4K / _8K / _16K`; default unchanged at 3072.
+**`-dPXX_TLS_USER_0` gives the whole 3,072 back to any program that declares no
+`threadvar`, which is most of them, and it needs no detection at all.**
+
+It is sound for the reason the measurement below established and nothing more:
+the fold and the reserve capture the size at a moment, and a capture is safe
+exactly while the value cannot move afterwards. argv is read before any of it,
+so a `-d` cannot violate that; **what is forbidden is a size that VARIES DURING
+a compile, not a size that differs BETWEEN compiles.** Route B is the one that
+breaks it, and it is still the only one that does.
+
+Measured on an x86-64 `hello`, bss at each rung — exactly the area's own
+difference every time:
+
+| | 0 | 1K | 2K | **3072** | 4K | 8K | 16K |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| bss | 35,324 | 36,348 | 37,372 | **38,396** | 39,420 | 43,516 | 51,708 |
+| `__pxxTlsBlockSize` | 1152 | 2176 | 3200 | **4224** | 5248 | 9344 | 17536 |
+
+`test_atomic_counter` prints `ATOMIC OK` at 0, 1K, default, 8K and 16K;
+`test_a_threadvar_is_per_thread` is correct at default, 1K and 16K; the
+relation-asserting `test_the_tls_carve_constants_are_readable_from_the_rtl`
+passes at default and at 8K without editing — palthread reads the real size
+through `__pxxTlsBlockSize` and follows the knob.
+
+Quantised to powers of two for the same reason the ESP heap arena is: a define
+carries no value usable in an expression, so an arbitrary byte count would mean
+a new option and a parser change, and a per-thread variable area is not tuned to
+the byte.
+
+Fixture `test_the_threadvar_area_is_a_command_line_knob.pas`, both directions:
+385 Int64 threadvars = 3080 bytes, **refused** at the default and **accepted**
+at `-dPXX_TLS_USER_4K`, with the LAST-declared name — the one past the default
+cap — read back, so a knob that moved the diagnostic without moving the storage
+reddens.
+
+**Routes A and B are NOT closed by this and should be read as what they now
+are:** route A buys the same 3,072 without the user asking, on the 22% of
+`examples/` with no top-level `uses`; route B buys it on every program and still
+needs the fold fixed first. Route C is the cheap floor under both.
+
+## WHERE TO PICK THIS UP (frankS parked it 2026-09-18; nobody holds it)
+
+Route C shipped and is the whole of what is done. **The next step is ROUTE A,
+and everything it needs has been measured — it is an afternoon, not an
+investigation:**
+
+1. Add a `threadvar` scan to `DetectPascalRuntimeNeeds`
+   (`pasparser_prog.inc`), beside the `tkUses`/`tkArray`/`tkClass` rows that are
+   already there. Absent -> the area is 0. **`uses` must force it back ON**, for
+   the same opacity reason the existing prescan treats imports as opaque: a used
+   unit's `threadvar` is not in the main source's token array. Non-Pascal
+   frontends have no `threadvar` and can always take 0.
+2. Set `TlsUserBytes` from that instead of unconditionally, in
+   `ApplyTlsUserBytesOption` (`ir_codegen.inc`) — which already exists, already
+   runs at the only correct moment, and is already called from `compiler.pas`
+   right before `EmitTlsMainInstall`. **Route C built the ordering route A
+   needed; there is no plumbing left to do.** An explicit `-dPXX_TLS_USER_*`
+   must still WIN over the scan, or a program whose threadvars live in a used
+   unit has no way to ask for room.
+3. The knob keeps working unchanged and stays the escape hatch for whatever the
+   scan gets wrong. That is the point of doing A second.
+
+**Do not skip the `uses` clause in step 1.** It is the whole difference between
+route A being safe and route A silently refusing a correct program: the scan
+sees the main source's tokens only, and `palthread` itself declares threadvars.
+
+**Known ceiling, counted, do not re-count:** 11 of 49 Pascal files under
+`examples/` have no top-level `uses`, so route A reaches 22% of them. That is
+the honest value — decide against it on that number if you want to, rather than
+discovering it halfway.
+
+**Route B stays unsound** and needs the fold fixed first; nothing measured today
+changes that. See "Route B's blocker" below.
 
 # Two routes, and they are not equal
 

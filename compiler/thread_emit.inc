@@ -19,10 +19,10 @@
                         futex-wakes on exit (the join handshake).
     childStack(arg2) -> highest address of the child's stack (grows down); must be
                         16-byte aligned. The stub carves the child's hidden-destination
-                        scratch (CLONE_RETBUF_SIZE, every leg) and TLS_BLOCK_SIZE-byte
+                        scratch (CLONE_RETBUF_SIZE, every leg) and TlsBlockSize-byte
                         TLS block (x86-64) off the top, then stages [entry][arg] just
                         below that, so the caller must provide at least
-                        CLONE_RETBUF_SIZE + TLS_BLOCK_SIZE + 16 usable bytes.
+                        CLONE_RETBUF_SIZE + TlsBlockSize + 16 usable bytes.
     entry     (arg3) -> ^procedure(arg: Pointer); cdecl-free, called with arg in rdi.
                         An entry that RETURNS something through the caller-owned hidden
                         destination is called correctly too -- the stub points that
@@ -57,8 +57,8 @@ begin
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
     { ---- carve the child's TLS block off the top of its stack ---- }
-    { TLS_BLOCK_SIZE bytes = the slot map (16 named slots plus the 64 magazine
-      heads and 64 counts behind them) followed by TLS_USER_BYTES of
+    { TlsBlockSize bytes = the slot map (16 named slots plus the 64 magazine
+      heads and 64 counts behind them) followed by TlsUserBytes of
       source-declared `threadvar` storage. NO SLOT COUNT IN THIS SENTENCE: the
       previous one said 80 and the answer was 144 by the time anyone read it --
       defs.inc owns the census and this is a consumer.
@@ -100,7 +100,7 @@ begin
 
       Costs SIG_ALTSTACK_SIZE of every thread's stack (32KB of palthread's 1MB
       default) and one syscall per thread. The floor a caller must now supply is
-      TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE + CLONE_RETBUF_SIZE plus whatever the
+      TlsBlockSize + SIG_ALTSTACK_SIZE + CLONE_RETBUF_SIZE plus whatever the
       thread actually uses;
       __pxxclone is reachable directly, so a caller passing a stack smaller than
       that was already carving a TLS block out of nothing. }
@@ -111,13 +111,13 @@ begin
       See CLONE_RETBUF_SIZE for why the register must be set at all. }
     EmitB($48); EmitB($81); EmitB($EE); EmitI32(CLONE_RETBUF_SIZE);  { sub rsi, CLONE_RETBUF_SIZE }
     EmitB($48); EmitB($81); EmitB($EE); EmitI32(SIG_ALTSTACK_SIZE);  { sub rsi, SIG_ALTSTACK_SIZE }
-    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, TLS_BLOCK_SIZE }
+    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TlsBlockSize);  { sub rsi, TlsBlockSize }
     EmitB($FC);                                       { cld }
     EmitB($57);                                       { push rdi   (flags) }
     EmitB($51);                                       { push rcx   (arg) }
     EmitB($48); EmitB($89); EmitB($F7);               { mov rdi, rsi }
     EmitB($31); EmitB($C0);                           { xor eax, eax }
-    EmitB($B9); EmitI32(TLS_BLOCK_SIZE div 8);        { mov ecx, slot count }
+    EmitB($B9); EmitI32(TlsBlockSize div 8);        { mov ecx, slot count }
     EmitB($F3); EmitB($48); EmitB($AB);               { rep stosq }
     EmitB($59);                                       { pop rcx }
     EmitB($5F);                                       { pop rdi }
@@ -156,12 +156,12 @@ begin
       same reason the buffer is per-thread: a shared struct is a race between
       two threads registering at once, and this one is dead the instant the
       syscall returns. 32 rather than 24 keeps rsp 16-aligned across the call.
-      altBase = tlsBlock + TLS_BLOCK_SIZE, and tlsBlock is rsp+16 -- the stage
+      altBase = tlsBlock + TlsBlockSize, and tlsBlock is rsp+16 -- the stage
       area holding (entry, arg) is the 16 bytes below it.
       rdi, rsi and rax are all dead here: rdi and rsi were arch_prctl's
       arguments and entry/arg live on the stack. }
     EmitB($48); EmitB($8D); EmitB($B4); EmitB($24);
-      EmitI32(16 + TLS_BLOCK_SIZE);                   { lea rsi, [rsp+16+TLS_BLOCK_SIZE] }
+      EmitI32(16 + TlsBlockSize);                   { lea rsi, [rsp+16+TlsBlockSize] }
     EmitB($48); EmitB($83); EmitB($EC); EmitB($20);   { sub rsp, 32 }
     EmitB($48); EmitB($89); EmitB($34); EmitB($24);   { mov [rsp], rsi      (ss_sp) }
     EmitB($48); EmitB($C7); EmitB($44); EmitB($24); EmitB($08);
@@ -179,7 +179,7 @@ begin
       it by exiting. rsp is still the stage area here, so the scratch is
       stage + 16 (past entry/arg) + the TLS block + the alt stack. }
     EmitB($4C); EmitB($8D); EmitB($94); EmitB($24);
-      EmitI32(16 + TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE); { lea r10, [rsp+16+TLS+ALT] }
+      EmitI32(16 + TlsBlockSize + SIG_ALTSTACK_SIZE); { lea r10, [rsp+16+TLS+ALT] }
     EmitB($58);                                       { pop rax  (entry) }
     EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
     EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }

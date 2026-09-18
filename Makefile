@@ -7047,6 +7047,26 @@ test-threads: $(COMPILER)
 	# bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
 	./$(COMPILER) --threadsafe test/test_the_tls_carve_constants_are_readable_from_the_rtl.pas $(TESTTMP)/test_tls_carve26
 	$(TESTTMP)/test_tls_carve26 | diff -u test/test_the_tls_carve_constants_are_readable_from_the_rtl.expected -
+	# THE THREADVAR AREA IS A COMMAND-LINE KNOB, and both directions are the test.
+	# The fixture declares 385 Int64 threadvars = 3080 bytes, eight over the
+	# default 3072. NEGATIVE half: the default must REFUSE it, and that refusal is
+	# what lets the reserve be baked in before parsing and __pxxTlsBlockSize fold
+	# to a literal -- a program can never be quietly given storage the reserved
+	# block does not contain. POSITIVE half: -dPXX_TLS_USER_4K builds the same
+	# source with no compiler rebuild, and the LAST-declared name (the one past
+	# the default cap) reads back, so a knob that moved the diagnostic without
+	# moving the storage fails here.
+	# `block=` pins the derivation: TLS_USER_FIRST_OFF + the rung, 1152 + 4096.
+	# Measured 2026-09-18: the fold is sound because the size is a compile-time
+	# CONSTANT, not because it is 3072 -- at 0 bytes test_atomic_counter still
+	# prints 800000/800000 over four threads. What is forbidden is a size that
+	# VARIES DURING a compile; argv cannot do that.
+	# feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar
+	@./$(COMPILER) --threadsafe test/test_the_threadvar_area_is_a_command_line_knob.pas $(TESTTMP)/test_tlsknob_neg26 2>&1 \
+	  | grep -q 'the per-thread variable area is full (3072 bytes)' \
+	  || { echo 'test_the_threadvar_area_is_a_command_line_knob: FAIL - the default cap did not refuse 3080 bytes of threadvar'; exit 1; }
+	./$(COMPILER) --threadsafe -dPXX_TLS_USER_4K test/test_the_threadvar_area_is_a_command_line_knob.pas $(TESTTMP)/test_tlsknob26
+	tools/expect_same.sh test_tlsknob26 "$$($(TESTTMP)/test_tlsknob26)" "$$(printf 'first=11\nlast=31\nblock=5248')"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how
