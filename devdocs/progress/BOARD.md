@@ -80,7 +80,7 @@ _none_
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (44)
+## backlog (53)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -99,8 +99,17 @@ _none_
 | regression-test-c-abi-mixed-link-compiler-srchash-2 | T | 70 | regression | regression: test-c-abi-mixed-link#src:tools/compiler_srchash.sh at 95fc8aff2016 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ -z "$…` (auto-filed by twatch) | — |
 | regression-test-core-c-asm-in-inline-body-3 | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 4fe0e6505042 in step 7/14, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-c-cross-time-and-exit-through-the-pal | T | 70 | regression | regression: test-core#src:test/c_cross_time_and_exit_through_the_pal.c at a8179a73ea84 in step 5/5, `overall=0; ran=0; want=0; \ for t in i386 aarch64 arm32 riscv32; do \ want=$((want+1)); \ case $t in i386) q=qemu-i386;…` (auto-filed by twatch) | — |
+| regression-test-core-test-cast-deref-varparam | T | 70 | regression | regression: test-core#src:test/test_cast_deref_varparam.pas at 4fbed6c4157e in step 2/14, `tools/expect_same.sh test_cast_deref_varparam26 "$(/tmp/test_cast_deref_varparam26)" "$(printf 'abc 3')"` (auto-filed by twatch) | — |
+| regression-test-core-test-dynarray-to-pointer-seam-leaks-2 | T | 70 | regression | regression: test-core#src:test/test_dynarray_to_pointer_seam_leaks.pas at 4fbed6c4157e in step 3/10, `tools/assert_no_leak.sh dynarray_to_pointer_seam 50 /tmp/test_dtp26` (auto-filed by twatch) | — |
+| regression-test-core-test-indexing-a-string-cast-of-a-pointer-slot | T | 70 | regression | regression: test-core#src:test/test_indexing_a_string_cast_of_a_pointer_slot.pas at 4fbed6c4157e in step 23/23, `/tmp/test_stridxptrslot26 \| diff -u test/test_indexing_a_string_cast_of_a_pointer_slot.expected - \ \|\| { echo 'test_ind…` (auto-filed by twatch) | — |
+| regression-test-core-test-interface-containers-2 | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@1 at 4fbed6c4157e in step 2/18, `tools/expect_same.sh test_interface_containers26 "$(/tmp/test_interface_containers26)" "$(printf 'strarr: ok\nstatic: 3…` (auto-filed by twatch) | — |
+| regression-test-core-test-managed-record-gate-leaks | T | 70 | regression | regression: test-core#src:test/test_managed_record_gate_leaks.pas at 4fbed6c4157e in step 3/3, `tools/assert_no_leak.sh managed_record_gate 50 /tmp/test_mrg26` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy at 18f97d8f5f1f in step 1/2, `./compiler/pascal26 test/test_nilpy_star_methods_and_targets.npy /tmp/test_nilpy_starm26` (auto-filed by twatch) | — |
 | regression-test-core-test-object-value-type | P | 70 | regression | regression: test-core#src:test/test_object_value_type.pas at cc03b4a51933 in step 8/9, `! ./compiler/pascal26 test/test_object_value_constructor_error.pas /tmp/test_object_value_constructor_error26 > /tmp/te…` (auto-filed by twatch) | — |
+| regression-test-core-test-promoint-array-cleanup-2 | T | 70 | regression | regression: test-core#src:test/test_promoint_array_cleanup.pas at 4fbed6c4157e in step 21/41, `tools/assert_no_leak.sh managed_member_array 50 /tmp/test_mma26` (auto-filed by twatch) | — |
+| regression-test-core-test-record-promo-member-leaks | T | 70 | regression | regression: test-core#src:test/test_record_promo_member_leaks.pas at 4fbed6c4157e in step 3/21, `tools/assert_no_leak.sh record_promo_member 50 /tmp/test_rpm26` (auto-filed by twatch) | — |
+| regression-test-core-test-record-variant-member-leaks | T | 70 | regression | regression: test-core#src:test/test_record_variant_member_leaks.pas at 4fbed6c4157e in step 3/3, `tools/assert_no_leak.sh record_variant_member 50 /tmp/test_rvm26` (auto-filed by twatch) | — |
+| regression-test-core-test-synth-soname-survives-redeclaration | T | 70 | regression | regression: test-core#src:test/test_synth_soname_survives_redeclaration.pas at 4fbed6c4157e in step 3/134, `if readelf -d /tmp/synthclob26 2>/dev/null \| grep -q 'libc\.so\.6'; then \ echo "ok: synthclob26 imports memcmp from li…` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-annotated-class-attribute | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_annotated_class_attribute.npy at 67f0878f2e59 in step 2/2, `/tmp/test_nilpy_annotated_class_attribute26 \| diff -u test/test_nilpy_annotated_class_attribute.expected -` (auto-filed by twatch) | — |
@@ -1265,8 +1274,17 @@ _none_
 - [p 70] [T] regression-test-c-abi-mixed-link-compiler-srchash-2
 - [p 70] [T] regression-test-core-c-asm-in-inline-body-3
 - [p 70] [T] regression-test-core-c-cross-time-and-exit-through-the-pal
+- [p 70] [T] regression-test-core-test-cast-deref-varparam
+- [p 70] [T] regression-test-core-test-dynarray-to-pointer-seam-leaks-2
+- [p 70] [T] regression-test-core-test-indexing-a-string-cast-of-a-pointer-slot
+- [p 70] [T] regression-test-core-test-interface-containers-2
+- [p 70] [T] regression-test-core-test-managed-record-gate-leaks
 - [p 70] [N] regression-test-core-test-nilpy-star-methods-and-targets-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-core-test-object-value-type [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [T] regression-test-core-test-promoint-array-cleanup-2
+- [p 70] [T] regression-test-core-test-record-promo-member-leaks
+- [p 70] [T] regression-test-core-test-record-variant-member-leaks
+- [p 70] [T] regression-test-core-test-synth-soname-survives-redeclaration
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-annotated-class-attribute [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
