@@ -311,7 +311,18 @@ var
   nameOff: array[0..MAX_EXTERNAL-1] of Integer;
   neededLibStr : array[0..MAX_EXTERNAL-1] of Integer; { distinct Strs[] indices }
   neededLibOff : array[0..MAX_EXTERNAL-1] of Integer; { their dynstr offsets }
+  roMark: Integer;
 begin
+  { FIRST, before any table byte is appended: resolving a synthesised soname
+    INTERNS it, and InternStr appends a literal block to Data[]. Called after
+    DynamicStrOff it put that block INSIDE .dynstr -- dead bytes the loader
+    never read, until the read-only split moved every literal block out of the
+    RW image and shortened the table under its own offsets: DT_NEEDED read
+    `>` instead of `libc.so.6` (test_synth_soname_survives_redeclaration).
+    roMark below makes the next such append loud instead of silent.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  ResolveSynthImportLibraries;
+  roMark := RoRangeCount;
   DynamicInterpOff := DataLen;
   if TargetArch = TARGET_AARCH64 then
     DataPutZ('/lib/ld-linux-aarch64.so.1')
@@ -324,7 +335,6 @@ begin
   { Emit each distinct library soname once (one DT_NEEDED per library, not
     per imported symbol). InternStr dedups library names, so identical
     libraries share a Strs[] index — compare by index. }
-  ResolveSynthImportLibraries;
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
@@ -366,6 +376,8 @@ begin
     DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
+  if RoRangeCount <> roMark then
+    ErrorNoPos('internal: a string literal was interned while the dynamic tables were being built');
   while (DataLen mod 8) <> 0 do DataPutB(0);
 
   DynamicSymOff := DataLen;
@@ -448,7 +460,10 @@ var
   nameOff: array[0..MAX_EXTERNAL-1] of Integer;
   neededLibStr : array[0..MAX_EXTERNAL-1] of Integer;
   neededLibOff : array[0..MAX_EXTERNAL-1] of Integer;
+  roMark: Integer;
 begin
+  ResolveSynthImportLibraries;   { first -- it interns; see PrepareDynamicData }
+  roMark := RoRangeCount;
   DynamicInterpOff := DataLen;
   if TargetArch = TARGET_ARM32 then
     DataPutZ('/lib/ld-linux.so.3')          { arm EABI (armel) loader }
@@ -458,7 +473,6 @@ begin
 
   DynamicStrOff := DataLen;
   DataPutB(0);
-  ResolveSynthImportLibraries;
   DynamicNeededCount := 0;
   for i := 0 to ExternalCount-1 do
   begin
@@ -483,6 +497,8 @@ begin
     DataPutZ(ExternalLinkName(i));
   end;
   DynamicStrSize := DataLen - DynamicStrOff;
+  if RoRangeCount <> roMark then
+    ErrorNoPos('internal: a string literal was interned while the dynamic tables were being built');
   while (DataLen mod 4) <> 0 do DataPutB(0);
 
   { dynsym: Elf32_Sym = name(4) value(4) size(4) info(1) other(1) shndx(2). }

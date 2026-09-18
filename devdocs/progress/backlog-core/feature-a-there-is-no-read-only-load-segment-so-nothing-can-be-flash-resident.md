@@ -171,3 +171,18 @@ was classified with `--no-ro-data` as the A/B before fixing:
 - **Exposed test bug: `test_cast_deref_varparam`.** The test read a stream
   into `PChar(r)^` straight after `r := 'zzz'`. fpc 3.2.2 faults on the same
   program. Added `UniqueString(r)`; the test's subject is unchanged.
+
+## 2026-09-18 (frankH) — test-core rerun: a second segment bug of mine
+
+The detached rerun stopped at `synthclob26 has no libc.so.6 DT_NEEDED`.
+`--no-ro-data` A/B: with the split, NEEDED read `>`; without it, `libc.so.6`.
+So this is a segment bug. `PrepareDynamicData` called
+`ResolveSynthImportLibraries` after `DynamicStrOff := DataLen`, and resolving a
+synthesised soname INTERNS it. That put a 48-byte literal block inside
+`.dynstr`. Before the split those bytes were dead and never read. The split
+moved them out of the RW image, which shortened the table under its own
+offsets. Fix: resolve first, in both builders (the 32-bit copy was latent). A
+`roMark` guard now errors if any literal is interned while the tables are
+built. The model's blind spot is the same one as the RTTI words: a table whose
+integrity is POSITIONAL (offsets from its own start) breaks if a foreign range
+is emitted inside it.
