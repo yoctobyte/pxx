@@ -237,12 +237,14 @@ Also fixed and pushed: two regressions of my own. RTTI self-relative words
 
 **test-core after all of the above:** runs 1 and 2 stopped at `synthclob26`
 (fixed) and at `test_object_value_constructor_error`. The second is a STALE
-row: efe06a903 deliberately allowed constructors in `object`. frankb-56 holds
-its fix (9729073df), not on origin as of 13:40. Run 3 used a scratch Makefile
+row: efe06a903 deliberately allowed constructors in `object`. Its fix is on origin as
+`cdf0c0539` (frankb-56). I first quoted it by its pre-rebase ghost sha, which
+was wrong. Run 3 used a scratch Makefile
 copy with only that row dropped, and was past both earlier stops with no
 failures at the time of writing. Its verdict is appended below if it finished
-while this seat was still live. If no verdict follows, test-core past that row
-is UNMEASURED on this tree.
+while this seat was still live. That run measures the same row set origin has
+had since `cdf0c0539`. If no verdict follows, it did not finish while this seat
+was live.
 
 **Next step (cold-seat resume), in order of value:**
 1. **Hosted aarch64 / i386 / arm32 executables.** The layout is generic:
