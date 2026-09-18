@@ -4690,16 +4690,14 @@ begin
     including a program with no console output at all -- measured, that was
     the first cut of this warning and it was useless.
 
-    THE CONDITION MIRRORS THE TWO BACKEND ARMS AND THEY DO NOT AGREE:
-    ir_codegen_xtensa.inc asks `TargetPlatform = PLATFORM_ESP` (so it drops
-    writeln on the IDF profile too), ir_codegen_riscv32.inc asks
-    `EspBareBoot` (so riscv32 EMITS it under IDF, into the syscall write
-    path). Spelled out here rather than simplified, because simplifying it
-    would hide the divergence -- which has its own ticket.
-    bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok }
+    ONE CONDITION, MATCHING BOTH BACKEND ARMS. It was spelled out per-arch
+    when this landed, because the two arms asked DIFFERENT questions and
+    simplifying would have hidden that. They now both ask TargetPlatform,
+    per the ruling at ir_codegen.inc:1374 ("TargetPlatform is the axis;
+    EspBareBoot is one input to it"), so one predicate is honest here.
+    bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile }
   if (CurrentUnitIdx = -1) and (not EspWriteNoopWarned) and
-     ((((TargetArch = TARGET_XTENSA) and (TargetPlatform = PLATFORM_ESP)) or
-       ((TargetArch = TARGET_RISCV32) and EspBareBoot))) then
+     (TargetPlatform = PLATFORM_ESP) then
   begin
     EspWriteNoopWarned := True;
     Warn('write/writeln emits nothing on this ESP profile: there is no '

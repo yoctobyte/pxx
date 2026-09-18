@@ -3566,10 +3566,31 @@ begin
 
     IR_WRITE, IR_WRITELN:
       begin
-        if EspBareBoot then
+        if TargetPlatform = PLATFORM_ESP then
         begin
-          { Bare-metal: write/writeln does nothing (UART output is explicit
-            MMIO in user code, see test_esp_bare.pas). }
+          { ESP: write/writeln emits nothing. UART output is explicit MMIO in
+            user code on bare (test_esp_bare.pas), and an IDF component
+            declares its own esp_rom_printf (docs/targets/esp32.md:86).
+
+            ASKED AS `EspBareBoot` UNTIL 2026-09-18, AND THAT WAS THE WRONG
+            QUESTION -- the same wrong question ir_codegen.inc:1374 already
+            ruled on for the SIGNAL runtime: "TargetPlatform is the axis;
+            EspBareBoot is one input to it". For riscv32 the two spellings
+            coincide (bare -> ESP, else POSIX), which is exactly why nobody
+            noticed; for xtensa they do not, and the xtensa arm has asked
+            TargetPlatform all along. So the two backends disagreed on the IDF
+            profile and NEITHER arm contains the word "writeln", which is why
+            no grep for the feature ever brought the two files together --
+            this repo's "the sibling is usually a SPELLING, not a shape".
+
+            What it cost: a riscv32 --platform=esp build EMITTED the hosted
+            arm, whose helpers reach the kernel by `ecall`. Measured
+            2026-09-18: the IDF object carried 32 ecalls against the bare
+            object's 2, and `write` is not an external (nm -u lists only
+            calloc and free), so on a chip that traps to IDF's machine-mode
+            handler instead of printing. A compile-time warning beats a
+            machine-mode trap that is very hard to read on hardware.
+            bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile }
         end
         else if IRKind[node] = IR_WRITELN then
         begin
