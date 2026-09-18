@@ -34537,6 +34537,46 @@ test-quick: $(COMPILER)
 	else \
 	  echo "=== test_dce_i386_stub_calls: qemu-i386 absent, i386 DCE NOT verified ==="; \
 	fi
+	# AND XTENSA, ON BOTH ABIs, because the ABI is what decides the CALL FORM at a
+	# stub call site: EmitXtensaCallToCode emits CALL0 (its stubs end in RET) and
+	# EmitXtensaCall8ToCode emits CALL8 (theirs end in RETW), and DCE re-encodes
+	# each one IN PLACE from the form recorded beside it. A single-ABI row exercises
+	# one of the two arms and cannot tell you the other is wrong.
+	#
+	# --xtensa-soft-mulhigh IS REQUIRED, and it is not a workaround for anything
+	# here: the qemu-xtensa CPU model has no MULUH, so an integer WriteLn is an
+	# illegal instruction with or without --dce. Measured 2026-09-18 while chasing
+	# what looked like a pre-existing xtensa bug and was this flag; the pinned
+	# compiler reproduced it identically, which is what made it look pre-existing
+	# rather than self-inflicted.
+	#
+	# The xtensa arm also carries the ALIGNMENT invariant the other targets cannot
+	# test: CALL0/CALL8 encode a WORD offset and require a 4-aligned target, and
+	# xtensa is the only ISA here with 2- and 3-byte instructions, so a dropped
+	# body's extent is an arbitrary number. DceRun rounds every removed span down
+	# to a multiple of 4 for exactly this row; without that, `hello` does not even
+	# compile ("target 2462 is not 4-aligned").
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')"; \
+	  for abi in call0 windowed; do \
+	    if [ $$abi = windowed ]; then af=--xtensa-abi=windowed; else af=; fi; \
+	    ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $$af \
+	        test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcext_off >/dev/null \
+	    && ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $$af --dce \
+	        test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcext_on >/dev/null \
+	    && tools/expect_same.sh dcext_off_$$abi "$$(timeout 60 qemu-xtensa $(TESTTMP)/dcext_off; echo "exit=$$?")" "$$want" \
+	    && tools/expect_same.sh dcext_on_$$abi "$$(timeout 60 qemu-xtensa $(TESTTMP)/dcext_on; echo "exit=$$?")" "$$want" \
+	    && szoff=$$(stat -c%s $(TESTTMP)/dcext_off) && szon=$$(stat -c%s $(TESTTMP)/dcext_on) \
+	    && if [ $$szon -ge $$szoff ]; then \
+	         echo "test_dce_xtensa_stub_calls[$$abi]: --dce did NOT shrink the image ($$szon >= $$szoff)."; \
+	         exit 1; \
+	       fi \
+	    && echo "=== test_dce_xtensa_stub_calls[$$abi]: OK ($$szoff -> $$szon bytes) ===" \
+	    || exit 1; \
+	  done; \
+	else \
+	  echo "=== test_dce_xtensa_stub_calls: qemu-xtensa absent, xtensa DCE NOT verified ==="; \
+	fi
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --

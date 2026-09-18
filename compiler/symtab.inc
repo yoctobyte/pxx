@@ -17567,11 +17567,19 @@ procedure EmitXtensaCall8ToCode(target: Integer);
 
   The long form needs no arm at all -- EmitXtensaLongCallSlot already ends in
   CALLX8 under windowed. }
+var litPos, anchorPc: Integer;
 begin
+  { Recorded, with its own form -- see EmitXtensaCallToCode above for why the
+    form travels with the slot instead of every site being widened. }
   if XtensaCallReaches(CodeLen, target) then
-    xtensa_call8(target - CodeLen)
-  else
-    EmitXtensaLongCall(target);
+  begin
+    RecordCodeRefFull(CodeLen, target, 0, CODEREF_ANCHOR_CALL8);
+    xtensa_call8(target - CodeLen);
+    Exit;
+  end;
+  EmitXtensaLongCallSlot(litPos, anchorPc);
+  RecordCodeRefFull(litPos, target, 0, anchorPc);
+  Patch32(litPos, target - anchorPc);
 end;
 
 { --- riscv32: reaching an already-emitted RUNTIME HELPER -------------------
@@ -17658,11 +17666,32 @@ end;
   no CallFix entry is involved at all -- the target is final at emit time -- so
   the choice here is unconditional and needs no note about fixups. }
 procedure EmitXtensaCallToCode(target: Integer);
+var litPos, anchorPc: Integer;
 begin
+  { RECORDED, AND THE SHAPE IS UNCHANGED. Same 2026-09-18 finding as
+    EmitRiscv32CallToCode: "the target is final at emit time" is true of the
+    TARGET and false of the SITE, because DCE deletes dead bodies and every call
+    site after a hole slides down.
+
+    THE FORM TRAVELS IN CodeRefAnchor rather than the slot being widened to one
+    uniform shape, and that is not a size optimisation -- widening would be
+    WRONG here. EmitXtensaLongCallSlot ends in CALLX8 under the windowed ABI,
+    and this helper exists precisely because its stubs end in RET and must not
+    have a window rotated under them; that is the whole distinction
+    EmitXtensaCall8ToCode is named for. So the short call0 stays a short call0
+    and is re-encoded in place, which costs nothing and changes no semantics.
+
+    Re-encoding in place is sound because DCE only REMOVES bytes: |target -
+    site| never grows, so a CALL0 that reached before still reaches after. }
   if XtensaCallReaches(CodeLen, target) then
-    xtensa_call0(target - CodeLen)
-  else
-    EmitXtensaLongCall(target);
+  begin
+    RecordCodeRefFull(CodeLen, target, 0, CODEREF_ANCHOR_CALL0);
+    xtensa_call0(target - CodeLen);
+    Exit;
+  end;
+  EmitXtensaLongCallSlot(litPos, anchorPc);
+  RecordCodeRefFull(litPos, target, 0, anchorPc);
+  Patch32(litPos, target - anchorPc);
 end;
 
 { --- a JUMP inside one body that J cannot reach --------------------------
@@ -17896,23 +17925,29 @@ begin
     if (Procs[procIdx].BodyAddr >= 0) and
        not XtensaCallReaches(CodeLen, Procs[procIdx].BodyAddr) then
     begin
-      { Deliberately NOT RecordInternalCall: ApplyCallFixups would Patch24 a
-        3-byte CALLn over the head of this sequence and re-run the very range
-        check that sent us here. CallFix has exactly one other consumer, DceRun,
-        and dce.inc still refuses xtensa -- so no xtensa site is reachable from
-        it. If DCE ever grows an xtensa arm, these sites need their own fixup
-        list before it does.
+      { RECORDED WITH AN ANCHOR, which is the fixup list this block asked for.
 
-        THAT WARNING WAS RIGHT, AND IT CAME TRUE ON THE SIBLING TARGET FIRST.
-        This block used to say DceRun "exits on `TargetArch <> TARGET_X86_64`",
-        which stopped being the gate's spelling on 2026-09-18 when riscv32 was
-        added to it -- so the reason is restated as what it actually depends on,
-        which is that xtensa is refused, not which comparison does the refusing.
-        The prediction itself needed no change: riscv32's own
-        EmitRiscv32CallToCode was unrecorded for exactly this reason and its ten
-        sites jumped into unmapped memory the moment the pass was let near
-        them. }
-      EmitXtensaLongCall(Procs[procIdx].BodyAddr);
+        It used to say "deliberately NOT RecordInternalCall", and the reason was
+        sound for the un-anchored spelling: ApplyCallFixups would Patch24 a
+        3-byte CALLn over the head of this sequence and re-run the very range
+        check that sent us here. But the anchored spelling was already in the
+        tree for the FORWARD case, and ApplyCallFixups branches on it first --
+        `if CallFixAnchor[i] <> -1` puts the whole displacement in the literal
+        and never reaches the Patch24. So the objection was to one spelling, not
+        to recording.
+
+        Its own closing sentence is why this changed on 2026-09-18: "If DCE ever
+        grows an xtensa arm, these sites need their own fixup list before it
+        does." It grew one. Unrecorded, the callee is invisible to reachability
+        and gets dropped, and the literal is measured from an anchor that moved
+        -- the two ways this class kills a program, both silent.
+
+        The immediate Patch32 is kept so the slot is correct even for a driver
+        that never reaches ApplyCallFixups; that call rewrites the same value
+        from the (possibly remapped) proc row. }
+      EmitXtensaLongCallSlot(litPos, anchorPc);
+      RecordInternalCallAt(procIdx, litPos, anchorPc);
+      Patch32(litPos, Procs[procIdx].BodyAddr - anchorPc);
       Exit;
     end;
     if (Procs[procIdx].BodyAddr < 0) and

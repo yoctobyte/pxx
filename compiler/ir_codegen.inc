@@ -3295,7 +3295,7 @@ begin
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 end;
 
-procedure PatchCodeRefSlot(pos, target, linkReg: Integer);
+procedure PatchCodeRefSlot(pos, target, linkReg, anchor: Integer);
 { Re-aim ONE recorded code->code reference at `target`, in the slot's own
   encoding. Extracted from PatchProgramEntryJump because DCE needs the identical
   arm set and had its own copy of only the x86-64 one -- `Patch32(pos, target -
@@ -3316,13 +3316,14 @@ procedure PatchCodeRefSlot(pos, target, linkReg: Integer);
   So the arms below are not new work -- every one of them already existed a few
   lines down. What was missing was DCE reaching them.
 
-  XTENSA IS NOT DISCHARGED HERE and the arm is carried only so the two callers
-  stay one routine. XtEntryPcAnchor is a code offset captured before the pass
-  runs, and DCE MOVES code, so under DCE that delta is measured from a stale
-  anchor. Nothing exercises it today: dce.inc still refuses xtensa. Whoever
-  lifts that gate must re-derive the anchor through DceNewOff first -- and the
-  measurement that retires this block is an xtensa binary built with --dce that
-  runs, not a reading of this comment. }
+  XTENSA TAKES ITS ANCHOR FROM THE SLOT, NOT FROM THE GLOBAL, and that is what
+  retired the hazard block this header carried on 2026-09-18. It used to read
+  XtEntryPcAnchor directly, which is captured once before the pass runs while
+  DCE moves code -- a delta measured from a stale anchor. Recording the anchor
+  per slot fixes it by construction: DceRun compacts CodeRefAnchor with
+  DceNewOff alongside the position it belongs to, so there is no global left to
+  go stale. Measured: an xtensa --platform=posix image built with --dce runs
+  under qemu-xtensa, which is the evidence that block asked for. }
 begin
   if TargetArch = TARGET_ARM32 then
     Patch32(pos, $EA000000 or ((((target - pos) div 4) - 2) and $00ffffff))
@@ -3330,10 +3331,28 @@ begin
     Patch32(pos, $14000000 or (((target - pos) div 4) and $03ffffff))
   else if TargetArch = TARGET_XTENSA then
   begin
-    if XtEntryPcAnchor >= 0 then
-      Patch32(pos, target - XtEntryPcAnchor)
+    if anchor >= 0 then
+      { A long slot: the whole displacement lives in a literal, measured from
+        the anchor PC that CALL0 left in a0. Re-aiming is the literal alone --
+        the instructions around it do not encode the target at all, which is
+        why the call0/call8 distinction does not reach this far. }
+      Patch32(pos, target - anchor)
+    else if anchor = CODEREF_ANCHOR_J then
+      Patch24(pos, EncodeXtensaJ(target - pos))
+    else if anchor = CODEREF_ANCHOR_CALL0 then
+      Patch24(pos, EncodeXtensaCall0(pos, target))
+    else if anchor = CODEREF_ANCHOR_CALL8 then
+      Patch24(pos, EncodeXtensaCall8(pos, target))
     else
-      Patch24(pos, EncodeXtensaJ(target - pos));
+      { NOT a default, and not reachable by any slot this tree emits. A slot
+        recorded without a form would otherwise be re-encoded as a `j`, and for
+        a CALL site that means the callee returns to whatever a0 last held --
+        wrong, silent, and nowhere near here. Whoever adds an xtensa code->code
+        slot gets this message instead of that. }
+      Error('compiler error: an xtensa code-ref slot at code offset '
+            + AIntToStr(pos) + ' was recorded with no form (CodeRefAnchor = -1). '
+            + 'Record it with its anchor PC for the long form, or '
+            + 'CODEREF_ANCHOR_J for a short j.');
   end
   else if TargetArch = TARGET_RISCV32 then
     PatchRv32LinkSlot(pos, target, linkReg)
@@ -3349,18 +3368,30 @@ procedure PatchProgramEntryJump(jmpPatch: Integer);
   offset over an ARM branch word and produced a fresh SIGILL four instructions
   later. The two halves belong together.
   bug-a-nilpy-on-cross-targets-four-remaining-walls }
+var xtAnchor: Integer;
 begin
   { The one code->code reference that is not a call: recorded so DCE can move
     the main body up over the dead unit bodies this jump exists to skip.
     Recorded for every target -- only x86-64 consumes it today, and a table that
     is only filled in on the target that reads it is the one that breaks when a
     second target starts reading it. feature-emission-size-dce }
-  RecordCodeRefAt(jmpPatch, CodeLen);
   { The arms live in PatchCodeRefSlot above, because DCE re-aims this very slot
     and needs the same encodings. Xtensa's long form is a 4-byte LITERAL holding
     a delta from the PC anchor rather than a `j` to re-encode; that is in there
     too. }
-  PatchCodeRefSlot(jmpPatch, CodeLen, 0);   { a jump: no link register }
+  { The anchor travels WITH the slot from here on, so nothing downstream reads
+    XtEntryPcAnchor and nothing can read it stale. On xtensa it is either the
+    CALL0 anchor PC (the long form) or CODEREF_ANCHOR_J (EspBareBoot's short
+    `j`); every other target ignores it. }
+  if TargetArch = TARGET_XTENSA then
+  begin
+    if XtEntryPcAnchor >= 0 then xtAnchor := XtEntryPcAnchor
+    else xtAnchor := CODEREF_ANCHOR_J;
+  end
+  else
+    xtAnchor := -1;
+  RecordCodeRefFull(jmpPatch, CodeLen, 0, xtAnchor);
+  PatchCodeRefSlot(jmpPatch, CodeLen, 0, xtAnchor);   { a jump: no link register }
 end;
 
 procedure EmitIoLockStubsForTarget;

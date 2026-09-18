@@ -209,6 +209,16 @@ const
     feature-emission-size-dce, feature-dynamic-compiler-tables }
   CALLFIX_BASE = 8192;
   CODEREF_BASE = 8192;
+  { "this xtensa slot is a short `j`, not a literal" -- see CodeRefAnchor. A
+    distinct sentinel rather than -1 so that a slot recorded with NO form is
+    still distinguishable from one recorded with the short form, and can be
+    refused instead of guessed at. }
+  CODEREF_ANCHOR_J     = -2;
+  CODEREF_ANCHOR_CALL0 = -3;   { short CALL0, re-encoded in place }
+  CODEREF_ANCHOR_CALL8 = -4;   { short CALL8, likewise -- the form is per SITE,
+                                 chosen by the callee's own return instruction
+                                 (RET vs RETW) and not by the ABI, which is why
+                                 it cannot be recomputed at patch time }
   { Distinct non-proc code targets (runtime stubs + the entry jump) one image
     can hold. Around 50 today; the pass refuses to run rather than truncate. }
   MAX_DCE_STUBS = 4096;
@@ -4296,6 +4306,29 @@ var
   CodeRefPos    : array of Integer;
   CodeRefTarget : array of Integer;
   CodeRefLink   : array of Integer;
+  { CodeRefAnchor -- xtensa only, and it is what makes that slot re-aimable.
+    Xtensa has no PC-relative branch wide enough for an arbitrary code offset,
+    so the long form leaves the whole displacement in a LITERAL, measured from
+    an anchor PC that CALL0 deposits in a0. Re-aiming such a slot means
+    rewriting the literal as `target - anchor`, and BOTH move when DCE compacts,
+    so the anchor is a code offset that must be remapped exactly like the site.
+
+    THREE STATES, and the third one is a guard rather than a value:
+      >= 0                a long slot; patch the literal at CodeRefPos
+      CODEREF_ANCHOR_J    a short xtensa `j`, re-encoded in place
+      -1                  no anchor recorded
+
+    -1 reaching the xtensa patcher is an ERROR, not a default. Every xtensa
+    code->code slot is one of the two forms above; a third would otherwise be
+    silently re-encoded as a `j`, which for a CALL site means the callee never
+    returns to its caller -- a wrong answer with no crash at the patch site. A
+    slot nobody taught the patcher about should say so.
+
+    PARALLEL BY INDEX, LIKE EVERY OTHER COLUMN HERE, AND THAT IS A HAZARD WITH A
+    DATED PRECEDENT: dce.inc's CallFix compaction dropped CallFixAnchor for
+    exactly this reason until 2026-09-18, as the GlobFix one did before it.
+    Anything added here must be compacted in DceRun's CodeRef loop too. }
+  CodeRefAnchor : array of Integer;
   CodeRefCount  : Integer;
   CodeRefCapacity : Integer;
 

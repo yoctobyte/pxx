@@ -65,7 +65,7 @@ end;
   a reference that silently rots the moment a body ahead of it is dropped, which
   is why the recording lives at the emission points rather than in a table
   someone has to remember to extend. feature-emission-size-dce }
-procedure RecordCodeRefAtLink(pos, target, linkReg: Integer);
+procedure RecordCodeRefFull(pos, target, linkReg, anchor: Integer);
 { `linkReg` is the register the slot's branch writes its return address into --
   riscv32 encodes it in rd and a re-patch that guesses gets a jump where a call
   belongs. 0 is x0/reg_zero, i.e. "this slot is a jump". Spelled as the literal
@@ -78,17 +78,24 @@ begin
     if CodeRefCapacity = 0 then n := CODEREF_BASE else n := CodeRefCapacity * 2;
     SetLength(CodeRefPos, n); SetLength(CodeRefTarget, n);
     SetLength(CodeRefLink, n);
+    SetLength(CodeRefAnchor, n);
     CodeRefCapacity := n;
   end;
   CodeRefPos[CodeRefCount] := pos;
   CodeRefTarget[CodeRefCount] := target;
   CodeRefLink[CodeRefCount] := linkReg;
+  CodeRefAnchor[CodeRefCount] := anchor;
   Inc(CodeRefCount);
+end;
+
+procedure RecordCodeRefAtLink(pos, target, linkReg: Integer);
+begin
+  RecordCodeRefFull(pos, target, linkReg, -1);
 end;
 
 procedure RecordCodeRefAt(pos, target: Integer);
 begin
-  RecordCodeRefAtLink(pos, target, 0);
+  RecordCodeRefFull(pos, target, 0, -1);
 end;
 
 procedure RecordCodeRef(target: Integer);

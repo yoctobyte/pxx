@@ -210,6 +210,18 @@ begin
   Result := True;
 end;
 
+function DceCodeAlign: Integer;
+{ The alignment a code offset must keep for this target's branch encodings to
+  stay valid when DCE slides everything after a hole downwards. 1 means "no
+  constraint", which is the x86 family; 4 is every fixed-width ISA here, and on
+  xtensa it is load-bearing rather than free -- see the rounding in DceRun. }
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    Result := 1
+  else
+    Result := 4;
+end;
+
 procedure DceReportLine(const s: AnsiString);
 begin
   if DceReport then writeln(StdErr, 'dce: ', s);
@@ -239,8 +251,8 @@ begin
     existing parallel array was itself being dropped by this pass until today.
     See bug-a-dce-refuses-every-target-except-x86-64 for the mapped-out work. }
   if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_RISCV32) and
-     (TargetArch <> TARGET_I386) then
-    why := 'target is not x86-64, riscv32 or i386'
+     (TargetArch <> TARGET_I386) and (TargetArch <> TARGET_XTENSA) then
+    why := 'target is not x86-64, i386, riscv32 or xtensa'
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
@@ -418,10 +430,33 @@ begin
           DceReportLine('kept (holds a stub target): ' + Procs[p].Name)
         else
         begin
-          DceRemStart[DceRemCount] := a;
-          DceRemEnd[DceRemCount] := b;
-          Inc(DceRemCount);
-          gotB := gotB + (b - a);
+          { KEEP THE REMOVED SPAN A MULTIPLE OF THE TARGET'S CODE ALIGNMENT.
+            Everything after a hole slides down by exactly its size, so a hole
+            whose size is not a multiple of 4 re-aligns every later body -- and
+            xtensa's CALL0/CALL8 encode a WORD offset and require a 4-aligned
+            TARGET. Measured 2026-09-18, the first xtensa --dce build: `target
+            2462 is not 4-aligned`, from the encoder's own assert, on `hello`.
+
+            This has never bitten the other targets and could not have: x86-64
+            and i386 have no alignment requirement at all, and on riscv32,
+            arm32 and aarch64 every instruction is 4 bytes, so a body's extent
+            is already a multiple of 4 and the rounding below is a no-op. Xtensa
+            is the one ISA here with 2- and 3-byte instructions, so it is the
+            one where a body's SIZE is an arbitrary number.
+
+            The cost is up to 3 dead bytes left behind per dropped body, which
+            is the honest price of not moving what follows. Rounding the END
+            down rather than the START up because `a` is the body's first byte
+            and is already correctly aligned; only the tail is negotiable. }
+          if DceCodeAlign > 1 then
+            b := a + ((b - a) div DceCodeAlign) * DceCodeAlign;
+          if b > a then
+          begin
+            DceRemStart[DceRemCount] := a;
+            DceRemEnd[DceRemCount] := b;
+            Inc(DceRemCount);
+            gotB := gotB + (b - a);
+          end;
         end;
       end;
     end;
@@ -602,6 +637,12 @@ begin
       CodeRefPos[j] := DceNewOff(CodeRefPos[i]);
       CodeRefTarget[j] := DceNewOff(CodeRefTarget[i]);
       CodeRefLink[j] := CodeRefLink[i];
+      { A CODE OFFSET, so it moves with the code exactly like the site does.
+        The two negative states are forms, not offsets, and stay as they are. }
+      if CodeRefAnchor[i] < 0 then
+        CodeRefAnchor[j] := CodeRefAnchor[i]
+      else
+        CodeRefAnchor[j] := DceNewOff(CodeRefAnchor[i]);
       Inc(j);
     end;
     Inc(i);
@@ -630,7 +671,8 @@ begin
       PatchCodeRefSlot (ir_codegen.inc) is the arm set PatchProgramEntryJump has
       always had for the same slot; see its header for the riscv32 measurement
       that found this, and for why xtensa is still refused above. }
-    PatchCodeRefSlot(CodeRefPos[i], CodeRefTarget[i], CodeRefLink[i]);
+    PatchCodeRefSlot(CodeRefPos[i], CodeRefTarget[i], CodeRefLink[i],
+                     CodeRefAnchor[i]);
     Inc(i);
   end;
 end;
