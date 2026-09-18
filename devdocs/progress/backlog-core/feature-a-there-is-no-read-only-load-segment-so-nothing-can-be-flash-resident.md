@@ -218,3 +218,50 @@ Sizes, xtensa, `.data` with the split against without it:
 `esp_obj_rodata.pas` 2288 vs 3424 (+1264 .rodata), `test_emit_obj.pas` 2624 vs
 6304 (+3832 .rodata). The bare profile is unchanged; it uses the executable
 writer and one RWX region.
+
+## 2026-09-18 (frankH) — PARKED for the wind-down: state and next step
+
+**All three live corruptions the segment exposed are FIXED and pushed. None is
+open.**
+- SetLength's unguarded literal-refcount decrement: `b05b7bb0a`. Pin v411
+  carries the bug, so it is inert for pin users until the next pin.
+- `t(r)[i] := c` with no copy-on-write: `120e3a3cd`.
+- The test that wrote a literal (`test_cast_deref_varparam`): `120e3a3cd`.
+
+Also fixed and pushed: two regressions of my own. RTTI self-relative words
+(`120e3a3cd`) and a soname interned inside `.dynstr` (`1cdb560f4`).
+
+**Landed:**
+- x86-64 executables (`b05b7bb0a`).
+- ESP-IDF objects, both ELF32 writers (`c44fa2642`).
+
+**test-core after all of the above:** runs 1 and 2 stopped at `synthclob26`
+(fixed) and at `test_object_value_constructor_error`. The second is a STALE
+row: efe06a903 deliberately allowed constructors in `object`. frankb-56 holds
+its fix (9729073df), not on origin as of 13:40. Run 3 used a scratch Makefile
+copy with only that row dropped, and was past both earlier stops with no
+failures at the time of writing. Its verdict is appended below if it finished
+while this seat was still live. If no verdict follows, test-core past that row
+is UNMEASURED on this tree.
+
+**Next step (cold-seat resume), in order of value:**
+1. **Hosted aarch64 / i386 / arm32 executables.** The layout is generic:
+   `RoLayoutPrepare(wanted, page)`, `DataRemap`, `RoPermuteData`. Each of
+   these writers needs what the two x86-64 `writeELF` copies got: call
+   `RoLayoutPrepare` after `PrepareDynamicData`; add a program header when
+   `RoSplitActive`, which moves `codeOffset`; route every data address through
+   `DataVA` / `DataFilePos`; write `DataFileLen` bytes; call `RoPermuteData`
+   after the fixups; and loop `DataRelFix` through `DataRemap`. Grep
+   `RoSplitActive` in `writeELF` for the full list. Verify with the
+   `test_ro_data_literal_store` rows under qemu: faults when split, runs with
+   `--no-ro-data`.
+2. **Then RTTI / VMT / dispatch tables / float constants**, each only after its
+   own measurement that it is never written. RTTI emission is frankb-56's
+   (see "whether a blob is emitted is theirs, where a survivor lives is
+   ours"). Hazard for any new RO range: a contiguous RW structure is CUT if a
+   literal is interned between its first and last byte. Guard with an
+   `RoRangeCount` snapshot plus `ErrorNoPos`, as `PrepareDynamicData` does.
+3. **ESP caveat to keep:** only DIRECT references from `iram;` code keep a
+   literal in `.data` (`ObjRoKeepIramLiteralsWritable`). A read through a
+   pointer is not seen. Any future read-only VMT/RTTI would need the same
+   thought for iram methods.
