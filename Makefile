@@ -25247,6 +25247,13 @@ test-core: $(COMPILER)
 	@# fault on. Verified identical to FPC 3.2.2 and on all four cross targets.
 	./$(COMPILER) test/test_const_array_in_data.pas $(TESTTMP)/test_const_array_in_data26
 	tools/expect_same.sh test_const_array_in_data26 "$$($(TESTTMP)/test_const_array_in_data26)" "$$(printf '1234605616436508552 0 18446744073709551615 7 \n-1 9223372036854775807 -9223372036854775808 0 \n3735928559 0 1 4294967295 \n0 65535 258 7 \n0 255 128 1 \n-128 127 0 -1 \nTRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE\n-2147483648 2147483647 0 -1 \nTRUE FALSE TRUE TRUE \n97 90 0 126 \n2 0 1 \n1 2 3 4 5 6 \none two three \n1/2 3/4 \n10 20 30 \n10 99 30 ')"
+	# The RECORD sibling. Row 2 is the one that can fail: values alone pass with or
+	# without baking, so it asserts WHICH consts went to .data -- and that the
+	# string-field and float-field records were REFUSED.
+	# bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data
+	./$(COMPILER) test/test_const_record_in_data.pas $(TESTTMP)/test_const_record_in_data26
+	tools/expect_same.sh test_const_record_in_data26 "$$($(TESTTMP)/test_const_record_in_data26)" "$$(printf '1 -2 3 -9000000000 5 -6\n1 -1 2\n2 5 7 0 0\n01 23\nhello 2.5\n42 99')"
+	tools/expect_same.sh test_const_record_in_data26-baked "$$(PXXDBG=a.constdata ./$(COMPILER) test/test_const_record_in_data.pas $(TESTTMP)/test_const_record_in_data26b 2>&1 | sed -n 's/.*PXXDBG a.constdata baked \(record \)*\([A-Za-z]*\).*/\2/p' | tr '\n' ' ')" "cOuter cVar cEn cPart aNeg "
 	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
 	@# verified identical to FPC 3.2.2. The status is the contract here, not the
 	@# printed line: FPC does not flush stdout after its unit finalizations, so

@@ -6864,6 +6864,156 @@ begin
   Result := True;
 end;
 
+function PISpanName(off, len: Integer): AnsiString;
+{ A pending init's field-name span, as text. The same TokChars read
+  GetASTIdentName does when the startup emitter turns the span into AN_FIELD. }
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 0 to len - 1 do AppendChar(s, TokChars[off + i]);
+  Result := s;
+end;
+
+function TryBakeConstRecordIntoData(symIdx, firstPI, bssBefore, bssAfterAlloc: Integer): Boolean;
+{ THE RECORD SIBLING OF TryBakeConstArrayIntoData: a typed const that IS a
+  record, or an array OF records, becomes initialised .data instead of BSS plus
+  one generated store per field at startup. Measured before this existed: 116
+  bytes of code per 16-byte record, ~29 per Integer field -- the same figure the
+  scalar-array ticket measured -- and on wasm32, a target with no startup path at
+  the time, a record const read back as zeros.
+  bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data
+
+  It reproduces the STORES, it does not reinterpret the source. Each pending
+  init's target path (element index, first field span, deeper PIPath spans) is
+  resolved through the same field table the AN_FIELD lowering uses, to a byte
+  offset and a width, and the value is written there in init order -- so a
+  variant part's overlapping fields end with the last writer winning, exactly as
+  the store sequence would. Untouched bytes stay zero, which is what BSS gave.
+
+  WRITABLE .data, not a read-only section: FPC's {$J+} typed constants may be
+  assigned, and test_const_array_in_data writes one on purpose. This makes a
+  record const DATA; it does not make it constant.
+
+  Fails CLOSED, all-or-nothing per symbol. Refused, leaving the startup stores:
+  any init that is not a plain ordinal (kind 0) or float (kind 3); an ordinal
+  landing in a float field or a float in a non-float one (the store would
+  CONVERT, raw bytes would not); a field that is an array, a bit-field, a
+  subrange, a dynamic array or not TypedConstBakeable; an indexed field path
+  (FIdx -- no low bound is recorded for a field array, so the index base would
+  be a guess); a builtin record; any computed offset outside the symbol's own
+  extent; and object/shared output, for TryBakeConstArrayIntoData's reason. }
+var k, pk, idx, rec, curRec, fi, stride, size, elemBase, off, width, base, b, n: Integer;
+    v: Int64; tk: TTypeKind; pos, wid: array of Integer;
+begin
+  Result := False;
+  if EmitObjMode or EmitSharedMode then Exit;
+  if (symIdx < 0) or (Syms[symIdx].Kind <> skGlobal) then Exit;
+  if PendingInitCount <= firstPI then Exit;
+  if SymIsSub[symIdx] then Exit;
+  stride := 0;
+  if Syms[symIdx].IsArray then
+  begin
+    if Syms[symIdx].ElemType <> tyRecord then Exit;
+    if (Syms[symIdx].ArrLen <= 0) or (SymElemDynDepth[symIdx] > 0) then Exit;
+    rec := Syms[symIdx].ElemRecName;
+  end
+  else
+  begin
+    if Syms[symIdx].TypeKind <> tyRecord then Exit;
+    rec := Syms[symIdx].RecName;
+  end;
+  if (rec < REC_UCLASS_BASE) or (BuiltinRecFieldCount(rec) > 0) then Exit;
+  if not UClsIsRecord[rec - REC_UCLASS_BASE] then Exit;
+  if Syms[symIdx].IsArray then
+  begin
+    stride := RecSize(rec);
+    size := stride * Syms[symIdx].ArrLen;
+  end
+  else
+    size := RecSize(rec);
+  if size <= 0 then Exit;
+  { The BSS slot this replaces must be exactly where the size says it is --
+    otherwise the layout this computes is not the layout the reads use. }
+  if (Syms[symIdx].Offset < bssBefore) or
+     (Syms[symIdx].Offset + size > bssAfterAlloc) then Exit;
+
+  { Pass 1: every init is a plain literal aimed at a field of THIS symbol. }
+  for k := firstPI to PendingInitCount - 1 do
+  begin
+    if PendingInitSym[k] <> symIdx then Exit;
+    if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
+    if PendingInitFOff[k] < 0 then Exit;
+    if PendingInitFIdx[k] <> PI_ELEM_NONE then Exit;
+  end;
+
+  { Pass 2: resolve every target to (byte position, width). Nothing is written
+    until all of them resolve -- a refusal half-way would otherwise leave stray
+    bytes past DataLen, which DataEnsure does NOT re-zero and which later
+    alignment padding is read from. }
+  n := PendingInitCount - firstPI;
+  SetLength(pos, n);
+  SetLength(wid, n);
+  for k := firstPI to PendingInitCount - 1 do
+  begin
+    elemBase := 0;
+    if Syms[symIdx].IsArray then
+    begin
+      idx := PendingInitElem[k] - Integer(Syms[symIdx].ConstVal);
+      if (PendingInitElem[k] = PI_ELEM_NONE) or (idx < 0) or
+         (idx >= Syms[symIdx].ArrLen) then Exit;
+      elemBase := idx * stride;
+    end
+    else if PendingInitElem[k] <> PI_ELEM_NONE then Exit;
+
+    curRec := rec;
+    fi := FindUField(curRec - REC_UCLASS_BASE,
+                     PISpanName(PendingInitFOff[k], PendingInitFLen[k]));
+    if fi < 0 then Exit;
+    off := UFldOff_[fi];
+    for pk := 0 to PendingInitPCount[k] - 1 do
+    begin
+      if (UFldTk[fi] <> Ord(tyRecord)) or UFldIsArray[fi] then Exit;
+      curRec := UFldRec_[fi];
+      if (curRec < REC_UCLASS_BASE) or (BuiltinRecFieldCount(curRec) > 0) then Exit;
+      fi := FindUField(curRec - REC_UCLASS_BASE,
+                       PISpanName(PIPathOff[PendingInitPStart[k] + pk],
+                                  PIPathLen[PendingInitPStart[k] + pk]));
+      if fi < 0 then Exit;
+      off := off + UFldOff_[fi];
+    end;
+
+    if UFldIsArray[fi] or (UFldBitWidth[fi] <> 0) or UFldIsSub[fi] or
+       (UFldDynDepth[fi] <> 0) then Exit;
+    tk := IntToTypeKind(UFldTk[fi]);
+    if not TypedConstBakeable(tk) then Exit;
+    if PendingInitTk[k] <> Ord(tk) then Exit;
+    if (PendingInitKind[k] = 3) <> ((tk = tyDouble) or (tk = tySingle)) then Exit;
+    width := TypeSlotSize(tk);
+    if (off < 0) or (elemBase + off + width > size) then Exit;
+
+    pos[k - firstPI] := elemBase + off;
+    wid[k - firstPI] := width;
+  end;
+
+  { Pass 3: write, in init order, so the last writer of an overlapping (variant)
+    field wins exactly as the store sequence would have. }
+  base := AlignTo(DataLen, 16);
+  DataEnsure(base - DataLen + size);
+  for b := 0 to size - 1 do Data[base + b] := 0;
+  for k := firstPI to PendingInitCount - 1 do
+  begin
+    v := PendingInitVal[k];
+    if IntToTypeKind(PendingInitTk[k]) = tySingle then v := DoubleBitsToSingleBits(v);
+    for b := 0 to wid[k - firstPI] - 1 do
+      Data[base + pos[k - firstPI] + b] := Byte((v shr (8 * b)) and $FF);
+  end;
+  DataLen := base + size;
+  Syms[symIdx].Offset := DATA_SYM_BIAS + base;
+  PendingInitCount := firstPI;
+  if BSSSize = bssAfterAlloc then BSSSize := bssBefore;
+  Result := True;
+end;
+
 { ===== The POINTEE carrier set of a named ARRAY type =====
 
   `TAp = array[0..1] of PPC` where `PPC = ^PChar` has to remember, on the TYPE

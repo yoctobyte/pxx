@@ -3,9 +3,9 @@ track: A
 prio: 35
 type: bug
 blocked-by: []
-summary: "The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros."
-status: new
-owner: ""
+summary: "FIXED 2026-09-18 (frankH): a typed const RECORD, and an array of records, whose every field init is a plain ordinal literal is now initialised .data (TryBakeConstRecordIntoData) -- 100 extra 16-byte records went from +11,600 code/+1,600 bss to +6 code/+1,600 data/+0 bss. Byte-identical to the startup-store image on a 22-shape corpus on x86-64, i386, aarch64, arm32, riscv32 and xtensa. Fails CLOSED and still refuses: string/set/pointer-valued inits, FLOAT fields (the record parser does not record them as kind 3 -- unexplored, safe), array fields, FIdx paths (no field-array low bound recorded), subrange and bit fields. Writable .data ({$J+}), never read-only. Null row: SysUtils/Classes/DateUtils/StrUtils/Math bake nothing, so the win is in user code, not the RTL."
+status: done
+owner: "frankH"
 ---
 
 # A typed const record is built by startup code, not stored as data
@@ -101,3 +101,39 @@ assumptions six existing ones could not see.
 Per `CLAUDE.md`: `make compiler/pascal26` (which IS the byte-identical self-host
 fixedpoint) plus the repro above. Sizes before and after for both tables in the
 measurement section.
+
+## Resolution (frankH, 2026-09-18)
+
+`TryBakeConstRecordIntoData` (symtab.inc), called from the record-const site
+and, after the scalar baker declines, from the array-of-records site. Each
+pending init's target PATH (element index, first field span, deeper PIPath
+spans) is resolved through `FindUField`/`UFldOff_` (the table the AN_FIELD
+lowering reads) to a byte offset and a width, and the literal is written there
+in init order, into a zeroed image the size of the BSS slot it replaces.
+Everything is resolved before anything is written. A refusal half-way would
+otherwise leave bytes past DataLen, and DataEnsure does not re-zero those.
+
+**Measured:** the ticket's `array[0..N-1] of TP` table, N=1 -> 101:
+code +6 (was +11,600), data +1,600 (the records' own bytes), bss +0 (was +1,600).
+The repro prints `11 4 8 7` with all three record consts baked.
+
+**Verified as an image, not as values.** A 22-row corpus dumps every const's
+raw bytes. Covered shapes: mixed widths, enums, nested records three deep,
+variant arms, packed, negative low bounds, partial initialisers, and {$J+}
+writes after baking. It is byte-identical between this compiler and HEAD's
+(which builds the same image with startup stores) on x86-64, i386, aarch64,
+arm32 and riscv32, with both binaries asserted to exist and to print. xtensa
+compares against x86-64 instead, because HEAD's xtensa binary faults (below).
+
+**Guard:** `test/test_const_record_in_data.pas`, two rows in test-core. Row 2
+reads `PXXDBG=a.constdata` and asserts exactly which consts were baked
+(`cOuter cVar cEn cPart aNeg`), with the string-field and float-field records
+refused. Values alone cannot fail, and HEAD bakes 0 of them.
+
+**Found on the way, pre-existing, not this change** (tickets filed):
+xtensa gives variant arms DIFFERENT start offsets (`A@8 L@4`; x86-64 8/8,
+i386 4/4), and any unaligned packed-record field access faults on xtensa
+(`r.I` at offset 1 -> SIGBUS, HEAD and this build alike).
+
+## Log
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

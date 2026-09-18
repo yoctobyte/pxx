@@ -4488,9 +4488,14 @@ begin
         cBaked := False;
         if not isLocalConst then
           cBaked := TryBakeConstArrayIntoData(cIdx, cFirstPI, cBssBefore, cBssAfter);
+        { An array OF RECORDS is refused above (its inits are field paths, not
+          elements) and has its own baker. }
+        if not cBaked and not isLocalConst and (cElemTk = tyRecord) then
+          cBaked := TryBakeConstRecordIntoData(cIdx, cFirstPI, cBssBefore, cBssAfter);
         if cBaked and PxxDbgEnabled('a.constdata') then
           writeln('PXXDBG a.constdata baked ', name, ' n=', Syms[cIdx].ArrLen,
-                  ' elemsize=', TypeSlotSize(cElemTk), ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
+                  ' elemsize=', TypeStorageSize(cElemTk, Syms[cIdx].ElemRecName),
+                  ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
       end
       else
       begin
@@ -4586,7 +4591,9 @@ begin
         else
         begin
         AllocStaticLocal := constIsStatic;
+        cBssBefore := BSSSize;
         cIdx := AllocVar(name, cTk);
+        cBssAfter := BSSSize;
         AllocStaticLocal := False;
         { `const K: TEnum = Two` is an enum-typed value like any var of that type. }
         if SemKindMatches(cTk, cSem) then SymSemId[cIdx] := cSem;
@@ -4716,7 +4723,17 @@ begin
           end;
         end
         else if cTk = tyRecord then
-          ParseRecordInitializerInto(cIdx, Syms[cIdx].RecName, PI_ELEM_NONE, isLocalConst)
+        begin
+          cFirstPI := PendingInitCount;
+          ParseRecordInitializerInto(cIdx, Syms[cIdx].RecName, PI_ELEM_NONE, isLocalConst);
+          { A record const whose every field is a plain literal is .data, not
+            BSS plus one startup store per field -- TryBakeConstRecordIntoData. }
+          if not isLocalConst and
+             TryBakeConstRecordIntoData(cIdx, cFirstPI, cBssBefore, cBssAfter) and
+             PxxDbgEnabled('a.constdata') then
+            writeln('PXXDBG a.constdata baked record ', name, ' size=', RecSize(Syms[cIdx].RecName),
+                    ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
+        end
         else if isLocalConst then
         begin
           if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
