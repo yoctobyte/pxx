@@ -5,7 +5,7 @@ track: A+S
 prio: 75
 status: open
 found: 2026-09-18
-summary: "`-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to procs=0 and a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The same source with the managed runtime emits 72 procs / 57,900 B. An empty program and a hello-world are BYTE-IDENTICAL under the flag, which is the tell. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing."
+summary: "`-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The program is gone. THE TELL IS THAT AN EMPTY PROGRAM AND A HELLO-WORLD ARE BYTE-IDENTICAL INCLUDING DATA — on x86-64 the same pair differs by 40 bytes of data (the string literal) and the hello-world RUNS. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing."
 ---
 
 # What
@@ -67,3 +67,26 @@ Do not "fix" it by re-defining PXX_MANAGED_STRING on the bare path. That
 restores the 57,900-byte floor this flag exists to escape, and the escape is
 what the ESP size work needs. The correct outcome is either a working small
 image or an explicit refusal.
+
+## Correction 2026-09-18 — `procs=0` IS NOT THE TELL, AND THIS TICKET LEANED ON IT
+
+Filed leaning on `procs=0` as the evidence. That is wrong and would have sent a
+reader hunting in the wrong place. **x86-64 reports `procs=0` for the identical
+flag and prints `hello` correctly**, measured today:
+
+    pascal26 -uPXX_MANAGED_STRING --no-signals hello.pas out
+    ok: [code=3864B data=336B bss=41800B procs=0]   ->  ./out  =>  hello
+
+`procs=0` means the whole program lowered to backend-emitted machine code with
+no Pascal procedure bodies left — which is the NORMAL and correct outcome for a
+`writeln` of a literal once the managed-string runtime is out. It says nothing
+about whether the program exists.
+
+**The discriminator is the byte-identity of empty-vs-hello, and it must include
+`data=`.** On x86-64 the two differ by 40 bytes of data, because the literal is
+there. On ESP bare they are identical in code AND data, because nothing was
+emitted. Anyone re-measuring this should compare the pair, not read `procs`.
+
+Also corrected in the same pass: `code=` is **page-quantised**, so the `20B`
+above is a floor-of-a-segment figure and not a code measurement — see the
+2026-09-18 logbook entry and `symtab.inc:14858`, which already said so.

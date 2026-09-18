@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok | A+S | 75 | bug | `-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to procs=0 and a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The same source with the managed runtime emits 72 procs / 57,900 B. An empty program and a hello-world are BYTE-IDENTICAL under the flag, which is the tell. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing. | — |
+| bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok | A+S | 75 | bug | `-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The program is gone. THE TELL IS THAT AN EMPTY PROGRAM AND A HELLO-WORLD ARE BYTE-IDENTICAL INCLUDING DATA — on x86-64 the same pair differs by 40 bytes of data (the string literal) and the hello-world RUNS. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing. | — |
 
 ## working (30)
 

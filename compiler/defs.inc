@@ -450,7 +450,7 @@ const
     rather than dropped -- a dropped marker compiles to the OLD lowering, which
     is a wrong-arity run-time failure and not a message. }
   MAX_PAS_PYSTAR = 64;
-  MAX_INC_DEPTH = 32;
+  MAX_INC_DEPTH = 32;   { ExpandIncludes recursion brake; FPC's own limit is 16 }
   { Consecutive pause-loop iterations with the lock HELD before the --threadsafe
     heap lock calls itself deadlocked (EmitHeapLockSlowStub, ir_codegen.inc).
     The counter RESETS every time the waiter observes the lock free, so what it
@@ -475,7 +475,13 @@ const
     move this number, a longer stall does. Re-measure on a box whose pause
     latency differs by more than an order of magnitude. }
   HEAP_LOCK_SPIN_LIMIT = $10000000;
-  SIG_ALTSTACK_SIZE = 32768;   { alt-stack bytes. Linux MINSIGSTKSZ is 2048 and SIGSTKSZ 8192, but both are advisory floors that grew with the register file (AVX-512 pushes the kernel's signal frame past the old constants), and this is zero-filled BSS with no file cost. }   { ExpandIncludes recursion brake; FPC's own limit is 16 }
+  SIG_ALTSTACK_SIZE = 32768;   { alt-stack bytes. Linux MINSIGSTKSZ is 2048 and SIGSTKSZ 8192, but both are advisory floors that grew with the register file (AVX-512 pushes the kernel's signal frame past the old constants).
+    "Zero-filled BSS with no file cost" was the old justification here and it is
+    true of a HOSTED target only. EnsureSignalBss allocates this unconditionally,
+    --no-signals included, so on a target where BSS is SRAM it is 32768 bytes of
+    RAM in every image. Measured 2026-09-18: it is 78% of the bss of an x86-64
+    hello world at its 195-byte code floor (41800 bss, of which 32768 is this).
+    See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss. }
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
