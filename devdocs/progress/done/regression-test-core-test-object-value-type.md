@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P from the FAILING STEP** — line 8 of 9, `! ./compiler/pascal26 test/test_object_value_constructor_error.pas /tmp/test_object_value_constructor_error26 > /tmp/tes`, which names `test/test_object_value_constructor_error.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 5 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -36,3 +37,50 @@ ok: /tmp/testmgr-scratch-46993/test_object_value_type26  [code=73496B  data=4832
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolution (frankB, 2026-09-18)
+
+**Not a regression. Stale paperwork, and the watcher was right to fire.**
+
+The cause is `efe06a903` (2026-09-17 16:00:02Z, Track P), which deliberately
+made `constructor` and `destructor` legal on an old-style `object`: pxx
+hard-errors on BOTH routes by which an `object` can acquire a VMT — an
+ancestor, and a `virtual`/`dynamic`/`override`/`abstract` directive — so every
+`object` that reaches the member loop is VMT-less by construction and a
+constructor on one is semantically a plain method. It measured that against
+FPC's own `versioncmp.pas:29`, `cgbase.pas:376` and `cmsgs.pas:46`, added its
+own rows and fixtures, and left behind the row asserting the opposite:
+
+```
+! ./$(COMPILER) test/test_object_value_constructor_error.pas ...
+grep -q "an object type cannot have a constructor" ...
+```
+
+from `d23f52948`. The `!` inverts a compiler that now correctly exits 0, so
+the row fails and takes the tier with it. This watcher fired **six minutes
+later**, at 16:06:33Z, which is the tightest corroboration of the cause
+available and is what dated it.
+
+Fixed in `9729073df`: the row and `test/test_object_value_constructor_error.pas`
+removed, and the comment above the surviving rows corrected from "the three
+things it deliberately refuses" to TWO, naming the commit that changed the
+count so the next reader does not re-derive it. Coverage is not reduced —
+`efe06a903` already carries both halves (`test_object_value_ctor.pas` asserts
+the accepting shape byte-identically against fpc 3.2.2;
+`test_object_value_ctor_fail.pas` asserts the four shapes still refused as
+four separate compiles of one source).
+
+**The range bound in this ticket is correct and was the thing that mattered.**
+`cc03b4a51933` touches no buildable file, as the header says, and the cause is
+below it — `efe06a903` is exactly one commit down.
+
+**Worth keeping about the instrument, not about the bug:** the slug names
+`test_object_value_type`, which passes, and the header warns about that in its
+own words. The warning is right and it did not prevent the outcome — the
+ticket sat 18 hours while the tier was red for every seat. A stub whose title
+names a passing file reads as low-signal at a glance, which is the one thing a
+regression stub cannot afford to read as. Not filed as a separate ticket:
+`tools/twatch.py` already derives the title from `src:` deliberately, for
+dedupe-key stability, and changing that is a Track T trade-off rather than a
+defect.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
