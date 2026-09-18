@@ -2880,7 +2880,8 @@ const
 var
   PXXLineBuf: Pointer;
   PXXLineCap: Int64;
-  PXXLineLen: Int64;
+  PXXLineLen: Int64;      { bytes held, THE #10 TERMINATOR INCLUDED }
+  PXXLineTextLen: Int64;  { ...and the same count WITHOUT it — see PXXReadLine }
   PXXLinePos: Int64;
   PXXPeekByte: Byte;      { pushed-back stdin byte held by PXXStdinEof }
   PXXPeekValid: Int64;
@@ -2909,11 +2910,30 @@ begin
 end;
 
 procedure PXXReadLine;
+{ THE #10 TERMINATOR IS STORED IN THE BUFFER, and that is a fix and not a
+  detail. Stripping it made `read(c: Char)` — the canonical Pascal text-scan
+  loop, `while not Eof do read(c)` — skip silently from the last character of
+  one line to the first of the next, so copying stdin produced ONE LONG LINE.
+  Measured 2026-09-18 on 'ab\ncd\n': FPC 3.2.2 yields 97 98 10 99 100 10 and
+  we yielded 97 98 99 100. Same family as the over-long line: the reader merges
+  two lines and the wrong value surfaces in a LATER, innocent-looking read.
+
+  Everything downstream falls out of the invariant rather than being special-
+  cased. `PXXLinePos < PXXLineLen` (not-eof, and "do not refill") is still
+  exactly right, because the terminator IS unconsumed input. IR_READ_DISCARD's
+  `pos := len` still means readln's "skip the rest of the line", and now
+  genuinely consumes the newline. The integer parser stops at #10 because it is
+  not a digit and not one of the two blanks it skips. Only the STRING readers
+  need to know the difference, and they read PXXLineTextLen.
+
+  A line ended by EOF rather than by \n stores no terminator, so TextLen = Len
+  there and `read(c)` past it still yields #0. }
 var n: Int64; b: Byte; more: Boolean;
 begin
   if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
   PXXLinePos := 0;
   PXXLineLen := 0;
+  PXXLineTextLen := 0;
   more := True;
   while more do
   begin
@@ -2926,10 +2946,18 @@ begin
     end
     else
       n := PXXSysRead(0, Int64(@b), 1);
-    if n <= 0 then more := False          { EOF / error: empty or short line }
-    else if b = 10 then more := False     { \n ends the line (not stored) }
+    if n <= 0 then
+    begin
+      more := False;                      { EOF / error: no terminator to store }
+      PXXLineTextLen := PXXLineLen;
+    end
     else if b <> 13 then                  { \r skipped }
     begin
+      if b = 10 then
+      begin
+        more := False;
+        PXXLineTextLen := PXXLineLen;     { text ends here; the #10 follows it }
+      end;
       PXXLineEnsure(PXXLineLen + 1);
       PByte(Int64(PXXLineBuf) + PXXLineLen)^ := b;
       PXXLineLen := PXXLineLen + 1;
@@ -2965,7 +2993,7 @@ end;
 procedure PXXReadVarStrM(slot: Pointer);
 var len: Int64; oldp, newp: Pointer;
 begin
-  len := PXXLineLen - PXXLinePos;
+  len := PXXLineTextLen - PXXLinePos;   { TEXT length: never the #10 terminator }
   if len < 0 then len := 0;
   newp := PXXStrFromLit(len, Pointer(Int64(PXXLineBuf) + PXXLinePos));
   PXXLinePos := PXXLineLen;

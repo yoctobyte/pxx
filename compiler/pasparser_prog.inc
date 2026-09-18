@@ -867,6 +867,7 @@ begin
   BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
   BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
+  BSS_LINE_TEXTLEN:= BSSSize; Inc(BSSSize, 8);
   BSS_PEEK_VALID  := BSSSize; Inc(BSSSize, 8);
   BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
   { EIGHT bytes, not a buffer: BSS_LINE_BUF holds a POINTER to the builtin

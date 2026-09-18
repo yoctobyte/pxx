@@ -40,12 +40,24 @@ IS cross-checked between i386 and x86-64 (`Makefile:26282`) — on input where
 the two agree. `test_readln_line_longer_than_the_buffer.pas` is now
 cross-checked the same way on input where they did not.
 
-**The honest statement is that the parsers are not known to agree, not that
-they do.** What has actually been run across backends, 2026-09-18, all green:
-`test_readln`, `test_eof_stdin`, `test_read_into_a_frozen_string_from_stdin_and_a_file`
-and the new long-line row, on x86-64, i386 and riscv32. What has NOT been
-compared on any target but x86-64: whitespace before a sign, a `-` with no
-digits after it, a value wider than its target, a `Char` read at end of line.
-Running the existing fixtures under two more `--target=` flags is most of the
-value in this ticket and costs minutes — do that first, whether or not the
-deletion follows.
+**THAT CENSUS HAS NOW BEEN RUN — 2026-09-18, and it paid for itself.** Eight
+fixtures x five targets (x86-64, i386, riscv32, arm32, aarch64), fifteen input
+shapes: blanks before a sign, a tab before a sign, leading zeros, an in-range
+value into a `Byte`, two `Char`s from one line, two integers on one line, a
+second integer past end of line, a string taking the rest of a line with its
+blanks, a `string[N]` clamp, a `-` with no digits, `300` into a `Byte`, `40000`
+into a `SmallInt`, `x9` into an `Integer`, the read/readln/Eof interleave, and
+the character scan loop. **All five targets are byte-identical on every one.**
+So the parsers DO agree, empirically, and the deletion is that much safer.
+
+**It also found a real bug that no fixture covered, in BOTH spellings**:
+`read(c: Char)` never handed over the `#10` that ends a line, so the canonical
+`while not Eof do read(c)` scanner stepped silently from the last character of
+one line to the first of the next. Fixed the same day in both readers
+(`test_read_char_preserves_the_line_terminator.pas`). That is the argument for
+this ticket restated as evidence rather than as a worry: two spellings of one
+parser were wrong in the SAME way and nothing compared them to an oracle.
+
+Two divergences from FPC survive and are filed separately —
+[[bug-a-readln-diverges-from-fpc-on-a-malformed-number-and-on-a-char-read-from-an-empty-line]].
+Neither is a disagreement between our own backends.

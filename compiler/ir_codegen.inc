@@ -5676,7 +5676,7 @@ procedure EmitReadLine;
   tail left in the fd, which made the NEXT readln return the remainder of the
   previous line. The base moves on growth, so it is re-read after every
   PXXLineEnsure and never cached across one. }
-var loopStart, j1, j2, jSkip, jPeek, jHave, procIdx: Integer;
+var loopStart, j1, j2, jSkip, jPeek, jHave, jDone, procIdx: Integer;
 begin
   procIdx := FindProc('PXXLineEnsure');
   if procIdx < 0 then Error('compiler error: PXXLineEnsure not found in builtin unit');
@@ -5734,8 +5734,23 @@ begin
   EmitB($0F); EmitB($84); j2 := CodeLen; EmitI32(0);                           { je done (\n) }
   EmitAsmX64(['inc qword [@glob]', BSS_LINE_LEN]);
   EmitB($E9); EmitI32(loopStart - (CodeLen + 4));                              { jmp loopStart }
-  Patch32(j1, CodeLen - (j1 + 4));
-  Patch32(j2, CodeLen - (j2 + 4));
+  { newline: the byte is already in the buffer at [rsi]. Record the TEXT length
+    (everything before it) and then count it, so the #10 is unconsumed input
+    that read(c) will hand over — see PXXReadLine's header for why. }
+  Patch32(j2, CodeLen - (j2 + 4));                                             { nl: }
+  EmitAsmX64([
+    'mov rax, [@glob]', BSS_LINE_LEN,
+    'mov [@glob], rax', BSS_LINE_TEXTLEN,
+    'inc qword [@glob]', BSS_LINE_LEN
+  ]);
+  EmitB($EB); jDone := CodeLen; EmitB(0);                                       { jmp done }
+  { EOF or error: the line has no terminator, so text and buffer are the same. }
+  Patch32(j1, CodeLen - (j1 + 4));                                             { eofdone: }
+  EmitAsmX64([
+    'mov rax, [@glob]', BSS_LINE_LEN,
+    'mov [@glob], rax', BSS_LINE_TEXTLEN
+  ]);
+  PatchRel8(jDone);                                   { done: }
   Patch32(jSkip, CodeLen - (jSkip + 4));
 end;
 
@@ -5785,7 +5800,7 @@ procedure EmitReadVarParse(tk: TTypeKind);
 { rax = target address on entry. Parse a value from the line buffer at the
   cursor by type and store it; advance the cursor. tyString takes the rest of
   the line; tyChar one byte; integer kinds skip blanks then read [-]digits. }
-var sz, skipLoop, digLoop, jDone, jStart, jAdv, jDigits, jNoSign: Integer;
+var sz, skipLoop, digLoop, jDone, jStart, jAdv, jDigits, jNoSign, jStrLen: Integer;
     jEmpty, jSign, jDigEnd, jLt, jGt: Integer;
 begin
   if tk = tyAnsiString then
@@ -5794,10 +5809,21 @@ begin
       publish it into the target slot (rax = slot address), releasing the old
       handle. Without this a managed string target fell through to the integer
       parser below and wrote garbage into the 8-byte handle slot. }
+    { LENGTH comes from TEXTLEN, never LEN: the #10 terminator is in the buffer
+      (PXXReadLine's header says why) and a string target must not take it.
+      Clamped, because a preceding read(c) can have moved the cursor past the
+      text and onto the terminator. The CURSOR still advances to LEN, so readln
+      consumes the newline exactly as before. }
     EmitAsmX64([
       'push rax',                        { target addr }
-      'mov rax, [@glob]', BSS_LINE_LEN,
+      'mov rax, [@glob]', BSS_LINE_TEXTLEN,
       'sub rax, [@glob]', BSS_LINE_POS,
+      'test rax, rax'
+    ]);
+    EmitB($0F); EmitB($8D); jStrLen := CodeLen; EmitI32(0);                     { jge haveLen }
+    EmitAsmX64(['xor rax, rax']);
+    Patch32(jStrLen, CodeLen - (jStrLen + 4));                                  { haveLen: }
+    EmitAsmX64([
       'mov rdi, rax',                    { length }
       'mov rsi, [@glob]', BSS_LINE_BUF,
       'add rsi, [@glob]', BSS_LINE_POS   { src }
@@ -5820,10 +5846,17 @@ begin
   end;
   if tk = tyString then
   begin
+    { TEXTLEN, clamped — same reason as the managed arm above. }
     EmitAsmX64([
       'mov rdi, rax',
-      'mov rcx, [@glob]', BSS_LINE_LEN,
+      'mov rcx, [@glob]', BSS_LINE_TEXTLEN,
       'sub rcx, [@glob]', BSS_LINE_POS,
+      'test rcx, rcx'
+    ]);
+    EmitB($0F); EmitB($8D); jStrLen := CodeLen; EmitI32(0);                     { jge haveLen }
+    EmitAsmX64(['xor rcx, rcx']);
+    Patch32(jStrLen, CodeLen - (jStrLen + 4));                                  { haveLen: }
+    EmitAsmX64([
       'mov [rdi], rcx',
       'mov rsi, [@glob]', BSS_LINE_BUF,
       'add rsi, [@glob]', BSS_LINE_POS,

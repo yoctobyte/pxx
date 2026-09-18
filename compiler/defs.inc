@@ -6571,6 +6571,7 @@ var
   BSS_EXC_CLS     : Integer;
   BSS_EXC_ADDR    : Integer;  { code address of the RAISE SITE of the exception in flight — the return address the `call` to the raise stub pushed. Read by System/SysUtils ExceptAddr. }
   BSS_LINE_BUF    : Integer;  { POINTER to the builtin's readln line buffer }
+  BSS_LINE_TEXTLEN: Integer;  { line length WITHOUT the #10 terminator }
   BSS_LINE_LEN    : Integer;  { bytes currently in line buffer }
   BSS_LINE_POS    : Integer;  { parse cursor into line buffer }
   BSS_PEEK_VALID  : Integer;  { Eof one-byte stdin pushback: 1 if a byte is held }

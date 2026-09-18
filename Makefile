@@ -20229,6 +20229,15 @@ test-core: $(COMPILER)
 	# ceiling now, not that the ceiling moved.
 	./$(COMPILER) test/test_readln_line_longer_than_the_buffer.pas $(TESTTMP)/test_readln_long26
 	tools/expect_same.sh test_readln_long26 "$$(printf '%5000s\nSECOND\n' '' | tr ' ' 'A' | $(TESTTMP)/test_readln_long26)" "$$(printf 'len=5000\nallA=TRUE\nnext=[SECOND]')"
+	# ...and read(c: Char) handing over the #10 that ends a line, which it did
+	# not. `while not Eof do read(c)` — the canonical Pascal text scanner —
+	# stepped silently from the last character of one line to the first of the
+	# next, so copying stdin produced ONE LONG LINE. The first four rows are the
+	# part that cost values: c3 used to be the `4` of the NEXT line, so the
+	# readln after it answered [2] and the READLN looked like the bug. Pre-fix
+	# pin: c3=52, rest=[2], count=2. Values are FPC 3.2.2's under {$$H+}.
+	./$(COMPILER) test/test_read_char_preserves_the_line_terminator.pas $(TESTTMP)/test_readterm26
+	tools/expect_same.sh test_readterm26 "$$(printf 'ab\n42\nxy\n' | $(TESTTMP)/test_readterm26)" "$$(printf 'c1=97\nc2=98\nc3=10\nrest=[42]\n<120><121><10>\ncount=3')"
 	# ...and reading into a FROZEN string, at BOTH doors, which had no test at
 	# all. From a Text file it SEGFAULTED (a `var AnsiString` RTL parameter
 	# handed an inline [len][chars] slot); from stdin it silently wrote the
@@ -26296,6 +26305,10 @@ test-i386: $(COMPILER)
 	# two spellings answered 4096 and 4095 on exactly this input. One buffer now.
 	./$(COMPILER) --target=i386 test/test_readln_line_longer_than_the_buffer.pas $(TESTTMP)/test_i386_readln_long
 	tools/expect_same.sh i386/test_i386_readln_long "$$(printf '%5000s\nSECOND\n' '' | tr ' ' 'A' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln_long)" "$$(printf 'len=5000\nallA=TRUE\nnext=[SECOND]')"
+	# The terminator on i386 too — same reason: i386 lowers read/readln to the
+	# portable builtin, x86-64 to inline asm, and the fix had to land in both.
+	./$(COMPILER) --target=i386 test/test_read_char_preserves_the_line_terminator.pas $(TESTTMP)/test_i386_readterm
+	tools/expect_same.sh i386/test_i386_readterm "$$(printf 'ab\n42\nxy\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readterm)" "$$(printf 'c1=97\nc2=98\nc3=10\nrest=[42]\n<120><121><10>\ncount=3')"
 	./$(COMPILER) --target=i386 test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof_x64
 	tools/expect_same.sh i386/test_i386_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"
