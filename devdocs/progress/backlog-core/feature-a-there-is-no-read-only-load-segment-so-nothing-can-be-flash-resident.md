@@ -267,3 +267,14 @@ was live.
    literal in `.data` (`ObjRoKeepIramLiteralsWritable`). A read through a
    pointer is not seen. Any future read-only VMT/RTTI would need the same
    thought for iram methods.
+
+**Run-3 verdict (appended 14:10):** `rc=2` at the `--threadsafe` self-host
+fixedpoint row: `pascal26-threadsafe-self` and `-next` differ at byte 217.
+Every row before it passed, including both earlier stop points. That red is
+the MID-RUN PULL, not a defect. Parking synced 9 files of
+`compiler/thread_emit.inc`, `lib/rtl/palthread.pas` and others while the run
+was going, so a binary built before the pull compiled sources from after it,
+which gives two valid fixedpoints. Run alone on the settled tree
+(f89dcf573, rebuilt), the same row gives `cmp` SAME. Rows after that one did
+not run. Mixed-tree evidence, as stated above: this is not a clean run of any
+single sha.
