@@ -15127,8 +15127,8 @@
   "wall": 991.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-13T16:25:34Z",
-  "sha": "54f8407b396187137a54ee8c53a11f45b51ec3a6",
+  "date": "2026-09-18T09:31:43Z",
+  "sha": "0b92223b07bc9e81e145afdf9b1af12793e59704",
   "tier": "full"
  },
  "last_opt": {
@@ -15256,6 +15256,7 @@
    "range": [
     "095a7a794d87e38acae1cf1b336445a703b0331c"
    ],
+   "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
    "status": "fail"
   }
