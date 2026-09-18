@@ -6048,24 +6048,42 @@ begin
   if kwspec <> '' then
     raise TypeError.Create(name + '() is dispatched at run time through a '
       + 'callable attribute, which takes positional arguments only');
-  { pyvar_callv IS STILL A LADDER, and past four it has no rung. This `else`
-    used to be exactly four — the frontend capped every dynamic call at four, so
-    nargs could not exceed it — and lifting that cap for the METHOD arm makes
-    this arm reachable with five. Refused by name rather than truncated:
-    `pyvar_callv4` would have dropped the rest and returned a plausible wrong
-    value, which is the same silent-truncation trade the method arm's own cap
-    was documented as avoiding. A list-taking pyvar_callv is the fix and is a
-    different subsystem with its own consumers, so it is not done here.
-    bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments }
+  { The ladder reaches EIGHT, and this arm stopped at four because it was
+    written while the ladder did. "past four it has no rung" was true at
+    95e7eb26e and stopped being true later the SAME DAY at 2b7068dd7, which
+    added pyvar_callv5..8 for the star-unpack path and did not revisit this
+    case — so the cap here was a stale comment rather than a decision, and the
+    refusal fired with four working rungs sitting underneath it.
+
+    EIGHT is structural, not a preference: a callable value is called through
+    its code address, an indirect call needs a static arity, and the four
+    carrier families each have their own function-pointer type, so the arms
+    have to be enumerated. An interpreted closure has no limit at all — its
+    arguments already travel as a list and pyvar_wide_prelude serves it from
+    that list inside each rung, so it never reaches the `else`.
+
+    Past eight is refused by name AND with the count rather than truncated:
+    pyvar_callv8 would drop the rest and return a plausible wrong value, the
+    same silent-truncation trade the method arm's own cap was written to
+    avoid. }
   case nargs of
     0: Result := pyvar_callv0(cb);
     1: Result := pyvar_callv1(cb, args.at(0));
     2: Result := pyvar_callv2(cb, args.at(0), args.at(1));
     3: Result := pyvar_callv3(cb, args.at(0), args.at(1), args.at(2));
     4: Result := pyvar_callv4(cb, args.at(0), args.at(1), args.at(2), args.at(3));
+    5: Result := pyvar_callv5(cb, args.at(0), args.at(1), args.at(2), args.at(3),
+                              args.at(4));
+    6: Result := pyvar_callv6(cb, args.at(0), args.at(1), args.at(2), args.at(3),
+                              args.at(4), args.at(5));
+    7: Result := pyvar_callv7(cb, args.at(0), args.at(1), args.at(2), args.at(3),
+                              args.at(4), args.at(5), args.at(6));
+    8: Result := pyvar_callv8(cb, args.at(0), args.at(1), args.at(2), args.at(3),
+                              args.at(4), args.at(5), args.at(6), args.at(7));
   else
     raise TypeError.Create(name + '() is dispatched at run time through a '
-      + 'callable attribute, which takes at most 4 arguments');
+      + 'callable attribute, which takes at most 8 arguments, got '
+      + pystr_of(Int64(nargs)));
   end;
 end;
 

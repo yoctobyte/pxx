@@ -16067,11 +16067,26 @@ begin
     else if n = 1 then dispPi := FindProc('pyvar_callv1')
     else if n = 2 then dispPi := FindProc('pyvar_callv2')
     else if n = 3 then dispPi := FindProc('pyvar_callv3')
-  { …and FOUR. Past this the old lowering still applies, and it calls through
-    the callee's payload as a code address — correct for a plain def, a SEGFAULT
-    for a lambda (whose value is a closure OBJECT).
-    bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
-  else if n = 4 then dispPi := FindProc('pyvar_callv4');
+    { …and FOUR. Past this the old lowering used to apply, and it calls through
+      the callee's payload as a code address — correct for a plain def, a
+      SEGFAULT for a lambda (whose value is a closure OBJECT).
+      bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
+    else if n = 4 then dispPi := FindProc('pyvar_callv4')
+    { …AND FIVE TO EIGHT. This ladder stopped at four because it was written
+      while the dispatcher did, and pyvar_callv5..8 arrived later the SAME DAY
+      (2b7068dd7) for the star-unpack path without this arm being revisited —
+      so a fifth argument fell past the ladder to the `sigPi < 0` refusal below
+      and was reported as a MISSING SIGNATURE, which is a true statement about
+      the wrong question: the field has no signature at four either, and four
+      compiles. pyeval's PyDynMethL carried the identical stale cap in its own
+      spelling and is fixed in the same commit; neither arm is reachable from
+      the other, which is why grepping for the construct does not find the
+      pair.
+      bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments }
+    else if n = 5 then dispPi := FindProc('pyvar_callv5')
+    else if n = 6 then dispPi := FindProc('pyvar_callv6')
+    else if n = 7 then dispPi := FindProc('pyvar_callv7')
+    else if n = 8 then dispPi := FindProc('pyvar_callv8');
     if dispPi >= 0 then
     begin
       dispArg := AllocNode(AN_ARG);
@@ -16083,6 +16098,16 @@ begin
       ASTTk[Result] := Ord(tyVariant);
       Exit;
     end;
+    { PAST EIGHT, refused HERE rather than by falling through to the
+      pointer-typed arms below. Their `no signature` message is true about a
+      POINTER field and a false lead about this one: a variant callable field
+      has no signature at four either, and four compiles — so it sends the
+      reader off to annotate a field whose annotation was never what decided
+      it. Says the ceiling and the count instead, the way the callable-VALUE
+      dispatcher's own refusal does. }
+    Error('Nil Python: .' + fname + '() — a callable field on a '
+          + 'dynamically-typed receiver is called through its code address, '
+          + 'which takes at most 8 arguments, got ' + AIntToStr(n));
   end;
 
   { A POINTER-typed procedural field holds a bare code address and carries no

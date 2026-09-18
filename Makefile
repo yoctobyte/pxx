@@ -3184,6 +3184,45 @@ test-nilpy: $(COMPILER)
 	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_widecall_attr.npy $(TESTTMP)/nilpy_widecall_attr26 2>&1 && $(TESTTMP)/nilpy_widecall_attr26 2>&1); \
 	 printf '%s\n' "$$out" | grep -q 'cb(): forwarded call got 9 arguments, expected 0 to 8' \
 	  || { echo "wide call through a callable ATTRIBUTE: FAIL - not refused past the ceiling, or the message does not NAME the attribute"; printf '%s\n' "$$out"; exit 1; }
+	# ...and the same ceiling for a callable FIELD reached on a DYNAMICALLY-TYPED
+	# receiver, which is a different pair of arms from the two above and was capped
+	# at FOUR in BOTH of them. The cap was stale in two spellings that no grep for
+	# the construct relates: pyparser.inc's PyVariantFieldCallArm ladder (compile
+	# time, used when the field's owning class is a visible CANDIDATE) and
+	# pyeval.pas's PyDynMethL (run time, used when no class declares the field at
+	# all). Both stopped where pyvar_callv<n> stopped when they were written;
+	# pyvar_callv5..8 landed later the SAME DAY (2b7068dd7) and neither was
+	# revisited. The receiver must arrive through a CONTAINER -- the ticket's own
+	# repro used `o = mod.make()`, which the frontend types, dispatches statically,
+	# and which therefore printed the right answer on the unfixed compiler.
+	./$(COMPILER) -Futest test/test_nilpy_callable_field_wide_arity.npy $(TESTTMP)/test_nilpy_cbfieldwide26
+	$(TESTTMP)/test_nilpy_cbfieldwide26 | diff -u test/test_nilpy_callable_field_wide_arity.expected -
+	# CANDIDATE-CLASS route, past the ceiling: refused at COMPILE time, and the
+	# message must say the CEILING and the COUNT. Falling through to the
+	# pointer-field arm's `no signature` wording is what this asserts against: it is
+	# true of a POINTER field and a false lead about this one, since a variant field
+	# has no signature at FOUR either and four compiles -- it sends the reader off
+	# to annotate a field whose annotation was never what decided it.
+	printf 'import callablefield_mod
+xs = callablefield_mod.boxes("B")
+print(xs[0].c8(1, 2, 3, 4, 5, 6, 7, 8, 9))
+' > $(TESTTMP)/nilpy_cbfield_over.npy
+	@out=$$(./$(COMPILER) -Futest $(TESTTMP)/nilpy_cbfield_over.npy $(TESTTMP)/nilpy_cbfield_over26 2>&1 && $(TESTTMP)/nilpy_cbfield_over26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'c8() — a callable field on a dynamically-typed receiver is called through its code address, which takes at most 8 arguments, got 9' \
+	  || { echo "callable field, candidate-class route: FAIL - nine arguments was not refused, or the message does not name the ceiling and the count"; printf '%s\n' "$$out"; exit 1; }
+	# RUN-TIME route, past the ceiling: no class declares .cb, so the lookup happens
+	# on the receiver and the refusal is a TypeError naming the attribute.
+	printf 'import callablefield_mod
+class Bare:
+    pass
+o = Bare()
+o.cb = callablefield_mod.f8
+xs = [o]
+print(xs[0].cb(1, 2, 3, 4, 5, 6, 7, 8, 9))
+' > $(TESTTMP)/nilpy_cbfield_dyn_over.npy
+	@out=$$(./$(COMPILER) -Futest $(TESTTMP)/nilpy_cbfield_dyn_over.npy $(TESTTMP)/nilpy_cbfield_dyn_over26 2>&1 && $(TESTTMP)/nilpy_cbfield_dyn_over26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'cb() is dispatched at run time through a callable attribute, which takes at most 8 arguments, got 9' \
+	  || { echo "callable field, run-time route: FAIL - nine arguments was not refused, or the message does not NAME the attribute and the count"; printf '%s\n' "$$out"; exit 1; }
 	# `self.__class__(...)` -- construct another one of the receiver's OWN type.
 	# Was a COMPILE error while `self.__class__.__name__` beside it read fine.
 	# Every `B` row is load-bearing: in a BASE method the class object must be

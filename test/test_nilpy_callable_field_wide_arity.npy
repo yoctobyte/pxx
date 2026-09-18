@@ -1,0 +1,97 @@
+# FIVE TO EIGHT ARGUMENTS to a CALLABLE FIELD on a dynamically-typed receiver.
+# The cap was FOUR, in TWO independent spellings that no grep for the construct
+# relates, and a fixture reaching either one alone certifies the other:
+#
+#   ROUTE A -- compile time, pyparser.inc's PyVariantFieldCallArm. The receiver
+#   is dynamically typed but its class is a visible CANDIDATE, so the frontend
+#   emits pyvar_callv<n> directly. Its ladder stopped at pyvar_callv4 and a
+#   fifth argument fell past it to the `sigPi < 0` arm, which refused at COMPILE
+#   time with `a callable field with no signature must be variant-typed` -- true
+#   about a POINTER field and a false lead about this one, since the field has
+#   no signature at four either and four compiles.
+#
+#   ROUTE B -- run time, pyeval.pas's PyDynMethL. The attribute is set on an
+#   instance whose class declares no such field, so there is no candidate at all
+#   and the lookup happens on the receiver. Its ladder stopped at four too and
+#   raised `cb() is dispatched at run time through a callable attribute, which
+#   takes at most 4 arguments`.
+#
+# Both stopped at four because both were written while the DISPATCHER did:
+# pyvar_callv5..8 arrived later the same day (2b7068dd7) for the star-unpack
+# path and neither arm was revisited.
+#
+# WHAT SHAPE DOES *NOT* REACH EITHER, and is what the ticket's own repro wrote:
+# `o = mod.make()` then `o.thing(1, 2, 3, 4, 5)`. The frontend types `o` from
+# the call, dispatches statically, and prints 15 on the UNFIXED compiler. The
+# receiver has to arrive through a container (or be a parameter with no single
+# inferable call site) for either arm to be reached at all.
+#
+# FOUR CARRIER FAMILIES answer a call through a field and each has its own
+# function-pointer type -- a plain function, a `-> None` function (a real Pascal
+# procedure: casting one through the function types reads a garbage hidden-result
+# pointer and the callee's epilogue writes 16 bytes through it), a bound METHOD,
+# and a lambda (a closure OBJECT, the interpreted road, which never had a cap).
+# Each needs its own row or three of the four stay unexercised.
+#
+# The ceiling is EIGHT and is structural, not a preference: the value is called
+# through its code address and an indirect call needs a static arity. The ceiling
+# is NOT asserted here -- CPython accepts nine and this file is diffed against
+# CPython. Both refusals are asserted in the Makefile beside this fixture.
+
+import callablefield_mod
+
+# ---- ROUTE A: candidate class known, receiver dynamically typed -------------
+# FOUR FIRST, then wide. Four already worked, so it is the control that says the
+# route is reached at all rather than the whole call collapsing to something
+# else -- and putting it first is the arrangement in which a stale ladder still
+# answers, so nothing here is carried by a warm path.
+xs = callablefield_mod.boxes("B")
+print(xs[0].c4(1, 2, 3, 4))
+print(xs[0].c5(1, 2, 3, 4, 5))
+print(xs[0].c6(1, 2, 3, 4, 5, 6))
+print(xs[0].c7(1, 2, 3, 4, 5, 6, 7))
+print(xs[0].c8(1, 2, 3, 4, 5, 6, 7, 8))
+
+# ...and WIDE FIRST on a second receiver, because the order above is the one a
+# suite gets written in and it is the order in which a cap can still be hidden.
+ys = callablefield_mod.boxes("Y")
+print(ys[0].c8(8, 7, 6, 5, 4, 3, 2, 1))
+print(ys[0].c5(9, 8, 7, 6, 5))
+
+# ---- the other three carriers, all at wide arity ----------------------------
+xs[0].cv5(1, 2, 3, 4, 5)
+xs[0].cv8(1, 2, 3, 4, 5, 6, 7, 8)
+print(callablefield_mod.drain())
+
+print(xs[0].clam(1, 2, 3, 4, 5, 6))
+print(xs[0].cm5(1, 2, 3, 4, 5))
+
+# ---- a SECOND candidate class declaring the same field names ----------------
+# One arm is emitted per candidate over the same arguments; the run-time class
+# chooses. With only one candidate in the program that choice is never made.
+zs = callablefield_mod.others()
+print(zs[0].c5(2, 3, 4, 5, 6))
+print(zs[0].c8(2, 3, 4, 5, 6, 7, 8, 9))
+
+# NO STAR-UNPACK ROW, deliberately. `xs[0].c6(2, *rest)` is refused outright and
+# by name -- "the positional half would need an expansion dispatcher through the
+# field value, which does not exist, so the arguments would be silently
+# dropped". That is a different and honestly-diagnosed limitation, it is refused
+# identically before and after this change, and a row for it would red this
+# fixture for something it does not test.
+
+# ---- ROUTE B: no candidate class, looked up on the receiver at run time -----
+
+
+class Bare:
+    pass
+
+
+b = Bare()
+b.cb4 = callablefield_mod.f4
+b.cb5 = callablefield_mod.f5
+b.cb8 = callablefield_mod.f8
+bs = [b]
+print(bs[0].cb4(1, 2, 3, 4))
+print(bs[0].cb5(1, 2, 3, 4, 5))
+print(bs[0].cb8(1, 2, 3, 4, 5, 6, 7, 8))
