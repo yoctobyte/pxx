@@ -8,7 +8,7 @@ created: 2026-09-02
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "MEASURED 2026-09-18 (frankB) AND THE FORK COLLAPSES TO ONE SENTENCE FOR THE OWNER: **do we promise that a pxx object can supply the runtime for SOMETHING ELSE, or only for ITSELF?** Answer \"for itself\" and B is safe today. Answer \"for something else\" and A stands and per-object DCE stays off the table until the runtime is shared. Evidence: `--dce` does not move the export surface at all (307 weak FUNC exported both ways; the exports ARE the root set, so the pass can only remove 266 LOCAL bodies) -- so B had to be simulated, off the object's own relocations, with the compiler's 573-live answer as the positive control (model: 576). Re-rooted at the TU's own two exports, live bodies go 576 -> **78** -- the number this ticket already records for the same code as an executable, reproduced from a different direction -- and **298 of 307 weak exports vanish**. 20 of the 298 are routines a backend LOWERS onto and no source names (`__pxx_builtin_popcount*`, `__pxx_va_arg_agg`, ...), demonstrated: a second TU containing zero `__pxx_` in its source reaches `__pxx_va_arg_agg` by passing a struct by value through a variadic. **So B's contract change is not source-auditable.** BUT the pxx-to-pxx pair is NOT at risk: both objects have ZERO undefined symbols of any kind, because each carries everything it reaches -- the parent ticket's own complaint is what makes B safe between pxx objects. The silent breakage is confined to a NON-PXX consumer, or to the `libcrtl.a` direction where one object provides the runtime for the rest -- both of which are the self-contained-runtime reading, i.e. answer A's premise. Nothing is recommended; x86-64 only, a Pascal object and 4b-septies' DATA symbols are unmeasured and the page says so. IMPORT SIDE, separately: `ld` errors on relocation SITES, not on undefined symbol-table entries -- an xtensa object's ESP-IDF UND entries sit at 20 with and without `--dce` while relocations naming them go 24 -> 0 and the link goes rc=1 -> rc=0. So \"the symbol goes, not just the bytes\" is false on the import side and the benefit arrives without it."
+summary: "MEASURED 2026-09-18 (frankB) AND THE FORK COLLAPSES TO ONE SENTENCE FOR THE OWNER: **do we promise that a pxx object can supply the runtime for SOMETHING ELSE, or only for ITSELF?** Answer \"for itself\" and B is safe today. Answer \"for something else\" and A stands and per-object DCE stays off the table until the runtime is shared. Evidence: `--dce` does not move the export surface at all (307 weak FUNC exported both ways; the exports ARE the root set, so the pass can only remove 266 LOCAL bodies) -- so B had to be simulated, off the object's own relocations, with the compiler's 573-live answer as the positive control (model: 576). Re-rooted at the TU's own two exports, live bodies go 576 -> **78** -- the number this ticket already records for the same code as an executable, reproduced from a different direction -- and **298 of 307 weak exports vanish**. 20 of the 298 are routines a backend LOWERS onto and no source names (`__pxx_builtin_popcount*`, `__pxx_va_arg_agg`, ...), demonstrated: a second TU containing zero `__pxx_` in its source reaches `__pxx_va_arg_agg` by passing a struct by value through a variadic. **So B's contract change is not source-auditable.** BUT the pxx-to-pxx pair is NOT at risk: both objects have ZERO undefined symbols of any kind, because each carries everything it reaches -- the parent ticket's own complaint is what makes B safe between pxx objects. The silent breakage is confined to a NON-PXX consumer, or to the `libcrtl.a` direction where one object provides the runtime for the rest -- both of which are the self-contained-runtime reading, i.e. answer A's premise. Nothing is recommended. The 78 is the load-bearing evidence BECAUSE the two readings fail differently -- compiler-built executable versus a readelf-level BFS on an unlinked object, sharing no code path, and built and controlled before the target number was looked up. x86-64 only; a Pascal object is UNMEASURED rather than assumed-the-same and is the gap most likely to matter, since a Pascal object is what an ESP program actually is; 4b-septies' DATA symbols untouched. NOTE this page carries two UND counts about two different objects -- 20 either way for the xtensa ESP object, ZERO for the x86-64 C TU -- and they do not contradict each other. IMPORT SIDE, separately: `ld` errors on relocation SITES, not on undefined symbol-table entries -- an xtensa object's ESP-IDF UND entries sit at 20 with and without `--dce` while relocations naming them go 24 -> 0 and the link goes rc=1 -> rc=0. So \"the symbol goes, not just the bytes\" is false on the import side and the benefit arrives without it."
 ---
 
 # Is a pxx object a self-contained runtime, or a translation unit?
@@ -101,6 +101,20 @@ The `--dce` object still carries all twenty UND entries — the identical list �
 and links clean. **`ld` errors on relocation sites, not on undefined symbol
 table entries.**
 
+**NAME THE OBJECT BESIDE THE NUMBER, because this page carries two UND counts
+that look like they contradict each other and do not.** Here — the XTENSA ESP
+object, `test/test_emit_obj.pas --target=xtensa` — the count is **20 either
+way**, because that object imports the ESP-IDF PAL, which nothing in the object
+defines. In the export section below — the **x86-64 C TU** reconstructed from
+`60edd4853` — the count is **ZERO undefined symbols of any kind**, because a
+hosted C object carries a full copy of everything it reaches and asks the linker
+for nothing. Two objects, two targets, two populations. A later reader meeting
+"twenty UND entries" and "zero undefined symbols" a page apart should read them
+as facts about different objects, not as one refuting the other. (This is the
+same shape as the 25-versus-24 correction recorded in
+[[bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal]]:
+a count carried across two populations is the house error here.)
+
 ### What this does and does not settle
 
 It is a measurement on the **IMPORT** side. This fork is about the **EXPORT**
@@ -174,8 +188,21 @@ Re-rooted at the TU's own two exports and nothing else:
 | the TU's own two exports (= answer B) | **78** | **9** |
 
 **78 is the number this ticket already records for "the same code as an
-executable" (78 of 805).** The model reproduces it from a different direction
-without being aimed at it, which is the strongest thing said for it here.
+executable" (78 of 805)** — and that is not a coincidence noted in passing, it
+is the strongest evidence on this page, so the reason is spelled out rather
+than left to a reader.
+
+This repo's rule is that two readings corroborate only if they **FAIL
+DIFFERENTLY**, and these do. The 78 in the table above came from the COMPILER
+building a real executable: its own front end, its own reachability walk, its
+own root set, the answer read off the binary. The 78 here came from
+`readelf`-level relocation data with the compiler's graph never consulted, an
+`awk`-shaped BFS written for this question, on an OBJECT that has no `main` and
+was never linked. The two share no code path, no data structure and no root-set
+logic. **And it could not have been tuned to the target**: the model was built
+and its control run against 573 before the 78 was looked up — the root set was
+swapped and it landed there. An instrument that cannot be aimed at a number and
+hits it is evidence; one that merely agrees is not.
 
 The nine that survive: `malloc`, `memcpy`, `snprintf`, `strerror`, `strlen`,
 `__pxx_set_environ`, `__pxx_va_arg_gp`, `__pxx_va_arg_fp`, `__pxx_va_start_impl`.
@@ -249,6 +276,14 @@ trying to be, which is the one thing a measurement cannot supply.
     which measured it; it is not re-measured here.
   * The `PXX*` Pascal runtime routines are all **LOCAL** in a C object (119 of
     them) and are not exported at all, so they are already B-semantics and are
-    not in either count. A Pascal object was not measured.
+    not in either count. **A Pascal object was not built, and this is UNMEASURED
+    rather than assumed-the-same** — it is the gap most likely to matter, because
+    a Pascal object is what an ESP program actually is, and `ObjProcIsExported`
+    is `ProcCdecl and not ProcCStaticLink`, a predicate whose answer for
+    Pascal-lane routines nobody has read off a built object. Whether the 298/9
+    split survives on the Pascal side is open; do not carry these numbers there.
+  * **Zero undefined symbols is measured on the x86-64 C objects only.** The
+    xtensa ESP object in the import section has twenty, which is the same
+    predicate answering about a different population — see the note there.
   * 4b-septies' DATA symbols (one heap, one `errno`, one `optind`) are still
     unmeasured; nothing here exercises the shared-heap row.
