@@ -902,3 +902,4 @@
 2026-09-17T18:43:33Z	borg	c4cef487ef64fb89257cbbe93518114f78d5e6d0	would NOT pin c4cef487ef64 — 1 red(s) the current pin does not have, 6 inherited from the current pin: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy
 2026-09-17T19:05:18Z	borg	56a9748dc3c2e2a90ae4a3111c05b685f82d0485	would NOT pin 56a9748dc3c2 — 1 red(s) the current pin does not have, 6 inherited from the current pin: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy
 2026-09-18T07:54:52Z	borg	ad85bf019f9629788f2a0e0a5b40fa3aa6a3ebb5	would NOT pin ad85bf019f96 — 1 red(s) the current pin does not have, 6 inherited from the current pin: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy
+2026-09-18T09:19:47Z	borg	9f67753a16d6b0e173cd4c51918645daf2ba28c2	would NOT pin 9f67753a16d6 — 1 red(s) the current pin does not have, 6 inherited from the current pin: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy
