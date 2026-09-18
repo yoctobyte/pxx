@@ -20128,13 +20128,16 @@ test-core: $(COMPILER)
 	# object: the STANDARD Pascal old-style object type -- a value type with methods
 	./$(COMPILER) test/test_object_value_type.pas $(TESTTMP)/test_object_value_type26
 	tools/expect_same.sh test_object_value_type26 "$$($(TESTTMP)/test_object_value_type26 | tail -1)" "OK"
-	# ...and the three things it deliberately refuses, loudly (no VMT to hang them on)
+	# ...and the TWO things it deliberately refuses, loudly (no VMT to hang them
+	# on). It was three until efe06a903 (2026-09-17) made `constructor` and
+	# `destructor` legal on an object -- they are plain methods on a type that is
+	# VMT-less by construction. That commit added its own rows above and left
+	# this one and test/test_object_value_constructor_error.pas behind, so
+	# test-core has been RED on stale paperwork since; both are removed here.
 	! ./$(COMPILER) test/test_object_value_ancestor_error.pas $(TESTTMP)/test_object_value_ancestor_error26 > $(TESTTMP)/test_object_value_ancestor_error.log 2>&1
 	grep -q "an object type cannot have an ancestor" $(TESTTMP)/test_object_value_ancestor_error.log
 	! ./$(COMPILER) test/test_object_value_virtual_error.pas $(TESTTMP)/test_object_value_virtual_error26 > $(TESTTMP)/test_object_value_virtual_error.log 2>&1
 	grep -q "an object type cannot have a virtual method" $(TESTTMP)/test_object_value_virtual_error.log
-	! ./$(COMPILER) test/test_object_value_constructor_error.pas $(TESTTMP)/test_object_value_constructor_error26 > $(TESTTMP)/test_object_value_constructor_error.log 2>&1
-	grep -q "an object type cannot have a constructor" $(TESTTMP)/test_object_value_constructor_error.log
 	./$(COMPILER) test/test_case_insensitive.pas $(TESTTMP)/test_case_insensitive26
 	tools/expect_same.sh test_case_insensitive26 "$$($(TESTTMP)/test_case_insensitive26)" "42"
 	./$(COMPILER) test/test_case_sensitive.pas $(TESTTMP)/test_case_sensitive26
