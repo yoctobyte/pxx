@@ -713,6 +713,26 @@ right.** An 80%-accurate name is worse than a 0%-accurate one — the part you
 sample confirms it. A stale imperative can be **obeyed by tooling while false in
 the world**.
 
+**AND WHERE TWO CONSTANTS SHARE A NAME-SHAPE, THE ONE A GREP REACHES FIRST IS
+THE WRONG ONE — AND IT OFTEN HOLDS THE RIGHT VALUE, SO THE ARITHMETIC CONFIRMS
+IT.** Measured 2026-09-18, **three pairs in one day, three subsystems, two
+seats**, each found only by flipping a candidate and rebuilding. `SocBareArenaSize`
+(NilPy-only, unreached in a Pascal build) against `EspArena`/`HEAP_ARENA` (the RTL
+buffer every bare program gets) — **both 64 KiB**, so a subtraction that had
+correctly identified the QUANTITY appeared to confirm the wrong SOURCE; the seat
+that hit it had written the warning against that exact confusion nine hours
+earlier, in a file it never reopened. `EspArena` spelled its own size **twice, in
+two units** (`array[0..8191] of Int64` beside `HEAP_ARENA = 65536`), tied by a
+hand-checked comment whose own text admits a mismatch would reintroduce the heap
+corruption that arm exists to remove — **a comment is not a guard**, and editing
+one line is silent. And `LINE_BUF_SIZE` (`defs.inc`, reserved by the Pascal
+driver) against `PXXLineBuf` (`builtinheap`), both 4,096-byte readln buffers,
+only one of which moves an image. **A subtraction names a quantity and can never
+name a constant**, so do not let a matching number stand in for a differential:
+change the candidate, rebuild, measure, revert — and state the delta. Two of the
+three were found that way and none by reading. When you fix one, DERIVE the
+second spelling from the first rather than restating it.
+
 **AND THE MOST EXPENSIVE STALE ROW IS A HAZARD BLOCK, BECAUSE OBEYING ONE
 PRODUCES NO SIGNAL.** A stale fact gets contradicted by the next measurement; a
 stale WARNING is written to stop a reader, it succeeds, and a reader who stops
