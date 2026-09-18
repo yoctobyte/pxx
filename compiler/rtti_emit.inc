@@ -1188,7 +1188,24 @@ begin
         if (UClsRTTIOff[ci] < 0) or (not ClassIsStreamable(ci)) then continue;
         entryPos := DataLen;
         DataPutZeros(16);
-        nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
+        { ClassRttiName, NOT the raw TokSlice spelling. The blob's own name word
+          (Pass 2) holds ClassRttiName, and that is what ClassName reads back --
+          so keying the registry on the raw name breaks the ONE round trip the
+          registry exists for, GetClass(X.ClassName). Measured 2026-09-18 on a
+          specialization alias, where the two spellings diverge: ClassName gave
+          `TBox<System.LongInt>`, GetClass('TIntBox') FOUND and
+          GetClass(b.ClassName) MISSING. For every non-specialized class the two
+          strings are identical and nothing moves.
+          There is a second reason to prefer the already-interned spelling and it
+          is about LAYOUT: this loop reads entries at a fixed 16-byte stride from
+          the count slot, and InternStr APPENDS to Data[] (emit.inc), so a name
+          not already interned would land BETWEEN two entries and push the rest
+          off-stride. Pass 2 interns ClassRttiName for every class with a header,
+          so asking for that string here can never append -- the raw spelling
+          had no such guarantee. That hazard is the one frankh-3f hit in .dynstr
+          at 1cdb560f4; it did not reproduce here, and this removes the route to
+          it rather than leaving it resting on an ordering nobody states. }
+        nm := ClassRttiName(ci);
         strIdx := InternStr(nm);
         AddDataPtrFix(entryPos + 0, Strs[strIdx].Offset);
         AddDataPtrFix(entryPos + 8, UClsRTTIOff[ci]);

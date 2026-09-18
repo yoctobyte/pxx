@@ -61,7 +61,13 @@ the row fails and takes the tier with it. This watcher fired **six minutes
 later**, at 16:06:33Z, which is the tightest corroboration of the cause
 available and is what dated it.
 
-Fixed in `9729073df`: the row and `test/test_object_value_constructor_error.pas`
+Fixed in `cdf0c0539`. (**Not `9729073df`** — that sha is a GHOST. `tools/sync.sh`
+rebases nearly every sync, so the `git commit` id is the doomed one and the
+surviving id is born under the rebase step; `git merge-base --is-ancestor
+9729073df origin/master` fails and the same check on `cdf0c0539` passes. The
+resolve commit `0a77fe3b8` quotes the ghost in its own message, where it is now
+permanent — cite this line, not that one.) The row and
+`test/test_object_value_constructor_error.pas`
 removed, and the comment above the surviving rows corrected from "the three
 things it deliberately refuses" to TWO, naming the commit that changed the
 count so the next reader does not re-derive it. Coverage is not reduced —

@@ -20152,6 +20152,20 @@ test-core: $(COMPILER)
 	@a=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_default.log); b=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_public.log); \
 	 [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-core: the two visibility variants no longer carry the same blob/vmt weight ($$a vs $$b), so the pair is not a controlled comparison any more"; exit 1; }; \
 	 echo "test-core: a.rttiweight prices a class's RTTI, and the default (published) section is what puts it in the registry -- $$a"
+	# THE REGISTRY IS KEYED BY THE STRING ClassName RETURNS, not by the raw
+	# declaration spelling. The blob's name word holds ClassRttiName -- canonical
+	# for a specialization alias -- and the registry used to intern the raw
+	# TokSlice name, so the one round trip the registry exists for,
+	# GetClass(X.ClassName), was the one that failed, while a lookup under a name
+	# no instance ever reports succeeded. For every ordinary class the two
+	# strings are identical, which is why it needed a specialization to see.
+	# THE POSITIVE CONTROL IS THE PINNED COMPILER and it fires: same fixture,
+	# stable_linux_amd64/default/pinned answers `by-ClassName MISSING` /
+	# `by-alias-spelling FOUND`, exactly inverted on the two rows that matter.
+	# plain-class-control is FOUND on BOTH, which is what stops this row passing
+	# on a registry that simply finds nothing -- the MISSING row alone would.
+	./$(COMPILER) test/test_rtti_registry_is_keyed_by_classname.pas $(TESTTMP)/test_regkey26
+	tools/expect_same.sh test_regkey26 "$$($(TESTTMP)/test_regkey26)" "$$(cat test/test_rtti_registry_is_keyed_by_classname.expected)"
 	grep -q "prop Caption tk=23" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Owner tk=6" $(TESTTMP)/test_rtti_emit_dump26.log
 	grep -q "prop Align tk=1 enum=TAlign" $(TESTTMP)/test_rtti_emit_dump26.log

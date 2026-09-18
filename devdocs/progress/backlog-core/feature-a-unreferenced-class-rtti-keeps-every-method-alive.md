@@ -190,8 +190,114 @@ changed:
     type TU = class public     procedure A; virtual; ...   streamable=0
 
 identical `blob=112 vmt=64 vmtslotprocs=5 directmethbytes=220` on both sides, and
-the registry entry is the 24-byte difference in `data=` (1448 against 1424 on
-esp32c3 bare).
+the registry entry is the **24-byte** difference in `data=` on **esp32c3 bare**
+and the **16-byte** difference on **hosted x86-64** — re-derived 2026-09-18 after
+`c44fa2642`, where bare reads 1000 against 976 and hosted 4808 against 4792.
+
+**The label changes a term, so name it rather than carrying one number into the
+other profile.** The absolute `data=` on bare has moved since this section was
+first written (1448 -> 1000, from the heap-arena knob and the commits around it);
+**the DELTA has not**, which is what makes the delta the quantity to quote and
+the absolute the one to re-measure.
+
+**The 8-byte gap between profiles is NOT pointer width — I wrote that, and it is
+wrong in the direction that should have caught it, since bare here is riscv32 and
+has the NARROWER pointers.** Re-derived from the emitter instead of reasoned: a
+registry entry is a fixed **16 bytes** (`DataPutZeros(16)`, two pointer-fixed
+slots, target-independent), and the table also carries an 8-byte COUNT slot that
+exists only when at least one class is streamable. Hosted goes streamable 2 -> 1,
+so one entry leaves and the count slot stays: **16**. Bare goes 1 -> 0, so the
+whole table goes: 8 + 16 = **24**. Same entry size on both profiles; the
+difference is whether the class being removed is the LAST streamable one.
+
+### PARKED 2026-09-18 (frankB) — WHERE A COLD SEAT PICKS THIS UP
+
+**Nothing is half-landed. The pass was deliberately never started**, because the
+measurement below relocates the ticket rather than sizing it. What is banked is
+the instrument, the boundary, and one fixed bug found while pricing it.
+
+**The next step is ONE change and it is not the one this ticket's title asks
+for:** make the RTTI registry conditional on the `AN_RTTI_REG` **node** rather
+than emitting it whenever any class is streamable. Concretely, in
+`compiler/rtti_emit.inc` at the `if regEntries > 0 then` arm (the block that
+sets `RTTIRegistryOff`), gate on whether the program actually contains an
+`AN_RTTI_REG` node. **Do NOT gate on `uses typinfo`** — `__rttireg()` is a
+public intrinsic a user program can call directly, and a hand-maintained union
+of unit names is the exact failure the frontend-cannot-see ticket records from
+the other side.
+
+**Why that is the lever and the ticket's own proposal is not:** every ordinary
+class is registry-rooted (no visibility keyword defaults to `published`), so a
+reachability-gated drop finds almost nothing to drop while the registry is an
+unconditional root. Make the root conditional and the residue becomes droppable.
+Only then is the pass this ticket describes worth writing.
+
+**Three things already closed, so do not redo them:**
+- The `--emit-obj` edge is MOOT, measured: each object carries its own `Data[]`
+  and its own registry, so cross-object `GetClass` does not work today
+  (`a=1 B_finds_A=0 B_finds_its_own=1`) and node-conditional emission cannot
+  break it. No `--emit-obj` arm is needed.
+- The registry's sole consumer is `IR_RTTI_REG`, verified across all six
+  backends; inside `lib/` the intrinsic is called from three files only
+  (`rtl/typinfo.pas` GetClass, `pcl/controls.pas`, `pcl/gtk3widgets.pas`).
+- The keying bug below is FIXED and has a test row; it is not outstanding work.
+
+**One defect found and deliberately NOT fixed, because whoever writes the gate
+will be changing that exact predicate:** `emit.inc` sets `DATAREF_DROP` when
+there is no registry and the intrinsic then reads nil. A registry with no reader
+gives no diagnostic and a reader with no registry gives no refusal — the
+silent-negative shape, and the reason an emitted-and-never-read registry went
+unnoticed. **Decide what a node-conditional registry should do there before
+writing the gate, not after.**
+
+**Also parked, and it is frankh-3f's suggestion rather than a finding:** a
+`RoRangeCount` snapshot + `ErrorNoPos` guard around the blob and VMT emitters,
+his `1cdb560f4` shape. By his own framing the RTTI rows are green and no emitter
+is known to intern mid-blob, so it makes the FIRST offender loud rather than
+fixing a live defect — which means **it has no natural positive control**.
+Whoever adds it owes a manufactured one (an emitter with a deliberate mid-blob
+intern, asserted to fire, then removed) or a finding that `RoRangeCount`
+structurally cannot move in that span.
+
+**Ownership, settled with frankh-3f and still live:** whether a blob is EMITTED
+is this ticket's; where a survivor LIVES is his (`c44fa2642`, ESP-IDF `.rodata`
+in both ELF32 object writers). His half is unblocked and does not need the
+registry gate first — the gate only decides whether there is ALSO a droppable
+set on top.
+
+### A LIVE BUG FOUND IN THE REGISTRY EMITTER WHILE PRICING IT, AND FIXED
+
+Chasing frankh-3f's mid-blob-intern hazard into this loop turned up a different
+defect in the same four lines. The registry is a count slot followed by fixed
+16-byte `(name ptr, rtti ptr)` pairs, and it interned **the raw `TokSliceStr`
+declaration spelling** for the name key. Pass 2 interns `ClassRttiName(ci)`,
+which is **canonical for a specialization alias**. For every ordinary class the
+two strings are identical — which is exactly why this survived: the divergence
+needs a specialization.
+
+Measured on the pinned compiler, `stable_linux_amd64/default/pinned`:
+
+    ClassName=TBox<System.LongInt>
+    GetClass(b.ClassName)   MISSING
+    GetClass('TIntBox')     FOUND
+
+**The one round trip the registry exists for fails, and a lookup under a name no
+instance ever reports succeeds.** Every streaming path does
+`GetClass(X.ClassName)`.
+
+Fixed by interning `ClassRttiName(ci)` here as well. It also closes the route to
+frankh-3f's hazard rather than leaving it resting on an ordering nobody states:
+`ClassRttiName` is guaranteed already-interned by Pass 2, so `InternStr` here can
+never append and push later entries off the 16-byte stride; the raw spelling
+carried no such guarantee. **The layout hazard itself did NOT reproduce** — three
+streamable classes, all three found — so that half stays a removed route, not a
+fixed bug.
+
+**The positive control is the pin, not something manufactured**, and the third
+row is what makes it a control: `plain-class-control` is FOUND on BOTH compilers.
+Without it, a registry that found *nothing* would satisfy the MISSING assertion
+and the row would certify a completely broken registry. Wired into `test-core` as
+`test/test_rtti_registry_is_keyed_by_classname.pas`.
 
 **So the pass as this ticket specifies it would drop almost nothing on ordinary
 Pascal**, because almost every class is name-reachable by default. That is not an
