@@ -271,6 +271,17 @@ TIERS = {
         # implements MUL32HIGH). Arithmetic questions — the two tickets that
         # motivated the oracle — are what this target still cannot answer.
         "test-xtensa",
+        # THE ESP BARE-METAL SUITES, in no tier until 2026-09-18 -- every ESP
+        # size and correctness number was a hand measurement nothing defended.
+        # ~30 UART-output diffs against the x86-64 oracle, both chips
+        # (esp32c3 = riscv32, esp32s3 = xtensa Call0), under Espressif's
+        # qemu-system fork. The first time anyone ran test-esp-bare it caught a
+        # profile-wide defect (no program declaring a class could build for
+        # --esp-profile=bare). A box without the fork SKIPS these with a
+        # hole-counted reason (apply_esp_skips) -- never a green: the recipes
+        # would otherwise print "not installed" per row and pass.
+        # bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
+        "test-esp-bare", "test-esp-softfloat",
         # the 220-program c-testsuite battery per cross target, + lua on all
         # four: this matrix found 3 real backend gaps on the day it landed,
         # so the watcher should be the one running it (Track C asked for it in
@@ -289,7 +300,11 @@ TIERS = {
     # slow: shards demoted OUT of the per-sha tiers because one job was setting
     # the whole tier's wall. Disjoint from the nesting chain, like `opt`, so a
     # full run neither contains nor evicts it. See SLOW_SHARDS.
-    "slow": ["test-uforth"],
+    # test-esp-idf builds NINE real ESP-IDF projects (FreeRTOS, lwIP sockets,
+    # DNS, FAT) and runs them under the qemu fork: one 41-line job whose wall
+    # is tens of minutes, so it rides the idle tier rather than setting
+    # `full`'s. Skipped with a reason where ESP-IDF or the fork is absent.
+    "slow": ["test-uforth", "test-esp-idf"],
     # opt: O-level differential gate (feature-testmgr-opt-tier-and-benchmarks).
     # test-opt = hand-picked corpus + -O1/-O2 self-compile fixedpoints; on top,
     # generate() adds OPT_SHARDS optdiff.sh jobs sweeping EVERY test/*.pas|.c
@@ -366,6 +381,15 @@ CLASSES = {
     "selfhost":    {"est_mem": 782 << 20,  "timeout": 600},
     "corpus":      {"est_mem": 400 << 20,  "timeout": 1200},
     "conformance": {"est_mem": 256 << 20,  "timeout": 1200},
+    # test-esp-idf: nine real ESP-IDF project builds plus qemu runs, one job.
+    # 1800 = a COLD build (every examples/esp32/*/build created during the run)
+    # measured at 524s on plexus 2026-09-18 while sharing the box with the bare
+    # suite, x~3.4. est_mem is NOT measured as an aggregate: /usr/bin/time saw a
+    # 168 MB largest process, but ninja runs gcc in parallel, so 2 GiB is an
+    # upper guess for mem_estimate_report() to correct on its first real run.
+    # Under `qemu` (240s) this job would be killed and published as a RED.
+    # bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
+    "esp-idf":     {"est_mem": 2048 << 20, "timeout": 1800},
     # 1934 = the 1289 MB optdiff#shard0/12 actually peaked at on 2026-09-01,
     # * 1.5, which is what mem_estimate_report() tells you to do when it catches
     # a breach — and it caught this one on a COLD START, with no learned metric
@@ -905,7 +929,7 @@ HEARTBEAT_PERIOD = 10.0         # beat interval; must be << HEARTBEAT_STALE
 # default work-weights for jobs with no learned duration yet, per class —
 # used only for the progress estimate, never for scheduling
 CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
-                "corpus": 45.0, "conformance": 90.0, "opt": 30.0,
+                "corpus": 45.0, "conformance": 90.0, "opt": 30.0, "esp-idf": 60.0,
                 "guards": 20.0, "guards-py": 35.0}
 # TWO TABLES KEYED BY CLASS, AND ADDING A CLASS TO ONE IS NOT AN ERROR ANYWHERE
 # UNTIL A JOB OF THAT CLASS RUNS. Adding `guards` to CLASSES alone on
@@ -1655,6 +1679,94 @@ def apply_host_tool_skips(jobs, absent):
               "box is not providing, not a verdict on the tree; run "
               "tools/install_qemu.sh to close it."
               % (n, ", ".join(sorted(absent.values()))), flush=True)
+    return n
+
+
+# ---- ESP SYSTEM emulators and ESP-IDF --------------------------------------
+# The ESP suites need a different emulator from HOST_TOOLS above: Espressif's
+# qemu-system FORK, which is the only qemu with an esp32/esp32s3/esp32c3
+# machine. Stock qemu-system-xtensa/-riscv32 (10.2.1 measured on plexus) have
+# none, and the qemu-USER binaries twatch fingerprints are a third thing again,
+# so neither PATH nor the archive can answer "can this box run an ESP row".
+#
+# THE RECIPES SKIP INLINE AND EXIT 0. Each row is
+# `QEMU=$(ls ~/.espressif/...); if [ -z "$QEMU" ]; then echo "... not
+# installed; ... skipped"; else ...` -- so on a box without the fork every row
+# prints a sentence and the target passes. Enrolled as-is, that is a GREEN for
+# ~30 assertions that never ran, which is worse than not being enrolled: an
+# unenrolled suite is an absence, this would be a false statement. So the
+# harness checks first and SKIPS with a hole-counted reason; the recipe's own
+# guard then never decides anything under testmgr.
+#
+# EITHER fork absent skips the WHOLE target. The recipes run both chips, and
+# with one fork missing they would run half their rows and inline-skip the
+# other half silently -- a green that means one chip. That is the one place
+# this deliberately departs from HOST_TOOLS' "when in doubt, RUN": there the
+# job fails loudly when the tool is missing, here it passes quietly, so the
+# asymmetry points the other way. install_esp32_target.sh installs both.
+#
+# The globs are the recipes' own, verbatim (and tools/esp_run_bare.sh's);
+# testmgr_esp_skip_devtest.py fails if esp_run_bare.sh stops containing them.
+# bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
+ESPRESSIF_QEMU = (
+    ("qemu-system-riscv32",
+     "$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32"),
+    ("qemu-system-xtensa",
+     "$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa"),
+)
+ESP_IDF_EXPORT = "$HOME/esp/esp-idf/export.sh"
+# target -> what it needs. test-esp-idf builds real IDF projects AND runs them
+# through tools/esp_run.sh, which resolves the same qemu fork.
+ESP_SUITES = {
+    "test-esp-bare":      ("qemu",),
+    "test-esp-softfloat": ("qemu",),
+    "test-esp-idf":       ("qemu", "idf"),
+}
+ESP_INSTALL_HINT = "tools/install_esp32_target.sh"
+
+
+def _expand_home(pattern, home):
+    return pattern.replace("$HOME", home)
+
+
+def missing_esp_prereqs(home=None):
+    """{"qemu": [names], "idf": [names]} for what this box lacks; empty lists
+    when present. `home` is injectable for the devtest."""
+    home = home or os.path.expanduser("~")
+    qemu = [name for name, pat in ESPRESSIF_QEMU
+            if not any(os.access(p, os.X_OK)
+                       for p in glob.glob(_expand_home(pat, home)))]
+    idf = [] if os.path.isfile(_expand_home(ESP_IDF_EXPORT, home)) \
+        else ["ESP-IDF (%s)" % ESP_IDF_EXPORT]
+    return {"qemu": qemu, "idf": idf}
+
+
+def apply_esp_skips(jobs, missing):
+    """Skip every job of an ESP suite whose prerequisites this box lacks.
+    -> the number skipped. An already-skipped job keeps its first reason."""
+    n = 0
+    for j in jobs:
+        if j.status == "skip":
+            continue
+        needs = ESP_SUITES.get(j.target)
+        if not needs:
+            continue
+        lacking = [x for kind in needs for x in missing.get(kind, [])]
+        if not lacking:
+            continue
+        j.status = "skip"
+        j.skip_reason = (SKIP_HOST_TOOL_ABSENT + " %s — the ESP suites run under "
+                         "Espressif's qemu-system fork (stock qemu has no ESP "
+                         "machine), and without it every row would print "
+                         "'not installed' and pass; install with %s"
+                         % (", ".join(lacking), ESP_INSTALL_HINT))
+        n += 1
+    if n:
+        print("testmgr: %d ESP job(s) SKIPPED — this box lacks %s. That is ESP "
+              "coverage this box is not providing, not a verdict on the tree; "
+              "run %s to close it."
+              % (n, ", ".join(sorted({x for v in missing.values() for x in v})),
+                 ESP_INSTALL_HINT), flush=True)
     return n
 
 
@@ -3136,6 +3248,9 @@ def classify(lines):
             # not finish is not a job that failed.
             or "uforth" in text):
         return "corpus"
+    # Before the qemu arm: the IDF recipe runs qemu too, and would get its 240s.
+    if "esp-idf/export.sh" in text:
+        return "esp-idf"
     if "run_target.sh" in text or "qemu" in text:
         return "qemu"
     # A sweep over T's own devtest scripts. Matched on the GLOB the recipe
@@ -6592,6 +6707,7 @@ def main():
     # corpus guard: a job already skipped has a reason, and the FIRST reason is
     # the actionable one.
     apply_host_tool_skips(jobs, missing_emulators())
+    apply_esp_skips(jobs, missing_esp_prereqs())
     apply_host_lib_skips(jobs)
     for j in jobs:
         j.deps = [d for d in j.deps if d.status != "skip"]

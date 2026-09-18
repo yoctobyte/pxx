@@ -69,6 +69,7 @@ import atexit
 import calendar
 import datetime
 import fnmatch
+import glob
 import hashlib
 import json
 import os
@@ -8003,6 +8004,21 @@ HW_KEYS = ("cpu", "sockets", "cores", "threads", "mhz_max", "mem_total_kb",
 # when run_target.sh grows a runner this does not name.
 RUNNER_BINARIES = ("qemu-i386", "qemu-arm", "qemu-aarch64", "qemu-riscv32",
                    "qemu-riscv64", "qemu-xtensa", "wasmtime")
+# The ESP suites' emulators, which are NOT the qemu-user binaries above and not
+# on PATH: Espressif's qemu-system fork, resolved by glob under ~/.espressif
+# exactly as tools/esp_run_bare.sh does. Recorded because the archive said
+# `qemu-xtensa: 8.2.2` for a box that may have no ESP machine at all, and a
+# reader asking "can the watcher run test-esp-bare" got a true answer about the
+# wrong binary. Keys deliberately do NOT start with `qemu-`, so toolchain_line
+# does not fold them into the user-mode group. Same globs as testmgr's
+# ESPRESSIF_QEMU; testmgr_esp_skip_devtest.py holds the two in step.
+# bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
+ESP_SYSTEM_EMULATORS = (
+    ("espqemu-riscv32",
+     "$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32"),
+    ("espqemu-xtensa",
+     "$HOME/.espressif/tools/qemu-xtensa/*/qemu/bin/qemu-system-xtensa"),
+)
 _TOOLCHAIN_CACHE = {}
 
 
@@ -8076,6 +8092,10 @@ def host_toolchain():
     tc["git"] = _tool_version("git")
     for b in RUNNER_BINARIES:
         tc[b] = _tool_version(b)
+    home = os.path.expanduser("~")
+    for key, pat in ESP_SYSTEM_EMULATORS:
+        hits = sorted(glob.glob(pat.replace("$HOME", home)))
+        tc[key] = _tool_version(hits[-1]) if hits else None
     _TOOLCHAIN_CACHE.update(tc)
     return dict(tc)
 

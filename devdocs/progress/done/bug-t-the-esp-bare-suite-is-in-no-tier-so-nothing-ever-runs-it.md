@@ -4,10 +4,10 @@ track: T+S
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-08-30
 found-by: frankS
-summary: "THREE ESP suites, not two: test-esp-bare, test-esp-softfloat AND test-esp-idf appear in ZERO testmgr tiers and in no script -- only test-xtensa is enrolled. Re-verified 2026-09-05, and the suite was then EXECUTED for the first time: it immediately caught bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare, a profile-wide compiler defect present indefinitely. The assertion count in the original body is WRONG (see the 2026-09-05 note): 27 sites in test-esp-bare and 2 in test-esp-softfloat, and on a box WITH the Espressif qemu builds NONE of them skip -- so the '92% skip, maybe split the 2 hosted rows out' advice is a property of the measuring box, not of the target. Post-fix clean run: rc=0, 26 distinct assertions all ok, 0 skipped. Enrolment is still Track T's, in tools/testmgr.py, untouched here. 2026-09-06: test-esp-idf added to this ticket -- it ran ONE of the nine examples/esp32 projects (timer-c3, for both chips), so gpio-c3, net-c3, dns-c3 and fs-c3 were executed by nothing at all and all four PASS; wired into the target this session, enrolment still open."
+summary: "ENROLLED 2026-09-18 (frankH): test-esp-bare + test-esp-softfloat in testmgr `full`, test-esp-idf in `slow` (own class, 1800s). A box without Espressif's qemu-system fork (or ESP-IDF, for idf) SKIPS them as a hole-counted `host tool absent:` naming tools/install_esp32_target.sh -- never the silent green the recipes' inline guards would give. Green at HEAD on plexus: 32 bare/softfloat rows, 4m39s serial; idf 6 rows, 8m44s cold. twatch now fingerprints the ESP emulators (espqemu-*). Open until observed: whether borg, the only publishing watcher, RUNS or SKIPS them -- first visible in its next full/slow report."
 ---
 
 # The ESP bare-metal suite is enrolled nowhere
@@ -373,3 +373,42 @@ distinguish "ran and passed" from "was skipped" contributes nothing to a tier, s
 enrolling the suite without fixing it buys a green that means less than it reads.
 That is a separate, smaller ticket for whoever takes the enrolment; 35 assertions
 in the bare suite, one of them this shape.
+
+## 2026-09-18 (frankH, Track T) — ENROLLED, with a harness-level skip
+
+**What landed.** `tools/testmgr.py`: `test-esp-bare` and `test-esp-softfloat`
+in `full`, `test-esp-idf` in `slow`. `apply_esp_skips()` runs beside the
+qemu-user host-tool guard. New class `esp-idf` (1800s, weight 60).
+`tools/twatch.py`: `espqemu-riscv32` / `espqemu-xtensa` in the toolchain
+fingerprint, resolved by the same globs. `tools/testmgr_esp_skip_devtest.py`
+(runs under tools-devtest) covers eight guards in both directions, including
+the globs staying equal to `esp_run_bare.sh`'s and twatch's.
+
+**Why not a plain `+=`: the recipes skip INLINE and exit 0.** On a box without
+the fork every row prints "not installed; ... skipped" and the target passes.
+Enrolled as-is, that is a green for ~30 rows that never ran, which is worse
+than the absence this ticket was filed about. So testmgr checks first and skips
+as a counted hole. Either fork missing skips the whole target, because the
+recipe would otherwise run one chip and quietly skip the other.
+
+**Measured at HEAD before enrolling (plexus, compiler `1d2aa814c50d`).**
+Bare + softfloat: rc=0, 32 ok rows, 0 MISMATCH, 0 skips, 4m39s serial (20
+testmgr jobs, ~14s each, inside the qemu class's 240s). test-esp-idf: rc=0,
+gpio/net/dns/fs-c3 plus both esp_timer rows ok, **8m44s COLD** (every
+`examples/esp32/*/build` was created during the run), largest process 168 MB.
+Under the `qemu` class it would have been killed at 240s and published as a RED.
+
+**The 2026-09-11 note's "guard whose pass and skip print the same thing"** is
+a HISTORICAL comment (Makefile, above the executed windowed row). It describes
+the state before that row existed. The row itself asserts two outcome slots.
+Nothing to fix.
+
+**Still open, and it is an observation rather than work:** borg is the only
+watcher publishing and it is unreachable from plexus, and its fingerprint
+(until this lands) recorded only qemu-user. Its next `full` report either
+carries the ESP rows or prints `ESP job(s) SKIPPED — this box lacks ...`. If
+it skips, closing the hole is an infra act on borg
+(`tools/install_esp32_target.sh`), not a code change.
+
+## Log
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

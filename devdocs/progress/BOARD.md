@@ -509,7 +509,7 @@ _none_
 | refactor-n-user-class-dunders-are-dispatched-at-run-time-when-the-left-operand-is-static | N | 30 | refactor | > | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (61)
+## backlog-tools (60)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -549,7 +549,6 @@ _none_
 | bug-t-the-conformance-runner-reports-an-empty-corpus-as-a-normal-green | T | 45 | bug | tools/run_pascal_conformance.sh guards a MISSING suite directory (prints SKIP) but not a PRESENT-BUT-EMPTY one: that prints `0 pass, 0 fail, 0 skip, 0 auto-gated (of 0)` and exits 0 — a line shaped exactly like a result, with `(of 0)` the only tell. Both cases exit 0, so a caller reading rc cannot separate no-corpus, empty-corpus and green. Measured on this box. 22 of 28 checkouts pass this target by absence, and the group that bit had `library_candidates/` present with the suite under it missing, so a presence check on the parent passes and the corpus still is not there. | — |
 | bug-t-the-crtl-census-writes-fixed-names-into-a-caller-supplied-scratch-dir | T | 40 | bug | crtl_declaration_census.sh writes FIXED names ($TMP/crtl_census.c, .log and the binary) into a caller-supplied tmpdir, and its verdict is `grep -q 'does not define' $LOG`. Two concurrent invocations sharing TESTTMP have one grepping the other's log and one exec'ing a binary the other is rewriting. NOT the cause of the 2026-09-17 lib-test#55 red -- that was the pinned compiler and is fully explained (red under pin v410, green at HEAD, cleared by pin v411) -- so this is filed as a live hazard on its own evidence, not as a diagnosis of that failure. | — |
 | bug-t-the-documented-build-path-never-enumerates-what-it-needs | T | 45→80 | bug | FROM AN ATTEMPT, not the backlog. Build-from-clean now WORKS in a container with only git and make -- verified 2026-09-06 in podman/alpine (musl, no bash, no fpc, no gcc): seed from the committed pin, `make compiler/pascal26`, converged in 1 round to the same sha as the host. But git and make were installed BY THE TESTER via apk, so the one step still unmeasured is a box that lacks them, and NOTHING in the repo states the requirement. The prerequisite set is currently folk knowledge: this attempt found bash was assumed and absent (fixed, 79264f396), which is exactly the shape of an unstated dependency -- it did not error usefully, it silently disabled a guard. Wants a stated, TESTED prerequisite list, not a README paragraph nobody runs. | — |
-| bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it | T+S | 45→70 | bug | THREE ESP suites, not two: test-esp-bare, test-esp-softfloat AND test-esp-idf appear in ZERO testmgr tiers and in no script -- only test-xtensa is enrolled. Re-verified 2026-09-05, and the suite was then EXECUTED for the first time: it immediately caught bug-a-no-program-declaring-a-class-can-build-for-esp-profile-bare, a profile-wide compiler defect present indefinitely. The assertion count in the original body is WRONG (see the 2026-09-05 note): 27 sites in test-esp-bare and 2 in test-esp-softfloat, and on a box WITH the Espressif qemu builds NONE of them skip -- so the '92% skip, maybe split the 2 hosted rows out' advice is a property of the measuring box, not of the target. Post-fix clean run: rc=0, 26 distinct assertions all ok, 0 skipped. Enrolment is still Track T's, in tools/testmgr.py, untouched here. 2026-09-06: test-esp-idf added to this ticket -- it ran ONE of the nine examples/esp32 projects (timer-c3, for both chips), so gpio-c3, net-c3, dns-c3 and fs-c3 were executed by nothing at all and all four PASS; wired into the target this session, enrolment still open. | — |
 | bug-t-the-five-gtk-regressions-are-one-missing-host-dependency | T | 55 | bug | Seven lost its GTK development headers to the 2026-09-05 dist-upgrade (removed 15:20-17:30, reinstalled by hand 17:59:31), so the 09-05 batch of five gtk jobs failed there, auto-filed, and was closed by whoever verified on a host that has them. CORRECTED 2026-09-06: the 'it has happened four times' recurrence argument is FALSE and the other three batches are NOT this condition -- 08-21 ran on plexus and its own log tail shows gtk_init SUCCEEDING; 08-30 and 09-01 both failed deep inside headers that were present, against two different code defects, each root-caused and fixed. The five test NAMES recur because they carry the widest header surface in the suite, not because one condition recurs. The durable fix stands and is strengthened: a job that cannot tell 'the feature is broken' from 'the toolchain is absent' -- and a ticket set that cannot tell four causes apart -- produces closures nobody can audit. | — |
 | bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy | T | 60 | bug |  | — |
 | bug-t-the-full-suite-hook-refuses-writing-about-the-suite-not-just-running-it | T | 35 | bug | `.claude/hooks/no-full-suite.sh` matches the COMMAND TEXT, so it refuses commands that merely CONTAIN a suite name in prose rather than invoking one. Three refusals in one session, none of them a suite run: a heredoc writing a ticket whose body said `gate.sh full`, a logbook line naming a `test/` glob, and a `git commit -F -` whose MESSAGE said `make test` while explaining why the quick tier was enough. Each cost a retry through a different tool. The guard is right and must stay; it is the aperture that is wrong — it cannot tell `make test` from a commit message about `make test`. | decide-t-the-full-suite-hook-refuses-prose-about-the-suite |
@@ -1096,9 +1095,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3824)
+## done (3825)
 
-3824 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3825 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (83)
 
@@ -1237,7 +1236,6 @@ _none_
 - [p 70] [A+S] bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss (unblocks 1)
 - [p 70] [A] bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program (unblocks 1)
 - [p 70] [N] bug-n-a-bitwise-or-shift-operator-on-a-variant-user-object-never-reaches-its-dunder (unblocks 1)
-- [p 70] [T+S] bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it (unblocks 1)
 - [p 70] [A] feature-a-an-extern-only-variable-still-reserves-its-storage (unblocks 1)
 - [p 70] [A+O] feature-opt-rtti-emit-on-use (unblocks 1)
 - [p 70] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to (unblocks 1) [parked — re-claim, do not duplicate]
@@ -1784,7 +1782,6 @@ _none_
 - **1** — bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines
 - **1** — bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero
 - **1** — bug-t-the-documented-build-path-never-enumerates-what-it-needs
-- **1** — bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
