@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "Every `--emit-obj` xtensa object now imports 18 `lwip_*` symbols plus `vTaskDelay` and `esp_timer_get_time`, for a routine the program never calls, and the xtensa link in test-emit-obj fails. TWO facts, neither sufficient alone: `--emit-obj` retains the whole builtin unit (test_emit_obj carries 114 PalBackend symbols, test_esp_hello carries 0, and NEITHER contains an Assert), and `f0a1a8be9` gave `__pxxAssert` an AnsiString local + concatenation whose string path reaches the PAL's file I/O — which on ESP shares a translation unit with the socket backend. riscv32 is clean only because the POSIX backend defines those calls in-object. Bisected to the commit and narrowed to the hunk; ordinary ESP programs are byte-identical, so this is NOT the esp32 bare-image size regression."
+summary: "OPTION (A) IS MEASURED TO FIX THIS (2026-09-18, frankB): with `--dce` now running on riscv32, a `--emit-obj` object for this ticket's own repro goes from 114 `PalBackend` symbols to **0** (538428 B -> 66008 B) with its exports byte-identical — and riscv32 carries the same 114 PAL symbols as xtensa, differing only in defining rather than importing their callees. **The three-backend `platform_net` split (S/B) is therefore NOT required to fix this bug** and should be ranked on its own merit. The earlier \"`--dce` changes nothing here\" row was measured on xtensa WHERE THE PASS REFUSES THE TARGET, so it is a true statement about a pass that did not run. Original defect: every `--emit-obj` xtensa object imports 18 `lwip_*` plus `vTaskDelay` and `esp_timer_get_time` for a routine the program never calls, because retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit. STILL OPEN: xtensa needs its stub calls recorded, `XtEntryPcAnchor` re-derived through `DceNewOff`, and `symtab.inc:17878`'s backward long call moved to the anchored slot form. Verifiable here — `qemu-xtensa` runs a `--platform=posix` image."
 ---
 
 # `--emit-obj` retains `__pxxAssert`, so one AnsiString in it imports the whole ESP PAL
@@ -405,3 +405,84 @@ backend directories carrying those 22 (and their posix/wasi equivalents),
 `platform_net.pas` over them carrying the 27 facade wrappers, and `uses
 platform_net` added to the 13 RTL consumers. **Move the ratchet from 20 to 2 in
 the same commit**, which is what this ticket already asks of whoever fixes it.
+
+
+## 2026-09-18 (frankB) — OPTION (A) IS MEASURED TO FIX THIS, AND (S/B) IS NOT NEEDED FOR IT
+
+**Before anyone starts the three-backend split: DCE drops all 114 PAL symbols.**
+Measured today on riscv32, which this ticket establishes carries *the same 114
+`PalBackend` symbols as xtensa* and differs only in defining rather than
+importing their callees:
+
+| `--target=riscv32 --emit-obj`, `test/test_emit_obj.pas` | PAL syms | UND | object |
+| --- | --- | --- | --- |
+| without `--dce` | 114 | `ext_notify` `ext_aliased_link` | 538428 B |
+| with `--dce` | **0** | `ext_notify` `ext_aliased_link` | **66008 B** |
+
+Exports byte-identical (`readelf -sW`, GLOBAL FUNC, diffed — that is what an
+object is FOR, and DCE's own root loop exists to protect it). The five-line
+`Assert` repro behaves the same: 114 -> 0, 536824 B -> 71524 B.
+
+**This became measurable today because `--dce` now runs on riscv32**
+(`40ab2b91c`). It was not measurable before, and that is why the ticket's
+earlier `--dce` row could not see it.
+
+### The row above this one is not evidence against this, and it looks like it is
+
+This ticket records *"**`--dce` changes nothing here.** With and without:
+`code=336324B` byte for byte, `lwip_und=18`, `pal=114`"*. That was measured **on
+xtensa, where the pass refuses the target** — the correction section says so in
+its own words two paragraphs earlier (`dce: off: target is not x86-64`). So it
+is a true statement about a pass that did not run, and it reads as a measurement
+of a pass that did. It is the instrument-answering-about-something-else shape:
+nothing errored, and the number was real.
+
+### What this does to the two candidate fixes
+
+- **(A) make DCE work on the target** — now demonstrated to remove the retention
+  entirely, on a target of the same family, with exports preserved. And it is
+  **much smaller than this ticket's "now known to be much bigger than it
+  looked"** assessment, which rested on the premise that each backend needs a
+  branch-patch arm written. That premise is false and is corrected at the top of
+  [[bug-a-dce-refuses-every-target-except-x86-64]]: `ApplyCallFixups` has been
+  fully architecture-aware all along. riscv32 needed two one-line defects fixed,
+  not an arm.
+- **(S/B) split the ESP `platform_backend`** — frankF priced this honestly at
+  **three backends x 114 entry points, a 119-entry facade, and 13 RTL
+  consumers**, and banked it rather than landing it. **That work is not required
+  to fix this ticket.** It remains independently useful (a program naming
+  `platform` for the clock should not carry sockets under ANY pruning policy),
+  but it should be ranked on its own merit and not as this bug's fix.
+
+### What is NOT claimed
+
+**That xtensa's 18 `lwip_*` imports are gone.** They are not measured, because
+DCE still refuses xtensa. What is measured is that the 114 PAL bodies which
+reference them are droppable on a sibling target with the pass on. The import
+list is a consequence of those bodies being retained, so the expectation is that
+they follow — but that is a prediction and this section is not the place to
+record it as a result. **Re-derive the number from the built object**, do not
+write it from this paragraph; an assertion written from a prediction pins the
+prediction.
+
+### The remaining xtensa work, now that riscv32 has mapped the shape
+
+Verifiable here: `qemu-xtensa` is on this box, and
+`--target=xtensa --platform=posix` builds a hosted image that runs under it
+(`hello`, rc=0, measured). So a gate lift on xtensa **can** be verified
+end-to-end rather than only linked.
+
+1. `EmitXtensaCallToCode` / `EmitXtensaCall8ToCode` need their calls recorded,
+   exactly as `EmitRiscv32CallToCode`'s ten sites did.
+2. `XtEntryPcAnchor` is captured before the pass runs and DCE moves code — it
+   must be re-derived through `DceNewOff`, or the entry jump's long form is a
+   delta from a stale anchor.
+3. **The one riscv32 did not have**: `symtab.inc:17878`'s deliberate
+   non-recording, for a BACKWARD call out of `CALLn` reach. The anchored slot
+   form the FORWARD case already uses (`EmitXtensaLongCallSlot` +
+   `RecordInternalCallAt` with an anchor) is what that case needs too —
+   `ApplyCallFixups` has a literal arm keyed on the anchor, which is precisely
+   the Patch24-over-the-head problem that note gives as its reason.
+
+**Move the `<= 20` ratchet in the same commit**, as this ticket already asks of
+whoever fixes it, and assert on both targets.
