@@ -111,7 +111,7 @@ what IDF itself takes before our first byte, what bare metal adds back (the
 64 KB `SocBareArenaSize` arena is BSS by construction), and what it drops (the
 hosted 32 KB `SIG_ALTSTACK_SIZE` is in the numbers above and has no bare-metal
 counterpart). **Those are rungs of `umbrella-an-esp32-image-is-as-small-as-it-
-can-be`, and they are measured on a chip, not projected here.** The escalation
+can-be`, and they are measured, not projected here.** **RUNG 0 IS ANSWERED (2026-09-18, `measure-what-idf-itself-costs-in-sram-on-a-c3`) and it needed no chip: IDF leaves 340,124 bytes of free heap on a C3, ~285,100 with WiFi linked, so 146,612 B of data+bss is 43% / 51% of the budget — it fits in both, with room.** What still needs hardware is the runtime WiFi buffers; qemu's esp32c3 has no radio model and the station example hangs in `esp_wifi_init()`. The escalation
 built on the old paragraph — *"is a whole Python program meant to fit inside an
 ESP32"* — is in `rejected/` for this reason: **the fork may be real, the number
 it rested on was not.**

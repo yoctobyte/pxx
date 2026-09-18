@@ -8,7 +8,7 @@ blocked-by: [bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-wor
 status: new
 created: 2026-09-18
 owner: ""
-summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. An ESP32-C3 has ~400 KB usable SRAM (docs/targets/esp32.md:118) before IDF takes its share — network buffers included, and WE HAVE NEVER MEASURED IDF'S OWN COST, so the budget is not yet a number. Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) `--dce` is refused on every target but x86-64 at `dce.inc:226`, so no ESP build strips a byte. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one."
+summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. RUNG 0 IS ANSWERED (2026-09-18): IDF costs 69,476 B of a C3's 409,600 and leaves **340,124 bytes** of free heap for a non-networking app, ~285,100 projected with WiFi linked — measured here with IDF v6.0.1 under the Espressif qemu, no chip needed. So the budget IS a number, and our NilPy hello-world's 146,612 B of data+bss is 43% of it. The runtime WiFi-buffer term he named still needs a chip (qemu has no radio model). Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) `--dce` is refused on every target but x86-64 at `dce.inc:226`, so no ESP build strips a byte. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one."
 ---
 
 # The target, in the owner's words
@@ -50,18 +50,32 @@ them in one umbrella would rank by the wrong currency.
 - The bss floor is 41,800 B, of which **32,768 is the signal alt stack**,
   reserved unconditionally, `--no-signals` included.
 
-**NOT measured, and it is the number this umbrella most needs:**
+**RUNG 0 IS NOW MEASURED (2026-09-18, frankS) — the budget is a number:**
 
-- **What IDF itself costs in SRAM.** The owner asked directly: *"does this
-  include what IDF uses? (because likely network buffers etc do eat up some)."*
-  Until someone measures it, "149 KB for nothing" is an unanchored figure and no
-  rung here can be said to have made the image fit. **This is rung 0.**
+- **IDF costs 69,476 B of the C3's 409,600.** Its own `hello_world`, built here
+  with IDF v6.0.1 for esp32c3 and booted under the Espressif qemu, links
+  46,144 B of DRAM and prints `Minimum free heap size: 340124 bytes`.
+  **340,124 B is ours to spend** with no networking linked.
+- **Linking WiFi costs 55,024 B of heap pool before a single buffer is
+  allocated** (`heap_init` RAM region 215,504 -> 160,480; static DRAM
+  46,144 -> 101,352). A networking image projects to ~285,100 B free.
+- **So our NilPy hello-world's 146,612 B of data+bss is 43% of the no-network
+  budget and 51% of the WiFi-linked one. It fits in both, with room.**
+- **Still not measured, and it is the half he named: the RUNTIME WiFi buffers.**
+  qemu's esp32c3 has no WiFi radio model — the instrumented station build hangs
+  in `esp_wifi_init()` and never reaches its heap print. That term needs a chip;
+  55,024 B is a LOWER BOUND on the networking case.
+
+See [[measure-what-idf-itself-costs-in-sram-on-a-c3]] for the method and the
+two traps it walks past (`idf.py size`'s "Total" is not the chip's SRAM, and the
+static table cannot see the 10,584 B startup allocates).
 
 # The rungs
 
-0. **Measure IDF's own SRAM floor**, so the budget is a number. Nothing else
-   here is gradeable against "does it fit" until it exists. No ticket yet — file
-   one when taking it.
+0. **DONE 2026-09-18** — [[measure-what-idf-itself-costs-in-sram-on-a-c3]].
+   The budget is **340,124 B** without networking, ~285,100 B with WiFi linked.
+   Every rung below is gradeable against that now. The runtime WiFi-buffer term
+   still needs a chip.
 1. **Make size measurable at all.**
    [[bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work]].
 2. **Stop the silent-empty-image bug.**

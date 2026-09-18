@@ -448,7 +448,7 @@ of them code size: what IDF itself consumes before our first byte; what bare
 metal adds (`SocBareArenaSize` is 64 KB of BSS by construction); and what it
 drops (the hosted 32,768-byte `SIG_ALTSTACK_SIZE` is inside the bss above and
 has no bare-metal counterpart). Those belong to
-`umbrella-an-esp32-image-is-as-small-as-it-can-be` and are measured on a chip.
+`umbrella-an-esp32-image-is-as-small-as-it-can-be`. **The first is now measured and needed no chip (2026-09-18, [[measure-what-idf-itself-costs-in-sram-on-a-c3]]): IDF leaves 340,124 B free on a C3, ~285,100 B with WiFi linked, so 146,612 B is 43% / 51% of the budget — it fits in both.** The runtime WiFi buffers are the term that still needs hardware.
 
 **This is why `CheckBareImageFitsSram` matters more than it looked**: without it
 the overflow is silent and lands as a stack growing into the heap.
