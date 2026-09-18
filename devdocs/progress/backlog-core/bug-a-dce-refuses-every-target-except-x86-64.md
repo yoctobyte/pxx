@@ -7,7 +7,7 @@ type: bug
 status: working
 created: 2026-09-18
 owner: ""
-summary: "RISCV32 IS DONE (2026-09-18, frankB): `--dce` runs on it and a `uses sysutils` program with classes, virtual dispatch, AnsiString concat, try/except and div0 goes 884588B -> 200556B with byte-identical output. THE PRESCRIBED WORK BELOW WAS WRONG AND IS CORRECTED IN ITS OWN SECTION: no backend needed a branch-patch arm written, because `ApplyCallFixups` has been fully architecture-aware all along and DCE already calls it. The two real defects were one line each — DCE re-aimed every CodeRef with an x86-64 rel32 over what is a JAL word on riscv32, and ten stub calls (signal install, coroutine switch, sethook, exception setjmp/raise/longjmp) were emitted outside every fixup table. STILL OPEN for i386, arm32, aarch64, xtensa, wasm32. Each one needs the SAME thing and nothing else: its hand-built branch to `SigInstallAddr` (and its siblings) recorded as a CodeRef. i386 is the cheapest — its slot IS rel32, so the patcher already handles it and only the recording is missing. Owner directive, 2026-09-17: \"strip code and associated data where possible.\""
+summary: "FOUR OF SIX TARGETS DONE (2026-09-18, frankB): x86-64 as before, plus **riscv32, i386 and xtensa (both ABIs)**, each verified by RUNNING the binary under qemu, not by linking it. THE PRESCRIBED WORK BELOW WAS WRONG AND IS CORRECTED IN ITS OWN SECTION: no backend needed a branch-patch arm written — `ApplyCallFixups` has been fully architecture-aware all along. The real defects were an x86-64 rel32 written over encoded branch WORDS, ~30 stub calls emitted outside every fixup table on the premise that \"the target is final at emit time\" (true of the target, false of the site), a dropped `CallFixAnchor` column, and — xtensa only — CODE ALIGNMENT: a hole whose size is not a multiple of 4 re-aligns every later body, and CALL0/CALL8 require a 4-aligned target. REMAINING: arm32, aarch64 (each needs only its hand-built `SigInstallAddr` branch recorded; the patcher arms already exist) and wasm32 (genuinely different — function indices, not displacements). Owner directive, 2026-09-17: \"strip code and associated data where possible.\" Measured wins: riscv32 880020B->198572B, i386 456290B->86626B, xtensa call0 694520B->161840B / windowed 613087B->140323B."
 ---
 
 # What
@@ -126,3 +126,71 @@ trailing zeros stripped until frankh-3f lands the instrument fix; do not diff
 `code=` across programs and conclude anything.
 
 This still removes **zero bytes of SRAM** — the note above stands unchanged.
+
+
+## 2026-09-18 (frankB) — riscv32, i386 and xtensa all land; ALIGNMENT was the one nobody predicted
+
+Three more targets, each verified by RUNNING the binary under qemu rather than
+by linking it. What each actually needed, against what this ticket predicted:
+
+| target | predicted | actually needed |
+| --- | --- | --- |
+| riscv32 | `jal`/`auipc+jalr` arm | CodeRef patched per-target (the arm existed); 10 stub calls recorded |
+| i386 | not listed | **only** the recording — 11 hand-built sites that are byte-for-byte `IREmitCodeCall` |
+| xtensa | `call0/callx0` + literal pool, "the awkward part" | form carried per slot; the backward long call recorded; **4-byte alignment** |
+| arm32 | `bl` 24-bit | (unstarted) its `SigInstallAddr` branch recorded — the arm exists |
+| aarch64 | `bl` 26-bit | (unstarted) same |
+| wasm32 | function indices | genuinely different; the one row this ticket got right |
+
+**i386 is the sharpest evidence that the prediction was about the wrong thing.**
+It has NO encoding difference from x86-64 — its slot is the same rel32 — and it
+still failed, in eleven sites that hand-rolled the four bytes `IREmitCodeCall`
+already emits and lost the record doing it. A target with nothing
+target-specific about its branches cannot be fixed by writing it a branch-patch
+arm.
+
+### The alignment invariant, which four targets could not have exposed
+
+Everything after a hole slides down by exactly the hole's size. If that size is
+not a multiple of 4, every later body changes alignment — and xtensa's
+CALL0/CALL8 encode a WORD offset and require a 4-aligned TARGET.
+
+Xtensa is the only ISA here with 2- and 3-byte instructions, so it is the only
+one where a body's EXTENT is an arbitrary number: on riscv32, arm32 and aarch64
+every instruction is 4 bytes, and on x86-64/i386 there is no constraint at all.
+`DceRun` now rounds each removed span down to `DceCodeAlign`, leaving up to 3
+dead bytes per dropped body.
+
+**It cost an hour instead of a day because the encoder REFUSES rather than
+truncating** — `call0 target 2462 is not 4-aligned; CALL0/CALL8 encode a WORD
+offset and a stray byte is silently truncated away by the div below`. That
+message is the whole diagnosis, written by whoever put the assert in front of
+the `div`.
+
+### And a parallel-array drop, found while mapping xtensa and fixed before it bit
+
+`dce.inc`'s CallFix compaction remapped `CodePos` and `CallFixTarget` and
+silently dropped **`CallFixAnchor`**, which is parallel to it BY INDEX — so every
+site that moved would have worn the anchor of whoever previously sat at its new
+index. Identical in shape to the GlobFix/GlobFixPCRel bug
+`test_dce_threadsafe_heaplock.pas` exists for, in the table next door. Inert at
+the time (xtensa was the only anchor user and was still refused), fixed anyway.
+
+`CodeRefAnchor` is now a fourth column on the same table and carries the same
+hazard; its declaration in `defs.inc` says so and names this.
+
+### What the rows assert, and on which box
+
+`test/test_dce_riscv32_stub_calls.pas` in **quick**, with legs for riscv32, i386
+and xtensa (BOTH ABIs — the ABI decides the call form at a stub site, so one ABI
+exercises one of the two arms). Each leg asserts the output AND that the image
+shrank, because equal output is also what a pass that dropped nothing produces.
+Each SKIPs, never passes, when its qemu is absent.
+
+**`--xtensa-soft-mulhigh` is required for the xtensa legs and is not a
+workaround**: qemu-xtensa's CPU model has no MULUH, so an integer `WriteLn` is an
+illegal instruction with or without `--dce`. I chased that as a pre-existing
+xtensa bug first — the PINNED compiler reproduced it identically, which is
+exactly what a pre-existing bug looks like — and it was my own missing flag. No
+bug filed, and the flag is explained in the recipe so the next reader does not
+repeat it.

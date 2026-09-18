@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "OPTION (A) IS MEASURED TO FIX THIS (2026-09-18, frankB): with `--dce` now running on riscv32, a `--emit-obj` object for this ticket's own repro goes from 114 `PalBackend` symbols to **0** (538428 B -> 66008 B) with its exports byte-identical — and riscv32 carries the same 114 PAL symbols as xtensa, differing only in defining rather than importing their callees. **The three-backend `platform_net` split (S/B) is therefore NOT required to fix this bug** and should be ranked on its own merit. The earlier \"`--dce` changes nothing here\" row was measured on xtensa WHERE THE PASS REFUSES THE TARGET, so it is a true statement about a pass that did not run. Original defect: every `--emit-obj` xtensa object imports 18 `lwip_*` plus `vTaskDelay` and `esp_timer_get_time` for a routine the program never calls, because retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit. STILL OPEN: xtensa needs its stub calls recorded, `XtEntryPcAnchor` re-derived through `DceNewOff`, and `symtab.inc:17878`'s backward long call moved to the anchored slot form. Verifiable here — `qemu-xtensa` runs a `--platform=posix` image."
+summary: "THE LINK FAILURE IS FIXED BY `--dce`, MEASURED 2026-09-18 (frankB): with DCE now running on xtensa, this ticket's own repro — link the object against the deliberately-no-ESP-IDF shim — goes from `ld` rc=1 with **25 undefined references** to **rc=0 with 0**, producing a 258556 B ELF; PalBackend 114 -> 0, object 381528 B -> 52476 B, windowed likewise. **The three-backend `platform_net` split (S/B) is NOT required for this bug.** TWO THINGS STILL OPEN AND THEY ARE BOTH SMALL: (1) `--dce` is not on by default, so a default `--emit-obj` object still over-imports — the remaining question is whether `--emit-obj` should enable the pass, which is a goal question and not an engineering one; (2) the ratchet this ticket installed counts UND SYMBOL-TABLE ENTRIES, which stay at 20 under `--dce` because DCE removes code and not symbol entries, while the thing the link actually cares about — RELOCATIONS naming those symbols — goes **24 -> 0**. The ratchet should count relocations. Original defect unchanged: retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit."
 ---
 
 # `--emit-obj` retains `__pxxAssert`, so one AnsiString in it imports the whole ESP PAL
@@ -486,3 +486,59 @@ end-to-end rather than only linked.
 
 **Move the `<= 20` ratchet in the same commit**, as this ticket already asks of
 whoever fixes it, and assert on both targets.
+
+
+## 2026-09-18 (frankB) — measured, not predicted: the link failure is gone, and my own prediction was WRONG
+
+`--dce` runs on xtensa as of `095a7a794`. This ticket's own failing scenario,
+reproduced and then fixed:
+
+    xtensa --emit-obj, linked against the shim with NO ESP-IDF
+      without --dce   ld rc=1   25 undefined references     <- the original red
+      with    --dce   ld rc=0    0 undefined references     258556 B ELF
+
+Windowed ABI the same. `PalBackend` 114 -> 0, object 381528 B -> 52476 B. The
+five-line `Assert` repro: 114 -> 0, 380180 B -> 53492 B.
+
+### The prediction I refused to assert was wrong, and this is why it was refused
+
+The section above says, of the 18 `lwip_*` imports: *"that is a prediction and
+this section is not the place to record it as a result. **Re-derive the number
+from the built object**, do not write it from this paragraph."*
+
+Re-derived, and **the import count does not move**: 20 with `--dce`, 20 without.
+DCE removes CODE; it does not prune the symbol table, so the object still
+DECLARES imports that nothing in it references any more. What moved is the thing
+the linker actually fails on:
+
+| | ESP-IDF UND entries | relocations naming them | total relocations |
+| --- | --- | --- | --- |
+| without `--dce` | 20 | **24** | 428 |
+| with `--dce` | 20 | **0** | 210 |
+
+An `ld` error is an undefined **reference**, not an undefined symbol — which is
+why the link goes green while the count this ticket ratchets on sits still.
+
+**So the ratchet is counting the wrong quantity.** It was installed to notice the
+over-import growing, and it cannot see the over-import being FIXED. Counting
+relocations instead would read 24 -> 0 and would have to be re-baselined by
+whoever turns the pass on. **Left as it is here and not re-baselined silently**,
+because this ticket asks that the 20 move in the same commit as the fix, and
+`test-emit-obj` does not pass `--dce` — nothing about that row changed today.
+
+### What is left, and neither part is the split
+
+1. **`--dce` is not on by default.** A default `--emit-obj` object still carries
+   all 114 and still imports 20. Whether `--emit-obj` should enable the pass is a
+   goal question, not an engineering one, and it is one sentence: *do we want an
+   emitted object to contain only what it needs?* If yes, this ticket closes by
+   turning the pass on for that path and moving the ratchet to relocations.
+2. **The ratchet's quantity**, above.
+
+**(S/B), the `platform_net` split, is not required for either.** frankF priced it
+honestly at three backends x 114 entry points, a 119-entry facade and 13 RTL
+consumers, and banked it rather than landing it. It remains independently useful
+— a program naming `platform` for the clock should not carry the socket surface
+under ANY pruning policy, and a fix that depends on an optional flag is weaker
+than one that does not — but it should be ranked on that merit, not as this
+bug's fix.
