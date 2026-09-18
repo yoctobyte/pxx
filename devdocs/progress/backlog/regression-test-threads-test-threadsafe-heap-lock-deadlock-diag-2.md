@@ -66,3 +66,47 @@ takes it from the repro line.*
 - 2026-09-18 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 95b92d92023e (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-18 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 7f86a12a6628 (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-18 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at 91ba5968354b (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-09-18 night watch — THIS JOB CANNOT SUPPORT A BISECT, AND ITS CURRENT `bad` IS NOT A LEAD
+
+**Do not audit `c44fa2642` on the strength of this ticket.** `twatch --status`
+now reports this job as `bad=c44fa26429e9 (1 in range)` — narrowed 3 -> 1 by idle
+bisect, and with none of the *"bad touches NO buildable file"* caveat the other
+six open regressions carry, so it reads like the one real lead on the board. It
+is not, and three independent things say so.
+
+**1. The failure is a TIMEOUT, not a wrong answer.** The log tail expects `212`
+and gets **`124`** — the exit status `timeout` itself returns when it kills the
+child. The recipe is `out=$(timeout 60 /tmp/test_ts_hl_diag26 ...)`, and the
+subject is a lock-contention diagnostic that finishes **twelve** workers. So the
+assertion that fails is not the diagnostic's verdict; it is whether the box got
+through the contention inside sixty seconds. borg spent 2026-09-18 running full
+tiers, an opt sweep, a bench and idle bisects.
+
+**2. The same tree gives OPPOSITE verdicts in two tiers — three times.** From
+the tstate commits, each pair one sha:
+`91ba5968354b` NEW-RED (full) / FIXED (native); `7f86a12a6628` NEW-RED (full) /
+FIXED (native); `95b92d92023e` NEW-RED (full) / FIXED (native). **A defect that
+is present and absent at one sha is not a defect at that sha**, it is a race
+against a clock, and the full tier is simply the busier neighbour.
+
+**3. The `bad` sha MIGRATED, which is the tell a flapping job leaves and a real
+one cannot.** This ticket was auto-filed on 2026-09-14 with bad `aa43f495ab87`,
+1 commit in range. Four days later the same job's bisect has walked to
+`c44fa26429e9` — a 330-line ELF-writer change (`feat(A,S): ESP-IDF objects carry
+string literals in a read-only .rodata`) with no path to heap-lock contention
+timing. **A stable regression bisects once and stays put.** Bisection assumes a
+monotone good->bad boundary; a timing flake has none, so the search terminates on
+whichever commit it happened to sample red and reports it with full confidence.
+
+**What is therefore NOT established, said plainly:** that there is no real race
+here. This says the INSTRUMENT cannot locate one, not that the subject is clean —
+the job may well be guarding something worth guarding. What is established is
+that its `bad` sha is an artefact of sampling and must not be read as an
+attribution against any commit.
+
+**RESIDUAL QUESTION, and it needs an owner (Track T):** does this job get a
+longer/adaptive timeout, get pinned to an unloaded host, or get marked
+non-bisectable so the watcher stops minting attributions from it? Left
+unassigned deliberately — the fleet was wound down on 2026-09-18 and this tick is
+a watch, not a dispatch. Flagged to the owner the same night.
