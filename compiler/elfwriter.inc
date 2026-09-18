@@ -3404,6 +3404,73 @@ begin
     end;
 end;
 
+procedure ObjReportImportedDataWaste;
+{ How much .bss this object reserved for names it can never address.
+
+  feature-a-an-extern-only-variable-still-reserves-its-storage: the reservation
+  happens at declaration time and the import decision is a fold over every
+  declaration of the name, so the allocator cannot know. By the time
+  ObjDataIsImport is final the slot exists, and the writer then retargets every
+  reference to the UND symbol -- so the bytes are paid for and unreachable.
+
+  AN INSTRUMENT RATHER THAN A FIX, and deliberately: that ticket asks to check
+  first whether real inputs make a reclaim pass worth anything, and nothing
+  could answer it. The UND symbol carries st_size 0 and NOTYPE, so `readelf`
+  cannot see the reservation from outside -- the size lives only in
+  SymAllocSize, here. Measured 2026-09-18 on this box: ZERO on every ESP object
+  (both ISAs refuse an imported variable outright, ObjRefuseEspDataImports) and
+  on a Pascal object built from lib/rtl, which declares no `external` variable
+  at all. The population is hosted C.
+
+  Printed under PXXDBG=a.impwaste rather than always, because on a clean object
+  the answer is 0 and a zero printed every build is a line nobody reads. }
+var i, n, ref, lo, hi, others: Integer;
+    waste, wasteRef: Int64;
+begin
+  if not PxxDbgEnabled('a.impwaste') then Exit;
+  n := 0; ref := 0; waste := 0; wasteRef := 0;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) then
+    begin
+      Inc(n); waste := waste + SymAllocSize[i];
+      if ObjDataIsReferenced(i) then
+      begin
+        Inc(ref); wasteRef := wasteRef + SymAllocSize[i];
+      end;
+      WriteLn('PXXDBG a.impwaste sym ', Syms[i].Name,
+              ' off=', Syms[i].Offset, ' size=', SymAllocSize[i],
+              ' referenced=', Ord(ObjDataIsReferenced(i)));
+    end;
+  { TWO BOUNDS, BECAUSE THE SUM OF SIZES IS NOT THE ANSWER. Each slot is aligned,
+    so removing an import also frees the padding that followed it -- measured on
+    busybox's editors/sed.c, 34 imports sum to 103 bytes while occupying an
+    offset span of 241. The sum is therefore a LOWER bound. The span is an upper
+    bound only if nothing else was allocated between the first and last import,
+    which is why the interleaved count below is printed rather than assumed: a
+    nonzero `others-in-span` means the span over-counts and the truth is between.
+
+    Both counts are also split by REFERENCED. An unreferenced import costs the
+    .bss slot and nothing else -- no UND symbol is emitted for it at all (see
+    ObjDataIsReferenced) -- while a referenced one also carries the UND entry and
+    its relocations. A reclaim pass would recover both. }
+  lo := -1; hi := -1;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) then
+    begin
+      if (lo < 0) or (Syms[i].Offset < lo) then lo := Syms[i].Offset;
+      if Syms[i].Offset + SymAllocSize[i] > hi then hi := Syms[i].Offset + SymAllocSize[i];
+    end;
+  others := 0;
+  if lo >= 0 then
+    for i := 0 to SymCount-1 do
+      if ObjDataIsCandidate(i) and (not ObjDataIsImport(i)) and
+         (Syms[i].Offset >= lo) and (Syms[i].Offset < hi) then Inc(others);
+  WriteLn('PXXDBG a.impwaste total imports=', n, ' bytes>=', waste,
+          '  of which referenced=', ref, ' bytes=', wasteRef,
+          '  span=', hi - lo, ' (', lo, '..', hi, ')',
+          '  others-in-span=', others, '  bss=', BSSSize);
+end;
+
 function ObjDataSymIndexForOff(bssOff: Integer): Integer;
 { The IMPORT whose slot starts exactly at `bssOff`, or -1.
 
@@ -4101,6 +4168,7 @@ begin
     if ObjCallFixIsRelocatable(i) then
       writeRela64(f, CallFix[i].CodePos, ObjProcSymIdx[CallFix[i].ProcIdx], 2, -4);
   ObjReportFunctionSections;
+  ObjReportImportedDataWaste;
 
   { .rela.data: data->data pointers, data->code method slots, and one
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }

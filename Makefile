@@ -33145,6 +33145,31 @@ test-emit-obj: $(COMPILER)
 	   test/c_obj_import_pascal.pas > $(TESTTMP)/cimp_unref.pas
 	./$(COMPILER) -Fulib/rtl --emit-obj $(TESTTMP)/cimp_unref.pas $(TESTTMP)/cimp_unref.o
 	@! readelf -sW $(TESTTMP)/cimp_unref.o | grep -qE " (ImpCount|ImpA|ImpB)$$" || { echo "test-emit-obj: an UNREFERENCED external variable still emitted an UND symbol"; exit 1; }
+	#    AND THE SLOT IT RESERVED IS STILL THERE, which is the OTHER half and is
+	#    only visible from inside the compiler: the UND symbol carries st_size 0
+	#    and NOTYPE, so readelf cannot see the reservation at all. That is why
+	#    feature-a-an-extern-only-variable-still-reserves-its-storage sat
+	#    unmeasured from 2026-09-01 -- its own text asks whether real inputs make
+	#    a reclaim pass worth anything and nothing could answer it.
+	#    PXXDBG=a.impwaste reports it through the same ObjDataIsImport predicate
+	#    the writers walk. Measured 2026-09-18: ~241 B per busybox TU (0.26% of
+	#    its .bss) and ZERO on ESP, where both writers refuse an imported
+	#    variable outright -- so the pass is NOT worth building, which is the
+	#    finding, and this row is what keeps the instrument honest.
+	#
+	#    THE POSITIVE CONTROL IS THE PAIR, NOT THE NUMBER. The same program
+	#    either side of one keyword: 4000 reported with `extern`, 0 without, and
+	#    bss= IDENTICAL in both -- which is the defect stated as a measurement.
+	#    A row asserting only the 4000 would pass on an instrument that reported
+	#    every global, and a row asserting only the 0 would pass on one that
+	#    reported nothing at all.
+	@printf 'extern int Big[1000];\nint get(void){return Big[3];}\n' > $(TESTTMP)/impw_ext.c
+	@printf 'int Big[1000];\nint get(void){return Big[3];}\n' > $(TESTTMP)/impw_def.c
+	@PXXDBG=a.impwaste ./$(COMPILER) --emit-obj $(TESTTMP)/impw_ext.c $(TESTTMP)/impw_ext.o > $(TESTTMP)/impw_ext.log 2>&1
+	@PXXDBG=a.impwaste ./$(COMPILER) --emit-obj $(TESTTMP)/impw_def.c $(TESTTMP)/impw_def.o > $(TESTTMP)/impw_def.log 2>&1
+	@grep -q 'a.impwaste total imports=1 bytes>=4000 ' $(TESTTMP)/impw_ext.log || { echo "test-emit-obj: PXXDBG=a.impwaste did not report the 4000-byte reservation an extern-only array still takes"; grep impwaste $(TESTTMP)/impw_ext.log; exit 1; }
+	@grep -q 'a.impwaste total imports=0 bytes>=0 ' $(TESTTMP)/impw_def.log || { echo "test-emit-obj: PXXDBG=a.impwaste reported an import for a DEFINING translation unit -- the predicate is not ObjDataIsImport"; grep impwaste $(TESTTMP)/impw_def.log; exit 1; }
+	@a=$$(grep -oE 'bss=[0-9]+' $(TESTTMP)/impw_ext.log | tail -1); b=$$(grep -oE 'bss=[0-9]+' $(TESTTMP)/impw_def.log | tail -1); 	 [ "$$a" = "$$b" ] || { echo "test-emit-obj: the extern-only and defining TUs no longer have the same bss ($$a vs $$b) -- either the defect was FIXED (update the ticket and this row) or the fixture drifted"; exit 1; }; 	 echo "test-emit-obj: a.impwaste sees the 4000 B an import reserves and nothing in the defining TU, at identical bss ($$a)"
 	#    REFUSED, NOT SILENT, where there is no import to bind to. An executable
 	#    has no linker step that could resolve it, and the pre-implementation
 	#    behaviour -- local storage reading zero -- is exactly what must not

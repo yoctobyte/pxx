@@ -28525,3 +28525,70 @@ subsystem, mistakes an invocation error for a pre-existing bug because the pin
 reproduced it. One instance, one seat, one flag is merit, not recurrence — it
 would then go up as an extension of CLAUDE.md's B/E bullet, which is the same
 instrument failing with the opposite sign, rather than as a new rule.)*
+
+## A POPULATION LABEL IS NOT A POPULATION CHECK — AN ACCURATE LABEL ON AN ANALYSIS THAT IGNORES IT CERTIFIES THE REASONING IT SHOULD HAVE BLOCKED
+
+Measured 2026-09-18 (frankB, Track A/S), in the same session as two corrections
+of the *mis*labelling shape, which is what makes this a different rule rather
+than a third instance of that one.
+
+CLAUDE.md is thick with rules about instruments answering correctly about the
+wrong population, and the remedy they all converge on is **say which population
+this number is from**. I did that. Every ESP figure I published carried its
+profile beside it — `--esp-profile=bare`, target named, `--dce` state named —
+because the owner had just re-ranked ESP to SRAM and I had been told the
+bare-versus-IDF distinction was load-bearing rather than a caveat.
+
+Then I computed `SRAM = data + bss` and published two conclusions from it.
+
+That is the **IDF** accounting. On bare, `defs.inc`'s own map says the internal
+SRAM is mapped twice, qemu's esp32c3 machine models it as ONE RWX region, and
+*"the whole image (code+data+bss) loads at the IRAM org"*. On bare there is no
+flash. **`SRAM(bare) = code + data + bss`**, and the two conclusions inverted:
+
+    published: "--dce moves zero bytes of data or bss.  Not approximately zero."
+               -- literally true, and the conclusion drawn from it was that the
+               pass buys no SRAM. On bare it saves 54,344 B, 41%: the second
+               largest SRAM lever after the 64 KiB heap arena.
+
+    published: "the SRAM cost is 3x the flash cost"  -- an IDF-shaped split
+               applied to bare numbers. On bare both halves are SRAM and the
+               split does not exist.
+
+**The label did not fail. It was correct, prominent, and repeated on every
+row.** What failed is that nobody — me least of all — ran the label against the
+arithmetic sitting next to it. And the label is exactly what stopped them: a
+number carrying `--esp-profile=bare` in the same sentence LOOKS
+population-checked, so a reviewer's population alarm has already been answered
+before it fires. **An unlabelled number invites the question. A labelled one
+retires it.** That is why this is worse than not labelling: the discipline
+everyone reaches for as the remedy, applied honestly, manufactured the
+confidence that carried the error.
+
+It travels beyond profiles. `-O2` beside a number measured with `make
+pxx-debug`, which forces `-O0`. A target named beside a width that was reasoned
+about on the host. A shim named beside a count carried from a different shim
+(the same day, same seat, 25-versus-24). In each the label is TRUE and the
+analysis beside it belongs to the other population.
+
+**The discharge is one question and it is not "did I label it":**
+
+> *What does this label CHANGE about the arithmetic I just did? Name the term.*
+
+For bare the answer is "it adds `code` to the sum", and asking it once would
+have caught both conclusions before either was published. If the label changes
+nothing about the computation, either the label is decoration or you have not
+understood what it means — and the second is the common case, because a label
+is usually attached at measurement time and the arithmetic happens later, in a
+different frame of mind, from numbers that have already been written down.
+
+Corollary for a reviewer: **when you see a population label, treat it as a
+claim to be checked against the reasoning, not as evidence the reasoning was
+checked.** The upstream figure I inherited (`data=616 bss=70936, SRAM=71552`)
+carried the same gap from the same cause — its author had established that bare
+loads code into IRAM, written it down as a numbered fact, and then computed
+`data + bss` anyway.
+
+*(Trigger for promotion out of this file: if a second seat, in an unrelated
+subsystem, labels a population correctly and reasons past it. One seat, one
+profile, two conclusions is merit, not recurrence.)*
