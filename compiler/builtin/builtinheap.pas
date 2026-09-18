@@ -878,6 +878,12 @@ end;
 
 const
 {$if defined(PXX_ESP)}
+  { THE 64 KiB IN EVERY BARE ESP IMAGE'S BSS. Not to be confused with the
+    compiler-side SocNilPyArenaSize (defs.inc), which is a different 64 KiB,
+    reserved by the NilPy driver only and zero in a Pascal or C build -- that
+    name said "BareArena" until 2026-09-18 and cost a seat a wrong diagnosis.
+    This one is the RTL buffer every bare program links. EspArena below is
+    sized FROM this constant; do not restate it. }
   HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
 {$elseif defined(CPU_WASM32)}
   { MUST equal the WasmArena byte size below. PXXAlloc rounds any request up to
@@ -893,6 +899,18 @@ const
 {$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
+{ THE ESP-IDF PROFILE LANDS ON THAT 256 MiB ARM AND IT IS DEAD THERE -- checked
+  2026-09-18, because it reads alarmingly and someone will read it again.
+  PXX_ESP is defined only from PXX_ESP_BARE (line 18), so an IDF build takes
+  neither ESP arm and falls through to the value above. That does NOT mean an
+  IDF program asks a chip with no mmap for 256 MiB: the IDF profile redefines
+  PXXAlloc to use calloc/free and never calls HeapMmap at all (see :1330), and
+  calloc/free resolve to newlib/heap_caps at IDF link time. VERIFIED END TO END
+  rather than read: examples/esp32/hello-c3 with a GetMem(p, 1024) added,
+  built against ESP-IDF v6.0.1 and booted under the Espressif qemu, printed
+  `PXX GetMem returned 0x3fc92f20` -- a real address inside the C3's DRAM heap
+  region -- and then ran to completion. A p75 ticket was drafted on the source
+  reading alone and withdrawn when that one boot refuted it. }
 
 const
   { Segregated free lists. Every allocation is already rounded up to a multiple of
@@ -1078,9 +1096,21 @@ var
     FPC guarantees — never a nil dereference. BSS-zeroed, so it is always #0. }
   PXXEmptyChar : Char;
 {$ifdef PXX_ESP}
-  { 64 KiB static arena as Int64 cells so its base is 8-aligned (payloads sit
-    at base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after. }
-  EspArena     : array[0..8191] of Int64;
+  { Static arena as Int64 cells so its base is 8-aligned (payloads sit at
+    base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after.
+
+    SIZED FROM HEAP_ARENA, not spelled again. It was `array[0..8191]`, i.e.
+    the same 65,536 written a second time in a second unit of measure, with
+    nothing tying the two together -- change one and PXXAlloc hands out a
+    HeapEnd past the end of the buffer, which is the exact corruption the
+    wasm arm's own HEAP_ARENA comment exists to prevent. That arm at least
+    carried a hand-checked `{ 131072 * 8 = HEAP_ARENA }`; this one carried no
+    note at all. Measured 2026-09-18 while probing the ESP SRAM floor:
+    halving the arena needed BOTH lines edited by hand, and editing one is
+    silent. Positive control for the derivation: changing HEAP_ARENA alone
+    from 65536 to 16384 moves a bare hello's bss 70,936 -> 21,784, exactly
+    -49,152. umbrella-an-esp32-image-is-as-small-as-it-can-be }
+  EspArena     : array[0..(HEAP_ARENA div 8) - 1] of Int64;
   EspArenaUsed : Integer;
 {$endif}
 {$ifdef CPU_WASM32}
@@ -1095,7 +1125,11 @@ var
     never emitted into the file, so this costs declared address space at
     instantiation and not one byte of .wasm.
     bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero }
-  WasmArena     : array[0..131071] of Int64;   { 131072 * 8 = HEAP_ARENA }
+  { Sized from HEAP_ARENA rather than restating it -- see the ESP twin above.
+    The hand-checked `131072 * 8 = HEAP_ARENA` this replaces was correct, and
+    correct-by-inspection is exactly what HEAP_ARENA's own comment says must
+    not be relied on for this arm. }
+  WasmArena     : array[0..(HEAP_ARENA div 8) - 1] of Int64;
   WasmArenaUsed : Integer;
 {$endif}
 
@@ -1466,7 +1500,16 @@ begin
 end;
 
 const
+{$ifdef PXX_ESP}
+  { BARE METAL HAS NO mmap, so it must not be named. This arm's arena is the
+    fixed EspArena buffer handed out once by HeapMmap's PXX_ESP arm; when it is
+    gone there is no second source, and telling a bare user an "mmap failed"
+    sends them looking for a syscall their chip does not have. Names the knob
+    that actually governs it instead. }
+  OOM_MSG = 'pxx: out of memory (bare static heap arena exhausted; HEAP_ARENA)';
+{$else}
   OOM_MSG = 'pxx: out of memory (heap arena mmap failed)';
+{$endif}
 
 procedure PXXHeapExhausted;
 { Never returns. Writes BYTE AT A TIME through the raw syscall, exactly as
@@ -1480,6 +1523,31 @@ procedure PXXHeapExhausted;
 var i: Integer; b: Byte; r: Int64;
 begin
   r := 0;
+{$ifdef PXX_ESP}
+  { BARE METAL: the UART0 TX FIFO, not a syscall. PXX_ESP is defined only from
+    PXX_ESP_BARE (line 18), so this arm IS the bare profile.
+
+    MEASURED 2026-09-18, and the syscall version produced NOTHING: a bare C3
+    program allocating 4 KiB at a time printed `start`, fifteen dots, and then
+    stopped dead. 15 * 4096 = 61,440; the sixteenth request exhausted the
+    65,536-byte arena, HeapMmap returned 0, and this procedure ran -- writing
+    OOM_MSG through PXXSysWrite, which on bare metal reaches no kernel, and
+    then halting into the self-loop `Halt` emits on this profile. A chip that
+    hangs with no output, on the one failure the allocator is built to report.
+
+    THE SAME DEFECT AND THE SAME FIX AS espassert.pas, whose own comment is
+    the precedent: it "COMPILED on both chips and printed NOTHING when the
+    assertion fired -- a silent Halt(227), which is the worst possible outcome
+    for an assertion", and it resolved to write the FIFO directly because that
+    is "what the docs tell every bare user to do and what the RTL should
+    therefore do on their behalf". A heap exhaustion is that case exactly.
+
+    $60000000 on both esp32c3 and esp32s3 -- defs.inc says UART0 FIFO is MMIO
+    at the same address on both, which is why this needs no per-SoC table. }
+  for i := 1 to Length(OOM_MSG) do
+    PByte(Int64($60000000))^ := Byte(OOM_MSG[i]);
+  PByte(Int64($60000000))^ := 10;
+{$else}
   for i := 1 to Length(OOM_MSG) do
   begin
     b := Byte(OOM_MSG[i]);
@@ -1487,6 +1555,7 @@ begin
   end;
   b := 10;
   r := PXXSysWrite(2, Int64(@b), 1);
+{$endif}
   Halt(203);
 end;
 

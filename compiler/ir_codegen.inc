@@ -2986,7 +2986,7 @@ procedure EmitBareHeapArenaInit;
   register window to preserve, and on riscv32 nothing has run yet. }
 var arenaEnd: Integer;
 begin
-  arenaEnd := BSS_HEAP_ARENA + SocBareArenaSize(TargetSoc);
+  arenaEnd := BSS_HEAP_ARENA + SocNilPyArenaSize(TargetSoc);
   if TargetArch = TARGET_XTENSA then
   begin
     EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_HEAP_ARENA);   { a8 = &arena }

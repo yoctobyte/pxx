@@ -99,3 +99,17 @@ the `BSS[0]` aliasing this split could have reintroduced),
    `ReadLn`. Now the largest single item in the floor: after this fix the
    x86-64 `--no-signals` bss is 9,008, of which the TLS main block is 4,240 and
    this is 4,096 — together **93%** of what remains.
+
+## Note 2026-09-18 — where the ESP bss actually goes, now that this is fixed
+
+After this fix a bare esp32c3/esp32s3 hello is `bss=70936`, and **65,536 of it
+is one buffer**: `EspArena` in `compiler/builtin/builtinheap.pas`, sized by
+`HEAP_ARENA`. Established by differential, because a subtraction cannot name a
+constant: halving `SocNilPyArenaSize` (`defs.inc`, the compile-time NilPy
+reservation) left bss at 70,936 **unchanged**, while halving `HEAP_ARENA`
+moved it to 38,168.
+
+`SocNilPyArenaSize` was called `SocBareArenaSize` until today and that name cost
+a seat a wrong diagnosis — two things called "the arena", both 64 KiB, and a
+grep reaches the compiler-side one first. Renamed, cross-referenced at both
+sites.

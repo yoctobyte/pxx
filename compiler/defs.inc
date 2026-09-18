@@ -8377,7 +8377,7 @@ begin
                      (soc = SOC_ESP32P4);
 end;
 
-function SocBareArenaSize(soc: Integer): Integer;
+function SocNilPyArenaSize(soc: Integer): Integer;
 { How much SRAM a bare-metal program may keep as its NilPy heap arena.
 
   A CAPABILITY and not a constant, per this table's own rule, even though every
@@ -8388,13 +8388,39 @@ function SocBareArenaSize(soc: Integer): Integer;
   with a different map is measured, the divergence belongs HERE rather than in
   a seventh top-level constant.
 
-  64 KiB against a 256 KiB region (C3: 0x40380000..0x403C0000) leaves the image,
-  its data and the stack the remaining three quarters. It is not a guess that
-  has to be right: CheckBareImageFitsSram refuses the build if the image plus
-  this arena plus a minimum stack does not fit, so being wrong here is a
-  compile-time error and never a program that overruns its stack at runtime. }
+  THIS IS NOT THE 64 KiB IN A BARE PASCAL IMAGE'S BSS, AND THE NAME IS WHY
+  SOMEONE ALREADY THOUGHT IT WAS. Reached only inside `if withHeapArena`
+  (frontend_prologue.inc), whose sole True caller is pyparser.inc -- so it is
+  ZERO for Pascal and C, and changing it moves nothing in a Pascal build.
+  Measured 2026-09-18 by differential: halving THIS left a bare Pascal hello's
+  bss at 70,936 unchanged, while halving HEAP_ARENA in
+  compiler/builtin/builtinheap.pas moved it to 38,168. **The 64 KiB a bare
+  Pascal program carries is that one -- the RTL's `EspArena` buffer -- not this
+  one.** Two things called "the arena", both 64 KiB, and a grep reaches this
+  one first. elfwriter.inc:1758 already carried a warning against exactly this
+  confusion and it did not help, because a warning cannot reach a reader who
+  never gets to it.
+
+  THE SIZING ARGUMENT BELOW IS PRICED AGAINST QEMU'S MAP, NOT A CHIP'S, and
+  that is recorded rather than silently fixed because the conclusion happens to
+  survive. "64 KiB against a 256 KiB region (C3: 0x40380000..0x403C0000)
+  leaves the image, its data and the stack the remaining three quarters" -- the
+  256 KiB is the bare profile's region, and defs.inc's own SRAM-map comment
+  says that single RWX region is how *qemu* models the C3. A real C3 has
+  ~400 KB of SRAM, and under IDF 340,124 B of it is free after IDF's own cost
+  (measured 2026-09-18, measure-what-idf-itself-costs-in-sram-on-a-c3). So the
+  true fraction is ~16%, not 25% -- the default is more conservative than its
+  own justification claimed, not less. **Re-derived, unchanged.**
+
+  It is also not a guess that has to be right, though the guard is narrower
+  than it reads: CheckBareImageFitsSram refuses the build if the image plus
+  this arena plus a minimum stack does not fit, so being wrong about FIT is a
+  compile-time error. It does NOT bound heap ADEQUACY -- an arena that fits and
+  is too small for the program is not a compile-time error, and on bare that
+  used to be a silent hang until PXXHeapExhausted learned to write the UART
+  (builtinheap.pas, 2026-09-18). }
 begin
-  SocBareArenaSize := 64 * 1024;
+  SocNilPyArenaSize := 64 * 1024;
 end;
 
 function SocIramBase(soc: Integer): Int64;

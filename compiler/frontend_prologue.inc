@@ -98,7 +98,7 @@ begin
     if EspBareBoot then
     begin
       BSS_HEAP_ARENA := BSSSize;
-      Inc(BSSSize, SocBareArenaSize(TargetSoc));
+      Inc(BSSSize, SocNilPyArenaSize(TargetSoc));
     end;
   end;
   EmitProgramEntryForTarget(withHeapArena, jmpPatch);
