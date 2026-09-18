@@ -40,17 +40,51 @@ nobody has established.** Reserve the area from what parsing actually used
 compiler already patches code with `Patch32`, and the clone stub is emitted
 lazily (`CloneStubAddr := 0`) so it may not need patching at all.
 
-**IT FOLDS EARLY, AND THAT IS ROUTE B'S ONE REAL BLOCKER — established
-2026-09-18 from the mechanism, not from a comment.** `lib/rtl/palthread.pas:280`
+## Read this before you delete the reserve, and before you believe it is a guard
+
+Two readings were put to this ticket and **both are half right; the measurement
+separates them.**
+
+- *"There is no live corruption today."* **TRUE, measured.** The reserve is a
+  CAP and overflow is REFUSED. 400 scalar `Int64` threadvars in a program that
+  `uses palthread`: `v384` — the first byte past 3072 — is refused with the
+  diagnostic and the program never reaches runtime. Rebuilt with
+  `TLS_USER_BYTES = 0`, the same refusal fires on the first threadvar in
+  `test_a_threadvar_is_per_thread.pas`. There is no arrangement in which a
+  program outgrows the block the fold captured.
+- *"So the 3,072 IS the guard that makes the fold sound — the reserve and the
+  fold are one mechanism and you cannot touch either alone."* **FALSE, and this
+  is the reframe to resist**, because it would park a real 8% of the hosted
+  floor behind a safety property it does not actually carry. The fold is sound
+  because `TLS_BLOCK_SIZE` is a compile-time **CONSTANT**, not because it is
+  3072. **Measured: rebuilt with `TLS_USER_BYTES = 0`, `test_atomic_counter`
+  still prints `counter=800000 expected=800000 / ATOMIC OK`** — four threads,
+  palthread's mmap, the gs install and the alt stack all correct — with bss
+  61,580 -> 58,508. A different constant is just as sound as this one.
+
+**So the constraint is not "do not change the size". It is "do not let the size
+VARY DURING A COMPILE".** That is what decides the two routes below: route A
+fixes the size before `EmitTlsMainInstall`, i.e. before palthread is ever lexed,
+and is therefore exactly as sound as today at ANY size including 0. Route B
+grows it as threadvars are parsed, and is the only one that breaks the fold.
+
+A reader who deletes the reserve without doing route A's prescan gets the
+COMPILE ERROR above, not corruption — so the failure direction is safe in both
+directions here, which is unusual and worth knowing.
+
+## Route B's blocker
+
+**`__pxxTlsBlockSize` FOLDS EARLY — established 2026-09-18 from the mechanism,
+not from a comment.** `lib/rtl/palthread.pas:280`
 reads the block size from `__pxxTlsBlockSize` rather than restating it, and
 `pasparser_expr.inc:4451` lowers that name to `AllocNode(AN_INT_LIT)` with
 `ASTIVal := TLS_BLOCK_SIZE` **at the use site, while palthread is being parsed**.
 Its own comment states the intent — *"Constants, not calls — they fold to an
 AN_INT_LIT here, so a `const` in the RTL can be defined from them."*
 
-So if the block size becomes a value that grows when a `threadvar` is seen, that
-literal captures whatever it was when palthread was parsed, which can be BEFORE
-the growth. Too small a block means gs-relative slots write past the mapping —
+So if the block size becomes a value that GROWS when a `threadvar` is seen —
+which is route B and only route B — that literal captures whatever it was when
+palthread was parsed, which can be BEFORE the growth. Too small a block means gs-relative slots write past the mapping —
 the exact silent corruption palthread's own comment warns about, arriving from
 inside one compile instead of between two releases.
 
