@@ -15314,7 +15314,7 @@
   },
   {
    "bad": "d9ed3131ab6ffc01eea48918042b0b14dfa09c63",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "578ca3e81d91d1898a13121021ff66608e4e9114",
    "job": "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
