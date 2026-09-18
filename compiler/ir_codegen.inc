@@ -26,6 +26,32 @@ begin
     Error('compiler error: call to a runtime stub that was never emitted '
           + '(code offset 0 is the ELF entry point). A frontend driver is '
           + 'missing its stub-emission call for the current flags/target.');
+  { PER TARGET, AND RECORDED ON ALL OF THEM. This used to be the x86 encoding
+    alone, with arm32 and aarch64 hand-writing the same `bl` at eleven sites
+    each and recording nothing -- which is what kept DCE off those targets, not
+    any missing arm. 2026-09-18: the identical finding as riscv32, i386 and
+    xtensa. A stub call is a code->code reference and the pass that moves code
+    has to be told about it; the ONLY place that can be reliably true is the one
+    routine every caller already goes through. }
+{$ifndef PXX_NO_ARM32}
+  if TargetArch = TARGET_ARM32 then
+  begin
+    RecordCodeRefAtLink(CodeLen, addr, 1);   { 1 = this slot LINKS: bl, not b }
+    EmitI32($EB000000 or ((((addr - CodeLen) div 4) - 2) and $00ffffff));
+    Exit;
+  end;
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { No -2: arm32's PC reads 8 ahead of the instruction and aarch64's does not,
+      so the same-looking displacement is DIFFERENT arithmetic -- the note
+      EmitSweepThunkCall leaves about copying the wrong neighbouring line. }
+    RecordCodeRefAtLink(CodeLen, addr, 1);   { 1 = this slot LINKS: bl, not b }
+    EmitI32($94000000 or (((addr - CodeLen) div 4) and $03ffffff));
+    Exit;
+  end;
+{$endif}
   EmitB($E8);
   { The displacement is finished here and correct until something moves. It is
     recorded because DCE moves things -- see RecordCodeRef. }
@@ -1540,9 +1566,9 @@ begin
   if (TargetArch = TARGET_ARM32) and not NoSignals then
   begin
     EmitLoadImmArm32(0, 2);                                            { SIGINT }
-    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));   { bl install }
+    IREmitCodeCall(SigInstallAddr);                                                { bl install }
     EmitLoadImmArm32(0, 15);                                           { SIGTERM }
-    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));
+    IREmitCodeCall(SigInstallAddr);
   end;
   if (TargetArch = TARGET_RISCV32) and not NoSignals and TargetHasSignalRuntime then
   begin
@@ -1566,9 +1592,9 @@ begin
   if (TargetArch = TARGET_AARCH64) and not NoSignals then
   begin
     EmitLoadImmA64(0, 2);                                              { SIGINT }
-    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
+    IREmitCodeCall(SigInstallAddr);
     EmitLoadImmA64(0, 15);                                             { SIGTERM }
-    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
+    IREmitCodeCall(SigInstallAddr);
   end;
 end;
 
@@ -3325,10 +3351,33 @@ procedure PatchCodeRefSlot(pos, target, linkReg, anchor: Integer);
   go stale. Measured: an xtensa --platform=posix image built with --dce runs
   under qemu-xtensa, which is the evidence that block asked for. }
 begin
+  { ARM32/AARCH64: THE LINK BIT IS THE WHOLE DIFFERENCE BETWEEN B AND BL, and
+    getting it from linkReg is not a convenience -- these two arms were written
+    for the entry JUMP and patched B unconditionally. The moment stub CALLS
+    started coming through here (2026-09-18) that silently rewrote every one of
+    them as a branch, so the callee returned to whatever lr last held: measured,
+    arm32 `hello` installed SIGINT successfully and then took SIGSEGV at
+    si_addr=NULL, eleven basic blocks in and nowhere near the patch site.
+
+    `linkReg = 0` means "this slot does not link", which is what reg_zero means
+    on riscv32 and what B-not-BL means here -- the same column, the same
+    question, and the entry jump is the only caller that answers no. }
   if TargetArch = TARGET_ARM32 then
-    Patch32(pos, $EA000000 or ((((target - pos) div 4) - 2) and $00ffffff))
+  begin
+    if linkReg <> 0 then
+      Patch32(pos, $EB000000 or ((((target - pos) div 4) - 2) and $00ffffff))
+    else
+      Patch32(pos, $EA000000 or ((((target - pos) div 4) - 2) and $00ffffff));
+  end
   else if TargetArch = TARGET_AARCH64 then
-    Patch32(pos, $14000000 or (((target - pos) div 4) and $03ffffff))
+  begin
+    { No -2 on either form: arm32's PC reads 8 ahead of the instruction and
+      aarch64's does not. }
+    if linkReg <> 0 then
+      Patch32(pos, $94000000 or (((target - pos) div 4) and $03ffffff))
+    else
+      Patch32(pos, $14000000 or (((target - pos) div 4) and $03ffffff));
+  end
   else if TargetArch = TARGET_XTENSA then
   begin
     if anchor >= 0 then
@@ -15415,7 +15464,7 @@ begin
     EmitI32($E1A0200D);                                          { mov r2, sp }
     EmitI32($E5812000);                                          { str r2, [r1] }
     EmitI32($E28D0008);                                          { add r0, sp, #8 }
-    EmitI32($EB000000 or ((((ExcSetJmpAddr - CodeLen) div 4) - 2) and $00ffffff));
+    IREmitCodeCall(ExcSetJmpAddr);
     EmitI32($E3500000);                                          { cmp r0, #0 }
     landPatch := CodeLen; EmitI32($1A000000);                    { bne landing }
     Exit;
@@ -15433,7 +15482,7 @@ begin
     EmitI32($910003E2);                                          { mov x2, sp }
     EmitI32($F9000022);                                          { str x2, [x1] }
     EmitI32($910043E0);                                          { add x0, sp, #16 }
-    EmitI32($94000000 or (((ExcSetJmpAddr - CodeLen) div 4) and $03ffffff));
+    IREmitCodeCall(ExcSetJmpAddr);
     landPatch := CodeLen; EmitI32($B5000000);                    { cbnz x0, landing }
     Exit;
   end;
@@ -15589,11 +15638,11 @@ begin
 {$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then
-    EmitI32($EB000000 or ((((ExcRaiseAddr - CodeLen) div 4) - 2) and $00ffffff))
+    IREmitCodeCall(ExcRaiseAddr)
 {$endif}
 {$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then
-    EmitI32($94000000 or (((ExcRaiseAddr - CodeLen) div 4) and $03ffffff))
+    IREmitCodeCall(ExcRaiseAddr)
 {$endif}
   else if TargetArch = TARGET_RISCV32 then
     EmitRiscv32CallToCode(reg_ra, ExcRaiseAddr)

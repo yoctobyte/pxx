@@ -250,9 +250,8 @@ begin
     callee's own return instruction), which is two more columns on a table whose
     existing parallel array was itself being dropped by this pass until today.
     See bug-a-dce-refuses-every-target-except-x86-64 for the mapped-out work. }
-  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_RISCV32) and
-     (TargetArch <> TARGET_I386) and (TargetArch <> TARGET_XTENSA) then
-    why := 'target is not x86-64, i386, riscv32 or xtensa'
+  if TargetArch = TARGET_WASM32 then
+    why := 'wasm32 references functions by INDEX, not by displacement'
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,

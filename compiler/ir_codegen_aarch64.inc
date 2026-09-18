@@ -4180,7 +4180,7 @@ begin
           Save the pool to THIS frame's slots and restore on resume (execution
           continues right after the bl). No-op unless FxSaveOn (-O3). }
         FloatPoolSaveA64;
-        EmitI32($94000000 or (((CoSwitchAddr - CodeLen) div 4) and $03ffffff)); { bl CoSwitch }
+        IREmitCodeCall(CoSwitchAddr);                                          { bl CoSwitch }
         FloatPoolRestoreA64;
       end;
 
@@ -4194,7 +4194,7 @@ begin
         EmitI32($F81F0FE0);                          { str x0, [sp, #-16]! }
         IREmitNodeAarch64(IRA[node]);                { x0 = signal number }
         EmitI32($F84107E1);                          { ldr x1, [sp], #16  (handler) }
-        EmitI32($94000000 or (((SigSetHookAddr - CodeLen) div 4) and $03FFFFFF));  { bl sethook }
+        IREmitCodeCall(SigSetHookAddr);                                            { bl sethook }
       end;
 
     IR_LABELADDR:
@@ -4788,7 +4788,7 @@ begin
         end;
         for i := nArgs - 1 downto 0 do
           EmitI32($F84107E0 + i);       { ldr x[i], [sp], #16  (i=4..0) }
-        EmitI32($94000000 or (((CloneStubAddr - CodeLen) div 4) and $03FFFFFF)); { bl stub }
+        IREmitCodeCall(CloneStubAddr);                                          { bl stub }
       end;
 
     IR_ATOMIC:
@@ -5395,7 +5395,7 @@ begin
           EmitI32($910003E2);                                         { mov x2, sp }
           EmitI32($F9000022);                                         { str x2, [x1] }
           EmitI32($910043E0);                                         { add x0, sp, #16 }
-          EmitI32($94000000 or (((ExcSetJmpAddr - CodeLen) div 4) and $03ffffff)); { bl ExcSetJmpAddr }
+          IREmitCodeCall(ExcSetJmpAddr);                                          { bl ExcSetJmpAddr }
           if (RcResidentCount > 0) or FxSaveOn then
           begin
             { Landing refresh (mirror of the x86-64 IR_EXC_ENTER block): int
@@ -5461,7 +5461,7 @@ begin
             EmitGlobRef(BSS_EXC_CLS);
             EmitI32($F9000020);                                       { str x0, [x1] }
           end;
-          EmitI32($94000000 or (((ExcRaiseAddr - CodeLen) div 4) and $03ffffff)); { bl ExcRaiseAddr }
+          IREmitCodeCall(ExcRaiseAddr);                                          { bl ExcRaiseAddr }
         end;
 
       IR_EXC_STORE:
@@ -5569,10 +5569,10 @@ begin
         IREmitNodeAarch64(i);
 
       IR_IO_LOCK:
-        EmitI32($94000000 or (((IOLockAddr - CodeLen) div 4) and $03FFFFFF));   { bl io-lock stub }
+        IREmitCodeCall(IOLockAddr);                                            { bl io-lock stub }
 
       IR_IO_UNLOCK:
-        EmitI32($94000000 or (((IOUnlockAddr - CodeLen) div 4) and $03FFFFFF)); { bl io-unlock stub }
+        IREmitCodeCall(IOUnlockAddr);                                          { bl io-unlock stub }
 
       else
         { A value node does nothing at statement level -- the parent that

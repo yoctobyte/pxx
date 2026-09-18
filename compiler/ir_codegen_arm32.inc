@@ -3848,7 +3848,7 @@ begin
         IREmitNodeArm32(IRA[argNode]);               { r0 = pto }
         EmitI32($E1A01000);                          { mov r1, r0 (pto) }
         EmitI32($E49D0004);                          { pop {r0} (ldr r0,[sp],#4) }
-        EmitI32($EB000000 or ((((CoSwitchAddr - CodeLen) div 4) - 2) and $00ffffff)); { bl CoSwitch }
+        IREmitCodeCall(CoSwitchAddr);                                                { bl CoSwitch }
       end;
 
     IR_SET_SIGNAL:
@@ -3860,7 +3860,7 @@ begin
         EmitI32($E92D0001);                          { push {r0} }
         IREmitNodeArm32(IRA[node]);                  { r0 = signal number }
         EmitI32($E8BD0002);                          { pop {r1}   (handler) }
-        EmitI32($EB000000 or ((((SigSetHookAddr - CodeLen - 8) div 4)) and $FFFFFF));  { bl sethook }
+        IREmitCodeCall(SigSetHookAddr);                                               { bl sethook }
       end;
 
     IR_LABELADDR:
@@ -4451,7 +4451,7 @@ begin
         end;
         for i := nArgs - 1 downto 0 do
           EmitI32($E8BD0000 or (1 shl i));   { pop {r[i]}  (i=4..0) }
-        EmitI32($EB000000 or ((((CloneStubAddr - CodeLen) div 4) - 2) and $00FFFFFF)); { bl stub }
+        IREmitCodeCall(CloneStubAddr);                                               { bl stub }
       end;
 
     IR_ATOMIC:
@@ -5109,7 +5109,7 @@ begin
           EmitI32($E1A0200D);                                         { mov r2, sp }
           EmitI32($E5812000);                                         { str r2, [r1] }
           EmitI32($E28D0008);                                         { add r0, sp, #8 }
-          EmitI32($EB000000 or ((((ExcSetJmpAddr - CodeLen) div 4) - 2) and $00ffffff)); { bl ExcSetJmpAddr }
+          IREmitCodeCall(ExcSetJmpAddr);                                                { bl ExcSetJmpAddr }
           EmitI32($E3500000);                                         { cmp r0, #0 }
           if LabelPositions[lblId] <> -1 then
             EmitI32($1A000000 or ((((LabelPositions[lblId] - CodeLen) div 4) - 2) and $00ffffff)) { bne label }
@@ -5144,7 +5144,7 @@ begin
             EmitGlobRef(BSS_EXC_CLS);
             EmitI32($E5810000);                                       { str r0, [r1] }
           end;
-          EmitI32($EB000000 or ((((ExcRaiseAddr - CodeLen) div 4) - 2) and $00ffffff)); { bl ExcRaiseAddr }
+          IREmitCodeCall(ExcRaiseAddr);                                                 { bl ExcRaiseAddr }
         end;
 
       IR_EXC_STORE:
@@ -5256,10 +5256,10 @@ begin
         IREmitNodeArm32(i);
 
       IR_IO_LOCK:
-        EmitI32($EB000000 or ((((IOLockAddr - CodeLen) div 4) - 2) and $00FFFFFF));   { bl io-lock }
+        IREmitCodeCall(IOLockAddr);                                                   { bl io-lock }
 
       IR_IO_UNLOCK:
-        EmitI32($EB000000 or ((((IOUnlockAddr - CodeLen) div 4) - 2) and $00FFFFFF)); { bl io-unlock }
+        IREmitCodeCall(IOUnlockAddr);                                                 { bl io-unlock }
 
       else
         { A value node does nothing at statement level -- the parent that

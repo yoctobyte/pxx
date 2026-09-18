@@ -34577,6 +34577,43 @@ test-quick: $(COMPILER)
 	else \
 	  echo "=== test_dce_xtensa_stub_calls: qemu-xtensa absent, xtensa DCE NOT verified ==="; \
 	fi
+	# arm32 AND aarch64, the last two displacement targets. They needed only what
+	# i386 needed -- their hand-built `bl` to a stub recorded -- but they exposed
+	# one thing no other target could: PatchCodeRefSlot's arms for these two were
+	# written for the entry JUMP and patched B ($EA000000 / $14000000)
+	# unconditionally. Routing stub CALLS through them rewrote every one as a plain
+	# branch, so the callee returned to whatever lr held; arm32 `hello` installed
+	# SIGINT successfully and then took SIGSEGV at si_addr=NULL. The link bit now
+	# comes from the recorded linkReg -- the same column, and the same question,
+	# that reg_zero-vs-reg_ra answers on riscv32.
+	#
+	# THAT IS WHY BOTH LEGS RUN THE BINARY. A build-only check is green on it, and
+	# so is any check that only looks at size: the image shrinks correctly and then
+	# does not come back from its first stub call.
+	@for t in arm32 aarch64; do \
+	  case $$t in arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')"; \
+	    ./$(COMPILER) --target=$$t test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcearm_off >/dev/null \
+	    && ./$(COMPILER) --target=$$t --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcearm_on >/dev/null \
+	    && tools/expect_same.sh dcearm_off_$$t "$$(timeout 60 $$q $(TESTTMP)/dcearm_off; echo "exit=$$?")" "$$want" \
+	    && tools/expect_same.sh dcearm_on_$$t "$$(timeout 60 $$q $(TESTTMP)/dcearm_on; echo "exit=$$?")" "$$want" \
+	    && szoff=$$(stat -c%s $(TESTTMP)/dcearm_off) && szon=$$(stat -c%s $(TESTTMP)/dcearm_on) \
+	    && if [ $$szon -ge $$szoff ]; then \
+	         echo "test_dce_stub_calls[$$t]: --dce did NOT shrink the image ($$szon >= $$szoff)."; \
+	         exit 1; \
+	       fi \
+	    && echo "=== test_dce_stub_calls[$$t]: OK ($$szoff -> $$szon bytes) ===" \
+	    || exit 1; \
+	  else echo "=== test_dce_stub_calls[$$t]: $$q absent, $$t DCE NOT verified ==="; fi; \
+	done
+	# wasm32 is the one target the pass REFUSES, and the refusal is asserted so it
+	# stays a decision rather than becoming an oversight. Function indices are not
+	# a displacement; nothing above applies to them.
+	@./$(COMPILER) --target=wasm32 --dce-report test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce_wasm 2>&1 \
+	  | grep -q 'dce: off: wasm32 references functions by INDEX' \
+	  || { echo "test_dce_stub_calls[wasm32]: expected --dce to refuse wasm32 and say why"; exit 1; }
+	@echo "=== test_dce_stub_calls[wasm32]: correctly refused ==="
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --
