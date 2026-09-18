@@ -86,7 +86,7 @@ Two divergences from FPC survive and are filed separately —
 Neither is a disagreement between our own backends.
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 295bcceb9.
 
 
 # Resolution — 2026-09-18
