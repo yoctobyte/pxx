@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `a1e3f1a35713` | 2026-09-18T11:49:14Z | RED (native) | 309.8s | `578ca3e81d91` RED |
+| borg | `91ba5968354b` | 2026-09-18T11:55:21Z | RED (native) | 318.6s | `578ca3e81d91` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `578ca3e81d91` on borg, 2026-09-18T11:42:14Z (7m ago).**
+**Newest full tier in the fleet: `578ca3e81d91` on borg, 2026-09-18T11:42:14Z (13m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `578ca3e81d91` | RED | 7m | — (newest) |
+| borg | `578ca3e81d91` | RED | 13m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -32,4 +32,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `7f86a12a6628`, last good `95b92d92023e`, 4 commit(s) in range
