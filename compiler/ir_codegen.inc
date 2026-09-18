@@ -1352,9 +1352,41 @@ begin
     24 bytes covers stack_t on both widths: { ss_sp, ss_flags, ss_size } is
     8+4(+4 pad)+8 on the 64-bit targets and 4+4+4 on the 32-bit ones.
 
-    Allocated even under --no-signals, like the slots above: it is zero-filled
-    BSS with no file cost, and making it conditional would put a condition on a
-    function whose whole contract is "idempotent, call it whenever". }
+    SPLIT OUT OF THIS FUNCTION 2026-09-18 -- see EnsureSignalAltStack below.
+    It used to be allocated here, unconditionally, justified as "zero-filled
+    BSS with no file cost". That is true of a hosted target and FALSE wherever
+    BSS is SRAM, which is every ESP build. }
+end;
+
+procedure EnsureSignalAltStack;
+{ The 32 KB alt stack and its stack_t, reserved ONLY where a handler can
+  actually be installed. Separate from EnsureSignalBss because the two have
+  different conditions, and collapsing them cost 32,768 bytes of every image.
+
+  WHY THE SLOTS ABOVE STAY UNCONDITIONAL AND THIS DOES NOT. The slots are
+  READ by the signal-info builtins (ir.inc, IRC 2/3/4) whether or not a
+  handler is ever installed, and a 0 offset there would address BSS[0]. That
+  argument is sound and it covers 56 bytes. Nothing addresses the alt stack
+  except the runtime that installs it, so where no runtime is emitted the
+  reservation has no reader at all.
+
+  Measured 2026-09-18, x86-64 hello world at its 195-byte code floor: bss was
+  41,800 bytes of which 32,768 -- 78% -- was this one constant, with
+  --no-signals passed and --dce on. On an ESP32-C3 that is 8% of the chip's
+  SRAM for a facility the program opted out of.
+  bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss
+
+  THE CONDITION IS THE DISPATCHER'S, NOT A NEW ONE. EmitSignalRuntimeForTarget
+  calls this exactly where it is about to emit a runtime -- past
+  `if NoSignals then Exit` and under TargetHasSignalRuntime, which is THE
+  predicate the five signal sites share. Reserved iff emitted, one place, so a
+  new backend cannot forget it the way the old per-arch allocation was
+  forgotten four separate times (the history in EnsureSignalBss above).
+
+  Idempotent, like its sibling. }
+begin
+  if SigAltStackAllocated then Exit;
+  SigAltStackAllocated := True;
   BSS_SIG_ALTSTK  := BSSSize; Inc(BSSSize, SIG_ALTSTACK_SIZE);
   BSS_SIG_ALTSS   := BSSSize; Inc(BSSSize, 24);
 end;
@@ -1444,6 +1476,11 @@ procedure EmitSignalRuntimeForTarget;
 begin
   EnsureSignalBss;
   if NoSignals then Exit;
+  { The 32 KB alt stack, reserved only from here -- past --no-signals and only
+    where a handler can exist. Every arm below either emits a runtime or is
+    guarded by this same predicate, so "reserved" and "emitted" cannot drift.
+    bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss }
+  if TargetHasSignalRuntime then EnsureSignalAltStack;
   if      TargetArch = TARGET_X86_64  then EmitSignalRuntime
 {$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then EmitSignalRuntimeA64

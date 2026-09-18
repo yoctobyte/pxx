@@ -53,3 +53,49 @@ Any fix must keep a program that *installs a handler and faults on its own
 stack* working — that is what the alt stack is for. `test/` has the signal
 fixtures; run them with and without `--no-signals` and assert the alt stack is
 present in exactly one.
+
+## FIXED 2026-09-18 (frankS) — piece 1 of the three
+
+`EnsureSignalAltStack` split out of `EnsureSignalBss`, and called from
+`EmitSignalRuntimeForTarget` past `if NoSignals then Exit` under
+`TargetHasSignalRuntime`. **Reserved iff a runtime is emitted**, one place, so
+"reserved" and "emitted" cannot drift — which is what the four separate
+per-arch-allocation bugs in `EnsureSignalBss`'s own history were.
+
+The 56 bytes of SLOTS stay unconditional, and the ticket was right that the
+existing comment's argument covers exactly those: the signal-info builtins read
+them whether or not a handler exists, and a 0 offset would address `BSS[0]`.
+Nothing addresses the alt stack except the runtime that installs it.
+
+**Measured, both directions:**
+
+| build | bss before | bss after | delta |
+| --- | ---: | ---: | ---: |
+| x86-64 hello, `--no-signals` | 41,800 | **9,008** | **−32,792** |
+| x86-64 hello, signals ON | 41,800 | 41,800 | 0 (control) |
+| esp32c3 `--esp-profile=bare` | 103,728 | **70,936** | **−32,792** |
+| esp32s3 `--esp-profile=bare` | 103,728 | **70,936** | **−32,792** |
+
+−32,792 is exactly `SIG_ALTSTACK_SIZE` + the 24-byte `stack_t`. **Every ESP
+image gets 32 KB of SRAM back** — 8% of a C3 — because `TargetHasSignalRuntime`
+is False on the ESP platform, so the reservation never had a reader there.
+
+**Positive control, the one this ticket specified.** `test_signal_altstack`
+prints `handler-off-faulting-stack=TRUE`: a handler installed, the stack
+faulted, the handler entered on the alt stack. Also green:
+`test_signal_bss_alias` (`hit=1 argv-intact=TRUE` — the guard against exactly
+the `BSS[0]` aliasing this split could have reintroduced),
+`test_setsignalhandler_call`, `test_signal_handler_callback_b336`,
+`test_signal_default_revert_b336` (rc=143, correct), and
+`test_cross_signal_runtime_predicate`. Hosted hello still prints `hello`.
+
+## Still open — pieces 2 and 3
+
+2. **Size it per target.** 32768 is chosen against AVX-512's signal frame.
+   riscv32 and arm32 have no 512-bit register file and their frames are a
+   fraction of it. This fix makes the constant cost nothing where no handler
+   exists; it does not make it the right size where one does.
+3. **`LINE_BUF_SIZE`.** 4,096 bytes of stdin line buffer in a program with no
+   `ReadLn`. Now the largest single item in the floor: after this fix the
+   x86-64 `--no-signals` bss is 9,008, of which the TLS main block is 4,240 and
+   this is 4,096 — together **93%** of what remains.

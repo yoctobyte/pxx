@@ -3,9 +3,9 @@ slug: bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok
 type: bug
 track: A+S
 prio: 75
-status: urgent
+status: done
 found: 2026-09-18
-summary: "`-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The program is gone. THE TELL IS THAT AN EMPTY PROGRAM AND A HELLO-WORLD ARE BYTE-IDENTICAL INCLUDING DATA — on x86-64 the same pair differs by 40 bytes of data (the string literal) and the hello-world RUNS. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing."
+summary: "RESOLVED 2026-09-18, AND THE TITLE IS WRONG: the flag is not involved. empty.pas and hello.pas are BYTE-IDENTICAL on --esp-profile=bare WITH AND WITHOUT -uPXX_MANAGED_STRING, on esp32c3 and esp32s3 — the flag stripped 57 KB of unrelated runtime and made an identity that was already there visible. Nor is the program gone: an assignment survives the same build (code 52 vs 20). `writeln` specifically lowers to nothing, via an empty `if EspBareBoot then begin end` arm at ir_codegen_riscv32.inc:3569 — and that is DOCUMENTED and intended, docs/targets/esp32.md:70, 'writeln/readln are intentionally no-ops — there is no console'. So the image was correct and THE SILENCE was the defect. FIXED: a once-per-compilation warning at the parse choke point ParsewriteArgsAST, naming the doc line and offering --platform=posix. Four controls, and the negative one made it usable — the first cut lived in the backend arms and fired on a program with no console output at all, because the linked RTL's own writelns reach that arm. THE LARGER DEFECT THIS WAS SITTING ON is filed separately: the two ESP backends ask different questions and disagree on the IDF profile, where nothing is documented as a no-op — bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile."
 ---
 
 # What
@@ -176,3 +176,6 @@ so that path traps to IDF's machine-mode handler rather than printing.
 
 xtensa is the primary ESP target and the one that silently drops. Filed as
 [[bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile]].
+
+## Log
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
