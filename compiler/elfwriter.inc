@@ -2095,6 +2095,16 @@ begin
 
   for i := 0 to DataPtrFixCount-1 do
     PatchDataU64(DataPtrFix[i].DataPos, DataVA(dataBase, DataPtrFix[i].TargetOff));
+
+  { Self-relative words inside Data[]: `target - pos`, measured in the IMAGE.
+    Unchanged when nothing is split. With the read-only split the two ends move
+    by different amounts whenever a literal range lies between them -- both can
+    be RW and still drift, because the RW part is compacted. Missing this read
+    the wrong RTTI descriptor and released nothing (test_interface_containers:
+    rdyn 0 instead of 3). See DataRelFixPos. }
+  for i := 0 to DataRelFixCount-1 do
+    PatchDataI32(DataRelFixPos[i],
+                 Integer(DataRemap(DataRelFixTarget[i]) - DataRemap(DataRelFixPos[i])));
 end;
 
 {$ifdef FPC}

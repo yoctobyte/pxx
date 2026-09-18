@@ -24,7 +24,7 @@ type
   TSh = String[20];
 var
   r: Pointer;
-  s: AnsiString;
+  s, q: AnsiString;
   sh: TSh;
   p: PChar;
 begin
@@ -61,4 +61,13 @@ begin
     literal operand (tagged tyChar, which a `not a string` test would sweep into
     the reinterpret and break) and Length over the pointer slot. }
   WriteLn('J: ', Pos(t(' '), 'a b'), ' ', Length(t(r)));
+  { K: COPY-ON-WRITE through the cast. q shares r's block, so a store through
+    t(r) must detach r and leave q alone. Indexed off the handle VALUE it wrote
+    the shared block -- q changed too, and after `t(r) := 'abcde'` the store
+    went into the literal pool itself, which the read-only data segment turned
+    into a SIGSEGV at row B.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  q := t(r);
+  t(r)[1] := 'K';
+  WriteLn('K: ', t(r), ' ', q);
 end.

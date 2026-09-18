@@ -256,6 +256,23 @@ The read-only data segment's first cut SIGSEGVed `test_static_string_literals` a
 `SetLength(a, 3)` on `a := 'abcdef'`, at `dec qword [rax-16]` in
 `EmitAnsiStrReleaseLocked`. That helper has no `MSTR_STATIC_RC` guard, unlike its
 retain twin and the release blob. So the measurement above ("ZERO writes ...
-SetLength") is false for that arm. Fixed there; see the segment ticket. How the
-watchpoint rows avoided the arm is not established. The value-CHANGES caveat
-above does not explain it, since a decrement changes the value.
+SetLength") is false for that arm. Fixed there; see the segment ticket.
+
+**Why the probe missed it: its own previous step removed the precondition.**
+The probe's only string SetLength was `UniqueString(b); SetLength(b, 3)`. The
+UniqueString gave b a HEAP copy, so the release never saw the literal. Measured
+on the pinned (pre-fix) compiler with the same watchpoint harness: the original
+probe trips ZERO times, and the same probe with that line changed to
+`b := a; SetLength(b, 3)` trips on the first iteration (0x40000000 ->
+0x3FFFFFFF, once per iteration). The route was right (the inlined arm is
+reached either way); the population was wrong. The value-CHANGES caveat does
+not apply: a decrement changes the value.
+
+**Exposure window.** Static literal handles became the -O2 default at
+`440c822e6` (2026-08-30). A compensating `inc` at every literal load balanced
+the unguarded decrement until `d782926ce` (2026-08-31 18:49). From then until
+the fix, each SetLength on a string still holding a literal was a net decrement
+of that literal. Pin v411 carries it. After the first decrement the literal is
+live-counted; it is freed only after ~1.07e9 net decrements of the same literal.
+So it meant wrong accounting and a written page, not a practical
+use-after-free.

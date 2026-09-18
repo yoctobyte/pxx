@@ -2486,6 +2486,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     tk: TTypeKind;
     baseDynDepth, dynRootSym, dynBaseRec, slotAddrNode: Integer;
     dpaSym: Integer;   { the pointer symbol behind a `p^[i]` array base }
+    scSym: Integer;    { the Pointer slot behind an indexed managed-string cast `t(r)[i]` }
     dfsSym: Integer;   { ...and behind a `p^[i]` FROZEN STRING base }
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
@@ -2669,6 +2670,38 @@ begin
       if TypeIsAnyString(IntToTypeKind(ASTTk[baseNode])) then
       begin
         tk := IntToTypeKind(ASTTk[baseNode]);
+        { A MANAGED string cast over a plain Pointer-sized VARIABLE -- `t(r)[2]
+          := 'X'` with `r: Pointer` -- is a string living in that slot, and a
+          store through it needs copy-on-write exactly as `s[2] := 'X'` does.
+          Indexed off the handle VALUE below, the store wrote straight into
+          whatever block r shared: the literal pool itself after `t(r) :=
+          'abcde'`, so every other 'abcde' in the program changed with it
+          (fpc 3.2.2 uniques here). Presented instead as element 0 of an
+          `array of AnsiString` at the slot, the character index takes the
+          COW path every backend already has for `arr[i][j]`: write -> unique
+          through the slot, read -> load the handle. Found by the read-only
+          literal segment, which turned the silent store into a SIGSEGV.
+          Scoped to a plain symbol, where the slot address is certain; a
+          field or deref operand still indexes the value.
+          feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+        if (tk = tyAnsiString) and (ASTKind[ASTLeft[baseNode]] = AN_IDENT) then
+        begin
+          scSym := ASTIVal[ASTLeft[baseNode]];
+          if (scSym >= 0) and (scSym < SymCount) and
+             not Syms[scSym].IsArray and
+             (TypeSlotSize(Syms[scSym].TypeKind) = TypeSlotSize(tyPointer)) and
+             not TypeIsAnyString(Syms[scSym].TypeKind) and
+             ((Syms[scSym].Kind = skGlobal) or (Syms[scSym].Kind = skLocal) or
+              ((Syms[scSym].Kind = skParam) and not Syms[scSym].IsRef)) then
+          begin
+            baseAddr := IRAppend(IR_INDEX,
+                          IRAppend(IR_SLOTADDR, scSym, -1, -1, 0, Ord(tyPointer)),
+                          IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                          0, TypeSlotSize(tyPointer), Ord(tyAnsiString));
+            Result := IRAppend(IR_INDEX, baseAddr, indexNode, 1, 1, Ord(tyChar));
+            Exit;
+          end;
+        end;
         if TypeIsFrozenString(tk) then lo := -(FrozenStrPrefixSize(tk) - 1)
         else lo := 1;
         baseAddr := IRLowerAST(baseNode);

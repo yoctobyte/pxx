@@ -13,6 +13,10 @@ begin
   st.Write(PChar(s)^, Length(s));
   st.Position := 0;
   r := 'zzz';
+  { r still shares the literal's bytes; reading INTO them would write the
+    literal pool, which is read-only (fpc 3.2.2 faults here too: EAccessViolation).
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  UniqueString(r);
   x := st.Read(PChar(r)^, 3);
   writeln(r, ' ', x);
   st.Free;

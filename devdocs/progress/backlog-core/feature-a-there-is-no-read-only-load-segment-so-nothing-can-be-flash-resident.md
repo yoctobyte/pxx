@@ -146,3 +146,28 @@ flags A (not writable) plus `.rela.rodata` with 2x R_XTENSA_32 against
 Scope of that: one gcc, one version, one -O. It says the ELF model and the IDF
 link allow it, not that pxx's object writer will produce it. That writer is the
 next half of this ticket.
+
+## 2026-09-18 (frankH) — test-core sweep: one regression of mine, two exposed defects
+
+borg published five new test-core reds on a tree containing `b05b7bb0a`. Each
+was classified with `--no-ro-data` as the A/B before fixing:
+
+- **Segment bug (mine): `test_interface_containers` @1/@2 and
+  `test_dynarray_to_pointer_seam_leaks`.** RTTI layout descriptors hold
+  SELF-RELATIVE 32-bit words (`typeRef`/`baseTypeRef` = target - pos, decoded
+  as `pos + word`; five sites in rtti_emit.inc). The split compacts the RW part,
+  so a literal range between two RW items changes their distance. The result was
+  a silent wrong value with no fault: rdyn 0 instead of 3, and live=999 instead
+  of 14. Fix: `AddDataRelFix` records each word, and `ApplyImageFixups`
+  recomputes it through `DataRemap`. The earlier claim in this ticket's model
+  ("every reference into Data[] already goes through an explicit offset field")
+  was false for these five sites.
+- **Exposed pxx bug: `test_indexing_a_string_cast_of_a_pointer_slot`.**
+  `t(r)[2] := 'X'` with `r: Pointer` did no copy-on-write. It wrote into the
+  literal pool, or into another variable's shared string. Fixed in ir.inc: the
+  slot is presented as element 0 of an array-of-AnsiString, so every backend's
+  COW path applies. Output matches fpc on five targets. New row K pins the
+  aliasing half; the pinned compiler prints `K: KXZde KXZde`.
+- **Exposed test bug: `test_cast_deref_varparam`.** The test read a stream
+  into `PChar(r)^` straight after `r := 'zzz'`. fpc 3.2.2 faults on the same
+  program. Added `UniqueString(r)`; the test's subject is unchanged.

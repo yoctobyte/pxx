@@ -4198,6 +4198,12 @@ var
   RwFileStart  : Integer;  { first RW byte's FILE offset from the data start }
   RwFileEnd    : Integer;  { one past the last RW byte, same coordinates }
   RwVaShift    : Integer;  { VA minus file position for an RW byte (ElfSegAlign) }
+  { A 32-bit word IN Data[] holding the distance from itself to another data
+    item (the RTTI layout descriptors' typeRef/baseTypeRef, decoded by the
+    runtime as `pos + word`). Recorded so the writer can recompute it through
+    DataRemap: the read-only split moves the two ends by different amounts. }
+  DataRelFixPos, DataRelFixTarget : array of Integer;
+  DataRelFixCount : Integer;
 
   BSSSize : Integer;
   DbgDataBase : Integer; { absolute address of .data, for a DWARF location on a data-resident global (see DATA_SYM_BIAS); set beside DbgBssBase by the ELF writer }

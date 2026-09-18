@@ -317,6 +317,21 @@ begin
   for i := oldCap to DataCap - 1 do Data[i] := 0;
 end;
 
+{ Record that the 32-bit word at Data[pos] is `target - pos`. The caller still
+  writes that value itself; this only lets ApplyImageFixups rewrite it when the
+  data image is not laid out in Data[] order (see DataRelFixPos). }
+procedure AddDataRelFix(pos, target: Integer);
+begin
+  if DataRelFixCount >= Length(DataRelFixPos) then
+  begin
+    SetLength(DataRelFixPos, 2 * DataRelFixCount + 64);
+    SetLength(DataRelFixTarget, 2 * DataRelFixCount + 64);
+  end;
+  DataRelFixPos[DataRelFixCount] := pos;
+  DataRelFixTarget[DataRelFixCount] := target;
+  Inc(DataRelFixCount);
+end;
+
 { Mark Data[s..e) as never written at run time. Ranges arrive in ascending
   order because they are marked as they are appended; one that touches the
   previous is merged into it, so a run of literals is one range and the RW

@@ -1845,7 +1845,10 @@ begin
             begin
               subCi := UFldRec_[fi] - REC_UCLASS_BASE;
               if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+              begin
                 baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
+                AddDataRelFix(dynDescOff + 16, UClsRTTIOff[subCi]);
+              end
             end
             else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
               { kind 4 carries the interface ID in this slot, kinds 5/6 the
@@ -1860,7 +1863,10 @@ begin
           begin
             subCi := UFldRec_[fi] - REC_UCLASS_BASE;
             if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+            begin
               typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
+              AddDataRelFix(mHdr + 12, UClsRTTIOff[subCi]);
+            end
           end
           else if mKind = 4 then
             { COM interface member: typeRef carries the interface id, the key
@@ -1988,7 +1994,10 @@ begin
               begin
                 subCi := UFldRec_[fi] - REC_UCLASS_BASE;
                 if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+                begin
                   baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
+                  AddDataRelFix(dynDescOff + 16, UClsRTTIOff[subCi]);
+                end
               end
               else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
                 baseTypeRef := ManagedElemRef(UFldTk[fi], UFldRec_[fi]);
@@ -2000,7 +2009,10 @@ begin
             begin
               subCi := UFldRec_[fi] - REC_UCLASS_BASE;
               if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+              begin
                 typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
+                AddDataRelFix(mHdr + 12, UClsRTTIOff[subCi]);
+              end
             end
             else if mKind = 4 then
               { COM interface member: typeRef carries the interface id (its UCls
@@ -2049,7 +2061,10 @@ begin
     begin
       subCi := AnonDynArrayBaseRec[i] - REC_UCLASS_BASE;
       if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
+      begin
         baseTypeRef := UClsRTTIOff[subCi] - (hdr + 16);
+        AddDataRelFix(hdr + 16, UClsRTTIOff[subCi]);
+      end
     end
     else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
       { COM interface elements: the SAME word carries the interface id rather
