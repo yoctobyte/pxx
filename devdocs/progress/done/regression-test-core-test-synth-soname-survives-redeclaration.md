@@ -35,3 +35,6 @@ FAIL: synthclob26 has no libc.so.6 DT_NEEDED. memcmp is supposed to be a dynamic
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-18 — auto-closed by the borg watcher: `test-core#src:test/test_synth_soname_survives_redeclaration.pas` passes at 578ca3e81d91 (tier native); it was red at 4fbed6c4157e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
