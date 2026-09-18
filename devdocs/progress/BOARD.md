@@ -80,7 +80,7 @@ _none_
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (52)
+## backlog (53)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,6 +93,7 @@ _none_
 | regression-lib-test-lib-mimic-xml-sax-xmlreader | T | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy at 2b2ec3fee1c5 in step 2/10, `tools/expect_same.sh lib_mimic_xmlreader.1 "$(/tmp/lib_mimic_xmlreader \| grep -c '=ok')" "25"` (auto-filed by twatch) | — |
 | regression-lib-test-lib-thread-handle-reports-exit-on-both-routes | B | 70 | regression | first-ever red: lib-test#src:test/lib_thread_handle_reports_exit_on_both_routes.pas at 06e40fb95b13 in step 1/6, `stable_linux_amd64/default/pinned --threadsafe -Fulib/rtl test/lib_thread_handle_reports_exit_on_both_routes.pas /tmp/l…` (auto-filed by twatch) | — |
 | regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call | T | 70 | regression | first-ever red: lib-test#src:test/test_nilpy_format_and_set_do_not_leak_a_temporary_list_per_call.npy at 5c7d6d650e5d in step 2/6, `tools/expect_same.sh test_nilpy_noleak "$(/tmp/test_nilpy_noleak \| tail -n 1)" "PYLEAK OK"` (auto-filed by twatch) | — |
+| regression-optdiff-shard11-12 | T | 70 | regression | regression: optdiff#shard11/12 at b291b321f185 in step 1/1, `tools/optdiff.sh --shard 11/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard5-12 | T | 70 | regression | regression: optdiff#shard5/12 at 285208414d3f in step 1/1, `tools/optdiff.sh --shard 5/12` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-size-canary-size-canary-2 | A | 40 | regression | advisory red: size-canary#src:tools/size_canary.py at 2a4cd0bcf664 in step 1/1, `python3 tools/size_canary.py` (auto-filed by twatch) | — |
@@ -1270,6 +1271,7 @@ _none_
 - [p 70] [T] regression-lib-test-lib-mimic-xml-sax-xmlreader
 - [p 70] [B] regression-lib-test-lib-thread-handle-reports-exit-on-both-routes [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-lib-test-test-nilpy-format-and-set-do-not-leak-a-temporary-list-per-call
+- [p 70] [T] regression-optdiff-shard11-12
 - [p 70] [T] regression-optdiff-shard5-12
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [A] regression-test-aarch64-test-dynarray-to-pointer-seam-leaks
