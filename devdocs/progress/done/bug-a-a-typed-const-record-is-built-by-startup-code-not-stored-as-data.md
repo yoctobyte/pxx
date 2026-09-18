@@ -136,4 +136,4 @@ i386 4/4), and any unaligned packed-record field access faults on xtensa
 (`r.I` at offset 1 -> SIGBUS, HEAD and this build alike).
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 38b12690f.
