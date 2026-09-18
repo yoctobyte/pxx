@@ -77,9 +77,12 @@ holder.make()` then `o.thing(1, 2, 3, 4, 5)` prints 15 on the PINNED, unfixed
 compiler: the frontend types `o` from the call and dispatches STATICALLY,
 reaching neither capped arm. A fixture written to that shape passes before the
 fix -- the `ucycle_b` failure mode CLAUDE.md warns about, caught here by running
-the negative control before committing. The receiver has to arrive through a
-CONTAINER (or be a parameter with no single inferable call site) for either arm
-to be entered at all.
+the negative control before committing rather than after, which is when it feels
+like verification.
+
+**THE RECEIVER HAS TO ARRIVE THROUGH A CONTAINER FOR EITHER ARM TO BE ENTERED.**
+That sentence is the reproducer; this ticket's own was not. (A parameter with no
+single inferable call site does it too.)
 
 **Two spellings, and grepping for the construct does not relate them.** With the
 receiver reached through a list, the observable is not this ticket's title at
@@ -111,3 +114,18 @@ CPython on the fixed one.
 
 ## Log
 - 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0560e7b50.
+
+## The general lesson: when you extend a ladder, grep for who counted its old top
+
+This is not two authors drifting apart over months. `pyvar_callv5..8` landed at
+2b7068dd7, later the SAME DAY as 95e7eb26e, and left TWO consumers behind within
+hours. Neither consumer names the ladder and the ladder names neither consumer,
+so no grep for the construct relates them -- the sibling-is-a-spelling case from
+`normalise-dont-special-case.md`, arriving through a shared numeric CONSTANT
+rather than through a shared shape.
+
+The compile-time arm is the nastier of the two because its diagnostic argues
+AGAINST the real cause: a fifth argument was reported as a MISSING SIGNATURE,
+and a reader who believes it goes off to annotate a field whose annotation was
+never what decided anything -- four arguments compile with the same missing
+signature.

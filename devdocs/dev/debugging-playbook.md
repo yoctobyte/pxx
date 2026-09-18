@@ -28694,3 +28694,56 @@ still works": the repro ran under PXX.
 Cost of the fix: move the definition below its callees, one rebuild. Cost of
 missing it: a tree that cannot be bootstrapped, discovered by whoever next tries,
 with the cause an arbitrary distance back.
+
+## PASTING A RECIPE'S TEXT INTO A SHELL CANNOT CATCH A MAKEFILE SYNTAX ERROR — TWO PARSERS, AND ONLY ONE OF THEM EVER RAN
+
+Measured 2026-09-18 (frankD, `0560e7b50`, repaired in `74d185d8a`). Three new
+`test-nilpy` rows were wired into the Makefile and verified by copying the
+recipe body into a shell, where all three passed. The commit shipped a Makefile
+that could not be parsed at all: `Makefile:3208: *** missing separator`, on
+**every target in every lane**, for about fifteen minutes.
+
+The generator had written the ceiling assertions' `printf` payloads with REAL
+newlines where `\n` was meant:
+
+```make
+	printf 'import callablefield_mod
+xs = callablefield_mod.boxes("B")
+print(xs[0].c8(1, 2, 3, 4, 5, 6, 7, 8, 9))
+' > $(TESTTMP)/nilpy_cbfield_over.npy
+```
+
+**TWO PARSERS READ THAT TEXT AND THEY DISAGREE ABOUT WHAT A NEWLINE IS.** The
+shell parses the EXPANDED COMMAND, and a newline inside a single-quoted string
+is an ordinary character — so pasted into a terminal this runs, and it produces
+exactly the right file. `make` parses the FILE, where a line not beginning with
+a tab ends the recipe; the continuation lines become malformed rules. So the
+verification was correct about the command and silent about the thing that
+broke, which is this tree's house failure mode — an instrument that does not
+error, and answers a different question.
+
+**The tell is that the check never loaded the Makefile.** Any verification of a
+recipe that does not invoke `make` is testing the shell, however faithfully it
+reproduces the recipe's text — and the more faithfully it reproduces it, the
+more convincing the green. A generator that emits into a Makefile can only be
+checked by the program that reads Makefiles.
+
+**The cheap half of the remedy needs no theory of parsers: RUN `make` ONCE AFTER
+TOUCHING THE MAKEFILE.** In this case the seat's last `make` PREDATED the
+wiring — the fix, the fixture and the fixedpoint had all been built and proved
+before the Makefile was edited, so the tree felt thoroughly verified and the
+one build that would have caught this was behind rather than ahead. Any target
+would have done it; the file fails to parse before a rule is selected. A bare
+`make -n <target>` is cheaper still and catches the whole class, because parsing
+happens before execution.
+
+**A second reason it survived review:** the three rows were pasted and run
+against the CORRECT compiler and they printed the correct refusals, so the
+commit carried real evidence that the assertions were right. They were. The
+assertions and the file are separate claims, and only one was tested.
+
+TRIGGER FOR PROMOTION TO CLAUDE.md: a second independent subsystem where a
+generated artefact is verified through a DIFFERENT reader than the one that
+consumes it in production — a `.ini`, a hook, a YAML frontmatter block, a linker
+script. One instance is this section; two is a rule about generators, not about
+Makefiles.
