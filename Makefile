@@ -3203,23 +3203,13 @@ test-nilpy: $(COMPILER)
 	# true of a POINTER field and a false lead about this one, since a variant field
 	# has no signature at FOUR either and four compiles -- it sends the reader off
 	# to annotate a field whose annotation was never what decided it.
-	printf 'import callablefield_mod
-xs = callablefield_mod.boxes("B")
-print(xs[0].c8(1, 2, 3, 4, 5, 6, 7, 8, 9))
-' > $(TESTTMP)/nilpy_cbfield_over.npy
+	printf 'import callablefield_mod\nxs = callablefield_mod.boxes("B")\nprint(xs[0].c8(1, 2, 3, 4, 5, 6, 7, 8, 9))\n' > $(TESTTMP)/nilpy_cbfield_over.npy
 	@out=$$(./$(COMPILER) -Futest $(TESTTMP)/nilpy_cbfield_over.npy $(TESTTMP)/nilpy_cbfield_over26 2>&1 && $(TESTTMP)/nilpy_cbfield_over26 2>&1); \
 	 printf '%s\n' "$$out" | grep -q 'c8() — a callable field on a dynamically-typed receiver is called through its code address, which takes at most 8 arguments, got 9' \
 	  || { echo "callable field, candidate-class route: FAIL - nine arguments was not refused, or the message does not name the ceiling and the count"; printf '%s\n' "$$out"; exit 1; }
 	# RUN-TIME route, past the ceiling: no class declares .cb, so the lookup happens
 	# on the receiver and the refusal is a TypeError naming the attribute.
-	printf 'import callablefield_mod
-class Bare:
-    pass
-o = Bare()
-o.cb = callablefield_mod.f8
-xs = [o]
-print(xs[0].cb(1, 2, 3, 4, 5, 6, 7, 8, 9))
-' > $(TESTTMP)/nilpy_cbfield_dyn_over.npy
+	printf 'import callablefield_mod\nclass Bare:\n    pass\no = Bare()\no.cb = callablefield_mod.f8\nxs = [o]\nprint(xs[0].cb(1, 2, 3, 4, 5, 6, 7, 8, 9))\n' > $(TESTTMP)/nilpy_cbfield_dyn_over.npy
 	@out=$$(./$(COMPILER) -Futest $(TESTTMP)/nilpy_cbfield_dyn_over.npy $(TESTTMP)/nilpy_cbfield_dyn_over26 2>&1 && $(TESTTMP)/nilpy_cbfield_dyn_over26 2>&1); \
 	 printf '%s\n' "$$out" | grep -q 'cb() is dispatched at run time through a callable attribute, which takes at most 8 arguments, got 9' \
 	  || { echo "callable field, run-time route: FAIL - nine arguments was not refused, or the message does not NAME the attribute and the count"; printf '%s\n' "$$out"; exit 1; }
