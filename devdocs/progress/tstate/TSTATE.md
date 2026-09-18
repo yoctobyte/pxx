@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `4fbed6c4157e` | 2026-09-18T10:37:42Z | RED (native) | 311.7s | `7f86a12a6628` RED |
+| borg | `4fbed6c4157e` | 2026-09-18T10:54:43Z | RED (full) | 993.3s | `4fbed6c4157e` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `7f86a12a6628` on borg, 2026-09-18T10:31:18Z (6m ago).**
+**Newest full tier in the fleet: `4fbed6c4157e` on borg, 2026-09-18T10:54:43Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `7f86a12a6628` | RED | 6m | — (newest) |
+| borg | `4fbed6c4157e` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -44,3 +44,5 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-core#src:test/test_record_promo_member_leaks.pas** — test/test_record_promo_member_leaks.pas tools/expect_same.sh +3 (borg): bad `4fbed6c4157e`, last good `7f86a12a6628`, 4 commit(s) in range
 - **test-core#src:test/test_record_variant_member_leaks.pas** — test/test_record_variant_member_leaks.pas tools/expect_same.sh +1 (borg): bad `4fbed6c4157e`, last good `7f86a12a6628`, 4 commit(s) in range
 - **test-core#src:test/test_synth_soname_survives_redeclaration.pas** — test/test_synth_soname_survives_redeclaration.pas lib/crtl/src/string.c +2 (borg): bad `4fbed6c4157e`, last good `7f86a12a6628`, 4 commit(s) in range
+- **test-aarch64#src:test/test_dynarray_to_pointer_seam_leaks.pas** — test/test_dynarray_to_pointer_seam_leaks.pas tools/expect_same.sh +2 (borg): bad `4fbed6c4157e`, last good `7f86a12a6628`, 4 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy** — test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy test/test_nilpy_an_unreferenced_header_import_needs_no_library.expected +7 (borg): bad `4fbed6c4157e`, last good `7f86a12a6628`, 4 commit(s) in range
