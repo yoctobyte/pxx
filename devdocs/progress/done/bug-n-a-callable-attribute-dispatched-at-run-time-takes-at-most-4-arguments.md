@@ -129,3 +129,20 @@ AGAINST the real cause: a fifth argument was reported as a MISSING SIGNATURE,
 and a reader who believes it goes off to annotate a field whose annotation was
 never what decided anything -- four arguments compile with the same missing
 signature.
+
+TRIGGER FOR PROMOTION TO CLAUDE.md, recorded rather than acted on. This met the
+MERIT test and has NOT met the RECURRENCE one: it is a single subsystem -- the
+pyvar_callv ladder and its two consumers -- and CLAUDE.md promotes on a SECOND
+INDEPENDENT subsystem, not on quality, because merit-based promotion is how that
+file reached 72KB the first time.
+
+**If a second independent subsystem shows a consumer left behind by a WIDENED
+NUMERIC BOUND, it is promoted as a STRENGTHENING of the existing
+sibling-is-a-spelling rule -- an extension sentence, not a new neighbour.**
+
+What it would strengthen, and why the existing rule does not already cover it:
+CLAUDE.md says to grep for the other spelling's HANDLER. That does not find this
+class. A consumer that merely stopped at four is not a handler for anything --
+it names no ladder, contains no shared construct, and reads as ordinary correct
+code. The actionable form is the one this ticket found: WHEN YOU EXTEND A LADDER,
+GREP FOR WHO COUNTED ITS OLD TOP.

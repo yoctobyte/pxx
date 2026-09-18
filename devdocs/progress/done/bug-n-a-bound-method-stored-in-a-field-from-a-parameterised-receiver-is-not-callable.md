@@ -113,3 +113,24 @@ parameterised shape it originally wanted, which now needs both fixes.
 
 ## Log
 - 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 953456bf6.
+
+## For the next seat in this file: "a callable value travels as a variant" now has THREE owners
+
+Not acted on here -- flagged so it is visible rather than rediscovered.
+`PyInferExprType` states this rule in its own words in its LAMBDA arm ("A LAMBDA
+is a CALLABLE VALUE, and a callable value travels as a variant"), the
+return-type scan carries it as its own arm (`PyInferDefRetTypeScan`, "`return
+lambda ...` is a CALLABLE VALUE"), and this fix is the third place to need it.
+
+`devdocs/dev/root-cause-over-microfix.md`'s own count applies: two is a smell,
+three is a design flaw. The question worth asking before the fourth arm is
+written is whether these three want to be one predicate -- "does this expression
+denote a callable value" -- asked once, rather than three arms that each
+rediscover the answer for one construct. That is a refactor with a test corpus
+behind it, not a wind-down job.
+
+Also worth carrying: the fixture is at ONE argument on purpose. The natural,
+thorough-looking wide-arity fixture measures this defect together with the
+four-argument callable-field cap, which refuses FIRST, so it would have pinned
+neither. The pinned compiler's `object is not callable` is what discriminates
+the two.
