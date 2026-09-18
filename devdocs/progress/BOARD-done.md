@@ -3571,6 +3571,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-unbound-builtin-method | N | 70 | regression | regression: test-core#src:test/test_nilpy_unbound_builtin_method.npy red at c28e07a89f03 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-zero-argument-builtin-constructors | N | 70 | regression | regression: test-core#src:test/test_nilpy_zero_argument_builtin_constructors.npy red at dc798834ba33 (auto-filed by twatch) | — |
 | regression-test-core-test-object-reference | P | 70 | regression | regression: test-core#src:test/test_object_reference.pas red at f9bfcca97409 (auto-filed by twatch) | — |
+| regression-test-core-test-object-value-type | P | 70 | regression | regression: test-core#src:test/test_object_value_type.pas at cc03b4a51933 in step 8/9, `! ./compiler/pascal26 test/test_object_value_constructor_error.pas /tmp/test_object_value_constructor_error26 > /tmp/te…` (auto-filed by twatch) | — |
 | regression-test-core-test-operator-implicit-shortstring-b356 | P | 70 | regression | regression: test-core#src:test/test_operator_implicit_shortstring_b356.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-opt-store-reload | A | 70 | regression | regression: test-core#src:test/test_opt_store_reload.pas red at c951ec710b33 (auto-filed by twatch) | — |
 | regression-test-core-test-pascal-cast-chain-method-call | P | 70 | regression | regression: test-core#src:test/test_pascal_cast_chain_method_call.pas red at 97f96a5cc766 (auto-filed by twatch) | — |

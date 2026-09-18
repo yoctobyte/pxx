@@ -274,6 +274,46 @@ write time; identity when nothing is split.
 `AddDataRelFix(pos, target)` beside its `PatchDataI32`.** Absolute pointers via
 `AddDataPtrFix` were always fine.
 
+**AND THE SECOND RULE IS ABOUT WHEN, NOT ABOUT WHAT — DO NOT INTERN A STRING
+BETWEEN A CONTIGUOUS STRUCTURE'S FIRST AND LAST BYTE.** frankh-3f, `1cdb560f4`:
+`ResolveSynthImportLibraries` interned a soname into `.dynstr` *while* that
+table was being built, the read-only split moved those 48 bytes out and closed
+the gap, and `DT_NEEDED` read `>`.
+
+**Corrected by frankh-3f, and the correction widens it rather than narrowing
+it — my first note here had the mechanism wrong.** I wrote that the hazard was
+to self-relative words. It is not: `typeRef`/`baseTypeRef` are `target - pos`
+and `AddDataRelFix` records them, so they survive a mid-blob intern intact.
+The real hazard needs no offsets in the blob at all. **Any contiguous RW
+structure read as `base + fixed offset` is CUT IN TWO if `InternStr` runs
+between its first and last byte** — the split hoists the literal out, the gap
+closes, and every field after the cut shifts by the literal's size. `.dynstr`
+was one instance; an RTTI blob is another, and so is any record image a future
+pass builds in one span.
+
+**AND IF A BLOB EVER BECOMES READ-ONLY, THE IRAM EXCLUSION DOES NOT COVER A READ
+THROUGH A POINTER.** frankh-3f, `c44fa2642` (ESP-IDF `.rodata` in both ELF32
+object writers; `rtti_emit.inc` untouched, the five relfix sites re-patched per
+object by the new `ObjRoPrepare`, and both ends of a relative word must share a
+section or `ErrorNoPos`). Measured there: `test_emit_obj.pas` on xtensa, SRAM
+`.data` 6304 -> 2624 B. The caveat that lands on this ticket: an IRAM-safe ISR
+runs with the **flash cache off**, so a literal an `iram;` routine references
+DIRECTLY is deliberately kept in `.data` by `ObjRoKeepIramLiteralsWritable` —
+but that exclusion sees **Fixups from iram code only**. A VMT or RTTI blob
+reached through a POINTER from an `iram;` method is invisible to it, and would
+be flash-mapped and unreadable exactly when the ISR runs. So "this blob is never
+written" is NOT sufficient to justify moving it; the second question is whether
+any `iram;` code can reach it, and today nothing answers that.
+
+**The guard is cheap and it is in this ticket's file:** snapshot `RoRangeCount`
+when a blob starts and `ErrorNoPos` if it has changed at the end — `1cdb560f4`'s
+own shape, suggested for the blob and VMT emitters in `rtti_emit.inc`. NOT YET
+BUILT, and the honest status is that there is no known offender: the RTTI rows
+are green, so this makes the FIRST one loud rather than fixing a live defect.
+Whoever adds it owes it a positive control — an emitter with a deliberate
+mid-blob intern, asserted to fire — because a guard nothing can trip is a guard
+that prints PASS.
+
 This is exactly the shape that cost a day on the code side this week: DCE
 re-aimed every `CodeRef` with a raw x86-64 rel32 over encoded branch WORDS,
 because a displacement's SITE moves even when its TARGET is final. A blob-
