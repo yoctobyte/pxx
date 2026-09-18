@@ -617,11 +617,22 @@ end;
 procedure EmitAnsiStrReleaseLocked;
 { rax = managed-string data pointer. Caller holds the heap lock when threading
   is enabled. See EmitDynArrayReleaseLocked for why the jumps are manually
-  patched rather than via EmitAsmX64 labels. }
-var pNil, pNonZero: Integer;
+  patched rather than via EmitAsmX64 labels.
+
+  The MSTR_STATIC_RC guard is EmitAnsiStrRetainLocked's twin and the release
+  blob's. Its two callers are the SetLength resize and SetLength(s, 0), and the
+  old block there is whatever the string held -- a literal as often as not.
+  Without it `SetLength(a, 3)` on `a := 'abcdef'` decremented the literal's
+  count: silent while the pool was writable, and one step below the threshold
+  every other guard tests, so the block was live-counted from then on. The
+  read-only data segment turned it into a SIGSEGV, which is how it was found.
+  feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+var pNil, pStatic, pNonZero: Integer;
 begin
   EmitAsmX64(['test rax, rax']);
   EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+  EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
+  EmitB($73); pStatic := CodeLen; EmitB(0);       { jae done: a static block }
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pNonZero := CodeLen; EmitB(0);      { jnz done }
@@ -631,6 +642,7 @@ begin
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   PatchRel8(pNil);
+  PatchRel8(pStatic);
   PatchRel8(pNonZero);
 end;
 

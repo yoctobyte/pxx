@@ -317,6 +317,37 @@ begin
   for i := oldCap to DataCap - 1 do Data[i] := 0;
 end;
 
+{ Mark Data[s..e) as never written at run time. Ranges arrive in ascending
+  order because they are marked as they are appended; one that touches the
+  previous is merged into it, so a run of literals is one range and the RW
+  segment is not chopped into a piece per string. See RoRangeStart. }
+procedure RoRangeAdd(s, e: Integer);
+begin
+  if e <= s then Exit;
+  if (RoRangeCount > 0) and (s < RoRangeEnd[RoRangeCount - 1]) then
+    ErrorNoPos('internal: read-only data ranges out of order');
+  if (RoRangeCount > 0) and (s = RoRangeEnd[RoRangeCount - 1]) then
+  begin
+    RoRangeEnd[RoRangeCount - 1] := e;
+    Exit;
+  end;
+  if RoRangeCount >= Length(RoRangeStart) then
+  begin
+    if Length(RoRangeStart) = 0 then
+    begin
+      SetLength(RoRangeStart, 256); SetLength(RoRangeEnd, 256);
+    end
+    else
+    begin
+      SetLength(RoRangeStart, Length(RoRangeStart) * 2);
+      SetLength(RoRangeEnd, Length(RoRangeEnd) * 2);
+    end;
+  end;
+  RoRangeStart[RoRangeCount] := s;
+  RoRangeEnd[RoRangeCount] := e;
+  Inc(RoRangeCount);
+end;
+
 { The relocation table and its TWO PARALLEL COLUMNS grow as one. FixupPCRel and
   FixupPicDelta are indexed by the same fixup number as Fixups, so a grow that
   moved one and not the others is the identical defect to a compaction that

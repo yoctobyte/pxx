@@ -1839,7 +1839,7 @@ begin
 end;
 
 function InternStr(const s: AnsiString): Integer;
-var i, j, h: Integer; len, orAll, meta: Int64; match: Boolean;
+var i, j, h, entryStart: Integer; len, orAll, meta: Int64; match: Boolean;
 begin
   if Length(StrHashHead) = 0 then StrHashClear;
   h := StrHashOf(s) and StrHashMask;
@@ -1905,6 +1905,7 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
+  entryStart := DataLen;
   EmitDataWord32Zx(0);                       { allocator size word: no capacity }
 
   { The ASCII answer, computed here because the bytes are right here. The
@@ -1955,7 +1956,13 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
-  
+
+  { The whole entry, size word to padding, is never stored to: measured with
+    hardware watchpoints, default / --threadsafe / -O3
+    (feature-opt-static-literal-blocks-should-never-be-written-to). The
+    runtime's retain/release see MSTR_STATIC_RC and leave the block alone. }
+  RoRangeAdd(entryStart, DataLen);
+
   Result := StrCount; Inc(StrCount);
 end;
 

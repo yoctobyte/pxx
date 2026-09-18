@@ -4,7 +4,7 @@ track: A
 status: done
 owner: frankH
 slug: feature-opt-static-literal-blocks-should-never-be-written-to
-summary: "DONE -- the park note below is STALE. d782926ce (2026-08-31) guarded BOTH x86-64 refcount blobs with the MSTR_STATIC_RC floor and deleted the compensating inc at the literal site; the other five backends were done 2026-08-30 via PXXStrIncRef/DecRef. MEASURED 2026-09-18 (frankH) with hardware watchpoints on a static block's three header words and first payload byte: 20,000 iterations through assignment, copy, const/value/var params, function results, dyn-array SetLength grow/shrink, record copy, class field, concat, UniqueString and SetLength -- ZERO writes on x86-64 default, --threadsafe and -O3 (-O0 builds no static blocks). Positive control: a deliberate +1 on the rc word trips the watch (old 1073741824 = MSTR_STATIC_RC). Blind spot: gdb watch reports value CHANGES, so a same-value rewrite would not show; no inc/dec produces one. Cross targets not re-measured here."
+summary: "DONE -- CORRECTED 2026-09-18: the ZERO-writes measurement below MISSED one writer. x86-64 inlined SetLength released the old block unguarded (EmitAnsiStrReleaseLocked), so SetLength(a, 3) on a literal decremented its count. The read-only data segment faulted on it and it is fixed in the same change (feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident). Original: the park note below is STALE. d782926ce (2026-08-31) guarded BOTH x86-64 refcount blobs with the MSTR_STATIC_RC floor and deleted the compensating inc at the literal site; the other five backends were done 2026-08-30 via PXXStrIncRef/DecRef. MEASURED 2026-09-18 (frankH) with hardware watchpoints on a static block's three header words and first payload byte: 20,000 iterations through assignment, copy, const/value/var params, function results, dyn-array SetLength grow/shrink, record copy, class field, concat, UniqueString and SetLength -- ZERO writes on x86-64 default, --threadsafe and -O3 (-O0 builds no static blocks). Positive control: a deliberate +1 on the rc word trips the watch (old 1073741824 = MSTR_STATIC_RC). Blind spot: gdb watch reports value CHANGES, so a same-value rewrite would not show; no inc/dec produces one. Cross targets not re-measured here."
 ---
 
 # Static literal blocks should never be written to at all
@@ -249,3 +249,13 @@ This clears the first blocker of
 feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident.
 The read-only segment itself will be the stronger instrument: a store of ANY
 value to an R page faults.
+
+## 2026-09-18 (frankH) — correction: the zero-writes result was incomplete
+
+The read-only data segment's first cut SIGSEGVed `test_static_string_literals` at
+`SetLength(a, 3)` on `a := 'abcdef'`, at `dec qword [rax-16]` in
+`EmitAnsiStrReleaseLocked`. That helper has no `MSTR_STATIC_RC` guard, unlike its
+retain twin and the release blob. So the measurement above ("ZERO writes ...
+SetLength") is false for that arm. Fixed there; see the segment ticket. How the
+watchpoint rows avoided the arm is not established. The value-CHANGES caveat
+above does not explain it, since a decrement changes the value.

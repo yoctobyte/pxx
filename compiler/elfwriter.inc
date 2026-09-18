@@ -30,6 +30,180 @@ begin
   end;
 end;
 
+{ ===== the read-only data segment =====
+  Data[] is built as ONE buffer and every recorded offset -- a fixup's DataOff,
+  a DataPtrFix target, a data-resident global, a GOT slot -- is a position in
+  it. The x86-64 executable writer cuts the ranges RoRangeAdd marked out of it
+  and loads them through their own PT_LOAD with p_flags R, so a store to any of
+  those bytes faults instead of landing. The cut happens HERE, at write time,
+  and every consumer of a data offset asks DataRemap for the address, so no
+  emitter, backend or frontend learns the split exists.
+
+  Layout, as offsets from dataBase:
+    [R  : the read-only pieces, packed from 0]           RoImageLen bytes
+    [RW : the rest, from RwFileStart in the FILE]        loaded RwVaShift higher
+  The RW pieces sit a page higher in memory than in the file -- the linker's
+  usual trick, and the reason the image does not carry a page of zero padding:
+  a PT_LOAD needs p_vaddr = p_offset modulo the page, not a page-aligned
+  offset. Each piece keeps its offset MODULO RO_RESIDUE, so every alignment an
+  emitter asked for relative to Data[0] still holds (the widest is 16, the
+  typed-const baker's AlignTo; TypeAlign stops at 8).
+
+  First cut: x86-64 ET_EXEC only, string-literal pool only.
+  feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+const
+  RO_RESIDUE = 16;
+
+function RoResidueUp(pos, old: Integer): Integer;
+begin
+  Result := pos + ((((old - pos) mod RO_RESIDUE) + RO_RESIDUE) mod RO_RESIDUE);
+end;
+
+procedure RoPieceAdd(old: Integer; isRo: Boolean);
+begin
+  if RoPieceCount + 1 >= Length(RoPieceOld) then
+  begin
+    SetLength(RoPieceOld, 2 * RoPieceCount + 16);
+    SetLength(RoPieceNew, 2 * RoPieceCount + 16);
+    SetLength(RoPieceIsRo, 2 * RoPieceCount + 16);
+  end;
+  RoPieceOld[RoPieceCount] := old;
+  RoPieceIsRo[RoPieceCount] := isRo;
+  Inc(RoPieceCount);
+end;
+
+{ Decide the split and lay it out. Must run AFTER the last append to Data[]
+  (PrepareDynamicData appends) and BEFORE anything resolves a data address. }
+procedure RoLayoutPrepare(wanted: Boolean; page: Integer);
+var i, cur, pos, len: Integer;
+begin
+  RoSplitActive := False;
+  RoPieceCount := 0;
+  if (not wanted) or NoRoData or (RoRangeCount = 0) then Exit;
+  cur := 0;
+  for i := 0 to RoRangeCount - 1 do
+  begin
+    if RoRangeEnd[i] > DataLen then
+      ErrorNoPos('internal: a read-only data range runs past DataLen');
+    if RoRangeStart[i] > cur then RoPieceAdd(cur, False);
+    RoPieceAdd(RoRangeStart[i], True);
+    cur := RoRangeEnd[i];
+  end;
+  if cur < DataLen then RoPieceAdd(cur, False);
+  RoPieceOld[RoPieceCount] := DataLen;   { sentinel: the end of the last piece }
+
+  pos := 0;
+  for i := 0 to RoPieceCount - 1 do
+    if RoPieceIsRo[i] then
+    begin
+      pos := RoResidueUp(pos, RoPieceOld[i]);
+      RoPieceNew[i] := pos;
+      pos := pos + (RoPieceOld[i + 1] - RoPieceOld[i]);
+    end;
+  RoImageLen := pos;
+  RwVaShift := page;
+  RwFileStart := AlignTo(RoImageLen, RO_RESIDUE);
+  pos := RwFileStart;
+  for i := 0 to RoPieceCount - 1 do
+    if not RoPieceIsRo[i] then
+    begin
+      pos := RoResidueUp(pos, RoPieceOld[i]);
+      RoPieceNew[i] := pos + RwVaShift;
+      len := RoPieceOld[i + 1] - RoPieceOld[i];
+      pos := pos + len;
+    end;
+  RwFileEnd := pos;
+  RoSplitActive := True;
+end;
+
+function RoPieceOf(o: Integer): Integer;
+var lo, hi, mid: Integer;
+begin
+  lo := 0; hi := RoPieceCount - 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if RoPieceOld[mid] <= o then lo := mid else hi := mid - 1;
+  end;
+  Result := lo;
+end;
+
+{ Where the byte at Data[o] is loaded, as an offset from dataBase. Identity
+  unless the split is active. o = DataLen is one past the end of the data and
+  maps to one past the end of the RW part. Anything else outside Data[] is a
+  fixup nobody finished, and remapping it would make a wrong address look
+  deliberate -- so say so. }
+function DataRemap(o: Integer): Int64;
+var k: Integer;
+begin
+  if not RoSplitActive then begin Result := o; Exit; end;
+  if (o < 0) or (o > DataLen) then
+    ErrorNoPos('internal: data offset ' + AIntToStr(o) + ' outside the data image');
+  if o = DataLen then begin Result := RwFileEnd + RwVaShift; Exit; end;
+  k := RoPieceOf(o);
+  Result := RoPieceNew[k] + (o - RoPieceOld[k]);
+end;
+
+function DataVA(dataBase: Int64; o: Integer): Int64;
+begin
+  Result := dataBase + DataRemap(o);
+end;
+
+{ The byte's FILE position relative to the start of the data image. }
+function DataFilePos(o: Integer): Integer;
+var k: Integer;
+begin
+  Result := DataRemap(o);
+  if RoSplitActive then
+  begin
+    if o = DataLen then Result := RwFileEnd
+    else
+    begin
+      k := RoPieceOf(o);
+      if not RoPieceIsRo[k] then Result := Result - RwVaShift;
+    end;
+  end;
+end;
+
+{ Bytes of data the file carries. }
+function DataFileLen: Integer;
+begin
+  if RoSplitActive then Result := RwFileEnd else Result := DataLen;
+end;
+
+{ Where the RW part starts: its file position from the data start, and its VA. }
+function DataRwFilePos: Integer;
+begin
+  if RoSplitActive then Result := RwFileStart else Result := 0;
+end;
+
+function DataRwVA(dataBase: Int64): Int64;
+begin
+  if RoSplitActive then Result := dataBase + RwFileStart + RwVaShift
+  else Result := dataBase;
+end;
+
+{ Rearrange Data[] into file order. LAST, after every patch into Data[] --
+  those are written at old positions (DataPtrFix.DataPos, the RELA table). The
+  gaps are alignment filler and are zero. DataLen is NOT changed: it stays the
+  count of bytes the program emitted, which is what the ok: line reports. }
+procedure RoPermuteData;
+var img: array of Byte; i, j, dst, n: Integer;
+begin
+  if not RoSplitActive then Exit;
+  SetLength(img, RwFileEnd + 16);
+  for i := 0 to RwFileEnd + 15 do img[i] := 0;
+  for i := 0 to RoPieceCount - 1 do
+  begin
+    dst := RoPieceNew[i];
+    if not RoPieceIsRo[i] then dst := dst - RwVaShift;
+    n := RoPieceOld[i + 1] - RoPieceOld[i];
+    for j := 0 to n - 1 do img[dst + j] := Data[RoPieceOld[i] + j];
+  end;
+  Data := img;
+  DataCap := Length(img);
+end;
+
 procedure DataPutB(v: Byte);
 begin
   DataEnsure(1);
@@ -250,15 +424,15 @@ procedure PatchDynamicData(dataBase: Int64);
 var i, p: Integer;
 begin
   for i := 0 to ExternalCount-1 do
-    PatchDataU64(DynamicRelaOff + (i * 24), dataBase + ExternalGotOff[i]);
+    PatchDataU64(DynamicRelaOff + (i * 24), DataVA(dataBase, ExternalGotOff[i]));
   p := DynamicOff + (DynamicNeededCount * 16);
-  PatchDataU64(p + 8, dataBase + DynamicStrOff);
+  PatchDataU64(p + 8, DataVA(dataBase, DynamicStrOff));
   Inc(p, 32);
-  PatchDataU64(p + 8, dataBase + DynamicSymOff);
+  PatchDataU64(p + 8, DataVA(dataBase, DynamicSymOff));
   Inc(p, 32);
-  PatchDataU64(p + 8, dataBase + DynamicHashOff);
+  PatchDataU64(p + 8, DataVA(dataBase, DynamicHashOff));
   Inc(p, 16);
-  PatchDataU64(p + 8, dataBase + DynamicRelaOff);
+  PatchDataU64(p + 8, DataVA(dataBase, DynamicRelaOff));
 end;
 
 { ELF32 dynamic-link tables (i386). Mirrors PrepareDynamicData but with 32-bit
@@ -401,7 +575,7 @@ var i: Integer; slotVA: Int64;
 begin
   for i := 0 to DynCallCount-1 do
   begin
-    slotVA := dataBase + ExternalGotOff[DynCallExtIdx[i]];
+    slotVA := DataVA(dataBase, ExternalGotOff[DynCallExtIdx[i]]);
     if TargetArch = TARGET_AARCH64 then
     begin
       Patch32(DynCallCodePos[i],     $D2800010 or ((slotVA and $FFFF) shl 5));
@@ -589,10 +763,13 @@ begin
   writePad(f, 64);   { NULL shdr (index 0) }
   DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
   writeShdr64(f, DbgNmText, 1, codeOffset, CodeLen);                  { .text PROGBITS }
-  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
-  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);        { .data PROGBITS }
+  { With the read-only split, .data names the RW part only: the R part sits at
+    a different distance from its file bytes, and one section cannot say both. }
+  DbgShFlags := 3; DbgShAddr := DataRwVA(dataBase); DbgShAlign := 8;
+  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen + DataRwFilePos,
+              DataFileLen - DataRwFilePos);                           { .data PROGBITS }
   DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
-  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize); { .bss NOBITS }
+  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataFileLen, BSSSize); { .bss NOBITS }
   DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
   writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
@@ -757,10 +934,13 @@ begin
   for i := 1 to 64 do writeU8(f, 0);   { NULL shdr (index 0) }
   DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
   writeShdr64(f, DbgNmText, 1, codeOffset, CodeLen);                  { .text PROGBITS }
-  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
-  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);        { .data PROGBITS }
+  { With the read-only split, .data names the RW part only: the R part sits at
+    a different distance from its file bytes, and one section cannot say both. }
+  DbgShFlags := 3; DbgShAddr := DataRwVA(dataBase); DbgShAlign := 8;
+  writeShdr64(f, DbgNmData, 1, codeOffset + CodeLen + DataRwFilePos,
+              DataFileLen - DataRwFilePos);                           { .data PROGBITS }
   DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
-  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize); { .bss NOBITS }
+  writeShdr64(f, DbgNmBss, 8, codeOffset + CodeLen + DataFileLen, BSSSize); { .bss NOBITS }
   DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
   writeShdr64(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr64(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
@@ -1274,7 +1454,7 @@ begin
   begin
     DbgPutB($03);                 { DW_OP_addr }
     if SymOffIsData(DbgVarOff[vi]) then
-      DbgPutAddr(DbgDataBase + SymOffDataPart(DbgVarOff[vi]))
+      DbgPutAddr(DbgDataBase + DataRemap(SymOffDataPart(DbgVarOff[vi])))
     else
       DbgPutAddr(DbgBssBase + DbgVarOff[vi]);
   end
@@ -1835,7 +2015,7 @@ begin
   { Apply data fixups (8-byte absolute) }
   for i := 0 to FixCount-1 do
   begin
-    addr := dataBase + Fixups[i].DataOff;
+    addr := DataVA(dataBase, Fixups[i].DataOff);
     { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
       bytes measured from the end of the instruction, not eight absolute. }
     if FixupPCRel[i] then
@@ -1852,7 +2032,7 @@ begin
       BIASED offset -- the one decode point for all of them, because every
       backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
     if SymOffIsData(GlobFix[i].BSSoff) then
-      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+      addr := DataVA(dataBase, SymOffDataPart(GlobFix[i].BSSoff))
     else
       addr := bssBase + GlobFix[i].BSSoff;
     { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
@@ -1914,7 +2094,7 @@ begin
   end;
 
   for i := 0 to DataPtrFixCount-1 do
-    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+    PatchDataU64(DataPtrFix[i].DataPos, DataVA(dataBase, DataPtrFix[i].TargetOff));
 end;
 
 {$ifdef FPC}
@@ -1934,13 +2114,23 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK (+ PT_LOAD rodata below) }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
     phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
+  end;
+  { The read-only data segment -- x86-64 only in this first cut. Decided here,
+    after the last append to Data[] (PrepareDynamicData) and before anything
+    resolves a data address; it is one more program header, so code starts 56
+    bytes later. feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoLayoutPrepare(TargetArch = TARGET_X86_64, ElfSegAlign);
+  if RoSplitActive then
+  begin
+    Inc(phCount);
+    codeOffset := codeOffset + PROG_HEADER_SIZE;
   end;
   { Code starts immediately after the program headers, so the constant and the
     header count are one fact spelled twice and drift silently: the image still
@@ -1955,9 +2145,9 @@ begin
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
-  bssBase  := AlignTo(dataBase + DataLen, 8);
+  bssBase  := AlignTo(DataVA(dataBase, DataLen), 8);
   entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
-  filesz   := codeOffset + CodeLen + DataLen;
+  filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
   { DbgArchSupported, not a fourth copy of the target list. This line said
@@ -1981,6 +2171,7 @@ begin
   end;
 
   ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
+  RoPermuteData;   { last: every patch above wrote Data[] at its OLD position }
 
   Assign(f, outPath); Rewrite(f, 1);
 
@@ -2006,22 +2197,35 @@ begin
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
   writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
   writeU64(f,ElfSegAlign);
-  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
-    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
-    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  { PT_LOAD -- the read-only data, R only, when there is a split: a store to
+    any of these bytes faults. p_filesz = p_memsz, nothing is zero-filled. }
+  if RoSplitActive then
+  begin
+    writeU32(f,1);writeU32(f,4);  { PT_LOAD, R }
+    writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+    writeU64(f,RoImageLen);writeU64(f,RoImageLen);
+    writeU64(f,ElfSegAlign);
+  end;
+  { PT_LOAD -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is the end of the data
+    rounded up to 8, so the gap is inside this segment and is zeroed too. With
+    the split this segment starts at the RW part, a page higher in memory than
+    in the file -- p_vaddr and p_offset still agree modulo the page. }
   writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
-  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
-  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,codeOffset + CodeLen + DataRwFilePos);
+  writeU64(f,DataRwVA(dataBase));writeU64(f,DataRwVA(dataBase));
+  writeU64(f,DataFileLen - DataRwFilePos);
+  writeU64(f,(bssBase - DataRwVA(dataBase)) + BSSSize);
   writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
-    writeU64(f,codeOffset + CodeLen + DynamicInterpOff);
-    writeU64(f,dataBase + DynamicInterpOff);writeU64(f,dataBase + DynamicInterpOff);
+    writeU64(f,codeOffset + CodeLen + DataFilePos(DynamicInterpOff));
+    writeU64(f,DataVA(dataBase, DynamicInterpOff));writeU64(f,DataVA(dataBase, DynamicInterpOff));
     writeU64(f,DynamicInterpSize);writeU64(f,DynamicInterpSize);writeU64(f,1);
     writeU32(f,2);writeU32(f,6); { PT_DYNAMIC, RW }
-    writeU64(f,codeOffset + CodeLen + DynamicOff);
-    writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
+    writeU64(f,codeOffset + CodeLen + DataFilePos(DynamicOff));
+    writeU64(f,DataVA(dataBase, DynamicOff));writeU64(f,DataVA(dataBase, DynamicOff));
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
@@ -2031,7 +2235,7 @@ begin
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
-  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
   if doDebug then
   begin
     if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
@@ -2059,13 +2263,23 @@ begin
     machine := 183
   else
     machine := 62;
-  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK }
+  phCount := 3;   { PT_LOAD code + PT_LOAD data + PT_GNU_STACK (+ PT_LOAD rodata below) }
   codeOffset := CODE_OFFSET;
   if ExternalCount > 0 then
   begin
     PrepareDynamicData;
     phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
+  end;
+  { The read-only data segment -- x86-64 only in this first cut. Decided here,
+    after the last append to Data[] (PrepareDynamicData) and before anything
+    resolves a data address; it is one more program header, so code starts 56
+    bytes later. feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoLayoutPrepare(TargetArch = TARGET_X86_64, ElfSegAlign);
+  if RoSplitActive then
+  begin
+    Inc(phCount);
+    codeOffset := codeOffset + PROG_HEADER_SIZE;
   end;
   { Code starts immediately after the program headers, so the constant and the
     header count are one fact spelled twice and drift silently: the image still
@@ -2080,9 +2294,9 @@ begin
   { bssBase must be 8-aligned: aarch64 64-bit exclusives (ldaxr/stlxr in the
     --threadsafe I/O + atomic stubs) SIGBUS on a 4-aligned qword. CodeLen varies
     per program, so an unaligned dataBase+DataLen would randomly misalign BSS. }
-  bssBase  := AlignTo(dataBase + DataLen, 8);
+  bssBase  := AlignTo(DataVA(dataBase, DataLen), 8);
   entry    := LOAD_ADDR + codeOffset + AsmEntryOff;
-  filesz   := codeOffset + CodeLen + DataLen;
+  filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
   { DWARF -g. Build the .debug_* bytes, then place a section-header table after
@@ -2116,6 +2330,7 @@ begin
   end;
 
   ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
+  RoPermuteData;   { last: every patch above wrote Data[] at its OLD position }
 
   AssignPath := outPath;
   f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
@@ -2142,22 +2357,35 @@ begin
   writeU64(f,0);writeU64(f,LOAD_ADDR);writeU64(f,LOAD_ADDR);
   writeU64(f,codeOffset + CodeLen);writeU64(f,codeOffset + CodeLen);
   writeU64(f,ElfSegAlign);
-  { PT_LOAD #2 -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
-    which the kernel zero-fills past p_filesz. bssBase is dataBase + DataLen
-    rounded up to 8, so the gap is inside this segment and is zeroed too. }
+  { PT_LOAD -- the read-only data, R only, when there is a split: a store to
+    any of these bytes faults. p_filesz = p_memsz, nothing is zero-filled. }
+  if RoSplitActive then
+  begin
+    writeU32(f,1);writeU32(f,4);  { PT_LOAD, R }
+    writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
+    writeU64(f,RoImageLen);writeU64(f,RoImageLen);
+    writeU64(f,ElfSegAlign);
+  end;
+  { PT_LOAD -- data + bss, R+W and NO X. p_memsz runs to the end of bss,
+    which the kernel zero-fills past p_filesz. bssBase is the end of the data
+    rounded up to 8, so the gap is inside this segment and is zeroed too. With
+    the split this segment starts at the RW part, a page higher in memory than
+    in the file -- p_vaddr and p_offset still agree modulo the page. }
   writeU32(f,1);writeU32(f,6);  { PT_LOAD, R+W }
-  writeU64(f,codeOffset + CodeLen);writeU64(f,dataBase);writeU64(f,dataBase);
-  writeU64(f,DataLen);writeU64(f,(bssBase - dataBase) + BSSSize);
+  writeU64(f,codeOffset + CodeLen + DataRwFilePos);
+  writeU64(f,DataRwVA(dataBase));writeU64(f,DataRwVA(dataBase));
+  writeU64(f,DataFileLen - DataRwFilePos);
+  writeU64(f,(bssBase - DataRwVA(dataBase)) + BSSSize);
   writeU64(f,ElfSegAlign);
   if ExternalCount > 0 then
   begin
     writeU32(f,3);writeU32(f,4); { PT_INTERP, R }
-    writeU64(f,codeOffset + CodeLen + DynamicInterpOff);
-    writeU64(f,dataBase + DynamicInterpOff);writeU64(f,dataBase + DynamicInterpOff);
+    writeU64(f,codeOffset + CodeLen + DataFilePos(DynamicInterpOff));
+    writeU64(f,DataVA(dataBase, DynamicInterpOff));writeU64(f,DataVA(dataBase, DynamicInterpOff));
     writeU64(f,DynamicInterpSize);writeU64(f,DynamicInterpSize);writeU64(f,1);
     writeU32(f,2);writeU32(f,6); { PT_DYNAMIC, RW }
-    writeU64(f,codeOffset + CodeLen + DynamicOff);
-    writeU64(f,dataBase + DynamicOff);writeU64(f,dataBase + DynamicOff);
+    writeU64(f,codeOffset + CodeLen + DataFilePos(DynamicOff));
+    writeU64(f,DataVA(dataBase, DynamicOff));writeU64(f,DataVA(dataBase, DynamicOff));
     writeU64(f,DynamicSize);writeU64(f,DynamicSize);writeU64(f,8);
   end;
   writeU32(f,$6474E551);writeU32(f,6); { PT_GNU_STACK, RW (no X): no executable
@@ -2167,7 +2395,7 @@ begin
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
   if doDebug then
   begin
     if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);

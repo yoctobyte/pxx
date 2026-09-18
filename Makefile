@@ -25254,6 +25254,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_const_record_in_data.pas $(TESTTMP)/test_const_record_in_data26
 	tools/expect_same.sh test_const_record_in_data26 "$$($(TESTTMP)/test_const_record_in_data26)" "$$(printf '1 -2 3 -9000000000 5 -6\n1 -1 2\n2 5 7 0 0\n01 23\nhello 2.5\n42 99')"
 	tools/expect_same.sh test_const_record_in_data26-baked "$$(PXXDBG=a.constdata ./$(COMPILER) test/test_const_record_in_data.pas $(TESTTMP)/test_const_record_in_data26b 2>&1 | sed -n 's/.*PXXDBG a.constdata baked \(record \)*\([A-Za-z]*\).*/\2/p' | tr '\n' ' ')" "cOuter cVar cEn cPart aNeg "
+	# The read-only data segment is its own instrument: a store into the string
+	# literal pool must FAULT (rc=139, SIGSEGV) by default, and must land under
+	# --no-ro-data. The second row is what stops the first passing on a program
+	# that dies for any other reason -- same source, one flag apart. The
+	# `before:` line proves the program ran up to the store in both.
+	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
+	./$(COMPILER) test/test_ro_data_literal_store.pas $(TESTTMP)/test_ro_store_ro >/dev/null
+	tools/expect_same.sh test_ro_data_literal_store-faults "$$( ( $(TESTTMP)/test_ro_store_ro 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
+	./$(COMPILER) --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/test_ro_store_rw >/dev/null
+	tools/expect_same.sh test_ro_data_literal_store-control "$$( ( $(TESTTMP)/test_ro_store_rw 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
 	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
 	@# verified identical to FPC 3.2.2. The status is the contract here, not the
 	@# printed line: FPC does not flush stdout after its unit finalizations, so

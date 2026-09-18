@@ -966,7 +966,7 @@ end;
 
 { ===== Main ===== }
 
-var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode: Integer;
+var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode, procMapRoShift: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
 begin
@@ -1503,6 +1503,15 @@ begin
       { Tune (or disable with =0) the oversized-stack-frame warning threshold in
         bytes. Default MAX_STACK_FRAME_SIZE. See feature-warn-oversized-stack-frame. }
       MaxStackFrameSize := PasOptionInt(option, 19);
+      Inc(i);
+    end
+    else if option = '--no-ro-data' then
+    begin
+      { Keep every data byte in the one RW segment: the A/B control for the
+        read-only segment, and the way out if a program is found writing to a
+        literal it was handed. See RoRangeStart.
+        feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+      NoRoData := True;
       Inc(i);
     end
     else if option = '--no-signals' then
@@ -2616,10 +2625,14 @@ begin
     static layout only (the optimization work targets the host first); the VA
     matches the non-dynamic ELF entry math (LOAD_ADDR + CODE_OFFSET + BodyAddr;
     a dynamic build shifts by the dynamic header delta). }
+  { The read-only data segment adds a program header, so code starts one
+    header later -- the writer decides that on exactly these facts. }
+  procMapRoShift := 0;
+  if (not NoRoData) and (RoRangeCount > 0) then procMapRoShift := PROG_HEADER_SIZE;
   if DumpProcMap and (TargetArch = TARGET_X86_64) then
     for i := 0 to ProcCount - 1 do
       if Procs[i].BodyAddr >= 0 then
-        writeln(StdErr, 'PROC ', IntToHexStr(LOAD_ADDR + CODE_OFFSET + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
+        writeln(StdErr, 'PROC ', IntToHexStr(LOAD_ADDR + CODE_OFFSET + procMapRoShift + Procs[i].BodyAddr, 8), ' ', Procs[i].Name);
   if MeasureRegcall then
   begin
     writeln(StdErr, 'REGCALL-MEASURE: bodies-with-params=', RegcallProcsWithParams,

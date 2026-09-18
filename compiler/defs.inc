@@ -4176,6 +4176,30 @@ var
   DataCap      : Integer;
   SpacesOffset : Integer;  { -1 = not yet allocated; set lazily on first :width use }
 
+  { READ-ONLY RANGES OF Data[] -- half-open [start,end), ascending, adjacent
+    ones merged. Marked where the bytes are laid down (RoRangeAdd, util.inc),
+    because that is the only place that KNOWS a range is never written; the
+    x86-64 executable writer moves them into their own R-only PT_LOAD
+    (RoLayoutPrepare, elfwriter.inc). Offsets everywhere else stay in Data[]
+    coordinates: fixups resolve through DataRemap, so nothing that records an
+    offset has to know the split exists.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoRangeStart, RoRangeEnd : array of Integer;
+  RoRangeCount : Integer;
+  NoRoData     : Boolean;  { --no-ro-data: keep every byte in the RW segment (the A/B control) }
+  { The writer's layout, valid only while RoSplitActive: Data[] is cut into
+    alternating pieces at RoPieceOld[k], each placed at RoPieceNew[k] -- an
+    offset from dataBase, so RW pieces carry the page shift that keeps the
+    file compact. RoPieceOld[RoPieceCount] = DataLen is the sentinel. }
+  RoSplitActive : Boolean;
+  RoPieceOld, RoPieceNew : array of Integer;
+  RoPieceIsRo : array of Boolean;
+  RoPieceCount : Integer;
+  RoImageLen   : Integer;  { R segment length, from dataBase }
+  RwFileStart  : Integer;  { first RW byte's FILE offset from the data start }
+  RwFileEnd    : Integer;  { one past the last RW byte, same coordinates }
+  RwVaShift    : Integer;  { VA minus file position for an RW byte (ElfSegAlign) }
+
   BSSSize : Integer;
   DbgDataBase : Integer; { absolute address of .data, for a DWARF location on a data-resident global (see DATA_SYM_BIAS); set beside DbgBssBase by the ELF writer }
 
