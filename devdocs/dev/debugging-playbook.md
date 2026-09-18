@@ -28592,3 +28592,68 @@ loads code into IRAM, written it down as a numbered fact, and then computed
 *(Trigger for promotion out of this file: if a second seat, in an unrelated
 subsystem, labels a population correctly and reasons past it. One seat, one
 profile, two conclusions is merit, not recurrence.)*
+
+## A SUBTRACTION NAMES A QUANTITY AND CANNOT NAME A CONSTANT — AND THE ARITHMETIC CLOSING TO THE BYTE IS WHAT CONFIRMS THE WRONG ONE
+
+Measured 2026-09-18, **two seats, two subsystems, one day, and the second seat
+knew about the first.**
+
+The shape: you isolate a cost by difference — build with a thing and without
+it, subtract — which is sound and gives you a real number. Then you `grep` for
+a constant of that size, find one, and stop. **The subtraction proved the
+quantity exists; it said nothing about which symbol produces it.** Where two
+similarly-named constants hold the same value, a grep reaches one of them
+first, the arithmetic closes exactly, and the wrong answer arrives wearing a
+confirmation.
+
+**Instance 1 (frankuser).** ESP bare bss was 70,936 with the heap and 4,768
+without, so 66,168 was "the arena". `grep` found `SocBareArenaSize` returning
+`64 * 1024`, which closes to the byte. It is the wrong constant: it sits inside
+`if withHeapArena`, whose sole True caller is the NilPy driver, so it is **zero
+in the Pascal build that was measured**. The real 64 KiB is `EspArena` /
+`HEAP_ARENA` in `compiler/builtin/builtinheap.pas` — a different file, a
+different layer, the same number.
+
+**Instance 2 (frankS, same day, after reading instance 1).** Chasing
+`LINE_BUF_SIZE`, grepped, found `PXXLineBuf: array[0..4095] of Byte` in
+builtinheap — a 4,096-byte readln line buffer, exactly the quantity under
+discussion. Wrong one again: shrinking it moves **neither** the bare nor the
+hosted image. The live constant is `LINE_BUF_SIZE` at `defs.inc:69`, reserved
+compiler-side at `pasparser_prog.inc:872`. Two 4,096-byte readln buffers, one
+dead in these builds.
+
+**Knowing about instance 1 did not prevent instance 2**, which is the finding.
+The pull toward the first plausible grep hit is not defeated by having just
+watched it fail.
+
+### The instrument, and it takes one rebuild
+
+**Vary the candidate and see whether the number moves.** Not "read the code
+around it", not "check the call graph" — change the constant, rebuild, measure,
+revert. It cannot be fooled by a name, a layer, or a coincidence of value:
+
+    baseline                                        bss=70,936
+    probe A: SocBareArenaSize  64K -> 32K           bss=70,936   UNCHANGED
+    probe B: HEAP_ARENA/EspArena 64K -> 32K         bss=38,168   -32,768
+
+Probe A is the one that matters and it is the one nobody runs, because by then
+the answer already feels settled. **Run the probe on the candidate you believe
+in, not only on the alternative** — a differential with one arm is a reading.
+
+### The tell that you are in this failure
+
+You found the number by **subtraction** and the constant by **grep**, and those
+are two different instruments answering two different questions. Say which
+instrument answered which half out loud; the sentence "I measured 66,168 and
+grepped for where it comes from" contains its own warning once written down.
+
+### Related, and it is the same root cause one level up
+
+Both instances exist because **two things share a name**. The durable fix is
+renaming, not a comment: `SocBareArenaSize` -> `SocNilPyArenaSize` was done the
+same day, *after* a warning against exactly this confusion had already been
+written at `elfwriter.inc:1758` and failed to prevent it. **A warning cannot
+reach a reader who never gets to it**, and a grep for "arena" does not land on
+the file carrying the warning. See also the sibling-is-a-SPELLING-not-a-shape
+rule in CLAUDE.md: there two spellings of one guard diverged, here two names
+for one quantity converged, and both are invisible to a grep for the feature.
