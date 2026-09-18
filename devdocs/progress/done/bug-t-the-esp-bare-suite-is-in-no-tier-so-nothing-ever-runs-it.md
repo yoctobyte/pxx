@@ -411,4 +411,4 @@ it skips, closing the hole is an infra act on borg
 (`tools/install_esp32_target.sh`), not a code change.
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ff2aefa20.
