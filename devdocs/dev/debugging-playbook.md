@@ -28423,3 +28423,105 @@ and it was the wrong thing: I varied the frontend while holding x86-64, then
 varied the target while holding Pascal, and never held both away from the
 default at once. `--target=esp32c3` with a `.py` source — the actual
 configuration under discussion — was the one combination neither probe covered.
+
+## WHERE A PROPERTY IS ONLY VIOLABLE ON ONE MEMBER OF YOUR TARGET SET, A CLEAN SWEEP OF THE OTHERS IS NOT COVERAGE
+
+Measured 2026-09-18 (frankB, Track A), porting `--dce` off x86-64.
+
+DCE compacts code by removing dead procedure bodies, so everything after a hole
+slides down by exactly the hole's size. That is correct on x86-64, i386, riscv32,
+arm32 and aarch64 — five targets, running binaries, byte-identical output — and
+it is **wrong on xtensa**, where CALL0/CALL8 encode a WORD offset and require a
+4-aligned TARGET. A hole whose size is not a multiple of 4 re-aligns every later
+body.
+
+**The five passes were not five pieces of evidence.** x86-64 and i386 have no
+alignment constraint to violate at all. riscv32, arm32 and aarch64 have one, and
+satisfy it by construction: every instruction is 4 bytes, so a body's EXTENT is
+already a multiple of 4 and the rounding is a no-op. Xtensa is the only ISA in
+the set with 2- and 3-byte instructions, so it is the only one where a dropped
+body's size is an arbitrary number. Five green targets are **one equivalence
+class sampled five times**.
+
+This is `normalise-dont-special-case.md`'s "the passing arrangements are not a
+sample, they are the population everyone writes" arriving on a new axis. There
+the variable is where you put the interesting element in an ordered list; here it
+is which member of a target set can express the defect at all. **Ask which
+members of your set are even CAPABLE of violating the property**, before reading
+a clean sweep as coverage. If the answer is one, you have tested it once or not
+at all, and the count of green rows is telling you about the other axis.
+
+The same question generalises past targets: an ABI that has the field, a platform
+that enforces the limit, a codec that is not fixed-width, the one backend that
+does not round. A property with a single possible violator is a property with a
+sample size of one.
+
+### The part that turned a day into an hour: the encoder REFUSED
+
+    error: target xtensa: call0 target 2462 is not 4-aligned; CALL0/CALL8
+    encode a WORD offset and a stray byte is silently truncated away by the
+    div below
+
+That message is the entire diagnosis — the symptom, the mechanism, and the reason
+it would otherwise be silent, in one sentence, at the point of failure. Whoever
+put that assert in front of the `div` wrote it for a reader who did not exist
+yet.
+
+**The counterfactual is the lesson.** Without it the `div` drops the low bits, a
+CALL0 lands one to three bytes into the wrong instruction, and the failure
+surfaces as a wild jump somewhere else entirely — the expensive class this
+playbook opens with, a plausible wrong value far from the cause. **When you write
+an encoder that narrows, rounds, or truncates, assert the precondition in front
+of the operation and name what the operation would silently do.** The cost is one
+branch on a path that is already conditional; the saving is the difference
+between a compile error and a debugging session.
+
+## REPRODUCING UNDER THE PIN IS EVIDENCE ABOUT THE TREE — IT IS NOT PROOF THE FAILURE IS NOT YOUR OWN INVOCATION
+
+Measured 2026-09-18 (frankB, Track A). An hour, and a bug report nearly filed.
+
+Bringing up `--dce` on xtensa, the hosted test program died under `qemu-xtensa`
+with an illegal instruction. The obvious question was whether I had broken it, so
+I asked the standard one — **does it reproduce with the pinned compiler?** It
+did, identically, on a binary built before any of my work existed. That is the
+signature of a pre-existing defect, and I had the ticket half-written.
+
+It was my own missing flag. `qemu-xtensa`'s CPU model has no MULUH, so an integer
+`WriteLn` is an illegal instruction **with or without `--dce`, on any compiler**,
+unless the build passes `--xtensa-soft-mulhigh`. I had been passing it on the
+windowed leg (copied from a Makefile row that had it) and not on the call0 leg.
+
+**The pin control answers "is this in the tree" and gets read as "is this my
+fault".** They are different questions, and they come apart precisely when the
+fault is in the INVOCATION — which both legs share, because a differential runs
+both legs the same way. A wrong flag is perfectly reproducible under every
+compiler ever built, so the control is not merely weak here: it is guaranteed to
+agree with you.
+
+Note this is the **exact inverse** of the rule everyone here already knows, the
+B/E one in CLAUDE.md: there, a green under the pin is correct about a DIFFERENT
+COMPILER, because the source branches on the pin's age. Same instrument, same
+mis-reading, opposite sign — that one manufactures a false pass, this one
+manufactures a false "not mine".
+
+**The discharge is one line and it is not another compiler: vary the INVOCATION
+while holding everything else fixed.** Two commands, both with the current
+binary, differing only in the flag, settled it —
+
+    call0, no flag                  rc=132  illegal instruction
+    call0, --xtensa-soft-mulhigh    rc=0    42
+
+and a second control that costs nothing: **a simpler program on the same
+invocation**. `WriteLn('txt')` passed on the leg where `WriteLn(42)` failed,
+which localises it to integer formatting and away from anything DCE touches.
+Neither control involves a second compiler at all.
+
+**Before filing a pre-existing bug found while porting, diff your invocation
+against the working leg's.** If the two legs of your own differential do not use
+identical flags, the difference is the first suspect, and the pin cannot see it.
+
+*(Trigger for promotion out of this file: if a second seat, in an unrelated
+subsystem, mistakes an invocation error for a pre-existing bug because the pin
+reproduced it. One instance, one seat, one flag is merit, not recurrence — it
+would then go up as an extension of CLAUDE.md's B/E bullet, which is the same
+instrument failing with the opposite sign, rather than as a new rule.)*

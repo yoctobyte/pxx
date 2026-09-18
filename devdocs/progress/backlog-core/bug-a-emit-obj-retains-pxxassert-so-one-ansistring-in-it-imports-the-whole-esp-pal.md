@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "THE LINK FAILURE IS FIXED BY `--dce`, MEASURED 2026-09-18 (frankB): with DCE now running on xtensa, this ticket's own repro — link the object against the deliberately-no-ESP-IDF shim — goes from `ld` rc=1 with **25 undefined references** to **rc=0 with 0**, producing a 258556 B ELF; PalBackend 114 -> 0, object 381528 B -> 52476 B, windowed likewise. **The three-backend `platform_net` split (S/B) is NOT required for this bug.** TWO THINGS STILL OPEN AND THEY ARE BOTH SMALL: (1) `--dce` is not on by default, so a default `--emit-obj` object still over-imports — the remaining question is whether `--emit-obj` should enable the pass, which is a goal question and not an engineering one; (2) the ratchet this ticket installed counts UND SYMBOL-TABLE ENTRIES, which stay at 20 under `--dce` because DCE removes code and not symbol entries, while the thing the link actually cares about — RELOCATIONS naming those symbols — goes **24 -> 0**. The ratchet should count relocations. Original defect unchanged: retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit."
+summary: "THE LINK FAILURE IS FIXED BY `--dce`, MEASURED 2026-09-18 (frankB): with DCE now running on xtensa, this ticket's own repro — link the object against the deliberately-no-ESP-IDF shim — goes from `ld` rc=1 with **24 undefined references** to **rc=0 with 0**, producing a 258556 B ELF; PalBackend 114 -> 0, object 381528 B -> 52476 B, windowed likewise. **The three-backend `platform_net` split (S/B) is NOT required for this bug.** TWO THINGS STILL OPEN AND THEY ARE BOTH SMALL: (1) `--dce` is not on by default, so a default `--emit-obj` object still over-imports — the remaining question is whether `--emit-obj` should enable the pass, which is a goal question and not an engineering one; (2) the ratchet this ticket installed counted UND SYMBOL-TABLE ENTRIES, which stay at 20 under `--dce` because DCE removes code and not symbol entries, while the thing the link actually cares about — RELOCATIONS naming those symbols — goes **24 -> 0**; **MOVED to relocations 2026-09-18**, ratcheted at 24 with the UND count kept as a printed number, because the two fail differently. Original defect unchanged: retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit."
 ---
 
 # `--emit-obj` retains `__pxxAssert`, so one AnsiString in it imports the whole ESP PAL
@@ -484,8 +484,9 @@ end-to-end rather than only linked.
    `ApplyCallFixups` has a literal arm keyed on the anchor, which is precisely
    the Patch24-over-the-head problem that note gives as its reason.
 
-**Move the `<= 20` ratchet in the same commit**, as this ticket already asks of
-whoever fixes it, and assert on both targets.
+**Move the ratchet in the same commit**, as this ticket already asks of whoever
+fixes it, and assert on both targets. (The `<= 20` UND ratchet this line named
+is gone as of 2026-09-18 — see the relocation section below.)
 
 
 ## 2026-09-18 (frankB) — measured, not predicted: the link failure is gone, and my own prediction was WRONG
@@ -494,11 +495,21 @@ whoever fixes it, and assert on both targets.
 reproduced and then fixed:
 
     xtensa --emit-obj, linked against the shim with NO ESP-IDF
-      without --dce   ld rc=1   25 undefined references     <- the original red
+      without --dce   ld rc=1   24 undefined references     <- the original red
       with    --dce   ld rc=0    0 undefined references     258556 B ELF
 
 Windowed ABI the same. `PalBackend` 114 -> 0, object 381528 B -> 52476 B. The
 five-line `Assert` repro: 114 -> 0, 380180 B -> 53492 B.
+
+**24, not the 25 in the pin-versus-HEAD control above, and the difference is the
+SHIM and not the tree.** That control ran against the HAND-WRITTEN shim; this
+runs against the generated one with every ESP-IDF name stripped, which is a
+different set of names left undefined. Re-measured 2026-09-18 and the 24 is
+self-consistent with the relocation table below: `ld` reports one error per
+relocation SITE, so 24 errors across 20 distinct names — the four symbols with
+two relocations each are reported twice. An earlier pass of this section said
+25 by carrying the older control's figure across two shims; it is 24 for this
+one.
 
 ### The prediction I refused to assert was wrong, and this is why it was refused
 
@@ -519,12 +530,17 @@ the linker actually fails on:
 An `ld` error is an undefined **reference**, not an undefined symbol — which is
 why the link goes green while the count this ticket ratchets on sits still.
 
-**So the ratchet is counting the wrong quantity.** It was installed to notice the
-over-import growing, and it cannot see the over-import being FIXED. Counting
-relocations instead would read 24 -> 0 and would have to be re-baselined by
-whoever turns the pass on. **Left as it is here and not re-baselined silently**,
-because this ticket asks that the 20 move in the same commit as the fix, and
-`test-emit-obj` does not pass `--dce` — nothing about that row changed today.
+**So the ratchet was counting the wrong quantity.** It was installed to notice
+the over-import growing, and it could not see the over-import being FIXED.
+
+**MOVED, later the same day: `test-emit-obj` now asserts on RELOCATIONS naming
+the ESP-IDF symbols, ratcheted at 24, and PRINTS the UND count beside it.** Both
+readings are kept because they fail differently — the relocation count is the
+one that tracks the fix and the one `ld` agrees with, and the UND count is what
+a linker error message NAMES, so dropping it would lose the reading that says
+which symbol widened. The row still builds without `--dce`, so 24 is today's
+number and not a target; whoever turns the pass on moves it to 0 in the same
+commit.
 
 ### What is left, and neither part is the split
 
