@@ -112,4 +112,4 @@ fixed one. `callablefield_mod.py`'s bound-method row was switched back to the
 parameterised shape it originally wanted, which now needs both fixes.
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 953456bf6.
