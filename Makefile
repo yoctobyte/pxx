@@ -33416,6 +33416,46 @@ test-emit-obj: $(COMPILER)
 	@n=$$(readelf -sW $(TESTTMP)/espx_bare.o | awk '$$5=="GLOBAL" && $$7!="UND"' | wc -l); \
 	 [ "$$n" = 1 ] || { echo "test-emit-obj: an UNMARKED ESP program exports $$n defined globals, not 1 -- the export surface widened without a marker"; readelf -sW $(TESTTMP)/espx_bare.o | awk '$$5=="GLOBAL" && $$7!="UND"'; exit 1; }; \
 	 echo "test-emit-obj: an unmarked ESP program still exports app_main and nothing else"
+	#    STRING LITERALS GO TO .rodata, WHICH THE ESP-IDF LINKER SCRIPT PLACES IN
+	#    FLASH (DROM) -- every byte moved there is SRAM given back.
+	#    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
+	#    The object rows say the section exists, is not writable, and is named by a
+	#    relocation. The LINK rows are the ones that see a WRONG relocation: a bad
+	#    symbol or addend still links, so tools/elf_literal_home.py compares the
+	#    word the code holds with the address the literal's bytes landed at.
+	#    --no-ro-data is the control -- the same program with the literal back in
+	#    writable .data -- which is what shows the checker can tell the two apart.
+	#    The iram fixture carries the one exception, both halves asserted: a literal
+	#    iram code references directly stays in .data (iram code runs with the
+	#    flash cache off), while the flash-code literal beside it goes to .rodata.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_rodata.pas $(TESTTMP)/esprod_$$t.o >/dev/null || { echo "test-emit-obj: the $$t .rodata fixture FAILED to build"; exit 1; }; \
+	  readelf -SW $(TESTTMP)/esprod_$$t.o | grep -qE '\] \.rodata +PROGBITS +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +A ' || { echo "test-emit-obj: the $$t object has no .rodata section with flags A (allocated, not writable)"; readelf -SW $(TESTTMP)/esprod_$$t.o; exit 1; }; \
+	  readelf -rW $(TESTTMP)/esprod_$$t.o | grep -qE 'R_(RISCV|XTENSA)_32 +[0-9a-f]+ +\.rodata \+' || { echo "test-emit-obj: no relocation in the $$t object names .rodata -- the literals moved and nothing points at them"; exit 1; }; \
+	 done; echo "test-emit-obj: an ESP object carries its string literals in a read-only .rodata (riscv32, xtensa)"
+	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
+	XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
+	for t in riscv32 xtensa; do \
+	  if [ $$t = riscv32 ]; then G=$$RV; else G=$$XT; fi; \
+	  [ -n "$$G" ] || { echo "test-emit-obj: $$t esp gcc not installed; .rodata link check skipped"; continue; }; \
+	  for v in ro ctl iram; do \
+	    f=; src=test/esp_obj_rodata.pas; \
+	    [ $$v = ctl ] && f=--no-ro-data; [ $$v = iram ] && src=test/esp_obj_rodata_iram.pas; \
+	    o=$(TESTTMP)/esprodl_$${t}_$$v; \
+	    ./$(COMPILER) $$f -Fulib/rtl --emit-obj --target=$$t --platform=esp $$src $$o.o >/dev/null || { echo "test-emit-obj: $$t [$$v] .rodata fixture FAILED to build"; exit 1; }; \
+	    tools/emit_obj_stub_shim.sh $$o.o > $$o.c || exit 1; \
+	    $$G -fno-builtin -nostartfiles -Wl,-e,main $$o.c $$o.o -o $$o.elf || { echo "test-emit-obj: $$t [$$v] .rodata object FAILED to link"; exit 1; }; \
+	  done; \
+	  a=$$(python3 tools/elf_literal_home.py $(TESTTMP)/esprodl_$${t}_ro.elf pxx-rodata-marker); \
+	  [ "$$a" = "home=.rodata flags=A refs=.text" ] || { echo "test-emit-obj: $$t linked literal is '$$a', want 'home=.rodata flags=A refs=.text'"; exit 1; }; \
+	  c=$$(python3 tools/elf_literal_home.py $(TESTTMP)/esprodl_$${t}_ctl.elf pxx-rodata-marker); \
+	  [ "$$c" = "home=.data flags=AW refs=.text" ] || { echo "test-emit-obj: $$t --no-ro-data control is '$$c', want 'home=.data flags=AW refs=.text' -- the checker cannot tell the placements apart"; exit 1; }; \
+	  i=$$(python3 tools/elf_literal_home.py $(TESTTMP)/esprodl_$${t}_iram.elf pxx-iram-marker); \
+	  [ "$$i" = "home=.data flags=AW refs=.iram1.text" ] || { echo "test-emit-obj: $$t iram-referenced literal is '$$i', want 'home=.data flags=AW refs=.iram1.text' -- iram code must not read flash"; exit 1; }; \
+	  j=$$(python3 tools/elf_literal_home.py $(TESTTMP)/esprodl_$${t}_iram.elf pxx-rodata-marker); \
+	  [ "$$j" = "home=.rodata flags=A refs=.text" ] || { echo "test-emit-obj: $$t two-text-section writer put the flash literal at '$$j', want 'home=.rodata flags=A refs=.text'"; exit 1; }; \
+	  echo "test-emit-obj: $$t linked: literal in .rodata and the code holds its address; control in .data; iram literal kept in .data"; \
+	done
 	#    AND AN IMPORT IS REFUSED, not silently given local storage. These
 	#    writers relocate every global reference against the .bss section sym, so
 	#    an `external` variable would read zero -- the exact silent-wrong-value

@@ -4185,6 +4185,13 @@ var
     feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
   RoRangeStart, RoRangeEnd : array of Integer;
   RoRangeCount : Integer;
+  { Where each marked block BEGAN, before the merge above erased the seams --
+    ascending, one per RoRangeAdd call. A block ends at the next start inside
+    its range, or at the range's end. What reads it: the ESP object writers,
+    which hand a literal an `iram;` routine references back to .data
+    (ObjRoKeepIramLiteralsWritable). }
+  RoEntryStart : array of Integer;
+  RoEntryCount : Integer;
   NoRoData     : Boolean;  { --no-ro-data: keep every byte in the RW segment (the A/B control) }
   { The writer's layout, valid only while RoSplitActive: Data[] is cut into
     alternating pieces at RoPieceOld[k], each placed at RoPieceNew[k] -- an

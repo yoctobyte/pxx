@@ -2788,6 +2788,129 @@ begin
     end;
 end;
 
+{ ===== The read-only split in an ESP-IDF relocatable object =====
+  An object has no segments, so the read-only pieces go into their own SECTION,
+  .rodata, and the linker script decides where it lives. ESP-IDF's puts .rodata
+  in flash (DROM), which is the reason for doing this at all: every byte moved
+  there is a byte of SRAM given back. The layout is RoLayoutPrepare's with no
+  VA shift: RO pieces at [0, RoImageLen) and RW pieces from RwFileStart, and
+  one Data[] write covers both, because the gap between them is zero filler.
+
+  After that, a data offset is a (section, offset) PAIR, and every relocation
+  these writers emit against Data[] goes through ObjDataSym/ObjDataOff. Where
+  the relocated word itself sits in RO, it belongs in .rela.rodata. gcc emits
+  exactly that on both ISAs (xtensa-esp-elf-gcc 15.2.0 and riscv32, measured),
+  so a read-only section that carries relocations is ordinary in an IDF build. }
+function ObjDataIsRo(o: Integer): Boolean;
+begin
+  Result := RoSplitActive and (o >= 0) and (o < DataLen) and RoPieceIsRo[RoPieceOf(o)];
+end;
+
+{ The offset within the section ObjDataSym names. }
+function ObjDataOff(o: Integer): Integer;
+begin
+  Result := Integer(DataRemap(o));
+  if RoSplitActive and (not ObjDataIsRo(o)) then Result := Result - RwFileStart;
+end;
+
+function ObjDataSym(o, dataSym, roSym: Integer): Integer;
+begin
+  if ObjDataIsRo(o) then Result := roSym else Result := dataSym;
+end;
+
+{ Size of the .data section. }
+function ObjRwLen: Integer;
+begin
+  if RoSplitActive then Result := RwFileEnd - RwFileStart else Result := DataLen;
+end;
+
+{ How many data-resident relocations (DataPtrFix, MethodFixups) land in the RO
+  part, or in the RW part. }
+function ObjDataRelocCount(wantRo: Boolean): Integer;
+var i: Integer;
+begin
+  Result := 0;
+  for i := 0 to DataPtrFixCount-1 do
+    if ObjDataIsRo(DataPtrFix[i].DataPos) = wantRo then Inc(Result);
+  for i := 0 to MethodFixCount-1 do
+    if ObjDataIsRo(MethodFixups[i].DataPos) = wantRo then Inc(Result);
+end;
+
+{ A literal an `iram;` routine references directly stays in .data.
+  `iram;` exists for code that runs while the flash cache is OFF -- an ISR
+  registered IRAM-safe runs during flash writes -- and IDF's linker script puts
+  .rodata in flash, so a literal there faults on exactly the path the
+  directive promises. test_esp_isr_register's handler passes a format string
+  to esp_rom_printf, which is that case. C has the same rule and makes the
+  programmer spell it (DRAM_STR); here the compiler can see the reference, so
+  it keeps the block writable itself. Only DIRECT references: a table in .data
+  pointing at a .rodata literal is still read through flash, as in C.
+  A block is RoEntryStart[k] up to the next start in its range or the range's
+  end; the range list is rebuilt from the blocks that stay. }
+procedure ObjRoKeepIramLiteralsWritable;
+var i, k, r, lo, hi, mid, o: Integer;
+    entEnd: array of Integer;
+    keep: array of Boolean;
+    any: Boolean;
+begin
+  if NoRoData or (RoEntryCount = 0) then Exit;
+  any := False;
+  for i := 0 to FixCount-1 do
+    if CodePosToIramOff(Fixups[i].CodePos) >= 0 then any := True;
+  if not any then Exit;
+  SetLength(entEnd, RoEntryCount);
+  SetLength(keep, RoEntryCount);
+  r := 0;
+  for k := 0 to RoEntryCount-1 do
+  begin
+    while RoRangeEnd[r] <= RoEntryStart[k] do Inc(r);
+    if (k + 1 < RoEntryCount) and (RoEntryStart[k + 1] < RoRangeEnd[r]) then
+      entEnd[k] := RoEntryStart[k + 1]
+    else
+      entEnd[k] := RoRangeEnd[r];
+    keep[k] := True;
+  end;
+  for i := 0 to FixCount-1 do
+    if CodePosToIramOff(Fixups[i].CodePos) >= 0 then
+    begin
+      o := Fixups[i].DataOff;
+      lo := 0; hi := RoEntryCount - 1;
+      while lo < hi do
+      begin
+        mid := (lo + hi + 1) div 2;
+        if RoEntryStart[mid] <= o then lo := mid else hi := mid - 1;
+      end;
+      if (RoEntryStart[lo] <= o) and (o < entEnd[lo]) then keep[lo] := False;
+    end;
+  RoRangeCount := 0;
+  for k := 0 to RoEntryCount-1 do
+    if keep[k] then RoRangeAppend(RoEntryStart[k], entEnd[k]);
+end;
+
+{ Decide the split for an ESP object and settle everything it moves. Must run
+  after the last append to Data[] and before anything is written. The
+  self-relative words (AddDataRelFix) were computed at emission against the
+  unsplit image. Their two ends must share a section: a distance across two
+  sections is decided by the linker, and no 32-bit word written here could
+  hold it. Permutes Data[] into file order LAST, after those patches, which
+  are at old positions. }
+procedure ObjRoPrepare;
+var i, p, t: Integer;
+begin
+  ObjRoKeepIramLiteralsWritable;
+  RoLayoutPrepare(True, 0);
+  if not RoSplitActive then Exit;
+  for i := 0 to DataRelFixCount-1 do
+  begin
+    p := DataRelFixPos[i];
+    t := DataRelFixTarget[i];
+    if ObjDataIsRo(p) <> ObjDataIsRo(t) then
+      ErrorNoPos('internal: a self-relative data word spans .rodata and .data');
+    PatchDataI32(p, ObjDataOff(t) - ObjDataOff(p));
+  end;
+  RoPermuteData;
+end;
+
 { Bodies below, after the Obj*Is* predicates they call -- pxx prescans headers
   and the FPC seed does not, so a body placed here would build fine and fail
   only in the seed canary. }
@@ -2819,7 +2942,10 @@ procedure writeELF32RelIram(const outPath: AnsiString);
   calls were emitted as indirect literal loads (IramCallFix) and are relocated
   here against the callee proc's own local symbol. Sections (11):
   0 null,1 .text,2 .rela.text,3 .iram1.text,4 .rela.iram1.text,5 .data,
-  6 .rela.data,7 .bss,8 .symtab,9 .strtab,10 .shstrtab. }
+  6 .rela.data,7 .bss,8 .symtab,9 .strtab,10 .shstrtab, and with the
+  read-only split 11 .rodata, 12 .rela.rodata -- appended, as in
+  writeELF32Rel, so no existing index moves. .rodata's section symbol is
+  local symbol 5. }
 var
   i, machine, iramSize, mapped: Integer;
   numLocalProcs, numExportProcs, numExportData, extSym0: Integer;
@@ -2827,6 +2953,7 @@ var
   textOff, iramOff, dataOff, symOff, strOff: Integer;
   relaTextOff, relaIramOff, relaDataOff, shstrOff, shOff, strSize: Integer;
   relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
+  rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -2845,7 +2972,9 @@ begin
     end;
 
   ObjRefuseEspDataImports;
-  ObjPlanEspSymbols(4, strSize, numLocalProcs, numExportProcs, numExportData,
+  ObjRoPrepare;
+  if RoSplitActive then nSecSyms := 5 else nSecSyms := 4;
+  ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
   numSyms := extSym0 + ExternalCount;
 
@@ -2863,18 +2992,31 @@ begin
     the target proc's symbol — the @isr address for esp_intr_alloc. }
   for i := 0 to ProcAddrFixCount-1 do
     if CodePosToIramOff(ProcAddrFix[i].CodePos) >= 0 then Inc(relaIramCount) else Inc(relaTextCount);
-  relaDataCount := DataPtrFixCount + MethodFixCount;
+  relaDataCount := ObjDataRelocCount(False);
+  relaRoCount := ObjDataRelocCount(True);
+  if RoSplitActive then
+  begin
+    shnum := 13;
+    shstrSize := 116;                    { + '.rodata' + '.rela.rodata' }
+  end
+  else
+  begin
+    shnum := 11;
+    shstrSize := 95;
+  end;
 
   textOff := ELF32_HEADER_SIZE;
   iramOff := AlignTo(textOff + CodeLen, 4);
-  dataOff := AlignTo(iramOff + iramSize, 8);
-  symOff  := AlignTo(dataOff + DataLen, 4);
+  rodataOff := AlignTo(iramOff + iramSize, 8);
+  dataOff := rodataOff + DataRwFilePos;  { = rodataOff with no split }
+  symOff  := AlignTo(rodataOff + DataFileLen, 4);
   strOff  := symOff + numSyms * 16;
   relaTextOff := AlignTo(strOff + strSize, 4);
   relaIramOff := relaTextOff + relaTextCount * 12;
   relaDataOff := relaIramOff + relaIramCount * 12;
-  shstrOff := relaDataOff + relaDataCount * 12;
-  shOff := AlignTo(shstrOff + 95, 4);    { 95 = .shstrtab blob size }
+  relaRoOff := relaDataOff + relaDataCount * 12;
+  shstrOff := relaRoOff + relaRoCount * 12;
+  shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -2883,7 +3025,7 @@ begin
   f := sysopen(AssignPath, 577);
 {$endif}
 
-  { ehdr (ET_REL), 11 sections, shstrndx 10 }
+  { ehdr (ET_REL), 11 or 13 sections, shstrndx 10 }
   writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
   writeU8(f,1);writeU8(f,1);writeU8(f,1);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
@@ -2892,7 +3034,7 @@ begin
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);
   writeU32(f,0);
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
-  writeU16(f,40);writeU16(f,11);writeU16(f,10);
+  writeU16(f,40);writeU16(f,shnum);writeU16(f,10);
 
   { .text = full Code[] (iram procs keep a dead twin here so flash PC-relative
     offsets stay valid); .iram1.text = the live copy of each iram proc body. }
@@ -2902,25 +3044,28 @@ begin
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
       Blockwrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
-  writePad(f, dataOff - (iramOff + iramSize));
-  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  writePad(f, rodataOff - (iramOff + iramSize));
+  if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
       syswrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
-  writePad(f, dataOff - (iramOff + iramSize));
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  writePad(f, rodataOff - (iramOff + iramSize));
+  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
 {$endif}
-  writePad(f, symOff - (dataOff + DataLen));
+  writePad(f, symOff - (rodataOff + DataFileLen));
 
-  { .symtab: null, 4 section syms (.text/.iram1.text/.data/.bss), procs, app_main, externals. }
+  { .symtab: null, 4 section syms (.text/.iram1.text/.data/.bss), plus .rodata's
+    with the split, procs, app_main, externals. }
   writeSym32(f, 0, 0, 0, 0, 0);
   writeSym32(f, 0, 0, 0, 3, 1);   { .text }
   writeSym32(f, 0, 0, 0, 3, 3);   { .iram1.text }
   writeSym32(f, 0, 0, 0, 3, 5);   { .data }
   writeSym32(f, 0, 0, 0, 3, 7);   { .bss }
+  if RoSplitActive then
+    writeSym32(f, 0, 0, 0, 3, 11); { .rodata }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
     begin
@@ -2958,10 +3103,11 @@ begin
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text — only relocs whose CodePos stays in flash .text.
-    Section syms: 3 = .data, 4 = .bss. }
+    Section syms: 3 = .data, 4 = .bss, 5 = .rodata. }
   for i := 0 to FixCount-1 do
     if CodePosToIramOff(Fixups[i].CodePos) < 0 then
-      writeRela32(f, Fixups[i].CodePos, 3, 1, Fixups[i].DataOff);
+      writeRela32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 3, 5), 1,
+                  ObjDataOff(Fixups[i].DataOff));
   for i := 0 to GlobFixCount-1 do
     if CodePosToIramOff(GlobFix[i].CodePos) < 0 then
       writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
@@ -2980,7 +3126,9 @@ begin
   for i := 0 to FixCount-1 do
   begin
     mapped := CodePosToIramOff(Fixups[i].CodePos);
-    if mapped >= 0 then writeRela32(f, mapped, 3, 1, Fixups[i].DataOff);
+    if mapped >= 0 then
+      writeRela32(f, mapped, ObjDataSym(Fixups[i].DataOff, 3, 5), 1,
+                  ObjDataOff(Fixups[i].DataOff));
   end;
   for i := 0 to GlobFixCount-1 do
   begin
@@ -3003,17 +3151,30 @@ begin
     if mapped >= 0 then writeRela32(f, mapped, ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 1, 0);
   end;
 
-  { .rela.data (unchanged from the base writer; iram method targets use the
-    .iram1.text section sym). }
-  for i := 0 to DataPtrFixCount-1 do
-    writeRela32(f, DataPtrFix[i].DataPos, 3, 1, DataPtrFix[i].TargetOff);
-  for i := 0 to MethodFixCount-1 do
-    if ProcIram[MethodFixups[i].ProcIdx] then
-      writeRela32(f, MethodFixups[i].DataPos, 2, 1, ObjProcIramOff[MethodFixups[i].ProcIdx])
-    else
-      writeRela32(f, MethodFixups[i].DataPos, 1, 1, Procs[MethodFixups[i].ProcIdx].BodyAddr);
+  { .rela.data then .rela.rodata: the same relocations as the base writer,
+    split by which part of the image the relocated word sits in (pass 0 the RW
+    part, pass 1 the RO part). Iram method targets use the .iram1.text
+    section sym. }
+  for pass := 0 to 1 do
+  begin
+    for i := 0 to DataPtrFixCount-1 do
+      if ObjDataIsRo(DataPtrFix[i].DataPos) = (pass = 1) then
+        writeRela32(f, ObjDataOff(DataPtrFix[i].DataPos),
+                    ObjDataSym(DataPtrFix[i].TargetOff, 3, 5), 1,
+                    ObjDataOff(DataPtrFix[i].TargetOff));
+    for i := 0 to MethodFixCount-1 do
+      if ObjDataIsRo(MethodFixups[i].DataPos) = (pass = 1) then
+      begin
+        if ProcIram[MethodFixups[i].ProcIdx] then
+          writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 2, 1,
+                      ObjProcIramOff[MethodFixups[i].ProcIdx])
+        else
+          writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
+                      Procs[MethodFixups[i].ProcIdx].BodyAddr);
+      end;
+  end;
 
-  { .shstrtab: 95-byte blob }
+  { .shstrtab: 95-byte blob, 116 with the split }
   writeU8(f, 0);
   writeStrZ(f, '.text');            { 1 }
   writeStrZ(f, '.rela.text');       { 7 }
@@ -3025,7 +3186,12 @@ begin
   writeStrZ(f, '.symtab');          { 69 }
   writeStrZ(f, '.strtab');          { 77 }
   writeStrZ(f, '.shstrtab');        { 85 }
-  writePad(f, shOff - (shstrOff + 95));
+  if RoSplitActive then
+  begin
+    writeStrZ(f, '.rodata');        { 95 }
+    writeStrZ(f, '.rela.rodata');   { 103 }
+  end;
+  writePad(f, shOff - (shstrOff + shstrSize));
 
   { Section headers. $40 = SHF_INFO_LINK on rela sections. }
   writeShdrA(f, 0, 0, 0, 0, 0);                              writeShdrB(f, 0, 0, 0, 0);
@@ -3033,12 +3199,17 @@ begin
   writeShdrA(f, 7, 4, $40, relaTextOff, relaTextCount*12);   writeShdrB(f, 8, 1, 4, 12);
   writeShdrA(f, 18, 1, 6, iramOff, iramSize);                writeShdrB(f, 0, 0, 4, 0);
   writeShdrA(f, 30, 4, $40, relaIramOff, relaIramCount*12);  writeShdrB(f, 8, 3, 4, 12);
-  writeShdrA(f, 47, 1, 3, dataOff, DataLen);                 writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 47, 1, 3, dataOff, ObjRwLen);                writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 53, 4, $40, relaDataOff, relaDataCount*12);  writeShdrB(f, 8, 5, 4, 12);
-  writeShdrA(f, 64, 8, 3, dataOff + DataLen, BSSSize);       writeShdrB(f, 0, 0, 8, 0);
+  writeShdrA(f, 64, 8, 3, rodataOff + DataFileLen, BSSSize); writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 69, 2, 0, symOff, numSyms*16);               writeShdrB(f, 9, firstGlobal, 4, 16);
   writeShdrA(f, 77, 3, 0, strOff, strSize);                  writeShdrB(f, 0, 0, 1, 0);
-  writeShdrA(f, 85, 3, 0, shstrOff, 95);                     writeShdrB(f, 0, 0, 1, 0);
+  writeShdrA(f, 85, 3, 0, shstrOff, shstrSize);              writeShdrB(f, 0, 0, 1, 0);
+  if RoSplitActive then
+  begin
+    writeShdrA(f, 95, 1, 2, rodataOff, RoImageLen);          writeShdrB(f, 0, 0, 8, 0);
+    writeShdrA(f, 103, 4, $40, relaRoOff, relaRoCount*12);   writeShdrB(f, 8, 11, 4, 12);
+  end;
 
 {$ifdef FPC}
   Close(f);
@@ -3058,7 +3229,11 @@ procedure writeELF32Rel(const outPath: AnsiString);
   ehdr, .text, .data, .symtab, .strtab, .rela.text, .rela.data, .shstrtab,
   section headers. Symbols: section syms, every proc as LOCAL FUNC (debug
   visibility without link-time name collisions), the program entry exported
-  GLOBAL as app_main, externals as UNDEF GLOBAL. }
+  GLOBAL as app_main, externals as UNDEF GLOBAL.
+  With the read-only split (ObjRoPrepare) the RO part of Data[] is a .rodata
+  section plus .rela.rodata, APPENDED after .shstrtab's index as sections 9 and
+  10 so that no existing index moves; its content is written just before .data,
+  in one write with it. The .rodata section symbol is local symbol 4. }
 var
   i, machine: Integer;
   numLocalProcs, numExportProcs, numExportData, extSym0: Integer;
@@ -3066,6 +3241,7 @@ var
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relaTextCount, relaDataCount, appMainOff: Integer;
+  rodataOff, relaRoOff, relaRoCount, shstrSize, shnum, nSecSyms, pass: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3107,20 +3283,35 @@ begin
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
   ObjRefuseEspDataImports;
-  ObjPlanEspSymbols(3, strSize, numLocalProcs, numExportProcs, numExportData,
+  ObjRoPrepare;
+  if RoSplitActive then nSecSyms := 4 else nSecSyms := 3;
+  ObjPlanEspSymbols(nSecSyms, strSize, numLocalProcs, numExportProcs, numExportData,
                     appMainOff, firstGlobal, extSym0);
   numSyms := extSym0 + ExternalCount;
   relaTextCount := FixCount + GlobFixCount + DynCallCount;
-  relaDataCount := DataPtrFixCount + MethodFixCount;
+  relaDataCount := ObjDataRelocCount(False);
+  relaRoCount := ObjDataRelocCount(True);
+  if RoSplitActive then
+  begin
+    shnum := 11;
+    shstrSize := 87;                             { + '.rodata' + '.rela.rodata' }
+  end
+  else
+  begin
+    shnum := 9;
+    shstrSize := 66;
+  end;
 
   textOff := ELF32_HEADER_SIZE;                  { 52, already 4-aligned }
-  dataOff := AlignTo(textOff + CodeLen, 8);
-  symOff  := AlignTo(dataOff + DataLen, 4);
+  rodataOff := AlignTo(textOff + CodeLen, 8);
+  dataOff := rodataOff + DataRwFilePos;          { = rodataOff with no split }
+  symOff  := AlignTo(rodataOff + DataFileLen, 4);
   strOff  := symOff + numSyms * 16;
   relaTextOff := AlignTo(strOff + strSize, 4);
   relaDataOff := relaTextOff + relaTextCount * 12;
-  shstrOff := relaDataOff + relaDataCount * 12;
-  shOff := AlignTo(shstrOff + 66, 4);            { 66 = .shstrtab blob size }
+  relaRoOff := relaDataOff + relaDataCount * 12;
+  shstrOff := relaRoOff + relaRoCount * 12;
+  shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -3138,24 +3329,26 @@ begin
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
-  writeU16(f,40);writeU16(f,9);writeU16(f,8);   { shentsize, shnum, shstrndx }
+  writeU16(f,40);writeU16(f,shnum);writeU16(f,8); { shentsize, shnum, shstrndx }
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
-  writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  writePad(f, rodataOff - (textOff + CodeLen));
+  if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
-  writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  writePad(f, rodataOff - (textOff + CodeLen));
+  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
 {$endif}
-  writePad(f, symOff - (dataOff + DataLen));
+  writePad(f, symOff - (rodataOff + DataFileLen));
 
   { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
   writeSym32(f, 0, 0, 0, 0, 0);
   writeSym32(f, 0, 0, 0, 3, 1);   { STT_SECTION .text }
   writeSym32(f, 0, 0, 0, 3, 3);   { STT_SECTION .data }
   writeSym32(f, 0, 0, 0, 3, 5);   { STT_SECTION .bss }
+  if RoSplitActive then
+    writeSym32(f, 0, 0, 0, 3, 9); { STT_SECTION .rodata }
   for i := 0 to ProcCount-1 do
     if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
@@ -3180,10 +3373,11 @@ begin
     writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
 
-  { .rela.text: literal slots -> .data / .bss / undefined externals.
-    Symbol indices: 1 = .text section sym, 2 = .data, 3 = .bss. }
+  { .rela.text: literal slots -> .data / .rodata / .bss / undefined externals.
+    Symbol indices: 1 = .text section sym, 2 = .data, 3 = .bss, 4 = .rodata. }
   for i := 0 to FixCount-1 do
-    writeRela32(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
+    writeRela32(f, Fixups[i].CodePos, ObjDataSym(Fixups[i].DataOff, 2, 4), 1,
+                ObjDataOff(Fixups[i].DataOff));
   for i := 0 to GlobFixCount-1 do
     writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
   for i := 0 to DynCallCount-1 do
@@ -3191,12 +3385,20 @@ begin
 
   { .rela.data: data->data pointers and data->code method slots. Slots are 8
     bytes wide (layout shared with 64-bit targets); the reloc patches the low
-    word, the high word stays zero. }
-  for i := 0 to DataPtrFixCount-1 do
-    writeRela32(f, DataPtrFix[i].DataPos, 2, 1, DataPtrFix[i].TargetOff);
-  for i := 0 to MethodFixCount-1 do
-    writeRela32(f, MethodFixups[i].DataPos, 1, 1,
-                Procs[MethodFixups[i].ProcIdx].BodyAddr);
+    word, the high word stays zero. Pass 0 writes .rela.data (the word sits
+    in the RW part), pass 1 .rela.rodata (it sits in the RO part). }
+  for pass := 0 to 1 do
+  begin
+    for i := 0 to DataPtrFixCount-1 do
+      if ObjDataIsRo(DataPtrFix[i].DataPos) = (pass = 1) then
+        writeRela32(f, ObjDataOff(DataPtrFix[i].DataPos),
+                    ObjDataSym(DataPtrFix[i].TargetOff, 2, 4), 1,
+                    ObjDataOff(DataPtrFix[i].TargetOff));
+    for i := 0 to MethodFixCount-1 do
+      if ObjDataIsRo(MethodFixups[i].DataPos) = (pass = 1) then
+        writeRela32(f, ObjDataOff(MethodFixups[i].DataPos), 1, 1,
+                    Procs[MethodFixups[i].ProcIdx].BodyAddr);
+  end;
 
   { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
   writeU8(f, 0);
@@ -3208,7 +3410,12 @@ begin
   writeStrZ(f, '.symtab');      { 40 }
   writeStrZ(f, '.strtab');      { 48 }
   writeStrZ(f, '.shstrtab');    { 56 }
-  writePad(f, shOff - (shstrOff + 66));
+  if RoSplitActive then
+  begin
+    writeStrZ(f, '.rodata');      { 66 }
+    writeStrZ(f, '.rela.rodata'); { 74 }
+  end;
+  writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs: 0 null, 1 .text, 2 .rela.text, 3 .data, 4 .rela.data, 5 .bss,
     6 .symtab, 7 .strtab, 8 .shstrtab. $40 = SHF_INFO_LINK on rela sections. }
@@ -3218,18 +3425,25 @@ begin
   writeShdrB(f, 0, 0, 4, 0);
   writeShdrA(f, 7, 4, $40, relaTextOff, relaTextCount*12);
   writeShdrB(f, 6, 1, 4, 12);
-  writeShdrA(f, 18, 1, 3, dataOff, DataLen);
+  writeShdrA(f, 18, 1, 3, dataOff, ObjRwLen);
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 24, 4, $40, relaDataOff, relaDataCount*12);
   writeShdrB(f, 6, 3, 4, 12);
-  writeShdrA(f, 35, 8, 3, dataOff + DataLen, BSSSize);
+  writeShdrA(f, 35, 8, 3, rodataOff + DataFileLen, BSSSize);
   writeShdrB(f, 0, 0, 8, 0);
   writeShdrA(f, 40, 2, 0, symOff, numSyms*16);
   writeShdrB(f, 7, firstGlobal, 4, 16);
   writeShdrA(f, 48, 3, 0, strOff, strSize);
   writeShdrB(f, 0, 0, 1, 0);
-  writeShdrA(f, 56, 3, 0, shstrOff, 66);
+  writeShdrA(f, 56, 3, 0, shstrOff, shstrSize);
   writeShdrB(f, 0, 0, 1, 0);
+  if RoSplitActive then
+  begin
+    writeShdrA(f, 66, 1, 2, rodataOff, RoImageLen);   { 9 .rodata: SHF_ALLOC only }
+    writeShdrB(f, 0, 0, 8, 0);
+    writeShdrA(f, 74, 4, $40, relaRoOff, relaRoCount*12); { 10 .rela.rodata }
+    writeShdrB(f, 6, 9, 4, 12);
+  end;
 
 {$ifdef FPC}
   Close(f);

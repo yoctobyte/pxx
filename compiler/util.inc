@@ -332,11 +332,10 @@ begin
   Inc(DataRelFixCount);
 end;
 
-{ Mark Data[s..e) as never written at run time. Ranges arrive in ascending
-  order because they are marked as they are appended; one that touches the
-  previous is merged into it, so a run of literals is one range and the RW
-  segment is not chopped into a piece per string. See RoRangeStart. }
-procedure RoRangeAdd(s, e: Integer);
+{ Append [s, e) to the merged range list: ascending, and one that touches the
+  previous range extends it. The list alone, no block record -- which is what
+  lets a writer REBUILD the list from a subset of blocks. }
+procedure RoRangeAppend(s, e: Integer);
 begin
   if e <= s then Exit;
   if (RoRangeCount > 0) and (s < RoRangeEnd[RoRangeCount - 1]) then
@@ -361,6 +360,21 @@ begin
   RoRangeStart[RoRangeCount] := s;
   RoRangeEnd[RoRangeCount] := e;
   Inc(RoRangeCount);
+end;
+
+{ Mark Data[s..e) as never written at run time. Ranges arrive in ascending
+  order because they are marked as they are appended; one that touches the
+  previous is merged into it, so a run of literals is one range and the RW
+  segment is not chopped into a piece per string. The block's own start is
+  kept in RoEntryStart. See RoRangeStart. }
+procedure RoRangeAdd(s, e: Integer);
+begin
+  if e <= s then Exit;
+  RoRangeAppend(s, e);
+  if RoEntryCount >= Length(RoEntryStart) then
+    SetLength(RoEntryStart, 2 * RoEntryCount + 256);
+  RoEntryStart[RoEntryCount] := s;
+  Inc(RoEntryCount);
 end;
 
 { The relocation table and its TWO PARALLEL COLUMNS grow as one. FixupPCRel and

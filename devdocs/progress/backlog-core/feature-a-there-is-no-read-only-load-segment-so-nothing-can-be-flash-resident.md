@@ -8,7 +8,7 @@ blocked-by: []
 status: new
 created: 2026-09-18
 owner: ""
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. REMAINING: ESP-IDF .rodata in the object writers (gcc emits .rodata + .rela.rodata on both riscv32 and xtensa, so relocations are fine); aarch64/i386/arm32 hosted; then RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: aarch64/i386/arm32 hosted; then RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -186,3 +186,35 @@ offsets. Fix: resolve first, in both builders (the 32-bit copy was latent). A
 built. The model's blind spot is the same one as the RTTI words: a table whose
 integrity is POSITIONAL (offsets from its own start) breaks if a foreign range
 is emitted inside it.
+
+## 2026-09-18 (frankH) — ESP-IDF objects: .rodata landed
+
+Both ELF32 object writers (the plain one and the two-text-section `iram;` one)
+use the same layout as the executable with no VA shift. RO pieces go into a
+`.rodata` section (SHF_ALLOC only) plus `.rela.rodata`. Both are APPENDED after
+`.shstrtab`'s index, so no existing section index moves. A data offset becomes
+a (section, offset) pair through `ObjDataSym`/`ObjDataOff`. Self-relative RTTI
+words are re-patched, and both ends must share a section. Objects with no
+split keep their exact old byte layout.
+
+**One deliberate exception: a literal an `iram;` routine references directly
+stays in `.data`.** iram code is what runs while the flash cache is off, and
+IDF puts `.rodata` in flash. `test_esp_isr_register`'s handler passes a format
+string to `esp_rom_printf`, which is that case exactly. C has the same rule and
+makes the programmer write `DRAM_STR`; here the compiler sees the reference.
+Only DIRECT references count: a `.data` table pointing at a `.rodata` literal is
+read through flash, as in C. To support this, `RoRangeAdd` now also records
+each block's start (`RoEntryStart`), because merging erased the seams.
+
+Verified by linking with the esp gcc on both ISAs
+(`tools/elf_literal_home.py`, rows in `test-emit-obj`). In each case the
+literal's bytes sit in `.rodata` (flags A) and the `.text` slot holds exactly
+their address. The `--no-ro-data` control lands in `.data` AW. In the iram
+fixture, the iram literal stays in `.data` and is referenced from
+`.iram1.text`. Not run on hardware: no IDF app build here, so "IDF places it in
+DROM" is the linker script's documented behaviour, not a measurement.
+
+Sizes, xtensa, `.data` with the split against without it:
+`esp_obj_rodata.pas` 2288 vs 3424 (+1264 .rodata), `test_emit_obj.pas` 2624 vs
+6304 (+3832 .rodata). The bare profile is unchanged; it uses the executable
+writer and one RWX region.
