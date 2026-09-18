@@ -34515,6 +34515,28 @@ test-quick: $(COMPILER)
 	else \
 	  echo "=== test_dce_riscv32_stub_calls: qemu-riscv32 absent, riscv32 DCE NOT verified ==="; \
 	fi
+	# THE SAME ROW ON i386, and it is here as EVIDENCE and not just coverage. The
+	# riscv32 fix turned up two x86-64-shaped assumptions; i386 needed only the
+	# second one (its slot IS rel32, so the patcher already handled it) and it
+	# needed it in ELEVEN hand-built sites that were byte-for-byte what
+	# IREmitCodeCall already emits. Two targets failing the same way, one of them
+	# with no encoding difference from x86-64 at all, is what says the pattern is
+	# "record the hand-built branch" rather than "write a per-target arm".
+	@if command -v qemu-i386 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=i386 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce386_off >/dev/null \
+	  && ./$(COMPILER) --target=i386 --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dce386_on >/dev/null \
+	  && want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')" \
+	  && tools/expect_same.sh dce386_off "$$(timeout 30 qemu-i386 $(TESTTMP)/dce386_off; echo "exit=$$?")" "$$want" \
+	  && tools/expect_same.sh dce386_on "$$(timeout 30 qemu-i386 $(TESTTMP)/dce386_on; echo "exit=$$?")" "$$want" \
+	  && szoff=$$(stat -c%s $(TESTTMP)/dce386_off) && szon=$$(stat -c%s $(TESTTMP)/dce386_on) \
+	  && if [ $$szon -ge $$szoff ]; then \
+	       echo "test_dce_i386_stub_calls: --dce did NOT shrink the image ($$szon >= $$szoff)."; \
+	       exit 1; \
+	     fi \
+	  && echo "=== test_dce_i386_stub_calls: OK ($$szoff -> $$szon bytes) ==="; \
+	else \
+	  echo "=== test_dce_i386_stub_calls: qemu-i386 absent, i386 DCE NOT verified ==="; \
+	fi
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --

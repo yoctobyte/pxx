@@ -1533,9 +1533,9 @@ begin
   if (TargetArch = TARGET_I386) and not NoSignals then
   begin
     EmitB($B8); EmitI32(2);                                            { mov eax, 2 (SIGINT) }
-    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
+    IREmitCodeCall(SigInstallAddr);
     EmitB($B8); EmitI32(15);                                           { mov eax, 15 (SIGTERM) }
-    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
+    IREmitCodeCall(SigInstallAddr);
   end;
   if (TargetArch = TARGET_ARM32) and not NoSignals then
   begin
@@ -15366,7 +15366,7 @@ begin
     EmitB($89); EmitB($E0);                                      { mov eax, esp }
     EmitMovGlobAcc($A3, BSS_EXC_TOP);                        { mov [EXC_TOP], eax }
     EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386);
-    EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));
+    IREmitCodeCall(ExcSetJmpAddr);
     EmitB($85); EmitB($C0);                                      { test eax, eax }
     EmitB($0F); EmitB($85); landPatch := CodeLen; EmitI32(0);    { jne landing }
     Exit;
@@ -15554,7 +15554,7 @@ begin
   if TargetArch = TARGET_X86_64 then IREmitCodeCall(ExcRaiseAddr)
 {$ifndef PXX_NO_I386}
   else if TargetArch = TARGET_I386 then
-    begin EmitB($E8); EmitI32(ExcRaiseAddr - (CodeLen + 4)); end
+    IREmitCodeCall(ExcRaiseAddr)
 {$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then

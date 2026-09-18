@@ -4505,7 +4505,7 @@ begin
         EmitB($50);                                  { push eax }
         IREmitNode386(IRA[node]);                    { eax = signal number }
         EmitB($5A);                                  { pop edx   (handler) }
-        EmitB($E8); EmitI32(SigSetHookAddr - (CodeLen + 4));   { call sethook }
+        IREmitCodeCall(SigSetHookAddr);                        { call sethook }
       end;
 
     IR_LABELADDR:
@@ -4585,15 +4585,15 @@ begin
         argNode := IRA[node];                        { IR_ARG for pfrom }
         IREmitNode386(IRA[argNode]);                 { eax = pfrom }
         EmitB($50);                                  { push pfrom }
-        EmitB($E8); EmitI32(CoSwitchAddr - (CodeLen + 4)); { call CoSwitch }
+        IREmitCodeCall(CoSwitchAddr);                      { call CoSwitch }
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
       end;
 
     IR_IO_LOCK:
-      begin EmitB($E8); EmitI32(IOLockAddr - (CodeLen + 4)); end;   { call IO lock }
+      IREmitCodeCall(IOLockAddr);                                   { call IO lock }
 
     IR_IO_UNLOCK:
-      begin EmitB($E8); EmitI32(IOUnlockAddr - (CodeLen + 4)); end; { call IO unlock }
+      IREmitCodeCall(IOUnlockAddr);                                 { call IO unlock }
 
     IR_CLONE:
       begin
@@ -4612,7 +4612,7 @@ begin
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
-        EmitB($E8); EmitI32(CloneStubAddr - (CodeLen + 4));  { call clone stub }
+        IREmitCodeCall(CloneStubAddr);                       { call clone stub }
         EmitB($81); EmitB($C4); EmitI32(nArgs * 4);  { add esp, nArgs*4 }
         EmitB($99);                                  { cdq (eax -> edx:eax) }
       end;
@@ -6029,7 +6029,7 @@ begin
           EmitB($89); EmitB($E0);                              { mov eax, esp }
           EmitMovGlobAcc($A3, BSS_EXC_TOP);                { mov [BSS_EXC_TOP], eax }
           EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386); { lea eax, [esp+EXC_JMP_OFFSET_386] }
-          EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));  { call ExcSetJmpAddr }
+          IREmitCodeCall(ExcSetJmpAddr);                      { call ExcSetJmpAddr }
           EmitB($85); EmitB($C0);                              { test eax, eax }
           if LabelPositions[lblId] <> -1 then
           begin
@@ -6061,7 +6061,7 @@ begin
             EmitB($B8); EmitI32(classIdx);
             EmitMovGlobAcc($A3, BSS_EXC_CLS);
           end;
-          EmitB($E8); EmitI32(ExcRaiseAddr - (CodeLen + 4));
+          IREmitCodeCall(ExcRaiseAddr);
         end;
 
       IR_EXC_STORE:

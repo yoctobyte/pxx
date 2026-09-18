@@ -221,10 +221,26 @@ var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
 begin
   if not DceEnabled then Exit;
   why := '';
-  { The reference shapes this pass knows how to re-patch are x86-64's rel32
-    call/jmp. Every other target keeps its bodies. }
-  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_RISCV32) then
-    why := 'target is not x86-64 or riscv32'
+  { WHICH REFERENCE SHAPES PatchCodeRefSlot AND ApplyCallFixups CAN RE-AIM.
+    This used to read "x86-64's rel32 call/jmp", which was the truth about the
+    ONE line below the CodeRef loop, not about the pass; see PatchCodeRefSlot
+    (ir_codegen.inc) for the 2026-09-18 measurement that separated them.
+
+    A target qualifies when two things hold, and both are about the EMITTER, not
+    about this file: every code->code reference it emits is recorded (CallFix for
+    a call to a proc, CodeRef for a call or jump to a fixed code offset), and the
+    slot each one sits in can be re-encoded in place. Reach is not a third
+    condition -- DCE only REMOVES bytes, so |target - site| never grows and a
+    branch form that encoded before still encodes after.
+
+    Xtensa is the one still refused, and not for want of an arm: its slot needs
+    both a delta ANCHOR and a per-site FORM (call0 vs call8, chosen by the
+    callee's own return instruction), which is two more columns on a table whose
+    existing parallel array was itself being dropped by this pass until today.
+    See bug-a-dce-refuses-every-target-except-x86-64 for the mapped-out work. }
+  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_RISCV32) and
+     (TargetArch <> TARGET_I386) then
+    why := 'target is not x86-64, riscv32 or i386'
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
@@ -526,6 +542,23 @@ begin
         CallFixTarget[j] := -1
       else
         CallFixTarget[j] := DceNewOff(CallFixTarget[i]);
+      { CallFixAnchor IS PARALLEL TO CallFix BY INDEX, and this loop used to
+        drop it -- the same shape as the GlobFix/GlobFixPCRel bug that
+        test_dce_threadsafe_heaplock.pas exists for, in the table next door.
+        Every site that moved would have worn the anchor of whoever previously
+        sat at its new index.
+
+        It is a CODE OFFSET, so it moves with the code exactly like the site
+        does; -1 means "not a reserved long call" and stays -1. INERT TODAY and
+        fixed anyway: xtensa is the only target that sets an anchor and dce.inc
+        still refuses xtensa, so nothing can reach this yet. It is fixed now
+        rather than as part of that arm because a latent parallel-array drop is
+        invisible until the day it is not, and whoever lifts the xtensa gate
+        should not have to find this underneath the work they came to do. }
+      if CallFixAnchor[i] < 0 then
+        CallFixAnchor[j] := -1
+      else
+        CallFixAnchor[j] := DceNewOff(CallFixAnchor[i]);
       Inc(j);
     end;
     Inc(i);
