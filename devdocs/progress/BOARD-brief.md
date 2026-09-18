@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:30 unfinished:21 blocked:7 backlog:44 backlog-umbrella:11 backlog-core:165 backlog-nilpy:179 backlog-tools:61 backlog-pascal:11 backlog-decide:48 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3821 rejected:82`
+`urgent:1 working:30 unfinished:21 blocked:7 backlog:44 backlog-umbrella:13 backlog-core:168 backlog-nilpy:179 backlog-tools:62 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3821 rejected:83`
 
 ## Held now (working/ — do not touch these files)
 
@@ -78,9 +78,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 553, ranked
+## Ready — top 30 of 555, ranked
 
-- `[p 75] [A+S]` bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok
+- `[p 75] [A+S]` bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok (unblocks 1)
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [N]` bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result (unblocks 1)
@@ -111,4 +111,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 
-_523 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_525 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

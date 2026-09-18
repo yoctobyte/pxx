@@ -3,7 +3,7 @@ slug: bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok
 type: bug
 track: A+S
 prio: 75
-status: open
+status: urgent
 found: 2026-09-18
 summary: "`-uPXX_MANAGED_STRING --target=esp32c3 --esp-profile=bare` compiles `writeln('hello')` to a 20-byte code segment, prints `ok:` with exact byte counts, and exits 0. The program is gone. THE TELL IS THAT AN EMPTY PROGRAM AND A HELLO-WORLD ARE BYTE-IDENTICAL INCLUDING DATA — on x86-64 the same pair differs by 40 bytes of data (the string literal) and the hello-world RUNS. Silent: no diagnostic, no refusal, a well-formed ELF that does nothing."
 ---
