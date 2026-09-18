@@ -17899,9 +17899,19 @@ begin
       { Deliberately NOT RecordInternalCall: ApplyCallFixups would Patch24 a
         3-byte CALLn over the head of this sequence and re-run the very range
         check that sent us here. CallFix has exactly one other consumer, DceRun,
-        and it exits on `TargetArch <> TARGET_X86_64` (dce.inc) before reading
-        the array -- so no xtensa site is reachable from it. If DCE ever grows
-        an xtensa arm, these sites need their own fixup list before it does. }
+        and dce.inc still refuses xtensa -- so no xtensa site is reachable from
+        it. If DCE ever grows an xtensa arm, these sites need their own fixup
+        list before it does.
+
+        THAT WARNING WAS RIGHT, AND IT CAME TRUE ON THE SIBLING TARGET FIRST.
+        This block used to say DceRun "exits on `TargetArch <> TARGET_X86_64`",
+        which stopped being the gate's spelling on 2026-09-18 when riscv32 was
+        added to it -- so the reason is restated as what it actually depends on,
+        which is that xtensa is refused, not which comparison does the refusing.
+        The prediction itself needed no change: riscv32's own
+        EmitRiscv32CallToCode was unrecorded for exactly this reason and its ten
+        sites jumped into unmapped memory the moment the pass was let near
+        them. }
       EmitXtensaLongCall(Procs[procIdx].BodyAddr);
       Exit;
     end;
