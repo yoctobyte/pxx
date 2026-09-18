@@ -66,14 +66,15 @@ class Box:
         self.clam = lambda a, b, c, d, e, f: "clam:%s:%s" % (
             tag, (a, b, c, d, e, f))
         # A BOUND METHOD stored in a field: a fourth carrier, its own pointer
-        # type again. The receiver is built from a LITERAL, not from `tag`:
-        # `Tagged(tag).m5` does not register cm5 as a field at all ("no class
-        # declares a method or callable field .cm5()"), falls to the run-time
-        # route, and dies with `object is not callable` -- at ONE argument, on
-        # the pinned compiler, unchanged by this fix. That is a field-inference
-        # defect and it has its own ticket; borrowing its shape here would red
-        # this fixture for someone else's bug.
-        self.cm5 = Tagged("B").m5
+        # type again. Built from the PARAMETER rather than a literal, which is
+        # the combination of the two defects fixed that day: until
+        # bug-n-a-bound-method-stored-in-a-field-from-a-parameterised-receiver-
+        # is-not-callable, `Tagged(tag).m5` registered no field at all and died
+        # with `object is not callable` at ANY arity, and the wide-arity cap
+        # here reported its own refusal first and hid it. This row needs BOTH
+        # fixes; test_nilpy_bound_method_field_from_expression pins the other
+        # one alone, at one argument.
+        self.cm5 = Tagged(tag).m5
 
 
 class Other:

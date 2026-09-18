@@ -3195,6 +3195,17 @@ test-nilpy: $(COMPILER)
 	# revisited. The receiver must arrive through a CONTAINER -- the ticket's own
 	# repro used `o = mod.make()`, which the frontend types, dispatches statically,
 	# and which therefore printed the right answer on the unfixed compiler.
+	# A BOUND METHOD taken off a freshly constructed receiver and stored in a field --
+	# `self.cb = Tagged(tag).m1` -- registered NO field unless the constructor's
+	# argument was a LITERAL. A module global, a parameter and `self.tag` all failed
+	# identically, fell to run-time dispatch and died with `object is not callable`.
+	# PyCtorSelectorType looked a selector up as a METHOD only when a `(` followed it
+	# and as a FIELD otherwise, so a bound-method REFERENCE resolved to nothing.
+	# EVERY ROW IS AT ONE ARGUMENT: the defect is arity-independent and was MASKED by
+	# the four-argument callable-field cap fixed the same day, which reported its own
+	# refusal first -- a wide-arity row measures both at once and pins neither.
+	./$(COMPILER) -Futest test/test_nilpy_bound_method_field_from_expression.npy $(TESTTMP)/test_nilpy_bmfield26
+	$(TESTTMP)/test_nilpy_bmfield26 | diff -u test/test_nilpy_bound_method_field_from_expression.expected -
 	./$(COMPILER) -Futest test/test_nilpy_callable_field_wide_arity.npy $(TESTTMP)/test_nilpy_cbfieldwide26
 	$(TESTTMP)/test_nilpy_cbfieldwide26 | diff -u test/test_nilpy_callable_field_wide_arity.expected -
 	# CANDIDATE-CLASS route, past the ceiling: refused at COMPILE time, and the

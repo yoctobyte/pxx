@@ -1,0 +1,46 @@
+# A BOUND METHOD stored in a field, taken off a freshly constructed receiver:
+# `self.cb = Tagged(tag).m1`. The field was not registered at all unless the
+# constructor's ARGUMENT was a LITERAL -- a module global, a parameter and
+# `self.tag` all failed identically, the call fell to run-time dispatch on the
+# receiver, and it died with `TypeError: object is not callable`.
+#
+# PyCtorSelectorType chases `Foo()` through its trailing selectors. A selector
+# followed by `(` is looked up as a METHOD; a selector WITHOUT one was looked up
+# only as a FIELD, so a bound-method REFERENCE resolved to nothing and the chase
+# answered tyUnknown. A bound method is a CALLABLE VALUE and a callable value
+# travels as a variant -- the rule PyInferExprType's own lambda arm already
+# states, here for the third construct that needs it.
+#
+# EVERY ROW IS AT ONE ARGUMENT, DELIBERATELY. The defect is arity-independent,
+# and it was MASKED by the four-argument cap on callable fields
+# (bug-n-a-callable-attribute-dispatched-at-run-time-takes-at-most-4-arguments,
+# fixed the same day): with that cap in place this same call reported `takes at
+# most 4 arguments` instead, so a wide-arity fixture measures the two together
+# and cannot say which one it is pinning. One argument reaches only this.
+#
+# The receiver must arrive through a CONTAINER. `o = mod.Holder("B")` is typed
+# statically and dispatches without consulting the field table at all, which is
+# the shape in which every spelling below already printed the right answer.
+
+import boundmethodfield_mod
+
+hs = boundmethodfield_mod.holders("P")
+
+# The two that worked, FIRST -- so a stale scan still answers here and nothing
+# below is carried by a warm path.
+print(hs[0].lit(1))
+print(hs[0].num(2))
+
+# The three that did not.
+print(hs[0].glb(3))
+print(hs[0].par(4))
+print(hs[0].att(5))
+
+# The control: same receiver expression, bound off a local instead.
+print(hs[0].loc(6))
+
+# A second receiver, to show the field is registered on the CLASS and not
+# rescued per instance.
+js = boundmethodfield_mod.holders("Q")
+print(js[0].par(7))
+print(js[0].att(8))

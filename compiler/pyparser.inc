@@ -5273,6 +5273,43 @@ begin
     else
     begin
       fi2 := FindUField(cur, nm);
+      { A SELECTOR WITH NO `(` AFTER IT IS NOT ALWAYS A FIELD -- it is a BOUND
+        METHOD whenever the name is one, and this arm used to answer tyUnknown
+        for that, because it asked FindUField and nothing else. `self.cb =
+        Tagged(tag).m1` then registered no field at all, the call fell to
+        run-time dispatch on the receiver, and died with `object is not
+        callable` -- at ONE argument, which is why it was not an arity bug even
+        though the four-argument cap on callable fields had been reporting its
+        own refusal first and hiding it.
+
+        A bound method is a CALLABLE VALUE and a callable value travels as a
+        variant. That is not a new rule invented here: it is the one the lambda
+        arm of PyInferExprType states in its own words ("A LAMBDA is a CALLABLE
+        VALUE, and a callable value travels as a variant"), and this is the same
+        rule one construct over -- the third owner of it, which is the shape
+        devdocs/dev/normalise-dont-special-case.md is about.
+
+        `cur` becomes -1 because a callable value has no class identity to chase
+        a further selector through; `Tagged(tag).m1.something` is correctly
+        refused by the `cur < 0` guard at the top of the loop.
+
+        Why the LITERAL spelling worked and hid this: `Tagged("B").m1` is a
+        different route through the caller, not a different answer here. A
+        parameter, a module global and `self.tag` all failed identically, which
+        is what says the argument's VALUE was never the subject -- only whether
+        this chase resolved.
+        bug-n-a-bound-method-stored-in-a-field-from-a-parameterised-receiver-is-not-callable }
+      if fi2 < 0 then
+      begin
+        mi := FindUMeth(cur, nm);
+        if mi >= 0 then
+        begin
+          Result := tyVariant;
+          cur := -1;
+          k := k + 2;
+          Continue;
+        end;
+      end;
       if fi2 < 0 then begin Result := tyUnknown; outCi := -1; Exit; end;
       Result := IntToTypeKind(UFldTk[fi2]);
       if (Result = tyClass) and (UFldRec_[fi2] >= REC_UCLASS_BASE) then

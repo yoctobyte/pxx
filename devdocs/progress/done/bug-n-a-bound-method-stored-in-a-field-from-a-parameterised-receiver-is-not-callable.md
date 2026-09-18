@@ -2,20 +2,21 @@
 slug: bug-n-a-bound-method-stored-in-a-field-from-a-parameterised-receiver-is-not-callable
 title: a bound method stored in a field is not callable unless the receiver was built from a literal
 summary: >
-  `self.cb = Tagged(tag).m1` in a constructor does not register `cb` as a
-  callable field at all -- the compiler warns `no class declares a method or
-  callable field .cb()`, falls to run-time dispatch on the receiver, and the
-  call dies with `TypeError: object is not callable`. What decides it is whether
-  the inner constructor's ARGUMENT is a LITERAL: `Tagged("B").m1` registers the
-  field and works, while a parameter, a module global and `self.tag` all fail
-  identically. Arity-independent -- it fails at ONE argument -- and reproducible
-  on the pinned compiler, so it is not a consequence of the wide-arity fix that
-  found it. CPython accepts all four spellings.
+  FIXED. `self.cb = Tagged(tag).m1` registered NO field unless the constructor's
+  argument was a LITERAL -- a module global, a parameter and `self.tag` all
+  failed identically, the call fell to run-time dispatch on the receiver, and
+  died with `TypeError: object is not callable`. Arity-independent: it failed at
+  ONE argument. PyCtorSelectorType chases `Foo()` through its trailing
+  selectors and looked a selector up as a METHOD only when a `(` followed it,
+  as a FIELD otherwise -- so a bound-method REFERENCE resolved to nothing and
+  the chase answered tyUnknown. A bound method is a CALLABLE VALUE and travels
+  as a variant, which is the rule PyInferExprType's own lambda arm already
+  states; this is its third owner.
 track: N
 type: bug
 prio: 40
-owner: unassigned
-status: open
+owner: frankD
+status: done
 ---
 
 ## How it was found
@@ -83,3 +84,32 @@ pyparser.inc (`no class declares a method or callable field`), which is
 CORRECT given an empty field table -- the defect is upstream of it, in what the
 table was given. The run-time arm then does `pydynattr_get` and gets something
 that is not a callable, so the second question is what that slot actually holds.
+
+## Resolution (2026-09-18)
+
+One arm, in `PyCtorSelectorType`: when `FindUField` misses, ask `FindUMeth`
+before giving up, and answer tyVariant. `cur` becomes -1 because a callable
+value has no class identity to chase a further selector through, so
+`Tagged(tag).m1.something` is still refused by the loop's own `cur < 0` guard.
+
+**Why the literal spelling worked, and why that was the misleading part.**
+`Tagged("B").m1` is a different route through the CALLER, not a different answer
+in this chase. The argument's value was never the subject -- what decided it was
+only whether the chase resolved -- and an int literal worked too, which is what
+ruled out any theory about strings.
+
+**Measured, all at ONE argument, pinned versus fixed:** `Tagged("B").m1` and
+`Tagged(7).m1` worked before and after; `Tagged(G).m1`, `Tagged(tag).m1` and
+`Tagged(self.tag).m1` all raised `object is not callable` before and print
+CPython's answer after. Binding off a local first (`t = Tagged(tag); self.cb =
+t.m1`) is a different arm and always worked -- it is the fixture's control.
+
+Fixture `test/test_nilpy_bound_method_field_from_expression.npy` (+
+`boundmethodfield_mod.py`), every row at one argument so it pins THIS defect and
+not the four-argument callable-field cap that was masking it. Refused by the
+pinned compiler with the exact message above; byte-identical to CPython on the
+fixed one. `callablefield_mod.py`'s bound-method row was switched back to the
+parameterised shape it originally wanted, which now needs both fixes.
+
+## Log
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
