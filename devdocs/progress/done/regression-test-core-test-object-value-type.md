@@ -83,4 +83,4 @@ regression stub cannot afford to read as. Not filed as a separate ticket:
 `tools/twatch.py` already derives the title from `src:` deliberately, for
 dedupe-key stability, and changing that is a Track T trade-off rather than a
 defect.
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0a77fe3b8.
