@@ -38,3 +38,6 @@ test_nilpy_a_headers_directory_names_its_library: FAIL - DT_NEEDED is [eam_decod
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-18 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_an_unreferenced_header_import_needs_no_library.npy` passes at 578ca3e81d91 (tier full); it was red at 4fbed6c4157e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
