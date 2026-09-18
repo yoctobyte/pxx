@@ -15313,7 +15313,7 @@
    "status": "fail"
   },
   {
-   "bad": "91ba5968354b9e183635d022d3b2982107b24d4d",
+   "bad": "d9ed3131ab6ffc01eea48918042b0b14dfa09c63",
    "bad_untestable": true,
    "first_seen": false,
    "good": "578ca3e81d91d1898a13121021ff66608e4e9114",
@@ -15327,10 +15327,7 @@
    "range": [
     "c44fa26429e95646c0170c4479096532ca6e7c74",
     "cdf0c0539b7ef833eee55e1f8f03a1601b4b5841",
-    "d9ed3131ab6ffc01eea48918042b0b14dfa09c63",
-    "295bcceb96b9b2bed859a8d89adbf8da9ff945d3",
-    "0560e7b50b730cebb5c4d328b8cf29c74b278d35",
-    "74d185d8a03d8e641160bfe7b5b901e8f5af38b1"
+    "d9ed3131ab6ffc01eea48918042b0b14dfa09c63"
    ],
    "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
