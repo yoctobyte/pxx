@@ -111,3 +111,53 @@ named for it.
 reduction arrives as a reported shrink against a frozen baseline rather than as
 prose in a ticket. Note it is **advisory**: it reports and files, it does not fail
 a tier.
+
+## Scoped 2026-09-18 (frankS) — the prize, the locus, and the one concrete blocker
+
+**The prize, measured on bare esp32c3** with a UART-only program using
+`ShortString` and never allocating:
+
+| | code | data | bss |
+| --- | ---: | ---: | ---: |
+| default | 58,900 | 736 | 71,452 |
+| `-uPXX_MANAGED_STRING` | **1,156** | 432 | **5,288** |
+
+**−98% code and −93% bss, with byte-identical program output** (`noalloc-start
+123 noalloc-done` from both, under Espressif qemu). On bare ESP this is the
+largest single saving anywhere in
+[[umbrella-an-esp32-image-is-as-small-as-it-can-be]] — bigger than the 32 KB
+alt stack and bigger than the whole rest of the bss floor combined.
+
+**The detection already exists and is already conservative.**
+`DetectPascalRuntimeNeeds` (`pasparser_prog.inc`) sets `needsAnsiRuntime` from
+real evidence — `tkUses`, and the identifiers `AnsiString` and `Variant` — and
+sets `needsHeap` from `tkUses`/`tkArray`/`tkClass`, `div`/`mod`, floats,
+`New`/`Dispose`/`ReallocMem`/`SetLength`/`GetMem`/`FreeMem`, and `write`
+formatting. **All of that careful work is discarded by one line:**
+
+```pascal
+needsAnsiRuntime := PasDefineExists('PXX_MANAGED_STRING');   { :104 }
+```
+
+`PasApplyDefaults` defines that symbol unconditionally, so the variable is True
+before the scan starts and the scan can only confirm it.
+
+**The failure direction is safe, and this is what makes the change tractable.**
+Under-detecting produces a COMPILE error, never a wrong binary — measured:
+
+    pascal26:7: error: target riscv32: frozen tyString concat unsupported
+
+**THE ONE CONCRETE BLOCKER: the `string` keyword is not in the scan.** `var s:
+string; s2 := s + 'y'` has no `AnsiString` identifier and no `uses`, so flipping
+`needsAnsiRuntime` to evidence-only breaks it — verified, that exact program
+fails under `-uPXX_MANAGED_STRING` today. `tkString` is the string LITERAL
+token (see `defs.inc:6802`, *"tkString empty is a legitimate `''`"*), not the
+type keyword, so whoever takes this must first establish what `string`,
+`ShortString`, `WideString` and `UnicodeString` lex as and add them.
+
+**Why it was not done in the same pass as the rest of today's ESP work:** the
+change flips a default for **every Pascal program on every target**, the
+detection set is a judgement call whose wrong answers reach users as compile
+errors, and the quick gate covers x86-64. It wants its own pass with a real
+sweep, not a bolt-on. The manual lever is documented meanwhile
+(`docs/targets/esp32.md`, bare-profile notes).

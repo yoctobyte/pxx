@@ -83,6 +83,21 @@ Notes for the bare profile:
   and halts with code 203. Note the compiler cannot check this for you —
   it refuses a build whose image plus arena plus stack does not FIT, but an
   arena that fits and is too small for your program is only found at runtime.
+- **A program that never allocates can drop the heap entirely with
+  `-uPXX_MANAGED_STRING`, and on bare metal that is the single largest saving
+  available.** Measured on an esp32c3, a UART-only program using `ShortString`
+  and no `GetMem`:
+
+  | | code | data | bss |
+  | --- | ---: | ---: | ---: |
+  | default | 58,900 | 736 | 71,452 |
+  | `-uPXX_MANAGED_STRING` | **1,156** | 432 | **5,288** |
+
+  Byte-identical output from both. It is not automatic yet — every Pascal
+  program pulls the managed-string runtime unconditionally, and `{$H-}` does
+  not reach it. **Getting it wrong is a COMPILE error, never a bad binary**: a
+  program that does need the runtime fails with `frozen tyString concat
+  unsupported` rather than miscompiling, so it is safe to try and see.
 - A program that falls off the end parks in a self-loop (there is no OS to
   exit to). End interactive experiments with `while True do ;`.
 - Interrupt handlers: mark a routine `interrupt;` for a raw hardware-vector
