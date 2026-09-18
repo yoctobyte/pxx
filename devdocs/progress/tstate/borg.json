@@ -15168,8 +15168,8 @@
   "wall": 997.0
  },
  "last_idle_tier_try": {
-  "date": "2026-09-18T10:07:31Z",
-  "sha": "dbe874029961c70f6bed6d419c3c664a801a9d5d",
+  "date": "2026-09-18T10:37:55Z",
+  "sha": "4fbed6c4157ef53972bae9ffb923ecf029f50725",
   "tier": "full"
  },
  "last_opt": {
@@ -15322,6 +15322,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_cast_deref_varparam.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15343,6 +15344,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_dynarray_to_pointer_seam_leaks.pas tools/expect_same.sh +1",
    "status": "fail"
   },
@@ -15364,6 +15366,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_indexing_a_string_cast_of_a_pointer_slot.pas test/test_indexing_a_string_cast_of_a_pointer_slot.expected",
    "status": "fail"
   },
@@ -15385,6 +15388,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_interface_containers.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15406,6 +15410,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_interface_containers.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15427,6 +15432,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_managed_record_gate_leaks.pas tools/expect_same.sh +1",
    "status": "fail"
   },
@@ -15448,6 +15454,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_promoint_array_cleanup.pas tools/expect_same.sh +2",
    "status": "fail"
   },
@@ -15469,6 +15476,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_record_promo_member_leaks.pas tools/expect_same.sh +3",
    "status": "fail"
   },
@@ -15490,6 +15498,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_record_variant_member_leaks.pas tools/expect_same.sh +1",
    "status": "fail"
   },
@@ -15511,6 +15520,7 @@
     "daa6c462198f4165703fe3b4e7721cf2fcf2e470",
     "b05b7bb0a209d408b87717c6af7ce30508aa451b"
    ],
+   "range_non_causal": false,
    "src": "test/test_synth_soname_survives_redeclaration.pas lib/crtl/src/string.c +2",
    "status": "fail"
   }
