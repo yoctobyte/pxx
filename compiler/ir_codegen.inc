@@ -3295,6 +3295,52 @@ begin
   EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
 end;
 
+procedure PatchCodeRefSlot(pos, target, linkReg: Integer);
+{ Re-aim ONE recorded code->code reference at `target`, in the slot's own
+  encoding. Extracted from PatchProgramEntryJump because DCE needs the identical
+  arm set and had its own copy of only the x86-64 one -- `Patch32(pos, target -
+  (pos + 4))`, a raw rel32.
+
+  THAT COPY IS WHAT THE `target is not x86-64` GATE WAS ABOUT, and the gate's
+  one-line reason was exactly right. Measured 2026-09-18 on riscv32 with the
+  gate lifted and nothing else changed: the entry jump's slot came out as
+  `000080dc` where the working binary has `5394006f` -- opcode 0x6f, a JAL. DCE
+  had written the new displacement 32988 as a plain little-endian word over a
+  bit-scattered JAL encoding, so the program executed two blocks (auipc / j over
+  the literal / lw / sw of the initial sp) and then ran into `c.lbu a5,1(s1)`
+  followed by an illegal instruction. SIGSEGV at si_addr=0x1, before any
+  syscall. The same class as the ARM SIGILL in PatchProgramEntryJump's own
+  header note, four years of encoding apart and the same cause: a raw byte
+  offset written over a branch WORD.
+
+  So the arms below are not new work -- every one of them already existed a few
+  lines down. What was missing was DCE reaching them.
+
+  XTENSA IS NOT DISCHARGED HERE and the arm is carried only so the two callers
+  stay one routine. XtEntryPcAnchor is a code offset captured before the pass
+  runs, and DCE MOVES code, so under DCE that delta is measured from a stale
+  anchor. Nothing exercises it today: dce.inc still refuses xtensa. Whoever
+  lifts that gate must re-derive the anchor through DceNewOff first -- and the
+  measurement that retires this block is an xtensa binary built with --dce that
+  runs, not a reading of this comment. }
+begin
+  if TargetArch = TARGET_ARM32 then
+    Patch32(pos, $EA000000 or ((((target - pos) div 4) - 2) and $00ffffff))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(pos, $14000000 or (((target - pos) div 4) and $03ffffff))
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    if XtEntryPcAnchor >= 0 then
+      Patch32(pos, target - XtEntryPcAnchor)
+    else
+      Patch24(pos, EncodeXtensaJ(target - pos));
+  end
+  else if TargetArch = TARGET_RISCV32 then
+    PatchRv32LinkSlot(pos, target, linkReg)
+  else
+    Patch32(pos, target - (pos + 4));
+end;
+
 procedure PatchProgramEntryJump(jmpPatch: Integer);
 { The other half of EmitProgramEntryForTarget: fix its patchable jump up to the
   main body, which starts at the current CodeLen. Same per-arch encoding, and it
@@ -3310,23 +3356,11 @@ begin
     is only filled in on the target that reads it is the one that breaks when a
     second target starts reading it. feature-emission-size-dce }
   RecordCodeRefAt(jmpPatch, CodeLen);
-  if TargetArch = TARGET_ARM32 then
-    Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
-  else if TargetArch = TARGET_AARCH64 then
-    Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
-  else if TargetArch = TARGET_XTENSA then
-  begin
-    { Long form: jmpPatch is a 4-byte LITERAL holding a code-internal delta
-      measured from the PC anchor, not a `j` to re-encode. }
-    if XtEntryPcAnchor >= 0 then
-      Patch32(jmpPatch, CodeLen - XtEntryPcAnchor)
-    else
-      Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch));
-  end
-  else if TargetArch = TARGET_RISCV32 then
-    PatchRv32JumpSlot(jmpPatch, CodeLen)
-  else
-    Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  { The arms live in PatchCodeRefSlot above, because DCE re-aims this very slot
+    and needs the same encodings. Xtensa's long form is a 4-byte LITERAL holding
+    a delta from the PC anchor rather than a `j` to re-encode; that is in there
+    too. }
+  PatchCodeRefSlot(jmpPatch, CodeLen, 0);   { a jump: no link register }
 end;
 
 procedure EmitIoLockStubsForTarget;

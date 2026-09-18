@@ -17618,10 +17618,31 @@ begin
 end;
 
 procedure EmitRiscv32CallToCode(linkReg, target: Integer);
+{ RECORDED, AND ALWAYS TWO WORDS. Both halves are 2026-09-18 and both are about
+  DCE, which until then could not run on this target and so made the old
+  shape -- unrecorded, one word when it fitted -- correct.
+
+  Recorded, because "the target is final at emit time" is a statement about the
+  TARGET and the bug is in the SITE: DCE deletes dead bodies and every call site
+  after a hole slides down, so a displacement that was right at emit time names
+  an address 232 KiB away afterwards. Measured on a riscv32 `hello`: the main
+  body's SIGINT install ran as `jal ra,-265220` into unmapped memory at
+  0x0800f588, three basic blocks into the program. These ten sites were the only
+  code->code references in the image that no table knew about.
+
+  Two words always, because the slot has to be RE-AIMABLE and a one-word JAL
+  that fitted before the pass may not fit after it -- DCE changes the distance,
+  not just the position. Reserving the pair costs one nop at each of ten sites,
+  40 bytes, against the 232 KiB the pass removes; and it costs them in non-DCE
+  builds too, which is the honest price of one slot shape rather than two. }
 var rvHi, rvLo: Integer;
 begin
+  RecordCodeRefAtLink(CodeLen, target, linkReg);
   if Riscv32JalReaches(CodeLen, target) then
-    rv32_jal(linkReg, target - CodeLen)
+  begin
+    rv32_jal(linkReg, target - CodeLen);
+    EmitI32($00000013);          { addi x0, x0, 0 -- the slot's second word }
+  end
   else
   begin
     { reg_t0 is the same caller-saved scratch EmitCallProc's riscv32 arm uses

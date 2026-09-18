@@ -4276,12 +4276,26 @@ var
   CallFixCount : Integer;
   CallFixCapacity : Integer;
 
-  { Code->code rel32 references to a fixed code OFFSET rather than to a proc:
-    stub calls and the entry jump. CodeRefPos is the offset of the 4-byte
-    displacement field; CodeRefTarget is the absolute code offset it names.
-    Recorded by RecordCodeRef at the point of emission. }
+  { Code->code references to a fixed code OFFSET rather than to a proc: stub
+    calls and the entry jump. CodeRefPos is the offset of the SLOT;
+    CodeRefTarget is the absolute code offset it names. Recorded by
+    RecordCodeRef at the point of emission.
+
+    NOT "rel32", which is what this comment said until 2026-09-18: that is the
+    x86-64 SPELLING of the slot, and reading it as the definition is exactly
+    what made DCE write a raw displacement over a riscv32 JAL. On x86-64 the
+    slot is the 4-byte displacement field of a call/jmp; on riscv32 it is a
+    TWO-WORD branch slot; on arm32/aarch64 a single branch word. PatchCodeRefSlot
+    (ir_codegen.inc) owns the spelling and is the only thing that should know it.
+
+    CodeRefLink is the LINK REGISTER the slot writes -- riscv32's JAL and JALR
+    carry it in rd, so a re-patch that does not know it turns a call into a
+    plain jump and the callee returns to whatever ra last held. Zero (x0 =
+    reg_zero) on every target that has no such field and for a slot that is a
+    jump rather than a call; the entry jump is the latter. }
   CodeRefPos    : array of Integer;
   CodeRefTarget : array of Integer;
+  CodeRefLink   : array of Integer;
   CodeRefCount  : Integer;
   CodeRefCapacity : Integer;
 

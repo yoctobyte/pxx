@@ -223,7 +223,8 @@ begin
   why := '';
   { The reference shapes this pass knows how to re-patch are x86-64's rel32
     call/jmp. Every other target keeps its bodies. }
-  if TargetArch <> TARGET_X86_64 then why := 'target is not x86-64'
+  if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_RISCV32) then
+    why := 'target is not x86-64 or riscv32'
   { --shared only. `-c` used to be refused beside it on the premise that an
     object "carries its own code-offset relocations"; it does, and every table
     those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
@@ -567,6 +568,7 @@ begin
     begin
       CodeRefPos[j] := DceNewOff(CodeRefPos[i]);
       CodeRefTarget[j] := DceNewOff(CodeRefTarget[i]);
+      CodeRefLink[j] := CodeRefLink[i];
       Inc(j);
     end;
     Inc(i);
@@ -589,7 +591,13 @@ begin
   i := 0;
   while i < CodeRefCount do
   begin
-    Patch32(CodeRefPos[i], CodeRefTarget[i] - (CodeRefPos[i] + 4));
+    { PER-TARGET, and this line was the whole of `target is not x86-64`. It read
+      `Patch32(CodeRefPos[i], CodeRefTarget[i] - (CodeRefPos[i] + 4))` -- a raw
+      rel32 -- while the slot on every other target is an encoded branch WORD.
+      PatchCodeRefSlot (ir_codegen.inc) is the arm set PatchProgramEntryJump has
+      always had for the same slot; see its header for the riscv32 measurement
+      that found this, and for why xtensa is still refused above. }
+    PatchCodeRefSlot(CodeRefPos[i], CodeRefTarget[i], CodeRefLink[i]);
     Inc(i);
   end;
 end;

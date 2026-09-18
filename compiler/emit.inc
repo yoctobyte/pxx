@@ -65,18 +65,30 @@ end;
   a reference that silently rots the moment a body ahead of it is dropped, which
   is why the recording lives at the emission points rather than in a table
   someone has to remember to extend. feature-emission-size-dce }
-procedure RecordCodeRefAt(pos, target: Integer);
+procedure RecordCodeRefAtLink(pos, target, linkReg: Integer);
+{ `linkReg` is the register the slot's branch writes its return address into --
+  riscv32 encodes it in rd and a re-patch that guesses gets a jump where a call
+  belongs. 0 is x0/reg_zero, i.e. "this slot is a jump". Spelled as the literal
+  0 rather than reg_zero because rv32enc.inc is included AFTER this file and
+  FPC's seed resolves in source order. }
 var n: Integer;
 begin
   if CodeRefCount >= CodeRefCapacity then
   begin
     if CodeRefCapacity = 0 then n := CODEREF_BASE else n := CodeRefCapacity * 2;
     SetLength(CodeRefPos, n); SetLength(CodeRefTarget, n);
+    SetLength(CodeRefLink, n);
     CodeRefCapacity := n;
   end;
   CodeRefPos[CodeRefCount] := pos;
   CodeRefTarget[CodeRefCount] := target;
+  CodeRefLink[CodeRefCount] := linkReg;
   Inc(CodeRefCount);
+end;
+
+procedure RecordCodeRefAt(pos, target: Integer);
+begin
+  RecordCodeRefAtLink(pos, target, 0);
 end;
 
 procedure RecordCodeRef(target: Integer);

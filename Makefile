@@ -34484,6 +34484,37 @@ test-quick: $(COMPILER)
 	# hang from a slow box -- it wedges the tier instead of failing it.
 	./$(COMPILER) --threadsafe --dce test/test_dce_threadsafe_heaplock.pas $(TESTTMP)/smoke_dcetslock26
 	tools/expect_same.sh smoke_dcetslock26 "$$(timeout 30 $(TESTTMP)/smoke_dcetslock26; echo "exit=$$?")" "$$(printf 'DCETSLOCK OK 2080\nexit=0')"
+	# DCE ON A SECOND TARGET. riscv32 is the first non-x86-64 arm the pass has
+	# ever had, and it is here for the same reason the row above is: a pass with
+	# no row of its own is a pass that ships broken. The two faults it guards are
+	# in test/test_dce_riscv32_stub_calls.pas -- an x86-64 rel32 written over a
+	# JAL word, and ten stub calls no fixup table knew about.
+	#
+	# SKIP, NEVER PASS, when qemu-riscv32 is absent. The whole subject of this row
+	# is what the binary DOES; both failures BUILD perfectly and then SIGSEGV, so
+	# a build-only check is green on the bug.
+	#
+	# THE SIZE COMPARISON IS HALF THE TEST. Identical output is also what a pass
+	# that dropped nothing produces, which is exactly what --dce did on this
+	# target until 2026-09-18 -- so equality alone would have certified the
+	# refusal. `&&` between the stages, not `;`: a precondition that does not
+	# branch is a comment.
+	@if command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=riscv32 test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcerv32_off >/dev/null \
+	  && ./$(COMPILER) --target=riscv32 --dce test/test_dce_riscv32_stub_calls.pas $(TESTTMP)/dcerv32_on >/dev/null \
+	  && want="$$(printf 'DCERV32 385 1,2,3,boom/div0\nexit=0')" \
+	  && tools/expect_same.sh dcerv32_off "$$(timeout 30 qemu-riscv32 $(TESTTMP)/dcerv32_off; echo "exit=$$?")" "$$want" \
+	  && tools/expect_same.sh dcerv32_on "$$(timeout 30 qemu-riscv32 $(TESTTMP)/dcerv32_on; echo "exit=$$?")" "$$want" \
+	  && szoff=$$(stat -c%s $(TESTTMP)/dcerv32_off) && szon=$$(stat -c%s $(TESTTMP)/dcerv32_on) \
+	  && if [ $$szon -ge $$szoff ]; then \
+	       echo "test_dce_riscv32_stub_calls: --dce did NOT shrink the image ($$szon >= $$szoff)."; \
+	       echo "  The pass refused this target or dropped nothing; the output rows above cannot see that."; \
+	       exit 1; \
+	     fi \
+	  && echo "=== test_dce_riscv32_stub_calls: OK ($$szoff -> $$szon bytes) ==="; \
+	else \
+	  echo "=== test_dce_riscv32_stub_calls: qemu-riscv32 absent, riscv32 DCE NOT verified ==="; \
+	fi
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --

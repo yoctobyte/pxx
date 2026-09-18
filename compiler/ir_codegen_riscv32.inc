@@ -4596,20 +4596,36 @@ begin
   EmitI32($00000013);                            { addi x0, x0, 0 }
 end;
 
-procedure PatchRv32JumpSlot(pos, targetOffset: Integer);
+procedure PatchRv32LinkSlot(pos, targetOffset, linkReg: Integer);
+{ The TWO-WORD branch slot, re-aimed, writing its return address into `linkReg`
+  -- reg_zero for a jump, reg_ra for a call. Both forms are exactly two words so
+  the slot can be re-aimed in place after DCE moves the call site: JAL reaches
+  +-1 MiB and the auipc/jalr pair reaches the full 32 bits, and which one fits
+  is a property of the DISTANCE, which DCE changes.
+
+  Carrying the link register rather than assuming reg_zero is the whole reason
+  this is not still PatchRv32JumpSlot: EmitRiscv32CallToCode's ten sites are
+  calls, and re-patching one as a jump would send the callee's `ret` to
+  whatever ra last held -- a wrong answer with no crash at the patch site. }
 var rvHi, rvLo: Integer;
 begin
   if Riscv32JalReaches(pos, targetOffset) then
   begin
-    Patch32(pos, EncodeRISCVJAL(reg_zero, targetOffset - pos));
+    Patch32(pos, EncodeRISCVJAL(linkReg, targetOffset - pos));
     Patch32(pos + 4, $00000013);                 { addi x0, x0, 0 }
   end
   else
   begin
     RISCVPcrelSplit(targetOffset - pos, rvHi, rvLo);
     Patch32(pos, EncodeRISCVAuipc(reg_t0, rvHi));
-    Patch32(pos + 4, EncodeRISCVJalr(reg_zero, reg_t0, rvLo));
+    Patch32(pos + 4, EncodeRISCVJalr(linkReg, reg_t0, rvLo));
   end;
+end;
+
+procedure PatchRv32JumpSlot(pos, targetOffset: Integer);
+{ The jump spelling -- the entry jump and the label slot in IREmitMachineCode. }
+begin
+  PatchRv32LinkSlot(pos, targetOffset, reg_zero);
 end;
 
 procedure IREmitMachineCodeRISCV32;
