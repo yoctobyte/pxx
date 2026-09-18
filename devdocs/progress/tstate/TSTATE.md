@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b291b321f185` on borg, 2026-09-18T12:41:18Z (26m ago).**
+**Newest full tier in the fleet: `b291b321f185` on borg, 2026-09-18T12:41:18Z (38m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `b291b321f185` | RED | 26m | — (newest) |
+| borg | `b291b321f185` | RED | 38m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -32,6 +32,6 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `d9ed3131ab6f`, last good `578ca3e81d91`, 3 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `c44fa26429e9`, last good `578ca3e81d91`, 1 commit(s) in range
 - **test-esp-idf#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (borg): bad `b291b321f185`, last good `unknown`, 0 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
