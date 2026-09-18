@@ -110,4 +110,4 @@ both ceilings. It is refused by the pinned compiler and byte-identical to
 CPython on the fixed one.
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0560e7b50.
