@@ -4,7 +4,7 @@ title: "A hosted (PC) program is as small as it can be — minimal code, constan
 track: A
 prio: 70
 type: umbrella
-blocked-by: [bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce, feature-a-unreferenced-class-rtti-keeps-every-method-alive, feature-opt-rtti-emit-on-use, feature-a-an-extern-only-variable-still-reserves-its-storage, bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data, bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions]
+blocked-by: [bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss, feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce, feature-a-unreferenced-class-rtti-keeps-every-method-alive, feature-opt-rtti-emit-on-use, feature-a-an-extern-only-variable-still-reserves-its-storage, bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data, bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions]
 status: new
 created: 2026-09-18
 owner: ""
@@ -63,6 +63,12 @@ Pascal program pulls `builtinheap` and `{$H-}` cannot reach it.
    38,428. i386 / arm32 / riscv32: 42,316 -> 34,140. aarch64: 42,356 -> 34,188.
    It is a pointer to a demand-allocated growable block now, so a program that
    never touches stdin reserves nothing at all.
+   **NEXT IN THIS RUNG AND IT IS THE LARGEST ONE LEFT:**
+   [[feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar]]
+   — 3,072 B, 8% of the hosted floor, held whether or not the program declares a
+   `threadvar`. **Measured x86-64-ONLY (0 on i386, aarch64 and bare ESP), so it
+   is deliberately NOT wired under the ESP umbrella**, which is the opposite of
+   the two items above it and is why the ticket leads with the profile table.
 3. **Make the default converge on the floor.**
    [[bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]] — the
    unconditional `PXX_MANAGED_STRING`. This is the single largest default-path
