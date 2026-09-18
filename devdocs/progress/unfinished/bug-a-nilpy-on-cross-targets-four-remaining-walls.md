@@ -3,7 +3,7 @@ track: A
 prio: 85
 type: bug
 blocked-by: []
-summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **BUT THE UNIT GAPS ARE NOT WHAT BLOCKS ESP: `print('hi')` under NilPy is ~1.74 MB on i386 and ~3.14 MB on arm32, against an ESP32-C3 SRAM region of 262,144 bytes TOTAL — 6.6x to 12x over, for the smallest program there is. The ranked prerequisite is wiring DCE for the NilPy frontend — and DCE has TWO gates, BOTH blocking: dce.inc:226 refuses any non-x86-64 target (the one an ESP build actually hits, and the expensive half — per-backend call/jmp re-patching) and dce.inc:241 refuses any non-Pascal/C frontend. It cuts 71% of code when it runs (Pascal control). DONE (a5419adbf): NilPy's real ratio is 44.7% of bytes (1,347,352 -> 745,240), verified by a self-differential over 29 .npy programs with differ=0 and zero DCE-only failures. IT STILL DOES NOT FIT: ~881 KB projected for riscv32 against ~400 KB of usable C3 SRAM, over at every ceiling. ESCALATED as decide-is-a-whole-python-program-meant-to-fit-inside-an-esp32; do not price the riscv32/xtensa re-patching work until that is answered.** ~53 .npy tests stay cross-blind on everything but arm32."
+summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **THE SIZE ARGUMENT THAT STOOD HERE IS RETRACTED (2026-09-18): it compared CODE against SRAM.** It said `print('hi')` is ~1.74 MB on i386 / ~3.14 MB on arm32 against 262,144 bytes of C3 SRAM and therefore could not fit. Those megabytes are `.text`, which lives in FLASH on the IDF profile; only `--esp-profile=bare` loads code into IRAM and defs.inc:2275 says that is qemu's map, not a chip's. Re-measured: data+bss for that program is **146,612 B on i386 AND on arm32** (identical, while code differs by 1.4 MB), 152,880 B on x86-64 — against ~400 KB usable C3 SRAM, not ruled out. DCE was ranked as the prerequisite and cuts ZERO bytes of data or bss (`code=1347352->745240`, data and bss byte-identical), so it buys flash only. The Track U escalation built on this is in `rejected/`. **What is still unmeasured is SRAM on a chip** — IDF's own consumption, the 64 KB `SocBareArenaSize` arena bare metal adds, the 32 KB `SIG_ALTSTACK_SIZE` it drops; that is `umbrella-an-esp32-image-is-as-small-as-it-can-be`. DCE for NilPy landed anyway (a5419adbf, 44.7% of code, self-differential differ=0) and riscv32/xtensa re-patching is unblocked, unpriced, and worth flash rather than SRAM.** ~53 .npy tests stay cross-blind on everything but arm32."
 status: unfinished
 owner: claude-A
 ---
@@ -397,20 +397,58 @@ Two false trails I checked and discarded:
   `__pxx_d2i64_rne is not linked` back to `PXXVarBinOp`. Tried, measured,
   reverted — the compiler is byte-identical again.
 
-### WHAT ACTUALLY BLOCKS IT: the NilPy runtime is 6.6x larger than the whole chip
+### RETRACTED 2026-09-18: "the NilPy runtime is 6.6x larger than the whole chip"
+
+**This section compared CODE size against SRAM.** The owner's correction, which
+dissolves it in one sentence: *"that should all be code and hence lives in flash
+memory. a 'hello world' should take almost no sram at all."* The measurements
+below are real; the conclusion drawn from them was a category error, and the
+Track U escalation it produced is in `rejected/`.
 
 `print("hi")` — the smallest NilPy program there is:
 
-| target | code | data | bss | total |
+| target | code (flash) | data (SRAM) | bss (SRAM) | SRAM total |
 | --- | --- | --- | --- | --- |
-| i386 | 1,593,196 | 85,940 | 60,672 | **~1.74 MB** |
-| arm32 | 2,994,028 | 85,940 | 60,672 | **~3.14 MB** |
+| i386 | 1,593,196 | 85,940 | 60,672 | **146,612** |
+| arm32 | 2,994,028 | 85,940 | 60,672 | **146,612** |
+| x86-64 | 1,347,352 | 86,084 | 66,796 | 152,880 |
 
-The ESP32-C3 SRAM region is `0x40380000..0x403C0000` = **262,144 bytes TOTAL**,
-and that must also hold the stack. So the NilPy runtime is **6.6x to 12x the
-entire address space it has to fit in**, for the smallest possible program,
-*before* adding back the 553 excluded lines and softfloat. riscv32 codegen is
-bulkier than i386, so the ESP figure is worse than the i386 row.
+**The last column is the one the question was about, and it is ~143 KB, not
+1.74 MB.** Re-measured 2026-09-18 at the same tree. Note data+bss is IDENTICAL
+on i386 and arm32 while code differs by 1.4 MB — the SRAM-resident part barely
+moves with the backend, which is itself the tell that the old table's `total`
+column was measuring the wrong thing.
+
+**Cross-checked against a second instrument, because `code=` is page-quantised
+(frankuser, 2026-09-18) and a quantised figure would have inflated this one
+too.** `readelf -lW` on the i386 binary: the RW LOAD segment is
+`FileSiz 0x14fb4 MemSiz 0x23cb8` — **146,616 bytes of memory footprint**, which
+is data+bss to within the 4-byte alignment of the bss start, and it is NOT
+rounded. (The R E segment IS: `FileSiz 0x185000` against `code=1593196`.) So the
+SRAM-resident figure survives the quantisation correction and the code figure is
+the one that was approximate all along.
+
+Three defects, each independently checkable:
+
+1. **`--esp-profile=bare` is the only profile that puts code in IRAM, and it
+   does so because of QEMU.** `defs.inc:2275`: *"qemu's esp32c3 machine models it
+   as one RWX region, so the whole image (code+data+bss) loads at the IRAM
+   org."* The IDF profile keeps `.text` in flash. The old section generalised
+   the emulator's map to the chip — **and this seat had read and quoted that
+   very comment earlier the same session, for a different fact.**
+2. **DCE moves code and nothing else.** `--dce` off/on at `a5419adbf`:
+   `code=1347352B data=86084B bss=66796B` -> `code=745240B data=86084B
+   bss=66796B`. **data and bss byte-identical.** So ranking DCE as the
+   prerequisite for a SRAM problem was ranking a flash-only lever.
+3. **"745 KB even WITH DCE" was a host number twice over** — it is code, and
+   `dce.inc:226` means no ESP build has ever run DCE at all.
+
+**What is NOT established is that it fits.** Three unmeasured terms remain, none
+of them code size: what IDF itself consumes before our first byte; what bare
+metal adds (`SocBareArenaSize` is 64 KB of BSS by construction); and what it
+drops (the hosted 32,768-byte `SIG_ALTSTACK_SIZE` is inside the bss above and
+has no bare-metal counterpart). Those belong to
+`umbrella-an-esp32-image-is-as-small-as-it-can-be` and are measured on a chip.
 
 **This is why `CheckBareImageFitsSram` matters more than it looked**: without it
 the overflow is silent and lands as a stack growing into the heap.
@@ -526,27 +564,24 @@ on the target DCE already supports and answers whether the approach is viable at
 all. Step (2) — teaching DCE riscv32/xtensa reference re-patching — is untouched
 and is the larger job.
 
-### THE ANSWER (1) WAS ASKED TO PRODUCE: it does not fit, at any ceiling
+### RETRACTED 2026-09-18: "it does not fit, at any ceiling"
 
-Projecting the measured 0.553 factor onto i386's 1,593,196 gives ~881 KB for
-riscv32 (bulkier than i386):
+This section projected the 0.553 DCE factor onto i386's **code** size to get
+~881 KB for riscv32, and put that against 262,144 / ~400 KB / ~512 KB of SRAM,
+concluding *"over at every ceiling"*. **The projection is arithmetically fine
+and the comparison is void**: 881 KB is flash-resident `.text`, and DCE cuts
+zero bytes of data or bss (measured above). The SRAM-resident figure for the
+same program is ~143 KB, which those ceilings do not rule out.
 
-| ceiling | source | over by |
-| --- | --- | --- |
-| 262,144 | the region we map today | 3.4x |
-| ~400 KB | `docs/targets/esp32.md:118`, C3 usable SRAM | ~2.2x |
-| ~512 KB | ESP32-S3 | ~1.7x |
+The escalation this produced —
+`decide-is-a-whole-python-program-meant-to-fit-inside-an-esp32` — was moved to
+`rejected/` by the owner. **The residual questions survive the retraction and
+the number does not**: if rung 0 of the size umbrella comes back and a product
+fork is still live, re-file it stated against SRAM measured on a chip.
 
-Quote the **400 KB** row, not our own 262,144 — our map leaves ~140 KB unused
-and "widen the map" would otherwise retire the argument without touching it. The
-conclusion survives every ceiling, on the smallest program that exists.
-
-**So this is no longer an engineering question and it is ESCALATED**:
-`decide-is-a-whole-python-program-meant-to-fit-inside-an-esp32` (Track U, p70).
-Flash/PSRAM and a reduced runtime profile are different PRODUCTS rather than
-different implementations, which is what makes it the owner's. **Do not price
-(2) until that is answered** — per-backend re-patching is real work spent on an
-image that would still be ~2x over.
+**Step (2) — teaching DCE riscv32/xtensa reference re-patching — is therefore
+no longer blocked on a decision.** It is unpriced, real work, and it buys flash,
+not SRAM; rank it on that.
 
 Both `2b2ec3fee` and `a5419adbf` are **inert until the next pin** (v411,
 `8d9d69bdc`, predates both).

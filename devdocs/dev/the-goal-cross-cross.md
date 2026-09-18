@@ -71,20 +71,57 @@ profile *"really does fail"*, measured, on `PXXVarBinOp` and `PxxSciDigits17`.
 NilPy's driver requires `builtin`. So the remaining work is making `builtin`
 compile for ESP, which is a different and far larger job than the arena was.
 
-**AND THE REMAINING BLOCKER IS SIZE, NOT MISSING CODE — measured the same day.**
-`print("hi")`, the smallest NilPy program there is, comes to **~1.74 MB** on i386
-and **~3.14 MB** on arm32. The ESP32-C3 SRAM region is **262,144 bytes total**,
-stack included. That is 6.6x to 12x over *before* adding back anything bare
-metal currently excludes. The named prerequisite is **wiring DCE for the NilPy
-frontend AND teaching DCE this target**. It has TWO independent gates and both
-block: `dce.inc:226` refuses any non-x86-64 target (*"the reference shapes this
-pass knows how to re-patch are x86-64's rel32 call/jmp"*) — that is the one an
-ESP build hits, and the expensive half — and `dce.inc:241` refuses any
-non-Pascal/C frontend. When it does run it cuts **71%** of code
-(`67642B -> 19328B`, Pascal control). 71% off 1.59 MB
-is ~460 KB: still over, but the right order of magnitude. **NilPy's own live/dead
-ratio is unmeasured and that 71% is a Pascal number** — it argues for measuring,
-not for assuming it fits.
+**THE SIZE CLAIM THAT STOOD HERE WAS WRONG, AND IT WAS WRONG IN THE MOST
+ORDINARY WAY: IT COMPARED CODE AGAINST SRAM.** Written 2026-09-17, retracted
+2026-09-18 after the owner said the one sentence that dissolves it — *"that
+should all be code and hence lives in flash memory. a 'hello world' should take
+almost no sram at all."* It read that `print("hi")` is ~1.74 MB on i386 and
+~3.14 MB on arm32 against 262,144 bytes of C3 SRAM, called that 6.6x to 12x
+over, and ranked DCE as the prerequisite. **Every number in it was real and the
+comparison was a category error.** Three ways, each checkable:
+
+1. **Those megabytes are `.text`.** The IDF profile keeps `.text` in flash and
+   only data+bss need SRAM. The one profile that does load code into IRAM is
+   `--esp-profile=bare`, and `defs.inc:2275` says in its own words why: *"qemu's
+   esp32c3 machine models it as one RWX region, so the whole image
+   (code+data+bss) loads at the IRAM org."* **That is the emulator's map, not a
+   chip's**, and the retracted paragraph generalised from it.
+2. **DCE cannot move the quantity the question was about.** Measured at
+   `a5419adbf`, same program, `--dce` off then on:
+   `code=1347352B data=86084B bss=66796B` -> `code=745240B data=86084B
+   bss=66796B`. **data and bss are byte-identical.** It is a 44.7% cut of the
+   part that lives in flash and a 0% cut of the part that lives in SRAM.
+3. **The SRAM-resident figure is small.** Measured 2026-09-18, same
+   `print("hi")`: data+bss is **146,612 B on i386 and on arm32** (85940 +
+   60672, identical on both) and 152,880 B on x86-64. Against ~400 KB of usable
+   C3 SRAM that is not 6.6x over; it leaves room.
+
+**Cross-checked against a second instrument, because `code=` is page-quantised
+(frankuser, 2026-09-18) and a quantised figure would have inflated this one
+too.** `readelf -lW` on the i386 binary: the RW LOAD segment is
+`FileSiz 0x14fb4 MemSiz 0x23cb8` — **146,616 bytes of memory footprint**, which
+is data+bss to within the 4-byte alignment of the bss start, and it is NOT
+rounded. (The R E segment IS: `FileSiz 0x185000` against `code=1593196`.) So the
+SRAM-resident figure survives the quantisation correction and the code figure is
+the one that was approximate all along.
+
+**What the retraction does NOT establish is that it fits.** Three unmeasured
+terms sit between 143 KB and a running chip, and none of them is code size:
+what IDF itself takes before our first byte, what bare metal adds back (the
+64 KB `SocBareArenaSize` arena is BSS by construction), and what it drops (the
+hosted 32 KB `SIG_ALTSTACK_SIZE` is in the numbers above and has no bare-metal
+counterpart). **Those are rungs of `umbrella-an-esp32-image-is-as-small-as-it-
+can-be`, and they are measured on a chip, not projected here.** The escalation
+built on the old paragraph — *"is a whole Python program meant to fit inside an
+ESP32"* — is in `rejected/` for this reason: **the fork may be real, the number
+it rested on was not.**
+
+**The DCE work stands on its own merits and is no longer justified by this
+paragraph.** `a5419adbf` wired the NilPy frontend (1889 bodies, 696 live,
+1,347,352 -> 745,240 code bytes, self-differential `compared=29 differ=0`).
+`dce.inc:226` still refuses every non-x86-64 target, so no ESP build has ever
+run it — which is also why the retracted paragraph's *"745 KB even WITH DCE"*
+was measuring a host binary.
 
 **"One wall, both ESP architectures" is retired as a description, and the
 conclusion it supported is UNCHANGED.** That sentence was true of what could be
