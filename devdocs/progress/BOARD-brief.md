@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:30 unfinished:21 blocked:7 backlog:44 backlog-umbrella:13 backlog-core:170 backlog-nilpy:179 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3826 rejected:83`
+`working:30 unfinished:20 blocked:7 backlog:44 backlog-umbrella:13 backlog-core:170 backlog-nilpy:179 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:47 low-prio:77 known-incompat:5 float:23 done-followup:3 decided:151 done:3827 rejected:83`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
 
-## unfinished (21) — parked mid-flight; re-claim, do not duplicate
+## unfinished (20) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -56,7 +56,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-enum-class` [N]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-nilpy-user-defined-decorators` [N]
-- `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
 - `feature-pal-esp-posix-fd-semantics` [B+S]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
