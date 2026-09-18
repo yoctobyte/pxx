@@ -1,34 +1,34 @@
 {
   "_comment": "Written by tools/size_canary.py --update. A DELTA baseline, not a target: it freezes today's sizes so growth becomes a red, and blesses none of them. See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.",
   "measured_at": {
-    "date": "2026-09-18T12:24:55+02:00",
-    "sha": "b05b7bb0a209",
-    "subject": "feat(A): a read-only PT_LOAD for the string-literal pool on x86-64 executables"
+    "date": "2026-09-18T13:16:22+02:00",
+    "sha": "e89400688655",
+    "subject": "docs(A): the TLS reserve is a cap, not the guard that makes the fold sound"
   },
   "subjects": {
     "esp32-bare": {
-      "bss": 66848,
+      "bss": 66808,
       "code": 46380,
       "data": 640
     },
     "esp32c3-bare": {
-      "bss": 66848,
+      "bss": 66808,
       "code": 57764,
       "data": 640
     },
     "esp32s2-bare": {
-      "bss": 66848,
+      "bss": 66808,
       "code": 46380,
       "data": 640
     },
     "esp32s3-bare": {
-      "bss": 66848,
+      "bss": 66808,
       "code": 46380,
       "data": 640
     },
     "x86_64-empty": {
-      "bss": 38428,
-      "code": 67381,
+      "bss": 38396,
+      "code": 67418,
       "data": 4288
     }
   }

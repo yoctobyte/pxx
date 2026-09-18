@@ -5662,291 +5662,6 @@ begin
     ]);
 end;
 
-procedure EmitReadLine;
-{ Read one line from stdin (fd 0) into the shared line buffer, byte at a time,
-  stopping at '\n' or EOF; '\r' is skipped. Sets BSS_LINE_LEN, resets
-  BSS_LINE_POS.
-
-  BSS_LINE_BUF IS A POINTER, NOT A BUFFER. The storage is the builtin unit's
-  demand-allocated PXXLineBuf (builtinheap.pas), grown by PXXLineEnsure and
-  shared with every other backend, so x86-64 and the five backends that lower
-  IR_READLINE to PXXReadLine cannot disagree about capacity — they did, 4095
-  against 4096, on the same program and the same input. It also removes the
-  ceiling: a line longer than any fixed buffer used to be truncated with its
-  tail left in the fd, which made the NEXT readln return the remainder of the
-  previous line. The base moves on growth, so it is re-read after every
-  PXXLineEnsure and never cached across one. }
-var loopStart, j1, j2, jSkip, jPeek, jHave, jDone, procIdx: Integer;
-begin
-  procIdx := FindProc('PXXLineEnsure');
-  if procIdx < 0 then Error('compiler error: PXXLineEnsure not found in builtin unit');
-
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_LINE_POS,
-    'mov rcx, [@glob]', BSS_LINE_LEN,
-    'cmp rax, rcx'
-  ]);
-  EmitB($0F); EmitB($8C); jSkip := CodeLen; EmitI32(0);                         { jl skip }
-
-  EmitAsmX64([
-    'mov qword [@glob], 0', BSS_LINE_POS,
-    'mov qword [@glob], 0', BSS_LINE_LEN
-  ]);
-  { Publish a non-nil base before the first read, so an immediate EOF still
-    leaves EmitReadVarParse a valid (empty) buffer to point at. }
-  EmitAsmX64(['mov rdi, %', 1]);
-  EmitCallProc(procIdx);
-  EmitAsmX64(['mov [@glob], rax', BSS_LINE_BUF]);
-
-  loopStart := CodeLen;
-  EmitAsmX64([
-    'mov rdi, [@glob]', BSS_LINE_LEN,
-    'inc rdi'
-  ]);
-  EmitCallProc(procIdx);                                { rax = buffer base }
-  EmitAsmX64([
-    'mov [@glob], rax', BSS_LINE_BUF,
-    'mov rsi, rax',
-    'add rsi, [@glob]', BSS_LINE_LEN
-  ]);
-  { If Eof left a pushed-back byte, consume it here instead of reading, so the
-    byte it peeked is not lost. Otherwise read one byte from stdin (fd 0). }
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_PEEK_VALID,
-    'test rax, rax'
-  ]);
-  EmitB($74); jPeek := CodeLen; EmitB(0);                                       { jz doread }
-  EmitAsmX64([
-    'mov al, [@glob]', BSS_PEEK_BYTE,
-    'mov [rsi], al',
-    'mov qword [@glob], 0', BSS_PEEK_VALID,
-    'mov rax, %', 1   { count }
-  ]);
-  EmitB($EB); jHave := CodeLen; EmitB(0);                                       { jmp havebyte }
-  PatchRel8(jPeek);                                   { doread: }
-  MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
-  PatchRel8(jHave);                                   { havebyte: }
-  EmitAsmX64(['test rax, rax']);
-  EmitB($0F); EmitB($8E); j1 := CodeLen; EmitI32(0);                           { jle done }
-  EmitAsmX64(['movzx rcx, byte [rsi]', 'cmp rcx, %', 13]);
-  EmitB($0F); EmitB($84); EmitI32(loopStart - (CodeLen + 4));                  { je loopStart (skip \r) }
-  EmitAsmX64(['cmp rcx, %', 10]);
-  EmitB($0F); EmitB($84); j2 := CodeLen; EmitI32(0);                           { je done (\n) }
-  EmitAsmX64(['inc qword [@glob]', BSS_LINE_LEN]);
-  EmitB($E9); EmitI32(loopStart - (CodeLen + 4));                              { jmp loopStart }
-  { newline: the byte is already in the buffer at [rsi]. Record the TEXT length
-    (everything before it) and then count it, so the #10 is unconsumed input
-    that read(c) will hand over — see PXXReadLine's header for why. }
-  Patch32(j2, CodeLen - (j2 + 4));                                             { nl: }
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_LINE_LEN,
-    'mov [@glob], rax', BSS_LINE_TEXTLEN,
-    'inc qword [@glob]', BSS_LINE_LEN
-  ]);
-  EmitB($EB); jDone := CodeLen; EmitB(0);                                       { jmp done }
-  { EOF or error: the line has no terminator, so text and buffer are the same. }
-  Patch32(j1, CodeLen - (j1 + 4));                                             { eofdone: }
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_LINE_LEN,
-    'mov [@glob], rax', BSS_LINE_TEXTLEN
-  ]);
-  PatchRel8(jDone);                                   { done: }
-  Patch32(jSkip, CodeLen - (jSkip + 4));
-end;
-
-procedure EmitEof;
-{ Standard-input Eof: rax := 1 if stdin is at end, else 0. Boolean result.
-  Not-eof if the current line buffer still holds unparsed content (pos < len) or
-  a pushed-back byte is already held. Otherwise peek one byte from fd 0: a read of
-  <= 0 is EOF; a real byte is stashed in BSS_PEEK_BYTE (consumed by the next
-  EmitReadLine read) and reported as not-eof. }
-var jNotEof1, jNotEof2, jEof, jDone1, jDone2: Integer;
-begin
-  { pos < len -> not eof }
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_LINE_POS,
-    'mov rcx, [@glob]', BSS_LINE_LEN,
-    'cmp rax, rcx'
-  ]);
-  EmitB($0F); EmitB($8C); jNotEof1 := CodeLen; EmitI32(0);                      { jl noteof }
-  { peek_valid -> not eof }
-  EmitAsmX64([
-    'mov rax, [@glob]', BSS_PEEK_VALID,
-    'test rax, rax'
-  ]);
-  EmitB($0F); EmitB($85); jNotEof2 := CodeLen; EmitI32(0);                      { jnz noteof }
-  { peek one byte into BSS_PEEK_BYTE }
-  EmitAsmX64(['lea rsi, [@glob]', BSS_PEEK_BYTE]);
-  MovRdiImm(0); MovRdxImm(1); MovRaxImm(SYS_READ); EmitSyscall;
-  EmitAsmX64(['test rax, rax']);
-  EmitB($0F); EmitB($8E); jEof := CodeLen; EmitI32(0);                          { jle eof }
-  { got a byte: mark held, report not eof }
-  EmitAsmX64([
-    'mov qword [@glob], 1', BSS_PEEK_VALID,
-    'xor rax, rax'
-  ]);
-  EmitB($EB); jDone1 := CodeLen; EmitB(0);                                      { jmp done }
-  Patch32(jEof, CodeLen - (jEof + 4));                                          { eof: }
-  EmitAsmX64(['mov rax, %', 1]);
-  EmitB($EB); jDone2 := CodeLen; EmitB(0);                                      { jmp done }
-  Patch32(jNotEof1, CodeLen - (jNotEof1 + 4));                                  { noteof: }
-  Patch32(jNotEof2, CodeLen - (jNotEof2 + 4));
-  EmitAsmX64(['xor rax, rax']);
-  PatchRel8(jDone1);                                 { done: }
-  PatchRel8(jDone2);
-end;
-
-procedure EmitReadVarParse(tk: TTypeKind);
-{ rax = target address on entry. Parse a value from the line buffer at the
-  cursor by type and store it; advance the cursor. tyString takes the rest of
-  the line; tyChar one byte; integer kinds skip blanks then read [-]digits. }
-var sz, skipLoop, digLoop, jDone, jStart, jAdv, jDigits, jNoSign, jStrLen: Integer;
-    jEmpty, jSign, jDigEnd, jLt, jGt: Integer;
-begin
-  if tk = tyAnsiString then
-  begin
-    { Managed readln(s): build a managed string from the rest of the line and
-      publish it into the target slot (rax = slot address), releasing the old
-      handle. Without this a managed string target fell through to the integer
-      parser below and wrote garbage into the 8-byte handle slot. }
-    { LENGTH comes from TEXTLEN, never LEN: the #10 terminator is in the buffer
-      (PXXReadLine's header says why) and a string target must not take it.
-      Clamped, because a preceding read(c) can have moved the cursor past the
-      text and onto the terminator. The CURSOR still advances to LEN, so readln
-      consumes the newline exactly as before. }
-    EmitAsmX64([
-      'push rax',                        { target addr }
-      'mov rax, [@glob]', BSS_LINE_TEXTLEN,
-      'sub rax, [@glob]', BSS_LINE_POS,
-      'test rax, rax'
-    ]);
-    EmitB($0F); EmitB($8D); jStrLen := CodeLen; EmitI32(0);                     { jge haveLen }
-    EmitAsmX64(['xor rax, rax']);
-    Patch32(jStrLen, CodeLen - (jStrLen + 4));                                  { haveLen: }
-    EmitAsmX64([
-      'mov rdi, rax',                    { length }
-      'mov rsi, [@glob]', BSS_LINE_BUF,
-      'add rsi, [@glob]', BSS_LINE_POS   { src }
-    ]);
-    IREmitCodeCall(AnsiStrFromLiteralAddr);                                        { rax = new managed handle }
-    EmitAsmX64([
-      'mov rcx, [@glob]', BSS_LINE_LEN,
-      'mov [@glob], rcx', BSS_LINE_POS,  { consume line }
-      'push rax',                        { new; stack: new,target }
-      'mov rcx, [rsp+8]',                { target addr }
-      'mov rax, [rcx]',                  { old handle }
-      'push rax',                        { old; stack: old,new,target }
-      'mov rax, [rsp+8]',                { new }
-      'mov [rcx], rax'                   { store new }
-    ]);
-    EmitAsmX64(['pop rax']);             { old }
-    IREmitCodeCall(AnsiStrReleaseAddr);                                            { release old (nil-safe) }
-    EmitAsmX64(['pop rax', 'pop rax']);  { new, target (discard) }
-    Exit;
-  end;
-  if tk = tyString then
-  begin
-    { TEXTLEN, clamped — same reason as the managed arm above. }
-    EmitAsmX64([
-      'mov rdi, rax',
-      'mov rcx, [@glob]', BSS_LINE_TEXTLEN,
-      'sub rcx, [@glob]', BSS_LINE_POS,
-      'test rcx, rcx'
-    ]);
-    EmitB($0F); EmitB($8D); jStrLen := CodeLen; EmitI32(0);                     { jge haveLen }
-    EmitAsmX64(['xor rcx, rcx']);
-    Patch32(jStrLen, CodeLen - (jStrLen + 4));                                  { haveLen: }
-    EmitAsmX64([
-      'mov [rdi], rcx',
-      'mov rsi, [@glob]', BSS_LINE_BUF,
-      'add rsi, [@glob]', BSS_LINE_POS,
-      'add rdi, %', 8,
-      'rep movsb',
-      'mov rax, [@glob]', BSS_LINE_LEN,
-      'mov [@glob], rax', BSS_LINE_POS
-    ]);
-    Exit;
-  end;
-  if tk = tyChar then
-  begin
-    EmitAsmX64([
-      'mov rdi, rax',
-      'mov rdx, [@glob]', BSS_LINE_POS,
-      'mov rcx, [@glob]', BSS_LINE_LEN,
-      'xor eax, eax',
-      'cmp rdx, rcx'
-    ]);
-    EmitB($0F); EmitB($8D); jDone := CodeLen; EmitI32(0);                         { jge nochar }
-    EmitAsmX64([
-      'mov rsi, [@glob]', BSS_LINE_BUF,
-      'add rsi, rdx',
-      'movzx rax, byte [rsi]',
-      'inc rdx',
-      'mov [@glob], rdx', BSS_LINE_POS
-    ]);
-    Patch32(jDone, CodeLen - (jDone + 4));
-    EmitAsmX64(['mov [rdi], al']);
-    Exit;
-  end;
-  { integer family: r8 = negative flag, r9 = accumulator, rdx = cursor }
-  EmitAsmX64([
-    'mov rdi, rax',
-    'mov rdx, [@glob]', BSS_LINE_POS,
-    'mov rcx, [@glob]', BSS_LINE_LEN,
-    'mov rsi, [@glob]', BSS_LINE_BUF,
-    'xor r8, r8',    { neg flag }
-    'xor r9, r9'     { acc }
-  ]);
-  { skip whitespace }
-  skipLoop := CodeLen;
-  EmitAsmX64(['cmp rdx, rcx']);
-  EmitB($0F); EmitB($8D); jEmpty := CodeLen; EmitI32(0);                          { jge applysign (empty) }
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
-  EmitAsmX64(['cmp rax, %', 32]);
-  EmitB($0F); EmitB($84); jAdv := CodeLen; EmitI32(0);                            { je advws }
-  EmitAsmX64(['cmp rax, %', 9]);
-  EmitB($0F); EmitB($85); jStart := CodeLen; EmitI32(0);                          { jne startsign }
-  { advws: }
-  Patch32(jAdv, CodeLen - (jAdv + 4));
-  EmitAsmX64(['inc rdx']);
-  EmitB($E9); EmitI32(skipLoop - (CodeLen + 4));                                  { jmp skipLoop }
-  { startsign: }
-  Patch32(jStart, CodeLen - (jStart + 4));
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
-  EmitAsmX64(['cmp rax, %', 45]);                                                { '-' }
-  EmitB($0F); EmitB($85); jSign := CodeLen; EmitI32(0);                           { jne digits }
-  EmitAsmX64(['mov r8, %', 1, 'inc rdx']);
-  { digits: }
-  Patch32(jSign, CodeLen - (jSign + 4));
-  digLoop := CodeLen;
-  EmitAsmX64(['cmp rdx, rcx']);
-  EmitB($0F); EmitB($8D); jDigEnd := CodeLen; EmitI32(0);                         { jge applysign }
-  EmitB($48); EmitB($0F); EmitB($B6); EmitB($04); EmitB($16);                    { movzx rax,byte[rsi+rdx] -- SIB index, not mechanically portable }
-  EmitAsmX64(['cmp rax, %', 48]);
-  EmitB($0F); EmitB($8C); jLt := CodeLen; EmitI32(0);                             { jl applysign }
-  EmitAsmX64(['cmp rax, %', 57]);
-  EmitB($0F); EmitB($8F); jGt := CodeLen; EmitI32(0);                             { jg applysign }
-  EmitB($4D); EmitB($6B); EmitB($C9); EmitB($0A);                                { imul r9,r9,10 -- 3-operand imul+imm not supported, isolated single site }
-  EmitAsmX64(['sub rax, %', 48, 'add r9, rax', 'inc rdx']);
-  EmitB($E9); EmitI32(digLoop - (CodeLen + 4));                                   { jmp digLoop }
-  { applysign: }
-  Patch32(jEmpty,  CodeLen - (jEmpty + 4));
-  Patch32(jDigEnd, CodeLen - (jDigEnd + 4));
-  Patch32(jLt,     CodeLen - (jLt + 4));
-  Patch32(jGt,     CodeLen - (jGt + 4));
-  EmitAsmX64(['test r8, r8']);
-  EmitB($0F); EmitB($84); jNoSign := CodeLen; EmitI32(0);                         { jz nosign }
-  EmitAsmX64(['neg r9']);
-  { nosign: }
-  Patch32(jNoSign, CodeLen - (jNoSign + 4));
-  EmitAsmX64(['mov rax, r9', 'mov [@glob], rdx', BSS_LINE_POS]);
-  sz := TypeSlotSize(tk);
-  if sz = 1 then EmitAsmX64(['mov [rdi], al'])
-  else if sz = 2 then EmitAsmX64(['mov [rdi], ax'])
-  else if sz = 4 then EmitAsmX64(['mov [rdi], eax'])
-  else EmitAsmX64(['mov [rdi], rax']);
-end;
-
 procedure EmitLoadVariantAddress(node: Integer);
 var symIdx, addressNode: Integer;
 begin
@@ -11211,8 +10926,16 @@ begin
           end
           else if specialId = 210 then
           begin
-            { Eof (standard input), no args -> Boolean in rax. }
-            EmitEof;
+            { Eof (standard input), no args -> Boolean in rax. The portable
+              builtin, exactly as the other five backends call it -- it shares
+              the pushback byte with PXXReadLine, and sharing that state is the
+              whole reason there is one reader. movzx because a Pascal Boolean
+              result is one byte and every consumer here tests the full
+              register; the deleted asm zeroed rax by construction. }
+            procIdx := FindProc('PXXStdinEof');
+            if procIdx < 0 then Error('compiler error: PXXStdinEof not found in builtin unit');
+            EmitCallProc(procIdx);
+            EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);   { movzx rax, al }
           end
           else if (specialId = Ord(tkOrd)) or (specialId = Ord(tkChr)) or
                   (specialId = Ord(tkInteger_T)) or (specialId = Ord(tkLongWord_T)) or
@@ -12015,15 +11738,38 @@ begin
         EmitwriteSyscall(NEWLINE_OFFSET, 1);
       end;
 
+    { ===== read/readln: the portable builtin, on every backend =====
+
+      x86-64 hand-rolled this for a long time -- ~285 lines emitting a line
+      reader, an Eof peek and a five-arm value parser over its own BSS buffer --
+      while i386, aarch64, arm32, riscv32 and xtensa all lowered the same three
+      IR ops onto PXXReadLine / PXXReadVar* / PXXReadDiscard in builtinheap.
+      Two spellings of one behaviour, and they DRIFTED, three times:
+
+        - the buffer cap, 4095 against 4096 on the same program and input;
+        - read(c: Char) and the #10 that ends a line (both wrong, differently);
+        - a frozen-string target under -uPXX_MANAGED_STRING -- the builtin gets
+          it right on i386 and riscv32, and the asm called an AnsiString stub
+          that a frozen build never emits, so x86-64 could not compile it.
+
+      The census that justified deleting this is in the ticket: eight fixtures,
+      five targets, fifteen target shapes, byte-identical output. The two
+      parsers demonstrably agreed, so this is a de-duplication and not a
+      rewrite -- and the third drift above means it is also a fix.
+      refactor-a-x86-64-hand-rolls-the-readln-parser-that-five-backends-share }
+
     IR_READLINE:
       begin
-        EmitReadLine;
+        procIdx := FindProc('PXXReadLine');
+        if procIdx < 0 then Error('compiler error: PXXReadLine not found in builtin unit');
+        EmitCallProc(procIdx);
       end;
 
     IR_READ_DISCARD:
       begin
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_LEN);   { mov rax,[len] }
-        EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_LINE_POS);   { mov [pos],rax }
+        procIdx := FindProc('PXXReadDiscard');
+        if procIdx < 0 then Error('compiler error: PXXReadDiscard not found in builtin unit');
+        EmitCallProc(procIdx);
       end;
 
     IR_READ_VAR:
@@ -12031,17 +11777,38 @@ begin
         { A managed-string target needs its SLOT address (&handle), not the
           loaded handle value: an AnsiString lea defaults to loading the handle
           in read context, so force lvalue-write mode to get the slot address
-          for EmitReadVarParse's managed publish. }
-        if IntToTypeKind(IRTk[node]) = tyAnsiString then
+          for PXXReadVarStrM's publish. Same three arms and the same reason as
+          ir_codegen386.inc's; only the argument registers differ. }
+        tk := IntToTypeKind(IRTk[node]);
+        if tk = tyAnsiString then
         begin
           savedLValueWrite := InLValueWrite;
           InLValueWrite := True;
           IREmitNode(IRA[node]);   { rax = slot address }
           InLValueWrite := savedLValueWrite;
+          EmitAsmX64(['mov rdi, rax']);
+          procIdx := FindProc('PXXReadVarStrM');
+          if procIdx < 0 then Error('compiler error: PXXReadVarStrM not found in builtin unit');
+          EmitCallProc(procIdx);
+        end
+        else if tk = tyChar then
+        begin
+          IREmitNode(IRA[node]);   { rax = target address }
+          EmitAsmX64(['mov rdi, rax']);
+          procIdx := FindProc('PXXReadVarChar');
+          if procIdx < 0 then Error('compiler error: PXXReadVarChar not found in builtin unit');
+          EmitCallProc(procIdx);
+        end
+        else if TypeIsOrdinal(tk) then
+        begin
+          IREmitNode(IRA[node]);   { rax = target address }
+          EmitAsmX64(['mov rdi, rax', 'mov rsi, %', TypeSlotSize(tk)]);
+          procIdx := FindProc('PXXReadVarInt');
+          if procIdx < 0 then Error('compiler error: PXXReadVarInt not found in builtin unit');
+          EmitCallProc(procIdx);
         end
         else
-          IREmitNode(IRA[node]);   { rax = target address }
-        EmitReadVarParse(IntToTypeKind(IRTk[node]));
+          Error('target x86-64: read/readln target type not supported');
       end;
 
     IR_VAR_STORE:

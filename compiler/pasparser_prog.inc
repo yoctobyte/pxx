@@ -117,6 +117,25 @@ begin
       needsHeap := True;
     if (Tokens[i].Kind = tkDiv) or (Tokens[i].Kind = tkMod) then
       needsDivStub := True;
+    { read/readln/Eof reach stdin through the ONE shared line buffer that lives
+      in builtinheap -- PXXLineEnsure, PXXReadLine, PXXReadVar*, PXXStdinEof --
+      so the statement's own token pulls the unit. Third instance in this
+      routine of the same thing the float and frozen-field-width paragraphs
+      below describe: THE DEPENDENCY WAS MOVED AND THIS IS WHERE IT HAS TO BE
+      PAID.
+
+      It was cross-target-only until 2026-09-18. x86-64 emitted a self-contained
+      reader over its own fixed 4096-byte BSS buffer and needed nothing; it now
+      shares the demand-allocated one, because the two spellings had drifted to
+      different capacities on the same program and the same input. Under
+      -uPXX_MANAGED_STRING nothing else pulls the block in, so `readln(i)` in a
+      frozen build stopped compiling with "compiler error: PXXLineEnsure not
+      found in builtin unit". Measured against the PINNED compiler: x86-64 built
+      and ran it, and the five cross targets already failed with "PXXReadLine
+      not found" -- so this closes a regression on one target and a hole that
+      predates it on five. }
+    if (Tokens[i].Kind = tkRead) or (Tokens[i].Kind = tkReadln) then
+      needsHeap := True;
     { EVERY target writes floats through the builtinheap Pascal helpers
       (PXXWriteFloat*), so any float-producing token pulls the unit.
       tkSlash counts: integer / integer yields a float.
@@ -186,6 +205,12 @@ begin
           (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)) and
          (CaseEqual(name, 'Single') or CaseEqual(name, 'Double') or
           CaseEqual(name, 'Real') or CaseEqual(name, 'Extended')) then
+        needsHeap := True;
+      { Eof with no read in the program still needs PXXStdinEof / the buffer
+        state it reads. Conservative by design, like the rest of this scan: a
+        file Eof(f) pulls the unit too, and a unit-bearing program has it
+        already. }
+      if CaseEqual(name, 'Eof') then
         needsHeap := True;
       if CaseEqual(name, 'New') or CaseEqual(name, 'Dispose') or
          CaseEqual(name, 'ReallocMem') or CaseEqual(name, 'SetLength') or
@@ -865,17 +890,15 @@ begin
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
   BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
-  BSS_LINE_POS    := BSSSize; Inc(BSSSize, 8);
-  BSS_LINE_LEN    := BSSSize; Inc(BSSSize, 8);
-  BSS_LINE_TEXTLEN:= BSSSize; Inc(BSSSize, 8);
-  BSS_PEEK_VALID  := BSSSize; Inc(BSSSize, 8);
-  BSS_PEEK_BYTE   := BSSSize; Inc(BSSSize, 8);
-  { EIGHT bytes, not a buffer: BSS_LINE_BUF holds a POINTER to the builtin
-    unit's demand-allocated line buffer (builtinheap.pas, PXXLineEnsure).
-    It was LINE_BUF_SIZE = 4096 bytes of bss reserved here in EVERY Pascal
-    program, on every target — including the five backends that never emit
-    a reference to it, and ESP, where the PAL refuses fd 0 outright. }
-  BSS_LINE_BUF    := BSSSize; Inc(BSSSize, 8);
+  { The readln line buffer, its cursor and the Eof pushback byte USED to be six
+    driver-owned bss slots here — 4096 of them a buffer — reserved in every
+    Pascal program on every target, including the five backends that never
+    emitted a reference to any of them and ESP, whose PAL refuses fd 0 outright.
+    They were the x86-64 asm reader's private state. That reader is gone and
+    the state lives in builtinheap where it always did for everyone else
+    (PXXLineBuf / PXXLinePos / PXXPeekByte), so there is one spelling and
+    nothing to keep in step.
+    refactor-a-x86-64-hand-rolls-the-readln-parser-that-five-backends-share }
   BSS_INTBUF      := BSSSize; Inc(BSSSize, INTBUF_SIZE);
   { BSS_IO_OWNER / BSS_IO_DEPTH are NOT allocated here any more: they belong to
     EmitIoLockStubsForTarget, alongside the stubs that are their only reader.

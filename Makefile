@@ -20273,6 +20273,19 @@ test-core: $(COMPILER)
 	# capacity clamp that path never had. .expected is FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_into_a_frozen_string_from_stdin_and_a_file.pas $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26
 	tools/expect_same.sh test_read_into_a_frozen_string_from_stdin_and_a_file26 "$$(printf 'abc\nlonger-than-four\n77\n' | $(TESTTMP)/test_read_into_a_frozen_string_from_stdin_and_a_file26)" "$$(cat test/test_read_into_a_frozen_string_from_stdin_and_a_file.expected)"
+	# ...and read/readln under -uPXX_MANAGED_STRING, the frozen-string model the
+	# compiler itself is built with, which NOTHING covered. It was broken on all
+	# five targets and it failed three DIFFERENT ways for one cause -- a driver
+	# that never pulls builtinheap. `PXXReadLine not found` on the five cross
+	# backends (predates the buffer work; reproduces on the pin);
+	# `PXXLineEnsure not found` on x86-64 once its reader started sharing the
+	# builtin buffer; and a never-emitted AnsiString stub on x86-64 for the
+	# frozen-string target, because the deleted asm sent one through the managed
+	# arm. Three messages, one cause, and BUILDING IT AT ALL is the assertion.
+	# The pinned compiler refuses this program on x86-64 and on i386.
+	# Values are FPC 3.2.2's own.
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_readln_in_a_frozen_string_build.pas $(TESTTMP)/test_readln_frozenbuild26
+	tools/expect_same.sh test_readln_frozenbuild26 "$$(printf '41\nhello\nZ\n' | $(TESTTMP)/test_readln_frozenbuild26)" "$$(printf 'i=42\ns=[hello]\nc=90')"
 	# `uses sysutils` must not take Delete/Insert away from a dynamic array.
 	# sysutils declared the two STRING overloads; SoftIntrinsicOpen is asked
 	# BEFORE any argument is parsed, so one same-named routine in scope closed
@@ -26336,6 +26349,11 @@ test-i386: $(COMPILER)
 	# portable builtin, x86-64 to inline asm, and the fix had to land in both.
 	./$(COMPILER) --target=i386 test/test_read_char_preserves_the_line_terminator.pas $(TESTTMP)/test_i386_readterm
 	tools/expect_same.sh i386/test_i386_readterm "$$(printf 'ab\n42\nxy\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readterm)" "$$(printf 'c1=97\nc2=98\nc3=10\nrest=[42]\n<120><121><10>\ncount=3')"
+	# ...and the frozen-string BUILD, whose i386 half failed with `PXXReadLine
+	# not found` long before x86-64 joined it. Cross row because x86-64 and i386
+	# reached that error from opposite directions and now share one reader.
+	./$(COMPILER) -uPXX_MANAGED_STRING --target=i386 test/test_readln_in_a_frozen_string_build.pas $(TESTTMP)/test_i386_readln_frozenbuild
+	tools/expect_same.sh i386/test_i386_readln_frozenbuild "$$(printf '41\nhello\nZ\n' | tools/run_target.sh i386 $(TESTTMP)/test_i386_readln_frozenbuild)" "$$(printf 'i=42\ns=[hello]\nc=90')"
 	./$(COMPILER) --target=i386 test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof
 	./$(COMPILER) test/test_eof_stdin.pas $(TESTTMP)/test_i386_eof_x64
 	tools/expect_same.sh i386/test_i386_eof "$$(printf 'alpha\nbeta\ngamma' | tools/run_target.sh i386 $(TESTTMP)/test_i386_eof)" "$$(printf 'alpha\nbeta\ngamma' | $(TESTTMP)/test_i386_eof_x64)"
