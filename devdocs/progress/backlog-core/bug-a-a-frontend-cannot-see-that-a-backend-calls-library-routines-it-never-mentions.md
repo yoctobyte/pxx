@@ -112,3 +112,52 @@ routine beside `EmitProgramPrologue` — which all nine already call — rather 
 adding a fourth copy. **A minimal fix to a duplication bug adds a copy**, and
 this ticket exists because a mechanism nobody could see from a frontend was
 spelled out per frontend.
+
+
+## 2026-09-18 (frankS) — THIRD MECHANISM, AND IT IS THE PASCAL DRIVER ITSELF
+
+`read` / `readln` / `Eof` lower onto `PXXReadLine` / `PXXReadVar*` /
+`PXXReadDiscard` / `PXXStdinEof`, and **nothing told the Pascal driver's own
+need-detector that a `read` token implies builtinheap.** Under
+`-uPXX_MANAGED_STRING` that broke readln on **all five cross targets plus
+x86-64**, three different messages, one cause:
+
+| target | message | since |
+| --- | --- | --- |
+| i386 / arm32 / aarch64 / riscv32 / xtensa | `PXXReadLine not found` | predates 2026-09-18; reproduces on the pin |
+| x86-64, any target type | `PXXLineEnsure not found in builtin unit` | `0ab100740`, when its asm reader started sharing the builtin buffer |
+| x86-64, frozen-string target | `call to a runtime stub that was never emitted` | reproduces on the pin |
+
+Fixed in `295bcceb9` by adding the pull to `DetectPascalRuntimeNeeds`, with a
+fixture (`test_readln_in_a_frozen_string_build.pas`, x86-64 and i386 rows) whose
+positive control is the pinned compiler refusing it on both.
+
+**This is not a fourth ticket because it is not a fourth mechanism — it is the
+same one arriving in the driver that looked immune.** `DetectPascalRuntimeNeeds`
+already carries two paragraphs saying, in those exact words, *the dependency was
+moved and this is where it has to be paid* — once for floats, once for a frozen
+string written with a field width. `read` is the third, and **why nobody paid it
+is the better argument for this ticket's prio than any count of instances:**
+x86-64 emitted its own self-contained reader, so the pull looked
+cross-target-only, and the five targets that actually needed it were failing in
+a build mode no row covers. A hand-maintained union of known mechanisms grows a
+new member every time a construct is shimmed onto a helper, and the member is
+invisible until someone compiles in the one mode that exercises it.
+
+### A CROSS-TARGET CENSUS IS NOT A CROSS-BUILD-MODE CENSUS
+
+The census that cleared the readln de-duplication ran eight fixtures across five
+`--target=` flags and found fifteen shapes byte-identical. It was right about
+agreement and **wrong about completeness**, and the reason is the axis it was
+given: it varied TARGET and never varied BUILD MODE, so it compared two readers
+on programs that BUILD — and there was an entire mode in which one of them does
+not. `-uPXX_MANAGED_STRING` is not an exotic corner: **it is the model
+`compiler.pas` itself is compiled with.** The population excluded the build the
+compiler uses on itself.
+
+This is the house rule with a new axis attached — a census answers honestly
+about whatever it enumerates, and that applies to whoever drew the boundary, not
+only to whoever ran it. **Wherever stdin, strings or the heap are involved, the
+frozen-string model deserves a row**, because it is the one mode where the
+managed-string runtime is absent and every dependency that was quietly riding on
+it comes due.
