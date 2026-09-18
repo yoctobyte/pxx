@@ -726,8 +726,16 @@ two units** (`array[0..8191] of Int64` beside `HEAP_ARENA = 65536`), tied by a
 hand-checked comment whose own text admits a mismatch would reintroduce the heap
 corruption that arm exists to remove — **a comment is not a guard**, and editing
 one line is silent. And `LINE_BUF_SIZE` (`defs.inc`, reserved by the Pascal
-driver) against `PXXLineBuf` (`builtinheap`), both 4,096-byte readln buffers,
-only one of which moves an image. **A subtraction names a quantity and can never
+driver) against `PXXLineBuf` (`builtinheap`), both 4,096-byte readln buffers —
+**where the twins are BOTH LIVE in one hosted binary and only one is ever read,
+so the pair cost 8,168 bytes against the 3,840 two seats had costed it at,
+each having measured one twin on the profile they happened to be on.** This
+clause said "only one of which moves an image" for two hours, which was true on
+bare ESP and read as "the other is inert"; the one that looked inert is the
+larger half everywhere else. **Price the PAIR, on the profile where both are
+live** — and note the two spellings had also silently drifted apart, x86-64
+capping at `LINE_BUF_SIZE-1` while five backends capped at 4096, so the same
+program on the same input read 4095 bytes on one target and 4096 on another. **A subtraction names a quantity and can never
 name a constant**, so do not let a matching number stand in for a differential:
 change the candidate, rebuild, measure, revert — and state the delta. Two of the
 three were found that way and none by reading. When you fix one, DERIVE the
@@ -988,8 +996,25 @@ was the measurer's previous step — which is why neither seat suspected it.
 general remedy is to ISOLATE the at-risk case from everything the run has
 already produced — a fixture naming none of the working members, a probe in a
 directory an earlier step did not write to — and let the asymmetry be the
-control. The question that catches every form of it: **would this row still
+control. The question that catches most forms of it: **would this row still
 pass if it were the ONLY thing in the run?**
+**AND IT ANSWERS *YES* FOR THE MIRROR CASE, WHERE AN EARLIER STEP DESTROYS THE
+PRECONDITION INSTEAD OF SUPPLYING IT — so the remedy above is stated for the
+false-PASS direction only, and this clause said "every form" until 2026-09-18.**
+The paragraph above is about a passing step handing a failing one what it needs.
+The mirror is a SETUP line that quietly removes the condition under test, and it
+produces a confident false NEGATIVE: the probe is alone, correctly aimed, takes
+the right route, and reports the defect absent. Measured 2026-09-18: a gdb
+watchpoint harness on static-literal refcounts reported **ZERO writes over 20,000
+iterations through every retain/release shape** — and its own `UniqueString(b)`,
+one line above `SetLength(b, 3)`, had given `b` a heap copy, so the release never
+saw a literal. **Changing that single line to `b := a;` makes the identical probe
+trip on the first iteration.** What it certified absent was a net decrement of a
+saturated literal refcount, live since `d782926ce` and carried by pin v411, found
+later the same day by a read-only page fault instead. So ask the setup question
+too: **does anything before the assertion make the subject stop being the thing
+I am testing?** A `Unique`, a copy, a reset, a normalise, a defensive clone —
+every one of them is a correct line to write and a precondition to destroy.
 **AND THAT QUESTION ANSWERS YES FOR A PROBE THAT IS ALONE AND STILL REACHES THE
 SUBJECT BY THE WRONG ROUTE — isolation guards the RUN, not the ROUTE.** Measured
 2026-09-12/13 in two independent subsystems: a MAXIMALLY isolated Zig census
