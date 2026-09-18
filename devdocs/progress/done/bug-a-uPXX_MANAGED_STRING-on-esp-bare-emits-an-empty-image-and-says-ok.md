@@ -178,4 +178,4 @@ xtensa is the primary ESP target and the one that silently drops. Filed as
 [[bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile]].
 
 ## Log
-- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-18 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 16ebf18ce.
