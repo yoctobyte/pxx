@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `b4104386ae9c` | 2026-09-19T15:16:06Z | RED (full) | 1023.6s | `b4104386ae9c` RED |
+| borg | `b4104386ae9c` | 2026-09-19T15:20:44Z | RED (slow) | 254.1s | `b4104386ae9c` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b4104386ae9c` on borg, 2026-09-19T15:16:06Z (0m ago).**
+**Newest full tier in the fleet: `b4104386ae9c` on borg, 2026-09-19T15:16:06Z (4m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `b4104386ae9c` | RED | 0m | — (newest) |
+| borg | `b4104386ae9c` | RED | 4m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -37,3 +37,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-core#src:test/test_nilpy_unbound_builtin_method.npy** — test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh (borg): bad `b4104386ae9c`, last good `374150f061fc`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy** — test/test_nilpy_bytearray_unbound_and_subclass.npy test/test_nilpy_bytearray_unbound_and_subclass.expected (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy** — test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
+- **test-esp-idf#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (borg): bad `b4104386ae9c`, last good `fada42022187`, 52 commit(s) in range

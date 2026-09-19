@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-19T06:40:10Z",
-   "fixed": [],
-   "new_red": [
-    "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas"
-   ],
-   "sha": "93b5dc62a1a537f43574b6a02141258bcc33dd79",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-19T06:46:38Z",
    "fixed": [
     "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas"
@@ -519,6 +508,17 @@
    ],
    "sha": "b4104386ae9c393702223f151f8e29b902868140",
    "tier": "full",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-09-19T15:20:44Z",
+   "fixed": [],
+   "new_red": [
+    "test-esp-idf#src:tools/compiler_srchash.sh"
+   ],
+   "sha": "b4104386ae9c393702223f151f8e29b902868140",
+   "tier": "slow",
    "timed_out": false,
    "verdict": "RED"
   }
@@ -5271,7 +5271,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "b4104386ae9c393702223f151f8e29b902868140",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "b4104386ae9c393702223f151f8e29b902868140",
   "test-threads#src:tools/compiler_srchash.sh": "b4104386ae9c393702223f151f8e29b902868140",
-  "test-uforth#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
+  "test-uforth#src:tools/compiler_srchash.sh": "b4104386ae9c393702223f151f8e29b902868140",
   "test-uforth#src:tools/compiler_srchash.sh@1": "b4104386ae9c393702223f151f8e29b902868140",
   "test-uforth#src:tools/compiler_srchash.sh@10": "b4104386ae9c393702223f151f8e29b902868140",
   "test-uforth#src:tools/compiler_srchash.sh@11": "b4104386ae9c393702223f151f8e29b902868140",
@@ -5453,6 +5453,7 @@
   "optdiff#shard11/12": "Segmentation fault | OPT DIFF -O3: test/test_ro_data_literal_store.pas (rc 0 vs 139) | optdiff skip SKIPLIST: test_c_gtk_types.pas | optdiff skip EXEC-FAIL-O0: c_obj_runtime_state_b.c(127) test_emit_obj_noexport.pas(127) | optdiff skip BUILD-FAIL: c_cross_ns_arity_fail.c cdefine_flag_b239.c c_pasunit_collide_fail.c cslicea_lib.c csrcwins.c cstray_toplevel_reject_b193.c c_unclosed_ptr_array_init_f\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
   "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- annotate both results with the same type | near: ( list ) :   >>> def append (",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "+PXX timer: done ticks=5 sGuru Meditation Error: Core  0 panic'ed (Interrupt wdt timeout on CPU0). | +PXX timer: tick=2 | +PXX timer: tick=3 | +PXX timer: tick=4 | +PXX timer: tick=5 | PXX timer: done ticks=5 status=0 | esp32c3 esp_timer callback MISMATCH",
   "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy": "pascal26:68: error: Nil Python: add overrides TPyList.add with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- annotate both results with the same type | near: ( list ) :   >>> def add (",
   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- annotate both results with the same type | near: ( list ) :   >>> def append (",
   "test-pascal-conformance#shard3/6": "SKIP tover4.pp \u2014 gap: 80-bit extended/cextended float type and overload resolution across single/double/extended | SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault) | SKIP tstring3.pp \u2014 gap: THE CHAR HALF IS FIXED (2026-09-06, compiler 3fa98ccccf88) -- a one-character named const is a string initialiser now, so `FDivChars = (c1,c2)`\u2026",
@@ -13497,7 +13498,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "pass",
   "test-esp-bare#src:test/test_esp_varparam.pas": "pass",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "pass",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "pass",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "fail",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "pass",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "pass",
   "test-fgl#src:tools/compiler_srchash.sh": "pass",
@@ -15308,14 +15309,14 @@
  },
  "last": {
   "code_fp": "1f06bcf02d3f",
-  "date": "2026-09-19T15:16:06Z",
+  "date": "2026-09-19T15:20:44Z",
   "deadline": 3600.0,
   "sha": "b4104386ae9c393702223f151f8e29b902868140",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 1023.6
+  "wall": 254.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15365,15 +15366,15 @@
    "wall": 958.7
   },
   "slow": {
-   "code_fp": "1d5c476a6328",
-   "date": "2026-09-19T08:55:07Z",
+   "code_fp": "1f06bcf02d3f",
+   "date": "2026-09-19T15:20:44Z",
    "deadline": 3600.0,
-   "sha": "fada42022187732beadbf9211aa05824ef006d18",
+   "sha": "b4104386ae9c393702223f151f8e29b902868140",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "GREEN",
-   "wall": 356.2
+   "verdict": "RED",
+   "wall": 254.1
   }
  },
  "last_full": {
@@ -15613,6 +15614,75 @@
    ],
    "range_non_causal": false,
    "src": "test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh",
+   "status": "fail"
+  },
+  {
+   "bad": "b4104386ae9c393702223f151f8e29b902868140",
+   "bad_untestable": true,
+   "first_seen": false,
+   "good": "fada42022187732beadbf9211aa05824ef006d18",
+   "job": "test-esp-idf#src:tools/compiler_srchash.sh",
+   "name": "test-esp-idf#00",
+   "never_passed": false,
+   "no_testable_change": false,
+   "opened": "2026-09-19T15:20:44Z",
+   "pin_axis": 0,
+   "pin_built": false,
+   "range": [
+    "402d61e0d94dfd466858bf8bf11de83bac52a68a",
+    "8116710dd42a1630ac2b719f119663b0263a6691",
+    "f88effa4a6f0351a80070bcfe4c2589ee530fc26",
+    "92136431f03b36e7b3df647e03f02401bf7bccda",
+    "6b31eb97855f3dccf5aa5d5e62d352acad98d374",
+    "2c929efa43e5f8a0bfc4afee4406f788184f926e",
+    "4b51f89fa86b3c740883629cc49cfc22f10db28d",
+    "196ab61a98650ff1861551a1c5e504a266c6e21f",
+    "c5ae069c5ee11e961ae788172bc042bac3308dd3",
+    "ce4da839d065ecaaf10046dd288367d0ea67e765",
+    "9270c1b41bd4b6ec295112ebc71cd02e4231ad03",
+    "523c10e42d90e48c4dcad3b2a514c5608caa4310",
+    "03fe0855b5e57e10369d2b103bac801b7c76bccb",
+    "80e9f78e82407e20050f7b9dcc4552fa5a80f492",
+    "beb587edac8b2ce00145266f439627e4057b08a4",
+    "9131cade18235e019c8b8eb07d92465bf7424047",
+    "dfa8f9db51031b5a29a93a7dce148734c2567f99",
+    "b435d8b0692104711b1242010ebcfa8f61afe068",
+    "ab0223f977d7083c74ebf2e3e11a1c3a52b83cb6",
+    "2c00eb4380db3d3c794ba95ca8e87a7a772c0b08",
+    "ba980b703f030e7d941d9c636cddbd0d3ef1f327",
+    "1bade63f414f54723ce79f8b4daeb4e86e5fad0d",
+    "5e5e588569763d16d4fc64fe09b8b64d75de6346",
+    "eb204cf3d5452d5457e0e97bb6a337501a8a4830",
+    "54b2cf4d9c9344eb0a4142d083990b658136eb11",
+    "2297652b091d9d009ac71414c46779936b92e37a",
+    "09de09465eb19544d70cdf58b73defb456983274",
+    "7c0dc03e54889446e69fa92094dc59dd2e1884fd",
+    "11510b811c49380f56f9f29212d297c220b2e1c1",
+    "027443610f9862924c590b756c99475dd97e2051",
+    "f8d2ca527e344710c0c26e50f7db8bcd074f904e",
+    "9a0dcdba3884d25f24fa658b8ddeade987f9bc8d",
+    "65aa9a09cf7c3a488b771075e78fedc2c9277b1d",
+    "8c66a2053e19f5847f26dac329b0193c02eb6594",
+    "1e1e3f65950ad9b5e5182b1e70340361996186b6",
+    "891ab8184cf5153527535dc3e3c13e7ecc5ee589",
+    "f813655fcac329b8ab4b860c3e9c2a8e4e0c1bd5",
+    "294cffd5b63e39a0d669aade8aef10728f53ab2f",
+    "646f027163db7bd4ac6efcaf0458797cd5c8b4a0",
+    "af39bb6f2b3b706d13688c46731558b18b1d6b56",
+    "af236751a0ac4d5e2acec940e2a80fff0bbaf1d3",
+    "531d1c843070693d3e949f7870853c6210afef88",
+    "09743b072237a757aec5fd2876e0f03aaf6e25fd",
+    "f96cbaab92ac836fcb4b4e3237bf4dcb49fa14d2",
+    "500db84972cbfe8cc87a7f18d318c84f769cf604",
+    "98b42be27af780dcb6404bfc98df8280867446ce",
+    "1d51ff8e62b644fab1c1238ff0aac021dc42955f",
+    "f646378ff91950e83b8b9da8107f49e321483946",
+    "f8afdce01e351f11d38ecefc807d611fd4517bfc",
+    "58da53a66cd2409fd02ddeabc0128bca5ae85cfc",
+    "5d99abf1d28aeba8ce5754f539d107d1a6501235",
+    "d90ddd2b71e63b7481b23b8dc860e8316aa06e9a"
+   ],
+   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2",
    "status": "fail"
   }
  ],
