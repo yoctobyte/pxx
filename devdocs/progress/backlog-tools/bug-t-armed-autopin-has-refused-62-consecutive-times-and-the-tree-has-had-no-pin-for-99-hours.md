@@ -9,7 +9,7 @@ created: 2026-09-11
 found-by: frankuser
 tags: [pin, track-t, autopin, owner-blocker, workflow]
 blocked-by: []
-summary: "RE-MEASURED 2026-09-19 10:36 AND THE HEADLINE IS STALE IN THE FAVOURABLE DIRECTION, WHICH IS THE ONE NOBODY CHECKS: **a human pinned v411 at `8d9d69bdc`, 2026-09-17 19:42**, so the gap is **~39 hours, not the 99 in the slug nor the 140 this summary claimed since 09-12**. The slug and the body keep their original figures so citations resolve. WHAT IS NOT RE-MEASURED and is what the ticket is actually about: whether auto-pin has fired since v411, and whether v411 cleared the RED FLOOR the body describes (`optdiff#shard0/12` in 64 of 64, plus four lib-test rows in 41 of 64 that Track T bisected to ONE cause, bad `fca28056d8ec`). The body also records a CIRCULAR DEPENDENCY -- `lib-test#src:tools/crtl_reachability.py` fails on the builtin cliff, clearable ONLY by a pin, and `make pin` is owner-only -- so a human pin was the one thing that could break the cycle and one has now happened. **Re-measure the floor against v411 before doing anything else here; do not inherit the 64-verdict numbers.** Not a code defect either way: the machinery does what it was armed to do, and the fork is whether the armed policy should be STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\")."
+summary: "RE-MEASURED 2026-09-19 (frankH), AGAINST v411: auto-pin has NOT fired -- 16 shadow verdicts since v411 (all borg), 0 WOULD PIN; every pin since arming (v408-v411) was human-authorised. The OLD floor is gone: optdiff#shard0/12 and the three synapse rows PASS, and crtl_reachability.py still fails but is INHERITED from v411, so it no longer blocks. THE NEW FLOOR IS A DIFFERENT DEFECT OF THE SAME SHAPE: the first FIVE verdicts after v411 were consecutive and each had exactly ONE new red, lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy -- which THE PIN ITSELF introduced. The row builds only with $(PXX_STABLE); v410 passes it 25/25 and v411 24/25 on identical live lib/, and the job last passed at 9b8475d4e, v411's own source tree, where it still ran under v410. A pin's inherited red set is recorded at a tree whose pin-built jobs ran under the PREVIOUS pin, so any pin-built job the new binary breaks is 'new' forever, and no HEAD fix reaches it without another human pin. Absent that red, the red criterion would have passed on two consecutive shas by 09-17 18:43 (the other pin_now conditions were not separately verified). Since 09-18 more reds joined (deadlock_diag, optdiff#shard11/12, test-esp-idf srchash). The 99 in the slug and the 64-verdict tables below are historical."
 ---
 
 > **THE SLUG SAYS 62 AND THAT NUMBER IS FROZEN.** It was 62 at filing and is 64 by
@@ -275,3 +275,67 @@ by a human pin, and a human pin has now happened. So the interesting question is
 no longer "why has nothing fired" but **"did v411 clear the floor, and has
 anything fired since"** — neither of which is measured here. The 64-verdict
 statistics predate v411 and must not be quoted as current.
+
+# RE-MEASURED 2026-09-19 (frankH): v411 broke the old cycle and made a new one
+
+Instruments, each checked:
+- Pins: `pin.log` plus the pin commits' bodies, not a `--grep` over prose.
+  v408 09-12, v409 09-13, v410 09-14 and v411 09-17 were all human-authorised,
+  so "no pin since 09-12" was wrong before v411 too.
+- Verdicts: `pin-shadow.log` whole-line, with controls. "WOULD PIN" appears 157
+  times elsewhere in the file (so the pattern can match); a made-up job name
+  counts 0. After the colon, a verdict lists ONLY the new reds; its item count
+  equals the N it states.
+- Job state: `borg.json` `jobs` and `job_last_pass`.
+
+Since v411 (2026-09-17T17:42:06Z): **16 verdicts, 0 WOULD PIN.**
+
+The old floor:
+
+| job | state |
+| --- | --- |
+| `optdiff#shard0/12` | pass |
+| `lib_synapse`, `lib_synapse_ssl`, `lib_synapse_transitive_unit` | pass |
+| `crtl_reachability.py` | still fails, never passed; inherited from v411, so no longer blocking |
+
+The new floor, as the sequence of verdicts:
+
+```
+09-17T18:11 .. 09-18T09:19   5 consecutive verdicts, new=1: ONLY lib_mimic_xml_sax_xmlreader.npy
+09-18T09:55 ..               + test_threadsafe_heap_lock_deadlock_diag (8/16)
+09-19T06:28 ..               + optdiff#shard11/12, test-esp-idf#compiler_srchash.sh (4/16)
+```
+
+**The xmlreader red was introduced BY the v411 pin.** Differential: the row's
+exact command, each pinned binary with its own frozen builtin extracted from
+git, run over identical live `lib/`:
+
+| pinned binary | result |
+| --- | --- |
+| v410 (`c599e8546121`) | 25/25, MIMIC-XMLREADER OK |
+| v411 (`bc884808fda5`) | 24/25, `name_by_qname` gets the tuple's repr STRING |
+
+The job last passed at `9b8475d4e`, v411's source tree. The one observable
+commit in its regression range is `8d9d69bdc`, the pin itself.
+
+**The mechanism (distinct from the one filed above):** "inherited from the
+current pin" is computed at the pin's source tree. There, every job built
+with `$(PXX_STABLE)` still ran under the PREVIOUS pin. So a pin-built job that
+the NEW binary breaks is classed as new for the whole life of that pin. It
+cannot be cleared at HEAD either, because the job only ever sees the pin.
+Same circular shape as the builtin cliff, and it will recur with any pin that
+regresses a pin-built job.
+
+**What would have made me conclude the opposite:**
+- v410 ALSO failing the row over today's lib. Then the cause is a lib change,
+  fixable at HEAD, with no cycle. It passed 25/25.
+- The five xmlreader-only verdicts NOT being consecutive. Then that red alone
+  was not what stopped a two-sha qualification. They are consecutive.
+- Not verified: whether pin_now's other conditions held at those shas (a live
+  self-host job, a clean detached tree). The verdict names only the red
+  criterion. "Would have fired" is therefore "would have passed the red
+  criterion".
+
+Not a pin, and no action was taken. Whether to pin, and whether the inherited
+set should be measured under the pin's OWN binary, are for the owner.
+

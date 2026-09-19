@@ -43,3 +43,21 @@ expect_same: MISMATCH [lib_mimic_xmlreader.1]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## 2026-09-19 (frankH) — bisected to the v410 -> v411 pin: a compiler/builtin regression
+
+The watcher cannot narrow this: its one observable commit is the v411 pin
+(`8d9d69bdc`). Differential, each pinned binary with its own frozen builtin
+extracted from git, over identical live `lib/` and the row's exact command:
+
+| pinned binary | result |
+| --- | --- |
+| v410 `c599e8546121` | 25/25 |
+| v411 `bc884808fda5` | 24/25, `name_by_qname=FAIL got "('http://www.w3.org/1999/xlink', 'href')"` |
+
+HEAD's compiler also answers 24. So the cause is in the compiler or builtin
+build inputs between `764ee2ed2` (v410) and `9b8475d4e` (v411's source), in
+the NilPy lane. The symptom is a tuple arriving as its repr STRING. It is also
+the sole new red that stopped auto-pin in the first five verdicts after v411:
+see bug-t-armed-autopin-has-refused-62-consecutive-times-... .
+
