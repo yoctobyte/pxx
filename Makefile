@@ -12731,6 +12731,21 @@ test-core: $(COMPILER)
 	    exit 1; \
 	  fi; \
 	  echo "except_arm_finalize_shape: ok (IN-ARM)"
+	@# A Char literal to an AnsiString value parameter is a static const_str,
+	@# not a ShortString temp converted per call. Output alone cannot see it --
+	@# the value was always right -- so the IR of Hot is the assertion. Pin v412
+	@# emits no const_str there (const_int 62 -> store into a ShortString temp),
+	@# so an absent const_str is the regression, and a Hot with no call at all
+	@# means the probe stopped exercising the path.
+	./$(COMPILER) test/test_char_literal_to_ansistring_param.pas $(TESTTMP)/test_clap26
+	tools/expect_same.sh test_clap26 "$$($(TESTTMP)/test_clap26 | tr '\n' '|')" "63000|z z |char:q str:qq |"
+	@shape=$$(PXXDBG=a.ir:Hot ./$(COMPILER) test/test_char_literal_to_ansistring_param.pas $(TESTTMP)/test_claps26 2>&1 \
+	  | awk '/^[0-9]+: const_str /{S=1} /^[0-9]+: call /{C=1} \
+	         END{ if (!C) print "NO-CALL"; else if (S) print "STATIC"; else print "PER-CALL" }'); \
+	  if [ "$$shape" != "STATIC" ]; then \
+	    echo "char literal to AnsiString param: expected STATIC, got $$shape"; exit 1; \
+	  fi; \
+	  echo "char_literal_to_ansistring_param: ok (STATIC)"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26

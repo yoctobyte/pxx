@@ -972,6 +972,23 @@ begin
     ParamTakesCharLitAsStr := True;
     Exit;
   end;
+  { AN ANSISTRING VALUE PARAMETER, for SPEED, not meaning: `P('>')` already
+    produced the right string, but by storing the ordinal into a ShortString
+    temp and converting that -- PXXStrFromLit, one heap block allocated,
+    copied and freed per call -- where a string literal takes its static,
+    never-freed block (EmitStaticLitHandle) and costs one `mov`. Measured
+    2026-09-19: every NilPy `<`/`>` on variants goes through
+    `PyOrdCheck(a, b, '>')`, and that allocation was one PXXAlloc per compare
+    in lekkerzeilen's chart loop. Same value either way; a string ARGUMENT
+    that is not a constant is untouched (only IsCharLitNode is retagged). }
+  if (tk = tyAnsiString) and (not Procs[cpi].Params[pi].IsRef) and
+     (not Procs[cpi].Params[pi].IsArray) and
+     (not ProcParamUntyped[cpi * MAX_PROC_PARAMS + pi]) and
+     (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pi] < 0) then
+  begin
+    ParamTakesCharLitAsStr := True;
+    Exit;
+  end;
   ParamTakesCharLitAsStr :=
     (tk = tyPointer) and
     (not Procs[cpi].Params[pi].IsRef) and
@@ -1132,6 +1149,9 @@ begin
     convert to a pointer -- two different questions that this one predicate
     answers for both. So refuse only where the destination is the pointer, and
     let the frozen-string destination fall through to the ordinary conversion.
+    (Spelled as `= tyPointer` rather than `not frozen` since the AnsiString arm
+    joined ParamTakesCharLitAsStr: a Char variable to an AnsiString parameter is
+    the ordinary conversion too.)
     A static `array of Char` argument has the same tyChar tag on its node (the
     element kind is what the identifier carries), so this refusal was also the
     thing standing in front of `array[1..4] of Char` -> `string[4]`, which fpc
@@ -1139,7 +1159,7 @@ begin
   if (argNode >= 0) and (IntToTypeKind(ASTTk[argNode]) = tyChar) and
      (cpi >= 0) and (cpi < ProcCount) and
      (pi >= 0) and (pi < Procs[cpi].ParamCount) and
-     (not TypeIsFrozenString(ParamStoredKind(cpi, pi))) and
+     (ParamStoredKind(cpi, pi) = tyPointer) and
      (not CProgramMode) and (not PyExprMode) then
     Error('argument type: a Char VALUE is not a PChar — only a character '
           + 'CONSTANT converts (fpc refuses this too)');
