@@ -1162,6 +1162,30 @@ begin
       end;
       PatchDataU64(hdr + 80, ifaceCount);
       if ifaceCount > 0 then AddDataPtrFix(hdr + 88, firstOff);
+
+      { FLATTENED BASES (UClsFlatOwner, defs.inc): a count at +112 and, at
+        +120, an array of that many RTTI blob pointers, laid out in full here --
+        RTTI is read-only by default in a hosted executable, so nothing may fill
+        it in at run time. __pxxInheritsFrom follows these, which is how
+        is/as/except see a NilPy base that was flattened rather than made the
+        parent. A class with none keeps both words zero. }
+      cnt := 0;
+      for i := 0 to UClsFlatN - 1 do
+        if (UClsFlatOwner[i] = ci) and (UClsRTTIOff[UClsFlatBase[i]] >= 0) then Inc(cnt);
+      if cnt > 0 then
+      begin
+        firstOff := DataLen;
+        DataPutZeros(cnt * 8);
+        k := 0;
+        for i := 0 to UClsFlatN - 1 do
+          if (UClsFlatOwner[i] = ci) and (UClsRTTIOff[UClsFlatBase[i]] >= 0) then
+          begin
+            AddDataPtrFix(firstOff + k * 8, UClsRTTIOff[UClsFlatBase[i]]);
+            Inc(k);
+          end;
+        PatchDataU64(hdr + 112, cnt);
+        AddDataPtrFix(hdr + 120, firstOff);
+      end;
     end;
   end;
 

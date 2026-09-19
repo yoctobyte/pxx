@@ -39372,6 +39372,28 @@ begin
   end;
 end;
 
+{ Is every PROPER ancestor of the flattened base `mix` also `par` (the derived
+  class's real parent) or one of par's ancestors? Then flattening `mix` drops
+  nothing and duplicates nothing: flattening replays mix's OWN body span and
+  never its ancestors, and every ancestor is reached exactly once, through the
+  real chain -- which is also where C3 puts it. `class
+  EphemerisMissing(EphemerisError, FileNotFoundError)` with
+  `EphemerisError(Exception)` is this shape: a diamond by PySharedAncestor, and
+  the two-copies hazard that refusal exists for cannot arise in it. }
+function PyMixAncestryOnChain(mix, par: Integer): Boolean;
+var g: Integer;
+begin
+  Result := False;
+  if (mix < 0) or (par < 0) then Exit;
+  g := UClsParent[mix];
+  while g >= 0 do
+  begin
+    if not PyClsHasAncestor(par, g) then Exit;
+    g := UClsParent[g];
+  end;
+  Result := True;
+end;
+
 { The member name a `def` at token `i` registers under. ONE function, because
   the registration pass and the body pass must agree exactly about which
   definitions a later base loses — a disagreement compiles a proc for a member
@@ -39458,10 +39480,19 @@ begin
     then exactly the right outcome. The parent is not always the first base:
     an imported one has no body to flatten and so is chosen from wherever it
     stands. bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused }
+  { ...and ONLY UP TO THE FIRST ANCESTOR THE BASE SHARES. In C3 a class
+    precedes its own ancestors, so in `class D(B, C)` with B(A) and C(A) the
+    order is D, B, C, A: B's own members beat C's, but a member B merely
+    inherits from A LOSES to C's. Walking the whole chain made `d.base()`
+    answer A's where CPython answers C's. A class on the parent chain that is
+    also an ancestor of this base is where the walk stops, and so is every
+    class above it, which is then an ancestor of both. The diamond these rows
+    matter for is admitted only when the base's whole ancestry is on the real
+    chain (PyMixAncestryOnChain), so nothing of the base's lies off it. }
   if not PyMixBeforeParent[upTo] then
   begin
     g := UClsParent[ci];
-    while g >= 0 do
+    while (g >= 0) and not PyClsHasAncestor(PyMixCi[upTo], g) do
     begin
       for mi := UClsMBase[g] to UClsMBase[g] + UClsMCount[g] - 1 do
         PyMixSkipAdd(PyRawName(UMthNOff[mi], UMthNLen[mi]));
@@ -44503,7 +44534,7 @@ var ci, bodyStart, bodyEnd, baseCi, k, clsEqAt: Integer;
     baseCiList: array[0..6] of Integer;
     baseAtTok: array[0..6] of Integer;
     baseQName: AnsiString;
-    mixK, sharedCi, myMixN, savedTokPos: Integer;
+    mixK, sharedCi, myMixN, savedTokPos, flatK: Integer;
     myMixCi: array[0..5] of Integer;
     myMixBP: array[0..5] of Boolean;
     propName: AnsiString;
@@ -44743,6 +44774,21 @@ begin
         PyMixCi[PyMixN] := baseCiList[k];
         PyMixBeforeParent[PyMixN] := (parentIx >= 0) and (k < parentIx);
         Inc(PyMixN);
+        { ...and remembered as a BASE, which PyMixCi (this declaration's
+          scratch) is not: is/as/except ask it at compile time and run time
+          (UClsFlatOwner in defs.inc). A declaration is visited on more than one
+          pass, so the row is written once. }
+        flatK := 0;
+        while (flatK < UClsFlatN) and not ((UClsFlatOwner[flatK] = ci) and
+              (UClsFlatBase[flatK] = baseCiList[k])) do Inc(flatK);
+        if flatK = UClsFlatN then
+        begin
+          if UClsFlatN > High(UClsFlatOwner) then
+            Error('Nil Python: too many flattened base classes in this program');
+          UClsFlatOwner[UClsFlatN] := ci;
+          UClsFlatBase[UClsFlatN] := baseCiList[k];
+          Inc(UClsFlatN);
+        end;
       end;
     { MULTIPLE INHERITANCE — `class D(B, C):`. Refused BY NAME rather than
       accepted-and-ignored: Python resolves attributes by C3 linearisation, so
@@ -44762,12 +44808,24 @@ begin
       diverges — a silently wrong answer, which is the one outcome worse than
       not supporting the shape. Named explicitly so the reader can see which
       ancestor is shared. }
+    { ...EXCEPT where every flattened base's ancestry is already on the real
+      parent chain (PyMixAncestryOnChain): there the shared ancestor is ONE copy
+      by construction. Measured necessary on That Space Program (the exception
+      idiom `class E(LocalError, FileNotFoundError)`, 14 of 66 modules), and
+      safe only because is/as/except now see a flattened base
+      (UClsFlatOwner, __pxxInheritsFrom) -- without that, accepting this shape
+      would make `except LocalError` silently miss the exception.
+      decide-nilpy-multiple-inheritance-c3-or-delegate, 2026-09-19 section. }
     for mixK := 0 to PyMixN - 1 do
     begin
-      sharedCi := PySharedAncestor(UClsParent[ci], PyMixCi[mixK]);
-      for k := 0 to mixK - 1 do
-        if sharedCi < 0 then
-          sharedCi := PySharedAncestor(PyMixCi[k], PyMixCi[mixK]);
+      sharedCi := -1;
+      if not PyMixAncestryOnChain(PyMixCi[mixK], UClsParent[ci]) then
+      begin
+        sharedCi := PySharedAncestor(UClsParent[ci], PyMixCi[mixK]);
+        for k := 0 to mixK - 1 do
+          if sharedCi < 0 then
+            sharedCi := PySharedAncestor(PyMixCi[k], PyMixCi[mixK]);
+      end;
       if sharedCi >= 0 then
         Error('Nil Python: `class ' + PyRawName(UClsNOff[ci], UClsNLen[ci]) +
               '` is a DIAMOND — two of its bases share the ancestor `' +

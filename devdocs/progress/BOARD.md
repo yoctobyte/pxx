@@ -315,7 +315,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (176)
+## backlog-nilpy (177)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -377,6 +377,7 @@ _none_
 | bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments | N | 45 | bug | "The LADDER is widened to eight and this ticket is what remains: the | — |
 | bug-n-a-staticmethod-called-through-cls-raises-attributeerror | N | 70 | bug | > | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
+| bug-n-a-subclass-of-a-class-with-a-flattened-base-calls-through-a-nil-vmt-slot | N | 45 | bug | `class E(D)`, where D itself has a flattened base (`class D(P, Tag)`): EVERY method call on an E instance jumps to address 0 (SIGSEGV), including a method E inherits through D's REAL parent chain. Calls on a D instance work, and so do construction, isinstance and type(e).__name__. Present in pinned v411 as well as at HEAD, so it predates the flattened-base RTTI work. The suspect, not verified: E copies D's VMT slot count and slot table before D's flattened body is registered. That would explain a flattened method's slot but not an inherited one's. | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time | N | 60 | bug | `h = sys.stdout` then `h.write(x)` COMPILES and dies at run time with `TypeError: object is not callable`, having written nothing. `sys.stdout`/`sys.stderr` are modelled as a bare fd INTEGER (AN_INT_LIT, 1 and 2) and an Integer has no methods. The dotted spelling `sys.stdout.write(x)` was fixed 2026-09-10 by wiring the three-segment table entries sys.stdin already had; this is the spelling the table cannot reach. The fix is to make a stream an OBJECT — pylib's TPyFile already is one — and it cannot land alone: PyParsePrintFile asserts `ASTKind = AN_INT_LIT` and value 1 or 2, so print's file= handling must move in the same change or every `print(..., file=sys.stderr)` goes red. | — |
 | bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def | N | 55 | bug | `def p(x: str): return x.partition(' ')` prints raw memory instead of ('C', ' ', 'minor'). The same call outside a def is correct, and split/rsplit through the same def-return path are correct. Pre-existing — reproduces on pinned. | — |
@@ -1411,6 +1412,7 @@ _none_
 - [p 45] [N] bug-n-a-scalar-expression-class-attribute-declared-after-a-method-reads-none
 - [p 45] [N] bug-n-a-shim-parameter-typed-as-a-container-blocks-the-callable-value-wrapper
 - [p 45] [N] bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments
+- [p 45] [N] bug-n-a-subclass-of-a-class-with-a-flattened-base-calls-through-a-nil-vmt-slot
 - [p 45] [N] bug-n-exec-only-publishes-a-def-named-body-and-cannot-call-host-globals
 - [p 45] [N] bug-n-from-a-package-import-a-submodule-binds-nothing
 - [p 45] [N] bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused

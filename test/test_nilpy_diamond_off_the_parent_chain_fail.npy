@@ -1,0 +1,27 @@
+# A diamond whose flattened base has an ancestor OFF the real parent chain
+# (X here) is still refused: flattening replays C's own body and never X's, so
+# X's members would silently go missing.
+# See test_nilpy_diamond_whose_ancestry_is_on_the_parent_chain.npy for the
+# admitted shape.
+class A:
+    pass
+
+
+class X(A):
+    def x(self) -> str:
+        return "x"
+
+
+class C(X):
+    pass
+
+
+class P(A):
+    pass
+
+
+class D(P, C):
+    pass
+
+
+print(D().x())

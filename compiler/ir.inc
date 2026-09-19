@@ -6773,14 +6773,24 @@ end;
 
 function IsClassDescOrSelf(c, target: Integer): Boolean;
 { True if class c is `target` or transitively descends it (closed-world walk of
-  the compile-time parent chain). Drives the is/as VMT-set test. }
-var cur: Integer;
+  the compile-time parent chain). Drives the is/as VMT-set test.
+  A base FLATTENED into c or into one of its ancestors counts, with its own
+  ancestry: that is what CPython's isinstance answers for multiple inheritance,
+  and it is the same question __pxxInheritsFrom answers at run time from the
+  blob's +112/+120 words (UClsFlatOwner in defs.inc). }
+var cur, k: Integer;
 begin
   Result := False;
   cur := c;
   while cur >= 0 do
   begin
     if cur = target then begin Result := True; Exit; end;
+    for k := 0 to UClsFlatN - 1 do
+      if (UClsFlatOwner[k] = cur) and IsClassDescOrSelf(UClsFlatBase[k], target) then
+      begin
+        Result := True;
+        Exit;
+      end;
     cur := UClsParent[cur];
   end;
 end;

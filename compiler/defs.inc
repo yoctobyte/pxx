@@ -493,6 +493,7 @@ const
     See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss. }
   SPECIAL_IN  = 999;
 
+  MAX_UCLS_FLAT   = 1024;  { (class, flattened base) rows -- see UClsFlatOwner }
   MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
   { TObject's root virtuals occupy FIXED leading VMT slots in EVERY class, so a
     receiver whose STATIC type is TObject — which has no class row of its own —
@@ -557,7 +558,14 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 112; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName,classInfo
+  RTTI_CLS_SIZE    = 128; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName,classInfo,flatCount,flatBases
+                            +16 at +112/+120: the classes FLATTENED into this one (NilPy
+                            multiple inheritance), count then a pointer to that many RTTI
+                            blob pointers, which __pxxInheritsFrom follows so is/as/except
+                            see a flattened base. Re-checked 2026-09-19 for the growth rule
+                            below, widened to the RUNTIME WALK: the compiler has no `is`,
+                            `as` or typed `except` outside comments, so no stage-1 binary
+                            runs the walk over a seed-written blob.
                             +8 for the DECLARING UNIT's name at +96 (TObject.UnitName,
                             feature-pascal-builtin-tobject-class), then +8 for the
                             typinfo-facade PTypeInfo at +104 (TObject.ClassInfo,
@@ -7466,6 +7474,15 @@ var
   UClsMBase  : array[0..MAX_UCLASS-1] of Integer;
   UClsMCount : array[0..MAX_UCLASS-1] of Integer;
   UClsParent : array[0..MAX_UCLASS-1] of Integer;
+  { BASES THAT ARE NOT THE PARENT. NilPy multiple inheritance keeps one real
+    parent and FLATTENS every other base into the class (its body is replayed
+    against it), so UClsParent cannot answer "is a D a C?" for a flattened C.
+    One row per (class, flattened base), never a layout fact: IsClassDescOrSelf
+    and the RTTI blob's +112/+120 words read it, so is/as/except agree with
+    CPython's isinstance. Pascal never writes a row. }
+  UClsFlatN : Integer;
+  UClsFlatOwner : array[0..MAX_UCLS_FLAT-1] of Integer;
+  UClsFlatBase  : array[0..MAX_UCLS_FLAT-1] of Integer;
   UClsUnitIdx : array[0..MAX_UCLASS-1] of Integer; { Strs[] idx of the unit that DECLARES this class/record (CurrentUnitIdx at parse), -1 = main program. The access-control unit scope for private/protected under StrictVisibility. }
   UClsDeclImpl : array[0..MAX_UCLASS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   UClsVirtCount : array[0..MAX_UCLASS-1] of Integer;

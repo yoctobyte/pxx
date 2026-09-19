@@ -1,0 +1,10 @@
+EphemerisError: not found: x.bsp True
+EphemerisError: bad kernel False
+FileNotFoundError: plain
+FileNotFoundError first: not found: x.bsp True
+EphemerisError second: bad kernel
+FileNotFoundError first: plain False
+True True False EphemerisMissing
+B C.base 1 2 True True
+C2 B2.base True True
+True True False False

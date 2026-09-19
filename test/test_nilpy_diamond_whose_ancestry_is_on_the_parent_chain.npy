@@ -1,0 +1,134 @@
+# Multiple inheritance by flattening, where two bases share an ancestor.
+# Admitted when every ancestor of the flattened base is already on the real
+# parent chain: flattening replays only the base's own body, so the shared
+# ancestor is reached once, as C3 has it. Refused otherwise
+# (test_nilpy_diamond_off_the_parent_chain_fail.npy).
+# is/as/except see a flattened base (the RTTI blob's flattened-base words,
+# followed by __pxxInheritsFrom). Without that, `except EphemerisError` would
+# silently miss an EphemerisMissing.
+# decide-nilpy-multiple-inheritance-c3-or-delegate, 2026-09-19.
+
+
+# That Space Program's shape: a local error that is also a builtin one.
+class EphemerisError(Exception):
+    """malformed kernels"""
+
+
+class EphemerisMissing(EphemerisError, FileNotFoundError):
+    """the file does not exist"""
+
+
+def boom(kind: int) -> None:
+    if kind == 0:
+        raise EphemerisMissing("not found: x.bsp")
+    if kind == 1:
+        raise EphemerisError("bad kernel")
+    raise FileNotFoundError("plain")
+
+
+for kind in range(3):
+    try:
+        boom(kind)
+    except EphemerisError as e:
+        print("EphemerisError:", e, isinstance(e, FileNotFoundError))
+    except FileNotFoundError as e:
+        print("FileNotFoundError:", e)
+
+for kind in range(3):
+    try:
+        boom(kind)
+    except FileNotFoundError as e:
+        print("FileNotFoundError first:", e, isinstance(e, EphemerisError))
+    except EphemerisError as e:
+        print("EphemerisError second:", e)
+
+m = EphemerisMissing("m")
+print(isinstance(m, EphemerisError), isinstance(m, OSError), isinstance(m, KeyError), type(m).__name__)
+
+
+# The textbook diamond, both orders. C3 puts a base BEFORE its own ancestors,
+# so C's `base` beats the `base` B only inherits from A.
+class A:
+    def __init__(self) -> None:
+        self.n = 0
+
+    def who(self) -> str:
+        return "A"
+
+    def base(self) -> str:
+        return "A.base"
+
+    def bump(self) -> int:
+        self.n += 1
+        return self.n
+
+
+class B(A):
+    def who(self) -> str:
+        return "B"
+
+
+class C(A):
+    def who(self) -> str:
+        return "C"
+
+    def base(self) -> str:
+        return "C.base"
+
+
+class BC(B, C):
+    pass
+
+
+bc = BC()
+print(bc.who(), bc.base(), bc.bump(), bc.bump(), isinstance(bc, C), isinstance(bc, A))
+
+
+# The other order needs its OWN hierarchy: a class is a parent or a flattened
+# base program-wide, so reusing B and C here would flatten both and leave the
+# shared ancestor on no chain at all -- which is refused, correctly.
+class A2:
+    def base(self) -> str:
+        return "A2.base"
+
+
+class B2(A2):
+    def who(self) -> str:
+        return "B2"
+
+    def base(self) -> str:
+        return "B2.base"
+
+
+class C2(A2):
+    def who(self) -> str:
+        return "C2"
+
+
+class CB(C2, B2):
+    pass
+
+
+cb = CB()
+print(cb.who(), cb.base(), isinstance(cb, B2), isinstance(cb, A2))
+
+
+# isinstance through a flattened base that shares nothing, from the class and
+# from a subclass of it.
+class Tag:
+    pass
+
+
+class P:
+    pass
+
+
+class D(P, Tag):
+    pass
+
+
+class E(D):
+    pass
+
+
+print(isinstance(D(), Tag), isinstance(E(), Tag), isinstance(P(), Tag), isinstance(Tag(), D))

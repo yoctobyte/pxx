@@ -1231,6 +1231,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_relmember26 | diff -u test/test_nilpy_relative_import_of_an_init_member.expected -
 	./$(COMPILER) test/test_nilpy_subscript_index_is_a_full_expression.npy $(TESTTMP)/test_nilpy_subfull26
 	$(TESTTMP)/test_nilpy_subfull26 | diff -u test/test_nilpy_subscript_index_is_a_full_expression.expected -
+	./$(COMPILER) test/test_nilpy_diamond_whose_ancestry_is_on_the_parent_chain.npy $(TESTTMP)/test_nilpy_dia_on26
+	$(TESTTMP)/test_nilpy_dia_on26 | diff -u test/test_nilpy_diamond_whose_ancestry_is_on_the_parent_chain.expected -
+	# a diamond whose flattened base has an ancestor OFF the parent chain stays REFUSED
+	! ./$(COMPILER) test/test_nilpy_diamond_off_the_parent_chain_fail.npy $(TESTTMP)/test_nilpy_dia_off26 > $(TESTTMP)/test_nilpy_dia_off.log 2>&1
+	grep -q 'is a DIAMOND' $(TESTTMP)/test_nilpy_dia_off.log
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

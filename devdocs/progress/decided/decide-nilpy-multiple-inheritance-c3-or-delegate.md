@@ -168,3 +168,24 @@ analysis must treat a class's flattened-base entries as reachable wherever the
 class is, or it removes exactly what an `except` clause reads. The entries are
 emitted fully at compile time: RTTI is read-only by default in hosted
 executables (c19d88414), so nothing may patch them at run time.
+
+### LANDED 2026-09-19 (frankH): flattened bases are bases, and the diamond is narrowed
+
+- **is/as/except/isinstance.** `UClsFlatOwner`/`UClsFlatBase` (defs.inc)
+  record every (class, flattened base) pair. rtti_emit writes them at
+  +112/+120, and `__pxxInheritsFrom` follows them recursively.
+  `IsClassDescOrSelf` does the same at compile time for the enumeration path
+  (no builtin, ESP).
+- **The diamond.** It is refused only when some flattened base has an ancestor
+  that is NOT on the real parent chain (`PyMixAncestryOnChain`). That is where
+  an ancestor's body would be dropped. When every ancestor is on the chain,
+  the shared ancestor is reached once.
+- **C3 member order.** A base written after the parent used to lose EVERY
+  collision to the whole parent chain. C3 puts a base before its own
+  ancestors, so it now loses only to parent-chain classes above the first
+  ancestor they share. `class D(B, C)` with B(A), C(A): `d.base()` answered
+  A's and now answers C's, as CPython does.
+- Tests: test_nilpy_diamond_whose_ancestry_is_on_the_parent_chain (CPython
+  .expected) and test_nilpy_diamond_off_the_parent_chain_fail.
+- Still open: bug-n-a-subclass-of-a-class-with-a-flattened-base-calls-through-a-nil-vmt-slot
+  (pre-existing on pin v411). Also divergences 3 and 6 above.
