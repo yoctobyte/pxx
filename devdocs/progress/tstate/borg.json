@@ -15430,8 +15430,8 @@
   "wall": 1034.9
  },
  "last_idle_tier_try": {
-  "date": "2026-09-19T18:07:46Z",
-  "sha": "2ac02c44213f90e9b046baf8e62a995b0316ba1c",
+  "date": "2026-09-19T19:13:01Z",
+  "sha": "d250db9d36786f9f054b54f9428a507beca815b3",
   "tier": "full"
  },
  "last_opt": {
@@ -15716,6 +15716,7 @@
    "range": [
     "399712fd23afd527fc8a6212315c6fc9c12368dd"
    ],
+   "range_non_causal": false,
    "src": "test/test_platform_defines.pas tools/expect_same.sh",
    "status": "fail"
   },
@@ -15734,6 +15735,7 @@
    "range": [
     "399712fd23afd527fc8a6212315c6fc9c12368dd"
    ],
+   "range_non_causal": false,
    "src": "test/test_set_in_64bit_element.pas tools/expect_same.sh +2",
    "status": "fail"
   }
