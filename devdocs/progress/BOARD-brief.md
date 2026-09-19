@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:19 blocked:8 backlog:39 backlog-umbrella:13 backlog-core:168 backlog-nilpy:176 backlog-tools:61 backlog-pascal:11 backlog-decide:50 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3881 rejected:84`
+`working:31 unfinished:19 blocked:9 backlog:39 backlog-umbrella:13 backlog-core:168 backlog-nilpy:176 backlog-tools:61 backlog-pascal:11 backlog-decide:50 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3881 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,7 +27,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
-- `feature-n-import-threading-should-imply-threadsafe` [N] — owner: frankb-8e
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
@@ -64,12 +63,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (9) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — blocked-by: decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
+- `feature-n-import-threading-should-imply-threadsafe` [N] — blocked-by: decide-should-a-python-program-that-imports-threading-compile-as-written
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-lib-test-crtl-atexit-2` [C]

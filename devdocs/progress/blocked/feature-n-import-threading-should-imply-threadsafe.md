@@ -3,12 +3,12 @@ slug: feature-n-import-threading-should-imply-threadsafe
 track: N
 type: feature
 prio: 55
-status: working
+status: blocked
 owner: frankb-8e
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, threading, options, upward-compat]
-blocked-by: []
+blocked-by: [decide-should-a-python-program-that-imports-threading-compile-as-written]
 summary: "`import threading` compiles only with `--threadsafe` on the command line, so ordinary CPython source is a hard compile refusal — the wrong side of the upward-compatibility rule. The shim CANNOT declare it: the lock-implementation defines (PXX_TS_HARDLOCK on x86-64, PXX_TS_SOFTLOCK elsewhere) are applied before lexing and the lexer refuses `{$threadsafe on}` saying exactly that. It has to be decided at OPTION time, from a pre-scan of the source, MEASURED 2026-09-20 and the cost question is ANSWERED (chart +0.4%, ARC micro +26%, image +0.9%), so what is left is not a number but a stated intent, escalated as decide-should-a-python-program-that-imports-threading-compile-as-written; the hard part remains that the import can be in a module the main file only reaches transitively — lekkerzeilen/__main__.py has no threading reference at all and needs the mode because it imports app."
 ---
 
