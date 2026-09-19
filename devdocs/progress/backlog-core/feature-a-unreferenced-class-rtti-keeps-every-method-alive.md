@@ -237,8 +237,19 @@ immutable.
 
 His positive control is the one this ticket asked for and it fires: a store into
 a VMT slot and a store into an RTTI header, each reached through an instance,
-fault with rc=139 under the flag and land without it. The compiler also
-self-hosts with the flag defaulted on (converged, 2 rounds).
+fault with rc=139 under the flag and land without it.
+
+**The self-host with the flag defaulted on is WEAK evidence and must not be
+quoted as a sweep** — frankh-3f's own correction of a line I wrote, and it is
+CLAUDE.md's stated scope limit on the fixedpoint arriving in a live case: *it
+cannot see a construct the compiler never writes.* `compiler.pas` is a
+deliberately procedural subset that declares no classes of its own, so the only
+VMT and RTTI header in its image belong to the builtin `TObject`. A converged
+2-round self-host shows the compiler still runs with those two spans read-only
+and exercises almost no class RTTI path. **I had claimed it was a stronger sweep
+than test-core, on the reasoning that `compiler.pas` walks paths no fixture
+does. That is true of parser and IR paths and false of exactly this one.** The
+evidence is `test-core`.
 
 ### BUILT 2026-09-19 (frankB) — THE REGISTRY IS NOW CONDITIONAL ON ITS READER
 
