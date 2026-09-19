@@ -49,4 +49,4 @@ halves (`print`, then one boot over 40 s).
 Inert until the next pin: pin v412 predates it.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fcd8354f6.
