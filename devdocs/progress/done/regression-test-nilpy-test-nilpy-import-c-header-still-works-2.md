@@ -84,4 +84,4 @@ remove the `backlog/` original. The duplicate then keeps a real prio, so it
 goes on sorting alongside live work and a seat gets dispatched to a subject
 that has been passing for weeks — and `progress.sh resolve` refuses it as an
 ambiguous slug, which is how the pattern surfaced at all.
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9749340a2.
