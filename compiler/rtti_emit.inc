@@ -1177,7 +1177,40 @@ begin
     regEntries := 0;
     for ci := 0 to UClsCount - 1 do
       if (UClsRTTIOff[ci] >= 0) and ClassIsStreamable(ci) then Inc(regEntries);
-    if regEntries > 0 then
+
+    { THE REGISTRY IS EMITTED ONLY IF THIS PROGRAM CONTAINS A READER FOR IT.
+
+      Its sole consumer is IR_RTTI_REG, which comes from exactly one AST node,
+      AN_RTTI_REG, which comes from exactly one place: the `__rttireg()`
+      intrinsic. Inside lib/ that is called from three files -- rtl/typinfo.pas
+      (GetClass), pcl/controls.pas and pcl/gtk3widgets.pas. A program that does
+      not reach any of them was emitting a name->blob table that nothing could
+      ever look at, SILENTLY: emit.inc sets DATAREF_DROP when a registry
+      reference finds no table, so a registry with no reader gives no
+      diagnostic and a reader with no registry gives no refusal. That pairing is
+      why this went unnoticed for so long.
+
+      GATED ON THE NODE, NEVER ON `uses typinfo`. __rttireg() is a PUBLIC
+      intrinsic a user program may call directly, so a hand-maintained union of
+      unit names would be wrong for that program and would rot besides -- the
+      same failure bug-a-the-frontend-cannot-see-which-units-a-builtin-needs
+      records from the other side.
+
+      IT IS ALSO THE ROOT THIS TICKET HAS TO REMOVE. Every ordinary class is
+      streamable (no visibility keyword defaults to `published`), so while the
+      registry is emitted unconditionally it roots every class blob by NAME and
+      no reachability-gated drop can move anything. This does not itself drop a
+      blob -- Pass 1 still reserves a header per class, because ClassName and
+      the `is`/`as` backlink chain need one -- so the DIRECT saving here is only
+      the table: 8 bytes of count slot plus 16 per streamable class. Measured on
+      a `WriteLn` hello, 24 bytes. The point is the root, not the 24 bytes, and
+      this comment says so rather than letting the number travel as the win.
+
+      CONSERVATIVE BY CONSTRUCTION: RTTIRegRequested is a PARSE-time fact and
+      EmitRTTI runs before any IR lowering, so a `__rttireg()` in code that is
+      never lowered still emits the registry. Wrong in the direction that keeps
+      working. }
+    if (regEntries > 0) and RTTIRegRequested then
     begin
       RTTIRegistryOff := DataLen;
       RTTIRegistryCount := regEntries;
@@ -1240,12 +1273,18 @@ procedure ReportRTTIWeight;
   quoting the total as if they could. }
 var ci, k, vmtBytes, methBytes, nMeth, blobBytes: Integer;
     totData, totCode, dropData, dropCode: Int64;
-    nCls, nStream: Integer;
+    nCls, nStream, regBytes: Integer;
     nm: AnsiString;
 begin
   if not PxxDbgEnabled('a.rttiweight') then Exit;
   totData := 0; totCode := 0; dropData := 0; dropCode := 0;
   nCls := 0; nStream := 0;
+  { The table as EMITTED: an 8-byte count slot plus 16 per entry, or nothing at
+    all. Derived from RTTIRegistryOff rather than from the class walk, so it
+    reports what the emitter DID and not what the predicate would have said --
+    the whole point of the gate is that those two can now differ. }
+  if RTTIRegistryOff >= 0 then regBytes := 8 + 16 * RTTIRegistryCount
+  else regBytes := 0;
   for ci := 0 to UClsCount - 1 do
   begin
     if UClsRTTIOff[ci] < 0 then continue;
@@ -1300,9 +1339,19 @@ begin
             ' iface=', Ord(UClsIsInterface[ci]),
             ' record=', Ord(UClsIsRecord[ci]));
   end;
+  { `reader=` is the PARSE-time fact (a `__rttireg()` node exists) and
+    `registry=` is what EmitRTTI actually did with it. They are printed as two
+    separate columns ON PURPOSE: collapsing them into one "registry: yes/no"
+    would make a gate that never fires and a program that never asks read
+    identically, which is the pair this gate exists to separate. registry=0
+    with reader=1 is the legitimate third state -- a program that calls
+    GetClass but declares no streamable class -- and it is not a defect. }
   WriteLn('PXXDBG a.rttiweight total classes=', nCls, ' streamable=', nStream,
           '  data=', totData, ' directmeth=', totCode,
           '  NOT-streamable data=', dropData, ' directmeth=', dropCode,
+          '  reader=', Ord(RTTIRegRequested),
+          ' registry=', RTTIRegistryCount,
+          ' registrybytes=', regBytes,
           '  DataLen=', DataLen, ' CodeLen=', CodeLen);
 end;
 

@@ -2,12 +2,14 @@
 prio: 30
 track: A
 summary: "THIS TICKET'S PASS CANNOT DO WHAT IT SAYS, MEASURED 2026-09-18 (frankB) -- **the blocker is the REGISTRY and every ordinary class is in it.** ClassIsStreamable is `ClassHasPublished or ClassImplementsGuidedInterface`, and a class declared with NO visibility keyword defaults to PUBLISHED -- so `TU = class ... end` reports streamable=1 and `TU = class public ... end` reports 0, identical blob/vmt either side, the registry entry being the 24-byte difference in data=. Registry membership is name-reachability at run time, which this ticket's own Watch out lists as what makes a blob undroppable, so the pass AS SPECIFIED would drop almost nothing on ordinary Pascal. **And the ticket's own headline example is one of them**: TInterfacedObject, which holds every method in the residue table, is streamable=1 because it implements a guided interface. THE LEVER IS THAT THE REGISTRY IS AN UNCONDITIONAL ROOT: it is emitted whenever any class is streamable and its only consumer is IR_RTTI_REG from one AST node (AN_RTTI_REG, verified across all six backends), so in a program that never asks for it the registry is dead data rooting every streamable class. Make it conditional and streamable stops being a root, at which point the residue becomes droppable. MEASURED: AN_RTTI_REG comes only from the `__rttireg()` intrinsic, which inside lib/ is called from three files (rtl/typinfo.pas GetClass, pcl/controls.pas, pcl/gtk3widgets.pas); a program with no `uses` contains ZERO GetClass/FindClass/typinfo symbols in its object, so typinfo is not pulled ambiently and its registry is emitted and never read -- silently, because emit.inc DROPS an unresolved registry reference rather than failing. The pass must key on the NODE and never on `uses typinfo`, since __rttireg() is a public intrinsic a user program can call directly. THE --emit-obj EDGE IS MOOT, measured not argued: two objects in one binary, B finds its OWN class and NOT A's (a=1 B_finds_A=0 B_finds_its_own=1), because each object carries its own Data[] and its own registry -- so the cross-object lookup cannot be broken by node-conditional emission and no --emit-obj arm is needed. SEPARATE DEFECT UNCOVERED: emit.inc DROPS an unresolved registry reference and the intrinsic reads nil, so a registry with no reader gives no diagnostic and a reader with no registry gives no refusal -- the silent-negative shape, and why this went unnoticed. Weights via the new PXXDBG=a.rttiweight, profile named: hello hosted x86-64 = 5 classes, RTTI data 664, direct VMT-slot code 409; hello esp32c3 BARE --dce = 1 class, data 160 (the interface machinery is not pulled in on bare at all); esp_pal_fdsem_baseline.pas as an IDF xtensa object = 7 classes, data 608, direct code 556. directmethbytes is neither bound cleanly -- it over-counts inherited slots and under-counts far more, since the ~3.2 KB here is dominated by PXXTIOGetInterface/PXXIntfIMTOf/PXXVarStrAppend/PXXVarClear, runtime routines the methods REACH rather than methods in any VMT; only dce.inc's walk can price the closure. || AND THE SRAM ACCOUNTING, corrected the same day: MEASURED 2026-09-18 (frankB), AND CORRECTED THE SAME DAY -- ON THE BARE PROFILE CODE IS SRAM. defs.inc's own map: qemu's esp32c3 models internal SRAM as ONE RWX region and the whole image (code+data+bss) loads at the IRAM org, so SRAM(bare) = code + data + bss. A first pass of the measurement below read data/bss as the SRAM and code as the flash -- that is the IDF shape and it is false on bare; caught by frankh-3f. Consequences: (a) `--dce` saves **54344 B of SRAM on bare** (esp32c3 131276 -> 76932, -41%; esp32s3 -36%), not zero -- it is the largest SRAM lever measured on this profile after the 64 KiB heap arena; on IDF, where .text can be flash-mapped, the same removal is a flash win and that leg is unmeasured. (b) One unreferenced class with four virtual methods costs +268 B code and +808 B data = **+1076 B, all of it SRAM on bare**; the earlier `SRAM is 3x the flash cost` line is WITHDRAWN as an IDF-shaped split applied to bare numbers. What survives: this ticket's ~3.2 KB headline is the CODE residue (method bodies held by VMT slots), while the blob's own .data bytes -- noted here from the day it opened and never quantified -- are 3x that per class, so the blob is the larger half on either profile and the only half that is SRAM at all on IDF. (c) The fleet's stated bare baseline `data=616 bss=70936, SRAM=71552` omits code and is really ~129452 at plain -O. Scales at ~128 B one-off + ~200 B per class + ~120 B per virtual method, and the 4x4 row lands 360 B UNDER that because the fixture shares method NAMES between classes -- a real program pays more, not less. On IDF the blob is .data too with .rela.data +420 and NO .rodata section at all. Ownership settled with frankh-3f: placement is his, reachability and emission are mine, and read-only placement buys ZERO SRAM on bare because moving bytes inside one RWX region changes nothing."
+status: working
+owner: frankB
 ---
 
 # An unreferenced class keeps every one of its methods alive
 
 - **Type:** feature (codegen / emission size) — Track A, tag O
-- **Status:** backlog — opened 2026-08-21
+- **Status:** working (frankB, 2026-09-19) — opened 2026-08-21
 - **Follows:** [[feature-emission-size-dce]] (`--dce`, landed)
 
 ## What
@@ -209,6 +211,142 @@ exists only when at least one class is streamable. Hosted goes streamable 2 -> 1
 so one entry leaves and the count slot stays: **16**. Bare goes 1 -> 0, so the
 whole table goes: 8 + 16 = **24**. Same entry size on both profiles; the
 difference is whether the class being removed is the LAST streamable one.
+
+### BUILT 2026-09-19 (frankB) — THE REGISTRY IS NOW CONDITIONAL ON ITS READER
+
+The step the park note named is done. `RTTIRegRequested` is set at the two
+`AN_RTTI_REG` creation sites (`pasparser_expr.inc`, `pyparser.inc`) and read by
+`EmitRTTI`, which now emits the registry only when `(regEntries > 0) and
+RTTIRegRequested`.
+
+**Why the flag is set at PARSE time and not at the lowering site, where it
+belongs:** `EmitRTTI` runs immediately after the parse and **before any IR
+lowering**, so `ir.inc`'s `AN_RTTI_REG -> IR_RTTI_REG` arm — which would have
+been one site instead of two, and free for every future frontend — fires too
+late to be read. The consequence is that the flag is conservative: a
+`__rttireg()` in code that is never lowered still emits the registry. Wrong in
+the direction that keeps working.
+
+**MEASURED, against an expectation recorded before the change rather than
+after:** predicted a hello would lose exactly 24 bytes (8-byte count slot + one
+16-byte entry) and a GetClass program exactly 0. Both landed:
+`data=4288B -> 4264B` and `data=10360B -> 10360B`, with the GetClass program
+still printing FOUND.
+
+**THE 24 BYTES ARE NOT THE POINT AND MUST NOT TRAVEL AS THE WIN.** This does not
+drop a single blob: Pass 1 still reserves a header per class, because `ClassName`
+and the `is`/`as` backlink chain need one. What it removes is the unconditional
+ROOT — while the registry was emitted regardless, it held every streamable class
+alive BY NAME, and every ordinary class is streamable. A reachability-gated drop
+was impossible before this and is merely unwritten after it.
+
+**AND IT NEVER FIRES FOR NILPY, WHICH IS A POPULATION FACT AND NOT A BUG.**
+Measured: `print(1)` alone reports `reader=1`. Every NilPy program pulls
+`pylib`, and `compiler/builtin/pylib.pas:40` reads
+`uses builtin, exceptions, pypal, promocore, typinfo` — `typinfo.pas:755` is
+`reg := __rttireg()`. So a NilPy program always contains a reader by
+construction and saves nothing here. **A NilPy-side saving would have to come
+from making that `uses typinfo` conditional, which is Track N's ground and is
+not claimed by this ticket.** Recorded so the next reader does not measure a
+Pascal-only number and quote it for both frontends.
+
+**AND IT REACHES THE ESP UMBRELLA, which is the consequence this note stopped
+one step short of.** The SRAM case for this whole line of work is weaker on
+NilPy than on Pascal, and weaker by construction rather than by degree: a NilPy
+image on ESP carries the registry — and therefore the name-root on every
+streamable class — no matter what the program does, until that `uses` is
+conditional. So a future reachability pass measured on a Pascal ESP image and
+quoted for the ESP target generally would be the population error this ticket
+has already made once today in the other direction. **Measure both frontends or
+name the one you measured.**
+
+**AND THE FIX FOR IT IS NOT A CALL-SITE PREDICATE, WHICH IS WORTH RECORDING
+BECAUSE IT IS THE OBVIOUS ANSWER AND IT IS WRONG.** Measured 2026-09-19: a
+Pascal program with `uses typinfo` that NEVER calls `GetClass` reports
+`reader=1 registry=2 registrybytes=40`; the identical program without the
+`uses` reports `reader=0 registry=0 registrybytes=0`. The flag is a parse-time
+fact, so **merely parsing `typinfo` mints a reader** — making `GetClass`
+conditional, or teaching the builtin chain which routines a program actually
+called, would leave this gate exactly where it is. Only the `uses` going helps.
+
+**Census of the chain, read-only, handed to franks-ee who owns it:** it is TWO
+ambient sites, not one — `pylib.pas:40` and `pyeval.pas:47` both pull typinfo —
+and **typinfo is doubling as a TYPES unit**, which is why no conditional keyed
+on "does this program reflect" can be correct: `streams.pas:12` is
+`uses typinfo; { PUInt8 }` and `resources.pas:11` is
+`uses typinfo; { PString — declaring it here too would duplicate the type and
+corrupt RTTI }`. The two NilPy units are in the same position, wanting the RTTI
+TYPES rather than the reflection surface (pylib references `PClassRTTI` 29
+times and `GetInstanceRTTI` 25; pyeval 13 and 9), and neither calls `GetClass`
+or `__rttireg` itself. **Hypothesis, NOT a recommendation and not costed:** the
+answer may be to split the unit — types one side, `GetClass`/`FindClass`/
+`__rttireg` the other — at which point the chain pulls only the types half and
+no reflection predicate is needed by anyone. Owned by franks-ee, who has the
+corpus; this ticket claims none of it.
+
+**THE SPLIT IS FULLY ANALYSED AND DELIBERATELY NOT BUILT — census by franks-ee
+2026-09-19, verified here, DECLINED on price.** The shape is smaller and
+cleaner than the hypothesis above: it is not "types vs reflection", it is
+**move `GetClass` into its own unit**. `typinfo` has NO `uses` clause and NO
+`initialization`/`finalization` section, so there is nothing transitive and
+nothing kept alive by an initializer; property access by name works off a
+class's own RTTI pointer and not off the registry, so every other piece of
+reflection stays put — including the `PUInt8`/`PString` users (`streams.pas:12`,
+`resources.pas:11`) and the RTTI types `pylib` and `pyeval` lean on. The `uses`
+rewrite is four files, **none on the NilPy ambient chain**: `classes_lite.pas`
+(2 call sites), `lfm.pas` (1), `gtk3widgets.pas` (8), `controls.pas` (1). `pylib`
+and `pyeval` call `GetClass` ZERO times. **No Track U fork is needed**, because
+the line is "the class registry lookup" and not "reflection", so nobody has to
+decide what `typinfo` IS.
+
+**ONE CORRECTION TO THAT CENSUS, because it narrows a claim someone will
+otherwise over-apply:** `__rttireg` is called at **THREE** sites, not one —
+`typinfo.pas:755`, `controls.pas:167`, `gtk3widgets.pas:286`. Moving `GetClass`
+takes the reader away from a **NilPy** program, because the other two are pcl
+and not on that chain; a **GUI** program still mints one from either of them
+after the split. "Move GetClass and the reader goes" is true of the population
+in question and false in general.
+
+**DECLINED, and the reason is the price and not the shape:** ~24-40 bytes
+direct, against a new unit plus a `uses` rewrite across `lib/rtl` and `lib/pcl`,
+which is Track B's ground. Its real value is as a SECOND enabler for the
+reachability pass — the same value as this gate — and that pass is still
+unwritten. Building a second enabler for something that does not exist is how a
+backlog becomes a queue. The analysis is banked here so the split is a same-day
+change once the pass lands.
+
+**AND THE VERIFICATION THAT MUST HAPPEN FIRST IS RECORDED UNRUN, labelled
+rather than quietly omitted.** This ticket has MEASURED that parsing `typinfo`
+mints a reader; it has NOT measured that the `__rttireg()` CALL is what does it.
+Those are "consistent with" and not the same claim. Before any `lib/rtl` edit:
+copy `typinfo` to a scratch dir, stub `GetClass` so the `__rttireg()` call goes,
+compile with `-Fu` against the copy, read `reader=`. Zero means the call is the
+trigger. **Non-zero is also a result** — it means the reader enters somewhere
+neither seat has looked, and `reader=` is the instrument that would say so. Ten
+minutes, and it must precede the edit rather than follow it.
+
+**The instrument grew two columns to make this observable**, and they are
+deliberately separate: `reader=` is the parse-time fact, `registry=` is what the
+emitter did. Collapsed into one they could not distinguish "the gate dropped it"
+from "the program never asked", which is exactly the distinction under test.
+The legitimate third state — `reader=1 registry=0`, a program that calls
+GetClass but declares no streamable class — is not a defect and returns nil
+correctly.
+
+**The `test-core` row's positive control is the PAIR and both halves were
+verified to FAIL, not assumed to:** the pinned compiler (no gate at all) fails
+the no-reader row with its own message, and a deliberately over-firing gate
+(`and (1 = 2)` spliced in, built, run, reverted, binary restored
+byte-identically to `c4562f4bf4db`) fails the reader row with its own. The
+reader row asserts the RUNTIME lookup as well as the byte count, because a
+registry that is emitted but wrong satisfies any count.
+
+**What the silent `DATAREF_DROP` defect does under this change: nothing new, and
+that was checked rather than assumed.** A program now lacking a registry also
+lacks a reader by construction of the gate, so the (reader, no-registry) pairing
+that reaches `DATAREF_DROP` is the same set as before — `regEntries = 0` with a
+reader — and it answers nil correctly. The defect is untouched and still owned
+by whoever makes the next change in that predicate.
 
 ### PARKED 2026-09-18 (frankB) — WHERE A COLD SEAT PICKS THIS UP
 

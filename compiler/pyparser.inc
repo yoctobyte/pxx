@@ -55755,6 +55755,8 @@ begin
         end;
         node := AllocNode(AN_RTTI_REG);
         ASTTk[node] := Ord(tyPointer);
+        { see the Pascal site: the registry is emitted only if read }
+        RTTIRegRequested := True;
         CurASTNode := node;
         Exit;
       end;

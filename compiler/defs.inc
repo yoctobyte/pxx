@@ -3600,6 +3600,16 @@ var
   RecCopyHoleRec     : array[0..REC_COPY_HOLE_MAX-1] of Integer;
   RecCopyHoleCount   : Integer;
   RTTIRegistryOff    : Integer;  { Data[] off of registry (count slot then name/rtti ptr pairs), -1 if none }
+  RTTIRegRequested   : Boolean;  { a `__rttireg()` node was parsed, i.e. this
+                                   program contains a READER for the registry.
+                                   Set at the two AN_RTTI_REG creation sites and
+                                   read by EmitRTTI, which runs after the whole
+                                   parse and before any IR lowering -- so the
+                                   flag cannot be set at the LOWERING site, which
+                                   is where it would otherwise belong. Being a
+                                   parse-time fact it is conservative: a
+                                   `__rttireg()` in code that is never lowered
+                                   still emits the registry. That fails SAFE. }
   RTTIRegistryCount  : Integer;
   DumpRTTI           : Boolean;
   AnonDynArrayOff    : array[0..8191] of Integer;

@@ -20229,6 +20229,29 @@ test-core: $(COMPILER)
 	@a=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_default.log); b=$$(grep -oE 'cls TU blob=[0-9]+ vmt=[0-9]+' $(TESTTMP)/rw_public.log); \
 	 [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-core: the two visibility variants no longer carry the same blob/vmt weight ($$a vs $$b), so the pair is not a controlled comparison any more"; exit 1; }; \
 	 echo "test-core: a.rttiweight prices a class's RTTI, and the default (published) section is what puts it in the registry -- $$a"
+	# THE RTTI REGISTRY IS EMITTED ONLY IF SOMETHING READS IT. Its sole consumer
+	# is IR_RTTI_REG, from the one AST node AN_RTTI_REG, from the one intrinsic
+	# __rttireg(). A program that reaches none of its three lib/ callers was
+	# emitting a name->blob table nothing could look at, SILENTLY -- emit.inc
+	# sets DATAREF_DROP when a registry reference finds no table, so a registry
+	# with no reader gives no diagnostic and a reader with no registry gives no
+	# refusal. Gated on the NODE, never on `uses typinfo`: __rttireg() is a
+	# public intrinsic a user program may call directly.
+	# THE POSITIVE CONTROL IS THE PAIR, and each half rejects a different broken
+	# gate: a gate that NEVER fires fails the no-reader row, and a gate that
+	# ALWAYS fires fails the reader row -- which asserts the RUNTIME lookup too,
+	# not just the byte count, because a registry that is emitted but wrong
+	# satisfies any count. `reader=` and `registry=` are separate columns for the
+	# same reason: collapsed into one they could not tell "the gate dropped it"
+	# from "the program never asked".
+	@printf 'program rgn;\nbegin WriteLn(1); end.\n' > $(TESTTMP)/rgn_noreader.pas
+	@printf 'program rgy;\nuses typinfo;\ntype TSeen = class\n procedure M; virtual;\nend;\nprocedure TSeen.M; begin end;\nbegin\n if GetClass(%s) <> nil then WriteLn(%s) else WriteLn(%s);\nend.\n' "'TSeen'" "'FOUND'" "'MISSING'" > $(TESTTMP)/rgn_reader.pas
+	@PXXDBG=a.rttiweight ./$(COMPILER) $(TESTTMP)/rgn_noreader.pas $(TESTTMP)/rgn_noreader26 > $(TESTTMP)/rgn_noreader.log 2>&1
+	@PXXDBG=a.rttiweight ./$(COMPILER) $(TESTTMP)/rgn_reader.pas $(TESTTMP)/rgn_reader26 > $(TESTTMP)/rgn_reader.log 2>&1
+	@grep -q 'reader=0 registry=0 registrybytes=0' $(TESTTMP)/rgn_noreader.log || { echo "FAIL test-core: a program with no __rttireg reader still emitted an RTTI registry"; grep -o 'reader=.*CodeLen=[0-9]*' $(TESTTMP)/rgn_noreader.log; exit 1; }
+	@grep -qE 'reader=1 registry=[1-9][0-9]* registrybytes=[1-9][0-9]*' $(TESTTMP)/rgn_reader.log || { echo "FAIL test-core: a program that CALLS GetClass got no RTTI registry -- the gate is over-firing"; grep -o 'reader=.*CodeLen=[0-9]*' $(TESTTMP)/rgn_reader.log; exit 1; }
+	@tools/expect_same.sh rgn_reader26 "$$($(TESTTMP)/rgn_reader26)" "FOUND"
+	@echo "test-core: the RTTI registry is emitted only for a program that reads it -- $$(grep -o 'reader=[01] registry=[0-9]* registrybytes=[0-9]*' $(TESTTMP)/rgn_noreader.log) / $$(grep -o 'reader=[01] registry=[0-9]* registrybytes=[0-9]*' $(TESTTMP)/rgn_reader.log)"
 	# THE REGISTRY IS KEYED BY THE STRING ClassName RETURNS, not by the raw
 	# declaration spelling. The blob's name word holds ClassRttiName -- canonical
 	# for a specialization alias -- and the registry used to intern the raw
