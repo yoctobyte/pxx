@@ -133,7 +133,7 @@ Positive control, measured before the fix: xtensa `qemu: uncaught target
 signal 7 (Bus error)`; arm32 `q -> -5` (fine) and `d -> Bus error` (the
 isolation that found the float arm).
 
-Status: done.
+Status: done, commit `dc448c702` (the fix, the fixture and its seven rows in one).
 
 ### The walk's first cut crashed the compiler, and how it was caught
 
