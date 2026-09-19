@@ -80,3 +80,46 @@ callback. It fails with no diagnostic at all, at a call that may be far from the
 assignment, and it is currently invisible to the suite — the callable-field
 fixtures all wire NilPy functions into NilPy-declared fields, which is the case
 that works.
+
+## 2026-09-20 (frankS) — what is actually in the slot, measured. NOT fixed; I was moved to another group.
+
+Banked rather than left in a transcript. Reproduced at `74ff679403b8`, x86-64,
+exactly the repro above. The probes are three routines added to the unit --
+`SlotBits` (`q := @k.build; q^`), `Peek(addr, i)` (word `i` at `addr`) and
+`AddrOf(which)` (`@` of each unit routine) -- so every number below is read
+through Pascal, not inferred.
+
+```
+maker         5558117        <- @TheMaker
+wired slot    5558117        <- Result.build := @TheMaker, and it CALLS fine
+handed slot   0x7ab99f600050 <- MkKind(TheMaker) from NilPy
+```
+
+So the slot does not hold a mangled address: it holds a **heap pointer**. The
+carrier is stored whole, which is the "likely shape" paragraph's first branch.
+
+**And the second branch is ruled out -- the fix is NOT "read word 0 of the
+pair".** Dereferencing the carrier:
+
+```
+word 0   @TheMaker + 2149     <- a code address, and NOT TheMaker's
+word 1   0
+word 2   -4294967295          = 0xFFFFFFFF00000001, a refcount/tag pair shape
+word 3   another .text address
+word 4   40
+word 5   0
+```
+
+The four unit routines sit at `@TheMaker + 0 / 102 / 200 / 325`, so word 0 is
+none of them. Whatever code address the carrier holds, it is a wrapper or a
+different routine entirely, and a fix that loads word 0 into the slot would
+store a plausible, wrong, still-crashing address.
+
+**Where I would go next, in order:** `PXXDBG=a.ast:` on the `MkKind(TheMaker)`
+call to see what the argument node IS, then find which routine lives at
+`+2149` (a map file, or an `AddrOf` arm per candidate) -- naming that routine
+is what turns this from "the carrier is stored whole" into a diagnosis. Note
+the pointer VALUES move per run (ASLR); the deltas do not.
+
+Untouched by me: `PyCoerceCallableArgsIn` (compiler/pyparser.inc ~26959-27275)
+and `pycallback_*` in pylib.pas. Ticket is unassigned and free.
