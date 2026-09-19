@@ -1,0 +1,23 @@
+# MUST NOT COMPILE. D has two bases, so it is laid out by PyParseClass, after
+# P's body was compiled returning an int. Widening P.v's result to a variant
+# then (the override join) made `P().v() + 1` read a variant out of an int
+# routine: a SIGSEGV on pinned v411. Refused by name until the join can run
+# before the base is compiled. Ticket: backlog-nilpy/
+# bug-n-an-override-changing-the-result-type-in-a-late-laid-out-class-is-refused.md
+class Tag:
+    def tag(self) -> str:
+        return "t"
+
+
+class P:
+    def v(self):
+        return 0
+
+
+class D(P, Tag):
+    def v(self):
+        return 1.5
+
+
+p = P()
+print(p.v() + 1)

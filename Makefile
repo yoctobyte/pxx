@@ -1247,6 +1247,8 @@ test-nilpy: $(COMPILER)
 	# ...and an encoding open would have to IGNORE is refused, not dropped
 	! ./$(COMPILER) test/test_nilpy_open_refuses_an_encoding_it_would_ignore_fail.npy $(TESTTMP)/test_nilpy_openenc26 > $(TESTTMP)/test_nilpy_openenc.log 2>&1
 	grep -q "encoding='utf-16') is not supported" $(TESTTMP)/test_nilpy_openenc.log
+	! ./$(COMPILER) test/test_nilpy_an_override_widening_a_compiled_base_is_refused_fail.npy $(TESTTMP)/test_nilpy_ovwiden26 > $(TESTTMP)/test_nilpy_ovwiden.log 2>&1
+	grep -q 'in a class laid out after its base was compiled' $(TESTTMP)/test_nilpy_ovwiden.log
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

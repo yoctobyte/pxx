@@ -347,6 +347,11 @@ var
     Tag)` a VMT that called through nil for every inherited method and put
     E's own first method on the slot D's first method owns. }
   PyLayoutDeferred: array[0..MAX_UCLASS-1] of Boolean;
+  { True while the member pre-pass REGISTERS (PyClassHeaderSweep phase 1): no
+    method body has been compiled yet. A class registered later, by
+    PyParseClass, meets bases whose bodies ARE compiled -- which is what makes
+    the override result join below unsafe there. }
+  PyInHeaderSweep: Boolean;
 
   { The token span of a class's BODY, recorded by whichever pass registered the
     class first (the member pre-pass or PyParseClass). Multiple inheritance is
@@ -42682,6 +42687,18 @@ begin
             if (mRet <> Procs[ovPi].RetType) and
                PyOverrideRetJoinsToVariant(mRet, Procs[ovPi].RetType) then
             begin
+              { ...and the join may only widen the BASE while its body is not
+                yet compiled, which is the pre-pass. A class registered by
+                PyParseClass (several bases, or a subclass of one) meets a base
+                already emitted with its OLD result type: widening it then
+                leaves callers reading a variant out of a routine that returns
+                an integer -- a crash with no diagnostic. Refused by name. }
+              if not PyInHeaderSweep then
+                Error('Nil Python: ' + origName + ' overrides '
+                      + Procs[ovPi].Name + ' with a different result type, in '
+                      + 'a class laid out after its base was compiled (it has '
+                      + 'several bases, or derives from one that does) -- '
+                      + 'annotate both results with the same type');
               Procs[ovPi].RetType := tyVariant;
               ProcRetRecId[ovPi] := REC_NONE;
               mRet := tyVariant;
@@ -44308,7 +44325,7 @@ procedure PyClassHeaderSweep(phase: Integer);
   phase 1 only.
   bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
 var i, j, k, ci, bs, be, depth, baseCi: Integer;
-    isDC, hoist, multiBase: Boolean;
+    isDC, hoist, multiBase, erasedBase: Boolean;
 begin
   i := PyScanLo;
   while i < MainProgramTokCount - 2 do
@@ -44372,6 +44389,7 @@ begin
           the full run as before. }
         hoist := True;
         multiBase := False;
+        erasedBase := False;
         { a class that exists to be flattened registers FIELDS only — its
           methods are compiled into each host, never into itself }
         if PyClsUsedAsMixin[ci] then hoist := False;
@@ -44391,6 +44409,35 @@ begin
               baseCi := PyEnsureExceptionClass
             else
               baseCi := FindUClassNonRecord(GetTokenStr(i + 3));
+            { `class C(object):` -- and an erased `Generic[T]`/`Protocol` --
+              is a class with NO parent, which is exactly what PyParseClass
+              makes of it. Taken here as an unresolved base instead, it cost
+              the class its hoisting, and since a subclass of a deferred class
+              is deferred too (PyLayoutDeferred), its whole family was laid out
+              after the base's bodies were compiled -- where an override's
+              result join can no longer widen the base
+              (test_nilpy_line_continuation's Base(object)/Derived). Only as
+              the SOLE base: with a second one this is multiple inheritance and
+              PyParseClass decides. }
+            if (baseCi < 0) and (i + 4 < MainProgramTokCount) and
+               ((GetTokenStr(i + 3) = 'object') or
+                (((GetTokenStr(i + 3) = 'Generic') or
+                  (GetTokenStr(i + 3) = 'Protocol')) and
+                 (Tokens[i + 4].Kind = tkLBrack))) then
+            begin
+              k := i + 4;
+              if Tokens[k].Kind = tkLBrack then
+              begin
+                depth := 0;
+                repeat
+                  if Tokens[k].Kind = tkLBrack then Inc(depth)
+                  else if Tokens[k].Kind = tkRBrack then Dec(depth);
+                  Inc(k);
+                until (depth = 0) or (k >= MainProgramTokCount);
+              end;
+              if (k < MainProgramTokCount) and (Tokens[k].Kind = tkRParen) then
+                erasedBase := True;
+            end;
           end;
           { the join's parent link — taken here, before the multi-base and
             mixin decisions below turn it into a "defer to PyParseClass".
@@ -44428,7 +44475,9 @@ begin
             else if Tokens[j].Kind in [tkNewline, tkEOF] then Break;
             Inc(j);
           end;
-          if not multiBase then
+          if erasedBase then
+            { no parent, and nothing to wait for }
+          else if not multiBase then
           begin
             if (baseCi >= 0) and not PyClsUsedAsMixin[baseCi] then
               UClsParent[ci] := baseCi
@@ -44556,7 +44605,9 @@ begin
   PyFJReset;
   PyClassHeaderSweep(0);
   PyFJPropagate;
+  PyInHeaderSweep := True;
   PyClassHeaderSweep(1);
+  PyInHeaderSweep := False;
 end;
 
 { Evaluate the NON-CONSTANT parameter defaults of a class's methods.
@@ -47522,6 +47573,7 @@ begin
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyLayoutDeferred[i] := False;
+  PyInHeaderSweep := False;
   for i := 0 to MAX_UCLASS - 1 do
   begin
     PyClsBodyS[i] := -1;
