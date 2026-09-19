@@ -7089,6 +7089,30 @@ test-threads: $(COMPILER)
 	  || { echo 'test_the_threadvar_area_is_a_command_line_knob: FAIL - the default cap did not refuse 3080 bytes of threadvar'; exit 1; }
 	./$(COMPILER) --threadsafe -dPXX_TLS_USER_4K test/test_the_threadvar_area_is_a_command_line_knob.pas $(TESTTMP)/test_tlsknob26
 	tools/expect_same.sh test_tlsknob26 "$$($(TESTTMP)/test_tlsknob26)" "$$(printf 'first=11\nlast=31\nblock=5248')"
+	# ...and ROUTE A, the half that needs no flag: a program naming neither the
+	# per-thread keyword nor an import clause cannot reach the allocator, so it
+	# is given none of the area. 1152 is TLS_USER_FIRST_OFF, the slot map alone.
+	# PINNED CONTROL: the pinned compiler prints 4224 for this same file.
+	# THIS IS ALSO THE GUARD ON WHAT THE PRESCAN RESTS ON. An import-free program
+	# still pulls builtinheap/softfloat/builtin ambiently, so the scan is correct
+	# only while no unit under lib/ or compiler/builtin/ declares per-thread
+	# storage — counted 2026-09-19, none does. Add one and this row goes RED with
+	# the cap's diagnostic rather than a wrong size shipping quietly.
+	./$(COMPILER) test/test_a_unit_free_program_pays_no_threadvar_area.pas $(TESTTMP)/test_tlsnone26
+	tools/expect_same.sh test_tlsnone26 "$$($(TESTTMP)/test_tlsnone26)" "block=1152"
+	# ...and BOTH directions of the scan, which is the half that protects
+	# acceptance. An import clause keeps the full area even though the main
+	# source declares nothing — a used unit's declaration is not in these tokens,
+	# and refusing such a program to save bytes would be a regression, not an
+	# optimisation. A declaring program keeps it for the obvious reason. Written
+	# as heredocs rather than test/ files because what is asserted is the SCAN,
+	# and a fixture explaining itself in prose would trip it (see that file).
+	@printf 'program tlsusesarea;\nuses sysutils;\nbegin writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsusesarea.pas
+	./$(COMPILER) $(TESTTMP)/tlsusesarea.pas $(TESTTMP)/tlsusesarea
+	tools/expect_same.sh tlsusesarea "$$($(TESTTMP)/tlsusesarea)" "4224"
+	@printf 'program tlsdeclarea;\nthreadvar t: LongInt;\nbegin t := 1; writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsdeclarea.pas
+	./$(COMPILER) $(TESTTMP)/tlsdeclarea.pas $(TESTTMP)/tlsdeclarea
+	tools/expect_same.sh tlsdeclarea "$$($(TESTTMP)/tlsdeclarea)" "4224"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

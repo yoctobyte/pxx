@@ -7,7 +7,7 @@ prio: 45
 status: new
 created: 2026-09-18
 owner: ""
-summary: "ROUTE C SHIPPED 2026-09-18 — the area is a command-line knob (-dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K, default unchanged at 3072), so `-dPXX_TLS_USER_0` gives the whole 3,072 of bss back to any program with no `threadvar` with no detection at all. Measured on an x86-64 hello, bss 38,396 -> 35,324 at rung 0 and exact at every rung; test_atomic_counter is correct at 0, 1K, 8K and 16K; palthread follows without an edit because it reads __pxxTlsBlockSize. STILL OPEN because the knob is OPT-IN: a program that does not pass the flag still pays 3,072 it may not use. Route A (prescan for the `threadvar` token before EmitTlsMainInstall, `uses` forcing it back on) buys the same bytes without the user asking, and reaches 11 of 49 Pascal files under examples/ — 22%, counted, which is the honest ceiling on it. Route B (size the area from what parsing used) buys it on every program and is the only one that is UNSOUND today: it makes the size vary DURING a compile, which is exactly what the reserve and the __pxxTlsBlockSize fold both capture. The soundness rule, measured both directions: the fold works because TLS_BLOCK_SIZE is a compile-time CONSTANT, not because it is 3072 — at 0 bytes test_atomic_counter still prints 800000/800000 over four threads, and a program that outgrows whatever the cap is gets refused at compile with a diagnostic naming the rung to raise to."
+summary: "ROUTES C AND A BOTH SHIPPED. A Pascal program naming neither `threadvar` nor `uses` now gets a ZERO-byte threadvar area automatically — hello.pas, the hosted umbrella's floor subject, goes bss 38,396 -> 35,324 with no flag and __pxxTlsBlockSize becomes 1152. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen (compiler.pas clears TokCount above ApplyTlsUserBytesOption and every frontend lexes below it), and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, under IsPascalFrontend, which is why this is Pascal-only. Every way the scan can be wrong costs BYTES, never correctness. The `uses` rule stays because dropping it would REFUSE a program that compiles today — a used unit's threadvar is not in the main source — which caps the reach at unit-free programs, 11 of 49 under examples/, counted and not re-counted. STILL OPEN on two pieces: (1) the other frontends, each a flat -3,072 (a NilPy hello 62,724 -> 59,652, a C hello 72,448 -> 69,376), gated on the fact that isNilPy is true for the whole compilation INCLUDING the Pascal RTL units a NilPy program drags in, so "this frontend has no such keyword" is not the same claim as "this compilation cannot declare one"; (2) route B, still the only unsound route, blocker unchanged. Found on the way and filed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero (p55), which predates all of this and reproduces on the pin."
 ---
 
 # Why it is a fixed cap, in the code's own words
@@ -62,39 +62,82 @@ are:** route A buys the same 3,072 without the user asking, on the 22% of
 `examples/` with no top-level `uses`; route B buys it on every program and still
 needs the fold fixed first. Route C is the cheap floor under both.
 
-## WHERE TO PICK THIS UP (frankS parked it 2026-09-18; nobody holds it)
+# ROUTE A SHIPPED 2026-09-19 — no flag needed, and the floor subject is covered
 
-Route C shipped and is the whole of what is done. **The next step is ROUTE A,
-and everything it needs has been measured — it is an afternoon, not an
-investigation:**
+A Pascal program whose source names neither `threadvar` nor `uses` is given a
+**zero-byte** area automatically. `hello.pas` — the hosted umbrella's floor
+subject — goes **bss 38,396 -> 35,324** with no flag, and `__pxxTlsBlockSize`
+becomes 1152, the slot map alone. The size canary records the same -3,072 on
+`x86_64-empty`.
 
-1. Add a `threadvar` scan to `DetectPascalRuntimeNeeds`
-   (`pasparser_prog.inc`), beside the `tkUses`/`tkArray`/`tkClass` rows that are
-   already there. Absent -> the area is 0. **`uses` must force it back ON**, for
-   the same opacity reason the existing prescan treats imports as opaque: a used
-   unit's `threadvar` is not in the main source's token array. Non-Pascal
-   frontends have no `threadvar` and can always take 0.
-2. Set `TlsUserBytes` from that instead of unconditionally, in
-   `ApplyTlsUserBytesOption` (`ir_codegen.inc`) — which already exists, already
-   runs at the only correct moment, and is already called from `compiler.pas`
-   right before `EmitTlsMainInstall`. **Route C built the ordering route A
-   needed; there is no plumbing left to do.** An explicit `-dPXX_TLS_USER_*`
-   must still WIN over the scan, or a program whose threadvars live in a used
-   unit has no way to ask for room.
-3. The knob keeps working unchanged and stays the escape hatch for whatever the
-   scan gets wrong. That is the point of doing A second.
+**MY OWN RESUME NOTE WAS WRONG ABOUT THE CENTRAL FACT AND THIS IS THE
+CORRECTION.** It said to scan in `DetectPascalRuntimeNeeds` and that "route C
+built the ordering route A needed; there is no plumbing left to do". The
+ordering is right and the instrument was not: **the token array is EMPTY at the
+only moment the size may be chosen.** `compiler.pas` clears `TokCount` well
+above `ApplyTlsUserBytesOption`, and every frontend lexes inside its own branch
+BELOW it; `DetectPascalRuntimeNeeds` runs later still, inside `ParseProgram`.
+Nor can the call move down — `EmitTlsMainInstall` bakes `TlsBlockSize` into the
+BSS reservation and two immediates, and the fold captures it.
 
-**Do not skip the `uses` clause in step 1.** It is the whole difference between
-route A being safe and route A silently refusing a correct program: the scan
-sees the main source's tokens only, and `palthread` itself declares threadvars.
+So the scan reads `Source`, which by that point is the main file **with its
+includes already expanded** (`ExpandIncludes` then `ExpandPasMacros`, both under
+`IsPascalFrontend` — which is why the feature is Pascal-only and that is a
+consequence, not caution: a C program's `#include`s are expanded later, so a
+`__thread` in a header would be invisible, and NilPy resolves imports later
+still).
 
-**Known ceiling, counted, do not re-count:** 11 of 49 Pascal files under
-`examples/` have no top-level `uses`, so route A reaches 22% of them. That is
-the honest value — decide against it on that number if you want to, rather than
-discovering it halfway.
+**Every way the scan can be wrong costs bytes, not correctness**, and that is
+the design rather than a hope: the word in a comment or a string reserves an
+area that would have been reserved anyway. Demonstrated by accident and kept as
+the cheapest illustration anyone will find — the first draft of
+`test_a_unit_free_program_pays_no_threadvar_area.pas` explained itself using
+both keywords, tripped its own scan, and printed 4224. **The test asserting the
+feature had disabled the feature.** The file now says so at the top.
 
-**Route B stays unsound** and needs the fold fixed first; nothing measured today
-changes that. See "Route B's blocker" below.
+## Why the `uses` rule stays, and what it costs
+
+Kept, and the reason is sharper than "conservatism": **dropping it would refuse
+a program that compiles today.** A `threadvar` in a used unit is not in the main
+source's text, so without the rule such a program meets the cap and is refused
+until someone passes a flag. Trading an acceptance regression for bytes is not
+an optimisation. It caps the reach at unit-free programs — 11 of 49 Pascal files
+under `examples/`, counted 2026-09-18 and **not re-counted**; `hello.pas`
+qualifies, which is the case the umbrella cares about.
+
+**The rule currently defends a hypothetical, and that is worth knowing rather
+than acting on: NO unit under `lib/` or `compiler/builtin/` declares a
+threadvar** (counted 2026-09-19 — `sockets.pas` says in its own words that there
+is none in this dialect, and the three files a naive grep returns are all
+PROSE). That matters because a `uses`-free program still pulls builtinheap
+ambiently, so the prescan depends on it. It is GUARDED, not merely noted:
+`test_a_unit_free_program_pays_no_threadvar_area` asserts `block=1152`, and the
+first ambient-unit threadvar turns it red with the cap's own diagnostic.
+
+## Found on the way, and filed rather than chased
+
+`bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero` (p55).
+A `threadvar` in a unit's IMPLEMENTATION section is allocated storage but never
+rewritten, so it reads 0 with no diagnostic; in the INTERFACE it works. It
+reproduces on the pinned compiler and is independent of everything here — the
+program that exposes it has a `uses` and therefore gets the full default area
+under every setting.
+
+## WHAT IS LEFT (frankS parked it 2026-09-19; nobody holds it)
+
+The ticket stays OPEN on two remaining pieces, in value order:
+
+1. **The other frontends.** NilPy, BASIC, Rust, Zig, Erlang, Ada, Algol,
+   Fortran and the rest cannot declare a thread-local at all — only Pascal
+   (`threadvar`) and C (`__thread`) reach `TryAssignThreadVarStorage`, which is a
+   two-file census, not a guess. Each of them is a flat **-3,072** (measured: a
+   NilPy hello 62,724 -> 59,652; a C hello 72,448 -> 69,376 at rung 0). The
+   catch is the one `defs.inc` spells out at `PyImportLang`: **`isNilPy` is true
+   for the WHOLE compilation, including the nested `uses` of every Pascal RTL
+   unit a NilPy program drags in** — so "the frontend has no such keyword" is
+   NOT the same claim as "this compilation cannot declare one", and the same
+   ambient-unit argument as above has to carry it.
+2. **Route B** remains the only unsound one and its blocker is unchanged.
 
 # Two routes, and they are not equal
 

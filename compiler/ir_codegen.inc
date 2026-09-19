@@ -1628,6 +1628,50 @@ begin
   EmitIoLockStubsForTarget;
 end;
 
+function SourceMentionsKeyword(const kw: AnsiString): Boolean;
+{ Does `Source` contain kw as a whole word, case-insensitively? Used only by
+  ApplyTlsUserBytesOption, whose header explains why a TEXT scan rather than a
+  token scan and why every mistake here is paid in bytes.
+
+  The word boundary is an economy, not a safety property: without it `houses`
+  would match `uses` and reserve an area the program cannot use. It cannot hide
+  a real keyword, because a Pascal keyword is always delimited by characters
+  that are not identifier characters. One pass, no lowercased copy of the
+  source -- compiler.pas is seven megabytes of it. }
+var i, j, n, m: Integer; c, k: Char; ok: Boolean;
+begin
+  Result := False;
+  n := Length(Source);
+  m := Length(kw);
+  if (m = 0) or (n < m) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 0 to m - 1 do
+    begin
+      c := Source[i + j];
+      if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+      k := kw[j + 1];
+      if c <> k then begin ok := False; Break; end;
+    end;
+    if not ok then Continue;
+    if i > 1 then
+    begin
+      c := Source[i - 1];
+      if ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or
+         ((c >= '0') and (c <= '9')) or (c = '_') then Continue;
+    end;
+    if i + m <= n then
+    begin
+      c := Source[i + m];
+      if ((c >= 'a') and (c <= 'z')) or ((c >= 'A') and (c <= 'Z')) or
+         ((c >= '0') and (c <= '9')) or (c = '_') then Continue;
+    end;
+    Result := True;
+    Exit;
+  end;
+end;
+
 procedure ApplyTlsUserBytesOption;
 { Fix the size of the source-declared `threadvar` area, ONCE, from the command
   line, before anything that bakes it in runs.
@@ -1663,14 +1707,56 @@ procedure ApplyTlsUserBytesOption;
   would mean a new command-line option and a parser change. A per-thread
   variable area is not tuned to the byte, and the diagnostic names the rung to
   raise to. }
+var explicit: Boolean;
 begin
   TlsUserBytes := TLS_USER_BYTES_DEFAULT;
+  explicit := True;
   if      PasDefineExists('PXX_TLS_USER_0')   then TlsUserBytes := 0
   else if PasDefineExists('PXX_TLS_USER_1K')  then TlsUserBytes := 1024
   else if PasDefineExists('PXX_TLS_USER_2K')  then TlsUserBytes := 2048
   else if PasDefineExists('PXX_TLS_USER_4K')  then TlsUserBytes := 4096
   else if PasDefineExists('PXX_TLS_USER_8K')  then TlsUserBytes := 8192
-  else if PasDefineExists('PXX_TLS_USER_16K') then TlsUserBytes := 16384;
+  else if PasDefineExists('PXX_TLS_USER_16K') then TlsUserBytes := 16384
+  else explicit := False;
+
+  { ROUTE A, the half that needs no flag: a Pascal program whose source mentions
+    neither `threadvar` nor `uses` cannot reach the threadvar allocator, so it
+    gets none of the area. An explicit rung always WINS -- a program whose
+    thread-locals live somewhere this scan cannot see must have a way to ask.
+
+    WHY THE TEXT AND NOT THE TOKENS, which is the thing to know before moving
+    this. The token array is EMPTY here: compiler.pas clears TokCount well above
+    and every frontend lexes inside its own branch BELOW this call. It cannot be
+    moved down, either -- EmitTlsMainInstall bakes TlsBlockSize into the BSS
+    reservation and into two immediates, and __pxxTlsBlockSize folds to a
+    literal, so the size has to be final before anything is emitted. What IS
+    available is `Source`, and by this point it is the main file WITH ITS
+    INCLUDES ALREADY EXPANDED (compiler.pas: ExpandIncludes then ExpandPasMacros,
+    both under IsPascalFrontend) -- which is why this is restricted to the Pascal
+    frontend and is not merely caution. A C program's `#include`s are expanded
+    LATER, so a `__thread` in a header would be invisible here; NilPy resolves
+    its imports later still. Those frontends keep the full area.
+
+    EVERY WAY THIS SCAN CAN BE WRONG COSTS BYTES, NOT CORRECTNESS, and that is
+    deliberate. The word in a comment or a string, or an identifier this misreads
+    as the keyword, reserves the area that would have been reserved anyway. The
+    one direction that could refuse a valid program -- missing a real `threadvar`
+    -- cannot happen for the main source, because `threadvar` occurs literally
+    wherever one is declared, and is covered for units by the `uses` test.
+
+    IT RESTS ON ONE MEASURED FACT: no unit under lib/ or compiler/builtin/
+    declares a threadvar (counted 2026-09-19; sockets.pas says in its own words
+    that there is none in this dialect). A `uses`-free program still pulls
+    builtinheap ambiently, so if that ever stops being true this is wrong. It
+    FAILS LOUDLY if it does -- the cap in pasparser_decl.inc refuses the
+    declaration and names the flag to raise, so the unit-free fixture in the
+    Makefile turns red on the next build rather than shipping a wrong size.
+    feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
+  if (not explicit) and IsPascalFrontend and
+     (not SourceMentionsKeyword('threadvar')) and
+     (not SourceMentionsKeyword('uses')) then
+    TlsUserBytes := 0;
+
   { DERIVED, never a second spelling. }
   TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;
 end;
