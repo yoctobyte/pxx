@@ -15682,6 +15682,7 @@
     "5d99abf1d28aeba8ce5754f539d107d1a6501235",
     "d90ddd2b71e63b7481b23b8dc860e8316aa06e9a"
    ],
+   "range_non_causal": false,
    "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2",
    "status": "fail"
   }
