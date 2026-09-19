@@ -457,3 +457,24 @@ Not marked, each still behind its own never-written measurement: NilPy VMTs
 (pyparser.inc), published prop/method arrays, IMTs, enum and layout RTTI, the
 RTTI registry table.
 
+## 2026-09-19 (frankH) — pricing the remaining RTTI surfaces before measuring them
+
+`PXXDBG=a.rttiweight` on `test/gui/test_pcl_lfm.pas`, a real reflective pcl
+program (40 classes, 25 streamable):
+- class RTTI headers plus VMTs: **7432 bytes of 68756 bytes of Data**. That is
+  the surface c19d88414 made read-only.
+- The unmarked RTTI surfaces (published prop/method arrays, IMTs, enum and
+  layout RTTI) are each smaller than that.
+
+On ESP they buy nothing: every `--emit-obj` output is excluded, for the
+flash/ISR reason, and objects are where SRAM matters. Hosted, they buy a few KB
+of write PROTECTION and no memory.
+
+So they are not worth a full never-written sweep (test-core, lib-test, GUI,
+three tiers) on their own merit. Take one up only alongside a reason, such as a
+writer found in the wild, or an ESP profile that can place RTTI in flash
+safely. The bigger remaining prize for this ticket is the ESP side: what still
+sits in an ESP object's .data after the literal split (test_emit_obj: 2624
+bytes) and what it is. That census comes before dispatch tables or float
+constants.
+
