@@ -1,0 +1,54 @@
+# `obj.name(args)` on a class that declares __getattr__ and has no method or
+# field `name` fetches the attribute through __getattr__ and calls what comes
+# back, as CPython does. One route already did that. The route taken by a
+# receiver whose class the frontend knows, with no `.name =` anywhere in the
+# module, refused at compile time with "Namespace has no method fn", while
+# `g = ns.fn; g(ns)` worked. argparse's `args.fn(args)` is this shape: the
+# handler arrives through set_defaults(fn=...).
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+
+
+class Namespace:
+    def __init__(self):
+        self._d = {}
+
+    def __getattr__(self, name):
+        if name in self._d:
+            return self._d[name]
+        raise AttributeError(name)
+
+
+def cmd_now(args):
+    return "now alt=" + str(args.alt)
+
+
+def cmd_add(a, b):
+    return a + b
+
+
+ns = Namespace()
+ns._d["alt"] = 400.0
+ns._d["fn"] = cmd_now
+ns._d["add"] = cmd_add
+
+print(ns.fn(ns))            # the argparse shape
+print(ns.add(2, 3))         # two positional arguments
+g = ns.fn                   # the two-step spelling that already worked
+print(g(ns))
+
+
+class Holder:
+    def __init__(self, n: Namespace):
+        self.ns = n
+
+    def run(self):
+        return self.ns.fn(self.ns)   # through a field
+
+
+print(Holder(ns).run())
+
+try:
+    ns.missing(1)
+    print("no error")
+except AttributeError as e:
+    print("AttributeError:", e)

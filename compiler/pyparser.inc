@@ -50282,7 +50282,16 @@ begin
           is a dynamic attribute holding a callable — which means some `.name =`
           exists somewhere in the module. If none does, say so at compile time
           (bug-nilpy-unknown-method-segfaults). }
-        if (CurTok.Kind = tkLParen) and (not PyDynAttrEverAssigned(fieldName)) then
+        { ...and not when the class declares __getattr__. Then the name is
+          legal with no `.name =` anywhere: `obj.name(args)` fetches it through
+          __getattr__ and calls what comes back, the rule PyParseClassMethodCall
+          already applies to the same call reached by its other route
+          (bug-nilpy-getattr-dunder-not-supported). This site was that rule's
+          second spelling and never had it, so argparse's `args.fn(args)` on a
+          __getattr__ Namespace was refused at compile time with "Namespace has
+          no method fn", while `g = args.fn; g(args)` worked. }
+        if (CurTok.Kind = tkLParen) and (not PyDynAttrEverAssigned(fieldName)) and
+           (FindUMeth(recName - REC_UCLASS_BASE, '__getattr__') < 0) then
           Error('Nil Python: ' +
                 PyRawName(UClsNOff[recName - REC_UCLASS_BASE],
                           UClsNLen[recName - REC_UCLASS_BASE])
