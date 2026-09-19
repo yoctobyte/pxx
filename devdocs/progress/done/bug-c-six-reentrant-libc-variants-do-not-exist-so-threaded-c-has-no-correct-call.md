@@ -142,4 +142,4 @@ that touch these families (`cpwd`, `c_crtl_netdb_and_exec`,
 refactor.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 03fe0855b.
