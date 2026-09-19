@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. REMAINING: make --ro-rtti the default (after lib-test/pcl demos under it), dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test under it: clean too (only the pre-existing xmlreader red). REMAINING: make --ro-rtti the default once a pcl widget program has RUN under it, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -358,4 +358,21 @@ paths that EXECUTED; a fault that never happened is not proof of safety.**
 
 Next, before --ro-rtti can become the default: lib-test and the pcl demos
 under it.
+
+## 2026-09-19 (frankH) — lib-test under --ro-rtti: clean
+
+`make -i lib-test PXX_STABLE=<HEAD + RoRtti defaulted on>` (compiler sha
+`f4bc5ebb9b6e`, tree 46381a9e9; `-i` because the recipe otherwise stops at its
+first red and leaves the rest unmeasured) ran to the end. There were no
+segfaults, and the only failures were the two rows of `lib_mimic_xmlreader`.
+Those are the pre-existing `regression-lib-test-lib-mimic-xml-sax-xmlreader`
+(a tuple repr printed with quotes): 24/25 with the flag, without it, and on the
+pinned compiler alike. lib-test skipped synapse-ssl and reportlab-diff.
+
+What this adds: the lib/rtl suites, the NilPy library rows, and the tk facade
+RUN under xvfb. What it still does not add: **a pcl widget program RUNNING.**
+lib-test only COMPILES lib/pcl (lib_units_compile.py), and `make demos` only
+builds. So the pcl gap in the section above stands, and it is now the one
+thing between this flag and the default: run one reflective pcl GUI program
+(published properties, LFM) under xvfb with the flag, plus its flag-off control.
 
