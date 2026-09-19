@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:20 blocked:7 backlog:36 backlog-umbrella:13 backlog-core:166 backlog-nilpy:178 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3873 rejected:84`
+`working:31 unfinished:20 blocked:7 backlog:36 backlog-umbrella:13 backlog-core:166 backlog-nilpy:178 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3875 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
@@ -22,7 +22,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
-- `feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc` [A] — owner: frankB
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
