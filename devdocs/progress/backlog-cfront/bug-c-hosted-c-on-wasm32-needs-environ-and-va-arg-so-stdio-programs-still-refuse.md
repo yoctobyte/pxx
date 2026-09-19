@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "Wall A (`environ`) IS DONE as of 63d077feb -- WasmEmitEnvironFetch makes the WASI environ_sizes_get/environ_get pair inside the synthesised `_start` and hands the vector to __pxx_set_environ, and the refusal is deleted. It has NEVER EXECUTED and is inert (WasmCEntryEnvp stays -1 for every program that compiles today), because hosted C on wasm32 turns out to have THREE walls, not two, and A was only the first. Measured individually on 2026-09-06 by moving one and re-running: (B) lib/crtl/src/stdio.c hits `wasm: too many params+locals`, the MAX_WASM_BODY_VARS=288 bound in wasmenc.inc; (C) with that raised to 2048 locally, lib/crtl/src/fcntl.c hits the wasm32 va_arg gap, which open/openat need. The local raise was reverted -- it is the wasm backend`s call -- and the compiler rebuilt to the byte-identical 63f56a42bef6 it had before. Freestanding C is unaffected and still green. So `printf` on wasm32 needs B and C; A is no longer in the way and no longer the headline."
+summary: "Wall A (`environ`) IS DONE as of 63d077feb and is INERT -- WasmEmitEnvironFetch has never executed. RE-MEASURED 2026-09-19 (frankB) AND THE ORDER IN THIS TICKET IS STALE: it says \"A, then C, then B\"; at HEAD **B (va_arg) is the ONLY reachable wall and C (MAX_WASM_BODY_VARS=288) is behind it and unmeasurable.** Compiled ALONE for wasm32, stdio.c, fcntl.c, unistd.c and stdlib.c ALL now die at va_arg, not at the params+locals bound -- va_arg refuses at PARSE time while the bound fails at ENCODE time, and stdio.c defines the printf family, i.e. its own variadic callees. NULL RESULT WITH THE EXPECTATION RECORDED FIRST: raising the bound 288->2048 and rebuilding moved ZERO observables (all five subjects still va_arg); probe reverted, compiler rebuilt byte-identical to cc3113bf07f5. **Do not raise the bound as the next step** -- it costs a commit and moves nothing; the cost was never the obstacle (it is (2048-288)*9 = 15,840 bytes of compiler BSS against 86.9MB, arithmetic from the WFLoc/WFVar declarations). Whether C is still real is now UNKNOWN, not cleared: re-measure it after B. WALL B IS THE WHOLE REMAINING JOB AND IT IS AN ABI DESIGN, not ordinary work: the callee-side arms at cparser.inc:14582 spill ARGUMENT REGISTERS into __va_save (vaRegSz 16 arm32 / 32 riscv32 / 24 xtensa), and wasm32 has neither argument registers nor an addressable incoming frame, so none of them port; the caller side needs its own linear-memory marshalling because a wasm function has a FIXED typed signature and passing 3 arguments to a 1-param callee has no encoding at all. Both ends must be designed together and we own both. AND THE CALLER SIDE STILL FAILS SILENTLY, re-confirmed at HEAD: a variadic call writes a valid 117KB module, prints `ok:` and exits 0 with `main` lowered to `unreachable` -- a green build of a program that traps, the same class as the __thread bug resolved today. NOT changed here: the unreachable floor is the wasm backend's own partial-lowering instrument and its exit-code policy is that backend's call. Blast radius measured for whoever takes it: of 61 wasm32 sources in the Makefile, 59 clean, 1 unrelated failure, and exactly ONE emits a gap -- test_wasm32_two_gaps_in_one_body.pas, whose unreachable body is main$0. Freestanding C on wasm32 is unaffected and still green."
 ---
 
 # Hosted C on wasm32: environ and va_arg
@@ -234,3 +234,113 @@ worth deciding deliberately rather than by default.
 Consequently `vaRegSz = 0` for wasm32 is correct and insufficient, and the four
 consumer-set sites still must not be widened until a producer exists — the
 sibling's own warning, which stands.
+
+# MEASURED 2026-09-19 (frankB) — the ORDER is stale: C is no longer reachable, B is the only wall
+
+**Not worked, re-measured.** This ticket's corrected order — *"A, then C, then
+B"* — was true on 2026-09-06 and is false at HEAD (`402d61e0d`). Wall C is not
+the next step; it is **behind** wall B and cannot be measured at all today.
+
+## What HEAD actually does
+
+```
+$ ./compiler/pascal26 --target=wasm32 hello.c hello.wasm     # printf hello world
+pascal26:32: error: variadic C functions (va_arg) are not yet supported on this cross target
+  in: ./compiler/../lib/crtl/src/fcntl.c
+```
+
+Not `wasm: too many params+locals`. And it is not just `fcntl.c` — compiled
+**alone** for wasm32, every crtl file this ticket names dies at the same wall:
+
+| crtl file | rc | first wall at HEAD |
+| --- | --- | --- |
+| `stdio.c` | 1 | va_arg |
+| `fcntl.c` | 1 | va_arg |
+| `unistd.c` | 1 | va_arg |
+| `stdlib.c` | 1 | va_arg |
+
+`stdio.c` is the one this ticket recorded as the params+locals case, and it now
+refuses for va_arg before the encoder ever runs — which is the shape to expect,
+since **va_arg refuses at PARSE time and the bound fails at ENCODE time**, and
+`stdio.c` defines the `printf` family, i.e. its own variadic callees.
+
+## The null result, with the expectation recorded BEFORE the run
+
+Predicted: raising the bound changes no observable, because va_arg fires first.
+Measured, `MAX_WASM_BODY_VARS` 288 -> 2048, full rebuild:
+
+| subject | at 288 | at 2048 |
+| --- | --- | --- |
+| `stdio.c` / `fcntl.c` / `unistd.c` / `stdlib.c` | va_arg | **va_arg** |
+| hosted `printf` program | va_arg | **va_arg** |
+
+**Zero observables moved.** The probe was reverted and the compiler rebuilt to
+the byte-identical `cc3113bf07f5` it had before — the same verification this
+ticket's own 09-06 probe used.
+
+**So do not raise the bound as "the next step".** It costs a commit, moves
+nothing, and produces exactly the null row this repo has burned five of. The
+cost if someone does want it later is small and is arithmetic from the
+declarations rather than a guess: the bound sizes `WFLoc` (1 byte/entry) and
+`WFVar` (an AnsiString handle, 8), so 288 -> 2048 is (2048-288)*9 = **15,840
+bytes** of compiler BSS, against 86.9 MB already. The number was never the
+obstacle; reachability is.
+
+Whether wall C is still real at all is now **unknown and unmeasurable** —
+exactly the condition this ticket named in its own Wall C section (*"a wall
+behind a wall is not merely unmeasured, it is unmeasurABLE"*). It has simply
+changed which wall is in front. Re-measure C after B lands; do not assume it
+is still there, and do not assume it is gone.
+
+## Wall B is the whole remaining job, and it is an ABI design
+
+Scoped at HEAD rather than estimated. The callee-side prologue is a per-target
+arm at `cparser.inc:14582` that spills **argument registers** into `__va_save`
+and points `__va_overflow` at the incoming stack frame (`vaRegSz` is 16 on
+arm32, 32 on riscv32, 24 on xtensa, 0 elsewhere). **wasm32 has no argument
+registers and no addressable incoming frame, so not one of those arms ports.**
+And the caller side needs its own mechanism: a wasm function has a FIXED typed
+signature, so "pass three arguments to a function declared with one" has no
+encoding — the caller must marshal into linear memory and pass one pointer.
+Both ends have to be designed together, and we own both, so there is no
+external ABI to match (matching clang's wasm32 convention is a deliberate
+choice, not a default).
+
+That is a designed convention plus backend work, not ordinary work, and it is
+the only thing standing between here and hosted C on wasm32.
+
+## And the caller side still fails SILENTLY — same class as the `__thread` bug
+
+Re-confirmed at HEAD, the 2026-09-16 finding, unchanged:
+
+```
+$ ./compiler/pascal26 --target=wasm32 vacall.c vacall.wasm ; echo $?
+wasm32: 478 of 479 bodies lowered; 1 emitted as `unreachable`; 1 distinct gap(s) seen
+    main — call to pxx_probe_va passes more than its 1 parameters
+ok: .../vacall.wasm  [code=15627B ...]
+0
+```
+
+**`ok:`, exit 0, a 117 KB module written — whose `main` traps when run.** That
+is a green build of a program that cannot execute, which is the same defect
+class as
+[[bug-c-a-thread-declaration-that-does-not-fit-the-tls-area-becomes-a-shared-global-with-only-a-warning]]
+(resolved today): compiles, says ok, wrong at runtime.
+
+**Deliberately NOT changed here, and the reason is topic ownership rather than
+doubt.** The `unreachable` floor is the wasm backend's own partial-lowering
+instrument — the "N of M bodies lowered" line is how that work is tracked — and
+its exit-code policy is that backend's to set, not this ticket's. Measured
+blast radius if anyone does take it: of the 61 wasm32 sources named in the
+Makefile, **59 compile clean, 1 fails for an unrelated reason
+(`test_setsignalhandler_call.pas`, no signal runtime), and exactly ONE emits a
+gap — `test/test_wasm32_two_gaps_in_one_body.pas`, the test that exists to
+exercise the mechanism.** Its unreachable body is `main$0`, so "fatal when the
+ENTRY body is unreachable" would red that test too; any change here has to
+decide what that test should then assert.
+
+## Summary of what changed on this ticket
+
+Nothing in the tree. What changed is the map: **B is the only reachable wall, C
+is behind it and unmeasurable, and the bound is not worth raising until B
+lands.**
