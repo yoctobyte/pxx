@@ -23980,6 +23980,82 @@ begin
   Result := True;
 end;
 
+{ Does a source file exist at `path`? An open, not a load: the member-or-module
+  question below probes up to four spellings per name, and a whole package's
+  worth of files read only to be thrown away is the wrong price for a yes/no. }
+function PySourceExists(const path: AnsiString): Boolean;
+var fd: Integer;
+begin
+  fd := sysopen(path, 0);
+  Result := fd >= 0;
+  if Result then sysclose(fd);
+end;
+
+{ `from . import NAME` has TWO readings in Python and this frontend knew one.
+  CPython binds NAME from the package's `__init__` when it is defined there,
+  and only otherwise imports the submodule `NAME`. PyParseRelImportNames took
+  every name as a module, so `from . import run` -- `run` a def in the
+  package's `__init__.py`, which is how That Space Program's
+  `tsp/view/__main__.py` reaches its entry point -- died with "no unit named
+  run and no shim mimic_run".
+
+  The member reading is not a new mechanism: it IS `from ..<pkg> import NAME`,
+  which the ordinary from-import arm already resolves and binds, `as` aliases
+  and module re-export included. So this only decides WHICH arm a statement
+  takes, and answers the package's name when it is the member arm; '' keeps
+  the module arm exactly as before.
+
+  The member arm is taken only when the directory has an `__init__` AND no
+  name in the statement is a module file or subpackage there. On disk is the
+  question we can answer before parsing anything; "defined in `__init__`" is
+  not, and for a name that is both CPython's answer is the `__init__` binding
+  -- the one case this gets wrong, and it gets it wrong loudly only if the two
+  differ in shape. A statement MIXING the two readings keeps the module arm,
+  whose error names the member; extend on encounter. }
+function PyRelImportMemberPackage(impLevel: Integer): AnsiString;
+var dir, nm: AnsiString; k, depth, i: Integer; anyName: Boolean;
+begin
+  Result := '';
+  dir := PyRelativeDir(CurUnitDir, impLevel);
+  if Length(dir) = 0 then Exit;
+  if not (PySourceExists(dir + '__init__.py') or
+          PySourceExists(dir + '__init__.npy')) then Exit;
+  { CurTok is `import`; Tokens[TokPos] is the token after it }
+  k := TokPos;
+  depth := 0;
+  anyName := False;
+  while k < TokCount do
+  begin
+    case Tokens[k].Kind of
+      tkLParen: Inc(depth);
+      tkRParen: begin Dec(depth); if depth <= 0 then Break; end;
+      tkNewline: if depth = 0 then Break;
+      tkSemicolon, tkEOF: Break;
+      tkIdent:
+        begin
+          nm := GetTokenStr(k);
+          if nm = 'as' then
+            Inc(k)                     { the alias is not a name in the package }
+          else
+          begin
+            if PySourceExists(dir + nm + '.py') or
+               PySourceExists(dir + nm + '.npy') or
+               PySourceExists(dir + nm + '/__init__.py') or
+               PySourceExists(dir + nm + '/__init__.npy') then Exit;
+            anyName := True;
+          end;
+        end;
+    end;
+    Inc(k);
+  end;
+  if not anyName then Exit;
+  { the package is the directory's last segment }
+  if dir[Length(dir)] = '/' then dir := Copy(dir, 1, Length(dir) - 1);
+  i := Length(dir);
+  while (i > 0) and (dir[i] <> '/') do Dec(i);
+  Result := Copy(dir, i + 1, Length(dir) - i);
+end;
+
 { `from . import a, b` and `from . import (a, b,` / `c)` — the names ARE the
   modules. ONE copy, called from both PyParseOneImport and PyParseImportRun,
   which each carried their own identical loop until 2026-09-11. The parenthesised
@@ -45342,17 +45418,30 @@ begin
       The relative and absolute forms differ only in how the module NAME is
       spelled, so there is nothing to duplicate here. }
     impLevel := PyRelativeImportLevel;
+    impName := '';
     if (impLevel > 0) and (CurTok.Kind = tkUses) then
     begin
-      { see PyParseRelImportNames — one copy, both callers }
-      PyParseRelImportNames(impLevel);
-      Exit;
+      { a member of the package's `__init__` is `from ..<pkg> import NAME`;
+        see PyRelImportMemberPackage and its twin in PyParseImportRun }
+      impName := PyRelImportMemberPackage(impLevel);
+      if Length(impName) = 0 then
+      begin
+        { see PyParseRelImportNames — one copy, both callers }
+        PyParseRelImportNames(impLevel);
+        Exit;
+      end;
+      impRoot := impName;
+      PyDottedImport := impName;
+      Inc(impLevel);
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a module name after from');
+      impName := PyConsumeDottedModule(impRoot);
+      if CurTok.Kind <> tkUses then
+        Error('Nil Python: expected import after from ' + impName);
     end;
-    if CurTok.Kind <> tkIdent then
-      Error('Nil Python: expected a module name after from');
-    impName := PyConsumeDottedModule(impRoot);
-    if CurTok.Kind <> tkUses then
-      Error('Nil Python: expected import after from ' + impName);
     Next;
     if not PyImportIsConsumedOnly(impRoot, impName) then
     begin
@@ -45432,6 +45521,9 @@ var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
       is a global, and pulling a unit parses ITS imports and overwrites it. The
       unit arm read it after the pull and bound nothing. }
     impDotted: AnsiString;
+    { the package a `from . import NAME` names when NAME is a member of its
+      `__init__`, or ''; see PyRelImportMemberPackage }
+    impPkg: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc, aliasPi: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
@@ -45479,19 +45571,37 @@ begin
       { see the sibling above: dots + identifier falls through to the ordinary
         from-import path rather than growing a second one. }
       impLevel := PyRelativeImportLevel;
+      impPkg := '';
       if (impLevel > 0) and (CurTok.Kind = tkUses) then
       begin
-        { see PyParseRelImportNames — one copy, both callers }
-        PyParseRelImportNames(impLevel);
-        PySkipNewlines;
-        Continue;
+        impPkg := PyRelImportMemberPackage(impLevel);
+        if Length(impPkg) = 0 then
+        begin
+          { see PyParseRelImportNames — one copy, both callers }
+          PyParseRelImportNames(impLevel);
+          PySkipNewlines;
+          Continue;
+        end;
       end;
-      if CurTok.Kind <> tkIdent then
-        Error('Nil Python: expected a module name after from');
-      impName := PyConsumeDottedModule(impRoot);
-      impDotted := PyDottedImport;
-      if CurTok.Kind <> tkUses then
-        Error('Nil Python: expected import after from ' + impName);
+      if Length(impPkg) > 0 then
+      begin
+        { `from . import NAME`, NAME a member of the package's `__init__`: it is
+          `from ..<pkg> import NAME`, and the arm below already is that }
+        impName := impPkg;
+        impRoot := impPkg;
+        impDotted := impPkg;
+        PyDottedImport := impPkg;
+        Inc(impLevel);
+      end
+      else
+      begin
+        if CurTok.Kind <> tkIdent then
+          Error('Nil Python: expected a module name after from');
+        impName := PyConsumeDottedModule(impRoot);
+        impDotted := PyDottedImport;
+        if CurTok.Kind <> tkUses then
+          Error('Nil Python: expected import after from ' + impName);
+      end;
       Next;
       { itertools is consumed-but-unresolved for now: uforth only needs
         count(); its use sites wall visibly until a shim lands (Track B). }

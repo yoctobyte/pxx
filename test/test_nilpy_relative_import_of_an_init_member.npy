@@ -1,0 +1,12 @@
+# `from . import run` binds `run` from the package's __init__.py when no
+# module file named run exists beside it -- CPython's member reading of the
+# statement. It used to be read only as a submodule import and failed with
+# "no unit named run and no shim mimic_run" (That Space Program's
+# tsp/view/__main__.py). The fixture package is test/nilpy_relmember.
+from nilpy_relmember.user import use, inner, label, LIMIT
+from nilpy_relmember import NAME
+
+print(use(3))
+print(inner())
+print(label(), NAME)
+print(LIMIT)
