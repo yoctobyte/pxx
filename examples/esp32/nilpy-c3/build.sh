@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: 0BSD
-# PXX -> ESP-IDF (ESP32-C3): a static Python application. main/main.npy is
-# compiled by pxx's NilPy frontend to a relocatable riscv32 object, wrapped in
+# PXX -> ESP-IDF: a static Python application. main/main.npy is compiled by
+# pxx's NilPy frontend to a relocatable object for the chip's ISA, wrapped in
 # an archive, and linked by the normal IDF build. There is no interpreter on
 # the chip.
+#
+# ONE script, two projects: examples/esp32/nilpy-c3 (ESP32-C3, riscv32) and
+# examples/esp32/nilpy-s3 (ESP32-S3, xtensa), picked by the directory it runs
+# in. nilpy-s3's build.sh and main/main.npy are symlinks to these, so the two
+# chips always build the same program. IDF wants one project per chip
+# (set-target wipes build/), which is why there are two directories at all.
 #
 # Prereqs: . ~/esp/esp-idf/export.sh   (idf.py + toolchains on PATH)
 # Usage:   ./build.sh               build only
@@ -11,7 +17,7 @@
 #                                   the program's output against
 #                                   main/main.expected (CPython's own output)
 #
-# Its OWN project, not tools/esp_run.sh's hello-c3, for the same reason as
+# Its OWN project, not tools/esp_run.sh's hello-*, for the same reason as
 # fs-c3: it needs its own partition table. The NilPy runtime is ~3 MB of code
 # without --dce and the stock 1 MB factory app partition cannot hold it, so
 # this project is 4 MB of flash with one large app (partitions.csv). Code is
@@ -21,58 +27,86 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
 
-# --no-signals as well as --platform=esp: the signal runtime's rt_sigaction
-# install is an ecall in app_main's prologue, fatal under FreeRTOS.
-"$PXX" --target=riscv32 --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.npy main/main.o
+case "$(basename "$PWD")" in
+  nilpy-c3)
+    CHIP=esp32c3; NAME=pxx_nilpy_c3
+    # --no-signals as well as --platform=esp: the signal runtime's
+    # rt_sigaction install is an ecall in app_main's prologue, fatal under
+    # FreeRTOS.
+    ISA="--target=riscv32"
+    QEMU_GLOB="qemu-riscv32/*/qemu/bin/qemu-system-riscv32" ;;
+  nilpy-s3)
+    CHIP=esp32s3; NAME=pxx_nilpy_s3
+    # --xtensa-long-calls: a 2.9 MB image puts forward calls past CALL8's
+    # +-512 KiB, and a forward call site is sized before its body exists.
+    # feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
+    ISA="--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"
+    QEMU_GLOB="qemu-xtensa/*/qemu/bin/qemu-system-xtensa" ;;
+  *) echo "build.sh: run from nilpy-c3 or nilpy-s3, not $(basename "$PWD")" >&2; exit 2 ;;
+esac
+
+# shellcheck disable=SC2086
+"$PXX" $ISA --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.npy main/main.o
 ar rcs main/libpxx_app.a main/main.o
 
 # `set-target` WIPES build/ and reconfigures -- only when not configured yet.
-if ! grep -q '^CONFIG_IDF_TARGET="esp32c3"' sdkconfig 2>/dev/null; then
-  idf.py set-target esp32c3
+if ! grep -q "^CONFIG_IDF_TARGET=\"$CHIP\"" sdkconfig 2>/dev/null; then
+  idf.py set-target "$CHIP"
 fi
 # ninja does not see inside the prebuilt archive; drop the image to force a
 # relink, or a previous program's binary would boot instead.
 rm -f build/*.elf build/*.bin
 idf.py build
 
-grep -q " app_main" build/pxx_nilpy_c3.map && echo "app_main present in image map"
+grep -q " app_main" "build/$NAME.map" && echo "app_main present in image map"
 
 # Non-interactive acceptance, the fs-c3 recipe: serial to a FILE, let the
 # timeout fire, assert on what was captured.
 #
-# WHAT A PASS WITNESSES: the program's stdout on an emulated ESP32-C3, under
-# FreeRTOS, is byte-identical to CPython's. WHAT IT DOES NOT: silicon.
+# WHAT A PASS WITNESSES: the program's stdout on an emulated chip, under
+# FreeRTOS, is byte-identical to CPython's, and the chip booted ONCE -- a
+# program that ends by busy-parking starves the idle task and the watchdogs
+# reboot it, which replays the output. WHAT IT DOES NOT: silicon.
 if [ "${1:-}" = "qemu-assert" ]; then
-  QEMU_BIN="${QEMU_BIN:-$(ls "$HOME"/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1)}"
+  # shellcheck disable=SC2086
+  QEMU_BIN="${QEMU_BIN:-$(ls "$HOME"/.espressif/tools/$QEMU_GLOB 2>/dev/null | head -1)}"
   if [ -z "$QEMU_BIN" ] || [ ! -x "$QEMU_BIN" ]; then
-    echo "SKIP qemu-assert -- no Espressif qemu-system-riscv32 under ~/.espressif/tools"
+    echo "SKIP qemu-assert -- no Espressif qemu for $CHIP under ~/.espressif/tools"
     exit 77
   fi
-  ( cd build && esptool --chip esp32c3 merge-bin --pad-to-size 4MB \
+  ( cd build && esptool --chip "$CHIP" merge-bin --pad-to-size 4MB \
       -o qemu_flash.bin @flash_args >/dev/null )
-  # DEFAULT efuse, not a blank one: an all-zero block reports chip revision
-  # v0.0, the bootloader rejects the image and reboots forever (fs-c3/build.sh).
-  python3 - "$PWD/build/qemu_efuse.bin" <<'PYEFUSE'
+  ser="$(mktemp)"
+  trap 'rm -f "$ser"' EXIT
+  if [ "$CHIP" = esp32c3 ]; then
+    # DEFAULT efuse, not a blank one: an all-zero block reports chip revision
+    # v0.0, the bootloader rejects the image and reboots forever
+    # (fs-c3/build.sh). The esp32s3 machine boots without one.
+    python3 - "$PWD/build/qemu_efuse.bin" <<'PYEFUSE'
 import sys, os
 sys.path.insert(0, os.path.join(os.environ['IDF_PATH'], 'tools'))
 from idf_py_actions.qemu_ext import QEMU_TARGETS
 open(sys.argv[1], 'wb').write(QEMU_TARGETS['esp32c3'].default_efuse)
 PYEFUSE
-  ser="$(mktemp)"
-  trap 'rm -f "$ser"' EXIT
-  timeout 40 "$QEMU_BIN" -nographic -machine esp32c3 \
-    -drive file=build/qemu_flash.bin,if=mtd,format=raw \
-    -drive file=build/qemu_efuse.bin,if=none,format=raw,id=efuse \
-    -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
-    -serial "file:$ser" </dev/null >/dev/null 2>&1 || true
+    timeout 40 "$QEMU_BIN" -nographic -machine esp32c3 \
+      -drive file=build/qemu_flash.bin,if=mtd,format=raw \
+      -drive file=build/qemu_efuse.bin,if=none,format=raw,id=efuse \
+      -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
+      -serial "file:$ser" </dev/null >/dev/null 2>&1 || true
+  else
+    timeout 40 "$QEMU_BIN" -nographic -machine esp32s3 \
+      -drive file=build/qemu_flash.bin,if=mtd,format=raw \
+      -serial "file:$ser" </dev/null >/dev/null 2>&1 || true
+  fi
   # The program's output is everything after IDF's "Calling app_main()" line,
   # minus IDF's own log lines ("I (123) tag: ...").
   got="$(tr -d '\r' < "$ser" | awk 'f && !/^[IWE] \([0-9]+\) / {print} /Calling app_main\(\)/{f=1}')"
   want="$(cat main/main.expected)"
-  if [ "$got" = "$want" ]; then
-    echo "OK   nilpy-c3 -- a static Python application runs on the ESP32-C3, output == CPython"
+  boots="$(grep -c 'ESP-ROM' "$ser" || true)"
+  if [ "$got" = "$want" ] && [ "$boots" = 1 ]; then
+    echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == CPython, one boot"
   else
-    echo "FAIL nilpy-c3 -- output differs from CPython (main/main.expected)"
+    echo "FAIL $(basename "$PWD") -- output differs from CPython (main/main.expected) or the chip rebooted (boots=$boots)"
     echo "want:"; printf '%s\n' "$want" | sed 's/^/    /'
     echo "got:";  printf '%s\n' "$got"  | sed 's/^/    /'
     echo "serial tail:"; tr -d '\r' < "$ser" | tail -25 | sed 's/^/    /'

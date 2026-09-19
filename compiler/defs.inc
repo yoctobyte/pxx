@@ -6120,6 +6120,10 @@ var
     the body being emitted (slot 0 is the proc cleanup frame), allocated on
     first use and reset with XtSpillDepth. XtExcSlotOwner is the CurProc the
     table belongs to; -2 means empty. See XtensaExcFrameAddrW. }
+  { Bytes XtensaLoadArgRegsWindowed lowered sp by for a call passing more
+    argument words than XT_OUTARG_REGION holds; 0 for every ordinary call.
+    XtensaCallDoneWindowed restores it after the call. }
+  XtCallSpExtra : Integer;
   XtExcSlotOwner : Integer;
   XtExcSlotSet : array[0..XT_EXC_MAX_SLOTS - 1] of Boolean;
   XtExcSlotOff : array[0..XT_EXC_MAX_SLOTS - 1] of Integer;

@@ -61,6 +61,21 @@ franks-ee). One wall, both ESP architectures. **Until it falls: "pxx runs on
 ESP32" is TRUE (Pascal reaches xtensa) and "pxx compiles Python to ESP32" is
 FALSE, and neither goes into public copy in the other's place.**
 
+**SUPERSEDED IN A NAMED SCOPE, 2026-09-19 — "pxx compiles Python to ESP32" IS
+NOW TRUE FOR THE ESP32-C3 AND THE ESP32-S3 UNDER ESP-IDF, UNDER QEMU. NO REAL
+CHIP HAS RUN IT.** `examples/esp32/nilpy-c3` and `examples/esp32/nilpy-s3`
+build one NilPy program (a class, a list, a loop, `print`) to a relocatable
+object, link it with `idf.py`, boot it in Espressif's qemu, and diff the serial
+output against CPython's: byte-identical, one boot, no reboot loop
+(`./build.sh qemu-assert`). Say exactly that and no more. **Three things it
+does NOT say:** that it runs on silicon (nobody has flashed one); that it runs
+on BARE metal (`--esp-profile=bare` is still walled — the paragraphs below are
+about that profile and still hold); and that it needs no external tools — the
+image is linked by the IDF toolchain, not by pxx. The S3 build also needs
+`--xtensa-long-calls` until `feature-a-xtensa-should-not-need-a-flag-to-build-
+a-large-image` lands, and both need a compiler newer than pin v412, which
+predates both halves: until the next pin, run them with `PXX=compiler/pascal26`.
+
 **THE ARENA WALL FELL THE SAME DAY (`2b2ec3fee`) AND THE CLAIM IS STILL FALSE —
 READ BOTH HALVES.** Bare metal has no kernel to ask for an arena, so the arena
 does not need obtaining; it needs to BE part of the image, and it is BSS now.
@@ -128,8 +143,8 @@ was measuring a host binary.
 conclusion it supported is UNCHANGED.** That sentence was true of what could be
 seen, and clearing the wall is what showed it was never the expensive one —
 the first-failure pattern arriving inside a single ticket. **"pxx compiles
-Python to ESP32" is still FALSE**, no NilPy program runs on ESP bare metal
-today, and the arena landing does not move that line into public copy. What it
+Python to ESP32" is still FALSE ON BARE METAL** — no NilPy program runs on ESP
+bare metal today (under ESP-IDF, see the scoped TRUE above) — and the arena landing does not move that line into public copy. What it
 changes is only the reason: the arena is no longer why.
 
 Linking — a `pxx --link` mode — was discussed the same day and **explicitly

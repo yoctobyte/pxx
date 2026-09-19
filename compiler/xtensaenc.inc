@@ -61,6 +61,10 @@ end;
 
 function EncodeXtensaAddi(t, s, imm: Integer): Integer;
 begin
+  { NOT a PC-relative field, and it had the same wrap: `imm and $FF` turned
+    `addi a3, sp, 252` into `addi a3, sp, -4`, a valid instruction aimed at the
+    wrong slot. Windowed spill-slot addresses reach it past a depth of ~130. }
+  XtensaRelCheck(imm, -128, 127, 'addi immediate');
   Result := ((imm and $FF) shl 16) or ((($C shl 4) or s) shl 8) or ((t shl 4) or 2);
 end;
 
@@ -82,8 +86,19 @@ begin
   EmitB((val shr 16) and $FF);
 end;
 
+procedure XtensaCheckWordOffset(offset: Integer; const what: AnsiString);
+{ l32i/s32i encode offset/4 in eight bits: 0..1020, word-aligned. The mask
+  below wrapped anything else to a different valid slot. }
+begin
+  XtensaRelCheck(offset, 0, 1020, what + ' offset');
+  if (offset and 3) <> 0 then
+    Error('target xtensa: ' + what + ' offset ' + AIntToStr(offset)
+          + ' is not word-aligned');
+end;
+
 procedure xtensa_s32i(t, s, offset: Integer);
 begin
+  XtensaCheckWordOffset(offset, 's32i');
   EmitB((t shl 4) or 2);
   EmitB((6 shl 4) or s);
   EmitB((offset div 4) and $FF);
@@ -91,6 +106,7 @@ end;
 
 procedure xtensa_l32i(t, s, offset: Integer);
 begin
+  XtensaCheckWordOffset(offset, 'l32i');
   EmitB((t shl 4) or 2);
   EmitB((2 shl 4) or s);
   EmitB((offset div 4) and $FF);

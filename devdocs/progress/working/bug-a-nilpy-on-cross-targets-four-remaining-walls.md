@@ -1,9 +1,9 @@
 ---
 track: A
-prio: 85
+prio: 40
 type: bug
-blocked-by: [bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit]
-summary: "PER TARGET, BY MECHANISM (re-measured 2026-09-19, frankS). ESP32-C3 under ESP-IDF (--platform=esp) WORKS: a class/list/loop/print program builds, links and runs under qemu with output == CPython (examples/esp32/nilpy-c3, build.sh qemu-assert). Six IDF-profile gaps were closed to get there: the NilPy heap arena is reserved in BSS on the IDF profile as on bare; the NilPy driver pulls softfloat before builtinheap through the same routine as every other driver; riscv32 IR_SYSCALL answers -ENOSYS on ESP instead of an `ecall` trap; ParamCount/ParamStr answer 0/'' on ESP on both ISAs; Write/print on IDF reaches the libc stdout stream; the program end deletes the FreeRTOS task instead of busy-parking. ESP32-S3 under IDF is walled by the WINDOWED ABI'S FIXED OUTGOING-ARGUMENT AREA: a call may pass at most 22 argument words (XT_OUTARG_REGION), and pyeval's closure-call bridge passes up to 32 Int64 arguments, 64 words; the landing-pad reach limit in front of it is fixed. Behind that, xtensa's IDF Write is still silent and its exit a busy park (bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit). BARE metal (--esp-profile=bare, both ISAs) is walled by DESIGN, not a bug: the `builtin` unit is unsupported on a bare boot and NilPy needs it (feature-bare-esp-supports-uses-builtin, which now has the named program its ranking asked for). Flash: ~3 MB of code without DCE, and `--dce` on riscv32 IDF drops a called body (bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile). Other targets UNCHANGED since 2026-08-31 and NOT re-measured tonight: arm32 works; i386 `symbol kind not supported yet (load)`; aarch64 has no stack-argument passing for 5 of 6 call kinds; hosted riscv32/xtensa Linux has no mmap arm for the arena; wasm32 `undefined variable (SYS_openat)`."
+blocked-by: []
+summary: "PER TARGET, BY MECHANISM (re-measured 2026-09-19, frankS). UNDER ESP-IDF (--platform=esp) BOTH ESP ISAs WORK, UNDER QEMU ONLY -- no chip has run either: one class/list/loop/print program builds, links with idf.py and prints CPython's output byte for byte with one boot, on the ESP32-C3 (riscv32, examples/esp32/nilpy-c3) and the ESP32-S3 (windowed xtensa, examples/esp32/nilpy-s3), `./build.sh qemu-assert`. Needs a compiler newer than pin v412. What had to change is ISA-neutral runtime (the NilPy arena reserved in BSS on IDF; softfloat before builtinheap; ParamCount/ParamStr answer 0 on ESP; Write reaches libc's stdout STREAM; the program end deletes the FreeRTOS task instead of busy-parking) plus per-ISA codegen: riscv32's IR_SYSCALL answers -ENOSYS on ESP; xtensa's exception frames live in fixed frame slots instead of being pushed under the spill stack, its landing pads use a long jump past 128 KiB, a call passing more argument words than the windowed outgoing area holds carves the rest below sp with MOVSP, and every call shape marshals an argument by its class (the virtual/indirect/ctor sites knew only records). The S3 image still needs --xtensa-long-calls (feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image) and neither ISA can use --dce on IDF (bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile), so the image is ~3 MB of flash. BARE metal (--esp-profile=bare, both ISAs) is walled by DESIGN, not a bug: `builtin` is unsupported on a bare boot and NilPy needs it (feature-bare-esp-supports-uses-builtin). Other targets UNCHANGED since 2026-08-31 and NOT re-measured: arm32 works; i386 `symbol kind not supported yet (load)`; aarch64 has no stack-argument passing for 5 of 6 call kinds; hosted riscv32/xtensa Linux has no mmap arm for the arena; wasm32 `undefined variable (SYS_openat)`."
 status: working
 owner: frankS
 ---
@@ -623,3 +623,35 @@ now live in fixed per-depth slots of their own body's frame
 (XtensaExcFrameAddrW); test/test_esp_idf_nested_try.pas is the row in
 test-esp-idf, and the pinned compiler fails it (`T1 9`, then a Guru
 Meditation).
+
+## 2026-09-19 (frankS) — the ESP32-S3 IDF cell is GREEN under qemu; prio back to 40
+
+Same program as nilpy-c3, on the S3 under ESP-IDF in Espressif's qemu:
+`Aurora 20 / Wind 15 / Kees 24 / total 59 3`, == CPython, one boot, no Guru
+over 40 s. `examples/esp32/nilpy-s3` shares build.sh and main.npy with nilpy-c3
+by symlink; build.sh picks the chip from the directory name.
+
+Walls cleared on the way, in the order they were hit (each one hidden behind
+the one before it):
+
+1. landing pads past 128 KiB — resolved as its own ticket (b4a92ea58);
+2. nested windowed exception frames overwrote each other's EXC_TOP link once a
+   spill landed — frames now live in fixed frame slots (b4a92ea58,
+   test/test_esp_idf_nested_try.pas);
+3. more than 22 argument words refused — the extra words go in a region carved
+   below sp with MOVSP for the length of the call;
+4. forward calls past CALL8's reach at 2.9 MB — `--xtensa-long-calls` for now;
+5. quotients printed divided by 16 — virtual/indirect/ctor call sites passed an
+   Int64 or Double as ONE word; one shared XtensaPushArgByClass now serves all
+   of them (test/test_xtensa_call_arg_classes.pas, both ABIs);
+6. "expression/argument stack exceeds reserved frame" in a proc with a large
+   frame — the spill limit is the main body's fixed region only in the main
+   body; an sp offset past addi's range now materialises instead of wrapping,
+   and addi/l32i/s32i refuse an out-of-range immediate instead of masking it;
+7. Write silent and the end a busy park on xtensa IDF — resolved as
+   bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit.
+
+Prio 85 was set on 2026-09-17 (72ae354aa) to re-rank THE ESP WALL on the
+owner's refocus. Under IDF that wall is gone on both ISAs; bare metal has its
+own ticket and was parked deliberately (coordinator, 2026-09-19). What is left
+here is the non-ESP rows, which is what prio 40 was for before the refocus.

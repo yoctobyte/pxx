@@ -30820,6 +30820,17 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_xtensa_frame32k "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_frame_over_32k.pas $(TESTTMP)/test_xtensa_frame32k_w
 	tools/expect_same.sh xtensa/test_xtensa_frame32k_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_frame32k_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_frame32k_x64; echo "exit=$$?")"
+	# ARGUMENT CLASSES THROUGH EVERY CALL SHAPE, both ABIs. The virtual,
+	# indirect and constructor sites each had a record-only ladder, so an Int64
+	# or a Double went over as one word -- an ESP32-S3 NilPy program printed its
+	# quotients divided by 16. The pinned compiler before the fix gets five of
+	# seven rows wrong under call0 and refuses `wide` (26 argument words) under
+	# windowed. bug-a-nilpy-on-cross-targets-four-remaining-walls
+	./$(COMPILER) test/test_xtensa_call_arg_classes.pas $(TESTTMP)/test_xtensa_argcls_x64
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_xtensa_call_arg_classes.pas $(TESTTMP)/test_xtensa_argcls_w
+	tools/expect_same.sh xtensa/test_xtensa_argcls_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_argcls_w; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_argcls_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=call0 test/test_xtensa_call_arg_classes.pas $(TESTTMP)/test_xtensa_argcls_c0
+	tools/expect_same.sh xtensa/test_xtensa_argcls_c0 "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_argcls_c0; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_argcls_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -Fulib/rtl test/test_signal_altstack.pas $(TESTTMP)/test_xtensa_sigalt
 	tools/expect_same.sh xtensa/test_xtensa_sigalt "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sigalt; echo "exit=$$?")" "$$(printf 'recursing\ncode=2\nhandler-off-faulting-stack=TRUE\nexit=0')"
 	# FAULT-TO-RAISE ON XTENSA, the three rows the ucontext PC/SP offsets open.
@@ -35483,6 +35494,23 @@ test-esp-idf: $(COMPILER)
 	@if diff -u $(TESTTMP)/test_esp_idf_nested_try.oracle $(TESTTMP)/test_esp_idf_nested_try.s3; then \
 	  echo "esp32s3 nested exception frames ok (== x86-64 oracle)"; \
 	else echo "esp32s3 nested exception frames MISMATCH"; exit 1; fi
+	@# WRITELN, THEN THE PROGRAM ENDS -- the shape the IDF examples avoid by
+	@# printing with esp_rom_printf and parking in a vTaskDelay loop. Write used
+	@# to lower to nothing on ESP and the end was a busy park that the watchdogs
+	@# turn into a reboot, which replays the output; either shows up here as a
+	@# diff against the x86-64 oracle. The pinned compiler before the xtensa fix
+	@# prints nothing on esp32s3, measured with ESP_RUN_PXX.
+	@./$(COMPILER) test/test_esp_idf_writeln_end.pas $(TESTTMP)/test_esp_idf_writeln_end >/dev/null && \
+	  $(TESTTMP)/test_esp_idf_writeln_end > $(TESTTMP)/test_esp_idf_writeln_end.oracle && \
+	  [ -s $(TESTTMP)/test_esp_idf_writeln_end.oracle ] || { echo "writeln-end oracle did not run"; exit 1; }
+	@for chip in esp32c3 esp32s3; do \
+	  echo "--- $$chip WriteLn, then the program ends"; \
+	  ESP_RUN_TIMEOUT=20 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	    tools/esp_run.sh --chip $$chip test/test_esp_idf_writeln_end.pas > $(TESTTMP)/test_esp_idf_writeln_end.$$chip 2>/dev/null || true; \
+	  if diff -u $(TESTTMP)/test_esp_idf_writeln_end.oracle $(TESTTMP)/test_esp_idf_writeln_end.$$chip; then \
+	    echo "$$chip WriteLn + task end ok (== x86-64 oracle, one boot)"; \
+	  else echo "$$chip WriteLn + task end MISMATCH"; exit 1; fi; \
+	done
 
 test-esp-softfloat: $(COMPILER)
 	@./$(COMPILER) test/test_esp_softfloat_probe.pas $(TESTTMP)/test_esp_softfloat_oracle >/dev/null && $(TESTTMP)/test_esp_softfloat_oracle > $(TESTTMP)/test_esp_softfloat.oracle

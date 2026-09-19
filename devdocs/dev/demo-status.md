@@ -102,9 +102,14 @@ real window.** On evidence:
   the console against CPython's output: **OK, one boot, no watchdog over 45 s**
   (2026-09-19, frankS, HEAD binary `035bd63724e1`). **Checked** in this table's
   terms. It needs the compiler fixes landed with it, so until the next pin run
-  it as `PXX=compiler/pascal26 ./build.sh qemu-assert`. Not measured: silicon,
-  and the ESP32-S3 (its route is still walled, see
-  `bug-a-nilpy-on-cross-targets-four-remaining-walls`).
+  it as `PXX=compiler/pascal26 ./build.sh qemu-assert`. Not measured: silicon.
+  **`examples/esp32/nilpy-s3`: the same program on the ESP32-S3** (windowed
+  xtensa; build.sh and main.npy are symlinks into nilpy-c3, the script picks the
+  chip from its directory): **OK, one boot**, 2026-09-19, frankS, binary
+  `8e9015727927` built from the tree this row landed with. Same pin caveat.
+  It also passes `--xtensa-long-calls`, which its build.sh sets (`feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image`).
+  Not measured: silicon, and the S3 is the owner's own hardware, so that is the
+  next thing worth measuring.
 
 ## Reproduce
 

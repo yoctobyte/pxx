@@ -368,6 +368,37 @@ begin
   end;
 end;
 
+function XtSpillLimit: Integer;
+{ How deep the windowed expression stack may go in the body being emitted.
+  A PROCEDURE's frame is sized after its body to exactly what the stack
+  reached (PatchProcPrologue adds XtSpillMax), so its only limit is l32i/s32i's
+  reach, 1020 -- the old 256 was a guess about frame size that stopped being
+  load-bearing when frames became exact. The MAIN body is different: the entry
+  stub reserves a FIXED XT_OUTARG_REGION + XT_EXPR_REGION and is never
+  patched, so it keeps that cap. What needed the room: pyeval's closure bridge
+  stages up to 32 Int64 arguments, 64 words, now that the indirect path pushes
+  an Int64 as the two words it is. }
+begin
+  if CurProc < 0 then
+    Result := XT_OUTARG_REGION + XT_EXPR_REGION
+  else
+    Result := 1024;
+end;
+
+procedure XtensaSpAddr(rd, off: Integer);
+{ rd := sp + off, for any off. ADDI reaches -128..127 and its encoder used to
+  wrap anything larger to a different slot; a spill slot sits past that as
+  soon as the stack is ~130 bytes deep. }
+begin
+  if (off >= -128) and (off <= 127) then
+    xtensa_addi(rd, reg_xtensa_sp, off)
+  else
+  begin
+    EmitLoadConstXtensa(rd, off);
+    xtensa_add(rd, reg_xtensa_sp, rd);
+  end;
+end;
+
 procedure XtensaPushA2;
 { Spill a2 to the next expression-stack slot. Windowed: sp is constant, so the
   slot is sp-relative at the running XtSpillDepth offset (never move sp, or the
@@ -375,7 +406,7 @@ procedure XtensaPushA2;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
-    if XtSpillDepth + 4 > XT_OUTARG_REGION + XT_EXPR_REGION then
+    if XtSpillDepth + 4 > XtSpillLimit then
       Error('target xtensa: expression/argument stack exceeds reserved frame');
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     Inc(XtSpillDepth, 4);
@@ -479,7 +510,7 @@ procedure XtensaPush64;
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
-    if XtSpillDepth + 8 > XT_OUTARG_REGION + XT_EXPR_REGION then
+    if XtSpillDepth + 8 > XtSpillLimit then
       Error('target xtensa: expression/argument stack exceeds reserved frame');
     xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth);
     xtensa_s32i(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth + 4);
@@ -541,20 +572,54 @@ procedure XtensaLoadArgRegsWindowed(argBase, nArgs: Integer);
   area at sp+(k-6)*4, which the callee reads back through its own frame pointer
   (biased by its `entry` size). That is the layout xtensa gcc emits, so calls
   in and out of ESP-IDF agree. a8 is scratch: an indirect/virtual site only
-  loads the callee address into it afterwards. }
-var k: Integer;
+  loads the callee address into it afterwards.
+
+  PAST XT_MAX_ARG_WORDS the reserved outgoing area (XT_OUTARG_REGION) cannot
+  hold the overflow, and growing it would grow EVERY windowed frame, which the
+  3584-byte IDF task stacks cannot afford. So this one call lowers sp by the
+  overflow's size (MOVSP -- the only legal way to move a1 here) and writes the
+  words at the new sp+0.. . Nothing is spilled between here and the call, so
+  the sp-relative expression stack is never addressed while sp is low; the
+  staged words are read at their offsets plus the drop, and XtCallSpExtra
+  tells the call site to add the same to the one sp-relative load it does
+  after this (an indirect callee) and to restore sp once the call returns
+  (XtensaCallDoneWindowed). pyeval.pas's closure bridge passes up to 32 Int64
+  arguments, 64 words, and was refused by every NilPy program for ESP32-S3. }
+var k, extra, maxOff: Integer;
 begin
+  XtCallSpExtra := 0;
   if nArgs > XT_MAX_ARG_WORDS then
-    Error('target xtensa windowed: more than 22 argument words not supported ' +
-          '(XT_OUTARG_REGION is 16 overflow words)');
+  begin
+    extra := (((nArgs - 6) * 4 + 15) div 16) * 16;
+    maxOff := extra + argBase + (nArgs - 1) * 4;
+    if maxOff > 1020 then
+      Error('target xtensa windowed: a call passing ' + AIntToStr(nArgs)
+            + ' argument words needs a staged-word offset of ' + AIntToStr(maxOff)
+            + ', past l32i''s 1020');
+    EmitLoadConstXtensa(reg_xtensa_a8, extra);
+    xtensa_sub(reg_xtensa_a8, reg_xtensa_sp, reg_xtensa_a8);
+    xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+    XtCallSpExtra := extra;
+  end;
   for k := 6 to nArgs - 1 do
   begin
-    xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase + k * 4);
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtCallSpExtra + argBase + k * 4);
     xtensa_s32i(reg_xtensa_a8, reg_xtensa_sp, (k - 6) * 4);
   end;
   for k := 0 to nArgs - 1 do
     if k < 6 then
-      xtensa_l32i(reg_xtensa_a10 + k, reg_xtensa_sp, argBase + k * 4);
+      xtensa_l32i(reg_xtensa_a10 + k, reg_xtensa_sp, XtCallSpExtra + argBase + k * 4);
+end;
+
+procedure XtensaCallDoneWindowed;
+{ Undo XtensaLoadArgRegsWindowed's sp drop, if it made one. Only a8 is
+  touched: the result is in a10/a11. }
+begin
+  if XtCallSpExtra = 0 then Exit;
+  EmitLoadConstXtensa(reg_xtensa_a8, XtCallSpExtra);
+  xtensa_add(reg_xtensa_a8, reg_xtensa_sp, reg_xtensa_a8);
+  xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+  XtCallSpExtra := 0;
 end;
 
 procedure XtensaOrderOverflowArgsCall0(nArgs: Integer);
@@ -779,7 +844,7 @@ begin
     IREmitNodeXtensa(valNode);                  { a2 = char code }
     XtensaPushA2;                               { spill char to the frame }
     if XtensaABI = XTENSA_ABI_WINDOWED then
-      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
+      XtensaSpAddr(reg_xtensa_a3, XtSpillDepth - 4)
     else
       xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
     EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
@@ -928,7 +993,7 @@ begin
     XtensaPushA2;                               { spill char to the frame }
     { a3 = address of the spilled char slot. }
     if XtensaABI = XTENSA_ABI_WINDOWED then
-      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, XtSpillDepth - 4)
+      XtensaSpAddr(reg_xtensa_a3, XtSpillDepth - 4)
     else
       xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 0);
     EmitLoadConstXtensa(reg_xtensa_a2, 1);      { len 1 }
@@ -1859,6 +1924,81 @@ begin
   end
   else
     EmitCallProc(procIdx);                        { call0: a2, a3 already in place }
+end;
+
+procedure XtensaPushArgByClass(procIdx, paramIdx, argNode: Integer; var nArgs: Integer);
+{ Push one by-value call argument as the words its Arg32Class says it is:
+  Double and Int64 as an even-aligned pair (widened from a narrower source),
+  Single as one word, an 8-byte record as its two words, a set as its eight,
+  everything else as one word. `nArgs` counts WORDS; `paramIdx` is the
+  PARAMETER index (Self is 0 for a method).
+
+  ONE copy, used by the constructor, virtual and indirect ladders. There were
+  three: the constructor's had all five arms (it learned them in
+  bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes),
+  and the virtual and indirect ones pushed one word for everything but a
+  record, deliberately, noting that Int64/Double through them was "a separate
+  defect on this backend". A NilPy method IS a virtual call and its parameters
+  are Int64, so every argument to a Python method arrived as garbage on an
+  ESP32-S3: `b.dd(120)` returned 0 and the demo's `dist // self.speed`
+  printed its quotient divided by sixteen. The even-word pad is applied on the
+  caller side because the callee spill runs one shared 64-bit branch and skips
+  an odd word on its side too -- both sides apply the rule or neither does. }
+var argCls, w: Integer;
+begin
+  argCls := Arg32Class(procIdx, paramIdx, IntToTypeKind(IRTk[IRA[argNode]]));
+  if argCls = A32_DOUBLE then
+  begin
+    XtensaPadTo64Xtensa(procIdx, nArgs);
+    EmitFloatOperandXtensa(IRA[argNode], tyDouble);   { a2=lo, a3=hi }
+    XtensaPushA2;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+    XtensaPushA2;
+    Inc(nArgs, 2);
+  end
+  else if argCls = A32_SINGLE then
+  begin
+    EmitFloatOperandXtensa(IRA[argNode], tySingle);
+    XtensaPushA2;
+    Inc(nArgs, 1);
+  end
+  else if argCls = A32_PAIR64 then
+  begin
+    XtensaPadTo64Xtensa(procIdx, nArgs);
+    EmitNode64Xtensa(IRA[argNode]);                   { a2=lo, a3=hi }
+    XtensaPushA2;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+    XtensaPushA2;
+    Inc(nArgs, 2);
+  end
+  else if argCls = A32_RECORD then
+  begin
+    XtensaPadTo64Xtensa(procIdx, nArgs);
+    IREmitNodeXtensa(IRA[argNode]);                   { a2=lo, a3=hi }
+    XtensaPushA2;
+    xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+    XtensaPushA2;
+    Inc(nArgs, 2);
+  end
+  else if argCls = A32_SET then
+  begin
+    { The set's VALUE is its address; push all eight words inline, as the
+      direct path does, so the callee spill can rebuild it. }
+    IREmitNodeXtensa(IRA[argNode]);                   { a2 = set address }
+    xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+    for w := 0 to 7 do
+    begin
+      xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, w * 4);
+      XtensaPushA2;
+    end;
+    Inc(nArgs, 8);
+  end
+  else
+  begin
+    IREmitNodeXtensa(IRA[argNode]);
+    XtensaPushA2;
+    Inc(nArgs, 1);
+  end;
 end;
 
 procedure IREmitNodeXtensa(node: Integer);
@@ -3030,59 +3170,7 @@ begin
               Int64, Double and a 5..8 byte record, so it skips an odd word on
               its side too. Both sides apply the rule or neither does.
               bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes }
-            argCls := Arg32Class(j, i, IntToTypeKind(IRTk[IRA[argNode]]));
-            if argCls = A32_DOUBLE then
-            begin
-              XtensaPadTo64Xtensa(j, nArgs);
-              EmitFloatOperandXtensa(IRA[argNode], tyDouble);   { a2=lo, a3=hi }
-              XtensaPushA2;
-              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
-              XtensaPushA2;
-              Inc(nArgs, 2);
-            end
-            else if argCls = A32_SINGLE then
-            begin
-              EmitFloatOperandXtensa(IRA[argNode], tySingle);
-              XtensaPushA2;
-              Inc(nArgs, 1);
-            end
-            else if argCls = A32_PAIR64 then
-            begin
-              XtensaPadTo64Xtensa(j, nArgs);
-              EmitNode64Xtensa(IRA[argNode]);                   { a2=lo, a3=hi }
-              XtensaPushA2;
-              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
-              XtensaPushA2;
-              Inc(nArgs, 2);
-            end
-            else if argCls = A32_RECORD then
-            begin
-              XtensaPadTo64Xtensa(j, nArgs);
-              IREmitNodeXtensa(IRA[argNode]);                   { a2=lo, a3=hi }
-              XtensaPushA2;
-              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
-              XtensaPushA2;
-              Inc(nArgs, 2);
-            end
-            else if argCls = A32_SET then
-            begin
-              { The set's VALUE is its address; push all eight words inline, as
-                the direct path does, so the callee spill can rebuild it. }
-              IREmitNodeXtensa(IRA[argNode]);                   { a2 = set address }
-              xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
-              for hi := 0 to 7 do
-              begin
-                xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, hi * 4);
-                XtensaPushA2;
-              end;
-              Inc(nArgs, 8);
-            end
-            else
-            begin
-              IREmitNodeXtensa(IRA[argNode]);
-              XtensaPushA2;
-              Inc(nArgs, 1);
-            end;
+            XtensaPushArgByClass(j, i, argNode, nArgs);
             Inc(i);
             argNode := IRB[argNode];
           end;
@@ -3090,6 +3178,7 @@ begin
           begin
             XtensaLoadArgRegsWindowed(argBase, nArgs);
             EmitCallProc(j);
+            XtensaCallDoneWindowed;
             { Self survives in its sp-relative slot (sp is constant). }
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, argBase);
             XtSpillDepth := argBase;
@@ -3911,6 +4000,7 @@ begin
           xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, argFree);
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
+          XtensaCallDoneWindowed;
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           { 64-bit result returns in the callee's a2:a3, the caller's a10:a11. }
           if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
@@ -3920,10 +4010,16 @@ begin
 
     IR_WRITE, IR_WRITELN:
       begin
-        if TargetPlatform = PLATFORM_ESP then
+        if (TargetPlatform = PLATFORM_ESP) and EspBareBoot then
         begin
-          { Bare-metal / IDF: write/writeln does nothing (UART output is
-            explicit MMIO in user code, see test_esp_bare.pas). }
+          { BARE ESP: write/writeln does nothing (UART output is explicit MMIO
+            in user code, see test_esp_bare.pas). Under ESP-IDF the hosted
+            path below is right, as it is on riscv32: builtinheap's
+            PXXSysWrite has a PXX_IDF_STDIO arm that reaches the libc stdout
+            stream, and the one inline syscall below goes through it on ESP.
+            This arm used to silence IDF too, so a NilPy `print` on an S3
+            printed nothing.
+            bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit }
         end
         else if IRKind[node] = IR_WRITELN then
           EmitXtensaHelperCall(XtensaHelperProc('PXXWriteNL'), 0)
@@ -3953,9 +4049,19 @@ begin
                 order; see the IR_SYSCALL arm for the whole map. }
               EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[si].Offset + 8);
               EmitLoadConstXtensa(reg_xtensa_a4, Strs[si].Len);
-              xtensa_movi(reg_xtensa_a6, 1);              { fd 1 }
-              xtensa_movi(reg_xtensa_a2, 13);             { __NR_write }
-              xtensa_syscall;
+              if TargetPlatform = PLATFORM_ESP then
+              begin
+                { no kernel under IDF: the same three arguments, in a2..a4,
+                  go to PXXSysWrite }
+                xtensa_movi(reg_xtensa_a2, 1);            { fd 1 }
+                EmitXtensaHelperCall(XtensaHelperProc('PXXSysWrite'), 3);
+              end
+              else
+              begin
+                xtensa_movi(reg_xtensa_a6, 1);            { fd 1 }
+                xtensa_movi(reg_xtensa_a2, 13);           { __NR_write }
+                xtensa_syscall;
+              end;
             end;
           end
           else
@@ -3985,7 +4091,7 @@ begin
               EmitFloatOperandXtensa(valNode, tyDouble);
               XtensaPush64;
               if XtensaABI = XTENSA_ABI_WINDOWED then
-                xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, XtSpillDepth - 8)
+                XtensaSpAddr(reg_xtensa_a2, XtSpillDepth - 8)
               else
                 xtensa_mov(reg_xtensa_a2, reg_xtensa_sp);
               i := IRC[node];                          { decimals }
@@ -4096,18 +4202,22 @@ begin
             `echo "exit=$?"`; xtensa's did not. A green differential row that
             does not assert the thing the program exists to assert.
             bug-a-halt-n-exits-zero-on-hosted-xtensa }
+          EmitIdfTaskEndCall;                    { IDF: end the task, not a busy park }
           if (IRA[node] <> -1) and (TargetPlatform <> PLATFORM_ESP) then
           begin
             IREmitNodeXtensa(IRA[node]);         { a2 = the exit code }
             EmitExitReg;
           end
           else
-            EmitExit(0);                         { no argument, or ESP bare: park }
+            EmitExit(0);                         { no argument, or ESP: park }
         end
         else if CurProc >= 0 then
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit: jump out via epilogue }
         else
+        begin
+          EmitIdfTaskEndCall;
           EmitExit(0);
+        end;
       end;
 
     IR_DEFAULT_MEM:
@@ -4846,42 +4956,17 @@ begin
                     the moment one argument occupies two of them }
         while argNode <> -1 do
         begin
-          { Only A32_RECORD is branched on here, deliberately. This ladder pushes
-            one word for every other class and that is what it did before; a
-            by-value Int64 or Double through a proc pointer is a SEPARATE defect
-            on this backend, and folding its fix in would make this change
-            unattributable if either regressed. What the classifier buys today is
-            that the record case can no longer be reached without an arm.
-            bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
-          argCls := Arg32Class(procIdx, i, IntToTypeKind(IRTk[IRA[argNode]]));
-          if argCls = A32_RECORD then
-          begin
-            { The even-word pad first, for the reason the DIRECT path states: the
-              callee spill runs one shared 64-bit branch for Int64, Double and
-              this record, so it skips an odd word on its side too. Both sides
-              apply the rule or neither does. }
-            XtensaPadTo64Xtensa(procIdx, nArgs);
-            IREmitNodeXtensa(IRA[argNode]);        { a2=lo, a3=hi }
-            XtensaPushA2;                          { lo }
-            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
-            XtensaPushA2;                          { hi }
-            Inc(nArgs, 2);
-          end
-          else
-          begin
-            IREmitNodeXtensa(IRA[argNode]);
-            XtensaPushA2;
-            Inc(nArgs);
-          end;
+          XtensaPushArgByClass(procIdx, i, argNode, nArgs);   { every class; see the routine }
           Inc(i);
           argNode := IRB[argNode];
         end;
         if XtensaABI = XTENSA_ABI_WINDOWED then
         begin
           XtensaLoadArgRegsWindowed(argBase + 4, nArgs);
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, argBase);      { callee }
+          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, XtCallSpExtra + argBase);  { callee }
           XtSpillDepth := argBase;
           xtensa_callx8(reg_xtensa_a8);
+          XtensaCallDoneWindowed;
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
@@ -4955,23 +5040,7 @@ begin
                     is why the two cannot be one variable. }
         while argNode <> -1 do
         begin
-          { See the IR_CALL_IND arm: A32_RECORD only, on purpose. }
-          argCls := Arg32Class(procIdx, i, IntToTypeKind(IRTk[IRA[argNode]]));
-          if argCls = A32_RECORD then
-          begin
-            XtensaPadTo64Xtensa(procIdx, nArgs);
-            IREmitNodeXtensa(IRA[argNode]);        { a2=lo, a3=hi }
-            XtensaPushA2;                          { lo }
-            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
-            XtensaPushA2;                          { hi }
-            Inc(nArgs, 2);
-          end
-          else
-          begin
-            IREmitNodeXtensa(IRA[argNode]);
-            XtensaPushA2;
-            Inc(nArgs);
-          end;
+          XtensaPushArgByClass(procIdx, i, argNode, nArgs);   { every class; see the routine }
           Inc(i);
           argNode := IRB[argNode];
         end;
@@ -4986,6 +5055,7 @@ begin
             xtensa_l32i(reg_xtensa_a8, reg_xtensa_a10, 0);            { VMT ptr from [Self] }
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
           xtensa_callx8(reg_xtensa_a8);
+          XtensaCallDoneWindowed;
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
           if Is64BitXtensa(IntToTypeKind(IRTk[node])) then
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a11);
@@ -5571,13 +5641,7 @@ begin
     xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);   { prev EXC_TOP }
     EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
     xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
-    if XtensaABI = XTENSA_ABI_WINDOWED then
-    begin
-      xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, EXC_FRAME_SIZE_XTW);
-      xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
-    end
-    else
-      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, EXC_FRAME_SIZE_XT);
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, EXC_FRAME_SIZE_XT);   { Call0 }
   end;
 end;
 

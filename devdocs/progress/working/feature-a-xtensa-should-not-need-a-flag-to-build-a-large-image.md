@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: frankS
 blocked-by: []
-summary: "PRIO HELD AT 35 by the owner 2026-09-05, on a fresh measurement that supersedes BOTH earlier arguments. The 2026-09-04 refutation -- that ordinary C programs refuse because linking crtl crosses the wall -- NO LONGER REPRODUCES: f49c0e11f reserved the wide form unconditionally for FiniRunnerProc, and `#include <stdio.h>` (651116B) and test/c_crtl_syscall_guarded_bodies.c (675692B) now both link and RUN on xtensa with no flag. That was the case every real program met first, and it is gone. What still refuses is exactly one known program, the compiler itself: `pascal26 --target=xtensa compiler/compiler.pas` fails on a forward call to CmpBits$18392 at offset 370895 whose body is at 23898992 -- an ordinary-proc-to-ordinary-proc call 23 MB out, NOT FiniRunnerProc, so the remaining population is real but is a population of one. It is also the program the goal cares about most (self-hosting off x86-64), and it builds today with --xtensa-long-calls, so nothing is blocked -- this remains about the DEFAULT and about the size/speed the flag costs. Untried candidate: a veneer slot reserved per CALLING BODY rather than per call site, which the banked negative does not rule out the way it rules out an unreserved veneer."
+summary: "PRIO HELD AT 35 by the owner 2026-09-05, when the population was ONE program; it is TWO since 2026-09-19 and the second is an application, so the premise of the hold has moved (the prio has not -- that is his). MECHANISM: a forward call is sized before its callee's body exists, so a call site whose callee lands past CALL8/CALL0's +-512 KiB reach has no room for a wider form, and the build refuses; --xtensa-long-calls reserves the wide form everywhere and builds. Ordinary C no longer meets it: f49c0e11f reserved the wide form unconditionally for FiniRunnerProc, and `#include <stdio.h>` and test/c_crtl_syscall_guarded_bodies.c link and RUN with no flag. It is met by any image big enough that ordinary-proc-to-ordinary-proc calls span more than 512 KiB: the compiler itself (`pascal26 --target=xtensa compiler/compiler.pas`, a call 23 MB out) and ANY NilPy program, whose runtime is ~2.9 MB of code without DCE -- examples/esp32/nilpy-s3 (a NilPy app on the ESP32-S3 under IDF) passes the flag in its build.sh for that reason. DCE shrinks the second case but does not remove the mechanism, and --dce is not usable on the ESP IDF profile yet. Untried candidate: a veneer slot reserved per CALLING BODY rather than per call site, which the banked negative does not rule out the way it rules out an unreserved veneer."
 ---
 
 # xtensa should not need a flag to build a large image
@@ -365,3 +365,12 @@ more than it guarded before, but not the same thing.
 The general two-ordinary-procs case has never had a row: `xt_bigcall` was
 reaching the epilogue call from the day it was written. The gap is as old as
 the row, not as old as yesterday's fix.
+
+## 2026-09-19 (frankS) — a second program meets it, and it is an application
+
+`examples/esp32/nilpy-s3`: the ESP32-S3 NilPy demo. Without the flag the build
+refuses a forward call past CALL8's reach (image ~2.9 MB of code); with it,
+the program runs under qemu with output == CPython. Summary rewritten to the
+mechanism so it stops depending on how many programs happen to meet it today.
+The prio stays where the owner held it; the premise of that hold ("a population
+of one") is what changed, and that is reported to the coordinator, not acted on.

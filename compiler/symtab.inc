@@ -18282,14 +18282,13 @@ procedure EmitIdfTaskEndCall;
   program -- measured 2026-09-19 on a NilPy program on an ESP32-C3. Bare metal
   has no scheduler and keeps its park.
 
-  riscv32 ONLY for now, and deliberately: xtensa's IDF exit is the same busy
-  park and very likely wants the same call, but tonight's evidence is riscv32
-  under qemu and the xtensa NilPy route does not build yet, so nothing could
-  verify it. bug-a-nilpy-on-cross-targets-four-remaining-walls }
+  Both ESP ISAs. It was riscv32-only for a day because only the C3 route
+  could be verified; the S3 route builds now and has the same busy park.
+  bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit }
 var pi: Integer;
 begin
-  if (TargetArch <> TARGET_RISCV32) or (TargetPlatform <> PLATFORM_ESP) or
-     EspBareBoot then Exit;
+  if ((TargetArch <> TARGET_RISCV32) and (TargetArch <> TARGET_XTENSA)) or
+     (TargetPlatform <> PLATFORM_ESP) or EspBareBoot then Exit;
   pi := FindProc('PXXIdfTaskEnd');
   if pi >= 0 then EmitCallProc(pi);
 end;
