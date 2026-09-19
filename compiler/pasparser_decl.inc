@@ -2713,7 +2713,8 @@ begin
 end;
 
 function TryAssignThreadVarStorage(idx: Integer; const spelling: AnsiString;
-                                  var why: AnsiString): Boolean;
+                                  var why: AnsiString;
+                                  var reason: Integer): Boolean;
 { Give one thread-local variable its slot in the TLS block's user area, or
   answer False with the reason in `why`. THE CALLER DECIDES WHAT A REFUSAL
   MEANS, which is the whole point of the split.
@@ -2727,10 +2728,20 @@ function TryAssignThreadVarStorage(idx: Integer; const spelling: AnsiString;
   C caller, which warns and leaves the shared storage in place.
 
   Everything ABOVE that fork is identical for both and lives here once: the same
-  four refusal reasons, the same bump allocator, the same TlsUserUsed. A second
+  five refusal reasons, the same bump allocator, the same TlsUserUsed. A second
   copy of this list is the thing normalise-dont-special-case names -- two
   spellings of "may this be thread-local" that agree today and drift the first
-  time one of them learns a fifth reason.
+  time one of them learns a sixth reason.
+
+  `reason` CARRIES WHICH ONE, because the caller's policy is not uniform across
+  the five and a string cannot be branched on. Pascal ignores it and Errors on
+  all of them; C Errors on TLSREFUSE_AREAFULL alone and warns on the rest. The
+  split is argued at the TLSREFUSE_* constants in defs.inc, with the
+  measurement: four of the five fire in an ordinary build with no flag, so
+  "C should just Error too" would delete `__thread` on every target but x86-64
+  and in every --emit-obj build, for programs that are CORRECT today.
+  THE POLICY STAYS IN THE CALLERS. This function still decides storage and
+  nothing else -- an `if frontend = C` here is the shape the split prevents.
 
   THE STORAGE IS THE ONLY THING THIS DECIDES. Addressing happens later and in
   one place -- ThreadVarRewriteRange, run from CompileAST -- which is why there
@@ -2752,6 +2763,7 @@ begin
     what it did. }
   TryAssignThreadVarStorage := False;
   why := '';
+  reason := TLSREFUSE_NONE;
   if TargetArch <> TARGET_X86_64 then
   begin
     why := spelling + ' is x86-64 only: a per-thread block is installed with '
@@ -2760,6 +2772,7 @@ begin
          + 'way to SET one yet. Answering with the parent thread''s block would be '
          + 'a plausible wrong address rather than a null anything could test for '
          + '-- the same reason __pxxTlsBase refuses off x86-64.';
+    reason := TLSREFUSE_ARCH;
     Exit;
   end;
   if not TlsMainInstalled then
@@ -2768,6 +2781,7 @@ begin
          + 'and --emit-obj/--shared have no ELF entry point, so nothing installs '
          + 'one. `gs:` with no base does not read 0, it FAULTS -- and inside a '
          + 'glibc host it succeeds and returns glibc''s TCB, which is worse.';
+    reason := TLSREFUSE_NOINSTALL;
     Exit;
   end;
 
@@ -2779,6 +2793,7 @@ begin
          + 'missing is that several paths reach an array through its SYMBOL (bounds, '
          + 'dynamic-array handles, the element type) and a thread-local reference is '
          + 'rewritten into a pointer dereference before they see it. Scalars first.';
+    reason := TLSREFUSE_ARRAY;
     Exit;
   end;
   if not (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
@@ -2789,6 +2804,7 @@ begin
          + 'FINALISATION at thread start and exit, which no thread hook exists for yet; '
          + 'a record or set is reached through its symbol by paths that never see the '
          + 'rewritten reference. Both are rungs above this one.';
+    reason := TLSREFUSE_TYPE;
     Exit;
   end;
 
@@ -2807,6 +2823,7 @@ begin
          + 'rebuild: -dPXX_TLS_USER_4K, _8K or _16K (also _0, _1K, _2K to shrink it). '
          + 'lib/rtl/palthread.pas reads the real size through __pxxTlsBlockSize, so '
          + 'it follows without being edited.';
+    reason := TLSREFUSE_AREAFULL;
     Exit;
   end;
   SymTlsOffset[idx] := TLS_USER_FIRST_OFF + off;
@@ -2822,9 +2839,11 @@ procedure AssignThreadVarStorage(idx: Integer);
   refusal names what would have to change. The C frontend reaches the same
   allocator and does NOT do this; see TryAssignThreadVarStorage for why the two
   are allowed to differ at exactly this point and nowhere else. }
-var why: AnsiString;
+var why: AnsiString; reason: Integer;
 begin
-  if not TryAssignThreadVarStorage(idx, 'threadvar', why) then Error(why);
+  { `reason` is read by the C caller and deliberately ignored here: Pascal's
+    policy is uniform across all five, which is what makes refusing free. }
+  if not TryAssignThreadVarStorage(idx, 'threadvar', why, reason) then Error(why);
 end;
 
 procedure ParseVarSection;

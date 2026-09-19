@@ -3007,6 +3007,47 @@ type
     TargetOff : Integer;   { byte offset in Data[] the slot should point at }
   end;
 
+const
+  { WHY A REFUSAL REASON TRAVELS AS A CODE AND NOT ONLY AS PROSE.
+    TryAssignThreadVarStorage has FIVE refusal reasons and its two callers must
+    treat them DIFFERENTLY -- which a Boolean plus a string cannot express, so
+    both callers were forced into ONE policy for all five. Pascal's single
+    policy is right (every refusal is an Error; `threadvar` has never compiled,
+    so no program can regress). C's was not: it warned on all five.
+
+    THE FIVE ARE NOT ONE KIND, and that is the whole reason this code exists.
+    Measured 2026-09-19, each with NO flag at all: ARCH fires on every
+    non-x86-64 target, NOINSTALL on every --emit-obj/--shared build, ARRAY on
+    `__thread int b[4];` and TYPE on a `__thread` struct -- four of the five are
+    reachable in an ordinary build, against the filing ticket's "not reachable
+    today by accident", which was measured on the fifth only. So they split:
+
+      AREAFULL is a CONFIGURATION choice the programmer can undo, and the
+      message already names the flag that undoes it (-dPXX_TLS_USER_4K/_8K/
+      _16K). Stopping is actionable, so C now Errors on it -- the same answer
+      Pascal gives for the identical mistake.
+
+      ARCH / NOINSTALL / ARRAY / TYPE are OUR limits, not the programmer's
+      mistake. Erroring on them would refuse `__thread` on every target but
+      x86-64 and in every object-emitting build -- deleting a feature that
+      compiles and is CORRECT today, because in a single-threaded program one
+      shared copy IS one copy per thread. Those stay warnings.
+
+    The codes are also what lets the warning fire once per REASON instead of
+    once per COMPILATION. Measured before the change: a TU declaring a
+    `__thread` array AND a `__thread` struct reported the array and suppressed
+    the struct entirely -- repeating one fact per declaration is noise, which is
+    what the old one-shot was for, but suppressing a DIFFERENT fact is
+    under-reporting, and a silently degraded declaration is a latent data race.
+    bug-c-a-thread-declaration-that-does-not-fit-the-tls-area-becomes-a-shared-global-with-only-a-warning }
+  TLSREFUSE_NONE      = 0;  { assigned a per-thread slot; not a refusal }
+  TLSREFUSE_ARCH      = 1;  { not x86-64: no way to SET a thread register yet }
+  TLSREFUSE_NOINSTALL = 2;  { --emit-obj/--shared: no ELF entry point installs the block }
+  TLSREFUSE_ARRAY     = 3;  { an array is reached through its symbol; scalars first }
+  TLSREFUSE_TYPE      = 4;  { managed/record/set: needs per-thread init+final }
+  TLSREFUSE_AREAFULL  = 5;  { the user area is full -- raise it on the COMMAND LINE }
+  TLSREFUSE_MAX       = 5;
+
 var
   TARGET_PTR_SIZE    : Integer;
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
@@ -3671,7 +3712,7 @@ var
   X386PicSlot : Integer;        { i386 --emit-obj: ebp offset of the frame slot holding THIS body's anchor VALUE, or 0 when there is none. The anchor is kept in memory rather than pinned in a register on purpose: a reference then loads it into a register that is provably free AT THAT SITE -- its own destination for a load, a push/pop-wrapped scratch for a store -- so no sequence has to preserve anything across it and no liveness audit is needed for correctness. Pinning it in esi is the faster form and is a separate, later question. }
   X386PicAnchor : Integer;      { i386 --emit-obj: the .text offset of the `pop esi` that ends THIS body's PC-relative anchor, or -1 when the body has none. Every data reference in the body is then `esi + (sym - X386PicAnchor)`, recorded as R_386_PC32 with addend `fixupOffset - X386PicAnchor` -- both terms known at emit time, and MEASURED against the assembler rather than derived (see the ticket: as(1) stored 3 for a fixup at 8 with the anchor at 5). i386 has no [eip+disp32] addressing mode, which is why the anchor is an instruction rather than a mode; it does NOT need a GOT, because our .data/.bss symbols are section-local and cannot be preempted. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
   X386AddrImmPic : Boolean;     { i386 --emit-obj: the NEXT EmitDataRef/EmitGlobRef fixup is the imm32 of an `add dword [esp], imm32` that EmitI386PicAddrPush has just opened, so record it PC-relative WITHOUT sniffing the bytes. Set by the helper and cleared by whichever emitter consumes it. The address-as-IMMEDIATE shapes cannot be recognised the way the load/store families are: `c7 00` is two bytes that a `mov [eax+disp32], imm32` whose displacement happens to end $00 $C7 also ends in, which a ~13MB .data makes reachable rather than theoretical. So the intent travels from the call site instead of being inferred at the end of the buffer. bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils }
-  CTlsIgnoredWarned : Boolean;  { C frontend: whether the `__thread`/`_Thread_local` warning has already fired for this compilation. One warning, not one per declaration -- the fact is about the compiler and repeating it per site would bury the rest of the diagnostics. bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
+  CTlsWarnedReason : array[0..TLSREFUSE_MAX] of Boolean;  { C frontend: whether the `__thread`/`_Thread_local` warning has already fired for EACH refusal reason this compilation. Once per REASON, not once per declaration and not once per compilation: repeating one fact per site buries the other diagnostics (the original contract, kept), but the one-shot Boolean this replaced suppressed a SECOND, DIFFERENT reason entirely -- measured 2026-09-19, a TU with a `__thread` array and a `__thread` struct reported the array and hid the struct, and each hidden declaration is its own latent data race. TLSREFUSE_AREAFULL never reaches here: C Errors on that one. bug-c-a-thread-declaration-that-does-not-fit-the-tls-area-becomes-a-shared-global-with-only-a-warning }
   X386InstrStart : Integer;     { i386 --emit-obj: the .text offset at which the instruction now being emitted BEGAN, or -1 when no call site has said. The counterpart of X386AddrImmPic for the load/store families: I386PrefixBefore cannot tell a legacy prefix from the last byte of the previous instruction, so a call site that KNOWS its opcode is the first byte of its instruction says so here instead. THE FAILURE DIRECTION IS THE WHOLE DESIGN. A site that never sets it leaves a value from an EARLIER instruction, which is strictly less than the position being asked about (code offsets only grow), so the guard falls through to the byte test and REFUSES exactly as it does today. That is why this can be adopted one site at a time and why a missed site costs position-independence rather than correctness -- the opposite of announcing prefixes, where a missed announcement turns a conservative refusal into a silent wrong-width memory access. Cleared wherever CodeLen rewinds, because after a rewind a stale offset could coincide with a genuine one. bug-a-the-i386-pic-prefix-guard-reads-a-displacement-byte-as-a-prefix }
   X386AllocaBaseOff : Integer;  { i386: ebp offset of THIS body's alloca base, plus THREE scratch words at +4/+8/+12. 0 = this body contains no IR_ALLOCA. i386 is the ONE backend that also needs the saved-esp DELTA (see the park in the cdecl call arm): its `and esp,-16` makes the amount subtracted unknowable at compile time, so the restore cannot be a relative add. The scratch words exist because i386 has NO RED ZONE -- x86-64 spills its copy registers to [rsp-8..-24], which here would be memory the next signal frame may overwrite. }
   Arm32AllocaBaseOff : Integer;  { arm32: the same alloca base as X64AllocaBaseOff, fp(r11)-relative. 0 = this body contains no IR_ALLOCA. arm32 needs no saved-sp delta -- its AAPCS32 outgoing block is all relative (sub sp,#blk / add sp,#blk-16, no parked pointer), so nothing holds an absolute sp for an alloca to invalidate. }

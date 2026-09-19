@@ -16324,6 +16324,54 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cpthread_needs_threadsafe_b26; tools/expect_same.sh cpthread_needs_threadsafe_b26-rc "$$?" "42"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26
 	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
+	# A `__thread` THAT CANNOT GET A PER-THREAD SLOT: WHICH REFUSALS STOP THE
+	# BUILD AND WHICH DEGRADE. The allocator has FIVE refusal reasons and they
+	# are not one kind, so the answer is not one policy -- see the TLSREFUSE_*
+	# constants in compiler/defs.inc for the argument. The goal question it
+	# settles: do we want a C program that asks for thread-local storage and
+	# cannot have it to STOP, or to build and be wrong only once it uses
+	# threads? Answer: stop where the PROGRAMMER can fix it, degrade where the
+	# limit is OURS -- because in a single-threaded program one shared copy IS
+	# one copy per thread, so those programs are correct today.
+	#
+	# ROWS 1-2 ARE THE CHANGE AND ROW 3 IS THE INVARIANT, which is why row 3
+	# looks like it asserts nothing: it asserts NON-CHANGE, and the pinned
+	# compiler agrees with it on purpose. Do not "fix" row 3 by making it
+	# differ from the pin. Positive control for rows 1 and 2 is the pin, and it
+	# reds on both: stable_linux_amd64/default/pinned compiles the area-full
+	# program with rc=0 and NO diagnostic at all (it predates the warning), and
+	# reports exactly ONE of the two distinct reasons in row 2.
+	@printf '#include <stdio.h>\n__thread int counter;\nint main(void){ counter = 1; printf("got=%%d\\n", counter); return 0; }\n' > $(TESTTMP)/ctls_scalar.c
+	@printf '#include <stdio.h>\nstruct S { int a; };\n__thread int buf[4];\n__thread struct S s;\nint main(void){ buf[0]=1; s.a=2; printf("got=%%d\\n", buf[0]+s.a); return 0; }\n' > $(TESTTMP)/ctls_two.c
+	@# 1. AREA FULL IS THE PROGRAMMER'S OWN BUILD FLAG and the message already
+	@#    names the flag that undoes it, so stopping is ACTIONABLE -- the same
+	@#    answer Pascal has always given for the identical mistake.
+	@if ./$(COMPILER) -dPXX_TLS_USER_0 $(TESTTMP)/ctls_scalar.c $(TESTTMP)/ctls_full26 > $(TESTTMP)/ctls_full.log 2>&1; then \
+	  echo "FAIL ctls: a __thread that does not fit the per-thread area still COMPILED -- it silently becomes one shared copy, which is a data race that survives a green build"; exit 1; \
+	fi
+	@grep -q 'error: __thread counter: the per-thread variable area is full' $(TESTTMP)/ctls_full.log || { echo "FAIL ctls: area-full did not report as an error naming the declaration"; cat $(TESTTMP)/ctls_full.log; exit 1; }
+	@grep -q 'PXX_TLS_USER_4K' $(TESTTMP)/ctls_full.log || { echo "FAIL ctls: the refusal does not name the flag that fixes it, so it is a stop with no way forward"; exit 1; }
+	@# 2. ONE WARNING PER REASON, not per compilation. Before this, the one-shot
+	@#    flag reported the array and suppressed the struct ENTIRELY, and each
+	@#    suppressed declaration is its own latent data race.
+	@./$(COMPILER) $(TESTTMP)/ctls_two.c $(TESTTMP)/ctls_two26 > $(TESTTMP)/ctls_two.log 2>&1
+	@tools/expect_same.sh ctls_two_reasons "$$(grep -c 'warning: __thread' $(TESTTMP)/ctls_two.log)" "2"
+	@grep -q '__thread buf:' $(TESTTMP)/ctls_two.log || { echo "FAIL ctls: the array reason went unreported"; exit 1; }
+	@grep -q '__thread s:' $(TESTTMP)/ctls_two.log || { echo "FAIL ctls: the non-scalar reason went unreported -- this is the half the one-shot warning hid"; exit 1; }
+	@tools/expect_same.sh ctls_two_runs "$$($(TESTTMP)/ctls_two26)" "got=3"
+	@# 3. THE INVARIANT: a limit that is OURS still degrades and still builds.
+	@#    riscv32 cannot set a thread register yet, so this must warn and
+	@#    compile -- erroring here would delete `__thread` from every target but
+	@#    x86-64 and from every --emit-obj build, for programs that work today.
+	@./$(COMPILER) --target=riscv32 --emit-obj $(TESTTMP)/ctls_scalar.c $(TESTTMP)/ctls_rv.o > $(TESTTMP)/ctls_rv.log 2>&1 || { echo "FAIL ctls: a degraded __thread stopped a riscv32 build; the four non-configuration refusals must stay warnings"; cat $(TESTTMP)/ctls_rv.log; exit 1; }
+	@# NOTE THE ASYMMETRY, matched against the built thing rather than assumed:
+	@# the ARCH and NOINSTALL reasons do NOT name a declaration (`why` is
+	@# spelling + ' is x86-64 only: ...'), while ARRAY, TYPE and AREAFULL append
+	@# Syms[idx].Name. That is honest -- on a cross target EVERY declaration
+	@# degrades for the same reason, so naming one of them would be arbitrary --
+	@# and it is why this pattern is not the `__thread <name>:' shape row 2 uses.
+	@grep -q 'warning: __thread is x86-64 only' $(TESTTMP)/ctls_rv.log || { echo "FAIL ctls: riscv32 degraded SILENTLY -- no warning"; exit 1; }
+	@echo "test-core: a C __thread that cannot get a per-thread slot stops when the build flag is the cause and degrades-with-a-warning when the limit is ours, once per reason"
 	# A block-scope `static` must stay static when another storage class sits
 	# between it and the type: `static __thread int f;` compiled to an ORDINARY
 	# STACK LOCAL. Every row is called MORE THAN ONCE -- a discarded static and

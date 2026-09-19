@@ -10269,7 +10269,7 @@ procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
 
   WHERE C DELIBERATELY DIVERGES FROM PASCAL, AND IT IS THE ONLY PLACE. Both
   frontends reach the same allocator (TryAssignThreadVarStorage) and the same
-  four refusal reasons. Pascal turns every refusal into an Error; this does not,
+  five refusal reasons. Pascal turns every refusal into an Error; this does not,
   and the reason is a REGRESSION and not a preference: `__thread` COMPILES TODAY.
   It is skipped, the variable gets one shared copy, and for a single-threaded
   program one copy shared IS one copy per thread -- so those programs are
@@ -10277,10 +10277,36 @@ procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
   ones. `threadvar` has never compiled at any scope, so Pascal has no such
   population and refusing there costs nothing.
 
-  The measured population of `__thread` under test/, lib/ and examples/ is ZERO
-  (re-counted at this commit), so a refusal would be free IN THIS TREE. That is
-  exactly why it is not the argument -- what it costs is real C from outside it,
-  which is the corpus this frontend exists for.
+  BUT THAT ARGUMENT DOES NOT COVER ALL FIVE, and until 2026-09-19 it was applied
+  as if it did. The goal question is: do we want a C program that asks for
+  thread-local storage and cannot have it to STOP, or to build and be wrong only
+  once it uses threads? The answer splits on WHO CAN FIX IT, which is why
+  `reason` now travels as a code:
+
+    TLSREFUSE_AREAFULL is the programmer's own build configuration and the
+    message already names the flag that undoes it. Stopping is ACTIONABLE, so
+    it is an Error here -- the same answer Pascal gives for the identical
+    mistake, and the case the filing ticket actually measured.
+
+    The other four are OUR limits: not x86-64, no ELF entry point to install
+    the block, an array, a non-scalar type. Measured 2026-09-19, each with NO
+    flag: they fire on every cross target, in every --emit-obj/--shared build,
+    on `__thread int b[4];` and on a `__thread` struct. Erroring on those would
+    refuse `__thread` everywhere but hosted x86-64 scalars -- deleting a feature
+    from programs that are CORRECT today. They stay warnings.
+
+  So the ticket's "the two policies are one `if`" is true of the CODE and not of
+  the DECISION: one `if` still chooses, and what it chooses on is which reason.
+
+  The in-tree population of `__thread` was ZERO when that was written and is
+  TWO as of 2026-09-19 -- test/c_thread_local_is_per_thread.c, which is this
+  feature's own positive test, and test/c_block_static_survives_a_storage_class.c
+  -- so "a refusal would be free IN THIS TREE" is no longer true either. It was
+  never the argument: what a refusal costs is real C from OUTSIDE this tree,
+  which is the corpus this frontend exists for. Re-count before quoting a
+  population; this one went stale in eight days and in the flattering direction.
+  (Measured the same day: busybox, the largest C corpus here at 1,838 files,
+  contains zero.)
 
   SO THE NET EFFECT IS: STRICTLY BETTER ON x86-64 SCALARS, BYTE-IDENTICAL
   EVERYWHERE ELSE. Nothing that compiles today stops compiling, and nothing that
@@ -10289,20 +10315,32 @@ procedure CApplyThreadLocalStorage(idx: Integer; sawThread: Boolean);
   the four reasons applied, where before it said only that `__thread` was
   "being IGNORED" with no way to tell a target limit from a type limit.
 
-  ONE WARNING PER COMPILATION, NOT PER DECLARATION, keeping the existing
-  CTlsIgnoredWarned contract: a warning that fires on everything is not a
-  warning. The first refusal names its reason and the rest are silent, which is
-  the same trade the original warning made.
+  ONE WARNING PER REASON -- not per declaration, and no longer per COMPILATION.
+  The original contract was the first half of that and is kept: a warning that
+  fires on everything is not a warning, and on a cross target every declaration
+  refuses for the identical reason, so N copies of one fact bury the rest of the
+  diagnostics. What the one-shot Boolean ALSO did was suppress a SECOND,
+  DIFFERENT fact: measured before this change, a TU declaring a `__thread` array
+  and a `__thread` struct reported the array and said nothing at all about the
+  struct. Each silently degraded declaration is its own latent data race, so a
+  reason going entirely unreported is the failure this warning exists to
+  prevent, wearing the shape of restraint.
 
   bug-c-__thread-is-accepted-and-silently-ignored-so-thread-local-storage-is-shared }
-var why: AnsiString;
+var why: AnsiString; reason: Integer;
 begin
   if not sawThread then Exit;
   if idx < 0 then Exit;
-  if TryAssignThreadVarStorage(idx, '__thread', why) then Exit;
-  if not CTlsIgnoredWarned then
+  if TryAssignThreadVarStorage(idx, '__thread', why, reason) then Exit;
+
+  { THE ONE REASON THE PROGRAMMER CAN FIX IS THE ONE THAT STOPS. `why` already
+    names the flag; appending a consequence would be wrong here, because after
+    an Error there is no degraded program for it to be about. }
+  if reason = TLSREFUSE_AREAFULL then Error(why);
+
+  if (reason >= 0) and (reason <= TLSREFUSE_MAX) and (not CTlsWarnedReason[reason]) then
   begin
-    CTlsIgnoredWarned := True;
+    CTlsWarnedReason[reason] := True;
     Warn(why + ' — this declaration therefore gets ONE copy shared by every '
        + 'thread, not one per thread, exactly as it did before thread-local '
        + 'storage existed. Single-threaded code is unaffected; threaded code '

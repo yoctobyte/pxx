@@ -981,6 +981,7 @@ end;
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode, procMapRoShift: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
+    tlsR: Integer;                                            { loop index for the per-reason C __thread warn flags. A LOOP and not six assignments on purpose: TLSREFUSE_MAX is the one place the count is written, and an unrolled reset is a second spelling that goes stale the first time a sixth refusal reason is added. It is reset here rather than in cparser.inc because that file is behind {$ifndef PXX_NO_CFRONT} while the flags are declared in defs.inc, which is not. }
 begin
 {$ifdef FPC}
   { The exact-decimal core in exdec.inc is lib/rtl code, written for a runtime
@@ -2302,7 +2303,7 @@ begin
   ValidateBuiltinRecordLayout;
   CodeLen  := 0;
   X386InstrStart := -1;
-  CTlsIgnoredWarned := False;
+  for tlsR := 0 to TLSREFUSE_MAX do CTlsWarnedReason[tlsR] := False;
   { The fixed low block of .data -- INTBUF, then the two single bytes below --
     is written at CONSTANT offsets, never through DataLen, so it is the one
     place that needs the buffer to exist before anything appends to it. With
