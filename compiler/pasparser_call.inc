@@ -1260,16 +1260,23 @@ begin
   tail := head;
 end;
 
+{ ParseArgExpr, not ParseExpr: an index is an expression in the frontend's
+  OWN grammar, and under NilPy ParseExpr is Pascal's chain, which has no
+  value-returning `or`/`and` and no conditional expression. `d[unit or "s"]`
+  was "expected ']' before 'or'" while `k = unit or "s"` one line earlier
+  compiled -- the call-argument door had the hook and this one did not
+  (bug-n-a-subscript-accepts-a-narrower-expression-grammar-than-the-one-
+  outside-it). Without NilPy the hook IS ParseExpr. }
 procedure ParsePropIndexArgs(var head, tail: Integer);
 var n: Integer;
 begin
   Expect(tkLBrack, '[');
-  ParseExpr;
+  ParseArgExpr;
   head := AllocNode(AN_ARG); ASTLeft[head] := CurASTNode; tail := head;
   while CurTok.Kind = tkComma do
   begin
     Next;
-    ParseExpr;
+    ParseArgExpr;
     n := AllocNode(AN_ARG); ASTLeft[n] := CurASTNode;
     ASTRight[tail] := n; tail := n;
   end;

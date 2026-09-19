@@ -1,0 +1,36 @@
+# The index inside `[...]` is a full NilPy expression: `or`, `and`, `in` and the
+# conditional expression. ParsePropIndexArgs parsed it with Pascal's ParseExpr,
+# so `d[unit or "s"]` was "expected ']' before 'or'" while `k = unit or "s"` on
+# the line before compiled (That Space Program, tsp/timebase.py:195).
+# bug-n-a-subscript-accepts-a-narrower-expression-grammar-than-the-one-outside-it
+
+
+class Box:
+    def __init__(self) -> None:
+        self.d = {"s": 1, "m": 60}
+        self.xs = [10, 20, 30]
+
+
+def pick(unit: str) -> int:
+    d = {"s": 1, "m": 60}
+    return d[unit or "s"]
+
+
+d = {"s": 1, "m": 60, True: 5, False: 6}
+xs = [10, 20, 30]
+unit = ""
+f = True
+b = Box()
+k = unit or "s"
+print(d[k], d[unit or "s"])
+print(d["m" if f else "s"], d["s" if not f else "m"])
+print(d["m" and "s"])
+print(d[2 in [1, 2]], d[3 in [1, 2]])
+print(xs[0 or 2], xs[1 if f else 0])
+print(b.d[unit or "m"], b.xs[0 if not f else 2])
+print(pick(""), pick("m"))
+d[unit or "s"] = 7
+d["m" if f else "s"] += 1
+print(d["s"], d["m"])
+xs[1 and 0] = 99
+print(xs)

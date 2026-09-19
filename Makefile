@@ -1229,6 +1229,8 @@ test-nilpy: $(COMPILER)
 	while IFS= read -r c; do echo "== $$c"; $(TESTTMP)/test_nilpy_argparse26 $$c 2>&1; echo "rc=$$?"; done < test/test_nilpy_argparse_tsp_surface.cases | diff -u test/test_nilpy_argparse_tsp_surface.expected -
 	./$(COMPILER) -Futest test/test_nilpy_relative_import_of_an_init_member.npy $(TESTTMP)/test_nilpy_relmember26
 	$(TESTTMP)/test_nilpy_relmember26 | diff -u test/test_nilpy_relative_import_of_an_init_member.expected -
+	./$(COMPILER) test/test_nilpy_subscript_index_is_a_full_expression.npy $(TESTTMP)/test_nilpy_subfull26
+	$(TESTTMP)/test_nilpy_subfull26 | diff -u test/test_nilpy_subscript_index_is_a_full_expression.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

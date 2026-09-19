@@ -3,8 +3,8 @@ slug: bug-n-a-subscript-accepts-a-narrower-expression-grammar-than-the-one-outsi
 track: N
 type: bug
 prio: 70
-status: backlog
-owner: ""
+status: done
+owner: frankH
 created: 2026-09-19
 found-by: frankuser
 tags: [nilpy, parser, tsp, demo]
@@ -93,3 +93,46 @@ census answering 0 everywhere reads as a clean, confident finding.
 unchanged and real. The VALUE is unchanged too — fixing it advances 16 modules
 to their next wall. What changes is the SIZE: this is one parser fix against one
 call site, not sixteen sites, and nobody should scope it as the latter.
+
+## 2026-09-19 — FIXED (frankH)
+
+The seam was one call, not one line of grammar: `ParsePropIndexArgs`
+(pasparser_call.inc) parsed each index with Pascal's `ParseExpr`. The call-
+argument door already had the NilPy hook, `ParseArgExpr` (pyforwards.inc:
+`PyParseBoolExpr` under NilPy, `ParseExpr` otherwise), and the index now uses
+it. `or`, `and`, `in` (Python's meaning) and the conditional expression all
+work inside `[...]`, on name, attribute and function-local receivers, and as
+assignment and augmented-assignment targets. Slices, literal receivers and
+`not` were already reached through other paths and still work. Pascal cannot
+move: without NilPy the hook IS `ParseExpr`.
+
+Test: test_nilpy_subscript_index_is_a_full_expression, whose .expected is
+CPython 3.14.4's output. The pinned compiler refuses it at its first `or`.
+
+### TSP census, with the expectation written BEFORE the re-run
+
+Population: every `tsp/**/*.py` outside `__pycache__` at TSP 13eb601, 66
+files, one compile each from the TSP root, first `error:` line recorded. This
+is NOT the 61-module set above, which I could not reproduce (60 excluding
+`__init__`/`__main__`), so compare within a row, not across the two.
+
+| compiler | OK | first wall at timebase.py:195 |
+| --- | --- | --- |
+| 8c314084d635 (pxx 531d1c843, before) | 18 | 22 |
+| c101486bdd1e (this fix) | 20 | 0 |
+
+Written beforehand: *all 22 move past 195; OK rises by few, point estimate
+~21, because they share one dependency and whatever is behind 195 walls them
+again as a group.* Measured: all 22 moved; OK went up by two (`timebase`,
+`earth`). The other 44 rows are byte-identical before and after. Where the 22
+went next:
+
+- 14: `tsp/ephem/__init__.py:17`, the DIAMOND refusal on
+  `class EphemerisMissing(EphemerisError, FileNotFoundError)`.
+- 3: `tsp/orbit.py:217`, "expected newline after statement".
+- 2: `tsp/parts.py:73`, "expected expression".
+- 1: `director.py:37`, `@dataclass(frozen=True)`.
+- 2: OK.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

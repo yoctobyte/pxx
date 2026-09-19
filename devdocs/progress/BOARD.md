@@ -315,7 +315,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (177)
+## backlog-nilpy (176)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -378,7 +378,6 @@ _none_
 | bug-n-a-staticmethod-called-through-cls-raises-attributeerror | N | 70 | bug | > | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
-| bug-n-a-subscript-accepts-a-narrower-expression-grammar-than-the-one-outside-it | N | 70 | bug | Inside `[...]` the NilPy parser accepts a NARROWER expression grammar than the one it uses everywhere else: `d[unit or \"s\"]` is `expected ']' before 'or'` and `d[\"a\" if f else \"b\"]` is `expected ']' before 'if'`, while the IDENTICAL expression one line earlier (`k = unit or \"s\"`) compiles and runs. Two expression parsers, one of them wired into the subscript. Measured on That Space Program 2026-09-19: this is the FIRST wall in 16 of 61 modules, the single largest — AND RE-MEASURED 2026-09-19 THERE IS EXACTLY ONE SITE. All 16 rows report `pascal26:195:`, which is `tsp/timebase.py:195` (`total += float(num) * _DURATION_UNITS[unit or \"s\"]`) — an error raised inside an IMPORTED module prints with that module's line number, so the reader supplies the file they invoked. A fixed-string search over the whole corpus finds that one line and nothing else; the other `[... or ...]`/`[... if ...]` hits in `tsp/` are LIST COMPREHENSIONS, which are not this bug. So 16 is the size of timebase.py's import graph, not a count of sites, and three of the 16 (anchor, moons, reference) do not name timebase at all — they reach it transitively. The fix is worth 16 modules ADVANCING and is one line of parser; it is not sixteen call sites. (The instrument that first said "zero of 16 contain the construct" was a broken regex answering 0 for the file that demonstrably does contain it — caught by a positive control, and recorded here so nobody re-derives it.) READ THE CAVEAT TOO: a count of modules blocked is NOT a count of work, and in this repo clearing the largest wall has moved units-compiling by ZERO four times. | — |
 | bug-n-a-sys-stream-in-a-variable-has-no-methods-and-fails-at-run-time | N | 60 | bug | `h = sys.stdout` then `h.write(x)` COMPILES and dies at run time with `TypeError: object is not callable`, having written nothing. `sys.stdout`/`sys.stderr` are modelled as a bare fd INTEGER (AN_INT_LIT, 1 and 2) and an Integer has no methods. The dotted spelling `sys.stdout.write(x)` was fixed 2026-09-10 by wiring the three-segment table entries sys.stdin already had; this is the spelling the table cannot reach. The fix is to make a stream an OBJECT — pylib's TPyFile already is one — and it cannot land alone: PyParsePrintFile asserts `ASTKind = AN_INT_LIT` and value 1 or 2, so print's file= handling must move in the same change or every `print(..., file=sys.stderr)` goes red. | — |
 | bug-n-a-tuple-returning-str-method-prints-raw-memory-when-returned-from-a-def | N | 55 | bug | `def p(x: str): return x.partition(' ')` prints raw memory instead of ('C', ' ', 'minor'). The same call outside a def is correct, and split/rsplit through the same def-return path are correct. Pre-existing — reproduces on pinned. | — |
 | bug-n-a-tuple-unpacking-assignment-does-not-box-a-callable-value | N | 55 | bug | `a, b = lambda x: x + 1, lambda x: x + 2` compiles and then `a(1)` raises TypeError: object is not callable. The single-target spellings (`a = lambda ...`, `return lambda ...`) box the callable so the name is a variant; the tuple-UNPACK targets do not, so each name holds a raw pointer the dynamic-call path does not recognise. | — |
@@ -1084,9 +1083,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3870)
+## done (3871)
 
-3870 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3871 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (83)
 
@@ -1228,7 +1227,6 @@ _none_
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
 - [p 70] [N] bug-n-a-method-receiver-parameter-must-be-literally-named-self-or-every-argument-shifts
 - [p 70] [N] bug-n-a-staticmethod-called-through-cls-raises-attributeerror
-- [p 70] [N] bug-n-a-subscript-accepts-a-narrower-expression-grammar-than-the-one-outside-it
 - [p 70] [N] bug-n-a-write-to-a-file-that-is-never-closed-is-silently-lost
 - [p 70] [N] bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
