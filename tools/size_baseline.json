@@ -1,9 +1,9 @@
 {
   "_comment": "Written by tools/size_canary.py --update. A DELTA baseline, not a target: it freezes today's sizes so growth becomes a red, and blesses none of them. See bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss.",
   "measured_at": {
-    "date": "2026-09-19T07:30:00+02:00",
-    "sha": "9d0735d8342b",
-    "subject": "docs(dev): night tick 11 \u2014 nothing; breadth 16h, all else unchanged"
+    "date": "2026-09-19T08:47:44+02:00",
+    "sha": "258ca1ba7e2e",
+    "subject": "docs: retire CLAUDE.md's stale threading example, and record that my breadth claim was wrong"
   },
   "subjects": {
     "esp32-bare": {
@@ -29,7 +29,7 @@
     "x86_64-empty": {
       "bss": 35324,
       "code": 67418,
-      "data": 4288
+      "data": 4264
     }
   }
 }

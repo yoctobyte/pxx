@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:20 blocked:7 backlog:53 backlog-umbrella:13 backlog-core:170 backlog-nilpy:177 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3840 rejected:83`
+`working:32 unfinished:20 blocked:7 backlog:53 backlog-umbrella:13 backlog-core:168 backlog-nilpy:177 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:12 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:4 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3841 rejected:83`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-a-xtensa-unaligned-packed-record-field-access-faults` [A+S] — owner: frankS
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
 - `bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself` [P] — owner: frankS
@@ -74,7 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 563, ranked
+## Ready — top 30 of 561, ranked
 
 - `[p 90] [A]` bug-a-fourteen-compiler-internal-record-names-shadow-any-user-type (unblocks 1)
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
@@ -107,4 +108,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 
-_533 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_531 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

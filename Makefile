@@ -7758,6 +7758,34 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh riscv32/test_sosp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_sosp_rv32; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp_xt
 	tools/expect_same.sh xtensa/test_sosp "$$(tools/run_target.sh xtensa $(TESTTMP)/test_sosp_xt; echo "exit=$$?")" "$$($(TESTTMP)/test_sosp26; echo "exit=$$?")"
+	# EVERY ARM OF A VARIANT PART BEGINS AT THE SAME OFFSET, on every target.
+	# bug-a-xtensa-variant-record-arms-start-at-different-offsets, and it was
+	# three targets rather than the one the slug names: the variant part was laid
+	# out from AlignTo(curOff, TARGET_PTR_SIZE), described in its own comment as
+	# a base that "satisfies EVERY alignment", and on xtensa/arm32/riscv32 the
+	# pointer is 4 while an Int64 MEMBER aligns to 8. So the Int64 arm started at
+	# 8 and the Integer arm at 4, and writing one arm and reading the other
+	# returned the wrong bytes, silently. i386 escaped because TypeFieldAlign
+	# caps its scalars at 4; x86-64 because its pointer is already as wide as the
+	# widest member alignment -- the coincidence the old code mistook for a rule.
+	# THE FIXTURE ASSERTS RELATIONS AND NOT OFFSETS, which is what lets one file
+	# be correct on six targets with three different right answers, and the cross
+	# rows compare against the x86-64 run of the SAME source rather than a
+	# literal for the same reason. The last two rows read values back through the
+	# other arm, because an offset relation is a claim about the layout table and
+	# the thing users hit is a wrong value.
+	./$(COMPILER) test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm26
+	tools/expect_same.sh test_varm26 "$$($(TESTTMP)/test_varm26)" "$$(printf 'arms agree: TRUE\nsecond name in the arm follows the first: TRUE\narms agree (wide arm second): TRUE\ntag precedes the arms: TRUE\nsize covers the widest arm: TRUE\nlow half=4294967281 high half=2\nread back through the wide arm=7')"
+	./$(COMPILER) --target=i386 test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_i386
+	tools/expect_same.sh i386/test_varm "$$(tools/run_target.sh i386 $(TESTTMP)/test_varm_i386)" "$$($(TESTTMP)/test_varm26)"
+	./$(COMPILER) --target=arm32 test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_arm32
+	tools/expect_same.sh arm32/test_varm "$$(tools/run_target.sh arm32 $(TESTTMP)/test_varm_arm32)" "$$($(TESTTMP)/test_varm26)"
+	./$(COMPILER) --target=riscv32 test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_rv32
+	tools/expect_same.sh riscv32/test_varm "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_varm_rv32)" "$$($(TESTTMP)/test_varm26)"
+	./$(COMPILER) --target=aarch64 test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_a64
+	tools/expect_same.sh aarch64/test_varm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_varm_a64)" "$$($(TESTTMP)/test_varm26)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_xt
+	tools/expect_same.sh xtensa/test_varm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_varm_xt)" "$$($(TESTTMP)/test_varm26)"
 	# The other three REFUSE this shape by name. Asserted, not assumed: a refusal
 	# that silently became a miscompile is exactly the transition riscv32 and
 	# xtensa had already made when nobody was asserting them. These rows pin the

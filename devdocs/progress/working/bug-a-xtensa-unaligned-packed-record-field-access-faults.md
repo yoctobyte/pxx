@@ -3,10 +3,10 @@ slug: bug-a-xtensa-unaligned-packed-record-field-access-faults
 track: A
 prio: 40
 type: bug
-status: new
+status: working
 created: 2026-09-18
 found-by: frankH
-owner: ""
+owner: frankS
 summary: "Any access to a packed-record field that is not naturally aligned dies with SIGBUS on xtensa: `packed record B: Byte; I: Integer; W: Word; end` and `r.I := n` -> `qemu: uncaught target signal 7 (Bus error)`. xtensa's l32i/s32i fault on a misaligned word; the backend emits them for a packed field at offset 1. Measured 2026-09-18 with HEAD 316bbefd65cd and with the typed-const-record change alike, --platform=posix. A packed field needs byte-wise (or l8ui-composed) access on this target. Other strict-alignment targets not checked."
 ---
 

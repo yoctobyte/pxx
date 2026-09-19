@@ -5089,7 +5089,34 @@ begin
   if isPackedRecord then
     variantBaseOff := curOff   { packed: branches overlay right after the tag }
   else
-    variantBaseOff := AlignTo(curOff, TARGET_PTR_SIZE);
+    { THE MAXIMUM FIELD ALIGNMENT, NOT THE POINTER SIZE, and the difference is
+      the whole of bug-a-xtensa-variant-record-arms-start-at-different-offsets.
+      The paragraph below promises a base that "satisfies EVERY alignment" and
+      TARGET_PTR_SIZE does not deliver one: on every 32-bit target whose Int64
+      is 8-aligned as a MEMBER -- xtensa, arm32, riscv32 -- the pointer is 4,
+      so an Int64 branch field got aligned UP to 8 while an Integer branch
+      started at 4, and the two arms of one variant part began at different
+      offsets. Writing through one arm and reading through the other then
+      returns the wrong bytes, which is the variant record's entire purpose.
+      Measured 2026-09-19: `record Tag: Integer; case Integer of 0: (A: Int64);
+      1: (L, H: Integer); end` gave A@8 L@4 on those three and A@8 L@8 on
+      x86-64, A@4 L@4 on i386. The ticket named xtensa; it is three targets,
+      and i386 escapes only because TypeFieldAlign caps its scalars at 4.
+
+      DERIVED FROM TypeAlign RATHER THAN SPELLED AS 8, so this site and the cap
+      cannot drift apart: TypeAlign's own ladder tops out at 8 for anything
+      larger than 4 bytes, so TypeAlign(tyInt64) IS the maximum a field of any
+      type -- including a nested record, whose alignment is its widest member's
+      -- can ever ask for. If a 16-byte type ever arrives, that ladder is where
+      it lands and this follows it.
+
+      The downward shift below then does all the real work, and it can now
+      never be skipped for the wrong reason: variantBaseOff is >= vNewBase by
+      construction, because vMaxAlign cannot exceed the value used here. It
+      USED to be able to go negative -- vDelta = 4 - 8 on xtensa -- and the
+      `if vDelta > 0` guard silently did nothing, which is why this shipped
+      looking like a layout table that merely disagreed. }
+    variantBaseOff := AlignTo(curOff, TypeAlign(tyInt64));
   { Laid out from a base that satisfies EVERY alignment, then shifted back down
     to the alignment the branches actually need — because that need is only
     known once they are parsed, and laying out from an under-aligned base would
