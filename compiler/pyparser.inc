@@ -339,6 +339,14 @@ var
     module-collect trial parse resolve `x = obj.method()`
     (bug-nilpy-method-result-copied-to-var-undefined). }
   PyMembersHoisted: array[0..MAX_UCLASS-1] of Boolean;
+  { True when the member pre-pass DECLINED to lay this ci out, leaving it to
+    PyParseClass -- a class with several bases, one whose base is a mixin or
+    unresolved. Its size and slot count are not known until PyParseClass
+    reaches it, so a SUBCLASS must decline too: laid out here it continued a
+    parent of size 0 and no slots, which gave `class E(D)` under `class D(P,
+    Tag)` a VMT that called through nil for every inherited method and put
+    E's own first method on the slot D's first method owns. }
+  PyLayoutDeferred: array[0..MAX_UCLASS-1] of Boolean;
 
   { The token span of a class's BODY, recorded by whichever pass registered the
     class first (the member pre-pass or PyParseClass). Multiple inheritance is
@@ -7803,6 +7811,35 @@ begin
   end;
 end;
 
+{ Does the bracket opening at Tokens[open] close the right-hand side -- is the
+  token after its match a statement end? The construction and comprehension
+  fast paths both claim a whole statement from its opening shape, and both
+  need this answer before they may. }
+function PyBracketEndsRhs(open: Integer): Boolean;
+var i, depth: Integer;
+begin
+  PyBracketEndsRhs := False;
+  i := open;
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then
+      begin
+        PyBracketEndsRhs := (i + 1 >= TokCount) or
+                            (Tokens[i + 1].Kind in [tkNewline, tkDedent, tkEOF,
+                                                    tkSemicolon]);
+        Exit;
+      end;
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
+    Inc(i);
+  end;
+end;
+
 function PyCtorEndsRhs: Boolean;
 { Does the construction at CurTok END the right-hand side, or is it merely the
   FIRST operand of a larger expression? `x = C(1)` is a construction
@@ -7818,28 +7855,8 @@ function PyCtorEndsRhs: Boolean;
   bound to a NAME first, or merely parenthesised (`(K(1)) is k2`), were always
   fine, which is what disguised this as an `is`-specific parse bug.
   bug-nilpy-construction-on-the-right-of-is-does-not-parse }
-var i, depth: Integer;
 begin
-  PyCtorEndsRhs := False;
-  i := TokPos;                     { the '(' after the class name }
-  depth := 0;
-  while i < TokCount do
-  begin
-    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
-    else if Tokens[i].Kind in [tkRParen, tkRBrack, tkEnd] then
-    begin
-      Dec(depth);
-      if depth = 0 then
-      begin
-        PyCtorEndsRhs := (i + 1 >= TokCount) or
-                         (Tokens[i + 1].Kind in [tkNewline, tkDedent, tkEOF,
-                                                 tkSemicolon]);
-        Exit;
-      end;
-    end
-    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit;
-    Inc(i);
-  end;
+  PyCtorEndsRhs := PyBracketEndsRhs(TokPos);   { the '(' after the class name }
 end;
 
 { `_count(1)` (the itertools.count alias) -> a fresh TPyCounter. }
@@ -33661,8 +33678,16 @@ begin
     Expect(tkAssign, '=');
     { `target = [EXPR for VAR in ITER]` — a list comprehension. Desugared to an
       empty-list init plus an appending loop, so the whole statement IS that
-      sequence, not an ordinary assignment. }
-    if PyIsListCompAhead then
+      sequence, not an ordinary assignment.
+
+      Only when the comprehension IS the whole right-hand side. This claimed
+      the statement from the opening `[` alone, so `nus = [f(o) for o in offs]
+      + [x]` built the comprehension and dropped the `+ [x]` without a word,
+      and `* 2` after it was "expected expression". The expression path
+      already builds a comprehension as a value (PyParseCompExprValue), which
+      is how the same text parenthesised or as a call argument always worked.
+      The dict comprehension below claimed its statement the same way. }
+    if PyIsListCompAhead and PyBracketEndsRhs(TokPos - 1) then
     begin
       { A name being introduced HERE is born as the list itself; only a name
         that already exists with some other type needs the detour below. }
@@ -33691,7 +33716,7 @@ begin
       Exit;
     end;
     { a brace comprehension with a colon key — a dict comprehension. }
-    if PyIsDictCompAhead then
+    if PyIsDictCompAhead and PyBracketEndsRhs(TokPos - 1) then
     begin
       if symIdx < 0 then symIdx := AllocVar(name, tyClass);
       Syms[symIdx].RecName := REC_UCLASS_BASE + FindUClass('TPyDict');
@@ -44219,6 +44244,8 @@ begin
               UClsParent[ci] := baseCi
             else
               hoist := False;
+            if (baseCi >= 0) and PyLayoutDeferred[baseCi] then
+              hoist := False;
           end;
         end;
         { Skip the header to the COLON that ends it, honouring a parenthesised
@@ -44270,6 +44297,7 @@ begin
           bs := j + 1;
           be := bs;
         end;
+        if not hoist then PyLayoutDeferred[ci] := True;
         if bs < MainProgramTokCount then
         begin
           { Full members when the parent is settled: methods registered here
@@ -47303,6 +47331,7 @@ begin
   PyDcCount := 0;
   for i := 0 to PY_MAX_DC_FIELDS - 1 do PyDcClassIsDc[i] := False;
   for i := 0 to MAX_UCLASS - 1 do PyMembersHoisted[i] := False;
+  for i := 0 to MAX_UCLASS - 1 do PyLayoutDeferred[i] := False;
   for i := 0 to MAX_UCLASS - 1 do
   begin
     PyClsBodyS[i] := -1;

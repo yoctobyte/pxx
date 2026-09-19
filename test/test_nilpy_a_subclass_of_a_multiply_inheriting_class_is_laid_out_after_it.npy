@@ -1,0 +1,48 @@
+# `class E(D)` where D has two bases. D is laid out late, when its statement is
+# reached; E used to be laid out early, against a D of size 0 with no slots.
+
+class Tag:
+    def tag(self) -> str:
+        return "tag"
+
+
+class Root:
+    def who(self) -> str:
+        return "root"
+
+
+class P(Root):
+    def __init__(self) -> None:
+        self.n = 5
+
+    def pee(self) -> str:
+        return "P"
+
+
+class D(P, Tag):
+    def dd(self) -> str:
+        return "dd"
+
+
+class E(D):
+    def own(self) -> str:
+        return "own"
+
+
+class F(E):
+    def dd(self) -> str:
+        return "F.dd"
+
+
+e = E()
+print(e.tag())
+print(e.who())
+print(e.pee())
+print(e.dd())
+print(e.own())
+print(e.n)
+f = F()
+print(f.tag(), f.who(), f.dd(), f.own(), f.n)
+d: D = f
+print(d.dd())
+print(isinstance(e, Tag), isinstance(f, D), isinstance(e, F))

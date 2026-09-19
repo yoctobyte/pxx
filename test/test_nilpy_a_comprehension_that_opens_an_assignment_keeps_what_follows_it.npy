@@ -1,0 +1,46 @@
+# A comprehension at the START of an assignment's right-hand side is only the
+# first operand; what follows the closing bracket belongs to the statement.
+
+offs = [1.0, 2.0]
+
+# the whole right-hand side (the fast path, unchanged)
+a = [o * 2.0 for o in offs]
+print(a)
+
+# a binary operator after it
+b = [o for o in offs] + [9.0]
+print(b)
+c = [o for o in offs] * 2
+print(c)
+print(len([o for o in offs] + offs + [3.0]))
+
+# the name already exists, with another type
+d = 7
+d = [o for o in offs] + [4.0]
+print(d)
+
+# a comparison and a conditional after it
+e = [o for o in offs] == [1.0, 2.0]
+print(e)
+f = [o for o in offs] if len(offs) > 1 else []
+print(f)
+
+# a subscript and a call on it
+g = [o for o in offs][1]
+print(g)
+h = len([o for o in offs])
+print(h)
+
+# the dict comprehension claimed its statement the same way
+k = {str(o): o for o in offs} == {"1.0": 1.0, "2.0": 2.0}
+print(k)
+m = {str(o): o for o in offs}
+print(m)
+n = {str(o): o for o in offs} | {"9.0": 9.0}
+print(n)
+
+# a set comprehension was already right; it must stay right
+s = {int(o) for o in offs} | {7}
+print(sorted(s))
+t = {int(o) for o in offs}
+print(sorted(t))
