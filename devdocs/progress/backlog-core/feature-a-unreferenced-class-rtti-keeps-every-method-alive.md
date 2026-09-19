@@ -212,6 +212,34 @@ so one entry leaves and the count slot stays: **16**. Bare goes 1 -> 0, so the
 whole table goes: 8 + 16 = **24**. Same entry size on both profiles; the
 difference is whether the class being removed is the LAST streamable one.
 
+### THE REGISTRY'S RUN-TIME WRITABILITY IS UNMEASURED, NOT SETTLED (2026-09-19)
+
+Recorded because an exclusion with a reason attached reads as settled, and this
+one is not — the hazard-block decay shape: a reader who stops generates nothing
+that could reveal the reason was wrong.
+
+frankh-3f's `--ro-rtti` (`48b75b34b`, off by default) marks class RTTI headers
+and VMTs read-only. It deliberately does NOT mark the registry table, and **I
+gave the wrong reason for that**: I told him the registry would fault by
+construction, because its two pointer words per entry are filled by
+`AddDataPtrFix` at emission. **That is wrong.** `AddDataPtrFix` patches the FILE
+IMAGE, before the read-only pieces are permuted, so a span filled that way does
+not fault. His proof is direct and is the kind that settles it: the blob headers
+are filled by **exactly the same `AddDataPtrFix` calls**, they ARE marked
+read-only under the flag, and `test_ro_rtti_write`'s plain row runs clean with
+`ClassName` and `is` both reading them.
+
+**So the registry is excluded because it was SCOPED OUT, and whether anything
+writes it at run time is simply unmeasured.** Nobody should read the exclusion
+as evidence. Measuring it is one line of `RoRangeAdd` over the table's span plus
+a run, and the answer is worth having before anyone treats the registry as
+immutable.
+
+His positive control is the one this ticket asked for and it fires: a store into
+a VMT slot and a store into an RTTI header, each reached through an instance,
+fault with rc=139 under the flag and land without it. The compiler also
+self-hosts with the flag defaulted on (converged, 2 rounds).
+
 ### BUILT 2026-09-19 (frankB) — THE REGISTRY IS NOW CONDITIONAL ON ITS READER
 
 The step the park note named is done. `RTTIRegRequested` is set at the two
