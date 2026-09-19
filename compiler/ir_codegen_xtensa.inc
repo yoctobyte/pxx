@@ -5226,6 +5226,30 @@ begin
   xtensa_mov(reg_xtensa_a11, reg_xtensa_a8);         { ucontext*, before a8 becomes
                                                        EmitLoadGlobAddr's scratch }
 
+  { THE SIGNAL NUMBER FOR __pxxSigNum, AND XTENSA WAS THE ONE BACKEND THAT NEVER
+    STORED IT. defs.inc's own declaration says "all five hosted targets park it
+    as of 2026-08-31" -- x86-64, i386, arm32, aarch64, riscv32 -- and posix
+    xtensa is a SIXTH that arrived afterwards and was never added to that sweep.
+    What used to cover it was the intrinsic REFUSING on any target that did not
+    park the slot; that refusal is alive but asks TargetHasSignalRuntime, which
+    asks the PLATFORM, so `--platform=posix` passes the gate and the store was
+    simply absent. The failure is the one that declaration predicts in its own
+    words -- __pxxSigNum answers 0, "which would have sent every signal to
+    handler 0" -- and it is SILENT rather than wrong: 0 fails the trampoline's
+    `n >= 1` bounds check, so signals.pas drops every delivery and the handler
+    never runs. Measured: lib_signals_fpc reports
+    `per-signal-number=FAIL usr1=0 usr2=0 other=0` on xtensa and OK on the other
+    five, and the process SURVIVES a SIGUSR1 whose default action is terminate,
+    so the install and the stub were both working and only the number was lost.
+    That row does not run here -- the tier's cross loop is i386/arm32/aarch64/
+    riscv32 and xtensa is not in it.
+    a6 still holds the kernel's sig argument (it was parked at sp+8 above and
+    nothing since has touched it), and a11 has already captured ucontext*, so
+    a8 is free to be EmitLoadGlobAddr's scratch. Stored before BSS_SIG_CTX, the
+    same order riscv32 and aarch64 use. }
+  EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_NUM);
+  xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 0);
+
   EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_SIG_CTX);
   xtensa_s32i(reg_xtensa_a11, reg_xtensa_a8, 0);     { ucontext* for __pxxSigContext }
 

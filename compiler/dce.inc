@@ -245,11 +245,14 @@ begin
     condition -- DCE only REMOVES bytes, so |target - site| never grows and a
     branch form that encoded before still encodes after.
 
-    Xtensa is the one still refused, and not for want of an arm: its slot needs
-    both a delta ANCHOR and a per-site FORM (call0 vs call8, chosen by the
-    callee's own return instruction), which is two more columns on a table whose
-    existing parallel array was itself being dropped by this pass until today.
-    See bug-a-dce-refuses-every-target-except-x86-64 for the mapped-out work. }
+    XTENSA IS NO LONGER REFUSED AND THIS COMMENT SAID IT WAS until 2026-09-19 --
+    stale prose sitting three lines above a refusal list that does not contain
+    it, which is the shape that gets believed because the code below is correct
+    and nobody re-reads the paragraph. What it describes is real and was DONE:
+    the slot needs both a delta ANCHOR and a per-site FORM (call0 vs call8,
+    chosen by the callee's own return instruction), and both columns exist now.
+    wasm32 is the only architecture this gate turns away.
+    See bug-a-dce-refuses-every-target-except-x86-64 for what remains. }
   if TargetArch = TARGET_WASM32 then
     why := 'wasm32 references functions by INDEX, not by displacement'
   { --shared only. `-c` used to be refused beside it on the premise that an

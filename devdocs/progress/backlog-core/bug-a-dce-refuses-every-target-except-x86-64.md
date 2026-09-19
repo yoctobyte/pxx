@@ -7,7 +7,7 @@ type: bug
 status: working
 created: 2026-09-18
 owner: ""
-summary: "FOUR OF SIX TARGETS DONE (2026-09-18, frankB): x86-64 as before, plus **riscv32, i386 and xtensa (both ABIs)**, each verified by RUNNING the binary under qemu, not by linking it. THE PRESCRIBED WORK BELOW WAS WRONG AND IS CORRECTED IN ITS OWN SECTION: no backend needed a branch-patch arm written — `ApplyCallFixups` has been fully architecture-aware all along. The real defects were an x86-64 rel32 written over encoded branch WORDS, ~30 stub calls emitted outside every fixup table on the premise that \"the target is final at emit time\" (true of the target, false of the site), a dropped `CallFixAnchor` column, and — xtensa only — CODE ALIGNMENT: a hole whose size is not a multiple of 4 re-aligns every later body, and CALL0/CALL8 require a 4-aligned target. REMAINING: arm32, aarch64 (each needs only its hand-built `SigInstallAddr` branch recorded; the patcher arms already exist) and wasm32 (genuinely different — function indices, not displacements). Owner directive, 2026-09-17: \"strip code and associated data where possible.\" Measured wins: riscv32 880020B->198572B, i386 456290B->86626B, xtensa call0 694520B->161840B / windowed 613087B->140323B."
+summary: "FIVE OF SIX TARGETS DONE, and arm32/aarch64 needed NO WORK -- the REMAINING list below was stale when it was written (re-measured 2026-09-19, frankS). x86-64, riscv32, i386 and xtensa (both ABIs) as before, plus **arm32 and aarch64**: dce.inc's refusal gate never mentioned either of them -- it refuses wasm32, --shared, -g, a non-wired frontend and an .asm entry override, and nothing else -- so `--dce` was already running on both. What the list asked for ("each needs only its hand-built `SigInstallAddr` branch recorded") had ALREADY LANDED as the 2026-09-18 linkReg work in PatchCodeRefSlot, whose own comment records the exact failure: arm32 `hello` installing SIGINT and then taking SIGSEGV at si_addr=NULL because B was patched where BL was meant. VERIFIED BY RUNNING, which is the standard this ticket sets for itself: five fixtures per target, stdout and exit code identical with and without the pass (arm32 246072->37176 on hello, -85%; aarch64 200968->69896, -65%), plus lib_signals_fpc -- which INSTALLS a handler, RAISES SIGUSR1/SIGUSR2 and dispatches through the trampoline, so the signal path the list named is the one actually exercised rather than merely linked. REMAINING: wasm32 alone (genuinely different -- function indices, not displacements). ALSO CORRECTED: dce.inc's own comment said \"Xtensa is the one still refused\" three lines above a refusal list that does not contain xtensa -- stale prose against correct code, fixed here. AND A SEPARATE DEFECT FELL OUT OF THE VERIFICATION, fixed and not merely filed: the xtensa signal stub never stored BSS_SIG_NUM (five backends did, xtensa did not), so __pxxSigNum answered 0, 0 failed the trampoline's bounds check, and every delivery was dropped SILENTLY -- see the logbook entry for 2026-09-19. Owner directive, 2026-09-17: \"strip code and associated data where possible.\" Measured wins: riscv32 880020B->198572B, i386 456290B->86626B, xtensa call0 694520B->161840B / windowed 613087B->140323B."
 ---
 
 # What
@@ -194,3 +194,51 @@ xtensa bug first — the PINNED compiler reproduced it identically, which is
 exactly what a pre-existing bug looks like — and it was my own missing flag. No
 bug filed, and the flag is explained in the recipe so the next reader does not
 repeat it.
+
+### RE-MEASURED 2026-09-19 (frankS) — arm32 AND aarch64 WERE NEVER REFUSED
+
+Taken as a lead to check rather than as a conclusion, and two of the three
+things it said turned out not to match the tree.
+
+**The refusal gate does not mention arm32 or aarch64, and never did.**
+`dce.inc` refuses `wasm32`, `--shared`, `-g`, a frontend that is not
+Pascal/C/NilPy, and an `.asm` entry override. There is no architecture arm
+below wasm32. Both targets ran the pass on first asking:
+
+| target | bodies | live | dead | code |
+| --- | --- | --- | --- | --- |
+| arm32 | 174 | 27 (28544B) | 146 (209892B) | 239108B -> 29216B |
+| aarch64 | 138 | 27 (26440B) | 110 (137244B) | 164308B -> 27064B |
+
+**What the REMAINING list asked for had already landed.** It said each target
+"needs only its hand-built `SigInstallAddr` branch recorded". That is the
+2026-09-18 `linkReg` work in `PatchCodeRefSlot`, whose comment records the
+failure it fixed in the same words this ticket uses — arm32 `hello` installed
+SIGINT and then took SIGSEGV at `si_addr=NULL`, because B was being patched
+where BL was meant, eleven basic blocks from the patch site.
+
+**Verified by RUNNING, which is the standard this ticket sets for itself.**
+Five fixtures per target, stdout and exit status compared with and without the
+pass: `hello`, the packed-record fixture, the variant-record fixture, the
+open-array leak fixture, and `lib_signals_fpc`. All SAME.
+
+    h/arm32               SAME rc=0  246072 -> 37176
+    h/aarch64             SAME rc=0  200968 -> 69896
+    test_pkfld/arm32      SAME rc=0  255576 -> 75352
+    test_pkfld/aarch64    SAME rc=0  202264 -> 71192
+
+**`lib_signals_fpc` is in that list on purpose, and it is the row with teeth.**
+Every other fixture runs to exit 0 without a signal ever being delivered, so a
+mis-patched `SigInstallAddr` would not show: the binary installs a handler it
+never uses. That fixture installs two handlers, sends itself SIGUSR1 and
+SIGUSR2 through the PAL, and asserts per-signal dispatch through the
+trampoline — so it takes the route the REMAINING list named, rather than merely
+linking it. `--dce` and plain agree on i386, arm32, aarch64, riscv32 and
+x86-64.
+
+**Isolation was not the guard here — the ROUTE was.** The first pass of this
+verification ran four fixtures per target, got SAME on all of them, and would
+have closed arm32/aarch64 on evidence that could not have failed for the defect
+the ticket names.
+
+## REMAINING after this: wasm32 only.

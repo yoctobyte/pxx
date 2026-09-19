@@ -7839,6 +7839,33 @@ test-threads: $(COMPILER)
 	# ABI also uses for its own purposes -- the row that would catch a clash.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_xtw
 	tools/expect_same.sh xtensa-windowed/test_pkfld "$$(tools/run_target.sh xtensa $(TESTTMP)/test_pkfld_xtw)" "$$($(TESTTMP)/test_pkfld26)"
+	# THE SIGNAL NUMBER REACHES THE HANDLER ON XTENSA. Five backends stored
+	# BSS_SIG_NUM and xtensa stored it NOWHERE -- defs.inc's declaration says
+	# "all five hosted targets park it as of 2026-08-31" and posix xtensa is a
+	# sixth that arrived after that sweep. The refusal that used to cover a
+	# target with no slot asks TargetHasSignalRuntime, which asks the PLATFORM,
+	# so --platform=posix passed the gate with the store missing.
+	# WHY THIS ROW IS HERE AND NOT BESIDE THE OTHER lib_signals_fpc ROWS: that
+	# loop is in lib-test and builds with $(PXX_STABLE), so an xtensa row there
+	# would be RED until a pin carries this fix -- born red, which teaches that
+	# the guard can be ignored. This tier uses the HEAD compiler. Fold it into
+	# the lib-test loop once a pin carries it.
+	# THE FAILURE IT CATCHES IS SILENT, WHICH IS WHY THE ASSERTION IS THE OUTPUT
+	# AND NOT THE EXIT STATUS: __pxxSigNum answered 0, 0 fails the trampoline's
+	# `n >= 1` bounds check, signals.pas dropped every delivery, and the process
+	# SURVIVED a SIGUSR1 whose default action is terminate -- so install, stub
+	# and rc were all correct and only the number was lost. Measured before the
+	# fix: `per-signal-number=FAIL usr1=0 usr2=0 other=0`.
+	./$(COMPILER) test/lib_signals_fpc.pas $(TESTTMP)/sig_oracle
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/lib_signals_fpc.pas $(TESTTMP)/sig_xt
+	tools/expect_same.sh xtensa/lib_signals_fpc "$$(tools/run_target.sh xtensa $(TESTTMP)/sig_xt)" "$$($(TESTTMP)/sig_oracle)"
+	# AND THE WINDOWED ABI REFUSES BY NAME -- this row's own positive control.
+	# It is drawn from the same population (the same source, the same target,
+	# one flag apart), so a change that broke the Call0 arm into a silent pass
+	# cannot leave this one passing too. defs.inc: "windowed xtensa and any ESP
+	# platform still Error at codegen".
+	! ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/lib_signals_fpc.pas $(TESTTMP)/sig_xtw > $(TESTTMP)/sig_xtw.log 2>&1 || exit 1
+	tools/expect_same.sh xtensa-windowed/lib_signals_refusal "$$(grep -c "error: __pxxSigNum needs SA_SIGINFO" $(TESTTMP)/sig_xtw.log)" "1"
 	# The other three REFUSE this shape by name. Asserted, not assumed: a refusal
 	# that silently became a miscompile is exactly the transition riscv32 and
 	# xtensa had already made when nobody was asserting them. These rows pin the
