@@ -15589,6 +15589,7 @@
     "5d99abf1d28aeba8ce5754f539d107d1a6501235",
     "d90ddd2b71e63b7481b23b8dc860e8316aa06e9a"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_bytearray_unbound_and_subclass.npy test/test_nilpy_bytearray_unbound_and_subclass.expected",
    "status": "fail"
   },
@@ -15610,6 +15611,7 @@
     "5d99abf1d28aeba8ce5754f539d107d1a6501235",
     "d90ddd2b71e63b7481b23b8dc860e8316aa06e9a"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh",
    "status": "fail"
   }
