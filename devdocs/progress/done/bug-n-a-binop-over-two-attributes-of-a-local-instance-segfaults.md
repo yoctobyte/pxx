@@ -114,4 +114,4 @@ subjects records a fix. A regression fixture now holds it:
 test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.npy.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9c70e35f6.
