@@ -1,0 +1,27 @@
+# A Pascal routine handed from NilPy into a Pascal procedural PARAMETER has to
+# arrive as a code address. It arrived as the callable-value carrier -- the
+# heap object every NilPy function value is -- so the slot held a handle and
+# every later call through it jumped into the heap. Pin v412 segfaults on the
+# third line below; the first two pass there, which is the point of keeping
+# them: only the WIRING moved between them.
+#
+# The rows are the ticket's own matrix. Wired inside Pascal against handed in
+# from NilPy, each called from both languages, plus a list element as the
+# receiver -- that spelling was reported to fail identically, so it is here
+# rather than assumed to follow.
+#
+# NOT here, and not an oversight: a NilPy `def` in the same slot. A def
+# compiles all-Variant, so it has no native signature to take the address of;
+# it still needs a thunk, still crashes if called, and now warns at the call
+# site saying so.
+import 'procslot.pas' as ps
+
+kw = MkKindWired()
+print("wired   from pascal:", CallItFromPascal(kw))
+print("wired   from nilpy: ", kw.build(5, 2))
+kh = MkKind(TheMaker)
+print("handed  from pascal:", CallItFromPascal(kh))
+print("handed  from nilpy: ", kh.build(5, 2))
+ks = [MkKind(TheMaker)]
+print("element from pascal:", CallItFromPascal(ks[0]))
+print("element from nilpy: ", ks[0].build(5, 2))

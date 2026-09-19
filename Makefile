@@ -999,6 +999,15 @@ test-nilpy: $(COMPILER)
 	tools/expect_same.sh test_nilpy_subbase26.1 "$$($(TESTTMP)/test_nilpy_subbase26)" "$$(printf 'override: KeepCase\ninherited: keepcase')"
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_array_of_const_unit.npy $(TESTTMP)/test_nilpy_aoc26
 	tools/expect_same.sh test_nilpy_aoc26.1 "$$($(TESTTMP)/test_nilpy_aoc26)" "x:2"
+	@# A Pascal routine handed from NilPy into a Pascal PROCEDURAL parameter has
+	@# to arrive as a code address; it arrived as the callable-value carrier, so
+	@# the slot held a heap handle and every call through it jumped into it.
+	@# Six rows: wired in Pascal vs handed in from NilPy, each called from both
+	@# languages, plus a list element as receiver. The first two pass on pin
+	@# v412 and the third segfaults there -- only the WIRING moves between them,
+	@# which is what makes the pair a control rather than two tests.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_function_into_a_procedural_parameter.npy $(TESTTMP)/test_nilpy_procslot26
+	tools/expect_same.sh test_nilpy_procslot26.1 "$$($(TESTTMP)/test_nilpy_procslot26)" "$$(printf 'wired   from pascal: 502\nwired   from nilpy:  502\nhanded  from pascal: 502\nhanded  from nilpy:  502\nelement from pascal: 502\nelement from nilpy:  502')"
 	# A run-time dispatched method call PAST FOUR ARGUMENTS. The entry points
 	# were an arity ladder, so a fifth argument was refused outright; pydyn_methl
 	# takes a TPyList and has no cap. The four-argument row is the control that

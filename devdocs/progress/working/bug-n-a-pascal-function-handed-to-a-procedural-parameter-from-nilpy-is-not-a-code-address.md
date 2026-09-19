@@ -2,9 +2,10 @@
 track: N
 prio: 55
 type: bug
-owner: unassigned
+owner: frankb-8e
 blocked-by: []
 summary: "`MkKind(TheMaker)` — a Pascal function name passed from NilPy into a Pascal `function(...)` procedural PARAMETER — stores something that is not a code address, and every later call through it segfaults, INCLUDING a call made from Pascal. Wiring the identical field inside Pascal with `@TheMaker` gives 502 through both languages. The call site is innocent; the value is wrong. Present in the pin."
+status: working
 ---
 
 # A Pascal function handed to a procedural parameter from NilPy is not a code address

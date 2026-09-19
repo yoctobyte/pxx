@@ -26958,6 +26958,48 @@ begin
   end;
 end;
 
+{ The routine a callable-VALUE carrier was built for, or -1 for anything that
+  is not one of PyMakeFuncValueFor's carriers.
+
+  Read off the carrier's own AN_PYSIGREF argument, which already records the
+  ORIGINAL proc (`origPi`) because the signature must be recorded against the
+  def the user wrote rather than against a synthesized wrapper. Reading it here
+  is the same fact for a second consumer, so there is no second source of it --
+  and no name parsing: the wrapper IS named `$pycallwrap_<realPi>`, and
+  decoding that string would be a second spelling of a mapping the AST already
+  carries.
+
+  A four-argument carrier (pybound_new / pybound_new_star) has no sigref, and
+  answers with whatever its AN_PROCADDR holds -- which may be the all-Variant
+  wrapper. That is safe rather than lucky: the only caller checks the answer
+  with ProcSigCompatible, and a wrapper's all-Variant parameter list cannot
+  match a native signature, so the wrapper declines itself. }
+function PyCarrierNamedProc(node: Integer): Integer;
+var a, callee: Integer;
+begin
+  PyCarrierNamedProc := -1;
+  if (node < 0) or (ASTKind[node] <> AN_CALL) then Exit;
+  callee := Integer(ASTIVal[node]);
+  if (callee < 0) or (callee >= ProcCount) then Exit;
+  if (callee <> FindProc('pybound_new_sig')) and
+     (callee <> FindProc('pybound_new_star')) and
+     (callee <> FindProc('pybound_new')) then Exit;
+  a := ASTLeft[node];
+  while a <> -1 do
+  begin
+    if (ASTLeft[a] >= 0) and (ASTKind[ASTLeft[a]] = AN_PYSIGREF) then
+    begin
+      PyCarrierNamedProc := Integer(ASTIVal[ASTLeft[a]]);
+      Exit;
+    end;
+    a := ASTRight[a];
+  end;
+  a := ASTLeft[node];
+  if (a <> -1) and (ASTLeft[a] >= 0) and (ASTKind[ASTLeft[a]] = AN_PROCADDR) then
+    PyCarrierNamedProc := Integer(ASTIVal[ASTLeft[a]]);
+end;
+
+
 function PyCoerceCallableArgsIn(procIdx, argsHead: Integer): Boolean;
 { A callable VALUE handed to a raw callback `Pointer` parameter, coerced to the
   code address the slot has always wanted.
@@ -27138,6 +27180,66 @@ begin
       PyHoistStmt(asgn);
       ASTLeft[currArg] := PyMakeIdent(tmpSym);
       Result := True;
+    end;
+    { A named routine handed to a PROCEDURAL parameter -- `MkKind(TheMaker)`,
+      where the slot is a Pascal `function(laden, room: Integer): Integer`.
+
+      Every callable a NilPy program can name is a carrier (the arms below turn
+      that into a code address for a raw Pointer slot), and a procedural slot is
+      neither tyPointer nor tyVariant, so this walk skipped it entirely and the
+      CARRIER HANDLE was stored in the slot. Calling through it jumped into the
+      heap: SIGSEGV on the next call, including one made from Pascal, with the
+      wiring line the only difference between a working program and a crashing
+      one.
+
+      Measured 2026-09-20 rather than assumed, because the obvious repair is
+      wrong: the carrier's code word for `TheMaker` is `$pycallwrap_<n>`, the
+      synthesized all-Variant wrapper, NOT TheMaker. Storing that word would
+      have put a real, plausible code address in the slot and called it with
+      the native (Integer, Integer) convention -- a wrong answer instead of a
+      crash, which is the worse failure. So the address comes from the ROUTINE,
+      via the sigref the carrier already carries, and never from the carrier's
+      code word.
+
+      ProcSigCompatible is the gate and it is structural: same function-ness,
+      return type, parameter count and stored parameter kinds. A NilPy `def`
+      compiles all-Variant and therefore does NOT match a native signature, so
+      it still declines here and keeps today's behaviour -- handing one to a C
+      callback slot needs a native-ABI thunk, which is the ESP demo's ticket and
+      not this arm.
+      bug-n-a-pascal-function-handed-to-a-procedural-parameter-from-nilpy-is-not-a-code-address }
+    if (i < MAX_PROC_PARAMS) and
+       (ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] >= 0) and
+       (ASTLeft[currArg] >= 0) then
+    begin
+      code := PyCarrierNamedProc(ASTLeft[currArg]);
+      if (code >= 0) and
+         ProcSigCompatible(code, ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i]) then
+      begin
+        exprNode := AllocNode(AN_PROCADDR);
+        ASTIVal[exprNode] := code;
+        ASTTk[exprNode] := Ord(tyPointer);
+        ASTLeft[currArg] := exprNode;
+        Result := True;
+      end
+      else if (code >= 0) and (not PyTypingPass) then
+        { The shape this arm cannot serve: a callable whose compiled signature
+          is not the slot's, which a NilPy `def` always is (all-Variant). It
+          keeps exactly today's behaviour -- the carrier goes into the slot --
+          and today's behaviour is a SIGSEGV the moment anything calls through
+          it, measured identical on pin v412 and at HEAD.
+
+          A warning and not a refusal, deliberately: a program that stores such
+          a value and never calls it runs correctly today, and this arm cannot
+          tell that program from the one that crashes. The native-ABI thunk
+          that would make it work is the ESP demo's ticket, named here so the
+          message leads somewhere. }
+        Warn('Nil Python: ' + Procs[code].Name + ' does not have the signature '
+             + 'of procedural parameter ''' + Procs[procIdx].Params[i].Name
+             + ''', so the callable object is stored rather than a code '
+             + 'address — calling through that slot will crash. A def compiles '
+             + 'all-Variant and needs a native-ABI thunk, which is not built '
+             + 'yet.');
     end;
     if (i < MAX_PROC_PARAMS) and
        (Procs[procIdx].Params[i].TypeKind = tyPointer) and
