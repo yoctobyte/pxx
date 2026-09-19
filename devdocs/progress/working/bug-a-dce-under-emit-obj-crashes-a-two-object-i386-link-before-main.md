@@ -3,10 +3,10 @@ slug: bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main
 track: A
 prio: 55
 type: bug
-status: backlog
+status: working
 found: 2026-09-19
 found-by: frankS
-owner: ""
+owner: frankb-8e
 blocked-by: []
 summary: "`--dce --emit-obj --target=i386` produces objects that LINK cleanly and then die before main: two i386 objects (test/c_obj_fnptr_a.c + _b.c, the callback-table pair) link with `gcc -m32 -no-pie` and the program exits rc=138 having printed nothing, where `--no-dce` prints `20 11`. x86-64 is correct both ways, so it is i386-specific and not the pass in general. Reachable TODAY with an explicit `--dce` -- this is not a regression, it is an existing shipping path nobody had run on i386. Found while measuring whether `--emit-obj` should enable the pass by default (bug-a-emit-obj-retains-pxxassert-...): the answer is NOT YET, and this is why. The single-object rows pass on i386, so only a TWO-OBJECT link exposes it."
 ---
