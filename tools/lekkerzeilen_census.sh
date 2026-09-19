@@ -15,6 +15,23 @@
 # ---------------------------------------------------------------------------
 # READ THIS BEFORE RANKING ANYTHING ON THE OUTPUT.
 #
+# THE DEMO'S OWN BUILD PASSES TWO -d FLAGS AND THIS CENSUS DOES NOT, SO SOME OF
+# ITS WALLS ARE THE CENSUS'S AND NOT THE DEMO'S. Measured 2026-09-19 (frankD) at
+# lekkerzeilen 8b32f364cdca: seven subjects reported
+# `more than 32 parameters not supported (MAX_PROC_PARAMS)` at the IDENTICAL line
+# 3913 -- SDL's AVX-512 intrinsics, reached through SDL_cpuinfo.h. Recompiled
+# with the flag the demo itself uses, ALL SEVEN COMPILE:
+#
+#   LZFLAGS='-dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES' tools/lekkerzeilen_census.sh
+#
+# 29 of 39 becomes 36 of 39, and the three that remain are the ctypes backends
+# (_ctypes_backend.py, _gl.py, _sdl2.py), which are the CPython path the demo
+# does not take -- it uses platform/_pxx.py. AND THE CLOSURE ITSELF DOES NOT
+# STOP AT ALL: `__main__.py` with those flags compiles end to end, rc 0, ~145s,
+# a 14.2MB binary. So do NOT read a wall here as "the demo is blocked" without
+# first re-running with LZFLAGS; a subject-compiles census and a closure are
+# different questions and this file answers the first one.
+#
 # THIS IS A FIRST-FAILURE CENSUS AND THE WALL HISTOGRAM IS NOT A SIZE ESTIMATE.
 # The compiler stops at the first error in a module, so every wall BEHIND the one
 # reported is invisible, and the counts are biased in a direction this corpus has
@@ -70,6 +87,11 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 PXX="${PXX:-$ROOT/compiler/pascal26}"
+# EXTRA COMPILER FLAGS, default NONE so the long-tracked headline does not move
+# silently. See "THE DEMO'S OWN BUILD PASSES TWO -d FLAGS" in the header: the
+# demo's build is
+#   LZFLAGS='-dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES'
+LZFLAGS="${LZFLAGS:-}"
 LZ="${LZ_DIR:-/home/neo/lekkerzeilen}"
 QUIET=0; ONE=""
 
@@ -129,7 +151,7 @@ NPASS=0; NFAIL=0
 for m in $MODULES; do
   tag="$(printf '%s' "$m" | tr /. __ | sed 's/_py$//')"
   rc=0
-  ( cd "$LZ" && "$PXX" --threadsafe "$m" "$WORK/$tag" ) > "$WORK/$tag.log" 2>&1 || rc=$?
+  ( cd "$LZ" && "$PXX" --threadsafe $LZFLAGS "$m" "$WORK/$tag" ) > "$WORK/$tag.log" 2>&1 || rc=$?
   if [ "$rc" = 0 ]; then
     NPASS=$((NPASS+1))
     printf 'ok   %s\n' "$m" >> "$WORK/rows"
