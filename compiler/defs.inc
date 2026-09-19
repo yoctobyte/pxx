@@ -6221,6 +6221,12 @@ var
     bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain }
   ExceptionCaughtObjTmp: array[0..MAX_LOOP_FIXUPS-1] of Integer;
   ExceptionCaughtClsTmp: array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  { A unique id per protected region, parallel to ExceptionFinallyBody, so a
+    `goto` can ask whether it and its label are in the SAME region. Depth alone
+    cannot: two sibling `try` bodies share one depth. 0 = outside every region;
+    ExceptionRegionNext only ever grows. Set by IRPushExcRegion. }
+  ExceptionRegionId: array[0..MAX_LOOP_FIXUPS-1] of Integer;
+  ExceptionRegionNext: Integer;
   ExceptionHandlerParseDepth: Integer;
   { The symbol index an open `on E: T do` handler's scope starts at, PLUS ONE,
     so a Pascal global's zero means "no handler scope is open" and nothing has
@@ -7069,6 +7075,25 @@ var
   CEOrdTk  : TTypeKind; { WHICH ORDINAL the const expression just folded by ConstEval yielded. ConstEval collapses every ordinal (char, enum, bool) to a bare Int64 -- a genuine simplification that is why Ord/Succ/Pred need no code at all -- so the declaration site has no way to ask what kind came back and used to guess from the FIRST TOKEN. That is right for a bare literal and wrong for every folded form: `const X = eB` printed 1, `const Z = Low(TE)` printed 0, `const W = Low(TC)` printed 97. tyInteger unless an arm says otherwise; tyBoolean and tyChar are the two it can say. Propagated through the levels: a relational sets tyBoolean, and/or/xor keep tyBoolean only when BOTH operands were boolean, everything else clears to tyInteger. Read by the untyped-const declaration immediately after its own top-level ConstEval call. bug-p-the-constant-evaluator-erases-an-ordinals-type }
   CEEnumId : Integer;   { companion to CEOrdTk: the enum TYPE id when the folded value is an enum member, else -1. An enum is not a TTypeKind in this dialect -- an enum symbol is tyInteger with SymSemId >= 0 (see pasparser_decl.inc's VDTk handling) -- so the kind alone cannot carry it. }
   GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }
+  { The exception region a label was placed in, and the gotos seen before it,
+    per GotoLabel slot. Valid only while the matching *Serial equals
+    IRLowerSerial, so no frontend has to initialise them
+    and a stale entry from another body can never match. A goto whose region is
+    not its label's jumps into or out of a protected region with no
+    IR_EXC_ENTER / IR_EXC_LEAVE: the frame chain then points into dead stack
+    and the next unhandled raise longjmps into it. IRCheckGotoRegion. }
+  GotoLabelRegion       : array[0..MAX_GOTO_LABELS-1] of Integer;
+  GotoLabelRegionSerial : array[0..MAX_GOTO_LABELS-1] of Integer;
+  GotoPendHead          : array[0..MAX_GOTO_LABELS-1] of Integer;   { first GotoRec* waiting on the slot's label }
+  GotoPendSerial        : array[0..MAX_GOTO_LABELS-1] of Integer;
+  { gotos seen before their label, a per-slot list in one pool (IRReset empties
+    it). A LIST, not the first goto: with two forward gotos from different
+    regions only the label can say which one crosses. }
+  GotoRecRegion         : array[0..2*MAX_GOTO_LABELS-1] of Integer;
+  GotoRecNode           : array[0..2*MAX_GOTO_LABELS-1] of Integer;
+  GotoRecNext           : array[0..2*MAX_GOTO_LABELS-1] of Integer;
+  GotoRecCount          : Integer;
+  IRLowerSerial         : Integer;   { bumped by IRReset; 0 = no body lowered yet }
 
   { Scratch stack for IRLowerAST's statement-sequence lowering, which used to
     recurse down the AN_SEQ right spine — ONE FRAME PER STATEMENT. IRLowerAST's

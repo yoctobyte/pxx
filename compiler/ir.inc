@@ -385,6 +385,87 @@ begin
   IRCompoundLvVal := -1;
   CurLowerLine := 0;
   CurLowerFile := 1;
+  Inc(IRLowerSerial);   { retires every GotoLabelRegion / GotoPend entry of the previous body }
+  GotoRecCount := 0;
+end;
+
+{ Open a protected region: the three parallel slots IRLowerCleanupToDepth reads,
+  plus the region id a `goto` is checked against. The one place a region is
+  pushed, so a new kind of region cannot be registered for early exits and
+  forgotten for gotos. }
+procedure IRPushExcRegion(finallyBody, caughtObjTmp, caughtClsTmp: Integer);
+begin
+  ExceptionFinallyBody[ExceptionCodegenDepth] := finallyBody;
+  ExceptionCaughtObjTmp[ExceptionCodegenDepth] := caughtObjTmp;
+  ExceptionCaughtClsTmp[ExceptionCodegenDepth] := caughtClsTmp;
+  Inc(ExceptionRegionNext);
+  ExceptionRegionId[ExceptionCodegenDepth] := ExceptionRegionNext;
+  Inc(ExceptionCodegenDepth);
+end;
+
+function IRCurExcRegion: Integer;
+begin
+  if ExceptionCodegenDepth > 0 then
+    Result := ExceptionRegionId[ExceptionCodegenDepth - 1]
+  else
+    Result := 0;
+end;
+
+{ A `goto` and its label must sit in the same protected region. A plain jump
+  across a region boundary emits no IR_EXC_ENTER / IR_EXC_LEAVE: jumping OUT
+  leaves the region's frame on the chain in dead stack, so the next unhandled
+  raise longjmps into it; jumping IN pops a frame that was never pushed. FPC
+  refuses both ("Jump in or outside of an exception block") and so do we,
+  rather than invent an unwinding goto FPC-dialect code cannot contain.
+  isLabel: called from AN_LABEL (slot's region becomes known) or AN_GOTO. Named
+  labels only; the stackless generator's synthetic labels never cross a region
+  because `yield` inside a `try` is refused. A body with more forward gotos than
+  the GotoRec pool holds goes unchecked past the pool, never falsely refused. }
+procedure IRCheckGotoRegion(slot, node: Integer; isLabel: Boolean);
+var region, r: Integer;
+begin
+  if IRLowerSerial <= 0 then Exit;
+  { FAULT INJECTION, exact topic only (never `all`): PXXDBG=a.gotocross lets a
+    crossing goto through, which is the one way left to put a DEAD frame on the
+    chain on purpose -- the unwinder's stale-frame walk is tested with it. }
+  PxxDbgLoad;
+  if Pos(',a.gotocross,', ',' + PxxDbgTopics + ',') > 0 then Exit;
+  region := IRCurExcRegion;
+  if isLabel then
+  begin
+    GotoLabelRegion[slot] := region;
+    GotoLabelRegionSerial[slot] := IRLowerSerial;
+    if GotoPendSerial[slot] = IRLowerSerial then
+    begin
+      r := GotoPendHead[slot];
+      while r >= 0 do
+      begin
+        if GotoRecRegion[r] <> region then
+          ErrorAtRecoverTok(ASTLine[GotoRecNode[r]], ASTTok[GotoRecNode[r]],
+                            'Jump in or outside of an exception block');
+        r := GotoRecNext[r];
+      end;
+      GotoPendSerial[slot] := 0;
+    end;
+  end
+  else if GotoLabelRegionSerial[slot] = IRLowerSerial then
+  begin
+    if GotoLabelRegion[slot] <> region then
+      ErrorAtRecoverTok(ASTLine[node], ASTTok[node], 'Jump in or outside of an exception block');
+  end
+  else if GotoRecCount <= High(GotoRecNode) then
+  begin
+    if GotoPendSerial[slot] <> IRLowerSerial then
+    begin
+      GotoPendHead[slot] := -1;
+      GotoPendSerial[slot] := IRLowerSerial;
+    end;
+    GotoRecRegion[GotoRecCount] := region;
+    GotoRecNode[GotoRecCount] := node;
+    GotoRecNext[GotoRecCount] := GotoPendHead[slot];
+    GotoPendHead[slot] := GotoRecCount;
+    Inc(GotoRecCount);
+  end;
 end;
 
 procedure EnsureIRCapacity(need: Integer);
@@ -17773,10 +17854,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       end;
       first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
 
-      ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
-      ExceptionCaughtObjTmp[ExceptionCodegenDepth] := -1;
-      ExceptionCaughtClsTmp[ExceptionCodegenDepth] := -1;
-      Inc(ExceptionCodegenDepth);
+      IRPushExcRegion(-1, -1, -1);
       last := IRLowerAST(ASTLeft[node]);
       Dec(ExceptionCodegenDepth);
 
@@ -17937,10 +18015,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             early exit left the frame on the chain -- in dead stack, with the
             next unhandled raise longjmping into it.
             bug-a-a-return-out-of-an-except-handler-leaves-the-exception-frame-on-the-chain }
-          ExceptionFinallyBody[ExceptionCodegenDepth] := -1;
-          ExceptionCaughtObjTmp[ExceptionCodegenDepth] := excOwnTmp;
-          ExceptionCaughtClsTmp[ExceptionCodegenDepth] := excClsTmp;
-          Inc(ExceptionCodegenDepth);
+          IRPushExcRegion(-1, excOwnTmp, excClsTmp);
         end;
         last := IRDropManagedResult(ASTLeft[handlerNode], IRLowerAST(ASTLeft[handlerNode]));
         IRMarkStatementNode(last);
@@ -17977,10 +18052,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       endLabel := IRNewLabel;
       first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
 
-      ExceptionFinallyBody[ExceptionCodegenDepth] := ASTRight[node];
-      ExceptionCaughtObjTmp[ExceptionCodegenDepth] := -1;
-      ExceptionCaughtClsTmp[ExceptionCodegenDepth] := -1;
-      Inc(ExceptionCodegenDepth);
+      IRPushExcRegion(ASTRight[node], -1, -1);
       last := IRLowerAST(ASTLeft[node]);
       IRMarkStatementNode(last);
       Dec(ExceptionCodegenDepth);
@@ -18477,6 +18549,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             Break;
           end;
         if lbId = -1 then Error('AN_LABEL: undeclared label');
+        IRCheckGotoRegion(i, node, True);
         Result := IRAppend(IR_LABEL, -1, -1, -1, lbId, 0);
       end;
     end;
@@ -18502,6 +18575,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             Break;
           end;
         if lbId = -1 then Error('AN_GOTO: undefined label');
+        IRCheckGotoRegion(i, node, False);
         Result := IRAppend(IR_JUMP, lbId, -1, -1, 0, 0);
       end;
     end;

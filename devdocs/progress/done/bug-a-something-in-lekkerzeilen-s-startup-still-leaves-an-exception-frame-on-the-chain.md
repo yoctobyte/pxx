@@ -2,19 +2,22 @@
 slug: bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 title: something in lekkerzeilen's startup still leaves an exception frame on the chain
 summary: >
-  A SECOND instance of the class 82e070429 fixed, not yet reduced. After
-  `self.keys = bindings.load(...)` returns (app.py:780), the main thread's
-  TLS_SLOT_EXC_TOP holds a frame address BELOW the caller's own rsp -- a dead
-  frame -- where before the call it held the caller's live one. Every later
-  UNHANDLED raise then longjmps into it and the process dies at rip=rsp=rbp=0
-  printing nothing. Twenty-one hand-written shapes of the same family all come
-  out clean at HEAD, and so does the real `bindings.load` called from a
-  three-line program, so the reduction is NOT the Python shape on its own.
+  DOES NOT REPRODUCE AT HEAD, and the environment it was measured in cannot be
+  rebuilt; closed with its producer never named. Measured 2026-09-19 at pxx
+  0f7b946e8b2e against lekkerzeilen 01d0fec (plus the blocker-01 workaround),
+  `--shot`: TLS_SLOT_EXC_TOP equals rsp before app.py:780, after it, and at 784,
+  and 4 of 4 runs end in a PRINTED diagnostic. A dead frame is still produced
+  by any jump that crosses a protected region without IR_EXC_LEAVE / ENTER; the
+  third such route, `goto`, is now refused as FPC refuses it. The unwinder's
+  stale-frame walk no longer faults on a dead frame's link. What it still
+  cannot see is a dead frame whose memory survived intact -- that one is jumped
+  into as if live -- so a silent rip=0 death, or the line "a stale handler
+  frame", is the signature that reopens this.
 track: A
 type: bug
 prio: 70
-owner: frank-user
-status: open
+owner: frankB
+status: done
 ---
 
 ## What is measured, and what is not
@@ -103,3 +106,64 @@ now": it is not, on this path, today.
 
 Re-measure with the gs_base / EXC_TOP probe at app.py:780 before treating any
 of this as a state change.
+
+## 2026-09-19 — re-measured at HEAD: gone on this path; the goto route closed
+
+frankB. Not a reduction of the original -- that environment is gone -- but a
+dated measurement plus the sibling the 82e070429 grep found.
+
+**HEAD.** pxx 0f7b946e8b2e (source 94620a104), `-g`, default -O, `--threadsafe
+-dSDL_DISABLE_IMMINTRIN_H -dGL_GLEXT_PROTOTYPES`, lekkerzeilen 01d0fec in a
+scratch copy with `self.chart_view: float = chart.VIEW` (blocker 01), `--shot`
+under SDL_VIDEODRIVER=wayland. gs_base 0x111b828, slot +0x40:
+
+| where | rsp | EXC_TOP |
+| --- | --- | --- |
+| app.py:780 (pc 0xd2e04b) | 0x7fffffff70f8 | 0x7fffffff70f8 |
+| app.py:781 (pc 0xd2e1cc) | 0x7fffffff70f8 | 0x7fffffff70f8 |
+| app.py:784 (pc 0xd2e243) | 0x7fffffff70f8 | 0x7fffffff70f8 |
+
+Four runs (one under gdb, three plain) all end rc=217 with
+`Unhandled exception: AttributeError: 'str' object has no attribute 'delete'`
+-- lekkerzeilen-7a's current blocker, a real error, reported. None printed the
+stale-frame line.
+
+**Why not bisect.** The pxx side is recoverable (a scratch tree at 82e070429
+seeded from HEAD converges, 8a947b659a29) but the PROGRAM is not: the ticket was
+measured on an uncommitted lekkerzeilen tree. Three pairings were tried and each
+failed on a different skew: HEAD lekkerzeilen dies at app.py:745 under the old
+compiler before reaching 780 (`'App' object has no attribute 'chart_view'`);
+9521e53, the last commit before 09-14, still imports ctypes; 9ed69ed, the first
+with the pxx backend, passes `print` as a value, which the old compiler refuses.
+
+**The sibling (grep of the 82e070429 fix).** The three IR_EXC_ENTER sites are
+each paired with a codegen depth, and exit/return/break/continue all unwind
+through IRLowerCleanupToDepth. `goto` does not: AN_GOTO is a bare IR_JUMP, so a
+goto out of a `try` left the frame on the chain (measured: the next unhandled
+raise segfaults) and one into a `try` popped a frame never pushed. FPC refuses
+both ("Jump in or outside of an exception block"); pxx now does too, at the
+goto's own line, via a region id pushed with every region (IRPushExcRegion, now
+the one place a region is opened). Not lekkerzeilen's producer -- NilPy has no
+goto -- but the same class by a third route.
+
+**The detector's walk.** b00ffe7b3's validation skips a head whose saved rsp is
+not its own address, and then followed the dead frame's LINK, which is dead
+memory too: on the goto repro it read 0x20 and faulted, so the process died
+after the skip message and before "Unhandled exception". The walk now follows a
+link only when it points up; otherwise it ends on the unhandled path, which
+prints. Pinned by `test/test_unwinder_skips_a_dead_frame.pas`, built with the
+new fault injection `PXXDBG=a.gotocross` (exact topic, not `all`); pin v412
+segfaults on it.
+
+**What is still invisible, and why it stays that way.** A dead frame whose
+memory is untouched still passes the equality, so the unwinder longjmps into
+it: measured with the dead frame 8 KB below the raise, both pin and HEAD die
+silently. A position test ("live frames sit above the raising rsp") would catch
+it and is UNSOUND: a stackful generator links its chain to its resumer's, and
+the heap arena and thread stacks are both mmap'd, in either order. So the only
+defence for that shape is not producing the frame.
+
+Inert under `$(PXX_STABLE)` until the next pin (v412 predates all of it).
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

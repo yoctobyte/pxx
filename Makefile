@@ -27414,6 +27414,39 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_handler_early_exit_frees_the_caught_object.pas $(TESTTMP)/theef
 	tools/assert_no_leak.sh handler_early_exit_frees 50 $(TESTTMP)/theef
 	tools/expect_same.sh handler_early_exit_frees_out "$$($(TESTTMP)/theef | grep -v '^pxx-census:')" "$$(printf 'exit 500\nbreak 500\ncontinue 1500\nplain 500\nHANDLEREXIT OK')"
+	# THE SAME DEAD FRAME BY A THIRD ROUTE: `goto` across a region boundary. A
+	# goto is a bare jump -- no IR_EXC_LEAVE going out, no IR_EXC_ENTER coming in
+	# -- so pxx accepted one out of a try and the next unhandled raise segfaulted
+	# into the frame it left behind. FPC refuses it ("Jump in or outside of an
+	# exception block") and now so do we. One case per define, because lowering
+	# stops at the first recovered diagnostic: each must report EXACTLY its own
+	# `CROSS Cn` line (C8 puts the crossing goto BEFORE a legal one to the same
+	# label, so blaming the first forward goto is red), and with no define the
+	# file must compile. The run row is the legal half, values checked against
+	# FPC, ending in a deliberately unhandled raise. Positive control, pin v412:
+	# every case compiles, and a C1 program built by it segfaults.
+	# bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
+	./$(COMPILER) test/test_goto_across_exception_region_fail.pas $(TESTTMP)/tgxr0 > /dev/null
+	@for c in C1 C2 C3 C4 C5 C6 C7 C8 C9; do \
+	  got=$$(./$(COMPILER) -d$$c test/test_goto_across_exception_region_fail.pas $(TESTTMP)/tgxr 2>&1 \
+	         | sed -n 's/^pascal26:\([0-9]*\): error: Jump in or outside of an exception block$$/\1/p' | tr '\n' ' '); \
+	  want=$$(grep -n "CROSS $$c }" test/test_goto_across_exception_region_fail.pas | cut -d: -f1); \
+	  [ -n "$$want" ] && [ "$$got" = "$$want " ] || { echo "goto_across_exception_region $$c: FAIL - reported [$$got], want [$$want]"; exit 1; }; \
+	done
+	./$(COMPILER) test/test_goto_within_exception_region.pas $(TESTTMP)/tgwr
+	! $(TESTTMP)/tgwr > $(TESTTMP)/tgwr.out 2> $(TESTTMP)/tgwr.log
+	grep -q "Unhandled exception: Exception: frame chain is intact" $(TESTTMP)/tgwr.log
+	tools/expect_same.sh goto_within_exception_region_out "$$(cat $(TESTTMP)/tgwr.out)" "$$(printf 'inside 5\nover 10 20\nhandler 7')"
+	# The unwinder's stale-frame walk, which had no row: a skipped frame's LINK
+	# is dead memory too, and following it blind faulted, so the program died
+	# after the skip message but before the "Unhandled exception" line. Built
+	# with PXXDBG=a.gotocross -- the fault injection that lets the goto above
+	# through, the one way left to leave a dead frame on purpose. Positive
+	# control, pin v412: skip message, then SIGSEGV (rc 139).
+	PXXDBG=a.gotocross ./$(COMPILER) test/test_unwinder_skips_a_dead_frame.pas $(TESTTMP)/tusdf
+	! $(TESTTMP)/tusdf > $(TESTTMP)/tusdf.out 2> $(TESTTMP)/tusdf.log
+	grep -q "a stale handler frame" $(TESTTMP)/tusdf.log
+	grep -q "Unhandled exception: Exception: after a dead frame" $(TESTTMP)/tusdf.log
 	# --threadsafe: a dynamic array of Variants or of COM interfaces must release
 	# its ELEMENTS. ManagedElemKindLocked used to degrade kinds 4 and 6 to 0 under
 	# ThreadSafeMode because _Release -> Destroy -> FreeMem re-entered the

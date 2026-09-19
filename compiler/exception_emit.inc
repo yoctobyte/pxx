@@ -71,7 +71,7 @@ end;
 procedure EmitExceptionRuntime;
 var unhandledJmp, si, cbzOffset, pos, bOffset, k: Integer;
     siColon, jo1, jo2, jc1, jc2, jc3, jc4, jm1, jm2, jm3, jm4: Integer;
-    ExcValidateAddr, excSkip1, excSkip2, siCorrupt: Integer;
+    ExcValidateAddr, excSkip1, excSkip2, siCorrupt, unhandledJmp2: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -178,9 +178,26 @@ begin
       MovRdxImm(1); EmitSyscall;
       EmitB($4C); EmitB($89); EmitB($C0);                       { mov rax, r8 }
     end;
-    EmitB($48); EmitB($8B); EmitB($00);                         { mov rax, [rax]  previous head }
+    { THE LINK OF A DEAD FRAME IS DEAD TOO, so it is followed only when it
+      points strictly UP. The walk used to follow it blind: measured 2026-09-19
+      on a `goto` out of a `try`, the skipped frame's link read 0x20,
+      `mov rdx, [rax+56]` faulted on it, and the process died with the skip
+      message but WITHOUT the "Unhandled exception" line this block exists to
+      deliver. Rising is what an enclosing frame on the SAME stack does (pushed
+      earlier, so higher), and it also guarantees the walk ends. It is NOT a
+      law across stacks: a stackful generator links its chain to its
+      resumer's, and GetMem'd and mmap'd stacks lie in either order -- so this
+      test is applied only here, AFTER a frame has already failed validation,
+      where the chain is known to be broken and ending on the unhandled path
+      (which prints) is the goal. Never promote it to the validation itself.
+      Zero lands on the unhandled path too, as it always did. }
+    EmitB($48); EmitB($8B); EmitB($10);                         { mov rdx, [rax]  previous head }
+    EmitB($48); EmitB($39); EmitB($C2);                         { cmp rdx, rax }
+    EmitB($0F); EmitB($86); unhandledJmp2 := CodeLen; EmitI32(0); { jbe unhandled }
+    EmitB($48); EmitB($89); EmitB($D0);                         { mov rax, rdx }
     EmitB($E9); EmitI32(ExcValidateAddr - (CodeLen + 4));       { jmp validate }
     Patch32(unhandledJmp, CodeLen - (unhandledJmp + 4));
+    Patch32(unhandledJmp2, CodeLen - (unhandledJmp2 + 4));
 
     if not NoUnhandledHandler then
     begin
