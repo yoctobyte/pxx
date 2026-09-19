@@ -2131,6 +2131,15 @@ begin
     Halt(0);
   end;
 
+  { PXXDBG=a.objlayout:<listfile> -- stage 3, the section layout over that
+    set: every output section's address and size, and the final address of
+    every defined global. Checked against ld told to use the same addresses. }
+  if PxxDbgArg('a.objlayout') <> '' then
+  begin
+    ElfLnkLayoutDump(PxxDbgArg('a.objlayout'));
+    Halt(0);
+  end;
+
   if ParamCount < i then
     begin
       writeln(StdErr, 'usage: pxx [options] <source> [output]');

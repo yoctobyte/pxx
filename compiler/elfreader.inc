@@ -280,6 +280,74 @@ var
   ElfLnkNext  : array of Integer;
   ElfLnkMask  : Integer;
 
+{ ---- stage 3 state: which object and section DEFINES each global ------------
+  The merge above only COUNTS, which is enough to say what a set needs and
+  what it defines twice. A layout has to say WHERE, so the merge now also
+  remembers, per global, the definition a linker would choose -- and per
+  object, the input sections that carry bytes into the image.
+
+  SECTIONS ARE CONCATENATED PER NAME, NOT PER TYPE, and this is the decision
+  the stage opens with. Per TYPE is simply wrong for our objects: .text and
+  .data are BOTH SHT_PROGBITS, so a type key merges code into data. The name
+  is what ld's default script keys on too. The TYPE and FLAGS are then CHECKED
+  against the name rather than trusted, so a section that is called .text but
+  is not ALLOC|EXEC is refused instead of mapped.
+
+  THE SET IS TAKEN FROM THE EMITTER, NOT FROM A CORPUS: writeELFRelX64General
+  writes exactly .text, .data, .bss and -- only when a frontend emitted the
+  thunks -- .init_array and .fini_array; writeELFRelX64 (the .asm frontend's)
+  writes .text alone. Those five names are the whole allocated vocabulary. Any
+  other ALLOCATED section is refused by name: it is not ours, and this linker's
+  scope is pxx's own objects (rung 1 of the ticket). NON-allocated sections
+  (.symtab, .rela.*, a .note.GNU-stack) carry no bytes into the image and are
+  passed over.
+
+  The kind constants are in OUTPUT ORDER: text first in the RX segment, then
+  the RW segment as ld lays it out -- .init_array, .fini_array, .data, .bss. }
+
+const
+  ELFLNK_NKIND  = 5;
+  ELFLNK_K_TEXT = 0;
+  ELFLNK_K_INIT = 1;
+  ELFLNK_K_FINI = 2;
+  ELFLNK_K_DATA = 3;
+  ELFLNK_K_BSS  = 4;
+  ELFLNK_K_ABS  = -1;           { a definition against SHN_ABS: its value is the address }
+  ELFLNK_BASE   = $400000;      { the static non-PIE image base ld uses on x86-64 }
+  ELFLNK_PAGE   = $1000;
+
+var
+  ElfLnkObjPath  : array of AnsiString;
+  ElfLnkObjCount : Integer;
+  { indexed [obj * ELFLNK_NKIND + kind]; shndx 0 means "this object has none" }
+  ElfLnkInShndx  : array of Integer;
+  ElfLnkInSize   : array of Int64;
+  ElfLnkInAlign  : array of Int64;
+  ElfLnkInAddr   : array of Int64;
+  { the output sections, indexed by kind }
+  ElfLnkOutAddr  : array[0..4] of Int64;
+  ElfLnkOutSize  : array[0..4] of Int64;
+  { the CHOSEN definition per global: object, kind, st_value, and whether it is
+    weak (a later STRONG definition displaces a weak one; a later weak one does
+    not -- the first weak definition in link order stands, as in ld). }
+  ElfLnkDefObj   : array of Integer;
+  ElfLnkDefKind  : array of Integer;
+  ElfLnkDefVal   : array of Int64;
+  ElfLnkDefIsWeak: array of Boolean;
+
+function ElfLnkKindName(k: Integer): AnsiString;
+begin
+  case k of
+    ELFLNK_K_TEXT: ElfLnkKindName := '.text';
+    ELFLNK_K_INIT: ElfLnkKindName := '.init_array';
+    ELFLNK_K_FINI: ElfLnkKindName := '.fini_array';
+    ELFLNK_K_DATA: ElfLnkKindName := '.data';
+    ELFLNK_K_BSS:  ElfLnkKindName := '.bss';
+  else
+    ElfLnkKindName := '?';
+  end;
+end;
+
 function ElfLnkHash(const s: AnsiString): Integer;
 var i, h: Integer;
 begin
@@ -302,6 +370,21 @@ begin
   SetLength(ElfLnkRefs, 0);
   SetLength(ElfLnkFirst, 0);
   SetLength(ElfLnkNext, 0);
+  SetLength(ElfLnkDefObj, 0);
+  SetLength(ElfLnkDefKind, 0);
+  SetLength(ElfLnkDefVal, 0);
+  SetLength(ElfLnkDefIsWeak, 0);
+  ElfLnkObjCount := 0;
+  SetLength(ElfLnkObjPath, 0);
+  SetLength(ElfLnkInShndx, 0);
+  SetLength(ElfLnkInSize, 0);
+  SetLength(ElfLnkInAlign, 0);
+  SetLength(ElfLnkInAddr, 0);
+  for i := 0 to ELFLNK_NKIND - 1 do
+  begin
+    ElfLnkOutAddr[i] := 0;
+    ElfLnkOutSize[i] := 0;
+  end;
 end;
 
 { Index of `nm`, inserting it if new. }
@@ -322,6 +405,14 @@ begin
   SetLength(ElfLnkRefs, n + 1);
   SetLength(ElfLnkFirst, n + 1);
   SetLength(ElfLnkNext, n + 1);
+  SetLength(ElfLnkDefObj, n + 1);
+  SetLength(ElfLnkDefKind, n + 1);
+  SetLength(ElfLnkDefVal, n + 1);
+  SetLength(ElfLnkDefIsWeak, n + 1);
+  ElfLnkDefObj[n] := -1;
+  ElfLnkDefKind[n] := 0;
+  ElfLnkDefVal[n] := 0;
+  ElfLnkDefIsWeak[n] := False;
   ElfLnkName[n] := nm;
   ElfLnkDefs[n] := 0;
   ElfLnkWeak[n] := 0;
@@ -336,16 +427,98 @@ end;
 { Fold one object's global symbols into the table. False (with ElfRdErr set)
   when the object cannot be read -- a link that silently skips an unreadable
   input would report a smaller unresolved set than the truth. }
+function ElfRdShFlags(i: Integer): Int64;     begin ElfRdShFlags     := ElfRdU64(ElfRdShdr(i) + 8); end;
+function ElfRdShAddrAlign(i: Integer): Int64; begin ElfRdShAddrAlign := ElfRdU64(ElfRdShdr(i) + 48); end;
+
+{ The output kind of input section i, ELFLNK_NKIND when it carries nothing into
+  the image (not SHF_ALLOC), or -1 with ElfRdErr set when it is allocated and
+  not one of ours. THE TYPE AND FLAGS ARE CHECKED AGAINST THE NAME: the name
+  picks the kind, and a section whose type contradicts its name is refused
+  rather than mapped by whichever of the two a reader happened to trust. }
+function ElfLnkSecKind(i: Integer): Integer;
+var nm: AnsiString; ty, fl, wantTy, wantFl: Int64; k: Integer;
+begin
+  ElfLnkSecKind := -1;
+  nm := ElfRdSecName(i);
+  ty := ElfRdShType(i);
+  fl := ElfRdShFlags(i);
+  if (fl and 2) = 0 then begin ElfLnkSecKind := ELFLNK_NKIND; Exit; end;   { not SHF_ALLOC }
+  k := -1; wantTy := 0; wantFl := 0;
+  if nm = '.text'       then begin k := ELFLNK_K_TEXT; wantTy := 1;  wantFl := 6; end
+  else if nm = '.data'  then begin k := ELFLNK_K_DATA; wantTy := 1;  wantFl := 3; end
+  else if nm = '.bss'   then begin k := ELFLNK_K_BSS;  wantTy := ELFRD_SHT_NOBITS; wantFl := 3; end
+  else if nm = '.init_array' then begin k := ELFLNK_K_INIT; wantTy := 14; wantFl := 3; end
+  else if nm = '.fini_array' then begin k := ELFLNK_K_FINI; wantTy := 15; wantFl := 3; end;
+  if k < 0 then
+  begin
+    ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
+              + 'links pxx''s own objects (.text .data .bss .init_array .fini_array), '
+              + 'not a third-party toolchain''s';
+    Exit;
+  end;
+  { ALLOC|WRITE|EXEC only; SHF_INFO_LINK and the rest are not layout-bearing }
+  if (ty <> wantTy) or ((fl and 7) <> wantFl) then
+  begin
+    ElfRdErr := 'section ''' + nm + ''' has type ' + AIntToStr(ty) + ' flags '
+              + AIntToStr(fl and 7) + ', and pxx writes that name as type '
+              + AIntToStr(wantTy) + ' flags ' + AIntToStr(wantFl);
+    Exit;
+  end;
+  ElfLnkSecKind := k;
+end;
+
 function ElfLnkAddObject(const path: AnsiString): Boolean;
-var i, j, nsec, symEnts, bind, k: Integer;
-    stOff, stSize, stEnt, strTab, e, shndx, nameIdx: Int64;
+var i, j, nsec, symEnts, bind, k, obj, kind, slot: Integer;
+    stOff, stSize, stEnt, strTab, e, shndx, nameIdx, al: Int64;
     nm: AnsiString;
+    secKind: array of Integer;
 begin
   ElfLnkAddObject := False;
   LoadFile(path, ElfRdBuf);
   if Length(ElfRdBuf) = 0 then begin ElfRdErr := 'cannot read'; Exit; end;
   if not ElfRdCheckHeader then Exit;
   nsec := ElfRdShNum;
+
+  { register the object and its input sections }
+  obj := ElfLnkObjCount;
+  ElfLnkObjCount := obj + 1;
+  SetLength(ElfLnkObjPath, obj + 1);
+  ElfLnkObjPath[obj] := path;
+  SetLength(ElfLnkInShndx, (obj + 1) * ELFLNK_NKIND);
+  SetLength(ElfLnkInSize,  (obj + 1) * ELFLNK_NKIND);
+  SetLength(ElfLnkInAlign, (obj + 1) * ELFLNK_NKIND);
+  SetLength(ElfLnkInAddr,  (obj + 1) * ELFLNK_NKIND);
+  for k := 0 to ELFLNK_NKIND - 1 do
+  begin
+    slot := obj * ELFLNK_NKIND + k;
+    ElfLnkInShndx[slot] := 0;
+    ElfLnkInSize[slot] := 0;
+    ElfLnkInAlign[slot] := 1;
+    ElfLnkInAddr[slot] := 0;
+  end;
+  SetLength(secKind, nsec);
+  for i := 0 to nsec - 1 do
+  begin
+    secKind[i] := ELFLNK_NKIND;
+    if i = 0 then Continue;
+    kind := ElfLnkSecKind(i);
+    if kind < 0 then Exit;
+    secKind[i] := kind;
+    if kind = ELFLNK_NKIND then Continue;
+    slot := obj * ELFLNK_NKIND + kind;
+    { ONE PER NAME PER OBJECT is what the emitter writes. Two would need a rule
+      for their relative order that nothing here has had to decide. }
+    if ElfLnkInShndx[slot] <> 0 then
+    begin
+      ElfRdErr := 'two ' + ElfLnkKindName(kind) + ' sections in one object; pxx writes one';
+      Exit;
+    end;
+    al := ElfRdShAddrAlign(i);
+    if al < 1 then al := 1;
+    ElfLnkInShndx[slot] := i;
+    ElfLnkInSize[slot] := ElfRdShSize(i);
+    ElfLnkInAlign[slot] := al;
+  end;
   for i := 0 to nsec - 1 do
     if ElfRdShType(i) = ELFRD_SHT_SYMTAB then
     begin
@@ -367,17 +540,124 @@ begin
         shndx := ElfRdU16(e + 6);
         k := ElfLnkIntern(nm);
         if shndx = 0 then
-          ElfLnkRefs[k] := ElfLnkRefs[k] + 1
-        else if bind = ELFLNK_STB_WEAK then
+        begin
+          ElfLnkRefs[k] := ElfLnkRefs[k] + 1;
+          Continue;
+        end;
+        if bind = ELFLNK_STB_WEAK then
           ElfLnkWeak[k] := ElfLnkWeak[k] + 1
         else
         begin
           ElfLnkDefs[k] := ElfLnkDefs[k] + 1;
           if ElfLnkFirst[k] = '' then ElfLnkFirst[k] := path;
         end;
+        { WHERE the definition lives. SHN_ABS carries its address in st_value.
+          SHN_COMMON is what -fcommon would emit and our writer does not (a
+          tentative definition is a real .bss OBJECT here), so it is refused
+          by name rather than laid out by a rule nobody decided. }
+        if shndx = $FFF1 then kind := ELFLNK_K_ABS
+        else if (shndx >= $FF00) or (shndx >= nsec) then
+        begin
+          ElfRdErr := 'symbol ''' + nm + ''' is defined against special section index '
+                    + AIntToStr(shndx) + ', which pxx does not emit';
+          Exit;
+        end
+        else
+        begin
+          kind := secKind[Integer(shndx)];
+          if kind = ELFLNK_NKIND then
+          begin
+            ElfRdErr := 'symbol ''' + nm + ''' is defined in section '''
+                      + ElfRdSecName(Integer(shndx)) + ''', which is not allocated';
+            Exit;
+          end;
+        end;
+        { ld's rule: a STRONG definition displaces a weak one, and among weak
+          ones the FIRST in link order stands. Two strong ones are the
+          duplicate the counts above already report; the first is kept so the
+          layout is still defined for the dump. }
+        if (ElfLnkDefObj[k] < 0)
+           or (ElfLnkDefIsWeak[k] and (bind <> ELFLNK_STB_WEAK)) then
+        begin
+          ElfLnkDefObj[k] := obj;
+          ElfLnkDefKind[k] := kind;
+          ElfLnkDefVal[k] := ElfRdU64(e + 8);
+          ElfLnkDefIsWeak[k] := bind = ELFLNK_STB_WEAK;
+        end;
       end;
     end;
   ElfLnkAddObject := True;
+end;
+
+function ElfLnkAlignUp(v, a: Int64): Int64;
+begin
+  if a <= 1 then ElfLnkAlignUp := v
+  else ElfLnkAlignUp := ((v + a - 1) div a) * a;
+end;
+
+{ ---- stage 3: section layout -----------------------------------------------
+  Assign every input section an output address. Inputs are concatenated per
+  kind IN LINK ORDER, each at its own sh_addralign -- which is what ld does, and
+  what makes the order of .init_array entries (and so of constructors) the
+  command-line order rather than an accident of this table.
+
+  THE IMAGE: one RX segment from ELFLNK_BASE holding the ELF and program
+  headers in its first page and .text from base+page -- the address ld gives
+  .text in a -static -nostdlib link, so a reader comparing the two images sees
+  the same code addresses -- then a RW segment starting on the next page
+  boundary IN THE FILE, at the congruent address, holding .init_array,
+  .fini_array, .data and .bss in that order. ld packs the RW segment tighter
+  (it shares a page with the end of .text and aligns RELRO); that costs it
+  nothing and saves under a page, and matching it would couple this layout to
+  one linker version's script for no behaviour. Where the two layouts differ
+  is exactly what the oracle neutralises with --section-start.
+
+  An output section with no inputs has size 0 and an address that nothing
+  refers to; the writer omits it. }
+procedure ElfLnkLayout;
+var k, o, slot: Integer;
+    addr, start, maxAl, rwFile: Int64;
+begin
+  addr := ELFLNK_BASE + ELFLNK_PAGE;
+  for k := 0 to ELFLNK_NKIND - 1 do
+  begin
+    if k = ELFLNK_K_INIT then
+    begin
+      { the RW segment: next page in the FILE, at the congruent address }
+      rwFile := ElfLnkAlignUp(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], ELFLNK_PAGE);
+      addr := ELFLNK_BASE + rwFile;
+    end;
+    maxAl := 1;
+    for o := 0 to ElfLnkObjCount - 1 do
+    begin
+      slot := o * ELFLNK_NKIND + k;
+      if (ElfLnkInShndx[slot] <> 0) and (ElfLnkInAlign[slot] > maxAl) then
+        maxAl := ElfLnkInAlign[slot];
+    end;
+    start := ElfLnkAlignUp(addr, maxAl);
+    addr := start;
+    for o := 0 to ElfLnkObjCount - 1 do
+    begin
+      slot := o * ELFLNK_NKIND + k;
+      if ElfLnkInShndx[slot] = 0 then Continue;
+      addr := ElfLnkAlignUp(addr, ElfLnkInAlign[slot]);
+      ElfLnkInAddr[slot] := addr;
+      addr := addr + ElfLnkInSize[slot];
+    end;
+    ElfLnkOutAddr[k] := start;
+    ElfLnkOutSize[k] := addr - start;
+  end;
+end;
+
+{ The final address of global k's chosen definition. Only meaningful when
+  ElfLnkDefObj[k] >= 0. }
+function ElfLnkGlobalAddr(k: Integer): Int64;
+begin
+  if ElfLnkDefKind[k] = ELFLNK_K_ABS then
+    ElfLnkGlobalAddr := ElfLnkDefVal[k]
+  else
+    ElfLnkGlobalAddr := ElfLnkInAddr[ElfLnkDefObj[k] * ELFLNK_NKIND + ElfLnkDefKind[k]]
+                        + ElfLnkDefVal[k];
 end;
 
 { PXXDBG=a.objmerge:<listfile> -- one object path per line.
@@ -386,19 +666,23 @@ end;
   style: PXXDBG splits topics on ',' so a comma-separated list cannot be
   expressed at all, and the population this stage is FOR is 400 busybox
   objects, which is not a command line. }
-procedure ElfLnkMergeDump(const listPath: AnsiString);
-var lst, line, nm: AnsiString;
-    i, nobj, unresolved, dup, definedCount, weakOnly: Integer;
+{ Read a list file and fold every object in it, IN ORDER -- the order is the
+  link order, and stage 3 makes it observable. False after printing the reason
+  under `tag` when the list or any object cannot be read: a link that skips an
+  unreadable input reports a smaller world than the truth. }
+function ElfLnkLoadList(const listPath, tag: AnsiString): Boolean;
+var lst, line: AnsiString;
+    i: Integer;
     c: Char;
 begin
+  ElfLnkLoadList := False;
   LoadFile(listPath, lst);
   if Length(lst) = 0 then
   begin
-    WriteLn('elflnk: cannot read list ', listPath);
+    WriteLn(tag, ': cannot read list ', listPath);
     Exit;
   end;
   ElfLnkReset;
-  nobj := 0;
   line := '';
   for i := 1 to Length(lst) + 1 do
   begin
@@ -406,19 +690,25 @@ begin
     if c = Chr(10) then
     begin
       if Length(line) > 0 then
-      begin
         if not ElfLnkAddObject(line) then
         begin
-          WriteLn('elflnk: ', line, ': ', ElfRdErr);
+          WriteLn(tag, ': ', line, ': ', ElfRdErr);
           Exit;
         end;
-        nobj := nobj + 1;
-      end;
       line := '';
     end
     else if c <> Chr(13) then
       line := line + c;
   end;
+  ElfLnkLoadList := True;
+end;
+
+procedure ElfLnkMergeDump(const listPath: AnsiString);
+var nm: AnsiString;
+    i, nobj, unresolved, dup, definedCount, weakOnly: Integer;
+begin
+  if not ElfLnkLoadList(listPath, 'elflnk') then Exit;
+  nobj := ElfLnkObjCount;
 
   unresolved := 0; dup := 0; definedCount := 0; weakOnly := 0;
   for i := 0 to ElfLnkCount - 1 do
@@ -449,4 +739,40 @@ begin
     if ElfLnkDefs[i] > 1 then
       WriteLn('elflnk: dup ', ElfLnkName[i], ' x', AIntToStr(ElfLnkDefs[i]));
   WriteLn('elflnk: ELFLNK-OK');
+end;
+
+{ PXXDBG=a.objlayout:<listfile> -- stage 3's answer: where every output
+  section starts and how big it is, where each object's input sections landed,
+  and the final address of every DEFINED global.
+
+  THE SYMBOL ADDRESSES ARE THE CHECKABLE PART. ld, told to put each output
+  section where this layout did (--section-start), must then give every global
+  the same address; that single comparison exercises input order, per-input
+  alignment, the per-kind concatenation AND the weak/strong choice at once,
+  because a wrong choice between two weak copies lands the name in a different
+  object. An address is printed only for a global that HAS a definition --
+  an unresolved one has none to compare, and the merge dump names those. }
+procedure ElfLnkLayoutDump(const listPath: AnsiString);
+var k, o, slot: Integer;
+begin
+  if not ElfLnkLoadList(listPath, 'elflay') then Exit;
+  ElfLnkLayout;
+  WriteLn('elflay: objects ', AIntToStr(ElfLnkObjCount));
+  for k := 0 to ELFLNK_NKIND - 1 do
+    WriteLn('elflay: out ', ElfLnkKindName(k), ' 0x', IntToHexStr(ElfLnkOutAddr[k], 16),
+            ' size ', AIntToStr(ElfLnkOutSize[k]));
+  for o := 0 to ElfLnkObjCount - 1 do
+    for k := 0 to ELFLNK_NKIND - 1 do
+    begin
+      slot := o * ELFLNK_NKIND + k;
+      if ElfLnkInShndx[slot] <> 0 then
+        WriteLn('elflay: in ', AIntToStr(o), ' ', ElfLnkKindName(k),
+                ' 0x', IntToHexStr(ElfLnkInAddr[slot], 16),
+                ' size ', AIntToStr(ElfLnkInSize[slot]),
+                ' align ', AIntToStr(ElfLnkInAlign[slot]));
+    end;
+  for k := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefObj[k] >= 0 then
+      WriteLn('elflay: sym ', IntToHexStr(ElfLnkGlobalAddr(k), 16), ' ', ElfLnkName[k]);
+  WriteLn('elflay: ELFLAY-OK');
 end;

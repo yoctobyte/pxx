@@ -209,5 +209,96 @@ oracle_weak=$(readelf -sW "$W/c.o" | grep -E '^ *[0-9]+:' | awk '$5=="WEAK" && $
 [ "$(mfield cd.lst weakonly)" -gt 0 ] \
   || fail "the merge reports no weak-only symbols for a pair that readelf says has $oracle_weak"
 
+# ---- stage 3: the section layout, against ld --------------------------------
+# The layout assigns every input section an output address. Its ORACLE is ld
+# TOLD TO USE THE SAME OUTPUT-SECTION ADDRESSES (--section-start), which removes
+# the one legitimate difference between two linkers -- where each output
+# section starts -- and leaves everything this stage decides: input order,
+# per-input alignment, per-name concatenation, and which definition of a name
+# wins. Every global we give an address must then have THAT address in ld's
+# image. One wrong weak/strong choice lands a name in a different object and
+# moves it by hundreds of kilobytes, so the comparison is sharp.
+#
+# THE SUBJECT IS c, d, x IN THAT ORDER, and each part is there for a rule:
+#   * c and x both carry crtl WEAKLY, so `exit` etc. have two weak copies and
+#     only "the FIRST weak definition in link order stands" picks c's (d calls
+#     nothing from crtl and so carries none -- it is the object with `main`);
+#   * x defines atoi STRONGLY, after two weak copies of it, so only "a strong
+#     definition displaces a weak one" picks x's -- the first-wins rule alone
+#     would pick c's, and so would a table that never looks at binding;
+#   * c's .text is not a multiple of 16 long, so d's .text starts on padding
+#     that only per-input alignment produces.
+# Each of those is asserted to be TRUE OF THE SUBJECT below, because a row
+# whose subject lacks the case passes it vacuously.
+command -v ld >/dev/null 2>&1 || fail "ld is not on PATH -- the layout has no oracle"
+export LC_ALL=C   # sort and join must collate `_exit` and `exit` the same way;
+                  # under a locale they did not, and the join invented two mismatches
+cat > "$W/x.c" <<'EOF'
+#include <stdlib.h>
+int atoi(const char *s) { return 42; }
+int viax(const char *s) { return atoi(s); }
+EOF
+"$COMPILER" --emit-obj "$W/x.c" "$W/x.o" > "$W/x.build.log" 2>&1 \
+  || { cat "$W/x.build.log"; fail "--emit-obj did not produce x.o"; }
+
+bindof() { readelf -sW "$W/$1.o" | awk -v n="$2" '$8==n && $7!="UND" {print $5}' | head -1; }
+[ "$(bindof c atoi)" = "WEAK" ] && [ "$(bindof x atoi)" = "GLOBAL" ] \
+  || fail "the subject no longer has a weak atoi in c.o and a strong one in x.o, so the strong-over-weak row would pass vacuously"
+[ "$(bindof c exit)" = "WEAK" ] && [ "$(bindof x exit)" = "WEAK" ] \
+  || fail "c.o and x.o no longer both carry exit weakly, so the first-weak-wins row would pass vacuously"
+# `[ 1]` is TWO awk fields and `[10]` is one, so the index is stripped before
+# anything counts columns: name type addr off size.
+secs() { readelf -SW "$1" | sed -n 's/^ *\[ *[0-9]*\] *//p'; }
+ctext=$(secs "$W/c.o" | awk '$1==".text" {print $5}')
+[ $((0x$ctext % 16)) -ne 0 ] \
+  || fail "c.o's .text is a multiple of 16 long, so per-input alignment is not exercised"
+
+printf '%s\n%s\n%s\n' "$W/c.o" "$W/d.o" "$W/x.o" > "$W/cdx.lst"
+PXXDBG="a.objlayout:$W/cdx.lst" "$COMPILER" > "$W/lay.out" 2>&1 || fail "the layout exited nonzero"
+grep -q 'ELFLAY-OK' "$W/lay.out" || { cat "$W/lay.out"; fail "the layout did not reach its completion line"; }
+
+starts=""
+for s in text init_array fini_array data bss; do
+  a=$(awk -v n=".$s" '$2=="out" && $3==n {print $4}' "$W/lay.out")
+  [ -n "$a" ] || fail "the layout printed no address for .$s"
+  starts="$starts --section-start=.$s=$a"
+done
+# shellcheck disable=SC2086
+ld -static -nostdlib -e main $starts -o "$W/ref" "$W/c.o" "$W/d.o" "$W/x.o" > "$W/ld.log" 2>&1 \
+  || { cat "$W/ld.log"; fail "ld could not link the subject at the layout's addresses"; }
+
+# sizes: every output section but .bss must agree exactly. .bss is excluded by
+# name because ld's default script rounds its END up to 8 and that is a script
+# detail with no address consequence -- nothing is placed after it.
+for s in text init_array fini_array data; do
+  ours=$(awk -v n=".$s" '$2=="out" && $3==n {print $6}' "$W/lay.out")
+  theirs=$(secs "$W/ref" | awk -v n=".$s" '$1==n {print $5}')
+  [ "$ours" = "$((0x$theirs))" ] || fail "output .$s is $ours bytes here and $((0x$theirs)) in ld's image"
+done
+
+nm "$W/ref" | awk '$2 ~ /^[TDBWVRA]$/ {print $3, $1}' | sort > "$W/ld.syms"
+awk '$2=="sym" {print $4, $3}' "$W/lay.out" | sort > "$W/our.syms"
+nours=$(wc -l < "$W/our.syms" | tr -d ' ')
+njoin=$(join "$W/our.syms" "$W/ld.syms" | wc -l | tr -d ' ')
+nbad=$(join "$W/our.syms" "$W/ld.syms" | awk '$2!=$3' | wc -l | tr -d ' ')
+[ "$nours" -gt 100 ] || fail "the layout placed only $nours globals -- the subject carries crtl, so this is a reader that found almost nothing"
+[ "$njoin" = "$nours" ] || { join -v1 "$W/our.syms" "$W/ld.syms" | head >&2; fail "$((nours - njoin)) of our $nours globals are absent from ld's image"; }
+[ "$nbad" = "0" ] || { join "$W/our.syms" "$W/ld.syms" | awk '$2!=$3' | head >&2; fail "$nbad of $nours globals are at a different address than ld put them"; }
+
+# ---- positive control: an allocated section that is not ours is REFUSED -----
+# The scope is pxx's own objects. `as` is binutils, like ld and readelf.
+if command -v as >/dev/null 2>&1; then
+  printf '\t.section .rodata\n\t.globl k\nk:\t.long 1\n' > "$W/ro.s"
+  as -o "$W/ro.o" "$W/ro.s" || fail "as could not assemble the refusal control"
+  printf '%s\n%s\n' "$W/c.o" "$W/ro.o" > "$W/ro.lst"
+  PXXDBG="a.objlayout:$W/ro.lst" "$COMPILER" > "$W/ro.out" 2>&1
+  grep -q "allocated section '.rodata' is not one pxx emits" "$W/ro.out" \
+    || { cat "$W/ro.out"; fail "an object with a .rodata section was not refused by name"; }
+  grep -q 'ELFLAY-OK' "$W/ro.out" && fail "the layout printed its OK line after a refusal"
+else
+  fail "as is not on PATH -- the refusal control has no subject"
+fi
+
+echo "elf-layout: $nours globals at the same address as ld over c/d/x, sizes agree; a foreign .rodata is refused"
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"

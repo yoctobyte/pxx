@@ -5,12 +5,12 @@ track: A
 prio: 70
 type: feature
 blocked-by: []
-status: new
+status: working
 created: 2026-09-10
 found: 2026-09-10
 found-by: frank-user, answering the owner's question
-owner: ""
-summary: "ROUTE 1 MEASURED AND IT WORKS AT SCALE (2026-09-16, HEAD, binary b7f9f80c7d80): A 257-APPLET pxx-BUILT BUSYBOX LINKS AND RUNS WITH NO LIBC AND NO CRT. Over the 400 objects `busybox_diff.sh --separate` produces at 258 applets, pxx emits exactly TWO relocation types (R_X86_64_PC32 710066, R_X86_64_64 13891) over a fixed section set, and of 780 undefined references exactly ONE was unsatisfied by another object in the set: pivot_root, which glibc carries a stub for and the ordinary `gcc -o out obj/*.o` link therefore resolved SILENTLY -- the gap was invisible until a link was asked to use no library at all. Added to lib/crtl (sys/mount.c, six lines over the syscall bridge, Track C owns crtl). With it, `ld -static -nostdlib` links all 400 objects rc=0 with ZERO diagnostics and the result runs: cat, echo, sort, uniq, seq, tr, wc, basename, dirname, md5sum and sha256sum all correct (md5 and sha256 of 'abc' match the published vectors), `--list` prints 257 applets, `not a dynamic executable`. SO THE `gcc` IN THE NORMAL LINK IS A LINKER DRIVER AND THE GLIBC IS NOT LOAD-BEARING -- one symbol was, and it now is not. WHAT REMAINS IS THE PROCESS-ENTRY CONTRACT, NOT SYMBOL RESOLUTION: pxx objects define `main` and no `_start` because --emit-obj targets a toolchain supplying crt1.o. BOTH CITATIONS IN THIS SENTENCE WERE STALE BY 2026-09-19 AND ONE WAS WRONG IN SUBSTANCE (re-checked, frankB): elfwriter.inc:472 is the DYNAMIC INTERPRETER path (/lib/ld-linux.so.2), and elfwriter.inc synthesises no `_start` at all -- a pxx EXECUTABLE sets e_entry directly and `_start` appears only as a map-file label, so the stub SUPPLIES an entry the object path never had rather than joining two halves that already existed; cparser.inc:13150 is now __thread warning prose. Find them by name, not by line. A 30-line stub joining them (tools/pxxcrt_x86_64.S) closes it. Repeatable as `tools/busybox_diff.sh --freestanding`, GREEN, byte-identical to the gcc oracle over 29 cases with two controls proven to FIRE (a gcc link has PT_INTERP; a stub-less link has no _start). ROUTE 2 (a pxx --link mode) IS STILL THE END STATE and removes the assembler too. **ITS SIZE WAS UNDERSTATED HERE AND IS CORRECTED 2026-09-19 (frankB): \"two relocation types and a fixed section list is a small --link mode, not a linker project\" was wrong twice.** (1) TWO IS A CENSUS OVER THE BUSYBOX OBJECTS, NOT A CAPABILITY OF THE EMITTER: elfwriter.inc emits THREE x86-64 types -- R_X86_64_64 (1), R_X86_64_PC32 (2) and R_X86_64_32S (11) -- and the third simply did not occur in that corpus, so a --link mode scoped to the census is correct on the program that motivated it and wrong on the first one that is not it. The population was honestly stated and still answered the wrong question: the corpus that MOTIVATES a feature is not the domain the feature must COVER. (2) pxx HAS NO ELF READING CODE AT ALL -- grepped for every shape of it; elfwriter.inc's 6838 lines are entirely writing. So Route 2 is not the other half of something that exists: it is an object READER, a symbol-table merge, a section layout over inputs we did not lay out, relocation application, and only then the executable writer we already have. **Whoever takes this starts at the READER, and its oracle is readelf against a real pxx-emitted .o -- an external instrument that fails differently from anything we wrote. A reader that cannot enumerate symbols and relocations correctly makes every later stage unfalsifiable.** GOAL 5 DOES NOT WAIT ON THIS: Route 1 makes the no-libc claim true, is guarded by a test-core row as of 027443610, and the unity build already has pxx linking it itself. Route 2 is the separate-objects path. Whoever takes this starts at \"write the entry stub\", not \"write a linker\". **ROUTE 1 RE-MEASURED AND NOW GUARDED 2026-09-19 (frankB), origin 696f13d1f / compiler 8f8a089c6812: GREEN at the DEFAULT rung -- 2 applets, 28 translation units, 29 cases, byte-identical to the gcc oracle, no PT_INTERP, entry 0x401000 == _start, no libc.** THE 258-APPLET / 400-OBJECT SCALE ROW ABOVE WAS **NOT** RE-DERIVED and keeps its own tree (2026-09-16, b7f9f80c7d80): reconstructing that applet set needs a generated list from a completed build, so the two rows measure different populations and neither may be quoted for the other. **The bigger finding is that none of this was wired into anything**: busybox_diff.sh was referenced from the Makefile NOWHERE, so every part of the freestanding claim could have regressed silently and only a hand re-run would have noticed. A test-core row now runs `--freestanding`, requires the script's own BUSYBOX-DIFF-COMPLETE token AND the GREEN line AND the no-PT_INTERP control line (a token alone says the script reached its end, not that the comparison passed), and LOUDLY SKIPS when library_candidates/busybox is absent. All three assertions were proven to fire by removing each line from a real green log. STATUS was `new` with owner empty while Route 1 was landed and measured -- the summary had been kept current and the status field had not, which is how a p70 reads as unstarted work and gets dispatched as such. --- ORIGINAL (2026-09-10, 546d4dcbd305): pxx writes static, libc-free ELF executables with NO external linker -- no shell-out to ld/gcc/cc anywhere in compiler/**. THE GAP IS THE OTHER DIRECTION: pxx cannot CONSUME an object. `pascal26 a.o b.o out` answers `pascal26:1: error: unexpected character` -- it parses the .o as source. The external dependency is a LINKER, not a library."
+owner: frankB
+summary: "ROUTE 1 MEASURED AND IT WORKS AT SCALE (2026-09-16, HEAD, binary b7f9f80c7d80): A 257-APPLET pxx-BUILT BUSYBOX LINKS AND RUNS WITH NO LIBC AND NO CRT. Over the 400 objects `busybox_diff.sh --separate` produces at 258 applets, pxx emits exactly TWO relocation types (R_X86_64_PC32 710066, R_X86_64_64 13891) over a fixed section set, and of 780 undefined references exactly ONE was unsatisfied by another object in the set: pivot_root, which glibc carries a stub for and the ordinary `gcc -o out obj/*.o` link therefore resolved SILENTLY -- the gap was invisible until a link was asked to use no library at all. Added to lib/crtl (sys/mount.c, six lines over the syscall bridge, Track C owns crtl). With it, `ld -static -nostdlib` links all 400 objects rc=0 with ZERO diagnostics and the result runs: cat, echo, sort, uniq, seq, tr, wc, basename, dirname, md5sum and sha256sum all correct (md5 and sha256 of 'abc' match the published vectors), `--list` prints 257 applets, `not a dynamic executable`. SO THE `gcc` IN THE NORMAL LINK IS A LINKER DRIVER AND THE GLIBC IS NOT LOAD-BEARING -- one symbol was, and it now is not. WHAT REMAINS IS THE PROCESS-ENTRY CONTRACT, NOT SYMBOL RESOLUTION: pxx objects define `main` and no `_start` because --emit-obj targets a toolchain supplying crt1.o. BOTH CITATIONS IN THIS SENTENCE WERE STALE BY 2026-09-19 AND ONE WAS WRONG IN SUBSTANCE (re-checked, frankB): elfwriter.inc:472 is the DYNAMIC INTERPRETER path (/lib/ld-linux.so.2), and elfwriter.inc synthesises no `_start` at all -- a pxx EXECUTABLE sets e_entry directly and `_start` appears only as a map-file label, so the stub SUPPLIES an entry the object path never had rather than joining two halves that already existed; cparser.inc:13150 is now __thread warning prose. Find them by name, not by line. A 30-line stub joining them (tools/pxxcrt_x86_64.S) closes it. Repeatable as `tools/busybox_diff.sh --freestanding`, GREEN, byte-identical to the gcc oracle over 29 cases with two controls proven to FIRE (a gcc link has PT_INTERP; a stub-less link has no _start). ROUTE 2 (a pxx --link mode) IS STILL THE END STATE and removes the assembler too. **ITS SIZE WAS UNDERSTATED HERE AND IS CORRECTED 2026-09-19 (frankB): \"two relocation types and a fixed section list is a small --link mode, not a linker project\" was wrong twice.** (1) TWO IS A CENSUS OVER THE BUSYBOX OBJECTS, NOT A CAPABILITY OF THE EMITTER: elfwriter.inc emits THREE x86-64 types -- R_X86_64_64 (1), R_X86_64_PC32 (2) and R_X86_64_32S (11) -- and the third simply did not occur in that corpus, so a --link mode scoped to the census is correct on the program that motivated it and wrong on the first one that is not it. The population was honestly stated and still answered the wrong question: the corpus that MOTIVATES a feature is not the domain the feature must COVER. (2) pxx HAS NO ELF READING CODE AT ALL -- grepped for every shape of it; elfwriter.inc's 6838 lines are entirely writing. So Route 2 is not the other half of something that exists: it is an object READER, a symbol-table merge, a section layout over inputs we did not lay out, relocation application, and only then the executable writer we already have. **Each stage is checked against an external binutils instrument that fails differently from anything we wrote (readelf for the reader and merge, ld told to use our section addresses for the layout), and lands only with every row proven to fire; WHICH stages have landed is the state table in the body's newest dated section, not this sentence, so this summary does not go stale as they land.** GOAL 5 DOES NOT WAIT ON THIS: Route 1 makes the no-libc claim true, is guarded by a test-core row as of 027443610, and the unity build already has pxx linking it itself. Route 2 is the separate-objects path. Whoever takes this starts at \"write the entry stub\", not \"write a linker\". **ROUTE 1 RE-MEASURED AND NOW GUARDED 2026-09-19 (frankB), origin 696f13d1f / compiler 8f8a089c6812: GREEN at the DEFAULT rung -- 2 applets, 28 translation units, 29 cases, byte-identical to the gcc oracle, no PT_INTERP, entry 0x401000 == _start, no libc.** THE 258-APPLET / 400-OBJECT SCALE ROW ABOVE WAS **NOT** RE-DERIVED and keeps its own tree (2026-09-16, b7f9f80c7d80): reconstructing that applet set needs a generated list from a completed build, so the two rows measure different populations and neither may be quoted for the other. **The bigger finding is that none of this was wired into anything**: busybox_diff.sh was referenced from the Makefile NOWHERE, so every part of the freestanding claim could have regressed silently and only a hand re-run would have noticed. A test-core row now runs `--freestanding`, requires the script's own BUSYBOX-DIFF-COMPLETE token AND the GREEN line AND the no-PT_INTERP control line (a token alone says the script reached its end, not that the comparison passed), and LOUDLY SKIPS when library_candidates/busybox is absent. All three assertions were proven to fire by removing each line from a real green log. STATUS was `new` with owner empty while Route 1 was landed and measured -- the summary had been kept current and the status field had not, which is how a p70 reads as unstarted work and gets dispatched as such. --- ORIGINAL (2026-09-10, 546d4dcbd305): pxx writes static, libc-free ELF executables with NO external linker -- no shell-out to ld/gcc/cc anywhere in compiler/**. THE GAP IS THE OTHER DIRECTION: pxx cannot CONSUME an object. `pascal26 a.o b.o out` answers `pascal26:1: error: unexpected character` -- it parses the .o as source. The external dependency is a LINKER, not a library."
 ---
 
 # pxx cannot link its own objects
@@ -543,7 +543,7 @@ unpushed; there is no scratch state to recover.**
 | --- | --- | --- |
 | 1. object reader | landed, guarded | `8c66a2053` |
 | 2. symbol-table merge | landed, guarded | `98b42be27` |
-| 3. section layout over inputs we did not lay out | **not started** | — |
+| 3. section layout over inputs we did not lay out | landed, guarded (2026-09-19, see below) | — |
 | 4. relocation application | not started | — |
 | 5. the executable writer | exists already (`elfwriter.inc`) | — |
 
@@ -589,3 +589,75 @@ critical path for the owner's list.
 
 **Ownership: unheld.** Whoever picks this up should take it. The scoping above
 is the whole of what I was carrying; none of it lives only in my context.
+
+## Stage 3 landed 2026-09-19 (frankB) — section layout, oracled against `ld`
+
+Reached through `PXXDBG=a.objlayout:<listfile>`, like the two stages before
+it. Guarded in the same script, `tools/elf_reader_vs_readelf.sh`.
+
+**The opening decision: concatenate per NAME, and CHECK the type and flags
+against the name.** Keying on type alone is plainly wrong for our objects,
+because `.text` and `.data` are both `SHT_PROGBITS`. The name set comes from
+the EMITTER: `writeELFRelX64General` writes `.text .data .bss`, plus
+`.init_array`/`.fini_array` when the thunks exist, and the `.asm` writer
+writes `.text` alone. Any other ALLOCATED section is refused by name, which
+is the rung-1 scope. `SHN_COMMON` is refused too, because the writer emits
+none.
+
+**Resolution follows ld:** a strong definition displaces a weak one, and the
+first weak one in link order stands.
+
+**The image:** RX from `0x400000` (headers in the first page, `.text` at
+`0x401000`, which is where ld puts it), then RW on the next file page at the
+congruent address: `.init_array .fini_array .data .bss`. ld packs RW tighter.
+We deliberately do not copy that, because it is one linker version's script
+detail with no effect on behaviour.
+
+**Oracle:** ld linked with `--section-start` set to OUR five output
+addresses. Every global we place must then sit at the same address in ld's
+image, and the output sizes must agree (`.bss` is excluded by name, because
+ld rounds its end up to 8). Subject is `c.o d.o x.o` in that order:
+- c and x both carry crtl weakly, which exercises first-weak-wins;
+- x defines `atoi` strongly after two weak copies, which exercises
+  strong-over-weak;
+- c's `.text` is not a multiple of 16 long, which exercises per-input
+  alignment.
+
+Each of those three properties is ASSERTED true of the subject before the
+comparison runs. At compiler `813086199aaf`, 325 globals agree.
+
+**Every row proven to fire** by injecting a fault into the layout,
+rebuilding, running, and restoring from a patch (the rebuilt binary came back
+byte-identical, `813086199aaf`):
+
+| fault | result |
+| --- | --- |
+| strong-over-weak off | 1 of 325 globals at a different address (`atoi`) |
+| last weak wins | 321 of 325 at a different address |
+| per-input alignment dropped | ld refuses to link at our addresses |
+
+The third is caught by the link row, not the address row. It is still a real
+failure with a real cause.
+
+**Two oracle defects, both caught before they could send anyone to "fix" the
+layout.** `sort`/`join` under a locale collate `_exit` next to `exit`
+differently, which invented two mismatches (so `LC_ALL=C`). And `readelf -S`
+splits `[ 1]` into two awk fields but leaves `[10]` as one, so the index is
+stripped before any column is counted.
+
+**Not measured yet: scale.** Everything above is 3 objects. The merge still
+grows its arrays one element per new global, which is fine at hundreds and
+unmeasured at the 400-object busybox set.
+
+### PICK UP HERE: stage 4, relocation application
+
+The layout gives every input section an address, and `ElfLnkGlobalAddr` gives
+every global one. Stage 4 needs the same thing for LOCAL and SECTION symbols,
+per object: `S` is the object's own section address plus `st_value`. Apply all
+three emitter types: `R_X86_64_64` (S+A), `R_X86_64_PC32` (S+A-P, which must
+fit in a signed 32-bit field) and `R_X86_64_32S` (S+A, which must fit sign-extended).
+Refuse any other type by NAME. **The oracle is the same ld run.** With the
+addresses forced equal, `.text` and `.data` should come out BYTE-IDENTICAL to
+ld's output, which is a far sharper check than behaviour. The ticket's
+behavioural bar (the 29 busybox cases) comes at stage 5.
+
