@@ -43541,9 +43541,16 @@ begin
   bodyStart := ownBS; bodyEnd := ownBE;
   if isDC and not fieldsOnly then
   begin
-    { Synthesize the create ctor: self + one param per field, in order. }
-    if UClsFCount[ci] > 15 then
-      Error('Nil Python: too many dataclass fields for the ctor');
+    { Synthesize the create ctor: self + one param per field, in order.
+      The cap is the PARAMETER LIMIT the ctor is registered against, and it is
+      derived rather than spelled: it read 15 -- one less than MAX_PROC_PARAMS
+      when that was 16 -- and stayed behind when MAX_PROC_PARAMS became 32, so
+      a 17-field dataclass was refused by a limit the compiler no longer had.
+      That is one class (tuxspaceprogram's `Scene`) walling FOUR of its files,
+      three of them only because they import it. }
+    if UClsFCount[ci] > MAX_PROC_PARAMS - 1 then
+      Error('Nil Python: a dataclass ctor takes at most '
+            + AIntToStr(MAX_PROC_PARAMS - 1) + ' fields');
     pnames[0] := 'self'; ptypes[0] := tyClass;
     nparams := 1;
     for k := UClsFBase[ci] to UClsFBase[ci] + UClsFCount[ci] - 1 do

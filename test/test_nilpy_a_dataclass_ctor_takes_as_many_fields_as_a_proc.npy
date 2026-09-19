@@ -1,0 +1,55 @@
+# A @dataclass ctor's field cap is the compiler's PARAMETER limit, derived.
+#
+# The guard read `> 15`, one less than MAX_PROC_PARAMS when that was 16, and
+# stayed behind when MAX_PROC_PARAMS became 32 -- so a 17-field dataclass was
+# refused by a limit the compiler no longer had. In tuxspaceprogram one such
+# class (Scene, 17 fields) walled four files, three of them only because they
+# import it.
+#
+# 31 fields: self plus 31 is exactly MAX_PROC_PARAMS, so this also pins the
+# boundary rather than a comfortable number below it.
+# bug-n-a-dataclass-of-more-than-fifteen-fields-is-refused-by-a-stale-cap
+from dataclasses import dataclass
+
+
+@dataclass
+class Wide:
+    a1: int
+    a2: int
+    a3: int
+    a4: int
+    a5: int
+    a6: int
+    a7: int
+    a8: int
+    a9: int
+    b1: int
+    b2: int
+    b3: int
+    b4: int
+    b5: int
+    b6: int
+    b7: int
+    b8: int
+    b9: int
+    c1: int
+    c2: int
+    c3: int
+    c4: int
+    c5: int
+    c6: int
+    c7: int
+    c8: int
+    c9: int
+    d1: int
+    d2: int
+    d3: str
+    d4: float
+
+
+w = Wide(1, 2, 3, 4, 5, 6, 7, 8, 9,
+         10, 11, 12, 13, 14, 15, 16, 17, 18,
+         19, 20, 21, 22, 23, 24, 25, 26, 27,
+         28, 29, "last", 0.5)
+print(w.a1, w.b9, w.c9, w.d2, w.d3, w.d4)
+print(w.a1 + w.c9 + w.d2)

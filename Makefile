@@ -4907,6 +4907,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_emptyinit26 | diff -u test/test_nilpy_an_empty_init_marks_a_package.expected -
 	./$(COMPILER) test/test_nilpy_a_tuple_unpack_target_keeps_its_own_class.npy $(TESTTMP)/test_nilpy_unpackcls26
 	$(TESTTMP)/test_nilpy_unpackcls26 | diff -u test/test_nilpy_a_tuple_unpack_target_keeps_its_own_class.expected -
+	./$(COMPILER) test/test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc.npy $(TESTTMP)/test_nilpy_dcwide26
+	$(TESTTMP)/test_nilpy_dcwide26 | diff -u test/test_nilpy_a_dataclass_ctor_takes_as_many_fields_as_a_proc.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26
