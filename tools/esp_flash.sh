@@ -81,17 +81,26 @@ echo "esp_flash: $CHIP on $PORT <- $(basename "$PAS")" >&2
 ORACLE=""
 if [ "$VERIFY" = 1 ]; then
   ORACLE="$(mktemp)"
-  if "$PXX" "$PAS" /tmp/esp_flash_oracle >/dev/null 2>&1 && /tmp/esp_flash_oracle > "$ORACLE" 2>/dev/null; then
+  ORACLE_BIN="$(mktemp)"   # was the fixed /tmp/esp_flash_oracle, shared by every checkout
+  if "$PXX" "$PAS" "$ORACLE_BIN" >/dev/null 2>&1 && "$ORACLE_BIN" > "$ORACLE" 2>/dev/null; then
     :
   else
     echo "esp_flash: the program does not build/run on x86-64, so there is no oracle to diff against (continuing with --no-verify)" >&2
     VERIFY=0
     rm -f "$ORACLE"
   fi
+  rm -f "$ORACLE_BIN" "$ORACLE_BIN.map"
 fi
 
 # shellcheck disable=SC1091
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
+
+# ONE BUILD PER PROJECT AT A TIME: this shares $PROJ (main/main.o, build/)
+# with tools/esp_run.sh, and a concurrent run there swaps the program under
+# the image this writes to the board. Same lock, on the project directory,
+# held to exit -- see esp_run.sh for the measurement.
+exec 9<"$PROJ"
+flock 9
 
 cd "$PROJ" || exit 1
 # shellcheck disable=SC2086

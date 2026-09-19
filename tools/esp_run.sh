@@ -55,6 +55,21 @@ esac
 # shellcheck disable=SC1091
 . "$ESP_IDF_DIR/export.sh" >/dev/null 2>&1
 
+# ONE RUN PER PROJECT AT A TIME, AND A FLASH IMAGE OF OUR OWN. Every program
+# for a chip is built in the same $PROJ (main/main.o, build/), and the image
+# used to go to the fixed /tmp/esp_run_flash.bin, shared by every checkout on
+# the box. Measured 2026-09-19: a second esp_run.sh started 10s after a first
+# rebuilt the project and rewrote the image before the first qemu booted it,
+# so the FIRST run printed the SECOND program's output -- dns-c3's smoke line
+# under a timer-c3 invocation, 2 of 2 trials -- and a caller grepping for its
+# own "ok" line would have passed a program that never ran. The lock is on
+# the project DIRECTORY (no lock file to ignore), held to exit, so it covers
+# compile, link, merge and the qemu run that reads the image lazily.
+exec 9<"$PROJ"
+flock 9
+FLASH="$(mktemp --suffix=.bin)"
+trap 'rm -f "$FLASH"' EXIT
+
 cd "$PROJ"
 # The compile runs from INSIDE the project, so any -Fu in ESP_PXXFLAGS must be
 # absolute. Its diagnostics used to go to /dev/null along with the "ok:" line,
@@ -99,12 +114,12 @@ else
 fi
 
 cd build
-python -m esptool --chip "$CHIP" merge-bin -o /tmp/esp_run_flash.bin \
+python -m esptool --chip "$CHIP" merge-bin -o "$FLASH" \
   @flash_args --fill-flash-size 2MB >/dev/null 2>&1
 
 SER="$(mktemp)"
 timeout "$TIMEOUT" "$QEMU" -M "$CHIP" \
-  -drive file=/tmp/esp_run_flash.bin,if=mtd,format=raw \
+  -drive file="$FLASH",if=mtd,format=raw \
   -nographic -serial mon:stdio -monitor none >"$SER" 2>&1 || true
 
 # Everything after the IDF "Calling app_main()" line is the program's output,
