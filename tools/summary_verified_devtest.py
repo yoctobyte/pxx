@@ -39,6 +39,15 @@ A guard that only checked the print would pass through that.
 No fixture anywhere: every assertion reads bytes back off disk after running the
 real command, because the whole failure mode here is a fixture agreeing with its
 author.
+
+AND NOTHING HERE ASSERTS HOW THE OUTPUT IS FORMATTED. The first version of the
+summary row matched a phrase from the middle of the summary and failed on
+arrival: the block is wrapped for the terminal and the phrase straddled a line
+break. That assertion was written from a prediction about formatting -- an axis
+that is invisible in the source you write the assertion from -- and it would
+have pinned the wrap width rather than the property. The rows reassemble the
+wrapped lines and assert that the summary ARRIVED. See the note at that check
+before shortening it.
 """
 import argparse, importlib.util, io, re, sys, tempfile
 from contextlib import redirect_stderr
@@ -117,6 +126,13 @@ def t_claim_prints_the_summary_and_the_two_outcomes(tmp):
     # have pinned the wrap width rather than the property under test. What
     # matters is that the whole summary ARRIVED; how it is folded is not this
     # guard's business.
+    #
+    # DO NOT "SIMPLIFY" THIS BACK TO A SUBSTRING MATCH. It will pass on the day
+    # you write it -- you will pick a phrase that happens to sit inside one
+    # line -- and redden the next time the summary text, the terminal width or
+    # the "claim:      " prefix changes by a character. A phrase straddling a
+    # wrap is invisible in the source the assertion was written from, which is
+    # what made the first version of this row look correct.
     check("claim prints the whole summary text",
           SUMMARY in _reassemble(err),
           f"reassembled block was: {_reassemble(err)!r}")
