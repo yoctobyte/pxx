@@ -71,4 +71,4 @@ against xtensa's 735 on the identical program, ~340 KB of code --
 `bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program`.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 357d13162.
