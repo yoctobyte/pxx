@@ -454,11 +454,21 @@ one-line logbook pointer.
   2026-09-10): *"you care about 1 ULP more than a threading mutex."* Said as a
   joke and it is the sharpest thing in this section. Measured the same evening:
   **26 tickets sit in `devdocs/progress/float/`**, several of them last-digit
-  differences, while `threading` — which a real program imports and which does
-  not exist at all — was unowned. A last-ulp ticket is cheap to write, feels
-  rigorous, and has a crisp number attached; a missing module is none of those
-  and matters more. **When you find yourself quantifying a rounding difference,
-  check what you are NOT doing.**
+  differences, while `threading` — which a real program imports — was unowned.
+  A last-ulp ticket is cheap to write, feels rigorous, and has a crisp number
+  attached; a missing module is none of those and matters more. **When you find
+  yourself quantifying a rounding difference, check what you are NOT doing.**
+  **THE EXAMPLE'S FACTUAL HALF IS RETIRED AND THE RULE IS NOT: this line said
+  `threading` "does not exist at all" until 2026-09-19, and it was BUILT in the
+  meantime** — `lib/rtl/mimic_threading.pas` is 553 lines and 25 routines with
+  ZERO `NotImplemented`/`PAL_ERR_UNSUPPORTED` stubs, and FPC's `BeginThread`/
+  `EndThread`/`TThread` surface is present and tested beside it. What is left is
+  a HOLE, not an absence (`feature-b-the-rtlevent-family-is-absent-from-the-
+  threading-rtl`, p35). **A worked example decays faster than the rule it
+  illustrates, and this one decayed in the direction that sends a seat to build
+  something that already exists** — which is this file's own "the name is not the
+  thing" arriving in its own text. Check a gap before adopting it; the attention
+  point stands untouched.
   **AND THE CAVEAT THIS SEAT NEARLY TURNED INTO A RULE:** asked to compute
   `sin(0..1)` in 0.001 steps — also a joke — it found 70 of 1001 rows differing
   from CPython at **1 ULP** and promptly wrote a "nothing under 10 ULP is a
