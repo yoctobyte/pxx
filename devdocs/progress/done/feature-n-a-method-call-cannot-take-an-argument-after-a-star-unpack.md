@@ -309,4 +309,4 @@ touched here — they are in the comment block above `PyStarExpandCallArgs`'s
 caller and remain as this ticket described them.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit aea3c7132.
