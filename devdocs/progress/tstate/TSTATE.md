@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `165473bf9e30` | 2026-09-19T13:07:36Z | RED (full) | 1008.6s | `165473bf9e30` RED |
+| borg | `7fc84cc198ee` | 2026-09-19T13:14:00Z | RED (native) | 324.7s | `165473bf9e30` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `165473bf9e30` on borg, 2026-09-19T13:07:36Z (0m ago).**
+**Newest full tier in the fleet: `165473bf9e30` on borg, 2026-09-19T13:07:36Z (6m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `165473bf9e30` | RED | 0m | — (newest) |
+| borg | `165473bf9e30` | RED | 6m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -34,4 +34,3 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
 - **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `361c03dc6ded`, last good `e8a98c976991`, 4 commit(s) in range
-- **test-threads#src:test/test_tls_base.pas** — test/test_tls_base.pas tools/expect_same.sh (borg): bad `165473bf9e30`, last good `f648c28e35e2`, 5 commit(s) in range
