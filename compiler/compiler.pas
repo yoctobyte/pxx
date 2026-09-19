@@ -873,6 +873,12 @@ begin
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
   WriteLn('                        rt_sigreturn and clone''s child stub stay raw.');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
+  WriteLn('  --link [-o <out>] <obj>... [<out>]');
+  WriteLn('                        link x86-64 objects that pxx --emit-obj wrote into a');
+  WriteLn('                        static executable, with no external linker and no libc.');
+  WriteLn('                        Supplies _start unless an object defines one. SCOPE:');
+  WriteLn('                        pxx''s OWN objects -- a gcc/fpc object, an archive (.a)');
+  WriteLn('                        or a shared object is refused by design, not missing.');
   { DERIVED, not transcribed. This line said "general objects:
     --target=xtensa|riscv32 only. on x86-64 only .asm sources" for months after
     x86-64 got a general writer and i386 got one after that -- a THIRD copy of
@@ -1070,6 +1076,8 @@ begin
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
+  LinkMode := False;
+  LinkOutPath := '';
   TlsMainInstalled := False;
   EmitSharedMode := False;
   InitThunkOff := -1;
@@ -1426,6 +1434,18 @@ begin
         feature-a-wasm32-target-registration-skeleton }
       TargetArch := TARGET_WASM32;
       Inc(i);
+    end
+    else if option = '--link' then
+    begin
+      LinkMode := True;
+      Inc(i);
+    end
+    else if LinkMode and (option = '-o') and (i < ParamCount) then
+    begin
+      { the spelling every build system uses for a linker: `--link -o out a.o
+        b.o`. Only under --link -- the compiler's own output is positional. }
+      LinkOutPath := ParamStr(i + 1);
+      Inc(i, 2);
     end
     else if option = '--emit-obj' then
     begin
@@ -2147,6 +2167,30 @@ begin
   begin
     ElfLnkLinkDump(PxxDbgArg('a.objlink'));
     Halt(0);
+  end;
+
+  { --link <obj>... <out>: stage 5, the user-facing mode. Here, after the
+    option loop, because the loop stops at the first non-option and every
+    argument from there on is an object except the last. }
+  if LinkMode then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      ErrorNoPos('--link: x86-64 only -- it links the objects writeELFRelX64General '
+                 + 'writes, and the ' + TargetArchName(TargetArch)
+                 + ' object writer is a different format');
+    if LinkOutPath <> '' then
+    begin
+      if ParamCount < i then
+        ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
+      if ElfLnkLinkArgs(i, ParamCount, LinkOutPath) then Halt(0);
+    end
+    else
+    begin
+      if ParamCount - i < 1 then
+        ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
+      if ElfLnkLinkArgs(i, ParamCount - 1, ParamStr(ParamCount)) then Halt(0);
+    end;
+    Halt(1);
   end;
 
   if ParamCount < i then

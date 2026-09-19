@@ -15864,6 +15864,23 @@ test-core: $(COMPILER)
 	# A MISSING TREE IS A LOUD SKIP NAMING THE FETCH, never a quiet pass -- the
 	# script's own header makes that a rule and this row honours it.
 	@if [ -d library_candidates/busybox ]; then 	  tools/busybox_diff.sh --freestanding > $(TESTTMP)/bbfree.log 2>&1; 	  grep -q 'BUSYBOX-DIFF-COMPLETE' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: the run did not reach its own completion token -- exit status is not the verdict here"; tail -20 $(TESTTMP)/bbfree.log; exit 1; }; 	  grep -q 'busybox-diff: GREEN' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: completed but not GREEN"; grep -E 'FAIL|RED|SKIP' $(TESTTMP)/bbfree.log | head -10; exit 1; }; 	  grep -q 'no PT_INTERP' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: GREEN without the no-PT_INTERP control line -- the control that makes this believable did not run, so the green is about the gcc path"; exit 1; }; 	  echo "test-core: pxx objects link with ld -static -nostdlib over our own entry stub, no libc and no PT_INTERP, byte-identical to the gcc oracle"; 	else echo "busybox-freestanding: SKIP (no library_candidates/busybox -- fetch busybox there to run)"; fi
+	@# THE SAME RUN WITH pascal26 --link AS THE LINKER (Route 2): no ld, no
+	@# assembler, no stub file -- the linker supplies _start. Same three
+	@# assertions, plus one this row needs and the ld row does not: the link
+	@# note must NAME --link, or a mode that silently fell back to ld would
+	@# pass under this row's name.
+	@if [ -d library_candidates/busybox ]; then \
+	  tools/busybox_diff.sh --pxx-link --targets x86_64 > $(TESTTMP)/bbpxxlink.log 2>&1; \
+	  grep -q 'BUSYBOX-DIFF-COMPLETE' $(TESTTMP)/bbpxxlink.log \
+	    || { echo "FAIL busybox-pxx-link: the run did not reach its own completion token -- exit status is not the verdict here"; tail -20 $(TESTTMP)/bbpxxlink.log; exit 1; }; \
+	  grep -q 'busybox-diff: GREEN' $(TESTTMP)/bbpxxlink.log \
+	    || { echo "FAIL busybox-pxx-link: completed but not GREEN"; grep -E 'FAIL|RED|SKIP|note' $(TESTTMP)/bbpxxlink.log | head -10; exit 1; }; \
+	  grep -q 'no PT_INTERP' $(TESTTMP)/bbpxxlink.log \
+	    || { echo "FAIL busybox-pxx-link: GREEN without the no-PT_INTERP control line"; exit 1; }; \
+	  grep -q 'linked separately with `.* --link`' $(TESTTMP)/bbpxxlink.log \
+	    || { echo "FAIL busybox-pxx-link: GREEN, but the link was not pascal26 --link -- this row would be measuring another linker"; grep note $(TESTTMP)/bbpxxlink.log; exit 1; }; \
+	  echo "test-core: pxx objects linked by pascal26 --link itself, no ld, no libc, no PT_INTERP, byte-identical to the gcc oracle"; \
+	else echo "busybox-pxx-link: SKIP (no library_candidates/busybox -- fetch busybox there to run)"; fi
 	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
 	# the type through — crtl had the typedef only in <wchar.h>, so busybox's
 	# libbb/lineedit.c read `wchar_t` as a stray token at top level. C99 7.24.1

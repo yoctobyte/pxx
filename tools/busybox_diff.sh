@@ -86,6 +86,12 @@
 #               for feature-a-pxx-cannot-link-its-own-objects, whose route 2 (a
 #               pxx --link mode) removes the assembler and the stub together;
 #               do not grow this into a linker.
+#   --pxx-link  --freestanding with `pascal26 --link' as the linker instead of
+#               `ld' + tools/pxxcrt_x86_64.S: no external linker, no assembler,
+#               no stub file -- the linker supplies _start itself. Route 2 of
+#               feature-a-pxx-cannot-link-its-own-objects. Same probe, same two
+#               controls (no PT_INTERP; the entry is a `_start'), same cases,
+#               so the ld run is its differential oracle.
 #   --separate  build busybox the way BUSYBOX does -- one object per translation
 #               unit and a real link -- instead of as a unity. Which targets it
 #               can do is MEASURED per run by sep_probe, not stated here: this
@@ -197,6 +203,7 @@ APPLETS="cat echo"
 KEEP=0
 SEPARATE=0
 FREESTANDING=0
+PXXLINK=0
 OBJFLAGS=""
 
 while [ $# -gt 0 ]; do
@@ -207,6 +214,7 @@ while [ $# -gt 0 ]; do
     --applets) APPLETS="$2"; shift 2 ;;
     --separate) SEPARATE=1; shift ;;
     --freestanding) FREESTANDING=1; SEPARATE=1; shift ;;
+    --pxx-link) PXXLINK=1; FREESTANDING=1; SEPARATE=1; shift ;;
     --dce)     OBJFLAGS="--dce"; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
@@ -1673,6 +1681,32 @@ sep_probe() {
   # end state is a pxx --link mode (feature-a-pxx-cannot-link-its-own-objects,
   # route 2), which removes the assembler and this file with it. This is not
   # that, and reading it as a sanctioned architecture would be wrong.
+  # --pxx-link: the compiler IS the linker and supplies its own _start, so
+  # there is no stub to find and nothing to assemble. The candidate still has
+  # to link a real object AND run it, and still has to come out with no
+  # PT_INTERP, exactly like the ld candidate below.
+  if [ "$PXXLINK" -eq 1 ]; then
+    if [ "$spt" != "x86_64" ]; then
+      SEP_WHY="--pxx-link is x86-64 only: pascal26 --link consumes the x86-64 object writer's output"
+      return 1
+    fi
+    spld="$COMPILER --link"
+    if ! $spld -o "$WORK/sepprobe_$spt.bin" "$WORK/sepprobe_$spt.o" \
+         >> "$WORK/sepprobe_$spt.log" 2>&1; then
+      SEP_WHY="--pxx-link: pascal26 --link could not link a one-object probe: $(grep -a -v '^ok:' "$WORK/sepprobe_$spt.log" | tail -1)"
+      return 1
+    fi
+    if ! $sprun "$WORK/sepprobe_$spt.bin" >> "$WORK/sepprobe_$spt.log" 2>&1; then
+      SEP_WHY="--pxx-link: the probe LINKED and then did not run -- see $WORK/sepprobe_$spt.log"
+      return 1
+    fi
+    if readelf -lW "$WORK/sepprobe_$spt.bin" 2>/dev/null | grep -q INTERP; then
+      SEP_WHY="--pxx-link: the probe has an INTERP segment, so this mode would be measuring something else"
+      return 1
+    fi
+    SEP_LD="$spld"
+    return 0
+  fi
   if [ "$FREESTANDING" -eq 1 ]; then
     # ASK THE FILESYSTEM, DO NOT ASSERT THE TARGET LIST. This read `[ "$spt" !=
     # "x86_64" ]` for an hour and that is the same stale-name trap the --separate

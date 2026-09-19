@@ -35,10 +35,13 @@
 # 0, b.o calls it and must report exactly 1, named `helper` by the oracle. The
 # asymmetry is the control.
 #
-# COVERS TWO STAGES: the object READER (against readelf) and the symbol-table
-# MERGE over a set of objects (three cases no two of which can pass for each
-# other, plus the weak-does-not-collide property that lets 400 busybox objects
-# link at all).
+# COVERS ALL FIVE STAGES OF ROUTE 2: the object READER (against readelf); the
+# symbol-table MERGE over a set of objects (three cases no two of which can
+# pass for each other, plus the weak-does-not-collide property that lets 400
+# busybox objects link at all); the section LAYOUT and RELOCATION (against ld
+# told to use our addresses -- every global at ld's address, every relocated
+# byte ld's); and `--link` with its synthesised entry (against ld over the
+# proven tools/pxxcrt_x86_64.S stub, same output and exit code).
 #
 # Prints ELF-READER-ORACLE-COMPLETE on success. Exits nonzero on any mismatch.
 set -u
@@ -408,6 +411,62 @@ PXXDBG="a.objlink:$W/plt.lst" "$COMPILER" > "$W/plt.out" 2>&1
 grep -q 'R_X86_64_PLT32 in .text -- pxx emits' "$W/plt.out" \
   || { cat "$W/plt.out"; fail "an R_X86_64_PLT32 was not refused by name"; }
 
-echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and a PLT32 are refused by name"
+# ---- stage 5: --link, and the entry contract ---------------------------------
+# The linker supplies _start (ElfLnkPutStub), with the contract of
+# tools/pxxcrt_x86_64.S -- the stub the 663-case freestanding busybox ran on.
+# Its ORACLE is therefore that stub linked by ld over the same objects: the two
+# programs must print the same thing and exit the same way.
+#
+# THE SUBJECT READS `environ`, NOT getenv(), AND THAT IS THE WHOLE ROW.
+# environ is set by the C frontend's .init_array constructor, called with
+# (argc, argv, envp) by the entry's array walk -- so a stub that skips the walk
+# still links and runs. The first version of this row used getenv(), and a
+# stub with the walk REMOVED passed it: crtl's getenv reads /proc/self/environ
+# FIRST (lib/crtl/src/stdlib.c, pxx_env_load) and only then environ, so getenv
+# answers correctly whether or not the entry did its job. Fault injection found
+# that; reading the subject would not have. Run under `env -i PXXT=hello`, so
+# environ[0] has exactly one right answer: a missing walk prints (null) and an
+# envp one slot early prints (empty) -- neither collides with it.
+cat > "$W/e.c" <<'EOF'
+#include <stdio.h>
+extern char **environ;
+int twice(int);
+int main(int argc, char **argv) {
+  const char *v = !environ ? "(null)" : environ[0] ? environ[0] : "(empty)";
+  printf("argc=%d argv1=%s environ0=%s twice=%d\n", argc, argc > 1 ? argv[1] : "-", v, twice(21));
+  return 3;
+}
+EOF
+printf 'int twice(int x){ return 2*x; }\n' > "$W/f.c"
+for o in e f; do
+  "$COMPILER" --emit-obj "$W/$o.c" "$W/$o.o" > "$W/$o.build.log" 2>&1 \
+    || { cat "$W/$o.build.log"; fail "--emit-obj did not produce $o.o"; }
+done
+as -o "$W/crt.o" "$ROOT/tools/pxxcrt_x86_64.S" || fail "as could not assemble tools/pxxcrt_x86_64.S, the entry oracle"
+ld -static -nostdlib -e _start -o "$W/ef_ld" "$W/crt.o" "$W/e.o" "$W/f.o" > "$W/ef_ld.log" 2>&1 \
+  || { cat "$W/ef_ld.log"; fail "ld could not link the entry oracle"; }
+"$COMPILER" --link -o "$W/ef_pxx" "$W/e.o" "$W/f.o" > "$W/ef_pxx.log" 2>&1 \
+  || { cat "$W/ef_pxx.log"; fail "pascal26 --link -o failed on e.o f.o"; }
+"$COMPILER" --link "$W/e.o" "$W/f.o" "$W/ef_pos" > "$W/ef_pos.log" 2>&1 \
+  || { cat "$W/ef_pos.log"; fail "pascal26 --link <objs> <out> (positional output) failed"; }
+cmp -s "$W/ef_pxx" "$W/ef_pos" || fail "the -o and positional spellings of --link wrote different images"
+readelf -lW "$W/ef_pxx" | grep -q INTERP && fail "--link wrote an image with a PT_INTERP"
+ent=$(readelf -hW "$W/ef_pxx" | sed -n 's/.*Entry point address: *0x//p')
+st=$(nm "$W/ef_pxx" | awk '$3=="_start" {print $1}')
+[ -n "$st" ] && [ "$((0x$ent))" = "$((0x$st))" ] || fail "the entry point is not the synthesised _start"
+ours=$(env -i PXXT=hello "$W/ef_pxx" one two); orc=$?
+theirs=$(env -i PXXT=hello "$W/ef_ld" one two); trc=$?
+[ "$ours" = "$theirs" ] && [ "$orc" = "$trc" ] \
+  || fail "--link and ld+pxxcrt disagree: '$ours' rc=$orc vs '$theirs' rc=$trc"
+[ "$ours" = "argc=3 argv1=one environ0=PXXT=hello twice=42" ] && [ "$orc" = 3 ] \
+  || fail "the linked program printed '$ours' rc=$orc -- environ0 is the .init_array walk and the envp computation; argc/argv are the stack read"
+
+# no main and no _start: refused by name, nothing written
+"$COMPILER" --link -o "$W/nomain" "$W/f.o" > "$W/nomain.log" 2>&1 \
+  && fail "--link succeeded on a set with no main"
+grep -q 'no object defines main' "$W/nomain.log" || { cat "$W/nomain.log"; fail "a set with no main was not refused by name"; }
+[ -e "$W/nomain" ] && fail "--link refused the set and still wrote an output file"
+
+echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and a PLT32 are refused by name; --link's own _start runs the program as ld+pxxcrt does (argv, environ via .init_array, exit code)"
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"

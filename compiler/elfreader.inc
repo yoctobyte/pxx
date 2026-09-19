@@ -316,6 +316,7 @@ const
   ELFLNK_K_ABS  = -1;           { a definition against SHN_ABS: its value is the address }
   ELFLNK_BASE   = $400000;      { the static non-PIE image base ld uses on x86-64 }
   ELFLNK_PAGE   = $1000;
+  ELFLNK_STUB_SIZE = 93;        { the synthesised _start; see ElfLnkPutStub }
 
 var
   ElfLnkObjPath  : array of AnsiString;
@@ -338,6 +339,8 @@ var
   ElfLnkDefInfo  : array of Integer;  { st_info of the chosen definition, for the output .symtab }
   ElfLnkDefSize  : array of Int64;
   ElfLnkRwFile   : Int64;             { file offset (and base-relative address) of the RW segment }
+  ElfLnkEntryStub: Boolean;           { reserve and write the synthesised _start (stage 5) }
+  ElfLnkStubAddr : Int64;
 
 function ElfLnkKindName(k: Integer): AnsiString;
 begin
@@ -382,6 +385,8 @@ begin
   SetLength(ElfLnkDefInfo, 0);
   SetLength(ElfLnkDefSize, 0);
   ElfLnkRwFile := 0;
+  ElfLnkEntryStub := False;
+  ElfLnkStubAddr := 0;
   ElfLnkObjCount := 0;
   SetLength(ElfLnkObjPath, 0);
   SetLength(ElfLnkInShndx, 0);
@@ -661,6 +666,15 @@ begin
       addr := ElfLnkAlignUp(addr, ElfLnkInAlign[slot]);
       ElfLnkInAddr[slot] := addr;
       addr := addr + ElfLnkInSize[slot];
+    end;
+    { the synthesised _start goes AFTER every input's .text, so each input
+      keeps the address it has without it -- which keeps the stage 3/4 oracle
+      (ld, which has no stub) valid for everything but these bytes }
+    if (k = ELFLNK_K_TEXT) and ElfLnkEntryStub then
+    begin
+      addr := ElfLnkAlignUp(addr, 16);
+      ElfLnkStubAddr := addr;
+      addr := addr + ELFLNK_STUB_SIZE;
     end;
     ElfLnkOutAddr[k] := start;
     ElfLnkOutSize[k] := addr - start;
@@ -1053,10 +1067,82 @@ begin
     if i = 0 then secKind[i] := ELFLNK_NKIND else secKind[i] := ElfLnkSecKind(i);
 end;
 
+{ ---- stage 5: the process-entry contract ---------------------------------
+  THE CONTRACT IS tools/pxxcrt_x86_64.S's, INSTRUCTION FOR INSTRUCTION, because
+  that one is proven: it is what the 663-case freestanding busybox ran on. The
+  kernel does not call main. It jumps to the entry with rsp -> argc, then
+  argv[0..argc-1], a NULL, then envp. So:
+
+      xor   ebp, ebp                 backtraces stop here
+      mov   r12, [rsp]               argc
+      lea   r13, [rsp+8]             argv
+      lea   r14, [r13+r12*8+8]       envp = argv + argc + 1
+      and   rsp, -16                 SysV alignment AT the call
+      movabs rbx, <.init_array start>
+      movabs r15, <.init_array end>
+   1: cmp   rbx, r15 ; jae 2f
+      mov   rdi, r12 ; mov rsi, r13 ; mov rdx, r14 ; call [rbx]
+      add   rbx, 8 ; jmp 1b
+   2: mov   rdi, r12 ; mov rsi, r13 ; mov rdx, r14
+      movabs rax, <main> ; call rax
+      mov   edi, eax ; mov eax, 60 ; syscall ; hlt
+
+  THE .init_array WALK IS LOAD-BEARING AND ITS OMISSION IS SILENT: the C
+  frontend's constructor thunk sets environ from (argc, argv, envp), and a
+  missing walk leaves it null -- a wrong VALUE far away, not a crash.
+
+  ONE THING IS BETTER HERE THAN IN THE .S: the array bounds are CONSTANTS. The
+  .S names __init_array_start/__init_array_end and relies on ld's internal
+  script to PROVIDE them; this linker laid the array out itself and knows both
+  addresses, so there are no linker-defined symbols to get wrong. movabs rather
+  than rip-relative lea because the image is static at a fixed base, and an
+  absolute is one fewer thing to compute.
+
+  exit(2) (60), not exit(): the .S does not run the atexit chain or
+  .fini_array either, and matching the proven contract exactly is the point --
+  a difference here would be a claim nothing has measured. }
+procedure ElfLnkPutStub(var buf: array of Byte; initStart, initEnd, mainAddr: Int64);
+const
+  { 93 bytes; the three movabs immediates are zero here and filled below }
+  STUB: array[0..92] of Byte = (
+    $31,$ED,                               {  0 xor ebp,ebp            }
+    $4C,$8B,$24,$24,                       {  2 mov r12,[rsp]          }
+    $4C,$8D,$6C,$24,$08,                   {  6 lea r13,[rsp+8]        }
+    $4F,$8D,$74,$E5,$08,                   { 11 lea r14,[r13+r12*8+8]  }
+    $48,$83,$E4,$F0,                       { 16 and rsp,-16            }
+    $48,$BB,0,0,0,0,0,0,0,0,               { 20 movabs rbx,imm64 (22)  }
+    $49,$BF,0,0,0,0,0,0,0,0,               { 30 movabs r15,imm64 (32)  }
+    $4C,$39,$FB,                           { 40 cmp rbx,r15            }
+    $73,$11,                               { 43 jae +17 -> 62          }
+    $4C,$89,$E7,                           { 45 mov rdi,r12            }
+    $4C,$89,$EE,                           { 48 mov rsi,r13            }
+    $4C,$89,$F2,                           { 51 mov rdx,r14            }
+    $FF,$13,                               { 54 call [rbx]             }
+    $48,$83,$C3,$08,                       { 56 add rbx,8              }
+    $EB,$EA,                               { 60 jmp -22 -> 40          }
+    $4C,$89,$E7,                           { 62 mov rdi,r12            }
+    $4C,$89,$EE,                           { 65 mov rsi,r13            }
+    $4C,$89,$F2,                           { 68 mov rdx,r14            }
+    $48,$B8,0,0,0,0,0,0,0,0,               { 71 movabs rax,imm64 (73)  }
+    $FF,$D0,                               { 81 call rax               }
+    $89,$C7,                               { 83 mov edi,eax            }
+    $B8,$3C,$00,$00,$00,                   { 85 mov eax,60             }
+    $0F,$05,                               { 90 syscall                }
+    $F4);                                  { 92 hlt                    }
+var i: Integer;
+begin
+  for i := 0 to ELFLNK_STUB_SIZE - 1 do buf[i] := STUB[i];
+  ElfLnkPutLE(buf, 22, initStart, 8);
+  ElfLnkPutLE(buf, 32, initEnd, 8);
+  ElfLnkPutLE(buf, 73, mainAddr, 8);
+end;
+
 { Write the linked executable. ElfLnkLoadList and ElfLnkLayout must have run.
   False, with the reason printed under `tag`, on any refusal. }
 function ElfLnkWriteExe(const outPath, entryName, tag: AnsiString): Boolean;
 var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff, shOff: Integer;
+    mainAddr: Int64;
+    stub: array of Byte;
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
     secKind: array of Integer;
     g: Integer;
@@ -1077,13 +1163,28 @@ begin
     WriteLn(tag, ': ', AIntToStr(nUnres), ' undefined reference(s); nothing written');
     Exit;
   end;
-  g := ElfLnkFind(entryName);
+  { entryName '' means the synthesised _start, which calls main }
+  if entryName = '' then g := ElfLnkFind('main') else g := ElfLnkFind(entryName);
   if (g < 0) or (ElfLnkDefObj[g] < 0) then
   begin
-    WriteLn(tag, ': entry symbol ''', entryName, ''' is not defined by any object');
+    if entryName = '' then
+      WriteLn(tag, ': no object defines main (or _start), so there is nothing to enter')
+    else
+      WriteLn(tag, ': entry symbol ''', entryName, ''' is not defined by any object');
     Exit;
   end;
-  entry := ElfLnkGlobalAddr(g);
+  if entryName = '' then
+  begin
+    if not ElfLnkEntryStub then
+    begin
+      WriteLn(tag, ': internal -- the layout reserved no room for _start');
+      Exit;
+    end;
+    mainAddr := ElfLnkGlobalAddr(g);
+    entry := ElfLnkStubAddr;
+  end
+  else
+    entry := ElfLnkGlobalAddr(g);
 
   { the RW segment's extent }
   rwStart := ELFLNK_BASE + ElfLnkRwFile;
@@ -1134,6 +1235,11 @@ begin
       Inc(nDef);
       strSize := strSize + Length(ElfLnkName[i]) + 1;
     end;
+  if entryName = '' then
+  begin
+    Inc(nDef);
+    strSize := strSize + Length('_start') + 1;
+  end;
   strOff := symOff + (nDef + 1) * 24;
   shstrOff := strOff + strSize;
   shOff := Integer(ElfLnkAlignUp(shstrOff + SHSTR, 8));
@@ -1190,6 +1296,15 @@ begin
       end;
     end;
   end;
+  if entryName = '' then
+  begin
+    SetLength(stub, ELFLNK_STUB_SIZE);
+    ElfLnkPutStub(stub, ElfLnkOutAddr[ELFLNK_K_INIT],
+                  ElfLnkOutAddr[ELFLNK_K_INIT] + ElfLnkOutSize[ELFLNK_K_INIT], mainAddr);
+    ElfLnkWriteZeros(ElfLnkStubAddr - cur);
+    ElfLnkWrite(stub, ELFLNK_STUB_SIZE);
+    cur := ElfLnkStubAddr + ELFLNK_STUB_SIZE;
+  end;
   textEnd := ElfLnkOutAddr[ELFLNK_K_TEXT] + ElfLnkOutSize[ELFLNK_K_TEXT];
   ElfLnkWriteZeros(textEnd - cur);
   ElfLnkWriteZeros(ElfLnkRwFile - (ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT]));
@@ -1214,9 +1329,15 @@ begin
       ElfLnkBPut(ElfLnkDefSize[i], 8);
       strPos := strPos + Length(ElfLnkName[i]) + 1;
     end;
+  if entryName = '' then
+  begin
+    ElfLnkBPut(strPos, 4); ElfLnkBPut($12, 1); ElfLnkBPut(0, 1); ElfLnkBPut(1, 2);  { GLOBAL FUNC .text }
+    ElfLnkBPut(ElfLnkStubAddr, 8); ElfLnkBPut(ELFLNK_STUB_SIZE, 8);
+  end;
   ElfLnkBPut(0, 1);
   for i := 0 to ElfLnkCount - 1 do
     if ElfLnkDefObj[i] >= 0 then ElfLnkBStrZ(ElfLnkName[i]);
+  if entryName = '' then ElfLnkBStrZ('_start');
   { SHSTR = 68 bytes: offsets .text 1, .init_array 7, .fini_array 19, .data 31,
     .bss 37, .symtab 42, .strtab 50, .shstrtab 58 }
   ElfLnkBPut(0, 1);
@@ -1276,3 +1397,30 @@ begin
   WriteLn('elflink: wrote ', listPath, '.exe');
   WriteLn('elflink: ELFLINK-OK');
 end;
+
+{ --link <obj>... <out>, ParamStr(first..last) being the objects. If the set
+  defines _start it is the entry, as it would be for ld; otherwise the linker
+  supplies one (ElfLnkPutStub) that calls main. }
+function ElfLnkLinkArgs(first, last: Integer; const outPath: AnsiString): Boolean;
+var j, g: Integer;
+    entryName: AnsiString;
+begin
+  ElfLnkLinkArgs := False;
+  ElfLnkReset;
+  for j := first to last do
+    if not ElfLnkAddObject(ParamStr(j)) then
+    begin
+      WriteLn(StdErr, 'pascal26 --link: ', ParamStr(j), ': ', ElfRdErr);
+      Exit;
+    end;
+  g := ElfLnkFind('_start');
+  if (g >= 0) and (ElfLnkDefObj[g] >= 0) then entryName := '_start'
+  else
+  begin
+    entryName := '';
+    ElfLnkEntryStub := True;
+  end;
+  ElfLnkLayout;
+  ElfLnkLinkArgs := ElfLnkWriteExe(outPath, entryName, 'pascal26 --link');
+end;
+
