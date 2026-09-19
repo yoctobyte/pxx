@@ -388,6 +388,16 @@ begin
   Inc(RoRangeCount);
 end;
 
+{ Whether class RTTI headers and VMTs are marked read-only as they are
+  emitted. Not for an object file: on ESP-IDF .rodata is FLASH, and an ISR that
+  calls a virtual method reads the VMT through an INSTANCE -- no fixup, so
+  ObjRoKeepIramLiteralsWritable cannot see it -- with the flash cache off. The
+  hosted object writers do not split at all, so nothing is lost there. }
+function RoRttiWanted: Boolean;
+begin
+  RoRttiWanted := RoRtti and (not EmitObjMode);
+end;
+
 { Mark Data[s..e) as never written at run time. Ranges arrive in ascending
   order because they are marked as they are appended; one that touches the
   previous is merged into it, so a run of literals is one range and the RW

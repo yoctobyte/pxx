@@ -25579,13 +25579,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ro_data_literal_store-faults "$$( ( $(TESTTMP)/test_ro_store_ro 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
 	./$(COMPILER) --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/test_ro_store_rw >/dev/null
 	tools/expect_same.sh test_ro_data_literal_store-control "$$( ( $(TESTTMP)/test_ro_store_rw 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
-	# --ro-rtti (experimental): a store into a VMT or an RTTI header must fault
-	# with the flag and land without it. Ordinary class use must still run.
-	./$(COMPILER) --ro-rtti test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_ro >/dev/null
+	# Class RTTI headers and VMTs are read-only by default: a store into either
+	# must fault, and land under --no-ro-rtti. Ordinary class use must still run.
+	./$(COMPILER) test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_ro >/dev/null
 	tools/expect_same.sh test_ro_rtti_write-plain "$$( ( $(TESTTMP)/test_ro_rtti_ro plain 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\ndone\nrc=0')"
 	tools/expect_same.sh test_ro_rtti_write-vmt-faults "$$( ( $(TESTTMP)/test_ro_rtti_ro vmt 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-vmt-write\nrc=139')"
 	tools/expect_same.sh test_ro_rtti_write-blob-faults "$$( ( $(TESTTMP)/test_ro_rtti_ro blob 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-blob-write\nrc=139')"
-	./$(COMPILER) test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_rw >/dev/null
+	./$(COMPILER) --no-ro-rtti test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_rw >/dev/null
 	tools/expect_same.sh test_ro_rtti_write-control "$$( ( $(TESTTMP)/test_ro_rtti_rw vmt 2>&1; $(TESTTMP)/test_ro_rtti_rw blob 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-vmt-write\nafter-vmt-write\ndone\nder TDer TRUE TRUE\nbefore-blob-write\nafter-blob-write\ndone\nrc=0')"
 	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
 	@# verified identical to FPC 3.2.2. The status is the contract here, not the
@@ -33766,6 +33766,17 @@ test-emit-obj: $(COMPILER)
 	  readelf -SW $(TESTTMP)/esprod_$$t.o | grep -qE '\] \.rodata +PROGBITS +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +[0-9a-f]+ +A ' || { echo "test-emit-obj: the $$t object has no .rodata section with flags A (allocated, not writable)"; readelf -SW $(TESTTMP)/esprod_$$t.o; exit 1; }; \
 	  readelf -rW $(TESTTMP)/esprod_$$t.o | grep -qE 'R_(RISCV|XTENSA)_32 +[0-9a-f]+ +\.rodata \+' || { echo "test-emit-obj: no relocation in the $$t object names .rodata -- the literals moved and nothing points at them"; exit 1; }; \
 	 done; echo "test-emit-obj: an ESP object carries its string literals in a read-only .rodata (riscv32, xtensa)"
+	# ...but NOT its VMTs or class RTTI, which hosted executables make read-only
+	# by default: on ESP-IDF .rodata is flash, and an ISR reads a VMT through an
+	# instance with the flash cache off. So the section table must be identical
+	# with and without --no-ro-rtti. If the gate were lost, .rodata would grow by
+	# the VMT and RTTI bytes (0x400 for this fixture on x86-64) and differ.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_class_vmt.pas $(TESTTMP)/espvmt_$$t.o >/dev/null && \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp --no-ro-rtti test/esp_obj_class_vmt.pas $(TESTTMP)/espvmt_rw_$$t.o >/dev/null || { echo "test-emit-obj: the $$t class-VMT fixture FAILED to build"; exit 1; }; \
+	  a=$$(readelf -SW $(TESTTMP)/espvmt_$$t.o | grep -E '\] \.(ro)?data '); b=$$(readelf -SW $(TESTTMP)/espvmt_rw_$$t.o | grep -E '\] \.(ro)?data '); \
+	  [ -n "$$a" ] && [ "$$a" = "$$b" ] || { echo "test-emit-obj: the $$t object's .data/.rodata differ with --no-ro-rtti -- VMTs or class RTTI went to flash"; echo "$$a"; echo "$$b"; exit 1; }; \
+	 done; echo "test-emit-obj: an ESP object keeps its VMTs and class RTTI in writable .data (riscv32, xtensa)"
 	@RV=$$(ls $$HOME/.espressif/tools/riscv32-esp-elf/*/riscv32-esp-elf/bin/riscv32-esp-elf-gcc 2>/dev/null | head -1); \
 	XT=$$(ls $$HOME/.espressif/tools/xtensa-esp-elf/*/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc 2>/dev/null | head -1); \
 	for t in riscv32 xtensa; do \

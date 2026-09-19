@@ -1109,6 +1109,7 @@ begin
   PasUnitDirCount := 0;
   PasIncDirCount := 0;
   PasInitDefines;
+  RoRtti := True;   { see the --no-ro-rtti arm }
   i := 1;
   readingOptions := True;
   while (i <= ParamCount) and readingOptions do
@@ -1517,15 +1518,16 @@ begin
       MaxStackFrameSize := PasOptionInt(option, 19);
       Inc(i);
     end
-    else if option = '--ro-rtti' then
+    else if (option = '--ro-rtti') or (option = '--no-ro-rtti') then
     begin
-      { EXPERIMENTAL, off by default: also put every class RTTI header and every
-        VMT (with its two backlink words) in the read-only segment. The claim
-        that nothing writes them at run time is what this flag MEASURES -- a
-        write faults instead of landing. Not the RTTI registry table: that one
-        is filled by AddDataPtrFix at emission and stays where it is.
+      { Every class RTTI header and every VMT (with its two backlink words) goes
+        in the read-only segment by DEFAULT: measured never written at run time
+        on 2026-09-19 -- test-core, lib-test, the pcl GUI suite and the i386 /
+        aarch64 / arm32 tiers, each with the flag forced on, and a write into
+        either faulting (test_ro_rtti_write). --no-ro-rtti puts them back in the
+        RW segment; --ro-rtti is the default spelled out. See RoRttiWanted.
         feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
-      RoRtti := True;
+      RoRtti := option = '--ro-rtti';
       Inc(i);
     end
     else if option = '--no-ro-data' then

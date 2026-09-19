@@ -9428,7 +9428,7 @@ begin
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
-        if RoRtti then RoRangeAdd(vmtStart, DataLen);
+        if RoRttiWanted then RoRangeAdd(vmtStart, DataLen);
         { Fill every VMT slot from the effective method (own override or an
           inherited one). The per-override fixup loop only covers subclasses
           that already exist when the override is parsed, so a subclass

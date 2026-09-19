@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test and the pcl GUI suite under it: clean too (GUI suite identical flag on/off, 20 OK). The i386/aarch64/arm32 tiers under it are clean too (237+203+198, all pass). REMAINING: --ro-rtti default-on for HOSTED executables only (not ESP objects -- see 2026-09-19 GUI section); dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT LANDED 2026-09-19: class RTTI headers and Pascal VMTs are read-only BY DEFAULT in hosted executables (--no-ro-rtti turns it off), after a never-written measurement across test-core, lib-test, the pcl GUI suite and the i386/aarch64/arm32 tiers. ESP objects keep them in .data, because an ISR reads a VMT through an instance with the flash cache off. REMAINING: NilPy VMTs, prop/method arrays, IMTs, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -429,4 +429,31 @@ probing the binary. The count is 2/2 (flag on and off), not a flake.
   creates a toplevel.
 - That is the shape of the earlier `bug-gui-pcl-apps-broken-current-stable`.
 - Relayed to the coordinator for Track B.
+
+## 2026-09-19 (frankH) — RTTI/VMT read-only by default in hosted executables
+
+`RoRtti` now defaults on, and `--no-ro-rtti` turns it off (`--no-ro-data` still
+turns off the whole split). One predicate decides it at all three marking
+sites, `RoRttiWanted = RoRtti and not EmitObjMode`, so every `--emit-obj`
+output is excluded. That costs nothing hosted, because the x86-64 and i386
+object writers do not split, and it keeps ESP-IDF objects safe: there .rodata
+is flash, and an ISR reads a VMT through an instance, with no fixup for
+ObjRoKeepIramLiteralsWritable to see.
+
+Rows:
+- `test_ro_rtti_write` now tests the DEFAULT: its stores fault, and they land
+  under `--no-ro-rtti`.
+- New in test-emit-obj, fixture `test/esp_obj_class_vmt.pas`: an ESP object's
+  .data/.rodata must be identical with and without `--no-ro-rtti`, on riscv32
+  and xtensa.
+- The ESP row CAN fail. With the EmitObjMode half of the gate removed, it
+  reported riscv32 .rodata 0x560 -> 0x8f0 and .data 0xac0 -> 0x750. Gate
+  restored before landing.
+
+For the same program on x86-64, the R segment grows by 0x400 (0x8d8 ->
+0xcd8), and RW shrinks by the same amount.
+
+Not marked, each still behind its own never-written measurement: NilPy VMTs
+(pyparser.inc), published prop/method arrays, IMTs, enum and layout RTTI, the
+RTTI registry table.
 

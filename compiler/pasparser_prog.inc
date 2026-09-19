@@ -559,7 +559,7 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
-  if RoRtti then RoRangeAdd(vmtStart, DataLen);
+  if RoRttiWanted then RoRangeAdd(vmtStart, DataLen);
 end;
 
 { Give TObject's row its four root METHODS, so a receiver statically typed

@@ -4225,7 +4225,7 @@ var
     count and nothing else happens -- so RequireOutputArtefact reads this. }
   OutWriteShort : Boolean;
   NoRoData     : Boolean;  { --no-ro-data: keep every byte in the RW segment (the A/B control) }
-  RoRtti       : Boolean;  { --ro-rtti (EXPERIMENTAL): also mark class RTTI headers and VMTs read-only }
+  RoRtti       : Boolean;  { class RTTI headers and VMTs read-only too (default on; --no-ro-rtti) -- see RoRttiWanted }
   { The writer's layout, valid only while RoSplitActive: Data[] is cut into
     alternating pieces at RoPieceOld[k], each placed at RoPieceNew[k] -- an
     offset from dataBase, so RW pieces carry the page shift that keeps the
