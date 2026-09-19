@@ -82,4 +82,4 @@ no stderr, under both compilers. solitaire_gui and life map the same windows
 as before. gtk3gl.pas `uses gl_c` but calls nothing from it (its GL-area calls are gtk3_c's), so it compiles unchanged.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ce4da839d.
