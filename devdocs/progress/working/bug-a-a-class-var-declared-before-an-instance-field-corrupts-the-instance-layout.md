@@ -5,11 +5,11 @@ track: A
 prio: 80
 type: bug
 blocked-by: []
-status: new
+status: working
 created: 2026-09-14
 found: 2026-09-14
 found-by: frankb-56, while building lib/rtl/pil.pas
-owner: ""
+owner: frankD
 summary: "SILENT MEMORY CORRUPTION WITH A ONE-LINE TRIGGER. A `class var` declared BEFORE an instance field in the same class is counted into the INSTANCE layout, so every instance field after it lands at the wrong offset and two live instances OVERLAP -- constructing a second object reinitialises the FIRST one's fields through the alias. No diagnostic, and the first crash is somewhere else entirely. MEASURED AND REDUCED TO FOUR ROWS 2026-09-14, with a 20-line unit and no library involved: `class var` FIRST is wrong, `class var` LAST (after the instance fields) is right, and NO class var is right -- so the trigger is the DECLARATION ORDER and not the class var itself. The type does not matter (Integer reproduces it, so pylib is not involved) and one class var is enough. THE SHAPE THAT FOUND IT: a class holding a record with a dynamic array, whose instance method constructs a second instance -- `im.resize(...)` in lib/rtl/pil.pas printed Self.bmp=64x64 before `TPILImage.Create(0, 0, ...)` and Self.bmp=0x0 AFTER it, with Result.bmp also 0x0, then segfaulted reading the source it had just emptied. Two Image objects 216 bytes apart shared a field. WHY THIS IS RANKED AT 80 RATHER THAN AS A CURIOSITY: it needs no unusual code, it produces a wrong ANSWER rather than a refusal, and the corruption happens at a distance -- the damaged object is the one you are NOT looking at. Three reductions that do NOT reproduce it are recorded below, because they are what a fixer will try first: a dynamic array of Integers, a dynamic array of records, and a string field beside the record all behave correctly on their own."
 ---
 
