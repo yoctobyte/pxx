@@ -321,11 +321,26 @@ const
 var
   ElfLnkObjPath  : array of AnsiString;
   ElfLnkObjCount : Integer;
-  { indexed [obj * ELFLNK_NKIND + kind]; shndx 0 means "this object has none" }
-  ElfLnkInShndx  : array of Integer;
-  ElfLnkInSize   : array of Int64;
-  ElfLnkInAlign  : array of Int64;
-  ElfLnkInAddr   : array of Int64;
+  { ONE SLOT PER SECTION HEADER of every object: object o's section i is slot
+    ElfLnkObjSec0[o] + i. A slot rather than one input per KIND because a
+    --function-sections object carries a .text section per function, and
+    garbage collection keeps or drops them one at a time. }
+  ElfLnkObjSec0  : array of Integer;
+  ElfLnkObjNsec  : array of Integer;
+  ElfLnkSecKindOf: array of Integer;   { output kind, or ELFLNK_NKIND: carries no bytes }
+  ElfLnkSecSize  : array of Int64;
+  ElfLnkSecAlign : array of Int64;
+  ElfLnkSecAddr  : array of Int64;
+  ElfLnkSecLive  : array of Boolean;   { laid out and written; see ElfLnkGcMark }
+  ElfLnkSecCount : Integer;
+  { THE REFERENCE GRAPH, one edge per relocation: FROM the slot it patches TO a
+    slot (>= 0, a local or section symbol) or to a global NAME, -(g+1) --
+    resolved only at marking time, because which object's copy a global means
+    is decided by the whole link, not by the object that names it. }
+  ElfLnkEdgeFrom : array of Integer;
+  ElfLnkEdgeTo   : array of Integer;
+  ElfLnkEdgeCount: Integer;
+  ElfLnkGcOn     : Boolean;
   { the output sections, indexed by kind }
   ElfLnkOutAddr  : array[0..4] of Int64;
   ElfLnkOutSize  : array[0..4] of Int64;
@@ -333,7 +348,7 @@ var
     weak (a later STRONG definition displaces a weak one; a later weak one does
     not -- the first weak definition in link order stands, as in ld). }
   ElfLnkDefObj   : array of Integer;
-  ElfLnkDefKind  : array of Integer;
+  ElfLnkDefSec   : array of Integer;  { slot of the chosen definition, -1 for SHN_ABS }
   ElfLnkDefVal   : array of Int64;
   ElfLnkDefIsWeak: array of Boolean;
   ElfLnkDefInfo  : array of Integer;  { st_info of the chosen definition, for the output .symtab }
@@ -379,7 +394,7 @@ begin
   SetLength(ElfLnkFirst, 0);
   SetLength(ElfLnkNext, 0);
   SetLength(ElfLnkDefObj, 0);
-  SetLength(ElfLnkDefKind, 0);
+  SetLength(ElfLnkDefSec, 0);
   SetLength(ElfLnkDefVal, 0);
   SetLength(ElfLnkDefIsWeak, 0);
   SetLength(ElfLnkDefInfo, 0);
@@ -389,10 +404,11 @@ begin
   ElfLnkStubAddr := 0;
   ElfLnkObjCount := 0;
   SetLength(ElfLnkObjPath, 0);
-  SetLength(ElfLnkInShndx, 0);
-  SetLength(ElfLnkInSize, 0);
-  SetLength(ElfLnkInAlign, 0);
-  SetLength(ElfLnkInAddr, 0);
+  SetLength(ElfLnkObjSec0, 0);
+  SetLength(ElfLnkObjNsec, 0);
+  ElfLnkSecCount := 0;
+  ElfLnkEdgeCount := 0;
+  ElfLnkGcOn := False;
   for i := 0 to ELFLNK_NKIND - 1 do
   begin
     ElfLnkOutAddr[i] := 0;
@@ -421,7 +437,7 @@ begin
   SetLength(ElfLnkFirst, n + 1);
   SetLength(ElfLnkNext, n + 1);
   SetLength(ElfLnkDefObj, n + 1);
-  SetLength(ElfLnkDefKind, n + 1);
+  SetLength(ElfLnkDefSec, n + 1);
   SetLength(ElfLnkDefVal, n + 1);
   SetLength(ElfLnkDefIsWeak, n + 1);
   SetLength(ElfLnkDefInfo, n + 1);
@@ -429,7 +445,7 @@ begin
   ElfLnkDefInfo[n] := 0;
   ElfLnkDefSize[n] := 0;
   ElfLnkDefObj[n] := -1;
-  ElfLnkDefKind[n] := 0;
+  ElfLnkDefSec[n] := -1;
   ElfLnkDefVal[n] := 0;
   ElfLnkDefIsWeak[n] := False;
   ElfLnkName[n] := nm;
@@ -463,7 +479,10 @@ begin
   fl := ElfRdShFlags(i);
   if (fl and 2) = 0 then begin ElfLnkSecKind := ELFLNK_NKIND; Exit; end;   { not SHF_ALLOC }
   k := -1; wantTy := 0; wantFl := 0;
-  if nm = '.text'       then begin k := ELFLNK_K_TEXT; wantTy := 1;  wantFl := 6; end
+  { `.text.<name>` is a --function-sections function: code, laid out like
+    `.text` in object order. }
+  if (nm = '.text') or (Copy(nm, 1, 6) = '.text.') then
+    begin k := ELFLNK_K_TEXT; wantTy := 1;  wantFl := 6; end
   else if nm = '.data'  then begin k := ELFLNK_K_DATA; wantTy := 1;  wantFl := 3; end
   else if nm = '.bss'   then begin k := ELFLNK_K_BSS;  wantTy := ELFRD_SHT_NOBITS; wantFl := 3; end
   else if nm = '.init_array' then begin k := ELFLNK_K_INIT; wantTy := 14; wantFl := 3; end
@@ -471,7 +490,7 @@ begin
   if k < 0 then
   begin
     ElfRdErr := 'allocated section ''' + nm + ''' is not one pxx emits -- this '
-              + 'links pxx''s own objects (.text .data .bss .init_array .fini_array), '
+              + 'links pxx''s own objects (.text .text.* .data .bss .init_array .fini_array), '
               + 'not a third-party toolchain''s';
     Exit;
   end;
@@ -486,11 +505,46 @@ begin
   ElfLnkSecKind := k;
 end;
 
+procedure ElfLnkGrowSecs(n: Integer);
+var cap: Integer;
+begin
+  cap := Length(ElfLnkSecKindOf);
+  if n <= cap then Exit;
+  if cap < 1024 then cap := 1024;
+  while cap < n do cap := cap * 2;
+  SetLength(ElfLnkSecKindOf, cap);
+  SetLength(ElfLnkSecSize, cap);
+  SetLength(ElfLnkSecAlign, cap);
+  SetLength(ElfLnkSecAddr, cap);
+  SetLength(ElfLnkSecLive, cap);
+end;
+
+{ One edge; a repeat of the previous one is dropped, which is most of them --
+  a function calls the same few neighbours, and consecutive relocations in one
+  section very often name one target. }
+procedure ElfLnkAddEdge(fromS, toS: Integer);
+var cap: Integer;
+begin
+  if (ElfLnkEdgeCount > 0) and (ElfLnkEdgeFrom[ElfLnkEdgeCount - 1] = fromS)
+     and (ElfLnkEdgeTo[ElfLnkEdgeCount - 1] = toS) then Exit;
+  cap := Length(ElfLnkEdgeFrom);
+  if ElfLnkEdgeCount >= cap then
+  begin
+    if cap < 4096 then cap := 4096 else cap := cap * 2;
+    SetLength(ElfLnkEdgeFrom, cap);
+    SetLength(ElfLnkEdgeTo, cap);
+  end;
+  ElfLnkEdgeFrom[ElfLnkEdgeCount] := fromS;
+  ElfLnkEdgeTo[ElfLnkEdgeCount] := toS;
+  Inc(ElfLnkEdgeCount);
+end;
+
 function ElfLnkAddObject(const path: AnsiString): Boolean;
-var i, j, nsec, symEnts, bind, k, obj, kind, slot: Integer;
-    stOff, stSize, stEnt, strTab, e, shndx, nameIdx, al: Int64;
+var i, j, n, nsec, symEnts, bind, k, obj, kind, base, tgt, slot: Integer;
+    stOff, stSize, stEnt, strTab, e, shndx, nameIdx, al, rOff, rEnt, sidx, symSec: Int64;
     nm: AnsiString;
-    secKind: array of Integer;
+    seen: array of Boolean;
+    symG: array of Integer;   { per symbol index: its global, -1 for a local }
 begin
   ElfLnkAddObject := False;
   LoadFile(path, ElfRdBuf);
@@ -498,46 +552,50 @@ begin
   if not ElfRdCheckHeader then Exit;
   nsec := ElfRdShNum;
 
-  { register the object and its input sections }
+  { register the object and a slot for every section header }
   obj := ElfLnkObjCount;
   ElfLnkObjCount := obj + 1;
   SetLength(ElfLnkObjPath, obj + 1);
+  SetLength(ElfLnkObjSec0, obj + 1);
+  SetLength(ElfLnkObjNsec, obj + 1);
   ElfLnkObjPath[obj] := path;
-  SetLength(ElfLnkInShndx, (obj + 1) * ELFLNK_NKIND);
-  SetLength(ElfLnkInSize,  (obj + 1) * ELFLNK_NKIND);
-  SetLength(ElfLnkInAlign, (obj + 1) * ELFLNK_NKIND);
-  SetLength(ElfLnkInAddr,  (obj + 1) * ELFLNK_NKIND);
-  for k := 0 to ELFLNK_NKIND - 1 do
-  begin
-    slot := obj * ELFLNK_NKIND + k;
-    ElfLnkInShndx[slot] := 0;
-    ElfLnkInSize[slot] := 0;
-    ElfLnkInAlign[slot] := 1;
-    ElfLnkInAddr[slot] := 0;
-  end;
-  SetLength(secKind, nsec);
+  base := ElfLnkSecCount;
+  ElfLnkGrowSecs(base + nsec);
+  ElfLnkSecCount := base + nsec;
+  ElfLnkObjSec0[obj] := base;
+  ElfLnkObjNsec[obj] := nsec;
+  SetLength(seen, ELFLNK_NKIND);
+  for k := 0 to ELFLNK_NKIND - 1 do seen[k] := False;
   for i := 0 to nsec - 1 do
   begin
-    secKind[i] := ELFLNK_NKIND;
+    slot := base + i;
+    ElfLnkSecKindOf[slot] := ELFLNK_NKIND;
+    ElfLnkSecSize[slot] := 0;
+    ElfLnkSecAlign[slot] := 1;
+    ElfLnkSecAddr[slot] := 0;
+    ElfLnkSecLive[slot] := False;
     if i = 0 then Continue;
     kind := ElfLnkSecKind(i);
     if kind < 0 then Exit;
-    secKind[i] := kind;
+    ElfLnkSecKindOf[slot] := kind;
     if kind = ELFLNK_NKIND then Continue;
-    slot := obj * ELFLNK_NKIND + kind;
-    { ONE PER NAME PER OBJECT is what the emitter writes. Two would need a rule
-      for their relative order that nothing here has had to decide. }
-    if ElfLnkInShndx[slot] <> 0 then
+    { ONE PER NAME PER OBJECT is what the emitter writes for everything but
+      code. Two .init_array sections would need a rule for their relative
+      order -- constructor order -- that nothing here has had to decide. Code
+      may come in any number: --function-sections writes one per function,
+      and their order is simply header order. }
+    if (kind <> ELFLNK_K_TEXT) and seen[kind] then
     begin
       ElfRdErr := 'two ' + ElfLnkKindName(kind) + ' sections in one object; pxx writes one';
       Exit;
     end;
+    seen[kind] := True;
     al := ElfRdShAddrAlign(i);
     if al < 1 then al := 1;
-    ElfLnkInShndx[slot] := i;
-    ElfLnkInSize[slot] := ElfRdShSize(i);
-    ElfLnkInAlign[slot] := al;
+    ElfLnkSecSize[slot] := ElfRdShSize(i);
+    ElfLnkSecAlign[slot] := al;
   end;
+  SetLength(symG, 0);
   for i := 0 to nsec - 1 do
     if ElfRdShType(i) = ELFRD_SHT_SYMTAB then
     begin
@@ -547,6 +605,8 @@ begin
       strTab := ElfRdShOffset(ElfRdShLink(i));
       if stEnt <= 0 then stEnt := 24;
       symEnts := Integer(stSize div stEnt);
+      SetLength(symG, symEnts);
+      for j := 0 to symEnts - 1 do symG[j] := -1;
       for j := 1 to symEnts - 1 do
       begin
         e := stOff + Int64(j) * stEnt;
@@ -558,6 +618,7 @@ begin
         if nm = '' then Continue;
         shndx := ElfRdU16(e + 6);
         k := ElfLnkIntern(nm);
+        symG[j] := k;
         if shndx = 0 then
         begin
           ElfLnkRefs[k] := ElfLnkRefs[k] + 1;
@@ -575,7 +636,7 @@ begin
           SHN_COMMON is what -fcommon would emit and our writer does not (a
           tentative definition is a real .bss OBJECT here), so it is refused
           by name rather than laid out by a rule nobody decided. }
-        if shndx = $FFF1 then kind := ELFLNK_K_ABS
+        if shndx = $FFF1 then slot := -1
         else if (shndx >= $FF00) or (shndx >= nsec) then
         begin
           ElfRdErr := 'symbol ''' + nm + ''' is defined against special section index '
@@ -584,8 +645,8 @@ begin
         end
         else
         begin
-          kind := secKind[Integer(shndx)];
-          if kind = ELFLNK_NKIND then
+          slot := base + Integer(shndx);
+          if ElfLnkSecKindOf[slot] = ELFLNK_NKIND then
           begin
             ElfRdErr := 'symbol ''' + nm + ''' is defined in section '''
                       + ElfRdSecName(Integer(shndx)) + ''', which is not allocated';
@@ -600,11 +661,42 @@ begin
            or (ElfLnkDefIsWeak[k] and (bind <> ELFLNK_STB_WEAK)) then
         begin
           ElfLnkDefObj[k] := obj;
-          ElfLnkDefKind[k] := kind;
+          ElfLnkDefSec[k] := slot;
           ElfLnkDefVal[k] := ElfRdU64(e + 8);
           ElfLnkDefIsWeak[k] := bind = ELFLNK_STB_WEAK;
           ElfLnkDefInfo[k] := ElfRdU8(e + 4);
           ElfLnkDefSize[k] := ElfRdU64(e + 16);
+        end;
+      end;
+    end;
+  { THE REFERENCE GRAPH, taken now because the object is in memory now: the
+    link does not hold 500 objects at once. A relocation in an allocated
+    section is an edge from that section to what its symbol names. }
+  for i := 1 to nsec - 1 do
+    if ElfRdShType(i) = ELFRD_SHT_RELA then
+    begin
+      tgt := Integer(ElfRdU32(ElfRdShdr(i) + 44));
+      if (tgt <= 0) or (tgt >= nsec) then Continue;
+      if ElfLnkSecKindOf[base + tgt] = ELFLNK_NKIND then Continue;
+      symSec := ElfRdShLink(i);
+      stOff := ElfRdShOffset(Integer(symSec));
+      rOff := ElfRdShOffset(i);
+      rEnt := ElfRdShEntSize(i);
+      if rEnt <= 0 then rEnt := 24;
+      n := Integer(ElfRdShSize(i) div rEnt);
+      for j := 0 to n - 1 do
+      begin
+        sidx := (ElfRdU64(rOff + Int64(j) * rEnt + 8) shr 32) and $FFFFFFFF;
+        if sidx = 0 then Continue;
+        if (sidx < Length(symG)) and (symG[Integer(sidx)] >= 0) then
+          ElfLnkAddEdge(base + tgt, -(symG[Integer(sidx)] + 1))
+        else
+        begin
+          e := stOff + sidx * 24;
+          shndx := ElfRdU16(e + 6);
+          if (shndx > 0) and (shndx < nsec) then
+            if ElfLnkSecKindOf[base + Integer(shndx)] <> ELFLNK_NKIND then
+              ElfLnkAddEdge(base + tgt, base + Integer(shndx));
         end;
       end;
     end;
@@ -615,6 +707,92 @@ function ElfLnkAlignUp(v, a: Int64): Int64;
 begin
   if a <= 1 then ElfLnkAlignUp := v
   else ElfLnkAlignUp := ((v + a - 1) div a) * a;
+end;
+
+{ ---- section garbage collection ------------------------------------------
+  THE SAME RULE AS ld --gc-sections, and ld is the oracle for it
+  (PXXDBG=a.objgc, compared against --print-gc-sections): a section is kept
+  when the ENTRY reaches it through relocations, or when it is an .init_array
+  or .fini_array, which the process-entry contract walks without anything
+  naming their contents. A reference to a GLOBAL marks the section of the
+  definition the link CHOSE -- so the losing weak copies of crtl in every
+  other object are never reached, and that is the whole point.
+
+  WHY IT IS CORRECT UNDER EITHER ANSWER TO WHAT AN OBJECT IS
+  (decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit):
+  nothing here changes an object. It prunes an EXECUTABLE, which nothing links
+  against, from what that executable's own entry can reach. Exported symbols
+  are not roots, because in a static executable there is nobody left to
+  import them.
+
+  With GC off every allocated section is live, which is what the stage 3/4
+  oracles (ld without --gc-sections) compare against. }
+procedure ElfLnkGcMark(entryG: Integer);
+var i, s, t, sp, g: Integer;
+    first, adj, fill, stack: array of Integer;
+begin
+  for s := 0 to ElfLnkSecCount - 1 do
+    ElfLnkSecLive[s] := (not ElfLnkGcOn) and (ElfLnkSecKindOf[s] <> ELFLNK_NKIND);
+  if not ElfLnkGcOn then Exit;
+  { adjacency by source slot, counting sort }
+  SetLength(first, ElfLnkSecCount + 1);
+  for s := 0 to ElfLnkSecCount do first[s] := 0;
+  for i := 0 to ElfLnkEdgeCount - 1 do Inc(first[ElfLnkEdgeFrom[i] + 1]);
+  for s := 1 to ElfLnkSecCount do first[s] := first[s] + first[s - 1];
+  SetLength(adj, ElfLnkEdgeCount);
+  SetLength(fill, ElfLnkSecCount);
+  for s := 0 to ElfLnkSecCount - 1 do fill[s] := first[s];
+  for i := 0 to ElfLnkEdgeCount - 1 do
+  begin
+    adj[fill[ElfLnkEdgeFrom[i]]] := ElfLnkEdgeTo[i];
+    Inc(fill[ElfLnkEdgeFrom[i]]);
+  end;
+  SetLength(stack, ElfLnkSecCount);
+  sp := 0;
+  for s := 0 to ElfLnkSecCount - 1 do
+    if (ElfLnkSecKindOf[s] = ELFLNK_K_INIT) or (ElfLnkSecKindOf[s] = ELFLNK_K_FINI) then
+    begin
+      ElfLnkSecLive[s] := True;
+      stack[sp] := s; Inc(sp);
+    end;
+  if (entryG >= 0) and (ElfLnkDefObj[entryG] >= 0) and (ElfLnkDefSec[entryG] >= 0) then
+  begin
+    s := ElfLnkDefSec[entryG];
+    if not ElfLnkSecLive[s] then
+    begin
+      ElfLnkSecLive[s] := True;
+      stack[sp] := s; Inc(sp);
+    end;
+  end;
+  while sp > 0 do
+  begin
+    Dec(sp);
+    s := stack[sp];
+    for i := first[s] to first[s + 1] - 1 do
+    begin
+      t := adj[i];
+      if t < 0 then
+      begin
+        g := -t - 1;
+        if (ElfLnkDefObj[g] < 0) or (ElfLnkDefSec[g] < 0) then Continue;
+        t := ElfLnkDefSec[g];
+      end;
+      if not ElfLnkSecLive[t] then
+      begin
+        ElfLnkSecLive[t] := True;
+        stack[sp] := t; Inc(sp);
+      end;
+    end;
+  end;
+end;
+
+{ Is global k's chosen definition in the image? False for an undefined one and
+  for one whose section the GC dropped. }
+function ElfLnkDefKept(k: Integer): Boolean;
+begin
+  if ElfLnkDefObj[k] < 0 then ElfLnkDefKept := False
+  else if ElfLnkDefSec[k] < 0 then ElfLnkDefKept := True
+  else ElfLnkDefKept := ElfLnkSecLive[ElfLnkDefSec[k]];
 end;
 
 { ---- stage 3: section layout -----------------------------------------------
@@ -637,7 +815,7 @@ end;
   An output section with no inputs has size 0 and an address that nothing
   refers to; the writer omits it. }
 procedure ElfLnkLayout;
-var k, o, slot: Integer;
+var k, o, i, s0: Integer;
     addr, start, maxAl, rwFile: Int64;
 begin
   addr := ELFLNK_BASE + ELFLNK_PAGE;
@@ -651,21 +829,24 @@ begin
       addr := ELFLNK_BASE + rwFile;
     end;
     maxAl := 1;
-    for o := 0 to ElfLnkObjCount - 1 do
-    begin
-      slot := o * ELFLNK_NKIND + k;
-      if (ElfLnkInShndx[slot] <> 0) and (ElfLnkInAlign[slot] > maxAl) then
-        maxAl := ElfLnkInAlign[slot];
-    end;
+    for i := 0 to ElfLnkSecCount - 1 do
+      if ElfLnkSecLive[i] and (ElfLnkSecKindOf[i] = k) and (ElfLnkSecAlign[i] > maxAl) then
+        maxAl := ElfLnkSecAlign[i];
     start := ElfLnkAlignUp(addr, maxAl);
     addr := start;
+    { object order, then header order within an object -- which for a split
+      object is code order, so a link that keeps every section reproduces the
+      unsplit object's layout }
     for o := 0 to ElfLnkObjCount - 1 do
     begin
-      slot := o * ELFLNK_NKIND + k;
-      if ElfLnkInShndx[slot] = 0 then Continue;
-      addr := ElfLnkAlignUp(addr, ElfLnkInAlign[slot]);
-      ElfLnkInAddr[slot] := addr;
-      addr := addr + ElfLnkInSize[slot];
+      s0 := ElfLnkObjSec0[o];
+      for i := s0 to s0 + ElfLnkObjNsec[o] - 1 do
+      begin
+        if (not ElfLnkSecLive[i]) or (ElfLnkSecKindOf[i] <> k) then Continue;
+        addr := ElfLnkAlignUp(addr, ElfLnkSecAlign[i]);
+        ElfLnkSecAddr[i] := addr;
+        addr := addr + ElfLnkSecSize[i];
+      end;
     end;
     { the synthesised _start goes AFTER every input's .text, so each input
       keeps the address it has without it -- which keeps the stage 3/4 oracle
@@ -685,11 +866,10 @@ end;
   ElfLnkDefObj[k] >= 0. }
 function ElfLnkGlobalAddr(k: Integer): Int64;
 begin
-  if ElfLnkDefKind[k] = ELFLNK_K_ABS then
+  if ElfLnkDefSec[k] < 0 then
     ElfLnkGlobalAddr := ElfLnkDefVal[k]
   else
-    ElfLnkGlobalAddr := ElfLnkInAddr[ElfLnkDefObj[k] * ELFLNK_NKIND + ElfLnkDefKind[k]]
-                        + ElfLnkDefVal[k];
+    ElfLnkGlobalAddr := ElfLnkSecAddr[ElfLnkDefSec[k]] + ElfLnkDefVal[k];
 end;
 
 { PXXDBG=a.objmerge:<listfile> -- one object path per line.
@@ -784,28 +964,31 @@ end;
   because a wrong choice between two weak copies lands the name in a different
   object. An address is printed only for a global that HAS a definition --
   an unresolved one has none to compare, and the merge dump names those. }
-procedure ElfLnkLayoutDump(const listPath: AnsiString);
+procedure ElfLnkPrintLayout;
 var k, o, slot: Integer;
 begin
-  if not ElfLnkLoadList(listPath, 'elflay') then Exit;
-  ElfLnkLayout;
   WriteLn('elflay: objects ', AIntToStr(ElfLnkObjCount));
   for k := 0 to ELFLNK_NKIND - 1 do
     WriteLn('elflay: out ', ElfLnkKindName(k), ' 0x', IntToHexStr(ElfLnkOutAddr[k], 16),
             ' size ', AIntToStr(ElfLnkOutSize[k]));
   for o := 0 to ElfLnkObjCount - 1 do
-    for k := 0 to ELFLNK_NKIND - 1 do
-    begin
-      slot := o * ELFLNK_NKIND + k;
-      if ElfLnkInShndx[slot] <> 0 then
-        WriteLn('elflay: in ', AIntToStr(o), ' ', ElfLnkKindName(k),
-                ' 0x', IntToHexStr(ElfLnkInAddr[slot], 16),
-                ' size ', AIntToStr(ElfLnkInSize[slot]),
-                ' align ', AIntToStr(ElfLnkInAlign[slot]));
-    end;
+    for slot := ElfLnkObjSec0[o] to ElfLnkObjSec0[o] + ElfLnkObjNsec[o] - 1 do
+      if ElfLnkSecLive[slot] then
+        WriteLn('elflay: in ', AIntToStr(o), ' ', ElfLnkKindName(ElfLnkSecKindOf[slot]),
+                ' 0x', IntToHexStr(ElfLnkSecAddr[slot], 16),
+                ' size ', AIntToStr(ElfLnkSecSize[slot]),
+                ' align ', AIntToStr(ElfLnkSecAlign[slot]));
   for k := 0 to ElfLnkCount - 1 do
-    if ElfLnkDefObj[k] >= 0 then
+    if ElfLnkDefKept(k) then
       WriteLn('elflay: sym ', IntToHexStr(ElfLnkGlobalAddr(k), 16), ' ', ElfLnkName[k]);
+end;
+
+procedure ElfLnkLayoutDump(const listPath: AnsiString);
+begin
+  if not ElfLnkLoadList(listPath, 'elflay') then Exit;
+  ElfLnkGcMark(-1);
+  ElfLnkLayout;
+  ElfLnkPrintLayout;
   WriteLn('elflay: ELFLAY-OK');
 end;
 
@@ -958,9 +1141,8 @@ end;
 
 { S for symbol `si` of object `obj` (loaded in ElfRdBuf). ok = False with
   ElfRdErr set when it cannot be resolved. }
-function ElfLnkSymS(obj: Integer; const secKind: array of Integer; nsec: Integer;
-                    stOff, strTab, si: Int64; var ok: Boolean): Int64;
-var e, shndx: Int64; bind, g: Integer; nm: AnsiString;
+function ElfLnkSymS(obj, nsec: Integer; stOff, strTab, si: Int64; var ok: Boolean): Int64;
+var e, shndx: Int64; bind, g, slot: Integer; nm: AnsiString;
 begin
   ok := True;
   ElfLnkSymS := 0;
@@ -976,20 +1158,37 @@ begin
       ElfRdErr := 'local symbol ' + AIntToStr(si) + ' has no section';
       Exit;
     end;
-    if secKind[Integer(shndx)] = ELFLNK_NKIND then
+    slot := ElfLnkObjSec0[obj] + Integer(shndx);
+    if ElfLnkSecKindOf[slot] = ELFLNK_NKIND then
     begin
       ok := False;
       ElfRdErr := 'local symbol ' + AIntToStr(si) + ' is in unallocated section '''
                 + ElfRdSecName(Integer(shndx)) + '''';
       Exit;
     end;
-    ElfLnkSymS := ElfLnkInAddr[obj * ELFLNK_NKIND + secKind[Integer(shndx)]] + ElfRdU64(e + 8);
+    { cannot happen while the mark follows every relocation -- and if it ever
+      does, it is a jump into bytes that were not written, so it is refused }
+    if not ElfLnkSecLive[slot] then
+    begin
+      ok := False;
+      ElfRdErr := 'internal: a kept section refers to section '''
+                + ElfRdSecName(Integer(shndx)) + ''', which the section GC dropped';
+      Exit;
+    end;
+    ElfLnkSymS := ElfLnkSecAddr[slot] + ElfRdU64(e + 8);
     Exit;
   end;
   nm := ElfRdStr(strTab, ElfRdU32(e));
   g := ElfLnkFind(nm);
   if (g >= 0) and (ElfLnkDefObj[g] >= 0) then
   begin
+    if not ElfLnkDefKept(g) then
+    begin
+      ok := False;
+      ElfRdErr := 'internal: a kept section refers to ''' + nm
+                + ''', whose definition the section GC dropped';
+      Exit;
+    end;
     ElfLnkSymS := ElfLnkGlobalAddr(g);
     Exit;
   end;
@@ -998,73 +1197,62 @@ begin
   ElfRdErr := 'undefined reference to ''' + nm + '''';
 end;
 
-{ Apply every SHT_RELA that patches input section `target` of object `obj`,
-  whose bytes sit in `buf` from index `bufOff`. }
-function ElfLnkRelocate(obj: Integer; const secKind: array of Integer; nsec, target: Integer;
+{ Apply rela section `rela` of object `obj` (-1: none) to its input section
+  `target`, whose bytes sit in `buf` from index `bufOff`. }
+function ElfLnkRelocate(obj, nsec, target, rela: Integer;
                         var buf: array of Byte; bufOff: Int64): Boolean;
-var i, j, n, width: Integer;
+var j, n, width, slot: Integer;
     symSec, stOff, strTab, rOff, rEnt, e, off, info, rtype, si, add, S, P, v, secSize: Int64;
     ok: Boolean;
 begin
-  ElfLnkRelocate := False;
-  secSize := ElfRdShSize(target);
-  for i := 1 to nsec - 1 do
-    if (ElfRdShType(i) = ELFRD_SHT_RELA) and (ElfRdU32(ElfRdShdr(i) + 44) = target) then
-    begin
-      symSec := ElfRdShLink(i);
-      stOff := ElfRdShOffset(Integer(symSec));
-      strTab := ElfRdShOffset(Integer(ElfRdShLink(Integer(symSec))));
-      rOff := ElfRdShOffset(i);
-      rEnt := ElfRdShEntSize(i);
-      if rEnt <= 0 then rEnt := 24;
-      n := Integer(ElfRdShSize(i) div rEnt);
-      for j := 0 to n - 1 do
-      begin
-        e := rOff + Int64(j) * rEnt;
-        off := ElfRdU64(e);
-        info := ElfRdU64(e + 8);
-        add := ElfRdU64(e + 16);
-        rtype := info and $FFFFFFFF;
-        si := (info shr 32) and $FFFFFFFF;
-        if rtype = 1 then width := 8
-        else if (rtype = 2) or (rtype = 11) then width := 4
-        else
-        begin
-          ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfLnkKindName(secKind[target])
-                    + ' -- pxx emits R_X86_64_64, R_X86_64_PC32 and R_X86_64_32S only';
-          Exit;
-        end;
-        if (off < 0) or (off + width > secSize) then
-        begin
-          ElfRdErr := 'relocation at offset ' + AIntToStr(off) + ' runs past the end of '
-                    + ElfLnkKindName(secKind[target]);
-          Exit;
-        end;
-        S := ElfLnkSymS(obj, secKind, nsec, stOff, strTab, si, ok);
-        if not ok then Exit;
-        P := ElfLnkInAddr[obj * ELFLNK_NKIND + secKind[target]] + off;
-        if rtype = 2 then v := S + add - P else v := S + add;
-        if (width = 4) and ((v < -2147483648) or (v > 2147483647)) then
-        begin
-          ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfLnkKindName(secKind[target])
-                    + '+' + AIntToStr(off) + ' does not fit in 32 bits (value 0x'
-                    + IntToHexStr(v, 16) + ')';   { hex: AIntToStr narrows, and printed 0 for 2^32 }
-          Exit;
-        end;
-        ElfLnkPutLE(buf, bufOff + off, v, width);
-      end;
-    end;
   ElfLnkRelocate := True;
-end;
-
-{ Fill secKind for the object in ElfRdBuf. Its sections were already checked
-  when the object was added, so this cannot refuse -- it re-derives the map
-  because stage 4 reloads each object rather than holding 400 of them. }
-procedure ElfLnkSecKinds(nsec: Integer; var secKind: array of Integer);
-var i: Integer;
-begin
-  for i := 0 to nsec - 1 do
-    if i = 0 then secKind[i] := ELFLNK_NKIND else secKind[i] := ElfLnkSecKind(i);
+  if rela < 0 then Exit;
+  ElfLnkRelocate := False;
+  slot := ElfLnkObjSec0[obj] + target;
+  secSize := ElfRdShSize(target);
+  symSec := ElfRdShLink(rela);
+  stOff := ElfRdShOffset(Integer(symSec));
+  strTab := ElfRdShOffset(Integer(ElfRdShLink(Integer(symSec))));
+  rOff := ElfRdShOffset(rela);
+  rEnt := ElfRdShEntSize(rela);
+  if rEnt <= 0 then rEnt := 24;
+  n := Integer(ElfRdShSize(rela) div rEnt);
+  for j := 0 to n - 1 do
+  begin
+    e := rOff + Int64(j) * rEnt;
+    off := ElfRdU64(e);
+    info := ElfRdU64(e + 8);
+    add := ElfRdU64(e + 16);
+    rtype := info and $FFFFFFFF;
+    si := (info shr 32) and $FFFFFFFF;
+    if rtype = 1 then width := 8
+    else if (rtype = 2) or (rtype = 11) then width := 4
+    else
+    begin
+      ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfRdSecName(target)
+                + ' -- pxx emits R_X86_64_64, R_X86_64_PC32 and R_X86_64_32S only';
+      Exit;
+    end;
+    if (off < 0) or (off + width > secSize) then
+    begin
+      ElfRdErr := 'relocation at offset ' + AIntToStr(off) + ' runs past the end of '
+                + ElfRdSecName(target);
+      Exit;
+    end;
+    S := ElfLnkSymS(obj, nsec, stOff, strTab, si, ok);
+    if not ok then Exit;
+    P := ElfLnkSecAddr[slot] + off;
+    if rtype = 2 then v := S + add - P else v := S + add;
+    if (width = 4) and ((v < -2147483648) or (v > 2147483647)) then
+    begin
+      ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfRdSecName(target)
+                + '+' + AIntToStr(off) + ' does not fit in 32 bits (value 0x'
+                + IntToHexStr(v, 16) + ')';   { hex: AIntToStr narrows, and printed 0 for 2^32 }
+      Exit;
+    end;
+    ElfLnkPutLE(buf, bufOff + off, v, width);
+  end;
+  ElfLnkRelocate := True;
 end;
 
 { ---- stage 5: the process-entry contract ---------------------------------
@@ -1140,11 +1328,11 @@ end;
 { Write the linked executable. ElfLnkLoadList and ElfLnkLayout must have run.
   False, with the reason printed under `tag`, on any refusal. }
 function ElfLnkWriteExe(const outPath, entryName, tag: AnsiString): Boolean;
-var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff, shOff: Integer;
+var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff, shOff, t: Integer;
     mainAddr: Int64;
     stub: array of Byte;
     entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
-    secKind: array of Integer;
+    relaOf: array of Integer;
     g: Integer;
 const
   SHSTR = 68;   { see the blob below }
@@ -1230,7 +1418,7 @@ begin
   symOff := Integer(ElfLnkAlignUp(fileAt, 8));
   nDef := 0; strSize := 1;
   for i := 0 to ElfLnkCount - 1 do
-    if ElfLnkDefObj[i] >= 0 then
+    if ElfLnkDefKept(i) then
     begin
       Inc(nDef);
       strSize := strSize + Length(ElfLnkName[i]) + 1;
@@ -1260,34 +1448,43 @@ begin
       Exit;
     end;
     nsec := ElfRdShNum;
-    SetLength(secKind, nsec);
-    ElfLnkSecKinds(nsec, secKind);
-    for k := 0 to ELFLNK_NKIND - 1 do
+    { which rela section patches which section: one pass, so a split object's
+      thousand sections do not each rescan the header table }
+    SetLength(relaOf, nsec);
+    for i := 0 to nsec - 1 do relaOf[i] := -1;
+    for i := 1 to nsec - 1 do
+      if ElfRdShType(i) = ELFRD_SHT_RELA then
+      begin
+        t := Integer(ElfRdU32(ElfRdShdr(i) + 44));
+        if (t > 0) and (t < nsec) then relaOf[t] := i;
+      end;
+    for i := 1 to nsec - 1 do
     begin
-      slot := o * ELFLNK_NKIND + k;
-      if (ElfLnkInShndx[slot] = 0) or (k = ELFLNK_K_BSS) then Continue;
-      sz := ElfLnkInSize[slot];
-      secOff := ElfRdShOffset(ElfLnkInShndx[slot]);
+      slot := ElfLnkObjSec0[o] + i;
+      k := ElfLnkSecKindOf[slot];
+      if (not ElfLnkSecLive[slot]) or (k = ELFLNK_K_BSS) then Continue;
+      sz := ElfLnkSecSize[slot];
+      secOff := ElfRdShOffset(i);
       if k = ELFLNK_K_TEXT then
       begin
         SetLength(ElfLnkTb, sz);
-        for i := 0 to Integer(sz) - 1 do ElfLnkTb[i] := Ord(ElfRdBuf[secOff + 1 + i]);
-        if not ElfLnkRelocate(o, secKind, nsec, ElfLnkInShndx[slot], ElfLnkTb, 0) then
+        for t := 0 to Integer(sz) - 1 do ElfLnkTb[t] := Ord(ElfRdBuf[secOff + 1 + t]);
+        if not ElfLnkRelocate(o, nsec, i, relaOf[i], ElfLnkTb, 0) then
         begin
           WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
           ElfLnkClose(outPath);
           Exit;
         end;
-        ElfLnkWriteZeros(ElfLnkInAddr[slot] - cur);
+        ElfLnkWriteZeros(ElfLnkSecAddr[slot] - cur);
         ElfLnkWrite(ElfLnkTb, sz);
-        cur := ElfLnkInAddr[slot] + sz;
+        cur := ElfLnkSecAddr[slot] + sz;
       end
       else
       begin
-        for i := 0 to Integer(sz) - 1 do
-          ElfLnkRw[Integer(ElfLnkInAddr[slot] - rwStart) + i] := Ord(ElfRdBuf[secOff + 1 + i]);
-        if not ElfLnkRelocate(o, secKind, nsec, ElfLnkInShndx[slot], ElfLnkRw,
-                              ElfLnkInAddr[slot] - rwStart) then
+        for t := 0 to Integer(sz) - 1 do
+          ElfLnkRw[Integer(ElfLnkSecAddr[slot] - rwStart) + t] := Ord(ElfRdBuf[secOff + 1 + t]);
+        if not ElfLnkRelocate(o, nsec, i, relaOf[i], ElfLnkRw,
+                              ElfLnkSecAddr[slot] - rwStart) then
         begin
           WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
           ElfLnkClose(outPath);
@@ -1318,13 +1515,13 @@ begin
   for i := 1 to 24 do ElfLnkBPut(0, 1);
   strPos := 1;
   for i := 0 to ElfLnkCount - 1 do
-    if ElfLnkDefObj[i] >= 0 then
+    if ElfLnkDefKept(i) then
     begin
       ElfLnkBPut(strPos, 4);
       ElfLnkBPut(ElfLnkDefInfo[i], 1);
       ElfLnkBPut(0, 1);
-      if ElfLnkDefKind[i] = ELFLNK_K_ABS then ElfLnkBPut($FFF1, 2)
-      else ElfLnkBPut(ElfLnkDefKind[i] + 1, 2);
+      if ElfLnkDefSec[i] < 0 then ElfLnkBPut($FFF1, 2)
+      else ElfLnkBPut(ElfLnkSecKindOf[ElfLnkDefSec[i]] + 1, 2);
       ElfLnkBPut(ElfLnkGlobalAddr(i), 8);
       ElfLnkBPut(ElfLnkDefSize[i], 8);
       strPos := strPos + Length(ElfLnkName[i]) + 1;
@@ -1336,7 +1533,7 @@ begin
   end;
   ElfLnkBPut(0, 1);
   for i := 0 to ElfLnkCount - 1 do
-    if ElfLnkDefObj[i] >= 0 then ElfLnkBStrZ(ElfLnkName[i]);
+    if ElfLnkDefKept(i) then ElfLnkBStrZ(ElfLnkName[i]);
   if entryName = '' then ElfLnkBStrZ('_start');
   { SHSTR = 68 bytes: offsets .text 1, .init_array 7, .fini_array 19, .data 31,
     .bss 37, .symtab 42, .strtab 50, .shstrtab 58 }
@@ -1392,7 +1589,25 @@ end;
 procedure ElfLnkLinkDump(const listPath: AnsiString);
 begin
   if not ElfLnkLoadList(listPath, 'elflink') then Exit;
+  ElfLnkGcMark(-1);
   ElfLnkLayout;
+  if not ElfLnkWriteExe(listPath + '.exe', 'main', 'elflink') then Exit;
+  WriteLn('elflink: wrote ', listPath, '.exe');
+  WriteLn('elflink: ELFLINK-OK');
+end;
+
+{ PXXDBG=a.objgclink:<listfile> -- stage 4 WITH section GC: collect from
+  main, lay out what survives, print that layout in a.objlayout's form, and
+  write <listfile>.exe entered at main. The layout lines are what let the
+  oracle force ld --gc-sections to the same addresses and fence the padding
+  between the inputs that survived. }
+procedure ElfLnkGcLinkDump(const listPath: AnsiString);
+begin
+  if not ElfLnkLoadList(listPath, 'elflink') then Exit;
+  ElfLnkGcOn := True;
+  ElfLnkGcMark(ElfLnkFind('main'));
+  ElfLnkLayout;
+  ElfLnkPrintLayout;
   if not ElfLnkWriteExe(listPath + '.exe', 'main', 'elflink') then Exit;
   WriteLn('elflink: wrote ', listPath, '.exe');
   WriteLn('elflink: ELFLINK-OK');
@@ -1401,12 +1616,13 @@ end;
 { --link <obj>... <out>, ParamStr(first..last) being the objects. If the set
   defines _start it is the entry, as it would be for ld; otherwise the linker
   supplies one (ElfLnkPutStub) that calls main. }
-function ElfLnkLinkArgs(first, last: Integer; const outPath: AnsiString): Boolean;
+function ElfLnkLinkArgs(first, last: Integer; const outPath: AnsiString; gc: Boolean): Boolean;
 var j, g: Integer;
     entryName: AnsiString;
 begin
   ElfLnkLinkArgs := False;
   ElfLnkReset;
+  ElfLnkGcOn := gc;
   for j := first to last do
     if not ElfLnkAddObject(ParamStr(j)) then
     begin
@@ -1419,8 +1635,53 @@ begin
   begin
     entryName := '';
     ElfLnkEntryStub := True;
+    g := ElfLnkFind('main');
   end;
+  ElfLnkGcMark(g);
   ElfLnkLayout;
   ElfLnkLinkArgs := ElfLnkWriteExe(outPath, entryName, 'pascal26 --link');
+end;
+
+{ PXXDBG=a.objgc:<listfile> -- the section GC's verdict over that set, rooted
+  at _start if an object defines it and at main otherwise: one line per
+  DROPPED allocated section in ld's own --print-gc-sections wording, so the
+  two lists compare after stripping the prefix, then the totals. }
+procedure ElfLnkGcDump(const listPath: AnsiString);
+var o, i, g, slot, nAll, nKept: Integer;
+    bAll, bKept: Int64;
+begin
+  if not ElfLnkLoadList(listPath, 'elfgc') then Exit;
+  g := ElfLnkFind('_start');
+  if (g < 0) or (ElfLnkDefObj[g] < 0) then g := ElfLnkFind('main');
+  ElfLnkGcOn := True;
+  ElfLnkGcMark(g);
+  nAll := 0; nKept := 0; bAll := 0; bKept := 0;
+  for o := 0 to ElfLnkObjCount - 1 do
+  begin
+    LoadFile(ElfLnkObjPath[o], ElfRdBuf);
+    if (Length(ElfRdBuf) = 0) or not ElfRdCheckHeader then
+    begin
+      WriteLn('elfgc: ', ElfLnkObjPath[o], ': cannot re-read the object');
+      Exit;
+    end;
+    for i := 1 to ElfLnkObjNsec[o] - 1 do
+    begin
+      slot := ElfLnkObjSec0[o] + i;
+      if ElfLnkSecKindOf[slot] = ELFLNK_NKIND then Continue;
+      Inc(nAll);
+      bAll := bAll + ElfLnkSecSize[slot];
+      if ElfLnkSecLive[slot] then
+      begin
+        Inc(nKept);
+        bKept := bKept + ElfLnkSecSize[slot];
+      end
+      else
+        WriteLn('elfgc: removing unused section ''', ElfRdSecName(i), ''' in file ''',
+                ElfLnkObjPath[o], '''');
+    end;
+  end;
+  WriteLn('elfgc: kept ', AIntToStr(nKept), ' of ', AIntToStr(nAll), ' sections, ',
+          AIntToStr(bKept), ' of ', AIntToStr(bAll), ' bytes');
+  WriteLn('elfgc: ELFGC-OK');
 end;
 

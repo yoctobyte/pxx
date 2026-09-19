@@ -4,12 +4,12 @@ title: "N objects link N copies of crtl: weak resolves the symbol, it does not d
 track: A
 prio: 55
 type: feature
-status: working
+status: blocked
 created: 2026-09-01
 found-by: frankA
-owner: frankB
-blocked-by: []
-summary: "N pxx objects linked N copies of crtl because each object had ONE .text section: a linker keeps or drops whole SECTIONS, and a weak symbol only picks which copy is CALLED. --function-sections now writes one .text.<name> section per function on x86-64, and every reference that crosses a function boundary is a relocation -- calls, @proc, VMT slots, the init/fini thunks, and the calls into the runtime stubs ahead of the first proc (CodeRef, the table DCE already re-aims). tools/function_sections_baked.py reads the INSTRUCTIONS to prove it, because a baked displacement is in no .rela: a split object must read 0, and an unsplit one (its positive control) reads about 1180 for a C file. The object's symbols and export surface do not change, so this is correct under BOTH answers to decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit -- nothing is dropped from an object, only from a FINAL link, rooted at its entry. Flag-off objects are byte-identical to before, and a flag-on object linked by ld without GC is byte-identical in allocatable content to the unsplit one. REMAINING, in order: (1) pascal26 --link does not garbage-collect sections yet, so the pxx-only link path still keeps every copy; (2) the busybox size has not been re-measured with split objects; (3) .data and .bss are still one section per object, so each object's runtime DATA is kept whole wherever any of its code is live."
+owner: 
+blocked-by: [decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit]
+summary: "N pxx objects linked N copies of crtl because each object had ONE .text section, and a linker keeps or drops whole sections. BOTH HALVES OF THE SECTION ROUTE ARE BUILT, and neither changes what an object exports, so both are correct under either answer to decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit. (1) --function-sections writes one .text.<name> per function with every cross-function reference relocated; tools/function_sections_baked.py proves it from the instructions. (2) pascal26 --link garbage-collects sections from its entry the way ld --gc-sections does, and ld is its oracle for the dropped SET, the kept BYTES and the behaviour (tools/elf_reader_vs_readelf.sh stage 6). A weak crtl routine keeps one copy. WHAT REMAINS IS NOT REACHABLE BY ANY LINKER WITHOUT CHANGING THE OBJECT INTERFACE, which is why this ticket is blocked on that decide: the runtime an object keeps PRIVATE -- the Pascal builtin helpers (PXXFree, PXXRecordRelease, ...) are LOCAL symbols its own code calls, and the crtl globals its init thunk initialises live in its own .data/.bss -- is duplicated once per object that reaches it, and merging it means either exporting it (weak or COMDAT, answer A) or taking it out of the object (a runtime library, answer B). The size table with its population and compiler is in the body, 2026-09-19."
 ---
 
 # N objects cost N runtimes
@@ -1102,3 +1102,70 @@ Fault-injected: dropping the CodeRef relocations turns the census row red with
 15 crossings (the identity row stays green, correctly -- with every section
 kept a baked displacement still lands); forcing every section to 16-alignment
 turns the identity row red (.text 328926 vs 335381).
+
+## 2026-09-19 (frankB) — --link collects sections; busybox re-measured
+
+`pascal26 --link` keeps a section only when its entry reaches it through
+relocations, or when it is an `.init_array`/`.fini_array` (ld's KEEP), and a
+reference to a global marks the section of the definition the link CHOSE, so
+the losing weak copies are never reached. On by default; `--no-gc-sections`
+keeps everything. `PXXDBG=a.objgc:<list>` prints the dropped set in ld's
+`--print-gc-sections` wording; `PXXDBG=a.objgclink:<list>` is `a.objlink` with
+GC and the surviving layout, for the byte comparison.
+
+Oracle rows (tools/elf_reader_vs_readelf.sh, stage 6, subject: the stage 5
+`e.c` plus an `f2.c` that includes stdio and calls printf, both split): the
+dropped set equals `ld --gc-sections --print-gc-sections` (1616 sections); f's
+weak printf is dropped and e's kept, asserted in both directions; the kept
+bytes equal ld's at forced addresses except 50 bytes, all inside inter-input
+padding (ld fills NOPs, we leave zeros); the GC'd program prints the same as
+the un-GC'd one and as ld+pxxcrt, in 91149 of 659741 bytes of `.text`.
+Fault-injected: not following references to globals reds the set comparison;
+not rooting the init/fini arrays reds stage 5 with `environ0=(null)`.
+
+**BUSYBOX, the ticket's reference population**: 19 applets including ash (ash
+cat cp date dmesg echo grep ls mkdir mount mv ps pwd rm sleep sync umount
+uname wc), 86 translation units, 132 cases against the gcc oracle, busybox
+1.36.1 in `library_candidates/busybox`, `tools/busybox_diff.sh --pxx-link`.
+Compiler sha256 `f00848234ed2` for both rows (the tree of this commit minus
+the `a.objgclink` debug topic, which links identically):
+
+| objects | linked by `pascal26 --link` | bytes | verdict |
+| --- | --- | --- | --- |
+| `--emit-obj` | GC on, nothing to collect | 37855248 | GREEN, 132 cases |
+| `--emit-obj --function-sections` | GC on | **3859936** | GREEN, 132 cases |
+
+Upstream's own gcc build of the same 19 applets, stripped, is 116848 (the
+2026-09-10 row above), so 279x became about 33x. Of the 3.86 MB, measured on
+the kept work tree: `.text` 2436365, `.data` 1400968 (every object's whole
+`.data`, 86 of them -- data is still one section per object), init/fini arrays
+1360. The GC kept 3953 of 91118 allocated sections.
+
+**WHERE THE REST IS, AND WHY IT STOPS HERE.** 1731488 of the 2433954 kept code
+bytes are names kept in more than one object. Two classes, both the object's
+PRIVATE runtime:
+
+* `__pxx_init_thunk`, 84 objects, 864089 bytes: almost all of it is the inlined
+  initialisation of THIS object's crtl globals (1855 instructions in a printf
+  C file, nearly all stores into its own `.bss`), so it is as private as the
+  data it fills.
+* The Pascal builtin helpers -- `PXXDynArrayReleaseDepth`, `PXXRecordRelease`,
+  `PXXTIOGetInterface`, `PXXFree`, ... each in all 86 objects. They are LOCAL
+  symbols and each object's own code calls its own copy, so no linker may merge
+  them.
+
+Merging either class changes what an object IS: exporting them (weak, or a
+COMDAT group with hidden globals) is the self-contained-runtime answer, and
+taking them out into a runtime the link supplies is the translation-unit
+answer. That is the open decide, so this ticket is now `blocked-by` it rather
+than guessing -- per the coordinator's instruction to stop and report where no
+route is correct under both answers.
+
+`--link` is INERT under `$(PXX_STABLE)` until the next pin: pin v412 predates
+Route 2 entirely, and this commit's `--function-sections` sections too.
+
+## Parked 2026-09-19
+
+section route built and measured; the residual per-object private runtime waits on decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.

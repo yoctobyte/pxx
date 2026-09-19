@@ -467,6 +467,97 @@ theirs=$(env -i PXXT=hello "$W/ef_ld" one two); trc=$?
 grep -q 'no object defines main' "$W/nomain.log" || { cat "$W/nomain.log"; fail "a set with no main was not refused by name"; }
 [ -e "$W/nomain" ] && fail "--link refused the set and still wrote an output file"
 
+# ---- stage 6: section garbage collection ------------------------------------
+# --link drops every section its entry cannot reach, as ld --gc-sections does,
+# and with --function-sections objects that is what leaves ONE copy of crtl
+# instead of one per object. ld is the oracle three ways: the SET of dropped
+# sections (--print-gc-sections), the relocated BYTES at forced-equal addresses,
+# and the program's behaviour against ld+pxxcrt with --gc-sections.
+#
+# THE WEAK ROW IS THE POINT. f2.c includes <stdio.h> and CALLS printf, so both
+# objects define printf weakly and both reference it; the link chooses e.o's
+# (first in link order), f's own call resolves there, and f's copy must go.
+# (The stage 5 f.c includes no header and so carries no weak crtl at all --
+# measured, 489 LOCAL and zero WEAK functions -- which is why it is not reused.)
+# Asserted by name in both directions -- a GC that kept everything, or one that
+# dropped the chosen copy, fails a different half.
+printf '#include <stdio.h>\nint twice(int x){ if (x < 0) printf("neg %%d\\n", x); return 2*x; }\n' > "$W/f2.c"
+cp "$W/e.c" "$W/e2.c"
+for o in e f; do
+  "$COMPILER" --emit-obj --function-sections "$W/${o}2.c" "$W/${o}s.o" > "$W/${o}s.build.log" 2>&1 \
+    || { cat "$W/${o}s.build.log"; fail "--emit-obj --function-sections did not produce ${o}s.o"; }
+done
+printf '%s\n%s\n' "$W/es.o" "$W/fs.o" > "$W/efs.lst"
+PXXDBG="a.objgc:$W/efs.lst" "$COMPILER" > "$W/efs.gc" 2>&1 || fail "the GC dump exited nonzero"
+grep -q 'ELFGC-OK' "$W/efs.gc" || { cat "$W/efs.gc"; fail "the GC dump did not reach its completion line"; }
+ld -static -nostdlib -e main --gc-sections --print-gc-sections -o "$W/efs_ldgc" "$W/es.o" "$W/fs.o" 2> "$W/efs_ld.gc" \
+  || { cat "$W/efs_ld.gc"; fail "ld --gc-sections could not link the split pair"; }
+sed -n "s/^elfgc: removing unused section \(.*\)$/\1/p" "$W/efs.gc" | LC_ALL=C sort > "$W/gc.ours"
+sed -n "s/^.*: removing unused section \(.*\)$/\1/p" "$W/efs_ld.gc" | LC_ALL=C sort > "$W/gc.ld"
+[ "$(wc -l < "$W/gc.ld")" -gt 100 ] || fail "ld dropped fewer than 100 sections from two crtl-carrying objects -- the subject was not split"
+cmp -s "$W/gc.ours" "$W/gc.ld" || { diff "$W/gc.ours" "$W/gc.ld" | head >&2; fail "the sections --link drops are not the sections ld --gc-sections drops"; }
+readelf -sW "$W/fs.o" | awk '$4=="FUNC" && $5=="WEAK" && $8=="printf"' | grep -q . \
+  || fail "fs.o defines no weak printf, so the dedupe row below has no subject"
+grep -qF "'.text.printf' in file '$W/fs.o'" "$W/gc.ours" || fail "f.o's losing weak copy of printf was kept"
+grep -qF "'.text.printf' in file '$W/es.o'" "$W/gc.ours" && fail "e.o's copy of printf -- the one the link chose -- was dropped"
+ngc=$(wc -l < "$W/gc.ours" | tr -d ' ')
+
+# the bytes, at the addresses the GC'd layout chose
+PXXDBG="a.objgclink:$W/efs.lst" "$COMPILER" > "$W/efs.link" 2>&1 || fail "the GC link dump exited nonzero"
+grep -q 'ELFLINK-OK' "$W/efs.link" || { cat "$W/efs.link"; fail "the GC link dump did not reach its completion line"; }
+gstarts=""
+for s in text init_array fini_array data bss; do
+  a=$(awk -v n=".$s" '$2=="out" && $3==n {print $4}' "$W/efs.link")
+  [ -n "$a" ] || fail "the GC layout printed no address for .$s"
+  gstarts="$gstarts --section-start=.$s=$a"
+done
+# shellcheck disable=SC2086
+ld -static -nostdlib -e main --gc-sections $gstarts -o "$W/efs_ref" "$W/es.o" "$W/fs.o" > "$W/efs_ref.log" 2>&1 \
+  || { cat "$W/efs_ref.log"; fail "ld --gc-sections could not link at the GC layout's addresses"; }
+for s in .init_array .fini_array .data; do
+  objcopy -O binary -j "$s" "$W/efs.lst.exe" "$W/go$s.bin" && objcopy -O binary -j "$s" "$W/efs_ref" "$W/gr$s.bin" \
+    || fail "objcopy could not extract $s from the GC pair"
+  cmp -s "$W/go$s.bin" "$W/gr$s.bin" || fail "$s differs from ld --gc-sections' after relocation"
+done
+objcopy -O binary -j .text "$W/efs.lst.exe" "$W/go.text.bin" && objcopy -O binary -j .text "$W/efs_ref" "$W/gr.text.bin" \
+  || fail "objcopy could not extract the GC pair's .text"
+[ "$(wc -c < "$W/go.text.bin")" = "$(wc -c < "$W/gr.text.bin")" ] || fail "the GC'd .text is a different size from ld --gc-sections'"
+tbase=$(awk '$2=="out" && $3==".text" {print $4}' "$W/efs.link")
+awk '$2=="in" && $4==".text" {print $5, $7}' "$W/efs.link" > "$W/gtin"
+[ "$(wc -l < "$W/gtin")" -gt 20 ] || fail "the GC layout kept fewer than 20 .text inputs -- the gap fence below has nothing to fence"
+gdiff=0; gout=0
+cmp -l "$W/go.text.bin" "$W/gr.text.bin" > "$W/gtdiff" || true
+while read -r pos _ _; do
+  gdiff=$((gdiff + 1))
+  off=$((pos - 1))
+  ingap=0; prevend=""
+  while read -r a sz; do
+    s0=$((a - tbase))
+    if [ -n "$prevend" ] && [ "$off" -ge "$prevend" ] && [ "$off" -lt "$s0" ]; then ingap=1; fi
+    prevend=$((s0 + sz))
+  done < "$W/gtin"
+  [ "$ingap" = 1 ] || gout=$((gout + 1))
+done < "$W/gtdiff"
+[ "$gout" = 0 ] || fail "$gout of $gdiff differing GC'd .text bytes are OUTSIDE the inter-input padding"
+
+# the behaviour, and the size
+ld -static --gc-sections -e _start -o "$W/efs_ldrun" "$W/crt.o" "$W/es.o" "$W/fs.o" > "$W/efs_ldrun.log" 2>&1 \
+  || { cat "$W/efs_ldrun.log"; fail "ld+pxxcrt --gc-sections could not link the split pair"; }
+"$COMPILER" --link -o "$W/efs_pxx" "$W/es.o" "$W/fs.o" > "$W/efs_pxx.log" 2>&1 \
+  || { cat "$W/efs_pxx.log"; fail "pascal26 --link failed on the split pair"; }
+"$COMPILER" --link --no-gc-sections -o "$W/efs_all" "$W/es.o" "$W/fs.o" > "$W/efs_all.log" 2>&1 \
+  || { cat "$W/efs_all.log"; fail "pascal26 --link --no-gc-sections failed on the split pair"; }
+for b in efs_pxx efs_all efs_ldrun; do
+  out=$(env -i PXXT=hello "$W/$b" one two); rc=$?
+  [ "$out" = "argc=3 argv1=one environ0=PXXT=hello twice=42" ] && [ "$rc" = 3 ] \
+    || fail "$b printed '$out' rc=$rc"
+done
+tg=$(secs "$W/efs_pxx" | awk '$1==".text" {print $5}')
+ta=$(secs "$W/efs_all" | awk '$1==".text" {print $5}')
+[ -n "$tg" ] && [ -n "$ta" ] && [ $((0x$tg * 2)) -lt $((0x$ta)) ] \
+  || fail "--link kept 0x$tg bytes of .text against 0x$ta without GC -- less than half should survive two copies of crtl"
+echo "elf-gc: --link drops the same $ngc sections ld --gc-sections drops (f.o's weak printf, not e.o's), the kept bytes match ld's ($gdiff differ, all in padding), and the program runs as without GC in $((0x$tg)) of $((0x$ta)) bytes of .text"
+
 echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and a PLT32 are refused by name; --link's own _start runs the program as ld+pxxcrt does (argv, environ via .init_array, exit code)"
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"

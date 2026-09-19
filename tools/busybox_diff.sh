@@ -73,6 +73,12 @@
 #               reaches. Measured on a 3-TU C program at 39c7042211a7: 624856 ->
 #               336016 linked, and the cost of separate compilation 242568 ->
 #               42176. Ignored outside --separate: there are no objects to prune.
+#   --function-sections  add --function-sections to each per-TU compile, so every
+#               function is its own section and a linker can drop the unreached
+#               ones -- the crtl-per-object ticket's measurement switch. With
+#               --freestanding the ld line gets --gc-sections to match, because
+#               `pascal26 --link' (--pxx-link) collects sections by default and
+#               the two are each other's oracle.
 #   --freestanding  link the pxx objects with `ld -static -nostdlib' over our
 #               own entry stub (tools/pxxcrt_x86_64.S) instead of `gcc', so the
 #               result carries NO libc and no PT_INTERP. Implies --separate,
@@ -205,6 +211,7 @@ SEPARATE=0
 FREESTANDING=0
 PXXLINK=0
 OBJFLAGS=""
+FSECT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -215,7 +222,8 @@ while [ $# -gt 0 ]; do
     --separate) SEPARATE=1; shift ;;
     --freestanding) FREESTANDING=1; SEPARATE=1; shift ;;
     --pxx-link) PXXLINK=1; FREESTANDING=1; SEPARATE=1; shift ;;
-    --dce)     OBJFLAGS="--dce"; shift ;;
+    --dce)     OBJFLAGS="$OBJFLAGS --dce"; shift ;;
+    --function-sections) OBJFLAGS="$OBJFLAGS --function-sections"; FSECT=1; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -1730,7 +1738,9 @@ sep_probe() {
       SEP_WHY="--freestanding could not assemble tools/pxxcrt_$spt.S: $(grep -a -E 'rror' "$WORK/sepprobe_$spt.log" | head -1)"
       return 1
     fi
-    spld="$fsld -static -nostdlib -e _start $WORK/pxxcrt_$spt.o"
+    spld="$fsld -static -nostdlib -e _start"
+    [ "$FSECT" -eq 1 ] && spld="$spld --gc-sections"
+    spld="$spld $WORK/pxxcrt_$spt.o"
     if ! $spld -o "$WORK/sepprobe_$spt.bin" "$WORK/sepprobe_$spt.o" \
          >> "$WORK/sepprobe_$spt.log" 2>&1; then
       SEP_WHY="--freestanding: ld -nostdlib could not link a one-object probe: $(grep -a -E 'rror|undefined' "$WORK/sepprobe_$spt.log" | head -1)"

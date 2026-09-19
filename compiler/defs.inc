@@ -6119,6 +6119,7 @@ var
     (Route 2 of feature-a-pxx-cannot-link-its-own-objects). elfreader.inc. }
   LinkMode : Boolean;
   LinkOutPath : AnsiString;   { --link -o <out>; '' means the LAST argument is the output }
+  LinkGcSections : Boolean;   { --link drops unreachable sections; --no-gc-sections keeps them }
   { True while the x86-64 encoder is writing into AsmBytes (inline asm) rather
     than into Code. EmitGlobRef's rip-relative peephole must not look back at
     Code[CodeLen-1] then -- the ModRM/SIB it would be rewriting is not there.

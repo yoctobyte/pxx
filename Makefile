@@ -15878,8 +15878,13 @@ test-core: $(COMPILER)
 	@# assertions, plus one this row needs and the ld row does not: the link
 	@# note must NAME --link, or a mode that silently fell back to ld would
 	@# pass under this row's name.
+	@# WITH --function-sections, so it is also the section-GC row at real-program
+	@# scale: every function its own section, --link keeping only what _start
+	@# reaches -- one copy of crtl instead of one per object. The ld row above
+	@# keeps the UNSPLIT objects covered; the per-TU flags in the link note are
+	@# asserted so a run that silently dropped the flag cannot pass here.
 	@if [ -d library_candidates/busybox ]; then \
-	  tools/busybox_diff.sh --pxx-link --targets x86_64 > $(TESTTMP)/bbpxxlink.log 2>&1; \
+	  tools/busybox_diff.sh --pxx-link --function-sections --targets x86_64 > $(TESTTMP)/bbpxxlink.log 2>&1; \
 	  grep -q 'BUSYBOX-DIFF-COMPLETE' $(TESTTMP)/bbpxxlink.log \
 	    || { echo "FAIL busybox-pxx-link: the run did not reach its own completion token -- exit status is not the verdict here"; tail -20 $(TESTTMP)/bbpxxlink.log; exit 1; }; \
 	  grep -q 'busybox-diff: GREEN' $(TESTTMP)/bbpxxlink.log \
@@ -15888,7 +15893,9 @@ test-core: $(COMPILER)
 	    || { echo "FAIL busybox-pxx-link: GREEN without the no-PT_INTERP control line"; exit 1; }; \
 	  grep -q 'linked separately with `.* --link`' $(TESTTMP)/bbpxxlink.log \
 	    || { echo "FAIL busybox-pxx-link: GREEN, but the link was not pascal26 --link -- this row would be measuring another linker"; grep note $(TESTTMP)/bbpxxlink.log; exit 1; }; \
-	  echo "test-core: pxx objects linked by pascal26 --link itself, no ld, no libc, no PT_INTERP, byte-identical to the gcc oracle"; \
+	  grep -q 'per-TU flags: --emit-obj.*--function-sections' $(TESTTMP)/bbpxxlink.log \
+	    || { echo "FAIL busybox-pxx-link: GREEN, but the objects were not built with --function-sections"; grep note $(TESTTMP)/bbpxxlink.log; exit 1; }; \
+	  echo "test-core: pxx --function-sections objects linked and section-collected by pascal26 --link itself, no ld, no libc, no PT_INTERP, byte-identical to the gcc oracle"; \
 	else echo "busybox-pxx-link: SKIP (no library_candidates/busybox -- fetch busybox there to run)"; fi
 	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
 	# the type through — crtl had the typedef only in <wchar.h>, so busybox's

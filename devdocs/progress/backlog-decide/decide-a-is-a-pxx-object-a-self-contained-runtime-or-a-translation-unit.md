@@ -287,3 +287,22 @@ trying to be, which is the one thing a measurement cannot supply.
     predicate answering about a different population — see the note there.
   * 4b-septies' DATA symbols (one heap, one `errno`, one `optind`) are still
     unmeasured; nothing here exercises the shared-heap row.
+
+## 2026-09-19 (frankB) — what this decision is now worth, measured
+
+Everything that could be done WITHOUT answering it is done: pxx objects are
+split one function per section and `pascal26 --link` drops what the program
+never reaches, neither of which changes what an object exports. On the minimal
+system's busybox (19 applets, 86 objects) that took the binary from 37.9 MB to
+3.86 MB, all 132 cases still matching gcc's build. Upstream's own build is
+0.12 MB.
+
+What is left, about 1.7 MB of code and 1.4 MB of data, is each object's
+PRIVATE copy of the runtime: helpers only its own code may call, and the C
+library's variables it initialises for itself. Removing those copies is exactly
+this question. The answer that makes an object self-contained keeps them
+per object (they could still be shared if the object advertised them, the way
+it already advertises the C library's functions); the answer that makes an
+object a translation unit moves them into one runtime the link supplies.
+Either one gets the minimal busybox to roughly a megabyte. Details:
+`feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes`.

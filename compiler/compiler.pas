@@ -877,7 +877,10 @@ begin
   WriteLn('  --link [-o <out>] <obj>... [<out>]');
   WriteLn('                        link x86-64 objects that pxx --emit-obj wrote into a');
   WriteLn('                        static executable, with no external linker and no libc.');
-  WriteLn('                        Supplies _start unless an object defines one. SCOPE:');
+  WriteLn('                        Supplies _start unless an object defines one. Drops');
+  WriteLn('                        every section the entry cannot reach, as ld --gc-sections');
+  WriteLn('                        does (--no-gc-sections keeps them); with --function-sections');
+  WriteLn('                        objects that leaves one copy of the runtime. SCOPE:');
   WriteLn('                        pxx''s OWN objects -- a gcc/fpc object, an archive (.a)');
   WriteLn('                        or a shared object is refused by design, not missing.');
   { DERIVED, not transcribed. This line said "general objects:
@@ -1079,6 +1082,7 @@ begin
   EmitObjMode := False;
   LinkMode := False;
   LinkOutPath := '';
+  LinkGcSections := True;
   TlsMainInstalled := False;
   EmitSharedMode := False;
   InitThunkOff := -1;
@@ -1439,6 +1443,12 @@ begin
     else if option = '--link' then
     begin
       LinkMode := True;
+      Inc(i);
+    end
+    else if LinkMode and (option = '--no-gc-sections') then
+    begin
+      { keep every section, as ld does without --gc-sections }
+      LinkGcSections := False;
       Inc(i);
     end
     else if LinkMode and (option = '-o') and (i < ParamCount) then
@@ -2170,6 +2180,23 @@ begin
     Halt(0);
   end;
 
+  { PXXDBG=a.objgclink:<listfile> -- a.objlink with section GC, plus the
+    surviving layout, so the byte comparison against ld --gc-sections can
+    force the same addresses. }
+  if PxxDbgArg('a.objgclink') <> '' then
+  begin
+    ElfLnkGcLinkDump(PxxDbgArg('a.objgclink'));
+    Halt(0);
+  end;
+
+  { PXXDBG=a.objgc:<listfile> -- the section GC's verdict, one dropped section
+    per line in ld --print-gc-sections' wording, which is its oracle. }
+  if PxxDbgArg('a.objgc') <> '' then
+  begin
+    ElfLnkGcDump(PxxDbgArg('a.objgc'));
+    Halt(0);
+  end;
+
   { --link <obj>... <out>: stage 5, the user-facing mode. Here, after the
     option loop, because the loop stops at the first non-option and every
     argument from there on is an object except the last. }
@@ -2183,13 +2210,13 @@ begin
     begin
       if ParamCount < i then
         ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
-      if ElfLnkLinkArgs(i, ParamCount, LinkOutPath) then Halt(0);
+      if ElfLnkLinkArgs(i, ParamCount, LinkOutPath, LinkGcSections) then Halt(0);
     end
     else
     begin
       if ParamCount - i < 1 then
         ErrorNoPos('--link: usage: pascal26 --link [-o <out>] <obj>... [<out>]');
-      if ElfLnkLinkArgs(i, ParamCount - 1, ParamStr(ParamCount)) then Halt(0);
+      if ElfLnkLinkArgs(i, ParamCount - 1, ParamStr(ParamCount), LinkGcSections) then Halt(0);
     end;
     Halt(1);
   end;
