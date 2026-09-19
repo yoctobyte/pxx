@@ -22021,7 +22021,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_ptr_depth2_bases.pas $(TESTTMP)/sweep_ptrd226
 	tools/expect_same.sh sweep_ptrd226 "$$($(TESTTMP)/sweep_ptrd226)" "$$(printf 'c1=alpha\nb1=200\ni1=-42\nc2=alpha\nb2=200\ni2=-42\nceq=TRUE beq=TRUE ieq=TRUE')"
 	./$(COMPILER) test/test_loadfile_into_element_and_field.pas $(TESTTMP)/sweep_loadfile26
-	tools/expect_same.sh sweep_loadfile26 "$$($(TESTTMP)/sweep_loadfile26)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
+	tools/expect_same.sh sweep_loadfile26 "$$($(TESTTMP)/sweep_loadfile26)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	tools/expect_same.sh test_pascal_directives26 "$$($(TESTTMP)/test_pascal_directives26)" "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26

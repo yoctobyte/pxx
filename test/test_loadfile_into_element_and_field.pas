@@ -15,12 +15,24 @@ program test_loadfile_into_element_and_field;
   republishes over a slot that already holds a string, which must RELEASE the
   old handle. Measured before this test existed — 500 republishes of a 264 KB
   file peak at 512 KB RSS, where a leak would be ~132 MB.
-  bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array }
+  bug-a-c-preprocessor-include-buffers-are-sixteen-globals-not-an-array
+
+  THE PATH HALF (rows pelem/pdyn/pfld), 2026-09-19: the PATH goes through the
+  same lvalue door, and x86-64 read an element/field path as if its operand
+  were a symbol index -- a segfault in a plain program and an EMPTY READ inside
+  the compiler, where it stopped the Route 2 linker re-reading its objects.
+  Each live path is placed LAST among entries naming files that do not exist,
+  so reading the wrong element prints 0 rather than 14 -- and 0 is also what a
+  garbage handle read, so the expected 14 cannot collide with either failure. }
 var
   arr: array[0..3] of AnsiString;
   rec: record s: AnsiString; end;
   plain, p: AnsiString;
   i: Integer;
+  paths: array[0..2] of AnsiString;
+  dpaths: array of AnsiString;
+  prec: record miss, hit: AnsiString; end;
+  got: AnsiString;
 begin
   p := 'test/test_loadfile_into_element_and_field.data';
   LoadFile(p, plain);
@@ -36,4 +48,14 @@ begin
     content must be the file rather than a fragment of the previous one }
   for i := 1 to 50 do LoadFile(p, arr[2]);
   WriteLn('again ', Length(arr[2]));
+  paths[0] := p + '.absent0'; paths[1] := p + '.absent1'; paths[2] := p;
+  LoadFile(paths[2], got);
+  WriteLn('pelem ', Length(got));
+  SetLength(dpaths, 3);
+  dpaths[0] := p + '.absent0'; dpaths[1] := p + '.absent1'; dpaths[2] := p;
+  LoadFile(dpaths[2], got);
+  WriteLn('pdyn  ', Length(got));
+  prec.miss := p + '.absent'; prec.hit := p;
+  LoadFile(prec.hit, arr[3]);
+  WriteLn('pfld  ', Length(arr[3]));
 end.

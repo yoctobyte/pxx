@@ -6590,6 +6590,7 @@ var
     any more: the expression parser does.
     refactor-p-one-lvalue-path-for-statements-and-expressions }
   lfTmp, lfCall, lfAsn: Integer;   { LoadFile into a non-identifier destination — see its parse arm }
+  lfPathTmp, lfPathAsn: Integer;   { ...and FROM a non-identifier path, normalised the same way }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   frozenDest: Integer;   { Insert/Delete over a FROZEN string destination: the original lvalue, read-modify-written through a managed temp. -1 = the destination is already managed. See BuildFrozenStrVarArgRMW. }
@@ -7191,6 +7192,26 @@ begin
           (normalise-dont-special-case.md). x86-64's EmitLoadFileManagedAt is
           left in place and is now unreachable from this frontend; it is correct
           code and deleting what you merely BELIEVE is dead is its own ticket. }
+        { THE PATH IS NORMALISED THE SAME WAY, for the same reason, and it was
+          the half nobody did. `LoadFile(Paths[i], s)` parses its path through
+          the same lvalue door as the destination, so an array element or a
+          field arrives as an AN_INDEX/AN_FIELD -- and x86-64's managed arm
+          reads the path operand as a SYMBOL INDEX (EmitLoadManagedHandleRdi of
+          IRA[path]), which for an IR_LOAD_MEM is a node number. The program
+          loads a garbage handle: measured, a segfault in a plain program, and an
+          EMPTY READ inside the compiler, where the Route 2 linker's second pass
+          (LoadFile(ElfLnkObjPath[o], ...)) re-read every object as nothing.
+          i386 evaluates the path as an expression and was right, so the
+          backends disagreed about the same source. Normalising here makes the
+          path an identifier for all of them, which is the shape they already
+          agree on. }
+        lfPathAsn := -1;
+        if ASTKind[valNode] <> AN_IDENT then
+        begin
+          lfPathTmp := AllocVar('', tyAnsiString);
+          lfPathAsn := GenMakeAssign(GenMakeIdent(lfPathTmp, tyAnsiString), valNode);
+          valNode := GenMakeIdent(lfPathTmp, tyAnsiString);
+        end;
         if ASTKind[stepsNode] <> AN_IDENT then
         begin
           lfTmp := AllocVar('', tyAnsiString);
@@ -7213,6 +7234,8 @@ begin
           ASTIVal[node] := -100;
           ASTLeft[node] := argSeq;
         end;
+        if lfPathAsn >= 0 then
+          node := GenMakeSeq(lfPathAsn, GenMakeSeq(node, -1));
       end
       else if (CaseEqual(name, 'Include') or CaseEqual(name, 'Exclude')) and
               ((qUnit = -2) or (FindProc(name) < 0)) and (Tokens[TokPos].Kind = tkLParen) then
