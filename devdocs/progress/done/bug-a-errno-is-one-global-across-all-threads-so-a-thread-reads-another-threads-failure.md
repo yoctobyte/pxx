@@ -599,4 +599,4 @@ before: `__thread` has no per-thread block to use there. That is the arch half o
 the same sibling ticket.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c5ae069c5.
