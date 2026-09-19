@@ -15738,6 +15738,37 @@ test-core: $(COMPILER)
 	# warns that crtl does not define it; gcc oracle gives `1 1`.
 	./$(COMPILER) test/ccrtl_pivot_root.c $(TESTTMP)/ccrtlpivot26
 	tools/expect_same.sh ccrtlpivot26 "$$($(TESTTMP)/ccrtlpivot26)" "1 1"
+	# AND THE LINK ITSELF, WHICH HAD NO GUARD AT ALL. The symbol above is one
+	# half; the other is that `ld -static -nostdlib` over pxx objects plus our
+	# own entry stub still produces a running program. That was measured once,
+	# by hand, on 2026-09-16, and wired into nothing -- busybox_diff.sh was
+	# referenced from this Makefile NOWHERE before this row, so every part of
+	# the freestanding claim could have regressed silently and the only thing
+	# that would have noticed is somebody re-running it by hand.
+	#
+	# READ THE SCRIPT'S OWN TOKEN, NOT ITS EXIT STATUS. busybox_diff.sh execs a
+	# COPY of itself so a peer's `git pull` cannot rewrite it mid-run, which
+	# detaches it from any wrapper's lifetime -- it reported `completed (exit
+	# code 0)` at a 10-minute cap while the real run carried on. It prints
+	# BUSYBOX-DIFF-COMPLETE for exactly this reason and its header says so.
+	# Both the token AND the GREEN line are required: the token alone says the
+	# script reached the end, not that the comparison passed.
+	#
+	# THE MODE CARRIES ITS OWN POSITIVE CONTROL and that is why it can be
+	# believed: it asserts the probe has no PT_INTERP, because a dynamic binary
+	# here would mean the gcc candidate was silently used instead and every
+	# downstream case would still pass -- a green measuring the gcc path and
+	# calling it freestanding.
+	#
+	# POPULATION: this is the DEFAULT rung -- 2 applets, 28 translation units,
+	# 29 cases. It guards the MECHANISM. It does NOT re-derive the 258-applet /
+	# 400-object scale claim in
+	# feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc,
+	# which is a much longer run; that row names its own tree and population.
+	#
+	# A MISSING TREE IS A LOUD SKIP NAMING THE FETCH, never a quiet pass -- the
+	# script's own header makes that a rule and this row honours it.
+	@if [ -d library_candidates/busybox ]; then 	  tools/busybox_diff.sh --freestanding > $(TESTTMP)/bbfree.log 2>&1; 	  grep -q 'BUSYBOX-DIFF-COMPLETE' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: the run did not reach its own completion token -- exit status is not the verdict here"; tail -20 $(TESTTMP)/bbfree.log; exit 1; }; 	  grep -q 'busybox-diff: GREEN' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: completed but not GREEN"; grep -E 'FAIL|RED|SKIP' $(TESTTMP)/bbfree.log | head -10; exit 1; }; 	  grep -q 'no PT_INTERP' $(TESTTMP)/bbfree.log 	    || { echo "FAIL busybox-freestanding: GREEN without the no-PT_INTERP control line -- the control that makes this believable did not run, so the green is about the gcc path"; exit 1; }; 	  echo "test-core: pxx objects link with ld -static -nostdlib over our own entry stub, no libc and no PT_INTERP, byte-identical to the gcc oracle"; 	else echo "busybox-freestanding: SKIP (no library_candidates/busybox -- fetch busybox there to run)"; fi
 	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
 	# the type through — crtl had the typedef only in <wchar.h>, so busybox's
 	# libbb/lineedit.c read `wchar_t` as a stray token at top level. C99 7.24.1
