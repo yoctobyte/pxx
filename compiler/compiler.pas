@@ -931,7 +931,7 @@ end;
   the compiler carries, and reading an 11MB image back to check a number would
   put a second full read in every build. Existence-and-non-empty catches the
   reported defect (no file), the empty-file case, and any writer that silently
-  no-ops; a short WRITE would still pass and is not claimed. }
+  no-ops. A short WRITE is caught separately and exactly, by OutWriteShort. }
 function OutputArtefactLanded(const path: AnsiString): Boolean;
 var fd, got: Integer; probe: array[0..0] of Byte;
 begin
@@ -957,6 +957,18 @@ begin
     an exception the OS defines, not one this design introduces: nothing else
     in the filesystem answers "I accepted your bytes and kept none". }
   if path = '/dev/null' then Exit;
+  { A SHORT write is the case the existence probe below cannot see: the file
+    is there and non-empty, just truncated. Measured 2026-09-19 with a file-size
+    limit: `ok:` with exact byte counts over a 40960-byte prefix of hello, which
+    then segfaulted -- a full disk does the same. Every writer syswrite reports
+    through OutWrote (util.inc), so this is exact, not a size guess. }
+  if OutWriteShort then
+  begin
+    writeln(StdErr, 'pascal26: error: the output file was truncated: ', path);
+    writeln(StdErr, '  a write stored fewer bytes than it was asked to; the file on disk is incomplete.');
+    writeln(StdErr, '  usual cause: the filesystem is full (ENOSPC) or a file-size limit.');
+    Halt(1);
+  end;
   if OutputArtefactLanded(path) then Exit;
   writeln(StdErr, 'pascal26: error: compiled successfully but wrote no output file: ', path);
   writeln(StdErr, '  the code was generated; the artefact is not on disk or is empty.');

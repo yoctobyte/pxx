@@ -5793,6 +5793,7 @@ begin
         Expect(tkRParen, ')');
 
         node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysOpen);
+        ASTTk[node] := Ord(tyInteger);   { an fd / a byte count -- typed so it can be an ARGUMENT, not only an assignment source }
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         Exit;
@@ -5824,6 +5825,7 @@ begin
         Expect(tkRParen, ')');
 
         node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSysRead);
+        ASTTk[node] := Ord(tyInteger);   { an fd / a byte count -- typed so it can be an ARGUMENT, not only an assignment source }
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         Exit;
@@ -5855,6 +5857,7 @@ begin
         Expect(tkRParen, ')');
 
         node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkSyswrite);
+        ASTTk[node] := Ord(tyInteger);   { an fd / a byte count -- typed so it can be an ARGUMENT, not only an assignment source }
         ASTLeft[node] := argSeq;
         CurASTNode := node;
         Exit;

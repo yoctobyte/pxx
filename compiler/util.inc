@@ -332,6 +332,28 @@ begin
   Inc(DataRelFixCount);
 end;
 
+{ Write n bytes of buf from index off to the output file f. A full disk
+  (ENOSPC) or a file-size limit makes the kernel store a PREFIX and return its
+  length, or -1, and nothing raises: the writers used to discard that count and
+  print `ok:` with exact byte counts over a truncated binary that crashed
+  somewhere unrelated. Every write of an output artefact passes through here;
+  RequireOutputArtefact refuses when any came back short. The FPC seed's
+  Blockwrite already raises an I/O error for the same event. }
+procedure OutWrite(f: Integer; const buf: array of Byte; off, n: Integer);
+var got: Integer;
+begin
+  got := syswrite(f, buf[off], n);
+  if got <> n then OutWriteShort := True;
+end;
+
+{ The same for the text writers' Char buffer. }
+procedure OutWriteChars(f: Integer; const buf: array of Char; off, n: Integer);
+var got: Integer;
+begin
+  got := syswrite(f, buf[off], n);
+  if got <> n then OutWriteShort := True;
+end;
+
 { Append [s, e) to the merged range list: ascending, and one that touches the
   previous range extends it. The list alone, no block record -- which is what
   lets a writer REBUILD the list from a subset of blocks. }

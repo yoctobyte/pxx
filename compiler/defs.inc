@@ -4210,6 +4210,10 @@ var
     (ObjRoKeepIramLiteralsWritable). }
   RoEntryStart : array of Integer;
   RoEntryCount : Integer;
+  { Set when an output write stored fewer bytes than it was asked to (OutWrote,
+    util.inc). A full disk does that silently -- syswrite returns the short
+    count and nothing else happens -- so RequireOutputArtefact reads this. }
+  OutWriteShort : Boolean;
   NoRoData     : Boolean;  { --no-ro-data: keep every byte in the RW segment (the A/B control) }
   { The writer's layout, valid only while RoSplitActive: Data[] is cut into
     alternating pieces at RoPieceOld[k], each placed at RoPieceNew[k] -- an

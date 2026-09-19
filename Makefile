@@ -7714,6 +7714,16 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_sosp26.2 "$$($(TESTTMP)/test_sosp26 | head -2 | tail -1)" "short open  TRUE"
 	tools/expect_same.sh test_sosp26.3 "$$($(TESTTMP)/test_sosp26 | head -3 | tail -1)" "short read  5 PXX26"
 	tools/expect_same.sh test_sosp26.4 "$$($(TESTTMP)/test_sosp26 | head -4 | tail -1)" "short miss  TRUE"
+	# SysOpen/SysRead/SysWrite as an ARGUMENT: the intrinsic's node carried no
+	# type, so overload resolution refused the call. The compile is the assertion.
+	./$(COMPILER) test/test_sys_intrinsic_as_argument.pas $(TESTTMP)/test_siaa26
+	tools/expect_same.sh test_siaa26.1 "$$($(TESTTMP)/test_siaa26 2>/dev/null </dev/null | tr '\n' '|')" "write 2|open-missing TRUE|read 0|SYS INTRINSIC AS ARGUMENT OK|"
+	# A SHORT write of the output file is an error, not `ok:`. A full disk or a
+	# file-size limit makes write() store a prefix and return its length; the
+	# writers discarded that count and printed `ok:` over a truncated binary.
+	# `ulimit -f 40` is well under hello's ~69KB in either block unit, and XFSZ is
+	# ignored so the write returns short instead of killing the compiler.
+	tools/expect_same.sh test_trunc26.1 "$$( (trap '' XFSZ; ulimit -f 40; ./$(COMPILER) test/hello.pas $(TESTTMP)/test_trunc26 2>&1 >/dev/null); echo "rc=$$?")" "$$(printf 'pascal26: error: the output file was truncated: $(TESTTMP)/test_trunc26\n  a write stored fewer bytes than it was asked to; the file on disk is incomplete.\n  usual cause: the filesystem is full (ENOSPC) or a file-size limit.\nrc=1')"
 	# CROSS ROWS, wired when bug-a-riscv32-and-xtensa-accept-a-shortstring-
 	# sysopen-path-and-open-nothing closed. riscv32 and xtensa COMPILED this and
 	# printed `short open  FALSE` for a file that exists: the generic arg

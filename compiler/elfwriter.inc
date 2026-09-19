@@ -678,7 +678,7 @@ begin
     AssignPath := mapPath;
     sysfchmod(f, 420); { chmod 644 }
     if len > 0 then
-      syswrite(f, TokChars, len);
+      OutWriteChars(f, TokChars, 0, len);
     sysclose(f);
   end;
 end;
@@ -824,13 +824,13 @@ end;
 procedure writeU8(f: Integer; v: Byte);
 begin
   sysbuf[0] := v;
-  syswrite(f, sysbuf, 1);
+  OutWrite(f, sysbuf, 0, 1);
 end;
 procedure writeU16(f: Integer; v: Integer);
 begin
   sysbuf[0] := v and 255;
   sysbuf[1] := (v shr 8) and 255;
-  syswrite(f, sysbuf, 2);
+  OutWrite(f, sysbuf, 0, 2);
 end;
 procedure writeU32(f: Integer; v: Integer);
 begin
@@ -838,7 +838,7 @@ begin
   sysbuf[1] := (v shr 8) and 255;
   sysbuf[2] := (v shr 16) and 255;
   sysbuf[3] := (v shr 24) and 255;
-  syswrite(f, sysbuf, 4);
+  OutWrite(f, sysbuf, 0, 4);
 end;
 procedure writeU64(f: Integer; v: Int64);
 begin
@@ -868,7 +868,7 @@ begin
     sysbuf[6] := (v shr 48) and 255;
     sysbuf[7] := (v shr 56) and 255;
   end;
-  syswrite(f, sysbuf, 8);
+  OutWrite(f, sysbuf, 0, 8);
 end;
 procedure writeStrZ(f: Integer; const s: AnsiString);
 var i: Integer;
@@ -2428,11 +2428,11 @@ begin
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
   writeU64(f,0);writeU64(f,0);writeU64(f,$10);
 
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
-  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
+  if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
   if doDebug then
   begin
-    if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);
+    if DbgLen > 0 then OutWrite(f, DbgBuf, 0, DbgLen);
     for i := 1 to padN do writeU8(f,0);
     DbgWriteShdrTable(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
   end;
@@ -2791,11 +2791,11 @@ begin
   Close(f);
   FpChmod(outPath,&755);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
-  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
+  if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
   if doDebug then
   begin
-    if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);
+    if DbgLen > 0 then OutWrite(f, DbgBuf, 0, DbgLen);
     for i := 1 to padN do writeU8(f,0);
     DbgWriteShdrTable32(f, entry, dataBase, bssBase, codeOffset, dbgFileBase);
   end;
@@ -3084,13 +3084,13 @@ begin
   writePad(f, rodataOff - (iramOff + iramSize));
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, iramOff - (textOff + CodeLen));
   for i := 0 to ProcCount-1 do
     if ProcIram[i] and (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
-      syswrite(f, Code[Procs[i].BodyAddr], ProcBodyEnd[i] - Procs[i].BodyAddr);
+      OutWrite(f, Code, Procs[i].BodyAddr, ProcBodyEnd[i] - Procs[i].BodyAddr);
   writePad(f, rodataOff - (iramOff + iramSize));
-  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
+  if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
 {$endif}
   writePad(f, symOff - (rodataOff + DataFileLen));
 
@@ -3373,9 +3373,9 @@ begin
   writePad(f, rodataOff - (textOff + CodeLen));
   if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, rodataOff - (textOff + CodeLen));
-  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
+  if DataFileLen > 0 then OutWrite(f, Data, 0, DataFileLen);
 {$endif}
   writePad(f, symOff - (rodataOff + DataFileLen));
 
@@ -4493,9 +4493,9 @@ begin
   writePad(f, dataOff - (textOff + CodeLen));
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  if DataLen > 0 then OutWrite(f, Data, 0, DataLen);
 {$endif}
   writePad(f, symOff - (dataOff + DataLen));
 
@@ -5015,9 +5015,9 @@ begin
   writePad(f, dataOff - (textOff + CodeLen));
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
   writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  if DataLen > 0 then OutWrite(f, Data, 0, DataLen);
 {$endif}
   writePad(f, symOff - (dataOff + DataLen));
 
@@ -5320,7 +5320,7 @@ begin
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
 {$endif}
   writePad(f, symOff - (textOff + CodeLen));
 
@@ -5622,14 +5622,14 @@ begin
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
 {$else}
-  if CodeLen > 0 then syswrite(f,Code,CodeLen);
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
 {$endif}
   writePad(f, dataOff - (textOff + CodeLen));
 
 {$ifdef FPC}
   if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
 {$else}
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  if DataLen > 0 then OutWrite(f, Data, 0, DataLen);
 {$endif}
   writePad(f, dynstrOff - (dataOff + DataLen));
 
