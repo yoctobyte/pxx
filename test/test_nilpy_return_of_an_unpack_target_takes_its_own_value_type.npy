@@ -1,0 +1,55 @@
+# A def returning a name that was bound as ONE ELEMENT of an unpack target.
+# The return-type scans matched the `w =` spelled at the end of the target
+# list and typed w from the WHOLE right-hand side -- a tuple -- so the caller
+# read the integer as an object pointer and died with SIGSEGV (pinned v411
+# too). Same for a name also written as an ATTRIBUTE (`b.w = (1, 2)`). The
+# element sits first and last; the controls (a plain, a chained and a
+# ctor-bound local) must stay typed. CPython is the oracle.
+class B:
+    pass
+
+
+class C:
+    def call(self):
+        return "hi"
+
+
+def last_flat():
+    a, w = (1, 2), 4
+    return w
+
+
+def last_after_group():
+    (x, y), w = (1, 2), 4
+    return x + y + w
+
+
+def first_flat():
+    w, a = 4, (1, 2)
+    return w
+
+
+def attribute_then_local():
+    b = B()
+    b.w = (1, 2)
+    w = 5
+    return w
+
+
+def plain():
+    w = "abc"
+    return w
+
+
+def chained():
+    a = w = (1, 2)
+    return w
+
+
+def ctor_bound():
+    c = C()
+    return c.call()
+
+
+print(last_flat(), last_after_group(), first_flat(), attribute_then_local())
+print(plain().upper(), chained(), ctor_bound().upper())

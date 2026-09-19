@@ -1848,6 +1848,7 @@ const
     refused as "too many names". }
   PY_FOR_NEST_SLOTS = 7;   { target-list slots that may hold a group }
   PY_FOR_NEST_NAMES = 7;   { names inside one group }
+  PY_NEST_RECS = 1023;     { live nested-target records (PyNestRec*), all depths }
 
   { Population tag a PXXObjAlloc-headered instance carries at [inst-8] — MUST
     match PXX_OBJ_MAGIC in compiler/builtin/builtinheap.pas. Odd value, so it

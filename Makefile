@@ -4837,6 +4837,13 @@ test-nilpy: $(COMPILER)
 	# desugars bound only the flat names. CPython is the oracle.
 	./$(COMPILER) test/test_nilpy_nested_for_target_over_zip_and_generator.npy $(TESTTMP)/test_nilpy_nestforzipgen26
 	$(TESTTMP)/test_nilpy_nestforzipgen26 | diff -u test/test_nilpy_nested_for_target_over_zip_and_generator.expected -
+	# NESTED unpacking targets at any depth, loop and assignment, one group parser.
+	./$(COMPILER) test/test_nilpy_nested_target_at_any_depth.npy $(TESTTMP)/test_nilpy_nestanydepth26
+	$(TESTTMP)/test_nilpy_nestanydepth26 | diff -u test/test_nilpy_nested_target_at_any_depth.expected -
+	# a def returning ONE ELEMENT of an unpack target was typed from the whole
+	# right-hand side and the caller SIGSEGVed (pinned v411 too). CPython is the oracle.
+	./$(COMPILER) test/test_nilpy_return_of_an_unpack_target_takes_its_own_value_type.npy $(TESTTMP)/test_nilpy_retunptgt26
+	$(TESTTMP)/test_nilpy_retunptgt26 | diff -u test/test_nilpy_return_of_an_unpack_target_takes_its_own_value_type.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

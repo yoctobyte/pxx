@@ -1,0 +1,52 @@
+# NESTED unpacking targets at ANY depth, in a loop and in an assignment, at
+# module level and inside a def. Loop and assignment share one group parser
+# and one emitter, so neither can stop a level short of the other. The group
+# sits first, middle and last because position is a variable. A comprehension
+# with a nested target, inside a nested-target loop's ITERABLE, checks that the
+# two target lists being parsed at once do not share records.
+# Found by That Space Program, tsp/anchor.py:104. CPython is the oracle.
+legs = [((1, "a"), (2, "b")), ((3, "c"), (4, "d"))]
+for k, ((ta, pa), (tf, pf)) in enumerate(legs):
+    print(k, ta, pa, tf, pf)
+
+xs = [(((1, 2), 3), 4), (((5, 6), 7), 8)]
+for (((a, b), c), d) in xs:
+    print(a, b, c, d)
+for ((a, b), c), d in xs:
+    print(d, c, b, a)
+for d, ((a, b), c), e in [(0, ((1, 2), 3), 4)]:
+    print(d, a, b, c, e)
+
+k, ((ta, pa), (tf, pf)) = 0, ((1, "a"), (2, "b"))
+print(k, ta, pa, tf, pf)
+((a, b), c), d = ((1, 2), 3), 4
+print(a, b, c, d)
+
+
+def in_def(legs):
+    out = []
+    for k, ((ta, pa), (tf, pf)) in enumerate(legs):
+        out.append(ta + tf + k)
+    (x, (y, z)), w = (1, (2, 3)), 4
+    out.append(x + y + z + w)
+    return out
+
+
+print(in_def(legs))
+
+P = [((1, 2), 3), ((4, 5), 6)]
+for (a, b), c in [((q, p), r) for (p, q), r in P]:
+    print(a, b, c)
+print([a + b + c + i for i, ((a, b), c) in enumerate(P)])
+
+
+def gen():
+    yield 1, ((2, 3), 4)
+
+
+for i, ((a, b), c) in gen():
+    print(i, a, b, c)
+for ((a, b), c), d in zip([((1, 2), 3)], [9]):
+    print(a, b, c, d)
+for (only,) in [(1,), (2,)]:
+    print(only)

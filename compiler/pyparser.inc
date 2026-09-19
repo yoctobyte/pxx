@@ -217,24 +217,33 @@ var
     index, which is the only form that can serve three. }
   PyForExtraName: array[0..5] of AnsiString;
   PyForExtraCount: Integer;
-  { A NESTED target slot — `for n, (p, q) in enumerate(pairs):`. The whole for
-    lowering is keyed on a FLAT name list, so a group is desugared here rather
-    than generalised into it: the slot takes a HIDDEN name like any other, and
-    the inner names are unpacked from it by index at the top of the body, which
-    is exactly what the two-name pair path already does one level up.
+  { NESTED target groups — `for k, ((ta, pa), (tf, pf)) in enumerate(legs):` and
+    `a, (b, c) = (1, (2, 3))` — as ONE record list shared by the loop and the
+    assignment target parsers, to any depth. Both lowerings are keyed on a FLAT
+    name list, so a group is desugared rather than generalised into them: its
+    slot takes a HIDDEN name like any other, and the inner names are unpacked
+    from it by index ahead of the body (a loop) or after the outer stores (an
+    assignment), which is exactly what the two-name pair path does one level up.
 
-    Slot numbering matches the target list: 0 = the first name, 1 = the second,
-    2+ = PyForExtraName[slot-2]. Count 0 means the slot is a plain name.
+    A record is one element of a group: a user NAME, or an inner group bound to
+    a hidden name of its own (IsGroup), whose elements are records with it as
+    Parent. A slot's ROOT record (Parent -1) is the slot's hidden name. Records
+    are appended in PREORDER, so emitting them in list order assigns every
+    group's hidden variable before its children read it. Slot numbering matches
+    the target list: 0 = the first name, 1 = the second, 2+ = the extras.
+
+    Owner separates the target lists being parsed at once: a comprehension in a
+    loop's ITERABLE parses its own header before the outer loop emits. The list
+    is stack-shaped for the same reason, so emitted (Dead) records are dropped
+    off the tail when the next target list begins.
     feature-nilpy-starred-and-nested-unpacking }
-  PyForNestName: array[0..PY_FOR_NEST_SLOTS, 0..PY_FOR_NEST_NAMES] of AnsiString;
-  PyForNestCount: array[0..PY_FOR_NEST_SLOTS] of Integer;
-  { The same, for an ASSIGNMENT target list — `a, (b, c) = (1, (2, 3))`.
-    PyAsgNestHost is the HIDDEN name the group's slot was bound to, so the
-    unpack can be emitted from one helper at both of PyParseUnpackAssign's
-    exits instead of being written out twice. }
-  PyAsgNestName: array[0..PY_FOR_NEST_SLOTS, 0..PY_FOR_NEST_NAMES] of AnsiString;
-  PyAsgNestCount: array[0..PY_FOR_NEST_SLOTS] of Integer;
-  PyAsgNestHost: array[0..PY_FOR_NEST_SLOTS] of AnsiString;
+  PyNestRecOwner, PyNestRecSlot, PyNestRecParent, PyNestRecIdx,
+    PyNestRecSym: array[0..PY_NEST_RECS] of Integer;
+  PyNestRecName: array[0..PY_NEST_RECS] of AnsiString;
+  PyNestRecIsGroup, PyNestRecDead: array[0..PY_NEST_RECS] of Boolean;
+  PyNestRecCount: Integer;
+  PyNestOwnerSeq: Integer;
+  PyForNestOwner: Integer;   { the owner of the for header parsed last }
   PyHdrName: AnsiString;
   PyHdrNParams: Integer;
   PyHdrIsProc: Boolean;
@@ -27543,24 +27552,120 @@ begin
     Result := 'at';
 end;
 
-{ Unpack one NESTED for-target slot — the `(p, q)` of `for n, (p, q) in ...`,
-  recorded by PyParseForTargetSlot — out of the hidden name it was bound to,
-  appending one assignment per inner name to seq. The ONE place this is done:
-  PyParseForIn and the generator binder (PyGenBindTarget) both call it, because
-  the generator paths once bound only the flat names and left the inner ones
-  undefined. feature-nilpy-starred-and-nested-unpacking }
-function PyForNestUnpack(slot, hostSym, seq: Integer): Integer;
-var i, sym, node: Integer;
+{ Start a nested-target list and answer its owner id. Records already emitted
+  are dropped off the tail first: every list that began after them has ended
+  by now, so the list stays stack-shaped. }
+function PyNestBegin: Integer;
+begin
+  while (PyNestRecCount > 0) and PyNestRecDead[PyNestRecCount - 1] do
+    Dec(PyNestRecCount);
+  Inc(PyNestOwnerSeq);
+  Result := PyNestOwnerSeq;
+end;
+
+function PyNestAdd(owner, slot, parent, idx: Integer; const nm: AnsiString;
+                   isGroup: Boolean): Integer;
+begin
+  if PyNestRecCount > PY_NEST_RECS then
+    Error('Nil Python: too many names in nested unpacking targets');
+  Result := PyNestRecCount;
+  PyNestRecOwner[Result] := owner;
+  PyNestRecSlot[Result] := slot;
+  PyNestRecParent[Result] := parent;
+  PyNestRecIdx[Result] := idx;
+  PyNestRecName[Result] := nm;
+  PyNestRecIsGroup[Result] := isGroup;
+  PyNestRecDead[Result] := False;
+  PyNestRecSym[Result] := -1;
+  Inc(PyNestRecCount);
+end;
+
+{ Consume the `( ... )` group at CurTok as the elements of record `rec`. An
+  element is a NAME or another group, so any depth is one recursion. A
+  trailing comma is legal, and for ONE name it is what makes the group a
+  1-tuple unpack (`for (only,) in [(1,)]` binds 1, not (1,)), so it is
+  remembered rather than merely tolerated. isLoop picks the wording only. }
+procedure PyParseNestGroupInto(owner, slot, rec: Integer; isLoop: Boolean);
+var n, child: Integer; trailComma: Boolean; what: AnsiString;
+begin
+  if isLoop then what := 'loop' else what := 'assignment';
+  Next;                                  { '(' }
+  n := 0;
+  trailComma := False;
+  repeat
+    if CurTok.Kind = tkStar then
+      Error('Nil Python: a STARRED name inside a nested ' + what
+            + ' target is not supported yet');
+    if n > PY_FOR_NEST_NAMES then
+      Error('Nil Python: too many names in a nested ' + what + ' target');
+    if CurTok.Kind = tkLParen then
+    begin
+      child := PyNestAdd(owner, slot, rec, n, PyHiddenName('nst'), True);
+      PyParseNestGroupInto(owner, slot, child, isLoop);
+    end
+    else
+    begin
+      if CurTok.Kind <> tkIdent then
+        Error('Nil Python: expected a name inside the nested ' + what + ' target');
+      PyNestAdd(owner, slot, rec, n, CurTok.SVal, False);
+      Next;
+    end;
+    Inc(n);
+    if not Eat(tkComma) then Break;
+    if CurTok.Kind = tkRParen then begin trailComma := True; Break; end;
+  until False;
+  Expect(tkRParen, ')');
+  if (n < 2) and (not trailComma) then
+    Error('Nil Python: a nested ' + what + ' target needs at least two names');
+end;
+
+{ The ROOT record of `owner`'s slot, or -1 when that slot is a plain name. }
+function PyNestRoot(owner, slot: Integer): Integer;
+var r: Integer;
+begin
+  Result := -1;
+  for r := PyNestRecCount - 1 downto 0 do
+    if (PyNestRecOwner[r] = owner) and (PyNestRecSlot[r] = slot) and
+       (PyNestRecParent[r] < 0) then
+    begin
+      Result := r;
+      Exit;
+    end;
+end;
+
+{ Unpack every group of `owner`'s slot out of hostSym — the variable the slot's
+  hidden name was bound to — appending one assignment per element to seq, in
+  preorder. The ONE place this is done, for a loop target (PyParseForIn and
+  the generator binder PyGenBindTarget) and an assignment target
+  (PyEmitNestedAsgUnpacks) alike: two one-level copies used to exist, and the
+  generator paths once bound only the flat names. }
+function PyNestEmit(owner, slot, hostSym, seq: Integer): Integer;
+var r, host, sym, node: Integer;
 begin
   Result := seq;
-  if (hostSym < 0) or (PyForNestCount[slot] = 0) then Exit;
-  for i := 0 to PyForNestCount[slot] - 1 do
+  if hostSym < 0 then Exit;
+  for r := 0 to PyNestRecCount - 1 do
   begin
-    sym := PyAssignTargetSym(PyForNestName[slot][i]);
-    if sym < 0 then sym := AllocVar(PyForNestName[slot][i], tyVariant);
+    if (PyNestRecOwner[r] <> owner) or (PyNestRecSlot[r] <> slot) then Continue;
+    PyNestRecDead[r] := True;
+    if PyNestRecParent[r] < 0 then
+    begin
+      PyNestRecSym[r] := hostSym;
+      Continue;
+    end;
+    host := PyNestRecSym[PyNestRecParent[r]];
+    if host < 0 then Continue;
+    if PyNestRecIsGroup[r] then
+      sym := AllocVar(PyNestRecName[r], tyVariant)
+    else
+    begin
+      sym := PyAssignTargetSym(PyNestRecName[r]);
+      if sym < 0 then sym := AllocVar(PyNestRecName[r], tyVariant);
+    end;
+    PyNestRecSym[r] := sym;
     node := AllocNode(AN_ASSIGN);
     ASTLeft[node] := PyMakeIdent(sym);
-    ASTRight[node] := PyPairItem(PyMakeIdent(hostSym), i);
+    ASTRight[node] := PyPairItem(PyMakeIdent(host), PyNestRecIdx[r]);
     Result := PySeqAppend(Result, node);
   end;
 end;
@@ -27580,8 +27685,11 @@ var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, n
     extraSyms: array[0..5] of Integer;
     hName, hName2: AnsiString;
     hExtraNames: array[0..5] of AnsiString;
-    nsSlot, nsI, nsSym, nsNode, nsHostSym: Integer;   { nested target unpack }
+    nsSlot, nsHostSym, nestOwner: Integer;   { nested target unpack }
 begin
+  { captured BEFORE the iterable is parsed: a comprehension in it parses a
+    for header of its own, which moves PyForNestOwner }
+  nestOwner := PyForNestOwner;
   pairMode := False;
   { A comprehension filter — `[EXPR for V in ITER if COND]` — must not let the
     ITER expression parser see the `if`: it parses as a ternary head and dies
@@ -28254,12 +28362,11 @@ begin
     uses. feature-nilpy-starred-and-nested-unpacking }
   for nsSlot := 0 to PY_FOR_NEST_SLOTS do
   begin
-    if PyForNestCount[nsSlot] = 0 then Continue;
     if nsSlot = 0 then nsHostSym := symIdx
     else if nsSlot = 1 then nsHostSym := sym2
     else if nsSlot - 2 < nExtra then nsHostSym := extraSyms[nsSlot - 2]
     else Continue;
-    bodyNode := PyForNestUnpack(nsSlot, nsHostSym, bodyNode);
+    bodyNode := PyNestEmit(nestOwner, nsSlot, nsHostSym, bodyNode);
   end;
 
   if PyCompTarget >= 0 then
@@ -29013,17 +29120,17 @@ end;
 
 function PyParseForTargetSlot(slot: Integer): AnsiString;
 { One entry of a for target list: either a plain NAME, consumed and returned as
-  itself, or a PARENTHESISED GROUP — `(p, q)` in `for n, (p, q) in ...` — which
-  is consumed here and returned as a HIDDEN name, with the inner names recorded
-  in PyForNestName[slot] for the body prologue to unpack.
+  itself, or a PARENTHESISED GROUP — `(p, q)` in `for n, (p, q) in ...`, to any
+  depth — which is consumed here and returned as a HIDDEN name, with its
+  elements recorded under PyForNestOwner for the body prologue to unpack
+  (PyNestEmit).
 
   Desugared rather than generalised into the for lowering: that lowering is
   keyed end to end on a flat list of names, and a nested group is exactly the
   index-unpack it already performs for `for a, b in pairs`, one level down.
   feature-nilpy-starred-and-nested-unpacking }
-var n: Integer; trailComma: Boolean;
+var root: Integer;
 begin
-  if (slot >= 0) and (slot <= PY_FOR_NEST_SLOTS) then PyForNestCount[slot] := 0;
   if CurTok.Kind = tkStar then
     Error('Nil Python: a STARRED loop target (`for a, *rest in ...`) is not '
           + 'supported yet');
@@ -29037,36 +29144,9 @@ begin
   end;
   if (slot < 0) or (slot > PY_FOR_NEST_SLOTS) then
     Error('Nil Python: too many names in a for target');
-  Next;                                  { '(' }
-  n := 0;
-  trailComma := False;
-  repeat
-    if CurTok.Kind = tkStar then
-      Error('Nil Python: a STARRED name inside a nested loop target is not '
-            + 'supported yet');
-    if CurTok.Kind = tkLParen then
-      Error('Nil Python: a loop target nested more than one level deep '
-            + '(`for a, ((b, c), d) in ...`) is not supported yet');
-    if CurTok.Kind <> tkIdent then
-      Error('Nil Python: expected a name inside the nested loop target');
-    if n > PY_FOR_NEST_NAMES then
-      Error('Nil Python: too many names in a nested loop target');
-    PyForNestName[slot][n] := CurTok.SVal;
-    Inc(n);
-    Next;
-    if not Eat(tkComma) then Break;
-    { a TRAILING comma — `(only,)`, and also the legal `(a, b,)`. For ONE name
-      it is what makes the target a 1-tuple UNPACK rather than a plain name:
-      `for (only,) in [(1,)]` binds 1, not (1,). That is why it is remembered
-      rather than merely tolerated.
-      bug-nilpy-a-one-name-tuple-loop-target-is-refused }
-    if CurTok.Kind = tkRParen then begin trailComma := True; Break; end;
-  until False;
-  Expect(tkRParen, ')');
-  if (n < 2) and (not trailComma) then
-    Error('Nil Python: a nested loop target needs at least two names');
-  PyForNestCount[slot] := n;
   Result := PyHiddenName('nst');
+  root := PyNestAdd(PyForNestOwner, slot, -1, 0, Result, True);
+  PyParseNestGroupInto(PyForNestOwner, slot, root, True);
 end;
 
 { The class of this EXACT name, or -1.
@@ -29225,20 +29305,19 @@ begin
   if s0 < 0 then s0 := AllocVar(name, tyVariant);
   prologue := PySeqAppend(prologue,
                 PyMakeAssignNode(PyMakeIdent(s0), PyPairItem(PyMakeIdent(Result), 0)));
-  prologue := PyForNestUnpack(0, s0, prologue);
+  prologue := PyNestEmit(PyForNestOwner, 0, s0, prologue);
   si := PyAssignTargetSym(name2);
   if si < 0 then si := AllocVar(name2, tyVariant);
   prologue := PySeqAppend(prologue,
                 PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), 1)));
-  prologue := PyForNestUnpack(1, si, prologue);
+  prologue := PyNestEmit(PyForNestOwner, 1, si, prologue);
   for xi := 0 to PyForExtraCount - 1 do
   begin
     si := PyAssignTargetSym(PyForExtraName[xi]);
     if si < 0 then si := AllocVar(PyForExtraName[xi], tyVariant);
     prologue := PySeqAppend(prologue,
                   PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), xi + 2)));
-    if xi + 2 <= PY_FOR_NEST_SLOTS then
-      prologue := PyForNestUnpack(xi + 2, si, prologue);
+    prologue := PyNestEmit(PyForNestOwner, xi + 2, si, prologue);
   end;
 end;
 
@@ -29291,7 +29370,7 @@ begin
   end;
   { slot 0 of the target list; a `(p, q)` group here yields a hidden name and
     records its inner names for the body prologue }
-  for pScan := 0 to PY_FOR_NEST_SLOTS do PyForNestCount[pScan] := 0;
+  PyForNestOwner := PyNestBegin;
   if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkLParen) then
     Error('Nil Python: expected loop variable after for');
   name := PyParseForTargetSlot(0);
@@ -29455,12 +29534,12 @@ begin
     over the zip EXPRESSION, which the N-way cursor already serves.
     bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
   { `for (name, code, gm), p in zip(A, B):` is excluded too: a NESTED slot is
-    unpacked by the general path's body prologue (PyForNestCount), which this
+    unpacked by the general path's body prologue (PyNestEmit), which this
     desugar never reads, so the inner names were left unbound -- "undefined
     variable (name)". The general path over the zip EXPRESSION serves it, the
     same way it already serves the three-name form. (TSP nbody.py:69.) }
   if (name2 <> '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
-     (PyForNestCount[0] = 0) and (PyForNestCount[1] = 0) and
+     (PyNestRoot(PyForNestOwner, 0) < 0) and (PyNestRoot(PyForNestOwner, 1) < 0) and
      PyIsIdent('zip') and (not PyUserShadowsProc('zip')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
      ((TokPos + 1 >= TokCount) or (Tokens[TokPos + 1].Kind <> tkStar)) then
@@ -31983,44 +32062,24 @@ begin
   ASTTk[Result] := Ord(tyInteger);
 end;
 
-function PyParseAsgNestGroup(slot: Integer): AnsiString;
-{ `(b, c)` as one element of an assignment target list. Consumed here, returned
-  as the HIDDEN name its slot binds to, with the inner names recorded for
-  PyEmitNestedAsgUnpacks. The twin of PyParseForTargetSlot's group arm; kept
-  separate because an assignment target element also admits attributes,
-  subscripts and a star, none of which may appear inside a group here.
+function PyParseAsgNestGroup(owner, slot: Integer): AnsiString;
+{ `(b, c)` as one element of an assignment target list, to any depth. Consumed
+  here, returned as the HIDDEN name its slot binds to, with its elements
+  recorded under `owner` for PyEmitNestedAsgUnpacks. The group grammar is the
+  loop target's own (PyParseNestGroupInto); what differs is only the outer
+  list, whose elements also admit attributes, subscripts and a star.
   feature-nilpy-starred-and-nested-unpacking }
-var n: Integer;
+var root: Integer;
 begin
   if (slot < 0) or (slot > PY_FOR_NEST_SLOTS) then
     Error('Nil Python: too many unpacking targets');
-  Next;                                  { '(' }
-  n := 0;
-  repeat
-    if CurTok.Kind = tkStar then
-      Error('Nil Python: a STARRED name inside a nested assignment target is '
-            + 'not supported yet');
-    if CurTok.Kind = tkLParen then
-      Error('Nil Python: an assignment target nested more than one level deep '
-            + '(`a, ((b, c), d) = ...`) is not supported yet');
-    if CurTok.Kind <> tkIdent then
-      Error('Nil Python: expected a name inside the nested assignment target');
-    if n > PY_FOR_NEST_NAMES then
-      Error('Nil Python: too many names in a nested assignment target');
-    PyAsgNestName[slot][n] := CurTok.SVal;
-    Inc(n);
-    Next;
-  until not Eat(tkComma);
-  Expect(tkRParen, ')');
-  if n < 2 then
-    Error('Nil Python: a nested assignment target needs at least two names');
-  PyAsgNestCount[slot] := n;
   Result := PyHiddenName('anst');
-  PyAsgNestHost[slot] := Result;
+  root := PyNestAdd(owner, slot, -1, 0, Result, True);
+  PyParseNestGroupInto(owner, slot, root, False);
 end;
 
-function PyEmitNestedAsgUnpacks(seq: Integer): Integer;
-{ `a, (b, c) = ...` — the inner names of every NESTED group in the target list,
+function PyEmitNestedAsgUnpacks(owner, seq: Integer): Integer;
+{ `a, (b, c) = ...` — the elements of every NESTED group in the target list,
   read out of the hidden name its slot was bound to. Called at BOTH of
   PyParseUnpackAssign's exits (the one-sequence branch and the
   value-per-target one) so the two cannot diverge.
@@ -32029,23 +32088,14 @@ function PyEmitNestedAsgUnpacks(seq: Integer): Integer;
   what Python does: the whole right-hand side is already in temps by then, so
   ordering only affects which store wins, exactly as it does there.
   feature-nilpy-starred-and-nested-unpacking }
-var i, j, hostSym, sym, node: Integer;
+var i, root: Integer;
 begin
   Result := seq;
   for i := 0 to PY_FOR_NEST_SLOTS do
   begin
-    if PyAsgNestCount[i] = 0 then Continue;
-    hostSym := PyProgSym(PyAsgNestHost[i]);
-    if hostSym < 0 then Continue;
-    for j := 0 to PyAsgNestCount[i] - 1 do
-    begin
-      sym := PyAssignTargetSym(PyAsgNestName[i][j]);
-      if sym < 0 then sym := AllocVar(PyAsgNestName[i][j], tyVariant);
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := PyMakeIdent(sym);
-      ASTRight[node] := PyPairItem(PyMakeIdent(hostSym), j);
-      Result := PySeqAppend(Result, node);
-    end;
+    root := PyNestRoot(owner, i);
+    if root < 0 then Continue;
+    Result := PyNestEmit(owner, i, PyProgSym(PyNestRecName[root]), Result);
   end;
 end;
 
@@ -32064,10 +32114,11 @@ var names: array[0..7] of AnsiString;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
     starAt, unpCnt, unpHi, unpTrail: Integer;   { `a, *rest = xs` }
+    nestOwner: Integer;   { this target list's nested groups (PyNestEmit) }
 begin
   nTargets := 0;
   starAt := -1;
-  for i := 0 to PY_FOR_NEST_SLOTS do PyAsgNestCount[i] := 0;
+  nestOwner := PyNestBegin;
   repeat
     if CurTok.Kind = tkStar then
     begin
@@ -32086,7 +32137,7 @@ begin
       (this target list is flat end to end). }
     if CurTok.Kind = tkLParen then
     begin
-      names[nTargets] := PyParseAsgNestGroup(nTargets);
+      names[nTargets] := PyParseAsgNestGroup(nestOwner, nTargets);
       flds[nTargets] := '';
       subBase[nTargets] := -1;
       subIdx[nTargets] := -1;
@@ -32280,7 +32331,7 @@ begin
         node := PyUnpackTargetStore(names[i], flds[i], unpElem, tyVariant, REC_NONE);
       seq := PySeqAppend(seq, node);
     end;
-    Result := PyEmitNestedAsgUnpacks(seq);
+    Result := PyEmitNestedAsgUnpacks(nestOwner, seq);
     Exit;
   end;
   if starAt >= 0 then
@@ -32300,7 +32351,7 @@ begin
                                   Syms[tmps[i]].TypeKind, Syms[tmps[i]].RecName);
     seq := PySeqAppend(seq, node);
   end;
-  Result := PyEmitNestedAsgUnpacks(seq);
+  Result := PyEmitNestedAsgUnpacks(nestOwner, seq);
 end;
 
 { Step over any `[...]` groups a target element ends with, so the lookahead
@@ -32331,9 +32382,10 @@ end;
 
 function PySkipTargetGroup(i: Integer): Integer;
 { Step over a `(a, b)` group in a target list, answering the index just past its
-  `)`, or -1 when it is not a plain comma-separated NAME list — a parenthesised
-  expression, a call's arguments, anything deeper. -1 rather than the index, so
-  the lookahead declines the whole statement instead of half-claiming it.
+  `)`, or -1 when it is not a comma-separated list of NAMES and further such
+  GROUPS — a parenthesised expression, a call's arguments. -1 rather than the
+  index, so the lookahead declines the whole statement instead of half-claiming
+  it. Any depth, as PyParseNestGroupInto accepts.
   feature-nilpy-starred-and-nested-unpacking }
 var n: Integer;
 begin
@@ -32343,8 +32395,14 @@ begin
   n := 0;
   while i < TokCount do
   begin
-    if Tokens[i].Kind <> tkIdent then Exit;
-    Inc(i); Inc(n);
+    if Tokens[i].Kind = tkLParen then
+    begin
+      i := PySkipTargetGroup(i);
+      if i < 0 then Exit;
+    end
+    else if Tokens[i].Kind = tkIdent then Inc(i)
+    else Exit;
+    Inc(n);
     if (i < TokCount) and (Tokens[i].Kind = tkComma) then begin Inc(i); Continue; end;
     if (i < TokCount) and (Tokens[i].Kind = tkRParen) then
     begin
@@ -37860,6 +37918,23 @@ end;
   A name rebound across kinds (`v = 3` then `v = 0.5`) reports the LAST kind,
   which is what the value at the return actually is in the straight-line case
   this can see. Returns tyUnknown when nothing typed. }
+{ Is the NAME at token k — already known to be followed by `=` — the WHOLE
+  target of its assignment, so that the right-hand side is its value? Only at a
+  statement boundary, or as a link of a chain (`a = w = 5`). Not when it ends
+  an unpack target list: in `(x, y), w = (1, 2), 4` the `w =` spelled in the
+  tokens is followed by the whole tuple, while w is bound to 4. The body
+  scans that type a local from its right-hand side (PyRetRecvClass,
+  PyRetNameType, the nested-def result chase) matched that spelling, typed the
+  def's result as the TUPLE, and the caller then read the integer 4 as an
+  object pointer: a SIGSEGV. Not an attribute either (`self.w = ...`), which
+  is not the local. The module-level scans use the same boundary test. }
+function PyWholeTargetAt(k, scanFrom: Integer): Boolean;
+begin
+  Result := (k <= scanFrom) or
+            (Tokens[k - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon,
+                                    tkAssign]);
+end;
+
 function PyRetRecvClass(scanFrom, scanTo: Integer; const recvNm: AnsiString): Integer;
 { The class a local of this body was last bound to, from its `recv = ClassName(`
   assignment. Token-only, like every other chase in this scan: PyInferExprType's
@@ -37879,7 +37954,7 @@ begin
     if (Tokens[k].Kind = tkIdent) and (k + 3 < TokCount) and
        (Tokens[k + 1].Kind = tkAssign) and (Tokens[k + 2].Kind = tkIdent) and
        (Tokens[k + 3].Kind = tkLParen) and
-       CaseEqual(GetTokenStr(k), recvNm) then
+       CaseEqual(GetTokenStr(k), recvNm) and PyWholeTargetAt(k, scanFrom) then
     begin
       { the LAST such binding wins, as everywhere else in this scan }
       if FindUClassNonRecord(GetTokenStr(k + 2)) >= 0 then
@@ -37904,7 +37979,8 @@ begin
       end;
     end
     else if (Tokens[k].Kind = tkIdent) and (k + 2 < TokCount) and
-            (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), recvNm) then
+            (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), recvNm) and
+            PyWholeTargetAt(k, scanFrom) then
     begin
       { `c = a + b`, `c = (a + b)`, `c = h.a` -- any other right-hand side.
         The two shapes above were the only ones this chase knew, so a receiver
@@ -38070,7 +38146,8 @@ begin
   PyRetNameType := tyUnknown;
   for k := scanFrom to scanTo - 1 do
     if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) then
+       (Tokens[k + 1].Kind = tkAssign) and CaseEqual(GetTokenStr(k), nm) and
+       PyWholeTargetAt(k, scanFrom) then
     begin
       e2 := k + 2;
       while (e2 < TokCount) and
@@ -38465,7 +38542,8 @@ begin
         chainRec := -1;
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) then
+             CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) and
+             PyWholeTargetAt(k, bodyScanStart) then
           begin
           { `x /= 2` REBINDS x to a float, whatever it held before, because `/`
             is true division. The chase below only looks for `=`, so
@@ -38832,6 +38910,7 @@ begin
              (Tokens[k + 1].Kind = tkAssign) and
              (Tokens[k + 2].Kind = tkIdent) and (Tokens[k + 3].Kind = tkLParen) and
              CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) and
+             PyWholeTargetAt(k, bodyScanStart) and
              (FindProc(GetTokenStr(k + 2)) < 0) then
           begin
             t2 := PyNestedDefRetType(bodyScanStart, k, GetTokenStr(k + 2), rec2);
