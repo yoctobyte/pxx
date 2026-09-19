@@ -110,3 +110,4 @@ longer/adaptive timeout, get pinned to an unloaded host, or get marked
 non-bisectable so the watcher stops minting attributions from it? Left
 unassigned deliberately — the fleet was wound down on 2026-09-18 and this tick is
 a watch, not a dispatch. Flagged to the owner the same night.
+- 2026-09-19 — the borg watcher saw `test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas` GREEN at a330bf12fed7 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-threadsafe-heap-lock-deadlock-diag-2`, not `regression-test-threads-test-threadsafe-heap-lock-deadlock-diag`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
