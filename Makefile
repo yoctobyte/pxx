@@ -25648,6 +25648,13 @@ progress-check:
 # i386 cross-target slice (feature-target-i386). Grows with the backend;
 # joins 'make test' when the op coverage is broad enough to matter.
 test-i386: $(COMPILER)
+	# THE READ-ONLY DATA SEGMENT ON i386 -- the same pair as test-aarch64's first
+	# rows: the literal store faults with the split, runs with --no-ro-data.
+	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
+	./$(COMPILER) --target=i386 test/test_ro_data_literal_store.pas $(TESTTMP)/i386_ro_store_ro >/dev/null
+	tools/expect_same.sh i386/ro_data_literal_store-faults "$$( (tools/run_target.sh i386 $(TESTTMP)/i386_ro_store_ro 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
+	./$(COMPILER) --target=i386 --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/i386_ro_store_rw >/dev/null
+	tools/expect_same.sh i386/ro_data_literal_store-control "$$( (tools/run_target.sh i386 $(TESTTMP)/i386_ro_store_rw 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -30569,6 +30576,13 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_static_string_literal "$$(tools/run_target.sh xtensa $(TESTTMP)/ssl_xt | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_xt_x64 | grep -v '^pxx-census')"
 
 test-arm32: $(COMPILER)
+	# THE READ-ONLY DATA SEGMENT ON arm32 -- the same pair as test-aarch64's first
+	# rows: the literal store faults with the split, runs with --no-ro-data.
+	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
+	./$(COMPILER) --target=arm32 test/test_ro_data_literal_store.pas $(TESTTMP)/arm32_ro_store_ro >/dev/null
+	tools/expect_same.sh arm32/ro_data_literal_store-faults "$$( (tools/run_target.sh arm32 $(TESTTMP)/arm32_ro_store_ro 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
+	./$(COMPILER) --target=arm32 --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/arm32_ro_store_rw >/dev/null
+	tools/expect_same.sh arm32/ro_data_literal_store-control "$$( (tools/run_target.sh arm32 $(TESTTMP)/arm32_ro_store_rw 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
 	# THE BYTE PREFIX ON A 32-BIT TARGET, which is the row that is structurally
 	# invisible everywhere else: arm32 writes the WIDE prefix as two stores (low
 	# word plus an explicit zero high word), so it is the one backend whose

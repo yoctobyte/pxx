@@ -567,15 +567,15 @@ procedure PatchDynamicData32(dataBase: Int64);
 var i, p: Integer;
 begin
   for i := 0 to ExternalCount-1 do
-    PatchDataI32(DynamicRelaOff + (i * 8), Integer(dataBase + ExternalGotOff[i]));
+    PatchDataI32(DynamicRelaOff + (i * 8), Integer(DataVA(dataBase, ExternalGotOff[i])));
   p := DynamicOff + (DynamicNeededCount * 8);
-  PatchDataI32(p + 4, Integer(dataBase + DynamicStrOff));   { DT_STRTAB }
+  PatchDataI32(p + 4, Integer(DataVA(dataBase, DynamicStrOff)));   { DT_STRTAB }
   Inc(p, 16);
-  PatchDataI32(p + 4, Integer(dataBase + DynamicSymOff));   { DT_SYMTAB }
+  PatchDataI32(p + 4, Integer(DataVA(dataBase, DynamicSymOff)));   { DT_SYMTAB }
   Inc(p, 16);
-  PatchDataI32(p + 4, Integer(dataBase + DynamicHashOff));  { DT_HASH }
+  PatchDataI32(p + 4, Integer(DataVA(dataBase, DynamicHashOff)));  { DT_HASH }
   Inc(p, 8);
-  PatchDataI32(p + 4, Integer(dataBase + DynamicRelaOff));  { DT_REL }
+  PatchDataI32(p + 4, Integer(DataVA(dataBase, DynamicRelaOff)));  { DT_REL }
 end;
 
 { Point each external indirect call at its resolved GOT slot. x86-64 uses a
@@ -807,10 +807,12 @@ begin
   writePad(f, 40);   { NULL shdr (index 0) }
   DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
   writeShdr32(f, DbgNmText, 1, codeOffset, CodeLen);
-  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
-  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);
+  { With the read-only split, .data names the RW part only (see the 64-bit copy). }
+  DbgShFlags := 3; DbgShAddr := DataRwVA(dataBase); DbgShAlign := 8;
+  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen + DataRwFilePos,
+              DataFileLen - DataRwFilePos);
   DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
-  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize);
+  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataFileLen, BSSSize);
   DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
   writeShdr32(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr32(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
@@ -979,10 +981,12 @@ begin
   for i := 1 to 40 do writeU8(f, 0);   { NULL shdr (index 0) }
   DbgShFlags := 6; DbgShAddr := entry;    DbgShAlign := 16;
   writeShdr32(f, DbgNmText, 1, codeOffset, CodeLen);
-  DbgShFlags := 3; DbgShAddr := dataBase; DbgShAlign := 8;
-  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen, DataLen);
+  { With the read-only split, .data names the RW part only (see the 64-bit copy). }
+  DbgShFlags := 3; DbgShAddr := DataRwVA(dataBase); DbgShAlign := 8;
+  writeShdr32(f, DbgNmData, 1, codeOffset + CodeLen + DataRwFilePos,
+              DataFileLen - DataRwFilePos);
   DbgShFlags := 3; DbgShAddr := bssBase;  DbgShAlign := 8;
-  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataLen, BSSSize);
+  writeShdr32(f, DbgNmBss, 8, codeOffset + CodeLen + DataFileLen, BSSSize);
   DbgShFlags := 0; DbgShAddr := 0;        DbgShAlign := 1;
   writeShdr32(f, DbgNmLine,   1, dbgFileBase + DbgLineSecOff,   DbgLineSecSize);
   writeShdr32(f, DbgNmInfo,   1, dbgFileBase + DbgInfoSecOff,   DbgInfoSecSize);
@@ -2532,6 +2536,19 @@ begin
     phnum := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET32;
   end;
+  { The read-only data segment for the hosted 32-bit targets, i386 and arm32 --
+    the same layout as writeELF (RoLayoutPrepare), decided after the last
+    append to Data[] (PrepareDynamicData32) and before anything resolves a data
+    address. One more program header, so code starts 32 bytes later. Not the
+    bare ESP image, which is one RWX region with nothing to enforce a second.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoLayoutPrepare(((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32))
+                  and (not EspBareBoot), ElfSegAlign);
+  if RoSplitActive then
+  begin
+    Inc(phnum);
+    codeOffset := codeOffset + PROG32_HEADER_SIZE;
+  end;
   { See the same check in writeELF: the constant and the header count are one
     fact spelled twice, and drift produces an image that loads and lies. }
   if codeOffset <> ELF32_HEADER_SIZE + phnum * PROG32_HEADER_SIZE then
@@ -2558,11 +2575,11 @@ begin
   { BSS holds word-sized globals laid out with AlignTo offsets, so the base
     itself must be aligned — Xtensa s32i/l32i (and strict RV32 cores) trap on
     misaligned word access. Code+data lengths are byte-granular, so pad. }
-  bssBase  := AlignTo(dataBase + DataLen, 8);
+  bssBase  := AlignTo(DataVA(dataBase, DataLen), 8);
   { AsmEntryOff: .asm frontend `global <label>` entry override — always 0
     (inert) for every non-.asm compile, same contract as the x86-64 writers. }
   entry    := loadBase + codeOffset + AsmEntryOff;
-  filesz   := codeOffset + CodeLen + DataLen;
+  filesz   := codeOffset + CodeLen + DataFileLen;
   memsz    := (bssBase - loadBase) + BSSSize;
   CheckBareImageFitsSram(loadBase, memsz);
 
@@ -2591,7 +2608,7 @@ begin
   { Data fixups: 4-byte absolute on this target (EmitDataRef emitted 4 bytes). }
   for i := 0 to FixCount-1 do
   begin
-    addr := dataBase + Fixups[i].DataOff;
+    addr := DataVA(dataBase, Fixups[i].DataOff);
     Patch32(Fixups[i].CodePos, addr);
   end;
 
@@ -2602,7 +2619,7 @@ begin
       BIASED offset -- the one decode point for all of them, because every
       backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
     if SymOffIsData(GlobFix[i].BSSoff) then
-      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+      addr := DataVA(dataBase, SymOffDataPart(GlobFix[i].BSSoff))
     else
       addr := bssBase + GlobFix[i].BSSoff;
     { PCRel is never set on this path today -- EmitGlobRef's rewrite is guarded
@@ -2637,7 +2654,14 @@ begin
   { Data->data pointer relocations (RTTI/layout blobs). Slots are 8 bytes; the
     32-bit absolute target fits in the low dword, high dword stays zero. }
   for i := 0 to DataPtrFixCount-1 do
-    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+    PatchDataU64(DataPtrFix[i].DataPos, DataVA(dataBase, DataPtrFix[i].TargetOff));
+
+  { Self-relative data words (target - pos; RTTI typeRef/baseTypeRef) were
+    computed at emission against the unsplit image -- recompute them. Identity
+    without the split. }
+  for i := 0 to DataRelFixCount-1 do
+    PatchDataI32(DataRelFixPos[i],
+                 Integer(DataRemap(DataRelFixTarget[i]) - DataRemap(DataRelFixPos[i])));
 
   { Dynamic externals: point each FF/14/25 indirect call at its GOT slot VA, and
     fill the dynamic-section absolute pointers (STRTAB/SYMTAB/HASH/REL).
@@ -2655,7 +2679,7 @@ begin
     feature-a-optional-imports-an-undefined-weak-dynamic-symbol }
   for i := 0 to DynCallCount-1 do
   begin
-    addr := dataBase + ExternalGotOff[DynCallExtIdx[i]];
+    addr := DataVA(dataBase, ExternalGotOff[DynCallExtIdx[i]]);
     if TargetArch = TARGET_ARM32 then
     begin
       { movw ip,#lo16 ; movt ip,#hi16 — A2 encoding imm4:imm12 fields. }
@@ -2669,6 +2693,7 @@ begin
   end;
   if isDyn then
     PatchDynamicData32(dataBase);
+  RoPermuteData;   { LAST: every patch above wrote Data[] at old positions }
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -2716,26 +2741,34 @@ begin
     writeU32(f,loadBase);writeU32(f,loadBase);
     writeU32(f,codeOffset + CodeLen);writeU32(f,codeOffset + CodeLen);
     writeU32(f,5);writeU32(f,ElfSegAlign);              { flags R+X }
-    writeU32(f,1);writeU32(f,codeOffset + CodeLen);     { PT_LOAD, data offset }
-    writeU32(f,dataBase);writeU32(f,dataBase);
-    writeU32(f,DataLen);writeU32(f,(bssBase - dataBase) + BSSSize);
+    if RoSplitActive then
+    begin
+      writeU32(f,1);writeU32(f,codeOffset + CodeLen);   { PT_LOAD, read-only data }
+      writeU32(f,dataBase);writeU32(f,dataBase);
+      writeU32(f,RoImageLen);writeU32(f,RoImageLen);
+      writeU32(f,4);writeU32(f,ElfSegAlign);            { flags R }
+    end;
+    writeU32(f,1);writeU32(f,codeOffset + CodeLen + DataRwFilePos); { PT_LOAD, data offset }
+    writeU32(f,DataRwVA(dataBase));writeU32(f,DataRwVA(dataBase));
+    writeU32(f,DataFileLen - DataRwFilePos);
+    writeU32(f,(bssBase - DataRwVA(dataBase)) + BSSSize);
     writeU32(f,6);writeU32(f,ElfSegAlign);              { flags R+W, no X }
   end;
   if isDyn then
   begin
     { PT_INTERP (R): the dynamic loader path. }
     writeU32(f,3);                                      { p_type = PT_INTERP }
-    writeU32(f,codeOffset + CodeLen + DynamicInterpOff);{ p_offset }
-    writeU32(f,dataBase + DynamicInterpOff);            { p_vaddr }
-    writeU32(f,dataBase + DynamicInterpOff);            { p_paddr }
+    writeU32(f,codeOffset + CodeLen + DataFilePos(DynamicInterpOff)); { p_offset }
+    writeU32(f,DataVA(dataBase, DynamicInterpOff));     { p_vaddr }
+    writeU32(f,DataVA(dataBase, DynamicInterpOff));     { p_paddr }
     writeU32(f,DynamicInterpSize);                      { p_filesz }
     writeU32(f,DynamicInterpSize);                      { p_memsz }
     writeU32(f,4);writeU32(f,1);                        { flags=R, align }
     { PT_DYNAMIC (RW). }
     writeU32(f,2);                                      { p_type = PT_DYNAMIC }
-    writeU32(f,codeOffset + CodeLen + DynamicOff);      { p_offset }
-    writeU32(f,dataBase + DynamicOff);                  { p_vaddr }
-    writeU32(f,dataBase + DynamicOff);                  { p_paddr }
+    writeU32(f,codeOffset + CodeLen + DataFilePos(DynamicOff)); { p_offset }
+    writeU32(f,DataVA(dataBase, DynamicOff));           { p_vaddr }
+    writeU32(f,DataVA(dataBase, DynamicOff));           { p_paddr }
     writeU32(f,DynamicSize);                            { p_filesz }
     writeU32(f,DynamicSize);                            { p_memsz }
     writeU32(f,6);writeU32(f,4);                        { flags=RW, align }
@@ -2748,7 +2781,7 @@ begin
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
-  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+  if DataFileLen > 0 then Blockwrite(f,Data[0],DataFileLen);
   if doDebug then
   begin
     if DbgLen > 0 then Blockwrite(f,DbgBuf[0],DbgLen);
@@ -2759,7 +2792,7 @@ begin
   FpChmod(outPath,&755);
 {$else}
   if CodeLen > 0 then syswrite(f,Code,CodeLen);
-  if DataLen > 0 then syswrite(f,Data,DataLen);
+  if DataFileLen > 0 then syswrite(f,Data,DataFileLen);
   if doDebug then
   begin
     if DbgLen > 0 then syswrite(f,DbgBuf,DbgLen);

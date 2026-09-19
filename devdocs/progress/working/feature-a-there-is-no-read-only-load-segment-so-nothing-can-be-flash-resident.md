@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64 too since 2026-09-19) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: i386/arm32 hosted; then RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -289,3 +289,30 @@ in both `writeELF` copies. The page shift is `ElfSegAlign` (64 KiB on aarch64).
 PT_LOAD. New rows at the top of `test-aarch64`: the probe faults (rc 139) with
 the split and runs with `--no-ro-data`. Next: i386/arm32, which use the single
 `writeELF32`; see the recipe in the park section above.
+
+## 2026-09-19 (frankH) — i386 and arm32 hosted: landed
+
+`writeELF32` got what `writeELF` has, minus nothing:
+- `RoLayoutPrepare` for i386/arm32 and never the bare ESP image;
+- one more phdr, so `codeOffset` += 32;
+- `DataVA` for data and data-resident globals, `DataPtrFix`, GOT call sites
+  and `PatchDynamicData32`;
+- a `DataRelFix` loop, which this writer never had because nothing moved
+  before;
+- `RoPermuteData` after the patches;
+- R + RW PT_LOADs, with INTERP/DYNAMIC through `DataFilePos`/`DataVA`;
+- `DataFileLen` written;
+- both `DbgWriteShdrTable32` copies name only the RW part as `.data`.
+
+Verified:
+- `test-i386` and `test-arm32` GREEN in full.
+- 233/234 i386 and 201/202 arm32 tier binaries carry the R-only PT_LOAD,
+  3 dynamic on each.
+- New fault/control rows at the top of both tiers.
+- `-g` probed by hand: `.data` shdr equals the RW segment on both, readelf
+  clean, and `-g -O2` faults as expected. `-g` alone lowers `-O`, so the
+  literal is copied before the store; that is the same on x86-64.
+
+**Step 1 of the park section is DONE: every hosted target has the segment.**
+Next is step 2, RTTI/VMT/tables after measurement. It needs coordination with
+frankb-56, who owns RTTI emission.
