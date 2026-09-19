@@ -20,7 +20,8 @@ as the reasoning that produced it:
 2. **APPLICATION-FOCUSED, NOT BUG-FIX-FOCUSED, FROM NOW ON.** A standing change
    to how every seat picks work, not a preference. Attempt the target; let the
    failures name the tickets. The backlog is a consequence, never a queue.
-3. **A nice list of working demos.**
+3. **A nice list of working demos.** The measured list, one row per
+   `examples/**` program: `devdocs/dev/demo-status.md`.
 4. **lekkerzeilen compiles under Nil-Python**, as a demo.
 5. **busybox compiles without external libraries**, as a demo.
 6. **Beta 0.1.**
