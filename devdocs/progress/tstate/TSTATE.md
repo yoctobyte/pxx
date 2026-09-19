@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `ff2d50a2bde9` | 2026-09-19T16:32:08Z | RED (native) | 318.1s | `b4104386ae9c` RED |
+| borg | `ff2d50a2bde9` | 2026-09-19T16:50:12Z | RED (full) | 1057.8s | `ff2d50a2bde9` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `b4104386ae9c` on borg, 2026-09-19T15:16:06Z (1h ago).**
+**Newest full tier in the fleet: `ff2d50a2bde9` on borg, 2026-09-19T16:50:12Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `b4104386ae9c` | RED | 1h | — (newest) |
+| borg | `ff2d50a2bde9` | RED | 0m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -31,9 +31,12 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +50 (borg): bad `fca28056d8ec`, last good `0e3ba86d5208`, 4 commit(s) in range
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
-- **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy** — test/test_nilpy_bytearray_unbound_and_subclass.npy test/test_nilpy_bytearray_unbound_and_subclass.expected (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy** — test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
 - **test-esp-idf#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (borg): bad `b4104386ae9c`, last good `fada42022187`, 52 commit(s) in range
 - **test-core#src:test/c_asm_in_inline_body.c@2** — test/c_asm_in_inline_body.c tools/expect_same.sh +2 (borg): bad `8777a192a981`, last good `0c9be9120510`, 1 commit(s) in range
+- **test-aarch64#src:test/test_loadfile_into_element_and_field.pas** — test/test_loadfile_into_element_and_field.pas tools/expect_same.sh +1 (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
+- **test-arm32#src:test/test_loadfile_into_element_and_field.pas** — test/test_loadfile_into_element_and_field.pas tools/expect_same.sh +1 (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
+- **test-i386#src:test/test_loadfile_into_element_and_field.pas** — test/test_loadfile_into_element_and_field.pas tools/expect_same.sh +1 (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
+- **test-riscv32#src:test/test_loadfile_into_element_and_field.pas** — test/test_loadfile_into_element_and_field.pas tools/expect_same.sh +1 (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
+- **test-xtensa#src:test/test_loadfile_into_element_and_field.pas** — test/test_loadfile_into_element_and_field.pas tools/expect_same.sh +1 (borg): bad `ff2d50a2bde9`, last good `b4104386ae9c`, 7 commit(s) in range
