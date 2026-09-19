@@ -1,0 +1,5 @@
+3 7 2 3
+5
+TypeError
+F T F T T T
+True False fallback

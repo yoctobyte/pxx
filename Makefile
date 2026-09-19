@@ -2967,6 +2967,12 @@ test-nilpy: $(COMPILER)
 	@# TWICE and len(f.read().upper()) answered 0. Diffed against CPython.
 	./$(COMPILER) test/test_nilpy_len_of_a_file_read.npy $(TESTTMP)/test_nilpy_lenread26
 	$(TESTTMP)/test_nilpy_lenread26 | diff -u test/test_nilpy_len_of_a_file_read.expected -
+	@# len() and truthiness of a VARIANT holding a class with __len__/__bool__
+	@# (array.array, a user class). pylen_v raised TypeError and pyvar_to_bool
+	@# answered True for an empty one. Diffed against CPython; HEAD before the
+	@# fix dies on the first row and prints T T T T T T for the truth row.
+	./$(COMPILER) test/test_nilpy_len_of_a_variant_shim_object.npy $(TESTTMP)/test_nilpy_lenvar26
+	$(TESTTMP)/test_nilpy_lenvar26 | diff -u test/test_nilpy_len_of_a_variant_shim_object.expected -
 	@# io.open in a module that REBOUND the bare `open` -- lekkerzeilen/world.py's
 	@# own shape, and the shadow is what makes the row meaningful: without it a
 	@# fixture would also pass if io.open fell through to the builtin's lowering.

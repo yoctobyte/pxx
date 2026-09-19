@@ -1,0 +1,63 @@
+# len() of a VARIANT holding a class that declares __len__ -- an RTL shim
+# (array.array) or a user class. pylen_v knew only list/dict/bytes and raised
+# TypeError for every other object, while len() of a TYPED local of the same
+# class answered. Two routes to the variant: an unannotated parameter, and a
+# field the frontend does not type (array.array assigned to self.x). A class
+# WITHOUT __len__ must still be a TypeError.
+#
+# The truthiness half is the same gap in pyvar_to_bool: `if x:` on a variant
+# holding an EMPTY array.array or a user class whose __len__ is 0 answered True,
+# because the handle is never nil. Python asks __bool__ first, then __len__;
+# Both below has the two DISAGREE so the order is visible, and Plain (neither)
+# must stay truthy. Diffed against CPython.
+import array
+
+
+class Box:
+    def __init__(self, n):
+        self.n = n
+
+    def __len__(self):
+        return self.n
+
+
+class Plain:
+    pass
+
+
+class Both:
+    def __bool__(self):
+        return True
+
+    def __len__(self):
+        return 0
+
+
+class Holder:
+    def __init__(self):
+        self.values = array.array("h")
+        self.values.frombytes(bytes(10))
+
+
+def size(x):
+    return len(x)
+
+
+def truth(x):
+    if x:
+        return "T"
+    return "F"
+
+
+a = array.array("h")
+a.frombytes(bytes(6))
+print(size(a), size(Box(7)), size([1, 2]), size("abc"))
+h = Holder()
+print(len(h.values))
+try:
+    print(size(Plain()))
+except TypeError:
+    print("TypeError")
+e = array.array("h")
+print(truth(e), truth(a), truth(Box(0)), truth(Box(2)), truth(Both()), truth(Plain()))
+print(not e, bool(Box(0)), Box(0) or "fallback")

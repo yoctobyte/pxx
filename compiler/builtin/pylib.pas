@@ -6424,6 +6424,8 @@ function PyUserObjHash(o: TObject; var h: NativeUInt): Boolean; forward;
   bug-nilpy-iterator-protocol-on-a-user-class }
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean; forward;
+function PyUserObjNoArgMeth(o: TObject; mi: PMethInfo;
+                            var res: Variant): Boolean; forward;
 function PyUserObjHasDunder(o: TObject; const dunder: AnsiString): Boolean; forward;
 function PyUserObjIterable(o: TObject): Boolean; forward;   { __iter__ OR the old-style __getitem__ sequence protocol }
 { Is this object UNHASHABLE the way CPython means it — its class defines
@@ -9646,10 +9648,42 @@ begin
   end;
 end;
 
+{ __bool__ and __len__ of `o`'s class, most-derived first for each, in ONE
+  walk of the chain: pyvar_to_bool asks both for every plain object it tests,
+  and two PyFindDunder walks cost +33% on `if x:` over 1000 plain objects
+  (0.85 -> 1.14 s min of 5, 2M tests). The `__` prefix test skips the
+  ordinary methods without a string compare. }
+procedure PyFindTruthDunders(o: TObject; var mb, ml: PMethInfo);
+var curr: PClassRTTI; meths: PMethInfo; i: Integer;
+begin
+  mb := nil;
+  ml := nil;
+  curr := GetInstanceRTTI(Pointer(o));
+  while curr <> nil do
+  begin
+    if curr^.MethCount > 0 then
+    begin
+      meths := curr^.MethsPtr;
+      for i := 0 to Integer(curr^.MethCount) - 1 do
+      begin
+        if (Length(meths[i].NamePtr^) >= 7) and (meths[i].NamePtr^[1] = '_') and
+           (meths[i].NamePtr^[2] = '_') then
+        begin
+          if (mb = nil) and (meths[i].NamePtr^ = '__bool__') then mb := @meths[i]
+          else if (ml = nil) and (meths[i].NamePtr^ = '__len__') then ml := @meths[i];
+        end;
+      end;
+    end;
+    curr := PClassRTTI(curr^.ParentRTTI);
+  end;
+end;
+
 function pyvar_to_bool(const v: Variant): Boolean;
 var
   p: PPyVarRec;
   o: TObject;
+  dv: Variant;
+  mb, ml: PMethInfo;
 begin
   { Python truthiness -- TOTAL, never an error: 0, 0.0, '', None, and an EMPTY
     container are false. }
@@ -9670,7 +9704,20 @@ begin
     if o is TPyList then Result := TPyList(o).count > 0
     else if o is TPyDict then Result := TPyDict(o).count > 0
     else if o is TPyBytes then Result := TPyBytes(o).count > 0
-    else Result := p^.Payload <> 0;
+    { A user or RTL-shim class answers through __bool__, else __len__, which
+      is Python's order and the one the TYPED path already takes at compile
+      time (PyClassTruthyDunder). Without it `if x:` on a variant holding an
+      empty array.array, or a user class whose __len__ is 0, was True -- the
+      handle is never nil. pylen_v had the same one-arm gap. }
+    else
+    begin
+      PyFindTruthDunders(o, mb, ml);
+      if (mb <> nil) and PyUserObjNoArgMeth(o, mb, dv) then
+        Result := pyvar_to_bool(dv)
+      else if (ml <> nil) and PyUserObjNoArgMeth(o, ml, dv) then
+        Result := pyvar_to_int(dv) <> 0
+      else Result := p^.Payload <> 0;
+    end;
   end
   else
     Result := p^.Payload <> 0;
@@ -9725,6 +9772,7 @@ function pylen_v(const v: Variant): Int64;
 var
   p: PPyVarRec;
   o: TObject;
+  lv: Variant;
 begin
   p := PPyVarRec(@v);
   if p^.VType = 6 then
@@ -9745,6 +9793,14 @@ begin
     if o is TPyList then Result := TPyList(o).count
     else if o is TPyDict then Result := TPyDict(o).count
     else if o is TPyBytes then Result := TPyBytes(o).count
+    { A user or RTL-shim class declaring `__len__`. This is the helper len()
+      reaches whenever the value is a VARIANT -- an unannotated parameter, a
+      field the frontend could not type -- so `len(h.values)` for an
+      `array.array` field raised TypeError while `len(a)` on a typed local of
+      the same class answered. The for-loop's index walk (PYITER_K_SEQOBJ)
+      already asks the same dunder the same way. }
+    else if PyUserObjNoArgDunder(o, '__len__', lv) then
+      Result := pyvar_to_int(lv)
     else
     begin
       PyTypeError(p^.VType, 'an object with a length');
@@ -20822,15 +20878,25 @@ end;
 
 function PyUserObjNoArgDunder(o: TObject; const dunder: AnsiString;
                               var res: Variant): Boolean;
-var cls: PClassRTTI; mi: PMethInfo;
-    fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
-    ro: TObject;
+var cls: PClassRTTI;
 begin
   PyUserObjNoArgDunder := False;
   if o = nil then Exit;
   cls := GetInstanceRTTI(Pointer(o));
   if cls = nil then Exit;
-  mi := PyFindDunder(cls, dunder);
+  PyUserObjNoArgDunder := PyUserObjNoArgMeth(o, PyFindDunder(cls, dunder), res);
+end;
+
+{ The CALL half of PyUserObjNoArgDunder, for a caller that already holds the
+  method -- pyvar_to_bool finds __bool__ and __len__ in ONE walk of the class
+  chain and must not pay a second walk per name. False for a nil `mi` and for
+  any shape not declared below. }
+function PyUserObjNoArgMeth(o: TObject; mi: PMethInfo;
+                            var res: Variant): Boolean;
+var fv: TNoArgV; fo: TNoArgO; fi: TNoArgI; fs: TNoArgS; fb: TNoArgB; fd: TNoArgD;
+    ro: TObject;
+begin
+  PyUserObjNoArgMeth := False;
   if mi = nil then Exit;
   if mi^.Arity <> 1 then Exit;             { `self` only }
   if mi^.RetKind = 22 then
@@ -20852,7 +20918,7 @@ begin
       nothing above this line should change ownership because of it.
       bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
     if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 6 then
@@ -20861,7 +20927,7 @@ begin
     ro := fo(Pointer(o));
     if ro <> nil then PXXObjRetain(Pointer(ro));
     res := TObject(ro);
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if (mi^.RetKind = 13) or (mi^.RetKind = 1) or (mi^.RetKind = 15) or
@@ -20869,28 +20935,28 @@ begin
   begin
     fi := TNoArgI(mi^.Code);
     res := fi(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 23 then
   begin
     fs := TNoArgS(mi^.Code);
     res := fs(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 2 then
   begin
     fb := TNoArgB(mi^.Code);
     res := fb(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
   if mi^.RetKind = 19 then
   begin
     fd := TNoArgD(mi^.Code);
     res := fd(Pointer(o));
-    PyUserObjNoArgDunder := True;
+    PyUserObjNoArgMeth := True;
     Exit;
   end;
 end;
