@@ -4,9 +4,9 @@ track: C
 prio: 35
 type: bug
 blocked-by: []
-status: backlog
+status: done
 created: 2026-08-31
-summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it. THE GATE WAS MISNAMED AND IS CORRECTED HERE (2026-09-06, frankC): this said \"gated only by bug-c-no-c-program-entry-stub-for-wasm32-..., whoever lands that stub owes the same one-line widening in the same commit\". That stub LANDED (be2c87890) and the four sites are still unreachable, because the entry stub was never what gated them. The four sites are the CONSUMER side -- which helper reads a va_list. The gate is the PRODUCER side: the variadic prologue in ParseCSubroutine that spills registers into __va_save and anchors __va_overflow, which has SIX per-target arms (x86_64, aarch64, riscv32, i386, arm32, xtensa) and none for wasm32 -- that missing arm is the refusal. So the obligation now belongs to whoever adds a wasm32 PROLOGUE arm, not to anyone landing an entry stub. AND IT WAS NEVER ONE LINE: a new member also needs a vaRegSz (arm32 16, riscv32 32, xtensa 24, i386 0 -- wasm32 has no argument registers, so 0), and the cross32 helpers read a __va_save/__va_overflow pair that only a prologue arm creates. NOT WIDENED BLIND, deliberately: adding wasm32 to the four sets today would assert a va_list layout for a target that cannot produce one, unverifiable by any test that exists. THE TRIGGER IS NOW EXECUTABLE (2026-09-05, frankC): tools/c_va_arg_every_target.sh asserts, per target, that a build matches gcc exactly and that a REFUSAL names the C entry stub — the second arm being what stops a frontend broken for all cross targets from turning the check green. Proved a guard by ablation: TARGET_RISCV32 removed from the four sets made riscv32 print 0.00 where gcc says 2.50, which is the silent-wrong-values defect this ticket describes. NOTHING WAS WIDENED — the set is untouched and wasm32 stays unmeasurable by construction. The `Cross (aarch64)` comment residual at cparser.inc:2093 is also done -- the sibling at :2171 was reworded when xtensa landed and this one was missed. XTENSA IS NOW VERIFIED RATHER THAN ASSUMED (2026-09-05): the script gave every target its DEFAULT profile, so xtensa hit the ESP one, refused at the entry stub, and the row printed `outside this check by construction' -- false. With `--platform=posix' the same subject builds and qemu-xtensa RUNS it, matching gcc exactly, and all four set sites key on TargetArch alone so the profile cannot launder the result. 6 of 7 targets now assert VALUES; the built floor moved 5 -> 6. ONLY WASM32 IS STILL UNMEASURABLE, and it refuses at the entry stub on every profile it has. The ESP shipping path is covered too: `--emit-obj' must produce a Tensilica Xtensa REL object exporting app_main as a GLOBAL FUNC, which is the name the IDF links and calls."
+summary: "**FULLY DISCHARGED 2026-09-19 (frankB). Both halves of the trigger have now fired and the set is complete by ENUMERATION rather than by two targets being unable to compile C.** xtensa joined in 233e693bb with its C entry stub (the first half, 2026-09-04); wasm32 joined today with its variadic calling convention, and cparser.inc's four `TargetArch in [...]` sites now read `[TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA, TARGET_WASM32]`. aarch64 is the sole remaining occupant of the `TargetArch <> TARGET_X86_64` arm this ticket was afraid of targets falling into silently. THE GATE THIS TICKET NAMED WAS THE RIGHT ONE and it is met: the obligation was said to belong to \"whoever adds a wasm32 PROLOGUE arm\", and that arm exists -- empty, deliberately, because wasm32 spills nothing; the area is handed to the callee as a trailing parameter and stored into __va_overflow by the backend at body entry. vaRegSz is 0 for wasm32, as this ticket predicted, so the shared __pxx_va_arg_cross32 walk reads it exactly as it reads i386-cdecl. NOT WIDENED BLIND, which was this ticket's standing condition: the layout is asserted by RUNNING it -- test/c_wasm32_variadic.c, five shapes, exit 42 under both gcc and wasmtime, with a perturbed-expectation positive control and the pinned compiler as the negative one. tools/c_va_arg_every_target.sh still reports `6 built, 1 refused at a named wall, 7 examined`: wasm32 is IN the set and its subject now refuses one wall LATER, at our own MAX_WASM_BODY_VARS ceiling in crtl stdio.c, which is bookkeeping in the wasm encoder and not a question about va_arg. That remaining wall belongs to [[bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse]], which also records the wall behind IT (__pxx_fegetround). Nothing about the 32-bit slot-width set is open any more."
 ---
 
 # The 32-bit `va_arg` set is complete only because two targets cannot compile C
@@ -394,3 +394,30 @@ worth deciding deliberately rather than by default.
 Consequently `vaRegSz = 0` for wasm32 is correct and insufficient, and the four
 consumer-set sites still must not be widened until a producer exists — the
 sibling's own warning, which stands.
+
+
+## RESOLVED 2026-09-19 (frankB)
+
+The set is `[I386, ARM32, RISCV32, XTENSA, WASM32]` and every target that can
+compile a C program is in it explicitly. The thing this ticket existed to
+prevent — a C-capable target falling into the `TargetArch <> TARGET_X86_64` arm,
+silently taking aarch64's 8-byte two-bank layout, and printing wrong values from
+the second argument on — cannot now happen without someone adding a new target
+and skipping the check that would tell them.
+
+`tools/c_va_arg_every_target.sh` is the executable form of this ticket and it
+outlives it. Its admitted-refusal list gained a third spelling today
+(`wasm: too many params+locals`) **by name**, not by loosening to `grep -q
+error:`, with the reason beside it: wasm32 is now in the set and its subject
+stops at an encoder ceiling one wall further on. If a future target needs to be
+added there, the question to ask first is whether it belongs in the SET rather
+than in the tolerated list.
+
+What this ticket got right and is worth carrying forward: *"it was never one
+line"*. wasm32 needed a `vaRegSz` (0), a prologue arm (empty, and the emptiness
+is the design), a caller-side marshaller, a signature slot, and a body-entry
+store — five places, of which the four `TargetArch in [...]` sites were the
+last and cheapest.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

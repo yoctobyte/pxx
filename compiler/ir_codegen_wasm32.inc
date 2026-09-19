@@ -161,6 +161,15 @@ var
   share slots and only LEVELS need distinct ones. Lazily allocated, so a body
   that never nests pays for one level. }
   WasmStrPool       : array[0..15, 0..7] of Integer;
+  { THE VARIADIC-AREA SCRATCH LOCALS, one per nesting depth, and the depth is
+    real rather than defensive: a variadic argument may itself be a variadic
+    call (`printf("%d", snprintf(...))` places one inside the other's SECOND
+    pass), and a single shared local would have the inner call overwrite the
+    outer's area pointer between the outer's push and its pop. A named-argument
+    position does NOT nest -- that inner call completes before the outer pushes
+    anything -- so the depth only counts the tail. }
+  WasmVaPool        : array[0..7] of Integer;
+  WasmVaDepth       : Integer;
   { DATA-REF SENTINEL -> the Data[] offset of the cell that will hold its
     address; see WasmLateDataCellFor. Module-lifetime, not per body.
 
@@ -547,6 +556,11 @@ const
     NilPy defs) rather than code. }
   WASM_MAX_LATEDATA = 512;
   WASM_STR_SLOTS   = 8;
+  { How deep variadic calls may nest in one body. Eight is not a measured
+    ceiling, it is a refusal point: exceeding it reports a gap by name instead
+    of reusing a live area, which is the failure that would validate and then
+    read the wrong arguments. }
+  WASM_VA_DEPTH    = 8;
   WASM_PAGE        = 65536;
 
 const
@@ -2106,6 +2120,7 @@ end;
   emitted, or -1 when this body does not return an aggregate. }
 var
   WasmRetDestLocal: Integer;
+  WasmVaAreaLocal: Integer;   { C variadic on wasm32: the local index of the trailing i32 the CALLER hands over, pointing at the marshalled variadic area. -1 when this body is not variadic. Sits between the declared parameters and $retdest, so a declared parameter's index is still its own -- see WasmSigForProcSelf, which reserves the slots in that same order. }
 
 function WasmProcResult(p: Integer; var vt: Byte): Boolean;
 begin
@@ -2157,6 +2172,36 @@ begin
       WasmUnsupported('parameter ' + Procs[p].Params[i].Name + ' of '
                       + Procs[p].Name + ' has no wasm value type');
     end;
+  { A C VARIADIC FUNCTION TAKES ONE MORE PARAMETER THAN IT DECLARES, and that
+    is this target's whole variadic convention. Every register target lets the
+    callee FIND its variadic tail -- spill the argument registers, anchor at
+    the incoming frame. wasm32 has no argument registers and no addressable
+    incoming frame, so the tail cannot be found; it is HANDED over, as an i32
+    pointing at an area the caller marshalled into linear memory.
+
+    RESERVED BEFORE the hidden aggregate destination, so a variadic function's
+    area is always at index ParamCount exactly -- the caller, the callee's
+    entry store and the local numbering all compute it the same way without
+    anyone having to ask whether a hidden destination is also present. The
+    destination keeps its "trailing" property relative to everything declared,
+    which is what its own note is about.
+
+    We own both ends, so the layout is ours: packed 4-byte slots, an 8-byte
+    scalar taking two, no 8-byte alignment -- exactly what
+    __pxx_va_arg_cross32 already walks for i386-cdecl, whose reg-save area is
+    also empty. That reuse is the reason this target needs no new reader.
+    bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
+  if ProcVariadic[p] then
+  begin
+    if nParams < 32 then
+    begin
+      ptypes[nParams] := WT_I32;
+      Inc(nParams);
+    end
+    else
+      WasmUnsupported(Procs[p].Name + ' has no room for the variadic area'
+                      + ' parameter (32-parameter limit)');
+  end;
   nRes := 0;
   if Procs[p].IsFunc then
   begin
@@ -2998,6 +3043,26 @@ end;
   the compiler rebuilt to the byte-identical sha it had before, 63f56a42bef6.
   So BOTH must land before one line of this runs.
 
+  RE-MEASURED 2026-09-19, AND THE LIST IS NOW THREE LONG RATHER THAN TWO. The
+  va_arg row above is CLOSED -- wasm32 marshals its variadic tail into linear
+  memory and hands it over as a trailing parameter, and a five-shape C subject
+  matches gcc under wasmtime (test/c_wasm32_variadic.c). Raising the bound to
+  2048 again, on top of that, gets `#include <stdio.h>` + printf all the way to
+  a MODULE, and wasmtime then refuses to instantiate it on exactly one
+  unresolved import:
+
+    __pxx_fegetround   EmitCFenvStubs emits raw machine code; wasm has none
+
+  Eighteen imports, seventeen of them WASI, one of them ours. So the raise
+  alone is not an improvement to make on its own: it trades a named COMPILE
+  refusal for an unresolved import at INSTANTIATION, which is a later and
+  worse place to find out. The raise and a wasm32 fenv stub land together or
+  not at all. That raise was reverted too, byte-identical to f104f4b22922.
+
+  The ordering matters for whoever picks this up: the 288 ceiling is
+  bookkeeping in our own encoder, the fenv stub is a real missing body, and
+  neither is about the C variadic convention any more.
+
   It is INERT until then rather than merely untested: WasmCEntryEnvp stays -1
   for every program that compiles today, so this function is not called at
   all. Verified by the two wasm32 C programs that DO compile -- `return 42`
@@ -3784,9 +3849,153 @@ begin
   WasmInstrExtern := True;
 end;
 
+{ ===== the wasm32 C variadic convention, caller half =====
+
+  THE LAYOUT IS NOT A CHOICE MADE HERE. It is the one __pxx_va_arg_cross32
+  already walks for i386-cdecl -- packed 4-byte slots, an 8-byte scalar taking
+  two, nothing aligned to 8 -- and matching it is the entire reason this target
+  needs no sixth reader. Getting it wrong is SILENT: the module still
+  validates, and every argument after the mismatch reads half of its
+  neighbour.
+
+  WHY THE AREA IS ON THE SHADOW STACK rather than in a per-body buffer: the
+  same reason WasmStrScratchPush gives. One reserved area per body means one
+  address per body, and the nesting above is then two calls writing the same
+  bytes. A push nests by construction.
+
+  EVALUATION ORDER IS PRESERVED, which is why this runs AFTER the named
+  arguments are already on the operand stack rather than before. Every sequence
+  here is net-zero on that stack -- get/const/sub/tee/set for the area, an
+  address/value/store per argument -- so the named values sitting underneath
+  are untouched. Marshalling first would have been simpler and would have
+  evaluated the tail before the head; C leaves that order unspecified, but
+  unspecified is not a licence to differ from every other backend in this tree
+  for no reason. }
+
+{ The bytes one variadic argument occupies. False means the body is already
+  marked unsupported. }
+function WasmVaSlotBytes(valNode: Integer; const who: AnsiString;
+                         var bytes: Integer): Boolean;
+var vt: Byte;
+begin
+  WasmVaSlotBytes := False;
+  bytes := 0;
+  if not WasmNodeType(valNode, vt) then
+  begin
+    { AN AGGREGATE IN THE TAIL IS REFUSED, NOT GUESSED. cparser's reader arm
+      for this target takes the pointer branch (size TARGET_PTR_SIZE, two
+      derefs), so marshalling the struct's own bytes here would round-trip
+      wrong while validating perfectly. Passing the address instead needs a
+      stable copy with the call's lifetime, which is its own piece of work.
+      Naming it is what keeps the two halves from disagreeing in silence. }
+    WasmUnsupported('a struct, set or union in the variadic tail of ' + who
+                    + ' is not marshalled on wasm32 yet (scalars only)');
+    Exit;
+  end;
+  if (vt = WT_I64) or (vt = WT_F64) then bytes := 8 else bytes := 4;
+  WasmVaSlotBytes := True;
+end;
+
+{ Marshal the arguments from firstExtra onward into a fresh shadow-stack area
+  and leave its address on the operand stack as the trailing argument. Returns
+  the scratch local, or -1 with the body marked unsupported. totalOut is what
+  WasmVaAreaPop must add back. }
+function WasmVaAreaPush(firstExtra: Integer; const who: AnsiString;
+                        var totalOut: Integer): Integer;
+var a, total, off, scr, step: Integer; vt: Byte;
+begin
+  WasmVaAreaPush := -1;
+  totalOut := 0;
+  if WasmVaDepth >= WASM_VA_DEPTH then
+  begin
+    WasmUnsupported('variadic calls nest more than '
+                    + WasmIntStr(WASM_VA_DEPTH) + ' deep at ' + who);
+    Exit;
+  end;
+
+  { PASS ONE SIZES THE AREA. Walking the list twice is not laziness: $sp moves
+    exactly once, before any value is emitted, so the total has to be known
+    before the first argument is evaluated. }
+  total := 0;
+  a := firstExtra;
+  while a <> -1 do
+  begin
+    if not WasmVaSlotBytes(IRA[a], who, step) then Exit;
+    Inc(total, step);
+    a := IRB[a];
+  end;
+  { A call with `...` and no actual variadic argument still hands over a
+    pointer -- va_start has to anchor somewhere, and a zero-byte push would
+    anchor it at whatever sits below. Rounding to 16 keeps the callee's own
+    frame 16-aligned under ours, the same rounding WasmStrScratchPush uses. }
+  total := ((total + 15) div 16) * 16;
+
+  if WasmVaPool[WasmVaDepth] < 0 then
+    WasmVaPool[WasmVaDepth] :=
+      WasmAddLocal(WT_I32, 'va' + WasmIntStr(WasmVaDepth));
+  scr := WasmVaPool[WasmVaDepth];
+  if scr < 0 then Exit;
+
+  WasmGlobalGet(WasmGSp);
+  WasmI32Const(total);
+  WasmOp($6B, 'i32.sub');
+  WasmLocalTee(scr);
+  WasmGlobalSet(WasmGSp);
+
+  { PASS TWO stores each argument at its slot. The depth is held across the
+    value emits and only these, because that is the window in which a nested
+    variadic call can appear. }
+  Inc(WasmVaDepth);
+  off := 0;
+  a := firstExtra;
+  while (a <> -1) and (not WasmBodyBroken) do
+  begin
+    if not WasmVaSlotBytes(IRA[a], who, step) then Break;
+    if not WasmNodeType(IRA[a], vt) then Break;
+    WasmLocalGet(scr);
+    if off <> 0 then
+    begin
+      WasmI32Const(off);
+      WasmOp($6A, 'i32.add');
+    end;
+    WasmEmitValueAs(IRA[a], vt, 'variadic argument to ' + who);
+    if WasmBodyBroken then Break;
+    { THE STORE IS WIDTH-BY-SLOT, NOT WIDTH-BY-TYPE, and that distinction is
+      the one thing WasmTypeStore cannot be asked for here. A slot is four
+      bytes whatever the declared type is narrower than, and the reader reads
+      four; an i32.store8 would leave the upper three bytes holding whatever
+      the previous call left on the shadow stack, which is a wrong value and
+      not a crash. C's own default argument promotions mean a narrow type
+      should never reach here, but "should never" is not a guard. }
+    if vt = WT_F64 then WasmMemOp($39, 'f64.store', 3, 0)
+    else if vt = WT_I64 then WasmMemOp($37, 'i64.store', 3, 0)
+    else if vt = WT_F32 then WasmMemOp($38, 'f32.store', 2, 0)
+    else WasmMemOp($36, 'i32.store', 2, 0);
+    Inc(off, step);
+    a := IRB[a];
+  end;
+  Dec(WasmVaDepth);
+  if WasmBodyBroken then Exit;
+
+  { The area's address IS the trailing argument. }
+  WasmLocalGet(scr);
+  totalOut := total;
+  WasmVaAreaPush := scr;
+end;
+
+procedure WasmVaAreaPop(scr, total: Integer);
+begin
+  if scr < 0 then Exit;
+  WasmLocalGet(scr);
+  WasmI32Const(total);
+  WasmOp($6A, 'i32.add');
+  WasmGlobalSet(WasmGSp);
+end;
+
 procedure WasmEmitCall(node: Integer; isStmt: Boolean);
 var p, argNode, i, nParams, impIdx: Integer; pvt: Byte;
     isInstr: Boolean; instrOp: Byte; savedLVW: Boolean;
+    vaFirst, vaScr, vaTotal: Integer; isVariadic: Boolean;
 begin
   p := IRA[node];
   if p < 0 then
@@ -3833,12 +4042,32 @@ begin
     end;
   end;
   nParams := Procs[p].ParamCount;
+  { A VARIADIC CALL IS ONLY THE VARIADIC CONVENTION WHEN WE EMIT BOTH ENDS.
+    An IMPORT's signature is fixed by the host (WASI takes no variadic
+    function) and an INSTRUCTION extern is two bytes with no call at all, so
+    neither can be handed an extra parameter. They keep the refusal below,
+    which names the call rather than producing a module the host rejects. }
+  isVariadic := (p < Length(ProcVariadic)) and ProcVariadic[p]
+                and (impIdx < 0) and (not isInstr);
+  vaFirst := -1;
+  vaScr := -1;
+  vaTotal := 0;
   argNode := IRB[node];
   i := 0;
   while (argNode <> -1) and (not WasmBodyBroken) do
   begin
     if i >= nParams then
     begin
+      { THE TAIL STARTS HERE and the rest of this loop is about DECLARED
+        parameters, whose types come from Procs[p].Params. A variadic argument
+        has no declared parameter to take a type from -- that is what makes it
+        variadic -- so it is marshalled from its own node type instead, below,
+        after every named value is on the stack. }
+      if isVariadic then
+      begin
+        vaFirst := argNode;
+        Break;
+      end;
       WasmUnsupported('call to ' + Procs[p].Name + ' passes more than its '
                       + WasmIntStr(nParams) + ' parameters');
       Exit;
@@ -3892,6 +4121,20 @@ begin
                     + ' of ' + WasmIntStr(nParams) + ' parameters');
     Exit;
   end;
+  { THE VARIADIC AREA GOES ON BEFORE THE HIDDEN DESTINATION, matching the order
+    WasmSigForProcSelf reserves the two trailing slots in. A variadic function
+    that also returns an aggregate therefore takes ParamCount+2 parameters and
+    every index is still computable without asking which of the two is
+    present.
+
+    Emitted even when the tail is EMPTY (`vaFirst = -1`): the callee's
+    signature has the parameter unconditionally, so a `printf(s)` with no
+    conversions still has to hand over an anchor. }
+  if isVariadic then
+  begin
+    vaScr := WasmVaAreaPush(vaFirst, Procs[p].Name, vaTotal);
+    if WasmBodyBroken then Exit;
+  end;
   { The hidden destination goes on LAST, matching the trailing slot
     WasmSigForProc reserved. IRC is where the lowering already put it — the
     same field aarch64 reads for x8 — so nothing here allocates: the caller's
@@ -3925,6 +4168,10 @@ begin
     stack, and wasm requires the stack to be empty at the end of a statement.
     `drop` is that requirement, not a tidy-up. }
   if isStmt and Procs[p].IsFunc then WasmOp($1A, 'drop');
+  { RELEASE THE AREA. Net-zero on the operand stack, so it is safe to run with
+    a result sitting there; and it must run AFTER the call, because the callee
+    reads through the pointer for as long as it holds its va_list. }
+  if vaScr >= 0 then WasmVaAreaPop(vaScr, vaTotal);
   if impIdx < 0 then
   begin
     { A hidden-dest call's VALUE is the destination pointer the callee hands
@@ -7192,11 +7439,23 @@ begin
   { The trailing hidden-destination parameter. It is named and counted here so
     that local indices line up: every local added below sits above it, and a
     body that forgot it would silently address the dest as its first local. }
+  { The trailing variadic-area parameter, named and counted for the same reason
+    the destination below is: an index is a POSITION in the name buffer, so a
+    body that forgot it would number every local one too low and address the
+    area as its first local. Registered BEFORE $retdest to match the order
+    WasmSigForProcSelf reserves them in. }
+  WasmVaAreaLocal := -1;
+  if (CurProc >= 0) and ProcVariadic[CurProc] and (nParams < 32) then
+  begin
+    WasmVaAreaLocal := nParams;
+    if not resumed then WasmAddParamName('$vaarea');
+  end;
   WasmRetDestLocal := -1;
   if (CurProc >= 0) and Procs[CurProc].IsFunc
      and ABIRetViaHiddenDestProc(CurProc) and (nParams < 32) then
   begin
     WasmRetDestLocal := nParams;
+    if WasmVaAreaLocal >= 0 then WasmRetDestLocal := nParams + 1;
     if not resumed then WasmAddParamName('$retdest');
   end;
 
@@ -7255,6 +7514,8 @@ begin
   WasmStrDepth := 0;
   for i := 0 to WASM_STR_DEPTH - 1 do
     for pvtI := 0 to WASM_STR_SLOTS - 1 do WasmStrPool[i][pvtI] := -1;
+  WasmVaDepth := 0;
+  for i := 0 to WASM_VA_DEPTH - 1 do WasmVaPool[i] := -1;
   { A handler frame's pad is a BLOCK NUMBER, so a body that owns one needs the
     br_table to branch through even in the degenerate case where its own
     control flow would not have produced a second block. }
@@ -7306,6 +7567,23 @@ begin
         else if WasmSlotType(psym, pvt) then
           WasmTypeStore(Syms[psym].TypeKind, pvt);
       end;
+
+  { PUBLISH THE VARIADIC AREA INTO __va_overflow, which is what makes the
+    shared 32-bit va_arg walk work here unchanged. On every other target the
+    prologue fills this local from a register or a frame address; on wasm32 the
+    value arrived as a parameter and this is the only place the parameter
+    locals and the frame slots are both in scope.
+
+    __va_save is deliberately left alone: the reg-save area is SIZE 0 on this
+    target (va_start seeds regsize 0), so the walk never reads it, exactly as
+    on i386-cdecl. Zeroing it would be writing to memory nothing reads. }
+  if (not WasmBodyBroken) and (CurProc >= 0) and (WasmVaAreaLocal >= 0)
+     and (ProcVaOverflowSym[CurProc] >= 0) then
+  begin
+    WasmSlotAddr(ProcVaOverflowSym[CurProc]);
+    WasmLocalGet(WasmVaAreaLocal);
+    WasmTypeStore(tyPointer, WT_I32);
+  end;
 
   if not WasmBodyBroken then WasmEmitManagedLocals(False, retSym);
 

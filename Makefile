@@ -16574,6 +16574,30 @@ test-core: $(COMPILER)
 	# rather than as a comment, so it stays checkable.
 	# bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it
 	tools/c_wasm32_entry.sh
+	# C VARIADICS ON wasm32, THE ONE TARGET WHERE THE CALLEE CANNOT FIND ITS
+	# OWN TAIL. No argument registers to spill, no addressable incoming frame
+	# to anchor at, and a wasm function's signature is fixed -- so the caller
+	# marshals the tail into linear memory and hands over one trailing i32,
+	# and __pxx_va_arg_cross32's i386-cdecl walk reads it unchanged.
+	#
+	# BOTH HALVES ARE ASSERTED BY RUNNING IT, because the failure mode of a
+	# wrong layout is a module that VALIDATES and returns wrong numbers: every
+	# argument after the mismatch reads half of its neighbour. A build that
+	# says `ok:` proves nothing here -- see
+	# bug-a-a-wasm32-build-says-ok-for-a-module-that-traps-on-its-first-instruction.
+	#
+	# gcc IS THE ORACLE and the answer is asserted to be 42 on BOTH legs, so a
+	# subject that broke for both would be caught rather than agreeing with
+	# itself. 42 rather than 0 for the same reason c_wasm32_entry.sh gives:
+	# wasmtime instantiates a module with no `_start`, runs nothing, and exits
+	# 0, so 0 as the expected value cannot fail.
+	# bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse
+	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_variadic_gcc test/c_wasm32_variadic.c
+	@$(TESTTMP)/c_wasm32_variadic_gcc; tools/expect_same.sh c_wasm32_variadic-oracle "$$?" "42"
+	./$(COMPILER) --target=wasm32 test/c_wasm32_variadic.c $(TESTTMP)/c_wasm32_variadic.wasm
+	@tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_variadic.wasm; \
+	 tools/expect_same.sh c_wasm32_variadic-wasm32 "$$?" "42"
+	@echo "test-core: a C variadic function defines, calls and reads its tail on wasm32 -- five shapes, matching gcc"
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }

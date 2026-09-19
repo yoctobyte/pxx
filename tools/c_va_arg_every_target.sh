@@ -131,8 +131,28 @@ for t in $TARGETS; do
     # coverage, and one more thing for a future reader to believe is load
     # bearing. The list is what CAN happen, not what once did.
     #
+    # AND IT MOVED A THIRD TIME, 2026-09-19, FOR THE BEST REASON A WALL CAN
+    # MOVE: wasm32's va_arg landed, so the target is now IN the 32-bit set and
+    # its refusal is no longer about va_arg at all. This subject includes
+    # <stdio.h>, so it compiles the crtl, and crtl's stdio.c needs more
+    # params+locals in one body than the wasm encoder's MAX_WASM_BODY_VARS
+    # allows -- a BOOKKEEPING ceiling in our own backend, not a gap in the
+    # convention this script is about.
+    #
+    # Measured the same day, by raising that constant to 2048 and rebuilding:
+    # the subject then COMPILES and wasmtime refuses to instantiate it on one
+    # unresolved import, `__pxx_fegetround`, which is a machine-code stub
+    # EmitCFenvStubs cannot emit for a target that has no machine code. So the
+    # raise alone trades a named COMPILE refusal for an unresolved import at
+    # instantiation -- which this branch could not name at all, because the
+    # build would have SUCCEEDED. The raise and a wasm32 fenv stub therefore
+    # have to land together, and until they do the ceiling is the honest wall.
+    # The raise was reverted and the compiler rebuilt to the byte-identical sha
+    # it had before, f104f4b22922.
+    #
     #   C program entry stub  ->  a target with no stub yet
     #   va_arg not supported  ->  the target names the subject itself
+    #   too many params+locals -> our own encoder ceiling, not the convention
     #
     # DO NOT collapse these to `grep -q error:`. The whole value of this branch
     # is that it names which wall, and a check that accepts any error is a check
@@ -141,6 +161,8 @@ for t in $TARGETS; do
       why='no C entry stub yet'
     elif grep -q 'variadic C functions (va_arg) are not yet supported' "$WORK/build_$t.log"; then
       why='va_arg refused by name -- the honest wall, not a silent wrong layout'
+    elif grep -q 'wasm: too many params+locals' "$WORK/build_$t.log"; then
+      why='our own encoder ceiling in crtl stdio.c, BEHIND a working va_arg'
     else
       fail "$t refused for a reason that is NEITHER the C entry stub NOR a va_arg refusal by name, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
     fi

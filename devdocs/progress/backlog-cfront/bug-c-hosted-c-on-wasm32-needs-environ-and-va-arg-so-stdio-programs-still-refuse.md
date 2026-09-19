@@ -8,7 +8,7 @@ found: 2026-09-06
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "Wall A (`environ`) IS DONE as of 63d077feb and is INERT -- WasmEmitEnvironFetch has never executed. RE-MEASURED 2026-09-19 (frankB) AND THE ORDER IN THIS TICKET IS STALE: it says \"A, then C, then B\"; at HEAD **B (va_arg) is the ONLY reachable wall and C (MAX_WASM_BODY_VARS=288) is behind it and unmeasurable.** Compiled ALONE for wasm32, stdio.c, fcntl.c, unistd.c and stdlib.c ALL now die at va_arg, not at the params+locals bound -- va_arg refuses at PARSE time while the bound fails at ENCODE time, and stdio.c defines the printf family, i.e. its own variadic callees. NULL RESULT WITH THE EXPECTATION RECORDED FIRST: raising the bound 288->2048 and rebuilding moved ZERO observables (all five subjects still va_arg); probe reverted, compiler rebuilt byte-identical to cc3113bf07f5. **Do not raise the bound as the next step** -- it costs a commit and moves nothing; the cost was never the obstacle (it is (2048-288)*9 = 15,840 bytes of compiler BSS against 86.9MB, arithmetic from the WFLoc/WFVar declarations). Whether C is still real is now UNKNOWN, not cleared: re-measure it after B. WALL B IS THE WHOLE REMAINING JOB AND IT IS AN ABI DESIGN, not ordinary work: the callee-side arms at cparser.inc:14582 spill ARGUMENT REGISTERS into __va_save (vaRegSz 16 arm32 / 32 riscv32 / 24 xtensa), and wasm32 has neither argument registers nor an addressable incoming frame, so none of them port; the caller side needs its own linear-memory marshalling because a wasm function has a FIXED typed signature and passing 3 arguments to a 1-param callee has no encoding at all. Both ends must be designed together and we own both. AND THE CALLER SIDE STILL FAILS SILENTLY, re-confirmed at HEAD: a variadic call writes a valid 117KB module, prints `ok:` and exits 0 with `main` lowered to `unreachable` -- a green build of a program that traps, the same class as the __thread bug resolved today. NOT changed here: the unreachable floor is the wasm backend's own partial-lowering instrument and its exit-code policy is that backend's call. Blast radius measured for whoever takes it: of 61 wasm32 sources in the Makefile, 59 clean, 1 unrelated failure, and exactly ONE emits a gap -- test_wasm32_two_gaps_in_one_body.pas, whose unreachable body is main$0. Freestanding C on wasm32 is unaffected and still green."
+summary: "**WALL B (va_arg) IS DONE 2026-09-19 (frankB) and is NOT inert -- it is RUN.** wasm32 now defines, calls and reads a C variadic function: the caller marshals the tail into a shadow-stack area (packed 4-byte slots, an 8-byte scalar taking two, no 8-alignment -- the layout __pxx_va_arg_cross32 already walks for i386-cdecl) and hands it over as a trailing i32 reserved at index ParamCount, before the aggregate-dest slot; the callee stores it into __va_overflow at body entry, where the parameter locals exist. NO NEW READER: wasm32 joined the four 32-bit sets in cparser.inc with reg-save size 0, like i386. VERIFIED BY RUNNING IT: test/c_wasm32_variadic.c exercises five shapes -- 3 ints, 4/8/8 interleaved twice, an EMPTY tail, a variadic call nested INSIDE a variadic tail, and five named params before the tail -- and exits 42 under both gcc and wasmtime, with a positive control (two expectations perturbed -> 18) and a negative control (the pinned compiler refuses the same source). 61 wasm32 sources unchanged: 60 compile, one carries the pre-existing main$0 gap with identical text, one unrelated SetSignalHandler refusal. NOT done on purpose: an aggregate in the variadic tail is REFUSED by name (cparser reads it as a pointer here, so marshalling the bytes would validate and round-trip wrong), and WasmEmitCallInd is untouched so an INDIRECT variadic call still hits the old `passes more than its N parameters`. **THE REMAINING WALLS ARE TWO AND NEITHER IS ABOUT VARIADICS.** Re-measured the same day: hosted printf now dies at MAX_WASM_BODY_VARS=288 in crtl stdio.c; raising that to 2048 gets a whole MODULE and wasmtime then refuses to instantiate on exactly ONE unresolved import of eighteen (seventeen are WASI) -- __pxx_fegetround, which EmitCFenvStubs emits as raw machine code and cannot for a target that has none. **So do not raise the bound alone**: it trades a named COMPILE refusal for a link failure at instantiation, which is later and worse. The raise and a wasm32 fenv stub land together. Both probes reverted, compiler rebuilt byte-identical to f104f4b22922. Wall A (environ) is still INERT and still unasserted -- run a getenv program the day those two land."
 ---
 
 # Hosted C on wasm32: environ and va_arg
@@ -344,3 +344,96 @@ decide what that test should then assert.
 Nothing in the tree. What changed is the map: **B is the only reachable wall, C
 is behind it and unmeasurable, and the bound is not worth raising until B
 lands.**
+
+
+## WORKED 2026-09-19 (frankB) — wall B is DONE, and the wall count was wrong again
+
+`tools/gate.sh quick` GREEN, compiler `f104f4b22922`, `converged after 1 round(s)`.
+
+### The convention, and why it needed no new reader
+
+Every other target lets the callee FIND its variadic tail: spill the argument
+registers into `__va_save`, anchor `__va_overflow` at the incoming frame.
+wasm32 has neither — parameters arrive as typed locals, there is no register
+file and no addressable incoming frame — so the tail is **handed over** instead.
+
+- `WasmSigForProcSelf` reserves one trailing `i32` for `ProcVariadic[p]`, at
+  index exactly `ParamCount`, **before** the aggregate-destination slot. Every
+  site computes the index the same way without asking which of the two trailing
+  parameters is present.
+- `WasmEmitCall` emits the named arguments, then `WasmVaAreaPush` sizes the tail
+  in one pass, moves `$sp` once, stores each argument at its slot in a second
+  pass, and leaves the area address on the stack as the final argument.
+  `WasmVaAreaPop` adds the size back after the call. Both sequences are
+  net-zero on the operand stack, which is why they can run with the named
+  values — and the call's result — sitting underneath.
+- Body entry stores the parameter into `__va_overflow`
+  (`ProcVaOverflowSym[CurProc]`), the one place the parameter locals and the
+  frame slots are both in scope. `__va_save` is deliberately untouched: the
+  reg-save area is size 0 here.
+- `cparser.inc`'s four `TargetArch in [...]` sets gained `TARGET_WASM32`.
+  `vaRegSz` falls through to 0 and the slot alignment to 4, so the target reads
+  through `__pxx_va_arg_cross32`'s overflow walk exactly as i386-cdecl does.
+  **That reuse is the entire reason this is one commit and not a sixth reader.**
+
+### The shadow stack, not a per-body buffer
+
+One reserved area per body is one address per body, so
+`printf("%d", snprintf(...))` — an inner variadic call inside the outer's
+**second pass** — would marshal over arguments still live. A push nests by
+construction, and the scratch local is taken from a depth-indexed pool
+(`WASM_VA_DEPTH = 8`, exceeding it refuses by name). A variadic call in a
+**named** argument position does not nest: it completes before the outer push.
+
+### What the five-shape fixture is for
+
+`sum3(3, 10, 20, 12)` alone passes under a packed layout, under an 8-aligned
+one, and under a backend that pinned the area to a fixed position. The four
+other rows are the arrangements that differ: 4/8/8 interleaved twice (packing),
+an empty tail (the anchor still has to arrive), a nested variadic call (the
+scratch pool), and five named parameters before the tail (the index really is
+`ParamCount`). gcc is the oracle; the all-pass answer is **42 and not 0**,
+because a module with no `_start` is instantiated, runs nothing and exits 0.
+
+Positive control: perturbing two expectations gives exit 18 = 2|16.
+Negative control: the pinned compiler refuses the same source at `va_list`.
+
+### The wall count was wrong in the flattering direction, for the second time
+
+This ticket has now been wrong about how many walls are left **twice**, both
+times because a wall behind a wall is unmeasurable rather than merely
+unmeasured. With B closed:
+
+| wall | where | status |
+| --- | --- | --- |
+| A — `environ` | `WasmEmitEnvironFetch` | built, **never executed** |
+| B — `va_arg` | this commit | **done, and run** |
+| C — `MAX_WASM_BODY_VARS = 288` | `wasmenc.inc:87`, hit in crtl `stdio.c` | open |
+| D — `__pxx_fegetround` | `EmitCFenvStubs` emits raw machine code | open, **new** |
+
+D was found by raising C to 2048 and rebuilding: `#include <stdio.h>` +
+`printf` then produces a module, and `wasmtime` refuses to instantiate it on
+one unresolved import. `wasm-objdump -j Import -x` says eighteen imports,
+seventeen `wasi_snapshot_preview1`, one `libc.so.6.__pxx_fegetround`.
+
+**C alone is not an improvement.** Raising the bound converts a named COMPILE
+refusal into a link failure at instantiation — later, and invisible to
+`tools/c_va_arg_every_target.sh`'s refusal branch, which can only name a wall a
+build actually reports. C and D land together.
+
+Note D is not setjmp. The wasm32 skip in `ParseCProgram` covers both emitters
+for one stated reason — they emit machine code — but the two are not alike:
+`setjmp` cannot be made correct on wasm at all (no addressable call stack to
+unwind across), while `fegetround` returning `FE_TONEAREST` on a machine with
+exactly one rounding mode is **the truth**. `fesetround` is the half that must
+not silently answer success. Whoever takes D should split that guard the way
+the xtensa one was split.
+
+### The guard followed the wall rather than loosening
+
+`tools/c_va_arg_every_target.sh` would have gone red on this commit either way —
+with B closed, wasm32's refusal is `wasm: too many params+locals`, which was in
+neither admitted set. The admitted list gained that spelling **by name**, with
+the C-and-D reasoning beside it, and the script still reports
+`6 built, 1 refused at a named wall, 7 examined`. The alternative — `grep -q
+error:` — is the check that cannot fail.

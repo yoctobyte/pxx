@@ -14005,6 +14005,7 @@ begin
   SetLength(ProcLexParent, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
+  SetLength(ProcVaOverflowSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
   SetLength(ProcIram, n);  SetLength(ProcIsInterrupt, n);  SetLength(ProcBodyEnd, n);
@@ -14081,6 +14082,7 @@ begin
   ProcHdrTok[ProcCount]       := 0;   { 0 = always visible; ParseSubroutine stamps main-program headers }
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
+  ProcVaOverflowSym[ProcCount] := -1;
   ProcRetIsDynArray[ProcCount] := False;
   ProcRetDynDepth[ProcCount]   := 0;
   { -1, not 0: zero is a VALID ArrType index, so a proc that never sets this

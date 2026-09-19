@@ -1930,7 +1930,8 @@ begin
           FP save area, va_arg(int/ptr) the GP area. (An earlier model pushed every
           arg through GP and read floats from gp too; that mismatched the actual
           SysV call+prologue and made %f/%g render 0 — bug-c-double-vararg.) }
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA,
+                       TARGET_WASM32] then
         begin
           { 32-bit cross: 4-byte word slots; a 64-bit arg spans two. The helper is
             size-driven — pass the arg's byte size so it steps by 4 or 8. }
@@ -2206,7 +2207,8 @@ begin
           The stack-spilled named params are skipped via the __va_overflow
           anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA,
+                       TARGET_WASM32] then
         begin
           { 32-bit cross: seed gp_offset with the reg-area BYTES consumed by named
             params (one word = 4 bytes, a by-value i64/double = 8), capped at the
@@ -2240,8 +2242,10 @@ begin
             reading. xtensa joined the 32-bit set above in the same commit as
             its C entry stub, which is the trigger
             bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet
-            was filed to fire; wasm32 is still absent and still cannot compile
-            a C program, so that half of the trigger is still armed.
+            was filed to fire; wasm32 joined the 32-bit set on 2026-09-19 with
+            its caller-marshalled variadic area, so BOTH halves of that trigger
+            have now fired and the set below is once again complete only by
+            enumeration. aarch64 is the sole occupant of this branch.
 
             8 GP slots of 8 bytes at offset 0. Seed past the
             named GP params only -- a named FLOAT consumes an FP slot and not a
@@ -2260,7 +2264,8 @@ begin
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
         a5 := AllocNode(AN_INT_LIT);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA,
+                       TARGET_WASM32] then
           ASTIVal[a5] := vaRegSz                 { 5th arg = reg-area size for impl32 }
         else
         begin
@@ -2277,7 +2282,8 @@ begin
           else ASTIVal[a5] := 64 + ASTIVal[a5] * 8;
         end;
         ASTTk[a5] := Ord(tyInteger);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA,
+                       TARGET_WASM32] then
           helper := FindProc('__pxx_va_start_impl32')
         else
           helper := FindProc('__pxx_va_start_impl');
@@ -14378,6 +14384,10 @@ begin
       LastTypeRecId := vaSaveRec;
       vaSaveSym := AllocVar('__va_save', tyRecord);
       vaOverflowSym := AllocVar('__va_overflow', tyPointer);
+      { Recorded for wasm32, which cannot fill this from a prologue: it has no
+        incoming frame to point at and receives the area as a trailing
+        parameter instead, stored here at body entry by the backend. }
+      ProcVaOverflowSym[procIdx] := vaOverflowSym;
     end;
   end;
 
@@ -14577,6 +14587,29 @@ begin
       xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, 16);   { a9 = first stack word }
       EmitFrameAddrXtensa(reg_xtensa_a8, Syms[vaOverflowSym].Offset);
       xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);     { *__va_overflow = a15+16 }
+    end;
+    TARGET_WASM32:
+    begin
+      { NOTHING TO SPILL, AND THAT IS THE WHOLE POINT OF THE TARGET. Every arm
+        above copies incoming ARGUMENT REGISTERS into __va_save and anchors
+        __va_overflow at the incoming stack frame. wasm32 has neither: a wasm
+        function's parameters arrive as typed LOCALS, there is no register file
+        to spill and no addressable incoming frame to anchor to.
+
+        So the variadic area is not FOUND by the callee, it is HANDED to it --
+        the caller marshals into linear memory and passes one i32 pointer as a
+        trailing parameter (WasmSigForProcSelf reserves the slot, and
+        WasmEmitCall's WasmVaAreaPush fills it). The store into __va_overflow happens in
+        ir_codegen_wasm32.inc at body entry, where the parameter locals exist;
+        emitting it here is impossible because this arm emits machine code and
+        wasm32 has none.
+
+        The READER needs no wasm32 arm at all: __pxx_va_arg_cross32 walks the
+        reg-save area first and then the overflow, and wasm32's reg area is
+        size 0 -- the same shape i386-cdecl already uses, which has no argument
+        registers either. That is why this target reuses the existing 32-bit
+        walk instead of growing a sixth one.
+        bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
     end;
     else
       Error('variadic C functions (va_arg) are not yet supported on this cross target');

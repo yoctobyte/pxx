@@ -4735,6 +4735,7 @@ var
   ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
   ProcRetRecId : array of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }
+  ProcVaOverflowSym : array of Integer; { C variadic: this proc's `__va_overflow` LOCAL, or -1. Recorded because wasm32 receives the variadic area as a TRAILING PARAMETER and has to store it into that local at body entry, and by then the C scope that FindSym('__va_overflow') would need is long closed. Every register target sets the local from its own prologue instead and never reads this. bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
   ProcRetIsDynArray : array of Boolean; { result is `array of T` (pointer-sized heap handle) }
   { ...and how many `array of` levels that handle carries, so a dyn-array-valued
     CALL can answer NodeDynDepth the way a dyn-array VARIABLE does. Without it
