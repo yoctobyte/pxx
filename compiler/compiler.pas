@@ -854,9 +854,10 @@ begin
   WriteLn;
   WriteLn('common options:');
   WriteLn('  -O0 -O1 -O2 -O3       optimisation level (-O2 is the proven default)');
-  WriteLn('  --function-sections   --emit-obj: relocate internal calls against the callee''s');
-  WriteLn('                        symbol instead of baking the displacement. A prerequisite');
-  WriteLn('                        for letting a linker drop or share runtime code.');
+  WriteLn('  --function-sections   --emit-obj (x86-64): one .text.<name> section per function,');
+  WriteLn('                        every cross-function reference a relocation, so a linker');
+  WriteLn('                        can drop what the program never reaches (ld --gc-sections).');
+  WriteLn('                        The object''s symbols and exports are unchanged.');
   WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');

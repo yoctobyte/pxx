@@ -17207,10 +17207,11 @@ test-core: $(COMPILER)
 	# census line rather than on a symbol dump so it names WHICH callee pinned.
 	./$(COMPILER) --emit-obj --function-sections test/cstatic_two_modules_distinct.c $(TESTTMP)/cstatic_distinct26.o > $(TESTTMP)/cstatic_distinct_obj.log 2>&1
 	tools/expect_same.sh cstatic_distinct-pinned "$$(sed -n 's/.*pinned-target \([0-9]*\).*/\1/p' $(TESTTMP)/cstatic_distinct_obj.log | head -1)" "0"
-	# Two LOCAL `who` symbols at DIFFERENT addresses, which is what gcc emits for
+	# Two LOCAL `who` symbols at DIFFERENT places (section and value -- under
+	# --function-sections each is at 0 in a section of its own), which is what gcc emits for
 	# the multi-TU build. Without the row split there is one, and that is why the
 	# call could not be relocated.
-	tools/expect_same.sh cstatic_distinct-syms "$$(readelf -sW $(TESTTMP)/cstatic_distinct26.o | awk '$$8=="who" && $$5=="LOCAL"' | awk '{print $$2}' | sort -u | wc -l)" "2"
+	tools/expect_same.sh cstatic_distinct-syms "$$(readelf -sW $(TESTTMP)/cstatic_distinct26.o | awk '$$8=="who" && $$5=="LOCAL"' | awk '{print $$7, $$2}' | sort -u | wc -l)" "2"
 	# THE VARIABLE ARM of the same defect, and it is the worse one. Functions
 	# survived sharing a Procs row because every call site keeps a CallFixTarget
 	# snapshot and stays BAKED -- which is why rows 1-2 of the test above pass
@@ -33704,9 +33705,9 @@ test-emit-obj: $(COMPILER)
 	#    AIMED: the plain object names no callee in .rela.text; the flagged one
 	#    names deep2, the callee of deep1. A count alone would pass on any
 	#    relocation at all, including the data ones both objects already have.
-	@test $$(readelf -r -W $(TESTTMP)/cfs_plain.o | sed -n "/Relocation section '.rela.text'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -eq 0 \
+	@test $$(readelf -r -W $(TESTTMP)/cfs_plain.o | sed -n "/Relocation section '.rela.text/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -eq 0 \
 	  || { echo "c_function_sections: the PLAIN object already relocates a call -- this test cannot show the flag doing anything"; exit 1; }
-	@test $$(readelf -r -W $(TESTTMP)/cfs.o | sed -n "/Relocation section '.rela.text'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -gt 0 \
+	@test $$(readelf -r -W $(TESTTMP)/cfs.o | sed -n "/Relocation section '.rela.text/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -gt 0 \
 	  || { echo "c_function_sections: --function-sections emitted no relocation for the call to deep2"; exit 1; }
 	@if command -v gcc >/dev/null 2>&1; then \
 	  ./$(COMPILER) --emit-obj test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
@@ -33723,6 +33724,37 @@ test-emit-obj: $(COMPILER)
 	    || { echo "c_function_sections: the flag REMOVED a symbol from the linked binary"; cat $(TESTTMP)/cfs_alloc.log; exit 1; }; \
 	  echo "c_function_sections: internal calls relocate; allocatable content identical, +2 thunk symbols"; \
 	else echo "gcc not installed; --function-sections link check skipped"; fi
+	# 4a-quater. --function-sections: ONE .text SECTION PER FUNCTION, and none
+	#    of them reached by a BAKED displacement. The identity rows above prove
+	#    the split changes nothing where every section is kept (ld lays the
+	#    sections out in input order at the alignment the emitter gave them, so
+	#    the addresses land exactly where the unsplit object had them); these
+	#    prove it is SAFE where they are not. function_sections_baked.py reads
+	#    the instructions, because a displacement nobody relocated is not in any
+	#    .rela and no relocation census can see it.
+	#    POSITIVE CONTROL FIRST: the unsplit object, cut at its FUNC symbols,
+	#    must show crossings -- every internal call is baked there.
+	./$(COMPILER) --emit-obj test/c_function_sections.c $(TESTTMP)/cfs_plain.o >/dev/null
+	./$(COMPILER) --emit-obj --function-sections test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null
+	@! tools/function_sections_baked.py $(TESTTMP)/cfs_plain.o > $(TESTTMP)/cfs_baked_plain.log \
+	  || { echo "c_function_sections: the census found NO baked crossing in the UNSPLIT object -- it cannot see what it is for"; cat $(TESTTMP)/cfs_baked_plain.log; exit 1; }
+	@tools/function_sections_baked.py $(TESTTMP)/cfs.o > $(TESTTMP)/cfs_baked.log \
+	  || { echo "c_function_sections: a displacement crosses a function section with no relocation:"; cat $(TESTTMP)/cfs_baked.log; exit 1; }
+	@test $$(readelf -S -W $(TESTTMP)/cfs.o | grep -cE '\] \.text\.deep2 +PROGBITS') -eq 1 \
+	  || { echo "c_function_sections: no .text.deep2 section -- the object was not split"; exit 1; }
+	#    AND A LINKER MAY NOW DROP THEM: a static link with --gc-sections, on the
+	#    process-entry contract busybox uses, runs and is SMALLER. It dropped 168
+	#    bytes of 624888 before the split (0.03%).
+	@if command -v ld >/dev/null 2>&1 && command -v as >/dev/null 2>&1; then \
+	  as -o $(TESTTMP)/cfs_crt.o tools/pxxcrt_x86_64.S || exit 1; \
+	  ld -static $(TESTTMP)/cfs_crt.o $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_all || { echo "c_function_sections: split object failed a static link"; exit 1; }; \
+	  ld -static --gc-sections $(TESTTMP)/cfs_crt.o $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_gc || { echo "c_function_sections: split object failed a --gc-sections link"; exit 1; }; \
+	  tools/expect_same.sh cfs_all "$$($(TESTTMP)/cfs_all)" "13" || exit 1; \
+	  tools/expect_same.sh cfs_gc "$$($(TESTTMP)/cfs_gc)" "13" || exit 1; \
+	  a=$$(size -A $(TESTTMP)/cfs_all | awk '$$1==".text"{print $$2}'); g=$$(size -A $(TESTTMP)/cfs_gc | awk '$$1==".text"{print $$2}'); \
+	  test "$$g" -lt $$((a / 2)) || { echo "c_function_sections: --gc-sections kept $$g of $$a bytes of .text -- less than half should survive"; exit 1; }; \
+	  echo "c_function_sections: split, no baked crossing ($$(cat $(TESTTMP)/cfs_baked.log | cut -d' ' -f1-2)); --gc-sections keeps $$g of $$a bytes and runs"; \
+	else echo "ld/as not installed; --function-sections --gc-sections check skipped"; fi
 	# 4a-ter. --function-sections: VMT SLOTS AND @proc RELOCATE TOO.
 	#    4a-bis covers CallFix. Two other families name a proc BY INDEX and were
 	#    still emitted as `.text` plus a baked body offset: ProcAddrFix (@proc's
@@ -33768,10 +33800,13 @@ test-emit-obj: $(COMPILER)
 	#    the positive control and is what stops this passing vacuously.
 	@test $$(readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') -eq 0 \
 	  || { echo "test_emit_obj: --function-sections left a VMT slot relocating against .text"; exit 1; }
-	#    AND NO NEGATIVE ADDEND ANYWHERE, in either object. `.text - 1' is the
+	#    AND NO NEGATIVE ABSOLUTE ADDEND, in either object. `.text - 1' is the
 	#    bodiless case and it appeared in the PLAIN object too, so the flag
-	#    cannot be what fixes it and this row is checked on both.
-	@test $$(readelf -r -W $(TESTTMP)/fsm.o $(TESTTMP)/fsm_plain.o | grep -cE '\.text - ') -eq 0 \
+	#    cannot be what fixes it and this row is checked on both. ABSOLUTE
+	#    (R_X86_64_64) since per-function sections: a PC32 against a section
+	#    symbol carries the -4 bias, so `.text - 4' is the init thunk's
+	#    correct `call 0' into the program body, not a slot below an entry.
+	@test $$(readelf -r -W $(TESTTMP)/fsm.o $(TESTTMP)/fsm_plain.o | grep -cE 'R_X86_64_64 .*\.text - ') -eq 0 \
 	  || { echo "test_emit_obj: a relocation still carries a negative .text addend (a method with no body)"; exit 1; }
 	#    NAMED, not merely counted: a specific method symbol has to appear.
 	@readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -qE '^[0-9a-f]{8,}.* __pxxTObjectToString' \

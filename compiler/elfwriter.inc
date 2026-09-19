@@ -3777,6 +3777,303 @@ begin
   writeln(StdErr, '');
 end;
 
+{ ===== --function-sections: one .text section PER FUNCTION ===================
+  The flag's first step made every internal call a relocation against the
+  callee's own symbol, and its help text has said since that this is "a
+  prerequisite for letting a linker drop or share runtime code" -- but the object
+  still had ONE .text, so a linker could keep or drop only the whole of it, and
+  it kept all of it: 86 busybox objects linked 86 private copies of crtl, and
+  `ld --gc-sections` recovered 16 bytes. This is the other half.
+
+  THE CUTS: offset 0, the entry of every proc that has a body, and the two
+  init/fini thunks. Each section runs from its cut to the next, so EVERY BYTE OF
+  CODE IS IN EXACTLY ONE SECTION -- including code no proc owns (the runtime
+  stubs the frontend emits ahead of the first proc, which stay in the section
+  called plain `.text`, and whatever a lazy emitter left between two bodies,
+  which rides with the proc before it). Cutting at extents instead would need an
+  extent for code nothing records the end of, which is why the thunk symbols
+  carry size 0.
+
+  WHAT MAKES A CUT SAFE is that no displacement crosses it BAKED. Calls to procs
+  already relocate (CallFix, ProcAddrFix, MethodFix -- ObjReportFunctionSections
+  counts what does not). The remaining code->code references are the ones DCE
+  already has to re-aim when it moves code, and it finds them in exactly one
+  table, CodeRef: every stub call goes through IREmitCodeCall, which records
+  there. A CodeRef whose site and target fall in DIFFERENT sections becomes a
+  PC32 against the target section's STT_SECTION symbol -- never against a proc
+  symbol, because a GLOBAL or WEAK one resolves to whichever object's copy the
+  linker chose, and a stub sitting after this object's body is not in that copy.
+  tools/function_sections_baked.sh disassembles an object and counts any
+  direct reference that crosses a section boundary with no relocation; it reads
+  zero on a split object and ~1180 on an unsplit one.
+
+  ALIGNMENT: the largest power of two up to 16 that divides the cut's offset.
+  So a linker that keeps every section and packs them in order reproduces the
+  unsplit layout byte for byte -- each cut is already at an offset its own
+  alignment allows, so no padding is inserted -- and one that drops some keeps
+  every body at least as aligned as the emitter put it.
+
+  WITHOUT THE FLAG there is one cut, at 0, and every helper below answers
+  exactly what the writer used to hard-code (`.text`, symbol 1, the offset
+  unchanged), so the default object is byte-identical. }
+var
+  ObjCutOff   : array of Integer;     { sorted, unique; [0] = 0 }
+  ObjCutName  : array of AnsiString;  { '' for the head, else the owner's name }
+  ObjCutShndx : array of Integer;     { section header index of the cut's .text }
+  ObjCutSym   : array of Integer;     { its STT_SECTION symbol }
+  ObjCutRelAt : array of Integer;     { first index into the sorted .rela.text entries }
+  ObjCutRelN  : array of Integer;     { how many of them have their site in this cut }
+  ObjCutRelaNm: array of Integer;     { .shstrtab offset of '.rela.text.<name>'; +5 is '.text.<name>' }
+  ObjCutCount : Integer;
+  { every .rela.text entry, collected before any is written, because a split
+    object needs them grouped by section and the counts before the headers }
+  ObjRelPos   : array of Int64;
+  ObjRelAddn  : array of Int64;
+  ObjRelSym   : array of Integer;
+  ObjRelType  : array of Integer;
+  ObjRelCount : Integer;
+  ObjCodeRefCross, ObjCodeRefStale: Integer;
+
+procedure ObjRelPush(pos: Int64; sym, rtype: Integer; addend: Int64);
+var n: Integer;
+begin
+  if ObjRelCount >= Length(ObjRelPos) then
+  begin
+    n := Length(ObjRelPos) * 2;
+    if n < 256 then n := 256;
+    SetLength(ObjRelPos, n); SetLength(ObjRelAddn, n);
+    SetLength(ObjRelSym, n); SetLength(ObjRelType, n);
+  end;
+  ObjRelPos[ObjRelCount] := pos;
+  ObjRelSym[ObjRelCount] := sym;
+  ObjRelType[ObjRelCount] := rtype;
+  ObjRelAddn[ObjRelCount] := addend;
+  Inc(ObjRelCount);
+end;
+
+{ The cut containing code offset `off`: the last one at or below it. }
+function ObjCutOf(off: Int64): Integer;
+var lo, hi, mid: Integer;
+begin
+  lo := 0; hi := ObjCutCount - 1;
+  while lo < hi do
+  begin
+    mid := (lo + hi + 1) div 2;
+    if ObjCutOff[mid] <= off then lo := mid else hi := mid - 1;
+  end;
+  ObjCutOf := lo;
+end;
+
+function ObjCutEnd(c: Integer): Integer;
+begin
+  if c + 1 < ObjCutCount then ObjCutEnd := ObjCutOff[c + 1] else ObjCutEnd := CodeLen;
+end;
+
+function ObjCutAlign(c: Integer): Integer;
+var a: Integer;
+begin
+  a := 1;
+  if c = 0 then a := 16
+  else
+    while (a < 16) and ((ObjCutOff[c] mod (a * 2)) = 0) do a := a * 2;
+  ObjCutAlign := a;
+end;
+
+{ A code offset as (symbol, offset from that symbol): the section symbol of the
+  cut holding it. One cut means symbol 1 and the offset itself. }
+function ObjTextSym(off: Int64): Integer;
+begin
+  ObjTextSym := ObjCutSym[ObjCutOf(off)];
+end;
+function ObjTextRel(off: Int64): Int64;
+begin
+  ObjTextRel := off - ObjCutOff[ObjCutOf(off)];
+end;
+function ObjTextShndx(off: Int64): Integer;
+begin
+  ObjTextShndx := ObjCutShndx[ObjCutOf(off)];
+end;
+
+{ The section-name suffix for a function: its own name, EXCEPT where ld's
+  default script reads the name as a PLACEMENT HINT. That script gathers
+  `.text.unlikely`, `*_unlikely`, `.text.exit`, `.text.startup`, `.text.hot`
+  (each with a `.*` tail) and `.text.sorted.*` ahead of all other code, so crtl's
+  own `exit` came out as `.text.exit` and was moved to the front -- correctly
+  relocated, and a claim ("this is exit-time code") nobody made. Measured with
+  GNU ld 2.46: 16 bytes of padding and every address after it shifted, which is
+  what cost the flag its byte-identical-link check. Those names get a `pxx.`
+  prefix, and a `_unlikely` ending a `.pxx` tail; everything else is spelled as
+  gcc would. }
+function ObjCutIsLdHintName(const nm, w: AnsiString): Boolean;
+begin
+  ObjCutIsLdHintName := (nm = w) or (Copy(nm, 1, Length(w) + 1) = w + '.');
+end;
+
+function ObjCutSecSuffix(const nm: AnsiString): AnsiString;
+var r: AnsiString;
+begin
+  r := nm;
+  if ObjCutIsLdHintName(nm, 'unlikely') or ObjCutIsLdHintName(nm, 'exit')
+     or ObjCutIsLdHintName(nm, 'startup') or ObjCutIsLdHintName(nm, 'hot')
+     or (Copy(nm, 1, 7) = 'sorted.') then
+    r := 'pxx.' + r;
+  if (Length(nm) >= 9) and (Copy(nm, Length(nm) - 8, 9) = '_unlikely') then
+    r := r + '.pxx';
+  ObjCutSecSuffix := r;
+end;
+
+procedure ObjCutAdd(off: Integer; const nm: AnsiString);
+begin
+  { 0 is the head's; at or past the end a cut would be an empty section }
+  if (off <= 0) or (off >= CodeLen) then Exit;
+  ObjCutOff[ObjCutCount] := off;
+  ObjCutName[ObjCutCount] := ObjCutSecSuffix(nm);
+  Inc(ObjCutCount);
+end;
+
+{ The cuts and their symbol indices; section indices come later, once the
+  relocations are counted. `firstSecSym` is where the section symbols start --
+  after the thunk symbols, inside the LOCAL block. }
+procedure ObjPlanCuts(firstSecSym: Integer);
+var i, j, gap, t: Integer; s: AnsiString;
+begin
+  SetLength(ObjCutOff, ProcCount + 3);
+  SetLength(ObjCutName, ProcCount + 3);
+  ObjCutOff[0] := 0; ObjCutName[0] := '';
+  ObjCutCount := 1;
+  if FunctionSections then
+  begin
+    for i := 0 to ProcCount-1 do
+      if ObjProcIsDefined(i) then ObjCutAdd(Procs[i].BodyAddr, Procs[i].Name);
+    if InitThunkOff >= 0 then ObjCutAdd(InitThunkOff, OBJ_INIT_THUNK_NAME);
+    if FiniThunkOff >= 0 then ObjCutAdd(FiniThunkOff, OBJ_FINI_THUNK_NAME);
+    { shell sort [1..] by offset, then drop repeats (the first name stands) }
+    gap := (ObjCutCount - 1) div 2;
+    while gap > 0 do
+    begin
+      for i := 1 + gap to ObjCutCount - 1 do
+      begin
+        t := ObjCutOff[i]; s := ObjCutName[i];
+        j := i;
+        while (j - gap >= 1) and (ObjCutOff[j - gap] > t) do
+        begin
+          ObjCutOff[j] := ObjCutOff[j - gap]; ObjCutName[j] := ObjCutName[j - gap];
+          j := j - gap;
+        end;
+        ObjCutOff[j] := t; ObjCutName[j] := s;
+      end;
+      gap := gap div 2;
+    end;
+    j := 1;
+    for i := 1 to ObjCutCount - 1 do
+      if ObjCutOff[i] <> ObjCutOff[j - 1] then
+      begin
+        ObjCutOff[j] := ObjCutOff[i]; ObjCutName[j] := ObjCutName[i];
+        Inc(j);
+      end;
+    ObjCutCount := j;
+  end;
+  SetLength(ObjCutShndx, ObjCutCount);
+  SetLength(ObjCutSym, ObjCutCount);
+  SetLength(ObjCutRelAt, ObjCutCount);
+  SetLength(ObjCutRelN, ObjCutCount);
+  SetLength(ObjCutRelaNm, ObjCutCount);
+  ObjCutShndx[0] := 1;
+  ObjCutSym[0] := 1;
+  for i := 1 to ObjCutCount - 1 do
+  begin
+    ObjCutShndx[i] := 0;
+    ObjCutSym[i] := firstSecSym + i - 1;
+  end;
+  ObjRelCount := 0;
+  ObjCodeRefCross := 0;
+  ObjCodeRefStale := 0;
+end;
+
+{ The CodeRefs that cross a cut, as PC32s. A slot whose bytes do not hold the
+  displacement its record describes is STALE -- the record outlived the code it
+  was taken for -- and relocating it would write over whatever is there now, so
+  it is counted and refused rather than trusted. None has been seen; the count
+  is printed so that stays a measurement. }
+procedure ObjPushCodeRefs;
+var i, pos, tgt: Integer; baked: Int64;
+begin
+  if ObjCutCount <= 1 then Exit;
+  for i := 0 to CodeRefCount - 1 do
+  begin
+    pos := CodeRefPos[i];
+    tgt := CodeRefTarget[i];
+    if (pos < 0) or (pos + 4 > CodeLen) or (tgt < 0) or (tgt >= CodeLen) then Continue;
+    if ObjCutOf(pos) = ObjCutOf(tgt) then Continue;
+    baked := Int64(Code[pos]) or (Int64(Code[pos+1]) shl 8) or
+             (Int64(Code[pos+2]) shl 16) or (Int64(Code[pos+3]) shl 24);
+    if baked >= $80000000 then baked := baked - $100000000;
+    if baked <> Int64(tgt) - (pos + 4) then
+    begin
+      Inc(ObjCodeRefStale);
+      Continue;
+    end;
+    Inc(ObjCodeRefCross);
+    ObjRelPush(pos, ObjTextSym(tgt), 2, ObjTextRel(tgt) - 4);
+  end;
+end;
+
+{ Group the collected entries by the cut their SITE is in, keeping their order
+  within a cut, and make each site section-relative. Run ONCE: a second pass
+  would read the relative sites as absolute ones. }
+procedure ObjGroupRelocs;
+var i, c, n: Integer;
+    cutOf: array of Integer;
+    sPos, sAdd: array of Int64; sSym, sTyp, fill: array of Integer;
+begin
+  for c := 0 to ObjCutCount - 1 do ObjCutRelN[c] := 0;
+  SetLength(cutOf, ObjRelCount);
+  for i := 0 to ObjRelCount - 1 do
+  begin
+    cutOf[i] := ObjCutOf(ObjRelPos[i]);
+    Inc(ObjCutRelN[cutOf[i]]);
+  end;
+  n := 0;
+  for c := 0 to ObjCutCount - 1 do begin ObjCutRelAt[c] := n; n := n + ObjCutRelN[c]; end;
+  if ObjCutCount > 1 then
+  begin
+    SetLength(sPos, ObjRelCount); SetLength(sAdd, ObjRelCount);
+    SetLength(sSym, ObjRelCount); SetLength(sTyp, ObjRelCount);
+    SetLength(fill, ObjCutCount);
+    for c := 0 to ObjCutCount - 1 do fill[c] := ObjCutRelAt[c];
+    for i := 0 to ObjRelCount - 1 do
+    begin
+      c := cutOf[i];
+      sPos[fill[c]] := ObjRelPos[i] - ObjCutOff[c];
+      sAdd[fill[c]] := ObjRelAddn[i];
+      sSym[fill[c]] := ObjRelSym[i];
+      sTyp[fill[c]] := ObjRelType[i];
+      Inc(fill[c]);
+    end;
+    for i := 0 to ObjRelCount - 1 do
+    begin
+      ObjRelPos[i] := sPos[i]; ObjRelAddn[i] := sAdd[i];
+      ObjRelSym[i] := sSym[i]; ObjRelType[i] := sTyp[i];
+    end;
+  end;
+end;
+
+{ Number the cut sections: cut c >= 1 gets its .text from `firstShndx` on,
+  followed directly by its .rela.text when it has any relocation. Returns the
+  next free index. }
+function ObjNumberCuts(firstShndx: Integer): Integer;
+var c, n: Integer;
+begin
+  n := firstShndx;
+  for c := 1 to ObjCutCount - 1 do
+  begin
+    ObjCutShndx[c] := n;
+    Inc(n);
+    if ObjCutRelN[c] > 0 then Inc(n);
+  end;
+  ObjNumberCuts := n;
+end;
+
 
 function ObjProcBind(procIdx: Integer): Byte;
 { The st_info BINDING NIBBLE, already shifted: $10 GLOBAL, $20 WEAK.
@@ -4329,6 +4626,7 @@ var
   hasInitArr, hasFiniArr: Boolean;
     nThunkSym, initThunkSym, finiThunkSym: Integer;
     thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
+  nSecSym, c, extraRelaOff, extraRelaCount: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -4401,171 +4699,26 @@ begin
     end;
   end;
 
-  firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym;
+  { --function-sections: one STT_SECTION symbol per cut after the head (whose
+    section symbol is the fixed symbol 1), LOCAL, after the thunk symbols. }
+  ObjPlanCuts(4 + numLocalProcs + numLocalData + nThunkSym);
+  nSecSym := ObjCutCount - 1;
+
+  firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym + nSecSym;
   extSym0 := firstGlobal + numExportProcs + numExportData;
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
 
-  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym);
-
-  relaTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
-  { --function-sections: one PC32 per internal call, against the callee's own
-    FUNC symbol. Counted with the same predicate that emits them, so the header
-    and the body cannot disagree about how many there are -- a mismatch here
-    writes a section whose size does not match its contents, which readelf
-    reports as a truncated file rather than as anything naming this feature. }
-  for i := 0 to CallFixCount-1 do
-    if ObjCallFixIsRelocatable(i) then Inc(relaTextCount);
-  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
-
-  textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
-  dataOff := AlignTo(textOff + CodeLen, 16);
-  symOff  := AlignTo(dataOff + DataLen, 8);
-  strOff  := symOff + numSyms * 24;
-  relaTextOff := AlignTo(strOff + strSize, 8);
-  relaDataOff := relaTextOff + relaTextCount * 24;
-
-  { .init_array / .fini_array exist only when a frontend emitted the thunks --
-    which today means --emit-obj on x86-64 through the C frontend, and --shared.
-    See the header comment for the exact scope of "unchanged": it is narrower
-    than it first reads, and the first control I ran for it was vacuous. }
-  hasInitArr := InitThunkOff >= 0;
-  hasFiniArr := FiniThunkOff >= 0;
-  initArrSec := -1;
-  finiArrSec := -1;
-  numSects := 9;
-  if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
-  if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
-
-  { Names are appended to the 66-byte base blob only for sections that EXIST, so
-    an object without initialisers is byte-for-byte the file it was before this
-    feature. That property is worth four conditional sums: the first version of
-    this wrote all four names unconditionally to keep the offsets constant, and
-    the A/B caught it -- every object grew 58 bytes and e_shoff moved, which is a
-    change to every consumer of every object for the benefit of objects that do
-    not use the feature. 12 = len('.init_array')+1, 17 = len('.rela.init_array')+1. }
-  shstrSize := 66;
-  initArrNm := 0; relaInitArrNm := 0; finiArrNm := 0; relaFiniArrNm := 0;
-  if hasInitArr then
-  begin
-    initArrNm := shstrSize; relaInitArrNm := shstrSize + 12;
-    shstrSize := shstrSize + 29;
-  end;
-  if hasFiniArr then
-  begin
-    finiArrNm := shstrSize; relaFiniArrNm := shstrSize + 12;
-    shstrSize := shstrSize + 29;
-  end;
-
-  { Every offset here is already 8-aligned: relaDataOff is, 24 and 8 preserve
-    it, so the array sections need no padding of their own. }
-  initArrOff     := relaDataOff + relaDataCount * 24;
-  relaInitArrOff := initArrOff;
-  if hasInitArr then relaInitArrOff := initArrOff + 8;
-  finiArrOff := relaInitArrOff;
-  if hasInitArr then finiArrOff := relaInitArrOff + 24;
-  relaFiniArrOff := finiArrOff;
-  if hasFiniArr then relaFiniArrOff := finiArrOff + 8;
-  shstrOff := relaFiniArrOff;
-  if hasFiniArr then shstrOff := relaFiniArrOff + 24;
-  shOff := AlignTo(shstrOff + shstrSize, 8);
-
-{$ifdef FPC}
-  Assign(f, outPath); Rewrite(f, 1);
-{$else}
-  AssignPath := outPath;
-  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
-{$endif}
-
-  { ELF64 ehdr (64 bytes), ET_REL, EM_X86_64 }
-  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
-  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 64, LE, v1 }
-  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
-  writeU16(f,1);writeU16(f,62);writeU32(f,1);           { ET_REL, EM_X86_64 }
-  writeU64(f,0);writeU64(f,0);writeU64(f,shOff);        { entry, phoff, shoff }
-  writeU32(f,0);                                        { e_flags }
-  writeU16(f,ELF_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
-  writeU16(f,64);writeU16(f,numSects);writeU16(f,8); { shentsize, shnum, shstrndx }
-
-{$ifdef FPC}
-  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
-  writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
-{$else}
-  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
-  writePad(f, dataOff - (textOff + CodeLen));
-  if DataLen > 0 then OutWrite(f, Data, 0, DataLen);
-{$endif}
-  writePad(f, symOff - (dataOff + DataLen));
-
-  { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
-  writeSym64(f, 0, 0, 0, 0, 0);
-  writeSym64(f, 0, 3, 1, 0, 0);   { STT_SECTION .text }
-  writeSym64(f, 0, 3, 3, 0, 0);   { STT_SECTION .data }
-  writeSym64(f, 0, 3, 5, 0, 0);   { STT_SECTION .bss }
-  for i := 0 to ProcCount-1 do
-    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
-      writeSym64(f, ObjProcStrOff[i], $02, 1, Procs[i].BodyAddr, ObjProcSize(i));
-  { LOCAL data ($01 = LOCAL OBJECT), shndx 5 = .bss. A `static` file-scope
-    variable must never become an export -- it is the control that catches a
-    pass which simply exports everything. }
-  for i := 0 to SymCount-1 do
-    if ObjDataIsLocal(i) then
-      writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
-  { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
-    data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
-    -- a thunk is code no proc owns and its extent is recorded nowhere, so
-    stating one would be inventing it. That is a real limit for a later
-    --gc-sections, which wants a size; it is none for a relocation, which wants
-    an address. }
-  if initThunkSym >= 0 then
-    writeSym64(f, thunkInitStrOff, $02, 1, InitThunkOff, 0);
-  if finiThunkSym >= 0 then
-    writeSym64(f, thunkFiniStrOff, $02, 1, FiniThunkOff, 0);
-  for i := 0 to ProcCount-1 do
-    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-      writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), 1, Procs[i].BodyAddr, ObjProcSize(i));
-  { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
-    (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
-    SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
-  for i := 0 to SymCount-1 do
-    if ObjDataIsExport(i) then
-      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), 5, Syms[i].Offset, SymAllocSize[i]);
-  for i := 0 to ExternalCount-1 do
-    writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);  { GLOBAL NOTYPE UNDEF }
-  { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
-    size lives on the DEFINITION in another TU -- `extern char b[];` carries
-    none -- so emitting anything but 0 here would be inventing it. }
-  for i := 0 to SymCount-1 do
-    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
-      writeSym64(f, ObjDataStrOff[i], $10, 0, 0, 0);
-
-  { .strtab, in the same order }
-  writeU8(f, 0);
-  for i := 0 to ProcCount-1 do
-    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then writeStrZ(f, Procs[i].Name);
-  for i := 0 to SymCount-1 do
-    if ObjDataIsLocal(i) then writeStrZ(f, Syms[i].Name);
-  for i := 0 to ProcCount-1 do
-    if ObjProcIsDefined(i) and ObjProcIsExported(i) then writeStrZ(f, Procs[i].Name);
-  for i := 0 to SymCount-1 do
-    if ObjDataIsExport(i) then writeStrZ(f, Syms[i].Name);
-  for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
-  for i := 0 to SymCount-1 do
-    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
-  if initThunkSym >= 0 then writeStrZ(f, OBJ_INIT_THUNK_NAME);
-  if finiThunkSym >= 0 then writeStrZ(f, OBJ_FINI_THUNK_NAME);
-  writePad(f, relaTextOff - (strOff + strSize));
+  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym + nSecSym);
 
   { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
     R_X86_64_64 = 1, R_X86_64_32S = 11. }
   for i := 0 to FixCount-1 do
     { rtype 1 = R_X86_64_64 (absolute), 2 = R_X86_64_PC32 for the lea form }
     if FixupPCRel[i] then
-      writeRela64(f, Fixups[i].CodePos, 2, 2, Fixups[i].DataOff - 4)
+      ObjRelPush(Fixups[i].CodePos, 2, 2, Fixups[i].DataOff - 4)
     else
-      writeRela64(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
+      ObjRelPush(Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
   begin
     { A data-resident global (a typed const baked into .data) carries a BIASED
@@ -4619,30 +4772,30 @@ begin
     if dsym >= 0 then
     begin
       if GlobFixPCRel[i] then
-        writeRela64(f, GlobFix[i].CodePos, dsym, 2, -4 - GlobFixTrail[i])
+        ObjRelPush(GlobFix[i].CodePos, dsym, 2, -4 - GlobFixTrail[i])
       else
-        writeRela64(f, GlobFix[i].CodePos, dsym, 11, 0);
+        ObjRelPush(GlobFix[i].CodePos, dsym, 11, 0);
     end
     else if GlobFixPCRel[i] then
     begin
       if SymOffIsData(GlobFix[i].BSSoff) then
-        writeRela64(f, GlobFix[i].CodePos, 2, 2,
+        ObjRelPush(GlobFix[i].CodePos, 2, 2,
                     SymOffDataPart(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i])
       else
-        writeRela64(f, GlobFix[i].CodePos, 3, 2,
+        ObjRelPush(GlobFix[i].CodePos, 3, 2,
                     GlobFix[i].BSSoff - 4 - GlobFixTrail[i]);
     end
     else if SymOffIsData(GlobFix[i].BSSoff) then
-      writeRela64(f, GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
+      ObjRelPush(GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
     else
-      writeRela64(f, GlobFix[i].CodePos, 3, 11, GlobFix[i].BSSoff);
+      ObjRelPush(GlobFix[i].CodePos, 3, 11, GlobFix[i].BSSoff);
   end;
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
   for i := 0 to DynCallCount-1 do
     { `call qword ptr [rip+disp32]` naming our own GOT slot in .data: PC32, so
       the addend carries the -4 to the end of the instruction. }
-    writeRela64(f, DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
+    ObjRelPush(DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
   { @proc: the `mov rax, imm64` operand, absolute against .text }
   { @proc: `lea rax,[rip+disp32]` against .text -- PC32 (rtype 2), addend
     carrying the -4 to the end of the instruction. It was R_X86_64_64 against
@@ -4654,11 +4807,12 @@ begin
     makes the byte-identity check below a real test rather than a tautology. }
   for i := 0 to ProcAddrFixCount-1 do
     if ObjProcRefIsRelocatable(ProcAddrFix[i].ProcIdx) then
-      writeRela64(f, ProcAddrFix[i].CodePos,
+      ObjRelPush(ProcAddrFix[i].CodePos,
                   ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 2, -4)
     else
-      writeRela64(f, ProcAddrFix[i].CodePos, 1, 2,
-                  Procs[ProcAddrFix[i].ProcIdx].BodyAddr - 4);
+      ObjRelPush(ProcAddrFix[i].CodePos,
+                  ObjTextSym(Procs[ProcAddrFix[i].ProcIdx].BodyAddr), 2,
+                  ObjTextRel(Procs[ProcAddrFix[i].ProcIdx].BodyAddr) - 4);
 
   { --function-sections: the internal calls, LAST in .rela.text so the entries
     above keep the file offsets they had. addend -4 is the standard rel32 bias,
@@ -4671,9 +4825,176 @@ begin
     nothing. }
   for i := 0 to CallFixCount-1 do
     if ObjCallFixIsRelocatable(i) then
-      writeRela64(f, CallFix[i].CodePos, ObjProcSymIdx[CallFix[i].ProcIdx], 2, -4);
+      ObjRelPush(CallFix[i].CodePos, ObjProcSymIdx[CallFix[i].ProcIdx], 2, -4);
+  { CodeRefs that cross a cut -- none without the flag }
+  ObjPushCodeRefs;
   ObjReportFunctionSections;
+  if FunctionSections then
+    writeln(StdErr, 'function-sections: sections ', ObjCutCount,
+            '  CodeRef ', CodeRefCount, '  cross-section relocated ', ObjCodeRefCross,
+            '  stale ', ObjCodeRefStale);
   ObjReportImportedDataWaste;
+  ObjGroupRelocs;
+  relaTextCount := ObjCutRelN[0];
+  extraRelaCount := ObjRelCount - relaTextCount;
+  relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
+
+  textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
+  dataOff := AlignTo(textOff + CodeLen, 16);
+  symOff  := AlignTo(dataOff + DataLen, 8);
+  strOff  := symOff + numSyms * 24;
+  relaTextOff := AlignTo(strOff + strSize, 8);
+  relaDataOff := relaTextOff + relaTextCount * 24;
+
+  { .init_array / .fini_array exist only when a frontend emitted the thunks --
+    which today means --emit-obj on x86-64 through the C frontend, and --shared.
+    See the header comment for the exact scope of "unchanged": it is narrower
+    than it first reads, and the first control I ran for it was vacuous. }
+  hasInitArr := InitThunkOff >= 0;
+  hasFiniArr := FiniThunkOff >= 0;
+  initArrSec := -1;
+  finiArrSec := -1;
+  numSects := 9;
+  if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
+  if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
+  numSects := ObjNumberCuts(numSects);
+
+  { Names are appended to the 66-byte base blob only for sections that EXIST, so
+    an object without initialisers is byte-for-byte the file it was before this
+    feature. That property is worth four conditional sums: the first version of
+    this wrote all four names unconditionally to keep the offsets constant, and
+    the A/B caught it -- every object grew 58 bytes and e_shoff moved, which is a
+    change to every consumer of every object for the benefit of objects that do
+    not use the feature. 12 = len('.init_array')+1, 17 = len('.rela.init_array')+1. }
+  shstrSize := 66;
+  initArrNm := 0; relaInitArrNm := 0; finiArrNm := 0; relaFiniArrNm := 0;
+  if hasInitArr then
+  begin
+    initArrNm := shstrSize; relaInitArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 29;
+  end;
+  if hasFiniArr then
+  begin
+    finiArrNm := shstrSize; relaFiniArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 29;
+  end;
+  { '.rela.text.<name>' per cut; its '.text.<name>' is the same string from +5 }
+  for c := 1 to ObjCutCount - 1 do
+  begin
+    ObjCutRelaNm[c] := shstrSize;
+    shstrSize := shstrSize + Length(ObjCutName[c]) + 12;
+  end;
+
+  { Every offset here is already 8-aligned: relaDataOff is, 24 and 8 preserve
+    it, so the array sections need no padding of their own. }
+  initArrOff     := relaDataOff + relaDataCount * 24;
+  relaInitArrOff := initArrOff;
+  if hasInitArr then relaInitArrOff := initArrOff + 8;
+  finiArrOff := relaInitArrOff;
+  if hasInitArr then finiArrOff := relaInitArrOff + 24;
+  relaFiniArrOff := finiArrOff;
+  if hasFiniArr then relaFiniArrOff := finiArrOff + 8;
+  extraRelaOff := relaFiniArrOff;
+  if hasFiniArr then extraRelaOff := relaFiniArrOff + 24;
+  shstrOff := extraRelaOff + extraRelaCount * 24;
+  shOff := AlignTo(shstrOff + shstrSize, 8);
+
+{$ifdef FPC}
+  Assign(f, outPath); Rewrite(f, 1);
+{$else}
+  AssignPath := outPath;
+  f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+
+  { ELF64 ehdr (64 bytes), ET_REL, EM_X86_64 }
+  writeU8(f,$7F);writeU8(f,$45);writeU8(f,$4C);writeU8(f,$46);
+  writeU8(f,2);writeU8(f,1);writeU8(f,1);writeU8(f,0);  { class 64, LE, v1 }
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
+  writeU16(f,1);writeU16(f,62);writeU32(f,1);           { ET_REL, EM_X86_64 }
+  writeU64(f,0);writeU64(f,0);writeU64(f,shOff);        { entry, phoff, shoff }
+  writeU32(f,0);                                        { e_flags }
+  writeU16(f,ELF_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
+  writeU16(f,64);writeU16(f,numSects);writeU16(f,8); { shentsize, shnum, shstrndx }
+
+{$ifdef FPC}
+  if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then Blockwrite(f,Data[0],DataLen);
+{$else}
+  if CodeLen > 0 then OutWrite(f, Code, 0, CodeLen);
+  writePad(f, dataOff - (textOff + CodeLen));
+  if DataLen > 0 then OutWrite(f, Data, 0, DataLen);
+{$endif}
+  writePad(f, symOff - (dataOff + DataLen));
+
+  { .symtab; sh_info below = firstGlobal (locals first, per the ELF spec) }
+  writeSym64(f, 0, 0, 0, 0, 0);
+  writeSym64(f, 0, 3, 1, 0, 0);   { STT_SECTION .text }
+  writeSym64(f, 0, 3, 3, 0, 0);   { STT_SECTION .data }
+  writeSym64(f, 0, 3, 5, 0, 0);   { STT_SECTION .bss }
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
+      writeSym64(f, ObjProcStrOff[i], $02, ObjTextShndx(Procs[i].BodyAddr),
+                 ObjTextRel(Procs[i].BodyAddr), ObjProcSize(i));
+  { LOCAL data ($01 = LOCAL OBJECT), shndx 5 = .bss. A `static` file-scope
+    variable must never become an export -- it is the control that catches a
+    pass which simply exports everything. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then
+      writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
+  { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
+    data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
+    -- a thunk is code no proc owns and its extent is recorded nowhere, so
+    stating one would be inventing it. That is a real limit for a later
+    --gc-sections, which wants a size; it is none for a relocation, which wants
+    an address. }
+  if initThunkSym >= 0 then
+    writeSym64(f, thunkInitStrOff, $02, ObjTextShndx(InitThunkOff), ObjTextRel(InitThunkOff), 0);
+  if finiThunkSym >= 0 then
+    writeSym64(f, thunkFiniStrOff, $02, ObjTextShndx(FiniThunkOff), ObjTextRel(FiniThunkOff), 0);
+  { the cut sections' own symbols ($03 = LOCAL SECTION), in cut order }
+  for c := 1 to ObjCutCount - 1 do
+    writeSym64(f, 0, $03, ObjCutShndx[c], 0, 0);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+      writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), ObjTextShndx(Procs[i].BodyAddr),
+                 ObjTextRel(Procs[i].BodyAddr), ObjProcSize(i));
+  { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
+    (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
+    SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then
+      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), 5, Syms[i].Offset, SymAllocSize[i]);
+  for i := 0 to ExternalCount-1 do
+    writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);  { GLOBAL NOTYPE UNDEF }
+  { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
+    size lives on the DEFINITION in another TU -- `extern char b[];` carries
+    none -- so emitting anything but 0 here would be inventing it. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+      writeSym64(f, ObjDataStrOff[i], $10, 0, 0, 0);
+
+  { .strtab, in the same order }
+  writeU8(f, 0);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then writeStrZ(f, Syms[i].Name);
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then writeStrZ(f, Syms[i].Name);
+  for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
+  if initThunkSym >= 0 then writeStrZ(f, OBJ_INIT_THUNK_NAME);
+  if finiThunkSym >= 0 then writeStrZ(f, OBJ_FINI_THUNK_NAME);
+  writePad(f, relaTextOff - (strOff + strSize));
+
+  { .rela.text: the head's entries (all of them, unsplit) -- collected above }
+  for i := 0 to ObjCutRelN[0] - 1 do
+    writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
 
   { .rela.data: data->data pointers, data->code method slots, and one
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }
@@ -4687,8 +5008,9 @@ begin
       writeRela64(f, MethodFixups[i].DataPos,
                   ObjProcSymIdx[MethodFixups[i].ProcIdx], 1, 0)
     else
-      writeRela64(f, MethodFixups[i].DataPos, 1, 1,
-                  Procs[MethodFixups[i].ProcIdx].BodyAddr);
+      writeRela64(f, MethodFixups[i].DataPos,
+                  ObjTextSym(Procs[MethodFixups[i].ProcIdx].BodyAddr), 1,
+                  ObjTextRel(Procs[MethodFixups[i].ProcIdx].BodyAddr));
   for i := 0 to ExternalCount-1 do
     writeRela64(f, ExternalGotOff[i], extSym0 + i, 1, 0);
 
@@ -4703,14 +5025,18 @@ begin
   begin
     writeU64(f, 0);
     if initThunkSym >= 0 then writeRela64(f, 0, initThunkSym, 1, 0)
-    else writeRela64(f, 0, 1, 1, InitThunkOff);
+    else writeRela64(f, 0, ObjTextSym(InitThunkOff), 1, ObjTextRel(InitThunkOff));
   end;
   if hasFiniArr then
   begin
     writeU64(f, 0);
     if finiThunkSym >= 0 then writeRela64(f, 0, finiThunkSym, 1, 0)
-    else writeRela64(f, 0, 1, 1, FiniThunkOff);
+    else writeRela64(f, 0, ObjTextSym(FiniThunkOff), 1, ObjTextRel(FiniThunkOff));
   end;
+
+  { the cut sections' relocations, grouped, after the head's and the arrays' }
+  for i := ObjCutRelN[0] to ObjRelCount - 1 do
+    writeRela64(f, ObjRelPos[i], ObjRelSym[i], ObjRelType[i], ObjRelAddn[i]);
 
   { .shstrtab: 66-byte base blob, plus 29 bytes per array pair that exists. }
   writeU8(f, 0);
@@ -4732,12 +5058,13 @@ begin
     writeStrZ(f, '.fini_array');
     writeStrZ(f, '.rela.fini_array');
   end;
+  for c := 1 to ObjCutCount - 1 do writeStrZ(f, '.rela.text.' + ObjCutName[c]);
   writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs. $40 = SHF_INFO_LINK on rela sections; 6 = ALLOC|EXEC, 3 = ALLOC|WRITE. }
   writeShdrA64(f, 0, 0, 0, 0, 0);
   writeShdrB64(f, 0, 0, 0, 0);
-  writeShdrA64(f, 1, 1, 6, textOff, CodeLen);
+  writeShdrA64(f, 1, 1, 6, textOff, ObjCutEnd(0));
   writeShdrB64(f, 0, 0, 16, 0);
   writeShdrA64(f, 7, 4, $40, relaTextOff, relaTextCount*24);
   writeShdrB64(f, 6, 1, 8, 24);
@@ -4769,6 +5096,20 @@ begin
     writeShdrB64(f, 0, 0, 8, 8);
     writeShdrA64(f, relaFiniArrNm, 4, $40, relaFiniArrOff, 24);
     writeShdrB64(f, 6, finiArrSec, 8, 24);
+  end;
+  { the cut sections: bytes in place inside the one code blob, each followed by
+    its .rela.text.<name> when it has one. sh_info names the section patched. }
+  for c := 1 to ObjCutCount - 1 do
+  begin
+    writeShdrA64(f, ObjCutRelaNm[c] + 5, 1, 6, textOff + ObjCutOff[c],
+                 ObjCutEnd(c) - ObjCutOff[c]);
+    writeShdrB64(f, 0, 0, ObjCutAlign(c), 0);
+    if ObjCutRelN[c] > 0 then
+    begin
+      writeShdrA64(f, ObjCutRelaNm[c], 4, $40,
+                   extraRelaOff + (ObjCutRelAt[c] - ObjCutRelN[0]) * 24, ObjCutRelN[c] * 24);
+      writeShdrB64(f, 6, ObjCutShndx[c], 8, 24);
+    end;
   end;
 
 {$ifdef FPC}
