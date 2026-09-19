@@ -16339,6 +16339,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/cpthread_needs_threadsafe_b.c $(TESTTMP)/cpthread_needs_threadsafe_b26
 	$(TESTTMP)/cpthread_needs_threadsafe_b26; tools/expect_same.sh cpthread_needs_threadsafe_b26-rc "$$?" "42"
 	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_thread_local_is_per_thread.c $(TESTTMP)/c_thread_local26
+	# errno MUST BE PER-THREAD, and the row below is a COUNT rather than a value
+	# comparison on purpose: a shared errno is a race, so `errno == ENOENT` on one
+	# iteration passes almost every time and is physically unable to see the
+	# defect. The fixture carries its own positive control -- a deliberately
+	# shared int written before the SAME syscall and read after it, so it spans
+	# errno's window -- because `errno-crosstalk=0` is also what a run prints when
+	# the two threads never overlap. Measured 2026-09-19 against the pre-fix
+	# sources: RED 5 runs of 5; against the fix, GREEN 5 of 5.
+	./$(COMPILER) --threadsafe -Ilib/crtl/include -Ilib/crtl/src test/c_errno_is_per_thread.c $(TESTTMP)/c_errno_per_thread26
+	tools/expect_same.sh c_errno_per_thread26 "$$($(TESTTMP)/c_errno_per_thread26)" "$$(printf 'ran=1\nerrno-crosstalk=0\ncontrol-shared=1\nC ERRNO PER-THREAD OK')"
 	tools/expect_same.sh c_thread_local26 "$$($(TESTTMP)/c_thread_local26)" "$$(printf 'kept=4/4\nzeroed-on-entry=4/4\nno-crosstalk=4/4\ndistinct-tids=4/4\ncontrol-shared=1\nmain-copy=7\nC THREAD-LOCAL OK')"
 	# A `__thread` THAT CANNOT GET A PER-THREAD SLOT: WHICH REFUSALS STOP THE
 	# BUILD AND WHICH DEGRADE. The allocator has FIVE refusal reasons and they

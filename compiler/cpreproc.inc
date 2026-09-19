@@ -3414,6 +3414,31 @@ begin
     CPAddLiteral('__amd64__', '01');
     CPAddLiteral('__amd64', '01');
   end;
+  { Does a scalar `__thread` in THIS compilation actually get per-thread storage?
+    A header cannot answer that from the arch macro alone, and errno.h was the
+    first to need to: it declares `extern __thread int errno;` where the storage
+    is real and plain `extern int errno;` where it is not, because the degrade
+    path is correct but WARNS, and errno.h reaches nearly every C file in a
+    build. Guarding it on __x86_64__ leaves the noise on exactly the x86-64
+    builds that emit objects -- which is busybox's per-TU build, ~1,800 files,
+    every one of them including errno.h through the auto-registered
+    lib/crtl/include.
+
+    THE TWO CONDITIONS ARE TryAssignThreadVarStorage's TWO TU-LEVEL REFUSALS,
+    and they are here rather than inferred because both are command-line facts
+    known before a token is read: TLSREFUSE_ARCH (not x86-64) and
+    TLSREFUSE_NOINSTALL (--emit-obj/--shared have no ELF entry point, so
+    EmitTlsMainInstall never runs and nothing installs the block).
+
+    IT DOES NOT COVER THE OTHER THREE, AND MUST NOT CLAIM TO -- TLSREFUSE_ARRAY,
+    TLSREFUSE_TYPE and TLSREFUSE_AREAFULL are properties of a DECLARATION, not
+    of the translation unit, so a macro cannot decide them and a `__thread`
+    array still degrades and still warns with this defined. The macro answers
+    "would a scalar get a slot here", which is the question a header asks.
+    If TryAssignThreadVarStorage grows a sixth TU-level reason, it belongs here
+    too, or the macro becomes a name that is not the thing. }
+  if (TargetArch = TARGET_X86_64) and not (EmitObjMode or EmitSharedMode) then
+    CPAddLiteral('__pxx_thread_local__', '01');
   { Data-model predefines (C 5.2.4.2): real code branches on these to size long
     (c-testsuite 00212). 64-bit targets are LP64 (long/pointer = 8), 32-bit are
     ILP32 (long/pointer = 4) — matches the native-`long` model (see the C

@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frank-rust
 owner: unassigned
 blocked-by: []
-summary: "`__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not."
+summary: "HALF CLOSED BY EVENTS, RE-MEASURED 2026-09-19 (frankS) at HEAD. THE COSWITCH HALF IS DONE: `__pxxcoswitch(@a, @b)` COMPILES on riscv32, rc=0, and has since fc70d0cbe (2026-09-02, riscv32 stackful coroutines) — the `unsupported node in IR codegen: coswitch` error this ticket is named for no longer happens, so the title and the original summary were both stale for 17 days. THE CLONE HALF IS STILL REFUSED BUT NOT WHERE THIS TICKET SAYS: `__pxxclone` never reaches a missing codegen arm, because it is stopped one layer up — plain, `__pxxclone (thread creation) requires --threadsafe`; with --threadsafe, `--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet`. So what is missing on riscv32 is the THREADSAFE RUNTIME, not a codegen node, and this ticket is a duplicate view of that gap, and it is the only ticket recording it — kept open and kept at p25 for that reason, with the slug left alone because it is the citation key. NOT A PER-THREAD-STATE BUG: both observables are compile-time refusals reachable with ZERO threads running, which is the discriminator that keeps it out of that group."
 ---
 
 # `__pxxcoswitch` and `__pxxclone` have no riscv32 arm
@@ -117,3 +117,44 @@ for the profile where `PalBackendMmapAnon` and the thread-stack mmap actually
 run. Read it as **measured under qemu-xtensa 10.2.1, the execution target for
 the hosted profile** — not as a claim about silicon. The bare/ESP profile never
 reaches mmap, so nothing there depends on it.
+
+## RE-MEASURED 2026-09-19 (frankS) — and it is NOT in the per-thread-state group
+
+This was handed to me as the third member of a group about *per-thread state
+that is not actually per-thread*, with the grouping explicitly flagged as a lead
+to check and with the discriminator supplied: **does the defect need more than
+one thread to exist?** It does not, and the answer took two compiles.
+
+### `__pxxcoswitch` — the named error is gone
+
+    program cosw2;                      { zero threads created }
+    var a, b: Pointer;
+    begin a := nil; b := nil; __pxxcoswitch(@a, @b); end.
+
+    ./compiler/pascal26 --target=riscv32 ...  ->  ok: ... rc=0
+
+Gained at `fc70d0cbe`, 2026-09-02, *"riscv32 stackful coroutines — httpdemo
+crosses"*. The ticket has been carrying a quoted error string that the compiler
+stopped producing 17 days ago.
+
+### `__pxxclone` — refused, but a layer above the one this ticket names
+
+    (plain)         error: __pxxclone (thread creation) requires --threadsafe or
+                    {$threadsafe on}: the default heap/ARC/console-I/O runtime is
+                    not thread-safe
+    (--threadsafe)  --threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O
+                    locks are not implemented on this target yet
+
+There is no "missing arm" to reach. The gap is the **threadsafe runtime on
+riscv32**; a codegen arm for `clone` would be unreachable until that exists, so
+implementing one against this ticket would be work with no observable.
+
+### Why it is not in the group
+
+Both observables are **compile-time refusals, with zero threads running**. The
+group's other two members are silent wrong ANSWERS at runtime that require at
+least two threads to exist at all — one thread reading another's errno, one
+thread reading another's TLS block. This is a plain porting gap that announces
+itself, and it is the good kind: it stops and names what is missing.
+
+Saying so rather than making it fit, which is what I was asked for.

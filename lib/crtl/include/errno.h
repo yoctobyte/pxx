@@ -2,7 +2,43 @@
 #ifndef PXX_CRTL_ERRNO_H
 #define PXX_CRTL_ERRNO_H 1
 
+/* PER-THREAD, which is what C requires and what pxx did not do. It was one
+   ordinary .bss int shared by every thread, so a thread reading it on the line
+   after a failing call could see another thread's code -- measured at HEAD
+   against the glibc oracle at 8 cross-reads per 200000 iterations, varying per
+   run as a race should, where the oracle is 0 every time.
+
+   `__thread` is the whole fix because the machinery already exists: on hosted
+   x86-64 scalars it gets a real per-thread slot, and errno is exactly that.
+   Everywhere else it DEGRADES to the one shared .bss object it is today and
+   warns -- so this is strictly better on x86-64 and byte-identical elsewhere,
+   and nothing that compiles today stops compiling. The residual target set is
+   bug-a-a-cloned-thread-still-inherits-the-parents-fs-base-on-every-target-but-x86-64.
+   bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure */
+#ifdef __pxx_thread_local__
+extern __thread int errno;
+#else
+/* GUARDED, and the guard is about NOISE rather than correctness: where
+   __pxx_thread_local__ is undefined, `__thread` degrades to exactly this
+   shared object anyway, so both arms compile to the same thing -- but the
+   degrade path WARNS, and errno.h is included by nearly every C file, so the
+   unguarded spelling put a warning on essentially every cross compile AND on
+   every --emit-obj/--shared object in the tree. cparser.inc's own contract for
+   that warning is "a warning that fires on everything is not a warning", and
+   for the overwhelmingly common single-threaded build it carries nothing
+   actionable.
+
+   THE GUARD IS THE CAPABILITY, NOT THE ARCHITECTURE. `__x86_64__` is the
+   obvious spelling and it is wrong in one direction that matters: an x86-64
+   --emit-obj build has no ELF entry point, so nothing installs the per-thread
+   block and `__thread` degrades there too. That is busybox's per-TU build.
+   __pxx_thread_local__ is defined by cpreproc.inc from the same two TU-level
+   conditions TryAssignThreadVarStorage refuses on, so the two cannot drift.
+
+   The residual -- threaded C where the block is not installed -- is the
+   fs-base ticket named above, not this one. */
 extern int errno;
+#endif
 
 #define EPERM 1
 #define ENOENT 2

@@ -8,7 +8,7 @@ status: backlog
 found: 2026-09-01
 found-by: frankZ
 owner: unassigned
-summary: "A thread pxx did not create — a libc pthread, or any thread a linked C library starts — never runs the __pxxclone stub that carves and installs a per-thread TLS block, so it INHERITS its creator's gs and every `gs:` slot it touches is the creator's. Measured: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine."
+summary: "RE-MEASURED AND STILL LIVE 2026-09-19 (frankS) at HEAD, and the SCOPE HAS NARROWED since filing: a thread that never runs pxx's own entry code — neither the __pxxclone stub nor PxxPthreadStart — inherits its creator's gs, so every `gs:` slot it touches is the creator's. "A LIBC PTHREAD" IS NO LONGER THE RIGHT DESCRIPTION AND WAS WHEN THIS WAS FILED: 934ba0418 (2026-09-14, 13 days after the original measurement) routes pxx's own threads through pthread_create with PxxPthreadStart as the start routine, and that trampoline mmaps a block and installs it with arch_prctl(ARCH_SET_GS) exactly as the clone stub's child leg does. So a pthread pxx created is FINE; what is still broken is a thread whose start routine pxx never wrapped — a direct `external 'libpthread.so.0'` pthread_create, or a thread a linked external .so starts on its own. Measured today with BOTH routes in one program as each other's control: four BeginThread threads report four DISTINCT bases, four threads from a direct libpthread pthread_create all report the MAIN thread's base (10 duplicate pairs of 10). The original measurement stands unchanged because its subject, test/test_multithreading.pas, declares pthread_create as `external 'libpthread.so.0'` and is therefore on the still-broken route. ORIGINAL: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine."
 ---
 
 # A foreign thread has no TLS block of its own
@@ -157,3 +157,63 @@ An unblocked ticket whose only remaining content is "someone must decide" is
 worse than a blocked one: it is offered first, read for ten minutes, and put
 back. Nothing here is newly known — the edge just stops costing a session each
 time.
+
+## RE-MEASURED 2026-09-19 (frankS) — still live, and the scope is narrower than the filing
+
+Checked because this was handed to me as *a lead to CHECK*, not as a fact, and
+because `PxxPthreadStart` landed at `934ba0418` on **2026-09-14 — thirteen days
+after this ticket's measurement**, which is exactly the shape of a ticket that
+has been closed by events. It has not been.
+
+### The instrument puts both routes in one program, so each is the other's control
+
+`scratchpad/foreign_tls.pas`: route A creates four threads with `BeginThread`
+(→ `PalThreadCreate` → `PxxPthreadStart`); route B calls glibc's
+`pthread_create` **directly** through `external 'libpthread.so.0'`, which is
+what `test/test_multithreading.pas` — this ticket's own subject — does. Both
+routes spin so their threads genuinely overlap, because a block that is pooled
+and REUSED sequentially reports one base without any two threads holding it at
+once. (That false alarm has already been hit on this subject: a first run of an
+earlier probe reported all four workers sharing a base, and they were simply
+running one at a time.)
+
+    main base = 5596832
+      A[1]=134981710118912   B[1]=5596832
+      A[2]=134981710077952   B[2]=5596832
+      A[3]=134981709967360   B[3]=5596832
+      A[4]=134981709926400   B[4]=5596832
+    route A (BeginThread / trampoline) duplicate pairs: 0
+    route B (raw libpthread, foreign)  duplicate pairs: 10
+    FOREIGN-TLS SHARED
+
+Route A distinct and route B collapsed is what makes B's answer about the
+ROUTE. Had A collapsed too the probe would be broken and B would mean nothing —
+the fixture says so and branches on it.
+
+### What changed since filing, and what did not
+
+`PxxPthreadStart` mmaps a block, writes its own address into slot 0, installs it
+with `arch_prctl(ARCH_SET_GS)` and registers an alt stack — the clone stub's
+child leg, for the pthread route. So **a thread pxx creates is no longer
+foreign**, by either route. The filing's phrase *"a libc pthread"* now points at
+the fixed case, which is why the summary is rewritten rather than appended to.
+
+What is unchanged is everything this ticket is actually about: a thread whose
+start routine pxx never wrapped still inherits its creator's `gs`, and every
+slot in the block is the creator's.
+
+### It has a new tenant as of today
+
+`errno` is now a `__thread` scalar living in that block
+([[bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure]],
+resolved today), so a foreign thread now reads the creator's **errno** as well
+as the creator's magazine and stack bounds. That does not regress anything —
+errno was one process-wide global for every thread before — but it moves this
+ticket from "slots nobody has parked anything in yet" to a slot the C library
+uses on every error path.
+
+**For C specifically the residual is narrow**, and worth stating so nobody
+re-measures it: `lib/crtl/src/pthread.c:108` defines `pthread_create` itself and
+routes it to `__pxx_pthread_create` → `PxxPthreadStart`, so an ordinary
+`pthread_create` in a pxx-compiled C program is trampolined. A foreign thread in
+C means a linked external `.so` starting one of its own.

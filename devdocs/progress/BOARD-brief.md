@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:20 blocked:7 backlog:26 backlog-umbrella:13 backlog-core:169 backlog-nilpy:176 backlog-tools:61 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3860 rejected:83`
+`working:31 unfinished:20 blocked:7 backlog:26 backlog-umbrella:13 backlog-core:168 backlog-nilpy:176 backlog-tools:61 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3861 rejected:83`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,7 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 533, ranked
+## Ready — top 30 of 532, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -89,7 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 84] [N]` bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [A]` feature-a-pxx-cannot-link-its-own-objects-so-a-freestanding-multi-object-program-needs-gcc (unblocks 2)
-- `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [A]` feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
 - `[p 80] [A]` bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout
@@ -106,5 +105,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
+- `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 
-_503 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_502 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

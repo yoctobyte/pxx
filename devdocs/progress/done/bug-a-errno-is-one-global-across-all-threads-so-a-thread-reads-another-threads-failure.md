@@ -4,7 +4,7 @@ title: "errno is one global across all threads, so a thread can read another thr
 track: A
 prio: 65
 type: bug
-status: backlog
+status: done
 created: 2026-09-04
 found-by: franks-ab
 owner: ""
@@ -500,3 +500,103 @@ Not fixed here: the remaining work is Track C (every crtl site that SETS errno
 must go through the accessor), which is a lane and a scope beyond this session's
 group. The diagnosis is the deliverable; nothing above is inert until a pin,
 because nothing above changed code.
+
+## RESOLVED 2026-09-19 (frankS) — errno is `__thread`, and the guard is a capability macro
+
+### The fix is two lines and neither of them is new machinery
+
+`lib/crtl/include/errno.h` declares `extern __thread int errno;` and
+`lib/crtl/src/stdio.c` defines `__thread int errno;`. That is all. `__thread`
+already works on hosted x86-64 scalars — `errno` is exactly that — and
+`TryAssignThreadVarStorage` already allocates from the threadvar area, so this
+needed no new slot, no `TLS_SLOT_ERRNO`, no `CLONE_SETTLS`, no `.tbss` and no
+`gettid` on the error path. The ticket's own superseded-2026-09-07 paragraph had
+this right: *"errno simply never went into the storage that exists."*
+
+**The tid-registry alternative this ticket also records was measured and
+rejected**, not skipped: `PalThreadSelf` is a raw `gettid` **syscall**, so that
+route puts a syscall on every errno access.
+
+### Measured
+
+| | before | after |
+| --- | --- | --- |
+| x86-64 `--threadsafe`, 200000 iters/thread | `cross_reads a=8 b=0` — `ERRNO-TLS SHARED` | `a=0 b=0` — `ERRNO-TLS OK`, 8 runs of 8 |
+| glibc oracle, same probe | `0 0` | `0 0` |
+| x86-64 single-threaded | `errno=2`, `cleared=0` | unchanged |
+
+### The guard is `__pxx_thread_local__`, NOT `__x86_64__`, and that distinction is the whole second half of this work
+
+`__thread` off its supported configuration degrades to one shared `.bss` object
+**and warns**. `errno.h` is reached by nearly every C file — `lib/crtl/include`
+is an auto-registered `<>` search path — so the unguarded spelling put a warning
+on essentially every C compile in the tree, against `cparser.inc`'s own contract
+that *"a warning that fires on everything is not a warning."*
+
+`#ifdef __x86_64__` is the obvious guard and **it is wrong in a direction that
+matters**: one of the allocator's refusals is `TLSREFUSE_NOINSTALL` —
+`--emit-obj`/`--shared` have no ELF entry point, so nothing installs the block —
+and that is **busybox's per-TU build, ~1,800 objects**, every one of them
+including `errno.h`. Measured: `--target=<cross>` 1 warning each, and x86-64
+`--emit-obj` and `--shared` **1 warning each as well**.
+
+So `compiler/cpreproc.inc` now predefines `__pxx_thread_local__` from the same
+two TU-level conditions `TryAssignThreadVarStorage` refuses on
+(`TLSREFUSE_ARCH`, `TLSREFUSE_NOINSTALL`) — both command-line facts known before
+a token is read — and both spellings of `errno` branch on that one macro, so the
+declaration and the definition cannot drift onto different arms. It deliberately
+does **not** claim the other three refusals (`ARRAY`, `TYPE`, `AREAFULL`): those
+are properties of a declaration, not of a translation unit.
+
+Warning cost of a TU that merely includes `errno.h`, after:
+
+    --target=i386/arm32/aarch64/riscv32   0    (was 1 each)
+    x86-64 --emit-obj / --shared          0    (was 1 each)
+    x86-64 hosted                         0
+
+**`warnings=0` everywhere is also exactly what a macro that is never defined
+would print**, so that row is not the evidence. Two controls separate them: an
+explicit `__thread` the guard does not touch still warns 1 in all five degrading
+populations and 0 on hosted x86-64; and an `#error` probe reports the macro
+DEFINED in **exactly one** population, x86-64 hosted. (That probe first answered
+DEFINED for xtensa too — `rc != 0` from xtensa's unrelated refusal of a
+standalone C executable. Matching the error TEXT, not the exit status, fixed it.)
+
+### The test asserts a COUNT, because a value check cannot see this
+
+`test/c_errno_is_per_thread.c`, wired into `test-core`. A shared errno is a
+race, so `errno == ENOENT` on one iteration passes almost every time — the
+assertion class has to match the defect class. It carries its own positive
+control: a deliberately shared int written **before the same syscall and read
+after it**, so it spans errno's window. The first version of that control stored
+and reloaded on adjacent lines, a two-instruction window, and **reported zero
+crosstalk while genuinely shared** — which would have been read as "the threads
+overlap fine" and made the errno row meaningless.
+
+Fixture verified against the real pre-fix sources (`git checkout HEAD --` on
+both files, not a simulation): **RED 5 runs of 5**; against the fix, **GREEN 5
+of 5**.
+
+### What this does NOT fix, and it is measured, not assumed
+
+**A FOREIGN thread still shares errno** — one that never runs
+`PxxPthreadStart`/the clone stub inherits its creator's `gs`, and errno lives in
+that block. Measured at HEAD today with both routes in one program: four
+`BeginThread` threads get four distinct bases; four threads from a direct
+`external 'libpthread.so.0'` `pthread_create` **all report the main thread's
+base**. That is [[bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine]],
+which reproduces and is the genuine sibling of this ticket.
+
+**The residual is narrower than it sounds for C specifically**: `lib/crtl` defines
+`pthread_create` itself (`lib/crtl/src/pthread.c:108` → `__pxx_pthread_create` →
+`PxxPthreadStart`), so a pxx-compiled C program's threads ARE trampolined and DO
+get their own block. That is why the race above measures 0 rather than passing by
+accident. A foreign thread in C therefore means a linked external `.so` starting
+its own thread, not an ordinary `pthread_create` call.
+
+**Off x86-64 errno is still shared**, unchanged from today and byte-identical to
+before: `__thread` has no per-thread block to use there. That is the arch half of
+the same sibling ticket.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

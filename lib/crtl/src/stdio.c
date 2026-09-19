@@ -63,7 +63,18 @@ extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_remove(const char *path);
 extern int __pxx_rename(const char *oldPath, const char *newPath);
 
+/* The definition behind the declaration in <errno.h>. THE TWO SPELLINGS MUST
+   AGREE, including the guard: if the header says per-thread here and this says
+   shared, the tentative definition silently becomes a second, NON-thread-local
+   object and the race comes back with nothing to show for it.
+   Guarded on the same macro as the header, which is the point: one condition,
+   defined in one place (cpreproc.inc), so the declaration and the definition
+   cannot disagree about which arm they are on. */
+#ifdef __pxx_thread_local__
+__thread int errno;
+#else
 int errno;
+#endif
 
 /* ---- FILE + the standard streams ------------------------------------------ */
 
