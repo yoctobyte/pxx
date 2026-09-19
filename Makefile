@@ -4865,6 +4865,13 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_mcargty26 | diff -u test/test_nilpy_a_method_call_argument_is_not_typed_by_its_own_argument.expected -
 	./$(COMPILER) test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.npy $(TESTTMP)/test_nilpy_binop2attr26
 	$(TESTTMP)/test_nilpy_binop2attr26 | diff -u test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.expected -
+	./$(COMPILER) test/test_nilpy_a_field_from_a_qualified_shim_construction.npy $(TESTTMP)/test_nilpy_qshimfld26
+	$(TESTTMP)/test_nilpy_qshimfld26 | diff -u test/test_nilpy_a_field_from_a_qualified_shim_construction.expected -
+	@# the TYPE, which the values above cannot see: the field read `v` must carry
+	@# the same class as the local construction `a` (a relation, not a rec number)
+	o=$$(PXXDBG=n.locals ./$(COMPILER) test/test_nilpy_a_field_from_a_qualified_shim_construction.npy $(TESTTMP)/test_nilpy_qshimfld26 2>&1); \
+	 echo "$$o" | grep -qE '^PXXDBG n.locals f a tk=6 rec=[0-9]+' && \
+	 tools/expect_same.sh test_nilpy_qshimfld_type "$$(echo "$$o" | grep -E '^PXXDBG n.locals f v ' | sed 's/ | .*//; s/ f v / f _ /')" "$$(echo "$$o" | grep -E '^PXXDBG n.locals f a ' | sed 's/ | .*//; s/ f a / f _ /')"
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

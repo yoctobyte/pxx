@@ -5612,6 +5612,39 @@ begin
   end;
 end;
 
+{ The class a QUALIFIED construction `m.C(...)` builds, answered the way the
+  constructor path answers it (PyParseCall's PyCtorQualUnit arm): C in the unit
+  `m` names, by its plain spelling first and then by the reserved-word mapping
+  a Pascal shim has to use -- `array.array("h")` builds mimic_array's
+  `array_`, because `array` is a Pascal reserved word. The two token scanners
+  that type a field or a local from `m.C(...)` looked the member up bare and
+  flat, so they missed `array_` and the field became a variant: every
+  `self.values[i]` then went through the dynamic getitem, ~10x CPython's cost
+  in lekkerzeilen's chart build (frankb-8e, 2026-09-19). The flat lookup stays
+  as the FALLBACK, so a qualifier that is not a unit (and every name that
+  resolved before) answers exactly as it did. A RECORD row never answers --
+  a same-named record is the trap FindUClassNonRecord exists for.
+  -1 when nothing names a class. }
+function PyQualifiedCtorClass(qualTok, memberTok: Integer): Integer;
+var u: Integer; nm, rsv: AnsiString;
+begin
+  Result := -1;
+  nm := GetTokenStr(memberTok);
+  u := FindUnitOrAlias(LowerCase(GetTokenStr(qualTok)));
+  if u >= 0 then
+  begin
+    Result := FindUClassInUnit(nm, u);
+    if (Result >= 0) and UClsIsRecord[Result] then Result := -1;
+    if Result < 0 then
+    begin
+      rsv := PyMapReservedMember(nm);
+      if rsv <> nm then Result := FindUClassInUnit(rsv, u);
+      if (Result >= 0) and UClsIsRecord[Result] then Result := -1;
+    end;
+  end;
+  if Result < 0 then Result := FindUClassNonRecord(nm);
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -6037,9 +6070,12 @@ begin
   if (startIdx + 2 < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      (Tokens[startIdx + 1].Kind = tkDot) and (Tokens[startIdx + 2].Kind = tkIdent) and
      (startIdx + 3 < endIdx) and (Tokens[startIdx + 3].Kind = tkLParen) and
-     (FindUClass(GetTokenStr(startIdx + 2)) >= 0) then
+     ((FindUClass(GetTokenStr(startIdx + 2)) >= 0) or
+      (PyQualifiedCtorClass(startIdx, startIdx + 2) >= 0)) then
   begin
     ctorCi := FindUClass(GetTokenStr(startIdx + 2));
+    { ...unless the unit names it under the reserved-word spelling only }
+    if ctorCi < 0 then ctorCi := PyQualifiedCtorClass(startIdx, startIdx + 2);
     ctorEnd := PyEndOfGroup(startIdx + 3, endIdx);
     { the same selector chase as the bare-construction arm below — `mod.Foo()`
       and `Foo()` must not answer differently about what follows the ')' }
@@ -41820,7 +41856,7 @@ begin
     if (rhsAt + 3 < bodyEnd) and (Tokens[rhsAt].Kind = tkIdent) and
        (Tokens[rhsAt + 1].Kind = tkDot) and (Tokens[rhsAt + 2].Kind = tkIdent) and
        (Tokens[rhsAt + 3].Kind = tkLParen) and
-       (FindUClassNonRecord(GetTokenStr(rhsAt + 2)) >= 0) then
+       (PyQualifiedCtorClass(rhsAt, rhsAt + 2) >= 0) then
     begin
       { NonRecord, both times: a QUALIFIED construction
         `self.t = tk.Text(...)` names a class, and the first row of
@@ -41829,7 +41865,7 @@ begin
         "Text has no method insert".
         bug-nilpy-text-class-name-binds-the-rtl-file-record. }
       tk := tyClass;
-      fldRec := REC_UCLASS_BASE + FindUClassNonRecord(GetTokenStr(rhsAt + 2));
+      fldRec := REC_UCLASS_BASE + PyQualifiedCtorClass(rhsAt, rhsAt + 2);
     end;
     { A bare identifier that names a PARAMETER of this method is a
       VALUE, and that reading has to win before the type scanners see

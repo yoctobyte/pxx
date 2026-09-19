@@ -1,0 +1,28 @@
+# A field constructed through a MODULE-QUALIFIED shim class whose Pascal
+# spelling differs from the Python one: `self.values = array.array("h")`,
+# where mimic_array's class is `array_` (`array` is a Pascal reserved word).
+# The field pre-pass looked the member up bare, missed `array_`, and made the
+# field a VARIANT, so every `self.values[i]` went through the dynamic
+# getitem (about 10x CPython's cost in lekkerzeilen's chart build) and `len()`
+# of it raised. The values below pass either way once len() handles a
+# variant; the Makefile row asserts the TYPE, `v` against the local `a`.
+import array
+
+
+class H:
+    def __init__(self):
+        self.count = 0
+        self.values = array.array("h")
+
+
+def f():
+    a = array.array("h")
+    h = H()
+    v = h.values
+    a.frombytes(bytes(4))
+    v.frombytes(bytes(6))
+    v[2] = -7
+    print(len(a), len(v), v[2] + a[1], h.values[2] * 2)
+
+
+f()
