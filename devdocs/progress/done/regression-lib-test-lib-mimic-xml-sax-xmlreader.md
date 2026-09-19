@@ -116,4 +116,4 @@ through the widened result on both base and subclass, and matches CPython.
 Class-vs-class is untouched and still adopts the base: that is covariance and a
 separate question, and the common shape (`return Node(...)` in both) infers the
 same kind on both sides so it never reaches the join at all.
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8116710dd.
