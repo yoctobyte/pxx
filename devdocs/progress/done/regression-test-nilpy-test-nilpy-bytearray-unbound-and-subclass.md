@@ -37,3 +37,6 @@ pascal26:68: error: Nil Python: add overrides TPyList.add with a different resul
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy` passes at ff2d50a2bde9 (tier full); it was red at b4104386ae9c. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
