@@ -274,6 +274,7 @@ var
   ElfLnkDefs  : array of Integer;      { strong definitions seen }
   ElfLnkWeak  : array of Integer;      { weak definitions seen }
   ElfLnkRefs  : array of Integer;      { undefined references seen }
+  ElfLnkStrongRef : array of Boolean;  { some reference is NOT weak -- an undefined weak one is 0, not an error }
   ElfLnkFirst : array of AnsiString;   { object that first defined it, for the duplicate report }
   ElfLnkCount : Integer;
   ElfLnkHead  : array of Integer;
@@ -334,6 +335,9 @@ var
   ElfLnkDefKind  : array of Integer;
   ElfLnkDefVal   : array of Int64;
   ElfLnkDefIsWeak: array of Boolean;
+  ElfLnkDefInfo  : array of Integer;  { st_info of the chosen definition, for the output .symtab }
+  ElfLnkDefSize  : array of Int64;
+  ElfLnkRwFile   : Int64;             { file offset (and base-relative address) of the RW segment }
 
 function ElfLnkKindName(k: Integer): AnsiString;
 begin
@@ -368,12 +372,16 @@ begin
   SetLength(ElfLnkDefs, 0);
   SetLength(ElfLnkWeak, 0);
   SetLength(ElfLnkRefs, 0);
+  SetLength(ElfLnkStrongRef, 0);
   SetLength(ElfLnkFirst, 0);
   SetLength(ElfLnkNext, 0);
   SetLength(ElfLnkDefObj, 0);
   SetLength(ElfLnkDefKind, 0);
   SetLength(ElfLnkDefVal, 0);
   SetLength(ElfLnkDefIsWeak, 0);
+  SetLength(ElfLnkDefInfo, 0);
+  SetLength(ElfLnkDefSize, 0);
+  ElfLnkRwFile := 0;
   ElfLnkObjCount := 0;
   SetLength(ElfLnkObjPath, 0);
   SetLength(ElfLnkInShndx, 0);
@@ -403,12 +411,18 @@ begin
   SetLength(ElfLnkDefs, n + 1);
   SetLength(ElfLnkWeak, n + 1);
   SetLength(ElfLnkRefs, n + 1);
+  SetLength(ElfLnkStrongRef, n + 1);
+  ElfLnkStrongRef[n] := False;
   SetLength(ElfLnkFirst, n + 1);
   SetLength(ElfLnkNext, n + 1);
   SetLength(ElfLnkDefObj, n + 1);
   SetLength(ElfLnkDefKind, n + 1);
   SetLength(ElfLnkDefVal, n + 1);
   SetLength(ElfLnkDefIsWeak, n + 1);
+  SetLength(ElfLnkDefInfo, n + 1);
+  SetLength(ElfLnkDefSize, n + 1);
+  ElfLnkDefInfo[n] := 0;
+  ElfLnkDefSize[n] := 0;
   ElfLnkDefObj[n] := -1;
   ElfLnkDefKind[n] := 0;
   ElfLnkDefVal[n] := 0;
@@ -542,6 +556,7 @@ begin
         if shndx = 0 then
         begin
           ElfLnkRefs[k] := ElfLnkRefs[k] + 1;
+          if bind <> ELFLNK_STB_WEAK then ElfLnkStrongRef[k] := True;
           Continue;
         end;
         if bind = ELFLNK_STB_WEAK then
@@ -583,6 +598,8 @@ begin
           ElfLnkDefKind[k] := kind;
           ElfLnkDefVal[k] := ElfRdU64(e + 8);
           ElfLnkDefIsWeak[k] := bind = ELFLNK_STB_WEAK;
+          ElfLnkDefInfo[k] := ElfRdU8(e + 4);
+          ElfLnkDefSize[k] := ElfRdU64(e + 16);
         end;
       end;
     end;
@@ -625,6 +642,7 @@ begin
     begin
       { the RW segment: next page in the FILE, at the congruent address }
       rwFile := ElfLnkAlignUp(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], ELFLNK_PAGE);
+      ElfLnkRwFile := rwFile;
       addr := ELFLNK_BASE + rwFile;
     end;
     maxAl := 1;
@@ -775,4 +793,486 @@ begin
     if ElfLnkDefObj[k] >= 0 then
       WriteLn('elflay: sym ', IntToHexStr(ElfLnkGlobalAddr(k), 16), ' ', ElfLnkName[k]);
   WriteLn('elflay: ELFLAY-OK');
+end;
+
+{ ---- stage 4: relocation application, and the image it lands in ------------
+  THE THREE TYPES THE EMITTER WRITES, AND ONLY THOSE: R_X86_64_64 (1, S+A into
+  8 bytes), R_X86_64_PC32 (2, S+A-P into a signed 32-bit field) and
+  R_X86_64_32S (11, S+A into a signed 32-bit field). The busybox census saw two
+  of them; the third is in writeELFRelX64General for globals addressed
+  absolutely and simply did not occur there. Anything else is refused BY NAME
+  here, which is the place the reader deferred that refusal to: the applier
+  knows what it can do. A 32-bit result that does not fit is refused too --
+  ld says "relocation truncated to fit", and silently keeping the low half is
+  a jump to a plausible wrong address.
+
+  S IS RESOLVED THE WAY ld RESOLVES IT. A LOCAL symbol (including the section
+  symbols most of our data references go through) is this object's own section
+  address plus st_value. A non-local one goes through the GLOBAL table -- even
+  when this object defines it, because a weak copy here may have lost to another
+  object's -- and an undefined WEAK reference is 0.
+
+  THE IMAGE IS STREAMED, NOT HELD. .text is written object by object as it is
+  relocated, because at the busybox scale it is the whole 180 MB of the image;
+  only the RW segment (.init_array .. end of .data, a few MB) is assembled in
+  memory, since its inputs interleave by kind rather than by object. }
+
+var
+{$ifdef FPC}
+  ElfLnkF    : File;
+{$else}
+  ElfLnkF    : Integer;
+{$endif}
+  ElfLnkRw   : array of Byte;   { the RW segment's file bytes }
+  ElfLnkTb   : array of Byte;   { one object's .text while it is relocated }
+  ElfLnkB    : array of Byte;   { a small region assembled before it is written }
+  ElfLnkBLen : Integer;
+  ElfLnkZero : array of Byte;
+
+procedure ElfLnkOpen(const path: AnsiString);
+begin
+{$ifdef FPC}
+  Assign(ElfLnkF, path); Rewrite(ElfLnkF, 1);
+{$else}
+  AssignPath := path;
+  ElfLnkF := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
+{$endif}
+end;
+
+procedure ElfLnkClose(const path: AnsiString);
+begin
+{$ifdef FPC}
+  Close(ElfLnkF);
+  FpChmod(path, 493);
+{$else}
+  sysfchmod(ElfLnkF, 493); { chmod 755 }
+  sysclose(ElfLnkF);
+{$endif}
+end;
+
+procedure ElfLnkWrite(const buf: array of Byte; n: Int64);
+begin
+  if n <= 0 then Exit;
+{$ifdef FPC}
+  Blockwrite(ElfLnkF, buf[0], n);
+{$else}
+  OutWrite(ElfLnkF, buf, 0, Integer(n));
+{$endif}
+end;
+
+procedure ElfLnkWriteZeros(n: Int64);
+var i, chunk: Integer;
+begin
+  if Length(ElfLnkZero) = 0 then
+  begin
+    SetLength(ElfLnkZero, 4096);
+    for i := 0 to 4095 do ElfLnkZero[i] := 0;
+  end;
+  while n > 0 do
+  begin
+    chunk := 4096;
+    if n < chunk then chunk := Integer(n);
+    ElfLnkWrite(ElfLnkZero, chunk);
+    n := n - chunk;
+  end;
+end;
+
+procedure ElfLnkPutLE(var buf: array of Byte; off: Int64; v: Int64; n: Integer);
+var i: Integer;
+begin
+  for i := 0 to n - 1 do
+  begin
+    buf[Integer(off) + i] := Byte(v and $FF);
+    v := v shr 8;
+  end;
+end;
+
+{ the assembled-region builder: append little-endian fields to ElfLnkB }
+procedure ElfLnkBReset; begin ElfLnkBLen := 0; end;
+procedure ElfLnkBPut(v: Int64; n: Integer);
+var cap: Integer;
+begin
+  cap := Length(ElfLnkB);
+  if ElfLnkBLen + n > cap then
+  begin
+    if cap < 4096 then cap := 4096;
+    while ElfLnkBLen + n > cap do cap := cap * 2;
+    SetLength(ElfLnkB, cap);
+  end;
+  ElfLnkPutLE(ElfLnkB, ElfLnkBLen, v, n);
+  ElfLnkBLen := ElfLnkBLen + n;
+end;
+procedure ElfLnkBStrZ(const s: AnsiString);
+var i: Integer;
+begin
+  for i := 1 to Length(s) do ElfLnkBPut(Ord(s[i]), 1);
+  ElfLnkBPut(0, 1);
+end;
+procedure ElfLnkBPadTo(n: Integer);
+begin
+  while ElfLnkBLen < n do ElfLnkBPut(0, 1);
+end;
+
+{ Index of `nm` in the global table, or -1. Never inserts. }
+function ElfLnkFind(const nm: AnsiString): Integer;
+var i: Integer;
+begin
+  ElfLnkFind := -1;
+  i := ElfLnkHead[ElfLnkHash(nm) and ElfLnkMask];
+  while i >= 0 do
+  begin
+    if ElfLnkName[i] = nm then begin ElfLnkFind := i; Exit; end;
+    i := ElfLnkNext[i];
+  end;
+end;
+
+function ElfLnkRelTypeName(t: Int64): AnsiString;
+begin
+  case t of
+    1:  ElfLnkRelTypeName := 'R_X86_64_64';
+    2:  ElfLnkRelTypeName := 'R_X86_64_PC32';
+    4:  ElfLnkRelTypeName := 'R_X86_64_PLT32';
+    9:  ElfLnkRelTypeName := 'R_X86_64_GOTPCREL';
+    10: ElfLnkRelTypeName := 'R_X86_64_32';
+    11: ElfLnkRelTypeName := 'R_X86_64_32S';
+    41: ElfLnkRelTypeName := 'R_X86_64_GOTPCRELX';
+    42: ElfLnkRelTypeName := 'R_X86_64_REX_GOTPCRELX';
+  else
+    ElfLnkRelTypeName := 'relocation type ' + AIntToStr(t);
+  end;
+end;
+
+{ S for symbol `si` of object `obj` (loaded in ElfRdBuf). ok = False with
+  ElfRdErr set when it cannot be resolved. }
+function ElfLnkSymS(obj: Integer; const secKind: array of Integer; nsec: Integer;
+                    stOff, strTab, si: Int64; var ok: Boolean): Int64;
+var e, shndx: Int64; bind, g: Integer; nm: AnsiString;
+begin
+  ok := True;
+  ElfLnkSymS := 0;
+  e := stOff + si * 24;
+  bind := ElfRdU8(e + 4) shr 4;
+  shndx := ElfRdU16(e + 6);
+  if bind = ELFLNK_STB_LOCAL then
+  begin
+    if shndx = $FFF1 then begin ElfLnkSymS := ElfRdU64(e + 8); Exit; end;
+    if (shndx = 0) or (shndx >= nsec) then
+    begin
+      ok := False;
+      ElfRdErr := 'local symbol ' + AIntToStr(si) + ' has no section';
+      Exit;
+    end;
+    if secKind[Integer(shndx)] = ELFLNK_NKIND then
+    begin
+      ok := False;
+      ElfRdErr := 'local symbol ' + AIntToStr(si) + ' is in unallocated section '''
+                + ElfRdSecName(Integer(shndx)) + '''';
+      Exit;
+    end;
+    ElfLnkSymS := ElfLnkInAddr[obj * ELFLNK_NKIND + secKind[Integer(shndx)]] + ElfRdU64(e + 8);
+    Exit;
+  end;
+  nm := ElfRdStr(strTab, ElfRdU32(e));
+  g := ElfLnkFind(nm);
+  if (g >= 0) and (ElfLnkDefObj[g] >= 0) then
+  begin
+    ElfLnkSymS := ElfLnkGlobalAddr(g);
+    Exit;
+  end;
+  if bind = ELFLNK_STB_WEAK then Exit;
+  ok := False;
+  ElfRdErr := 'undefined reference to ''' + nm + '''';
+end;
+
+{ Apply every SHT_RELA that patches input section `target` of object `obj`,
+  whose bytes sit in `buf` from index `bufOff`. }
+function ElfLnkRelocate(obj: Integer; const secKind: array of Integer; nsec, target: Integer;
+                        var buf: array of Byte; bufOff: Int64): Boolean;
+var i, j, n, width: Integer;
+    symSec, stOff, strTab, rOff, rEnt, e, off, info, rtype, si, add, S, P, v, secSize: Int64;
+    ok: Boolean;
+begin
+  ElfLnkRelocate := False;
+  secSize := ElfRdShSize(target);
+  for i := 1 to nsec - 1 do
+    if (ElfRdShType(i) = ELFRD_SHT_RELA) and (ElfRdU32(ElfRdShdr(i) + 44) = target) then
+    begin
+      symSec := ElfRdShLink(i);
+      stOff := ElfRdShOffset(Integer(symSec));
+      strTab := ElfRdShOffset(Integer(ElfRdShLink(Integer(symSec))));
+      rOff := ElfRdShOffset(i);
+      rEnt := ElfRdShEntSize(i);
+      if rEnt <= 0 then rEnt := 24;
+      n := Integer(ElfRdShSize(i) div rEnt);
+      for j := 0 to n - 1 do
+      begin
+        e := rOff + Int64(j) * rEnt;
+        off := ElfRdU64(e);
+        info := ElfRdU64(e + 8);
+        add := ElfRdU64(e + 16);
+        rtype := info and $FFFFFFFF;
+        si := (info shr 32) and $FFFFFFFF;
+        if rtype = 1 then width := 8
+        else if (rtype = 2) or (rtype = 11) then width := 4
+        else
+        begin
+          ElfRdErr := ElfLnkRelTypeName(rtype) + ' in ' + ElfLnkKindName(secKind[target])
+                    + ' -- pxx emits R_X86_64_64, R_X86_64_PC32 and R_X86_64_32S only';
+          Exit;
+        end;
+        if (off < 0) or (off + width > secSize) then
+        begin
+          ElfRdErr := 'relocation at offset ' + AIntToStr(off) + ' runs past the end of '
+                    + ElfLnkKindName(secKind[target]);
+          Exit;
+        end;
+        S := ElfLnkSymS(obj, secKind, nsec, stOff, strTab, si, ok);
+        if not ok then Exit;
+        P := ElfLnkInAddr[obj * ELFLNK_NKIND + secKind[target]] + off;
+        if rtype = 2 then v := S + add - P else v := S + add;
+        if (width = 4) and ((v < -2147483648) or (v > 2147483647)) then
+        begin
+          ElfRdErr := ElfLnkRelTypeName(rtype) + ' at ' + ElfLnkKindName(secKind[target])
+                    + '+' + AIntToStr(off) + ' does not fit in 32 bits (value 0x'
+                    + IntToHexStr(v, 16) + ')';   { hex: AIntToStr narrows, and printed 0 for 2^32 }
+          Exit;
+        end;
+        ElfLnkPutLE(buf, bufOff + off, v, width);
+      end;
+    end;
+  ElfLnkRelocate := True;
+end;
+
+{ Fill secKind for the object in ElfRdBuf. Its sections were already checked
+  when the object was added, so this cannot refuse -- it re-derives the map
+  because stage 4 reloads each object rather than holding 400 of them. }
+procedure ElfLnkSecKinds(nsec: Integer; var secKind: array of Integer);
+var i: Integer;
+begin
+  for i := 0 to nsec - 1 do
+    if i = 0 then secKind[i] := ELFLNK_NKIND else secKind[i] := ElfLnkSecKind(i);
+end;
+
+{ Write the linked executable. ElfLnkLoadList and ElfLnkLayout must have run.
+  False, with the reason printed under `tag`, on any refusal. }
+function ElfLnkWriteExe(const outPath, entryName, tag: AnsiString): Boolean;
+var o, k, i, nsec, slot, nUnres, nDef, strSize, strPos, symOff, strOff, shstrOff, shOff: Integer;
+    entry, rwStart, rwLen, rwMem, endAddr, cur, textEnd, secOff, sz, fileAt: Int64;
+    secKind: array of Integer;
+    g: Integer;
+const
+  SHSTR = 68;   { see the blob below }
+begin
+  ElfLnkWriteExe := False;
+  { every STRONG reference must have a definition somewhere in the set }
+  nUnres := 0;
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkStrongRef[i] and (ElfLnkDefObj[i] < 0) then
+    begin
+      Inc(nUnres);
+      if nUnres <= 50 then WriteLn(tag, ': undefined reference to ''', ElfLnkName[i], '''');
+    end;
+  if nUnres > 0 then
+  begin
+    WriteLn(tag, ': ', AIntToStr(nUnres), ' undefined reference(s); nothing written');
+    Exit;
+  end;
+  g := ElfLnkFind(entryName);
+  if (g < 0) or (ElfLnkDefObj[g] < 0) then
+  begin
+    WriteLn(tag, ': entry symbol ''', entryName, ''' is not defined by any object');
+    Exit;
+  end;
+  entry := ElfLnkGlobalAddr(g);
+
+  { the RW segment's extent }
+  rwStart := ELFLNK_BASE + ElfLnkRwFile;
+  endAddr := rwStart;
+  for k := ELFLNK_K_INIT to ELFLNK_K_DATA do
+    if ElfLnkOutAddr[k] + ElfLnkOutSize[k] > endAddr then
+      endAddr := ElfLnkOutAddr[k] + ElfLnkOutSize[k];
+  rwLen := endAddr - rwStart;
+  rwMem := rwLen;
+  if ElfLnkOutAddr[ELFLNK_K_BSS] + ElfLnkOutSize[ELFLNK_K_BSS] - rwStart > rwMem then
+    rwMem := ElfLnkOutAddr[ELFLNK_K_BSS] + ElfLnkOutSize[ELFLNK_K_BSS] - rwStart;
+  SetLength(ElfLnkRw, rwLen);
+  for i := 0 to Integer(rwLen) - 1 do ElfLnkRw[i] := 0;
+
+  ElfLnkOpen(outPath);
+
+  { ehdr + 3 phdrs, padded to the first page }
+  ElfLnkBReset;
+  ElfLnkBPut($464C457F, 4); ElfLnkBPut(2, 1); ElfLnkBPut(1, 1); ElfLnkBPut(1, 1);
+  ElfLnkBPadTo(16);
+  ElfLnkBPut(2, 2); ElfLnkBPut(62, 2); ElfLnkBPut(1, 4);   { ET_EXEC, EM_X86_64 }
+  ElfLnkBPut(entry, 8); ElfLnkBPut(64, 8);
+  ElfLnkBPut(0, 8);                                        { e_shoff, patched below }
+  ElfLnkBPut(0, 4); ElfLnkBPut(64, 2); ElfLnkBPut(56, 2); ElfLnkBPut(3, 2);
+  ElfLnkBPut(64, 2); ElfLnkBPut(9, 2); ElfLnkBPut(8, 2);   { shentsize, shnum, shstrndx }
+  { PT_LOAD R+X: the headers and .text }
+  ElfLnkBPut(1, 4); ElfLnkBPut(5, 4); ElfLnkBPut(0, 8);
+  ElfLnkBPut(ELFLNK_BASE, 8); ElfLnkBPut(ELFLNK_BASE, 8);
+  ElfLnkBPut(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], 8);
+  ElfLnkBPut(ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT], 8);
+  ElfLnkBPut(ELFLNK_PAGE, 8);
+  { PT_LOAD R+W: .init_array .fini_array .data, then .bss as memsz }
+  ElfLnkBPut(1, 4); ElfLnkBPut(6, 4); ElfLnkBPut(ElfLnkRwFile, 8);
+  ElfLnkBPut(rwStart, 8); ElfLnkBPut(rwStart, 8);
+  ElfLnkBPut(rwLen, 8); ElfLnkBPut(rwMem, 8); ElfLnkBPut(ELFLNK_PAGE, 8);
+  { PT_GNU_STACK RW: without it the kernel may map the stack executable }
+  ElfLnkBPut($6474E551, 4); ElfLnkBPut(6, 4);
+  for i := 1 to 5 do ElfLnkBPut(0, 8);
+  ElfLnkBPut(16, 8);
+  ElfLnkBPadTo(ELFLNK_PAGE);
+  { e_shoff is known only after the image; computed now from the layout }
+  fileAt := ElfLnkRwFile + rwLen;
+  symOff := Integer(ElfLnkAlignUp(fileAt, 8));
+  nDef := 0; strSize := 1;
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefObj[i] >= 0 then
+    begin
+      Inc(nDef);
+      strSize := strSize + Length(ElfLnkName[i]) + 1;
+    end;
+  strOff := symOff + (nDef + 1) * 24;
+  shstrOff := strOff + strSize;
+  shOff := Integer(ElfLnkAlignUp(shstrOff + SHSTR, 8));
+  ElfLnkPutLE(ElfLnkB, 40, shOff, 8);
+  ElfLnkWrite(ElfLnkB, ElfLnkBLen);
+
+  { .text streamed per object; RW inputs copied into ElfLnkRw }
+  cur := ElfLnkOutAddr[ELFLNK_K_TEXT];
+  for o := 0 to ElfLnkObjCount - 1 do
+  begin
+    LoadFile(ElfLnkObjPath[o], ElfRdBuf);
+    if Length(ElfRdBuf) = 0 then ElfRdErr := 'read back empty'
+    else if ElfRdCheckHeader then ElfRdErr := '';
+    if ElfRdErr <> '' then
+    begin
+      WriteLn(tag, ': ', ElfLnkObjPath[o], ': cannot re-read the object: ', ElfRdErr);
+      ElfLnkClose(outPath);
+      Exit;
+    end;
+    nsec := ElfRdShNum;
+    SetLength(secKind, nsec);
+    ElfLnkSecKinds(nsec, secKind);
+    for k := 0 to ELFLNK_NKIND - 1 do
+    begin
+      slot := o * ELFLNK_NKIND + k;
+      if (ElfLnkInShndx[slot] = 0) or (k = ELFLNK_K_BSS) then Continue;
+      sz := ElfLnkInSize[slot];
+      secOff := ElfRdShOffset(ElfLnkInShndx[slot]);
+      if k = ELFLNK_K_TEXT then
+      begin
+        SetLength(ElfLnkTb, sz);
+        for i := 0 to Integer(sz) - 1 do ElfLnkTb[i] := Ord(ElfRdBuf[secOff + 1 + i]);
+        if not ElfLnkRelocate(o, secKind, nsec, ElfLnkInShndx[slot], ElfLnkTb, 0) then
+        begin
+          WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
+          ElfLnkClose(outPath);
+          Exit;
+        end;
+        ElfLnkWriteZeros(ElfLnkInAddr[slot] - cur);
+        ElfLnkWrite(ElfLnkTb, sz);
+        cur := ElfLnkInAddr[slot] + sz;
+      end
+      else
+      begin
+        for i := 0 to Integer(sz) - 1 do
+          ElfLnkRw[Integer(ElfLnkInAddr[slot] - rwStart) + i] := Ord(ElfRdBuf[secOff + 1 + i]);
+        if not ElfLnkRelocate(o, secKind, nsec, ElfLnkInShndx[slot], ElfLnkRw,
+                              ElfLnkInAddr[slot] - rwStart) then
+        begin
+          WriteLn(tag, ': ', ElfLnkObjPath[o], ': ', ElfRdErr);
+          ElfLnkClose(outPath);
+          Exit;
+        end;
+      end;
+    end;
+  end;
+  textEnd := ElfLnkOutAddr[ELFLNK_K_TEXT] + ElfLnkOutSize[ELFLNK_K_TEXT];
+  ElfLnkWriteZeros(textEnd - cur);
+  ElfLnkWriteZeros(ElfLnkRwFile - (ELFLNK_PAGE + ElfLnkOutSize[ELFLNK_K_TEXT]));
+  ElfLnkWrite(ElfLnkRw, rwLen);
+  ElfLnkWriteZeros(symOff - fileAt);
+
+  { .symtab (every defined global), .strtab, .shstrtab, section headers.
+    Output section indices: 1 .text 2 .init_array 3 .fini_array 4 .data
+    5 .bss 6 .symtab 7 .strtab 8 .shstrtab. }
+  ElfLnkBReset;
+  for i := 1 to 24 do ElfLnkBPut(0, 1);
+  strPos := 1;
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefObj[i] >= 0 then
+    begin
+      ElfLnkBPut(strPos, 4);
+      ElfLnkBPut(ElfLnkDefInfo[i], 1);
+      ElfLnkBPut(0, 1);
+      if ElfLnkDefKind[i] = ELFLNK_K_ABS then ElfLnkBPut($FFF1, 2)
+      else ElfLnkBPut(ElfLnkDefKind[i] + 1, 2);
+      ElfLnkBPut(ElfLnkGlobalAddr(i), 8);
+      ElfLnkBPut(ElfLnkDefSize[i], 8);
+      strPos := strPos + Length(ElfLnkName[i]) + 1;
+    end;
+  ElfLnkBPut(0, 1);
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefObj[i] >= 0 then ElfLnkBStrZ(ElfLnkName[i]);
+  { SHSTR = 68 bytes: offsets .text 1, .init_array 7, .fini_array 19, .data 31,
+    .bss 37, .symtab 42, .strtab 50, .shstrtab 58 }
+  ElfLnkBPut(0, 1);
+  ElfLnkBStrZ('.text'); ElfLnkBStrZ('.init_array'); ElfLnkBStrZ('.fini_array');
+  ElfLnkBStrZ('.data'); ElfLnkBStrZ('.bss'); ElfLnkBStrZ('.symtab');
+  ElfLnkBStrZ('.strtab'); ElfLnkBStrZ('.shstrtab');
+  ElfLnkBPadTo(shOff - symOff);
+  { null }
+  for i := 1 to 64 do ElfLnkBPut(0, 1);
+  { name type flags addr off size link info align entsize }
+  for k := 0 to ELFLNK_NKIND - 1 do
+  begin
+    case k of
+      ELFLNK_K_TEXT: begin ElfLnkBPut(1, 4);  ElfLnkBPut(1, 4);  ElfLnkBPut(6, 8); end;
+      ELFLNK_K_INIT: begin ElfLnkBPut(7, 4);  ElfLnkBPut(14, 4); ElfLnkBPut(3, 8); end;
+      ELFLNK_K_FINI: begin ElfLnkBPut(19, 4); ElfLnkBPut(15, 4); ElfLnkBPut(3, 8); end;
+      ELFLNK_K_DATA: begin ElfLnkBPut(31, 4); ElfLnkBPut(1, 4);  ElfLnkBPut(3, 8); end;
+      ELFLNK_K_BSS:  begin ElfLnkBPut(37, 4); ElfLnkBPut(8, 4);  ElfLnkBPut(3, 8); end;
+    end;
+    ElfLnkBPut(ElfLnkOutAddr[k], 8);
+    if k = ELFLNK_K_TEXT then ElfLnkBPut(ELFLNK_PAGE, 8)
+    else if k = ELFLNK_K_BSS then ElfLnkBPut(ElfLnkRwFile + rwLen, 8)
+    else ElfLnkBPut(ElfLnkOutAddr[k] - ELFLNK_BASE, 8);
+    ElfLnkBPut(ElfLnkOutSize[k], 8);
+    ElfLnkBPut(0, 4); ElfLnkBPut(0, 4);
+    if k = ELFLNK_K_TEXT then ElfLnkBPut(16, 8)
+    else if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8)
+    else ElfLnkBPut(16, 8);
+    if (k = ELFLNK_K_INIT) or (k = ELFLNK_K_FINI) then ElfLnkBPut(8, 8) else ElfLnkBPut(0, 8);
+  end;
+  { .symtab: link .strtab (7), info = one past the last local (only the null) }
+  ElfLnkBPut(42, 4); ElfLnkBPut(2, 4); ElfLnkBPut(0, 8); ElfLnkBPut(0, 8);
+  ElfLnkBPut(symOff, 8); ElfLnkBPut((nDef + 1) * 24, 8);
+  ElfLnkBPut(7, 4); ElfLnkBPut(1, 4); ElfLnkBPut(8, 8); ElfLnkBPut(24, 8);
+  ElfLnkBPut(50, 4); ElfLnkBPut(3, 4); ElfLnkBPut(0, 8); ElfLnkBPut(0, 8);
+  ElfLnkBPut(strOff, 8); ElfLnkBPut(strSize, 8);
+  ElfLnkBPut(0, 4); ElfLnkBPut(0, 4); ElfLnkBPut(1, 8); ElfLnkBPut(0, 8);
+  ElfLnkBPut(58, 4); ElfLnkBPut(3, 4); ElfLnkBPut(0, 8); ElfLnkBPut(0, 8);
+  ElfLnkBPut(shstrOff, 8); ElfLnkBPut(SHSTR, 8);
+  ElfLnkBPut(0, 4); ElfLnkBPut(0, 4); ElfLnkBPut(1, 8); ElfLnkBPut(0, 8);
+  ElfLnkWrite(ElfLnkB, ElfLnkBLen);
+  ElfLnkClose(outPath);
+  ElfLnkWriteExe := True;
+end;
+
+{ PXXDBG=a.objlink:<listfile> -- stages 3 and 4 end to end: lay the set out,
+  relocate it, and write <listfile>.exe with the entry at `main`. `main`, not
+  `_start`, because the process-entry contract is stage 5; this topic exists so
+  the RELOCATED BYTES can be compared against ld's while that is not yet built.
+  An image entered at main runs until main returns and then faults, which is
+  the measured behaviour of `ld -e main` over the same objects. }
+procedure ElfLnkLinkDump(const listPath: AnsiString);
+begin
+  if not ElfLnkLoadList(listPath, 'elflink') then Exit;
+  ElfLnkLayout;
+  if not ElfLnkWriteExe(listPath + '.exe', 'main', 'elflink') then Exit;
+  WriteLn('elflink: wrote ', listPath, '.exe');
+  WriteLn('elflink: ELFLINK-OK');
 end;

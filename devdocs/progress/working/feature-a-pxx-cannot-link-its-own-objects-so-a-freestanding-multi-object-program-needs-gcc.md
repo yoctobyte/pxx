@@ -544,7 +544,7 @@ unpushed; there is no scratch state to recover.**
 | 1. object reader | landed, guarded | `8c66a2053` |
 | 2. symbol-table merge | landed, guarded | `98b42be27` |
 | 3. section layout over inputs we did not lay out | landed, guarded (2026-09-19, see below) | — |
-| 4. relocation application | not started | — |
+| 4. relocation application | landed, guarded (2026-09-19, see below) | — |
 | 5. the executable writer | exists already (`elfwriter.inc`) | — |
 
 Both landed stages are reached through `PXXDBG=a.obj:<path>` and
@@ -660,4 +660,71 @@ Refuse any other type by NAME. **The oracle is the same ld run.** With the
 addresses forced equal, `.text` and `.data` should come out BYTE-IDENTICAL to
 ld's output, which is a far sharper check than behaviour. The ticket's
 behavioural bar (the 29 busybox cases) comes at stage 5.
+
+## Stage 4 landed 2026-09-19 (frankB) — relocation application, byte-identical to `ld`
+
+`PXXDBG=a.objlink:<listfile>` lays out the set, applies every relocation, and
+writes `<listfile>.exe`. The image is a static ET_EXEC: RX `PT_LOAD` (headers,
+then `.text`), RW `PT_LOAD` (arrays and `.data`, with `.bss` as memsz), and
+`PT_GNU_STACK`. Section headers and a `.symtab` of defined globals are included
+so readelf, objcopy, nm and gdb can read it. The entry is `main` on purpose: the
+process-entry contract is stage 5, so this image runs until `main` returns and
+then faults, which is exactly what `ld -e main` does with the same objects.
+
+**`.text` is streamed object by object** (at busybox scale it is the whole
+180MB). Only the RW segment is assembled in memory.
+
+**The applier handles exactly the emitter's three types:** `R_X86_64_64`,
+`R_X86_64_PC32` and `R_X86_64_32S`. Anything else is refused by NAME. A 32-bit
+result that does not fit is refused with its true value, where ld says
+"relocation truncated to fit". S is resolved the way ld resolves it:
+- locals and section symbols use this object's own section address;
+- every non-local goes through the global table, even when this object defines
+  it, because a weak copy here may have lost to another object's;
+- an undefined weak symbol resolves to 0.
+
+**Oracle:** the same ld run as stage 3, with the addresses forced equal.
+- **c/d/x:** `.data`, `.init_array` and `.fini_array` are byte-identical,
+  `.text` is identical except inside the padding BETWEEN inputs, and the global
+  symbols and the entry point are identical. ld fills that padding with
+  multi-byte NOPs (`66 2e 0f 1f 84 ..`) where we leave zeros. The harness fences
+  this: every differing byte must fall in a gap the layout reports.
+- **A hand-assembled subject in our section vocabulary:** all three types, each
+  with a non-zero addend, byte-identical to ld. A real pxx object cannot supply
+  a `32S`, because the tree asserts `.text` carries none (test-emit-obj), yet
+  elfwriter still writes one for an operand its rip-relative rewrite does not
+  recognise.
+
+**Every row proven to fire:**
+
+| fault | result |
+| --- | --- |
+| PC32 off by one | 2920 differing `.text` bytes land outside the padding |
+| `R_X86_64_64` addend dropped | `.init_array` differs from ld's |
+| `32S` written 8 bytes wide | the link refuses the subject |
+| non-local bound to this object's own copy | 513 bytes outside the padding (x.o's calls into its own weak crtl) |
+
+**Found on the way, and fixed separately (`fix(A): LoadFile from an
+array-element or field PATH ...`).** `LoadFile(ElfLnkObjPath[o], ...)` read
+every object back EMPTY. On x86-64, a path that is an array element or a field
+was read as a symbol index. The fix normalises the path to a temporary, like
+the destination beside it.
+
+**Also found:** `AIntToStr` takes a 32-bit `Integer`, and printed the value
+`0x100000000` as `0`. The overflow message uses 64-bit hex now. The other
+`AIntToStr` uses in the linker print sizes under 2GB.
+
+### PICK UP HERE: stage 5, the entry contract and `--link`
+
+1. **A `_start` synthesised by the linker.** It needs the contract
+   `tools/pxxcrt_x86_64.S` states: argc/argv/envp from the stack, 16-byte
+   alignment, walk `.init_array` with (argc, argv, envp), `call main`, then
+   exit. The layout already knows `.init_array`'s extent, so the linker can
+   bake those two addresses in as constants rather than define
+   `__init_array_start`/`__init_array_end` symbols.
+2. **A CLI mode**, with the rung-1 scope stated in its own help text.
+3. **Acceptance:** `busybox_diff.sh --freestanding` with `pxx --link`
+   substituted for `ld`, over the same cases, keeping the two proven controls.
+   Scale is still unmeasured: the merge grows its arrays one element per new
+   global, and `ElfLnkWriteExe` copies bytes in a loop.
 

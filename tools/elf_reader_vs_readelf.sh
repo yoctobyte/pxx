@@ -300,5 +300,114 @@ else
 fi
 
 echo "elf-layout: $nours globals at the same address as ld over c/d/x, sizes agree; a foreign .rodata is refused"
+
+# ---- stage 4: relocation application, against the same ld run ---------------
+# PXXDBG=a.objlink writes <list>.exe, entered at main (the entry contract is
+# stage 5). With the output addresses forced equal, every RELOCATED BYTE must
+# match ld's, which is a far sharper check than behaviour: one wrong S, A or P
+# anywhere in ~980 KB of code shows up as a differing byte.
+#
+# ONE LEGITIMATE DIFFERENCE, AND IT IS FENCED RATHER THAN IGNORED: ld fills the
+# padding BETWEEN input .text sections with multi-byte NOPs (66 2e 0f 1f 84 ..)
+# and we leave zeros. Nothing executes that padding. So .text is compared
+# everywhere, and every differing byte must fall inside a gap the layout itself
+# reports -- a difference one byte outside a gap is a relocation defect.
+link() {
+  PXXDBG="a.objlink:$W/$1" "$COMPILER" > "$W/$1.link" 2>&1 || fail "the linker exited nonzero on $1"
+  grep -q 'ELFLINK-OK' "$W/$1.link" || { cat "$W/$1.link"; fail "the linker did not reach its completion line on $1"; }
+  [ -s "$W/$1.exe" ] || fail "the linker reported OK and wrote no $1.exe"
+}
+link cdx.lst
+for s in .init_array .fini_array .data; do
+  objcopy -O binary -j "$s" "$W/cdx.lst.exe" "$W/o$s.bin" && objcopy -O binary -j "$s" "$W/ref" "$W/r$s.bin" \
+    || fail "objcopy could not extract $s"
+  [ -s "$W/r$s.bin" ] || fail "ld's image has an empty $s, so comparing it proves nothing"
+  cmp -s "$W/o$s.bin" "$W/r$s.bin" || fail "$s differs from ld's after relocation"
+done
+objcopy -O binary -j .text "$W/cdx.lst.exe" "$W/o.text.bin" && objcopy -O binary -j .text "$W/ref" "$W/r.text.bin" \
+  || fail "objcopy could not extract .text"
+[ "$(wc -c < "$W/o.text.bin")" = "$(wc -c < "$W/r.text.bin")" ] || fail ".text is a different size from ld's"
+# the gaps, as 0-based offsets into .text: [end of input n, start of input n+1)
+tbase=$(awk '$2=="out" && $3==".text" {print $4}' "$W/lay.out")
+awk -v b="$((tbase))" '$2=="in" && $4==".text" {print $5, $7}' "$W/lay.out" > "$W/tin"
+ndiff=0; nout=0
+cmp -l "$W/o.text.bin" "$W/r.text.bin" > "$W/tdiff" || true
+while read -r pos _ _; do
+  ndiff=$((ndiff + 1))
+  off=$((pos - 1))
+  ingap=0; prevend=""
+  while read -r a sz; do
+    s0=$((a - tbase))
+    if [ -n "$prevend" ] && [ "$off" -ge "$prevend" ] && [ "$off" -lt "$s0" ]; then ingap=1; fi
+    prevend=$((s0 + sz))
+  done < "$W/tin"
+  [ "$ingap" = 1 ] || nout=$((nout + 1))
+done < "$W/tdiff"
+[ "$nout" = 0 ] || fail "$nout of $ndiff differing .text bytes are OUTSIDE the inter-input padding -- a relocation was applied wrongly"
+nm "$W/cdx.lst.exe" | awk '$2 ~ /^[A-Z]$/' | sort > "$W/g1"
+nm "$W/ref" | awk '$2 ~ /^[A-Z]$/' | grep -vE ' (__bss_start|_edata|_end)$' | sort > "$W/g2"
+cmp -s "$W/g1" "$W/g2" || { diff "$W/g1" "$W/g2" | head >&2; fail "the linked image's global symbols differ from ld's"; }
+[ "$(readelf -hW "$W/cdx.lst.exe" | sed -n 's/.*Entry point address: *//p')" = "$(readelf -hW "$W/ref" | sed -n 's/.*Entry point address: *//p')" ] \
+  || fail "the entry point differs from ld's"
+
+# THE THIRD TYPE, AND ADDENDS. The c/d/x census is PC32 and 64 only: the tree
+# asserts .text carries no R_X86_64_32S (test-emit-obj), so a real pxx object
+# cannot supply one -- yet elfwriter still writes it for an operand its
+# rip-relative rewrite does not recognise, so the applier must be right about
+# it. A hand-assembled object in OUR section vocabulary exercises all three,
+# each with a non-zero addend so a dropped A cannot pass.
+cat > "$W/g.s" <<'EOF'
+	.text
+	.globl main
+main:
+	movq	$k+8, %rax
+	leaq	k+16(%rip), %rax
+	movq	$main, %rdx
+	ret
+	.data
+	.globl k
+k:	.quad	k+24
+	.quad	main
+	.quad	0
+EOF
+as -o "$W/g.o" "$W/g.s" || fail "as could not assemble the three-type subject"
+for t in R_X86_64_32S R_X86_64_PC32 R_X86_64_64; do
+  readelf -rW "$W/g.o" | grep -q " $t " || fail "the three-type subject carries no $t, so that row would pass vacuously"
+done
+printf '%s\n' "$W/g.o" > "$W/g.lst"
+PXXDBG="a.objlayout:$W/g.lst" "$COMPILER" > "$W/g.lay" 2>&1
+gstarts=""
+for s in text data; do
+  gstarts="$gstarts --section-start=.$s=$(awk -v n=".$s" '$2=="out" && $3==n {print $4}' "$W/g.lay")"
+done
+# shellcheck disable=SC2086
+ld -static -nostdlib -e main $gstarts -o "$W/refg" "$W/g.o" > "$W/ldg.log" 2>&1 || { cat "$W/ldg.log"; fail "ld could not link the three-type subject"; }
+link g.lst
+for s in .text .data; do
+  objcopy -O binary -j "$s" "$W/g.lst.exe" "$W/og$s.bin"; objcopy -O binary -j "$s" "$W/refg" "$W/rg$s.bin"
+  cmp -s "$W/og$s.bin" "$W/rg$s.bin" || fail "the three-type subject's $s differs from ld's"
+done
+
+# ---- positive controls: what the applier must REFUSE, by name ---------------
+# A 32-bit result that does not fit. ld says "relocation truncated to fit";
+# keeping the low half would be a jump to a plausible wrong address.
+printf '\t.text\n\t.globl main\nmain:\tmovq\t$big, %%rax\n\tret\n\t.globl big\n\t.set big, 0x100000000\n' > "$W/big.s"
+as -o "$W/big.o" "$W/big.s" || fail "as could not assemble the overflow control"
+ld -static -nostdlib -e main -o "$W/refbig" "$W/big.o" > "$W/ldbig.log" 2>&1 \
+  && fail "ld accepted the overflow control, so it does not overflow and the row below proves nothing"
+printf '%s\n' "$W/big.o" > "$W/big.lst"
+PXXDBG="a.objlink:$W/big.lst" "$COMPILER" > "$W/big.out" 2>&1
+grep -q 'R_X86_64_32S at .text+3 does not fit in 32 bits (value 0x0000000100000000)' "$W/big.out" \
+  || { cat "$W/big.out"; fail "a 32S that does not fit was not refused by name with its true value"; }
+grep -q 'ELFLINK-OK' "$W/big.out" && fail "the linker printed its OK line after refusing a relocation"
+# A type pxx does not emit.
+printf '\t.text\n\t.globl main\nmain:\tcall\tmain@PLT\n\tret\n' > "$W/plt.s"
+as -o "$W/plt.o" "$W/plt.s" || fail "as could not assemble the PLT32 control"
+printf '%s\n' "$W/plt.o" > "$W/plt.lst"
+PXXDBG="a.objlink:$W/plt.lst" "$COMPILER" > "$W/plt.out" 2>&1
+grep -q 'R_X86_64_PLT32 in .text -- pxx emits' "$W/plt.out" \
+  || { cat "$W/plt.out"; fail "an R_X86_64_PLT32 was not refused by name"; }
+
+echo "elf-link: relocated image matches ld byte for byte over c/d/x ($ndiff .text bytes differ, all in inter-input padding) and over a 32S/PC32/64 subject with addends; an overflowing 32S and a PLT32 are refused by name"
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"

@@ -2140,6 +2140,15 @@ begin
     Halt(0);
   end;
 
+  { PXXDBG=a.objlink:<listfile> -- stage 4: lay out, relocate, and write
+    <listfile>.exe entered at main. The relocated bytes are compared against
+    ld's; the entry contract is stage 5. }
+  if PxxDbgArg('a.objlink') <> '' then
+  begin
+    ElfLnkLinkDump(PxxDbgArg('a.objlink'));
+    Halt(0);
+  end;
+
   if ParamCount < i then
     begin
       writeln(StdErr, 'usage: pxx [options] <source> [output]');
