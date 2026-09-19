@@ -338,7 +338,11 @@ end;
   print `ok:` with exact byte counts over a truncated binary that crashed
   somewhere unrelated. Every write of an output artefact passes through here;
   RequireOutputArtefact refuses when any came back short. The FPC seed's
-  Blockwrite already raises an I/O error for the same event. }
+  Blockwrite already raises an I/O error for the same event.
+  The count goes through `got :=` rather than straight into a call because the
+  pinned seed refuses a SysWrite as an ARGUMENT (fixed beside this, row
+  test_siaa26.1), and compiler.pas must keep building from the pin. Leave it so
+  until a pin carries that row. }
 procedure OutWrite(f: Integer; const buf: array of Byte; off, n: Integer);
 var got: Integer;
 begin
