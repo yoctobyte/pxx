@@ -1,0 +1,116 @@
+# argparse, the surface That Space Program's two entry points use
+# (tsp/__main__.py, tsp/view/__main__.py), diffed against CPython 3.14.4.
+#
+# ONE CASE PER PROCESS: `prog tsp <args...>` or `prog view <args...>`. An
+# argparse error or --help EXITS, and under NilPy sys.exit is a Halt that no
+# `except SystemExit` sees (bug-n-sys-exit-is-a-halt-so-no-handler-sees-it), so
+# the Makefile row runs the binary once per line of the .cases file and prints
+# the exit status after each. .expected is python3 running this same file.
+# `view --size wide` is NOT in the .cases: its message names the `type=`
+# function, which NilPy cannot yet (bug-n-a-function-value-has-no-name).
+
+import argparse
+import sys
+
+
+def size(text):
+    w, _, h = text.lower().partition("x")
+    return (int(w), int(h))
+
+
+def cmd_node(args):
+    print("  fn: node", args.action, args.craft, args.prograde)
+
+
+def cmd_voice(args):
+    print("  fn: voice", args.action, args.text)
+
+
+def cmd_jump(args):
+    print("  fn: jump", args.duration, args.next)
+
+
+def build():
+    p = argparse.ArgumentParser(prog="tsp", description="TSP - That Space Program")
+    p.add_argument("--universe", help="universe file (default universe/tsp.sqlite or $TSP_UNIVERSE)")
+    p.add_argument("-q", "--quiet", action="store_true")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    n = sub.add_parser("node", help="orbit maneuvers (committed when added)",
+                       description="Maneuver nodes. Adding one flies the burn and commits it: "
+                       "the future is as fixed as the past, until you roll it back.")
+    n.add_argument("action", choices=("add", "circularize", "hohmann", "list", "rollback"))
+    n.add_argument("craft", nargs="?", default="", help="craft name (default: newest in space)")
+    n.add_argument("--at", default="", help="node time: apoapsis, periapsis, +30m, or UTC")
+    n.add_argument("--prograde", "--pro", type=float, default=0.0, help="m/s")
+    n.add_argument("--radial", "--rad", type=float, default=0.0, help="m/s (outwards)")
+    n.add_argument("--alt", type=float, help="hohmann: target circular altitude, km")
+    n.set_defaults(fn=cmd_node)
+    vo = sub.add_parser("voice", help="the commentary voice (neural TTS)")
+    vo.add_argument("action", choices=("prepare", "say"))
+    vo.add_argument("text", nargs="*", help="say: what to say")
+    vo.add_argument("--voice", help="say: which voice (e.g. bm_george)")
+    vo.add_argument("--no-view", action="store_true", help="arm the mission, don't open the view")
+    vo.add_argument("--in", dest="in_", default="30s", help="liftoff in (default 30s)")
+    vo.set_defaults(fn=cmd_voice)
+    j = sub.add_parser("jump", help="jump Now forward (never back)")
+    j.add_argument("duration", nargs="?", help="e.g. 1h, 3d")
+    j.add_argument("--next", action="store_true", help="to shortly before the next event")
+    j.add_argument("--lead", default="60s", help="with --next: how long before (default 60s)")
+    j.set_defaults(fn=cmd_jump)
+    sub.add_parser("now", help="the universe clock")
+    return p
+
+
+def view_parser():
+    parser = argparse.ArgumentParser(prog="python3 -m tsp.view",
+                                     description="TSP map view")
+    parser.add_argument("--demo", action="store_true",
+                        help="synthetic Earth/Moon/Sun/craft scene "
+                             "(no sim core needed)")
+    parser.add_argument("--screenshot", metavar="PNG", default="",
+                        help="render one frame offscreen to PNG and exit")
+    parser.add_argument("--size", type=size, default=(1280, 720),
+                        metavar="WxH")
+    parser.add_argument("--yaw", type=float, default=None, metavar="DEG")
+    parser.add_argument("--camera", choices=("map", "chase", "ground"),
+                        default="map", help="camera mode to start in")
+    parser.add_argument("--launch-in", type=float, default=20.0,
+                        metavar="SECONDS",
+                        help="demo: liftoff this long after the start")
+    return parser
+
+
+def show(ns, keys):
+    out = []
+    for k in keys:
+        out.append(k + "=" + repr(getattr(ns, k)))
+    print("  " + " ".join(out))
+
+
+def run(argv):
+    ns = build().parse_args(argv)
+    keys = ["cmd", "quiet", "universe"]
+    if ns.cmd == "node":
+        keys = keys + ["action", "craft", "at", "prograde", "radial", "alt"]
+    elif ns.cmd == "voice":
+        keys = keys + ["action", "text", "voice", "no_view", "in_"]
+    elif ns.cmd == "jump":
+        keys = keys + ["duration", "next", "lead"]
+    show(ns, keys)
+    if ns.cmd != "now":
+        ns.fn(ns)
+
+
+def run_view(argv):
+    ns = view_parser().parse_args(argv)
+    show(ns, ["demo", "screenshot", "size", "yaw", "camera", "launch_in"])
+    if not ns.demo:
+        view_parser().error("only --demo is available here; the real universe is "
+                            "`python3 -m tsp view` (or tsp.view.run from code)")
+
+
+which = sys.argv[1]
+if which == "tsp":
+    run(sys.argv[2:])
+else:
+    run_view(sys.argv[2:])

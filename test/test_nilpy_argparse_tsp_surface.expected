@@ -1,0 +1,234 @@
+== tsp voice say hello world
+  cmd='voice' quiet=False universe=None action='say' text=['hello', 'world'] voice=None no_view=False in_='30s'
+  fn: voice say ['hello', 'world']
+rc=0
+== tsp voice say --voice x hello world
+  cmd='voice' quiet=False universe=None action='say' text=['hello', 'world'] voice='x' no_view=False in_='30s'
+  fn: voice say ['hello', 'world']
+rc=0
+== tsp voice --voice x say hello
+  cmd='voice' quiet=False universe=None action='say' text=['hello'] voice='x' no_view=False in_='30s'
+  fn: voice say ['hello']
+rc=0
+== tsp voice --no-view --in 5m prepare
+  cmd='voice' quiet=False universe=None action='prepare' text=[] voice=None no_view=True in_='5m'
+  fn: voice prepare []
+rc=0
+== tsp node add Tux --pro 12.5
+  cmd='node' quiet=False universe=None action='add' craft='Tux' at='' prograde=12.5 radial=0.0 alt=None
+  fn: node add Tux 12.5
+rc=0
+== tsp node add --pro -3 Tux
+  cmd='node' quiet=False universe=None action='add' craft='Tux' at='' prograde=-3.0 radial=0.0 alt=None
+  fn: node add Tux -3.0
+rc=0
+== tsp node list
+  cmd='node' quiet=False universe=None action='list' craft='' at='' prograde=0.0 radial=0.0 alt=None
+  fn: node list  0.0
+rc=0
+== tsp node add --prog 2
+  cmd='node' quiet=False universe=None action='add' craft='' at='' prograde=2.0 radial=0.0 alt=None
+  fn: node add  2.0
+rc=0
+== tsp node add --prograde=-1.5 --rad 4
+  cmd='node' quiet=False universe=None action='add' craft='' at='' prograde=-1.5 radial=4.0 alt=None
+  fn: node add  -1.5
+rc=0
+== tsp node hohmann --alt 35786
+  cmd='node' quiet=False universe=None action='hohmann' craft='' at='' prograde=0.0 radial=0.0 alt=35786.0
+  fn: node hohmann  0.0
+rc=0
+== tsp jump
+  cmd='jump' quiet=False universe=None duration=None next=False lead='60s'
+  fn: jump None False
+rc=0
+== tsp jump 1h --next
+  cmd='jump' quiet=False universe=None duration='1h' next=True lead='60s'
+  fn: jump 1h True
+rc=0
+== tsp -q jump --next 2h
+  cmd='jump' quiet=True universe=None duration='2h' next=True lead='60s'
+  fn: jump 2h True
+rc=0
+== tsp -qq jump
+  cmd='jump' quiet=True universe=None duration=None next=False lead='60s'
+  fn: jump None False
+rc=0
+== tsp --quiet --universe u.sqlite now
+  cmd='now' quiet=True universe='u.sqlite'
+rc=0
+== tsp --universe=u2.sqlite now
+  cmd='now' quiet=False universe='u2.sqlite'
+rc=0
+== tsp jump -- -5m
+  cmd='jump' quiet=False universe=None duration='-5m' next=False lead='60s'
+  fn: jump -5m False
+rc=0
+== tsp jump -5
+  cmd='jump' quiet=False universe=None duration='-5' next=False lead='60s'
+  fn: jump -5 False
+rc=0
+== tsp
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: the following arguments are required: cmd
+rc=2
+== tsp bogus
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: argument cmd: invalid choice: 'bogus' (choose from node, voice, jump, now)
+rc=2
+== tsp node
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+tsp node: error: the following arguments are required: action
+rc=2
+== tsp node x
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+tsp node: error: argument action: invalid choice: 'x' (choose from add, circularize, hohmann, list, rollback)
+rc=2
+== tsp node add --pro abc
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+tsp node: error: argument --prograde/--pro: invalid float value: 'abc'
+rc=2
+== tsp node add --pro
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+tsp node: error: argument --prograde/--pro: expected one argument
+rc=2
+== tsp node add a b
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: unrecognized arguments: b
+rc=2
+== tsp --zz
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: the following arguments are required: cmd
+rc=2
+== tsp node add --zz
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: unrecognized arguments: --zz
+rc=2
+== tsp voice --in
+usage: tsp voice [-h] [--voice VOICE] [--no-view] [--in IN_]
+                 {prepare,say} [text ...]
+tsp voice: error: argument --in: expected one argument
+rc=2
+== tsp node add --p 1
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+tsp node: error: ambiguous option: --p could match --prograde, --pro
+rc=2
+== tsp jump --next=yes
+usage: tsp jump [-h] [--next] [--lead LEAD] [duration]
+tsp jump: error: argument --next: ignored explicit argument 'yes'
+rc=2
+== tsp -x now
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+tsp: error: unrecognized arguments: -x
+rc=2
+== tsp -h
+usage: tsp [-h] [--universe UNIVERSE] [-q] {node,voice,jump,now} ...
+
+TSP - That Space Program
+
+positional arguments:
+  {node,voice,jump,now}
+    node                orbit maneuvers (committed when added)
+    voice               the commentary voice (neural TTS)
+    jump                jump Now forward (never back)
+    now                 the universe clock
+
+options:
+  -h, --help            show this help message and exit
+  --universe UNIVERSE   universe file (default universe/tsp.sqlite or
+                        $TSP_UNIVERSE)
+  -q, --quiet
+rc=0
+== tsp node --help
+usage: tsp node [-h] [--at AT] [--prograde PROGRADE] [--radial RADIAL]
+                [--alt ALT]
+                {add,circularize,hohmann,list,rollback} [craft]
+
+Maneuver nodes. Adding one flies the burn and commits it: the future is as
+fixed as the past, until you roll it back.
+
+positional arguments:
+  {add,circularize,hohmann,list,rollback}
+  craft                 craft name (default: newest in space)
+
+options:
+  -h, --help            show this help message and exit
+  --at AT               node time: apoapsis, periapsis, +30m, or UTC
+  --prograde, --pro PROGRADE
+                        m/s
+  --radial, --rad RADIAL
+                        m/s (outwards)
+  --alt ALT             hohmann: target circular altitude, km
+rc=0
+== tsp voice -h
+usage: tsp voice [-h] [--voice VOICE] [--no-view] [--in IN_]
+                 {prepare,say} [text ...]
+
+positional arguments:
+  {prepare,say}
+  text           say: what to say
+
+options:
+  -h, --help     show this help message and exit
+  --voice VOICE  say: which voice (e.g. bm_george)
+  --no-view      arm the mission, don't open the view
+  --in IN_       liftoff in (default 30s)
+rc=0
+== tsp jump -h
+usage: tsp jump [-h] [--next] [--lead LEAD] [duration]
+
+positional arguments:
+  duration     e.g. 1h, 3d
+
+options:
+  -h, --help   show this help message and exit
+  --next       to shortly before the next event
+  --lead LEAD  with --next: how long before (default 60s)
+rc=0
+== view
+  demo=False screenshot='' size=(1280, 720) yaw=None camera='map' launch_in=20.0
+usage: python3 -m tsp.view [-h] [--demo] [--screenshot PNG] [--size WxH]
+                           [--yaw DEG] [--camera {map,chase,ground}]
+                           [--launch-in SECONDS]
+python3 -m tsp.view: error: only --demo is available here; the real universe is `python3 -m tsp view` (or tsp.view.run from code)
+rc=2
+== view --demo
+  demo=True screenshot='' size=(1280, 720) yaw=None camera='map' launch_in=20.0
+rc=0
+== view --demo --size 640x480 --yaw -30 --camera chase --launch-in 5
+  demo=True screenshot='' size=(640, 480) yaw=-30.0 camera='chase' launch_in=5.0
+rc=0
+== view --camera orbit
+usage: python3 -m tsp.view [-h] [--demo] [--screenshot PNG] [--size WxH]
+                           [--yaw DEG] [--camera {map,chase,ground}]
+                           [--launch-in SECONDS]
+python3 -m tsp.view: error: argument --camera: invalid choice: 'orbit' (choose from map, chase, ground)
+rc=2
+== view --help
+usage: python3 -m tsp.view [-h] [--demo] [--screenshot PNG] [--size WxH]
+                           [--yaw DEG] [--camera {map,chase,ground}]
+                           [--launch-in SECONDS]
+
+TSP map view
+
+options:
+  -h, --help            show this help message and exit
+  --demo                synthetic Earth/Moon/Sun/craft scene (no sim core
+                        needed)
+  --screenshot PNG      render one frame offscreen to PNG and exit
+  --size WxH
+  --yaw DEG
+  --camera {map,chase,ground}
+                        camera mode to start in
+  --launch-in SECONDS   demo: liftoff this long after the start
+rc=0

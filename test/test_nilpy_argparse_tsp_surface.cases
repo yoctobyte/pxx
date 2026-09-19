@@ -1,0 +1,40 @@
+tsp voice say hello world
+tsp voice say --voice x hello world
+tsp voice --voice x say hello
+tsp voice --no-view --in 5m prepare
+tsp node add Tux --pro 12.5
+tsp node add --pro -3 Tux
+tsp node list
+tsp node add --prog 2
+tsp node add --prograde=-1.5 --rad 4
+tsp node hohmann --alt 35786
+tsp jump
+tsp jump 1h --next
+tsp -q jump --next 2h
+tsp -qq jump
+tsp --quiet --universe u.sqlite now
+tsp --universe=u2.sqlite now
+tsp jump -- -5m
+tsp jump -5
+tsp
+tsp bogus
+tsp node
+tsp node x
+tsp node add --pro abc
+tsp node add --pro
+tsp node add a b
+tsp --zz
+tsp node add --zz
+tsp voice --in
+tsp node add --p 1
+tsp jump --next=yes
+tsp -x now
+tsp -h
+tsp node --help
+tsp voice -h
+tsp jump -h
+view
+view --demo
+view --demo --size 640x480 --yaw -30 --camera chase --launch-in 5
+view --camera orbit
+view --help
