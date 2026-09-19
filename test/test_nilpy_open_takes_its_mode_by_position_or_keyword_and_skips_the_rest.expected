@@ -1,0 +1,7 @@
+encoding only: 17
+mode kw first: 17
+mode kw last: 17
+mode positional: 17
+four positionals: 17
+read: True
+through a parameter: 17

@@ -207,6 +207,7 @@ AN_ARG Left objNode
 AN_ARG Left op
 AN_ARG Left opNode
 AN_ARG Left operand
+AN_ARG Left opnMode
 AN_ARG Left padNode
 AN_ARG Left pairNode
 AN_ARG Left polAddr

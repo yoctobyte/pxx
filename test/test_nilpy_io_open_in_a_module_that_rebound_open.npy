@@ -10,11 +10,10 @@
 # `io.open` silently fell through to the bare builtin's lowering — the shadow is
 # what makes the two outcomes distinguishable.
 #
-# Second half: the keywords. The builtin's lowering DISCARDS trailing arguments,
-# so `open(p, encoding="utf-8")` dies on `undefined variable (encoding)` — arg 2
-# is parsed as the MODE and the skip loop starts at arg 3. io.open declares them
-# as Pascal parameters instead, and REFUSES the ones it would otherwise have to
-# ignore: this unit reads bytes, so utf-16 is a real decode and ignoring it
+# Second half: the keywords. io.open declares them as Pascal parameters and
+# REFUSES the ones it would otherwise have to ignore (the bare builtin now applies
+# the same policy at compile time, to literals -- until 2026-09-19 it died on
+# `undefined variable (encoding)` instead, reading arg 2 as the MODE): this unit reads bytes, so utf-16 is a real decode and ignoring it
 # would return a plausible wrong string. A happy-path-only fixture cannot see
 # whether that refusal exists, so each one is asserted.
 # Every expectation is CPython's own output, except the three refusals, which

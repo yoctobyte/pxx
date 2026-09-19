@@ -1,0 +1,47 @@
+# open()'s mode is the second POSITIONAL or `mode=`; every other argument
+# (encoding, newline, errors, buffering) is skipped, however it is written.
+# `open(p, encoding="ascii")` took `encoding` as the mode expression and died
+# with "undefined variable (encoding)".
+P = "test/nilpy_data.txt"
+
+
+n = 0
+with open(P, encoding="ascii") as f:
+    for line in f:
+        n += len(line)
+print("encoding only:", n)
+n = 0
+with open(P, mode="r", encoding="utf-8") as f:
+    for line in f:
+        n += len(line)
+print("mode kw first:", n)
+n = 0
+with open(P, encoding="utf-8", mode="r") as f:
+    for line in f:
+        n += len(line)
+print("mode kw last:", n)
+n = 0
+with open(P, "r", newline=None) as f:
+    for line in f:
+        n += len(line)
+print("mode positional:", n)
+n = 0
+with open(P, "r", -1, "utf-8") as f:
+    for line in f:
+        n += len(line)
+print("four positionals:", n)
+with open(P, errors="strict") as f:
+    print("read:", f.read() == open(P).read())
+
+
+# a file handed to an UNANNOTATED parameter travels as a variant, and iterating
+# it went through the run-time sequence chain, which did not know a file
+def count(fh) -> int:
+    k = 0
+    for line in fh:
+        k += len(line)
+    return k
+
+
+with open(P, encoding="utf-8") as f:
+    print("through a parameter:", count(f))

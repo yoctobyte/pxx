@@ -52221,6 +52221,59 @@ begin
   end;
 end;
 
+{ open()'s encoding / errors / newline argument, checked where it is written.
+  The builtin reads BYTES and never decodes, so -- exactly io.open's policy
+  (lib/rtl/io.pas, which states the reasoning) -- a value that is the identity
+  on bytes is accepted and dropped, and one that would need a decode, a byte
+  rewrite or a line-ending translation is REFUSED rather than ignored, because
+  ignoring it hands the caller a plausible wrong string. Checked at compile
+  time, so only a LITERAL (or None) can be judged; anything else is refused by
+  name. Before this the argument was not reached at all: the builtin took the
+  second argument as the mode, so `open(p, encoding="ascii")` died on
+  "undefined variable (encoding)". CurTok is the argument's first token. }
+procedure PyOpenCheckTextArg(const role: AnsiString);
+var v, f: AnsiString; i: Integer; c: Char; ok: Boolean;
+begin
+  if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen]) then
+  begin
+    if CurTok.Kind = tkNil then Exit;          { None: the default }
+    if CurTok.Kind = tkString then
+    begin
+      v := CurTok.SVal;
+      f := '';
+      for i := 1 to Length(v) do
+      begin
+        c := v[i];
+        if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+        if c = '_' then c := '-';
+        f := f + c;
+      end;
+      if role = 'encoding' then
+        ok := (f = 'utf-8') or (f = 'utf8') or (f = 'ascii') or
+              (f = 'us-ascii') or (f = 'latin-1') or (f = 'latin1') or
+              (f = 'iso-8859-1')
+      else if role = 'errors' then
+        ok := f = 'strict'
+      else
+        ok := v = '';                          { newline='' reads bytes through }
+      if ok then Exit;
+      { escaped: a line ending interpolated raw splits the diagnostic }
+      f := '';
+      for i := 1 to Length(v) do
+        if v[i] = #10 then f := f + '\n'
+        else if v[i] = #13 then f := f + '\r'
+        else f := f + v[i];
+      Error('Nil Python: open(..., ' + role + '=''' + f + ''') is not supported: '
+            + 'open reads bytes and never decodes, so it would return a wrong '
+            + 'string rather than fail (accepted: encoding utf-8/ascii/latin-1, '
+            + 'errors strict, newline empty or None)');
+    end;
+  end;
+  Error('Nil Python: open()''s ' + role + ' must be a string literal or None '
+        + 'here -- it is checked at compile time, because a value open cannot '
+        + 'honour would otherwise be silently ignored');
+end;
+
 procedure PyParseFactorCore;
 var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     qcSegs, qcUnitIdx, qcI: Integer;         { the qualified-construction arm }
@@ -52261,6 +52314,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
+    opnMode, opnPos: Integer; opnKw: AnsiString;   { open(): the mode, wherever it was written }
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
@@ -55029,42 +55083,61 @@ begin
       end
       else if (name = 'open') and (not PyUserShadowsProc(name)) then
       begin
-        { open(path[, mode]) -> a TPyFile, whatever the mode. The no-mode form
-          goes through pyopen, which is now just pyfile_open(path, 'r') —
-          Python's default mode. Later positional/keyword args (encoding=...)
-          are skipped either way. }
+        { open(path[, mode], ...) -> a TPyFile, whatever the mode. With no mode
+          it goes through pyopen, which is pyfile_open(path, 'r') -- Python's
+          default. Every OTHER argument (buffering, encoding, errors, newline,
+          ...) is skipped, positional or keyword -- after encoding, errors and
+          newline are checked (PyOpenCheckTextArg): skipping one that open
+          cannot honour would return a wrong string.
+
+          The mode is the second POSITIONAL or a `mode=` KEYWORD. This took the
+          second argument as the mode whatever it was, so the ordinary
+          `open(path, encoding="ascii")` parsed `encoding` as an expression and
+          died with "undefined variable (encoding)" -- That Space Program's
+          tsp/moons.py:80, the first wall of ten of its modules.
+
+          ONE class for every mode. A text read used to lower to pyopen and
+          yield a TPyList of lines (the read-slurp model), so `open` answered
+          TPyList or TPyFile depending on the mode STRING -- two Pascal classes
+          for one Python type. Binding one name to both widened it to a
+          variant, and then `f.read()` resolved against TPyFile.read(u) and was
+          refused for an arity Python does not have; worse, an append through
+          a name that had widened to the read class dispatched .write to
+          TPyList.write and silently DROPPED the data. TPyFile now carries the
+          read side too -- read()/readlines(), and for-in iterates its lines
+          (PyParseForIn) -- so the mode no longer picks a type.
+          bug-nilpy-open-returns-two-different-classes-by-mode }
         Next; Expect(tkLParen, '(');
         ParseExpr;
         atRecv := CurASTNode;
-        if CurTok.Kind = tkComma then
+        opnMode := -1;
+        opnPos := 1;                     { the path was positional 0 }
+        while CurTok.Kind = tkComma do
         begin
           Next;
-          ParseArgExpr;
-          { ONE class for every mode. A text read used to lower to pyopen and
-            yield a TPyList of lines (the read-slurp model), so `open` answered
-            TPyList or TPyFile depending on the mode STRING — two Pascal classes
-            for one Python type. Binding one name to both widened it to a
-            variant, and then `f.read()` resolved against TPyFile.read(u) and was
-            refused for an arity Python does not have; worse, an append through
-            a name that had widened to the read class dispatched .write to
-            TPyList.write and silently DROPPED the data. TPyFile now carries the
-            read side too — read()/readlines(), and for-in iterates its lines
-            (PyParseForIn) — so the mode no longer picks a type.
-            bug-nilpy-open-returns-two-different-classes-by-mode }
-          node := AllocNode(AN_ARG);
-          ASTLeft[node] := atRecv;
-          atFld := AllocNode(AN_ARG);
-          ASTLeft[atFld] := CurASTNode;
-          ASTRight[node] := atFld;
-          atRecv := AllocNode(AN_CALL);
-          ASTIVal[atRecv] := FindProc('pyfile_open');
-          if ASTIVal[atRecv] < 0 then Error('Nil Python: pylib (pyfile_open) not loaded');
-          ASTTk[atRecv] := Ord(tyClass);
-          ASTLeft[atRecv] := node;
-          ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyFile');   { .write/.seek resolve }
-          while CurTok.Kind = tkComma do
+          if CurTok.Kind = tkRParen then Break;   { a trailing comma }
+          opnKw := '';
+          if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkAssign) then
           begin
-            Next;
+            opnKw := CurTok.SVal;
+            Next; Next;                  { the name and the '=' }
+          end;
+          if ((opnKw = '') and (opnPos = 1)) or (opnKw = 'mode') then
+          begin
+            ParseArgExpr;
+            opnMode := CurASTNode;
+          end
+          else
+          begin
+            { open(file, mode, buffering, encoding, errors, newline, ...) }
+            if (opnKw = 'encoding') or ((opnKw = '') and (opnPos = 3)) then
+              PyOpenCheckTextArg('encoding')
+            else if (opnKw = 'errors') or ((opnKw = '') and (opnPos = 4)) then
+              PyOpenCheckTextArg('errors')
+            else if (opnKw = 'newline') or ((opnKw = '') and (opnPos = 5)) then
+              PyOpenCheckTextArg('newline');
+            { skip one argument, balanced across nested parens }
             atFld := 0;
             while (CurTok.Kind <> tkEOF) and
                   not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
@@ -55074,25 +55147,26 @@ begin
               Next;
             end;
           end;
-          Expect(tkRParen, ')');
+          if opnKw = '' then Inc(opnPos);
+        end;
+        Expect(tkRParen, ')');
+        if opnMode >= 0 then
+        begin
+          node := AllocNode(AN_ARG);
+          ASTLeft[node] := atRecv;
+          atFld := AllocNode(AN_ARG);
+          ASTLeft[atFld] := opnMode;
+          ASTRight[node] := atFld;
+          atRecv := AllocNode(AN_CALL);
+          ASTIVal[atRecv] := FindProc('pyfile_open');
+          if ASTIVal[atRecv] < 0 then Error('Nil Python: pylib (pyfile_open) not loaded');
+          ASTTk[atRecv] := Ord(tyClass);
+          ASTLeft[atRecv] := node;
+          ASTRight[atRecv] := REC_UCLASS_BASE + FindUClass('TPyFile');   { .write/.seek resolve }
           CurASTNode := atRecv;
           LastExprTk := tyClass;
           Exit;
         end;
-        while CurTok.Kind = tkComma do
-        begin
-          Next;
-          { skip one argument, balanced across nested parens }
-          atFld := 0;
-          while (CurTok.Kind <> tkEOF) and
-                not ((atFld = 0) and (CurTok.Kind in [tkComma, tkRParen])) do
-          begin
-            if CurTok.Kind = tkLParen then Inc(atFld)
-            else if CurTok.Kind = tkRParen then Dec(atFld);
-            Next;
-          end;
-        end;
-        Expect(tkRParen, ')');
         node := AllocNode(AN_CALL);
         idx := FindProc('pyopen');
         if idx < 0 then Error('Nil Python: pylib (pyopen) not loaded');

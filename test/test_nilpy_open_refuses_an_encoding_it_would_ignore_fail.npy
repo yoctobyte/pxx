@@ -1,0 +1,4 @@
+# MUST NOT COMPILE. open() reads bytes and never decodes, so a utf-16 file read
+# through it would be a plausible wrong string; it is refused, like io.open.
+with open("test/nilpy_data.txt", encoding="utf-16") as f:
+    print(f.read())

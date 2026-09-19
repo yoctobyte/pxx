@@ -18669,6 +18669,11 @@ begin
     header is the cursor loop in PyParseForIn, which never reaches this. }
   if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+  { a FILE yields its remaining lines -- what `for line in f` does on a name
+    the frontend can see is a TPyFile. Through a VARIANT (a file handed to an
+    unannotated parameter, `def count(f): for line in f`) it reached this chain
+    and raised "expected a str, a list or a dict, got object". }
+  if o is TPyFile then begin Result := TPyFile(o).readlines; Exit; end;
   { a USER class implementing the iterator protocol, drained the same way a
     cursor is. This is the arm the three copies of this chain were missing. }
   if PyUserObjIterable(o) then

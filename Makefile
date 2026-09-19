@@ -1242,6 +1242,11 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_compop26 | diff -u test/test_nilpy_a_comprehension_that_opens_an_assignment_keeps_what_follows_it.expected -
 	./$(COMPILER) test/test_nilpy_keywords_and_a_mapping_bind_by_name_at_a_construction.npy $(TESTTMP)/test_nilpy_ctorkw26
 	$(TESTTMP)/test_nilpy_ctorkw26 | diff -u test/test_nilpy_keywords_and_a_mapping_bind_by_name_at_a_construction.expected -
+	./$(COMPILER) test/test_nilpy_open_takes_its_mode_by_position_or_keyword_and_skips_the_rest.npy $(TESTTMP)/test_nilpy_openkw26
+	$(TESTTMP)/test_nilpy_openkw26 | diff -u test/test_nilpy_open_takes_its_mode_by_position_or_keyword_and_skips_the_rest.expected -
+	# ...and an encoding open would have to IGNORE is refused, not dropped
+	! ./$(COMPILER) test/test_nilpy_open_refuses_an_encoding_it_would_ignore_fail.npy $(TESTTMP)/test_nilpy_openenc26 > $(TESTTMP)/test_nilpy_openenc.log 2>&1
+	grep -q "encoding='utf-16') is not supported" $(TESTTMP)/test_nilpy_openenc.log
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
