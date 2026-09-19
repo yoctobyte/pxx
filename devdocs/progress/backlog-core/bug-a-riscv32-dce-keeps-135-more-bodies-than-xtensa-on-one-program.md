@@ -41,3 +41,38 @@ dropped.
 
 **Do not "fix" this by dropping the root.** The asymmetry is the finding; the
 root rule is what keeps the pass honest.
+
+## 2026-09-20 (frankS) — the extra bodies are NAMED now, and they are 18% of the image
+
+Same measurement as the pyeval rung: the live symbols of the two `--dce`
+objects for `examples/esp32/nilpy-c3/main/main.npy`, diffed by NAME (a name is
+ISA-neutral where a byte count is not).
+
+```
+riscv32 live symbols 840   xtensa 721
+only in riscv32: 122 bodies, 381,416 B   <- 18.4% of riscv32's 2,074,812
+only in xtensa :   3 bodies,   2,104 B
+```
+
+By unit: **87 from pylib.pas, 28 from pyeval.pas**, 2 pypal, 2 promocore, 3
+unattributed. The largest are `PyDynMethL` (30,692), `PyClassRefNew` (11,420),
+`PyBoundFnCallKw` (10,404), `pystr_encode_enc_err` (9,100), `sorted` (8,272),
+`pyfloat_as_integer_ratio` (7,136), `pyvar_callv0` (7,040), `pyvar_callv1`
+(6,344).
+
+**`PyDynMethL`, `sorted`, `min`, `max`, `pymap_call`, `pyfilter_call` and the
+`pyvar_callv*` family are exactly the names `--dce-report` printed as `kept
+(holds a stub target)` on riscv32 before the kept-body fix landed** (71 of
+them; xtensa printed none). So the 122 are that set plus what it drags live,
+and the question is unchanged and now priced: **why does riscv32 put a CodeRef
+stub target INSIDE these bodies where xtensa does not?** `IREmitCodeCall` is
+shared code in `ir_codegen.inc`, so it is not a per-backend call site — the
+difference is WHERE each backend's stub code lands relative to body ranges.
+
+**The direction to rule out FIRST, because it inverts the conclusion:** if
+xtensa emits a code-offset call without RECORDING a CodeRef, then xtensa's
+smaller live set is not a win, it is a pass running blind — and a body it drops
+could be one something jumps into. Establish which before treating riscv32's
+extra 381 KB as waste. Neither backend file mentions `RecordCodeRef` directly;
+both go through the shared helper, which is evidence for "where the stubs land"
+and not yet proof.

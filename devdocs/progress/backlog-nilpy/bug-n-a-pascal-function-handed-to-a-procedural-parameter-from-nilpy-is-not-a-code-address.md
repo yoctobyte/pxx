@@ -123,3 +123,12 @@ the pointer VALUES move per run (ASLR); the deltas do not.
 
 Untouched by me: `PyCoerceCallableArgsIn` (compiler/pyparser.inc ~26959-27275)
 and `pycallback_*` in pylib.pas. Ticket is unassigned and free.
+
+**And frankh-c0, who holds the frontend's inference pre-pass, says the object is
+the frontend doing what it thinks is right** (2026-09-20, in reply to a topic
+check): *"a NilPy def's value is a class instance, not a bare pointer, wherever
+the frontend has typed it ... The code address lives inside it."* So the two
+halves are separable and this ticket is the second one: what lands in the slot
+once the CALLEE's signature says `procedure`, not what class the frontend
+inferred for the value. Do not take a heap pointer here as evidence of a
+lowering bug in the inference half.

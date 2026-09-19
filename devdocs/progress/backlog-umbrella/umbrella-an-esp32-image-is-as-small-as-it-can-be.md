@@ -4,11 +4,11 @@ title: "An ESP32 image is as small as it can be — code and constants in flash,
 track: A
 prio: 70
 type: umbrella
-blocked-by: [bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, bug-a-dce-refuses-every-target-except-x86-64, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss, bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok, bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss, bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal, bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program, bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it, feature-a-unreferenced-class-rtti-keeps-every-method-alive, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]
+blocked-by: [bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter, bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program, bug-t-code-is-page-quantised-so-there-is-no-instrument-for-size-work, bug-a-dce-refuses-every-target-except-x86-64, feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident, bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss, bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok, bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss, bug-a-emit-obj-retains-pxxassert-so-one-ansistring-in-it-imports-the-whole-esp-pal, bug-a-the-heap-arena-reserves-256-mib-without-map-noreserve-so-a-small-guest-cannot-run-any-allocating-pxx-program, bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it, feature-a-unreferenced-class-rtti-keeps-every-method-alive, bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce]
 status: new
 created: 2026-09-18
 owner: ""
-summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. RUNG 0 IS ANSWERED (2026-09-18): IDF costs 69,476 B of a C3's 409,600 and leaves **340,124 bytes** of free heap for a non-networking app, ~285,100 projected with WiFi linked — measured here with IDF v6.0.1 under the Espressif qemu, no chip needed. So the budget IS a number, and our NilPy hello-world's 146,612 B of data+bss is 43% of it. The runtime WiFi-buffer term he named still needs a chip (qemu has no radio model). Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) `--dce` is refused on every target but x86-64 at `dce.inc:226`, so no ESP build strips a byte. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one."
+summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. RUNG 0 IS ANSWERED (2026-09-18): IDF costs 69,476 B of a C3's 409,600 and leaves **340,124 bytes** of free heap for a non-networking app, ~285,100 projected with WiFi linked — measured here with IDF v6.0.1 under the Espressif qemu, no chip needed. So the budget IS a number, and our NilPy hello-world's 146,612 B of data+bss is 43% of it. The runtime WiFi-buffer term he named still needs a chip (qemu has no radio model). Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) SUPERSEDED 2026-09-20 -- `--dce` runs on every target but wasm32 now and BOTH ESP demos boot with it: C3 image 3,326,224 -> 2,307,648 B (-31%), S3 3,246,288 -> 1,996,848 B (-38%). That is a flash win and still not a RAM win, and neither reaches the stock 1 MB partition, which needs -66%. What the remaining 2 MB IS, measured per unit: pylib 53.6% / pyeval 30.1% on riscv32 (47.5% / 39.3% on xtensa) -- a runtime eval() tree-walker whose own header says it is NOT auto-used by NilPy is the second largest component of a program that never calls eval. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one."
 ---
 
 # The target, in the owner's words
@@ -24,6 +24,11 @@ blockers with the hosted umbrella deliberately; membership is an edge, and the
 ranker takes the max.
 
 **`prio: 70` is a placeholder set by an agent**, not by him.
+
+**Who is on it (2026-09-20): frankS holds the RUNGS, not the umbrella** — this
+file's own rule, and it is the right one even when a coordinator hands the
+whole thing over. Held: the pyeval rung and the riscv32/xtensa body-count rung
+named under rung 3. Everything else here is unclaimed.
 
 # Why ESP is a separate umbrella and not a rung of the PC one
 
@@ -87,9 +92,25 @@ static table cannot see the 10,584 B startup allocates).
    [[bug-a-uPXX_MANAGED_STRING-on-esp-bare-emits-an-empty-image-and-says-ok]] —
    urgent, prio 75. The one flag that would shrink an ESP image today produces a
    well-formed ELF that does nothing and says `ok:`.
-3. **Give the target a stripping pass at all.**
-   [[bug-a-dce-refuses-every-target-except-x86-64]]. xtensa is the primary ESP
-   target and riscv32 works; both keep every body today.
+3. **DONE 2026-09-19/20 — the target has a stripping pass.**
+   [[bug-a-dce-refuses-every-target-except-x86-64]] is five-of-six done and
+   wasm32 is the only architecture left refused;
+   [[bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile]] was the last
+   wall on the ESP profile. Both demos build AND BOOT with `--dce`, output
+   unchanged: **C3 -31%, S3 -38%** of the flashed image. It buys ZERO bytes of
+   data or bss, exactly as the note above says — do not re-sell it as the RAM
+   answer.
+   **What it leaves is now attributed per unit, which is where the next rungs
+   come from:**
+   [[bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter]] (pyeval
+   is 30.1% of the riscv32 image / 39.3% of xtensa's, and `PyHostCall` alone is
+   109,396 B) and
+   [[bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program]]
+   (riscv32 keeps 122 bodies xtensa drops, **381,416 B, 18% of its image** —
+   the stub-target root rule firing on one ISA and not the other).
+   **And the instrument that is missing is named in the first of those:**
+   `--dce-report` says which bodies DIED; nothing says why one LIVED. Without
+   that, shrinking the 2 MB is guesswork.
 4. **Put constants in flash.**
    [[feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident]].
    This is the owner's first directive and **this is where it pays.**
@@ -121,10 +142,14 @@ static table cannot see the 10,584 B startup allocates).
 
 # Two claims to keep straight
 
-From `devdocs/dev/the-goal-cross-cross.md`: **"pxx runs on ESP32" is TRUE and
-"pxx compiles Python to ESP32" is FALSE.** No `.npy` has ever run on a cross
-target. Nothing in this umbrella changes that, and a rung that shrinks an image
-must not be written up as if it had.
+From `devdocs/dev/the-goal-cross-cross.md`, and **SUPERSEDED IN A NAMED SCOPE
+ON 2026-09-19/20**: *"pxx compiles Python to ESP32" is FALSE* and *no `.npy` has
+ever run on a cross target* were both true when written. A NilPy program now
+runs on the **ESP32-C3 and ESP32-S3 under ESP-IDF, UNDER QEMU** (`nilpy-c3`,
+`nilpy-s3`), and a second one drives a GPIO pin and takes an ESP-IDF timer
+callback (`nilpy-hw-c3`, `nilpy-hw-s3`). **NO CHIP HAS RUN EITHER.** Bare metal
+is still walled by design. So the sentence a rung must not overclaim has
+MOVED rather than gone: it is now silicon, not the language.
 
 The bare profile's single RWX IRAM region is **qemu's shape** (`defs.inc:2275`:
 *"qemu's esp32c3 machine models it as one RWX region"*), not a real C3's. Numbers
