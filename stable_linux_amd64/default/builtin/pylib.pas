@@ -821,6 +821,10 @@ type
     procedure truncate(sz: Int64);
     procedure flush;
     procedure close;
+    { f.fileno(): the OS descriptor, which is all `mmap.mmap(f.fileno(), 0)`
+      needs. It was absent, so That Space Program's ephemeris reader stopped at
+      "TPyFile has no method fileno" right after its mmap import resolved. }
+    function fileno: Int64;
   end;
 
   { A CURSOR — CPython's `map` / `filter` / `enumerate` / `zip` / `reversed`
@@ -1555,7 +1559,18 @@ function pytime_time: Double;
   a caller that needs an order sorts. }
 function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
-procedure pysys_exit(code: Integer);
+{ sys.exit([arg]) — CPython's exit STATUS rules: no argument or None is 0, an
+  int is that status, and anything else is PRINTED to stderr and the status is
+  1. The last is the common application spelling — `sys.exit("No craft in
+  space.")` — and it used to take an Integer, so a string argument exited SILENTLY
+  with its pointer's low byte as the status (184, 192, 136 measured).
+  Still Halt, not a raised SystemExit: an `except SystemExit` or a `finally`
+  does not see it. That half is its own change — NilPy's SystemExit derives
+  from Exception, where CPython's derives from BaseException so that
+  `except Exception:` does not swallow an exit — and it has its own ticket.
+  bug-n-sys-exit-is-a-halt-so-no-handler-sees-it }
+procedure pysys_exit; overload;
+procedure pysys_exit(const code: Variant); overload;
 { sys.setswitchinterval / sys.getswitchinterval — the interpreter's thread switch
   interval, in seconds.
 
@@ -1636,6 +1651,15 @@ function pyoptional_missing(const what: AnsiString): Variant;
   CPython's own wording, and CPython's own exception class.
   bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
 function pyattr_missing(const owner: AnsiString; const attr: AnsiString): Variant;
+{ The SCALAR receiver's own raise, and deliberately NOT pyattr_missing above.
+  The two say different things — `module 'x' has no attribute 'y'` against
+  `'int' object has no attribute 'y'` — and the note on pyattr_missing records
+  what it cost the last time one raise served two concepts: the message
+  described only the first of them and was simply false about the second. So
+  this is a second function rather than a parameter, for the reason that one
+  is written down.
+  bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString): Variant;
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
@@ -2572,6 +2596,22 @@ type
 var
   PyPowHook: TPyPowFn;
 function pymath_modf(x: Double): TPyList;
+{ math.frexp / math.isqrt / math.isfinite — the three of the ticket's four
+  "exact operations, no rounding question" that were still missing (ldexp
+  already resolved, by luck rather than by design: NilPy's `import math` binds
+  the PASCAL unit case-insensitively and Pascal's Ldexp happens to take
+  CPython's argument shape. Pascal's Frexp does NOT — it is a procedure with
+  two var out-params, where CPython returns a PAIR — so `math.frexp(8.0)`
+  refused with "no overload of frexp matches these arguments", a Pascal
+  sentence for someone who wrote Python. An intercept here stops the Pascal
+  routine being reached at all.)
+  All three are libm-free — bit reads and integer arithmetic — which is what
+  lets them live in a BUILTIN unit, the constraint that keeps log/pow/atan2 out
+  of this table (see pyparser.inc's note beside math.log).
+  feature-nilpy-math-module-twelve-absent-names-measured }
+function pymath_frexp(x: Double): TPyList;
+function pymath_isqrt(n: Int64): Int64;
+function pymath_isfinite(x: Double): Boolean;
 { VARIANT parameters, not TPyList, for the reason dict.fromkeys carries: the
   stdlib call site builds these BY NAME and cannot resolve by type, so a str
   argument went straight into a TPyList slot and was dereferenced as an object.
@@ -4626,6 +4666,19 @@ end;
 
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
+  { THE WRITE TWIN OF pydynattr_get'S nil ARM, which has raised here all along.
+    Without this the store keyed the write on the NIL pointer and reported
+    success, so `n = None; n.foo = 1` silently did nothing while `n.foo` READ
+    raised correctly -- one receiver, two doors, two answers, and the working
+    door is the one people probe. The cost is measured and it is not the wrong
+    value: lekkerzeilen's app.py does `tile.buffers = {}` and `tile.instances =
+    {}` on a None tile, both no-op, and the first operation that cannot pretend
+    is the method call three lines later -- so the traceback named the wrong
+    line AND the wrong attribute. Same message and same class as the getter,
+    because it is the same fact about the same receiver.
+    bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+  if obj = nil then
+    raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''');
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
@@ -5103,6 +5156,21 @@ begin
       bug-n-pyexception-leaks-through-name-and-repr }
     if name = '__name__' then begin Result := PyClsRefName(v); Exit; end;
     raise AttributeError.Create('type object ''' + PyClsRefName(v)
+      + ''' has no attribute ''' + name + '''');
+  end;
+  { A BUILTIN type held as a value (VT_BTYPE) — `g = float; g.__name__`. Its
+    payload is a PYBT_* code, not an object, and the name is the same table
+    repr() already prints from. The attribute argparse reads to word
+    "invalid float value" for `type=float`.
+    bug-n-name-on-a-builtin-type-is-unimplemented }
+  if tg = 13 then
+  begin
+    if (name = '__name__') or (name = '__qualname__') then
+    begin
+      Result := pybtype_name(PPyVarRec(@v)^.Payload);
+      Exit;
+    end;
+    raise AttributeError.Create('type object ''' + pybtype_name(PPyVarRec(@v)^.Payload)
       + ''' has no attribute ''' + name + '''');
   end;
   obj := pyvarobj(v);
@@ -7958,6 +8026,86 @@ begin
   Result.FKind := PYSEQ_TUPLE;
   Result.append(x - ip);
   Result.append(ip);
+end;
+
+{ The mantissa/exponent split, x = mantissa * 2**exponent with the mantissa in
+  [0.5, 1). Algorithm taken from lib/rtl/math.pas's Frexp, which this cannot
+  CALL — pylib is a builtin unit and `uses math` from here would put the RTL's
+  Min/Max/Power beside pylib's own overloads — so it is duplicated on purpose
+  and the two must stay in step. SUBNORMALS are the reason for the 2**64 step:
+  a subnormal has a zero exponent field and no implicit leading 1, so without
+  scaling the whole subnormal range reports exponent -1022 with a mantissa far
+  below 0.5. Zero, NaN and Inf answer (x, 0), which is CPython's own contract. }
+function pymath_frexp(x: Double): TPyList;
+const
+  TWO_POW_64 = 18446744073709551616.0;
+var
+  bits, e, expn: Int64;
+  adj: Integer;
+  v, mant: Double;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  v := x;
+  bits := PInt64(@v)^;
+  if (x = 0.0) or (((bits shr 52) and $7FF) = $7FF) then
+  begin
+    Result.append(x);
+    Result.append(Int64(0));
+    Exit;
+  end;
+  adj := 0;
+  e := (bits shr 52) and $7FF;
+  if e = 0 then
+  begin
+    v := v * TWO_POW_64;
+    adj := -64;
+    bits := PInt64(@v)^;
+    e := (bits shr 52) and $7FF;
+  end;
+  expn := e - 1022 + adj;
+  bits := (bits and $800FFFFFFFFFFFFF) or (Int64(1022) shl 52);
+  mant := PPyDouble(@bits)^;
+  Result.append(mant);
+  Result.append(expn);
+end;
+
+{ The integer square root: the largest r with r*r <= n, EXACT by definition.
+  Pure integer arithmetic (the classic restoring bit algorithm), never a float
+  sqrt rounded back — at 2**53 and above a double cannot represent n, so the
+  float route answers a neighbour and the "exact by definition" contract is
+  exactly what would be lost. CPython raises ValueError on a negative. }
+function pymath_isqrt(n: Int64): Int64;
+var
+  res, bit, num: Int64;
+begin
+  if n < 0 then
+    raise ValueError.Create('isqrt() argument must be nonnegative');
+  num := n;
+  res := 0;
+  bit := Int64(1) shl 62;
+  while bit > num do bit := bit shr 2;
+  while bit <> 0 do
+  begin
+    if num >= res + bit then
+    begin
+      num := num - (res + bit);
+      res := (res shr 1) + bit;
+    end
+    else
+      res := res shr 1;
+    bit := bit shr 2;
+  end;
+  Result := res;
+end;
+
+{ not (isnan(x) or isinf(x)) — one read of the exponent field rather than two
+  calls, and it is a PREDICATE, so there is no rounding question. }
+function pymath_isfinite(x: Double): Boolean;
+var bits: Int64;
+begin
+  bits := PInt64(@x)^;
+  Result := ((bits shr 52) and $7FF) <> $7FF;
 end;
 
 { math.prod — the product, and an INT when every element is an int (CPython
@@ -11435,6 +11583,18 @@ begin
       Result := bytearray(TPyBytes(o));
       Exit;
     end;
+    { A range or an iterator, as in bytes(const v): materialised, then the LIST
+      arm, so an out-of-range element still raises ValueError. }
+    if o is TPyRange then
+    begin
+      Result := bytearray(list(TPyRange(o)));
+      Exit;
+    end;
+    if o is TPyIter then
+    begin
+      Result := bytearray(list(TPyIter(o)));
+      Exit;
+    end;
   end;
   { An INTEGER variant is bytearray(n) — n zero bytes — exactly as the static
     spelling is, so the two agree rather than diverging on how the value was
@@ -13701,6 +13861,13 @@ begin
     attr + '''');
 end;
 
+function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString): Variant;
+begin
+  pyscalar_attr_missing := pynone;
+  raise AttributeError.Create('''' + tname + ''' object has no attribute ''' +
+    attr + '''');
+end;
+
 function pyos_startfile(const path: AnsiString): Integer;
 begin
   pyos_startfile := 0;
@@ -13860,9 +14027,24 @@ begin
   Result := outp;
 end;
 
-procedure pysys_exit(code: Integer);
+procedure pysys_exit; overload;
 begin
-  Halt(code);
+  Halt(0);
+end;
+
+procedure pysys_exit(const code: Variant); overload;
+var tag: Int64;
+begin
+  tag := pyvartag(code);
+  if tag = 0 then Halt(0);                            { None }
+  if (tag = 1) or (tag = 2) then Halt(Integer(pyvar_to_int(code) and $FF));
+  if tag = 4 then                                     { a bool is an int }
+  begin
+    if pyvar_to_int(code) <> 0 then Halt(1);
+    Halt(0);
+  end;
+  pystderr_write(pystr_of(code) + #10);
+  Halt(1);
 end;
 
 procedure pysys_setswitchinterval(v: Double);
@@ -16698,6 +16880,19 @@ begin
       Result := bytes(TPyBytes(o));
       Exit;
     end;
+    { A range or an iterator is an iterable of ints, which CPython takes:
+      materialise it and go through the LIST arm. bytes(range(256)) raised
+      TypeError here until 2026-09-19. Mirrored in bytearray(const v). }
+    if o is TPyRange then
+    begin
+      Result := bytes(list(TPyRange(o)));
+      Exit;
+    end;
+    if o is TPyIter then
+    begin
+      Result := bytes(list(TPyIter(o)));
+      Exit;
+    end;
   end;
   { An INTEGER variant is bytes(n) — n zero bytes — exactly as the static
     spelling is, so the two agree rather than diverging on how the value was
@@ -18474,6 +18669,11 @@ begin
     header is the cursor loop in PyParseForIn, which never reaches this. }
   if o is TPyIter then begin Result := pyiter_drain(TPyIter(o)); Exit; end;
   if o is TPyRange then begin Result := list(TPyRange(o)); Exit; end;
+  { a FILE yields its remaining lines -- what `for line in f` does on a name
+    the frontend can see is a TPyFile. Through a VARIANT (a file handed to an
+    unannotated parameter, `def count(f): for line in f`) it reached this chain
+    and raised "expected a str, a list or a dict, got object". }
+  if o is TPyFile then begin Result := TPyFile(o).readlines; Exit; end;
   { a USER class implementing the iterator protocol, drained the same way a
     cursor is. This is the arm the three copies of this chain were missing. }
   if PyUserObjIterable(o) then
@@ -19899,6 +20099,11 @@ begin
   r := PyPalClose(FFd);
 end;
 
+function TPyFile.fileno: Int64;
+begin
+  Result := FFd;
+end;
+
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
   container is spelled out rather than printed as its object handle. }
 { `<function at 0x...>` for a CALLABLE VALUE. A function value used to render
@@ -21112,7 +21317,11 @@ begin
     str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
     that is the `e.args` gap, and the message is a strict improvement on an
     address either way. }
-  if (mi = nil) and (not wantRepr) and (o is Exception) then
+  { ExceptionBase, not Exception: an RTL-rooted exception (sysutils' tree, which
+    is what a mimic_ unit's bare `Exception` names after `uses pylib, sysutils`)
+    has the same `msg` on the same root and printed as an address here. The
+    frontend's PyClassStrNode draws the same line. }
+  if (mi = nil) and (not wantRepr) and (o is ExceptionBase) then
   begin
     { KeyError is the one builtin whose str() is the REPR of its argument —
       `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
@@ -21126,7 +21335,7 @@ begin
        (Exception(o).GetArgs.count = 1) then
       outS := pyvar_repr(Exception(o).GetArgs.at(0))
     else
-      outS := Exception(o).Message;
+      outS := ExceptionBase(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -21144,12 +21353,12 @@ begin
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is ExceptionBase) and (not (o is KeyError)) then
   begin
-    if Exception(o).Message = '' then
+    if ExceptionBase(o).Message = '' then
       outS := TObject(o).ClassName + '()'
     else
-      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
+      outS := TObject(o).ClassName + '(' + pyrepr_of(ExceptionBase(o).Message) + ')';
     PyUserObjStr := True;
     Exit;
   end;

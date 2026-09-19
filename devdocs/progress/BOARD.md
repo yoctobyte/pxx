@@ -81,7 +81,7 @@ _none_
 | regression-lib-test-crtl-atexit-2 | C | 70 | regression | NOT ACTIONABLE AND NOT THE SLUG'S SUBJECT: crtl_atexit passes. The census step fails because it runs under $(PXX_STABLE) and the pinned compiler warns on a WEAK external. The fix (e4c72bd15) landed 18 minutes AFTER pin v410. Live compiler: 600 declared, all defined, rc=0. Clears itself at the next pin; there is nothing to fix. | — |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (35)
+## backlog (36)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -99,6 +99,7 @@ _none_
 | regression-test-core-test-dynarray-to-pointer-seam-leaks-2 | T | 70 | regression | regression: test-core#src:test/test_dynarray_to_pointer_seam_leaks.pas at 4fbed6c4157e in step 3/10, `tools/assert_no_leak.sh dynarray_to_pointer_seam 50 /tmp/test_dtp26` (auto-filed by twatch) | — |
 | regression-test-core-test-interface-containers-2 | T | 70 | regression | regression: test-core#src:test/test_interface_containers.pas@1 at 4fbed6c4157e in step 2/18, `tools/expect_same.sh test_interface_containers26 "$(/tmp/test_interface_containers26)" "$(printf 'strarr: ok\nstatic: 3…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-qualifier-vs-cproc-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy at 5e9c8da7481e in step 1/3, `./compiler/pascal26 -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy /tmp/test_nilpy_qual_cproc26` (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-unbound-builtin-method-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_unbound_builtin_method.npy at b4104386ae9c in step 1/13, `./compiler/pascal26 test/test_nilpy_unbound_builtin_method.npy /tmp/test_nilpy_unbndbuiltin26` (auto-filed by twatch) | — |
 | regression-test-core-test-promoint-array-cleanup-2 | T | 70 | regression | regression: test-core#src:test/test_promoint_array_cleanup.pas at 4fbed6c4157e in step 21/41, `tools/assert_no_leak.sh managed_member_array 50 /tmp/test_mma26` (auto-filed by twatch) | — |
 | regression-test-debug-g-compiler-srchash-2 | A | 70 | regression | regression: test-debug-g#src:tools/compiler_srchash.sh at 7e5a0470a6b2 in step 1/2, `livesrc=$(tools/compiler_srchash.sh); \ stampsrc=$(sed -n 's/^srchash //p' compiler/.pascal26.fixedpoint); \ if [ "$liv…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
@@ -108,8 +109,8 @@ _none_
 | regression-test-nilpy-test-cpyext-errformat-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_errformat.npy at 523c10e42d90 in step 1/7, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_errformat.npy /tmp/test_cpyext_errformat26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-hello-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_hello.npy at 523c10e42d90 in step 1/4, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_hello.npy /tmp/test_cpyext_hello26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-markupsafe-2 | N | 70 | regression | regression: test-nilpy#src:test/test_cpyext_markupsafe.npy at 523c10e42d90 in step 1/15, `./compiler/pascal26 -Futest/nilpy_units -Ilib/cpyext/include test/test_cpyext_markupsafe.npy /tmp/test_cpyext_markupsaf…` (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-bytearray-unbound-and-subclass | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy at b4104386ae9c in step 1/24, `./compiler/pascal26 test/test_nilpy_bytearray_unbound_and_subclass.npy /tmp/test_nilpy_baunbound26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-dotted-package-import-3 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_dotted_package_import.npy@1 at 523c10e42d90 in step 1/8, `./compiler/pascal26 test/test_nilpy_dotted_package_import.npy /tmp/test_nilpy_dottedimport26` (auto-filed by twatch) | — |
-| regression-test-nilpy-test-nilpy-str-line-continuation | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_line_continuation.npy at 11e0c581c80d in step 4/5, `/tmp/test_nilpy_linecont26 \| diff -u test/test_nilpy_line_continuation.expected -` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-5 | P | 70 | regression | regression: test-pascal-conformance#shard0/6 at ef03a6282980 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 0/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 at cc03b4a51933 in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 3/6` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-5 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 at d11b8a1a99dd in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 library_candidates/fpc-testsuite/tests/test --shard 4/6` (auto-filed by twatch) | — |
@@ -1085,9 +1086,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3872)
+## done (3873)
 
-3872 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3873 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (84)
 
@@ -1247,6 +1248,7 @@ _none_
 - [p 70] [T] regression-test-core-test-dynarray-to-pointer-seam-leaks-2
 - [p 70] [T] regression-test-core-test-interface-containers-2
 - [p 70] [N] regression-test-core-test-nilpy-qualifier-vs-cproc-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-core-test-nilpy-unbound-builtin-method-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-promoint-array-cleanup-2
 - [p 70] [A] regression-test-debug-g-compiler-srchash-2
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
@@ -1256,8 +1258,8 @@ _none_
 - [p 70] [N] regression-test-nilpy-test-cpyext-errformat-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-hello-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-cpyext-markupsafe-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-bytearray-unbound-and-subclass [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [N] regression-test-nilpy-test-nilpy-dotted-package-import-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [N] regression-test-nilpy-test-nilpy-str-line-continuation [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [P] regression-test-pascal-conformance-shard0-6-5 [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-5

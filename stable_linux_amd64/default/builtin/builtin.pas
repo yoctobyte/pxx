@@ -2544,6 +2544,8 @@ const
   PXX_RTTI_METH_PUBLISHED = 1;
   PXX_RTTI_UNITNAME  = 96;   { the DECLARING unit's interned name — TObject.UnitName }
   PXX_RTTI_CLASSINFO = 104;  { the typinfo-facade PTypeInfo header — TObject.ClassInfo }
+  PXX_RTTI_FLATCOUNT = 112;  { how many bases were FLATTENED into this class (NilPy MI) }
+  PXX_RTTI_FLATBASES = 120;  { -> that many RTTI blob pointers }
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -2583,8 +2585,15 @@ end;
 function __pxxInheritsFrom(Rtti, Other: Pointer): Boolean;
 { X.InheritsFrom(C): True when Rtti IS C or descends from it, walking the blob's
   parent chain. FPC's TObject.InheritsFrom is reflexive -- a class inherits from
-  itself -- and so is this. nil never inherits from anything. }
-var cur: Pointer;
+  itself -- and so is this. nil never inherits from anything.
+
+  A base FLATTENED into a class on the chain counts too, with its own ancestry:
+  NilPy's `class D(B, C)` keeps one real parent and replays the other base's
+  body, and CPython's isinstance(d, C) -- and so `except C` -- is True. The
+  compiler writes those bases at +112/+120; a Pascal class has none, so for it
+  this is the parent walk and nothing else. }
+var cur, bases: Pointer;
+    n, i: NativeInt;
 begin
   Result := False;
   if (Rtti = nil) or (Other = nil) then Exit;
@@ -2595,6 +2604,21 @@ begin
     begin
       Result := True;
       Exit;
+    end;
+    n := PPxxInt_(PtrUInt(cur) + PXX_RTTI_FLATCOUNT)^;
+    if n > 0 then
+    begin
+      bases := PPxxPtr_(PtrUInt(cur) + PXX_RTTI_FLATBASES)^;
+      i := 0;
+      while i < n do
+      begin
+        if __pxxInheritsFrom(PPxxPtr_(PtrUInt(bases) + PtrUInt(i * 8))^, Other) then
+        begin
+          Result := True;
+          Exit;
+        end;
+        i := i + 1;
+      end;
     end;
     cur := PPxxPtr_(PtrUInt(cur) + PXX_RTTI_PARENT)^;
   end;

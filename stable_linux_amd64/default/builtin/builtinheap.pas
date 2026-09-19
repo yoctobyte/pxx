@@ -878,7 +878,54 @@ end;
 
 const
 {$if defined(PXX_ESP)}
-  HEAP_ARENA = 65536;       { single 64 KiB static arena (fits ESP SRAM) }
+  { THE BARE ESP HEAP SIZE, AND IT IS A KNOB: pass one of
+      -dPXX_ESP_HEAP_8K  -dPXX_ESP_HEAP_16K  -dPXX_ESP_HEAP_32K
+      -dPXX_ESP_HEAP_128K
+    to move it; the default with none of them is 64 KiB. A command-line -d
+    DOES reach this unit -- verified 2026-09-18, not assumed, because a
+    source-level {$define} does NOT cross unit boundaries and builtin.pas:62
+    records a {$ifndef} there that never ran for exactly that reason. The
+    measurement: the same bare hello is bss=70,936 plain and bss=21,784 with a
+    -d selecting 16 KiB.
+
+    QUANTISED TO POWERS OF TWO ON PURPOSE rather than taking a byte count. A
+    define carries no VALUE usable in a const expression -- {$IF} can compare
+    one but a Pascal const cannot be a term of it -- so an arbitrary size would
+    need a new compiler option and a parser change to inject. Five rungs cost
+    nothing and need neither, and a heap arena is not a quantity anyone tunes
+    to the byte.
+
+    IT IS A LEVER, NOT THE ANSWER. The arena exists at all because the program
+    pulls the heap, and every Pascal program pulls it unconditionally --
+    PasApplyDefaults defines PXX_MANAGED_STRING, pasparser_prog.inc:104 turns
+    that into needsAnsiRuntime and :199 into needsHeap, which {$H-} cannot
+    reach. A program that never allocates should not pay 64 KiB at ALL, and
+    that is bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce, which
+    is upstream of this knob rather than competing with it.
+
+    SHRINKING THIS IS SAFE TO GET WRONG, AND ONLY SINCE TODAY. Exhaustion used
+    to hang a bare chip silently; PXXHeapExhausted now reports through the
+    UART and halts 203. CheckBareImageFitsSram does NOT cover this -- it bounds
+    image+stack FIT, not heap ADEQUACY -- so the runtime report is the only
+    thing that makes a too-small arena loud. Verified at 8 KiB.
+    umbrella-an-esp32-image-is-as-small-as-it-can-be }
+  { NOT to be confused with SocNilPyArenaSize. Not to be confused with the
+    compiler-side SocNilPyArenaSize (defs.inc), which is a different 64 KiB,
+    reserved by the NilPy driver only and zero in a Pascal or C build -- that
+    name said "BareArena" until 2026-09-18 and cost a seat a wrong diagnosis.
+    This one is the RTL buffer every bare program links. EspArena below is
+    sized FROM this constant; do not restate it. }
+  {$if defined(PXX_ESP_HEAP_8K)}
+  HEAP_ARENA = 8192;
+  {$elseif defined(PXX_ESP_HEAP_16K)}
+  HEAP_ARENA = 16384;
+  {$elseif defined(PXX_ESP_HEAP_32K)}
+  HEAP_ARENA = 32768;
+  {$elseif defined(PXX_ESP_HEAP_128K)}
+  HEAP_ARENA = 131072;
+  {$else}
+  HEAP_ARENA = 65536;       { default: single 64 KiB static arena }
+  {$endif}
 {$elseif defined(CPU_WASM32)}
   { MUST equal the WasmArena byte size below. PXXAlloc rounds any request up to
     HEAP_ARENA and then sets HeapEnd := HeapPtr + arena, so a HEAP_ARENA larger
@@ -893,6 +940,18 @@ const
 {$else}
   HEAP_ARENA = 268435456;   { 256 MiB mmap chunk; anon pages fault in lazily }
 {$endif}
+{ THE ESP-IDF PROFILE LANDS ON THAT 256 MiB ARM AND IT IS DEAD THERE -- checked
+  2026-09-18, because it reads alarmingly and someone will read it again.
+  PXX_ESP is defined only from PXX_ESP_BARE (line 18), so an IDF build takes
+  neither ESP arm and falls through to the value above. That does NOT mean an
+  IDF program asks a chip with no mmap for 256 MiB: the IDF profile redefines
+  PXXAlloc to use calloc/free and never calls HeapMmap at all (see :1330), and
+  calloc/free resolve to newlib/heap_caps at IDF link time. VERIFIED END TO END
+  rather than read: examples/esp32/hello-c3 with a GetMem(p, 1024) added,
+  built against ESP-IDF v6.0.1 and booted under the Espressif qemu, printed
+  `PXX GetMem returned 0x3fc92f20` -- a real address inside the C3's DRAM heap
+  region -- and then ran to completion. A p75 ticket was drafted on the source
+  reading alone and withdrawn when that one boot refuted it. }
 
 const
   { Segregated free lists. Every allocation is already rounded up to a multiple of
@@ -1078,9 +1137,21 @@ var
     FPC guarantees — never a nil dereference. BSS-zeroed, so it is always #0. }
   PXXEmptyChar : Char;
 {$ifdef PXX_ESP}
-  { 64 KiB static arena as Int64 cells so its base is 8-aligned (payloads sit
-    at base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after. }
-  EspArena     : array[0..8191] of Int64;
+  { Static arena as Int64 cells so its base is 8-aligned (payloads sit at
+    base+8, also 8-aligned). Handed out once; HeapMmap returns 0 after.
+
+    SIZED FROM HEAP_ARENA, not spelled again. It was `array[0..8191]`, i.e.
+    the same 65,536 written a second time in a second unit of measure, with
+    nothing tying the two together -- change one and PXXAlloc hands out a
+    HeapEnd past the end of the buffer, which is the exact corruption the
+    wasm arm's own HEAP_ARENA comment exists to prevent. That arm at least
+    carried a hand-checked `{ 131072 * 8 = HEAP_ARENA }`; this one carried no
+    note at all. Measured 2026-09-18 while probing the ESP SRAM floor:
+    halving the arena needed BOTH lines edited by hand, and editing one is
+    silent. Positive control for the derivation: changing HEAP_ARENA alone
+    from 65536 to 16384 moves a bare hello's bss 70,936 -> 21,784, exactly
+    -49,152. umbrella-an-esp32-image-is-as-small-as-it-can-be }
+  EspArena     : array[0..(HEAP_ARENA div 8) - 1] of Int64;
   EspArenaUsed : Integer;
 {$endif}
 {$ifdef CPU_WASM32}
@@ -1095,7 +1166,11 @@ var
     never emitted into the file, so this costs declared address space at
     instantiation and not one byte of .wasm.
     bug-a-heapmmap-has-no-wasm32-arm-so-the-heap-starts-at-address-zero }
-  WasmArena     : array[0..131071] of Int64;   { 131072 * 8 = HEAP_ARENA }
+  { Sized from HEAP_ARENA rather than restating it -- see the ESP twin above.
+    The hand-checked `131072 * 8 = HEAP_ARENA` this replaces was correct, and
+    correct-by-inspection is exactly what HEAP_ARENA's own comment says must
+    not be relied on for this arm. }
+  WasmArena     : array[0..(HEAP_ARENA div 8) - 1] of Int64;
   WasmArenaUsed : Integer;
 {$endif}
 
@@ -1466,7 +1541,16 @@ begin
 end;
 
 const
+{$ifdef PXX_ESP}
+  { BARE METAL HAS NO mmap, so it must not be named. This arm's arena is the
+    fixed EspArena buffer handed out once by HeapMmap's PXX_ESP arm; when it is
+    gone there is no second source, and telling a bare user an "mmap failed"
+    sends them looking for a syscall their chip does not have. Names the knob
+    that actually governs it instead. }
+  OOM_MSG = 'pxx: out of memory (bare static heap arena exhausted; HEAP_ARENA)';
+{$else}
   OOM_MSG = 'pxx: out of memory (heap arena mmap failed)';
+{$endif}
 
 procedure PXXHeapExhausted;
 { Never returns. Writes BYTE AT A TIME through the raw syscall, exactly as
@@ -1480,6 +1564,31 @@ procedure PXXHeapExhausted;
 var i: Integer; b: Byte; r: Int64;
 begin
   r := 0;
+{$ifdef PXX_ESP}
+  { BARE METAL: the UART0 TX FIFO, not a syscall. PXX_ESP is defined only from
+    PXX_ESP_BARE (line 18), so this arm IS the bare profile.
+
+    MEASURED 2026-09-18, and the syscall version produced NOTHING: a bare C3
+    program allocating 4 KiB at a time printed `start`, fifteen dots, and then
+    stopped dead. 15 * 4096 = 61,440; the sixteenth request exhausted the
+    65,536-byte arena, HeapMmap returned 0, and this procedure ran -- writing
+    OOM_MSG through PXXSysWrite, which on bare metal reaches no kernel, and
+    then halting into the self-loop `Halt` emits on this profile. A chip that
+    hangs with no output, on the one failure the allocator is built to report.
+
+    THE SAME DEFECT AND THE SAME FIX AS espassert.pas, whose own comment is
+    the precedent: it "COMPILED on both chips and printed NOTHING when the
+    assertion fired -- a silent Halt(227), which is the worst possible outcome
+    for an assertion", and it resolved to write the FIFO directly because that
+    is "what the docs tell every bare user to do and what the RTL should
+    therefore do on their behalf". A heap exhaustion is that case exactly.
+
+    $60000000 on both esp32c3 and esp32s3 -- defs.inc says UART0 FIFO is MMIO
+    at the same address on both, which is why this needs no per-SoC table. }
+  for i := 1 to Length(OOM_MSG) do
+    PByte(Int64($60000000))^ := Byte(OOM_MSG[i]);
+  PByte(Int64($60000000))^ := 10;
+{$else}
   for i := 1 to Length(OOM_MSG) do
   begin
     b := Byte(OOM_MSG[i]);
@@ -1487,6 +1596,7 @@ begin
   end;
   b := 10;
   r := PXXSysWrite(2, Int64(@b), 1);
+{$endif}
   Halt(203);
 end;
 
@@ -2747,27 +2857,85 @@ end;
 
 
 {$ifndef PXX_ESP_BARE}
-{ ===== Console input (read/readln) for the cross targets =====
-  x86-64 keeps its hand-rolled asm path (EmitReadLine/EmitReadVarParse over the
-  BSS_LINE_* scratch); the 32-bit/cross backends lower IR_READLINE /
-  IR_READ_VAR / IR_READ_DISCARD to these portable helpers instead. Semantics
-  mirror the x86-64 asm: one shared line buffer + cursor; a string target takes
-  the rest of the line; a char one byte; integer kinds skip blanks then parse
-  [-]digits. See feature-cross-readln-console-input. }
+{ ===== Console input (read/readln) — ONE line buffer for every backend =====
+  i386 / arm32 / aarch64 / riscv32 / xtensa lower IR_READLINE / IR_READ_VAR /
+  IR_READ_DISCARD straight to these helpers. x86-64 keeps its hand-rolled asm
+  for the PARSING (EmitReadVarParse over the BSS_LINE_* scratch) but takes its
+  STORAGE from here, via PXXLineEnsure — so the two spellings cannot disagree
+  about capacity, which they did: the asm stopped at LINE_BUF_SIZE-1 and this
+  loop at 4096, so one program read the same 5000-byte line as 4095 bytes on
+  x86-64 and 4096 on riscv32.
+
+  DEMAND-ALLOCATED AND GROWABLE, and both halves of that are the fix:
+  - a program that never touches stdin reserves NO line buffer at all. This was
+    4096 bytes of bss in every image, ESP included, where the PAL refuses fd 0
+    and the buffer could never be read into;
+  - a line longer than the buffer is read WHOLE. It used to be truncated AND
+    the tail left in the fd, so the NEXT readln returned the remainder of the
+    previous line — a wrong value in a later, unrelated read, which is the
+    failure you cannot see from the statement that caused it.
+  See feature-cross-readln-console-input. }
+const
+  PXX_LINE_BUF_INIT = 256;   { first chunk; doubles on demand, no ceiling }
 var
-  PXXLineBuf: array[0..4095] of Byte;
-  PXXLineLen: Int64;
+  PXXLineBuf: Pointer;
+  PXXLineCap: Int64;
+  PXXLineLen: Int64;      { bytes held, THE #10 TERMINATOR INCLUDED }
+  PXXLineTextLen: Int64;  { ...and the same count WITHOUT it — see PXXReadLine }
   PXXLinePos: Int64;
   PXXPeekByte: Byte;      { pushed-back stdin byte held by PXXStdinEof }
   PXXPeekValid: Int64;
 
+{ Grow the shared line buffer to hold at least `need` bytes and return its base.
+  The base MOVES on growth, so never cache it across a call. }
+function PXXLineEnsure(need: NativeInt): Pointer;
+var ncap: Int64;
+begin
+  if need > PXXLineCap then
+  begin
+    ncap := PXXLineCap;
+    if ncap < PXX_LINE_BUF_INIT then ncap := PXX_LINE_BUF_INIT;
+    while ncap < need do ncap := ncap * 2;
+    PXXLineBuf := PXXRealloc(PXXLineBuf, ncap, 8);
+    PXXLineCap := ncap;
+  end;
+  Result := PXXLineBuf;
+end;
+
+{ Byte `i` of the line buffer, recomputed from PXXLineBuf every time on purpose
+  (see PXXLineEnsure). }
+function PXXLineAt(i: Int64): Byte;
+begin
+  Result := PByte(Int64(PXXLineBuf) + i)^;
+end;
+
 procedure PXXReadLine;
-var n: Int64; b: Byte;
+{ THE #10 TERMINATOR IS STORED IN THE BUFFER, and that is a fix and not a
+  detail. Stripping it made `read(c: Char)` — the canonical Pascal text-scan
+  loop, `while not Eof do read(c)` — skip silently from the last character of
+  one line to the first of the next, so copying stdin produced ONE LONG LINE.
+  Measured 2026-09-18 on 'ab\ncd\n': FPC 3.2.2 yields 97 98 10 99 100 10 and
+  we yielded 97 98 99 100. Same family as the over-long line: the reader merges
+  two lines and the wrong value surfaces in a LATER, innocent-looking read.
+
+  Everything downstream falls out of the invariant rather than being special-
+  cased. `PXXLinePos < PXXLineLen` (not-eof, and "do not refill") is still
+  exactly right, because the terminator IS unconsumed input. IR_READ_DISCARD's
+  `pos := len` still means readln's "skip the rest of the line", and now
+  genuinely consumes the newline. The integer parser stops at #10 because it is
+  not a digit and not one of the two blanks it skips. Only the STRING readers
+  need to know the difference, and they read PXXLineTextLen.
+
+  A line ended by EOF rather than by \n stores no terminator, so TextLen = Len
+  there and `read(c)` past it still yields #0. }
+var n: Int64; b: Byte; more: Boolean;
 begin
   if PXXLinePos < PXXLineLen then Exit;   { unconsumed input on the line }
   PXXLinePos := 0;
   PXXLineLen := 0;
-  while PXXLineLen < 4096 do
+  PXXLineTextLen := 0;
+  more := True;
+  while more do
   begin
     { consume the byte Eof peeked (else it would be lost) before reading }
     if PXXPeekValid <> 0 then
@@ -2778,11 +2946,22 @@ begin
     end
     else
       n := PXXSysRead(0, Int64(@b), 1);
-    if n <= 0 then Break;                 { EOF / error: empty or short line }
-    if b = 13 then Continue;              { skip \r }
-    if b = 10 then Break;                 { \n ends the line (not stored) }
-    PXXLineBuf[PXXLineLen] := b;
-    PXXLineLen := PXXLineLen + 1;
+    if n <= 0 then
+    begin
+      more := False;                      { EOF / error: no terminator to store }
+      PXXLineTextLen := PXXLineLen;
+    end
+    else if b <> 13 then                  { \r skipped }
+    begin
+      if b = 10 then
+      begin
+        more := False;
+        PXXLineTextLen := PXXLineLen;     { text ends here; the #10 follows it }
+      end;
+      PXXLineEnsure(PXXLineLen + 1);
+      PByte(Int64(PXXLineBuf) + PXXLineLen)^ := b;
+      PXXLineLen := PXXLineLen + 1;
+    end;
   end;
 end;
 
@@ -2814,9 +2993,9 @@ end;
 procedure PXXReadVarStrM(slot: Pointer);
 var len: Int64; oldp, newp: Pointer;
 begin
-  len := PXXLineLen - PXXLinePos;
+  len := PXXLineTextLen - PXXLinePos;   { TEXT length: never the #10 terminator }
   if len < 0 then len := 0;
-  newp := PXXStrFromLit(len, @PXXLineBuf[PXXLinePos]);
+  newp := PXXStrFromLit(len, Pointer(Int64(PXXLineBuf) + PXXLinePos));
   PXXLinePos := PXXLineLen;
   oldp := Pointer(PMachineWord(slot)^);
   PMachineWord(slot)^ := Int64(newp);
@@ -2828,7 +3007,7 @@ procedure PXXReadVarChar(dst: Pointer);
 begin
   if PXXLinePos < PXXLineLen then
   begin
-    PByte(dst)^ := PXXLineBuf[PXXLinePos];
+    PByte(dst)^ := PXXLineAt(PXXLinePos);
     PXXLinePos := PXXLinePos + 1;
   end
   else
@@ -2841,10 +3020,10 @@ procedure PXXReadVarInt(dst: Pointer; sz: NativeInt);
 var v: Int64; neg: Boolean; b: Byte; d: Int64;
 begin
   while (PXXLinePos < PXXLineLen) and
-        ((PXXLineBuf[PXXLinePos] = 32) or (PXXLineBuf[PXXLinePos] = 9)) do
+        ((PXXLineAt(PXXLinePos) = 32) or (PXXLineAt(PXXLinePos) = 9)) do
     PXXLinePos := PXXLinePos + 1;
   neg := False;
-  if (PXXLinePos < PXXLineLen) and (PXXLineBuf[PXXLinePos] = 45) then
+  if (PXXLinePos < PXXLineLen) and (PXXLineAt(PXXLinePos) = 45) then
   begin
     neg := True;
     PXXLinePos := PXXLinePos + 1;
@@ -2852,7 +3031,7 @@ begin
   v := 0;
   while PXXLinePos < PXXLineLen do
   begin
-    b := PXXLineBuf[PXXLinePos];
+    b := PXXLineAt(PXXLinePos);
     if (b < 48) or (b > 57) then Break;
     v := v * 10 + (b - 48);
     PXXLinePos := PXXLinePos + 1;
