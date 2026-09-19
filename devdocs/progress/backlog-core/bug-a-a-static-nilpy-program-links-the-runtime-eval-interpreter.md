@@ -6,7 +6,7 @@ status: open
 found: 2026-09-20
 found-by: frankS
 blocked-by: []
-summary: "MEASURED, not estimated: after `--dce`, compiler/builtin/pyeval.pas is 624,684 B of a riscv32 ESP image's 2,074,812 (30.1%) and 681,868 B of xtensa's 1,736,175 (39.3%), for a program that never calls eval() or exec(). pyeval is a runtime tree-walking interpreter written for uforth's PYTHON-bodied words, and its own header says `NOT auto-used by NilPy yet`. Its single largest routine, PyHostCall, is 109,396 B by itself -- 5.3% of the whole image in one body. DCE drops only 13.7% of the unit (723,548 -> 624,684) against 30.7% of the image overall, so something ROOTS most of it rather than calling it: the suspects are the @proc / VMT / RTTI root classes (an address in a table is reachable from anywhere by construction) and pylib's hook variables that pyeval installs into. The mechanism to establish is WHICH root keeps each body alive; the instrument for that does not exist yet -- --dce-report says which bodies died, never why one lived. Rung of umbrella-an-esp32-image-is-as-small-as-it-can-be: it is the single largest identified component of an ESP NilPy image after DCE."
+summary: "MEASURED, not estimated: after `--dce`, compiler/builtin/pyeval.pas is 624,684 B of a riscv32 ESP image's 2,074,812 (30.1%) and 681,868 B of xtensa's 1,736,175 (39.3%), for a program that never calls eval() or exec(). pyeval is a runtime tree-walking interpreter written for uforth's PYTHON-bodied words, and its own header says `NOT auto-used by NilPy yet`. Its single largest routine, PyHostCall, is 109,396 B by itself -- 5.3% of the whole image in one body. DCE drops only 13.7% of the unit (723,548 -> 624,684) against 30.7% of the image overall, so something ROOTS most of it rather than calling it: the suspects are the @proc / VMT / RTTI root classes (an address in a table is reachable from anywhere by construction) and pylib's hook variables that pyeval installs into. ANSWERED 2026-09-20 by `--dce-why`, built for this ticket: on xtensa the ENTIRE eval tree hangs off ONE @proc-taken root -- `PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement <- ExecSuite <- CallUserFn <- PyBodyTramp <- [@proc taken]` -- so the mechanism is a trampoline whose ADDRESS is in a table, not a call from NilPy code; 4 @proc roots hold 17,420 B directly and drag the rest through ordinary call edges. On riscv32 the same tree is rooted EARLIER and more coarsely: 819,480 B across 128 bodies are held because a stub target lands INSIDE them (143 stub targets, 139 inside a body, against xtensa's 4 and none), so that ISA cannot even see the @proc chain. The fix to design is therefore about PyBodyTramp's address being taken unconditionally, not about pyeval's size. Rung of umbrella-an-esp32-image-is-as-small-as-it-can-be: it is the single largest identified component of an ESP NilPy image after DCE."
 ---
 
 # A static NilPy program links the runtime's eval() interpreter
@@ -66,15 +66,49 @@ edge, while `ParsePrimary`, `ParseMethodCall` and `DoAssignment` -- the layer
 that would CALL the tokenizer -- are all live. A parser that survives while its
 lexer dies is not being reached through a call; it is being held by a root.
 
-## What to establish first, and it is an instrument
+## The instrument now exists, and it answered this -- 2026-09-20
 
-`--dce-report` answers "which bodies died". Nothing answers **"why is this body
-live"**, and without that answer any attempt to shrink this is guesswork. The
-root kinds DceRun installs are enumerable -- MethodFixups (a VMT/RTTI slot),
-ProcAddrFix (`@proc`), InitProcs, FiniProcs, EntryRoot, the exported-symbol
-loop, a stub-holding body, and a call from code no body owns. A per-body
-"first root that reached it, and the edge chain from it" would name the
-mechanism for all 624 KB at once.
+`--dce-why` (and `--dce-why=<substring>` for a named body) prints, per live
+body, the FIRST root that reached it and the CHAIN of call edges from that
+root. Built for this ticket; positive control in `test/test_dce_why_root_report.pas`,
+asserted in `test-quick`.
+
+**Live bytes by first reason, same program, same flags as the table above:**
+
+| first reason | riscv32 | xtensa |
+| --- | --- | --- |
+| called by (an ordinary call edge) | 1,033,892 B / 589 | 1,531,910 B / 589 |
+| holds a stub target | **819,480 B / 128** | **0** |
+| vmt/rtti slot | 200,544 B / 149 | 172,637 B / 149 |
+| @proc taken | 15,784 B / 4 | 17,420 B / 4 |
+| called from unowned code | 1,712 B / 5 | 1,006 B / 5 |
+| total live | 2,071,412 B | 1,722,973 B |
+
+**The xtensa column is the one that names the mechanism**, because nothing
+there is masked by the stub-target rule:
+
+```
+173755B  PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement
+                    <- ExecSuite <- CallUserFn <- PyBodyTramp <- [@proc taken]
+ 51743B  PyBoundFnCallvnMaskBody <- pyboundfn_callvn_mask <- pyboundfn_callvn
+                    <- pyboundfn_callv <- PyCallKey1 <- [@proc taken]
+```
+
+So pyeval is **not** kept by a call from the compiled Python program. It is kept
+because `PyBodyTramp`'s ADDRESS is taken -- an entry in a table, which is
+reachable from anywhere by construction -- and everything the trampoline can
+reach follows by ordinary call edges. Four such roots account for the whole
+tree. That is the thing to design against; `pyeval`'s size is the symptom.
+
+**And it says why the riscv32 number was uninformative:** there, 143 stub
+targets exist and 139 of them land INSIDE a body, so `DceRangeHoldsStub` roots
+those 128 bodies before the reachability walk ever runs and the @proc chain is
+never the FIRST reason for anything. See
+[[bug-a-riscv32-dce-keeps-135-more-bodies-than-xtensa-on-one-program]].
+
+**Keep LIVE and REACHABLE apart when quoting any of this.** Every row above is
+a CONSERVATIVE claim by the pass -- "an address of it is in a table" is not "it
+runs". The report's own header says so.
 
 **Do not start by deleting or guarding the unit.** The hook variables pylib
 declares for pyeval to install into (`PyIterCallHook` and the rawKind=2 closure

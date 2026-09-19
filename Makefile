@@ -35858,6 +35858,43 @@ test-quick: $(COMPILER)
 	  | grep -q 'dce: off: wasm32 references functions by INDEX' \
 	  || { echo "test_dce_stub_calls[wasm32]: expected --dce to refuse wasm32 and say why"; exit 1; }
 	@echo "=== test_dce_stub_calls[wasm32]: correctly refused ==="
+	# --dce-why: THE POSITIVE CONTROL FOR THE REPORT ITSELF. `--dce-report` says
+	# which bodies DIED; --dce-why says why each SURVIVOR lived, and it exists
+	# because a 2 MB NilPy ESP image had 819,480 B rooted as "holds a stub
+	# target" and nothing could see that. A report is an instrument, so it needs
+	# a case it must get right ON A BODY WHOSE ROOT IS ALREADY KNOWN -- a report
+	# that cannot be wrong about a known body cannot be trusted about pyeval's
+	# 624 KB.
+	#
+	# TWO BODIES, TWO DIFFERENT ROOTS, drawn from the population the report is
+	# about (live bodies of a compiled program, not a synthetic table):
+	#   TDerived.Tag  is reached ONLY through a VMT slot -- no call site names it
+	#   RootedByCall  is reached ONLY by a direct call, and never at hop 1, so a
+	#                 report that printed one hop and stopped would still fail
+	# The CHAIN is asserted, not just the root kind: a root kind alone names a
+	# category, a chain names the mechanism.
+	#
+	# THE CONTROL HAD TO BE MADE NON-INLINABLE and that is worth the line:
+	# written flat (`Result := n * 7`) RootedByCall is inlined at the default -O
+	# and then correctly DROPPED -- the program still prints 42 and the filter
+	# prints nothing, which is exactly what a broken filter produces. Both
+	# helpers are self-recursive for that reason. Measured 2026-09-20.
+	#
+	# LIVE IS NOT REACHABLE, and the report says so in its own header. Every
+	# reason here is a CONSERVATIVE claim by the pass: "the VMT names it" is not
+	# "it runs".
+	./$(COMPILER) --dce-why=rootedbycall test/test_dce_why_root_report.pas $(TESTTMP)/dcewhy 2>$(TESTTMP)/dcewhy_call.log >/dev/null
+	./$(COMPILER) --dce-why=.tag test/test_dce_why_root_report.pas $(TESTTMP)/dcewhy 2>$(TESTTMP)/dcewhy_vmt.log >/dev/null
+	grep -q 'RootedByCall <- Driver <- \[called from unowned code\]' $(TESTTMP)/dcewhy_call.log \
+	  || { echo "--dce-why: a body reached only by a call through Driver is not reported as such:"; \
+	       grep 'match' $(TESTTMP)/dcewhy_call.log; exit 1; }
+	grep -q 'TDerived.Tag <- \[vmt/rtti slot\]' $(TESTTMP)/dcewhy_vmt.log \
+	  || { echo "--dce-why: a body reached only through a VMT slot is not reported as such:"; \
+	       grep 'match' $(TESTTMP)/dcewhy_vmt.log; exit 1; }
+	# And the program still has to COMPUTE right: a build that reports
+	# beautifully and answers wrongly fails here.
+	tools/expect_same.sh dce_why_root_report "$$($(TESTTMP)/dcewhy)" "$$(printf 'tag 2\ncall 42')"
+	@echo "=== test_dce_why_root_report: --dce-why names both known roots ==="
 	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
 	# pthread never runs the __pxxclone stub that installs a per-thread TLS
 	# block, so it inherits the main thread's gs and shares its heap magazine --

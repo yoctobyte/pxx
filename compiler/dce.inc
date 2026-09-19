@@ -83,12 +83,37 @@ begin
 end;
 
 procedure DceMark(p: Integer);
+{ DceWhyNow/DceViaNow are read HERE rather than passed, because this is called
+  from a dozen root loops and the reachability walk, and widening the signature
+  would touch every one of them for a field only --dce-why reads. The pair is
+  set once per loop; the FIRST mark wins, which is what makes the record a
+  chain rather than a last-writer. }
 begin
   if (p < 0) or (p >= ProcCount) then Exit;
   if DceLive[p] then Exit;
   DceLive[p] := True;
+  DceWhy[p] := DceWhyNow;
+  DceVia[p] := DceViaNow;
   DceWork[DceWorkCount] := p;
   Inc(DceWorkCount);
+end;
+
+function DceWhyName(code: Integer): AnsiString;
+begin
+  case code of
+    DCE_WHY_VMT:      DceWhyName := 'vmt/rtti slot';
+    DCE_WHY_PROCADDR: DceWhyName := '@proc taken';
+    DCE_WHY_IRAM:     DceWhyName := 'iram call fixup';
+    DCE_WHY_INIT:     DceWhyName := 'unit initialization';
+    DCE_WHY_ENTRY:    DceWhyName := 'entry stub call';
+    DCE_WHY_FINI:     DceWhyName := 'unit finalization';
+    DCE_WHY_FINIRUN:  DceWhyName := 'finalizer runner';
+    DCE_WHY_EXPORT:   DceWhyName := 'exported (--emit-obj)';
+    DCE_WHY_STUB:     DceWhyName := 'holds a stub target';
+    DCE_WHY_FREECODE: DceWhyName := 'called from unowned code';
+    DCE_WHY_CALL:     DceWhyName := 'called by';
+  else DceWhyName := 'unset';
+  end;
 end;
 
 function DceAddStubTarget(t: Integer): Boolean;
@@ -227,6 +252,136 @@ begin
   if DceReport then writeln(StdErr, 'dce: ', s);
 end;
 
+procedure DceWhyChain(p: Integer; var line: AnsiString);
+{ p's first root and the hops back to it: `PyHostCall <- CallBuiltin <- ... <-
+  [@proc taken]`. Bounded at 8 hops because a chain is for reading, and a
+  cycle here would be a bug in the mark order rather than in the program. }
+var hops, v: Integer;
+begin
+  line := '';
+  hops := 0;
+  v := p;
+  while (hops < 8) and (v >= 0) and (DceWhy[v] = DCE_WHY_CALL) and (DceVia[v] >= 0) do
+  begin
+    v := DceVia[v];
+    line := line + ' <- ' + Procs[v].Name;
+    Inc(hops);
+  end;
+  if (v >= 0) and (DceWhy[v] = DCE_WHY_CALL) and (DceVia[v] >= 0) then
+    line := line + ' <- ...'
+  else if v >= 0 then
+    line := line + ' <- [' + DceWhyName(DceWhy[v]) + ']';
+end;
+
+procedure DceReportWhy(liveB: Integer);
+{ WHAT THIS ANSWERS AND WHAT IT DOES NOT. It answers "what kept this body in
+  the image", which had no instrument at all -- `--dce-report` says which
+  bodies DIED. It does NOT answer "can the program reach this", and the two
+  are different questions: a root is a conservative claim (an address in a
+  table can be called from anywhere), so a body can be LIVE here and
+  unreachable in every run. Anything quoting this report has to keep those
+  words apart, or it will read as having decided a question it cannot see.
+
+  The reason recorded is the FIRST that reached a body. A body reachable four
+  ways shows one, and which one is a property of the mark order. }
+var i, slot, sz, big, bigIdx, shown: Integer;
+    perWhy: array[0..12] of Integer;
+    perWhyN: array[0..12] of Integer;
+    seen: array of Boolean;
+    chain: AnsiString;
+begin
+  for i := 0 to 12 do begin perWhy[i] := 0; perWhyN[i] := 0; end;
+  SetLength(seen, ProcCount);
+  for i := 0 to ProcCount - 1 do seen[i] := False;
+  slot := 0;
+  while slot < DceOrderCount do
+  begin
+    i := DceOrder[slot];
+    sz := DceBodyEnd(slot) - Procs[i].BodyAddr;
+    if DceLive[i] and (sz > 0) and (DceWhy[i] >= 0) and (DceWhy[i] <= 12) then
+    begin
+      perWhy[DceWhy[i]] := perWhy[DceWhy[i]] + sz;
+      perWhyN[DceWhy[i]] := perWhyN[DceWhy[i]] + 1;
+    end;
+    Inc(slot);
+  end;
+  writeln(StdErr, 'dce-why: live bytes by FIRST reason (live is not reachable;',
+          ' a root is a conservative claim)');
+  for i := 0 to 12 do
+    if perWhyN[i] > 0 then
+      writeln(StdErr, 'dce-why:   ', perWhy[i], 'B  ', perWhyN[i], ' bodies  ',
+              DceWhyName(i));
+  writeln(StdErr, 'dce-why: total live ', liveB, 'B');
+  { --dce-why=<substr>: every live body whose name matches, with its chain.
+    Substring and case-insensitive, because a method reads as `TDerived.Tag`
+    here and nobody remembers which. }
+  if DceWhyFilter <> '' then
+  begin
+    slot := 0;
+    while slot < DceOrderCount do
+    begin
+      i := DceOrder[slot];
+      sz := DceBodyEnd(slot) - Procs[i].BodyAddr;
+      if Pos(LowerCase(DceWhyFilter), LowerCase(Procs[i].Name)) > 0 then
+      begin
+        if DceLive[i] then
+        begin
+          DceWhyChain(i, chain);
+          writeln(StdErr, 'dce-why:   [match] ', sz, 'B  ', Procs[i].Name, chain);
+        end
+        else
+          { A matched name that is DEAD is the answer to a different question
+            and it must not look like silence: a filter printing nothing reads
+            as "no such body", which is what an inlined or renamed routine
+            looks like too. }
+          writeln(StdErr, 'dce-why:   [match] ', sz, 'B  ', Procs[i].Name, ' <- DROPPED');
+      end;
+      Inc(slot);
+    end;
+  end;
+  { WHERE THE STUB TARGETS LAND, because `holds a stub target` is the one root
+    kind that is about ADDRESSES rather than about a table, and it is the one
+    that dominates a NilPy image. A target inside a body pins that body and
+    everything it calls; a target between bodies pins nothing. }
+  shown := 0;
+  for i := 0 to DceStubCount - 1 do
+  begin
+    slot := DceOwnerOf(DceStubTgt[i]);
+    if slot >= 0 then
+    begin
+      if shown < 12 then
+        writeln(StdErr, 'dce-why:   stub target ', DceStubTgt[i], ' is INSIDE ',
+                Procs[slot].Name, ' (+', DceStubTgt[i] - Procs[slot].BodyAddr, ')');
+      Inc(shown);
+    end;
+  end;
+  writeln(StdErr, 'dce-why: stub targets ', DceStubCount, ', of which ', shown,
+          ' land inside a body (each pins that body and its callees)');
+  { The 20 biggest live bodies, each with its chain back to a root. Selection
+    is an O(n*20) scan rather than a sort: n is thousands and this runs once,
+    behind a flag, and a sort here would need another array the size of
+    DceOrder. }
+  shown := 0;
+  while shown < 20 do
+  begin
+    big := 0; bigIdx := -1;
+    slot := 0;
+    while slot < DceOrderCount do
+    begin
+      i := DceOrder[slot];
+      sz := DceBodyEnd(slot) - Procs[i].BodyAddr;
+      if DceLive[i] and not seen[i] and (sz > big) then
+      begin big := sz; bigIdx := i; end;
+      Inc(slot);
+    end;
+    if bigIdx < 0 then Break;
+    seen[bigIdx] := True;
+    DceWhyChain(bigIdx, chain);
+    writeln(StdErr, 'dce-why:   ', big, 'B  ', Procs[bigIdx].Name, chain);
+    Inc(shown);
+  end;
+end;
+
 procedure DceRun;
 var i, j, p, owner, a, b, slot, liveN, deadN, liveB, deadB, gotB: Integer;
     why: AnsiString; src, dst: Integer;
@@ -316,25 +471,37 @@ begin
 
   { --- roots ------------------------------------------------------------- }
   i := 0;
-  while i < ProcCount do begin DceLive[i] := False; Inc(i); end;
+  while i < ProcCount do
+  begin
+    DceLive[i] := False; DceWhy[i] := DCE_WHY_UNSET; DceVia[i] := -1;
+    Inc(i);
+  end;
   DceWorkCount := 0;
+  DceViaNow := -1;   { every loop below installs a ROOT; only the walk sets a via }
   { an address in a VMT / RTTI / interface table can be called from anywhere }
+  DceWhyNow := DCE_WHY_VMT;
   i := 0;
   while i < MethodFixCount do begin DceMark(MethodFixups[i].ProcIdx); Inc(i); end;
   { @proc: same argument }
+  DceWhyNow := DCE_WHY_PROCADDR;
   i := 0;
   while i < ProcAddrFixCount do begin DceMark(ProcAddrFix[i].ProcIdx); Inc(i); end;
+  DceWhyNow := DCE_WHY_IRAM;
   i := 0;
   while i < IramCallFixCount do begin DceMark(IramCallFix[i].ProcIdx); Inc(i); end;
+  DceWhyNow := DCE_WHY_INIT;
   i := 0;
   while i < InitProcCount do begin DceMark(InitProcs[i]); Inc(i); end;
   { an entry stub's hand-patched call -- the C frontend's `main`, and its
     pre-main initializer shell. See RecordEntryRoot for why a CallFix edge
     cannot exist for these. }
+  DceWhyNow := DCE_WHY_ENTRY;
   i := 0;
   while i < EntryRootCount do begin DceMark(EntryRootProc[i]); Inc(i); end;
+  DceWhyNow := DCE_WHY_FINI;
   i := 0;
   while i < FiniProcCount do begin DceMark(FiniProcs[i]); Inc(i); end;
+  DceWhyNow := DCE_WHY_FINIRUN;
   DceMark(FiniRunnerProc);
   { AN OBJECT'S CALLERS ARE NOT IN THE OBJECT. Everything this object exports is
     reachable by definition -- that is what exporting means -- and no edge inside
@@ -350,6 +517,7 @@ begin
     copy if you are not. }
   if EmitObjMode then
   begin
+    DceWhyNow := DCE_WHY_EXPORT;
     i := 0;
     while i < ProcCount do
     begin
@@ -379,6 +547,7 @@ begin
     bodies end up kept-but-dead, so the same program builds on x86-64 and
     xtensa and refuses here.
     bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile }
+  DceWhyNow := DCE_WHY_STUB;
   slot := 0;
   while slot < DceOrderCount do
   begin
@@ -391,6 +560,7 @@ begin
 
   { a call from code that is never dropped -- the entry stub, the runtime stubs,
     the main body -- is a root by definition }
+  DceWhyNow := DCE_WHY_FREECODE;
   i := 0;
   while i < CallFixCount do
   begin
@@ -435,6 +605,7 @@ begin
     backwards instead of shifting the array. }
 
   { --- reachability ------------------------------------------------------- }
+  DceWhyNow := DCE_WHY_CALL;
   while DceWorkCount > 0 do
   begin
     Dec(DceWorkCount);
@@ -442,6 +613,7 @@ begin
     if p = 0 then a := 0 else a := DceEdgeHead[p - 1];
     b := DceEdgeHead[p];
     i := a;
+    DceViaNow := p;   { whoever this walk reaches was reached BY p }
     while i < b do begin DceMark(DceEdgeTo[i]); Inc(i); end;
   end;
 
@@ -502,6 +674,7 @@ begin
     writeln(StdErr, 'dce: bodies ', DceOrderCount, '  live ', liveN, ' (', liveB,
             'B)  dead ', deadN, ' (', deadB, 'B)  dropping ', DceRemCount, ' (', gotB, 'B)');
     writeln(StdErr, 'dce: code ', CodeLen, 'B -> ', CodeLen - gotB, 'B');
+    if DceWhyReport then DceReportWhy(liveB);
   end;
   if DceRemCount = 0 then Exit;
 

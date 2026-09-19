@@ -221,6 +221,20 @@ const
   { Distinct non-proc code targets (runtime stubs + the entry jump) one image
     can hold. Around 50 today; the pass refuses to run rather than truncate. }
   MAX_DCE_STUBS = 4096;
+  { DceWhy codes -- the root KINDS DceRun installs, in the order it installs
+    them, plus the two that are not roots at all. Reported by --dce-why. }
+  DCE_WHY_UNSET    = 0;   { dead, or never marked }
+  DCE_WHY_VMT      = 1;   { an address in a VMT / RTTI / interface table }
+  DCE_WHY_PROCADDR = 2;   { @proc taken somewhere }
+  DCE_WHY_IRAM     = 3;   { an IRAM call fixup (ESP) }
+  DCE_WHY_INIT     = 4;   { a unit initialization section }
+  DCE_WHY_ENTRY    = 5;   { an entry stub's hand-patched call }
+  DCE_WHY_FINI     = 6;   { a finalization section }
+  DCE_WHY_FINIRUN  = 7;   { the finalizer runner itself }
+  DCE_WHY_EXPORT   = 8;   { --emit-obj: exported, so callers are outside }
+  DCE_WHY_STUB     = 9;   { something jumps INTO this body's range }
+  DCE_WHY_FREECODE = 10;  { called from code no body owns (entry, stubs, main) }
+  DCE_WHY_CALL     = 11;  { called by DceVia[p] -- the only non-root reason }
   { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
     --threadsafe is the high-water mark — every global reference in the compiler's
     own code costs one — so this grows with the compiler and had been sitting just
@@ -4516,8 +4530,30 @@ var
     Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
   DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }
   DceReport     : Boolean;   { --dce-report: print what it found (implies --dce) }
+  DceWhyReport  : Boolean;   { --dce-why: print WHY each live body lived }
+  DceWhyFilter  : AnsiString;{ --dce-why=<substr>: name those bodies too, not just the biggest }
   DceOff        : Boolean;   { --no-dce: keep every body even at -O3 }
   DceLive       : array of Boolean;
+  { WHY a body is live: the FIRST thing that reached it, and through whom.
+    `--dce-report` answers which bodies DIED; nothing answered this, and
+    without it every size question about a big image is guesswork
+    (bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter measured
+    624,684 B of a runtime eval() the program never calls, with no way to ask
+    what holds it).
+
+    DceWhy[p] is one of the DCE_WHY_* codes below; DceVia[p] is the proc that
+    marked p (a caller, for DCE_WHY_CALL) or -1 when p is a root. Following
+    DceVia to -1 is the CHAIN -- a root KIND alone names a category, not a
+    mechanism.
+
+    FIRST, not only: a body reachable four ways records the way that reached it
+    first, which is a property of the mark order and not of the program. So
+    this says why the PASS kept a body; it does not say the program can reach
+    it, and a report that blurs those two decides nothing. }
+  DceWhy        : array of Integer;
+  DceVia        : array of Integer;
+  DceWhyNow     : Integer;   { what DceMark should record for the next mark }
+  DceViaNow     : Integer;
   DceWork       : array of Integer;   { mark worklist }
   DceWorkCount  : Integer;
   DceOrder      : array of Integer;   { bodied procs, sorted by BodyAddr }

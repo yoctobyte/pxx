@@ -1016,6 +1016,8 @@ begin
   DumpProcMap := False;
   DceEnabled := False;
   DceReport := False;
+  DceWhyReport := False;
+  DceWhyFilter := '';
   DceOff := False;
   EmitMapFile := True;   { default on; --no-map suppresses }
   MeasureRegcall := False;
@@ -1160,6 +1162,24 @@ begin
     else if option = '--dce-report' then
     begin
       DceEnabled := True; DceReport := True;
+      Inc(i);
+    end
+    else if Copy(option, 1, 10) = '--dce-why=' then
+    begin
+      { A named body rather than the biggest twenty. The top-20 listing answers
+        "where is the weight"; this answers "why is THIS one here", which is
+        the question a positive control asks and the one a reader has after
+        grepping a map file. }
+      DceEnabled := True; DceReport := True; DceWhyReport := True;
+      DceWhyFilter := Copy(option, 11, Length(option) - 10);
+      Inc(i);
+    end
+    else if option = '--dce-why' then
+    begin
+      { implies --dce-report: the why-listing is an ADDITION to it, and asking
+        for it while the pass is off would print nothing and look like an
+        answer }
+      DceEnabled := True; DceReport := True; DceWhyReport := True;
       Inc(i);
     end
     else if option = '--no-map' then

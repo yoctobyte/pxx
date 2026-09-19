@@ -29242,3 +29242,50 @@ yourself" — this is the case where the range is not enough either.
 **THE TRIGGER THAT WOULD PROMOTE THIS TO CLAUDE.md:** a second regression where
 the last-green-to-first-red range provably cannot contain the cause. One
 subsystem so far.
+
+## "WHICH BODIES DIED" IS NOT "WHY IS THIS ONE ALIVE" — AND ONLY THE SECOND QUESTION SHRINKS AN IMAGE
+
+`--dce-report` lists what the pass dropped. That is the wrong half for size
+work: a 2 MB image is made of what SURVIVED, and a survivor's size tells you
+nothing about what to change. Measured 2026-09-19/20 on the ESP NilPy demo —
+`pyeval.pas` is 30–39% of the image for a program that never calls `eval`, and
+four sessions could describe that and none could act on it, because nothing
+said which ROOT was holding it.
+
+**`--dce-why`** (compiler/dce.inc) prints, per live body, the FIRST root that
+reached it and the CHAIN of call edges from that root, plus live bytes grouped
+by reason. **`--dce-why=<substring>`** names a specific body instead of the
+twenty biggest — which is what a positive control needs, and what you want
+after grepping a map file.
+
+Three things it was built with, each one load-bearing:
+
+- **The chain, not the root kind.** `[vmt/rtti slot]` names a category;
+  `PyHostCall <- PyFieldGet <- DoAssignment <- ExecStatement <- ExecSuite <-
+  CallUserFn <- PyBodyTramp <- [@proc taken]` names the mechanism, and that one
+  line is what turned "pyeval is huge" into "one trampoline's address is in a
+  table". Only the second is actionable.
+- **A positive control from the right population** —
+  `test/test_dce_why_root_report.pas`, asserted in `test-quick`: one body
+  reachable ONLY through a VMT slot, one reachable ONLY by a direct call and
+  never at hop 1. A report that cannot be wrong about a body whose root you
+  already know cannot be trusted about the 624 KB you are asking it about.
+  **The control had to be made non-inlinable to exist at all**: written flat,
+  the call-rooted helper is inlined and then correctly DROPPED, the program
+  still prints the right answer, and the report says nothing — which is exactly
+  what a broken filter produces. The filter therefore prints `<- DROPPED` for a
+  matched-but-dead name rather than staying silent, because silence and absence
+  must not look alike.
+- **LIVE is not REACHABLE, in the output's own header.** Every reason the pass
+  gives is a CONSERVATIVE claim: "its address is in a table" is not "it runs".
+  Quoting a live-byte figure as reachable code is the error this wording exists
+  to stop.
+
+**And read the per-reason table as a property of the TARGET, not of the
+program.** Same source, same flags, 2026-09-20: riscv32 attributes 819,480 B to
+`holds a stub target` (143 stub targets, 139 landing INSIDE a body) where
+xtensa attributes zero (4 targets, none inside a body). That rule fires before
+the reachability walk, so on riscv32 the `@proc` chain above is never the first
+reason for anything and the report is markedly less informative there. If a
+root report looks uninformative, check whether an earlier, coarser root rule is
+claiming everything first.

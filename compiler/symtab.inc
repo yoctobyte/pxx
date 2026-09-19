@@ -13997,6 +13997,7 @@ begin
   SetLength(ProcInline, n);  SetLength(InlineBodyRoot, n);  SetLength(InlineParamCnt, n);
   SetLength(InlineBodyIsStmt, n);  SetLength(InlineLocalCnt, n);  SetLength(InlineBodyHasCall, n);
   SetLength(ProcFrameSensitive, n);  SetLength(DceLive, n);  SetLength(DceWork, n);
+  SetLength(DceWhy, n);  SetLength(DceVia, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcWeakExternal, n);  SetLength(ProcNoSelf, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);

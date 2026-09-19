@@ -6,7 +6,7 @@ status: open
 found: 2026-09-19
 found-by: frankS
 blocked-by: []
-summary: "On one NilPy program (test/test_dce_nilpy_esp_kept_body.npy, --platform=esp) --dce leaves riscv32 with 870 live bodies / 2,065,508 B of code and xtensa with 735 / 1,721,263 B -- 135 bodies and ~344 KB more on riscv32, from the same source and the same live set to begin with. The measured asymmetry upstream of that is stub targets: before the kept-body fix landed, --dce-report named 71 bodies `kept (holds a stub target)` on riscv32 and ZERO on xtensa, and those 71 are now roots (correctly -- something jumps into them), dragging their callees live with them. So the question is not DCE's: it is why riscv32 codegen puts a CodeRef target INSIDE 71 procedure bodies where xtensa puts none. A stub target inside a body is a root by construction, so every one of them is a body no program can ever drop."
+summary: "On one NilPy program (test/test_dce_nilpy_esp_kept_body.npy, --platform=esp) --dce leaves riscv32 with 870 live bodies / 2,065,508 B of code and xtensa with 735 / 1,721,263 B -- 135 bodies and ~344 KB more on riscv32, from the same source and the same live set to begin with. The measured asymmetry upstream of that is stub targets: before the kept-body fix landed, --dce-report named 71 bodies `kept (holds a stub target)` on riscv32 and ZERO on xtensa, and those 71 are now roots (correctly -- something jumps into them), dragging their callees live with them. So the question is not DCE's: it is why riscv32 codegen puts a CodeRef target INSIDE 71 procedure bodies where xtensa puts none. A stub target inside a body is a root by construction, so every one of them is a body no program can ever drop. PRICED 2026-09-20 by `--dce-why`: on the nilpy-c3 demo riscv32 has **143 stub targets of which 139 land inside a body**, rooting **819,480 B across 128 bodies** as `holds a stub target` -- 39.6% of its live code -- while xtensa has 4 stub targets, NONE inside a body, and 0 B rooted that way. The counting is not the open part; the open part is whether xtensa is smaller because its stubs land between bodies or because it emits a code-offset call WITHOUT recording a CodeRef, which would make its smaller live set a pass running blind rather than a win."
 ---
 
 # riscv32 DCE keeps 135 more bodies than xtensa on one program
@@ -76,3 +76,34 @@ could be one something jumps into. Establish which before treating riscv32's
 extra 381 KB as waste. Neither backend file mentions `RecordCodeRef` directly;
 both go through the shared helper, which is evidence for "where the stubs land"
 and not yet proof.
+
+## 2026-09-20 (frankS) — the root report prices it, and it does not answer the open half
+
+`--dce-why` on `examples/esp32/nilpy-c3/main/main.npy`, both ISAs, same flags:
+
+```
+riscv32  stub targets 143, of which 139 land inside a body
+         819,480 B / 128 bodies rooted `holds a stub target`  (39.6% of live)
+xtensa   stub targets 4,   of which 0 land inside a body
+         0 B rooted that way
+```
+
+Named, with the offset the target lands at inside the body:
+
+```
+BAddSigned +1280   BDivMod +4788   BShr +2896
+PXXPromoFromStr +3544   SubSlowVV +2976   PXXPromoMod +2496
+```
+
+Those offsets are the useful new fact: a stub target 1,280 or 4,788 bytes into
+a body is not a body ENTRY that a table happens to name — it is a jump into the
+middle of compiled code, which is what `DceRangeHoldsStub` is right to treat as
+un-droppable. **It also explains why this ISA's root report is less informative
+than xtensa's**: this rule fires before the reachability walk, so on riscv32 the
+FIRST reason for 128 bodies is the stub rule and the `@proc`/`PyBodyTramp` chain
+that xtensa shows for the same code is invisible here. See
+[[bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter]].
+
+**The rule-out above is untouched by this** — the report counts CodeRefs, and a
+call emitted without one is exactly what a CodeRef count cannot see. Do not read
+"xtensa: 4" as "xtensa has 4"; read it as "xtensa RECORDS 4".
