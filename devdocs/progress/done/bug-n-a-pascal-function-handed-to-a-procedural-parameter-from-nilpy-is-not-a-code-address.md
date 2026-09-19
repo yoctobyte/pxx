@@ -5,7 +5,7 @@ type: bug
 owner: frankb-8e
 blocked-by: []
 summary: "`MkKind(TheMaker)` — a Pascal function name passed from NilPy into a Pascal `function(...)` procedural PARAMETER — stores something that is not a code address, and every later call through it segfaults, INCLUDING a call made from Pascal. Wiring the identical field inside Pascal with `@TheMaker` gives 502 through both languages. The call site is innocent; the value is wrong. Present in the pin."
-status: working
+status: done
 ---
 
 # A Pascal function handed to a procedural parameter from NilPy is not a code address
@@ -133,3 +133,48 @@ halves are separable and this ticket is the second one: what lands in the slot
 once the CALLEE's signature says `procedure`, not what class the frontend
 inferred for the value. Do not take a heap pointer here as evidence of a
 lowering bug in the inference half.
+
+## Resolution (frankb-8e, 2026-09-20) -- commit 8826e6aec
+
+MECHANISM. NilPy has exactly one place that coerces a callable VALUE into a raw
+slot, `PyCoerceCallableArgsIn` in pyparser.inc, and it knew about `Pointer`,
+`cbuf` and `cptrarray` shapes only. A procedural PARAMETER is none of those:
+`ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] >= 0` marks it and nothing
+read that mark, so the carrier record built by `PyMakeFuncValueFor` was stored
+as-is. That record is a Python callable object, not a code address, so the
+slot held a heap pointer and every call through it -- from either language --
+jumped into a record header.
+
+FIX. A new first arm in `PyCoerceCallableArgsIn`, guarded on that mark, asks
+`PyCarrierNamedProc` which routine the carrier was built FOR and replaces the
+argument with a plain `AN_PROCADDR` to it. `PyCarrierNamedProc` reads the
+carrier's `AN_PYSIGREF` argument, whose `ASTIVal` is the original routine;
+it falls back to the first `AN_PROCADDR` in the carrier, which is safe
+because that fallback can only be the all-Variant `$pycallwrap_*` wrapper and
+a wrapper's signature cannot pass `ProcSigCompatible`.
+
+The signature test is the existing `ProcSigCompatible`, so a routine of the
+wrong shape is not silently coerced: it gets a named warning instead
+(suppressed during `PyTypingPass`, which runs the same site twice).
+
+WHAT IS NOT FIXED, and it is the thing the ESP demo actually wants: this
+delivers a PASCAL routine's address into a Pascal procedural slot. A NilPy
+`def` handed to a C or Pascal callback slot still does not work, because the
+code address that would have to be materialised is the carrier's, and a NilPy
+def has no native-ABI entry point of that signature. Filed separately; frankH
+owns the half that changes how the carrier is BUILT.
+
+FIXTURE. `test/test_nilpy_function_into_a_procedural_parameter.npy` with
+`test/nilpy_units/procslot.pas`, wired into test-nilpy, six rows all `502`:
+wired-with-@ vs handed-as-a-name, crossed with called-from-Pascal and
+called-from-NilPy, plus a list-element receiver so the coercion is not only
+exercised through a direct local. Positive control on
+stable_linux_amd64/default/pinned: segfault. The wired rows are the arm that
+must NOT change and they are green under both binaries.
+
+GATE. `make compiler/pascal26` converged; `gate.sh quick` GREEN; full
+test-nilpy GREEN at compiler f99f37bcebe2.
+
+
+## Log
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
