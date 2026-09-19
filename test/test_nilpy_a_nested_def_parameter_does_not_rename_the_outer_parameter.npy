@@ -1,0 +1,56 @@
+# A nested def's PARAMETER sharing a name with an enclosing local that is
+# rebound to a different type (`tp = None`). Parsing the nested header rewrote
+# the shared header globals, so the enclosing def's rebound-parameter check
+# asked about `tp` in ITS OWN slot 0 and renamed the real parameter there away:
+# "undefined variable (a)". TSP departure.py:200 (pinned v411 too). The shared
+# name sits in the nested def's first slot and its second, since each renamed a
+# different outer parameter. The local comes after the nested def and before
+# it. A method with the same shape, which already used a local copy, and a
+# genuinely rebound parameter are the controls. CPython is the oracle.
+def g(a):
+    def f(tp):
+        return tp
+    tp = None
+    return a + f(1)
+
+
+def g2(a, b):
+    def f(x, tp):
+        return x + tp
+    tp = None
+    return a + b + f(1, 2)
+
+
+def g3(a):
+    tp = None
+    def f(tp):
+        return tp
+    return a + f(1)
+
+
+def design(site, launch_us):
+    t_dep = launch_us + 1
+
+    def arrival(vi, tp):
+        return site + launch_us + vi + tp
+
+    tp = None
+    for k in range(2):
+        tp = arrival(t_dep, k)
+    return tp
+
+
+class K:
+    def m(self, a):
+        def f(tp):
+            return tp
+        tp = None
+        return a + f(1)
+
+
+def aug(x: int):
+    x /= 2
+    return x
+
+
+print(g(5), g2(5, 6), g3(5), design(10, 5), K().m(5), aug(9))

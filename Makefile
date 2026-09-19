@@ -4850,6 +4850,9 @@ test-nilpy: $(COMPILER)
 	# math.dist, against CPython.
 	./$(COMPILER) test/test_nilpy_math_dist.npy $(TESTTMP)/test_nilpy_mathdist26
 	$(TESTTMP)/test_nilpy_mathdist26 | diff -u test/test_nilpy_math_dist.expected -
+	# a nested def's parameter must not rename the enclosing def's parameter.
+	./$(COMPILER) test/test_nilpy_a_nested_def_parameter_does_not_rename_the_outer_parameter.npy $(TESTTMP)/test_nilpy_nestparamren26
+	$(TESTTMP)/test_nilpy_nestparamren26 | diff -u test/test_nilpy_a_nested_def_parameter_does_not_rename_the_outer_parameter.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

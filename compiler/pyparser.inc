@@ -37517,6 +37517,20 @@ begin
     end;
   end;
   PyCollectLocalsAST(bodyStart);
+  { The trial parse just run parsed every NESTED def's header too, through the
+    one shared header grammar, and that rewrote PyHdrPNames/PyHdrPTypes. Read
+    back from the Proc, which holds this def's own. Without this,
+    `def g(a): def f(tp): ...; tp = None` asked "is `tp` rebound?" about g's
+    parameter SLOT 0, found `tp = None` in g's body, and renamed a's symbol to
+    `$byref.tp` -- "undefined variable (a)" (TSP departure.py:200, pinned v411
+    too). A rebinding that kept the type (`tp = 3`) hid it. PyParseMethod reads
+    a local copy (pnames) and never had this. }
+  for i := 0 to pbOwn - 1 do
+    if i < MAX_PROC_PARAMS then
+    begin
+      PyHdrPNames[i] := Procs[procIdx].Params[i].Name;
+      PyHdrPTypes[i] := Procs[procIdx].Params[i].TypeKind;
+    end;
   { ...and now that the constraint table exists, the same private-slot treatment
     for a TYPED parameter this body rebinds to something its declared type
     cannot hold — see PyReboundParamSlotType. The pass is re-run when any slot
