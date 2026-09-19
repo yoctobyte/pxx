@@ -1,0 +1,46 @@
+# A target of a PARALLEL tuple unpack takes the class of ITS OWN value.
+#
+# PyDrainIfCursor materialises anything declaring __iter__ into a TPyList, which
+# is right for `a, b, c = bag` (one value indexed into several targets) and wrong
+# here: with a value per target nothing is indexed, so the value must be stored
+# as it stands. It was drained, so every target holding an iterable class came
+# out a list — `type(v).__name__` said `list` and `v.typecode` raised, while the
+# plain copy beside it kept the class.
+# bug-n-a-tuple-unpack-target-is-typed-as-the-tuple-not-as-its-element
+import array
+
+
+class G:
+    def __init__(self):
+        self.values = array.array("h")
+        self.values.frombytes(bytes(8))
+        self.base = 5
+
+
+def fields(g):
+    v, b = g.values, g.base
+    # the class must survive: a method only `array` has, and its length
+    print("def", len(v), v.typecode, b)
+
+
+def gen():
+    yield 1
+    yield 2
+
+
+a = array.array("h")
+a.frombytes(bytes(6))
+c = a
+v, b = a, 5
+print("mod", len(v), v.typecode, b, len(c))
+fields(G())
+
+# the ONE-value-many-targets shape still drains its iterable
+w, h = "3x4".split("x")
+print("drain", w, h)
+p, q = [7, 8]
+print("list", p, q)
+
+# a cursor in a parallel position stays a cursor and is still usable
+it, n = gen(), 9
+print("cursor", sum(it), n)

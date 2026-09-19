@@ -32288,6 +32288,7 @@ var names: array[0..7] of AnsiString;
       bug-nilpy-tuple-assignment-to-subscript-targets-does-not-parse }
     subBase: array[0..7] of Integer;
     subIdx: array[0..7] of Integer;
+    vals: array[0..7] of Integer;       { each value's node, before any temp }
     tgtBase: Integer;
     nTargets, nValues, i, symIdx, node, seq, tk: Integer;
     unpCi, unpIdx, unpElem: Integer;
@@ -32374,20 +32375,34 @@ begin
     PyParseBoolExpr;
     if nValues >= nTargets then
       Error('Nil Python: too many values to unpack');
-    { `w, h = map(int, s.split("x"))` — a cursor cannot be indexed, so it is
-      drained here first. CPython unpacks an iterator the same way. }
-    CurASTNode := PyDrainIfCursor(CurASTNode);
-    tk := ASTTk[CurASTNode];
-    if IntToTypeKind(tk) = tyString then tk := Ord(tyAnsiString);
-    tmps[nValues] := AllocVar(PyHiddenName('unp'), IntToTypeKind(tk));
-    if IntToTypeKind(tk) = tyClass then
-      Syms[tmps[nValues]].RecName := ResolveNodeRec(CurASTNode);
-    node := AllocNode(AN_ASSIGN);
-    ASTLeft[node] := PyMakeIdent(tmps[nValues]);
-    ASTRight[node] := CurASTNode;
-    seq := PySeqAppend(seq, node);
+    vals[nValues] := CurASTNode;
     Inc(nValues);
   until not Eat(tkComma);
+  { `w, h = map(int, s.split("x"))` — a cursor cannot be indexed, so it is
+    drained here first. CPython unpacks an iterator the same way.
+
+    ONLY where ONE value feeds SEVERAL targets, which is the shape that indexes
+    it. With a value per target nothing is indexed and the value is stored as it
+    stands, so draining there REPLACED it: `v, b = arr, 5` on an `array.array`
+    stored a TPyList into v — `type(v).__name__` answered `list` against
+    CPython's `array` and `v.typecode` raised AttributeError, while the plain
+    `c = arr` beside it kept the class. Any class declaring `__iter__` is
+    drained by PyDrainIfCursor, so every shim and user iterable had this.
+    bug-n-a-tuple-unpack-target-is-typed-as-the-tuple-not-as-its-element }
+  if (nValues = 1) and (nTargets > 1) then
+    vals[0] := PyDrainIfCursor(vals[0]);
+  for i := 0 to nValues - 1 do
+  begin
+    tk := ASTTk[vals[i]];
+    if IntToTypeKind(tk) = tyString then tk := Ord(tyAnsiString);
+    tmps[i] := AllocVar(PyHiddenName('unp'), IntToTypeKind(tk));
+    if IntToTypeKind(tk) = tyClass then
+      Syms[tmps[i]].RecName := ResolveNodeRec(vals[i]);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(tmps[i]);
+    ASTRight[node] := vals[i];
+    seq := PySeqAppend(seq, node);
+  end;
   { `pfx, content = cs` — ONE value for several targets means the value is a
     SEQUENCE to be indexed, not a shortfall. Our tuples are TPyLists, so this
     is the shape a function returning a tuple produces. }

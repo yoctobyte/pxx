@@ -341,7 +341,7 @@ AN_ASSIGN Left PyMakeIdent(sym2)
 AN_ASSIGN Left PyMakeIdent(symIdx)
 AN_ASSIGN Left PyMakeIdent(targetSym)
 AN_ASSIGN Left PyMakeIdent(tmpSym)
-AN_ASSIGN Left PyMakeIdent(tmps[nValues])
+AN_ASSIGN Left PyMakeIdent(tmps[i])
 AN_ASSIGN Left PyMakeIdent(userSym)
 AN_ASSIGN Left PyMakeIdent(vSym)
 AN_ASSIGN Left PyMakeIdent(vtTmpSym)
@@ -512,6 +512,7 @@ AN_ASSIGN Right val
 AN_ASSIGN Right valLit
 AN_ASSIGN Right valNode
 AN_ASSIGN Right valTmpIdent
+AN_ASSIGN Right vals[i]
 AN_ASSIGN Right valueNode
 AN_ASSIGN Right varNode
 AN_ASSIGN Right vlaAlloc
