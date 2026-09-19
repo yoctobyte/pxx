@@ -870,6 +870,8 @@ type
     FStart: Int64;           { enumerate(xs, START) / RANGE next value }
     FStep: Int64;            { RANGE stride }
     FObj: TObject;           { the user iterator object (USEROBJ) }
+    FSeqLen: Pointer;        { SEQOBJ: the class's __len__ PMethInfo, or nil }
+    FSeqGet: Pointer;        { SEQOBJ: its __getitem__ PMethInfo }
     FBox: TPyList;           { the one-slot prefetch }
     FHas: Boolean;           { FBox holds a prefetched value }
     FEnd: Boolean;           { the source is exhausted — never restarts }
@@ -5459,6 +5461,8 @@ end;
   user object needs it HERE, where the receiver has no static class. }
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean; forward;
+function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Variant;
+                             var res: Variant): Boolean; forward;
 { ...and its arity-3 twin, for `obj[k] = v`. Same reason it is forward-declared
   here: pyvar_setitem needs it and it is defined far below. }
 function PyUserSetitemCall(selfObj: TObject; const k: Variant;
@@ -14756,7 +14760,7 @@ function pyiter_has(it: TPyIter): Boolean;
 var genStep: TPyGenStep; genCur: Pointer;   { PYITER_K_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
-    lenv, idxv: Variant; nilo: TObject;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
+    lenv, idxv: Variant;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
     b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
@@ -14959,17 +14963,16 @@ begin
       that is not a Variant) RAISES rather than ending the walk: answering
       "exhausted" there would put back exactly the silent empty result this
       whole cursor exists to remove. }
-    if PyUserObjHasDunder(it.FObj, '__len__') then
+    if it.FSeqLen <> nil then
     begin
-      if not PyUserObjNoArgDunder(it.FObj, '__len__', lenv) then
+      if not PyUserObjNoArgMeth(it.FObj, PMethInfo(it.FSeqLen), lenv) then
       begin it.FEnd := True; Exit; end;
       if it.FPos >= PPyVarRec(@lenv)^.Payload then
       begin it.FEnd := True; Exit; end;
     end;
     idxv := pyvar_of_int(it.FPos);
-    nilo := nil;
     try
-      if not PyUserArithCall1(it.FObj, nilo, idxv, '__getitem__', pv) then
+      if not PyUserArithCallMeth(it.FObj, PMethInfo(it.FSeqGet), idxv, pv) then
         raise TypeError.Create('cannot iterate ''' + TObject(it.FObj).ClassName +
               ''' by index: its __getitem__ could not be called');
     except
@@ -15752,6 +15755,11 @@ begin
       Result.FKind := PYITER_K_SEQOBJ;
       Result.FPos := 0;
       Result.FObj := ito;
+      { Both methods found ONCE: the step below had looked each up by name
+        per element, three class-chain walks per item. The class of an
+        instance does not change under it, so the answer cannot go stale. }
+      Result.FSeqLen := PyFindDunder(GetInstanceRTTI(Pointer(ito)), '__len__');
+      Result.FSeqGet := PyFindDunder(GetInstanceRTTI(Pointer(ito)), '__getitem__');
       PXXObjRetain(Pointer(ito));
       Exit;
     end;
@@ -21067,17 +21075,7 @@ end;
 
 function PyUserArithCall1(selfObj, otherObj: TObject; const otherV: Variant;
                           const dunder: AnsiString; var res: Variant): Boolean;
-var cls: PClassRTTI; mi: PMethInfo; pk: PInt64; rk: Int64;
-    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
-    fb: TPyArithB; fo: TPyArithO;
-    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
-    pb: TPyArithPB; po: TPyArithPO;
-    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
-    db: TPyArithDB; dob: TPyArithDO;
-    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
-    ib: TPyArithIB; io: TPyArithIO;
-    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
-    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+var cls: PClassRTTI;
 begin
   PyUserArithCall1 := False;
   { `otherObj` is NOT required, and never was used: the only parameter shape
@@ -21091,7 +21089,29 @@ begin
   if (selfObj is TPyList) or (selfObj is TPyDict) or (selfObj is TPyBytes) then Exit;
   cls := GetInstanceRTTI(Pointer(selfObj));
   if cls = nil then Exit;
-  mi := PyFindDunder(cls, dunder);
+  PyUserArithCall1 := PyUserArithCallMeth(selfObj, PyFindDunder(cls, dunder), otherV, res);
+end;
+
+{ The CALL half of PyUserArithCall1, for a caller that already holds the
+  method: the old-style sequence cursor (PYITER_K_SEQOBJ) finds __getitem__
+  once and calls it per element, where the name lookup had been 18% of
+  list(array.array). `selfObj` must already have passed the wrapper's
+  checks (not a list/dict/bytes, has RTTI); a nil `mi` declines. }
+function PyUserArithCallMeth(selfObj: TObject; mi: PMethInfo; const otherV: Variant;
+                             var res: Variant): Boolean;
+var pk: PInt64; rk: Int64;
+    fv: TPyArithV; fs: TPyArithS; fi: TPyArithI; fd: TPyArithD;
+    fb: TPyArithB; fo: TPyArithO;
+    pv: TPyArithPV; ps: TPyArithPS; pi_: TPyArithPI; pd: TPyArithPD;
+    pb: TPyArithPB; po: TPyArithPO;
+    dv: TPyArithDV; ds: TPyArithDS; di: TPyArithDI; dd: TPyArithDD;
+    db: TPyArithDB; dob: TPyArithDO;
+    iv: TPyArithIV; is_: TPyArithIS; ii: TPyArithII; id_: TPyArithID;
+    ib: TPyArithIB; io: TPyArithIO;
+    mode, ot: Integer; op: Pointer; od: Double; oi: Int64;
+    sres: AnsiString; ores: Pointer; r: PPyVarRec;
+begin
+  PyUserArithCallMeth := False;
   if mi = nil then Exit;
   if mi^.Arity <> 2 then Exit;
   if mi^.ParamKinds = nil then Exit;
@@ -21212,7 +21232,7 @@ begin
   end
   else
     Exit;
-  PyUserArithCall1 := True;
+  PyUserArithCallMeth := True;
 end;
 
 { Box an object handle as a VT_OBJECT variant, for handing the REFLECTED operand
