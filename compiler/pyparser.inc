@@ -13719,12 +13719,34 @@ begin
   end;
   if nm = 'maxsize' then
   begin
-    { sys.maxsize — the largest Py_ssize_t, i.e. 2^63-1 on every target pxx
-      builds for. Modelled beside byteorder because the two travel together in
-      the same kind of code (a width or endianness test guarding a fast path)
-      and a missing one costs the same AttributeError. }
+    { sys.maxsize — the largest Py_ssize_t, which is a property of the TARGET
+      and not of this compiler: 2^63-1 where a pointer is 8 bytes, 2^31-1 where
+      it is 4. Read off TARGET_PTR_SIZE (compiler.pas sets it from TargetArch
+      before any frontend runs) rather than re-listing the 32-bit targets here,
+      because a hand-written list is a second statement of the set and is the
+      one that goes stale.
+
+      This said "2^63-1 on every target pxx builds for" until 2026-09-19 and
+      answered 9223372036854775807 on i386, arm32, riscv32 and xtensa — four
+      targets that are not hypothetical. CPython on a 32-bit build answers
+      2147483647, so `sys.maxsize > 2**32` — the idiomatic width test, and the
+      exact thing this member exists to serve — was TRUE on every one of them.
+      Measured on x86-64 and asserted for all targets; the quantifier was the
+      invention, which is this tree's "nothing observably differs is a claim
+      about ONE target" arriving in the NilPy frontend.
+
+      The node stays tyInt64 on both. The VALUE is the claim; typing the 32-bit
+      answer as a narrower kind would change how surrounding arithmetic is
+      evaluated for no gain, and 2^31-1 is representable either way.
+
+      Modelled beside byteorder because the two travel together in the same kind
+      of code (a width or endianness test guarding a fast path) and a missing
+      one costs the same AttributeError. }
     Result := AllocNode(AN_INT_LIT);
-    ASTIVal[Result] := High(Int64);
+    if TARGET_PTR_SIZE >= 8 then
+      ASTIVal[Result] := High(Int64)
+    else
+      ASTIVal[Result] := 2147483647;
     ASTTk[Result] := Ord(tyInt64);
     ASTRight[Result] := -1;
     LastExprTk := tyInt64;

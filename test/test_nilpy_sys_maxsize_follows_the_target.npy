@@ -1,0 +1,11 @@
+# sys.maxsize is a property of the TARGET, not of the compiler: the largest
+# Py_ssize_t, so 2^63-1 where a pointer is 8 bytes and 2^31-1 where it is 4.
+#
+# The second line is the point of the row. `sys.maxsize > 2**32` is THE
+# idiomatic width test in real Python, and it is what this member exists to
+# serve; until 2026-09-19 it answered True on i386, arm32, riscv32 and xtensa
+# because the frontend folded High(Int64) unconditionally. Printing the raw
+# value alone would pin the constant without showing what a wrong one costs.
+import sys
+print("maxsize", sys.maxsize)
+print("wide", sys.maxsize > 2**32)

@@ -7300,6 +7300,27 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_npy_machineword_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_machineword_a64)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
 	tools/expect_same.sh arm32/test_npy_machineword_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_machineword_arm32)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
+	# sys.maxsize is the TARGET's largest Py_ssize_t, so this row is the one
+	# shape a host-only test cannot carry: two expected files, not one. The
+	# frontend folded High(Int64) unconditionally until 2026-09-19, which made
+	# `sys.maxsize > 2**32` -- the idiomatic width test, and the reason the
+	# member is modelled at all -- answer True on every 32-bit target. Measured
+	# on x86-64 and asserted for all of them.
+	# POSITIVE CONTROL, measured not assumed: on the compiler one commit back
+	# the i386 row below prints 9223372036854775807/True against .expected32 and
+	# FAILS. The x86-64 row is the negative control and is unchanged by the fix.
+	# riscv32 and xtensa take the same 4-byte arm and are correct by
+	# construction; they are absent here because NilPy hosted cannot build for
+	# them yet (EmitMmapArena has no riscv32 arm --
+	# bug-a-nilpy-on-cross-targets-four-remaining-walls), not because they pass.
+	./$(COMPILER) test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize26
+	tools/expect_same.sh test_npy_maxsize26 "$$($(TESTTMP)/test_npy_maxsize26)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_a64
+	tools/expect_same.sh aarch64/test_npy_maxsize_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_maxsize_a64)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_i386
+	tools/expect_same.sh i386/test_npy_maxsize_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_maxsize_i386)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_sys_maxsize_follows_the_target.npy $(TESTTMP)/test_npy_maxsize_arm32
+	tools/expect_same.sh arm32/test_npy_maxsize_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_maxsize_arm32)" "$$(cat test/test_nilpy_sys_maxsize_follows_the_target.expected32)"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log
