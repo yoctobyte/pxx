@@ -1,0 +1,117 @@
+# AN ARGUMENT AFTER A `*` UNPACK, AT A METHOD SITE. A trailing POSITIONAL was
+# refused at all three method sites -- `an argument after *unpacking is not
+# supported yet` -- while the identical shape on a free FUNCTION worked. The
+# asymmetry was ours, not the program's: every row here is ordinary Python.
+#
+# WHY IT SPLIT THAT WAY. A plain call with a star is detected before the argument
+# loop and routed to PyStarMixedForwardCall, which builds a positional list and a
+# keyword dict and hands both to PyStarForwardCall, dispatching on len(args) at
+# RUN time. The method sites used the COMPILE-time expansion instead, which
+# claims a fixed set of slots -- and a trailing positional's slot is
+# `firstSlot + len(starred)`, a run-time fact a compile-time expansion does not
+# have. A trailing KEYWORD was fixed in 2026-09-12 because a keyword NAMES its
+# slot and needs no arithmetic; the positional is the hard half and this is it.
+#
+# EVERY ROW IS PAIRED: the free FUNCTION spelling beside the METHOD spelling of
+# the same shape, same values. The function rows already worked and are the
+# controls -- they are what says a regression in the shared forwarder shows up
+# here rather than only in the method rows, since the fix routes methods THROUGH
+# the function's path. The pairing is the point; a method-only fixture would pass
+# just as happily with the plain path broken.
+#
+# ARITY AND ITS OFF-BY-ONE ARE THE WHOLE RISK. Inside PyStarForwardCall the loop
+# index is both the LIST POSITION and the PARAMETER INDEX; for a free function
+# they are the same number, and for a method they differ by one because
+# ParamCount counts `self`. Getting that wrong yields a PLAUSIBLE WRONG ARGUMENT
+# at run time -- no crash, no diagnostic -- so no row below is symmetric in its
+# values: every argument is distinguishable from every other, and the defaults
+# (30, 40) can never be confused with a supplied value.
+
+
+def f(a, b, c=30, d=40):
+    return "f:%s" % ((a, b, c, d),)
+
+
+class K:
+    def m(self, a, b, c=30, d=40):
+        return "m:%s" % ((a, b, c, d),)
+
+    # `self.m(...)` is its own site, distinct from `k.m(...)`, and it is the one
+    # the lekkerzeilen closure actually hits.
+    def via_self(self, xs, tail):
+        return self.m(*xs, tail)
+
+    def via_self_two(self, xs):
+        return self.m(*xs, 3, 4)
+
+    def via_self_mid(self, ys):
+        return self.m(1, *ys, 3)
+
+    def via_self_kwtail(self, xs):
+        return self.m(*xs, 3, d=9)
+
+
+k = K()
+xs = [1, 2]
+ys = [1]
+
+# ---- a single trailing POSITIONAL, the shape the ticket is named for --------
+print("A", f(*xs, 3))
+print("B", k.m(*xs, 3))
+print("C", K().m(*xs, 3))
+print("D", k.via_self(xs, 3))
+
+# ---- TWO trailing positionals: the slot arithmetic has to keep counting -----
+print("E", f(*xs, 3, 4))
+print("F", k.m(*xs, 3, 4))
+print("G", K().m(*xs, 3, 4))
+print("H", k.via_self_two(xs))
+
+# ---- the star in the MIDDLE, written arguments on both sides ----------------
+print("I", f(1, *ys, 3))
+print("J", k.m(1, *ys, 3))
+print("K", K().m(1, *ys, 3))
+print("L", k.via_self_mid(ys))
+
+# ---- a trailing POSITIONAL followed by a KEYWORD ----------------------------
+# Both mechanisms in one call: the positional's slot is computed at run time and
+# the keyword names its own, so this is where a fix that gets one right and the
+# other wrong shows up.
+print("M", f(*xs, 3, d=9))
+print("N", k.m(*xs, 3, d=9))
+print("O", K().m(*xs, 3, d=9))
+print("P", k.via_self_kwtail(xs))
+
+# ---- a trailing **mapping: the FREE function only, and that is deliberate ---
+# `m(*xs, **d)` at a METHOD site is still refused, and it is NOT "the same shape"
+# the ticket called it. A positional tail works because `m(*xs, 3)` IS
+# `m(*(list(xs) + [3]))` -- appending keeps the slot arithmetic at run time where
+# it belongs. A `**mapping` names slots by KEY and appends to nothing, so it has
+# no such identity and still needs the run-time forwarder. Its own refusal
+# message is unchanged and the ticket stays open for it.
+print("Q", f(*xs, **{"c": 7}))
+
+# ---- rows that ALREADY worked, so a fix must not move them ------------------
+# A trailing KEYWORD (fixed 2026-09-12), and a star that fills a default on its
+# own. If the routing change breaks the keyword half, these reds.
+print("T", f(*xs, c=7))
+print("U", k.m(*xs, c=7))
+print("V", K().m(*xs, c=7))
+print("W", k.m(*[1, 2, 3]))
+print("X", f(*[1, 2, 3]))
+# the star alone, exactly filling the required slots and no more
+print("Y", k.m(*xs))
+print("Z", f(*xs))
+
+# ---- THE OPERAND MUST NOT BE MUTATED, which the implementation depends on ----
+# The tail is appended to a FRESH list that the starred operand is extended into,
+# because the star operand reaches the expansion as the caller's OWN list node,
+# not a copy. Appending in place would silently grow `xs` -- and every row above
+# would still pass, because each builds its own arguments. This row is the only
+# thing that sees it.
+keep = [1, 2]
+print("aa", k.m(*keep, 3))
+print("ab", keep)
+print("ac", k.m(*keep, 4))
+print("ad", keep)
+print("ae", len(keep))

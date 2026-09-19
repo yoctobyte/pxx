@@ -4,11 +4,11 @@ track: N
 prio: 75
 type: feature
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-11
 found-by: frankuser
 owner: unassigned
-summary: "PARTLY FIXED 2026-09-12. A KEYWORD argument after the star now works at all three METHOD sites (`obj.m`, `Cls().m`, and the dynamic receiver) -- a keyword NAMES its slot, so the fix was to stop the compile-time expander claiming every remaining slot: PyStarTrailingKwMinSlot looks the tail up and PyStarExpandCallArgs caps `total` at the lowest slot a trailing `name=` claims. This cleared the lekkerzeilen closure, which moved 438 lines further into app.py. STILL OPEN, and it is the hard half: a trailing POSITIONAL (`obj.m(*xs, 5)`), whose slot is `firstSlot + len(starred)` and therefore a RUN-TIME fact a compile-time expansion does not have. That needs the method sites routed through PyStarForwardCall, where `k` doubles as the LIST POSITION and the PARAMETER INDEX -- they differ by one for a method, ~12 sites in a ~200-line generator. A trailing `**mapping` is the same shape. The CONSTRUCTOR arm of even the keyword half is its own ticket."
+summary: "FIXED 2026-09-19 for the POSITIONAL tail, which was the hard half. `m(*xs, 3)` IS `m(*(list(xs) + [3]))` -- so the trailing positionals are APPENDED to the starred list and the existing compile-time expansion is untouched, because it already fills slots from a list whose length it does not know and already fills defaults past its end. THIS TICKET'S PRESCRIPTION WAS WRONG ABOUT THE COST: no arity-dispatch rewrite, no split of `k` into listPos/prm, no routing of the method sites through PyStarForwardCall, and no change to any call site. Two internal functions moved -- PyStarExpandCallArgs builds a FRESH list (extend + append, because the star operand arrives as the caller's OWN node and appending in place would grow `xs`) and PyStarTrailingKwMinSlot skips the positional tail before demanding its keyword run. ALL FIVE PyStarExpandCallArgs SITES GOT IT AT ONCE, the CONSTRUCTOR included -- which this ticket had split off as its own ticket and which now needs none. Measured: obj.m, Cls().m, self.m, one and two trailing positionals, star in the middle, positional-then-keyword, and the constructor, all byte-identical to CPython; 37 existing star/unpack fixtures unmoved. STILL OPEN: a trailing `**mapping` at a method site, which this ticket called \"the same shape\" and is NOT -- a `**` names slots by KEY and appends to nothing, so it has no list identity to exploit and still needs the run-time forwarder. Refused by name, unchanged."
 ---
 
 # A method call cannot take an argument after a `*` unpack
@@ -245,3 +245,68 @@ collector — a control set drawn from the wrong population, the failure
 because a separate question ("is the -2 path reachable where PyKwArgIndex does
 not error?") was asked of the CODE rather than of the controls. A guard asserting
 the four shapes I had thought of would have certified this one.
+
+## RESOLVED 2026-09-19 (frankD) — and the prescription above was the expensive way
+
+The analysis in this ticket is correct about the MECHANISM and wrong about the
+COST, so the prescription is left standing above as history and contradicted
+here rather than quietly edited.
+
+**What it prescribed:** route the three method sites through
+`PyStarForwardCall`, splitting its loop index `k` into `listPos` and
+`prm := listPos + selfSlots`, "about twelve sites" inside a code generator,
+with the warning that getting it wrong yields a plausible wrong argument at run
+time.
+
+**What it needed:** the observation that `m(*xs, 3)` is exactly
+`m(*(list(xs) + [3]))`. A trailing positional's slot is
+`firstSlot + len(starred)` — a run-time fact — and APPENDING it to the starred
+list keeps that fact at run time, where the existing expansion already handles
+it. `PyStarExpandCallArgs` fills slots from a list whose length it does not know
+at compile time and fills defaults past its end; that is the whole requirement,
+and it was already met.
+
+**Two internal changes, no call site touched:**
+
+1. `PyStarExpandCallArgs` — when a positional tail is present, the list is built
+   as a FRESH `TPyList` extended from the star operand and then appended to,
+   instead of binding the operand directly. **The copy is load-bearing:**
+   `PyStarOperandAsList` returns a non-variant operand's own node untouched, so
+   appending in place would silently grow the caller's `xs`. Every other row of
+   the fixture would still pass; one row (`aa`..`ae`) exists to see it.
+2. `PyStarTrailingKwMinSlot` — skips the positional tail before demanding its
+   unbroken `name=value` run, so `m(*xs, 3, d=9)` gets both halves.
+
+**THE CONSTRUCTOR CAME FREE, and this ticket had split it off as its own.** All
+five `PyStarExpandCallArgs` callers changed behaviour together because it is one
+list built differently — the `normalise-dont-special-case.md` outcome, arrived
+at by making the shared thing more capable rather than by teaching each site.
+
+### Measured against CPython
+
+`obj.m`, `Cls().m` and `self.m`; one and two trailing positionals; the star in
+the MIDDLE with written arguments on both sides; a trailing positional followed
+by a keyword; a star that fills a default on its own; the constructor. Every row
+paired with its free-FUNCTION spelling, since the method rows alone would pass
+with the shared path broken. Fixture
+`test/test_nilpy_a_method_call_takes_an_argument_after_a_star.npy`, refused by
+pin v411 and byte-identical to CPython here. 37 existing star/unpack fixtures
+unmoved.
+
+### Still open, and NOT "the same shape"
+
+A trailing `**mapping` at a method site (`k.m(*xs, **d)`). This ticket predicted
+it was the same shape as the positional tail; it is not. A `**` names slots by
+KEY and appends to nothing, so there is no list identity to exploit and it does
+need the run-time forwarder this ticket described. Its refusal is unchanged and
+asserted by name in the Makefile.
+
+### Two corrections this ticket asked for are still outstanding
+
+The two misleading comments it recorded (the first/later-position distinction,
+and the retired "refuses a callee with defaults in the starred range") were not
+touched here — they are in the comment block above `PyStarExpandCallArgs`'s
+caller and remain as this ticket described them.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

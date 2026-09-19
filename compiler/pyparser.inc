@@ -18507,11 +18507,67 @@ end;
 
   A name that is not a declared parameter returns -1 rather than guessing: a
   `**kwargs` collector would accept it, and that is a different lowering. }
+{ How many PLAIN POSITIONAL elements follow the starred one, before any
+  `name=value` run begins. -1 means the tail contains a shape this cannot carry.
+
+  `m(*xs, 3)` is exactly `m(*(list(xs) + [3]))` -- a trailing positional's slot
+  is `firstSlot + len(starred)`, a RUN-TIME fact, and appending it to the
+  starred list is how that fact stays at run time where it belongs. That is the
+  whole trick, and it is why this needed no arity-dispatch rewrite: the
+  expansion in PyStarExpandCallArgs already fills slots from a list whose length
+  it does not know, and already fills defaults past its end.
+
+  REFUSED, by returning -1: a second `*` or a `**` in the tail. `**mapping` does
+  not append to a positional list -- it names slots -- and it keeps its own
+  refusal.
+
+  Called with CurTok on the '*', so the scan starts at TokPos, the same cursor
+  convention PyStarTrailingKwMinSlot and PyStarExpandCallArgs use. }
+function PyStarTailPositionalCount: Integer;
+var i, depth: Integer;
+begin
+  Result := 0;
+  depth := 0;
+  i := TokPos;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkEOF then Exit;
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkEnd] then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;            { this argument list's own ')' }
+      Dec(depth);
+    end
+    else if (depth = 0) and (Tokens[i].Kind = tkComma) then
+    begin
+      if i + 1 >= TokCount then Exit;
+      { another star, or a `**`: not a positional tail, and not ours }
+      if Tokens[i + 1].Kind = tkStar then
+      begin
+        Result := -1;
+        Exit;
+      end;
+      { the keyword run begins here -- stop counting, the cap machinery owns it }
+      if (i + 2 < TokCount) and (Tokens[i + 1].Kind = tkIdent) and
+         (Tokens[i + 2].Kind = tkAssign) then Exit;
+      Inc(Result);
+    end;
+    Inc(i);
+  end;
+end;
+
 function PyStarTrailingKwMinSlot(mpi: Integer): Integer;
-var i, depth, p, slot: Integer;
+var i, depth, p, slot, skipPos: Integer;
     nm: AnsiString;
 begin
   Result := -1;
+  { A POSITIONAL tail is no longer the refused shape -- PyStarExpandCallArgs
+    appends it to the starred list -- so those elements are SKIPPED here rather
+    than answering -1 for the whole call. What follows them must still be an
+    unbroken `name=value` run, which is what the scan below already demands. }
+  skipPos := PyStarTailPositionalCount;
+  if skipPos < 0 then Exit;
   depth := 0;
   i := TokPos;
   while i < TokCount do
@@ -18525,7 +18581,14 @@ begin
     end
     else if (depth = 0) and (Tokens[i].Kind = tkComma) then
     begin
-      { EVERY element after the star must be `name=value`, or the cap does not
+      { the positional tail, already counted and owned by the expansion }
+      if skipPos > 0 then
+      begin
+        Dec(skipPos);
+        Inc(i);
+        Continue;
+      end;
+      { EVERY element after that must be `name=value`, or the cap does not
         apply at all -- a mixed tail is the refused shape. }
       if (i + 2 >= TokCount) or (Tokens[i + 1].Kind <> tkIdent) or
          (Tokens[i + 2].Kind <> tkAssign) then
@@ -18576,6 +18639,7 @@ procedure PyStarExpandCallArgs(procIdx, firstSlot, kwCap: Integer;
 var listCi, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
     hasArg, hasIdx, hasCall, ifNode, pairNode, dfltAsgn: Integer;
+    nPos: Integer;
 begin
   { ONE entry point for both spellings, so the five sites that divert a starred
     argument out of an arity-driven Pascal loop each ask ONE question. They used
@@ -18590,15 +18654,46 @@ begin
   end;
   listCi := FindUClass('TPyList');
   if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  { A POSITIONAL TAIL (`m(*xs, 3)`) is counted BEFORE the operand is parsed,
+    because the count is a token question and parsing moves the cursor. }
+  nPos := PyStarTailPositionalCount;
   Next;                          { the '*' }
   PyParseBoolExpr;
-  listSym := AllocVar(PyHiddenName('starl'), tyClass);
-  Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
-  SymSyncTypeRef(listSym);
-  asgn := AllocNode(AN_ASSIGN);
-  ASTLeft[asgn] := PyMakeIdent(listSym);
-  ASTRight[asgn] := PyStarOperandAsList(CurASTNode, listCi);
-  PyHoistStmt(asgn);
+  if nPos > 0 then
+  begin
+    { `m(*xs, 3)` IS `m(*(list(xs) + [3]))`, so the tail is appended to the
+      starred list and the expansion below is untouched -- it already fills
+      slots from a list whose length it does not know at compile time, which is
+      exactly what a trailing positional's slot depends on.
+
+      A FRESH list, extended rather than appended to in place: PyStarOperandAsList
+      returns a non-variant operand's own node UNTOUCHED, so appending would
+      mutate the caller's `xs`. That is the same copy idiom PyStarMixedForwardCall
+      uses to build its forwarded positional list.
+
+      This is why the fix needed no arity-dispatch rewrite and no change to any
+      of the five call sites: it is one list, built differently. }
+    listSym := PyNewContainerTemp('TPyList', 'starl');
+    PyContainerCall1(listSym, 'TPyList', 'extend',
+                     PyStarOperandAsList(CurASTNode, listCi), -1);
+    while (nPos > 0) and (CurTok.Kind = tkComma) do
+    begin
+      Next;                      { the ',' }
+      ParseArgExpr;
+      PyContainerCall1(listSym, 'TPyList', 'append', CurASTNode, -1);
+      Dec(nPos);
+    end;
+  end
+  else
+  begin
+    listSym := AllocVar(PyHiddenName('starl'), tyClass);
+    Syms[listSym].RecName := REC_UCLASS_BASE + listCi;
+    SymSyncTypeRef(listSym);
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(listSym);
+    ASTRight[asgn] := PyStarOperandAsList(CurASTNode, listCi);
+    PyHoistStmt(asgn);
+  end;
 
   total := Procs[procIdx].ParamCount;
   { A trailing KEYWORD argument claims its own slot by NAME, so the star must

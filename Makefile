@@ -3213,6 +3213,29 @@ test-nilpy: $(COMPILER)
 	# PyMarkVariantParamsByRef reddens test_nilpy_a_callee_declared_below_its_caller
 	# while leaving every row here green. So this row exists to stop a formerly
 	# CORRUPTING shape returning unnoticed, and no binary on this box reddens it.
+	# AN ARGUMENT AFTER A `*` UNPACK AT A METHOD SITE. A trailing POSITIONAL was
+	# refused at all three method sites while the same shape on a free FUNCTION
+	# worked -- the asymmetry was ours, every row here is ordinary Python. A
+	# trailing KEYWORD was fixed in 2026-09-12 because a keyword NAMES its slot; a
+	# positional's slot is `firstSlot + len(starred)`, a RUN-TIME fact, which is
+	# what a compile-time expansion was said not to have.
+	# THE FIX IS THAT IT DOES NOT NEED IT: `m(*xs, 3)` IS `m(*(list(xs) + [3]))`,
+	# so the tail is appended to the starred list and the existing expansion --
+	# which already fills slots from a list whose length it does not know, and
+	# already fills defaults past its end -- is untouched. One list, built
+	# differently, so all FIVE call sites of PyStarExpandCallArgs got it at once,
+	# the CONSTRUCTOR included (which the ticket had split off as its own).
+	# EVERY ROW IS PAIRED, function beside method, because the method rows alone
+	# would pass just as happily with the shared path broken.
+	./$(COMPILER) test/test_nilpy_a_method_call_takes_an_argument_after_a_star.npy $(TESTTMP)/test_nilpy_starmeth26
+	$(TESTTMP)/test_nilpy_starmeth26 | diff -u test/test_nilpy_a_method_call_takes_an_argument_after_a_star.expected -
+	# ...and `**mapping` after a star at a METHOD site stays refused BY NAME. It is
+	# not "the same shape": a `**` names slots by KEY and appends to nothing, so it
+	# has no list identity to exploit and still needs the run-time forwarder.
+	printf 'class K:\n    def m(self, a, b, c=30):\n        return a\nk = K()\nxs = [1, 2]\nprint(k.m(*xs, **{"c": 7}))\n' > $(TESTTMP)/nilpy_starmeth_kw.npy
+	@out=$$(./$(COMPILER) $(TESTTMP)/nilpy_starmeth_kw.npy $(TESTTMP)/nilpy_starmeth_kw26 2>&1); \
+	 printf '%s\n' "$$out" | grep -q 'an argument after \*unpacking is not supported yet' \
+	  || { echo "star at a method site: FAIL - a trailing **mapping should still be refused by name"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) test/test_nilpy_a_method_passes_a_list_to_a_method.npy $(TESTTMP)/test_nilpy_mlist26
 	$(TESTTMP)/test_nilpy_mlist26 | diff -u test/test_nilpy_a_method_passes_a_list_to_a_method.expected -
 	./$(COMPILER) -Futest test/test_nilpy_bound_method_field_from_expression.npy $(TESTTMP)/test_nilpy_bmfield26
