@@ -13,6 +13,7 @@ begin
   while True do
   begin
     Write('kiosk> ');
+    if Eof then Break;   { input ended: stop, do not re-prompt forever }
     ReadLn(line);
     line := Trim(line);
     if line = 'about' then

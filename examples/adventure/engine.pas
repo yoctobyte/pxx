@@ -1032,6 +1032,7 @@ begin
   begin
     WriteLn;
     Write(Col('machine[', WHT)); Write(Col(NumStr(Player.Energy), YEL)); Write(Col(']> ', WHT));
+    if Eof then Break;   { input ended: stop, do not re-prompt forever }
     ReadLn(line); line := Trim(line);
     if line = '' then Continue;
     FirstWord(line, w, rest); w := LowerStr(w);

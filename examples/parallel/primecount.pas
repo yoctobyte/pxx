@@ -1,6 +1,6 @@
 { SPDX-License-Identifier: 0BSD }
 program PrimeCountParallel;
-{ Prime counting over [2..N] — the EVEN-LOAD integer foil to collatz.pas.
+{ Prime counting over [2..LIMIT] — the EVEN-LOAD integer foil to collatz.pas.
 
   Collatz has an erratic per-item cost, so the distribution policy decides the
   outcome. Trial division is the opposite: the cost of IsPrime(n) grows smoothly
@@ -9,7 +9,7 @@ program PrimeCountParallel;
   policy earns its keep only when the load is uneven.
 
   Two reductions in one pass:
-    reduction(+:   primes) — pi(N), the prime count.
+    reduction(+:   primes) — pi(LIMIT), the prime count.
     reduction(max: maxGap) — the largest gap between consecutive primes.
   The gap is derived by GapBefore(n), a PURE function of n (it walks back to the
   previous prime), so it does not depend on where the slice boundaries fall — the
@@ -25,7 +25,7 @@ program PrimeCountParallel;
 uses palparallel, baseunix;
 
 const
-  N        = 2000000;
+  LIMIT    = 2000000;   { not N: the workers' loop variable n IS N, case-insensitively }
   PI_N     = 148933;     { pi(2*10^6)          — known value, correctness oracle }
   MAXGAP   = 132;        { max prime gap below 2*10^6 — ditto }
 
@@ -62,7 +62,7 @@ begin
   else NowUsec := 0;
 end;
 
-{ Count primes in [2..N] under a chosen distribution / worker count, and track
+{ Count primes in [2..LIMIT] under a chosen distribution / worker count, and track
   the largest prime gap. Reduction variables are ENCLOSING LOCALS (globals are
   not captured); results leave via out params. }
 procedure CountPrimes(useOnDemand, forceSerial: Boolean; var oCount, oGap: Int64);
@@ -71,7 +71,7 @@ begin
   lCount := 0; lGap := 0;
   if forceSerial then PXXSetParForWorkers(1);
   if useOnDemand then
-    parallel(pdOnDemand) for n := 2 to N reduction(+: lCount) reduction(max: lGap) do
+    parallel(pdOnDemand) for n := 2 to LIMIT reduction(+: lCount) reduction(max: lGap) do
     begin
       if IsPrime(n) then
       begin
@@ -82,7 +82,7 @@ begin
       end;
     end
   else
-    parallel(pdChunked) for n := 2 to N reduction(+: lCount) reduction(max: lGap) do
+    parallel(pdChunked) for n := 2 to LIMIT reduction(+: lCount) reduction(max: lGap) do
     begin
       if IsPrime(n) then
       begin
@@ -102,7 +102,7 @@ var
   gSerial, gChunked, gOnDemand: Int64;
   bad: Boolean;
 begin
-  writeln('Prime count over 2..', N, '   workers=', PXXParForWorkers);
+  writeln('Prime count over 2..', LIMIT, '   workers=', PXXParForWorkers);
 
   t0 := NowUsec; CountPrimes(False, True,  cSerial,   gSerial);   t1 := NowUsec; usSerial   := t1 - t0;
   t0 := NowUsec; CountPrimes(False, False, cChunked,  gChunked);  t1 := NowUsec; usChunked  := t1 - t0;
@@ -129,12 +129,12 @@ begin
   end;
   if cSerial <> PI_N then
   begin
-    writeln('WRONG — pi(', N, ') should be ', PI_N, ' (BUG)'); bad := True;
+    writeln('WRONG — pi(', LIMIT, ') should be ', PI_N, ' (BUG)'); bad := True;
   end;
   if gSerial <> MAXGAP then
   begin
     writeln('WRONG — max gap should be ', MAXGAP, ' (BUG)'); bad := True;
   end;
   if bad then Halt(1);
-  writeln('ALL AGREE — count matches pi(N), reductions identical across distributions');
+  writeln('ALL AGREE — count matches pi(LIMIT), reductions identical across distributions');
 end.

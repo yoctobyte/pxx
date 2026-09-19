@@ -301,6 +301,7 @@ begin
   while running do
   begin
     write('> ');
+    if Eof then Break;   { input ended: stop, do not re-prompt forever }
     readln(line);
     pos := 1;
     if NextToken(line, pos, t0) then
