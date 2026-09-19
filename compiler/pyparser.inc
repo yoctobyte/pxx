@@ -1460,6 +1460,8 @@ var
   PyOptMissingCount: Integer;
   PyImpName: array[0..255] of Integer;      { interned lowercase name }
   PyImpNameUnit: array[0..255] of Integer;  { CurrentUnitIdx of the importer }
+  PyImpNameSrc: array[0..255] of Integer;   { the unit it was imported FROM (FindUnitOrAlias), or -1 }
+  PyImpNameReal: array[0..255] of Integer;  { interned source spelling: `X` of `from M import X as Y` }
   PyImpNameCount: Integer;
   { True only while parsing a def's RETURN annotation: there Optional[int] maps
     to tyVariant (None = VT_EMPTY tag) instead of the tyInt64 0-sentinel, so
@@ -5585,10 +5587,35 @@ begin
   end;
 end;
 
+{ The type a field or local takes from ANOTHER MODULE'S GLOBAL, read off the
+  unit's symbol: `chart.VIEW`, or `VIEW` after `from .chart import VIEW`. The
+  pre-passes type a right-hand side from TOKENS, and an imported module's
+  tokens are not this module's, so the symbol is the one record that knows. A
+  class-typed global needs its class IDENTITY or the field reads at the wrong
+  layout, so one without a recorded class answers tyUnknown, and so does an
+  array -- neither is a shape this answer can describe.
+  test_nilpy_a_field_from_another_module_s_global }
+function PyUnitGlobalType(si: Integer; var ci: Integer): TTypeKind;
+begin
+  Result := tyUnknown;
+  ci := -1;
+  if si < 0 then Exit;
+  if not (Syms[si].Kind in [skGlobal, skConst]) then Exit;
+  if Syms[si].IsArray then Exit;
+  Result := Syms[si].TypeKind;
+  if Result = tyClass then
+  begin
+    if Syms[si].RecName >= REC_UCLASS_BASE then
+      ci := Syms[si].RecName - REC_UCLASS_BASE
+    else
+      Result := tyUnknown;
+  end;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
-    qcUnit, qcProc: Integer; qcTk: TTypeKind;   { a qualified module MEMBER -- see the arm }
+    qcUnit, qcProc, qcSym: Integer; qcTk: TTypeKind;   { a qualified module MEMBER -- see the arm }
     qmUnit, qmProc: Integer;   { ...and the UNIT-SCOPED lookup the bare-call arm owes it }
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
     divAt: Integer; divL, divR: TTypeKind;
@@ -6393,6 +6420,23 @@ begin
           Inc(i);
           Continue;
         end;
+        { ...and a METHOD CALL on a value bound in this def that no arm above
+          resolved -- `stage.pop(name)` on a dict parameter -- is the
+          variant the arm above promises for it, over the WHOLE call. It used
+          to decline and fall through, and then the argument group was
+          scanned like a parenthesised expression, so the call took its
+          ARGUMENT's type: `show(stage.pop(name))` typed show's parameter as
+          a str from the key, and the Mesh it was handed was stored as the
+          text '<__main__.Mesh object at 0x...>' (lekkerzeilen, every
+          streamed tile mesh; the literal key `pop("terrain")` did the same).
+          test_nilpy_a_method_call_argument_is_not_typed_by_its_own_argument }
+        if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
+           PyDottedRootIsLocal(i, startIdx) then
+        begin
+          i := PyEndOfGroup(i + 1, endIdx);
+          Result := PyWiden(Result, tyVariant);
+          Continue;
+        end;
         { ...unless the name is BOUND in this def: `Box = Word(44); return
           Box.get() + v` denotes the local, whose constraint below carries
           the class it holds (test_nilpy_local_named_like_a_class, red on the
@@ -6651,6 +6695,99 @@ begin
                 Result := PyWiden(Result, qcTk);
                 i := i + 3;
                 Continue;
+              end;
+            end
+            else
+            begin
+              { ...and a module GLOBAL of an imported `.py` module --
+                `self.chart_view = chart.VIEW` with `VIEW = 1700.0` in
+                chart.py. Not a routine, so the arm above cannot see it, and
+                nothing else here looks a name up in another UNIT: the field
+                was refused with "cannot infer the type of field ... annotate
+                it (... int ...)" for a Double. The value door already binds
+                the same spelling with FindSymInUnit; this asks it the same
+                question.
+
+                IT PASSED WHENEVER THE IMPORTED MODULE HAD NO `def`, which is
+                what made it look like a regression in the lekkerzeilen demo:
+                the module's own inferred locals were still sitting in
+                PyLocals when the importer's field pre-pass ran, and a later
+                def's local collection is what cleared them. Leftover state,
+                not a lookup -- so the answer comes from the unit's symbol,
+                which is the same with or without a def.
+
+                The WHOLE operand only: `chart.OBJ.attr` and `chart.XS[0]` are
+                not the global's type, so a selector after it declines. qcSym
+                comes back as the CLASS index for a class-typed global. }
+              qcTk := PyUnitGlobalType(
+                        FindSymInUnit(GetTokenStr(i + 2), qcUnit), qcSym);
+              if not ((i + 3 < endIdx) and
+                      (Tokens[i + 3].Kind in [tkDot, tkLBrack])) then
+              begin
+                if qcTk = tyClass then PyInferLastCi := qcSym;
+                if qcTk <> tyUnknown then
+                begin
+                  Result := PyWiden(Result, qcTk);
+                  i := i + 3;
+                  Continue;
+                end;
+              end
+              else if (qcTk = tyClass) and (Tokens[i + 3].Kind = tkDot) then
+              begin
+                { ...and THROUGH a class-instance global: `fg.ORIGIN.y`,
+                  `fg.ORIGIN.norm1()`. The same walk the local-receiver arm
+                  below does for `o.inner.name`, from the global's class:
+                  fields by FindUField, and a method call ends the chain with
+                  its result. Anything it cannot follow -- an unknown member,
+                  a subscript, a call on a non-class -- declines the whole
+                  operand, so nothing is typed from a prefix of it. }
+                fci := qcSym;
+                k2 := i + 3;
+                qcProc := 0;   { 0 = still walking, 1 = typed, -1 = declined }
+                while qcProc = 0 do
+                begin
+                  if not ((k2 + 1 < endIdx) and (Tokens[k2].Kind = tkDot) and
+                          (Tokens[k2 + 1].Kind = tkIdent) and (fci >= 0)) then
+                    qcProc := -1
+                  else if (k2 + 2 < endIdx) and (Tokens[k2 + 2].Kind = tkLParen) then
+                  begin
+                    si := FindUMeth(fci, GetTokenStr(k2 + 1));
+                    if si < 0 then qcProc := -1
+                    else
+                    begin
+                      qcTk := Procs[UMthProc_[si]].RetType;
+                      fci := -1;
+                      if (qcTk = tyClass) and
+                         (ProcRetRecId[UMthProc_[si]] >= REC_UCLASS_BASE) then
+                        fci := ProcRetRecId[UMthProc_[si]] - REC_UCLASS_BASE;
+                      k2 := PyEndOfGroup(k2 + 2, endIdx);
+                    end;
+                  end
+                  else
+                  begin
+                    fi := FindUField(fci, GetTokenStr(k2 + 1));
+                    if fi < 0 then qcProc := -1
+                    else
+                    begin
+                      qcTk := IntToTypeKind(UFldTk[fi]);
+                      fci := -1;
+                      if (qcTk = tyClass) and (UFldRec_[fi] >= REC_UCLASS_BASE) then
+                        fci := UFldRec_[fi] - REC_UCLASS_BASE;
+                      k2 := k2 + 2;
+                    end;
+                  end;
+                  if (qcProc = 0) and
+                     not ((k2 < endIdx) and (Tokens[k2].Kind in [tkDot, tkLBrack])) then
+                    qcProc := 1;
+                end;
+                if (qcProc = 1) and (qcTk <> tyUnknown) and
+                   not ((qcTk = tyClass) and (fci < 0)) then
+                begin
+                  if qcTk = tyClass then PyInferLastCi := fci;
+                  Result := PyWiden(Result, qcTk);
+                  i := k2;
+                  Continue;
+                end;
               end;
             end;
           end;
@@ -34860,6 +34997,27 @@ begin
   end;
 end;
 
+function PyImportedGlobalSym(const name: AnsiString): Integer;
+{ The symbol THIS module bound as `name` with `from M import X [as name]`,
+  looked up IN M -- or -1. Not FindSym: flat unit scope answers any module's
+  global of that spelling, so two modules exporting one name would type a
+  field from the wrong one (the hazard
+  bug-n-a-from-import-alias-resolves-its-source-through-flat-scope records for
+  the value itself). Python's rule is per-module and so is this: the entry
+  must be the current module's, and the lookup is in the unit it named. }
+var i, ni: Integer;
+begin
+  Result := -1;
+  ni := InternStr(LowerCase(name));
+  for i := PyImpNameCount - 1 downto 0 do
+    if (PyImpName[i] = ni) and (PyImpNameUnit[i] = CurrentUnitIdx) then
+    begin
+      if (PyImpNameSrc[i] >= 0) and (PyImpNameSrc[i] <> CurrentUnitIdx) then
+        Result := FindSymInUnit(Strs[PyImpNameReal[i]].Text, PyImpNameSrc[i]);
+      Exit;
+    end;
+end;
+
 function PyModuleGlobalIsDef(const name: AnsiString): Boolean;
 { Is `name` a module-level `def` — a FUNCTION used as a value?
 
@@ -41818,6 +41976,18 @@ begin
         tk := tyVariant;
         fldRec := REC_NONE;
         fldSig := -1;
+      end
+      else if PyImportedGlobalSym(GetTokenStr(j + 4)) >= 0 then
+      begin
+        { ...and a global IMPORTED BY NAME, `from .chart import VIEW` then
+          `self.chart_view = VIEW`. The three scans above read THIS module's
+          tokens and the binding is in another module's, so the answer
+          comes from that module's symbol -- the qualified spelling
+          `chart.VIEW` asks the identical question in PyInferExprType.
+          test_nilpy_a_field_from_another_module_s_global }
+        tk := PyUnitGlobalType(PyImportedGlobalSym(GetTokenStr(j + 4)), k2);
+        fldRec := REC_NONE;
+        if tk = tyClass then fldRec := REC_UCLASS_BASE + k2;
       end;
     end;
   end;
@@ -46440,6 +46610,8 @@ begin
           begin
             PyImpName[PyImpNameCount] := InternStr(LowerCase(impAlias));
             PyImpNameUnit[PyImpNameCount] := CurrentUnitIdx;
+            PyImpNameSrc[PyImpNameCount] := FindUnitOrAlias(impName);
+            PyImpNameReal[PyImpNameCount] := InternStr(impReal);
             Inc(PyImpNameCount);
           end;
           if not Eat(tkComma) then Break;

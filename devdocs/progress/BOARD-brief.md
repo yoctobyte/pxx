@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:19 blocked:8 backlog:39 backlog-umbrella:13 backlog-core:169 backlog-nilpy:178 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3876 rejected:84`
+`working:31 unfinished:19 blocked:8 backlog:39 backlog-umbrella:13 backlog-core:169 backlog-nilpy:177 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3877 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,7 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 547, ranked
+## Ready — top 30 of 546, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -99,12 +99,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows
 - `[p 80] [A]` umbrella-track-p-and-a-have-no-open-bugs
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
-- `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
+- `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 
-_517 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_516 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

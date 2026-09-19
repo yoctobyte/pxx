@@ -1,0 +1,57 @@
+# A METHOD CALL on a parameter or local, passed straight as an argument, was
+# typed by ITS OWN ARGUMENT when the callee's parameter was inferred from its
+# call sites: `show(stage.pop(name))` typed show's `mesh` as a str from the key,
+# and the Mesh it was handed arrived as '<__main__.Mesh object at 0x...>'. A
+# literal key did the same. Reached by attempting lekkerzeilen (app.py:1766).
+# One callee per shape: a callee whose sites DISAGREE gives up and is a
+# variant, which passed. The int-index `count` row is first, not the str ones.
+# The same through a LOCAL, `m = stage.pop(name); show_via(m)`: the local's
+# binding is read by the same scanner. (lekkerzeilen blocker 02)
+
+
+class Mesh:
+    def __init__(self, n):
+        self.n = n
+
+
+def show(mesh):
+    print(type(mesh).__name__, mesh.n)
+
+
+def show_lit(mesh):
+    print(type(mesh).__name__, mesh.n)
+
+
+def show_idx(mesh):
+    print(type(mesh).__name__, mesh.n)
+
+
+def show_local(mesh):
+    print(type(mesh).__name__, mesh.n)
+
+
+def show_via(mesh):
+    print(type(mesh).__name__, mesh.n)
+
+
+def count(x):
+    print(type(x).__name__, x + 1)
+
+
+def run(stage, name, xs, i):
+    stage[name] = Mesh(1)
+    stage["terrain"] = Mesh(2)
+    xs.append(Mesh(3))
+    idx = [10, 20, 30]
+    count(idx.index(20))
+    show(stage.pop(name))
+    show_lit(stage.pop("terrain"))
+    show_idx(xs.pop(i))
+    local = {"k": Mesh(4)}
+    show_local(local.pop("k"))
+    stage[name] = Mesh(5)
+    m = stage.pop(name)
+    show_via(m)
+
+
+run({}, "sea", [], 0)

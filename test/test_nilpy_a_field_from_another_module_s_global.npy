@@ -1,0 +1,52 @@
+# A field assigned straight from ANOTHER module's global, in the constructor:
+# `self.v = chart.VIEW`, and the same after `from chart import VIEW`. Both were
+# refused with "cannot infer the type of field self.v - annotate it (... int
+# ...)" -- for a float -- because the pre-pass types a field from tokens and the
+# global's binding is in the other module's. Passed by accident whenever the
+# imported module had no `def`. The float is the LAST field and the instance
+# global is read through its fields, so a field typed from the wrong source
+# prints a wrong number rather than compiling quietly. `fg.ORIGIN.y` and
+# `fg.ORIGIN.norm1()` are the chained spelling of the same gap, and `CAP`/`SEA`
+# the aliased by-name one, resolved through the module each came from.
+# (lekkerzeilen blocker 01, app.py:745)
+import fieldglobal_mod
+import fieldglobal_mod as fg
+import fieldglobal_mod2
+from fieldglobal_mod import NAME, ORIGIN, VIEW
+from fieldglobal_mod import LIMIT as CAP
+from fieldglobal_mod2 import TIDE as SEA
+
+
+class Qualified:
+    def __init__(self):
+        self.limit = fieldglobal_mod.LIMIT
+        self.name = fg.NAME
+        self.on = fg.ON
+        self.origin = fg.ORIGIN
+        self.oy = fg.ORIGIN.y
+        self.n1 = fg.ORIGIN.norm1()
+        self.view = fg.VIEW
+
+
+class ByName:
+    def __init__(self):
+        self.name = NAME
+        self.cap = CAP
+        self.sea = SEA
+        self.origin = ORIGIN
+        self.view = VIEW
+
+
+q = Qualified()
+print(q.limit * 3)
+print(q.name + "!")
+print(q.on and q.limit > 6)
+print(q.origin.x + q.origin.y, q.origin.norm1())
+print(q.oy + 1, q.n1 * 10)
+print(q.view + 0.25)
+b = ByName()
+print(b.name + "?")
+print(b.origin.y - b.origin.x, b.origin.norm1())
+print(b.cap * 2, b.sea + "!", fieldglobal_mod2.TIDE)
+print(b.view * 2)
+print(fieldglobal_mod.helper(q.limit))

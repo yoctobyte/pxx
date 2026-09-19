@@ -1,0 +1,38 @@
+# Two attribute reads of a FUNCTION-LOCAL instance as the two operands of one
+# binary operator. Recorded 2026-09-02 as a SIGSEGV on the pin and the tip, for
+# int and str attributes and for two different instances; re-measured
+# 2026-09-19 correct on both pin v411 and the tip with no fix on record, so this
+# pins it rather than trusting that it stays fixed. The str rows are after the
+# int ones.
+# bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
+
+
+class P:
+    def __init__(self, a, b):
+        self.x = a
+        self.y = b
+
+
+def total(a, b):
+    q = P(a, b)
+    return q.x + q.y
+
+
+def swapped(a, b):
+    q = P(a, b)
+    return q.y + q.x
+
+
+def product(a, b):
+    q = P(a, b)
+    return q.x * q.y
+
+
+def across(a, b):
+    q = P(a, b)
+    r = P(b, a)
+    return q.x + r.y
+
+
+print(total(1, 2), swapped(1, 2), product(3, 4), across(1, 2))
+print(total("a", "b"), swapped("a", "b"), across("a", "b"))

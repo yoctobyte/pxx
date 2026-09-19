@@ -3,8 +3,8 @@ track: N
 prio: 75
 type: bug
 blocked-by: []
-summary: "`q = P(a, b); return q.x + q.y` inside a FUNCTION segfaults the produced binary — any binary operator whose BOTH operands are attribute reads of a class instance held in a function LOCAL. Works at module scope, works as `self.x + self.y` inside a method, works with one attribute (`q.x + 1`), works when the two reads are spilled to locals first (`t = q.x; u = q.y; t + u`). Reproduces on the PIN and on the tip, at every -O level, for int and str attributes, and with two different instances (`q.x + r.y`). Found incidentally 2026-09-02 while probing the AST cloners; not diagnosed."
-status: backlog
+summary: "CLOSED BY EVENTS, NOT BY A FIX ON RECORD. `q = P(a, b); return q.x + q.y` inside a function (a binop over two attribute reads of a function-local instance) was recorded 2026-09-02 as a SIGSEGV on pin and tip. Re-measured 2026-09-19 correct on BOTH pin v411 and the tip, every table row including str attributes and two instances, against CPython. No commit names it; dcb6f2c17 (the ASTLeft/ASTRight walkers) is a plausible candidate given it was found probing the AST cloners, unverified. Pinned by test_nilpy_a_binop_over_two_attributes_of_a_local_instance."
+status: done
 owner: —
 ---
 
@@ -103,3 +103,15 @@ the same corruption lands one step later as `TypeError: expected a number, got
 object` instead of SIGSEGV. A defect whose symptom moves between a signal and a
 type error under an irrelevant perturbation is one whose test must assert the
 VALUE — a crash-only guard passes the loop form.
+
+# Resolution, 2026-09-19, frankH
+
+Re-measured at HEAD 464f35da4 (compiler 0e4797e1d018) and on
+stable_linux_amd64/default/pinned: `q.x + q.y`, `q.y + q.x`, `q.x * q.y`,
+`q.x + r.y`, int and str, all print CPython's answer on both; the original
+repro prints `3` at -O0..-O3 on both. Nothing in the logbook or commit
+subjects records a fix. A regression fixture now holds it:
+test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.npy.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

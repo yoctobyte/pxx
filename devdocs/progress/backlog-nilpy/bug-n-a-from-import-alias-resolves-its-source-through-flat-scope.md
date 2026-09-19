@@ -1,7 +1,7 @@
 ---
 prio: 60
 track: N
-summary: "`from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis."
+summary: "`from M import X as Y` resolves the SOURCE name X through flat unit scope instead of through M, so any equal name in flat scope wins. TWO SEVERITIES, ONE CAUSE: a collision INSIDE one import statement is now a compile error (`undefined variable`), but two DIFFERENT modules each exporting the same member name is still a SILENT WRONG VALUE -- both aliases answer the later module (measured 2026-09-11, `8b0839edde8f`). Prio 45 -> 60 on the silent arm, which the 2026-09-10 re-measure concluded had gone and had not varied the module axis. The collision needs no alias: `from M import X` beside ANY other imported module that defines X reads the wrong one. PyImportedGlobalSym (source unit per from-import entry) resolves it correctly and the field pre-pass already uses it; the value door still does not."
 ---
 
 # bug: a from-import alias resolves its SOURCE name through flat unit scope, not through the exporting module
@@ -217,3 +217,21 @@ passing.
 Section above, on re-probing the neighbours that share an OBSERVABLE: this is an
 instance, and the observable moved twice — silent, then loud, then silent again
 in a shape nobody had varied.
+
+# 2026-09-19, frankH, compiler `d7cd6a018296` -- the UN-aliased spelling collides too, and a building block now exists
+
+Measured while fixing lekkerzeilen blocker 01: `from m import VIEW` (no `as`),
+with a SECOND imported module that also defines `VIEW = "sea"`, reads the
+second module's value -- `VIEW * 2` printed `seasea` against CPython's
+`3401.0`. So the silent arm needs no alias at all, only two modules exporting
+one name. Not fixed here; the value door is this ticket's.
+
+What now exists: every `from M import X [as Y]` entry in `PyImpName` records
+the unit it came from (`PyImpNameSrc`, via `FindUnitOrAlias(impName)`, which
+chases the shim alias chain) and the source spelling (`PyImpNameReal`), and
+`PyImportedGlobalSym(Y)` answers M's symbol for X. The class-field pre-pass
+uses it (test_nilpy_a_field_from_another_module_s_global), so a field is now
+TYPED from M's `X` while its VALUE is still read through flat scope -- which
+turns this ticket's silent wrong value into a loud `TypeError` for a field
+whose two candidates differ in type. A fixture for the collision was written
+and taken out of that test for exactly that reason: it measures this ticket.

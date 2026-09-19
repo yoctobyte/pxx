@@ -4853,6 +4853,12 @@ test-nilpy: $(COMPILER)
 	# a nested def's parameter must not rename the enclosing def's parameter.
 	./$(COMPILER) test/test_nilpy_a_nested_def_parameter_does_not_rename_the_outer_parameter.npy $(TESTTMP)/test_nilpy_nestparamren26
 	$(TESTTMP)/test_nilpy_nestparamren26 | diff -u test/test_nilpy_a_nested_def_parameter_does_not_rename_the_outer_parameter.expected -
+	./$(COMPILER) -Futest test/test_nilpy_a_field_from_another_module_s_global.npy $(TESTTMP)/test_nilpy_fieldglobal26
+	$(TESTTMP)/test_nilpy_fieldglobal26 | diff -u test/test_nilpy_a_field_from_another_module_s_global.expected -
+	./$(COMPILER) test/test_nilpy_a_method_call_argument_is_not_typed_by_its_own_argument.npy $(TESTTMP)/test_nilpy_mcargty26
+	$(TESTTMP)/test_nilpy_mcargty26 | diff -u test/test_nilpy_a_method_call_argument_is_not_typed_by_its_own_argument.expected -
+	./$(COMPILER) test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.npy $(TESTTMP)/test_nilpy_binop2attr26
+	$(TESTTMP)/test_nilpy_binop2attr26 | diff -u test/test_nilpy_a_binop_over_two_attributes_of_a_local_instance.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26
