@@ -1318,3 +1318,39 @@ chain was found by instrumenting a scratch copy of the package.
 The cause is `__file__`, the package case, and it is a FORK rather than a bug to
 take — see the summary and
 `decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package`.
+
+## 2026-09-19 — MEASURED: 11 OF THESE 18 `blocked-by` EDGES ARE ALREADY CLOSED
+
+Counted by FOLDER, not by a glob across folders: **7 open, 11 in `done/`.**
+
+**Still open (7):**
+- `backlog-nilpy` — `bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers`
+- `backlog-nilpy` — `bug-n-a-method-that-calls-a-method-with-a-list-argument-loses-its-own-result`
+- `backlog-nilpy` — `feature-n-a-method-call-cannot-take-an-argument-after-a-star-unpack`
+- `backlog-nilpy` — `feature-nilpy-math-module-twelve-absent-names-measured`
+- `backlog-libs` — `task-b-write-the-lekkerzeilen-pxx-platform-backend`
+- `backlog-decide` — `decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package`
+- `working` — `bug-n-os-environ-and-os-sep-are-not-values`
+
+**Closed but still listed as blockers (11):** the two C-pointer binding bugs, the
+callee-declared-below ABI bug, the non-constant default, the `with`-header star
+unpack, the staticmethod/classmethod-through-a-class-value bug, the `getattr`
+segfault, the heap-lock-on-allocation bug, **`feature-b-pil-...`**,
+**`feature-n-...-capped-at-four-arguments`**, and
+**`feature-n-the-module-docstring-...`**.
+
+**WHY THIS IS WORTH A BLOCK RATHER THAN A QUIET PRUNE.** The edges are not wrong
+as history — this umbrella genuinely needed all eighteen — and the RANKER is not
+fooled: `tools/progress.sh ready --track N` correctly omits every closed one. The
+damage is done to **readers**, and it has now been measured three times, all three
+from this same list of eleven: a seat was pointed at the module-docstring ticket
+(closed since 09-12), at the four-argument cap (closed by the seat itself), and
+at PIL — **closed 2026-09-14 in `6b45b991b`, owned by frankb-56, with 44KB of
+working `lib/rtl/pil.pas` behind it.** The third one cost more than a wasted
+message: `claim` PULLED A DONE TICKET OUT OF `done/` into `working/` and rewrote
+its owner, and it was caught only because the seat opened the file before starting.
+
+**The instrument that was right the whole time is `tools/progress.sh ready|next`,
+and the mistake was reading this file's raw `blocked-by:` list instead** —
+CLAUDE.md already says the tooling beats reading a board, and an umbrella's edge
+list is a board. **Do not dispatch from this list; dispatch from `ready`.**
