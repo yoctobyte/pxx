@@ -125,12 +125,13 @@ today, at HEAD, both halves fail:
   claim is true for CPython <= 3.13 and there is no such interpreter installed
   (`/usr/bin/python3.14` is the only one).
 
-So there may still be a divergence in the lekkerzeilen shape -- one where the
-annotation RESOLVES instead of degrading to Any, which is what would change the
-timing -- but it is not the shape described, and the version the oracle claim
-depends on has to be recorded with it. Owner of the residual: frankb-8e, who
-measured the table; asked to re-check which arm printed no warning. Not filed as
-a ticket, because filing the mechanism as stated would file something that does
+SETTLED (frankb-8e, same day): there is NO residual divergence. The resolving
+arm exists and is the 16.85 s row, where chart.py DOES import world -- so the
+annotation resolving there is correct behaviour, not silent acceptance. The
+shape described in the note was a fourth arm, measured first and then dropped:
+annotation with no import, degraded to Any, 3.407 s, i.e. the unannotated
+timing, because in effect it is unannotated. The table's conclusion stands on
+the resolving row. Not filed as a ticket, because the mechanism as stated does
 not happen.
 
 ## Log
