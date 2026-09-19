@@ -29018,3 +29018,48 @@ wrong on a subset.** One subsystem so far. frankB proposed it and frankuser
 agreed on 2026-09-19 to hold it here rather than argue it up on how well it
 reads — which is the test CLAUDE.md sets for itself, applied to a finding its
 own author liked.
+
+## A FIXTURE OF SMALL VALUES CERTIFIES BOTH THE EXACT ALGORITHM AND THE ROUNDED ONE — THE MAGNITUDE IS THE ASSERTION
+
+Measured 2026-09-19 (frankD, Track N), landing `math.isqrt` as a NilPy
+intercept. `isqrt(n)` is the largest `r` with `r*r <= n`, **exact by
+definition**. Two implementations satisfy every small test: the integer
+algorithm, and `Trunc(Sqrt(Double(n)))` corrected by a step or two.
+
+The rows anyone writes are `isqrt(0)`, `isqrt(1)`, `isqrt(16)`, `isqrt(17)`,
+`isqrt(24)`, `isqrt(25)` — zero, one, a perfect square, either side of one.
+They are the right *shapes*, they look thorough, and **not one of them can
+fail for the defect the function exists to avoid**, because at those
+magnitudes a double represents `n` exactly and the float route is correct.
+
+The row that separates them is `isqrt(9007199254740993)` — `2**53 + 1`, the
+first integer a double **cannot** represent. The float route loads it as
+`2**53`, takes a square root and answers a neighbour; the integer route
+answers `94906265`. Nothing about the row's *shape* is special. Its
+**magnitude** is the entire assertion.
+
+This is CLAUDE.md's "choose a probe whose right answer differs from the
+default" in the axis that rule does not name. That rule is about the expected
+VALUE colliding with the failure value — a zero, an empty, a width. Here the
+values do not collide at all; the INPUT is drawn from the range where the two
+implementations are indistinguishable, and every assertion about it is honest
+and useless. It is also the numerical-instrument rule (a least-squares fit
+validated at `t = 1000000` and fed absolute epoch seconds) arriving in integer
+arithmetic rather than in floats: **validate at the magnitude the real input
+has, not at the magnitude that is easy to read.**
+
+The practical tell, and it is cheap: for anything whose contract is *exact*,
+*integer*, or *arbitrary precision*, ask **which range makes the cheap wrong
+implementation wrong** — for float/int boundaries that is `2**53`, for 32-bit
+accumulators `2**31`, for a length prefix `2**16` — and put one row there. If
+you cannot name such a range, the function has no exactness contract to
+protect and the small rows are sufficient.
+
+**And label the row so it survives.** A large literal in a test reads as
+arbitrary and invites "simplify this to 16" in the next cleanup pass; the
+fixture carries a DO NOT SIMPLIFY note naming `2**53+1` and what the float
+route answers, because the row's value is invisible from the row.
+
+Worked: `test/test_nilpy_math_frexp_isqrt_isfinite_are_exact.npy`.
+Banked, not promoted: merit met, second independent subsystem not — this is
+one instance in one. Promote if it recurs elsewhere.

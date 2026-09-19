@@ -46,10 +46,14 @@ eq("isqrt(16) perfect square", math.isqrt(16), 4)
 eq("isqrt(17) just above", math.isqrt(17), 4)
 eq("isqrt(24) just below", math.isqrt(24), 4)
 eq("isqrt(25) perfect square", math.isqrt(25), 5)
-# BEYOND 2**53, where a double cannot represent n at all: a float-sqrt route
-# rounds to a neighbour and the "exact by definition" contract is precisely
-# what is lost. This row is the one that separates an integer algorithm from a
-# float one, and it is why the implementation uses neither Sqrt nor a cast.
+# DO NOT "SIMPLIFY" THE NEXT TWO ROWS TO SMALL NUMBERS. Every isqrt row above
+# this point passes under BOTH a correct integer algorithm and a float-sqrt
+# rounded back, so on their own they certify either implementation and cannot
+# fail for the defect this function exists to avoid. 9007199254740993 is
+# 2**53+1, the first integer a double CANNOT represent: the float route loads
+# it as 2**53, takes a sqrt, and answers a neighbour, while "exact by
+# definition" is the whole contract. The row is large on purpose; the size IS
+# the assertion, and it is why the implementation uses neither Sqrt nor a cast.
 eq("isqrt(2**53+1)", math.isqrt(9007199254740993), 94906265)
 eq("isqrt(2**62)", math.isqrt(4611686018427387904), 2147483648)
 
