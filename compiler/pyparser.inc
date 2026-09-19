@@ -47741,6 +47741,7 @@ begin
   if pyHasExceptions then EnableExceptionRuntime;
   RegisterBuiltinTGuid;
   RegisterBuiltinTObject;
+  PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   if needsBuiltin then ParseUsesUnitAmbient('builtin');
   { Resolve TVarRec now that builtinheap declared it, exactly as ParseProgram
@@ -48036,6 +48037,7 @@ begin
     handler, so without this an imported module's exit code never ran. }
   if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
     EmitCallProc(GetFiniRunnerProc);
+  EmitIdfTaskEndCall;   { ESP-IDF: end the FreeRTOS task rather than busy-park }
   EmitExit(0);
   DbgMainBodyEnd := CodeLen;
   { -g: the program's module-level names, as CU-level globals (Python module

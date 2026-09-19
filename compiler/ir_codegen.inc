@@ -3309,10 +3309,10 @@ begin
       xtensa encoding, so there is nothing to call. Scoped with `not EspBareBoot`
       rather than left unconditional because the old message fired on BOTH and
       told a hosted build it was bare metal. }
-    if withHeapArena and (not EspBareBoot) then
+    if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA = 0) then
       Error('target xtensa (hosted): a heap arena needs mmap and EmitMmapArena '
-            + 'has no xtensa arm. Bare metal (--esp-profile=bare) reserves the '
-            + 'arena in BSS and does not need one '
+            + 'has no xtensa arm. Bare metal (--esp-profile=bare) and ESP-IDF '
+            + '(--platform=esp) reserve the arena in BSS and do not need one '
             + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
     { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
       top of SRAM before entering main. EmitLoadConstXtensa drops a literal
@@ -3452,6 +3452,9 @@ begin
       xtensa_j(0);
       Exit;
     end;
+    { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. It
+      writes only a8/a9, which this stub already overwrites below. }
+    if withHeapArena and (BSS_HEAP_ARENA > 0) then EmitBareHeapArenaInit;
     xtensa_mov(reg_xtensa_a9, reg_xtensa_a0);   { save the return address }
     { call0 to the next 4-aligned offset. CALL0 targets must be 4-aligned (the
       encoder now asserts it), so pad the gap with bytes that are never
@@ -3482,11 +3485,16 @@ begin
   begin
     { Same split as xtensa above: bare metal uses the BSS arena; the HOSTED
       riscv32 Linux profile is what still has no mmap encoding. }
-    if withHeapArena and (not EspBareBoot) then
+    if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA = 0) then
       Error('target riscv32 (hosted linux): a heap arena needs mmap and '
             + 'EmitMmapArena has no riscv32 arm. Bare metal '
-            + '(--esp-profile=bare) reserves the arena in BSS and does not need '
-            + 'one (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+            + '(--esp-profile=bare) and ESP-IDF (--platform=esp) reserve the '
+            + 'arena in BSS and do not need one '
+            + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+    { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. t0/t1
+      are caller-saved and nothing has run yet, same as the bare arm below. }
+    if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA > 0) then
+      EmitBareHeapArenaInit;
     { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
       (grows down toward the image) before entering main. lui+addi covers any
       low bits in the stack-top constant. }

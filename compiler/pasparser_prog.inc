@@ -2277,6 +2277,7 @@ begin
       EmitCallProc(exitPi)
     else if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
       EmitCallProc(GetFiniRunnerProc);
+    EmitIdfTaskEndCall;   { ESP-IDF, when PXXExitProcess is absent }
     EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
   end;
   EmitFinalizerRunnerBody;

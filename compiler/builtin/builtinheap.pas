@@ -2627,9 +2627,82 @@ end;
   positions -- false here for every string. Leaving it unset means "unknown",
   which is the honest answer and the one every consumer already handles. }
 
+{ ESP-IDF: the byte I/O primitives go through newlib's POSIX read/write, which
+  IDF's VFS services (fd 0/1/2 are the console UART). There is no kernel under
+  FreeRTOS, so the raw-syscall arms below would be an `ecall`/`syscall` trap
+  there -- a Guru Meditation, not an error return. BARE has neither newlib nor
+  a VFS and keeps its own story (no stdout; UART is MMIO in user code).
+  The Pascal names are prefixed so they cannot shadow the Read/Write intrinsics.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls (a Python `print` on an
+  ESP32 printed nothing: it lowers to IR_WRITE, which ended here). }
+{$ifdef PXX_PLATFORM_ESP}{$ifndef PXX_ESP_BARE}{$define PXX_IDF_STDIO}{$endif}{$endif}
+{$ifdef PXX_IDF_STDIO}
+function PXXIdfPosixRead(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'read';
+function PXXIdfPosixWrite(fd: Integer; buf: Pointer; count: Integer): Integer; cdecl; external name 'write';
+function PXXIdfPutchar(c: Integer): Integer; cdecl; external name 'putchar';
+function PXXIdfGetchar: Integer; cdecl; external name 'getchar';
+
+{ fd 0/1/2 ARE NOT POSIX FDS UNDER IDF. esp_libc's picolibc_init opens the
+  console and stores WHATEVER fd open() returned in its stdin/stdout streams,
+  so `write(1, ...)` finds no VFS entry and answers EBADF -- measured
+  2026-09-19 under gdb: esp_vfs_write(fd=1, "Aurora", 6) = -1 while IDF's own
+  log flushed to fd 0. So the standard streams go through the libc STREAMS,
+  by function only: putchar per byte. stdout is LINE-buffered, so a newline
+  flushes it. NOT fflush(NULL): this picolibc takes the lock of the NULL
+  stream (__flockfile) and load-faults -- measured the same evening. The one
+  gap is a final line with no newline, which stays in the buffer when the task
+  ends. Any other fd is a real VFS fd from open(). }
+function PXXIdfStdWrite(buf: Pointer; count: Integer): Integer;
+var i, r: Integer; p: PByte;
+begin
+  p := PByte(buf);
+  for i := 0 to count - 1 do
+  begin
+    r := PXXIdfPutchar(p[i]);
+    if r < 0 then begin Result := -1; Exit; end;
+  end;
+  Result := count;
+end;
+
+procedure PXXIdfVTaskDelete(task: Pointer); cdecl; external name 'vTaskDelete';
+
+{ The END of a program under IDF. app_main is a FreeRTOS task, not a process:
+  there is nothing to exit to, and the old ending -- a busy self-loop --
+  starves the idle task until the task watchdog and then the interrupt
+  watchdog fire and the chip REBOOTS, replaying the program (measured
+  2026-09-19). Deleting the calling task is exactly what IDF's own main_task
+  does when app_main returns. The codegen calls this by name, after the
+  finalizers and before its park, so the park stays as the fallback if this
+  unit is absent. (No flush: see PXXIdfStdWrite for why fflush(NULL) cannot
+  be used here.) }
+procedure PXXIdfTaskEnd;
+begin
+  PXXIdfVTaskDelete(nil);
+end;
+
+function PXXIdfStdRead(buf: Pointer; count: Integer): Integer;
+var n, c: Integer; p: PByte;
+begin
+  p := PByte(buf);
+  n := 0;
+  while n < count do
+  begin
+    c := PXXIdfGetchar;
+    if c < 0 then Break;            { EOF: what was read so far, 0 = EOF }
+    p[n] := Byte(c);
+    Inc(n);
+    if c = 10 then Break;           { a line at a time, as a tty read returns }
+  end;
+  Result := n;
+end;
+{$endif}
+
 function PXXSysRead(fd, buf, count: NativeInt): Int64;
 begin
-{$if defined(CPUX86_64)}
+{$if defined(PXX_IDF_STDIO)}
+  if fd = 0 then Result := PXXIdfStdRead(Pointer(buf), Integer(count))
+  else Result := PXXIdfPosixRead(Integer(fd), Pointer(buf), Integer(count));
+{$elseif defined(CPUX86_64)}
   Result := __pxxrawsyscall(0, fd, buf, count);
 {$elseif defined(CPU_I386)}
   Result := __pxxrawsyscall(3, fd, buf, count);
@@ -2671,7 +2744,10 @@ function PXXSysWrite(fd, buf, count: NativeInt): Int64;
 var iov: array[0..1] of Integer; nw: Integer;
 {$endif}
 begin
-{$if defined(CPU_WASM32)}
+{$if defined(PXX_IDF_STDIO)}
+  if (fd = 1) or (fd = 2) then Result := PXXIdfStdWrite(Pointer(buf), Integer(count))
+  else Result := PXXIdfPosixWrite(Integer(fd), Pointer(buf), Integer(count));
+{$elseif defined(CPU_WASM32)}
   { One iovec: [ptr, len]. WASI returns an ERRNO, not a byte count — the count
     is written to *nwritten — so the two are not interchangeable and a caller
     reading the return value as a length would get 0 on success. }

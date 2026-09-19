@@ -55,3 +55,15 @@ ride a bug ticket.
 `root-cause-over-microfix` says count tickets closed per change. Nobody has yet
 named a program that wants `uses builtin;` on a bare boot. **Rank it against
 that**, not against how close it looks.
+
+## 2026-09-19 (frankS): a named program now wants it
+
+The ranking test above asked for one. A NilPy program on a bare ESP boot
+(`--esp-profile=bare`, either ISA) stops at step 0 here, `undefined variable
+(PXXVarBinOp)`, because NilPy's runtime is built on `builtin`. The IDF profile
+does NOT need this: the same program now runs on an ESP32-C3 under IDF
+(`examples/esp32/nilpy-c3`). So this is the bare route of "a static Python
+application on an ESP", not the only route. That is why it is not wired as a
+blocker of `bug-a-nilpy-on-cross-targets-four-remaining-walls`. Rank it
+knowing that.
+

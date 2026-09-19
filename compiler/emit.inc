@@ -1592,8 +1592,13 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    if EspBareBoot then
-      { Bare-metal: no exit syscall — park in a self-loop. }
+    if TargetPlatform = PLATFORM_ESP then
+      { Bare metal / IDF: no kernel, so no exit syscall -- park in a self-loop,
+        as xtensa does. This asked `EspBareBoot` until 2026-09-19, the wrong
+        question (TargetPlatform is the axis, EspBareBoot one input to it): on
+        the IDF profile riscv32 took the hosted arm, and every NilPy program
+        on an ESP32-C3 that ran to its end died in an `ecall` Guru Meditation
+        on exit_group. The Halt-code sibling below had the same test. }
       EmitI32($0000006F) { jal zero, 0 }
     else
     begin
@@ -1720,7 +1725,7 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    if EspBareBoot then
+    if TargetPlatform = PLATFORM_ESP then            { bare AND IDF: see EmitExit }
       EmitI32($0000006F)                             { jal zero, 0 — park }
     else
     begin

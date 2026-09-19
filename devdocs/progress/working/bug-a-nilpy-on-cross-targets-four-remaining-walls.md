@@ -2,10 +2,10 @@
 track: A
 prio: 85
 type: bug
-blocked-by: []
-summary: "ARM32 NOW WORKS — measured 2026-08-31, it builds AND runs a class-heavy .npy correctly under qemu-arm, so the SIGILL below is fixed and this ticket is no longer 'no cross target'. The other walls, re-measured at that date and NOT what the table below says: i386 `symbol kind not supported yet (load)`, aarch64 `indirect call with more than 8 parameters` (ir_codegen_aarch64.inc:3309 — one of SIX separate >8 refusals on that backend), riscv32/xtensa BARE METAL: the heap-arena wall is CLEARED (2026-09-17) — all three of esp32s3/esp32c6/esp32c3 now reach a NEW and deeper wall, `undefined variable (PXXVarBinOp)` in builtin.pas, which is bare metal pulling no `builtin` unit at all (espassert.pas:24 documents it: that unit does not compile for ESP). HOSTED riscv32/xtensa still refuse — EmitMmapArena has no arm for either, which is a different fix. wasm32 `undefined variable (SYS_openat)`. Five walls, not four. **THE SIZE ARGUMENT THAT STOOD HERE IS RETRACTED (2026-09-18): it compared CODE against SRAM.** It said `print('hi')` is ~1.74 MB on i386 / ~3.14 MB on arm32 against 262,144 bytes of C3 SRAM and therefore could not fit. Those megabytes are `.text`, which lives in FLASH on the IDF profile; only `--esp-profile=bare` loads code into IRAM and defs.inc:2275 says that is qemu's map, not a chip's. Re-measured: data+bss for that program is **146,612 B on i386 AND on arm32** (identical, while code differs by 1.4 MB), 152,880 B on x86-64 — against ~400 KB usable C3 SRAM, not ruled out. DCE was ranked as the prerequisite and cuts ZERO bytes of data or bss (`code=1347352->745240`, data and bss byte-identical), so it buys flash only. The Track U escalation built on this is in `rejected/`. **What is still unmeasured is SRAM on a chip** — IDF's own consumption, the 64 KB `SocBareArenaSize` arena bare metal adds, the 32 KB `SIG_ALTSTACK_SIZE` it drops; that is `umbrella-an-esp32-image-is-as-small-as-it-can-be`. DCE for NilPy landed anyway (a5419adbf, 44.7% of code, self-differential differ=0) and riscv32/xtensa re-patching is unblocked, unpriced, and worth flash rather than SRAM.** ~53 .npy tests stay cross-blind on everything but arm32."
-status: unfinished
-owner: claude-A
+blocked-by: [bug-a-xtensa-an-exception-landing-pad-cannot-reach-past-128-kib, bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit]
+summary: "PER TARGET, BY MECHANISM (re-measured 2026-09-19, frankS). ESP32-C3 under ESP-IDF (--platform=esp) WORKS: a class/list/loop/print program builds, links and runs under qemu with output == CPython (examples/esp32/nilpy-c3, build.sh qemu-assert). Six IDF-profile gaps were closed to get there: the NilPy heap arena is reserved in BSS on the IDF profile as on bare; the NilPy driver pulls softfloat before builtinheap through the same routine as every other driver; riscv32 IR_SYSCALL answers -ENOSYS on ESP instead of an `ecall` trap; ParamCount/ParamStr answer 0/'' on ESP on both ISAs; Write/print on IDF reaches the libc stdout stream; the program end deletes the FreeRTOS task instead of busy-parking. ESP32-S3 under IDF is walled by a BRANCH-REACH limit: an xtensa exception landing pad cannot reach past 128 KiB and pyeval has a larger procedure (bug-a-xtensa-an-exception-landing-pad-cannot-reach-past-128-kib); behind it, xtensa's IDF Write is still silent and its exit a busy park (bug-a-the-xtensa-idf-profile-still-silences-write-and-busy-parks-at-exit). BARE metal (--esp-profile=bare, both ISAs) is walled by DESIGN, not a bug: the `builtin` unit is unsupported on a bare boot and NilPy needs it (feature-bare-esp-supports-uses-builtin, which now has the named program its ranking asked for). Flash: ~3 MB of code without DCE, and `--dce` on riscv32 IDF drops a called body (bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile). Other targets UNCHANGED since 2026-08-31 and NOT re-measured tonight: arm32 works; i386 `symbol kind not supported yet (load)`; aarch64 has no stack-argument passing for 5 of 6 call kinds; hosted riscv32/xtensa Linux has no mmap arm for the arena; wasm32 `undefined variable (SYS_openat)`."
+status: working
+owner: frankS
 ---
 
 # NilPy on cross targets: four remaining walls
@@ -586,3 +586,21 @@ not SRAM; rank it on that.
 Both `2b2ec3fee` and `a5419adbf` are **inert until the next pin** (v411,
 `8d9d69bdc`, predates both).
 
+## 2026-09-19 (frankS): the ESP census, 2 chips x 2 routes, attempted from the application end
+
+Program: a class, a list of three instances, a loop, `//`, `len` and `print`
+(now `examples/esp32/nilpy-c3/main/main.npy`). Expectations were written BEFORE
+each run, per the census rule; both first expectations were WRONG, which is the
+useful part.
+
+| cell | expected first wall | measured, in order |
+| --- | --- | --- |
+| C3 IDF | IDF link: an undefined libc symbol | arena "needs mmap" -> softfloat not pulled -> links, image 3.3 MB > 1 MB partition -> boots, `ecall` in PXXEntropy64 -> `ecall` exit_group at the end -> prints nothing (`print` is IR_WRITE, silenced on ESP) -> `write(1)` EBADF (fd 1 is not a POSIX fd under IDF) -> `fflush(NULL)` faults -> busy park reboots the chip -> **GREEN**, output == CPython, one boot, no watchdog over 45 s |
+| S3 IDF | same as C3 | arena -> `ParamStr` refused (pylib's sys.argv) -> landing-pad reach (open, ticketed) |
+| C3 bare | a new missing declaration, PXXVarBinOp gone | still `undefined variable (PXXVarBinOp)`: the `builtin` unit is unsupported on bare BY DESIGN (the "done" ticket closed as working-as-intended) |
+| S3 bare | same as C3 bare | same |
+
+Binary at the green: `035bd63724e1` plus the builtinheap edits (compiler
+sources unchanged after it). INERT UNTIL PINNED: `examples/esp32/nilpy-c3/build.sh`
+defaults to the pinned compiler, so it passes only with `PXX=compiler/pascal26`
+until the next pin carries these changes.

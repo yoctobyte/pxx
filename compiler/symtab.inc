@@ -18270,6 +18270,29 @@ begin
     EmitI32(0);
 end;
 
+procedure EmitIdfTaskEndCall;
+{ Before a PROGRAM's final park on the ESP-IDF profile: call builtinheap's
+  PXXIdfTaskEnd, which flushes stdout and deletes the calling FreeRTOS task.
+  The park that follows (EmitExit) is then unreachable, and stays as the
+  fallback when builtinheap is not in the program.
+
+  Why: a busy self-loop in app_main starves the idle task, the task watchdog
+  and then the interrupt watchdog fire, and the chip reboots and REPLAYS the
+  program -- measured 2026-09-19 on a NilPy program on an ESP32-C3. Bare metal
+  has no scheduler and keeps its park.
+
+  riscv32 ONLY for now, and deliberately: xtensa's IDF exit is the same busy
+  park and very likely wants the same call, but tonight's evidence is riscv32
+  under qemu and the xtensa NilPy route does not build yet, so nothing could
+  verify it. bug-a-nilpy-on-cross-targets-four-remaining-walls }
+var pi: Integer;
+begin
+  if (TargetArch <> TARGET_RISCV32) or (TargetPlatform <> PLATFORM_ESP) or
+     EspBareBoot then Exit;
+  pi := FindProc('PXXIdfTaskEnd');
+  if pi >= 0 then EmitCallProc(pi);
+end;
+
 procedure ApplyCallFixups;
 var i, procIdx, rvHi, rvLo, tgt: Integer;
 begin

@@ -3060,7 +3060,17 @@ begin
           if procIdx = -Ord(tkArgCount) then
           begin
             { ParamCount = argc - 1; initial sp (saved by the entry stub)
-              points at argc. }
+              points at argc.
+
+              Under --platform=esp there is no argc: the IDF entry stub saved
+              FreeRTOS's task sp and bare saves nothing, so the load below read
+              an arbitrary stack word as the count -- a plausible wrong value.
+              0, as xtensa has answered there since it had the arm. }
+            if TargetPlatform = PLATFORM_ESP then
+            begin
+              rv32_addi(reg_a0, reg_zero, 0);
+              Exit;
+            end;
             EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
             rv32_lw(reg_t1, reg_t1, 0);
             rv32_lw(reg_a0, reg_t1, 0);
@@ -3098,17 +3108,24 @@ begin
               PXXCStrToFrozen turns nil into '' and the managed arm below tests
               it, so the whole contract falls out of these four instructions.
               bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
-            EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
-            rv32_lw(reg_t1, reg_t1, 0);               { initial sp }
-            rv32_lw(reg_t2, reg_t1, 0);               { argc }
-            rv32_sltu(reg_t2, reg_a0, reg_t2);        { 1 when 0 <= index < argc }
-            rv32_sub(reg_t2, reg_zero, reg_t2);       { -1 in range, 0 out }
-            rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> index 0 }
-            rv32_slli(reg_a0, reg_a0, 2);
-            rv32_addi(reg_t1, reg_t1, 4);             { argv base }
-            rv32_add(reg_a0, reg_t1, reg_a0);
-            rv32_lw(reg_a0, reg_a0, 0);               { argv[index] }
-            rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> nil }
+            if TargetPlatform = PLATFORM_ESP then
+              { No argv (see ParamCount): every index is out of range, so nil,
+                which the dest arms below turn into ''. Same answer as xtensa. }
+              rv32_addi(reg_a0, reg_zero, 0)
+            else
+            begin
+              EmitLoadGlobAddrRISCV32(reg_t1, BSS_INITIAL_RSP);
+              rv32_lw(reg_t1, reg_t1, 0);               { initial sp }
+              rv32_lw(reg_t2, reg_t1, 0);               { argc }
+              rv32_sltu(reg_t2, reg_a0, reg_t2);        { 1 when 0 <= index < argc }
+              rv32_sub(reg_t2, reg_zero, reg_t2);       { -1 in range, 0 out }
+              rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> index 0 }
+              rv32_slli(reg_a0, reg_a0, 2);
+              rv32_addi(reg_t1, reg_t1, 4);             { argv base }
+              rv32_add(reg_a0, reg_t1, reg_a0);
+              rv32_lw(reg_a0, reg_a0, 0);               { argv[index] }
+              rv32_and(reg_a0, reg_a0, reg_t2);         { out of range -> nil }
+            end;
             if (IRKind[valNode] = IR_LOAD_SYM) and
                (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
             begin
@@ -3547,7 +3564,29 @@ begin
       begin
         { Raw linux syscall (hosted qemu-user): args (nr, a0..a5) pushed, then
           popped into a7 (number) and a0..a5. 32-bit result in a0,
-          sign-extended into a0:a1 (Int64 result; negative = -errno). }
+          sign-extended into a0:a1 (Int64 result; negative = -errno).
+
+          Under --platform=esp there is no kernel, and an `ecall` there is not
+          -ENOSYS, it is a Guru Meditation ("Environment call from M-mode").
+          xtensa has answered -ENOSYS (-38, PAL_ERR_UNSUPPORTED) on that profile
+          since cf72dd641 -- see its IR_SYSCALL arm for the reasoning -- and this
+          backend never got the arm: measured 2026-09-19, every NilPy program on
+          an ESP32-C3 under IDF rebooted forever in PXXEntropy64, which pylib's
+          initialization calls to seed `random` and which falls back correctly
+          on a failed getrandom. Args are still emitted (side effects), values
+          discarded. bug-a-nilpy-on-cross-targets-four-remaining-walls }
+        if TargetPlatform = PLATFORM_ESP then
+        begin
+          argNode := IRA[node];
+          while argNode <> -1 do
+          begin
+            IREmitNodeRISCV32(IRA[argNode]);
+            argNode := IRB[argNode];
+          end;
+          rv32_addi(reg_a0, reg_zero, -38);
+          rv32_srai(reg_a1, reg_a0, 31);
+          Exit;
+        end;
         argNode := IRA[node]; nArgs := 0;
         while argNode <> -1 do
         begin
@@ -3566,11 +3605,20 @@ begin
 
     IR_WRITE, IR_WRITELN:
       begin
-        if TargetPlatform = PLATFORM_ESP then
+        if (TargetPlatform = PLATFORM_ESP) and EspBareBoot then
         begin
-          { ESP: write/writeln emits nothing. UART output is explicit MMIO in
-            user code on bare (test_esp_bare.pas), and an IDF component
-            declares its own esp_rom_printf (docs/targets/esp32.md:86).
+          { BARE ESP: write/writeln emits nothing. UART output is explicit MMIO
+            in user code (test_esp_bare.pas).
+
+            THE IDF PROFILE PRINTS NOW (2026-09-19), through the hosted helper
+            path below: builtinheap's PXXSysWrite/PXXSysRead have a PXX_IDF_STDIO
+            arm that calls newlib's write/read, which IDF's VFS services on the
+            console UART, so the helpers no longer reach a kernel by `ecall`,
+            and the one inline syscall below routes through PXXSysWrite on ESP.
+            That removes the reason the IDF profile was silenced (the history
+            below). What forced it: a Python `print` lowers to IR_WRITE, so a
+            NilPy application on an ESP32-C3 ran to completion and printed
+            nothing. bug-a-nilpy-on-cross-targets-four-remaining-walls
 
             ASKED AS `EspBareBoot` UNTIL 2026-09-18, AND THAT WAS THE WRONG
             QUESTION -- the same wrong question ir_codegen.inc:1374 already
@@ -3619,12 +3667,23 @@ begin
             end;
             if Strs[si].Len > 0 then
             begin
-              { write(1, data+8, len) — inline syscall, no helper needed }
+              { write(1, data+8, len) — inline syscall, no helper needed;
+                under IDF there is no kernel, so the same three arguments go
+                to PXXSysWrite, whose IDF arm calls newlib's write. }
               EmitLoadImmRISCV32(reg_a0, 1);
               EmitLoadDataRefRISCV32(reg_a1, Strs[si].Offset + 8);
               EmitLoadImmRISCV32(reg_a2, Strs[si].Len);
-              EmitLoadImmRISCV32(reg_a7, 64);          { __NR_write }
-              EmitI32($00000073);                      { ecall }
+              if TargetPlatform = PLATFORM_ESP then
+              begin
+                procIdx := FindProc('PXXSysWrite');
+                if procIdx < 0 then Error('compiler error: PXXSysWrite not found');
+                EmitCallProc(procIdx);
+              end
+              else
+              begin
+                EmitLoadImmRISCV32(reg_a7, 64);        { __NR_write }
+                EmitI32($00000073);                    { ecall }
+              end;
             end;
           end
           else
@@ -3770,6 +3829,7 @@ begin
             from inside the fifth hand-rolled copy of it. Two of the six had
             drifted to a thread-only exit by then —
             bug-b-concurrent-halt-from-several-threads-exits-0. }
+          EmitIdfTaskEndCall;                    { IDF: end the task, not a busy park }
           if (IRA[node] <> -1) and (not EspBareBoot) then
           begin
             IREmitNodeRISCV32(IRA[node]);        { a0 = the exit code }
@@ -3781,7 +3841,10 @@ begin
         else if CurProc >= 0 then
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit via epilogue }
         else
+        begin
+          EmitIdfTaskEndCall;
           EmitExit(0);
+        end;
       end;
 
     IR_DEFAULT_MEM:

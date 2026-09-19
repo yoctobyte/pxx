@@ -94,8 +94,13 @@ begin
       here with the four slots that point INTO it -- before the entry stub, for
       the same reason they are. Costs nothing in the file (BSS is memsz-only, so
       `filesz` does not move); it costs SRAM, which CheckBareImageFitsSram is
-      what bounds. Hosted targets leave it 0 and mmap as before. }
-    if EspBareBoot then
+      what bounds. Hosted targets leave it 0 and mmap as before.
+      THE IDF PROFILE TOO (--platform=esp): it is an object linked into an
+      ESP-IDF app, so there is no kernel to mmap from either, and its BSS lands
+      in DRAM through IDF's own linker script. Bare-only here left every NilPy
+      program refused on both ESP chips under IDF with "a heap arena needs
+      mmap" -- the route an ESP application actually takes. }
+    if EspBareBoot or (TargetPlatform = PLATFORM_ESP) then
     begin
       BSS_HEAP_ARENA := BSSSize;
       Inc(BSSSize, SocNilPyArenaSize(TargetSoc));
@@ -124,6 +129,24 @@ begin
   { THE finish-the-runtime step: signal runtime (restorer / dispatch / sethook /
     install; --no-signals opts out) plus the --threadsafe I/O lock stubs. }
   EmitProgramRuntimeStubsForTarget;
+end;
+
+procedure PullSoftFloatBeforeBuiltinHeap;
+{ The one statement of "a no-FPU target that has an RTL pulls softfloat BEFORE
+  builtinheap": that unit's float bodies compile against the __pxx_* kernels,
+  so pulling it alone fails with `the soft-float kernel __pxx_l2d is not
+  linked`. Hosted/IDF riscv32 and xtensa; bare stays on its own on-demand scan
+  (no RTL, and ~54-64KB of flash a float-free MCU program must not pay).
+
+  A routine and not a line because there are two doors onto builtinheap: this
+  file's PullTargetRuntimeUnits and the NilPy driver, which pulls the unit
+  itself. The NilPy copy never had the softfloat half, so every NilPy program
+  for ESP-IDF died on that message once the arena wall in front of it was gone
+  (bug-a-nilpy-on-cross-targets-four-remaining-walls, 2026-09-19). }
+begin
+  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
+     (not EspBareBoot) then
+    ParseUsesUnitAmbient('softfloat');
 end;
 
 procedure PullTargetRuntimeUnits;
@@ -157,9 +180,7 @@ procedure PullTargetRuntimeUnits;
   bug-a-a-frontend-cannot-see-that-a-backend-calls-library-routines-it-never-mentions }
 begin
   if not TargetCodegenCallsHeapRuntime then Exit;
-  if ((TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA)) and
-     (not EspBareBoot) then
-    ParseUsesUnitAmbient('softfloat');
+  PullSoftFloatBeforeBuiltinHeap;
   ParseUsesUnitAmbient('builtinheap');
   ParseUsesUnitAmbient('builtin');
 end;

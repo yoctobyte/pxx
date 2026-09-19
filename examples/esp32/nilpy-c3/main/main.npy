@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: 0BSD
+# A static Python application for the ESP32-C3: a class, a list, a loop and
+# print, compiled by pxx straight to a relocatable object and linked by the
+# normal ESP-IDF build. No interpreter on the chip -- this IS the machine code.
+# Its output is CPython's own, byte for byte (build.sh qemu-assert checks).
+
+class Boat:
+    def __init__(self, name, speed):
+        self.name = name
+        self.speed = speed
+
+    def eta(self, dist):
+        return dist // self.speed
+
+def main():
+    fleet = [Boat("Aurora", 6), Boat("Wind", 8), Boat("Kees", 5)]
+    total = 0
+    for b in fleet:
+        t = b.eta(120)
+        total += t
+        print(b.name, t)
+    print("total", total, len(fleet))
+
+main()

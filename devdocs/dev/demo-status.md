@@ -95,7 +95,16 @@ real window.** On evidence:
 - **The other two goal-3 demos.** lekkerzeilen (NilPy) and busybox (C) are not
   `examples/**` Pascal programs and are tracked on their own umbrellas.
 - **Cross targets.** Everything above is x86-64 Linux; esp32 examples are
-  skipped by `make demos`.
+  skipped by `make demos`. The one cross demo measured so far is
+  **`examples/esp32/nilpy-c3`: a static Python application on the ESP32-C3**
+  (a class, a list, a loop, `print`), compiled by pxx to machine code and linked
+  by ESP-IDF. `./build.sh qemu-assert` boots it under Espressif qemu and diffs
+  the console against CPython's output: **OK, one boot, no watchdog over 45 s**
+  (2026-09-19, frankS, HEAD binary `035bd63724e1`). **Checked** in this table's
+  terms. It needs the compiler fixes landed with it, so until the next pin run
+  it as `PXX=compiler/pascal26 ./build.sh qemu-assert`. Not measured: silicon,
+  and the ESP32-S3 (its route is still walled, see
+  `bug-a-nilpy-on-cross-targets-four-remaining-walls`).
 
 ## Reproduce
 

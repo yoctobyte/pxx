@@ -3503,16 +3503,18 @@ begin
               why ParamCount alone does not make test_arm32_arg_runtime green
               and both arms are in this change. Mirrors riscv32.
 
-              Refused rather than faked under --platform=esp: there is no argv
-              to index, and unlike SysGetRandom nothing in the portable RTL
-              calls ArgStr (checked, not assumed), so an ESP program reaching
-              here asked for it directly and an empty string would be a lie it
-              cannot detect. That is the opposite call from IR_SYSCALL's -ENOSYS
-              and for the stated reason: that arm exists to let STATICALLY
-              UNREACHABLE library calls compile away. }
-            if TargetPlatform = PLATFORM_ESP then
-              Error('target xtensa: ArgStr/ParamStr needs a command line, which '
-                    + 'an ESP image has not; ParamCount answers 0 there');
+              Under --platform=esp there is no argv, so every index is out of
+              range and the answer is '' -- which is not a fake: with ParamCount
+              answering 0 (the arm below), '' IS the language's answer for
+              ParamStr(i), exactly as for ParamStr(3) on a host with no
+              arguments. This used to be a codegen Error, on the premise that
+              "nothing in the portable RTL calls ArgStr (checked, not assumed)".
+              That stopped being true: pylib's pysys_argv calls ParamStr, so the
+              refusal took EVERY NilPy program out of the ESP32-S3 whether or not
+              it touched sys.argv -- the whole-unit cost the IR_SYSCALL arm's
+              -ENOSYS convention exists to avoid (2026-09-19,
+              bug-a-nilpy-on-cross-targets-four-remaining-walls). The index is
+              still evaluated, for its side effects. riscv32 does the same. }
             argNode := IRB[node];
             if argNode = -1 then Error('target xtensa: ArgStr expects an index');
             IREmitNodeXtensa(IRA[argNode]);            { a2 = index }
@@ -3529,17 +3531,22 @@ begin
               x86-64's `jb` does. Out of range yields NIL, and PXXCStrToFrozen
               turns nil into '' for free.
               bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets }
-            EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
-            EmitAsmXtensa(['l32i a8, a8, 0',            { initial sp }
-                           'l32i a9, a8, 0',            { argc }
-                           'bgeu a2, a9, .oor',         { unsigned: catches < 0 too }
-                           'add a2, a2, a2', 'add a2, a2, a2',  { index*4, no shift-imm }
-                           'addi a8, a8, 4',            { argv base }
-                           'add a2, a8, a2',
-                           'l32i a2, a2, 0',            { argv[index] }
-                           'j .done',
-                           '.oor:', 'movi a2, 0',
-                           '.done:']);
+            if TargetPlatform = PLATFORM_ESP then
+              EmitLoadConstXtensa(reg_xtensa_a2, 0)     { no argv: always nil -> '' }
+            else
+            begin
+              EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+              EmitAsmXtensa(['l32i a8, a8, 0',            { initial sp }
+                             'l32i a9, a8, 0',            { argc }
+                             'bgeu a2, a9, .oor',         { unsigned: catches < 0 too }
+                             'add a2, a2, a2', 'add a2, a2, a2',  { index*4, no shift-imm }
+                             'addi a8, a8, 4',            { argv base }
+                             'add a2, a8, a2',
+                             'l32i a2, a2, 0',            { argv[index] }
+                             'j .done',
+                             '.oor:', 'movi a2, 0',
+                             '.done:']);
+            end;
             if (IRKind[valNode] = IR_LOAD_SYM) and
                (Syms[IRA[valNode]].TypeKind = tyAnsiString) then
             begin
