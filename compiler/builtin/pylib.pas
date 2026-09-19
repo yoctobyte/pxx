@@ -821,6 +821,10 @@ type
     procedure truncate(sz: Int64);
     procedure flush;
     procedure close;
+    { f.fileno(): the OS descriptor, which is all `mmap.mmap(f.fileno(), 0)`
+      needs. It was absent, so That Space Program's ephemeris reader stopped at
+      "TPyFile has no method fileno" right after its mmap import resolved. }
+    function fileno: Int64;
   end;
 
   { A CURSOR — CPython's `map` / `filter` / `enumerate` / `zip` / `reversed`
@@ -20049,6 +20053,11 @@ begin
   r := PyPalClose(FFd);
 end;
 
+function TPyFile.fileno: Int64;
+begin
+  Result := FFd;
+end;
+
 { repr() dispatching on the RUNTIME tag, so a container element nested inside a
   container is spelled out rather than printed as its object handle. }
 { `<function at 0x...>` for a CALLABLE VALUE. A function value used to render
@@ -21262,7 +21271,11 @@ begin
     str(KeyError) is. A user-CONSTRUCTED `KeyError("k")` still loses the quotes;
     that is the `e.args` gap, and the message is a strict improvement on an
     address either way. }
-  if (mi = nil) and (not wantRepr) and (o is Exception) then
+  { ExceptionBase, not Exception: an RTL-rooted exception (sysutils' tree, which
+    is what a mimic_ unit's bare `Exception` names after `uses pylib, sysutils`)
+    has the same `msg` on the same root and printed as an address here. The
+    frontend's PyClassStrNode draws the same line. }
+  if (mi = nil) and (not wantRepr) and (o is ExceptionBase) then
   begin
     { KeyError is the one builtin whose str() is the REPR of its argument —
       `str(KeyError('inner'))` is "'inner'", with the quotes. That used to come
@@ -21276,7 +21289,7 @@ begin
        (Exception(o).GetArgs.count = 1) then
       outS := pyvar_repr(Exception(o).GetArgs.at(0))
     else
-      outS := Exception(o).Message;
+      outS := ExceptionBase(o).Message;
     PyUserObjStr := True;
     Exit;
   end;
@@ -21294,12 +21307,12 @@ begin
     PyUserObjStr := True;
     Exit;
   end;
-  if (mi = nil) and wantRepr and (o is Exception) and (not (o is KeyError)) then
+  if (mi = nil) and wantRepr and (o is ExceptionBase) and (not (o is KeyError)) then
   begin
-    if Exception(o).Message = '' then
+    if ExceptionBase(o).Message = '' then
       outS := TObject(o).ClassName + '()'
     else
-      outS := TObject(o).ClassName + '(' + pyrepr_of(Exception(o).Message) + ')';
+      outS := TObject(o).ClassName + '(' + pyrepr_of(ExceptionBase(o).Message) + ')';
     PyUserObjStr := True;
     Exit;
   end;

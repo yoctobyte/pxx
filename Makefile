@@ -1205,6 +1205,10 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_bytesrange26 | diff -u test/test_nilpy_bytes_of_a_range_or_an_iterator.expected -
 	./$(COMPILER) test/test_nilpy_a_module_qualified_annotation_reads_as_its_last_name.npy $(TESTTMP)/test_nilpy_qualann26
 	$(TESTTMP)/test_nilpy_qualann26 | diff -u test/test_nilpy_a_module_qualified_annotation_reads_as_its_last_name.expected -
+	./$(COMPILER) test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy $(TESTTMP)/test_nilpy_mmapro26
+	$(TESTTMP)/test_nilpy_mmapro26 | diff -u test/test_nilpy_mmap_read_only_and_struct_unpack_from.expected -
+	./$(COMPILER) test/test_nilpy_an_rtl_rooted_exception_prints_its_message.npy $(TESTTMP)/test_nilpy_rtlexcmsg26
+	$(TESTTMP)/test_nilpy_rtlexcmsg26 | diff -u test/test_nilpy_an_rtl_rooted_exception_prints_its_message.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

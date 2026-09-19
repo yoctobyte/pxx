@@ -1,0 +1,87 @@
+# mmap.mmap over a file, read-only, and struct.unpack_from over the result --
+# the shapes That Space Program's SPK ephemeris reader (tsp/ephem/spk.py) uses:
+# a mapping held in a field annotated "mmap.mmap | bytes", len(), bytes(m[a:b]),
+# struct.unpack_from(fmt, m, off), a Struct reused per record, and close().
+# Also f.fileno(), which the mmap call needs and which was absent.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+import mmap
+import os
+import struct
+
+P = "/tmp/pxx_test_mmap_read_only.bin"
+
+# a header, then three little-endian records of (double, double, int32, int32)
+REC = struct.Struct("<2d2i")
+with open(P, "wb") as w:
+    w.write(b"DAF/SPK " + bytes([i for i in range(8)]))
+    for k in range(3):
+        w.write(REC.pack(1.5 * k, -2.25 * k, k, -k))
+
+
+class Reader:
+    def __init__(self, path: str):
+        self._file = open(path, "rb")
+        self._file.read(4)   # the mapping must not care where the file position is
+        self._buf: "mmap.mmap | bytes" = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
+        self._rec: "struct.Struct | None" = REC
+
+    def header(self) -> bytes:
+        return bytes(self._buf[0:8])
+
+    def record(self, i: int):
+        return self._rec.unpack_from(self._buf, 16 + i * REC.size)
+
+    def close(self):
+        self._buf.close()
+        self._file.close()
+
+
+r = Reader(P)
+print(len(r._buf), r._file.tell())
+print(r.header(), r.header().decode("ascii").strip())
+for i in range(3):
+    print(r.record(i))
+
+m = r._buf
+print(bytes(m[8:16]), m[9], m[15])
+print(struct.unpack_from("<2i", m, 16 + REC.size + 16))
+print(struct.unpack_from("<i", m, -4), struct.unpack_from("<d", m, -24))
+
+for fmt, off in [("<2i", len(m) - 4), ("<i", -len(m) - 1), ("<2i", -4)]:
+    try:
+        struct.unpack_from(fmt, m, off)
+        print("no error", fmt, off)
+    except struct.error as e:
+        print("struct.error:", e)
+
+# Struct.unpack_from with no offset, and the module-level one on plain bytes
+print(struct.Struct("<4B").unpack_from(b"\x01\x02\x03\x04\x05"))
+print(struct.unpack_from("<h", b"\x00\x01\x02", 1))
+
+# ACCESS_COPY is a private copy; a zero-length map of an empty file refuses
+f2 = open(P, "rb")
+c = mmap.mmap(f2.fileno(), 16, access=mmap.ACCESS_COPY)
+print(len(c), bytes(c[0:3]))
+c.close()
+try:
+    mmap.mmap(f2.fileno(), 1 << 20, access=mmap.ACCESS_READ)
+    print("no error")
+except ValueError as e:
+    print("ValueError:", e)
+f2.close()
+
+E = P + ".empty"
+open(E, "wb").close()
+fe = open(E, "rb")
+try:
+    mmap.mmap(fe.fileno(), 0, access=mmap.ACCESS_READ)
+    print("no error")
+except ValueError as e:
+    print("ValueError:", e)
+fe.close()
+
+print(mmap.ACCESS_READ, mmap.ACCESS_COPY)
+r.close()
+os.remove(P)
+os.remove(E)
+print("done")

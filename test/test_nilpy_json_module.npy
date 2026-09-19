@@ -26,3 +26,22 @@ with p.open("w", encoding="utf-8") as f:
 with p.open("r", encoding="utf-8") as f:
     r = json.load(f)
 print(r["name"], r["bpm"], r["tags"][1], len(r))
+
+# Malformed input raises json.JSONDecodeError, which is a ValueError. It raised
+# the parser's internal EJSONError, which neither clause catches, so a program
+# guarding a settings read with either died unhandled. The message is the
+# parser's own, not CPython's, so these rows print the type and not the text.
+for bad in ["{bad", "", "[1, 2", "nope"]:
+    try:
+        json.loads(bad)
+        print("parsed", bad)
+    except json.JSONDecodeError as e:
+        print("JSONDecodeError", type(e).__name__, isinstance(e, ValueError), len(str(e)) > 0)
+try:
+    json.loads("[1,")
+except ValueError as e:
+    print("as ValueError", type(e).__name__)
+try:
+    json.loads("{")
+except (OSError, json.JSONDecodeError) as e:
+    print("in a tuple", type(e).__name__)

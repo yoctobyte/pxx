@@ -1,0 +1,11 @@
+print: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)
+str: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)
+percent: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)
+fstring: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)
+repr: error('unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)')
+in a list: [error('unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)')]
+rebound: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)
+tuple: offset -21 out of range for 20-byte buffer
+type: error
+described: not enough data to unpack 8 bytes at offset -4
+as Exception: unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 20)

@@ -36,8 +36,9 @@ unit mimic_struct;
 
   ABSENT, and each would be a hard error rather than a wrong answer: `s`/`p`
   (byte strings), `?` (bool), `c` (char), `n`/`N`/`P` (native-size ints),
-  `e` (half floats), `x` (pad bytes), and `pack_into`/`unpack_from`/
-  `iter_unpack`. Adding any of them is a small edit to ItemSize and the two
+  `e` (half floats), `x` (pad bytes), and `pack_into`/`iter_unpack`.
+  `unpack_from` was in that list until 2026-09-19, when That Space Program's
+  ephemeris reader needed it; it is below now, on the module and on Struct. Adding any of them is a small edit to ItemSize and the two
   loops; leaving them out is not a design, just an unmet need.
 
   The `Struct` CLASS was in that list until 2026-09-13, when lekkerzeilen's
@@ -141,6 +142,14 @@ function pack(const fmt: AnsiString; args: TPyList): TPyBytes; overload;
   tuple to repr(), type() and isinstance(). }
 function unpack(const fmt: AnsiString; b: TPyBytes): TPyList;
 
+{ unpack_from(fmt, buf, offset=0) -> tuple: the format's bytes read AT `offset`,
+  and the buffer may be longer than that. A negative offset counts from the end,
+  as CPython's does. That Space Program's SPK ephemeris reader is built on it: it
+  walks a 32 MB file of fixed-width records with one call per record and never
+  slices. The buffer is what `mmap.mmap` hands back, which is a TPyBytes here
+  (mimic_mmap), so the one signature serves both. }
+function unpack_from(const fmt: AnsiString; b: TPyBytes; offset: Integer = 0): TPyList;
+
 type
   { struct.Struct(fmt) -- one format, parsed once and reused.
 
@@ -154,7 +163,8 @@ type
     opens, once to size the read and once to check it came back whole.
 
     The four names below are every attribute of CPython's Struct that the
-    corpus reaches. `pack_into`, `unpack_from` and `iter_unpack` stay absent
+    corpus reaches, plus `unpack_from` (see the module-level one). `pack_into`
+    and `iter_unpack` stay absent
     on the class for the same reason they are absent at module level: nothing
     calls them, and a missing member is a compile error where a guess would
     be a wrong file. }
@@ -179,6 +189,7 @@ type
     function pack(args: TPyList): TPyBytes; overload;
     function pack_list(args: TPyList): TPyBytes;
     function unpack(b: TPyBytes): TPyList;
+    function unpack_from(b: TPyBytes; offset: Integer = 0): TPyList;
   end;
 
 implementation
@@ -465,11 +476,14 @@ begin
   end;
 end;
 
-function unpack(const fmt: AnsiString; b: TPyBytes): TPyList;
+{ The decode loop both entry points share: `fmt`'s items read from `b` starting
+  at byte `base`. The CALLER has checked that they fit, because the two
+  entries need different checks and different messages (unpack wants the
+  sizes EQUAL, unpack_from only wants them to fit). }
+function DecodeAt(const fmt: AnsiString; b: TPyBytes; base: Integer): TPyList;
 var i, off, cnt, sz, k: Integer;
     swap, isf: Boolean;
     c: Char;
-    need: Integer;
     f32: Single; f64: Double;
     i16: SmallInt; u16: Word;
     i32: LongInt; u32: LongWord;
@@ -478,13 +492,6 @@ var i, off, cnt, sz, k: Integer;
     inp: PS_U8;
     res: TPyList;
 begin
-  need := calcsize(fmt);
-  { CPython's message names both numbers and so does this one. A length
-    mismatch here is almost always a format that drifted from the writer's, and
-    the two sizes are what tells you which end moved. }
-  if b.FLen <> need then
-    raise error.Create('unpack requires a buffer of ' + IntToStr(need)
-                       + ' bytes, got ' + IntToStr(b.FLen));
   res := TPyList.Create;
   { A TUPLE, not a list. One representation, three Python types, and the kind is
     a runtime tag (PYSEQ_TUPLE) -- so this costs one assignment and is the
@@ -496,7 +503,7 @@ begin
   res.FKind := PYSEQ_TUPLE;
   inp := PS_U8(b.FData);
   FmtPrefix(fmt, i, swap);
-  off := 0;
+  off := base;
   c := ' ';
   cnt := 0;
   while NextItem(fmt, i, c, cnt) do
@@ -543,7 +550,45 @@ begin
       off := off + sz;
     end;
   end;
-  unpack := res;
+  DecodeAt := res;
+end;
+
+function unpack(const fmt: AnsiString; b: TPyBytes): TPyList;
+var need: Integer;
+begin
+  need := calcsize(fmt);
+  { CPython's message names both numbers and so does this one. A length
+    mismatch here is almost always a format that drifted from the writer's, and
+    the two sizes are what tells you which end moved. }
+  if b.FLen <> need then
+    raise error.Create('unpack requires a buffer of ' + IntToStr(need)
+                       + ' bytes, got ' + IntToStr(b.FLen));
+  unpack := DecodeAt(fmt, b, 0);
+end;
+
+{ CPython's three messages, word for word: a negative offset past the start, a
+  negative offset whose item runs off the end, and a non-negative one that does. }
+function unpack_from(const fmt: AnsiString; b: TPyBytes; offset: Integer = 0): TPyList;
+var need, at: Integer;
+begin
+  need := calcsize(fmt);
+  at := offset;
+  if at < 0 then
+  begin
+    if at + b.FLen < 0 then
+      raise error.Create('offset ' + IntToStr(offset) + ' out of range for '
+                         + IntToStr(b.FLen) + '-byte buffer');
+    at := at + b.FLen;
+    if at + need > b.FLen then
+      raise error.Create('not enough data to unpack ' + IntToStr(need)
+                         + ' bytes at offset ' + IntToStr(offset));
+  end
+  else if at + need > b.FLen then
+    raise error.Create('unpack_from requires a buffer of at least '
+                       + IntToStr(at + need) + ' bytes for unpacking '
+                       + IntToStr(need) + ' bytes at offset ' + IntToStr(at)
+                       + ' (actual buffer size is ' + IntToStr(b.FLen) + ')');
+  unpack_from := DecodeAt(fmt, b, at);
 end;
 
 { ------------------------------------------------------------- Struct ---- }
@@ -563,6 +608,11 @@ end;
 function StructUnpack(const fmt: AnsiString; b: TPyBytes): TPyList;
 begin
   StructUnpack := unpack(fmt, b);
+end;
+
+function StructUnpackFrom(const fmt: AnsiString; b: TPyBytes; offset: Integer): TPyList;
+begin
+  StructUnpackFrom := unpack_from(fmt, b, offset);
 end;
 
 constructor Struct.Create(const fmt: AnsiString);
@@ -590,6 +640,11 @@ end;
 function Struct.unpack(b: TPyBytes): TPyList;
 begin
   Result := StructUnpack(format, b);
+end;
+
+function Struct.unpack_from(b: TPyBytes; offset: Integer = 0): TPyList;
+begin
+  Result := StructUnpackFrom(format, b, offset);
 end;
 
 function Struct.pack(const a1: Variant): TPyBytes;

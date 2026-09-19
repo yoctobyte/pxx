@@ -1,0 +1,44 @@
+# An exception class from an RTL unit whose bare `Exception` is sysutils' and not
+# pylib's (struct.error here; json and queue had the same shape) printed as
+# `<__main__.error object at 0x..>` from print(e), str(e), "%s" % e and repr(e).
+# The same exception caught `as Exception` printed its message, so the output
+# depended on the except clause. Both trees share one root that holds the
+# message, and the frontend and the runtime now both test for that root.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+# The messages come from struct.unpack_from, whose wording matches CPython's.
+import struct
+
+B = bytes(range(20))
+
+try:
+    struct.unpack_from("<2i", B, 16)
+except struct.error as e:
+    print("print:", e)
+    print("str:", str(e))
+    print("percent: %s" % e)
+    print(f"fstring: {e}")
+    print("repr:", repr(e))
+    print("in a list:", [e])
+    held = e
+    print("rebound:", held)
+
+# the class LAST in a tuple, and a variant-held exception
+try:
+    struct.unpack_from("<i", B, -21)
+except (KeyError, IndexError, struct.error) as e:
+    print("tuple:", e)
+    print("type:", type(e).__name__)
+
+def describe(err):
+    return "described: " + str(err)
+
+try:
+    struct.unpack_from("<2i", B, -4)
+except struct.error as e:
+    print(describe(e))
+
+# caught as Exception -- this path already printed the message
+try:
+    struct.unpack_from("<2i", B, 16)
+except Exception as e:
+    print("as Exception:", e)

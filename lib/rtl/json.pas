@@ -93,8 +93,12 @@ function JSONParse(const src: AnsiString): TJSONValue;
 
 type
   { CPython raises this from loads/load on malformed input, and applications
-    catch it BY NAME — `except (OSError, json.JSONDecodeError)`. }
-  JSONDecodeError = class(Exception)
+    catch it BY NAME — `except (OSError, json.JSONDecodeError)` — or as the
+    ValueError it subclasses in CPython. Rooted on pylib's ValueError for that
+    reason: after `uses pylib, sysutils` a bare `Exception` here is the sysutils
+    one, which neither `except ValueError` nor a reader of CPython's hierarchy
+    expects. }
+  JSONDecodeError = class(ValueError)
   end;
 
 function dumps(const obj: Variant; indent: Integer = -1;
@@ -795,8 +799,16 @@ function loads(const s: AnsiString): Variant;
 var tree: TJSONValue;
 begin
   { JSONParse raises EJSONError; Python code catches json.JSONDecodeError, so
-    the failure is re-raised under the name the application knows. }
-  tree := JSONParse(s);
+    the failure is re-raised under the name the application knows.
+    This comment said so from 2026-07-28 and the code never did it: EJSONError
+    escaped `except json.JSONDecodeError` and the program died unhandled. The
+    message is still the parser's own, not CPython's
+    "Expecting value: line 1 column 1 (char 0)" wording. }
+  try
+    tree := JSONParse(s);
+  except
+    on E: EJSONError do raise JSONDecodeError.Create(E.Message);
+  end;
   loads := JsonPyFromTree(tree);
   { The tree is NOT freed here. Its strings are what the converted variants
     hold, and releasing them left the Python values pointing at freed text —

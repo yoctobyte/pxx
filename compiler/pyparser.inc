@@ -24109,7 +24109,7 @@ end;
   concept always costs (devdocs/dev/normalise-dont-special-case.md).
   bug-nilpy-user-str-dunder-on-an-exception-subclass-is-ignored }
 function PyClassStrNode(node, argCi: Integer): Integer;
-var mmi, excCi, fieldNode: Integer;
+var mmi, excCi, rootCi, fieldNode: Integer;
 begin
   PyClassStrNode := -1;
   if (node < 0) or (argCi < 0) then Exit;
@@ -24121,7 +24121,21 @@ begin
                                   node, -1);
     Exit;
   end;
+  { An exception of EITHER tree: pylib's `Exception` or the RTL's (sysutils).
+    The two are different classes that share one root, ExceptionBase, which is
+    where `msg` lives, at one offset for every descendant. Testing for pylib's
+    class alone sent an RTL-rooted exception down the plain-object arm, so
+    `except struct.error as e: print(e)` printed `<__main__.error object at
+    0x..>`. mimic_struct says `uses pylib, sysutils`, so its bare `Exception`
+    is the sysutils one, and every mimic_ unit written that way has the same
+    shape. The same exception caught `as Exception` printed its message, so the
+    answer depended on the catch clause. }
   excCi := PyLibExceptionCi;
+  if excCi >= 0 then
+  begin
+    rootCi := UClsParent[excCi];
+    if rootCi >= 0 then excCi := rootCi;
+  end;
   if (excCi >= 0) and ((argCi = excCi) or IsSubclassOf(argCi, excCi)) then
   begin
     fieldNode := AllocNode(AN_FIELD);
