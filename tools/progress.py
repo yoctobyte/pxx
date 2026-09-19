@@ -3605,6 +3605,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
         subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         was = "unowned" if not cur else "already yours"
         print(f"{args.slug} was already in working/ ({was}); owner set to {args.owner}.", file=sys.stderr)
+        _prompt_reverify_summary(args.slug, dst)
         _warn_claim_is_local(args.slug, args.owner)
         return 0
     move_ticket(src, dst)
@@ -3613,6 +3614,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
     subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"claimed {args.slug} -> working/ (owner: {args.owner}).", file=sys.stderr)
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit the move + edits together.", file=sys.stderr)
+    _prompt_reverify_summary(args.slug, dst)
     _warn_claim_is_local(args.slug, args.owner)
     return 0
 
@@ -3783,6 +3785,105 @@ def _warn_claim_is_local(slug: str, owner: str) -> None:
           "reads the", file=sys.stderr)
     print("claim:      snapshot. Publishing it costs seconds: tools/sync.sh",
           file=sys.stderr)
+
+
+def _summary_and_verified(path: Path) -> tuple[str, str]:
+    """(summary, verified-date) from a ticket's frontmatter. Both may be "".
+
+    Read through `parse_frontmatter` rather than a fresh regex so this agrees
+    with what `ready`, `next`, `check` and BOARD.md read. A second reader that
+    can disagree with the first is one reader, and the wrong one.
+    """
+    try:
+        fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+    except OSError:
+        return ("", "")
+    return (fm.get("summary", "").strip(), fm.get("verified", "").strip())
+
+
+def _wrap_for_stderr(text: str, width: int = 74) -> list[str]:
+    import textwrap
+    return textwrap.wrap(text, width=width) or [""]
+
+
+def _prompt_reverify_summary(slug: str, path: Path) -> None:
+    """Put the ticket's own summary in front of the seat that just claimed it.
+
+    THE CHEAPEST HALF OF A PROBLEM THAT HAS NO MEASURED MECHANICAL REMEDY.
+    Measured 2026-09-19 (decide-whose-job-is-it-to-notice-a-ticket-has-gone-stale):
+    FIVE stale ticket SUMMARIES were found by hand in one day across two lanes,
+    every one of them with a CORRECT body -- the part everyone reads
+    contradicting the part nobody scrolls to. The summary is what carries the
+    prio into the ranker, so a stale one promotes dead work to the top of a
+    queue and a seat is dispatched to it: one sat at p85 calling a 974-line file
+    "a 39-line stub", one was dispatched at p70 with forty lines of its own body
+    already saying FIXED.
+
+    DETECTION WAS MEASURED AND IT LARGELY DOES NOT WORK, which is why this is a
+    print and not a check. A body-says-done text rule has recall 1 of 5 on those
+    cases and flagged 7 of 586 open tickets, ALL SEVEN correctly open with
+    accurate summaries -- PARTIAL COMPLETION IS THE NORMAL CASE AND IS TEXTUALLY
+    INDISTINGUISHABLE FROM STALENESS. The one class that looked greppable, a
+    summary quoting a compiler diagnostic, FAILED ITS POSITIVE CONTROL: run
+    against the riscv32 ticket it was designed from it answered "not flagged",
+    because the quoted string is a generic template still in `compiler/` with
+    only the one arm fixed. Age is no signal either -- nothing open exceeds 19
+    days at ~250 commits a day, so staleness here is velocity-driven.
+
+    What is left is that every undetectable class needs the ticket read against
+    the tree, and a seat about to work on it is doing that anyway. The failure
+    is not that nobody notices; it is that the noticing happens AFTER dispatch
+    and nothing records it. So: print the summary at claim time, and give the
+    seat one command to record the outcome.
+
+    THIS DOES NOT STAMP `verified:` ITSELF, AND THAT IS THE POINT. A date this
+    function wrote would record "a seat was TOLD to check", never "a seat
+    checked" -- an 80%-accurate name, which this repo's own rules call worse
+    than a 0%-accurate one, in the direction where the field certifies the very
+    thing it was added to measure. The empty field is the measurement: if these
+    prints change nothing, `verified:` stays blank board-wide and that is the
+    failure rate for the cheap option, which is what would make the expensive
+    one (a model pass over every open ticket, on a cadence) arguable.
+    """
+    summary, verified = _summary_and_verified(path)
+    if not summary:
+        return
+    print("", file=sys.stderr)
+    print("claim: A TICKET IS A CLAIM WITH A DATE ON IT. Read this against the tree "
+          "before", file=sys.stderr)
+    print("claim:      you start — five stale summaries were found by hand in one "
+          "day, every", file=sys.stderr)
+    print("claim:      one with a correct body. The summary is what carried the "
+          "prio here.", file=sys.stderr)
+    print(f"claim:      last verified: {verified or 'NEVER'}", file=sys.stderr)
+    print("claim:", file=sys.stderr)
+    for line in _wrap_for_stderr(summary):
+        print(f"claim:      {line}", file=sys.stderr)
+    print("claim:", file=sys.stderr)
+    print(f"claim:      still true?  tools/progress.sh verified {slug}",
+          file=sys.stderr)
+    print("claim:      not true?     fix the summary in your FIRST commit, even if "
+          "you are", file=sys.stderr)
+    print("claim:                    not closing the ticket.", file=sys.stderr)
+
+
+def cmd_verified(args: argparse.Namespace) -> int:
+    """Record that a human-or-agent read this summary against the tree TODAY.
+
+    Deliberately its own verb and not a side effect of `claim`. See
+    `_prompt_reverify_summary`: a date written by the tool that PROMPTS the
+    check would certify the check rather than measure it.
+    """
+    path = find_ticket(args.slug)
+    today = _dt.date.today().isoformat()
+    set_field(path, "Verified", today)
+    subprocess.run(["git", "add", str(path)], cwd=ROOT,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"{args.slug}: summary verified against the tree on {today}.",
+          file=sys.stderr)
+    print("staged, not committed — it rides along with your first commit.",
+          file=sys.stderr)
+    return 0
 
 
 def cmd_park(args: argparse.Namespace) -> int:
@@ -3981,6 +4082,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="progress.sh",
         usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|F|M|N|O|P|R|S|T|U|W|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]\n"
+        "       %(prog)s verified <slug>   (the summary reads true against the tree today)\n"
         "       %(prog)s near <title or slug> [--track T] [--limit N] [--floor F]\n"
         "       %(prog)s dupes [--track T] [--limit N] [--floor F]",
     )
@@ -4017,6 +4119,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp.add_argument("--track", default="")
     sp.add_argument("--limit", type=int, default=20)
     sp.add_argument("--floor", type=float, default=0.30)
+    sp = sub.add_parser("verified")
+    sp.add_argument("slug")
     sp = sub.add_parser("resolve")
     sp.add_argument("slug")
     # Optional on purpose: the sha you can name here is the PRE-push one, and a
@@ -4038,6 +4142,8 @@ def main(argv: list[str]) -> int:
         return cmd_pending(args)
     if args.cmd == "fill":
         return cmd_fill(args)
+    if args.cmd == "verified":
+        return cmd_verified(args)
     if args.cmd == "resolve":
         return cmd_resolve(args)
     if args.cmd == "near":

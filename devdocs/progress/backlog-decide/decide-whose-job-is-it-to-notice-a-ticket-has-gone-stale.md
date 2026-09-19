@@ -8,17 +8,24 @@ created: 2026-09-19
 found-by: frankS
 owner: ""
 blocked-by: []
-summary: "FIVE stale ticket SUMMARIES were found by hand in one day (2026-09-19) across two lanes, each with a correct body — the part everyone reads contradicting the part nobody scrolls to, and the summary is what carries prio into the ranker, so a stale one promotes dead work to the top of a queue. Before proposing a tool I measured whether detection is possible, and IT LARGELY IS NOT: a text-marker heuristic has recall 1 of 5 on the real cases and flagged 7 of 586 open tickets, ALL SEVEN correctly-open with accurate summaries (precision 0). The four misses fail for THREE DIFFERENT reasons and only one is textual. The one class that looked mechanically checkable — a summary quoting a compiler diagnostic verbatim — FAILED ITS POSITIVE CONTROL: the riscv32 ticket's quoted string is a generic template still in the source, because only the specific arm was fixed. Age is no signal either: nothing open is over 19 days and the top tickets are 0-12 days old, because this tree takes ~250 commits a day — staleness here is caused by VELOCITY, not neglect. So the fork is not technical and no tool should be built until it is answered: WHEN A SEAT IS HANDED A TICKET, WHOSE JOB IS IT TO NOTICE THE TICKET IS OUT OF DATE — THE SYSTEM'S, OR THE SEAT'S? AND THE TOOL IS ALREADY SPECIFIED AND UNBUILT: `bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion` sits at p60 proposing exactly the body-says-done aperture, filed twenty days ago off a real dispatch loss — the numbers above ARE its measured yield, and they say it would catch its own founding case and one class of three, so it should be read before it is built rather than promoted. Recommendation inside: the seat's, made cheap and recorded, because every undetectable class requires reading the ticket against the tree, which is what a seat about to work on it does anyway."
+summary: "FIVE stale ticket SUMMARIES were found by hand in one day (2026-09-19) across two lanes, each with a correct body — the part everyone reads contradicting the part nobody scrolls to, and the summary is what carries prio into the ranker, so a stale one promotes dead work to the top of a queue. Before proposing a tool I measured whether detection is possible and IT LARGELY IS NOT, for a reason that kills every future grep proposal: PARTIAL COMPLETION IS THE NORMAL CASE AND IS TEXTUALLY INDISTINGUISHABLE FROM STALENESS — a body-says-done heuristic has recall 1 of 5 on the real cases and flagged 7 of 586 open tickets, ALL SEVEN correctly open with accurate summaries reading "FIXED piece 1 of the three" and "FIXED AT HEAD, STILL WRONG IN THE PIN" (precision 0). The four misses fail for THREE DIFFERENT reasons and only one is textual. The one class that looked mechanically checkable — a summary quoting a compiler diagnostic verbatim — FAILED ITS POSITIVE CONTROL: run against the riscv32 ticket it was designed from it answered not-flagged, because the quoted string is a generic template still in compiler/ with only the one arm fixed. Age is no signal either: nothing open is over 19 days and the top tickets are 0-12 days old, because this tree takes ~250 commits a day — staleness here is VELOCITY, not neglect. THE CHEAP HALF IS BUILT AND DID NOT WAIT FOR THIS TICKET (claim now prints the summary with a last-verified date, `progress.sh verified <slug>` records one, and claim deliberately never stamps it — guarded by a positive control). WHAT IS LEFT FOR THE OWNER IS A COST, NOT A DESIGN: do we want to spend model time, every day, having something read every open ticket against the tree — or is that the job of whoever picks the ticket up? A standing pass over 586 tickets is the only approach measured to work and it is a permanent token commitment, which is his dial. Also measured, independent of the fork: `progress.sh check` already answers the system side partly and emits 45 findings / 36,395 bytes, 20 of them NEAR-DUP — a 36KB report is not read, so a family with precision 0 makes it 36KB plus noise. AND THE TOOL IS ALREADY SPECIFIED AND UNBUILT: `bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion` sits at p60 proposing exactly the body-says-done aperture, filed twenty days ago off a real dispatch loss — the numbers above ARE its measured yield, so it should be read before it is built rather than promoted."
+verified: 2026-09-19
 ---
 
 # The question
 
-**When a seat is handed a ticket, whose job is it to notice the ticket is out
-of date — the system's, or the seat's?**
+**Do we want to spend model time, every day, having something read every open
+ticket against the tree — or is that the job of whoever picks the ticket up?**
 
-No implementation noun in it, and that is deliberate: answer this and the
-engineering follows; build first and we get a checker for the one class that
-happens to be greppable.
+That is the whole fork and it is answerable in a word. It is stated as a
+**recurring cost** and not as "whose job is it", because the cost is the part
+that is genuinely the owner's: the token budget is explicitly his dial, and the
+only approach measured to work here is a model pass over 586 open tickets on a
+cadence. Who-does-what is a design he has no stake in; what it costs, forever,
+he owns outright.
+
+**The cheap half needs no answer and is already built** — see *What has already
+been done* below. This ticket is only about whether to add the standing spend.
 
 # Why it is worth a decision at all
 
@@ -128,36 +135,53 @@ decide is the reason it should not simply be promoted.
 
 # The options
 
-**A — the system's.** Detect staleness. Measured above: the cheap forms do not
-work. In practice this means an **LLM pass over 586 open tickets**, re-run
-periodically, reading each body against its summary and against the tree. It is
-the only approach shown to be capable of the classes that matter. It has a real
-recurring cost and needs an owner.
+**A — a standing model pass.** Something reads every open ticket against its
+own body and against the tree, on a cadence. It is the only approach shown to
+be capable of the three classes that matter. **The cost is the decision:** 586
+open tickets, re-read periodically, forever. That is a standing token
+commitment, and fleet token spend is the owner's dial, not a seat's.
 
-**B — the seat's, made cheap and recorded.** Every undetectable class requires
-reading the ticket against the tree — which is exactly what a seat about to
-work on it does anyway. The failure is not that nobody notices; it is that the
-noticing happens **after dispatch** and nothing records it. So: `claim` prints
-"re-verify the summary before starting; if it is wrong, fix it in your first
-commit", and a `verified:` date in the frontmatter that `claim` and `resolve`
-update. Costs no compute and no new judgement.
+**B — the seat that picks it up.** Already built (below). Costs no compute and
+no new judgement: the ticket's summary is put in front of the seat at `claim`,
+and `tools/progress.sh verified <slug>` records the outcome.
 
 **C — do nothing, and say so.** Treat a ticket as a claim with a date on it,
-and put that sentence in CLAUDE.md. Honest, and it leaves the p85-pointing-at-
-finished-work case intact.
+and put that sentence in CLAUDE.md. Honest, and it leaves the
+p85-pointing-at-finished-work case intact.
 
-# Recommendation: B, and not a tool until B has been tried
+# Recommendation: B is done; A is a *later* question, not a foreclosed one
 
-B addresses all three classes because it puts the check where the knowledge
-already is. A is the only thing measured to *work*, but it pays a recurring
-cost to find something a seat is about to discover anyway — and the five found
-today were all found by seats reading, which is B happening informally and
-going unrecorded.
+Take no decision on A yet. **B landing is what makes A arguable**, because it
+produces the one thing this ticket cannot: a measured failure rate for the
+cheap option. If stale summaries keep arriving with `verified:` blank across the
+board, that is B not being used and the answer is not more automation. If they
+keep arriving with `verified:` dates *on them*, the cheap option has been tried
+and failed, and the recurring spend has an evidence base instead of an anecdote.
 
-**Do not build a detector on the strength of this ticket.** The measurements
-above are the argument against the cheap ones; if the answer is A, it should be
-A deliberately, with an owner and a budget, not a greppable subset that flags
-seven correct tickets and misses four wrong ones.
+**Do not read B as this being closed.** And do not build a detector on the
+strength of this ticket: the measurements above are the argument against the
+cheap ones, and if the answer is A it should be A deliberately, with a budget,
+not a greppable subset that flags seven correct tickets and misses four wrong
+ones.
+
+# What has already been done (B, landed — this decide did not gate it)
+
+A reversible tooling change in Track T's own lane, so the act-then-report rule
+covers it and a filed decide is not a reason to stall the half that needs no
+decision:
+
+- **`claim` prints the ticket's own summary**, with `last verified: <date>` or
+  `NEVER`, and the two outcomes: `tools/progress.sh verified <slug>` if it still
+  reads true, or fix it in the first commit if it does not. A pointer the seat
+  has to go and open is the step that does not happen after dispatch.
+- **`tools/progress.sh verified <slug>`** stamps `verified: <today>` into the
+  frontmatter.
+- **`claim` deliberately does NOT stamp the field**, and that is the guarded
+  property. A date written by the command that *prompts* the check would record
+  "a seat was told to check" while reading as "a seat checked" — certifying the
+  very thing the field exists to measure, on every claimed ticket at once.
+  `tools/summary_verified_devtest.py` carries that as its positive control;
+  injecting the stamp into `claim` reddens four rows, verified by doing it.
 
 # What would change this
 
