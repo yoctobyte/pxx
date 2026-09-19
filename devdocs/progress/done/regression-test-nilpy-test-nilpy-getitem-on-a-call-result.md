@@ -53,3 +53,44 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-16 — auto-closed by the borg watcher: `test-nilpy#src:test/test_nilpy_getitem_on_a_call_result.npy` passes at 881fdee59b6f (tier full); it was red at 67f0878f2e59. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+
+## CENSUS 2026-09-19 (frankS) — does not reproduce; closed by events
+
+Run through **testmgr's own job runner**, using this ticket's exact `Repro`
+line — the instrument that filed it, and the one auto-pin reads. Not through
+`make`, and not through a hand-run of the fixture:
+
+    tools/testmgr.py --tier full --job <this ticket's own literal job selector>
+    ->  testmgr: GREEN, 1/1 pass
+
+All **17** open NilPy regressions were run that way and all 17 came back GREEN.
+
+**The census carries a positive control drawn from the same population**,
+because seventeen greens from an instrument nobody has shown can fail are not
+evidence. Same runner, same tier, on the xmlreader job — which is still built
+by the PINNED compiler and therefore still broken — the identical form returns:
+
+    expect_same: MISMATCH [lib_mimic_xmlreader.1]
+    --- expected
+    +++ actual
+    @@ -1 +1 @@
+    -25
+    +24
+
+    testmgr: RED
+
+So GREEN here means the job passed, not that the runner is blind.
+
+**This does not say the report was never real.** It was real at its filing sha;
+the tree has moved past it. Closed as NOT REPRODUCING, so it stops occupying a
+ranked slot and stops being dispatched to.
+
+**Why a whole pile went stale at once, which is the part worth keeping:** these
+are auto-filed by the Track T watcher, and the watcher DOES retire them — 19
+open tickets have a twin in `done/` and every one of those twins carries the
+line `auto-closed by the borg watcher`. The defect is narrower than "nothing
+closes them": the auto-close WRITES the closed copy into `done/` and does not
+remove the `backlog/` original. The duplicate then keeps a real prio, so it
+goes on sorting alongside live work and a seat gets dispatched to a subject
+that has been passing for weeks — and `progress.sh resolve` refuses it as an
+ambiguous slug, which is how the pattern surfaced at all.
