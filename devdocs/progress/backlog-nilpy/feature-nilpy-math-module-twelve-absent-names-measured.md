@@ -128,3 +128,31 @@ Beside it, for whoever sweeps this again: `math` here resolves far enough to
 report `no member atan2 came of the qualifier math`, i.e. the import bound
 something. That is the loud-at-compile behaviour the sweep claimed, re-observed
 25 days later on real source.
+
+
+## The residual has no application demand — measured 2026-09-20 (frankH)
+
+Population: every `math.<name>` occurrence in the two target applications,
+`/home/neo/lekkerzeilen` and `/home/neo/tuxspaceprogram`, `*.py` at their
+working trees today. Oracle for the value rows: CPython 3.14.4. Compiler at
+47841c55b.
+
+29 distinct names are used, 1129 occurrences. NONE of the fifteen absent names
+(acosh asinh atanh cbrt erf erfc exp2 gamma lgamma log1p nextafter remainder
+sumprod ulp) appears in either tree. The sixteenth, `dist`, is used 23 times and
+landed on 2026-09-19.
+
+And the surface they DO use is already correct: all 27 comparable rows agree
+with CPython exactly -- sin cos radians sqrt pi hypot degrees atan2 floor dist
+ceil asin tan acos exp log inf log10 copysign pow isfinite isnan isinf fmod atan
+sinh nan log2 cosh, printed at %.12g and diffed whole.
+
+So this ticket's remainder is real and has zero measured demand from the
+programs we are trying to compile. Anyone ranking it should rank it on something
+other than application need, and the F-lane rule applies to what is left: a
+missing function a working program CALLS is a bug, and none of these is called.
+
+What would retire this row: a target application importing one of the fifteen.
+Re-run the census (`grep -rhoE '\bmath\.[a-z_0-9]+'` over both trees) rather
+than trusting this count -- it is a snapshot of two working trees on one day,
+and the trees move.
