@@ -4833,6 +4833,10 @@ test-nilpy: $(COMPILER)
 	# is a ValueError, not an IndexError.
 	./$(COMPILER) test/test_nilpy_starred_unpack.npy $(TESTTMP)/test_nilpy_starunpack26
 	$(TESTTMP)/test_nilpy_starunpack26 | diff -u test/test_nilpy_starred_unpack.expected -
+	# a NESTED loop target over two-argument zip() and over a generator: both
+	# desugars bound only the flat names. CPython is the oracle.
+	./$(COMPILER) test/test_nilpy_nested_for_target_over_zip_and_generator.npy $(TESTTMP)/test_nilpy_nestforzipgen26
+	$(TESTTMP)/test_nilpy_nestforzipgen26 | diff -u test/test_nilpy_nested_for_target_over_zip_and_generator.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

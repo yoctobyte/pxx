@@ -1,0 +1,46 @@
+# A NESTED loop target through the two for-header desugars that once bound only
+# the flat names: two-argument zip() (PyParseForZip) and a generator
+# (PyGenBindTarget). Both left the inner names undefined -- "undefined variable
+# (name)" -- while enumerate, a plain list and three-way zip worked. The group
+# sits FIRST, LAST and in the MIDDLE because position is a variable; the flat
+# forms are the control that the fast paths still serve. CPython is the oracle.
+# Found by That Space Program, tsp/nbody.py:69.
+P = [("a", 1, 2.0), ("b", 2, 3.0)]
+W = [10, 20]
+X = [7, 8]
+
+for (name, code, gm), p in zip(P, W):
+    print(name, code, gm, p)
+for p, (name, code, gm) in zip(W, P):
+    print(p, name, code, gm)
+for p, (name, code, gm), x in zip(W, P, X):
+    print(p, name, x)
+for a, b in zip(W, X):
+    print(a, b)
+print([name + str(p) for (name, code, gm), p in zip(P, W)])
+
+
+class G:
+    def gen(self):
+        yield ("u", 5), 6
+        yield ("v", 7), 8
+
+
+def gf():
+    yield 1, ("x", 2)
+    yield 3, ("y", 4)
+
+
+def g3():
+    yield 1, 2, ("z", 9)
+
+
+g = G()
+for (s, n), m in g.gen():
+    print(s, n, m)
+for s, m in g.gen():
+    print(s, m)
+for i, (s, n) in gf():
+    print(i, s, n)
+for i, j, (s, n) in g3():
+    print(i, j, s, n)

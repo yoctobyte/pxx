@@ -27543,6 +27543,28 @@ begin
     Result := 'at';
 end;
 
+{ Unpack one NESTED for-target slot — the `(p, q)` of `for n, (p, q) in ...`,
+  recorded by PyParseForTargetSlot — out of the hidden name it was bound to,
+  appending one assignment per inner name to seq. The ONE place this is done:
+  PyParseForIn and the generator binder (PyGenBindTarget) both call it, because
+  the generator paths once bound only the flat names and left the inner ones
+  undefined. feature-nilpy-starred-and-nested-unpacking }
+function PyForNestUnpack(slot, hostSym, seq: Integer): Integer;
+var i, sym, node: Integer;
+begin
+  Result := seq;
+  if (hostSym < 0) or (PyForNestCount[slot] = 0) then Exit;
+  for i := 0 to PyForNestCount[slot] - 1 do
+  begin
+    sym := PyAssignTargetSym(PyForNestName[slot][i]);
+    if sym < 0 then sym := AllocVar(PyForNestName[slot][i], tyVariant);
+    node := AllocNode(AN_ASSIGN);
+    ASTLeft[node] := PyMakeIdent(sym);
+    ASTRight[node] := PyPairItem(PyMakeIdent(hostSym), i);
+    Result := PySeqAppend(Result, node);
+  end;
+end;
+
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
 var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, nSym: Integer;
@@ -28237,17 +28259,7 @@ begin
     else if nsSlot = 1 then nsHostSym := sym2
     else if nsSlot - 2 < nExtra then nsHostSym := extraSyms[nsSlot - 2]
     else Continue;
-    if nsHostSym < 0 then Continue;
-    for nsI := 0 to PyForNestCount[nsSlot] - 1 do
-    begin
-      nsSym := PyAssignTargetSym(PyForNestName[nsSlot][nsI]);
-      if nsSym < 0 then
-        nsSym := AllocVar(PyForNestName[nsSlot][nsI], tyVariant);
-      nsNode := AllocNode(AN_ASSIGN);
-      ASTLeft[nsNode] := PyMakeIdent(nsSym);
-      ASTRight[nsNode] := PyPairItem(PyMakeIdent(nsHostSym), nsI);
-      bodyNode := PySeqAppend(bodyNode, nsNode);
-    end;
+    bodyNode := PyForNestUnpack(nsSlot, nsHostSym, bodyNode);
   end;
 
   if PyCompTarget >= 0 then
@@ -29213,16 +29225,20 @@ begin
   if s0 < 0 then s0 := AllocVar(name, tyVariant);
   prologue := PySeqAppend(prologue,
                 PyMakeAssignNode(PyMakeIdent(s0), PyPairItem(PyMakeIdent(Result), 0)));
+  prologue := PyForNestUnpack(0, s0, prologue);
   si := PyAssignTargetSym(name2);
   if si < 0 then si := AllocVar(name2, tyVariant);
   prologue := PySeqAppend(prologue,
                 PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), 1)));
+  prologue := PyForNestUnpack(1, si, prologue);
   for xi := 0 to PyForExtraCount - 1 do
   begin
     si := PyAssignTargetSym(PyForExtraName[xi]);
     if si < 0 then si := AllocVar(PyForExtraName[xi], tyVariant);
     prologue := PySeqAppend(prologue,
                   PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), xi + 2)));
+    if xi + 2 <= PY_FOR_NEST_SLOTS then
+      prologue := PyForNestUnpack(xi + 2, si, prologue);
   end;
 end;
 
@@ -29438,7 +29454,13 @@ begin
     no count until it runs. Falling through hands it to the pair-unpack path
     over the zip EXPRESSION, which the N-way cursor already serves.
     bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
+  { `for (name, code, gm), p in zip(A, B):` is excluded too: a NESTED slot is
+    unpacked by the general path's body prologue (PyForNestCount), which this
+    desugar never reads, so the inner names were left unbound -- "undefined
+    variable (name)". The general path over the zip EXPRESSION serves it, the
+    same way it already serves the three-name form. (TSP nbody.py:69.) }
   if (name2 <> '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
+     (PyForNestCount[0] = 0) and (PyForNestCount[1] = 0) and
      PyIsIdent('zip') and (not PyUserShadowsProc('zip')) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
      ((TokPos + 1 >= TokCount) or (Tokens[TokPos + 1].Kind <> tkStar)) then
