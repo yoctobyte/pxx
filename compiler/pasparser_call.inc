@@ -4284,6 +4284,14 @@ begin
       argIsNil[nArgs] := IsNilLiteralNode(CurASTNode);
       argNode[nArgs] := CurASTNode;   { for the channel fill below; the rewind restores
                                         TokPos only, so the node stays valid in the arena }
+      { `@obj.Method` (AN_METHODREF) is typed tyPointer, but as an argument it
+        fills a method-pointer parameter (TMethod / `of object`), so report it as
+        tyRecord -- the rule both FREE-call paths already apply
+        (pasparser_expr.inc, pasparser_stmt.inc). Missing here, a METHOD call
+        refused `Bar.AddButton(t, 'Btn', @h.PickA)` as "(Integer, ShortString,
+        Pointer)" while the identical free-function call compiled and fired.
+        bug-p-the-address-of-a-method-is-typed-pointer-so-it-cannot-match-a-tmethod-parameter }
+      if ASTKind[CurASTNode] = AN_METHODREF then argTk[nArgs] := tyRecord;
       if argTk[nArgs] = tyClass then
         argRec[nArgs] := ResolveNodeRec(CurASTNode)
       else

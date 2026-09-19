@@ -7755,6 +7755,11 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_sosp26.2 "$$($(TESTTMP)/test_sosp26 | head -2 | tail -1)" "short open  TRUE"
 	tools/expect_same.sh test_sosp26.3 "$$($(TESTTMP)/test_sosp26 | head -3 | tail -1)" "short read  5 PXX26"
 	tools/expect_same.sh test_sosp26.4 "$$($(TESTTMP)/test_sosp26 | head -4 | tail -1)" "short miss  TRUE"
+	# `@obj.Method` into a METHOD's TMethod parameter: bare, Self-qualified and
+	# virtual spellings must all reach the override with the instance, and the
+	# method path must pick Ov(TMethod) over Ov(Pointer) exactly as the free path does.
+	./$(COMPILER) test/test_methodref_arg_to_a_method_call.pas $(TESTTMP)/test_mramc26
+	tools/expect_same.sh test_mramc26.1 "$$($(TESTTMP)/test_mramc26 | tr '\n' '|')" "der tag=9|der tag=9|der tag=9|Ov(TMethod)|der tag=9|FOv(TMethod)|der tag=9|"
 	# SysOpen/SysRead/SysWrite as an ARGUMENT: the intrinsic's node carried no
 	# type, so overload resolution refused the call. The compile is the assertion.
 	./$(COMPILER) test/test_sys_intrinsic_as_argument.pas $(TESTTMP)/test_siaa26
