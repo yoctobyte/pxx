@@ -38,3 +38,6 @@ pascal26: error: the output file was truncated: /tmp/testmgr-scratch-2865077/tes
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — the borg watcher saw `test-core#src:test/test_opt_store_reload.pas` GREEN at 358ffb7891e4 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-opt-store-reload-2`, not `regression-test-core-test-opt-store-reload`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
