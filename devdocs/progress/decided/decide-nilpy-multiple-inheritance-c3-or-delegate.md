@@ -2,7 +2,7 @@
 track: U
 prio: 40
 type: decision
-summary: "class D(B, C) is refused with a clear diagnostic (option 3 landed 2026-08-04). The FEATURE is still open and the remaining choice is a design fork: full C3 linearisation, or second-base-as-delegate. Needs a call before anyone builds it."
+summary: "DECIDED 2026-08-08: multiple inheritance is FLATTENED at compile time. The first base with no body in this file (or the first base) is the real parent; every other base's own body is replayed into the derived class, never its ancestors. Divergences from CPython: isinstance/except do not see a flattened base unless its class is recorded as one at run time, super() across a flattened body is refused, and a diamond is refused where flattening could drop or duplicate an ancestor. A diamond whose flattened mixins have every ancestor in the real parent chain drops and duplicates nothing, and the exception idiom `class E(LocalError, FileNotFoundError)` is that shape."
 ---
 
 # Decide: multiple inheritance — C3, delegate, or leave refused?
@@ -140,3 +140,31 @@ riding the existing RTTI interface table and IMT rather than new machinery.
 
 Unblocks [[bug-nilpy-multiple-inheritance-does-not-parse]], which should be
 re-scoped to this plan (its own option list predates the decision).
+
+## 2026-09-19 — measured on That Space Program (frankH): which divergence decides the diamond
+
+`tsp/ephem/__init__.py:17`, `class EphemerisMissing(EphemerisError,
+FileNotFoundError)`, with `EphemerisError(Exception)` and a docstring-only body.
+It is the first wall for 14 of TSP's 66 modules (TSP 13eb601, after f96cbaab9).
+
+- **Divergence 5 (two copies of the shared ancestor) cannot fire for this
+  shape.** Flattening replays the mixin's OWN body span and never its
+  ancestors, and `Exception` is reached exactly once, through the real parent
+  `FileNotFoundError`. Wherever every proper ancestor of each flattened mixin is
+  already in the derived class's real parent chain, nothing is duplicated or
+  dropped.
+- **Divergence 1 (isinstance) is live and fatal to this idiom.** Probe, a
+  non-diamond flattened mixin: `isinstance(e, Tag)` answers False where CPython
+  answers True. A two-base exception exists so that BOTH `except
+  EphemerisError` and `except FileNotFoundError` catch it. So narrowing the
+  diamond refusal on its own would turn a loud refusal into a silently
+  uncaught exception. The "later, separable" half of the scope above has to
+  land first, or together with the narrowing.
+
+**Constraint for the RTTI dropper (d9ed3131a priced it; unbuilt).** Once
+flattened bases are recorded in the RTTI blob and `__pxxInheritsFrom` follows
+them, `isinstance`/`except`/`as` DEPEND on those entries. The dropper's liveness
+analysis must treat a class's flattened-base entries as reachable wherever the
+class is, or it removes exactly what an `except` clause reads. The entries are
+emitted fully at compile time: RTTI is read-only by default in hosted
+executables (c19d88414), so nothing may patch them at run time.

@@ -112,9 +112,10 @@ CPython 3.14.4's output. The pinned compiler refuses it at its first `or`.
 ### TSP census, with the expectation written BEFORE the re-run
 
 Population: every `tsp/**/*.py` outside `__pycache__` at TSP 13eb601, 66
-files, one compile each from the TSP root, first `error:` line recorded. This
-is NOT the 61-module set above, which I could not reproduce (60 excluding
-`__init__`/`__main__`), so compare within a row, not across the two.
+files, one compile each from the TSP root, first `error:` line recorded. The
+61-module rows above are the same instrument on an EARLIER tree: TSP `5d18097`
+has 61 `tsp/**/*.py`, and its descendant `13eb601` has 66 (55 and 60 without
+`__init__`/`__main__`). Both are correct; compare within a tree, never across.
 
 | compiler | OK | first wall at timebase.py:195 |
 | --- | --- | --- |
