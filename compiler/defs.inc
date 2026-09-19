@@ -1954,6 +1954,10 @@ const
     no privileged instruction". }
   EXC_FRAME_SIZE_XTW = 64;    { [0]=prev EXC_TOP, 11-word jmpbuf at +8 }
   EXC_JMP_OFFSET_XTW = 8;
+  { How deeply `try` may nest in one windowed-xtensa body: each depth owns a
+    fixed frame slot (XtensaExcFrameAddrW), so this is 64 bytes of table, not
+    of stack -- a body only pays for the depths it reaches. }
+  XT_EXC_MAX_SLOTS = 32;
 
   { Data-ref sentinel base for class-reference (metaclass) values. A fixup with
     DataOff = -(CLASSREF_DATAREF_BASE + ci) is patched to UClsRTTIOff[ci] after
@@ -6112,6 +6116,13 @@ var
     after the body, and nested routines are emitted BEFORE their parent's
     prologue, so the two never interleave. }
   XtSpillMax : Integer;
+  { Windowed-ABI exception frames: one 64-byte slot per lexical `try` depth in
+    the body being emitted (slot 0 is the proc cleanup frame), allocated on
+    first use and reset with XtSpillDepth. XtExcSlotOwner is the CurProc the
+    table belongs to; -2 means empty. See XtensaExcFrameAddrW. }
+  XtExcSlotOwner : Integer;
+  XtExcSlotSet : array[0..XT_EXC_MAX_SLOTS - 1] of Boolean;
+  XtExcSlotOff : array[0..XT_EXC_MAX_SLOTS - 1] of Integer;
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;

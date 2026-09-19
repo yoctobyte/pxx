@@ -5454,31 +5454,118 @@ begin
 end;
 
 procedure EmitXtensaExcFramePushW;
-{ Allocate one exception frame. Call0 moves sp with a plain ADDI; WINDOWED MAY
-  NOT, and this is the one place in the exception path where the two ABIs differ
-  in a way that is invisible if you get it wrong.
+{ Allocate one exception frame at sp -- CALL0 ONLY. Call0 moves sp for every
+  push, so its expression stack and outgoing arguments follow the frame down.
+  Windowed frames no longer come through here: they used MOVSP (a plain ADDI
+  would leave the caller's a0-a3 block at [sp-16] behind), and moving sp at all
+  is what broke them -- see XtensaExcFrameAddrW. }
+begin
+  xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+end;
 
-  [sp-16] holds the CALLER's a0-a3, and window overflow and underflow read it
-  there. A plain ADDI relocates sp and leaves that block behind, so a later
-  RETW underflows from whatever now occupies the address -- a wrong value, not
-  a fault. MOVSP carries the block with the pointer (raising ALLOCA for the
-  runtime to copy it when the caller's registers are still live). }
+procedure XtensaExcFrameAddrW(rd, slot: Integer);
+{ rd := the address of this body's windowed exception-frame slot `slot`,
+  allocating it on first use.
+
+  WHY WINDOWED FRAMES DO NOT LIVE AT SP. They did: EmitXtensaExcFramePushW
+  moved sp down 64 bytes per frame. But the windowed body addresses its
+  expression stack at FIXED sp-relative offsets (XtSpillDepth, starting at
+  XT_OUTARG_REGION) and writes outgoing argument words 6.. at sp+0 -- both
+  computed as if sp never moved. With one frame pushed the spills landed in the
+  body's own outgoing area and nothing broke; with TWO (a try inside a proc
+  that has a cleanup frame, or any nested try) sp+64 IS the outer frame, and
+  the first spill overwrote its saved EXC_TOP link. The next raise that had to
+  reach an outer handler walked into the spilled value: LoadProhibited on an
+  ESP32-S3, from a three-word call inside the inner try, while a one- or
+  two-word call (no spill) passed. And a call with argument words past six
+  would have written the innermost frame's head directly.
+
+  So each lexical `try` depth owns one fixed slot in its own body's frame --
+  a hidden local block, addressed through the frame pointer like every other
+  local -- and sp stays constant, which is what this ABI's codegen assumes
+  everywhere else. Depths reuse slots safely because a region is always
+  LEAVEd before code at its depth runs again (its handler label, its finally
+  body, and IRLowerCleanupToDepth all leave first). Cost: 64 bytes per depth
+  REACHED, exactly what the moving push cost, and no MOVSP/alloca exception.
+
+  The MAIN body has no frame patch to back late growth (see
+  FloatPoolBoundaryAssign), so its slots are BSS: main is the root of the call
+  stack and is never re-entered.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls (the S3 cell) }
+var i: Integer;
+begin
+  if XtExcSlotOwner <> CurProc then
+  begin
+    for i := 0 to XT_EXC_MAX_SLOTS - 1 do XtExcSlotSet[i] := False;
+    XtExcSlotOwner := CurProc;
+  end;
+  if (slot < 0) or (slot >= XT_EXC_MAX_SLOTS) then
+    Error('target xtensa windowed: try blocks nested more than '
+          + AIntToStr(XT_EXC_MAX_SLOTS - 1) + ' deep in one routine');
+  if not XtExcSlotSet[slot] then
+  begin
+    if CurProc < 0 then
+    begin
+      BSSSize := AlignTo(BSSSize, 8);
+      XtExcSlotOff[slot] := BSSSize;
+      Inc(BSSSize, EXC_FRAME_SIZE_XTW);
+    end
+    else
+    begin
+      FrameSize := AlignTo(FrameSize + EXC_FRAME_SIZE_XTW, 8);
+      XtExcSlotOff[slot] := -FrameSize;
+    end;
+    XtExcSlotSet[slot] := True;
+  end;
+  if CurProc < 0 then
+    EmitLoadGlobAddrXtensa(rd, XtExcSlotOff[slot])
+  else
+    EmitFrameAddrXtensa(rd, XtExcSlotOff[slot]);
+end;
+
+procedure EmitXtensaExcFrameEnterW(slot: Integer);
+{ Allocate and chain one exception frame: [frame+0] := EXC_TOP; EXC_TOP :=
+  frame. Windowed: the frame is `slot`'s fixed block (XtensaExcFrameAddrW) and
+  its address is left in a5 for the setjmp argument. Call0: pushed at sp, as
+  before -- Call0 moves sp for every push, so its offsets follow. }
 begin
   if XtensaABI = XTENSA_ABI_WINDOWED then
   begin
-    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -EXC_FRAME_SIZE_XTW);
-    xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+    XtensaExcFrameAddrW(reg_xtensa_a5, slot);
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    xtensa_s32i(reg_xtensa_a4, reg_xtensa_a5, 0);
+    xtensa_s32i(reg_xtensa_a5, reg_xtensa_a3, 0);
   end
   else
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+  begin
+    EmitXtensaExcFramePushW;
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+  end;
 end;
 
 procedure IREmitLeaveExceptionFramesXtensa(count: Integer);
 { Pop `count` exception frames: restore the saved prev EXC_TOP from each
-  frame head and free the frame. MOVSP on windowed for the reason above -- the
-  pop moves sp exactly as the push does. }
+  frame head. Call0 frees each frame by moving sp back. Windowed frames are
+  fixed slots (XtensaExcFrameAddrW), so there is nothing to free and the head
+  is found through EXC_TOP itself -- the innermost live frame is always this
+  body's, and the chain gives the rest. }
 var i: Integer;
 begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
+    for i := 1 to count do
+    begin
+      xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);   { top frame }
+      xtensa_l32i(reg_xtensa_a4, reg_xtensa_a4, 0);   { its prev EXC_TOP }
+      xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
+    end;
+    Exit;
+  end;
   for i := 1 to count do
   begin
     xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);   { prev EXC_TOP }
@@ -5708,17 +5795,15 @@ begin
             setjmp; a raise longjmps back here with 1 in the result register ->
             jump to the handler label (beq-skip + j, so the handler can be far). }
           lblId := IRA[i];
-          EmitXtensaExcFramePushW;
-          EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
-          xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
-          xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
-          xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+          { slot 0 is the proc cleanup frame; a try at lexical depth d (the
+            IR records it in IRIVal) owns slot d+1 }
+          EmitXtensaExcFrameEnterW(Integer(IRIVal[i]) + 1);
           if XtensaABI = XTENSA_ABI_WINDOWED then
           begin
             { CALL8, so the argument goes in a10 and the result comes back in
               a10 -- the callee's a2 IS the caller's a10. Both halves matter:
               the stub reads a2 and the compare below must read a10. }
-            xtensa_addi(reg_xtensa_a10, reg_xtensa_sp, EXC_JMP_OFFSET_XTW);
+            xtensa_addi(reg_xtensa_a10, reg_xtensa_a5, EXC_JMP_OFFSET_XTW);
             EmitXtensaCall8ToCode(ExcSetJmpAddr);
             xtensa_movi(reg_xtensa_a4, 0);
             skipPos := CodeLen;

@@ -26723,7 +26723,7 @@ test-i386: $(COMPILER)
 	# A cross row that tests the shape that already worked is the hole, not the
 	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
 	./$(COMPILER) --target=i386 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_i386_lfef
-	tools/expect_same.sh i386/test_i386_lfef "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
+	tools/expect_same.sh i386/test_i386_lfef "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_i386_sysopen_family_x64
 	tools/expect_same.sh i386/test_i386_sysopen_family "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysopen_family)" "$$($(TESTTMP)/test_i386_sysopen_family_x64)"
@@ -27859,7 +27859,7 @@ test-aarch64: $(COMPILER)
 	# A cross row that tests the shape that already worked is the hole, not the
 	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
 	./$(COMPILER) --target=aarch64 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_aarch64_lfef
-	tools/expect_same.sh aarch64/test_aarch64_lfef "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
+	tools/expect_same.sh aarch64/test_aarch64_lfef "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_aarch64_sysopen_family_x64
 	tools/expect_same.sh aarch64/test_aarch64_sysopen_family "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sysopen_family)" "$$($(TESTTMP)/test_aarch64_sysopen_family_x64)"
@@ -29000,7 +29000,7 @@ test-riscv32: $(COMPILER)
 	# A cross row that tests the shape that already worked is the hole, not the
 	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
 	./$(COMPILER) --target=riscv32 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_rv32_lfef
-	tools/expect_same.sh riscv32/test_rv32_lfef "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\nexit=0')"
+	tools/expect_same.sh riscv32/test_rv32_lfef "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14\nexit=0')"
 	# by-value SysOpen/SysRead/SysWrite/SysClose/SysFchmod: the family had no arm
 	# on either 32-bit generic backend. rv32 is asm-generic and has NO plain
 	# open, so SysOpen lowers to openat(AT_FDCWD, path, flags, 0).
@@ -30712,7 +30712,7 @@ test-xtensa: $(COMPILER)
 	# A cross row that tests the shape that already worked is the hole, not the
 	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_xtensa_lfef
-	tools/expect_same.sh xtensa/test_xtensa_lfef "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\nexit=0')"
+	tools/expect_same.sh xtensa/test_xtensa_lfef "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_lfef; echo "exit=$$?")" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14\nexit=0')"
 	# ParamCount / ParamStr / ArgStr. xtensa was the only hosted target whose
 	# entry stub never saved the kernel-provided initial sp to BSS_INITIAL_RSP,
 	# so builtin -55 had no honest arm available -- the stub save and both arms
@@ -31624,7 +31624,7 @@ test-arm32: $(COMPILER)
 	# A cross row that tests the shape that already worked is the hole, not the
 	# fix. bug-a-no-cross-target-can-build-the-compiler-itself
 	./$(COMPILER) --target=arm32 test/test_loadfile_into_element_and_field.pas $(TESTTMP)/test_arm32_lfef
-	tools/expect_same.sh arm32/test_arm32_lfef "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14')"
+	tools/expect_same.sh arm32/test_arm32_lfef "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_lfef)" "$$(printf 'plain 14\nelem  14\nfield 14\nnbrs  0 0\nagain 14\npelem 14\npdyn  14\npfld  14')"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_sysopen_family.pas $(TESTTMP)/test_arm32_sysopen_family_x64
 	tools/expect_same.sh arm32/test_arm32_sysopen_family "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sysopen_family)" "$$($(TESTTMP)/test_arm32_sysopen_family_x64)"
@@ -35453,6 +35453,23 @@ test-esp-idf: $(COMPILER)
 	    echo "$$chip esp_timer callback ok"; \
 	  else echo "$$chip esp_timer callback MISMATCH"; exit 1; fi; \
 	done
+	@# NESTED EXCEPTION FRAMES ON THE WINDOWED ABI, oracle = the x86-64 run.
+	@# Windowed frames used to be pushed by moving sp while the body's spills
+	@# and outgoing arguments stayed at fixed sp offsets, so with two frames
+	@# live the first spill overwrote the outer frame's EXC_TOP link and the
+	@# next raise that crossed it faulted. The pinned compiler before the fix
+	@# prints `T1 9` and then a Guru Meditation, measured with ESP_RUN_PXX.
+	@# esp32s3 only: the fix is xtensa's, and this program does not fit
+	@# hello-c3's 1 MB factory partition without DCE.
+	@./$(COMPILER) test/test_esp_idf_nested_try.pas $(TESTTMP)/test_esp_idf_nested_try >/dev/null && \
+	  $(TESTTMP)/test_esp_idf_nested_try > $(TESTTMP)/test_esp_idf_nested_try.oracle && \
+	  [ -s $(TESTTMP)/test_esp_idf_nested_try.oracle ] || { echo "nested-try oracle did not run"; exit 1; }
+	@echo "--- esp32s3 nested exception frames"
+	@ESP_RUN_TIMEOUT=20 ESP_PXXFLAGS="--no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp" \
+	  tools/esp_run.sh --chip esp32s3 test/test_esp_idf_nested_try.pas > $(TESTTMP)/test_esp_idf_nested_try.s3 2>/dev/null || true
+	@if diff -u $(TESTTMP)/test_esp_idf_nested_try.oracle $(TESTTMP)/test_esp_idf_nested_try.s3; then \
+	  echo "esp32s3 nested exception frames ok (== x86-64 oracle)"; \
+	else echo "esp32s3 nested exception frames MISMATCH"; exit 1; fi
 
 test-esp-softfloat: $(COMPILER)
 	@./$(COMPILER) test/test_esp_softfloat_probe.pas $(TESTTMP)/test_esp_softfloat_oracle >/dev/null && $(TESTTMP)/test_esp_softfloat_oracle > $(TESTTMP)/test_esp_softfloat.oracle

@@ -17852,7 +17852,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           handlerNode := ASTRight[handlerNode];
         end;
       end;
-      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
+      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, ExceptionCodegenDepth, 0);
 
       IRPushExcRegion(-1, -1, -1);
       last := IRLowerAST(ASTLeft[node]);
@@ -18008,7 +18008,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if excOwnTmp >= 0 then
         begin
           excUnwindLabel := IRNewLabel;
-          last := IRAppend(IR_EXC_ENTER, excUnwindLabel, -1, -1, 0, 0);
+          last := IRAppend(IR_EXC_ENTER, excUnwindLabel, -1, -1, ExceptionCodegenDepth, 0);
           { REGISTER THE REGION, so `exit`, `break` and `continue` out of the
             handler body unwind it. The EXC_ENTER above was pushed without a
             codegen depth, so IRLowerCleanupToDepth could not see it and an
@@ -18050,7 +18050,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
     begin
       handlerLabel := IRNewLabel;
       endLabel := IRNewLabel;
-      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, 0, 0);
+      first := IRAppend(IR_EXC_ENTER, handlerLabel, -1, -1, ExceptionCodegenDepth, 0);
 
       IRPushExcRegion(ASTRight[node], -1, -1);
       last := IRLowerAST(ASTLeft[node]);

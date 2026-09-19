@@ -15219,6 +15219,7 @@ begin
         above it. }
       XtSpillDepth := XT_OUTARG_REGION;
       XtSpillMax := XtSpillDepth;
+      XtExcSlotOwner := -2;
       xtensa_mov(reg_xtensa_a15, reg_xtensa_sp);
       EmitXtensaFrameReserve(Result);
     end

@@ -27,7 +27,13 @@ PAS="$(cd "$(dirname "$PAS")" && pwd)/$(basename "$PAS")"
 TIMEOUT="${ESP_RUN_TIMEOUT:-8}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PXX="$REPO_ROOT/compiler/pascal26"
+# ESP_RUN_PXX picks another compiler -- the pinned one, for a control. It is
+# NOT spelled PXX: this line used to ignore a PXX from the environment, so
+# `PXX=<pinned> tools/esp_run.sh` silently ran HEAD and a pinned-vs-HEAD
+# control compared HEAD with itself (measured 2026-09-19, on a fix whose pinned
+# control then "passed"). A distinct name cannot be inherited by accident.
+PXX="${ESP_RUN_PXX:-$REPO_ROOT/compiler/pascal26}"
+echo "esp_run: compiler $PXX" >&2
 
 case "$CHIP" in
   esp32c3)

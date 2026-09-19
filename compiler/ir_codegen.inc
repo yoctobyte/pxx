@@ -3393,6 +3393,7 @@ begin
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
       XtSpillDepth := XT_OUTARG_REGION;
       XtSpillMax := XtSpillDepth;
+      XtExcSlotOwner := -2;
     end;
     { Same shape as CPENABLE below, for the same reason: bare metal leaves
       ATOMCTL at its reset value 0, and 0 means "raise an exception" for EVERY
@@ -15480,10 +15481,30 @@ begin
   else Error('compiler error: no proc exception cleanup frame for this target');
 end;
 
+function XtensaCleanupLandingIsLong: Boolean;
+{ The entry branch to a proc's landing pad spans the WHOLE BODY, and it is
+  emitted before the body exists and patched after it, so it cannot be widened
+  in place and IREmitMachineCodeXtensa's relaxation never sees it. xtensa's `j`
+  reaches +-128 KiB, and a real body passed that: the NilPy runtime's largest
+  procedure in pyeval.pas is 152,807 bytes, which refused every NilPy program
+  on ESP32-S3 under ESP-IDF.
+
+  So the width is decided up front, per profile, exactly as the entry stub
+  decides it (EmitProgramEntryForTarget): BARE keeps the 3-byte `j` -- its
+  images are SRAM-bounded at tens of KB and byte-identity canaries cover them --
+  and everything else takes the reach-independent long jump. The long form sits
+  on the EXCEPTIONAL edge only: the normal return's beq skips it, so the cost
+  is flash bytes per cleanup frame, never time on the path that runs.
+  bug-a-xtensa-an-exception-landing-pad-cannot-reach-past-128-kib }
+begin
+  Result := (TargetArch = TARGET_XTENSA) and not EspBareBoot;
+end;
+
 procedure EmitProcCleanupFrameEnterForTarget(var landPatch: Integer);
 { Push + chain the frame and setjmp into it. Returns in landPatch the position
   of the not-taken-on-entry branch, to be resolved by
   EmitProcCleanupFramePatchLanding once the landing pad's address is known. }
+var skipPos, anchorPc: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
   begin
@@ -15569,18 +15590,14 @@ begin
       point: a try frame and a proc cleanup frame are the same frame, so the two
       cannot drift if the second is a transcription of the first. The one
       difference is the landing pad it branches to. }
-    EmitXtensaExcFramePushW;
-    EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
-    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
-    xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
-    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
+    EmitXtensaExcFrameEnterW(0);
     { beq skips the j on the NORMAL return (result = 0); the j is the taken edge,
       so the landing pad may sit anywhere within J's reach. Offset 6 clears the
       three-byte j that follows. The register the result arrives in is the ABI's
       choice, not ours: CALL8 delivers the callee's a2 as the caller's a10. }
     if XtensaABI = XTENSA_ABI_WINDOWED then
     begin
-      xtensa_addi(reg_xtensa_a10, reg_xtensa_sp, EXC_JMP_OFFSET_XTW);
+      xtensa_addi(reg_xtensa_a10, reg_xtensa_a5, EXC_JMP_OFFSET_XTW);
       EmitXtensaCall8ToCode(ExcSetJmpAddr);
       xtensa_movi(reg_xtensa_a4, 0);
       xtensa_beq(reg_xtensa_a10, reg_xtensa_a4, 6);
@@ -15594,6 +15611,21 @@ begin
       xtensa_movi(reg_xtensa_a4, 0);
       xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);
     end;
+    if XtensaCleanupLandingIsLong then
+    begin
+      { The beq above was emitted aiming past a 3-byte j; re-aim it past the
+        long jump instead. The literal carries the ANCHOR until the pad lands --
+        EmitProcCleanupFramePatchLanding reads it back and overwrites it with
+        the delta, so landPatch alone is enough to finish the job. }
+      skipPos := CodeLen - 3;
+      EmitXtensaLongJumpSlot(landPatch, anchorPc);
+      Patch32(landPatch, anchorPc);
+      if XtensaABI = XTENSA_ABI_WINDOWED then
+        XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a10, reg_xtensa_a4)
+      else
+        XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a2, reg_xtensa_a4);
+      Exit;
+    end;
     landPatch := CodeLen; xtensa_j(4);
     Exit;
   end;
@@ -15601,9 +15633,11 @@ begin
 end;
 
 procedure CheckProcCleanupBranchRange(delta, limit: Integer);
-{ The entry branch and the skip branch both span a WHOLE PROC BODY, and the
-  fixed-width encodings below mask the displacement rather than trapping — a
-  body past the limit would silently branch somewhere else. x86-64 and i386 use
+{ The ENTRY branch spans a WHOLE PROC BODY, and the fixed-width encodings below
+  mask the displacement rather than trapping — a body past the limit would
+  silently branch somewhere else. (The SKIP branch spans only the pad, or a
+  sweep thunk: EmitProcCleanupLandingPadForTarget emits it after the body. Its
+  checks are the cheap half of the same guard, not a second whole-body span.) x86-64 and i386 use
   rel32 and cannot reach it; aarch64's cbnz (+-1 MB) and riscv32's jal (+-1 MB)
   can in principle, so say so instead of emitting a wrong branch. The IR_EXC_ENTER
   arms these were lifted from carry the same hazard unguarded; that is worth the
@@ -15617,6 +15651,7 @@ end;
 
 procedure EmitProcCleanupFramePatchLanding(landPatch: Integer);
 { Resolve the entry branch to land HERE. }
+var anchorPc: Integer;
 begin
   if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
     Patch32(landPatch, CodeLen - (landPatch + 4))
@@ -15640,6 +15675,14 @@ begin
     { J's imm18 is a BYTE offset, so the reach is +-128 KiB -- four times
       tighter than the aarch64/riscv32 limits above, and the reason this arm
       states its own number instead of copying theirs. }
+    if XtensaCleanupLandingIsLong then
+    begin
+      { landPatch is the long jump's literal, parked holding its anchor PC. }
+      anchorPc := Code[landPatch] or (Code[landPatch+1] shl 8) or
+                  (Code[landPatch+2] shl 16) or (Code[landPatch+3] shl 24);
+      Patch32(landPatch, CodeLen - anchorPc);
+      Exit;
+    end;
     CheckProcCleanupBranchRange(CodeLen - landPatch, 131072);
     Patch24(landPatch, EncodeXtensaJ(CodeLen - landPatch));
   end
