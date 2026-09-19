@@ -7,7 +7,7 @@ found: 2026-09-05
 found-by: frankZ
 owner: ""
 blocked-by: []
-summary: "THE LINK FAILURE IS FIXED BY `--dce`, MEASURED 2026-09-18 (frankB): with DCE now running on xtensa, this ticket's own repro — link the object against the deliberately-no-ESP-IDF shim — goes from `ld` rc=1 with **24 undefined references** to **rc=0 with 0**, producing a 258556 B ELF; PalBackend 114 -> 0, object 381528 B -> 52476 B, windowed likewise. **The three-backend `platform_net` split (S/B) is NOT required for this bug.** TWO THINGS STILL OPEN AND THEY ARE BOTH SMALL: (1) `--dce` is not on by default, so a default `--emit-obj` object still over-imports — the remaining question is whether `--emit-obj` should enable the pass, which is a goal question and not an engineering one; (2) the ratchet this ticket installed counted UND SYMBOL-TABLE ENTRIES, which stay at 20 under `--dce` because DCE removes code and not symbol entries, while the thing the link actually cares about — RELOCATIONS naming those symbols — goes **24 -> 0**; **MOVED to relocations 2026-09-18**, ratcheted at 24 with the UND count kept as a printed number, because the two fail differently. Original defect unchanged: retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit."
+summary: "THE LINK FAILURE IS FIXED BY `--dce`, MEASURED 2026-09-18 (frankB): with DCE now running on xtensa, this ticket's own repro — link the object against the deliberately-no-ESP-IDF shim — goes from `ld` rc=1 with **24 undefined references** to **rc=0 with 0**, producing a 258556 B ELF; PalBackend 114 -> 0, object 381528 B -> 52476 B, windowed likewise. **The three-backend `platform_net` split (S/B) is NOT required for this bug.** TWO THINGS STILL OPEN AND THEY ARE BOTH SMALL: (1) `--dce` is not on by default, so a default `--emit-obj` object still over-imports — ANSWERED 2026-09-19 (frankS) AND IT IS NOT A GOAL QUESTION AFTER ALL: nothing competes -- the pass roots an object at its exports via the writer's own predicate, ELF locals cannot resolve across objects, and measured on x86-64/riscv32/xtensa ZERO GLOBAL defined symbols are lost while relocations roughly halve. It is blocked on a BUG instead: turned on, `make test-emit-obj` dies at fnp_386, a TWO-OBJECT i386 link that links cleanly and then crashes before main (rc=138, no output) where --no-dce prints `20 11`. Reproduces with an explicit --dce, so pre-existing and not a regression; default REVERTED and filed as bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main. The same pass DID land on by default for --esp-profile=bare (e1ffef211), where the evidence is complete; (2) the ratchet this ticket installed counted UND SYMBOL-TABLE ENTRIES, which stay at 20 under `--dce` because DCE removes code and not symbol entries, while the thing the link actually cares about — RELOCATIONS naming those symbols — goes **24 -> 0**; **MOVED to relocations 2026-09-18**, ratcheted at 24 with the UND count kept as a printed number, because the two fail differently. Original defect unchanged: retention is PER-UNIT (naming `platform` at all costs all 114) and `f0a1a8be9` gave `__pxxAssert` a string path that reaches the unit."
 ---
 
 # `--emit-obj` retains `__pxxAssert`, so one AnsiString in it imports the whole ESP PAL
@@ -558,3 +558,69 @@ consumers, and banked it rather than landing it. It remains independently useful
 under ANY pruning policy, and a fix that depends on an optional flag is weaker
 than one that does not — but it should be ranked on that merit, not as this
 bug's fix.
+
+## 2026-09-19 (frankS) — item 1's goal question, answered with a measurement: YES in principle, NOT YET in practice
+
+The ticket asks *"do we want an emitted object to contain only what it needs?"*
+and calls it a goal question. It is stated correctly — no implementation noun in
+it — and the honest answer is that **the goal half is not where the difficulty
+is.** There is no competing want:
+
+- An object's callers are outside it, so the pass roots at everything the object
+  EXPORTS, via `ObjProcIsExported` — the object writer's own predicate, so the
+  root set and the GLOBAL symbol block cannot disagree (`dce.inc` says so at the
+  loop).
+- A LOCAL body that goes is unreachable from another object **by definition**:
+  ELF locals do not resolve across objects.
+- So the only thing that could break is a GLOBAL, and measured on three targets,
+  none moves.
+
+| `test_emit_obj` | object | relocations | GLOBAL defined syms LOST |
+| --- | --- | --- | --- |
+| x86-64 | 208,256 -> 37,864 | 496 -> 258 | **0** |
+| riscv32 | 540,108 -> 66,252 | 455 -> 255 | **0** |
+| xtensa | 382,904 -> 52,736 | 433 -> 208 | **0** |
+
+(UND symbol-table entries are unchanged, as this ticket already records: the
+pass removes code, not symbol entries. Relocations are the quantity that moves.)
+
+`dce.inc` names one non-loud failure for this path — a dropped symbol that
+*"resolves to another object's copy"*. Built two objects and linked them with a
+C driver: identical program output both ways, and **zero GLOBAL symbols defined
+in both objects**, because each exports only its own entry points and its
+runtime copy is local. That mode is not reachable here.
+
+### And then the default was turned on, and the tier said no
+
+All of the above is x86-64 and single-object. Turned on, `make test-emit-obj`
+failed at `fnp_386` — the callback-table pair, **two objects, i386**:
+
+| | i386 | x86-64 |
+| --- | --- | --- |
+| `--no-dce --emit-obj` | rc=0, `20 11` | rc=0, `20 11` |
+| `--dce --emit-obj` | **rc=138, no output** | rc=0, `20 11` |
+
+The objects LINK cleanly and the program dies before `main`. It reproduces with
+`--dce` spelled explicitly, so **it is not a regression and not about the
+default** — it is an existing shipping path nobody had run on i386, and the
+single-object rows pass there, so only a two-object link exposes it.
+
+**The default was reverted.** Filed as
+[[bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main]] (p55),
+with `dce.inc`'s own init/fini-thunk note as the lead — *"turning the refusal
+off without them SEGFAULTS BEFORE main"* is the observed symptom one target
+over.
+
+### So item 1 is not blocked on a decision
+
+It is blocked on that bug. When it is fixed, turning the pass on for
+`--emit-obj` is one line beside the `-O3` rule and the guard is already written
+in this tier (same exports, smaller, still runs) — the one change it needs is
+that its baseline arm must then say `--no-dce` explicitly, because otherwise the
+comparison becomes `x < x`. That is not hypothetical: it is what happened on the
+first run after the flip, and the row caught it.
+
+**What DID land from this measurement**: the same pass is now on by default for
+`--esp-profile=bare` (`e1ffef211`), where the evidence is complete — six images
+booted on both chips under Espressif QEMU, UART byte-identical, and 14 bare-boot
+rows green. Different path, different root set, fully measured.
