@@ -15753,6 +15753,7 @@
     "2b2f80c046ecb68b6bf1fa57595ccf4b0259ffe3",
     "401c308acfd61d83202e44db02711f704dc4868e"
    ],
+   "range_non_causal": false,
    "src": "test/test_opt_store_reload.pas tools/expect_same.sh",
    "status": "fail"
   }
