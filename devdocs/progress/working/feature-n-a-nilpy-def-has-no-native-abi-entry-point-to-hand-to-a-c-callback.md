@@ -78,6 +78,75 @@ guess which side a given change is on.
 Both are reasons this is a feature rather than a bug: nothing is producing a
 wrong answer today, the refusal is deliberate and documented at the call site.
 
+## The host-side repro, measured 2026-09-20 (compiler f99f37bcebe2)
+
+Already reduced, and it is the positive control for whatever lands. Against
+`test/nilpy_units/procslot.pas`, which `8826e6aec` already ships:
+
+```python
+import 'procslot.pas' as ps
+
+
+def mymaker(laden, room):
+    return laden * 100 + room
+
+
+k = ps.MkKind(mymaker)
+print(ps.CallItFromPascal(k))
+```
+
+Compiles, with the diagnostic `8826e6aec` added firing at exactly the right
+line and naming this ticket's mechanism:
+
+```
+pascal26:8: warning: Nil Python: mymaker does not have the signature of
+procedural parameter 'f', so the callable object is stored rather than a code
+address -- calling through that slot will crash. A def compiles all-Variant
+and needs a native-ABI thunk, which is not built yet.
+```
+
+Then **segfaults** (exit 139). CPython prints `502` for the same program with
+the Pascal unit stubbed. So the diagnostic is honest, the crash is the thing to
+remove, and `502` is the oracle. Note the warning is a WARNING and not an
+error deliberately: refusing here would break programs that store a callable
+they never call through that slot.
+
+## The boundary, read 2026-09-20 -- this needs NO carrier change
+
+The ticket above says "if materialising the thunk address requires it to live
+IN the carrier, that part is theirs". Reading pyparser.inc, it does not, and
+the reason is that **three** synthesised-adapter sites already exist on one
+pending-lambda queue and none of them touches a carrier:
+
+| synthesiser | emits | params | result |
+| --- | --- | --- | --- |
+| `PyGetOrMakeCallableWrapper` | `$pycallwrap_N` | all Variant | Variant |
+| `PyGetOrMakeCloneThunk` | `$pyclonethunk_N` | one `Pointer` | none (a procedure) |
+| `PyGetOrMakeBoundRetWrapper` | `$pyboundretwrap_N` | p0 keeps the method's OWN type + `ProcParamRecId` | Variant |
+
+`PyGetOrMakeCloneThunk` **is already this ticket's shape** -- a native-ABI
+thunk for a def, built because `__pxxclone`'s trampoline has a fixed
+non-Variant contract. `PyGetOrMakeBoundRetWrapper` proves a synthesised
+routine can take a non-Variant parameter type and carry class identity. The
+two together are a C callback thunk, with the types coming from
+`ProcParamProcSig` instead of from a method.
+
+The `bStart = -1` body builder loops over the synthesised proc's own
+parameters and relies on the ordinary argument/return coercion, so
+`<target type> -> by-ref Variant` in and `Variant -> <target result>` out
+should need no new runtime. **That sentence is a READ of the code and not a
+measurement** -- it is the first thing to check by building.
+
+### The one genuinely new thing
+
+All three cache by the real proc ALONE (`'$pycallwrap_' + realPi`,
+`'$pyclonethunk_' + realPi`, `'$pyboundretwrap_' + mpi`), which is safe for
+them because their signature is a function of that proc. It is NOT safe here:
+one def handed to two different callback slots needs two thunks, so the key
+must be **(realPi, target signature)**, and the queue currently carries only
+`PyPendLamWrapReal`. Either derive the name from the target's pi, or add a
+second parallel array.
+
 ## Acceptance
 
 The ESP demo stops polling: its timer callback is a `def` in `main.npy`, and
