@@ -3,12 +3,14 @@ slug: bug-c-a-bare-thread-in-a-function-body-is-accepted-and-returns-a-garbage-v
 track: C
 prio: 55
 type: bug
-status: backlog
+status: done
 created: 2026-09-19
 found-by: frankS
 tags: [tls, threads, c-frontend]
 blocked-by: []
 summary: "`__thread int t;` inside a function body, with no `static`, is ACCEPTED and becomes an ordinary uninitialised stack local — measured 2026-09-19 at HEAD on x86-64: pxx returns a fresh indeterminate value per call (586162841, then 1551595657 on a rebuild) where gcc REFUSES the program outright (`function-scope 't' implicitly auto and declared `__thread`). SUMMARY CORRECTED THE SAME DAY, AND IT WAS BORN FALSE RATHER THAN GONE STALE: this said "with NO diagnostic", and the file was ADDED IN 09de09465 — the very commit whose warning falsifies it — so the sentence was never true for any reader. The remedy for that is not re-verifying later but deriving the summary from the tree you are COMMITTING TO rather than from the measurement you took before the fix. THE REMAINDER IS NARROWER THAN THE ORIGINAL SUMMARY AND STILL REAL: it now warns, and it still COMPILES and still returns garbage, where the oracle refuses. A warning is not a refusal, and acceptance for this ticket is the refusal. 09de09465 also got the TEXT wrong for one commit — it told the programmer this declaration "gets ONE copy shared by every thread", which is true of the `static` sibling and FALSE here, since this one is not shared at all but a fresh automatic; that is now a seventh reason (TLSREFUSE_FUNCAUTO) with its own message and its own warn-once flag, because two facts sharing one flag is the defect this family was rebuilt around, one size down. ONE CAUSE, TWO SPELLINGS — both come from cparser.inc's block-scope storage-class loop, which consumes `__thread`/`_Thread_local` and records only `static`, so the qualifier is gone before a symbol exists. The `static` sibling works single-threaded and is wrong only under threads; THIS one is wrong on one thread today and needs no threads to bite, which is why it outranks it. What is open is only whether we Error like gcc or keep warning — C requires a block-scope thread-local to be `static` or `extern`, so no correct program can want this shape and the population a refusal would break is empty by construction; measure it anyway before refusing, since that count went stale in eight days once already in this subsystem, in the flattering direction."
+owner: frankS
+verified: 2026-09-19
 ---
 
 # A bare `__thread` at block scope compiles to a garbage stack local
@@ -108,3 +110,6 @@ A fixture asserting the refusal must also assert that `static __thread int t;`
 in a body **still compiles**, or it passes on a change that refuses the whole
 block-scope family — which is the sibling's working case and the exact
 whole-family shape that has certified a broken half here before.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

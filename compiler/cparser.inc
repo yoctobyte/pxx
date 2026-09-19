@@ -8495,16 +8495,37 @@ begin
       automatic, so it is a fresh garbage value on every call, with no threads
       involved. Landed as the shared-copy message for one commit (09de09465)
       and that was false for this shape. }
-    if CTlsWarnedReason[TLSREFUSE_FUNCAUTO] then Exit;
-    CTlsWarnedReason[TLSREFUSE_FUNCAUTO] := True;
-    Warn('__thread at function scope with no `static`: C requires a '
-       + 'block-scope thread-local to be `static` or `extern`, and gcc REFUSES '
-       + 'this program outright ("implicitly auto and declared __thread"). We '
-       + 'accept it and the storage class is DISCARDED — you get an ordinary '
-       + 'uninitialised local, so this reads a fresh indeterminate value on '
-       + 'every call and persists nowhere. This is not thread-related and does '
-       + 'not need threads to be wrong. Add `static`, or move the declaration '
-       + 'to file scope');
+    { IT STOPS, and this is the ONE shape at this seam where stopping is right.
+      The file-scope path warns for four of its five reasons because refusing
+      would delete `__thread` from programs that are CORRECT today -- that
+      argument needs a population, and here there is none. C requires a
+      block-scope thread-local to be `static` or `extern`, so gcc refuses this
+      program outright: NO PROGRAM THAT COMPILES UNDER THE ORACLE CAN CONTAIN
+      IT, and the population is empty by construction rather than merely empty
+      in the corpora we happen to hold.
+
+      Counted anyway, 2026-09-19, because this file's own note says to re-count
+      before quoting a population and that one went stale in eight days in the
+      flattering direction: ZERO occurrences of `__thread`, `_Thread_local`,
+      C23 `thread_local` or `__declspec(thread)` across 1,917 external C/H
+      files -- busybox 1838, zlib 69, fpc-testsuite 6, sqlite 4 -- and in-tree
+      every block-scope occurrence carries `static`. The grep was
+      positive-controlled against a term known to be present.
+
+      Same answer TryAssignThreadVarStorage gives for TLSREFUSE_AREAFULL and
+      for the same reason: the mistake is the programmer's own and the fix is
+      named in the message, so stopping is ACTIONABLE rather than merely
+      strict. A warning here would leave a program building and returning an
+      indeterminate value that no threads are needed to produce.
+
+      bug-c-a-bare-thread-in-a-function-body-is-accepted-and-returns-a-garbage-value }
+    Error('__thread at function scope with no `static`: C requires a '
+       + 'block-scope thread-local to be `static` or `extern`, and gcc refuses '
+       + 'this outright ("implicitly auto and declared __thread"). Accepting '
+       + 'it would DISCARD the storage class and give you an ordinary '
+       + 'uninitialised local -- a fresh indeterminate value on every call, '
+       + 'persisting nowhere, with no threads needed to make it wrong. '
+       + 'Add `static`, or move the declaration to file scope');
     Exit;
   end;
   if CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] then Exit;
