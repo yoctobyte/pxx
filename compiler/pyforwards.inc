@@ -234,7 +234,6 @@ function PyParseVariadicMinMax(const nm: AnsiString): Integer; forward; { Nil Py
 function PyParseRangeList: Integer; forward;      { Nil Python: list(range(...)) materialised (pyparser.inc) }
 function PyAnyProcWithArity(const nm: AnsiString; n: Integer): Boolean; forward; { any routine of this name with exactly n params (pyparser.inc) }
 function PyParseSysStream: Integer; forward; { Nil Python sys.stdout/sys.stderr -> its fd (pyparser.inc) }
-function PyIsSysStreamAhead: Boolean; forward; { Nil Python: at a modelled stdlib VALUE, `sys.stderr`, `sys.argv`? (pyparser.inc) }
 function PyIsIntMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean; forward; { Nil Python: may an int method claim this receiver? (pyparser.inc) }
 function PyIsIntMethodName(const nm: AnsiString): Boolean; forward; { Nil Python: an intercepted int method name? (pyparser.inc) }
 function PyIsIntMethodSuffixAhead: Boolean; forward; { Nil Python: at an intercepted int-method suffix? (pyparser.inc) }

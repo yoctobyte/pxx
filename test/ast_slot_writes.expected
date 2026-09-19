@@ -80,6 +80,7 @@ AN_ARG Left PyMakeIdent(lamSyms[j])
 AN_ARG Left PyMakeIdent(listSym)
 AN_ARG Left PyMakeIdent(nfoundSym)
 AN_ARG Left PyMakeIdent(rbSym)
+AN_ARG Left PyMakeIdent(restSym)
 AN_ARG Left PyMakeIdent(rngStepSym)
 AN_ARG Left PyMakeIdent(setTmpSym)
 AN_ARG Left PyMakeIdent(slotSym)
@@ -422,12 +423,12 @@ AN_ASSIGN Right PyCallMeth1(listCi, 'count', PyMakeIdent(cbSym), -1)
 AN_ASSIGN Right PyClsAttrNode(i)
 AN_ASSIGN Right PyMakeBoolLit(v)
 AN_ASSIGN Right PyMakeIdent(Procs[procIdx].Params[i].SymIdx)
+AN_ASSIGN Right PyMakeIdent(PyStarKwRemainder(procIdx, 0, kwIdx, dictSym))
 AN_ASSIGN Right PyMakeIdent(attrGSym)
 AN_ASSIGN Right PyMakeIdent(buildSym)
 AN_ASSIGN Right PyMakeIdent(chainTmp)
 AN_ASSIGN Right PyMakeIdent(cmpTmp)
 AN_ASSIGN Right PyMakeIdent(cntSym)
-AN_ASSIGN Right PyMakeIdent(dictSym)
 AN_ASSIGN Right PyMakeIdent(gsym)
 AN_ASSIGN Right PyMakeIdent(iSym)
 AN_ASSIGN Right PyMakeIdent(keyN)
@@ -734,6 +735,7 @@ AN_CALL Left rngArg
 AN_CALL Left rngChkArg
 AN_CALL Left rtArg
 AN_CALL Left sArg
+AN_CALL Left selfA
 AN_CALL Left selfArg
 AN_CALL Left smArg1
 AN_CALL Left smGuardArg
