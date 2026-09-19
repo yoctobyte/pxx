@@ -277,7 +277,21 @@ because you cannot finish it now. Diagnosed something deeper than the session?
   and is unaffected.
 
 **A ticket's `summary` MUST be true** — it is the only part everyone reads, and a
-stale one misroutes whoever reads it. Fix it in the same commit. Below the
+stale one misroutes whoever reads it. Fix it in the same commit.
+**AND IT IS NOT ONLY A READER IT MISROUTES — THE SUMMARY IS WHAT CARRIES THE
+PRIO INTO THE RANKER, SO A STALE ONE PROMOTES DEAD WORK TO THE TOP OF A QUEUE
+AND A SEAT GETS DISPATCHED TO IT.** Measured 2026-09-19, **three in one day
+across two lanes, every one of them stale in the SUMMARY while its BODY was
+correct** — the part everyone reads against the part nobody scrolls to.
+`task-b-write-the-lekkerzeilen-pxx-platform-backend` sat at **p85, the highest
+open number under its umbrella**, saying *"IS A 39-LINE STUB"* of a file the
+owner had rewritten to 974 lines; `bug-a-the-signal-alt-stack-...` was
+dispatched at **p70** with forty lines of its own body already saying FIXED; and
+`bug-a-dce-refuses-every-target-except-x86-64` still listed arm32 and aarch64 as
+REMAINING after both had landed. **A body that records its own completion is not
+a safety net, it is the evidence nobody reaches** — so when you close a piece of
+a multi-part ticket, edit the SUMMARY in the same commit even when you are not
+closing the ticket. Below the
 summary is append-only history nobody must read. **Keep a new ticket to one
 screen.** A finding whose value IS its length goes in a reference doc with a
 one-line logbook pointer.
@@ -750,6 +764,17 @@ name a constant**, so do not let a matching number stand in for a differential:
 change the candidate, rebuild, measure, revert — and state the delta. Two of the
 three were found that way and none by reading. When you fix one, DERIVE the
 second spelling from the first rather than restating it.
+**THE READLN PAIR IS RETIRED AS A LIVE EXAMPLE, 2026-09-19 — `LINE_BUF_SIZE` NO
+LONGER EXISTS.** `0ab100740` made the readln buffer growable (`PXXRealloc`), so
+there is ONE spelling, the 8,168-byte pairing is not a cost anyone can pay, and
+the 4095-versus-4096 drift is gone with it; the only surviving occurrence in the
+tree is the word inside a historical comment in `builtinheap.pas`. **It was
+fixed as a side effect of a correctness fix and NOBODY RECORDED IT** — found
+2026-09-19 by a seat re-measuring a neighbouring ticket, not by anyone reading
+this. **That is the second worked example in this file to decay in one day**
+(the F-lane's `threading`, same morning), and the pattern is the same both
+times: the RULE was fine and the FACT under it had moved. Read a named constant
+in this file as a claim with a date on it, and grep before you cite one.
 
 **AND THE MOST EXPENSIVE STALE ROW IS A HAZARD BLOCK, BECAUSE OBEYING ONE
 PRODUCES NO SIGNAL.** A stale fact gets contradicted by the next measurement; a
