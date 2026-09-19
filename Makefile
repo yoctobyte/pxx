@@ -23958,6 +23958,54 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test_set_in_64bit_element: qemu-xtensa absent, xtensa arm NOT verified ==="; \
 	fi
+	# WRITE/WRITELN ON THE TWO ESP PROFILES: the no-op is INTENDED on both, and
+	# the two backends must agree about it. They did not until b3adef718 --
+	# ir_codegen_xtensa asked `TargetPlatform = PLATFORM_ESP` and
+	# ir_codegen_riscv32 asked `EspBareBoot`, which coincide for riscv32 (bare ->
+	# ESP, else POSIX) and do NOT for xtensa, which defaults to PLATFORM_ESP. So
+	# an xtensa IDF build dropped writeln and a riscv32 IDF build emitted the
+	# hosted path, whose helpers reach the kernel by `ecall` and trap on a chip.
+	#
+	# THIS ROW DELIBERATELY DOES NOT ASSERT WHAT THE TICKET PRESCRIBED. Its
+	# "positive control for whoever takes it" says to assert empty and hello are
+	# NOT byte-identical "on any profile that claims to have a console", i.e.
+	# that IDF writeln gets routed to esp_rom_printf. The tree decided the other
+	# way, with evidence: PalBackendWrite REFUSES stdout/stderr on IDF, the docs
+	# name esp_rom_printf as the IDF idiom, and examples/esp32/hello-c3 ships it
+	# and prints on a real C3 under qemu. An assertion written from a
+	# PREDICTION pins the prediction, so this asserts the DECIDED behaviour --
+	# identical on both profiles -- and the warning is what makes it not silent.
+	#
+	# THE POSITIVE CONTROL IS THE PIN and it fails three different ways:
+	# stable_linux_amd64/default/pinned gives riscv32 IDF 258788 vs 258828 (the
+	# +40 divergence), and emits NO warning on either profile, so every row below
+	# is red against it.
+	@printf 'program espe;\nbegin end.\n' > $(TESTTMP)/espnoop_empty.pas
+	@printf 'program esph;\nbegin WriteLn(%s); end.\n' "'hi'" > $(TESTTMP)/espnoop_hello.pas
+	@for combo in "xtensa --esp-profile=bare" "xtensa --platform=esp" "riscv32 --esp-profile=bare" "riscv32 --platform=esp"; do \
+	  set -- $$combo; a=$$1; pr=$$2; \
+	  ./$(COMPILER) --target=$$a $$pr --emit-obj $(TESTTMP)/espnoop_empty.pas $(TESTTMP)/espnoop_e.o > $(TESTTMP)/espnoop_e.log 2>&1; \
+	  ./$(COMPILER) --target=$$a $$pr --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_h.o > $(TESTTMP)/espnoop_h.log 2>&1; \
+	  e=$$(grep -oE 'code=[0-9]+B +data=[0-9]+B' $(TESTTMP)/espnoop_e.log); \
+	  h=$$(grep -oE 'code=[0-9]+B +data=[0-9]+B' $(TESTTMP)/espnoop_h.log); \
+	  [ -n "$$e" ] || { echo "FAIL espnoop: $$a $$pr empty did not compile"; cat $(TESTTMP)/espnoop_e.log; exit 1; }; \
+	  [ "$$e" = "$$h" ] || { echo "FAIL espnoop: $$a $$pr writeln CHANGED the image -- empty[$$e] hello[$$h]; the two backends must agree that it is a no-op"; exit 1; }; \
+	  grep -q 'warning: write/writeln emits nothing' $(TESTTMP)/espnoop_h.log || { echo "FAIL espnoop: $$a $$pr dropped writeln SILENTLY -- no warning"; exit 1; }; \
+	  if grep -q 'warning' $(TESTTMP)/espnoop_e.log; then echo "FAIL espnoop: $$a $$pr warned about a program containing no write at all"; exit 1; fi; \
+	done
+	@# ...and the warning must say something TRUE on each profile. One predicate
+	@# decides WHETHER to warn (TargetPlatform, since both drop it); the profile
+	@# decides WHAT TO SAY, because "there is no console" is a fact about BARE.
+	@# On IDF there is one -- esp_rom_printf, resolved by the IDF link. Until
+	@# 2026-09-19 both profiles got the bare text, so an IDF user was told their
+	@# chip had no console and pointed at a bullet headed "Notes for the bare
+	@# profile". True about the behaviour, false about the reason and the remedy.
+	@./$(COMPILER) --target=xtensa --esp-profile=bare --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_b.o > $(TESTTMP)/espnoop_bare.log 2>&1
+	@./$(COMPILER) --target=xtensa --platform=esp --emit-obj $(TESTTMP)/espnoop_hello.pas $(TESTTMP)/espnoop_i.o > $(TESTTMP)/espnoop_idf.log 2>&1
+	@grep -q 'bare ESP profile: there is no console' $(TESTTMP)/espnoop_bare.log || { echo "FAIL espnoop: the bare warning no longer states the bare reason"; exit 1; }
+	@grep -q 'esp_rom_printf' $(TESTTMP)/espnoop_idf.log || { echo "FAIL espnoop: the IDF warning does not name esp_rom_printf, the console it does have"; exit 1; }
+	@if grep -q 'there is no console' $(TESTTMP)/espnoop_idf.log; then echo "FAIL espnoop: the IDF warning claims there is no console; on ESP-IDF there is one"; exit 1; fi
+	@echo "test-core: write/writeln is a no-op on both ESP profiles and both backends, warned once, and the warning names the right console for each profile"
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
 	# so the declaration reserved ONE element and fixed the symbol's offset

@@ -725,11 +725,10 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 
-## backlog-esp (4)
+## backlog-esp (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile | A+S | 70 | bug | The IR_WRITE/IR_WRITELN arms of the two ESP backends ask DIFFERENT questions. ir_codegen_xtensa.inc:3781 asks `TargetPlatform = PLATFORM_ESP`; ir_codegen_riscv32.inc:3569 asks `EspBareBoot`. On --esp-profile=bare they agree and the no-op is documented (docs/targets/esp32.md:70). ON THE IDF PROFILE THEY DO NOT AGREE AND NEITHER IS RIGHT: xtensa DROPS writeln silently (`--emit-obj --platform=esp` gives code=208948 for an empty program and for a writeln hello-world, byte-identical), while riscv32 EMITS it into the internal syscall write path (258,788 vs 258,828 — a 40-byte delta in code AND data; the object carries 32 `ecall`s against the bare object's 2, and `write` is NOT an external, only calloc and free are). So on a chip the xtensa build prints nothing and the riscv32 build traps to IDF's machine-mode handler. Nothing is documented as a no-op on the IDF profile — docs/targets/esp32.md scopes that note to the bare profile only. XTENSA IS THE PRIMARY ESP TARGET AND IS THE ONE THAT SILENTLY DROPS. | — |
 | bug-s-c-on-the-esp-profile-cannot-reach-crtl | S | 45 | bug | A C source that reaches crtl does not build on the ESP profile: `#include <stdio.h>` plus a printf stops with `compiler error: PXXMemZero not found` under --target=xtensa --emit-obj, on BOTH the default profile and --esp-profile=bare. The 2x2 says the discriminator is the PROFILE, not the output mode -- the same source builds with --platform=posix as an executable AND as an object. PXXMemZero is defined unconditionally in compiler/builtin/builtinheap.pas:4561 (only its fast paths are CPUX86_64-guarded), so the symbol EXISTS and the lookup is not reaching it: the builtin heap unit is not being pulled into a C compilation on PLATFORM_ESP. Bounds decide-should-a-c-main-exist-on-the-esp-profile-at-all, which established that --emit-obj is the shipping path for C here -- true for FREESTANDING C and not yet for C that calls into crtl. | — |
 | bug-s-install-esp32-target-names-a-package-that-is-virtual-only-on-26-04 | S | 25 | bug | `tools/install_esp32_target.sh:96` asks for `qemu-user-static`, which on 26.04/resolute survives as a PURE VIRTUAL package: three instruments say it exists and only `apt-cache policy` says it cannot be installed. The script's own `apt_has_candidate()` already does the correct `Candidate:` test, so it WARNS rather than dying and blocks nobody today -- but it will not install the renamed package on a fresh 26.04 box. Not urgent; filed so the rename lands with the measurement rather than being rediscovered. The real package is `qemu-user-binfmt`. | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
@@ -1104,9 +1103,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3845)
+## done (3846)
 
-3845 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3846 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (83)
 
@@ -1246,7 +1245,6 @@ _none_
 - [p 70] [A+O] feature-opt-rtti-emit-on-use (unblocks 1)
 - [p 70] [A] bug-a-something-in-lekkerzeilen-s-startup-still-leaves-an-exception-frame-on-the-chain
 - [p 70] [A] bug-a-the-compiler-prints-ok-with-exact-byte-counts-for-an-output-it-failed-to-write
-- [p 70] [A+S] bug-a-writeln-diverges-between-the-two-esp-backends-on-the-idf-profile
 - [p 70] [N] bug-n-a-collections-deque-segfaults-at-run-time
 - [p 70] [N] bug-n-a-freshly-allocated-value-whose-result-is-discarded-is-never-released
 - [p 70] [N] bug-n-a-local-holding-a-callable-is-shadowed-by-a-pascal-intrinsic-at-the-call
