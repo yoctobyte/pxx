@@ -5,10 +5,10 @@ track: A
 prio: 70
 type: feature
 blocked-by: []
-status: new
+status: working
 created: 2026-09-18
-owner: ""
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: aarch64/i386/arm32 hosted; then RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+owner: frankH
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64 too since 2026-09-19) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: i386/arm32 hosted; then RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -278,3 +278,14 @@ which gives two valid fixedpoints. Run alone on the settled tree
 (f89dcf573, rebuilt), the same row gives `cmp` SAME. Rows after that one did
 not run. Mixed-tree evidence, as stated above: this is not a clean run of any
 single sha.
+
+## 2026-09-19 (frankH) — aarch64 hosted: landed
+
+aarch64 goes through the same 64-bit `writeELF` as x86-64. Every one of its
+data references is an absolute literal word, a 4-byte global or a GOT slot, and
+each already resolves through `DataVA`. So the change is the `wanted` condition
+in both `writeELF` copies. The page shift is `ElfSegAlign` (64 KiB on aarch64).
+`test-aarch64` GREEN in full; 119 of 120 sampled test binaries carry the R-only
+PT_LOAD. New rows at the top of `test-aarch64`: the probe faults (rc 139) with
+the split and runs with `--no-ro-data`. Next: i386/arm32, which use the single
+`writeELF32`; see the recipe in the park section above.

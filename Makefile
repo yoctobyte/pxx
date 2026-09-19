@@ -26779,6 +26779,17 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genpromo_i386)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 
 test-aarch64: $(COMPILER)
+	# THE READ-ONLY DATA SEGMENT ON aarch64: the string-literal pool loads through
+	# an R-only PT_LOAD, so a store into a literal faults instead of silently
+	# rewriting every later use of it. --no-ro-data is the control: the same
+	# program with the pool writable runs to completion, which is what shows the
+	# fault is the segment's and not something else in the probe. qemu's own
+	# "uncaught target signal" line goes to stderr and is not compared.
+	# feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident
+	./$(COMPILER) --target=aarch64 test/test_ro_data_literal_store.pas $(TESTTMP)/a64_ro_store_ro >/dev/null
+	tools/expect_same.sh aarch64/ro_data_literal_store-faults "$$( (tools/run_target.sh aarch64 $(TESTTMP)/a64_ro_store_ro 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
+	./$(COMPILER) --target=aarch64 --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/a64_ro_store_rw >/dev/null
+	tools/expect_same.sh aarch64/ro_data_literal_store-control "$$( (tools/run_target.sh aarch64 $(TESTTMP)/a64_ro_store_rw 2>/dev/null); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
 	# THE BYTE PREFIX ON THE SECOND BACKEND. aarch64 is the first cross target
 	# converted, and it is here rather than only in the x86-64 rows because the
 	# whole width-and-alignment class is structurally invisible on the 64-bit

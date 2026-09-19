@@ -2148,11 +2148,13 @@ begin
     phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
-  { The read-only data segment -- x86-64 only in this first cut. Decided here,
-    after the last append to Data[] (PrepareDynamicData) and before anything
-    resolves a data address; it is one more program header, so code starts 56
-    bytes later. feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
-  RoLayoutPrepare(TargetArch = TARGET_X86_64, ElfSegAlign);
+  { The read-only data segment -- the two targets this writer serves, x86-64
+    and aarch64 (whose data references are all absolute literal words and
+    GOT slots, so DataVA covers them). Decided here, after the last append to
+    Data[] (PrepareDynamicData) and before anything resolves a data address;
+    it is one more program header, so code starts 56 bytes later.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoLayoutPrepare((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64), ElfSegAlign);
   if RoSplitActive then
   begin
     Inc(phCount);
@@ -2297,11 +2299,13 @@ begin
     phCount := 5;   { + PT_INTERP + PT_DYNAMIC }
     codeOffset := DYNAMIC_CODE_OFFSET;
   end;
-  { The read-only data segment -- x86-64 only in this first cut. Decided here,
-    after the last append to Data[] (PrepareDynamicData) and before anything
-    resolves a data address; it is one more program header, so code starts 56
-    bytes later. feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
-  RoLayoutPrepare(TargetArch = TARGET_X86_64, ElfSegAlign);
+  { The read-only data segment -- the two targets this writer serves, x86-64
+    and aarch64 (whose data references are all absolute literal words and
+    GOT slots, so DataVA covers them). Decided here, after the last append to
+    Data[] (PrepareDynamicData) and before anything resolves a data address;
+    it is one more program header, so code starts 56 bytes later.
+    feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+  RoLayoutPrepare((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64), ElfSegAlign);
   if RoSplitActive then
   begin
     Inc(phCount);
