@@ -298,7 +298,14 @@ fourth instance the same day: neo-a2 fixed `math.frexp` while closing an
 unrelated ticket, and that silently falsified the p85 rtl-shadow ticket, whose
 summary cited `math.frexp`/`math.ldexp` as its LIVE EXAMPLE of an unsprung
 trap. Nobody was working on that ticket and no check on the ticket being closed
-could have reached it. **A summary that cites a currently-firing row acquires a
+could have reached it. **AND AUTHORSHIP IS NOT PROTECTION — THE FALSIFIED
+SENTENCE WAS THE SAME SEAT'S OWN, WRITTEN 71 MINUTES EARLIER** (`92136431f`
+wrote it, `b435d8b06` removed it, one checkout, one session id, verified with
+`git log -S`). It knew exactly what that line claimed, fixed the very row it
+cited, and did not connect the two. So the defence a reader reaches for — *my
+own text is safe, I remember writing it* — is the one the instance disproves,
+and your own summary reads as already-checked, which makes you worse placed to
+notice than a stranger. **A summary that cites a currently-firing row acquires a
 dependency on that row staying broken** — and three of the day's four were this
 shape, in three lanes: `task-b-...-platform-backend` said "IS A 39-LINE STUB"
 of a file the owner had rewritten, and the DCE ticket listed two targets as
