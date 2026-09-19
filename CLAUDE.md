@@ -291,7 +291,24 @@ dispatched at **p70** with forty lines of its own body already saying FIXED; and
 REMAINING after both had landed. **A body that records its own completion is not
 a safety net, it is the evidence nobody reaches** — so when you close a piece of
 a multi-part ticket, edit the SUMMARY in the same commit even when you are not
-closing the ticket. Below the
+closing the ticket.
+**AND THAT REMEDY IS PROCEDURAL, SO IT CANNOT CATCH THE COMMONEST CASE: THE
+SUMMARY IT FALSIFIES IS IN SOMEBODY ELSE'S TICKET.** Measured 2026-09-19, a
+fourth instance the same day: neo-a2 fixed `math.frexp` while closing an
+unrelated ticket, and that silently falsified the p85 rtl-shadow ticket, whose
+summary cited `math.frexp`/`math.ldexp` as its LIVE EXAMPLE of an unsprung
+trap. Nobody was working on that ticket and no check on the ticket being closed
+could have reached it. **A summary that cites a currently-firing row acquires a
+dependency on that row staying broken** — and three of the day's four were this
+shape, in three lanes: `task-b-...-platform-backend` said "IS A 39-LINE STUB"
+of a file the owner had rewritten, and the DCE ticket listed two targets as
+REMAINING after other seats landed them. So the repair is structural and not
+more checking: **state the MECHANISM and the condition that would SPRING it,
+never a row that fires today.** A mechanism does not decay when an instance is
+fixed; the rewritten summary above names "a Pascal routine with a colliding
+name, an accepting signature and differing semantics", with `Ldexp` as the near
+miss that has two of the three, and that sentence survives every future fix.
+Below the
 summary is append-only history nobody must read. **Keep a new ticket to one
 screen.** A finding whose value IS its length goes in a reference doc with a
 one-line logbook pointer.
