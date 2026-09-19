@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `8777a192a981` | 2026-09-19T16:25:33Z | RED (native) | 332.7s | `b4104386ae9c` RED |
+| borg | `ff2d50a2bde9` | 2026-09-19T16:32:08Z | RED (native) | 318.1s | `b4104386ae9c` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -33,7 +33,6 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
-- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `ae02ddfc4d08`, last good `f3340e4a355f`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy** — test/test_nilpy_bytearray_unbound_and_subclass.npy test/test_nilpy_bytearray_unbound_and_subclass.expected (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy** — test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh (borg): bad `b4104386ae9c`, last good `11e0c581c80d`, 4 commit(s) in range
 - **test-esp-idf#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (borg): bad `b4104386ae9c`, last good `fada42022187`, 52 commit(s) in range
