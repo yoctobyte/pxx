@@ -2,10 +2,10 @@
 track: A
 prio: 45
 type: feature
-status: working
+status: backlog
 found: 2026-08-31
 found-by: frankC
-owner: frankb-8e
+owner: ""
 blocked-by: []
 summary: "arm32 and aarch64 still have no object writer; i386 landed separately and x86-64 before it. Both are DIVERGENT targets on the C-ABI question, so each one is a second and third oracle for a ruling the i386 measurement has already made once -- worth having, not urgent. aarch64 is gated on an ABI question first: cparser.inc's aarch64 param spill is POSITIONAL while pxx's external-call path is AAPCS, and the two coincide for every all-integer/pointer signature, which is why libc callbacks work today and prove nothing. Make that spill AAPCS, or establish by measurement that it already is, BEFORE landing the writer -- the writer is what makes the falsifying test (a genuinely external caller, mixed int/float) constructible for the first time. Expect the shape to follow i386's, not the ESP writer's: check how each backend reaches an external before assuming."
 ---

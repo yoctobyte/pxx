@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:33 unfinished:19 blocked:8 backlog:39 backlog-umbrella:13 backlog-core:165 backlog-nilpy:177 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3881 rejected:84`
+`working:32 unfinished:19 blocked:8 backlog:39 backlog-umbrella:13 backlog-core:167 backlog-nilpy:176 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3881 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main` [A] — owner: frankb-8e
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: frankS
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
@@ -23,12 +22,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` [T] — owner: frank-subcoord
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
-- `feature-a-object-output-for-arm32-and-aarch64` [A] — owner: frankb-8e
 - `feature-a-record-rtti-descriptors-for-initializearray-and-finalizearray` [A] — owner: frankA
 - `feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident` [A] — owner: frankH
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
+- `feature-n-import-threading-should-imply-threadsafe` [N] — owner: frankb-8e
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
@@ -76,7 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 542, ranked
+## Ready — top 30 of 543, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -91,6 +90,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
 - `[p 80] [U]` decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit (unblocks 1)
+- `[p 80] [A]` feature-a-object-output-for-arm32-and-aarch64 (unblocks 1)
 - `[p 80] [N]` bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last
 - `[p 80] [N]` bug-n-an-attribute-read-through-a-class-bound-to-a-variable-gives-a-raw-address
 - `[p 80] [N]` bug-n-an-unpack-or-chain-store-whose-receiver-is-a-parameter-silently-does-nothing
@@ -107,6 +107,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 - `[p 70] [A]` bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss (unblocks 2)
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [A]` feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar (unblocks 2)
 
-_512 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_513 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

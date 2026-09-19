@@ -3,8 +3,8 @@ slug: feature-n-import-threading-should-imply-threadsafe
 track: N
 type: feature
 prio: 55
-status: backlog
-owner: ""
+status: working
+owner: frankb-8e
 created: 2026-09-10
 found-by: frankB
 tags: [nilpy, threading, options, upward-compat]
