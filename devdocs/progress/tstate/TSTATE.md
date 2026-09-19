@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `fada42022187` | 2026-09-19T09:11:19Z | RED (opt) | 958.7s | `fada42022187` RED |
+| borg | `a725d91310a3` | 2026-09-19T09:43:36Z | RED (native) | 318.4s | `fada42022187` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `fada42022187` on borg, 2026-09-19T08:48:54Z (22m ago).**
+**Newest full tier in the fleet: `fada42022187` on borg, 2026-09-19T08:48:54Z (54m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `fada42022187` | RED | 22m | — (newest) |
+| borg | `fada42022187` | RED | 54m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -23,7 +23,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
 
 | host | toolchain | fp |
 |------|-----------|-----|
-| borg | kernel=7.0.0-29-generic gcc=13.3.0 qemu=8.2.2(6 of 6) git=2.43.0 wasmtime=48.0.1 | `fbd303b097c6` |
+| borg | kernel=7.0.0-31-generic gcc=13.3.0 qemu=8.2.2(6 of 6) espqemu-riscv32=9.2.2 espqemu-xtensa=9.2.2 git=2.43.0 wasmtime=48.0.1 | `892e942692d7` |
 
 Two hosts with different fingerprints did not measure the same thing, and a job that disagrees between them may be disagreeing about the EMULATOR rather than about the tree. Check this before filing a cross-target red against the compiler: `bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain` is the incident that cost an afternoon for want of this row.
 
@@ -33,3 +33,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy** — test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh (borg): bad `2b2ec3fee1c5`, last good `9b8475d4e99e`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
+- **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `a725d91310a3`, last good `fada42022187`, 1 commit(s) in range
