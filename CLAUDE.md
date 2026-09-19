@@ -320,6 +320,28 @@ summary is append-only history nobody must read. **Keep a new ticket to one
 screen.** A finding whose value IS its length goes in a reference doc with a
 one-line logbook pointer.
 
+**AND A NUMBER IN A TICKET NEEDS ITS POPULATION BESIDE IT, OR IT IS NOT
+RE-DERIVABLE BY ANYONE — INCLUDING THE SAME INSTRUMENT.** Not a claim about
+measuring; the measurements below were all correct when taken. It is a claim
+about the RECORD: a bare count LOOKS reproducible, so the next reader re-runs,
+gets a different number, and cannot tell a regression from a different
+denominator. Measured 2026-09-19, **three lanes, three seats, one day**. A
+wasm32 ticket recorded "61 sources, 59 clean, 1 gap, 1 unrelated failure" and
+named no set — at HEAD the same question answers **43** for `*.pas`, **47**
+adding `.npy` and `.c`, and **98** for `test/wasm/*` once shell scripts count,
+so its "1 unrelated failure" has no denominator either and the original sweep's
+reach is unrecoverable. A math ticket's "twelve absent names" and a later
+"eighteen" were **the same measurement against different CPythons**, which
+reads as a regression or a win to everyone who was not there. And this file's
+own coordinator quoted lekkerzeilen at "36 of 39 modules" when the 3 failures
+are exactly the `ctypes` arm pxx is designed never to enter — every module it
+reaches compiles, and 39 was the wrong denominator. **So record the POPULATION,
+the TREE and the ORACLE beside the number, and when a re-run disagrees do not
+replace one number with the other** — carry both rows, each marked with what it
+measured, because a number whose population was never written down is not
+refuted by a new one, it is simply unquotable. Say what would retire the new
+row while you are there.
+
 ## Tracks — coordination lanes, not a taxonomy
 
 | | lane | files it owns | gate |
