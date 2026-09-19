@@ -275,4 +275,4 @@ dispatched call returning a float truncates and one returning a string raises.
 Filed with its own repro and a control proving it was UNREACHABLE before this
 fix, because the call never completed at all.
 
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 92136431f.

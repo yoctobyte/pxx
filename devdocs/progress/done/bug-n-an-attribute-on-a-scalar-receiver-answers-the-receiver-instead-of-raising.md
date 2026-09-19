@@ -138,4 +138,4 @@ Verified 2026-09-14: CPython prints `SCALARATTR OK`, pxx at 26249fa1d prints
 passing -- so the fixture cannot pass by a fix that raises unconditionally.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 92136431f.
