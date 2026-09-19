@@ -41,3 +41,6 @@ expect_same: MISMATCH [test_tls_base26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — auto-closed by the borg watcher: `test-threads#src:test/test_tls_base.pas` passes at e8a98c976991 (tier native); it was red at be58b2cbea7e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
