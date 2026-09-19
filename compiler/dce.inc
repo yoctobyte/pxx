@@ -357,6 +357,38 @@ begin
       Inc(i);
     end;
   end;
+  { A BODY THAT HOLDS A STUB TARGET IS A ROOT, NOT MERELY A BODY THAT SURVIVES.
+    The range loop below already refuses to drop one -- something jumps into
+    the middle of it, so its bytes have to stay -- and until 2026-09-19 that
+    was the whole rule. It is half of one: code that stays in the image and
+    can be entered is code that RUNS, so the calls it makes are live edges. A
+    body kept that way but never marked kept its call sites through the
+    compaction (they are not inside a removed range) while their callees were
+    dropped for want of an edge, and ApplyCallFixups said `unresolved forward:
+    PyUserObjGetattrTry` -- pylib's two `hasattr` helpers, both kept for a stub
+    target, both calling a body nothing else reaches.
+
+    Marking it here rather than keeping it there is what closes the gap,
+    because a decision taken AFTER the fixpoint cannot feed the fixpoint. The
+    keep branch below stays as a second line: it is unreachable for anything
+    this loop marks, and it is what would catch a stub target this loop's
+    range arithmetic did not see.
+
+    NOT riscv32's bug, though riscv32 IDF is where it was found: nothing in
+    either half is target-specific. What differs per target is only WHICH
+    bodies end up kept-but-dead, so the same program builds on x86-64 and
+    xtensa and refuses here.
+    bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile }
+  slot := 0;
+  while slot < DceOrderCount do
+  begin
+    p := DceOrder[slot];
+    a := Procs[p].BodyAddr;
+    b := DceBodyEnd(slot);
+    if (b > a) and DceRangeHoldsStub(a, b) then DceMark(p);
+    Inc(slot);
+  end;
+
   { a call from code that is never dropped -- the entry stub, the runtime stubs,
     the main body -- is a root by definition }
   i := 0;

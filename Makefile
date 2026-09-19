@@ -35512,6 +35512,34 @@ test-esp-idf: $(COMPILER)
 	  else echo "$$chip WriteLn + task end MISMATCH"; exit 1; fi; \
 	done
 
+	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
+	# is the whole question here, because this class of mistake stops the build
+	# by name (`unresolved forward: <callee>`) rather than mis-running. A body
+	# kept for a stub target keeps its CALL SITES through the compaction, so its
+	# callees have to be marked live; they were not, and the only programs that
+	# noticed were NilPy ones, where pylib's attribute helpers are kept that way.
+	# POSITIVE CONTROL, and NOT the pinned compiler -- pin v412 refuses this
+	# program for an unrelated reason it predates (the IDF heap arena), so it
+	# fails the row while saying nothing about the row's subject. The control is
+	# HEAD with the DceMark loop in dce.inc reverted: measured 2026-09-19, the
+	# riscv32 arm then says `unresolved forward: PyUserObjGetattrTry` and the
+	# xtensa arm still builds -- which is the asymmetry that says WHICH bodies
+	# end up kept-but-dead is what differs per target, not the mechanism.
+	# THE SIZE COMPARISON IS THE OTHER HALF, as in the row above: a pass that
+	# refuses this target builds fine and drops nothing.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/test_dce_nilpy_esp_kept_body.npy $(TESTTMP)/dce_nilpy_esp_off.o >/dev/null \
+	  && ./$(COMPILER) --dce $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    test/test_dce_nilpy_esp_kept_body.npy $(TESTTMP)/dce_nilpy_esp_on.o >/dev/null \
+	  && szoff=$$(stat -c%s $(TESTTMP)/dce_nilpy_esp_off.o) && szon=$$(stat -c%s $(TESTTMP)/dce_nilpy_esp_on.o) \
+	  && if [ $$szon -ge $$szoff ]; then \
+	       echo "test_dce_nilpy_esp_kept_body [$$t]: --dce did NOT shrink the object ($$szon >= $$szoff)."; exit 1; \
+	     fi \
+	  && echo "=== test_dce_nilpy_esp_kept_body [$$t]: OK ($$szoff -> $$szon bytes) ===" \
+	  || exit 1; \
+	done
+
 test-esp-softfloat: $(COMPILER)
 	@./$(COMPILER) test/test_esp_softfloat_probe.pas $(TESTTMP)/test_esp_softfloat_oracle >/dev/null && $(TESTTMP)/test_esp_softfloat_oracle > $(TESTTMP)/test_esp_softfloat.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \

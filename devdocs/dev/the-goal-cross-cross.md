@@ -135,9 +135,14 @@ it rested on was not.**
 **The DCE work stands on its own merits and is no longer justified by this
 paragraph.** `a5419adbf` wired the NilPy frontend (1889 bodies, 696 live,
 1,347,352 -> 745,240 code bytes, self-differential `compared=29 differ=0`).
-`dce.inc:226` still refuses every non-x86-64 target, so no ESP build has ever
-run it — which is also why the retracted paragraph's *"745 KB even WITH DCE"*
-was measuring a host binary.
+*"`dce.inc:226` still refuses every non-x86-64 target, so no ESP build has ever
+run it"* was true when written and is RETIRED 2026-09-19: wasm32 is the only
+architecture the gate turns away now, and both ESP demos have been built and
+BOOTED with `--dce` under qemu, output unchanged. Measured the same day, same
+program, flashed image: C3 3,326,224 B -> 2,307,648 B (-31%), S3 3,246,288 B ->
+1,996,848 B (-38%). Neither reaches the stock 1 MB factory partition, which
+needs -66%, so the demos are still built without it. The retracted paragraph's
+*"745 KB even WITH DCE"* was measuring a host binary, which is unaffected.
 
 **"One wall, both ESP architectures" is retired as a description, and the
 conclusion it supported is UNCHANGED.** That sentence was true of what could be

@@ -45,8 +45,12 @@ case "$(basename "$PWD")" in
   *) echo "build.sh: run from nilpy-c3 or nilpy-s3, not $(basename "$PWD")" >&2; exit 2 ;;
 esac
 
+# PXX_EXTRA_FLAGS is for measuring a flag against this program without editing
+# the recipe -- `PXX_EXTRA_FLAGS=--dce ./build.sh qemu-assert` is what the DCE
+# rows in bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile were taken
+# with. It is NOT how the demo is built.
 # shellcheck disable=SC2086
-"$PXX" $ISA --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.npy main/main.o
+"$PXX" $ISA ${PXX_EXTRA_FLAGS:-} --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" main/main.npy main/main.o
 ar rcs main/libpxx_app.a main/main.o
 
 # `set-target` WIPES build/ and reconfigures -- only when not configured yet.

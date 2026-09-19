@@ -1,0 +1,16 @@
+# DCE, a NilPy program, the ESP profile: a body KEPT because a stub target
+# lands inside it is code that RUNS, so the calls it makes are live edges.
+# pylib's `hasattr` helpers are kept that way and call PyUserObjGetattrTry,
+# which nothing else reaches; before the fix the call site survived the
+# compaction and its callee did not, and the build stopped with
+# `unresolved forward: PyUserObjGetattrTry`.
+# A class with a field is what pulls the attribute helpers in at all.
+# bug-a-dce-drops-a-called-body-on-the-riscv32-idf-profile
+class B:
+    def __init__(self, n):
+        self.n = n
+
+def main():
+    print(B(3).n)
+
+main()
