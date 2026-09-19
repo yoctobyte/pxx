@@ -16468,6 +16468,41 @@ test-core: $(COMPILER)
 	# is gcc on the same source.
 	./$(COMPILER) test/c_block_static_survives_a_storage_class.c $(TESTTMP)/c_blockstatic26
 	tools/expect_same.sh c_blockstatic26 "$$($(TESTTMP)/c_blockstatic26)" "block static survives a storage class: 6 rows OK"
+	# ...AND THE SIBLING DEFECT AT THE SAME SEAM: that fix made `static __thread`
+	# keep its storage, and the `__thread` half stayed SILENT. A thread-local
+	# inside a function body never reaches TryAssignThreadVarStorage at all -- the
+	# block-scope storage-class loop consumed the qualifier and recorded only
+	# `static` -- so it was not refused for a reason, it was never asked, and it
+	# was the only member of the degraded family with no diagnostic whatsoever.
+	#
+	# FOUR ROWS AND THREE OF THEM ARE CONTROLS, because the obvious single row
+	# (`the warning appears`) passes on any build that warns about anything.
+	./$(COMPILER) test/c_func_scope_thread_local_warns.c $(TESTTMP)/c_fsthread26 >$(TESTTMP)/c_fsthread26.err 2>&1
+	# 1. NON-CHANGE. The warning must not be delivered by breaking the storage:
+	#    `static __thread` still counts like a block-scope static. gcc on the same
+	#    source prints this identically (measured 2026-09-19).
+	tools/expect_same.sh c_fsthread26 "$$($(TESTTMP)/c_fsthread26)" "func-scope __thread: storage unchanged, 4 rows OK"
+	# 2. ONCE PER REASON, NOT ONCE PER DECLARATION AND NOT ONCE PER COMPILATION.
+	#    The fixture carries TWO block-scope thread-locals on purpose: a file with
+	#    one cannot tell those apart, and this family exists because a one-shot
+	#    flag reported a `__thread` array and suppressed a `__thread` struct.
+	@n=$$(grep -c 'function scope' $(TESTTMP)/c_fsthread26.err); 	  [ "$$n" = 1 ] 	  || { echo "c_func_scope_thread_local: FAIL - want exactly 1 warning for 2 declarations, got $$n"; exit 1; }
+	# 3. NEGATIVE CONTROL, drawn from the population the question is about: a
+	#    block-scope static with NO thread storage class must stay quiet. The
+	#    `ok:` line is asserted FIRST and BRANCHED ON -- an absence grepped out of
+	#    a failed compile passes for the wrong reason, which is the regression
+	#    this row exists to catch.
+	printf 'int f(void){static int x; x++; return x;}\nint main(void){return f()+f();}\n' > $(TESTTMP)/fs_none.c
+	./$(COMPILER) $(TESTTMP)/fs_none.c $(TESTTMP)/fs_none >$(TESTTMP)/fs_none.err 2>&1
+	@grep -q '^ok: ' $(TESTTMP)/fs_none.err 	  || { echo "c_func_scope_thread_local: FAIL - control did not compile; its silence proves nothing"; cat $(TESTTMP)/fs_none.err; exit 1; }
+	@! grep -q 'function scope' $(TESTTMP)/fs_none.err 	  || { echo "c_func_scope_thread_local: FAIL - warned about a function with no thread-local"; exit 1; }
+	# 4. AND IT MUST NOT STEAL THE FILE-SCOPE ROW. A file-scope scalar GETS real
+	#    per-thread storage on x86-64, so it must report nothing -- if this reason
+	#    fired there it would be announcing a defect in the one shape that works.
+	printf '__thread int g;\nint main(void){g++; return g;}\n' > $(TESTTMP)/fs_file.c
+	./$(COMPILER) $(TESTTMP)/fs_file.c $(TESTTMP)/fs_file >$(TESTTMP)/fs_file.err 2>&1
+	@grep -q '^ok: ' $(TESTTMP)/fs_file.err 	  || { echo "c_func_scope_thread_local: FAIL - file-scope control did not compile"; cat $(TESTTMP)/fs_file.err; exit 1; }
+	@! grep -q 'function scope' $(TESTTMP)/fs_file.err 	  || { echo "c_func_scope_thread_local: FAIL - func-scope reason fired on a FILE-scope declaration"; exit 1; }
 	# _Static_assert is EVALUATED at every scope C11 allows one. The file above is
 	# the must-COMPILE half (true assertions must be invisible, and a struct
 	# carrying one must lay out unchanged -- the sizeof rows are what make that

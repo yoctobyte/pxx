@@ -3046,7 +3046,27 @@ const
   TLSREFUSE_ARRAY     = 3;  { an array is reached through its symbol; scalars first }
   TLSREFUSE_TYPE      = 4;  { managed/record/set: needs per-thread init+final }
   TLSREFUSE_AREAFULL  = 5;  { the user area is full -- raise it on the COMMAND LINE }
-  TLSREFUSE_MAX       = 5;
+  { THE SIXTH IS NOT A REFUSAL BY TryAssignThreadVarStorage -- IT IS A
+    DECLARATION THAT NEVER REACHED IT. The five above are answers the allocator
+    GAVE; this one is the absence of a question. A `static __thread int t;`
+    inside a function body is consumed by the block-scope storage-class loop in
+    ParseCStatementAST, which records only `static`, so the qualifier is gone
+    before any symbol exists and there is no idx to ask about. That is why this
+    row was the ONLY silent member of the family: the warning it should have had
+    lives in a path it never entered.
+
+    IT IS PER-DECLARATION AND NOT TU-LEVEL, which matters for one specific
+    reader: cpreproc.inc's `__pxx_thread_local__` predefine is derived from the
+    TWO TU-level refusals (ARCH and NOINSTALL) and says in its own comment that
+    a sixth TU-LEVEL reason would belong there. This is not one -- whether a
+    declaration sits at file or block scope is not knowable before a token is
+    read -- so the predefine is deliberately unaffected. A C program can still
+    test __pxx_thread_local__ to learn whether file-scope scalars get real
+    per-thread storage, which is exactly what it claims and no more.
+
+    bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+  TLSREFUSE_FUNCSCOPE = 6;  { declared inside a function body: never reaches the allocator }
+  TLSREFUSE_MAX       = 6;
 
 var
   TARGET_PTR_SIZE    : Integer;

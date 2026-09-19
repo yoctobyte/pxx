@@ -1,5 +1,5 @@
 ---
-summary: "The RESIDUAL left by the __thread fix: on x86-64 with a file-scope scalar, `__thread` gets real per-thread storage; everywhere else — any other target, an array, --emit-obj/--shared, and FUNCTION SCOPE — it still compiles to ONE SHARED object and only a warning says so, except at function scope where there is NO warning at all. Not a regression; this is byte-identical to the behaviour before the fix. NOTE the function-scope row is about SHARING ONLY: the separate bug that made it a wrong value single-threaded (the `static` being dropped) is fixed and is bug-c-a-block-scope-static-is-silently-dropped-when-a-thread-storage-class-precedes-the-type."
+summary: "The RESIDUAL left by the __thread fix: on x86-64 with a file-scope scalar, `__thread` gets real per-thread storage; everywhere else — any other target, an array, --emit-obj/--shared, and FUNCTION SCOPE — it still compiles to ONE SHARED object and only a warning says so, and AS OF 2026-09-19 function scope warns too (TLSREFUSE_FUNCSCOPE, a sixth reason that is not a refusal but a declaration that never reached the allocator) — so the family no longer has a silent member, which was this ticket's sharpest row. The SHARING is untouched at every one of the five: the warning deliberately does not reach TryAssignThreadVarStorage, because a new class of consumer would meet an area size baked before anything is lexed and a full area is now a hard Error, so wiring it would stop a program compiling that compiles today. Real storage for function scope is feature-c-a-function-scope-thread-local-gets-real-per-thread-storage, blocked on the sizing move. A SECOND DEFECT AT THE SAME SEAM was measured while fixing this and is NOT fixed: a BARE `__thread` in a body, no `static`, returns a garbage stack local where gcc refuses the program — bug-c-a-bare-thread-in-a-function-body-is-accepted-and-returns-a-garbage-value, ranked ABOVE this one because it is wrong on one thread today. Not a regression; this is byte-identical to the behaviour before the fix. NOTE the function-scope row is about SHARING ONLY: the separate bug that made it a wrong value single-threaded (the `static` being dropped) is fixed and is bug-c-a-block-scope-static-is-silently-dropped-when-a-thread-storage-class-precedes-the-type."
 type: bug
 track: C
 prio: 40
@@ -35,13 +35,23 @@ A **multi-threaded** C program using `__thread`, where any of these holds:
 | the variable is an array | several paths reach an array through its SYMBOL (bounds, handles, element type) and a thread-local reference is rewritten to a pointer dereference before they see it |
 | the variable is a managed or aggregate type | needs per-thread init/final at thread start and exit; no thread hook exists |
 | `--emit-obj` / `--shared` | no ELF entry point, so nothing installs the block |
-| **function scope** (`static __thread int t;` inside a body) | the fix hooks `ParseCGlobalVarDecl`; a local declaration never reaches it |
+| **function scope** (`static __thread int t;` inside a body) | the fix hooks `ParseCGlobalVarDecl`; a local declaration never reaches it. **Warns since 2026-09-19 (`TLSREFUSE_FUNCSCOPE`); still shares.** |
 
 In every one of these the declaration compiles to **one shared `.bss` object**,
 exactly as it did before the fix, and a warning naming the specific reason is
 the only thing between that program and a wrong answer.
 
-**THE FUNCTION-SCOPE ROW IS THE ONE THAT WARNS NOTHING AT ALL.** The fix hooks
+**FIXED 2026-09-19 — THE FUNCTION-SCOPE ROW WAS THE ONE THAT WARNED NOTHING AT
+ALL, AND NOW WARNS.** It gained `TLSREFUSE_FUNCSCOPE`, a sixth reason that is
+not an answer from the allocator but the absence of a question: the block-scope
+storage-class loop consumed the qualifier and recorded only `static`, so no idx
+and no reason ever existed. **The sharing is unchanged** — see
+`feature-c-a-function-scope-thread-local-gets-real-per-thread-storage` for why
+giving it real storage is blocked on the area sizing rather than merely undone.
+The paragraph below is the original finding and is kept as the record of what
+was true before; read it in the past tense.
+
+**THE FUNCTION-SCOPE ROW WAS THE ONE THAT WARNED NOTHING AT ALL.** The fix hooks
 the file-scope declaration parser, so a `static __thread int t;` inside a body is
 never seen by it — and the warning it replaced lived in the TOP-LEVEL walk, so
 that shape never warned before this change either. **No regression, and it is now

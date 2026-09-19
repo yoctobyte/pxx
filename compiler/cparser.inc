@@ -8453,10 +8453,58 @@ begin
   Result := blk;
 end;
 
+procedure CWarnFuncScopeThreadLocal;
+{ The sixth reason, and the only one that is not an answer from the allocator.
+
+  A `static __thread int t;` inside a function body gets ONE shared object,
+  exactly like the other five degraded shapes -- but unlike them it said NOTHING
+  AT ALL, because it never reached TryAssignThreadVarStorage to be refused. The
+  block-scope storage-class loop in ParseCStatementAST consumed the qualifier
+  and recorded only `static`, so no idx and no reason ever existed. That is why
+  this row was silent, and making it speak is the fix the ticket asks for.
+
+  IT DELIBERATELY DOES NOT CALL TryAssignThreadVarStorage, AND THAT IS A
+  CORRECTNESS PROPERTY, NOT A SHORTCUT. Reaching the allocator would make
+  function-scope declarations a NEW CLASS OF CONSUMER of the thread-local user
+  area -- and the area size is baked by EmitTlsMainInstall before anything is
+  lexed, so a new consumer meets a size chosen without knowledge of it, and
+  since 402d61e0d a full area is a hard Error. A program with several
+  `static __thread` in bodies compiles today (silently wrong under threads) and
+  would STOP COMPILING. Refusing a program that compiles today, to protect it
+  from a race, is the trade the file-scope path deliberately declined for the
+  four reasons that are OUR limits; it would be worse here, where the qualifier
+  may sit in a vendored dependency whose author never saw our diagnostic.
+  So this warns and changes no storage: measured 2026-09-19, `static __thread
+  int t; t++;` prints 1 2 3 against gcc's 1 2 3 before and after this change.
+
+  GIVING IT REAL PER-THREAD STORAGE IS A SEPARATE, LARGER CHANGE and is filed,
+  blocked on moving the area-sizing decision to where it can see the
+  declarations rather than deepening the scan.
+
+  ONCE PER REASON, sharing CTlsWarnedReason with the other five for the reason
+  recorded there: N copies of one fact bury the other diagnostics, while a
+  one-shot flag across all reasons hides a second, different one.
+
+  bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
+begin
+  if CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] then Exit;
+  CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] := True;
+  Warn('__thread at function scope: a thread-local declared inside a function '
+     + 'body never reaches the thread-local allocator at all -- the storage '
+     + 'class is consumed with the other block-scope specifiers -- so it is '
+     + 'not refused for a reason, it is simply never asked for. '
+     + 'File-scope scalars are the shape that gets real per-thread storage. '
+     + '— this declaration therefore gets ONE copy shared by every thread, not '
+     + 'one per thread, exactly as it did before thread-local storage existed. '
+     + 'Single-threaded code is unaffected; threaded code will read and write '
+     + 'another thread''s value with no further warning');
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmStart, asmLen: Integer; asmEmpty: Boolean;   { GCC inline asm }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
+    localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
@@ -8526,14 +8574,24 @@ begin
     is not handled today, and adding it is a behaviour change this fix has no
     measurement for. }
   localSawStatic := False;
+  localSawThread := False;
   while (CurTok.Kind = tkIdent) and
         ((CurTok.SVal = 'register') or (CurTok.SVal = 'auto') or
          (CurTok.SVal = 'static') or
          (CurTok.SVal = '__thread') or (CurTok.SVal = '_Thread_local')) do
   begin
     if CurTok.SVal = 'static' then localSawStatic := True;
+    { BOTH SPELLINGS, ONE QUESTION -- the same pairing CDeclSawThreadLocal makes
+      at file scope. Recording this is the whole of the function-scope fix: the
+      token was being swallowed by the bare `Next` below, so by the time a
+      symbol existed there was nothing left to say `__thread` had been asked
+      for, and this row was the only member of the family that warned NOTHING. }
+    if (CurTok.SVal = '__thread') or (CurTok.SVal = '_Thread_local') then
+      localSawThread := True;
     Next;
   end;
+  { Warn BEFORE the two declaration arms below, because both of them Exit. }
+  if localSawThread then CWarnFuncScopeThreadLocal;
 
   { block-scope static declaration: parse as a normal local declaration but
     allocate the declared storage in BSS so pointers to it survive the block.
