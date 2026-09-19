@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test and the pcl GUI suite under it: clean too (GUI suite identical flag on/off, 20 OK). REMAINING: --ro-rtti default-on for HOSTED executables only (not ESP objects -- see 2026-09-19 GUI section), after the i386/aarch64/arm32 tiers under it; dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test and the pcl GUI suite under it: clean too (GUI suite identical flag on/off, 20 OK). The i386/aarch64/arm32 tiers under it are clean too (237+203+198, all pass). REMAINING: --ro-rtti default-on for HOSTED executables only (not ESP objects -- see 2026-09-19 GUI section); dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -403,4 +403,30 @@ keep RTTI and VMTs in .data unless a later measurement says otherwise.
 
 Next: the i386 / aarch64 / arm32 tiers with the flag on. test-core's cross rows
 ran under it, but the per-arch tiers did not. Then default-on for hosted.
+
+## 2026-09-19 (frankH) — i386 / aarch64 / arm32 tiers under --ro-rtti: all pass
+
+The flag defaulted on (the same uncommitted one-line edit, reverted after),
+rebuilt (`151ef9e07c9a`, tree 6c6addb38), then `testmgr --tier full --job
+'test-<arch>#*' --jobs 4`:
+**i386 237/237, aarch64 203/203, arm32 198/198.**
+
+The flag is LIVE on those targets, which is what makes the greens mean
+anything. With the same binary, `test_ro_rtti_write` on each target: the plain
+run completes, and the VMT and RTTI-header writes fault with rc=139 on i386,
+aarch64 and arm32 alike.
+
+Measurement complete for the marked spans: test-core, lib-test, the pcl GUI
+suite and the three per-arch tiers, each with a flag-off control or an in-run
+positive control. Next: default-on for hosted executables, with ESP objects
+excluded (the flash/ISR hazard above).
+
+Note on the GUI section's `solitaire_gui` red, from reading the check and
+probing the binary. The count is 2/2 (flag on and off), not a flake.
+- The size check prints its initial `0x0` when it finds NO window.
+- Run in default mode under xvfb, the app is alive after 3s, the root window
+  has 0 children, and the app idles in poll() with sockets open. It never
+  creates a toplevel.
+- That is the shape of the earlier `bug-gui-pcl-apps-broken-current-stable`.
+- Relayed to the coordinator for Track B.
 
