@@ -9,7 +9,7 @@ created: 2026-09-11
 found-by: frankuser
 tags: [pin, track-t, autopin, owner-blocker, workflow]
 blocked-by: []
-summary: "RE-MEASURED 2026-09-12 18:36 AND THE NUMBERS IN THIS SLUG ARE NOW LOW: the last pin is v407 at 51901941e, 2026-09-06 21:59 — **~140 hours, not 99**, i.e. nearly six days, and the gap has grown by 41h since this was filed. The slug keeps the original figures so citations resolve. The owner armed Track T auto-pin on 2026-09-09 (`fc2ce3d02`, \"go ahead and arm it\"). It has fired ZERO times in 64 verdicts and counting (the log is live -- quote it as 'zero of N, N still growing', never as a number), and the tree's last pin is v407 at 2026-09-06T21:59 — 99 hours. Cadence before that was ~1/day (10 pins, 08-31..09-06). The blocker is a persistent red FLOOR, not a regression: `optdiff#shard0/12` is in 64 of 64, and four lib-test rows (lib_synapse.pas, lib_synapse_ssl.pas, lib_synapse_transitive_unit.pas, crtl_reachability.py) in 41 of 64. THOSE FOUR ARE ONE CAUSE -- Track T bisected all four (plus a test-fpjson row) to the SAME range, bad `fca28056d8ec` / last good `0e3ba86d5208`, 4 commits, and the only one touching lib/rtl/sysutils.pas is `0ffe185bb` (six System names moved out of sysutils). Five rows, one fix, not three lanes. The MINIMUM red count across all 64 is 4, so no verdict was ever close. Auto-pin refuses on any red the current pin does not carry and the allowlist holds 2 entries, so the armed policy is STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\", 2026-09-06). Not a code defect: the machinery is doing exactly what it was armed to do. The fork is whether it should. AND THERE IS A CIRCULAR DEPENDENCY, confirmed 2026-09-11 after I wrongly denied it: `lib-test#src:tools/crtl_reachability.py` blocks 41 of 64 and its ACTUAL failure is the builtin cliff (`mimic_threading` / `__pxxclone requires --threadsafe`), clearable ONLY by a pin -- and `make pin` is owner-only. So the fleet cannot break the cycle by fixing tests; auto-pin cannot fire until a human pins once. I denied this by grepping pin-shadow.log for the error text; that log records job IDENTIFIERS (a source fingerprint), never failures."
+summary: "RE-MEASURED 2026-09-19 10:36 AND THE HEADLINE IS STALE IN THE FAVOURABLE DIRECTION, WHICH IS THE ONE NOBODY CHECKS: **a human pinned v411 at `8d9d69bdc`, 2026-09-17 19:42**, so the gap is **~39 hours, not the 99 in the slug nor the 140 this summary claimed since 09-12**. The slug and the body keep their original figures so citations resolve. WHAT IS NOT RE-MEASURED and is what the ticket is actually about: whether auto-pin has fired since v411, and whether v411 cleared the RED FLOOR the body describes (`optdiff#shard0/12` in 64 of 64, plus four lib-test rows in 41 of 64 that Track T bisected to ONE cause, bad `fca28056d8ec`). The body also records a CIRCULAR DEPENDENCY -- `lib-test#src:tools/crtl_reachability.py` fails on the builtin cliff, clearable ONLY by a pin, and `make pin` is owner-only -- so a human pin was the one thing that could break the cycle and one has now happened. **Re-measure the floor against v411 before doing anything else here; do not inherit the 64-verdict numbers.** Not a code defect either way: the machinery does what it was armed to do, and the fork is whether the armed policy should be STRICTER than the owner's own standing rule (\"we NEED regular pinning, green or not\")."
 ---
 
 > **THE SLUG SAYS 62 AND THAT NUMBER IS FROZEN.** It was 62 at filing and is 64 by
@@ -261,3 +261,17 @@ not so anyone stops.
 Supersedes the closed `decide-arm-track-t-autopin-the-evidence-gate-cannot-pass-as-written`,
 which asked whether to arm. It is armed. This asks whether armed-and-refusing is
 what he wanted.
+
+# 2026-09-19 — the summary was the fourth stale one found in a day, and it was stale UPWARD
+
+Corrected in place. The slug says 99 hours, this summary said 140, and the
+measured gap is **39** — a human pinned v411 on 2026-09-17. Nobody had
+re-measured because the number only ever moved in the alarming direction
+before, and **a headline that overstates a problem is not re-checked by anyone
+who agrees with it.**
+
+What that changes: the body's central claim is a CIRCULAR DEPENDENCY broken only
+by a human pin, and a human pin has now happened. So the interesting question is
+no longer "why has nothing fired" but **"did v411 clear the floor, and has
+anything fired since"** — neither of which is measured here. The 64-verdict
+statistics predate v411 and must not be quoted as current.
