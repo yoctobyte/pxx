@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test under it: clean too (only the pre-existing xmlreader red). REMAINING: make --ro-rtti the default once a pcl widget program has RUN under it, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. lib-test and the pcl GUI suite under it: clean too (GUI suite identical flag on/off, 20 OK). REMAINING: --ro-rtti default-on for HOSTED executables only (not ESP objects -- see 2026-09-19 GUI section), after the i386/aarch64/arm32 tiers under it; dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -375,4 +375,32 @@ lib-test only COMPILES lib/pcl (lib_units_compile.py), and `make demos` only
 builds. So the pcl gap in the section above stands, and it is now the one
 thing between this flag and the default: run one reflective pcl GUI program
 (published properties, LFM) under xvfb with the flag, plus its flag-off control.
+
+## 2026-09-19 (frankH) — the pcl GUI suite under --ro-rtti: identical to flag-off
+
+`tools/gui_suite.sh` (xvfb) with `PXX_STABLE=` the flag-on compiler
+(`f4bc5ebb9b6e`), then the HEAD compiler with the flag off (`7ad4bc24a102`),
+tree 0ac42bfb9. **Per-test results are identical:** 20 OK in both, and they
+cover the reflective pcl paths the earlier sections named as the likeliest
+writers: test_pcl_lfm, test_pcl_event_rtti, test_pcl_stream_paned,
+test_pcl_click/menus/input/widgets, real windows for solitaire_gui and life.
+
+The same three FAILs in both runs, so none is the flag's, and none is mine:
+- `test_pcl_tabbar` and `eliah_ide` do not compile: `Bar.AddButton(tStd, 'Btn',
+  @h.PickA)` against `AddButton(ATab: Integer; const ACaption: string;
+  AOnClick: TMethod)` answers "no overload ... (Integer, ShortString,
+  Pointer)". `@obj.Method` is typed Pointer, not a method value. It is red on
+  the PINNED compiler too, so it is not new today.
+- `solitaire_gui`: "no real toplevel (biggest window 0x0)", after two OK rows
+  for the same program.
+
+**One hazard before default-on, and it is ESP-only.** On ESP-IDF, .rodata is
+FLASH. ObjRoKeepIramLiteralsWritable keeps a block writable only when iram code
+references it by a FIXUP. An ISR calling a virtual method reads the VMT through
+an INSTANCE pointer, with no fixup, so a read-only VMT would be read from flash
+with the cache off. So default-on is for hosted executables only; ESP objects
+keep RTTI and VMTs in .data unless a later measurement says otherwise.
+
+Next: the i386 / aarch64 / arm32 tiers with the flag on. test-core's cross rows
+ran under it, but the per-arch tiers did not. Then default-on for hosted.
 
