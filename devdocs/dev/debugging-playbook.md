@@ -28843,3 +28843,72 @@ the population everyone writes.
 
 Sibling: "A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO" — same failure, callee
 kind instead of reader kind.
+
+## THE ONLY ROW THAT CAN SEE A TYPE-LAYOUT CHANGE IS THE ONE THAT COMPILES `lib/rtl`
+
+**The case.** `bug-a-xtensa-unaligned-packed-record-field-access-faults`, landed
+`dc448c702`. The fix needed one new predicate — does this record have any field
+at an offset its own type cannot be read from — and the first cut of that walk
+recursed on *"this field has a record id"*:
+
+```pascal
+fr := UFldRec_[i];
+if (fr <> REC_NONE) and (fr >= REC_UCLASS_BASE) then
+  if RecHasMisalignedField(fr) then ...
+```
+
+**`UFldRec_` is populated for a CLASS field as well as for a record one.** A
+class field is a pointer, so `TNode = class Next: TNode` — ordinary, legal, and
+in half the RTL — recursed without bound. **23 of 60 `lib/rtl` root units
+segfaulted the compiler.**
+
+**What each instrument said.**
+
+| instrument | verdict | why |
+| --- | --- | --- |
+| `make compiler/pascal26` | `converged after 1 round(s)` | `compiler.pas` is a deliberately procedural subset with no self-referential class in a raggedness-relevant position |
+| the fixture, on all six targets | all six MATCH | the fixture had no such class either — it was written about packed records, not about the walk |
+| `testmgr --tier quick` | would have passed | same population as the fixedpoint |
+| **`gate.sh quick`'s HEAD rtl canary** | **FAIL, 23 of 60** | it compiles the real `lib/rtl`, which contains the shape |
+
+The same run caught a second red the other rows also could not: `TypeFieldAlign`
+is declared ~4,400 lines BELOW its new caller, and pxx prescans while FPC
+resolves in source order, so the **seed** build would have broken. That is the
+FPC seed canary, and it is likewise the only row that can see it.
+
+**The general shape.** CLAUDE.md's per-fix loop already says the fixedpoint
+*"cannot see a construct the compiler never writes"*, with a duplicated
+`tkProperty` arm as its example. This is a second, independent subsystem for the
+same rule, and the reason it is here rather than there is that the rule is
+already stated and already believed — a second worked example costs a paragraph
+for a line of new information.
+
+**What IS new is the calibration, and it is the reason for this section.**
+CLAUDE.md calls `gate.sh quick` *"OPTIONAL per fix"*. For a change to **type
+layout** — anything touching offsets, alignment, field walks, record identity —
+that is an understatement, because the population that exercises the change is
+not in `compiler.pas` and is not in your fixture. It is in `lib/rtl`, and
+exactly one row compiles `lib/rtl`.
+
+**So: a change to type layout is not verified by a converging fixedpoint plus a
+green fixture. Run `gate.sh quick` and read the rtl rows.**
+
+**THE TRIGGER THAT WOULD PROMOTE THIS TO CLAUDE.md** (written here so a later
+reader does not have to guess, and so "not promoted" is not read as "not
+valued"): **if a SECOND layout-shaped change is caught by the HEAD rtl canary
+and by nothing else, it earns the calibration** — a line in the per-fix loop
+making the gate non-optional for type-layout changes. One subsystem so far, so
+this is a playbook entry with a trigger, not a rules line.
+
+**The self-criticism, which is the cheaper lesson.** The correct idiom was 400
+lines up in the same file: `RecordHasManagedFieldsDepth2` gates on
+`UFldTk[base+i] = Ord(tyRecord)`, excludes self, and carries a depth cap, with a
+comment recording the same hazard arriving from a C struct-tag redefinition. I
+wrote a new walk where I should have read the one next door. **The field's ID is
+not the question; the field's KIND is** — and `UFldRec_` being populated for a
+class field too is precisely CLAUDE.md's "the name is not the thing": the name
+says *record*, the contents include pointers-to-class, and the 80% that matches
+is what makes it trustworthy.
+
+Sibling: "the fixedpoint cannot see a construct the compiler never writes"
+(CLAUDE.md, per-fix loop).
