@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_time.pas's calendar half and mimic_calendar.pas, against CPython.
+
+A DIFFERENTIAL: this file runs unmodified under CPython and prints identical
+output both ways (`python3 test/lib_mimic_time_calendar.npy`). The expected file
+was produced by CPython, not by the shim.
+
+The rows are the ones That Space Program depends on (tsp/view/demo.py:
+`calendar.timegm(time.strptime(text, fmt))` and `time.strftime(..., time.gmtime(t))`)
+plus the calendar edges a date algorithm gets wrong: the epoch, the second before
+it, a fractional negative time (which must floor, not truncate), 29 February in a
+leap year, 1900 and 2100 (not leap), 2000 (leap), and a date past 2038.
+Every gmtime row prints all nine fields, so a wrong weekday or day-of-year shows.
+"""
+import time
+import calendar
+
+
+# Unannotated on purpose: NilPy cannot read a module-qualified annotation
+# (`t: time.struct_time` is "expected ')' before '.'"), measured 2026-09-19 and
+# relayed to Track N. The shim is the subject here, not the annotation.
+def fields(t) -> str:
+    return "%d-%d-%d %d:%d:%d wday=%d yday=%d dst=%d" % (
+        t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec,
+        t.tm_wday, t.tm_yday, t.tm_isdst)
+
+
+for secs in [0.0, -1.0, -0.5, 59.9, 951782400.0, 951868799.0, 1000000000.0,
+             -2208988800.0, 4107542400.0, 4102444800.0, 1790000000.0]:
+    g = time.gmtime(secs)
+    print("gmtime", secs, fields(g), "timegm", calendar.timegm(g))
+
+for text, fmt in [("2026-09-18T16:00", "%Y-%m-%dT%H:%M"),
+                  ("2026-09-18T16:00:07", "%Y-%m-%dT%H:%M:%S"),
+                  ("2024-02-29T23:59:59", "%Y-%m-%dT%H:%M:%S"),
+                  ("1969-12-31T23:59", "%Y-%m-%dT%H:%M"),
+                  ("2026-9-8 7:05", "%Y-%m-%d %H:%M"),
+                  ("2026-09-08   07:05", "%Y-%m-%d %H:%M"),
+                  ("100%", "100%%")]:
+    t = time.strptime(text, fmt)
+    print("strptime", repr(text), fields(t), "timegm", calendar.timegm(t))
+
+for text, fmt in [("2026-09-18", "%Y-%m-%dT%H:%M"),
+                  ("2026-09-18T16:00x", "%Y-%m-%dT%H:%M"),
+                  ("2023-02-29T00:00", "%Y-%m-%dT%H:%M"),
+                  ("2026-13-01T00:00", "%Y-%m-%dT%H:%M"),
+                  ("26-09-18T00:00", "%Y-%m-%dT%H:%M")]:
+    try:
+        time.strptime(text, fmt)
+        print("strptime", repr(text), "accepted")
+    except ValueError as e:
+        print("strptime", repr(text), "ValueError:", e)
+
+print(time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(1790000000.0)))
+print(time.strftime("tsp-map-%Y%m%d-%H%M%S.png", time.gmtime(951782400.0)))
+print(time.strftime("day %j of %Y, 100%%", time.gmtime(4102444800.0 - 1.0)))
+print("strftime() with no tuple has the shape of now:",
+      len(time.strftime("%Y%m%d-%H%M%S")) == 15)
+
+a = time.perf_counter()
+b = time.perf_counter()
+print("perf_counter does not go backwards:", b >= a)

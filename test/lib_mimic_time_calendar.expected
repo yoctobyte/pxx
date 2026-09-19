@@ -1,0 +1,28 @@
+gmtime 0.0 1970-1-1 0:0:0 wday=3 yday=1 dst=0 timegm 0
+gmtime -1.0 1969-12-31 23:59:59 wday=2 yday=365 dst=0 timegm -1
+gmtime -0.5 1969-12-31 23:59:59 wday=2 yday=365 dst=0 timegm -1
+gmtime 59.9 1970-1-1 0:0:59 wday=3 yday=1 dst=0 timegm 59
+gmtime 951782400.0 2000-2-29 0:0:0 wday=1 yday=60 dst=0 timegm 951782400
+gmtime 951868799.0 2000-2-29 23:59:59 wday=1 yday=60 dst=0 timegm 951868799
+gmtime 1000000000.0 2001-9-9 1:46:40 wday=6 yday=252 dst=0 timegm 1000000000
+gmtime -2208988800.0 1900-1-1 0:0:0 wday=0 yday=1 dst=0 timegm -2208988800
+gmtime 4107542400.0 2100-3-1 0:0:0 wday=0 yday=60 dst=0 timegm 4107542400
+gmtime 4102444800.0 2100-1-1 0:0:0 wday=4 yday=1 dst=0 timegm 4102444800
+gmtime 1790000000.0 2026-9-21 14:13:20 wday=0 yday=264 dst=0 timegm 1790000000
+strptime '2026-09-18T16:00' 2026-9-18 16:0:0 wday=4 yday=261 dst=-1 timegm 1789747200
+strptime '2026-09-18T16:00:07' 2026-9-18 16:0:7 wday=4 yday=261 dst=-1 timegm 1789747207
+strptime '2024-02-29T23:59:59' 2024-2-29 23:59:59 wday=3 yday=60 dst=-1 timegm 1709251199
+strptime '1969-12-31T23:59' 1969-12-31 23:59:0 wday=2 yday=365 dst=-1 timegm -60
+strptime '2026-9-8 7:05' 2026-9-8 7:5:0 wday=1 yday=251 dst=-1 timegm 1788851100
+strptime '2026-09-08   07:05' 2026-9-8 7:5:0 wday=1 yday=251 dst=-1 timegm 1788851100
+strptime '100%' 1900-1-1 0:0:0 wday=0 yday=1 dst=-1 timegm -2208988800
+strptime '2026-09-18' ValueError: time data '2026-09-18' does not match format '%Y-%m-%dT%H:%M'
+strptime '2026-09-18T16:00x' ValueError: unconverted data remains: x
+strptime '2023-02-29T00:00' ValueError: day 29 must be in range 1..28 for month 2 in year 2023
+strptime '2026-13-01T00:00' ValueError: time data '2026-13-01T00:00' does not match format '%Y-%m-%dT%H:%M'
+strptime '26-09-18T00:00' ValueError: time data '26-09-18T00:00' does not match format '%Y-%m-%dT%H:%M'
+2026-09-21 14:13:20 UTC
+tsp-map-20000229-000000.png
+day 365 of 2099, 100%
+strftime() with no tuple has the shape of now: True
+perf_counter does not go backwards: True

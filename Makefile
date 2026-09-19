@@ -37414,6 +37414,14 @@ endif
 	# and this returns, a chosen divergence recorded in
 	# devdocs/dev/nilpy-semantics-divergences.md.
 	$(TESTTMP)/lib_mimic_time | diff -u test/lib_mimic_time.expected -
+	# time's calendar half (struct_time, gmtime, strptime, strftime) and
+	# calendar.timegm -- what That Space Program's demo clock calls. A
+	# DIFFERENTIAL: the .expected was produced by CPython running the same file.
+	# The gmtime rows print all nine fields across the epoch, a fractional
+	# negative time (floor, not truncate), 29 February and the 1900/2000/2100
+	# leap rules; breaking the weekday offset by one turns 18 rows red.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_time_calendar.npy $(TESTTMP)/lib_mimic_time_calendar
+	$(TESTTMP)/lib_mimic_time_calendar | diff -u test/lib_mimic_time_calendar.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"
