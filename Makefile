@@ -3204,6 +3204,17 @@ test-nilpy: $(COMPILER)
 	# EVERY ROW IS AT ONE ARGUMENT: the defect is arity-independent and was MASKED by
 	# the four-argument callable-field cap fixed the same day, which reported its own
 	# refusal first -- a wide-arity row measures both at once and pins neither.
+	# A METHOD CALLING A METHOD WITH A CONTAINER ARGUMENT, callee declared FIRST.
+	# `return self.take(["a", "b", "c"])` printed NOTHING for the caller's result and
+	# SEGFAULTED in a larger class -- memory corruption, not a wrong value. No longer
+	# reproduces (HEAD and pin v411, every row of the ticket's own matrix), cause
+	# UNATTRIBUTED: it is NOT the by-ref ABI fix, measured twice -- b48c40d28 filed it
+	# saying so ("it fails with the callee declared first as well"), and disabling
+	# PyMarkVariantParamsByRef reddens test_nilpy_a_callee_declared_below_its_caller
+	# while leaving every row here green. So this row exists to stop a formerly
+	# CORRUPTING shape returning unnoticed, and no binary on this box reddens it.
+	./$(COMPILER) test/test_nilpy_a_method_passes_a_list_to_a_method.npy $(TESTTMP)/test_nilpy_mlist26
+	$(TESTTMP)/test_nilpy_mlist26 | diff -u test/test_nilpy_a_method_passes_a_list_to_a_method.expected -
 	./$(COMPILER) -Futest test/test_nilpy_bound_method_field_from_expression.npy $(TESTTMP)/test_nilpy_bmfield26
 	$(TESTTMP)/test_nilpy_bmfield26 | diff -u test/test_nilpy_bound_method_field_from_expression.expected -
 	./$(COMPILER) -Futest test/test_nilpy_callable_field_wide_arity.npy $(TESTTMP)/test_nilpy_cbfieldwide26

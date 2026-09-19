@@ -1,0 +1,104 @@
+# A METHOD CALLING A METHOD WITH A CONTAINER ARGUMENT, callee declared FIRST.
+# `return self.take(["a", "b", "c"])` printed NOTHING for the caller's result --
+# not a wrong number, no diagnostic, the outer print simply never ran -- and the
+# same shape in a larger class SEGFAULTED, which is what said memory corruption
+# rather than a wrong value. A probe printing the inner result before returning
+# it showed the right number and then the program ended.
+#
+# WHY THERE IS NO NEGATIVE CONTROL FOR THIS FIXTURE, stated rather than left for
+# a reader to wonder about: the defect predates pin v411 and EVERY compiler on
+# this box already carries the fix, so there is no binary here that reddens it.
+# Its failure mode was reproduced instead by disabling PyMarkVariantParamsByRef
+# and rebuilding -- see the ticket -- which is also what attributes the repair.
+#
+# THE MECHANISM, because it decides what this fixture has to contain. An
+# unannotated NilPy parameter is a variant and travels const-by-REF, so
+# IRLowerCallArg boxes a non-variant argument into a hidden temp and passes its
+# ADDRESS. That decision reads Procs[cpi].Params[k].IsRef, which used to be
+# written only while the CALLEE'S BODY was parsed. Any call lowered before that
+# passed the container handle BY VALUE and the callee dereferenced it.
+#
+# So the axis is not "is the callee above or below" -- test_nilpy_a_callee_
+# declared_below_its_caller owns that one, and its class D (callee FIRST,
+# `d.values()`) passed before the fix and is its control. The axis here is a
+# LIST LITERAL built at the call site inside a method body, which is a different
+# temp with a different lifetime, and it is the shape the ticket measured.
+#
+# EVERY ROW A DIFFERENT LENGTH, so a diff names the row that moved rather than
+# printing identical numbers -- and so no row's expected value is the 0 or the
+# empty container a broken path also produces.
+
+
+class L:
+    def take(self, r):
+        return len(r)
+
+    def take_int(self, n):
+        return n
+
+    # returned directly
+    def go_direct(self):
+        return self.take(["a"])
+
+    # through a local, which is a different temp lifetime
+    def go_local(self):
+        n = self.take(["a", "b"])
+        return n
+
+    # the list bound FIRST, then passed by name
+    def go_bound(self):
+        a = ["a", "b", "c"]
+        return self.take(a)
+
+    # a DICT and a nested list, so the row is not about TPyList alone
+    def go_dict(self):
+        return self.take({"a": 1, "b": 2, "c": 3, "d": 4})
+
+    def go_nested(self):
+        return self.take([["a"], ["b"], ["c"], ["d"], ["e"]])
+
+
+# The same two shapes as module-level FUNCTIONS, which were correct throughout
+# and are the control that says the defect needed a method calling a method.
+def take_fn(r):
+    return len(r)
+
+
+def go_fn():
+    return take_fn(["a", "b", "c", "d", "e", "f"])
+
+
+class Big:
+    """The larger class: the shape that SEGFAULTED rather than printing empty.
+    Instance fields of several kinds ahead of the methods, because the corruption
+    was in the instance layout and an empty class cannot show it."""
+
+    def __init__(self):
+        self.a = 1
+        self.b = "two"
+        self.c = [3]
+        self.d = {"e": 4}
+
+    def take(self, r):
+        return len(r)
+
+    def go(self):
+        return self.take(["a", "b", "c", "d", "e", "f", "g"])
+
+    def go_from_fields(self):
+        return self.take([self.a, self.b, self.c, self.d])
+
+
+print("A", L().go_direct())
+print("B", L().go_local())
+print("C", L().go_bound())
+print("D", L().go_dict())
+print("E", L().go_nested())
+print("F", go_fn())
+print("G", Big().go())
+print("H", Big().go_from_fields())
+# the INT argument, which was correct throughout -- the control that says the
+# argument being a CONTAINER is what mattered
+print("I", L().take_int(9))
+# and the method reached DIRECTLY from module level, also correct throughout
+print("J", L().take(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]))
