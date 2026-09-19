@@ -15376,8 +15376,8 @@
   "wall": 1025.6
  },
  "last_idle_tier_try": {
-  "date": "2026-09-18T10:07:31Z",
-  "sha": "dbe874029961c70f6bed6d419c3c664a801a9d5d",
+  "date": "2026-09-19T14:58:49Z",
+  "sha": "b4104386ae9c393702223f151f8e29b902868140",
   "tier": "full"
  },
  "last_opt": {
@@ -15577,6 +15577,7 @@
    "range": [
     "d90ddd2b71e63b7481b23b8dc860e8316aa06e9a"
    ],
+   "range_non_causal": false,
    "src": "test/test_nilpy_unbound_builtin_method.npy tools/expect_same.sh",
    "status": "fail"
   }
