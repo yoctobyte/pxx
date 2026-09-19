@@ -1636,6 +1636,15 @@ function pyoptional_missing(const what: AnsiString): Variant;
   CPython's own wording, and CPython's own exception class.
   bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
 function pyattr_missing(const owner: AnsiString; const attr: AnsiString): Variant;
+{ The SCALAR receiver's own raise, and deliberately NOT pyattr_missing above.
+  The two say different things — `module 'x' has no attribute 'y'` against
+  `'int' object has no attribute 'y'` — and the note on pyattr_missing records
+  what it cost the last time one raise served two concepts: the message
+  described only the first of them and was simply false about the second. So
+  this is a second function rather than a parameter, for the reason that one
+  is written down.
+  bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString): Variant;
 function pyos_startfile(const path: AnsiString): Integer;
 function pyos_environ_get(const name: AnsiString): Variant;
 function pyos_environ_get_d(const name: AnsiString; const dflt: Variant): Variant;
@@ -4626,6 +4635,19 @@ end;
 
 procedure pydynattr_set(obj: Pointer; const name: AnsiString; const val: Variant);
 begin
+  { THE WRITE TWIN OF pydynattr_get'S nil ARM, which has raised here all along.
+    Without this the store keyed the write on the NIL pointer and reported
+    success, so `n = None; n.foo = 1` silently did nothing while `n.foo` READ
+    raised correctly -- one receiver, two doors, two answers, and the working
+    door is the one people probe. The cost is measured and it is not the wrong
+    value: lekkerzeilen's app.py does `tile.buffers = {}` and `tile.instances =
+    {}` on a None tile, both no-op, and the first operation that cannot pretend
+    is the method call three lines later -- so the traceback named the wrong
+    line AND the wrong attribute. Same message and same class as the getter,
+    because it is the same fact about the same receiver.
+    bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+  if obj = nil then
+    raise AttributeError.Create('''NoneType'' object has no attribute ''' + name + '''');
   if PyDynAttrStore = nil then PyDynAttrStore := TPyDict.Create;
   PyDynAttrStore.store(PyDynAttrKey(obj, name), val);
 end;
@@ -13698,6 +13720,13 @@ function pyattr_missing(const owner: AnsiString; const attr: AnsiString): Varian
 begin
   pyattr_missing := pynone;
   raise AttributeError.Create('module ''' + owner + ''' has no attribute ''' +
+    attr + '''');
+end;
+
+function pyscalar_attr_missing(const tname: AnsiString; const attr: AnsiString): Variant;
+begin
+  pyscalar_attr_missing := pynone;
+  raise AttributeError.Create('''' + tname + ''' object has no attribute ''' +
     attr + '''');
 end;
 

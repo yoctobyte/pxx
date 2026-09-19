@@ -1573,6 +1573,17 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 	./$(COMPILER) test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.npy $(TESTTMP)/test_nilpy_dynsig26
 	$(TESTTMP)/test_nilpy_dynsig26 | diff -u test/test_nilpy_dynamic_call_takes_defaults_from_its_own_class.expected -
+	# An attribute that does not exist must RAISE whatever the receiver is.
+	# The scalar arm: `i.foo` on an int used to answer the int itself, on a str
+	# the string HANDLE as an integer, on a float 0, and `None.foo = 1` silently
+	# no-opped -- RecFieldType's not-found default reading the receiver's own
+	# first machine word at offset 0. Every expected row here is a RAISE, never
+	# a value, because the broken compiler ANSWERS THE RECEIVER: a row asserting
+	# "not None" or "falsy" passes on the bug. Built with ./$(COMPILER), not
+	# $(PXX_STABLE) -- the pin predates the fix. CPython is the oracle.
+	# bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
+	./$(COMPILER) test/test_nilpy_an_attribute_on_a_scalar_raises_rather_than_answering_garbage.npy $(TESTTMP)/test_nilpy_scalarattr26
+	$(TESTTMP)/test_nilpy_scalarattr26 | diff -u test/test_nilpy_an_attribute_on_a_scalar_raises_rather_than_answering_garbage.expected -
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.npy $(TESTTMP)/test_nilpy_clsref_rtti
 	$(TESTTMP)/test_nilpy_clsref_rtti | diff -u test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.expected -
 	./$(COMPILER) -Futest/nilpy_boundret test/test_nilpy_a_bound_method_value_keeps_the_variant_return_abi.npy $(TESTTMP)/test_nilpy_boundret

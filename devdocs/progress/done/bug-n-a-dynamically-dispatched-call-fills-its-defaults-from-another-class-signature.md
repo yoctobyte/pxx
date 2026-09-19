@@ -2,21 +2,31 @@
 slug: bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 title: a dynamically dispatched call fills its parameter defaults from another class's signature
 summary: >
-  `g.at(a, b)` on a receiver with no static type dispatches to the right class
-  at run time but takes its PARAMETER DEFAULTS from whichever same-named method
-  the candidate scan saw first -- which, when the receiver's class lives in a
-  module parsed later, is a sibling class in the CALLER's own module. Measured:
-  a call that CPython answers `outside=None` answers `outside=0.0`, where 0.0
-  is the default of a differently-named parameter of a different class. No
-  warning. When the two signatures also differ in LENGTH the call is built with
-  the wrong argument count, the run-time bind fails, and a variant tagged
-  VT_OBJECT with payload 1 is returned instead -- no method body runs and there
-  is no diagnostic. That is lekkerzeilen's world-path fault (wind.py:143).
+  FIXED 2026-09-14 (the "FIXED -- two halves" section below) AND RE-MEASURED AT
+  HEAD 2026-09-19: the committed reduction in
+  devdocs/progress/repro/dynamic-default-signature/ now matches CPython BYTE FOR
+  BYTE on both rows -- the shared-name row and the unique-name row -- so this
+  ticket is DONE and is being closed. It sat open at prio 88, the highest open
+  number under its umbrella, for five days with its own body recording the fix,
+  and a seat was dispatched to it on the strength of this summary. Read the rest
+  as the 2026-09-14 report it was.
+
+  WHAT IT WAS: `g.at(a, b)` on a receiver with no static type dispatched to the
+  right class at run time but took its PARAMETER DEFAULTS from whichever
+  same-named method the candidate scan saw first -- a sibling class in the
+  CALLER's own module when the receiver's class lived in a module parsed later.
+  A call CPython answers `outside=None` answered `outside=0.0`, with no warning.
+
+  STILL OPEN, and NOT this ticket: the lekkerzeilen world path still does not
+  run. It gets further and then dies in `malloc(): unsorted double linked list
+  corrupted` -- heap corruption, a different defect. See also
+  bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer, which this
+  fix UNCOVERED and which has its own repro.
 track: N
 type: bug
 prio: 88
 owner: frank-user
-status: open
+status: done
 ---
 
 ## Repro
@@ -265,3 +275,4 @@ dispatched call returning a float truncates and one returning a string raises.
 Filed with its own repro and a control proving it was UNREACHABLE before this
 fix, because the call never completed at all.
 
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -2522,8 +2522,14 @@ end;
   result must compile to an ordinary runtime attribute access — CPython raises
   at the first step here too, so there is nothing to skip.
   bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through }
-function PyMakeAttrMissingCall(const owner: AnsiString;
-                               const attr: AnsiString): Integer;
+{ Two raises share this builder and differ only in WHICH pylib routine and
+  what the first string means — the module name for one, the receiver's type
+  name for the other. Taking the routine as a parameter is what keeps the node
+  shape in one place; the MESSAGES stay in two functions in pylib, which is the
+  half that must not be merged. }
+function PyMakeAttrMissingCallNamed(const fn: AnsiString;
+                                    const owner: AnsiString;
+                                    const attr: AnsiString): Integer;
 var procIdx, a1, a2, l1, l2: Integer;
 
   function StrArg(const t: AnsiString): Integer;
@@ -2535,8 +2541,8 @@ var procIdx, a1, a2, l1, l2: Integer;
   end;
 
 begin
-  procIdx := FindProc('pyattr_missing');
-  if procIdx < 0 then Error('Nil Python: pylib (pyattr_missing) not loaded');
+  procIdx := FindProc(fn);
+  if procIdx < 0 then Error('Nil Python: pylib (' + fn + ') not loaded');
   l1 := StrArg(owner);
   l2 := StrArg(attr);
   a2 := AllocNode(AN_ARG);
@@ -2550,6 +2556,79 @@ begin
   ASTLeft[Result] := a1;
   ASTTk[Result] := Ord(tyVariant);
   LastExprTk := tyVariant;
+end;
+
+{ `module 'x' has no attribute 'y'` — the original caller's spelling, kept as
+  its own name so the eleven sys/module sites read as they did. }
+function PyMakeAttrMissingCall(const owner: AnsiString;
+                               const attr: AnsiString): Integer;
+begin
+  Result := PyMakeAttrMissingCallNamed('pyattr_missing', owner, attr);
+end;
+
+{ The Python spelling of a SCALAR receiver's type, for the AttributeError
+  message only. Deliberately coarse: CPython names the type it would have
+  raised about, so a NilPy Int64 is `int` and a Double is `float` — the
+  Pascal width is not part of what Python is being asked. }
+function PyScalarTypeName(tk: Integer): AnsiString;
+begin
+  case IntToTypeKind(tk) of
+    tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32, tyUInt32,
+    tyInt64, tyUInt64, tyNativeInt, tyNativeUInt: Result := 'int';
+    tyBoolean:                                    Result := 'bool';
+    tySingle, tyDouble, tyExtended:               Result := 'float';
+    tyString, tyAnsiString, tyShortString,
+    tyFixedString, tyChar:                        Result := 'str';
+  else
+    Result := 'object';
+  end;
+end;
+
+{ int and float DO carry four real attributes, and the offset-0 read answered
+  TWO of them correctly BY COLLISION: the first machine word of an int IS the
+  int, and CPython's `int.real` and `int.numerator` ARE the int. So the guard
+  below would have turned two right answers into AttributeError while fixing
+  the wrong ones — the value-collision case, from the side where the BUG's
+  value is the correct one. Measured against CPython: int.real 5, int.imag 0,
+  int.numerator 5, int.denominator 1; float.real 1.5, float.imag 0.0, and
+  float has NO numerator/denominator (AttributeError), which is why the float
+  arm lists only two names.
+  Answers -1 when the name is not one of these, and the caller then raises. }
+function PyScalarRealAttr(node, tk: Integer; const nm: AnsiString): Integer;
+var k: TTypeKind;
+begin
+  Result := -1;
+  k := IntToTypeKind(tk);
+  if (k = tyInteger) or (k = tyInt8) or (k = tyUInt8) or (k = tyInt16) or
+     (k = tyUInt16) or (k = tyInt32) or (k = tyUInt32) or (k = tyInt64) or
+     (k = tyUInt64) or (k = tyNativeInt) or (k = tyNativeUInt) then
+  begin
+    if (nm = 'real') or (nm = 'numerator') then Result := node
+    else if nm = 'imag' then Result := PyMakeIntLit(0)
+    else if nm = 'denominator' then Result := PyMakeIntLit(1);
+  end
+  else if (k = tySingle) or (k = tyDouble) or (k = tyExtended) then
+  begin
+    if nm = 'real' then Result := node
+    else if nm = 'imag' then
+    begin
+      Result := AllocNode(AN_FLOAT_LIT);
+      ASTIVal[Result] := 0;
+      ASTTk[Result] := Ord(tyDouble);
+    end;
+  end;
+end;
+
+{ `<scalar>.name` where the name is no member of anything — the SCALAR arm of
+  the missing-attribute raise. A RUN-TIME raise and not a compile-time refusal,
+  because CPython raises AttributeError and real code catches it; refusing at
+  compile time would make `try: x.foo except AttributeError:` unbuildable.
+  bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+function PyMakeScalarAttrMissingCall(tk: Integer;
+                                     const attr: AnsiString): Integer;
+begin
+  Result := PyMakeAttrMissingCallNamed('pyscalar_attr_missing',
+                                       PyScalarTypeName(tk), attr);
 end;
 
 { isinstance(x, T) / isinstance(x, (T1, T2, ...)) — desugared to tag checks
@@ -51228,6 +51307,56 @@ begin
         and a metaclass has taken its own branch, so neither reaches here. }
       if (tk = tyPointer) and (recName = REC_NONE) then
         Error('"' + fieldName + '": a pointer has no members (dereference it with ^, or the pointee type is unknown here)');
+
+      { ...AND THE SAME HOLE IS OPEN ONE TYPE-KIND WIDER: a receiver that is no
+        record or class AT ALL, which for NilPy means an int, a str or a float.
+        The guard above closes it for a pointer; RequireRecMember below closes it
+        for a user class, guarding `recId >= REC_UCLASS_BASE`. A scalar is in
+        NEITHER population, so it fell straight through to the AN_FIELD build and
+        RecFieldType's not-found default typed it tyInteger AT OFFSET 0 -- the
+        emitted code then reads the first machine word of the scalar's own
+        storage slot. Measured: `(5).foo` -> 5, `"abc".foo` -> 6513249, the string
+        HANDLE surfaced as an integer, `(1.5).bar` -> 0. The int row stays
+        self-consistent under arithmetic (`(5).foo + 1` -> 6), which is this
+        repo's expensive shape: a plausible wrong value, no crash, far from the
+        cause. `None.foo` READ already raised correctly, which is what kept this
+        hidden -- the half that works is the half people probe.
+
+        `RequireValueHasMembers` (pasparser_call.inc) is exactly this guard on the
+        Pascal side and is deliberately NOT on this path: its own comment records
+        that putting it on every member-dispatch copy refused valid Pascal at the
+        DEREF sites, where REC_NONE is normal (test_arr_of_ptr_elemrec_b354).
+        This is the NilPy copy of the loop, so that regression cannot return
+        through it, and NilPy has no `^` to build a half-dereferenced chain with.
+
+        A RUN-TIME raise and not an Error, unlike both Pascal siblings, for the
+        reason the dunder arm in PyParseClassRecordSelectors states: CPython
+        raises AttributeError here and real code CATCHES it, so a compile-time
+        refusal would make `try: x.foo / except AttributeError:` unbuildable.
+        Scalar METHODS never reach this line -- `"AB".lower()`, `d.get(k)` are
+        intercepted upstream while CurTok is still their '('.
+        bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising }
+      if NilPyUserCode and (recName = REC_NONE) and (not viaProp) and
+         (tk <> tyRecord) and (tk <> tyClass) and (tk <> tyVariant) and
+         (tk <> tyUnknown) and (tk <> tySet) and (tk <> tyAuto) and
+         (tk <> tyPointer) then
+      begin
+        Next;                          { consume the member name }
+        { ...but int and float really do have real/imag/numerator/denominator,
+          and two of those were RIGHT before this guard existed, by collision
+          with the offset-0 read. See PyScalarRealAttr. }
+        fldIdx := PyScalarRealAttr(node, Ord(tk), fieldName);
+        if fldIdx >= 0 then
+        begin
+          node := fldIdx;
+          if (fieldName = 'imag') or (fieldName = 'denominator') then
+            tk := IntToTypeKind(ASTTk[fldIdx]);
+          recName := REC_NONE;
+          Continue;
+        end;
+        Result := PyMakeScalarAttrMissingCall(Ord(tk), fieldName);
+        Exit;
+      end;
 
       { Property-backed access: FPC checks the PROPERTY's visibility, and the
         backing field is read on the declaring class's behalf — a private FField

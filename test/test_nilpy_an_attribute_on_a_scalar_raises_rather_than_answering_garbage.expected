@@ -1,0 +1,11 @@
+int.foo            AttributeError
+str.foo            AttributeError
+float.bar          AttributeError
+int.foo + 1        AttributeError
+None.foo = 1       AttributeError
+control: real attribute still reads
+control: scalar methods still work
+control: int real/imag/numerator/denominator
+control: float real/imag
+control: float.numerator AttributeError
+SCALARATTR OK

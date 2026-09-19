@@ -101,6 +101,7 @@ function PyZeroArgScalarCtor(const nm: AnsiString): Boolean; forward; { Nil Pyth
 function PyReboundParamSlotType(bodyStart: Integer; const nm: AnsiString; declTk: TTypeKind): TTypeKind; forward; { Nil Python: the private-slot type a rebound parameter needs, or tyUnknown (pyparser.inc) }
 function PyNodeListCi(n: Integer): Integer; forward; { Nil Python: TPyList class index of a node, else -1 (pyparser.inc) }
 function PyMakeDynAttrGet(baseNode: Integer; const fname: AnsiString): Integer; forward; { Nil Python obj.name dynamic read (pyparser.inc) }
+function PyMakeScalarAttrMissingCall(tk: Integer; const attr: AnsiString): Integer; forward; { Nil Python <scalar>.name -> AttributeError raise (pyparser.inc) }
 function PyMakeDynAttrSet(baseNode: Integer; const fname: AnsiString; valNode: Integer): Integer; forward; { Nil Python obj.name = v dynamic write (pyparser.inc) }
 function PyMakeVariantSetItem(baseNode, idxNode, valNode: Integer): Integer; forward; { Nil Python v[key]=val on a variant (pyparser.inc) }
 function PyMakeIdent(symIdx: Integer): Integer; forward; { Nil Python: ident AST node for a symbol (pyparser.inc) }

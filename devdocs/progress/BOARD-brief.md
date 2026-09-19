@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:31 unfinished:20 blocked:7 backlog:52 backlog-umbrella:13 backlog-core:169 backlog-nilpy:176 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3849 rejected:83`
+`working:31 unfinished:20 blocked:7 backlog:52 backlog-umbrella:13 backlog-core:169 backlog-nilpy:175 backlog-tools:60 backlog-pascal:11 backlog-decide:47 backlog-libs:26 backlog-cfront:11 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3851 rejected:83`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,19 +74,17 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 559, ranked
+## Ready — top 30 of 558, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
 - `[p 90] [N]` feature-nilpy-math-module-twelve-absent-names-measured (unblocks 1)
-- `[p 88] [N]` bug-n-a-dynamically-dispatched-call-fills-its-defaults-from-another-class-signature
 - `[p 85] [P]` bug-p-a-conditional-set-constant-whose-terms-live-two-units-away-declines (unblocks 1)
 - `[p 85] [P]` bug-p-compile-time-info-macros-are-not-implemented-and-silently-yield-zero (unblocks 1)
 - `[p 85] [P]` feature-b-rtl-has-no-tdoublerec (unblocks 1)
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [A]` bug-a-nilpy-on-cross-targets-four-remaining-walls
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
-- `[p 85] [N]` bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
 - `[p 84] [N]` bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
@@ -106,5 +104,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-class-level-field-annotation-is-discarded-unless-the-class-is-a-dataclass
 - `[p 75] [N]` bug-n-a-pylib-temporary-tpylist-is-never-freed-so-format-and-set-leak-per-call
 - `[p 75] [N]` bug-n-a-variant-comparison-heap-allocates-a-box-per-evaluation
+- `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
+- `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 
-_529 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_528 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

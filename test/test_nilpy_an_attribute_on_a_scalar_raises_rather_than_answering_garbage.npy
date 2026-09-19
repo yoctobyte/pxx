@@ -57,6 +57,8 @@ class C:
         self.a = 7
 
 c = C()
+i5 = 5
+f15 = 1.5
 if c.a == 7:
     print("control: real attribute still reads")
 else:
@@ -69,6 +71,33 @@ if len("abc") == 3 and d.get("k") == 1 and "AB".lower() == "ab":
 else:
     print("control: scalar methods BROKE")
     ok = False
+
+# THE COLLISION ROWS, and they are why a "raise on every unresolved scalar
+# attribute" fix is WRONG. int and float carry four real attributes, and the
+# offset-0 read answered TWO of them correctly BY ACCIDENT: the first machine
+# word of an int IS the int, and CPython's int.real and int.numerator ARE the
+# int. A fix that raises unconditionally turns two RIGHT answers into
+# AttributeError while fixing the wrong ones, and no row above can see it.
+# float has no numerator/denominator at all, which is the asymmetry that stops
+# this being "ints and floats both have four".
+if i5.real == 5 and i5.imag == 0 and i5.numerator == 5 and i5.denominator == 1:
+    print("control: int real/imag/numerator/denominator")
+else:
+    print("control: int real-attrs BROKE")
+    ok = False
+
+if f15.real == 1.5 and f15.imag == 0.0:
+    print("control: float real/imag")
+else:
+    print("control: float real-attrs BROKE")
+    ok = False
+
+try:
+    v = f15.numerator
+    print("control: float.numerator NO RAISE -> %s   FAIL" % repr(v))
+    ok = False
+except AttributeError:
+    print("control: float.numerator AttributeError")
 
 if ok:
     print("SCALARATTR OK")

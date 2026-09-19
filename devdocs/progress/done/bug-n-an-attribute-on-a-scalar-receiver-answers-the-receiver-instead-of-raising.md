@@ -2,7 +2,30 @@
 type: bug
 track: N
 prio: 85
-status: open
+status: done
+owner: frankD
+summary: >
+  FIXED 2026-09-19. `i.foo` on an int answered the int, on a str the string
+  HANDLE as an integer, on a float 0, and `None.foo = 1` silently no-opped --
+  RecFieldType's not-found default fabricating a field at OFFSET 0, so the
+  emitted code read the receiver's own first machine word. Two halves: a guard
+  in PyParseLValueAST (pyparser.inc) that routes an unresolved member on a
+  non-record receiver to a new pylib raise, and the WRITE twin of
+  pydynattr_get's nil arm in pydynattr_set, which had reported success while
+  the READ of the same receiver raised correctly. Fixture wired into
+  test-nilpy and diffed against CPython; it fails 8 rows on the pin.
+  THE FIX IS NOT A BLANKET RAISE, AND THAT IS THE INTERESTING PART: int and
+  float carry real/imag/numerator/denominator, and the offset-0 read answered
+  int.real and int.numerator CORRECTLY BY COLLISION -- the first word of an
+  int IS the int. A raise-on-everything fix turns two right answers into
+  AttributeError and no row of the original fixture could see it. All six are
+  now implemented and pinned as controls.
+  NOT COVERED, measured and filed separately as
+  bug-n-an-attribute-on-a-scalar-returned-by-a-call-segfaults: `mk().foo` and
+  `"ab".upper().foo` SEGFAULT (a different parser route -- a guard written at
+  the obvious place in PyParseClassRecordSelectors probed ZERO hits and was
+  removed rather than landed), and `(5).foo` does not parse at all. Both
+  predate this fix; both reproduce on the pin.
 slug: bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
 ---
 
@@ -47,6 +70,9 @@ the shape CLAUDE.md calls the expensive kind: no crash, a plausible wrong value
 far from the cause.
 
 ## FOUND FROM A REAL PROGRAM, NOT A PROBE
+
+(Line numbers below have drifted: the app.py rows are at 1697/1698/1700 as of
+2026-09-19, not 1690/1691/1693. The SHAPE is confirmed unchanged.)
 
 lekkerzeilen crashes under -dPXX_OBJTRACE with
 `AttributeError: 'NoneType' object has no attribute 'grids'` at app.py:1693 --
@@ -110,3 +136,6 @@ than `$(PXX_STABLE)` since the pin will predate the fix.
 Verified 2026-09-14: CPython prints `SCALARATTR OK`, pxx at 26249fa1d prints
 `SCALARATTR FAIL` with all five rows failing and both positive controls
 passing -- so the fixture cannot pass by a fix that raises unconditionally.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
