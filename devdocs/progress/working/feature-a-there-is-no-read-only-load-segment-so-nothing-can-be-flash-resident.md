@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-09-18
 owner: frankH
-summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). REMAINING: RTTI/VMT, dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
+summary: "FIRST CUT LANDED 2026-09-18 (frankH): x86-64 executables (aarch64, i386 and arm32 too since 2026-09-19 -- every hosted target) load the string-literal pool through a third PT_LOAD with flags R (static and dynamic links, -g included; --no-ro-data turns it off). The compiler's own image: 555 KB of its 574 KB data is now read-only. Mechanism: ranges of Data[] are marked at emission (RoRangeAdd), the writer permutes them to the front and every data address resolves through DataRemap, so no emitter changed. The segment found a real writer on day one -- x86-64's inlined SetLength released the old block with no MSTR_STATIC_RC guard, decrementing a literal's count -- fixed in the same change. ESP-IDF LANDED 2026-09-18: both ELF32 object writers emit .rodata (flags A) + .rela.rodata, which IDF places in flash -- test_emit_obj.pas on xtensa: SRAM .data 6304 -> 2624 bytes; a literal an iram; routine references directly stays in .data (iram code runs with the flash cache off). RTTI/VMT MEASURED 2026-09-19 (flag --ro-rtti, experimental, off): class RTTI headers + Pascal VMTs read-only -> test-core 2355/2356, the one red the predicted control; not yet default, see the 2026-09-19 section for what the green does NOT cover. REMAINING: make --ro-rtti the default (after lib-test/pcl demos under it), dispatch tables, float constants, each after its own never-written measurement. Typed constants stay writable ({$J+}). The bare ESP profile gains nothing -- a fact about OUR profile (one RWX IRAM region, qemu's shape), not the chip."
 ---
 
 # What
@@ -316,3 +316,46 @@ Verified:
 **Step 1 of the park section is DONE: every hosted target has the segment.**
 Next is step 2, RTTI/VMT/tables after measurement. It needs coordination with
 frankb-56, who owns RTTI emission.
+
+## 2026-09-19 (frankH) — RTTI/VMT: measured under --ro-rtti, nothing writes them on the paths test-core runs
+
+`--ro-rtti` (48b75b34b, EXPERIMENTAL, off by default) marks each class RTTI
+header (EmitRTTI Pass 1 reservation) and each Pascal VMT with its two backlink
+words (both pasparser VMT sites, declared classes and the builtin TObject)
+read-only, at emission.
+
+Positive control, `test_ro_rtti_write` (in test-core): a store into a VMT slot
+and one into an RTTI header, each reached through an INSTANCE (VMT pointer, then
+the backlink at VMT-8), fault rc=139 with the flag and land without it.
+
+Sweep: the flag defaulted on (an uncommitted one-line edit, reverted after),
+rebuilt (converged, 2 rounds, `b8ea1fdefb92`, tree 48b75b34b, which carries
+frankb-56's registry gate 5bde993c5), `testmgr --tier native --job 'test-core*'
+--jobs 4`: **2355/2356 pass**. The one FAIL is `test_ro_rtti_write-control`, as
+predicted: with the flag forced on, its "without the flag" leg faults too. A
+first attempt was killed by the harness's low-memory guard after 42 jobs and
+measured nothing.
+
+What the green covers: 1550 Pascal subjects; 460 declare a class, 110 use
+virtual/override, 28 publish, 48 use typinfo-style property access, and four
+exercise streaming or LFM for real (`test_streaming`, `test_streaming_enumset`,
+`test_lfm`, `test_wildcard_lfm`).
+
+**What it does NOT cover. A clean run says nothing writes these spans on the
+paths that EXECUTED; a fault that never happened is not proof of safety.**
+- The pcl widgets and the demos: `lib-test`/`make demos` were not run under
+  the flag, and they are the heaviest reflective consumers.
+- Streaming and LFM beyond those four fixtures.
+- Code reached only by reflection at run time, beyond the 48 subjects above.
+- NilPy's VMTs (`pyparser.inc`), which are not marked at all.
+- Published property/method arrays, IMTs, enum RTTI and layout RTTI, which
+  are not marked.
+- The RTTI registry table. It is excluded by SCOPE, not by any reason it would
+  fault: AddDataPtrFix patches the file image, as it does for the headers that
+  ARE marked. Whether anything writes it at run time is unmeasured.
+- The self-host with the flag on converged, but compiler.pas declares no
+  classes, so it exercises only TObject's two spans. Weak evidence.
+
+Next, before --ro-rtti can become the default: lib-test and the pcl demos
+under it.
+
