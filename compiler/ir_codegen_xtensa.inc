@@ -5712,7 +5712,7 @@ procedure IREmitMachineCodeXtensa;
   touches the data section at all, and LibcSyscallCallCount is x86-64 only.
   Anything added to this backend that appends to a NEW table must be saved here
   too, or the discarded pass leaves relocations pointing into overwritten code. }
-var i, lblId, pos, f, procIdx, skipPos: Integer;
+var i, lblId, pos, f, procIdx, skipPos, si, sz: Integer;
     LabelFixupCount: Integer;
     saveCodeLen, saveCodeRef, saveFix, saveGlobFix: Integer;
     saveCallFix, saveDynCall, saveIramFix: Integer;
@@ -5839,6 +5839,37 @@ begin
         begin
           if IRStmtRoot[i] then
             IREmitNodeXtensa(i);
+        end;
+
+      IR_ZERO_SYM:
+        begin
+          { Nil-init a managed local so an early exit or the epilogue's
+            scope-exit DecRef never releases stale stack bytes. A scalar (and a
+            dyn-array handle) is one pointer; an array of AnsiString or a
+            record with managed fields zeroes its whole span through PXXMemZero.
+            The other FIVE backends carry this arm -- x86-64, i386, riscv32,
+            arm32, aarch64 -- and xtensa raised `unsupported node in IR codegen:
+            zero_sym` instead. Found 2026-09-19 by a NilPy program with a `def`
+            returning a local, not by a test: the same wall took 34 of 52 NilPy
+            tests on arm32 before riscv32 and arm32 got their arms, and xtensa
+            was left behind in that sweep.
+            bug-a-nilpy-on-cross-targets-four-remaining-walls }
+          si := IRA[i];
+          if (Syms[si].Kind = skLocal) and SymNeedsZeroing(si, sz) then
+          begin
+            if sz = TARGET_PTR_SIZE then
+            begin
+              EmitSlotAddrXtensa(reg_xtensa_a8, si);
+              xtensa_movi(reg_xtensa_a9, 0);
+              xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);
+            end
+            else if sz > 0 then
+            begin
+              EmitSlotAddrXtensa(reg_xtensa_a2, si);
+              EmitLoadConstXtensa(reg_xtensa_a3, sz);
+              EmitXtensaHelperCall(XtensaHelperProc('PXXMemZero'), 2);
+            end;
+          end;
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:

@@ -56,6 +56,37 @@ function TimerStop(var t: TEspTimer): Boolean;
   be reused with a fresh Start. }
 procedure TimerDone(var t: TEspTimer);
 
+{ ---- the Nil Python surface ---------------------------------------------
+  A Python program has no `var t: TEspTimer` and no `@Tick`: it cannot spell a
+  record parameter, and a def's address cannot be handed to C as a function
+  pointer at all (pyparser's PyCoerceCallableArgsIn takes a variant heading for
+  an external Pointer parameter as a data BUFFER, deliberately, and the one
+  ticket that wants otherwise is
+  bug-n-a-pascal-function-handed-to-a-procedural-parameter-from-nilpy-is-not-a-code-address).
+
+  So the callback stays on THIS side of the seam -- the unit owns one timer and
+  one counter, the SDK calls a Pascal routine here, and Python asks how many
+  times it has fired. That is the shape the crash course prescribes (a Python
+  surface ON the unit, never a second implementation), and it is also the only
+  shape that works today.
+
+  `import 'esptimer.pas' as t` then reads:
+      t.timer_start_periodic_ms(100)
+      while t.timer_ticks() < 5: t.sleep_ms(100)
+      t.timer_stop()
+  Integers and not Booleans on purpose: an Integer rc crosses the seam with no
+  question about how a Boolean is represented, and 0/1 reads the same in both
+  languages. }
+function timer_start_periodic_ms(intervalMs: Integer): Integer;
+function timer_start_once_ms(delayMs: Integer): Integer;
+function timer_ticks: Integer;
+function timer_stop: Integer;
+procedure timer_done;
+
+{ FreeRTOS's own yield, in milliseconds. A Python loop that polls must yield,
+  or the idle task never runs and the watchdogs reboot the chip. }
+procedure sleep_ms(ms: Integer);
+
 implementation
 
 { esp_timer service (components/esp_timer). All resolve at IDF link time. }
@@ -150,6 +181,76 @@ begin
     rc := esp_timer_delete(t.Handle);
   end;
   TimerInit(t);
+end;
+
+{ ---- the Nil Python surface: one module-level timer ---------------------- }
+
+procedure vTaskDelay(ticks: Integer); external;
+
+var
+  PyTimer: TEspTimer;
+  PyTicks: Integer;
+  PyInited: Boolean;
+
+{ The SDK's callback. It runs in the esp_timer dispatch task, so it does the
+  least it can: one increment. Python reads the counter with timer_ticks. }
+procedure PyOnElapsed(arg: Pointer);
+begin
+  PyTicks := PyTicks + 1;
+end;
+
+procedure PyEnsureInit;
+begin
+  if PyInited then Exit;
+  TimerInit(PyTimer);
+  PyTimer.OnElapsed := @PyOnElapsed;
+  PyTicks := 0;
+  PyInited := True;
+end;
+
+function timer_start_periodic_ms(intervalMs: Integer): Integer;
+begin
+  PyEnsureInit;
+  if TimerStartPeriodicMs(PyTimer, intervalMs) then timer_start_periodic_ms := 1
+  else timer_start_periodic_ms := 0;
+end;
+
+function timer_start_once_ms(delayMs: Integer): Integer;
+begin
+  PyEnsureInit;
+  if TimerStartOnceMs(PyTimer, delayMs) then timer_start_once_ms := 1
+  else timer_start_once_ms := 0;
+end;
+
+function timer_ticks: Integer;
+begin
+  timer_ticks := PyTicks;
+end;
+
+function timer_stop: Integer;
+begin
+  if not PyInited then begin timer_stop := 0; Exit; end;
+  if TimerStop(PyTimer) then timer_stop := 1 else timer_stop := 0;
+end;
+
+procedure timer_done;
+begin
+  if not PyInited then Exit;
+  TimerDone(PyTimer);
+  PyInited := False;
+  PyTicks := 0;
+end;
+
+{ CONFIG_FREERTOS_HZ is 100 by default on both ESP targets here, so a tick is
+  10 ms. Rounding UP, because a caller asking to yield for 5 ms and getting 0
+  ticks does not yield at all -- and not yielding is the failure that reboots
+  the chip. }
+procedure sleep_ms(ms: Integer);
+var ticks: Integer;
+begin
+  if ms <= 0 then Exit;
+  ticks := (ms + 9) div 10;
+  vTaskDelay(ticks);
 end;
 
 end.

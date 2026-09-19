@@ -110,6 +110,20 @@ real window.** On evidence:
   It also passes `--xtensa-long-calls`, which its build.sh sets (`feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image`).
   Not measured: silicon, and the S3 is the owner's own hardware, so that is the
   next thing worth measuring.
+  **`examples/esp32/nilpy-hw-c3` and `-hw-s3`: a static Python application that
+  TOUCHES THE HARDWARE** — it drives GPIO 8 and is paced by an ESP-IDF timer
+  callback, through two pxx Pascal units that carry a Python surface
+  (`lib/rtl/platform/esp/esptimer.pas`, `espgpio.pas`). **OK on both chips, one
+  boot** (2026-09-19, frankS, binary `38410ffddc4b`), `./build.sh qemu-assert`.
+  **Read its pass narrowly, and this row is where the other two differ:** its
+  `main.expected` is the program's SPECIFICATION, not CPython's output — CPython
+  cannot run it, since the two imports have no CPython equivalent. What it
+  witnesses is that the SDK timer callback fired and the Python loop saw it
+  (`timer_ticks()` advancing is the callback having run). **The LED is NOT
+  witnessed**: Espressif's qemu does not model the GPIO input path and its
+  output path is unobservable, so `gpio_write` executes, returns 0, and nothing
+  here can say what the pin did. That half needs silicon, which is also why
+  this is the demo worth flashing first.
 
 ## Reproduce
 

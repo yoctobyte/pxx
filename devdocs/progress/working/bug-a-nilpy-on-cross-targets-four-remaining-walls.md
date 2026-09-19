@@ -655,3 +655,20 @@ Prio 85 was set on 2026-09-17 (72ae354aa) to re-rank THE ESP WALL on the
 owner's refocus. Under IDF that wall is gone on both ISAs; bare metal has its
 own ticket and was parked deliberately (coordinator, 2026-09-19). What is left
 here is the non-ESP rows, which is what prio 40 was for before the refocus.
+
+## 2026-09-20 (frankS) — xtensa had no `IR_ZERO_SYM` arm either
+
+The same wall this ticket already records for arm32 (34 of 52 tests, 2026-08-21)
+was still open on xtensa, and nothing had noticed because no NilPy program had
+ever been compiled for it until the S3 demo. Found by writing a second demo,
+not by a test: a `def` with a local is what emits the node, and the xtensa
+build of `examples/esp32/nilpy-hw-c3/main/main.npy` said
+`unsupported node in IR codegen: zero_sym` while riscv32 built it.
+
+The other five backends all carried the arm. Xtensa's is the same shape --
+one pointer store for a scalar or a dyn-array handle, `PXXMemZero` for a span.
+Guarded by the nilpy-hw source row in the test-esp-idf target, both ISAs.
+
+**What this says about the census in this ticket: an absent arm is invisible
+until a program of that language reaches the target.** The 2026-08-31 rows
+above were measured by compiling Pascal, and Pascal does not emit this node.

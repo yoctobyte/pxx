@@ -5,17 +5,18 @@
 # an archive, and linked by the normal IDF build. There is no interpreter on
 # the chip.
 #
-# ONE script, two projects: examples/esp32/nilpy-c3 (ESP32-C3, riscv32) and
-# examples/esp32/nilpy-s3 (ESP32-S3, xtensa), picked by the directory it runs
-# in. nilpy-s3's build.sh and main/main.npy are symlinks to these, so the two
-# chips always build the same program. IDF wants one project per chip
-# (set-target wipes build/), which is why there are two directories at all.
+# ONE script, one project per (program, chip): nilpy-c3 / nilpy-s3 are the
+# `print` demo on the ESP32-C3 (riscv32) and ESP32-S3 (xtensa), nilpy-hw-c3 /
+# nilpy-hw-s3 the hardware one. Each directory holds a symlink to this script
+# and to the program, so the two chips always build the same source. IDF wants
+# one project per chip (set-target wipes build/), which is why the directories
+# are per chip at all.
 #
 # Prereqs: . ~/esp/esp-idf/export.sh   (idf.py + toolchains on PATH)
 # Usage:   ./build.sh               build only
 #          ./build.sh qemu-assert   build, boot under Espressif QEMU, and diff
 #                                   the program's output against
-#                                   main/main.expected (CPython's own output)
+#                                   main/main.expected
 #
 # Its OWN project, not tools/esp_run.sh's hello-*, for the same reason as
 # fs-c3: it needs its own partition table. The NilPy runtime is ~3 MB of code
@@ -27,22 +28,26 @@ cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../../.. && pwd)"
 PXX="${PXX:-$REPO_ROOT/stable_linux_amd64/default/pinned}"
 
+# The chip comes from the directory's SUFFIX and the IDF project name from the
+# whole directory name, so a new demo is a new directory plus two symlinks --
+# `nilpy-c3`, `nilpy-s3`, `nilpy-hw-c3`, `nilpy-hw-s3` all run this one script.
+NAME="pxx_$(basename "$PWD" | tr - _)"
 case "$(basename "$PWD")" in
-  nilpy-c3)
-    CHIP=esp32c3; NAME=pxx_nilpy_c3
+  *-c3)
+    CHIP=esp32c3
     # --no-signals as well as --platform=esp: the signal runtime's
     # rt_sigaction install is an ecall in app_main's prologue, fatal under
     # FreeRTOS.
     ISA="--target=riscv32"
     QEMU_GLOB="qemu-riscv32/*/qemu/bin/qemu-system-riscv32" ;;
-  nilpy-s3)
-    CHIP=esp32s3; NAME=pxx_nilpy_s3
+  *-s3)
+    CHIP=esp32s3
     # --xtensa-long-calls: a 2.9 MB image puts forward calls past CALL8's
     # +-512 KiB, and a forward call site is sized before its body exists.
     # feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
     ISA="--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"
     QEMU_GLOB="qemu-xtensa/*/qemu/bin/qemu-system-xtensa" ;;
-  *) echo "build.sh: run from nilpy-c3 or nilpy-s3, not $(basename "$PWD")" >&2; exit 2 ;;
+  *) echo "build.sh: the directory name must end in -c3 or -s3, not $(basename "$PWD")" >&2; exit 2 ;;
 esac
 
 # PXX_EXTRA_FLAGS is for measuring a flag against this program without editing
@@ -68,9 +73,16 @@ grep -q " app_main" "build/$NAME.map" && echo "app_main present in image map"
 # timeout fire, assert on what was captured.
 #
 # WHAT A PASS WITNESSES: the program's stdout on an emulated chip, under
-# FreeRTOS, is byte-identical to CPython's, and the chip booted ONCE -- a
-# program that ends by busy-parking starves the idle task and the watchdogs
-# reboot it, which replays the output. WHAT IT DOES NOT: silicon.
+# FreeRTOS, is byte-identical to main/main.expected, and the chip booted ONCE
+# -- a program that ends by busy-parking starves the idle task and the
+# watchdogs reboot it, which replays the output. WHAT IT DOES NOT: silicon.
+#
+# WHERE main.expected COMES FROM is per demo and it matters: for nilpy-c3 /
+# nilpy-s3 it is CPython's own output for the same file, so a pass is a
+# differential against CPython. nilpy-hw-* imports two pxx Pascal units that
+# CPython has no equivalent of, so there its expected output is the program's
+# SPECIFICATION and the oracle claim is weaker -- what it still witnesses is
+# that the SDK timer callback fired and the Python loop saw it.
 if [ "${1:-}" = "qemu-assert" ]; then
   # shellcheck disable=SC2086
   QEMU_BIN="${QEMU_BIN:-$(ls "$HOME"/.espressif/tools/$QEMU_GLOB 2>/dev/null | head -1)}"
@@ -108,9 +120,9 @@ PYEFUSE
   want="$(cat main/main.expected)"
   boots="$(grep -c 'ESP-ROM' "$ser" || true)"
   if [ "$got" = "$want" ] && [ "$boots" = 1 ]; then
-    echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == CPython, one boot"
+    echo "OK   $(basename "$PWD") -- a static Python application runs on the $CHIP, output == main/main.expected, one boot"
   else
-    echo "FAIL $(basename "$PWD") -- output differs from CPython (main/main.expected) or the chip rebooted (boots=$boots)"
+    echo "FAIL $(basename "$PWD") -- output differs from main/main.expected or the chip rebooted (boots=$boots)"
     echo "want:"; printf '%s\n' "$want" | sed 's/^/    /'
     echo "got:";  printf '%s\n' "$got"  | sed 's/^/    /'
     echo "serial tail:"; tr -d '\r' < "$ser" | tail -25 | sed 's/^/    /'

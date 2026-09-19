@@ -76,6 +76,20 @@ image is linked by the IDF toolchain, not by pxx. The S3 build also needs
 a-large-image` lands, and both need a compiler newer than pin v412, which
 predates both halves: until the next pin, run them with `PXX=compiler/pascal26`.
 
+**AND IT IS PAST `print` AS OF THE SAME DAY: `examples/esp32/nilpy-hw-c3` and
+`-hw-s3` DRIVE A GPIO PIN AND ARE PACED BY AN ESP-IDF TIMER CALLBACK**, through
+two pxx Pascal units carrying a Python surface (`esptimer.pas`, `espgpio.pas`).
+Both boot green. **The timer half is witnessed** — the Python loop sees the
+SDK's callback fire. **The GPIO half is NOT**: qemu does not model the input
+path and its output path is unobservable, so the write executes and returns 0
+and nothing here can say what the pin did. Which is the sharpest form of the
+caveat above: *"a static Python application for your ESP"* is now true of a
+program that talks to a peripheral, on an emulator, and the LED still needs
+silicon. A NilPy `def` cannot yet be handed to C as a callback
+(`bug-n-a-pascal-function-handed-to-a-procedural-parameter-from-nilpy-is-not-a-
+code-address`), so the callback lives in the Pascal unit and Python polls a
+counter — say that too, rather than implying Python takes the interrupt.
+
 **THE ARENA WALL FELL THE SAME DAY (`2b2ec3fee`) AND THE CLAIM IS STILL FALSE —
 READ BOTH HALVES.** Bare metal has no kernel to ask for an arena, so the arena
 does not need obtaining; it needs to BE part of the image, and it is BSS now.

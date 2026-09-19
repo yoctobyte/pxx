@@ -1,0 +1,8 @@
+gpio 0
+timer 1
+tick 1 led 1
+tick 2 led 0
+tick 3 led 1
+tick 4 led 0
+tick 5 led 1
+done True

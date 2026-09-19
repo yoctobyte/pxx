@@ -35518,6 +35518,22 @@ test-esp-idf: $(COMPILER)
 	  else echo "$$chip WriteLn + task end MISMATCH"; exit 1; fi; \
 	done
 
+	@# THE HARDWARE DEMO'S SOURCE, both ESP ISAs, BUILD ONLY -- the qemu run of
+	@# it lives in examples/esp32/nilpy-hw-{c3,s3}/build.sh, as for the other
+	@# NilPy demos. Compiling it here is what keeps the two Pascal shim units
+	@# (lib/rtl/platform/esp/esptimer.pas' Python surface and espgpio.pas)
+	@# reachable from a .npy: an `import '<unit>.pas'` that stops resolving, or
+	@# a surface that stops being NilPy-callable, fails right here.
+	@# It also pins IR_ZERO_SYM on xtensa. That arm did not exist until
+	@# 2026-09-19 -- the other five backends had it -- and the xtensa build of
+	@# this exact file said `unsupported node in IR codegen: zero_sym`. The
+	@# program is the positive control: it has a `def` with a local, which is
+	@# what emits the node.
+	@for t in "--target=riscv32" "--target=xtensa --xtensa-abi=windowed --xtensa-long-calls"; do \
+	  ./$(COMPILER) $$t --platform=esp --no-signals -Fu$(CURDIR)/lib/rtl -Fu$(CURDIR)/lib/rtl/platform/esp \
+	    examples/esp32/nilpy-hw-c3/main/main.npy $(TESTTMP)/nilpy_hw.o >/dev/null \
+	  && echo "=== nilpy-hw demo source builds [$$t]: OK ===" || exit 1; \
+	done
 	# DCE + NilPy + THE ESP PROFILE, both ESP ISAs, BUILD ONLY -- and build-only
 	# is the whole question here, because this class of mistake stops the build
 	# by name (`unresolved forward: <callee>`) rather than mis-running. A body

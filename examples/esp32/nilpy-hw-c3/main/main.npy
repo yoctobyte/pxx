@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: 0BSD
+# A static Python application that TOUCHES THE HARDWARE: it drives a GPIO pin
+# and it is driven by an ESP-IDF timer callback. Compiled by pxx straight to a
+# relocatable object for the chip's ISA and linked by the normal ESP-IDF
+# build. There is no interpreter on the chip -- this IS the machine code.
+#
+# The two imports are pxx's OWN Pascal units, from lib/rtl/platform/esp, each
+# carrying a Pascal surface and a Python one. That is how a Python program
+# reaches an SDK here: the unit declares the C functions `external`, and the
+# NilPy side sees plain ints.
+#
+# WHY THE TIMER CALLBACK LIVES IN THE PASCAL UNIT AND NOT HERE. A def's
+# address cannot be handed to C as a function pointer today (an unannotated
+# value arriving at an external Pointer parameter is taken as a data buffer,
+# deliberately). So esptimer.pas owns the callback and the counter, and this
+# program ASKS how many times it has fired. `timer_ticks()` advancing is the
+# callback having run.
+#
+# WHAT A RUN UNDER QEMU WITNESSES: the timer callback fires, this loop sees it,
+# and the printed lines match what CPython prints for the same program (with
+# the two modules stubbed -- see main.expected). WHAT IT DOES NOT: the LED.
+# Espressif's qemu does not model the GPIO input path at all and its output
+# path is unobservable, so `gpio_write` here EXECUTES and returns 0 and nothing
+# can check what the pin did. That half is for silicon.
+#
+# GPIO 8 is the on-board LED on most ESP32-C3 and ESP32-S3 devkits. On a board
+# where it is not, the blink is silent and everything else still runs.
+
+import 'esptimer.pas' as timer
+import 'espgpio.pas' as gpio
+
+LED = 8
+TICK_MS = 100
+BLINKS = 5
+
+
+def blink(n):
+    """Drive the LED from the tick number: on for odd ticks, off for even."""
+    level = n % 2
+    gpio.gpio_write(LED, level)
+    return level
+
+
+def main():
+    print("gpio", gpio.gpio_output(LED))
+    print("timer", timer.timer_start_periodic_ms(TICK_MS))
+
+    for i in range(1, BLINKS + 1):
+        # Wait for the i'th callback. sleep_ms yields to FreeRTOS -- a busy
+        # loop here would starve the idle task and the watchdogs would reboot
+        # the chip.
+        while timer.timer_ticks() < i:
+            timer.sleep_ms(TICK_MS // 4)
+        print("tick", i, "led", blink(i))
+
+    timer.timer_stop()
+    print("done", timer.timer_ticks() >= BLINKS)
+
+
+main()
