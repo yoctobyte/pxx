@@ -1211,6 +1211,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_rtlexcmsg26 | diff -u test/test_nilpy_an_rtl_rooted_exception_prints_its_message.expected -
 	./$(COMPILER) test/test_nilpy_a_pep585_alias_binds_its_origin_type.npy $(TESTTMP)/test_nilpy_pep585alias26
 	$(TESTTMP)/test_nilpy_pep585alias26 | diff -u test/test_nilpy_a_pep585_alias_binds_its_origin_type.expected -
+	./$(COMPILER) test/test_nilpy_a_field_assigned_after_a_nested_block_is_a_field.npy $(TESTTMP)/test_nilpy_fieldafterblock26
+	$(TESTTMP)/test_nilpy_fieldafterblock26 | diff -u test/test_nilpy_a_field_assigned_after_a_nested_block_is_a_field.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

@@ -41298,7 +41298,7 @@ procedure PyCollectClassFieldJoins(ci, bodyStart, bodyEnd: Integer);
   That skeleton carries no semantics; the two routines it calls carry all of
   them, so the two passes cannot drift about what a field is.
   bug-n-a-field-declared-in-an-ancestor-is-not-widened-by-a-descendants-rebind }
-var i, j, depth, methodStart: Integer;
+var i, j, depth, sdepth, methodStart: Integer;
     isCtor: Boolean;
     fldAnn, fldRec, fldSig: Integer;
     tk: TTypeKind;
@@ -41320,8 +41320,17 @@ begin
       isCtor := PyMethodName(GetTokenStr(i + 1)) = 'create';
       j := PyFindSuiteIndent(i, bodyEnd);
       if j < 0 then j := bodyEnd else Inc(j);
-      while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
+      { the WHOLE method body, nested blocks included: see the registering
+        pass below, which must walk exactly these tokens }
+      sdepth := 0;
+      while j + 4 < bodyEnd do
       begin
+        if Tokens[j].Kind = tkIndent then Inc(sdepth)
+        else if Tokens[j].Kind = tkDedent then
+        begin
+          if sdepth = 0 then Break;
+          Dec(sdepth);
+        end;
         fldAnn := PyFieldDeclAt(j);
         fldSig := -1;
         if fldAnn >= 0 then
@@ -41344,7 +41353,7 @@ procedure PyRegisterClassMembers(ci, bodyStart, bodyEnd: Integer; isDC: Boolean;
 var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, align, sz: Integer;
     fi, baseOff, fj: Integer; wtk: TTypeKind; fldWidened: Boolean;
     ovMmi, ovPi: Integer;   { the inherited method an override must match }
-    fldAnn, rhsAt, k2, fldSig: Integer;
+    fldAnn, rhsAt, k2, fldSig, sdepth: Integer;
     origName, name, fullName, rhsName: AnsiString; isCtor: Boolean;
     fldRec, mRetRec, pri: Integer; mRet: TTypeKind;
     ownBS, ownBE, mixIx: Integer;  { the span loop — own body, then each flattened base }
@@ -42438,8 +42447,27 @@ begin
           (bug-nilpy-def-body-scans-run-on-when-no-indent-is-found) }
         j := PyFindSuiteIndent(j, bodyEnd);
         if j < 0 then j := bodyEnd else Inc(j);
-        while (j + 4 < bodyEnd) and (Tokens[j].Kind <> tkDedent) do
+        { The WHOLE method body, nested blocks included. This stopped at the
+          FIRST dedent, which closes the first `if`/`try`/`for` in the method
+          and not the method, so every `self.x` assigned after a nested block
+          went unregistered. An unannotated one fell back to a dynamic attribute
+          and appeared to work, minus its class identity. An annotated one
+          raised "'K' object has no attribute 'x'" on the next read. That Space
+          Program's SPK.__init__ maps its file inside a try and then assigns
+          `self.segments: list[Segment] = []`. The detect pass
+          (PyCollectClassFieldJoins) walks the same tokens the same way, so the
+          join still sees every assignment and widens a conflicting one.
+          bug-nilpy-def-body-scans-run-on-when-no-indent-is-found still holds:
+          the walk ends at the method's own closing dedent. }
+        sdepth := 0;
+        while j + 4 < bodyEnd do
         begin
+          if Tokens[j].Kind = tkIndent then Inc(sdepth)
+          else if Tokens[j].Kind = tkDedent then
+          begin
+            if sdepth = 0 then Break;
+            Dec(sdepth);
+          end;
           fldAnn := PyFieldDeclAt(j);
           fldSig := -1;
           if fldAnn >= 0 then

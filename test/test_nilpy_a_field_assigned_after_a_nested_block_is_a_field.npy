@@ -1,0 +1,76 @@
+# A `self.x` assigned AFTER a nested block (`try`, `if`, `for`, `with`) in a
+# method was never registered as a field: both field scans stopped at the first
+# dedent, which closes that block and not the method. An annotated one then
+# raised "'K' object has no attribute 'x'" on its next read. An unannotated one
+# fell back to a dynamic attribute and appeared to work, minus its class
+# identity. That Space Program's SPK.__init__ maps its file inside a `try` and
+# then assigns `self.segments: list[Segment] = []`.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+
+
+class Seg:
+    def __init__(self, n: int):
+        self.n = n
+
+    def double(self) -> int:
+        return self.n * 2
+
+
+class K:
+    def __init__(self, path: str) -> None:
+        self.path: str = path
+        try:
+            self.first = len(path)
+        except (ValueError, OSError):
+            raise
+        self.segments: list[Seg] = []          # annotated, after a try
+        if self.first > 3:
+            self.big = True
+        else:
+            self.big = False
+        self.label: str = "k:" + path          # annotated, after an if/else
+        for i in range(2):
+            self.segments.append(Seg(i + 1))
+        self.last = Seg(10)                    # unannotated, after a for
+        with open("/dev/null") as f:
+            f.read()
+        self.count: int = len(self.segments)   # annotated, after a with
+
+    def later(self) -> None:
+        if self.big:
+            pass
+        self.tail: list[int] = [self.count]    # a non-ctor method, after an if
+
+
+k = K("abcdef")
+print(len(k.segments), [s.double() for s in k.segments])
+print(k.label, k.big, k.count)
+print(k.last.double())      # needs Seg's class identity: a method call
+k.later()
+print(k.tail)
+k.segments.append(Seg(7))
+print(k.segments[-1].double(), len(k.segments))
+
+
+# a field assigned in BOTH arms with two different types must still work
+class Two:
+    def __init__(self, flag: bool):
+        if flag:
+            self.v = 1
+        else:
+            self.v = "one"
+        self.after: int = 5
+
+
+print(Two(True).v, Two(False).v, Two(False).after)
+
+
+# a nested DEF inside a method must not end the scan early either
+class Nest:
+    def __init__(self):
+        def helper(x):
+            return x + 1
+        self.n: int = helper(1)
+
+
+print(Nest().n)
