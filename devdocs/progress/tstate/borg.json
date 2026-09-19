@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-17T19:05:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "56a9748dc3c2e2a90ae4a3111c05b685f82d0485",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-17T19:07:06Z",
    "fixed": [],
    "new_red": [],
@@ -517,6 +508,17 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-19T08:55:07Z",
+   "fixed": [
+    "test-esp-idf#src:tools/compiler_srchash.sh"
+   ],
+   "new_red": [],
+   "sha": "fada42022187732beadbf9211aa05824ef006d18",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -3624,6 +3626,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "fada42022187732beadbf9211aa05824ef006d18",
   "test-esp-bare#src:test/test_esp_varparam.pas": "fada42022187732beadbf9211aa05824ef006d18",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "fada42022187732beadbf9211aa05824ef006d18",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "fada42022187732beadbf9211aa05824ef006d18",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
   "test-fgl#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
@@ -5231,7 +5234,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "fada42022187732beadbf9211aa05824ef006d18",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "fada42022187732beadbf9211aa05824ef006d18",
   "test-threads#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
-  "test-uforth#src:tools/compiler_srchash.sh": "b291b321f18566a7874e1e56b6483615b85140ce",
+  "test-uforth#src:tools/compiler_srchash.sh": "fada42022187732beadbf9211aa05824ef006d18",
   "test-uforth#src:tools/compiler_srchash.sh@1": "fada42022187732beadbf9211aa05824ef006d18",
   "test-uforth#src:tools/compiler_srchash.sh@10": "fada42022187732beadbf9211aa05824ef006d18",
   "test-uforth#src:tools/compiler_srchash.sh@11": "fada42022187732beadbf9211aa05824ef006d18",
@@ -5412,7 +5415,6 @@
   "lib-test#src:tools/crtl_reachability.py": "... 4 more line(s) not shown | lib-units: FAIL mimic_reportlab_pdfgen | pascal26:60: warning: #include <asm-generic/ioctls.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:60: warning: #include <linux/ioctl.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismat\u2026",
   "optdiff#shard11/12": "Segmentation fault | OPT DIFF -O3: test/test_ro_data_literal_store.pas (rc 0 vs 139) | optdiff skip SKIPLIST: test_c_gtk_types.pas | optdiff skip EXEC-FAIL-O0: c_obj_runtime_state_b.c(127) test_emit_obj_noexport.pas(127) | optdiff skip BUILD-FAIL: c_cross_ns_arity_fail.c cdefine_flag_b239.c c_pasunit_collide_fail.c cslicea_lib.c csrcwins.c cstray_toplevel_reject_b193.c c_unclosed_ptr_array_init_f\u2026",
   "test-core#src:test/c_crtl_wait.c": "after-cont       ret=ok   errno=0  exited=1 code=5 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait             ret=ok   errno=0  exited=1 code=3 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | wait4-rusage     ret=ok   errno=0  exited=1 code=9 signalled=0 sig=-1 stopped=0 ssig=-1 cont=0 | -wait4-rusage     rusage=written | +wait4-rusage     rusage=UNTOUCHED | notmychild       ret=minus1 errno=10\u2026",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "+PXX timer: tick=1 | +PXX timer: tick=2 | PXX timer: tick=3 | PXX timer: tick=4 | PXX timer: tick=5 | esp32c3 esp_timer callback MISMATCH",
   "test-pascal-conformance#shard3/6": "SKIP tover4.pp \u2014 gap: 80-bit extended/cextended float type and overload resolution across single/double/extended | SKIP tpropdef.pp \u2014 wontfix: depends on FPC Classes/TComponent published-property RTTI streaming (stored/nodefault) | SKIP tstring3.pp \u2014 gap: THE CHAR HALF IS FIXED (2026-09-06, compiler 3fa98ccccf88) -- a one-character named const is a string initialiser now, so `FDivChars = (c1,c2)`\u2026",
   "tools-devtest#00": "ok   only .md files are tickets | RED  the working tree has no duplicate slug | twatch duplicate-slug BROKEN | the working tree has no duplicate slug | live duplicates: ['regression-cascade-e5cd18e4b220.md', 'regression-lib-test-lib-criticalsection-blocking.md', 'regression-lib-test-lib-fpc-thread-surface.md', 'regression-lib-test-lib-thread-handle-reports-exit-on-both-routes.md', 'regression-lib\u2026"
  },
@@ -13411,7 +13413,7 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "pass",
   "test-esp-bare#src:test/test_esp_varparam.pas": "pass",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "pass",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "fail",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "pass",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "pass",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "pass",
   "test-fgl#src:tools/compiler_srchash.sh": "pass",
@@ -15195,14 +15197,14 @@
  },
  "last": {
   "code_fp": "1d5c476a6328",
-  "date": "2026-09-19T08:48:54Z",
+  "date": "2026-09-19T08:55:07Z",
   "deadline": 3600.0,
   "sha": "fada42022187732beadbf9211aa05824ef006d18",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1018.1
+  "verdict": "GREEN",
+  "wall": 356.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15253,14 +15255,14 @@
   },
   "slow": {
    "code_fp": "1d5c476a6328",
-   "date": "2026-09-18T12:47:05Z",
+   "date": "2026-09-19T08:55:07Z",
    "deadline": 3600.0,
-   "sha": "b291b321f18566a7874e1e56b6483615b85140ce",
+   "sha": "fada42022187732beadbf9211aa05824ef006d18",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "RED",
-   "wall": 334.5
+   "verdict": "GREEN",
+   "wall": 356.2
   }
  },
  "last_full": {
@@ -15368,22 +15370,6 @@
     "8d9d69bdcbb80ccad79050374ae02f9c663f899d"
    ],
    "src": "test/lib_mimic_xml_sax_xmlreader.npy tools/expect_same.sh",
-   "status": "fail"
-  },
-  {
-   "bad": "b291b321f18566a7874e1e56b6483615b85140ce",
-   "bad_untestable": true,
-   "first_seen": true,
-   "good": "",
-   "job": "test-esp-idf#src:tools/compiler_srchash.sh",
-   "name": "test-esp-idf#00",
-   "never_passed": false,
-   "no_testable_change": false,
-   "opened": "2026-09-18T12:47:05Z",
-   "pin_axis": 0,
-   "pin_built": false,
-   "range": [],
-   "src": "tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2",
    "status": "fail"
   },
   {
