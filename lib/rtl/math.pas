@@ -141,7 +141,15 @@ function SimpleRoundTo(const AValue: Single; const Digits: TRoundToRange): Singl
   are symmetric, so a swapped or ignored argument is invisible in it. The canary
   uses asymmetric arguments now. Filed as
   bug-c-pascal-math-names-hijack-libc-through-pxxcio; NilPy gets intercepts for
-  those three instead. `trunc` is absent for a different reason — Python's
+  those three instead. ABSENT HERE DOES NOT MEAN ABSENT IN NilPy, and
+  reading it that way is what nearly retired this block: `math.pow`, `math.log`,
+  `math.atan2` and `math.copysign` all WORK from NilPy and agree with CPython,
+  because they are renamed or intercepted in the FRONTEND -- pyparser.inc maps
+  math.pow -> Power, math.log -> Ln, math.atan2 -> ArcTan2, and
+  math.copysign/math.trunc -> pymath_*. So a seat that measures `math.pow(2,10)`
+  from a .py file gets 1024 and concludes this paragraph is stale; it is not,
+  it is a claim about THIS UNIT, and adding the names here is what trips the
+  hijack. Measured 2026-09-19 (frankD, corrected by frankuser the same hour). `trunc` is absent for a different reason — Python's
   returns an int, the same contract mismatch that made math.floor/ceil
   intercepts.
 
