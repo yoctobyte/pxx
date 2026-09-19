@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_uuid.pas against CPython's real `uuid`.
+
+A DIFFERENTIAL that runs unmodified under CPython (`python3 test/lib_mimic_uuid.npy`).
+A uuid4 is random, so every row is a PREDICATE about its layout rather than a
+value: 32 lowercase hex digits, the version nibble (hex[12]) is 4, the variant
+nibble (hex[16]) is one of 8/9/a/b, str() is the same digits in the 8-4-4-4-12
+form, and two calls differ. The variant row is the one a shim that skipped the
+bit twiddling fails 3 times in 4, and the version row 15 times in 16; the loop
+over 200 ids makes both effectively certain.
+"""
+import uuid
+
+ok_len = ok_hex = ok_ver = ok_var = ok_str = True
+seen = []
+for i in range(200):
+    u = uuid.uuid4()
+    h = u.hex
+    s = str(u)
+    if len(h) != 32:
+        ok_len = False
+    for c in h:
+        if c not in "0123456789abcdef":
+            ok_hex = False
+    if h[12] != "4" or u.version != 4:
+        ok_ver = False
+    if h[16] not in "89ab":
+        ok_var = False
+    if len(s) != 36 or s[8] != "-" or s[13] != "-" or s[18] != "-" or s[23] != "-" \
+            or s.replace("-", "") != h:
+        ok_str = False
+    seen.append(h)
+
+print("32 digits:", ok_len)
+print("lowercase hex:", ok_hex)
+print("version 4:", ok_ver)
+print("RFC 4122 variant:", ok_var)
+print("str is 8-4-4-4-12 of the same digits:", ok_str)
+print("200 ids, all distinct:", len(set(seen)) == 200)
+print("hex[:12] is 12 long, as tsp/universe.py uses it:", len(uuid.uuid4().hex[:12]) == 12)

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_hashlib.pas against CPython's real `hashlib`.
+
+A DIFFERENTIAL that runs unmodified under CPython (`python3 test/lib_mimic_hashlib.npy`);
+the .expected came from CPython. The inputs are the ones SHA-1 gets wrong: the
+empty message, "abc" and the 56-byte NIST vector (FIPS 180-4 examples), the
+padding edges at 55, 56, 63, 64 and 65 bytes (one or two final blocks), a
+multi-block message, every byte value 0..255 once, update() split at an odd
+boundary against the same data in one piece, and tsp/voice.py's own
+key shape.
+
+The all-byte-values row is built with a list comprehension, not bytes(range(256)),
+because this row runs under the pin, and bytes() of a range raised TypeError until
+2026-09-19 (test_nilpy_bytes_of_a_range_or_an_iterator covers that fix).
+"""
+import hashlib
+
+for data in [b"", b"abc", b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+             b"a" * 55, b"a" * 56, b"a" * 63, b"a" * 64, b"a" * 65, b"x" * 1000,
+             bytes([i for i in range(256)])]:
+    h = hashlib.sha1(data)
+    print(len(data), h.hexdigest())
+
+h = hashlib.sha1(b"The quick brown ")
+h.update(b"fox jumps over the lazy dog")
+print("split", h.hexdigest(), h.hexdigest() == hashlib.sha1(b"The quick brown fox jumps over the lazy dog").hexdigest())
+d = hashlib.sha1(b"abc").digest()
+print("digest", len(d), d[0], d[19])
+print("name", h.name, h.digest_size, h.block_size)
+voice = "bm_george"
+text = "Liftoff! We have liftoff."
+print("tsp key", hashlib.sha1(("%s|%s" % (voice, text)).encode("utf-8")).hexdigest()[:20])

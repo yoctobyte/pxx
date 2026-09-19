@@ -1,0 +1,7 @@
+32 digits: True
+lowercase hex: True
+version 4: True
+RFC 4122 variant: True
+str is 8-4-4-4-12 of the same digits: True
+200 ids, all distinct: True
+hex[:12] is 12 long, as tsp/universe.py uses it: True

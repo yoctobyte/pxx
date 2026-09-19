@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: 0BSD
+"""bytes() and bytearray() of a range or an iterator, against CPython.
+
+A DIFFERENTIAL that runs unmodified under CPython; the .expected came from it.
+Both raised "cannot convert this value to bytes without an encoding" until
+2026-09-19: the Variant overloads knew list, bytes and int payloads but not a
+range or an iterator, and CPython takes any iterable of ints. Found writing
+lib_mimic_hashlib's all-256-byte-values row, bytes(range(256)).
+
+Every row prints the whole value, not just its length, so a materialisation that
+lost the step, the order or the tail shows.
+"""
+print(bytes(range(5)))
+print(bytes(range(250, 256)))
+print(bytes(range(10, 0, -3)))
+print(bytes(range(0)))
+print(len(bytes(range(256))), bytes(range(256))[255])
+print(bytearray(range(5)))
+print(bytearray(range(65, 70)))
+print(bytes(x * 2 for x in range(4)))
+print(bytearray(x + 97 for x in range(3)))
+print(bytes(iter([1, 2, 3])))
+try:
+    print(bytearray(range(254, 258)))
+except ValueError as e:
+    print("bytearray out of range: ValueError")

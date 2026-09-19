@@ -11457,6 +11457,18 @@ begin
       Result := bytearray(TPyBytes(o));
       Exit;
     end;
+    { A range or an iterator, as in bytes(const v): materialised, then the LIST
+      arm, so an out-of-range element still raises ValueError. }
+    if o is TPyRange then
+    begin
+      Result := bytearray(list(TPyRange(o)));
+      Exit;
+    end;
+    if o is TPyIter then
+    begin
+      Result := bytearray(list(TPyIter(o)));
+      Exit;
+    end;
   end;
   { An INTEGER variant is bytearray(n) — n zero bytes — exactly as the static
     spelling is, so the two agree rather than diverging on how the value was
@@ -16725,6 +16737,19 @@ begin
     if o is TPyBytes then
     begin
       Result := bytes(TPyBytes(o));
+      Exit;
+    end;
+    { A range or an iterator is an iterable of ints, which CPython takes:
+      materialise it and go through the LIST arm. bytes(range(256)) raised
+      TypeError here until 2026-09-19. Mirrored in bytearray(const v). }
+    if o is TPyRange then
+    begin
+      Result := bytes(list(TPyRange(o)));
+      Exit;
+    end;
+    if o is TPyIter then
+    begin
+      Result := bytes(list(TPyIter(o)));
       Exit;
     end;
   end;

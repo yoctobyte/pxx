@@ -1198,6 +1198,11 @@ test-nilpy: $(COMPILER)
 	# is a hard compile error. Expected output is CPython 3's on the same source.
 	./$(COMPILER) test/test_nilpy_bytes_methods.npy $(TESTTMP)/test_nilpy_bytesm26
 	$(TESTTMP)/test_nilpy_bytesm26 | diff -u test/test_nilpy_bytes_methods.expected -
+	# bytes()/bytearray() of a range or an iterator -- both raised "cannot convert
+	# this value to bytes without an encoding" until 2026-09-19. A differential
+	# whose .expected came from CPython; the pre-fix pin fails every row.
+	./$(COMPILER) test/test_nilpy_bytes_of_a_range_or_an_iterator.npy $(TESTTMP)/test_nilpy_bytesrange26
+	$(TESTTMP)/test_nilpy_bytesrange26 | diff -u test/test_nilpy_bytes_of_a_range_or_an_iterator.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
@@ -37422,6 +37427,18 @@ endif
 	# leap rules; breaking the weekday offset by one turns 18 rows red.
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_time_calendar.npy $(TESTTMP)/lib_mimic_time_calendar
 	$(TESTTMP)/lib_mimic_time_calendar | diff -u test/lib_mimic_time_calendar.expected -
+	# uuid.uuid4().hex, which That Space Program names universe objects with.
+	# PREDICATES, not values (a uuid4 is random): 32 lowercase hex digits, version
+	# nibble 4, RFC 4122 variant, the 8-4-4-4-12 str, 200 distinct. Dropping the
+	# variant bits reddens the variant row. The .expected came from CPython.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_uuid.npy $(TESTTMP)/lib_mimic_uuid
+	$(TESTTMP)/lib_mimic_uuid | diff -u test/lib_mimic_uuid.expected -
+	# hashlib.sha1 -- the RTL had no SHA-1; TSP keys its speech cache on one. A
+	# DIFFERENTIAL over the FIPS 180-4 vectors, the 55/56/63/64/65-byte padding
+	# edges, all 256 byte values and a split update(); the .expected came from
+	# CPython, and one round constant off by one reddens 13 of 14 rows.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_hashlib.npy $(TESTTMP)/lib_mimic_hashlib
+	$(TESTTMP)/lib_mimic_hashlib | diff -u test/lib_mimic_hashlib.expected -
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
 	tools/expect_same.sh lib_mimic_colorsys.1 "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" "20"
 	tools/expect_same.sh lib_mimic_colorsys.2 "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" "MIMIC-COLORSYS OK"
