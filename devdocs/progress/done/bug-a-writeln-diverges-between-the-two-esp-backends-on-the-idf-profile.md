@@ -168,4 +168,4 @@ have emitted. The undefined-symbol check above is one such probe and it is clean
 for the write path.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 75dcbd2c0.
