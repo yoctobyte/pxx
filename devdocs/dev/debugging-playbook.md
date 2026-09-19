@@ -28747,3 +28747,99 @@ generated artefact is verified through a DIFFERENT reader than the one that
 consumes it in production — a `.ini`, a hook, a YAML frontmatter block, a linker
 script. One instance is this section; two is a rule about generators, not about
 Makefiles.
+
+
+## A FIXTURE'S OWN PROSE IS INSIDE THE POPULATION ITS SUBJECT SCANS — the test that disabled the feature it was written to assert
+
+2026-09-19, Track A, route A of the threadvar-area work. The feature is a
+prescan: a Pascal program whose SOURCE TEXT names neither `threadvar` nor `uses`
+gets a zero-byte per-thread area instead of 3,072 bytes. The fixture asserting
+it opened with a comment explaining what it was for — and that comment contained
+both keywords. The scan read them, reserved the full area, and the fixture
+printed `block=4224` where the feature it was testing produces `block=1152`.
+
+**The subject was the whole file, and a fixture is mostly prose.** Every
+convention we have makes this worse rather than better: a good fixture explains
+itself at the top, names the ticket, names the construct under test, and quotes
+the diagnostic it expects — so the richer the explanation, the more likely it is
+to contain the thing. A comment is invisible to a parser and this scan is not a
+parser; it runs before any frontend has lexed anything, on the include-expanded
+text, precisely because that is the only moment the size may still be chosen.
+
+**This is not only about text scans.** The general form is: *does my subject
+observe the artefact I am writing, and not just the construct inside it?* Anything
+that reads a whole file rather than a parsed structure has this shape — a build
+step that greps sources, a directive prescan, a "does this program need the heap"
+token pre-scan, a licence or banned-word check, a dependency sniffer. In each
+case the fixture's own commentary, its filename, and its `.expected` file are
+inside the population.
+
+**What to do, in order of preference:**
+1. Write the explanation so it cannot match — describe the keyword instead of
+   spelling it, and say at the top of the file that you did and why.
+2. Keep ONE deliberate near-miss as a live check on the matcher: this fixture's
+   program name still carries the word flanked by underscores, so it asserts the
+   word-boundary logic on every run.
+3. Do NOT delete the evidence. The failing draft is the cheapest demonstration
+   of the hazard anyone will ever get; reword it and leave the hazard written at
+   the top.
+
+**Why it was survivable here, and the question that tells you whether yours
+is:** every way this scan can be wrong costs BYTES and never CORRECTNESS — a
+false positive reserves an area nothing uses. Ask that first. Where the same
+collision decides whether code is CORRECT, the fixture's prose is not an
+embarrassment, it is a wrong answer.
+
+## THE AXIS NOBODY VARIED WAS THE READER — three spellings of WHERE a variable is declared, when what decided the outcome was WHAT READS IT
+
+2026-09-19, Track A, `bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero`.
+A `threadvar` read back through a unit's function answered 0 with no diagnostic;
+the identical declaration in the unit's interface answered correctly. Three
+spellings were measured — main program, unit interface, unit implementation —
+a clean table was written, the allocator and the parser were ruled out by
+measurement, and the ticket was filed naming the SECTION as the variable.
+
+**The section was not the variable. The reader was.**
+
+| the reader | result |
+| --- | --- |
+| the main program body, directly | correct |
+| a PROCEDURE, through a `var` parameter | correct |
+| a FUNCTION returning it | **0, or a segfault** |
+
+and the same function is correct at `-O0` and `-O1`. The cause is the `-O2`
+inliner: a threadvar symbol is `skGlobal`, retention happens BEFORE the rewrite
+that turns a threadvar reference into a per-thread dereference, so the inliner
+cloned a plain global read into its permanent region. One line of
+`PXXDBG=a.inline` said it outright — `RETAIN F shape=1 params=0 readsGlobal`.
+
+**Why the three-row table was persuasive and wrong.** It varied the axis the
+REPORT was phrased in. Both readers in the original probe were functions; which
+one was correct depended on whether its retention happened before or after the
+first rewrite, i.e. on compilation order — so the table was reading a
+coincidence as a rule, and it was reproducible, which is what made it
+convincing. This is the census-built-on-its-own-hypothesis failure arriving in
+a REDUCTION rather than in a filter: the reduction faithfully preserved the
+symptom while fixing the axis that mattered.
+
+**Why no fixture caught it.** All four threadvar fixtures read their threadvars
+from the main program body or through a procedure — the two arrangements that
+work. Not one wrapped a read in a function, which is the ordinary way a unit
+exposes per-thread state. The passing arrangements are not a sample; they are
+the population everyone writes.
+
+**The questions that separate this class:**
+- *What varies between my "works" rows and my "fails" rows that I did not put
+  there on purpose?* Callee kind, call position, optimisation level and
+  compilation order are all invisible in a source-shape table.
+- *Is my subject read anywhere OTHER than where I am dumping it?* The AST dump
+  was identical for both spellings because the AST **is** identical — the
+  divergence lives in a CLONE that a different subsystem took at a different
+  time. Ruling out the parser and the allocator was correct and answered a
+  question nobody was asking.
+- **Run the probe at `-O0` before believing any source-shape story.** A defect
+  that disappears at `-O0` is not about where the declaration sits, and that is
+  one compile.
+
+Sibling: "A PROBE CAN BE SAFE ON THE CALLEE AXIS TOO" — same failure, callee
+kind instead of reader kind.

@@ -166,6 +166,33 @@ begin
         end;
         if Syms[idx].IsArray then Exit;
         if not InlineScalarTk(Syms[idx].TypeKind) then Exit;
+        { A THREADVAR IS skGlobal AND IS NOT A GLOBAL. Refused here, above the
+          kind dispatch, because the answer must not depend on which arm below
+          would have claimed it: a threadvar is skGlobal today and the refusal
+          has to survive it being anything else.
+
+          WHY THE RETENTION DOOR AND NOT THE EXPANSION ONE: retention CLONES the
+          reference into the permanent inline region, and at this moment that
+          reference is still a plain AN_IDENT -- ThreadVarRewriteRange runs from
+          CompileAST, which pasparser_proc.inc calls AFTER TryRetainInlineBody.
+          So the clone is a plain global read of a symbol whose storage is not
+          where the program keeps it, and the probe said so in one word:
+          `RETAIN F shape=1 params=0 readsGlobal`. Both of the bug's symptoms
+          came from that one clone -- a body retained before the first sweep was
+          then rewritten with an address node from the VOLATILE arena, which is
+          recycled per statement, and the call site read a stale node and
+          faulted; a body retained after it was never swept and read the unused
+          BSS slot, i.e. zero, silently.
+
+          THIS IS A DECLINE, NOT A GAP TO APOLOGISE FOR, and it is also not the
+          end state: the rewritten form (AN_DEREF of AN_TLSBASE) is a plain
+          base+constant load and is perfectly inlinable. Retaining it means
+          rewriting BEFORE retention and allocating the address node in the
+          inline reserve, which is a change to the ordering this subsystem is
+          built on and wants its own measurement. Until then a threadvar read
+          costs a real call, which is what it cost at -O0 and -O1 all along.
+          bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero }
+        if SymTlsOffset[idx] >= 0 then Exit;
         if InlineParamIndexOf(procIdx, idx) >= 0 then
           InlineExprSimple := True
         else if Syms[idx].Kind = skGlobal then

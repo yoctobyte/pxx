@@ -14148,6 +14148,24 @@ var i, sym, addrNode: Integer;
 begin
   if TlsUserUsed = 0 then Exit;
   if ThreadVarRewriteHigh > ASTArenaFloor then ThreadVarRewriteHigh := ASTArenaFloor;
+  { THE INLINE RESERVE IS NOT THIS ROUTINE'S TO TOUCH, and leaving it out is a
+    correctness rule rather than a saving. [0..INLINE_AST_RESERVE) holds the
+    inliner's RETAINED bodies, which are PERMANENT; the address node this
+    routine mints comes from AllocNode, which allocates in the per-body region
+    ABOVE the floor -- volatile, rolled back per statement, index recycled. A
+    permanent parent pointing at a recycled child is a plausible wrong address,
+    and that is the shape the call site faulted on. ThreadVarRewriteHigh starts
+    at 0, so without this clamp the FIRST call swept the whole reserve.
+
+    What keeps the reserve free of threadvar references is the other half of
+    the same fix, at the door that puts things there: InlineExprSimple refuses
+    to retain a body that reads a threadvar. The two fail differently on
+    purpose -- if that guard ever develops a hole, the reference stays a plain
+    global read and the value is wrong, which a fixture can see; before, it
+    became a dangling parent, which only a fault could show and only sometimes.
+    bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero }
+  if ThreadVarRewriteHigh < INLINE_AST_RESERVE then
+    ThreadVarRewriteHigh := INLINE_AST_RESERVE;
   i := ThreadVarRewriteHigh;
   while i < ASTNodeCount do
   begin
@@ -14188,6 +14206,8 @@ begin
   { ...only the PERMANENT progress is kept. Banking ASTNodeCount here is the bug
     described above: the volatile tail is gone by the next call. }
   ThreadVarRewriteHigh := ASTArenaFloor;
+  if ThreadVarRewriteHigh < INLINE_AST_RESERVE then
+    ThreadVarRewriteHigh := INLINE_AST_RESERVE;
 end;
 
 procedure CompileAST(node: Integer);

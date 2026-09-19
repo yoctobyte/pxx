@@ -17632,6 +17632,20 @@ test-core: $(COMPILER)
 	# its positive control. feature-p-threadvar-is-not-supported-at-any-scope
 	./$(COMPILER) test/test_a_threadvar_is_a_variable.pas $(TESTTMP)/test_threadvar_var26
 	tools/expect_same.sh test_threadvar_var26 "$$($(TESTTMP)/test_threadvar_var26)" "$$(printf 't=10 u=20 before=1 after=2\nafter var param t=15\nthrough a pointer t=30 q^=30\ninc/dec t=28\nexpression=104\ncmp t>u\nd=4.5000\nptr points at before=TRUE\nindependent t=7 u=9')"
+	# A FUNCTION THAT READS A THREADVAR IS NOT RETAINED BY THE -O2 INLINER, and
+	# the row runs at the DEFAULT -O for that reason: at -O0 and -O1 nothing is
+	# retained and every line of this fixture was already correct while the
+	# default build crashed. A threadvar symbol is skGlobal, and at retention
+	# time its reference is still a plain AN_IDENT -- the rewrite runs from
+	# CompileAST, which pasparser_proc.inc calls AFTER TryRetainInlineBody -- so
+	# the inliner cloned a plain GLOBAL read into its permanent region. Retained
+	# before the first sweep it faulted (a permanent parent over a recycled
+	# volatile child); retained after it, it read the unused BSS slot, i.e. 0,
+	# silently. The last four lines are the control: the same shapes over an
+	# ordinary global, still retained, still correct.
+	# bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero
+	./$(COMPILER) -Futest/units test/test_a_function_that_reads_a_threadvar_is_not_inlined_as_a_global.pas $(TESTTMP)/test_tvinline26
+	tools/expect_same.sh test_tvinline26 "$$($(TESTTMP)/test_tvinline26)" "$$(printf 'assigned=11\ninline-arg=11\nexpression=12\nwith-param=15\ncondition=ok\nunit-impl-function=7\nunit-impl-procedure=7\nunit-intf-function=5\nglobal-assigned=100\nglobal-inline-arg=100\nglobal-expression=101\nglobal-with-param=104')"
 	# THE SIX REFUSALS, ONE FILE PER DIAGNOSTIC. A single source carrying all six
 	# mistakes reports the first and hides five behind it, which is how a negative
 	# test quietly stops testing what it names. Generated rather than committed
