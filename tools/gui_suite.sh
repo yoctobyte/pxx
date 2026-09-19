@@ -5,6 +5,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PXX_STABLE="${PXX_STABLE:-"$ROOT/stable_linux_amd64/default/pinned"}"
+# EVERY xvfb-run HERE CARRIES GDK_BACKEND=x11, and it is load-bearing. On a
+# Wayland desktop session GTK prefers Wayland -- WAYLAND_DISPLAY, and even with
+# that unset it finds wayland-0 in XDG_RUNTIME_DIR -- so an app started under
+# xvfb-run opened its window on the OWNER'S DESKTOP while every X-side check
+# measured an empty Xvfb. Measured 2026-09-19 from a desktop seat: solitaire_gui
+# and eliah_ide answered "biggest window 0x0" (root window: 0 children; strace:
+# connect to /run/user/1000/wayland-0), and with GDK_BACKEND=x11 solitaire maps
+# 820x640 inside Xvfb. testmgr scrubs WAYLAND_DISPLAY and the rest of the session
+# family from its jobs, which is why Track T never saw it. run_gui_expect is NOT
+# pinned: it runs "with whatever display happens to exist" on purpose.
 
 # The GTK3 include root. lib/pcl/gtk3_c.h is `#include <gtk/gtk.h>` against the
 # INSTALLED headers, and gtk-2.0 is a default system include root while gtk-3.0
@@ -251,7 +261,7 @@ gui_window_smoke() {
     say "SKIP  $name (real window) -- xvfb-run not installed"
     note_dep_skip xvfb-run; return
   fi
-  if [ "$(timeout 30 xvfb-run -a "$bin" --gui-smoke 2>"$log" | tail -1)" != "$expect" ]; then
+  if [ "$(timeout 30 env GDK_BACKEND=x11 xvfb-run -a "$bin" --gui-smoke 2>"$log" | tail -1)" != "$expect" ]; then
     say "FAIL  $name -- real-window smoke: $(tail -1 "$log")"; fail=1; return
   fi
   say "OK    $name (real window)"
@@ -278,7 +288,7 @@ gui_realwindow() {
   if ! have_xvfb; then say "SKIP  $name (real window size) -- xvfb-run not installed"; note_dep_skip xvfb-run; return; fi
   if ! have_xdotool; then say "SKIP  $name (real window size) -- xdotool not installed"; note_dep_skip xdotool; return; fi
   local geo
-  geo="$(timeout 30 xvfb-run -a bash -c '
+  geo="$(timeout 30 env GDK_BACKEND=x11 xvfb-run -a bash -c '
     bin="$1"; shift
     "$bin" "$@" &
     p=$!
@@ -324,7 +334,7 @@ life_smoke() {
     say "SKIP  life (real window) -- xvfb-run not installed"
     note_dep_skip xvfb-run; return
   fi
-  if ! timeout 30 xvfb-run -a "$out" --smoke >"$log" 2>&1; then
+  if ! timeout 30 env GDK_BACKEND=x11 xvfb-run -a "$out" --smoke >"$log" 2>&1; then
     say "FAIL  life -- real-window smoke: $(tail -1 "$log")"; fail=1; return
   fi
   say "OK    life (real window)"

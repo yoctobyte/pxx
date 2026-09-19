@@ -823,7 +823,7 @@ test-nilpy: $(COMPILER)
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	  for t in tkinter_facade:$(TESTTMP)/test_nilpy_tkinter26 field_class_identity:$(TESTTMP)/test_nilpy_fldcls26 callbacks:$(TESTTMP)/test_nilpy_tkcb26; do \
 	    src=$${t%%:*}; bin=$${t##*:}; \
-	    timeout 120 xvfb-run -a $$bin > $(TESTTMP)/$$src.got 2>&1; rc=$$?; \
+	    timeout 120 env GDK_BACKEND=x11 xvfb-run -a $$bin > $(TESTTMP)/$$src.got 2>&1; rc=$$?; \
 	    if [ "$$rc" = "124" ]; then echo "  tk: $$src TIMEOUT after 120s under Xvfb (hung, not a wrong exit)"; exit 1; fi; \
 	    [ "$$rc" = "0" ] || { echo "  tk: $$src EXITED NONZERO under Xvfb"; cat $(TESTTMP)/$$src.got; exit 1; }; \
 	    diff -u examples/tk/$$src.expected $(TESTTMP)/$$src.got \
@@ -21908,11 +21908,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_c_gtk.pas $(TESTTMP)/test_c_gtk26
 	tools/expect_same.sh test_c_gtk26 "$$($(TESTTMP)/test_c_gtk26)" "my_gtk header parsed and imported successfully"
 	./$(COMPILER) test/test_c_gtk_call.pas $(TESTTMP)/test_c_gtk_call26
-	xvfb-run -a $(TESTTMP)/test_c_gtk_call26
+	# GDK_BACKEND=x11 on every xvfb-run of a GTK binary in this file: from a Wayland
+	# desktop seat GTK otherwise opens the window on the REAL desktop, not in Xvfb --
+	# see the note at the top of tools/gui_suite.sh.
+	GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_c_gtk_call26
 	./$(COMPILER) test/test_c_gtk_types.pas $(TESTTMP)/test_c_gtk_types26
-	xvfb-run -a $(TESTTMP)/test_c_gtk_types26
+	GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_c_gtk_types26
 	./$(COMPILER) test/test_c_gtk_window.pas $(TESTTMP)/test_c_gtk_window26
-	xvfb-run -a $(TESTTMP)/test_c_gtk_window26
+	GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_c_gtk_window26
 	# The same program against the STOCK GTK3 headers instead of a curated
 	# binding: -Futest/gtk3stock shadows lib/pcl/gtk3_c.h with a header that just
 	# includes <gtk/gtk.h>. The -I is load-bearing and is the part still missing
@@ -21930,7 +21933,7 @@ test-core: $(COMPILER)
 	# -I above is load-bearing rather than merely conventional. Keep this line:
 	# a correct link is still worth checking, it is just a different claim.
 	readelf -d $(TESTTMP)/test_c_gtk3_stock26 | grep -q 'libgtk-3.so.0'
-	tools/expect_same.sh test_c_gtk3_stock26 "$$(xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
+	tools/expect_same.sh test_c_gtk3_stock26 "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/test_c_gtk3_stock26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
 	# --gtk=N SELECTS THE HEADER ROOT AND THE SONAME TOGETHER. The point of the
 	# feature is that they cannot disagree: GTK 3 headers against a GTK 2
 	# library is the hazard decide-which-gtk-a-bare-gtk-gtk-h-means names, and
@@ -21996,7 +21999,7 @@ test-core: $(COMPILER)
 	# ...and the GTK 2 build RUNS. A soname assertion alone cannot tell a
 	# coherent pick from a mismatched one -- headers and library disagreeing
 	# links fine and dies at runtime -- so the pair is the claim.
-	tools/expect_same.sh gtksel-2-runs "$$(xvfb-run -a $(TESTTMP)/gtksel2_26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
+	tools/expect_same.sh gtksel-2-runs "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/gtksel2_26)" "$$(printf 'Successfully created window\nStarting gtk_main loop...\nAutoQuit called from GTK main loop!\nMain loop exited cleanly')"
 	# GTK 4 is PROBED, not hardcoded unavailable: its runtime lib ships here and
 	# its headers do not. Assert the refusal NAMES the missing -dev package --
 	# an unrecognised flag would also "fail", and the two must not read alike.
@@ -36482,15 +36485,15 @@ lib-test: pxx-stable-check
 	$(TESTTMP)/crtl_exp2; tools/expect_same.sh crtl_exp2-rc "$$?" "42"
 	@if command -v xvfb-run >/dev/null 2>&1 && [ -e /usr/lib/$$(uname -m)-linux-gnu/libtk8.6.so.0 ]; then \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/hello.npy $(TESTTMP)/lib_tk_hello >/dev/null && \
-	  tools/expect_same.sh lib_tk_hello "$$(xvfb-run -a $(TESTTMP)/lib_tk_hello)" "ok: nilpy tk window shown and closed" && \
+	  tools/expect_same.sh lib_tk_hello "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_hello)" "ok: nilpy tk window shown and closed" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/widgets.npy $(TESTTMP)/lib_tk_widgets >/dev/null && \
-	  tools/expect_same.sh lib_tk_widgets "$$(xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
+	  tools/expect_same.sh lib_tk_widgets "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_widgets | tail -n 4)" "$$(printf 'entry = typed into an entry\ntext  = and into a text widget\nlabel = widgets, one TkEval each\nok: nilpy tk widgets shown and closed')" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/kwargs.npy $(TESTTMP)/lib_tk_kwargs >/dev/null && \
-	  tools/expect_same.sh lib_tk_kwargs "$$(xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
+	  tools/expect_same.sh lib_tk_kwargs "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_kwargs | tr -d '\n')" "get HELLOafter-delete LOvar bkwargs ok" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/callbacks.npy $(TESTTMP)/lib_tk_callbacks >/dev/null && \
-	  tools/expect_same.sh lib_tk_callbacks "$$(xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
+	  tools/expect_same.sh lib_tk_callbacks "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_callbacks | tail -n 6)" "$$(printf 'trace fired\nstr trace fired\nbbox [1, 1, 10, 10]\nhits 1\nscroll ok True True\nlambda scroll ok True True')" && \
 	  $(PXX_STABLE) -Fulib/pcl -Fulib/rtl -Fulib/rtl/platform/posix $(GTK3_INC) examples/tk/htmlview.npy $(TESTTMP)/lib_tk_htmlview >/dev/null && \
-	  tools/expect_same.sh lib_tk_htmlview "$$(xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
+	  tools/expect_same.sh lib_tk_htmlview "$$(GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_htmlview)" "$$(printf 'title True\ninline True\nbullet True\nentity True\npre True\nquote True\nlink True\nreplaced x\nlabel plain & small\nok: tkhtmlview rendered')" && \
 	  echo "  tk-nilpy: ok"; \
 	else \
 	  echo "  tk-nilpy: SKIP (no xvfb-run or no libtk8.6)"; echo tk-nilpy >> $(TESTTMP)/lib-test.skipped; \
@@ -36565,8 +36568,8 @@ lib-test: pxx-stable-check
 	# the same document. This is what would catch a renderer that is merely
 	# self-consistent. (feature-b-tkhtmlview-in-nilpy)
 	@if command -v xvfb-run >/dev/null 2>&1 && python3 -c "import tkinter" 2>/dev/null; then \
-	  xvfb-run -a env PYTHONPATH=lib/pcl python3 examples/tk/htmlview.npy > $(TESTTMP)/lib_tkhtml_cpy.txt 2>&1; \
-	  xvfb-run -a $(TESTTMP)/lib_tk_htmlview > $(TESTTMP)/lib_tkhtml_pxx.txt 2>&1; \
+	  GDK_BACKEND=x11 xvfb-run -a env PYTHONPATH=lib/pcl python3 examples/tk/htmlview.npy > $(TESTTMP)/lib_tkhtml_cpy.txt 2>&1; \
+	  GDK_BACKEND=x11 xvfb-run -a $(TESTTMP)/lib_tk_htmlview > $(TESTTMP)/lib_tkhtml_pxx.txt 2>&1; \
 	  diff $(TESTTMP)/lib_tkhtml_cpy.txt $(TESTTMP)/lib_tkhtml_pxx.txt >/dev/null \
 	    && echo "  lib-test: tkhtmlview renders identically under CPython" \
 	    || { echo "FAIL: tkhtmlview diverges from CPython"; diff $(TESTTMP)/lib_tkhtml_cpy.txt $(TESTTMP)/lib_tkhtml_pxx.txt | head -10; exit 1; }; \
