@@ -15738,6 +15738,20 @@ test-core: $(COMPILER)
 	# warns that crtl does not define it; gcc oracle gives `1 1`.
 	./$(COMPILER) test/ccrtl_pivot_root.c $(TESTTMP)/ccrtlpivot26
 	tools/expect_same.sh ccrtlpivot26 "$$($(TESTTMP)/ccrtlpivot26)" "1 1"
+	# THE ELF OBJECT READER, against readelf. First code here that READS an
+	# object rather than writing one, and the stage every later stage of
+	# feature-a-pxx-cannot-link-its-own-objects rests on -- a symbol merge, a
+	# section layout and a relocation applier all consume what it reports, so a
+	# reader that enumerates wrongly makes all of them unfalsifiable. readelf
+	# shares no code, no author and no assumption with ours, which is the only
+	# thing that makes it a second reading rather than the same one twice.
+	# The script carries its own controls: a defining/referencing object PAIR,
+	# because "0 undefined" is also what a reader that never finds any prints;
+	# an executable and a non-ELF file that must be refused BY NAME. Proven to
+	# fail by injecting a one-token fault (st_info's offset for st_shndx),
+	# rebuilding, watching it red on the b.o row, and restoring byte-for-byte
+	# to the same binary sha.
+	tools/elf_reader_vs_readelf.sh
 	# AND THE LINK ITSELF, WHICH HAD NO GUARD AT ALL. The symbol above is one
 	# half; the other is that `ld -static -nostdlib` over pxx objects plus our
 	# own entry stub still produces a running program. That was measured once,

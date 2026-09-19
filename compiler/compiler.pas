@@ -285,6 +285,7 @@ function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
 {$ifndef PXX_NO_ALGOL}{$include gparser.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include eparser.inc}{$endif}
 {$include elfwriter.inc}
+{$include elfreader.inc}   { reads an ELF64 relocatable object. AFTER elfwriter.inc: it uses LoadFile, whose body lives there, and AIntToStr from util.inc. Route 2 of feature-a-pxx-cannot-link-its-own-objects starts here -- the reader is the one stage whose correctness every later stage depends on and none can check. }
 {$include dce.inc}      { reachability-gated dead-code elimination — after every emitter, before the writer RUNS.
                           AFTER elfwriter.inc in DECLARATION order, which is a different thing: under --emit-obj
                           the pass's root set has to be the object's export surface, and that surface is decided
@@ -2107,6 +2108,21 @@ begin
     `--no-dce` still opts out, and it is checked here rather than assumed from
     option order: this runs after the whole option loop. }
   if EspBareBoot and not DceOff then DceEnabled := True;
+
+  { PXXDBG=a.obj:<path> -- read an ELF64 relocatable object and report what is
+    in it, then stop. HERE, before the usage check, because it takes its
+    subject from the CHANNEL and not from argv: it is an introspection topic
+    like a.ir and n.locals, not a compile mode, and giving it a command-line
+    flag would be new user-facing surface for a stage that cannot yet link
+    anything. When Route 2 of feature-a-pxx-cannot-link-its-own-objects grows a
+    real --link, this stays as the way to ask what the reader SAW, which is a
+    different question from what the linker DID. }
+  if PxxDbgArg('a.obj') <> '' then
+  begin
+    ElfRdDump(PxxDbgArg('a.obj'));
+    Halt(0);
+  end;
+
   if ParamCount < i then
     begin
       writeln(StdErr, 'usage: pxx [options] <source> [output]');
