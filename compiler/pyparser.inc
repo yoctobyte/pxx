@@ -7776,6 +7776,12 @@ function PyClassCreate: Integer; forward;
   self-hosted build resolves it either way, so only the seed canary sees this). }
 procedure PyStarExpandCallArgs(procIdx, firstSlot, kwCap: Integer;
                                var headArg, lastArg: Integer); forward;
+{ The keyword-mapping half of the same expansion, and the two helpers that let
+  a constructor fold `k=v` and `**d` into one mapping; defined beside it. }
+procedure PyStarFillFromMapping(procIdx, firstSlot, dictSym: Integer;
+                                var headArg, lastArg: Integer); forward;
+procedure PyParseKwTailIntoMapping(dictSym: Integer; const callee: AnsiString); forward;
+function PyDStarAheadInArgs: Boolean; forward;
 
 { The lowest parameter slot claimed by the KEYWORD arguments that follow the
   starred element, or -1 when what follows is not an unbroken run of
@@ -8612,6 +8618,7 @@ var name: AnsiString; ci, recId, node, argNode, lastArg, sizeNode: Integer;
     excFoldA, excFoldC: Integer;   { the multi-arg Exception fold }
     szArgNode, starHead: Integer;  { *args packing (see below) }
     kwExtraHead, kwExtraLast, kwKeyNode: Integer;   { keywords bound for **kwargs }
+    kwMapSym: Integer;   { `C(a, k=v, **d)`: the keywords and mappings, folded }
     noParens: Boolean;   { `raise ValueError` — construct with no argument list }
 begin
   name := CurTok.SVal;
@@ -8713,8 +8720,13 @@ begin
     every remaining declared slot at once, so there is nothing for the slot
     bookkeeping to do, and an argument after the unpack is refused by the shared
     expander anyway.
-    bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused }
-  if CurTok.Kind = tkStar then
+    bug-nilpy-kwargs-and-star-unpack-at-a-construction-are-refused
+
+    Single star only: a LEADING `**` is the keyword-mapping shape, which the
+    loop below takes whole -- that is what lets `C(**d, k=v)` and
+    `C(**a, **b)` through, where this arm refused anything after the mapping. }
+  if (CurTok.Kind = tkStar) and
+     not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkStar)) then
   begin
     ctorMi := FindUMeth(ci, 'create');
     if ctorMi < 0 then
@@ -8754,6 +8766,40 @@ begin
   end;
   while (not noParens) and (CurTok.Kind <> tkRParen) do
   begin
+    { `Engine(key=key, **d)` -- a mapping follows, so from the first keyword
+      (or the `**` itself) on, every argument binds BY NAME through one folded
+      mapping; the positional prefix parsed so far keeps its slots. The field
+      and ctor-parameter matching below never runs for these, and it cannot
+      have run for anything yet: a mapping ahead switches at the FIRST keyword,
+      so kwSlot holds positionals only, in order. That Space Program's
+      tsp/parts.py:73, reading engine records out of JSON. }
+    if ((CurTok.Kind = tkStar) or
+        ((CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign))) and PyDStarAheadInArgs then
+    begin
+      ctorMi := FindUMeth(ci, 'create');
+      if ctorMi < 0 then
+        Error('Nil Python: **unpacking into ' + name
+              + '() needs a constructor to unpack into');
+      ctorPi := UMthProc_[ctorMi];
+      lastArg := szArgNode;
+      ASTRight[szArgNode] := -1;
+      for kwI := 0 to kwPos - 1 do
+      begin
+        ASTRight[lastArg] := kwSlot[kwI];
+        lastArg := kwSlot[kwI];
+      end;
+      starHead := ASTRight[szArgNode];
+      kwMapSym := PyNewContainerTemp('TPyDict', 'ctorkw');
+      PyParseKwTailIntoMapping(kwMapSym, name);
+      PyStarFillFromMapping(ctorPi, 1 + kwPos, kwMapSym, starHead, lastArg);
+      if starHead >= 0 then ASTRight[szArgNode] := starHead;
+      Expect(tkRParen, ')');
+      Result := node;
+      LastExprTk := tyClass;
+      CurASTNode := node;
+      Exit;
+    end;
     kwFld := -1;
     if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
        (Tokens[TokPos].Kind = tkAssign) then
@@ -18510,13 +18556,158 @@ end;
   bug-n-double-star-unpacking-is-rejected-at-a-method-call }
 procedure PyStarExpandKwArgs(procIdx, firstSlot: Integer;
                              var headArg, lastArg: Integer);
-var dictSym, listSym, asgn, total, required, wanted, lo, k: Integer;
+var dictSym: Integer;
+begin
+  if FindUClass('TPyDict') < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
+  Next;                          { the first '*' }
+  Next;                          { the second — `**` is two tkStar }
+  PyParseBoolExpr;
+  dictSym := PyNewContainerTemp('TPyDict', 'starkw');
+  { pydict_merge_any, not an assignment: `**` accepts ANY mapping in CPython,
+    and the operand here is commonly `dict(zip(...))` — a fresh dict — but may
+    equally be a variable somebody else still holds, which must not be aliased
+    into the callee. }
+  PyHoistDictMergeAny(dictSym, CurASTNode);
+  PyStarFillFromMapping(procIdx, firstSlot, dictSym, headArg, lastArg);
+end;
+
+{ The rest of an argument list, from its first `name=value` or `**mapping`,
+  folded into ONE hoisted mapping in source order -- a keyword is a `store`, a
+  `**` is a merge, so a later source overwrites an earlier one as CPython's own
+  dict build does (CPython raises for a DUPLICATE name; accepting it is the
+  upward-compatible direction). PyStarFillFromMapping then binds that mapping
+  onto the callee's slots BY NAME, which is the only binding a keyword needs:
+  it is not position-dependent, so where it was written relative to the `**`
+  does not matter. Stops at the `)`, which it leaves for the caller.
+
+  This is what lets `Engine(key=key, **d)` and `o.m(1, b=2, **d)` compile: the
+  constructor and method paths refused a keyword before `**`, because the
+  mapping filled a contiguous run of slots that the keyword's own slot sat in.
+  A positional argument here is Python's own syntax error, refused as such. }
+procedure PyParseKwTailIntoMapping(dictSym: Integer; const callee: AnsiString);
+var kwLit: Integer; kwName: AnsiString;
+begin
+  while CurTok.Kind <> tkRParen do
+  begin
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkStar) then
+    begin
+      Next;                              { the first '*' }
+      Next;                              { the second }
+      PyParseBoolExpr;
+      PyHoistDictMergeAny(dictSym, CurASTNode);
+    end
+    else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      kwName := CurTok.SVal;
+      Next;                              { the name }
+      Next;                              { the '=' }
+      PyParseBoolExpr;
+      kwLit := AllocNode(AN_STR_LIT);
+      ASTSOffset[kwLit] := StoredName(kwName);
+      ASTSLen[kwLit] := Length(kwName);
+      ASTTk[kwLit] := Ord(tyString);
+      { `store`, not `setitem` -- see PyStarMixedForwardCall }
+      PyContainerCall1(dictSym, 'TPyDict', 'store', kwLit, CurASTNode);
+    end
+    else
+      Error('Nil Python: a positional argument after a keyword argument or '
+            + '**unpacking in ' + callee + '()');
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+end;
+
+{ Does a `**` follow at this argument list's own depth? CurTok is the argument
+  about to be parsed. Pure lookahead: a keyword is only routed through the
+  mapping when a mapping is actually coming, so every call without one keeps
+  the loop it always had. }
+function PyDStarAheadInArgs: Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  depth := 0;
+  i := TokPos - 1;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(depth)
+    else if Tokens[i].Kind in [tkRBrack, tkEnd] then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end
+    else if Tokens[i].Kind in [tkNewline, tkEOF] then Exit
+    else if (depth = 0) and (Tokens[i].Kind = tkStar) and (i + 1 < TokCount) and
+            (Tokens[i + 1].Kind = tkStar) and
+            ((i = TokPos - 1) or (Tokens[i - 1].Kind = tkComma)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ The @dataclass whose GENERATED constructor is procIdx, or -1. That ctor
+  records no parameter defaults -- a field's default lives in the PyDc tables,
+  in kinds (a factory re-evaluated per construction among them) that the
+  parameter-default tables have no row for. So a slot filler that reads only
+  ProcParamHasDefault treats every dataclass field as required: `Engine(**{
+  "key": "k", "thrust": 1.0})` with `isp: float = 250.0` raised "got 2
+  arguments, expected 3 to 3", on pinned v411 too. The class's own table is
+  the source; the call-site hole fill in PyClassCreate already reads it. }
+function PyDcCiOfCtor(procIdx: Integer): Integer;
+var c, mi: Integer;
+begin
+  Result := -1;
+  for c := 0 to UClsCount - 1 do
+    if (c < PY_MAX_DC_FIELDS) and PyDcClassIsDc[c] then
+    begin
+      mi := FindUMeth(c, 'create');
+      if (mi >= 0) and (UMthProc_[mi] = procIdx) then
+      begin
+        Result := c;
+        Exit;
+      end;
+    end;
+end;
+
+{ Does parameter `slot` of procIdx have a default -- its own, or, for a
+  dataclass's generated ctor (dcCi >= 0), its field's? And the node for it. }
+function PyParamSlotHasDefault(procIdx, dcCi, slot: Integer): Boolean;
+begin
+  if dcCi >= 0 then
+    Result := (slot >= 1) and
+              (PyDcFieldKind(dcCi, Procs[procIdx].Params[slot].Name) <> PYDC_NONE)
+  else
+    Result := (slot < MAX_PROC_PARAMS) and
+              ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + slot];
+end;
+
+function PyParamSlotDefaultNode(procIdx, dcCi, slot: Integer): Integer;
+var j, dcBase: Integer;
+begin
+  if dcCi >= 0 then
+  begin
+    dcBase := -1;
+    for j := 0 to PyDcCount - 1 do
+      if PyDcCi[j] = dcCi then begin dcBase := j; Break; end;
+    Result := PyDcDefaultNode(dcCi, dcBase, slot - 1);
+  end
+  else
+    Result := DefaultArgValueNode(procIdx, slot);
+end;
+
+procedure PyStarFillFromMapping(procIdx, firstSlot, dictSym: Integer;
+                                var headArg, lastArg: Integer);
+var dcCi, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
     nameNode, hasArg, hasCall, ifNode, pairNode, dfltAsgn: Integer;
     nfoundSym, kwIdx, declTotal, restSym, hi: Integer;
 begin
-  if FindUClass('TPyDict') < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
   if FindUClass('TPyList') < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  dcCi := PyDcCiOfCtor(procIdx);
   { A callee that DECLARES *args wants a list passed through as its packed
     parameter, and a mapping never supplies one — refused by name, exactly as
     the constructor site refuses the single-star spelling.
@@ -18534,15 +18725,6 @@ begin
     Error('Nil Python: **unpacking into ' + Procs[procIdx].Name
           + '() where the callee itself takes *args is not '
           + 'supported yet — pass the keywords one by one');
-  Next;                          { the first '*' }
-  Next;                          { the second — `**` is two tkStar }
-  PyParseBoolExpr;
-  dictSym := PyNewContainerTemp('TPyDict', 'starkw');
-  { pydict_merge_any, not an assignment: `**` accepts ANY mapping in CPython,
-    and the operand here is commonly `dict(zip(...))` — a fresh dict — but may
-    equally be a variable somebody else still holds, which must not be aliased
-    into the callee. }
-  PyHoistDictMergeAny(dictSym, CurASTNode);
   listSym := PyNewContainerTemp('TPyList', 'starkwpos');
 
   total := Procs[procIdx].ParamCount;
@@ -18551,8 +18733,7 @@ begin
   declTotal := total;
   if kwIdx >= 0 then declTotal := kwIdx;
   required := declTotal;
-  while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
-        ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
+  while (required > 0) and PyParamSlotHasDefault(procIdx, dcCi, required - 1) do
     Dec(required);
   wanted := declTotal - firstSlot;
   if (wanted <= 0) and (kwIdx < 0) then
@@ -18624,8 +18805,8 @@ begin
     begin
       dfltAsgn := AllocNode(AN_ASSIGN);
       ASTLeft[dfltAsgn] := PyMakeIdent(slotSym);
-      ASTRight[dfltAsgn] := PyForceVariant(DefaultArgValueNode(procIdx,
-                                                               firstSlot + k));
+      ASTRight[dfltAsgn] := PyForceVariant(PyParamSlotDefaultNode(procIdx, dcCi,
+                                                                  firstSlot + k));
       PyHoistStmt(dfltAsgn);
     end;
     elemNode := AllocNode(AN_ARG);
@@ -22809,7 +22990,7 @@ end;
   On entry the cursor sits just past `(` and the AN_ARG chain already holds
   Self at slot 0, which is what makes the parameter indices line up. }
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
-var argNode, kwIdx, head, cnt: Integer;
+var argNode, kwIdx, head, cnt, mapSym: Integer;
     sawKw: Boolean;
 begin
   head := ASTLeft[mcallNode];
@@ -22822,17 +23003,26 @@ begin
       rest, which is PyStarExpandKwArgs' job, shared with the constructor and
       the fresh-receiver sites. ParseArgExpr on the '*' answered "expected
       expression". After POSITIONAL arguments only — `firstSlot` is then just
-      the count so far. A keyword before the mapping, or anything after it, is
-      a different binding and stays refused by name. }
-    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
-       (Tokens[TokPos].Kind = tkStar) and (ProcPyStarIdx[mpi] < 0) then
+      the count so far.
+
+      A keyword before the mapping, or one after it, binds by name exactly as
+      the mapping's own keys do, so from the FIRST keyword on -- when a mapping
+      is coming -- the whole tail folds into one mapping (PyParseKwTailIntoMapping)
+      and the positional prefix keeps its slots. It switches at the first
+      keyword, so no keyword has been bound the ordinary way yet: `o.k(1, b=5,
+      **{"z": 7})` and `o.k(a=1, **d)` were refused by name. }
+    if (ProcPyStarIdx[mpi] < 0) and
+       (((CurTok.Kind = tkStar) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkStar)) or
+        ((CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+         (Tokens[TokPos].Kind = tkAssign))) and PyDStarAheadInArgs then
     begin
       if sawKw then
-        Error('Nil Python: a keyword argument before **unpacking into .'
-              + Procs[mpi].Name + '() is not supported yet');
-      PyStarExpandKwArgs(mpi, cnt, head, mlastArg);
-      if CurTok.Kind = tkComma then
-        Error('Nil Python: an argument after **unpacking is not supported yet');
+        Error('Nil Python: internal -- a keyword was bound before the '
+              + '**unpacking into .' + Procs[mpi].Name + '() was seen');
+      mapSym := PyNewContainerTemp('TPyDict', 'mkw');
+      PyParseKwTailIntoMapping(mapSym, Procs[mpi].Name);
+      PyStarFillFromMapping(mpi, cnt, mapSym, head, mlastArg);
       ASTLeft[mcallNode] := head;
       mai := Procs[mpi].ParamCount;
       Exit;

@@ -80,3 +80,6 @@ inherited through the real chain two levels up, a field from the parent's
 `__init__`, the subclass's own method, an override one level further down,
 dispatch through a base-typed name, and isinstance. Pinned v411 (bc884808fda5)
 SIGSEGVs on it.
+
+## Log
+- 2026-09-19 — fixed and resolved by frankH in commit f646378ff.

@@ -1,0 +1,72 @@
+# A constructor call mixing positional arguments, keywords and `**mapping`,
+# in the orders Python allows. The mapping binds BY NAME, so where a keyword
+# was written relative to it does not matter.
+from dataclasses import dataclass
+
+
+@dataclass
+class Engine:
+    key: str
+    thrust: float
+    isp: float = 250.0
+
+
+class Tank:
+    def __init__(self, name: str, fuel: float, dry: float = 1.0) -> None:
+        self.name = name
+        self.fuel = fuel
+        self.dry = dry
+
+
+d = {"thrust": 1.5, "isp": 300.0}
+e = Engine(key="a", **d)
+print(e.key, e.thrust, e.isp)
+e = Engine("b", **d)
+print(e.key, e.thrust, e.isp)
+e = Engine(**d, key="c")
+print(e.key, e.thrust, e.isp)
+e = Engine(key="d", **{"thrust": 2.0})
+print(e.key, e.thrust, e.isp)
+e = Engine(**{"key": "e"}, **{"thrust": 3.0, "isp": 9.0})
+print(e.key, e.thrust, e.isp)
+records = {"lox": {"thrust": 4.0, "isp": 311.0}, "rp1": {"thrust": 5.0}}
+for k, r in records.items():
+    e = Engine(key=k, **r)
+    print(e.key, e.thrust, e.isp)
+
+t = Tank("t1", **{"fuel": 10.0})
+print(t.name, t.fuel, t.dry)
+t = Tank(name="t2", **{"fuel": 20.0, "dry": 2.5})
+print(t.name, t.fuel, t.dry)
+t = Tank("t3", dry=0.5, **{"fuel": 30.0})
+print(t.name, t.fuel, t.dry)
+t = Tank(**{"name": "t4", "fuel": 40.0})
+print(t.name, t.fuel, t.dry)
+
+try:
+    Engine(key="x", **{"isp": 1.0})
+    print("no error")
+except TypeError:
+    print("TypeError: missing thrust")
+try:
+    Engine(key="x", **{"thrust": 1.0, "bogus": 2.0})
+    print("no error")
+except TypeError:
+    print("TypeError: unexpected bogus")
+
+# `**` as the POWER operator inside a keyword value is not a mapping
+e = Engine(key="p", thrust=2.0 ** 3, isp=1.0)
+print(e.key, e.thrust, e.isp)
+
+
+# the same fold at a method whose def collects **kwargs
+class O:
+    def k(self, a: int, b: int = 2, **kw) -> str:
+        return str(a) + str(b) + str(sorted(kw.items()))
+
+
+o = O()
+print(o.k(1, **{"b": 5, "z": 7}))
+print(o.k(1, b=5, **{"z": 7}))
+print(o.k(a=1, **{"z": 7}))
+print(o.k(**{"z": 7}, a=4, b=6))
