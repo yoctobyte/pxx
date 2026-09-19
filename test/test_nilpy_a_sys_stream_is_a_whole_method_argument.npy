@@ -1,0 +1,34 @@
+# `sys.stderr` / `sys.stdout` as a WHOLE argument into an untyped parameter.
+# An untyped parameter is a const Variant, so by-ref, and a bare name that
+# ends a by-ref argument is parsed as an lvalue -- `sys` names no symbol and
+# no unit (a deferred stdlib import), so it died as `undefined variable (sys)`
+# on the method spellings while the free-function spelling compiled.
+# Output goes to stdout only through the selector, so the diff sees it; which
+# stream was passed is printed as the fd the frontend models it as.
+import sys
+
+
+def which(file=None):
+    if file is None:
+        return "none"
+    return "given"
+
+
+class K:
+    def say(self, text, file=None):
+        print(text, which(file))
+
+    def err(self, text):
+        self.say(text, sys.stderr)
+
+    def out(self, text):
+        self.say(text, sys.stdout)
+
+
+print("fn", which(sys.stderr))
+K().say("fresh", sys.stderr)
+k = K()
+k.say("named", sys.stdout)
+k.err("self-err")
+k.out("self-out")
+k.say("default")

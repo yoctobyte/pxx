@@ -5424,6 +5424,20 @@ begin
         Result := True;
         Exit;
       end;
+      { ...AND A MODELLED STDLIB VALUE, the fourth instance and the one the unit
+        test above cannot see: `sys` is a deferred stdlib import, so it is no
+        unit and no symbol, and `self.say(text, sys.stderr)` into an untyped
+        (so `const Variant`, so by-ref) parameter died as `undefined variable
+        (sys)`. The same argument to a FREE function compiled, because that
+        path reaches ParseArgExpr unconditionally — the identical asymmetry all
+        three clauses above record. A stream or `sys.argv` is a value read,
+        never a binding target. Asked of the frontend through a region hook,
+        because only NilPy knows which stdlib members it models. }
+      if PyExprMode and FrontendStdlibValueAhead then
+      begin
+        Result := True;
+        Exit;
+      end;
     end;
   end;
   Result := (FindSym(CurTok.SVal) < 0) and (TokPos < TokCount) and

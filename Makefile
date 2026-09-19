@@ -1217,6 +1217,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_callgetattr26 | diff -u test/test_nilpy_a_method_call_falls_back_to_getattr.expected -
 	./$(COMPILER) test/test_nilpy_a_mapping_spread_into_a_kwargs_collector.npy $(TESTTMP)/test_nilpy_kwspread26
 	$(TESTTMP)/test_nilpy_kwspread26 | diff -u test/test_nilpy_a_mapping_spread_into_a_kwargs_collector.expected -
+	./$(COMPILER) test/test_nilpy_a_sys_stream_is_a_whole_method_argument.npy $(TESTTMP)/test_nilpy_sysstreamarg26
+	$(TESTTMP)/test_nilpy_sysstreamarg26 | diff -u test/test_nilpy_a_sys_stream_is_a_whole_method_argument.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
