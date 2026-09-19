@@ -1591,6 +1591,24 @@ begin
   end;
   if Tokens[i].Kind = tkNil then begin Inc(i); Exit; end;
   if Tokens[i].Kind <> tkIdent then Exit;
+  { A MODULE-qualified annotation — `orbit.Elements`, `time.struct_time`,
+    `typing.Optional[int]` — reads as its last name. Every arm below reads one
+    bare identifier, so the qualifier was taken as the whole term and the reader
+    stopped at the dot: not even the degrade-to-Any fallback at the bottom could
+    help, because it consumes a name and a subscript and never a selector, and
+    the module was refused with "expected ')' before '.'" (That Space Program's
+    tsp/ascent.py, `def _orbit_text(el: orbit.Elements)`).
+
+    The last name is exactly what `from orbit import Elements` then a bare
+    `Elements` already resolves to, so the qualified spelling gets the same
+    answer rather than a second lookup of its own. Syntactic, not gated on the
+    head being a known module: the def header and the method pre-pass both read
+    annotations and must agree, and an import table consulted mid-pre-pass is
+    not something both can rely on. A tail this reader does not know still
+    lands in the fallback below and degrades to Any, as a bare one does. }
+  while (i + 2 < MainProgramTokCount) and (Tokens[i + 1].Kind = tkDot) and
+        (Tokens[i + 2].Kind = tkIdent) do
+    i := i + 2;
   lo := LowerCase(GetTokenStr(i));
   if lo = 'int' then begin Result := tyInt64; Inc(i); Exit; end;   { 64-bit cell }
   if lo = 'float' then begin Result := tyDouble; Inc(i); Exit; end;

@@ -1,0 +1,83 @@
+# A module-qualified annotation (`mod.Cls`, `time.struct_time`,
+# `typing.Optional[int]`) refused the whole module with "expected ')' before
+# '.'": the annotation reader took the module name as the whole term and stopped
+# at the dot. It now reads as its last name, the same answer
+# `from mod import Cls` and a bare `Cls` give. A tail the reader does not know
+# still degrades to Any.
+# That Space Program's tsp/ascent.py has `def _orbit_text(el: orbit.Elements)`.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+import time
+import typing
+import collections.abc
+import nilpy_qualann_mod
+
+
+# parameter, a user module's class, used through its fields and a method
+def orbit_text(el: nilpy_qualann_mod.Elements) -> str:
+    return "a=" + str(el.a) + " e=" + str(el.e) + " apo=" + str(el.apoapsis())
+
+
+# parameter AND return, an RTL shim's class
+def year_of(t: time.struct_time) -> int:
+    return t.tm_year
+
+
+def epoch() -> time.struct_time:
+    return time.gmtime(0)
+
+
+# typing.Optional[...] qualified, both arms
+def or_default(v: typing.Optional[int], d: int) -> int:
+    if v is None:
+        return d
+    return v
+
+
+# the qualified term in a union, first and LAST
+def first_arm(el: nilpy_qualann_mod.Elements | None) -> float:
+    if el is None:
+        return -1.0
+    return el.a
+
+
+def last_arm(el: None | nilpy_qualann_mod.Elements) -> float:
+    if el is None:
+        return -1.0
+    return el.e
+
+
+# three levels, with a subscript: a tail the reader does not know
+def total(xs: collections.abc.Sequence[int]) -> int:
+    s = 0
+    for x in xs:
+        s += x
+    return s
+
+
+class Craft:
+    def __init__(self, name: str, el: nilpy_qualann_mod.Elements):
+        self.name = name
+        self.el: nilpy_qualann_mod.Elements = el
+
+    def describe(self) -> str:
+        return self.name + " " + orbit_text(self.el)
+
+
+el = nilpy_qualann_mod.make(7000.0, 0.25)
+print(orbit_text(el))
+print(orbit_text(nilpy_qualann_mod.Elements(6600.0, 0.0)))
+
+t0: time.struct_time = epoch()
+print(year_of(t0), t0.tm_mon, t0.tm_mday)
+print(year_of(time.gmtime(86400 * 366)))
+
+print(or_default(None, 5), or_default(3, 5))
+
+print(first_arm(el), first_arm(None))
+print(last_arm(el), last_arm(None))
+
+print(total([1, 2, 3, 4]))
+
+c = Craft("probe", el)
+print(c.describe())
+print(c.el.apoapsis())

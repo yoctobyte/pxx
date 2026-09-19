@@ -1203,6 +1203,8 @@ test-nilpy: $(COMPILER)
 	# whose .expected came from CPython; the pre-fix pin fails every row.
 	./$(COMPILER) test/test_nilpy_bytes_of_a_range_or_an_iterator.npy $(TESTTMP)/test_nilpy_bytesrange26
 	$(TESTTMP)/test_nilpy_bytesrange26 | diff -u test/test_nilpy_bytes_of_a_range_or_an_iterator.expected -
+	./$(COMPILER) test/test_nilpy_a_module_qualified_annotation_reads_as_its_last_name.npy $(TESTTMP)/test_nilpy_qualann26
+	$(TESTTMP)/test_nilpy_qualann26 | diff -u test/test_nilpy_a_module_qualified_annotation_reads_as_its_last_name.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body
