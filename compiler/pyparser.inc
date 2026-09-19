@@ -38502,6 +38502,52 @@ begin
                        (tk = tyBoolean) or TypeIsPromoInt(tk) or (tk = tyVariant);
 end;
 
+function PyOverrideRetJoinsToVariant(ovr, base: TTypeKind): Boolean;
+{ Do an override and its base disagree about the result in a way whose only
+  honest join is a VARIANT? Used by the override-signature block in
+  PyRegisterClassMembers, which otherwise adopts the BASE's type outright.
+
+  TWO ROWS, AND THE SECOND ONE IS WHY THIS FUNCTION EXISTS.
+
+  Both scalar: the original case -- `return 0` in the base against `return 1.5`
+  in the override read 1.5's IEEE bits as an integer. Unchanged.
+
+  A MANAGED STRING AGAINST A VARIANT: `def getNameByQName` returns a plain
+  `name` in AttributesImpl (a str) and a `(uri, localname)` TUPLE in the NS
+  subclass. A tuple is a TPyList reached through a variant, so the override
+  infers tyVariant while the base infers tyAnsiString -- and adopting the base
+  turned the tuple into its own REPR STRING, silently:
+  `got "('http://www.w3.org/1999/xlink', 'href')"` where a tuple was wanted.
+  The mirror direction SEGFAULTS, a str forced into the tuple's slot.
+
+  THIS IS THE SAME SHAPE AS configparser's `optionxform` AND THE OPPOSITE
+  CORRECT ANSWER, which is the whole difficulty: both overrides infer variant,
+  one really returns a str and the other really returns a tuple, and nothing in
+  the return KIND separates them. So the join has to be the type that is right
+  for both -- a variant carries a str perfectly well, and it is the only thing
+  that also carries a tuple. optionxform keeps working because a variant
+  holding a str coerces where the base's body wants one; the pair of
+  subclass-hook tests is the control for exactly that.
+
+  Widening is safe for the same reason the scalar row gives: this is a pre-pass,
+  no body has been compiled yet, the BASE is widened too so the VMT slot stays
+  consistent, and a second subclass widening it again is idempotent.
+
+  Still NOT tyClass on either side -- a differing class result is covariance,
+  a separate question, and the base's type stays the defensible answer there.
+  regression-lib-test-lib-mimic-xml-sax-xmlreader }
+begin
+  if (ovr = tyClass) and (base = tyClass) then
+    PyOverrideRetJoinsToVariant := False
+  else if (ovr = tyClass) or (base = tyClass) then
+    PyOverrideRetJoinsToVariant := True
+  else if PyIsScalarRetKind(ovr) and PyIsScalarRetKind(base) then
+    PyOverrideRetJoinsToVariant := True
+  else
+    PyOverrideRetJoinsToVariant := ((ovr = tyVariant) and (base = tyAnsiString)) or
+                                   ((ovr = tyAnsiString) and (base = tyVariant));
+end;
+
 function PyMethodReturnsSelf(defIdx: Integer): Boolean;
 { Does this method's body `return self`? That is the fluent-builder idiom —
   `def add(self, x): ...; return self` — and its result type is the method's own
@@ -41977,7 +42023,7 @@ begin
               down. bug-nilpy-an-override-returning-a-different-type-than-the-
               base-reads-float-bits }
             if (mRet <> Procs[ovPi].RetType) and
-               PyIsScalarRetKind(mRet) and PyIsScalarRetKind(Procs[ovPi].RetType) then
+               PyOverrideRetJoinsToVariant(mRet, Procs[ovPi].RetType) then
             begin
               Procs[ovPi].RetType := tyVariant;
               ProcRetRecId[ovPi] := REC_NONE;
