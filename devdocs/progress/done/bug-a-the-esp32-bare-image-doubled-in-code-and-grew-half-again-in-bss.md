@@ -361,5 +361,6 @@ esp32s3 / esp32s2 / esp32-bare 46,380 → 732. `x86_64-empty` unchanged.
   That is the sibling ticket's item 1 and the `-O3` -> `-O2` promotion, neither
   of which this claims.
 
-Status: the code half is done. Resolving on that basis with the bss half called
-out as stale rather than fixed.
+Status: the code half is done, commit `e1ffef211` (the default, the guard row
+and the canary re-baseline in one). Resolving on that basis, with the bss half
+called out as stale rather than fixed.
