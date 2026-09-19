@@ -22,6 +22,30 @@ before assuming the workaround is still needed.
 > behavioural re-run against `pinned`**, not the ticket's folder. One such row is
 > in the table below, labelled.
 >
+> **A FOURTH STATE, AND IT IS THE ONE THIS FILE'S OWN RE-CHECK CANNOT SEE: the
+> blocker was never real.** A row here records two things — a BEHAVIOUR that
+> changed when the workaround was removed, and a REASON for it. Every check the
+> file prescribes re-tests the behaviour. **The behaviour re-test confirms the
+> row and says nothing about whether the reason was ever true**, because a
+> workaround written against a misread mechanism still reverts to a real
+> failure: the shape changes, the gate reddens, and the row is "verified" again
+> for another month. Measured 2026-09-19: the `lib/rtl/pil.pas` (class
+> declaration order) row cited a p80 ticket reporting a `class var` being
+> counted into the INSTANCE layout. Nothing was displaced. `const` and
+> `class var` open a SECTION and a plain field after one is absorbed into it, so
+> the field was never per-instance; `var` closes the section, fpc 3.2.2 does the
+> same thing from the same source, and the pin takes the spelling. The file had
+> been contorted for five days and the row asserted a live compiler blocker the
+> whole time. **A WORKAROUND CAN OUTLIVE ITS BUG BY BEING WRONG ABOUT WHAT THE
+> BUG WAS.** This is not a stale hazard block, which was true once and decayed;
+> this one was false when written. The check that finds it is the only one not
+> listed above: **re-derive the MECHANISM, not the behaviour** — read the
+> blocking ticket's explanation and ask what measurement would distinguish it
+> from its neighbours, then take that measurement. For the row above it was one
+> line (`TBox.r.W := 7` with no instance ever constructed, which a field at a
+> wrong offset cannot answer). A row here is a standing claim that the tree is
+> contorted for a reason, and it is the reason that nothing re-reads.
+>
 > **Two sections, because a row leaves this one in two different ways.** Either
 > the bug closes and the workaround comes out (→ *Reverted*, at the bottom), or
 > the bug closes and the shape stays anyway because it reads better or because
