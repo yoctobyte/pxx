@@ -533,3 +533,59 @@ the omission as a defect.
 `devdocs/dev/linking-in-this-tree.md`, ~130 lines / ~2k tokens — a MAP onto our
 own source, not a tutorial. Its first pointer is `tools/pxxcrt_x86_64.S`, 76
 lines, which is the entry contract end to end.
+
+## Route 2 state at 2026-09-19 17:00, before a RAM install (frankB)
+
+**Two of five stages are landed and guarded. Nothing is held, uncommitted or
+unpushed; there is no scratch state to recover.**
+
+| stage | state | commit |
+| --- | --- | --- |
+| 1. object reader | landed, guarded | `8c66a2053` |
+| 2. symbol-table merge | landed, guarded | `98b42be27` |
+| 3. section layout over inputs we did not lay out | **not started** | — |
+| 4. relocation application | not started | — |
+| 5. the executable writer | exists already (`elfwriter.inc`) | — |
+
+Both landed stages are reached through `PXXDBG=a.obj:<path>` and
+`PXXDBG=a.objmerge:<listfile>` — introspection topics, not a compile mode, and
+deliberately no new CLI surface until there is something to link. Both are
+guarded by `tools/elf_reader_vs_readelf.sh`, wired into `test-core`, with
+`readelf` as an external oracle and every assertion proven to fail by injecting
+a fault, rebuilding, and restoring byte-for-byte.
+
+### PICK UP HERE: stage 3, section layout
+
+The merge already tells you which objects contribute which symbols. Stage 3 is
+assigning output addresses to each input section — and the first decision is
+whether to concatenate per section NAME or per section TYPE, because a pxx
+object carries `.text .rela.text .data .rela.data .bss .symtab .strtab
+.shstrtab .fini_array .rela.fini_array` and `.init_array` only when it has
+pre-main work. **Take that set from the EMITTER, not from a corpus** — see the
+correction in this ticket's summary; the same mistake was already made once
+with relocation types.
+
+### Three things that are settled and should not be re-derived
+
+1. **The emitter has THREE x86-64 relocation types** — `R_X86_64_64` (1),
+   `R_X86_64_PC32` (2), `R_X86_64_32S` (11). The busybox census found two
+   because the third did not occur there. Stage 4 must handle all three.
+2. **Weak definitions do not collide and that is load-bearing.** Every C object
+   carries the whole crtl runtime exported WEAK; two such objects merge to 322
+   weak-only symbols with zero duplicates. That is why `ld` accepts 400 busybox
+   objects, and a stage that treats weak like strong refuses a correct program.
+   Measured, not assumed — and note that an object calling *nothing* from crtl
+   has no weak symbols at all, so a subject that does not use `printf`/`strlen`
+   cannot exercise this and will pass vacuously.
+3. **Locals are skipped by BINDING, never by name.** Two objects may both
+   define `buf` locally and neither is a duplicate.
+
+### Goal 5 does not wait on any of this
+
+Route 1 already makes the no-libc claim true — `ld -static -nostdlib` over pxx
+objects plus `tools/pxxcrt_x86_64.S` — and is guarded as of `027443610`. Route 2
+is the separate-objects path and removes the external linker; it is not on the
+critical path for the owner's list.
+
+**Ownership: unheld.** Whoever picks this up should take it. The scoping above
+is the whole of what I was carrying; none of it lives only in my context.
