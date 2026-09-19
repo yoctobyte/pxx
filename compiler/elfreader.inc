@@ -239,3 +239,214 @@ begin
             ' relocations -- a type outside 0..63 is present');
   WriteLn('elfrd: ELFRD-OK');
 end;
+
+{ ---- symbol-table merge ----------------------------------------------------
+  THE SECOND STAGE OF ROUTE 2, and the first one that has an OPINION rather
+  than just a reading. The reader above answers "what is in this object"; this
+  answers "what does this SET of objects still need, and what does it define
+  twice" -- the two questions a linker exists to settle before it can lay
+  anything out.
+
+  ITS OWN HASH, NOT InternStr. InternStr is hash-backed and would have been
+  free, and it is the wrong table: it interns the LITERALS OF THE PROGRAM BEING
+  COMPILED and lays out string objects for emission. Linker symbol names are
+  not that program's data, and putting them there would make the emitter's
+  string pool depend on how many objects were on the command line. Same
+  open-chaining shape, separate table, ~40 lines.
+
+  WHY NOT A LINEAR SCAN: 400 busybox objects at ~493 symbols each is ~200k
+  lookups against a growing table. Linear is ~10^10 comparisons. This is the
+  one place in the reader where the constant factor decides whether the stage
+  is usable at the scale the ticket cares about.
+
+  LOCAL SYMBOLS ARE SKIPPED BY BINDING, NOT BY NAME. A local symbol is private
+  to its object by definition, so two objects may both define `buf` at local
+  binding and neither is a duplicate. Filtering on the name -- or on "does it
+  look internal" -- would report collisions that are not collisions, which is
+  the shape that makes a linker refuse a correct program. }
+
+const
+  ELFLNK_STB_LOCAL  = 0;
+  ELFLNK_STB_WEAK   = 2;
+
+var
+  ElfLnkName  : array of AnsiString;   { distinct global/weak symbol names }
+  ElfLnkDefs  : array of Integer;      { strong definitions seen }
+  ElfLnkWeak  : array of Integer;      { weak definitions seen }
+  ElfLnkRefs  : array of Integer;      { undefined references seen }
+  ElfLnkFirst : array of AnsiString;   { object that first defined it, for the duplicate report }
+  ElfLnkCount : Integer;
+  ElfLnkHead  : array of Integer;
+  ElfLnkNext  : array of Integer;
+  ElfLnkMask  : Integer;
+
+function ElfLnkHash(const s: AnsiString): Integer;
+var i, h: Integer;
+begin
+  h := 5381;
+  for i := 1 to Length(s) do
+    h := ((h * 33) + Ord(s[i])) and $7FFFFFFF;
+  ElfLnkHash := h;
+end;
+
+procedure ElfLnkReset;
+var i: Integer;
+begin
+  ElfLnkCount := 0;
+  ElfLnkMask := 16383;
+  SetLength(ElfLnkHead, ElfLnkMask + 1);
+  for i := 0 to ElfLnkMask do ElfLnkHead[i] := -1;
+  SetLength(ElfLnkName, 0);
+  SetLength(ElfLnkDefs, 0);
+  SetLength(ElfLnkWeak, 0);
+  SetLength(ElfLnkRefs, 0);
+  SetLength(ElfLnkFirst, 0);
+  SetLength(ElfLnkNext, 0);
+end;
+
+{ Index of `nm`, inserting it if new. }
+function ElfLnkIntern(const nm: AnsiString): Integer;
+var b, i, n: Integer;
+begin
+  b := ElfLnkHash(nm) and ElfLnkMask;
+  i := ElfLnkHead[b];
+  while i >= 0 do
+  begin
+    if ElfLnkName[i] = nm then begin ElfLnkIntern := i; Exit; end;
+    i := ElfLnkNext[i];
+  end;
+  n := ElfLnkCount;
+  SetLength(ElfLnkName, n + 1);
+  SetLength(ElfLnkDefs, n + 1);
+  SetLength(ElfLnkWeak, n + 1);
+  SetLength(ElfLnkRefs, n + 1);
+  SetLength(ElfLnkFirst, n + 1);
+  SetLength(ElfLnkNext, n + 1);
+  ElfLnkName[n] := nm;
+  ElfLnkDefs[n] := 0;
+  ElfLnkWeak[n] := 0;
+  ElfLnkRefs[n] := 0;
+  ElfLnkFirst[n] := '';
+  ElfLnkNext[n] := ElfLnkHead[b];
+  ElfLnkHead[b] := n;
+  ElfLnkCount := n + 1;
+  ElfLnkIntern := n;
+end;
+
+{ Fold one object's global symbols into the table. False (with ElfRdErr set)
+  when the object cannot be read -- a link that silently skips an unreadable
+  input would report a smaller unresolved set than the truth. }
+function ElfLnkAddObject(const path: AnsiString): Boolean;
+var i, j, nsec, symEnts, bind, k: Integer;
+    stOff, stSize, stEnt, strTab, e, shndx, nameIdx: Int64;
+    nm: AnsiString;
+begin
+  ElfLnkAddObject := False;
+  LoadFile(path, ElfRdBuf);
+  if Length(ElfRdBuf) = 0 then begin ElfRdErr := 'cannot read'; Exit; end;
+  if not ElfRdCheckHeader then Exit;
+  nsec := ElfRdShNum;
+  for i := 0 to nsec - 1 do
+    if ElfRdShType(i) = ELFRD_SHT_SYMTAB then
+    begin
+      stOff := ElfRdShOffset(i);
+      stSize := ElfRdShSize(i);
+      stEnt := ElfRdShEntSize(i);
+      strTab := ElfRdShOffset(ElfRdShLink(i));
+      if stEnt <= 0 then stEnt := 24;
+      symEnts := Integer(stSize div stEnt);
+      for j := 1 to symEnts - 1 do
+      begin
+        e := stOff + Int64(j) * stEnt;
+        bind := ElfRdU8(e + 4) shr 4;
+        if bind = ELFLNK_STB_LOCAL then Continue;
+        nameIdx := ElfRdU32(e + 0);
+        if nameIdx = 0 then Continue;
+        nm := ElfRdStr(strTab, nameIdx);
+        if nm = '' then Continue;
+        shndx := ElfRdU16(e + 6);
+        k := ElfLnkIntern(nm);
+        if shndx = 0 then
+          ElfLnkRefs[k] := ElfLnkRefs[k] + 1
+        else if bind = ELFLNK_STB_WEAK then
+          ElfLnkWeak[k] := ElfLnkWeak[k] + 1
+        else
+        begin
+          ElfLnkDefs[k] := ElfLnkDefs[k] + 1;
+          if ElfLnkFirst[k] = '' then ElfLnkFirst[k] := path;
+        end;
+      end;
+    end;
+  ElfLnkAddObject := True;
+end;
+
+{ PXXDBG=a.objmerge:<listfile> -- one object path per line.
+
+  A LIST FILE RATHER THAN A SEPARATED ARGUMENT, for two reasons that are not
+  style: PXXDBG splits topics on ',' so a comma-separated list cannot be
+  expressed at all, and the population this stage is FOR is 400 busybox
+  objects, which is not a command line. }
+procedure ElfLnkMergeDump(const listPath: AnsiString);
+var lst, line, nm: AnsiString;
+    i, nobj, unresolved, dup, definedCount, weakOnly: Integer;
+    c: Char;
+begin
+  LoadFile(listPath, lst);
+  if Length(lst) = 0 then
+  begin
+    WriteLn('elflnk: cannot read list ', listPath);
+    Exit;
+  end;
+  ElfLnkReset;
+  nobj := 0;
+  line := '';
+  for i := 1 to Length(lst) + 1 do
+  begin
+    if i <= Length(lst) then c := lst[i] else c := Chr(10);
+    if c = Chr(10) then
+    begin
+      if Length(line) > 0 then
+      begin
+        if not ElfLnkAddObject(line) then
+        begin
+          WriteLn('elflnk: ', line, ': ', ElfRdErr);
+          Exit;
+        end;
+        nobj := nobj + 1;
+      end;
+      line := '';
+    end
+    else if c <> Chr(13) then
+      line := line + c;
+  end;
+
+  unresolved := 0; dup := 0; definedCount := 0; weakOnly := 0;
+  for i := 0 to ElfLnkCount - 1 do
+  begin
+    if ElfLnkDefs[i] > 1 then dup := dup + 1;
+    if (ElfLnkDefs[i] > 0) then definedCount := definedCount + 1
+    else if ElfLnkWeak[i] > 0 then weakOnly := weakOnly + 1
+    else if ElfLnkRefs[i] > 0 then unresolved := unresolved + 1;
+  end;
+
+  WriteLn('elflnk: objects ', AIntToStr(nobj));
+  WriteLn('elflnk: globals ', AIntToStr(ElfLnkCount));
+  WriteLn('elflnk: defined ', AIntToStr(definedCount));
+  WriteLn('elflnk: weakonly ', AIntToStr(weakOnly));
+  WriteLn('elflnk: unresolved ', AIntToStr(unresolved));
+  WriteLn('elflnk: duplicate ', AIntToStr(dup));
+  { NAMED, not just counted. An unresolved COUNT tells a user nothing they can
+    act on, and the one time this mattered in this repo the answer was a single
+    symbol (pivot_root) hiding behind a glibc stub. Bounded so a badly-formed
+    link does not print 200k lines. }
+  for i := 0 to ElfLnkCount - 1 do
+    if (ElfLnkDefs[i] = 0) and (ElfLnkWeak[i] = 0) and (ElfLnkRefs[i] > 0) then
+    begin
+      nm := ElfLnkName[i];
+      WriteLn('elflnk: undef ', nm);
+    end;
+  for i := 0 to ElfLnkCount - 1 do
+    if ElfLnkDefs[i] > 1 then
+      WriteLn('elflnk: dup ', ElfLnkName[i], ' x', AIntToStr(ElfLnkDefs[i]));
+  WriteLn('elflnk: ELFLNK-OK');
+end;

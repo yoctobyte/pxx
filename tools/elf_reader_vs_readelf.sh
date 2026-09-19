@@ -35,6 +35,11 @@
 # 0, b.o calls it and must report exactly 1, named `helper` by the oracle. The
 # asymmetry is the control.
 #
+# COVERS TWO STAGES: the object READER (against readelf) and the symbol-table
+# MERGE over a set of objects (three cases no two of which can pass for each
+# other, plus the weak-does-not-collide property that lets 400 busybox objects
+# link at all).
+#
 # Prints ELF-READER-ORACLE-COMPLETE on success. Exits nonzero on any mismatch.
 set -u
 
@@ -133,6 +138,76 @@ grep -q 'ELFRD-OK' "$W/exe.rd" \
 PXXDBG="a.obj:$W/junk.o" "$COMPILER" > "$W/junk.rd" 2>&1
 grep -q 'no ELF magic' "$W/junk.rd" \
   || { cat "$W/junk.rd"; fail "a non-ELF file was not refused by name"; }
+
+# ---- stage 2: the symbol-table merge ---------------------------------------
+# The reader answers "what is in this object". The merge answers "what does
+# this SET still need, and what does it define twice" -- the two questions a
+# linker settles before it lays anything out. Three cases, and the point is
+# that no two of them can pass for each other:
+#   pair      a.o defines helper, b.o calls it   -> 0 unresolved, 0 duplicate
+#   lone      b.o alone                          -> exactly 1 unresolved, named
+#   doubled   a.o listed twice                   -> exactly 1 duplicate, named
+# The doubled case is the one that cannot be faked by a merge that does
+# nothing: a table that never records a definition reports 0 duplicates, and a
+# table that never records a reference reports 0 unresolved, so the two zeros
+# in the PAIR row are only meaningful beside the two non-zeros below them.
+printf '%s\n%s\n' "$W/a.o" "$W/b.o" > "$W/both.lst"
+printf '%s\n'       "$W/b.o"         > "$W/one.lst"
+printf '%s\n%s\n' "$W/a.o" "$W/a.o" > "$W/dbl.lst"
+
+merge() {
+  PXXDBG="a.objmerge:$W/$1" "$COMPILER" > "$W/$1.out" 2>&1 \
+    || fail "the merge exited nonzero on $1"
+  grep -q 'ELFLNK-OK' "$W/$1.out" || { cat "$W/$1.out"; fail "the merge did not reach its completion line on $1"; }
+}
+mfield() { sed -n "s/^elflnk: $2 \([0-9]*\)\$/\1/p" "$W/$1.out"; }
+
+merge both.lst; merge one.lst; merge dbl.lst
+
+[ "$(mfield both.lst unresolved)" = "0" ] || fail "a.o+b.o: helper is defined by a.o and must resolve"
+[ "$(mfield both.lst duplicate)"  = "0" ] || fail "a.o+b.o: nothing is defined twice"
+[ "$(mfield one.lst  unresolved)" = "1" ] || fail "b.o alone must have exactly one unresolved symbol"
+grep -q '^elflnk: undef helper$' "$W/one.lst.out" \
+  || fail "b.o's unresolved symbol must be NAMED helper -- a count alone is not actionable, and the one time this mattered here the answer was a single symbol behind a glibc stub"
+[ "$(mfield dbl.lst duplicate)" = "1" ] || fail "a.o listed twice must report exactly one duplicate definition"
+grep -q '^elflnk: dup helper x2$' "$W/dbl.lst.out" \
+  || fail "the duplicate must be named helper, seen twice"
+
+# WEAK DEFINITIONS MUST NOT COLLIDE, which is the property that lets 400
+# busybox objects link at all: every C object carries the whole crtl runtime,
+# exported WEAK. A merge that treated weak like strong would report hundreds of
+# duplicates on any two real objects and refuse a correct program.
+#
+# c.c USES crtl ON PURPOSE. An object that calls nothing from it has no weak
+# exports at all -- measured: a trivial two-line C file gives 1 GLOBAL and 492
+# LOCAL and not one WEAK -- so a subject that does not touch printf/strlen
+# cannot exercise this row and would pass it vacuously.
+cat > "$W/c.c" <<'EOF'
+#include <stdio.h>
+#include <string.h>
+int use(const char*s){ printf("%s", s); return strlen(s); }
+EOF
+cat > "$W/d.c" <<'EOF'
+int use(const char*s);
+int main(void){ return use("hi"); }
+EOF
+for o in c d; do
+  "$COMPILER" --emit-obj "$W/$o.c" "$W/$o.o" > "$W/$o.build.log" 2>&1 \
+    || { cat "$W/$o.build.log"; fail "--emit-obj did not produce $o.o"; }
+done
+printf '%s\n%s\n' "$W/c.o" "$W/d.o" > "$W/cd.lst"
+merge cd.lst
+[ "$(mfield cd.lst duplicate)" = "0" ] \
+  || fail "two objects both carrying crtl weakly must not collide -- weak definitions do not duplicate"
+[ "$(mfield cd.lst unresolved)" = "0" ] \
+  || fail "c.o defines use and d.o calls it; nothing should be left unresolved"
+# ASSERT THE ROW ACTUALLY EXERCISED WEAK, rather than passing because there
+# were none: the oracle must agree that these objects carry weak definitions.
+oracle_weak=$(readelf -sW "$W/c.o" | grep -E '^ *[0-9]+:' | awk '$5=="WEAK" && $7!="UND" {print $8}' | sort -u | wc -l | tr -d ' ')
+[ "$oracle_weak" -gt 0 ] \
+  || fail "c.o carries no WEAK definitions, so the no-collision row above proved nothing"
+[ "$(mfield cd.lst weakonly)" -gt 0 ] \
+  || fail "the merge reports no weak-only symbols for a pair that readelf says has $oracle_weak"
 
 echo "elf-reader: agrees with readelf on sections, symbols, undefined and relocations over a defining/referencing object pair; refuses an executable and a non-ELF file by name"
 echo "ELF-READER-ORACLE-COMPLETE"

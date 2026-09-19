@@ -2123,6 +2123,14 @@ begin
     Halt(0);
   end;
 
+  { PXXDBG=a.objmerge:<listfile> -- the symbol-table merge over a SET of
+    objects: what does this set still need, and what does it define twice. }
+  if PxxDbgArg('a.objmerge') <> '' then
+  begin
+    ElfLnkMergeDump(PxxDbgArg('a.objmerge'));
+    Halt(0);
+  end;
+
   if ParamCount < i then
     begin
       writeln(StdErr, 'usage: pxx [options] <source> [output]');

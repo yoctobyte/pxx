@@ -15788,6 +15788,9 @@ test-core: $(COMPILER)
 	# fail by injecting a one-token fault (st_info's offset for st_shndx),
 	# rebuilding, watching it red on the b.o row, and restoring byte-for-byte
 	# to the same binary sha.
+	# Covers BOTH stages now: the reader, and the symbol-table merge over a set
+	# of objects (pair resolves / lone caller has one unresolved / doubled object
+	# has one duplicate, plus weak-does-not-collide on a crtl-USING subject).
 	tools/elf_reader_vs_readelf.sh
 	# AND THE LINK ITSELF, WHICH HAD NO GUARD AT ALL. The symbol above is one
 	# half; the other is that `ld -static -nostdlib` over pxx objects plus our
