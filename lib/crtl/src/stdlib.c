@@ -200,16 +200,58 @@ static char pxx_env_buf[PXX_ENV_BUFSZ];
 static long pxx_env_len = 0;
 static int pxx_env_loaded = 0;
 
+/* AND THE FALLBACK, ADDED 2026-09-19 BECAUSE /proc IS A LINUX DETAIL AND NOT
+   THE ENVIRONMENT. Measured on wasm32 the day hosted C first ran there: the
+   entry stub fills `environ` correctly from WASI's environ_sizes_get/
+   environ_get -- a probe that walks `environ` directly prints every variable
+   wasmtime was given -- and getenv() answered (null) for all of them, because
+   it was reading a procfs file a WASI module has no filesystem for. Two
+   environments in one program that never spoke to each other, and the one the
+   C standard names was the one nobody read.
+
+   ORDER IS /proc FIRST AND `environ` SECOND, which is the weaker of the two
+   correct designs and is chosen on purpose. glibc's getenv reads `environ` and
+   nothing else, so preferring it here would be closer to the standard -- but
+   `environ` is filled by __pxx_run_initializers at the top of main, and a
+   getenv() reached from a file-scope initializer would then see an empty
+   environment on a target where /proc would have answered. That ordering
+   property has NOT been measured, and this arm is strictly additive as
+   written: every target with a readable /proc/self/environ behaves exactly as
+   it did before, byte for byte. Retire the caveat by measuring when `environ`
+   becomes non-null relative to the first getenv on each hosted target; if it
+   is always before, flip the order and delete the /proc read.
+
+   The copy is bounded by the same buffer the /proc path fills and stops on the
+   first record that would not fit, so an over-large environment truncates
+   rather than overruns -- the same "behave like a program started without it"
+   stance the header above takes for a failed open. */
+extern char **environ;
+
 static void pxx_env_load(void) {
   int fd;
   long got;
+  char **e;
+  const char *r;
+  long n;
   if (pxx_env_loaded) return;
   pxx_env_loaded = 1;
   fd = __pxx_open("/proc/self/environ", 0, 0);   /* O_RDONLY */
-  if (fd < 0) return;
-  got = __pxx_read(fd, pxx_env_buf, PXX_ENV_BUFSZ);
-  __pxx_close(fd);
-  if (got > 0) pxx_env_len = got;
+  if (fd >= 0) {
+    got = __pxx_read(fd, pxx_env_buf, PXX_ENV_BUFSZ);
+    __pxx_close(fd);
+    if (got > 0) { pxx_env_len = got; return; }
+  }
+  e = environ;
+  if (!e) return;
+  while (*e) {
+    r = *e;
+    n = 0;
+    while (r[n]) n++;
+    if (pxx_env_len + n + 1 > PXX_ENV_BUFSZ) break;
+    for (got = 0; got <= n; got++) pxx_env_buf[pxx_env_len + got] = r[got];
+    pxx_env_len += n + 1;
+    e++;
+  }
 }
 
 char *getenv(const char *name) {

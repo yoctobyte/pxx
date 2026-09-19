@@ -28912,3 +28912,109 @@ is what makes it trustworthy.
 
 Sibling: "the fixedpoint cannot see a construct the compiler never writes"
 (CLAUDE.md, per-fix loop).
+
+## ASK THE IR WHAT THE FRONTEND RECORDED — RE-DERIVING IT IS A SECOND OPINION THAT CAN ONLY DISAGREE
+
+Measured 2026-09-19 (frankB, Track C, wasm32). Filed as
+`done/bug-a-wasm32-picks-signed-division-for-an-unsigned-64-bit-value`.
+
+**The shape.** A backend has to answer one yes/no about an operation — is this
+signed? is this a pointer? does this need a barrier? — and the frontend has
+already answered it, applied the language's conversion rules, and written the
+answer onto the node. The backend asks the OPERANDS instead. It is right
+wherever the two agree, and silently wrong wherever they do not, which is
+exactly the set of inputs nobody has a test for.
+
+**The instance.** `WasmBinopWidth`:
+
+```pascal
+sgn := TypeSigned(tkA) or TypeSigned(tkB);
+```
+
+Signed if EITHER operand is signed. That rule is **viral**: `__crtl_utoa`'s
+`v % (unsigned long)base` lowers the cast as a mask against a `tyInt64`
+constant, so a provably non-negative zero-extension reports itself signed, the
+modulo picks `i64.rem_s`, and `printf("%llu", 18446744073709551615ULL)` prints
+`/` — `'0'` minus one, a digit loop running negative. `wasm2wat` over a hosted
+module contains **zero** `i64.div_u` or `i64.rem_u`: the unsigned opcodes were
+unreachable by construction.
+
+### Why this class hides so well
+
+**A wrong SIGNED answer on non-negative data equals the right answer.** Every
+`%llu` below 2^63 was correct the whole time, on every build, for as long as
+the target has existed. The divergence needs the top bit set, and no wasm32 C
+corpus row printed an integer that big. Where the wrong answer is a *different
+opcode* rather than a *missing* one, there is no diagnostic, no trap and no
+shape difference — just a plausible number on inputs outside the sample.
+
+### The repair that looked right and broke the mirror
+
+First attempt: at the operation's width, an unsigned OPERAND wins outright.
+
+```pascal
+if (not TypeSigned(tkA)) and (TypeSlotSize(tkA) = wantSz) then sgn := False;
+```
+
+`%llu` went correct. `n / (long long)q` — an explicit cast **to** signed — went
+unsigned, measured as wasm32 = 124 against 116 on the other six targets. The
+cast node still carries the source expression's unsigned type, so the operand
+check reads the wrong thing.
+
+`and` in place of `or` passes both of those shapes **and is wrong for a third**:
+a narrow unsigned promotes to signed `int` in C, so `-7 / (int)w` must be signed
+and `and` makes it four billion.
+
+**Three operand rules, three different wrong answers. No rule over the operands
+can be right**, because the conversions are a property of the LANGUAGE and the
+frontend has already applied them.
+
+### The fix, and the clause that is load-bearing
+
+```pascal
+tkN := IntToTypeKind(IRTk[node]);
+if (not WasmIsCompare(WasmBinopOp(node)))
+   and (TypeIsOrdinal(tkN) or TypeIsPointerSized(tkN))
+   and (TypeSlotSize(tkN) = wantSz) then
+  sgn := TypeSigned(tkN);
+```
+
+**The compare exclusion is not defensive coding.** A compare's recorded `IRTk`
+is `tyBoolean`, and `TypeSigned(tyBoolean)` is False — so the same fix without
+that clause turns every signed `<`, `<=`, `>`, `>=` into its unsigned opcode.
+The general form: **a node whose recorded type describes its RESULT rather than
+its OPERANDS is outside this rule**, and a compare is the common one. Ask what
+the recorded type is a statement about before trusting it.
+
+### The generalisation
+
+**Where a frontend has applied a language's rules and recorded the result, the
+backend reads the record. It does not re-derive.** Two derivations of one
+property is CLAUDE.md's "two mechanisms serving one concept is a smell" in its
+cheapest-to-fix position — and the second derivation does not announce itself,
+because it agrees most of the time.
+
+Corollary for finding others: **grep a backend for predicates over operand
+types where the node carries the same predicate.** Signedness is the one this
+was found in; nothing here says it is the only one.
+
+### The guard
+
+`tools/c_int_signedness_every_target.sh` — thirteen shapes over all seven
+targets against gcc, the whole printed line diffed so no expected value is
+written down twice, no admitted-refusal branch. Rows exist for BOTH directions
+by construction: the ones that catch signed-where-unsigned and the ones that
+catch unsigned-where-signed, because the first repair passed half of them.
+
+The subject **prints** its mask rather than returning it. The first draft
+returned `bad ? 100000 + bad : 42`, and `100000 + 138` is 42 mod 256 — rows 2,
+8 and 128 failing together would have exited with the all-pass answer. Sibling:
+CLAUDE.md, "CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT".
+
+**THE TRIGGER THAT WOULD PROMOTE THIS TO CLAUDE.md**, written down so "not
+promoted" is not read as "not valued": **a second independent subsystem where a
+backend re-derives a property the IR already records, and the re-derivation is
+wrong on a subset.** One subsystem so far. frankB proposed it and frankuser
+agreed on 2026-09-19 to hold it here rather than argue it up on how well it
+reads — which is the test CLAUDE.md sets for itself, applied to a finding its
+own author liked.

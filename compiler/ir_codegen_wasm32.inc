@@ -1638,7 +1638,7 @@ end;
   Shared by the planner and the type oracle so the two cannot disagree about
   what a binop yields. }
 function WasmBinopWidth(node: Integer; var want: Byte; var sgn: Boolean): Boolean;
-var tkA, tkB: TTypeKind; vtA, vtB, vtN: Byte;
+var tkA, tkB, tkN: TTypeKind; vtA, vtB, vtN: Byte; wantSz: Integer;
 begin
   WasmBinopWidth := False;
   if WasmBinopIsString(node) then Exit;
@@ -1661,7 +1661,62 @@ begin
     the arithmetic is. }
   if not WasmScalarType(IntToTypeKind(IRTk[node]), vtN) then vtN := vtA;
   want := WasmUnify(WasmUnify(vtA, vtB), vtN);
+
+  { SIGNEDNESS COMES FROM THE FRONTEND'S RECORDED RESULT TYPE WHERE THERE IS
+    ONE, AND FROM C's CONVERSION RULE OVER THE OPERANDS WHERE THERE IS NOT.
+    Until 2026-09-19 this line was `TypeSigned(tkA) or TypeSigned(tkB)` alone
+    -- signed if EITHER operand is signed -- and that is viral in the
+    direction that produces wrong answers silently.
+
+    Measured: `printf("%llu", 18446744073709551615ULL)` on wasm32 printed `/`,
+    ONE character, and %llu of 1e19 printed sixteen bytes of punctuation, while
+    x86-64, i386, arm32, riscv32 and aarch64 all matched gcc exactly. Values
+    below 2^63 were right, which is the tell -- `/` is '0' minus one, a digit
+    loop running negative. Not one i64.div_u or i64.rem_u existed anywhere in a
+    hosted wasm32 module.
+
+    THE CHAIN IS WHY IT SURVIVED, because nothing in __crtl_utoa looks signed.
+    Its `v % (unsigned long)base` lowers the cast as `base and $FFFFFFFF`,
+    whose mask constant is typed tyInt64; that `and` then reported itself
+    SIGNED through WasmNodeResultType's IR_BINOP arm -- which answers
+    WasmRepType(want, sgn) using this very function -- and the `%` above it saw
+    one unsigned operand and one "signed" one and chose i64.rem_s. A provably
+    non-negative zero-extension had acquired a sign on the way up. The IR had
+    it right the whole time: that node's own IRTk is tyUInt32.
+
+    SO ASK THE IR FIRST. The frontend is what applied C's usual arithmetic
+    conversions, and IRTk is where it wrote the answer down; re-deriving one
+    from the operands is a second opinion that can only disagree. The width
+    guard is there because IRTk is sometimes NARROWER than the operation the
+    unify above settled on (that same `or 0` node is tyUInt32 on an i64
+    operation), and a narrower type says nothing about the wider op's sign.
+
+    COMPARES ARE EXCLUDED, and forgetting that turns `-7 < 3` into lt_u. A
+    comparison's recorded type is tyBoolean, which is not a signed type, so
+    trusting it here would make every signed comparison unsigned -- a whole
+    class broken to fix one. Their sign has to come from the operands.
+
+    THE OPERAND FALLBACK IS C's RULE AND NOT `and`. Flipping the original to
+    `TypeSigned(tkA) and TypeSigned(tkB)` fixes %llu and breaks `-7 div
+    someWord`: a Word is unsigned, so the division goes unsigned and -7 becomes
+    four billion. C says the same -- a narrow unsigned promotes to signed int
+    and does NOT make the operation unsigned -- so only an operand as wide as
+    the operation can carry its unsignedness across. TypeSlotSize is asked
+    rather than the wasm value type, because WasmScalarType maps a 2-byte Word
+    to WT_I32 and that mapping would make every narrow unsigned look
+    full-width. }
   sgn := TypeSigned(tkA) or TypeSigned(tkB);
+  if (want = WT_I32) or (want = WT_I64) then
+  begin
+    if want = WT_I64 then wantSz := 8 else wantSz := 4;
+    if (not TypeSigned(tkA)) and (TypeSlotSize(tkA) = wantSz) then sgn := False;
+    if (not TypeSigned(tkB)) and (TypeSlotSize(tkB) = wantSz) then sgn := False;
+    tkN := IntToTypeKind(IRTk[node]);
+    if (not WasmIsCompare(WasmBinopOp(node)))
+       and (TypeIsOrdinal(tkN) or TypeIsPointerSized(tkN))
+       and (TypeSlotSize(tkN) = wantSz) then
+      sgn := TypeSigned(tkN);
+  end;
   WasmBinopWidth := True;
 end;
 

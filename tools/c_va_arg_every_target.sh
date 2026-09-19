@@ -105,67 +105,33 @@ for t in $TARGETS; do
     printf '  %-9s builds   %s\n' "$t" "$got"
     built=$((built + 1))
   else
-    # THE EXPECTED REFUSAL MOVED TWICE IN ONE DAY, AND THE CHECK FOLLOWS IT
-    # RATHER THAN LOOSENING. Both moves were caught by this branch failing,
-    # which is the branch working.
+    # EVERY TARGET IN THIS LIST NOW BUILDS, SO THERE IS NO ADMITTED REFUSAL
+    # LEFT -- and the list is deliberately EMPTY rather than kept "just in
+    # case", for the reason this script already applied to the environ
+    # spelling on 2026-09-06: an admissible reason that cannot occur is dead
+    # tolerance that reads as coverage, and one more thing for a future reader
+    # to believe is load bearing.
     #
-    # Until 2026-09-06 the only admissible refusal was "C program entry stub not
-    # implemented", which is what put wasm32 outside this check by construction.
-    # That stub now exists (WasmEmitCEntry): a freestanding C program builds and
-    # runs on wasm32. This subject is not freestanding -- it needs <stdio.h> to
-    # print -- so it moved one wall EARLIER than va_arg, to the environment.
+    # THE WALL MOVED FOUR TIMES AND THEN RAN OUT, all on wasm32, all caught by
+    # this branch failing, which is this branch working:
     #
-    # Then the environ wall was removed too (WasmEmitEnvironFetch), and wasm32
-    # landed on va_arg ITSELF. That is the best refusal this script can get from
-    # a target and it is worth saying why: the subject of the check is now the
-    # thing the target names. A target that says "variadic C functions are not
-    # yet supported" is NOT the danger this script exists for -- the danger is a
-    # C-capable target absent from cparser.inc's four sets, which falls into the
-    # `TargetArch <> TARGET_X86_64` arm, silently takes aarch64's 8-byte
-    # two-bank layout, and prints WRONG VALUES from the second argument on. A
-    # named refusal is the safe direction; a silent wrong value is not.
+    #   C program entry stub      -> closed by WasmEmitCEntry (be2c87890)
+    #   environ                   -> closed by WasmEmitEnvironFetch (63d077feb)
+    #   va_arg not supported      -> closed 2026-09-19, the caller-marshalled
+    #                                variadic area; wasm32 joined the 32-bit set
+    #   too many params+locals    -> closed 2026-09-19, MAX_WASM_BODY_VARS
+    #                                288 -> 1024, landed with the fenv body so
+    #                                the module links as well as builds
     #
-    # THE ENVIRON SPELLING IS GONE FROM THIS LIST RATHER THAN KEPT "just in
-    # case". No target can produce it any more, so leaving it would be an
-    # admissible reason that cannot occur -- dead tolerance that reads as
-    # coverage, and one more thing for a future reader to believe is load
-    # bearing. The list is what CAN happen, not what once did.
-    #
-    # AND IT MOVED A THIRD TIME, 2026-09-19, FOR THE BEST REASON A WALL CAN
-    # MOVE: wasm32's va_arg landed, so the target is now IN the 32-bit set and
-    # its refusal is no longer about va_arg at all. This subject includes
-    # <stdio.h>, so it compiles the crtl, and crtl's stdio.c needs more
-    # params+locals in one body than the wasm encoder's MAX_WASM_BODY_VARS
-    # allows -- a BOOKKEEPING ceiling in our own backend, not a gap in the
-    # convention this script is about.
-    #
-    # Measured the same day, by raising that constant to 2048 and rebuilding:
-    # the subject then COMPILES and wasmtime refuses to instantiate it on one
-    # unresolved import, `__pxx_fegetround`, which is a machine-code stub
-    # EmitCFenvStubs cannot emit for a target that has no machine code. So the
-    # raise alone trades a named COMPILE refusal for an unresolved import at
-    # instantiation -- which this branch could not name at all, because the
-    # build would have SUCCEEDED. The raise and a wasm32 fenv stub therefore
-    # have to land together, and until they do the ceiling is the honest wall.
-    # The raise was reverted and the compiler rebuilt to the byte-identical sha
-    # it had before, f104f4b22922.
-    #
-    #   C program entry stub  ->  a target with no stub yet
-    #   va_arg not supported  ->  the target names the subject itself
-    #   too many params+locals -> our own encoder ceiling, not the convention
-    #
-    # DO NOT collapse these to `grep -q error:`. The whole value of this branch
-    # is that it names which wall, and a check that accepts any error is a check
-    # that cannot fail.
-    if grep -q 'C program entry stub' "$WORK/build_$t.log"; then
-      why='no C entry stub yet'
-    elif grep -q 'variadic C functions (va_arg) are not yet supported' "$WORK/build_$t.log"; then
-      why='va_arg refused by name -- the honest wall, not a silent wrong layout'
-    elif grep -q 'wasm: too many params+locals' "$WORK/build_$t.log"; then
-      why='our own encoder ceiling in crtl stdio.c, BEHIND a working va_arg'
-    else
-      fail "$t refused for a reason that is NEITHER the C entry stub NOR a va_arg refusal by name, so this check silently stopped covering it: $(grep -m1 'error:' "$WORK/build_$t.log")"
-    fi
+    # So a refusal here today is one of two things and BOTH want a human: a
+    # REGRESSION in a target that was building an hour ago, or a NEW target
+    # somebody added to TARGETS above. Neither should pass quietly. If you are
+    # bringing up a new target and it genuinely cannot build this subject yet,
+    # admit its wall BY NAME here with a dated sentence saying what closes it
+    # -- do not reach for `grep -q error:`, which is the check that cannot
+    # fail, and do not delete your target from TARGETS, which is the check
+    # that cannot see.
+    fail "$t REFUSED, and every target in this list builds this subject today -- so this is a regression or a new target, not a known wall: $(grep -m1 'error:' "$WORK/build_$t.log")"
     printf '  %-9s refuses  %s -- outside this check by construction, and the trigger\n' "$t" "$why"
     refused=$((refused + 1))
   fi
@@ -175,10 +141,14 @@ done
 # frontend broke for every cross target, `refused` would be 6 and `built` 1 --
 # so a floor on `built` is what separates "the set is right" from "nothing ran".
 [ "$examined" -eq 7 ] || fail "examined $examined targets, expected 7 -- the list changed without this floor moving"
-# 6, not 5: xtensa moved from `refuses' to `builds' when it was given the
-# profile it actually has. Lowering this floor to re-admit a silent xtensa
-# refusal is the regression this number exists to catch.
-[ "$built" -ge 6 ] \
+# SEVEN, AND SEVEN IS THE WHOLE LIST -- this floor no longer tolerates any
+# target sitting out. It was 5, then 6 when xtensa was given the profile it
+# actually has, and 7 since 2026-09-19, when wasm32's variadic area and the
+# two walls behind it landed and it started printing the oracle's line like
+# everyone else. Lowering it is how a target goes quiet without anyone
+# noticing; that is the regression this number exists to catch, and the
+# refusal branch above is now its only other exit.
+[ "$built" -ge 7 ] \
   || fail "only $built target(s) built a va_arg program; this check cannot say anything about a set it never reached"
 
 printf '  %d built, %d refused at a named wall, %d examined\n' "$built" "$refused" "$examined"

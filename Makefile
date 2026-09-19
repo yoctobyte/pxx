@@ -16608,6 +16608,40 @@ test-core: $(COMPILER)
 	@tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_variadic.wasm; \
 	 tools/expect_same.sh c_wasm32_variadic-wasm32 "$$?" "42"
 	@echo "test-core: a C variadic function defines, calls and reads its tail on wasm32 -- five shapes, matching gcc"
+	# HOSTED C ON wasm32 -- printf and getenv, which is what the three walls
+	# were in the way of. Until 2026-09-19 `#include <stdio.h>` could not
+	# produce a wasm32 module at all, and each wall hid the next: va_arg
+	# refused at parse time, then MAX_WASM_BODY_VARS refused at encode time,
+	# then __pxx_fegetround was an unresolved import at INSTANTIATION time.
+	# The float rows are the ones that reach the third: they call
+	# __crtl_round_carry, hence __pxx_fegetround, so a subject printing only
+	# integers would link and run with that body missing.
+	#
+	# getenv IS THE ASSERTION WALL A NEVER GOT. WasmEmitEnvironFetch shipped
+	# 2026-09-06 and had never executed; its ticket says the first thing to do
+	# when the other walls fall is to run a program that reads getenv and check
+	# the VALUE. It found a real defect on its first run -- environ was
+	# populated and getenv answered (unset), because crtl read
+	# /proc/self/environ, which a WASI module has no filesystem for.
+	#
+	# DIFFED WHOLE AGAINST gcc with the same variable set on both legs, so no
+	# expected value is transcribed and a float row cannot pass by agreeing
+	# with a stale constant.
+	# bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse
+	gcc -std=gnu99 -o $(TESTTMP)/c_wasm32_hosted_gcc test/c_wasm32_hosted_stdio.c
+	./$(COMPILER) --target=wasm32 test/c_wasm32_hosted_stdio.c $(TESTTMP)/c_wasm32_hosted.wasm
+	@PXX_WASM_HOSTED_PROBE=set-by-the-caller tools/expect_same.sh c_wasm32_hosted_stdio \
+	   "$$(PXX_WASM_HOSTED_PROBE=set-by-the-caller tools/run_target.sh wasm32 $(TESTTMP)/c_wasm32_hosted.wasm)" \
+	   "$$(PXX_WASM_HOSTED_PROBE=set-by-the-caller $(TESTTMP)/c_wasm32_hosted_gcc)"
+	@echo "test-core: hosted C on wasm32 -- printf formatting and getenv match gcc, through WASI"
+	# WHICH OPERATIONS ARE SIGNED, on all seven targets, against gcc. A rule
+	# that is wrong in either direction gives a plausible wrong NUMBER and no
+	# crash, and the two directions hide each other -- so the subject carries
+	# thirteen shapes chosen so that a fix for one cannot certify the other.
+	# Found because %llu of 2^64-1 printed `/` on wasm32 and matched gcc on
+	# five other targets.
+	# bug-a-wasm32-picks-signed-division-for-an-unsigned-64-bit-value
+	tools/c_int_signedness_every_target.sh
 	@./$(COMPILER) test/cundeclared_type_cast_fail.c $(TESTTMP)/cundeclared_type_cast_fail26 2>&1 \
 	  | grep -q "unknown type name '_PyCFunctionFastWithKeywords' in cast; did you mean 'PyCFunctionFastWithKeywords'" \
 	  || { echo 'cundeclared_type_cast_fail: FAIL - a cast to an undeclared type must error and suggest the near miss'; exit 1; }

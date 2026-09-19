@@ -3277,6 +3277,34 @@
 # define SYS_openat2                       __NR_openat2
 # define SYS_pidfd_getfd                   __NR_pidfd_getfd
 # define SYS_faccessat2                    __NR_faccessat2
+#elif defined(__wasm__)
+
+/* wasm32 NAMES NO NUMBERS, AND THE EMPTINESS IS THE ANSWER RATHER THAN A GAP.
+   There is no syscall instruction on this target and no kernel behind it: a
+   module reaches the host through WASI imports, which are ordinary function
+   calls with their own signatures, not a numbered trap. So there is no table
+   that could be right, and the honest table is the empty one -- exactly what
+   this header's own `#else` says about a number its sweep never saw: naming
+   its SYS_* is a compile error, "which is the right answer".
+
+   THIS ARM EXISTS BECAUSE BOTH NEIGHBOURS WERE WRONG FOR wasm32, in opposite
+   directions, within one commit. Until 2026-09-19 a wasm32 build predefined
+   `__x86_64__` (cpreproc.inc fell through to the x86-64 arm for any target
+   added after that chain was written), so it took the FIRST arm here and got
+   the x86-64 __NR_ table -- and `src/sys/select.c`, which guards on
+   `#if defined(SYS_select) && defined(__x86_64__)`, compiled a syscall body
+   for a target with no syscalls instead of its own ENOSYS refusal. Giving
+   wasm32 its own `__wasm32__`/`__wasm__` identity fixed the predefine and
+   moved it into the `#else` below, which is the XTENSA-LINUX table -- a
+   second wrong answer wearing the shape of a default. A chain whose last arm
+   is one specific target's data has no default, and the fix for a new member
+   is its own arm, not a better fallback.
+
+   What a caller gets now: crtl's syscall-guarded bodies take their
+   preprocessor `#else` arms and refuse at runtime with ENOSYS, which is what
+   src/sys/select.c's last arm was written for and says so in its own comment.
+   A wasm32 program that wants a kernel service wants a WASI import instead. */
+
 #else
 /* xtensa-linux. NOT from a kernel header -- there is none on this box for this
    target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by

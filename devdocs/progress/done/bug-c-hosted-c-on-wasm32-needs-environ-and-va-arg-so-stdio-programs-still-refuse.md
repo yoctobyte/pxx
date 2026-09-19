@@ -3,12 +3,12 @@ slug: bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-
 track: C
 type: bug
 prio: 40
-status: open
+status: done
 found: 2026-09-06
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "**WALL B (va_arg) IS DONE 2026-09-19 (frankB) and is NOT inert -- it is RUN.** wasm32 now defines, calls and reads a C variadic function: the caller marshals the tail into a shadow-stack area (packed 4-byte slots, an 8-byte scalar taking two, no 8-alignment -- the layout __pxx_va_arg_cross32 already walks for i386-cdecl) and hands it over as a trailing i32 reserved at index ParamCount, before the aggregate-dest slot; the callee stores it into __va_overflow at body entry, where the parameter locals exist. NO NEW READER: wasm32 joined the four 32-bit sets in cparser.inc with reg-save size 0, like i386. VERIFIED BY RUNNING IT: test/c_wasm32_variadic.c exercises five shapes -- 3 ints, 4/8/8 interleaved twice, an EMPTY tail, a variadic call nested INSIDE a variadic tail, and five named params before the tail -- and exits 42 under both gcc and wasmtime, with a positive control (two expectations perturbed -> 18) and a negative control (the pinned compiler refuses the same source). 61 wasm32 sources unchanged: 60 compile, one carries the pre-existing main$0 gap with identical text, one unrelated SetSignalHandler refusal. NOT done on purpose: an aggregate in the variadic tail is REFUSED by name (cparser reads it as a pointer here, so marshalling the bytes would validate and round-trip wrong), and WasmEmitCallInd is untouched so an INDIRECT variadic call still hits the old `passes more than its N parameters`. **THE REMAINING WALLS ARE TWO AND NEITHER IS ABOUT VARIADICS.** Re-measured the same day: hosted printf now dies at MAX_WASM_BODY_VARS=288 in crtl stdio.c; raising that to 2048 gets a whole MODULE and wasmtime then refuses to instantiate on exactly ONE unresolved import of eighteen (seventeen are WASI) -- __pxx_fegetround, which EmitCFenvStubs emits as raw machine code and cannot for a target that has none. **So do not raise the bound alone**: it trades a named COMPILE refusal for a link failure at instantiation, which is later and worse. The raise and a wasm32 fenv stub land together. Both probes reverted, compiler rebuilt byte-identical to f104f4b22922. Wall A (environ) is still INERT and still unasserted -- run a getenv program the day those two land."
+summary: "**FULLY DISCHARGED 2026-09-19 (frankB). Hosted C RUNS on wasm32: `#include <stdio.h>` + `printf(\"hello\\n\")` builds, instantiates and prints under wasmtime, eighteen imports down to seventeen and all of them WASI.** Four walls, and the count was wrong in the flattering direction twice before this: B (va_arg) landed in 4b51f89fa; C, D and TWO WALLS NOBODY HAD SEEN landed together today. C -- MAX_WASM_BODY_VARS -- was BISECTED, not guessed: the subject refuses at 296 and builds at 304, so 288 was short by at most sixteen and both earlier probes reaching for 2048 were a rounding error; it is 1024, bounded by WasmAddLocal's O(n^2) dedupe scan rather than by wasm. D -- __pxx_fegetround -- is now C in lib/crtl/src/fenv.c, auto-pulled by stdio.c's `#include <fenv.h>`, with fesetround refusing every mode but FE_TONEAREST rather than answering success; the cparser guard was NOT split, because the wasm32 fenv bodies come from crtl instead. **WALL E, unseen: wasm32 was predefining `__x86_64__`** -- it fell through cpreproc's arch chain into the x86-64 arm, the exact defect that block's own comment describes, and got ILP32 `long` alongside it. Our own sys/syscall.h then handed it the x86-64 __NR_ table, so `#ifdef SYS_select` was true for a machine with no syscall instruction. `__wasm__`/`__wasm32__` alone dropped it into that header's `#else`, which is the XTENSA table and not a default -- a second wrong answer wearing the shape of one -- so wasm32 got an explicit arm naming no numbers. **WALL A ASSERTED FOR THE FIRST TIME and it was not where this ticket said**: `environ` was already populated correctly from WASI; crtl's getenv read /proc/self/environ, which WASI does not have. pxx_env_load now falls back to walking `environ`, /proc FIRST so no target with a readable one changes behaviour. tools/run_target.sh passes `-S inherit-env`, without which a getenv subject passes on six arches and fails on one for a reason about the RUNNER. One real compiler bug fell out of the first program that could print: [[bug-a-wasm32-picks-signed-division-for-an-unsigned-64-bit-value]]. Guards: test/c_wasm32_hosted_stdio.c diffed whole against gcc, and tools/c_va_arg_every_target.sh now reports **7 built, 0 refused** with its admitted-refusal list DELETED and its floor raised to 7. 61 wasm32 Pascal sources unchanged: 59 clean, the pre-existing main$0 gap with identical text, one unrelated SetSignalHandler refusal."
 ---
 
 # Hosted C on wasm32: environ and va_arg
@@ -437,3 +437,115 @@ neither admitted set. The admitted list gained that spelling **by name**, with
 the C-and-D reasoning beside it, and the script still reports
 `6 built, 1 refused at a named wall, 7 examined`. The alternative — `grep -q
 error:` — is the check that cannot fail.
+
+## WORKED 2026-09-19 (frankB) — C, D, and the three walls behind them
+
+C and D were taken as one piece on frankuser's dispatch, on the measurement in
+the section above: C alone trades a named compile refusal for a link failure at
+instantiation, which is later and worse. They were not the last two walls; they
+were the first two of five.
+
+### C — the bound was bisected, and both earlier probes had guessed
+
+`MAX_WASM_BODY_VARS` was 288. The two probes recorded in this ticket both
+reached for **2048**. Measured instead, on crtl `stdio.c` as the subject:
+
+| bound | result |
+| --- | --- |
+| 296 | `pascal26:3: error: wasm: too many params+locals` |
+| 304 | ok |
+| 312 | ok |
+
+So 288 was short **by at most sixteen**. It is 1024 now — headroom, with the
+reason for not going further being `WasmAddLocal`'s linear dedupe scan, which is
+O(n²) in one body. Both `WasmFail` sites now name the limit and say it is ours
+rather than wasm's, because `too many params+locals` alone told a reader nothing
+they could act on.
+
+**The forward declaration for `WasmIntStr` moved with them.** Naming the limit in
+the message made `WasmAddParamName` the FIRST caller, ten lines above the
+`forward;` that already covered the second. pxx resolves across the unit and FPC
+resolves in source order, so that self-hosts and breaks the bootstrap seed —
+caught by `gate.sh quick`'s FPC seed canary, which is the one instrument that
+sees this class.
+
+### D — the fenv bodies come from crtl C, and the guard was not split
+
+This ticket told whoever took D to split `EmitCSetjmpStubs` from
+`EmitCFenvStubs` at the two `if TargetArch <> TARGET_WASM32` sites. **That was
+not done, and it should not be**: splitting the guard would have wasm32 emit raw
+machine code for `fegetround`, which is the thing it cannot do. The bodies are C
+now — `lib/crtl/src/fenv.c`, under `#if defined(__wasm__)` — pulled in
+automatically by `CPAutoPullCrtlImpl` because `stdio.c` includes `<fenv.h>`.
+
+`__pxx_fegetround` returns `FE_TONEAREST`, which on a machine with exactly one
+rounding mode is the truth. `__pxx_fesetround` returns 0 **only** for
+`FE_TONEAREST` and −1 otherwise: the half that must not silently answer success.
+
+### E — wasm32 was predefining `__x86_64__`
+
+Not on anyone's list. `compiler/cpreproc.inc`'s arch chain had no wasm32 arm, so
+wasm32 fell through to the x86-64 one — the defect that block's own comment
+describes, in the target added after the comment was written — and got
+`__x86_64__` together with `__SIZEOF_LONG__ 4`. An incoherent pair, and our own
+headers read it: `lib/crtl/include/sys/syscall.h` handed wasm32 the x86-64
+`__NR_` table, so `#ifdef SYS_select` was true for a machine with no syscall
+instruction and `src/sys/select.c` compiled the syscall arm instead of its
+`ENOSYS` refusal.
+
+Adding `__wasm__`/`__wasm32__` moved it to that header's `#else` — **which is
+the xtensa table, not an empty default.** A second wrong answer in the shape of
+one. `select.c`'s own comment asserts that `<sys/syscall.h>` names no numbers
+for arm32 and xtensa; arm32 has its own arm and xtensa is the `#else`. **A chain
+whose last arm is one target's data has no default**, so wasm32 got an explicit
+arm naming no numbers.
+
+`__wasi__` is deliberately NOT defined: we target wasm32 through WASI's syscalls
+but do not claim the wasi-libc environment, and code guarded on `__wasi__`
+expects that libc's headers.
+
+Identity probe: HEAD 42, the pinned compiler 107.
+
+### A — asserted at last, and it was not `environ`
+
+This ticket has said since 2026-09-06 that wall A was *"built, never executed"*
+and asked for a `getenv` program the day the others landed. Run:
+
+- `environ` **was already correct.** A probe walking it printed every variable
+  the runner passed. `WasmEmitEnvironFetch` has been right the whole time.
+- `getenv` returned `(null)`. crtl's `pxx_env_load` reads `/proc/self/environ`,
+  which WASI does not provide. **Two environments in one program that never
+  spoke.**
+
+`lib/crtl/src/stdlib.c` now falls back to walking `extern char **environ;` when
+that open fails, bounded by `PXX_ENV_BUFSZ`. Deliberately /proc-FIRST, which is
+strictly additive: no target with a readable `/proc/self/environ` changes
+behaviour at all. `environ`-first is arguably better and is **unmeasured** —
+initializer ordering across targets decides it, and nothing here established
+that.
+
+### The runner, which is the row worth saying loudest
+
+`tools/run_target.sh`'s wasm32 arm now runs `wasmtime -S inherit-env`. WASI is
+deny-by-default for the environment; every qemu arm inherits the host's by
+construction. Without the flag a `getenv` subject **passes on six arches and
+fails on one, for a reason about the RUNNER** — and this repo's most expensive
+shape is a harness difference wearing the clothes of a target defect. It was one
+step away from being filed as one.
+
+### The guard stopped admitting refusals
+
+`tools/c_va_arg_every_target.sh` reported `6 built, 1 refused at a named wall, 7
+examined` before this. It now reports **7 built, 0 refused, 7 examined**: the
+admitted-refusal list is DELETED rather than extended, that branch `fail`s and
+names regression-or-new-target, and the floor rose from `-ge 6` to `-ge 7`.
+Leaving spellings in a list that no target can produce is how a guard stops
+being able to fail.
+
+The pinned compiler still fails it by name — the negative control holds.
+
+### One real compiler bug fell out of this
+
+The first hosted C program that could print printed its integers wrong above
+2^63: [[bug-a-wasm32-picks-signed-division-for-an-unsigned-64-bit-value]].
+Fixed and guarded on all seven targets in the same commit.

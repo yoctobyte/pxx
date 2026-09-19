@@ -83,8 +83,34 @@ const
     `MAX_PROC_PARAMS + 255` here compiled fine inside the compiler and broke
     the selftest with `not a constant` — the same prohibition, violated the
     same way, within an hour of writing it down. 32 is MAX_PROC_PARAMS today;
-    the rest is headroom for the backend's own locals. }
-  MAX_WASM_BODY_VARS = 288;
+    the rest is headroom for the backend's own locals.
+
+    RAISED 288 -> 1024 on 2026-09-19, and the number is DERIVED rather than
+    round. 288 was the wall a hosted C program hit: crtl's stdio.c has one
+    body that does not fit, and it was bisected rather than guessed —
+    `#include <stdio.h>` + printf refuses at 296 and builds at 304, so the
+    old ceiling was short by AT MOST SIXTEEN. That is worth saying plainly,
+    because "raise it to 2048" was the shape of the first two probes and the
+    real miss was a rounding error.
+
+    1024 is ~3.4x the measured high-water and not more, because this number
+    is not free in the way its byte cost suggests. The bytes are trivial
+    (WFLoc 1 + WFVar 8 = 9 per entry, so 288 -> 1024 is 6,624 more bytes of
+    compiler BSS against 86.9MB). The cost that scales is WasmAddLocal's
+    dedupe, which is a LINEAR SCAN of WFVar per local added — O(n^2) string
+    comparisons in one body — so a ceiling in the tens of thousands would
+    make a pathological body slow rather than refusing it. If a real program
+    ever needs more than a thousand params+locals in one function, replace
+    the scan before replacing the number.
+
+    AND IT DID NOT LAND ALONE, deliberately. Raising this bound is what lets
+    a hosted C module be BUILT, and a module that builds then fails to
+    instantiate on an unresolved import is a worse report than a compile-time
+    refusal — later, and invisible to every guard that reads a build's
+    diagnostic. The __pxx_fegetround body (lib/crtl/src/fenv.c) landed in the
+    same commit for that reason.
+    bug-c-hosted-c-on-wasm32-needs-environ-and-va-arg-so-stdio-programs-still-refuse }
+  MAX_WASM_BODY_VARS = 1024;
   MAX_WASM_CODE      = 8 * 1024 * 1024;   { flattened body-instruction pool }
   MAX_WASM_IMPORTS   = 1024;
   MAX_WASM_BODY_CALL = 65536;             { `call`s in one body }
@@ -417,6 +443,14 @@ begin
   WasmIndexOfSlot := WasmImpFuncCount + slot;
 end;
 
+{ WasmIntStr is defined near the bottom of this file and the first CALLER is
+  now the params ceiling message below, not WasmAddLocal's. FPC resolves in
+  source order and pxx resolves across the unit, so a forward that sits
+  between two callers self-hosts and breaks the bootstrap seed -- which is
+  precisely what gate.sh's FPC seed canary caught here. Keep this ABOVE the
+  first caller, not above the second. }
+function WasmIntStr(v: Int64): AnsiString; forward;
+
 { Name a PARAMETER of the most recently added function. Call once per param, in
   order, before any WasmAddLocal — params occupy the low local indices. }
 { Name the next parameter of the body being built. Params are named before any
@@ -424,7 +458,13 @@ end;
   locals, in one index space. }
 procedure WasmAddParamName(const nm: AnsiString);
 begin
-  if WFVarLen > High(WFVar) then WasmFail('wasm: too many params+locals');
+  { NAME THE CEILING. `too many params+locals` alone told a reader nothing
+    they could act on -- not what the limit is, not that it is OURS rather
+    than wasm's. wasm itself allows far more; this is MAX_WASM_BODY_VARS in
+    this file, and a reader who knows that can raise it. }
+  if WFVarLen > High(WFVar) then
+    WasmFail('wasm: too many params+locals in one body (limit '
+             + WasmIntStr(MAX_WASM_BODY_VARS) + ', ours not wasm''s)');
   WFVar[WFVarLen] := nm;
   Inc(WFVarLen);
 end;
@@ -434,8 +474,6 @@ end;
   Returns the local INDEX (params first), which is what local.get/set take. }
 { Add a local to the body being built; returns its index in the params-then-
   locals numbering. }
-function WasmIntStr(v: Int64): AnsiString; forward;
-
 { Add a local and NAME it uniquely within this body.
 
   The uniqueness is not cosmetic. Locals are INDICES in the binary, so a
@@ -458,7 +496,8 @@ function WasmAddLocal(vt: Byte; const nm: AnsiString): Integer;
 var i: Integer; unique: AnsiString;
 begin
   if (WFLocLen > High(WFLoc)) or (WFVarLen > High(WFVar)) then
-    WasmFail('wasm: too many params+locals');
+    WasmFail('wasm: too many params+locals in one body (limit '
+             + WasmIntStr(MAX_WASM_BODY_VARS) + ', ours not wasm''s)');
   unique := nm;
   for i := 0 to WFVarLen - 1 do
     if WFVar[i] = nm then

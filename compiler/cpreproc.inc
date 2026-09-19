@@ -3407,6 +3407,34 @@ begin
     CPAddLiteral('__xtensa__', '01');
     CPAddLiteral('__XTENSA__', '01');
   end
+  else if TargetArch = TARGET_WASM32 then
+  begin
+    { wasm32 FELL INTO THE x86-64 ARM UNTIL 2026-09-19, which is precisely the
+      defect the paragraph above describes, in the target added after it was
+      written. A wasm32 build predefined `__x86_64__` AND `__SIZEOF_LONG__ 4`
+      (the data-model block below keys on the arch list, not on this chain, and
+      was right) -- an incoherent pair, because every `#ifdef __x86_64__` arm in
+      real code assumes an 8-byte long beside it.
+
+      Measured in our own crtl at the moment of the fix: four places branch on
+      `__x86_64__`, and two of them decided real behaviour for wasm32.
+      `sys/syscall.h` handed it the x86-64 __NR_ table, so `#ifdef SYS_select`
+      was TRUE for a target with no syscall instruction at all, and
+      `src/sys/select.c` therefore compiled the syscall arm instead of its own
+      ENOSYS refusal -- the exact shape sched.c's header warns about, one file
+      away. With this arm the chain falls to syscall.h's `#else`, which names no
+      numbers on purpose, and select() refuses loudly.
+
+      `__wasm__` and `__wasm32__` are what clang predefines for the
+      wasm32-unknown-unknown triple. **`__wasi__` is deliberately NOT here**,
+      even though our modules do import wasi_snapshot_preview1 and export
+      `_start`: clang defines it for the wasm32-WASI triple, where it asserts
+      the wasi-libc surface. We provide our own crtl over raw WASI imports, so
+      claiming it would send real code down a libc path we do not have.
+      Retire that decision the day a program can link against wasi-libc here. }
+    CPAddLiteral('__wasm__', '01');
+    CPAddLiteral('__wasm32__', '01');
+  end
   else
   begin
     CPAddLiteral('__x86_64__', '01');

@@ -161,10 +161,27 @@ case "$arch" in
     # interactive PATH but not on the default one a non-login shell inherits,
     # so resolve it explicitly rather than failing with "not found" on a box
     # that has it.
+    #
+    # `-S inherit-env` MAKES THIS ARM AGREE WITH THE OTHER SIX, and that is why
+    # it is here rather than in a caller. Every qemu arm above inherits the
+    # host environment by construction and so does a native run, while WASI is
+    # deny-by-default: without this flag a module sees an EMPTY environment, so
+    # a subject calling getenv() passes on six arches and fails on one, for a
+    # reason about the RUNNER and not about the target. That is this repo's
+    # standing failure -- an absence belonging to the instrument, read as an
+    # absence in the world -- and it is exactly what nearly got recorded when
+    # hosted C first ran on wasm32 on 2026-09-19: getenv answered (null) there
+    # while `environ` was demonstrably populated. (The real defect that day was
+    # crtl's getenv reading /proc/self/environ; this flag is what lets a test
+    # tell the two apart at all.)
+    #
+    # It is a TEST RUNNER, not a sandbox. If something here ever needs a module
+    # run with a controlled environment, pass --env explicitly at that call
+    # site rather than taking this away from every other caller.
     if command -v wasmtime >/dev/null 2>&1; then
-      exec wasmtime "$bin" "$@"
+      exec wasmtime -S inherit-env "$bin" "$@"
     elif [ -x "$HOME/.local/bin/wasmtime" ]; then
-      exec "$HOME/.local/bin/wasmtime" "$bin" "$@"
+      exec "$HOME/.local/bin/wasmtime" -S inherit-env "$bin" "$@"
     else
       runner_absent "wasmtime" "Looked on PATH and in ~/.local/bin. This is a host gap, not a result about wasm32."
     fi

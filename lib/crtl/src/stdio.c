@@ -33,6 +33,13 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>   /* strerror, for %m */
+#include <fenv.h>     /* __pxx_fegetround, for the rounding decision at the cut.
+                         A bare `extern` sat at its use below until 2026-09-19;
+                         the include is what auto-pulls src/fenv.c, which is
+                         where wasm32's definition lives -- that target has no
+                         machine code for EmitCFenvStubs to write, so the symbol
+                         was otherwise an unresolved import in every hosted
+                         module. Preprocesses to nothing everywhere else. */
 
 #ifndef EOF
 #define EOF (-1)
@@ -224,7 +231,6 @@ static int __crtl_dexp_rest(const struct __crtl_dexp *x, int p) {
    settle ties, so ties-to-even-always broke (1.005).toFixed(2)). `neg` = value
    sign, `d` = first dropped digit, `rest` = nonzero digits beyond it, `odd` =
    last kept digit is odd. The expansion is exact, so every test is exact. */
-extern int __pxx_fegetround(void);
 static int __crtl_round_carry(int neg, int d, int rest, int odd) {
   int mode = __pxx_fegetround();
   if (mode == 0x400) return neg && (d > 0 || rest);     /* FE_DOWNWARD  */
