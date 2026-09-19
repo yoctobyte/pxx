@@ -36,3 +36,6 @@ pascal26:19: error: __thread errno: the per-thread variable area is full (0 byte
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — the borg watcher saw `test-nilpy#src:test/test_cpyext_hello.npy` GREEN at 361c03dc6ded (tier full) and did NOT close this: this is a repeat stub (`regression-test-nilpy-test-cpyext-hello-2`, not `regression-test-nilpy-test-cpyext-hello`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
