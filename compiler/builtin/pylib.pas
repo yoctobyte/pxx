@@ -2581,6 +2581,22 @@ type
 var
   PyPowHook: TPyPowFn;
 function pymath_modf(x: Double): TPyList;
+{ math.frexp / math.isqrt / math.isfinite — the three of the ticket's four
+  "exact operations, no rounding question" that were still missing (ldexp
+  already resolved, by luck rather than by design: NilPy's `import math` binds
+  the PASCAL unit case-insensitively and Pascal's Ldexp happens to take
+  CPython's argument shape. Pascal's Frexp does NOT — it is a procedure with
+  two var out-params, where CPython returns a PAIR — so `math.frexp(8.0)`
+  refused with "no overload of frexp matches these arguments", a Pascal
+  sentence for someone who wrote Python. An intercept here stops the Pascal
+  routine being reached at all.)
+  All three are libm-free — bit reads and integer arithmetic — which is what
+  lets them live in a BUILTIN unit, the constraint that keeps log/pow/atan2 out
+  of this table (see pyparser.inc's note beside math.log).
+  feature-nilpy-math-module-twelve-absent-names-measured }
+function pymath_frexp(x: Double): TPyList;
+function pymath_isqrt(n: Int64): Int64;
+function pymath_isfinite(x: Double): Boolean;
 { VARIANT parameters, not TPyList, for the reason dict.fromkeys carries: the
   stdlib call site builds these BY NAME and cannot resolve by type, so a str
   argument went straight into a TPyList slot and was dereferenced as an object.
@@ -7980,6 +7996,86 @@ begin
   Result.FKind := PYSEQ_TUPLE;
   Result.append(x - ip);
   Result.append(ip);
+end;
+
+{ The mantissa/exponent split, x = mantissa * 2**exponent with the mantissa in
+  [0.5, 1). Algorithm taken from lib/rtl/math.pas's Frexp, which this cannot
+  CALL — pylib is a builtin unit and `uses math` from here would put the RTL's
+  Min/Max/Power beside pylib's own overloads — so it is duplicated on purpose
+  and the two must stay in step. SUBNORMALS are the reason for the 2**64 step:
+  a subnormal has a zero exponent field and no implicit leading 1, so without
+  scaling the whole subnormal range reports exponent -1022 with a mantissa far
+  below 0.5. Zero, NaN and Inf answer (x, 0), which is CPython's own contract. }
+function pymath_frexp(x: Double): TPyList;
+const
+  TWO_POW_64 = 18446744073709551616.0;
+var
+  bits, e, expn: Int64;
+  adj: Integer;
+  v, mant: Double;
+begin
+  Result := TPyList.Create;
+  Result.FKind := PYSEQ_TUPLE;
+  v := x;
+  bits := PInt64(@v)^;
+  if (x = 0.0) or (((bits shr 52) and $7FF) = $7FF) then
+  begin
+    Result.append(x);
+    Result.append(Int64(0));
+    Exit;
+  end;
+  adj := 0;
+  e := (bits shr 52) and $7FF;
+  if e = 0 then
+  begin
+    v := v * TWO_POW_64;
+    adj := -64;
+    bits := PInt64(@v)^;
+    e := (bits shr 52) and $7FF;
+  end;
+  expn := e - 1022 + adj;
+  bits := (bits and $800FFFFFFFFFFFFF) or (Int64(1022) shl 52);
+  mant := PPyDouble(@bits)^;
+  Result.append(mant);
+  Result.append(expn);
+end;
+
+{ The integer square root: the largest r with r*r <= n, EXACT by definition.
+  Pure integer arithmetic (the classic restoring bit algorithm), never a float
+  sqrt rounded back — at 2**53 and above a double cannot represent n, so the
+  float route answers a neighbour and the "exact by definition" contract is
+  exactly what would be lost. CPython raises ValueError on a negative. }
+function pymath_isqrt(n: Int64): Int64;
+var
+  res, bit, num: Int64;
+begin
+  if n < 0 then
+    raise ValueError.Create('isqrt() argument must be nonnegative');
+  num := n;
+  res := 0;
+  bit := Int64(1) shl 62;
+  while bit > num do bit := bit shr 2;
+  while bit <> 0 do
+  begin
+    if num >= res + bit then
+    begin
+      num := num - (res + bit);
+      res := (res shr 1) + bit;
+    end
+    else
+      res := res shr 1;
+    bit := bit shr 2;
+  end;
+  Result := res;
+end;
+
+{ not (isnan(x) or isinf(x)) — one read of the exponent field rather than two
+  calls, and it is a PREDICATE, so there is no rounding question. }
+function pymath_isfinite(x: Double): Boolean;
+var bits: Int64;
+begin
+  bits := PInt64(@x)^;
+  Result := ((bits shr 52) and $7FF) <> $7FF;
 end;
 
 { math.prod — the product, and an INT when every element is an int (CPython

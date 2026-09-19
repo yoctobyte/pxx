@@ -1,0 +1,23 @@
+frexp(8.0)                     (0.5, 4)
+frexp(0.0)                     (0.0, 0)
+frexp(-0.75)                   (-0.75, 0)
+frexp(1.0)                     (0.5, 1)
+frexp(5e-324) subnormal        (0.5, -1073)
+frexp(inf)                     (inf, 0)
+isqrt(0)                       0
+isqrt(1)                       1
+isqrt(16) perfect square       4
+isqrt(17) just above           4
+isqrt(24) just below           4
+isqrt(25) perfect square       5
+isqrt(2**53+1)                 94906265
+isqrt(2**62)                   2147483648
+isfinite(1.0)                  True
+isfinite(-0.0)                 True
+isfinite(inf)                  False
+isfinite(-inf)                 False
+isfinite(nan)                  False
+ldexp(*frexp(123.456))         123.456
+ldexp(*frexp(-1e-300))         -1e-300
+isqrt(-4)                      ValueError
+MATHEXACT OK

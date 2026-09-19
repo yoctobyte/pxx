@@ -1587,6 +1587,19 @@ test-nilpy: $(COMPILER)
 	# "not None" or "falsy" passes on the bug. Built with ./$(COMPILER), not
 	# $(PXX_STABLE) -- the pin predates the fix. CPython is the oracle.
 	# bug-n-an-attribute-on-a-scalar-receiver-answers-the-receiver-instead-of-raising
+	# math.frexp / math.isqrt / math.isfinite — EXACT operations, so none of them
+	# inherits the "do not map a 1-ulp-off RTL routine" policy. frexp is also the
+	# CARRIER control: NilPy's `import math` binds the same-named PASCAL unit
+	# case-insensitively, so math.ldexp reached Pascal's Ldexp and AGREED by luck
+	# while math.frexp reached Pascal's `procedure Frexp(x; var m; var e)` and
+	# refused -- CPython returns a PAIR. Neither was written as a Python entry
+	# point. Each row here must be answered by the intercept, not the Pascal
+	# routine. Subnormal, inf, 2**53+1 and the ldexp(*frexp(x)) round trip are
+	# the rows that separate an exact implementation from a plausible one.
+	# Built with ./$(COMPILER): the pin cannot even compile this file.
+	# feature-nilpy-math-module-twelve-absent-names-measured
+	./$(COMPILER) test/test_nilpy_math_frexp_isqrt_isfinite_are_exact.npy $(TESTTMP)/test_nilpy_mathexact26
+	$(TESTTMP)/test_nilpy_mathexact26 | diff -u test/test_nilpy_math_frexp_isqrt_isfinite_are_exact.expected -
 	./$(COMPILER) test/test_nilpy_an_attribute_on_a_scalar_raises_rather_than_answering_garbage.npy $(TESTTMP)/test_nilpy_scalarattr26
 	$(TESTTMP)/test_nilpy_scalarattr26 | diff -u test/test_nilpy_an_attribute_on_a_scalar_raises_rather_than_answering_garbage.expected -
 	./$(COMPILER) test/test_nilpy_dynamic_dispatch_on_a_classref_receiver_does_not_walk_rtti.npy $(TESTTMP)/test_nilpy_clsref_rtti

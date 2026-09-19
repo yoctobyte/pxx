@@ -13850,6 +13850,17 @@ begin
   else if dotted = 'math.log10' then Result := 'Log10'
   else if dotted = 'math.log2' then Result := 'Log2'
   else if dotted = 'math.modf' then Result := 'pymath_modf'
+  { frexp/isqrt/isfinite — EXACT operations, no rounding question, so none of
+    them inherits the "do not map a 1-ulp-off RTL routine" policy that keeps
+    the transcendentals out of this table. frexp is here for a second reason:
+    without it the name resolved to Pascal's `procedure Frexp(x; var m; var e)`
+    through the case-insensitive unit binding and refused with "no overload of
+    frexp matches these arguments", because CPython returns a PAIR. That is the
+    carrier reaching a routine nobody wrote for it.
+    feature-nilpy-math-module-twelve-absent-names-measured }
+  else if dotted = 'math.frexp' then Result := 'pymath_frexp'
+  else if dotted = 'math.isqrt' then Result := 'pymath_isqrt'
+  else if dotted = 'math.isfinite' then Result := 'pymath_isfinite'
   else if dotted = 'math.prod' then Result := 'pymath_prod'
   else if dotted = 'math.fsum' then Result := 'pymath_fsum'
   else if dotted = 'math.perm' then Result := 'pymath_perm'
