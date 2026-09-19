@@ -7809,6 +7809,36 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh aarch64/test_varm "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_varm_a64)" "$$($(TESTTMP)/test_varm26)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_every_variant_arm_starts_at_the_same_offset.pas $(TESTTMP)/test_varm_xt
 	tools/expect_same.sh xtensa/test_varm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_varm_xt)" "$$($(TESTTMP)/test_varm26)"
+	# A PACKED RECORD'S FIELDS READ AND WRITE AT ANY OFFSET.
+	# bug-a-xtensa-unaligned-packed-record-field-access-faults. xtensa's l32i/
+	# s32i/l16ui/l16si FAULT on a misaligned address -- SIGBUS, not a slow
+	# absorb -- so `r.I := n` on a packed record died on the PRIMARY ESP target.
+	# THE PREDICATE IS THE RECORD'S OFFSETS, NOT THE `packed` KEYWORD, and it is
+	# all-or-nothing per record: element 1 of an `array[0..3] of TPk` starts at
+	# base+7, so a per-field offset rule is correct for the first element and
+	# wrong for the rest. The last group walks that array for exactly that
+	# reason. arm32 was in this too and the ticket had recorded it as unaffected:
+	# its INTEGER paths are two plain `ldr`s and ARMv7 absorbs those, but a
+	# Double field went through `vldr d0,[r0]`, which does not -- so only the
+	# float row faulted, which is why a fixture without one reports arm32 clean.
+	# Every row is a VALUE; the cross rows compare against the x86-64 run of the
+	# same source, because where the fields LAND differs legitimately per target.
+	./$(COMPILER) test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld26
+	tools/expect_same.sh test_pkfld26 "$$($(TESTTMP)/test_pkfld26)" "$$(printf 'B=1 I=-123456789 W=65535 size=7\nafter +1 I=-123456788\nTag=9 Q=-1234567890123456789 S=-30000 C=-100 size=20\nD=2.5000\nafter +1 S=-29999 C=-99\nnested Lead=7 B=2 I=999999 W=258 size=8\narray of packed records round-trips: TRUE\nelement 3 I=1000003 W=1003\nclass field B=3 I=-2000000 W=40000 self-ref nil: TRUE')"
+	./$(COMPILER) --target=i386 test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_i386
+	tools/expect_same.sh i386/test_pkfld "$$(tools/run_target.sh i386 $(TESTTMP)/test_pkfld_i386)" "$$($(TESTTMP)/test_pkfld26)"
+	./$(COMPILER) --target=arm32 test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_arm32
+	tools/expect_same.sh arm32/test_pkfld "$$(tools/run_target.sh arm32 $(TESTTMP)/test_pkfld_arm32)" "$$($(TESTTMP)/test_pkfld26)"
+	./$(COMPILER) --target=riscv32 test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_rv32
+	tools/expect_same.sh riscv32/test_pkfld "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_pkfld_rv32)" "$$($(TESTTMP)/test_pkfld26)"
+	./$(COMPILER) --target=aarch64 test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_a64
+	tools/expect_same.sh aarch64/test_pkfld "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_pkfld_a64)" "$$($(TESTTMP)/test_pkfld26)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_xt
+	tools/expect_same.sh xtensa/test_pkfld "$$(tools/run_target.sh xtensa $(TESTTMP)/test_pkfld_xt)" "$$($(TESTTMP)/test_pkfld26)"
+	# BOTH xtensa ABIs. The unaligned helpers build in a8/a9, which the windowed
+	# ABI also uses for its own purposes -- the row that would catch a clash.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_a_packed_record_field_reads_and_writes_at_any_offset.pas $(TESTTMP)/test_pkfld_xtw
+	tools/expect_same.sh xtensa-windowed/test_pkfld "$$(tools/run_target.sh xtensa $(TESTTMP)/test_pkfld_xtw)" "$$($(TESTTMP)/test_pkfld26)"
 	# The other three REFUSE this shape by name. Asserted, not assumed: a refusal
 	# that silently became a miscompile is exactly the transition riscv32 and
 	# xtensa had already made when nobody was asserting them. These rows pin the

@@ -567,6 +567,17 @@ begin
   Result := (tk = tyInt64) or (tk = tyUInt64);
 end;
 
+function Arm32AddrIsRagged(addrNode: Integer): Boolean;
+{ The same bit xtensa reads, and it is set by the FRONTEND half of the fix
+  (IRFieldRaggedBit in symtab.inc), so it is target-agnostic: it says this
+  address came from a field of a record whose own offsets are not naturally
+  aligned. arm32 only needs it for the VFP arms -- its integer loads and
+  stores are plain `ldr`/`str`, which ARMv7 absorbs. }
+begin
+  Arm32AddrIsRagged := (addrNode >= 0) and (IRKind[addrNode] = IR_FIELD) and
+                       (IRC[addrNode] = 1);
+end;
+
 procedure EmitLoadVar64Arm32(idx: Integer);
 { Load an 8-byte slot into r0:r1 (lo:hi). r9 is the address scratch. }
 begin
@@ -4002,6 +4013,35 @@ begin
         tk := IntToTypeKind(IRTk[node]);
         if TypeIsFloat(tk) then
         begin
+          { A FLOAT FIELD OF A PACKED RECORD CANNOT GO THROUGH vldr. The VFP
+            load requires a word-aligned address and BUS-ERRORS otherwise, so a
+            `packed record` with a Double at an odd offset faulted here exactly
+            as it did on xtensa -- arm32's INTEGER paths already survive it,
+            because they are two plain `ldr`s and ARMv7 absorbs a misaligned
+            word load, which is why only the float row failed and why the
+            original ticket recorded arm32 as unaffected.
+
+            The route out is the integer file: load the words with the same
+            `ldr`s the Int64 arm uses, then move them into d0/s0. Nothing here
+            is a wider alignment claim -- it is the SAME two loads that were
+            already correct one arm over.
+            bug-a-xtensa-unaligned-packed-record-field-access-faults }
+          if Arm32AddrIsRagged(IRA[node]) then
+          begin
+            if tk = tySingle then
+            begin
+              EmitI32($E5901000);  { ldr r1, [r0] }
+              EmitI32($EE001A10);  { vmov s0, r1 }
+              EmitI32($EEB70AC0);  { vcvt.f64.f32 d0, s0 }
+            end
+            else
+            begin
+              EmitI32($E5901004);  { ldr r1, [r0, #4]  (hi first; r0 is the addr) }
+              EmitI32($E5900000);  { ldr r0, [r0]      (lo) }
+              EmitI32($EC410B10);  { vmov d0, r0, r1 }
+            end;
+            Exit;
+          end;
           if tk = tySingle then
           begin
             EmitI32($ED900A00);  { vldr s0, [r0] }
@@ -4169,6 +4209,24 @@ begin
           IREmitNodeArm32(IRA[node]);               { address -> r0 }
           InLValueWrite := savedLValueWrite;
           EmitI32($ECBD0B02);                       { vpop {d0} }
+          if Arm32AddrIsRagged(IRA[node]) then
+          begin
+            { the store twin of the ragged float LOAD above; vstr has the same
+              alignment requirement vldr does }
+            if tk = tySingle then
+            begin
+              EmitI32($EEB70BC0);                   { vcvt.f32.f64 s0, d0 }
+              EmitI32($EE101A10);                   { vmov r1, s0 }
+              EmitI32($E5801000);                   { str r1, [r0] }
+            end
+            else
+            begin
+              EmitI32($EC521B10);                   { vmov r1, r2, d0 }
+              EmitI32($E5801000);                   { str r1, [r0] }
+              EmitI32($E5802004);                   { str r2, [r0, #4] }
+            end;
+            Exit;
+          end;
           if tk = tySingle then
           begin
             EmitI32($EEB70BC0);                     { vcvt.f32.f64 s0, d0 }

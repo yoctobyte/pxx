@@ -77,6 +77,11 @@ begin
 end;
 
 function DeclVisible(declUnit: Integer): Boolean; forward;
+{ RecHasMisalignedFieldDepth calls this from ABOVE its body. pxx prescans and
+  does not care; FPC resolves in source order, so the seed build breaks without
+  this. Caught by gate.sh quick's FPC seed canary and by nothing else.
+  bug-a-xtensa-unaligned-packed-record-field-access-faults }
+function TypeFieldAlign(tk: TTypeKind): Integer; forward;
 function DeclVisibleSect(declUnit: Integer; declInImpl: Boolean;
                         tab, row: Integer): Boolean; forward;
 { DeclVisible plus the interface/implementation boundary — body beside DeclVisible's. }
@@ -3281,6 +3286,93 @@ begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := UFldOff_[fi];
   end;
+end;
+
+function RecHasMisalignedFieldDepth(rec, depth: Integer): Boolean;
+{ Does any field of this record sit at an offset its own type cannot be read
+  from directly? True for a `packed record` whose packing actually bites, false
+  for one whose fields happen to land naturally aligned anyway.
+
+  THIS IS ASKED INSTEAD OF "IS IT PACKED", DELIBERATELY, and not because the
+  packed flag would be hard to add -- the record table does not keep one -- but
+  because packedness is not the property that matters. What matters to a strict-
+  alignment backend is whether an ordinary sized load can reach the field, and
+  that is a fact about the OFFSETS. A packed record whose every field is
+  naturally aligned needs nothing; an unpacked one could not have a misaligned
+  field in the first place. Asking the offsets also means a future layout
+  attribute -- an alignment pragma, a C `__attribute__((packed))` arriving
+  through another door -- is covered without touching this.
+
+  ALL-OR-NOTHING PER RECORD, which is the point. The caller uses this to decide
+  the access for EVERY field of the record, not just the ones whose own offset
+  is odd, because the record's BASE may itself be misaligned -- an element of an
+  `array of TPacked` with an odd stride, or a packed record nested inside
+  another. Once any field is off-alignment, no field's absolute address can be
+  assumed aligned, so testing one field's offset in isolation would be right for
+  the reported case and wrong for the array one.
+
+  Builtin records are compiler-authored and never packed, so they answer False
+  without a walk. bug-a-xtensa-unaligned-packed-record-field-access-faults }
+var ci, base, cnt, i, a, fr: Integer;
+begin
+  Result := False;
+  if rec < REC_UCLASS_BASE then Exit;
+  if depth > 64 then Exit;
+  ci := rec - REC_UCLASS_BASE;
+  while ci >= 0 do
+  begin
+    base := UClsFBase[ci];
+    cnt  := UClsFCount[ci];
+    for i := base to base + cnt - 1 do
+    begin
+      fr := UFldRec_[i];
+      { RECURSE THROUGH A RECORD FIELD ONLY, AND THE TEST IS THE FIELD'S KIND
+        RATHER THAN "IT HAS A RECORD ID". UFldRec_ is populated for a CLASS
+        field too, and a class field is a POINTER: `TNode = class Next: TNode`
+        is ordinary, legal, and self-referential, so a walk keyed on the id
+        alone recurses for ever. It did -- 23 of 60 lib/rtl root units
+        segfaulted the compiler, caught by gate.sh quick's HEAD rtl canary and
+        by nothing cheaper. The self-exclusion and the depth cap mirror
+        RecordHasManagedFieldsDepth2 above, whose comment records the same
+        hazard arriving from a C struct-tag redefinition; past the cap, answer
+        "not ragged" rather than fault -- wrong in the direction that only
+        costs a fault-free slow path on a record no valid source can build. }
+      if (UFldTk[i] = Ord(tyRecord)) and (fr <> REC_NONE) and
+         (fr >= REC_UCLASS_BASE) and (fr <> rec) then
+      begin
+        { a nested record FIELD held BY VALUE: its own alignment is the
+          record's, and a nested record that is itself ragged makes this one
+          ragged too }
+        a := UClsAlign[fr - REC_UCLASS_BASE];
+        if RecHasMisalignedFieldDepth(fr, depth + 1) then
+          begin Result := True; Exit; end;
+      end
+      else
+        a := TypeFieldAlign(IntToTypeKind(UFldTk[i]));
+      if (a > 1) and ((UFldOff_[i] mod a) <> 0) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+    ci := UClsParent[ci];
+  end;
+end;
+
+function RecHasMisalignedField(rec: Integer): Boolean;
+begin
+  RecHasMisalignedField := RecHasMisalignedFieldDepth(rec, 0);
+end;
+
+function IRFieldRaggedBit(rec: Integer): Integer;
+{ The IR_FIELD C-slot payload: 1 when this record's layout is ragged (see
+  RecHasMisalignedField), -1 -- IRAppend's "no value" -- otherwise. A function
+  rather than an inline `if` because the three IR_FIELD appends that carry it
+  sit in one expression each, and a fourth spelling of the same test is exactly
+  the second-path shape normalise-dont-special-case.md is about. }
+begin
+  if RecHasMisalignedField(rec) then IRFieldRaggedBit := 1
+  else IRFieldRaggedBit := -1;
 end;
 
 function RecFieldType(rec: Integer; const field: AnsiString): TTypeKind;

@@ -211,6 +211,106 @@ begin
     xtensa_s32i(rt, rs, 0);
 end;
 
+procedure EmitUnalignedLoadXtensa(rd, rs, off, sz: Integer; sgn: Boolean);
+{ Load sz bytes from [rs+off] into rd WITHOUT assuming the address is aligned.
+
+  WHY THIS EXISTS: xtensa's l32i and l16ui/l16si FAULT on a misaligned address
+  -- not "absorb it slowly" as on x86-64, and not "emulated by qemu" as on
+  arm32/riscv32, but SIGBUS. A `packed record` puts fields at unaligned offsets
+  ON PURPOSE (wire formats, file headers), so on this target the ordinary sized
+  load is simply not available for them.
+  bug-a-xtensa-unaligned-packed-record-field-access-faults
+
+  rd, rs and rt must not be a8 or a9: this builds the value in a8 and uses a9 as
+  the byte temp, so that rd MAY EQUAL rs -- which is the common case, since
+  IR_LOAD_MEM materialises the address into a2 and wants the value in a2. A
+  version that accumulated into rd would destroy the address on its first byte.
+
+  THE SHIFT AMOUNT IS LATCHED ONCE. This ISA has no shift-by-immediate: SSL sets
+  SAR from a register and SLL then uses it, so a9 carries 8 into `ssl` and is
+  free again immediately -- nothing between here and the last `sll` writes SAR. }
+begin
+  if sz = 1 then
+  begin
+    { one byte is aligned by definition; this is the ordinary load }
+    xtensa_l8ui(rd, rs, off);
+    if sgn then
+    begin
+      xtensa_movi(reg_xtensa_a9, 128);
+      xtensa_xor(rd, rd, reg_xtensa_a9);
+      xtensa_sub(rd, rd, reg_xtensa_a9);
+    end;
+    Exit;
+  end;
+  xtensa_movi(reg_xtensa_a9, 8);
+  xtensa_ssl(reg_xtensa_a9);                   { SAR := left-shift-by-8 }
+  if sz = 2 then
+  begin
+    xtensa_l8ui(reg_xtensa_a8, rs, off + 1);
+    xtensa_l8ui(reg_xtensa_a9, rs, off);
+    xtensa_sll(reg_xtensa_a8, reg_xtensa_a8);
+    xtensa_or(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a9);
+    xtensa_mov(rd, reg_xtensa_a8);
+    if sgn then
+    begin
+      { no l16si here, so sign-extend from bit 15 the same way the byte load
+        does from bit 7: (v xor 2^15) - 2^15. 32768 is outside movi's range. }
+      EmitLoadConstXtensa(reg_xtensa_a9, 32768);
+      xtensa_xor(rd, rd, reg_xtensa_a9);
+      xtensa_sub(rd, rd, reg_xtensa_a9);
+    end;
+    Exit;
+  end;
+  { four bytes, high first, little-endian }
+  xtensa_l8ui(reg_xtensa_a8, rs, off + 3);
+  xtensa_l8ui(reg_xtensa_a9, rs, off + 2);
+  xtensa_sll(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_or(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a9);
+  xtensa_l8ui(reg_xtensa_a9, rs, off + 1);
+  xtensa_sll(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_or(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a9);
+  xtensa_l8ui(reg_xtensa_a9, rs, off);
+  xtensa_sll(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_or(reg_xtensa_a8, reg_xtensa_a8, reg_xtensa_a9);
+  xtensa_mov(rd, reg_xtensa_a8);
+end;
+
+procedure EmitUnalignedStoreXtensa(rt, rs, off, sz: Integer);
+{ Store the low sz bytes of rt to [rs+off] without assuming alignment. rt and rs
+  must not be a8/a9; rt is COPIED into a8 before any shifting, so the caller's
+  value register survives. See EmitUnalignedLoadXtensa for why this exists and
+  why the shift amount is latched once (SSR here, since this shifts right). }
+begin
+  xtensa_s8i(rt, rs, off);
+  if sz = 1 then Exit;
+  xtensa_movi(reg_xtensa_a9, 8);
+  xtensa_ssr(reg_xtensa_a9);                   { SAR := right-shift-by-8 }
+  xtensa_mov(reg_xtensa_a8, rt);
+  xtensa_srl(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_s8i(reg_xtensa_a8, rs, off + 1);
+  if sz = 2 then Exit;
+  xtensa_srl(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_s8i(reg_xtensa_a8, rs, off + 2);
+  xtensa_srl(reg_xtensa_a8, reg_xtensa_a8);
+  xtensa_s8i(reg_xtensa_a8, rs, off + 3);
+end;
+
+function XtensaAddrIsRagged(addrNode: Integer): Boolean;
+{ Does this address node reach into a record whose layout is ragged -- i.e. may
+  the address be misaligned for the access about to be made? The bit is set at
+  the one Pascal field-access door in ir.inc; see IRFieldRaggedBit there and
+  RecHasMisalignedField in symtab.inc for why the question is about OFFSETS and
+  not about the `packed` keyword.
+
+  Answered from the ADDRESS node rather than from the load/store, because the
+  address is what knows: an IR_FIELD reached through an array element or a
+  nested record carries the bit just the same, and the memory op itself has no
+  type information beyond a width. }
+begin
+  XtensaAddrIsRagged := (addrNode >= 0) and (IRKind[addrNode] = IR_FIELD) and
+                        (IRC[addrNode] = 1);
+end;
+
 procedure EmitLoadVarXtensa(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
@@ -2218,8 +2318,16 @@ begin
             64-bit `<> 0` test on a null low word took the dereference branch
             and double-faulted (esp32s3 bare-boot total UART silence). Twin of
             the riscv32 IR_LOAD_MEM fix. Hi first: a2 still holds the address. }
-          xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+          if XtensaAddrIsRagged(IRA[node]) then
+          begin
+            EmitUnalignedLoadXtensa(reg_xtensa_a3, reg_xtensa_a2, 4, 4, False);
+            EmitUnalignedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, 0, 4, False);
+          end
+          else
+          begin
+            xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+          end;
         end
         else if tk = tyRecord then
         begin
@@ -2245,6 +2353,8 @@ begin
           xtensa_l32i(reg_xtensa_a3, reg_xtensa_a2, 4);
           xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
         end
+        else if XtensaAddrIsRagged(IRA[node]) then
+          EmitUnalignedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, 0, sz, sgn)
         else
           EmitSizedLoadXtensa(reg_xtensa_a2, reg_xtensa_a2, sz, sgn);
       end;
@@ -2389,8 +2499,19 @@ begin
             IREmitNodeXtensa(IRA[node]);             { a2 = dest addr }
             InLValueWrite := savedLVW;
             XtensaPop64ToA4A5;                       { a4:a5 = lo:hi }
-            xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
-            xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+            { the same ragged-address test the integer arms make; a Double field
+              of a packed record is exactly as misaligned as an Int64 one, and
+              this arm runs BEFORE the Is64Bit branch so it does not inherit it }
+            if XtensaAddrIsRagged(IRA[node]) then
+            begin
+              EmitUnalignedStoreXtensa(reg_xtensa_a4, reg_xtensa_a2, 0, 4);
+              EmitUnalignedStoreXtensa(reg_xtensa_a5, reg_xtensa_a2, 4, 4);
+            end
+            else
+            begin
+              xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
+              xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+            end;
           end
           else
           begin
@@ -2400,7 +2521,10 @@ begin
             IREmitNodeXtensa(IRA[node]);             { a2 = dest addr }
             InLValueWrite := savedLVW;
             XtensaPopA3;
-            xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);
+            if XtensaAddrIsRagged(IRA[node]) then
+              EmitUnalignedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, 0, 4)
+            else
+              xtensa_s32i(reg_xtensa_a3, reg_xtensa_a2, 0);
           end;
           Exit;
         end;
@@ -2417,8 +2541,16 @@ begin
           IREmitNodeXtensa(IRA[node]);              { a2 = dest addr }
           InLValueWrite := savedLVW;
           XtensaPop64ToA4A5;                        { a4:a5 = value lo:hi }
-          xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
-          xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+          if XtensaAddrIsRagged(IRA[node]) then
+          begin
+            EmitUnalignedStoreXtensa(reg_xtensa_a4, reg_xtensa_a2, 0, 4);
+            EmitUnalignedStoreXtensa(reg_xtensa_a5, reg_xtensa_a2, 4, 4);
+          end
+          else
+          begin
+            xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, 0);
+            xtensa_s32i(reg_xtensa_a5, reg_xtensa_a2, 4);
+          end;
         end
         else
         begin
@@ -2429,7 +2561,10 @@ begin
           IREmitNodeXtensa(IRA[node]);
           InLValueWrite := savedLVW;
           XtensaPopA3;
-          EmitSizedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, sz);
+          if XtensaAddrIsRagged(IRA[node]) then
+            EmitUnalignedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, 0, sz)
+          else
+            EmitSizedStoreXtensa(reg_xtensa_a3, reg_xtensa_a2, sz);
         end;
       end;
 

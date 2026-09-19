@@ -3354,14 +3354,27 @@ begin
       instead of rediscovering this. Narrowed to frozen strings and to a
       DISAGREEMENT, so ASTTk stays authoritative for everything else.
       bug-a-a-frozen-record-field-as-a-concat-operand-segfaults }
+    { IRC CARRIES ONE BIT HERE AND NOWHERE ELSE: 1 = this field belongs to a
+      record whose layout puts some field off its own natural alignment, i.e. a
+      `packed record` whose packing actually bites. IR_FIELD's C slot was -1 at
+      every site and is read by nothing, so this is a payload on a free slot
+      rather than a new parallel array -- and it is set at the ONE door every
+      Pascal field access comes through, so no backend has to know the word
+      "packed" and no other IR_FIELD site has to be taught anything.
+
+      Only the xtensa backend reads it today, because only xtensa FAULTS on a
+      misaligned word (x86-64 absorbs it; qemu emulates it on arm32/riscv32,
+      though the silicon may not -- that is a separate measurement nobody has
+      taken). Every other backend ignores the bit and emits exactly what it did
+      before. bug-a-xtensa-unaligned-packed-record-field-access-faults }
     if RecFieldDynDepth(recName, fieldName) > 0 then
-      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), Ord(tyPointer))
+      Result := IRAppend(IR_FIELD, baseAddr, -1, IRFieldRaggedBit(recName), RecFieldOffset(recName, fieldName), Ord(tyPointer))
     else if TypeIsFrozenString(RecFieldType(recName, fieldName)) and
             (RecFieldType(recName, fieldName) <> IntToTypeKind(ASTTk[node])) then
-      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName),
+      Result := IRAppend(IR_FIELD, baseAddr, -1, IRFieldRaggedBit(recName), RecFieldOffset(recName, fieldName),
                          Ord(RecFieldType(recName, fieldName)))
     else
-      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
+      Result := IRAppend(IR_FIELD, baseAddr, -1, IRFieldRaggedBit(recName), RecFieldOffset(recName, fieldName), ASTTk[node]);
   end
   else if ASTKind[node] = AN_DEREF then
   begin
