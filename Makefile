@@ -16377,7 +16377,20 @@ test-core: $(COMPILER)
 	@# 1. AREA FULL IS THE PROGRAMMER'S OWN BUILD FLAG and the message already
 	@#    names the flag that undoes it, so stopping is ACTIONABLE -- the same
 	@#    answer Pascal has always given for the identical mistake.
-	@if ./$(COMPILER) -dPXX_TLS_USER_0 $(TESTTMP)/ctls_scalar.c $(TESTTMP)/ctls_full26 > $(TESTTMP)/ctls_full.log 2>&1; then \
+	@#    THE SUBJECT FOR THIS ROW INCLUDES NOTHING, and that is the assertion
+	@#    rather than tidiness. The message must NAME THE DECLARATION, so the
+	@#    grep below names `counter` -- which quietly requires counter to be the
+	@#    FIRST __thread the compiler meets, an ordering property this row never
+	@#    meant to assert. It stopped being true within a day: c5ae069c5 made
+	@#    errno `__thread`, lib/crtl/src/stdio.c has included <errno.h> since
+	@#    long before that, and with a 0-byte area EVERY __thread fails -- so a
+	@#    `#include <stdio.h>` subject reports errno's declaration, correctly,
+	@#    and this row reds for a reason that is about neither commit. Measured
+	@#    2026-09-19: identical error with the crtl include chain otherwise
+	@#    untouched. Any future crtl header declaring a __thread does it again.
+	@#    ctls_scalar.c keeps its printf because row 3 RUNS it on riscv32.
+	@printf '__thread int counter;\nint main(void){ counter = 1; return counter; }\n' > $(TESTTMP)/ctls_full.c
+	@if ./$(COMPILER) -dPXX_TLS_USER_0 $(TESTTMP)/ctls_full.c $(TESTTMP)/ctls_full26 > $(TESTTMP)/ctls_full.log 2>&1; then \
 	  echo "FAIL ctls: a __thread that does not fit the per-thread area still COMPILED -- it silently becomes one shared copy, which is a data race that survives a green build"; exit 1; \
 	fi
 	@grep -q 'error: __thread counter: the per-thread variable area is full' $(TESTTMP)/ctls_full.log || { echo "FAIL ctls: area-full did not report as an error naming the declaration"; cat $(TESTTMP)/ctls_full.log; exit 1; }
