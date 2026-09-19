@@ -315,6 +315,25 @@ never a row that fires today.** A mechanism does not decay when an instance is
 fixed; the rewritten summary above names "a Pascal routine with a colliding
 name, an accepting signature and differing semantics", with `Ldexp` as the near
 miss that has two of the three, and that sentence survives every future fix.
+**AND THE THIRD HOLE IN THAT REMEDY IS A SUMMARY THAT WAS NEVER TRUE AT ALL —
+RE-VERIFYING ONE BEFORE YOU START CANNOT REACH IT, BECAUSE THERE WAS NO INTERVAL
+IN WHICH RE-READING WOULD HAVE HELPED.** Measured 2026-09-19 (`9a0dcdba3`): the
+p55 `bug-c-a-bare-thread-in-a-function-body-...` summary said the shape compiles
+*"with NO diagnostic"*, and `git log --diff-filter=A` puts the ticket file's
+creation in `09de09465` — **the same commit as the warning that falsifies it**,
+where `localSawThread := True` is set whether or not `static` is present and the
+warn fires before both declaration arms. **The measurement was true when TAKEN
+and false by the time it was WRITTEN DOWN, and nothing in between announced the
+change.** Its author first reported it as having gone stale four hours later —
+a reconstruction from remembering doing the work, and the story felt right
+because the measurement really was hours old; one `--diff-filter=A` collapsed
+the two commits into one. **This is the born-red assertion arriving in a SUMMARY
+instead of in a guard, and the summary is the worse host:** a guard written from
+a report of the code fails loudly on arrival, where a summary written from a
+superseded measurement just sits at the top of a queue being read. So **derive a
+summary from the tree you are COMMITTING TO, never from the measurement that
+motivated the fix** — and note who is worst placed to catch it: a seat filing a
+ticket beside its own fix is the least likely to re-read either.
 Below the
 summary is append-only history nobody must read. **Keep a new ticket to one
 screen.** A finding whose value IS its length goes in a reference doc with a
