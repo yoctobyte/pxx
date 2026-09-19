@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  615 functions across 63 headers. }
+  621 functions across 63 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -64,14 +64,15 @@ begin
       ' gai_strerror:netdb.h getaddrinfo:netdb.h getc:stdio.h getc_unlocked:stdio.h ' +
       ' getchar:stdio.h getchar_unlocked:stdio.h getcwd:unistd.h getdelim:stdio.h ' +
       ' getegid:unistd.h getenv:stdlib.h geteuid:unistd.h getgid:unistd.h getgrent:grp.h ' +
-      ' getgrgid:grp.h getgrnam:grp.h getgrouplist:grp.h getgroups:unistd.h ' +
-      ' gethostbyaddr:netdb.h gethostbyname:netdb.h gethostid:unistd.h gethostname:unistd.h ' +
-      ' getline:stdio.h getlogin:unistd.h getlogin_r:unistd.h getmntent:mntent.h ' +
-      ' getmntent_r:mntent.h getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h ' +
-      ' getopt_long_only:unistd.h getpagesize:unistd.h getpeername:sys/socket.h getpgid:unistd.h ' +
-      ' getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h getpwent:pwd.h ' +
-      ' getpwnam:pwd.h getpwuid:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h ' +
-      ' getservbyname:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
+      ' getgrgid:grp.h getgrgid_r:grp.h getgrnam:grp.h getgrnam_r:grp.h getgrouplist:grp.h ' +
+      ' getgroups:unistd.h gethostbyaddr:netdb.h gethostbyname:netdb.h gethostid:unistd.h ' +
+      ' gethostname:unistd.h getline:stdio.h getlogin:unistd.h getlogin_r:unistd.h ' +
+      ' getmntent:mntent.h getmntent_r:mntent.h getnameinfo:netdb.h getopt:unistd.h ' +
+      ' getopt_long:unistd.h getopt_long_only:unistd.h getpagesize:unistd.h ' +
+      ' getpeername:sys/socket.h getpgid:unistd.h getpid:unistd.h getppid:unistd.h ' +
+      ' getpriority:sys/resource.h getpwent:pwd.h getpwnam:pwd.h getpwnam_r:pwd.h getpwuid:pwd.h ' +
+      ' getpwuid_r:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h getservbyname:netdb.h ' +
+      ' getservbyname_r:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
       ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
       ' getxattr:sys/xattr.h glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h ' +
       ' gmtime_r:time.h grantpt:stdlib.h ';
@@ -130,16 +131,16 @@ begin
     'q': Result :=
       ' qsort:stdlib.h ';
     'r': Result :=
-      ' raise:signal.h rand:stdlib.h rawmemchr:string.h read:unistd.h readdir:dirent.h ' +
-      ' readlink:unistd.h readv:sys/uio.h realloc:stdlib.h reallocarray:stdlib.h ' +
-      ' realpath:stdlib.h reboot:sys/reboot.h recv:sys/socket.h recvfrom:sys/socket.h ' +
-      ' recvmsg:sys/socket.h regcomp:regex.h regerror:regex.h regexec:regex.h regfree:regex.h ' +
-      ' remainder:math.h remove:stdio.h removexattr:sys/xattr.h rename:stdio.h ' +
-      ' res_close:resolv.h res_init:resolv.h res_mkquery:resolv.h res_nclose:resolv.h ' +
-      ' res_ninit:resolv.h res_nmkquery:resolv.h res_nquery:resolv.h res_nsearch:resolv.h ' +
-      ' res_nsend:resolv.h res_query:resolv.h res_randomid:resolv.h res_search:resolv.h ' +
-      ' res_send:resolv.h rewind:stdio.h rewinddir:dirent.h rint:math.h rmdir:unistd.h ' +
-      ' round:math.h roundf:math.h ';
+      ' raise:signal.h rand:stdlib.h rand_r:stdlib.h rawmemchr:string.h read:unistd.h ' +
+      ' readdir:dirent.h readlink:unistd.h readv:sys/uio.h realloc:stdlib.h ' +
+      ' reallocarray:stdlib.h realpath:stdlib.h reboot:sys/reboot.h recv:sys/socket.h ' +
+      ' recvfrom:sys/socket.h recvmsg:sys/socket.h regcomp:regex.h regerror:regex.h ' +
+      ' regexec:regex.h regfree:regex.h remainder:math.h remove:stdio.h removexattr:sys/xattr.h ' +
+      ' rename:stdio.h res_close:resolv.h res_init:resolv.h res_mkquery:resolv.h ' +
+      ' res_nclose:resolv.h res_ninit:resolv.h res_nmkquery:resolv.h res_nquery:resolv.h ' +
+      ' res_nsearch:resolv.h res_nsend:resolv.h res_query:resolv.h res_randomid:resolv.h ' +
+      ' res_search:resolv.h res_send:resolv.h rewind:stdio.h rewinddir:dirent.h rint:math.h ' +
+      ' rmdir:unistd.h round:math.h roundf:math.h ';
     's': Result :=
       ' scalbn:math.h scandir:dirent.h scanf:stdio.h sched_get_priority_max:sched.h ' +
       ' sched_get_priority_min:sched.h sched_getaffinity:sched.h sched_getparam:sched.h ' +
@@ -207,7 +208,7 @@ begin
     'd': Result := 3000;
     'e': Result := 14200;
     'f': Result := 65520;
-    'g': Result := 98256;
+    'g': Result := 131024;
     'h': Result := 608;
     'i': Result := 227296;
     'k': Result := 144;

@@ -52,6 +52,10 @@ lldiv_t lldiv(long long num, long long den);
 #endif
 
 int rand(void);
+/* Reentrant rand: the caller holds the state, so no two threads share it.
+   Its SEQUENCE is not rand()'s and is not required to be -- 32 bits of seed
+   cannot drive rand()'s 64-bit generator. Range is still [0, RAND_MAX]. */
+int rand_r(unsigned int *seed);
 void srand(unsigned int seed);
 
 /* mkstemp/mkdtemp: the trailing XXXXXX is replaced and the name is claimed by

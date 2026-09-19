@@ -3,6 +3,7 @@
 #define PXX_CRTL_PWD_H 1
 
 #include <sys/types.h>   /* uid_t, gid_t */
+#include <stddef.h>      /* size_t, for the _r forms */
 
 /* Field ORDER is glibc's. Unlike `struct tms', nothing outside this program
    fills this one -- crtl parses /etc/passwd itself -- so the layout is not a
@@ -24,6 +25,19 @@ struct passwd {
    is what busybox's libbb/bb_pwd.c expects. */
 struct passwd *getpwnam(const char *name);
 struct passwd *getpwuid(uid_t uid);
+
+/* The reentrant forms, which are the IMPLEMENTATION the two above wrap. They
+   touch no static: the caller supplies both the struct and the string buffer
+   the struct's fields point into.
+
+   Return value is an ERRNO, not -1, and 0 with *result == NULL means "no such
+   user" rather than an error -- the POSIX contract, and the reason a caller
+   must check *result and not just the return. ERANGE means buf was too small
+   for some line in the file; retry with a bigger one. */
+int getpwnam_r(const char *name, struct passwd *pwd, char *buf, size_t buflen,
+               struct passwd **result);
+int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, size_t buflen,
+               struct passwd **result);
 
 void setpwent(void);
 void endpwent(void);

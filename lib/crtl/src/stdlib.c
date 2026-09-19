@@ -705,6 +705,46 @@ int rand(void) {
   return (int)((__crtl_rand_state >> 33) & 0x7fffffffULL);
 }
 
+/* rand_r: the caller owns the state, so there is nothing process-wide to race
+   on. IT CANNOT SHARE rand()'s GENERATOR, AND THAT IS FORCED BY THE SIGNATURE
+   RATHER THAN CHOSEN: POSIX types the seed as `unsigned int', so there are 32
+   bits of state where rand() keeps 64 -- and rand()'s whole design, argued
+   directly above, is to return the HIGH half because the low bits of a
+   power-of-two LCG have famously short periods. With 32 bits there is no high
+   half to take.
+
+   So this is the classical three-round construction, which exists to solve
+   exactly that constraint: three LCG steps, each contributing its upper bits,
+   assembled into 31. The range therefore still matches RAND_MAX (0x7fffffff),
+   which is the one property a caller is entitled to rely on.
+
+   THE TWO SEQUENCES DIFFER AND THAT IS CONFORMING -- nothing requires rand_r
+   to agree with rand. The caveat above applies unchanged: do not diff either
+   against a gcc build. What may be asserted is what the standard promises --
+   deterministic for a given seed, within [0, RAND_MAX], and the seed advanced
+   so successive calls differ. */
+int rand_r(unsigned int *seed) {
+  unsigned int next;
+  int result;
+
+  if (!seed) return 0;
+  next = *seed;
+
+  next = next * 1103515245u + 12345u;
+  result = (int)((next / 65536u) % 2048u);
+
+  next = next * 1103515245u + 12345u;
+  result <<= 10;
+  result ^= (int)((next / 65536u) % 1024u);
+
+  next = next * 1103515245u + 12345u;
+  result <<= 10;
+  result ^= (int)((next / 65536u) % 1024u);
+
+  *seed = next;
+  return result;
+}
+
 void qsort(void *base, size_t nmemb, size_t size,
            int (*cmp)(const void *, const void *)) {
   char *a = (char *)base;

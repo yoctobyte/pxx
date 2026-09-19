@@ -11,6 +11,7 @@
 #define _CRTL_GRP_H
 
 #include <sys/types.h>
+#include <stddef.h>      /* size_t, for the _r forms */
 
 struct group {
   char  *gr_name;    /* group name */
@@ -27,6 +28,15 @@ void          endgrent(void);
 struct group *getgrent(void);
 struct group *getgrnam(const char *name);
 struct group *getgrgid(gid_t gid);
+
+/* The reentrant forms. They touch no static: the caller supplies the struct
+   and the buffer, and unlike the passwd pair the MEMBER POINTER ARRAY is built
+   in that buffer too -- so size it for the line PLUS (members+1) pointers.
+   ERANGE means it did not fit; 0 with *result == NULL means no such group. */
+int getgrnam_r(const char *name, struct group *grp, char *buf, size_t buflen,
+               struct group **result);
+int getgrgid_r(gid_t gid, struct group *grp, char *buf, size_t buflen,
+               struct group **result);
 
 /* *ngroups is the caller's CAPACITY in and the true count out; -1 means the
    count exceeded the capacity, and the count is still written. */

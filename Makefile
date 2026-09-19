@@ -38003,6 +38003,23 @@ endif
 	  echo 'cpwd: identical to gcc'; \
 	fi; \
 	else echo 'cpwd: SKIP (no gcc)'; echo cpwd >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cpwd) >/dev/null; fi
+	# THE SIX REENTRANT LOOKUPS -- getpwnam_r, getpwuid_r, getgrnam_r,
+	# getgrgid_r, getservbyname_r, rand_r. None existed: no definition in
+	# lib/crtl/src and no declaration in lib/crtl/include, so a threaded C
+	# program had NO correct call -- the plain one races and the reentrant
+	# spelling would not link. That is worse than the non-reentrancy beside it,
+	# which POSIX explicitly permits precisely BECAUSE the _r form exists.
+	# NOT gcc-DIFFED, deliberately, unlike cpwd above: glibc returns ENOENT for a
+	# not-found entry where POSIX says 0 with a NULL result, so the oracle fails
+	# exactly one row on purpose. The fixture says so at that row and names the
+	# measured value. Everything else in it WAS checked against glibc.
+	# The rows are RELATIONS (each _r answer against the plain one on the same
+	# input) so no per-machine constant is baked in, plus the one assertion a
+	# static-returning fake cannot pass: the strings must live inside the
+	# CALLER'S buffer, checked by address.
+	# bug-c-six-reentrant-libc-variants-do-not-exist-so-threaded-c-has-no-correct-call
+	$(PXX_STABLE) test/c_crtl_reentrant_lookups.c $(TESTTMP)/c_crtl_reentrant_lookups
+	tools/expect_same.sh c_crtl_reentrant_lookups "$$($(TESTTMP)/c_crtl_reentrant_lookups)" "$$(printf 'fails=0\nC REENTRANT LOOKUPS OK')"
 	# execve/execvp -- crtl declared no execve and execvp was a LINK-ONLY STUB
 	# that set ENOENT unconditionally, telling callers a program did not exist
 	# when it did. A shell cannot run anything without this. The rows are the

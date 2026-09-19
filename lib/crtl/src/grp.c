@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #define GR_LINE_MAX 4096
 #define GR_MEM_MAX   256
@@ -51,7 +52,7 @@ static char *gr_field(char *s, char **next) {
 
 /* Parse one /etc/group line in place. 0 for a line that is not an entry (a
    comment, a blank, or too few fields): skipped, not end of file. */
-static int gr_parse(char *line) {
+static int gr_parse(char *line, struct group *out, char **mem, int memmax) {
   char *rest, *f[4], *p;
   int i, n;
 
@@ -72,18 +73,18 @@ static int gr_parse(char *line) {
   n = 0;
   if (f[3][0]) {
     p = f[3];
-    while (*p && n < GR_MEM_MAX) {
-      gr_mem[n++] = p;
+    while (*p && n < memmax) {
+      mem[n++] = p;
       while (*p && *p != ',') p++;
       if (*p == ',') *p++ = '\0';
     }
   }
-  gr_mem[n] = 0;
+  mem[n] = 0;
 
-  gr_ent.gr_name   = f[0];
-  gr_ent.gr_passwd = f[1];
-  gr_ent.gr_gid    = (gid_t)strtoul(f[2], 0, 10);
-  gr_ent.gr_mem    = gr_mem;
+  out->gr_name   = f[0];
+  out->gr_passwd = f[1];
+  out->gr_gid    = (gid_t)strtoul(f[2], 0, 10);
+  out->gr_mem    = mem;
   return 1;
 }
 
@@ -109,9 +110,79 @@ struct group *getgrent(void) {
       while ((c = fgetc(gr_fp)) != '\n' && c != EOF) { }
       continue;
     }
-    if (gr_parse(gr_line)) return &gr_ent;
+    if (gr_parse(gr_line, &gr_ent, gr_mem, GR_MEM_MAX)) return &gr_ent;
   }
   return 0;
+}
+
+/* NOT a wrapper pair -- see pwd.c's block comment for the contract difference
+   that decides it (plain SKIPS an over-long line, _r must return ERANGE), and
+   note grp.c has a SECOND reason of its own: the plain form gets a dedicated
+   256-slot gr_mem array, while the _r form carves its member array out of
+   whatever is left of the caller's buffer. Routing the plain one through _r
+   would silently shrink a long group's member list to however many pointers
+   fit after the line -- `wheel:x:10:alice,bob' reported with bob missing, on a
+   file that works today.
+
+   THE MEMBER ARRAY IS WHAT MAKES THIS DIFFERENT FROM pwd.c. gr_mem is a
+   NULL-terminated array of POINTERS, so the reentrant form cannot just point
+   into the caller's buffer -- it has to BUILD the array there too, which POSIX
+   requires and which is why `buf' must be bigger for groups than for users.
+   It is carved from whatever follows the line, aligned up for a pointer; if
+   what is left cannot hold at least the terminating NULL slot, that is ERANGE
+   and not a group with no members. Getting that wrong would report `wheel:x:10:
+   alice,bob' as empty, which is a plausible wrong ANSWER rather than a
+   failure. */
+static int gr_lookup_r(const char *name, gid_t gid, int by_name,
+                       struct group *grp, char *buf, size_t buflen,
+                       struct group **result) {
+  FILE *fp;
+
+  if (result) *result = 0;
+  if (!grp || !buf || !result || buflen == 0) return EINVAL;
+  if (by_name && !name) return EINVAL;
+
+  fp = fopen("/etc/group", "r");
+  if (!fp) return ENOENT;
+
+  while (fgets(buf, (int)buflen, fp)) {
+    char **mem;
+    size_t len, off, pad, al;
+    int memmax;
+
+    /* Same two causes as pwd.c's: too small, or a final line with no newline. */
+    if (!strchr(buf, '\n') && !feof(fp)) { fclose(fp); return ERANGE; }
+
+    len = strlen(buf);
+    al  = sizeof(char *);
+    off = len + 1;                       /* past the line's NUL */
+    pad = (al - (off % al)) % al;
+    if (off + pad + al > buflen) { fclose(fp); return ERANGE; }
+
+    mem    = (char **)(void *)(buf + off + pad);
+    memmax = (int)((buflen - (off + pad)) / al) - 1;   /* -1 for the NULL slot */
+    if (memmax < 0) { fclose(fp); return ERANGE; }
+
+    if (!gr_parse(buf, grp, mem, memmax)) continue;
+    if (by_name ? (strcmp(grp->gr_name, name) == 0) : (grp->gr_gid == gid)) {
+      fclose(fp);
+      *result = grp;
+      return 0;
+    }
+  }
+
+  fclose(fp);
+  return 0;                              /* not found: 0 with *result == NULL */
+}
+
+int getgrnam_r(const char *name, struct group *grp, char *buf, size_t buflen,
+               struct group **result) {
+  return gr_lookup_r(name, (gid_t)0, 1, grp, buf, buflen, result);
+}
+
+int getgrgid_r(gid_t gid, struct group *grp, char *buf, size_t buflen,
+               struct group **result) {
+  return gr_lookup_r(0, gid, 0, grp, buf, buflen, result);
 }
 
 struct group *getgrnam(const char *name) {

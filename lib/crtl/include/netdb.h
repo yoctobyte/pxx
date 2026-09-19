@@ -2,6 +2,8 @@
 #ifndef PXX_CRTL_NETDB_H
 #define PXX_CRTL_NETDB_H 1
 
+
+#include <stddef.h>   /* size_t, for the _r form */
 #include <sys/_types.h>   /* __socklen_t -- the leaf header, see the note below */
 
 struct sockaddr;          /* declared here so the prototypes below need no include */
@@ -48,6 +50,13 @@ struct servent {
 };
 
 struct servent *getservbyname(const char *name, const char *proto);
+
+/* Reentrant form: no static touched. `buf' must hold the matched line AND the
+   NULL-terminated alias pointer array, which is built in it -- ERANGE if it
+   does not fit. 0 with *result == NULL means no such service. */
+int getservbyname_r(const char *name, const char *proto,
+                    struct servent *result_buf, char *buf, size_t buflen,
+                    struct servent **result);
 struct servent *getservbyport(int port, const char *proto);
 void setservent(int stayopen);
 void endservent(void);

@@ -28,6 +28,7 @@
  * symbolic port), networking/netstat.c (getservbyport).
  */
 #include <netdb.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -76,7 +77,7 @@ void endservent(void) {
 /* Split one line in place. Returns 0 when it is a comment, blank, or malformed
    -- the caller simply reads on, which is what makes a bad line invisible
    rather than fatal. */
-static int serv_parse(char *line) {
+static int serv_parse(char *line, struct servent *out, char **al, int almax) {
   char *p = line, *name, *portstr, *slash, *proto;
   int na = 0;
 
@@ -104,19 +105,19 @@ static int serv_parse(char *line) {
   if (*proto == '\0') return 0;
 
   /* Whatever is left on the line is aliases. */
-  while (na < SERV_ALIAS_MAX) {
+  while (na < almax) {
     while (*p == ' ' || *p == '\t') p++;
     if (*p == '\0' || *p == '\n') break;
-    serv_aliases[na++] = p;
+    al[na++] = p;
     while (*p && *p != ' ' && *p != '\t' && *p != '\n') p++;
     if (*p) *p++ = '\0';
   }
-  serv_aliases[na] = 0;
+  al[na] = 0;
 
-  serv_ent.s_name = name;
-  serv_ent.s_aliases = serv_aliases;
-  serv_ent.s_port = (int)htons((unsigned short)atoi(portstr));  /* NETWORK order */
-  serv_ent.s_proto = proto;
+  out->s_name = name;
+  out->s_aliases = al;
+  out->s_port = (int)htons((unsigned short)atoi(portstr));  /* NETWORK order */
+  out->s_proto = proto;
   return 1;
 }
 
@@ -133,13 +134,77 @@ struct servent *getservent(void) {
       while ((c = fgetc(serv_fp)) != '\n' && c != EOF) { }
       continue;
     }
-    if (serv_parse(serv_line)) return &serv_ent;
+    if (serv_parse(serv_line, &serv_ent, serv_aliases, SERV_ALIAS_MAX)) return &serv_ent;
   }
   return 0;
 }
 
 static int serv_proto_ok(const char *proto) {
   return proto == 0 || strcmp(proto, serv_ent.s_proto) == 0;
+}
+
+/* getservbyname_r: no static touched, so two threads can look up a service at
+   once. NOT a wrapper pair with the plain form and not a candidate to become
+   one -- see pwd.c's block comment for the contract difference (plain SKIPS an
+   over-long line, _r must answer ERANGE), and the ALIAS array here is grp.c's
+   second reason: the plain form has a dedicated SERV_ALIAS_MAX table while
+   this one carves the array out of the caller's buffer, so routing the plain
+   one through here would silently shorten a service's alias list.
+
+   `buf' must therefore hold the line AND (aliases + 1) pointers. The alias
+   array is placed after the line, aligned up; if there is not room for even
+   the terminating NULL that is ERANGE, never "a service with no aliases". */
+static int serv_match(const struct servent *e, const char *name,
+                      const char *proto) {
+  int i;
+  if (proto && strcmp(proto, e->s_proto) != 0) return 0;
+  if (strcmp(name, e->s_name) == 0) return 1;
+  for (i = 0; e->s_aliases[i]; i++)
+    if (strcmp(name, e->s_aliases[i]) == 0) return 1;
+  return 0;
+}
+
+int getservbyname_r(const char *name, const char *proto,
+                    struct servent *result_buf, char *buf, size_t buflen,
+                    struct servent **result) {
+  FILE *fp;
+
+  if (result) *result = 0;
+  if (!name || !result_buf || !buf || !result || buflen == 0) return EINVAL;
+
+  fp = fopen("/etc/services", "r");
+  if (!fp) return ENOENT;
+
+  while (fgets(buf, (int)buflen, fp)) {
+    char **al;
+    size_t len, off, pad, sz;
+    int almax;
+
+    /* Two causes for a missing newline and they need different answers -- too
+       small a buffer (ERANGE, the caller retries) versus a final line with no
+       trailing newline (ordinary, parse it). */
+    if (!strchr(buf, '\n') && !feof(fp)) { fclose(fp); return ERANGE; }
+
+    len = strlen(buf);
+    sz  = sizeof(char *);
+    off = len + 1;
+    pad = (sz - (off % sz)) % sz;
+    if (off + pad + sz > buflen) { fclose(fp); return ERANGE; }
+
+    al    = (char **)(void *)(buf + off + pad);
+    almax = (int)((buflen - (off + pad)) / sz) - 1;   /* -1 for the NULL slot */
+    if (almax < 0) { fclose(fp); return ERANGE; }
+
+    if (!serv_parse(buf, result_buf, al, almax)) continue;
+    if (serv_match(result_buf, name, proto)) {
+      fclose(fp);
+      *result = result_buf;
+      return 0;
+    }
+  }
+
+  fclose(fp);
+  return 0;                          /* not found: 0 with *result == NULL */
 }
 
 struct servent *getservbyname(const char *name, const char *proto) {
