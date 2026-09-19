@@ -15709,30 +15709,28 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-13T17:35:40Z",
+  "date": "2026-09-19T16:06:21Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
-   "test-uforth#src:tools/compiler_srchash.sh@1",
-   "test-uforth#src:tools/compiler_srchash.sh@2",
-   "test-uforth#src:tools/compiler_srchash.sh@3",
-   "test-uforth#src:tools/compiler_srchash.sh@4",
-   "test-uforth#src:tools/compiler_srchash.sh@5",
-   "test-uforth#src:tools/compiler_srchash.sh@6",
-   "test-uforth#src:tools/compiler_srchash.sh@7",
-   "test-uforth#src:tools/compiler_srchash.sh@8",
-   "test-uforth#src:tools/compiler_srchash.sh@9",
-   "test-uforth#src:tools/compiler_srchash.sh@10",
-   "test-uforth#src:tools/compiler_srchash.sh@11",
-   "test-uforth#src:tools/compiler_srchash.sh@12",
-   "test-uforth#src:tools/compiler_srchash.sh@13",
+   "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
+   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
+   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy",
+   "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy",
    "tools-devtest#00",
-   "demos#00"
+   "demos#00",
+   "test-pascal-conformance#shard3/6"
   ],
-  "sha": "9393ab277ad16d0516d9f0d83ff23baf0e25b1a4",
+  "sha": "934f403764656371727a86e6cfc80ba6ef3bfc02",
   "tier": "full",
-  "ver": "v409",
-  "verdict": "RED"
+  "ver": "v412",
+  "verdict": "RED",
+  "why": {
+   "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- a",
+   "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy": "pascal26:68: error: Nil Python: add overrides TPyList.add with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- annotat",
+   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- a",
+   "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124"
+  }
  },
  "toolchain": {
   "espqemu-riscv32": "9.2.2",
