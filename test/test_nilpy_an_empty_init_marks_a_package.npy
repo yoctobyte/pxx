@@ -1,0 +1,13 @@
+# A ZERO-BYTE `__init__.py` marks a package -- the commonest spelling there is.
+# The resolver read "no content" as "no such file", so a package or
+# subpackage whose `__init__` was empty was "no unit named ...", and a one-line
+# comment in it made the same import work. Both levels here are empty. The
+# subpackage is named `platform`, like the Pascal RTL unit, which took the blame
+# in the diagnostic (lekkerzeilen's `from .platform import _gl`), and whose row
+# of the shared unit name the submodule lookup then took. The relative spelling
+# from inside a package module is bug-n-a-subpackage-directory-does-not-resolve-
+# as-a-module and is not asserted here.
+from nilpy_emptyinit import app
+from nilpy_emptyinit.platform import _gl as g2
+
+print(app.go(), g2.area())

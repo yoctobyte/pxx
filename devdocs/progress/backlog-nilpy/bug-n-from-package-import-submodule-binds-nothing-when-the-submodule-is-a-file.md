@@ -3,7 +3,7 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
-summary: "`from .platform import _gl` binds nothing when _gl is a SUBMODULE reached by its own filename: a member access on it errors `no member <x> came of the qualifier _gl`. `from . import <module>` and `from .platform import gl` (gl a NAME assigned in platform/__init__.py) both work; only the file-named submodule form fails, with or without `as`. Found by the lekkerzeilen seat; consequence is that lekkerzeilen/platform/* is uncoverable by a generated value sweep."
+summary: "MECHANISM (re-measured 2026-09-19 at 2bfcfa8bf23e, and it is an ANCHORING bug, not a spelling one): `from .pkg import <submodule-file>` resolves only when the package directory is itself a search root. The submodule arm now exists and finds the file -- strace shows `<root>/P/platform/_gl.py` opened -- and then the unit resolver probes the MANGLED key beside the importer and the DOTTED path under the -Fu ROOTS, so a package one level below a root is never reached. A main script INSIDE the package works; a module of the package driven from outside gives `no unit named platform__gl`. Fix: derive the package dotted path from the root that contains it. Same anchoring question as bug-n-a-subpackage-directory-does-not-resolve-as-a-module (p55) -- do them together."
 status: open
 ---
 
@@ -57,3 +57,35 @@ The repro above errors on the current compiler and must COMPILE and print
 `plain <result>` when fixed. Re-derive the expected value from the built
 thing rather than from this ticket (the member's return type is not asserted
 here).
+
+# 2026-09-19, frankH -- half of this is fixed; what is left is the SEARCH ROOT, not the spelling
+
+At compiler 2bfcfa8bf23e the submodule arm exists (the absolute twin of this
+ticket, bug-n-from-a-package-import-a-submodule-binds-nothing, is closed) and
+a zero-byte `__init__.py` resolves. `from .platform import _gl` now WORKS when
+the importing file is a main script sitting in the package directory: probe
+`P/{__init__.py, platform/{__init__.py,_gl.py}, main_inside.npy}` prints 7.
+
+It still fails when the importer is a MODULE of the package reached through a
+`-Fu` root above the package: `P/mod.py` with the same statement, driven by an
+outside `from P.mod import go`, gives
+
+    import: no unit named platform__gl and no shim mimic_platform__gl
+
+and that is the whole residual. Measured with strace, which names the cause
+exactly: the correct file IS found by the arm's own probe
+(`<root>/P/platform/_gl.py`, opened, fd 3 -- that is PyPackageSubmoduleKey
+answering), and then the unit resolver looks for the MANGLED key
+`<root>/P/platform__gl.py` beside the importer and for the DOTTED path
+`platform/_gl.py` under the roots -- i.e. under `<root>`, never under
+`<root>/P`. The dotted path is anchored at a search root while the package is
+one level below it.
+
+So the fix is to hand the resolver the package's path from a ROOT (derive the
+dotted name by matching the package directory against PasUnitDirs, then join
+the submodule) rather than the bare `<pkg>.<sub>`. Not attempted here: this
+ticket's other rows are closed, and the remaining one is the same anchoring
+question as
+bug-n-a-subpackage-directory-does-not-resolve-as-a-module (p55), whose
+`from .platform.gl import area` row fails identically on HEAD and on pin v411.
+Worth doing the two together.

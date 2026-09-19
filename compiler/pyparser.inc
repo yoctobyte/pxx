@@ -46190,8 +46190,52 @@ begin
   end;
 end;
 
+{ `from pkg import sub` where `sub` is a MODULE of the package and not a name
+  its `__init__` binds: the unit key to import it under (`pkg_sub`, what
+  `import pkg.sub` uses), or '' when this is an ordinary member import. The
+  from-import loop took every name as a MEMBER, so the submodule spelling bound
+  nothing and the first use said "no member area came of the qualifier geo",
+  while `import pkg.sub as sub`, `from pkg.sub import name` and the relative
+  twin `from . import sub` all worked (bug-n-from-a-package-import-a-submodule-
+  binds-nothing). Same rule as the relative arm's PyRelImportMemberPackage,
+  asked of the package's resolved `__init__` file instead of CurUnitDir: a
+  name the package unit declares wins, which is CPython's order, and only a
+  module file or subpackage beside that `__init__` answers. }
+function PyPackageSubmoduleKey(const pkgName, sub: AnsiString): AnsiString;
+var u, i: Integer; path, dir: AnsiString;
+begin
+  Result := '';
+  u := FindUnitOrAlias(pkgName);
+  if u < 0 then Exit;
+  if (FindUClassInUnit(sub, u) >= 0) or (FindSymInUnit(sub, u) >= 0) or
+     (FindProcInUnit(sub, u) >= 0) then Exit;
+  { EVERY compiled unit of that name, not the first: a unit's identity is
+    still its NAME (bug-a-a-python-module-s-identity-is-its-name-not-its-file),
+    so a package called `platform` shares its key with the Pascal RTL's
+    platform.pas, and the first row was the RTL's -- no `__init__`, no
+    submodules, and `from .platform import _gl` bound nothing. The row whose
+    file IS an `__init__` is the package. }
+  dir := '';
+  for i := 0 to CompiledUnitCount - 1 do
+    if (dir = '') and (CompiledUnits[i] = u) and (CompiledUnitFile[i] >= 0) then
+    begin
+      path := KeyStrs[CompiledUnitFile[i]];
+      if (Length(path) > 12) and (Copy(path, Length(path) - 11, 12) = '/__init__.py') then
+        dir := Copy(path, 1, Length(path) - 11)
+      else if (Length(path) > 13) and (Copy(path, Length(path) - 12, 13) = '/__init__.npy') then
+        dir := Copy(path, 1, Length(path) - 12);
+    end;
+  if dir = '' then Exit;
+  if PySourceExists(dir + sub + '.py') or PySourceExists(dir + sub + '.npy') or
+     PySourceExists(dir + sub + '/__init__.py') or
+     PySourceExists(dir + sub + '/__init__.npy') then
+    Result := pkgName + '_' + sub;
+end;
+
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
+    rsvImp: AnsiString; rsvUnit: Integer;   { a member Pascal reserves -- see the arm }
+    subKey: AnsiString;   { `from pkg import sub`, sub a MODULE -- see PyPackageSubmoduleKey }
     { `from . import (a, b)` — a parenthesised name list. See the loop below. }
     impParen: Boolean;
     { the unit key and language of a quoted import; see PyConsumeQuotedModule }
@@ -46403,6 +46447,49 @@ begin
             rather than the consumed-only one, but its members are mapped by
             the same table sys.exit uses and the unit alone does not bind them. }
           PyStdAliasRecord(impDotted, impReal, impAlias);
+          { A member whose Python name Pascal RESERVES: `from array import
+            array`. mimic_array cannot declare a class called `array`, so it
+            declares `array_` (PyMapReservedMember's convention), and the three
+            QUALIFIED doors already map `array.array` onto it. The from-import
+            did not, so both `from array import array` and `... as arr` were
+            `undefined variable`. When the unit this names declares ONLY the
+            mapped spelling, the source name becomes that spelling and the
+            arms below bind the Python name to it -- as a class alias for a
+            class, as a binding for a value. The plain spelling is probed
+            first for the reason the constructor door gives: a NilPy module
+            can and does declare `class set`. }
+          rsvImp := PyMapReservedMember(impReal);
+          if rsvImp <> impReal then
+          begin
+            rsvUnit := FindUnitOrAlias(impName);
+            if (rsvUnit >= 0) and
+               (FindUClassInUnit(impReal, rsvUnit) < 0) and
+               (FindSymInUnit(impReal, rsvUnit) < 0) and
+               (FindProcInUnit(impReal, rsvUnit) < 0) and
+               ((FindUClassInUnit(rsvImp, rsvUnit) >= 0) or
+                (FindSymInUnit(rsvImp, rsvUnit) >= 0) or
+                (FindProcInUnit(rsvImp, rsvUnit) >= 0)) then
+              impReal := rsvImp;
+          end;
+          { ...and a name that is a SUBMODULE of the package: import it as
+            `import pkg.sub as <alias>` would, and bind nothing else. }
+          subKey := '';
+          if not SoftUnitMissed then subKey := PyPackageSubmoduleKey(impName, impReal);
+          if subKey <> '' then
+          begin
+            PyDottedImport := impDotted + '.' + impReal;
+            PyRelativeLevel := impLevel;
+            PyParseImportUnit(subKey);
+            if (UnitAliasCount < MAX_UNIT_ALIASES) and
+               (LowerCase(impAlias) <> LowerCase(subKey)) then
+            begin
+              UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
+              UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(subKey));
+              Inc(UnitAliasCount);
+            end;
+            if not Eat(tkComma) then Break;
+            Continue;
+          end;
           if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
           begin
             aliasCi := FindUClass(impReal);

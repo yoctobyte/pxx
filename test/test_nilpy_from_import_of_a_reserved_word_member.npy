@@ -1,0 +1,16 @@
+# `from array import array` and `from array import array as arr`. mimic_array
+# declares the class as `array_` (Pascal reserves `array`), and only the
+# QUALIFIED spelling `array.array(...)` was mapped onto it: both from-import
+# spellings were `undefined variable`. The aliased form is first, and a
+# qualified construction sits between them as the control.
+from array import array as arr
+from array import array
+import array as array_mod
+
+a = arr("h")
+a.frombytes(bytes(4))
+q = array_mod.array("h", b"\x02\x00")
+b = array("h")
+b.frombytes(bytes(6))
+b[1] = 9
+print(len(a), len(q), q[0], len(b), b[1] + a[0])

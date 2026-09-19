@@ -319,7 +319,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (178)
+## backlog-nilpy (177)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -411,8 +411,7 @@ _none_
 | bug-n-compiling-html5lib-trie-never-terminates | N | 55 | bug | Compiling library_candidates/html5lib/html5lib/_trie/__init__.py — five lines — never terminates. Found as a pxx process that had been in state R for 1 day 16:47 on a six-session box, and reproduced bounded: `timeout 60` returns 124 after emitting only the shim-resolution notes. No diagnostic, no progress, no exit. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-exec-only-publishes-a-def-named-body-and-cannot-call-host-globals | N | 45 | bug | pyeval's exec() publishes exactly one def into the caller's namespace — one literally named __body__, hand-wired at pyeval.pas:5748 to uforth's wrapper idiom. `exec(\"def body(): return 1\", {}, ns); ns[\"body\"]()` raises KeyError under pxx and prints 1 under CPython. Two more refusals in the same family: a function in the globals dict is not callable from the exec'd body, and attribute access on a parameter raises 'no RTTI for attribute'. All three are programs CPython accepts and runs, so all three are N bugs by the upward-compatibility rule. | — |
-| bug-n-from-a-package-import-a-submodule-binds-nothing | N | 45 | bug | > | — |
-| bug-n-from-package-import-submodule-binds-nothing-when-the-submodule-is-a-file | N | 40 | bug | `from .platform import _gl` binds nothing when _gl is a SUBMODULE reached by its own filename: a member access on it errors `no member <x> came of the qualifier _gl`. `from . import <module>` and `from .platform import gl` (gl a NAME assigned in platform/__init__.py) both work; only the file-named submodule form fails, with or without `as`. Found by the lekkerzeilen seat; consequence is that lekkerzeilen/platform/* is uncoverable by a generated value sweep. | — |
+| bug-n-from-package-import-submodule-binds-nothing-when-the-submodule-is-a-file | N | 40 | bug | MECHANISM (re-measured 2026-09-19 at 2bfcfa8bf23e, and it is an ANCHORING bug, not a spelling one): `from .pkg import <submodule-file>` resolves only when the package directory is itself a search root. The submodule arm now exists and finds the file -- strace shows `<root>/P/platform/_gl.py` opened -- and then the unit resolver probes the MANGLED key beside the importer and the DOTTED path under the -Fu ROOTS, so a package one level below a root is never reached. A main script INSIDE the package works; a module of the package driven from outside gives `no unit named platform__gl`. Fix: derive the package dotted path from the root that contains it. Same anchoring question as bug-n-a-subpackage-directory-does-not-resolve-as-a-module (p55) -- do them together. | — |
 | bug-n-from-package-import-submodule-binds-the-parent-package | N | 40 | bug | `from xml.dom import minidom` binds `minidom` to the PARENT package `xml.dom`, not the submodule. Member lookups then resolve the parent's names silently -- `minidom.XHTML_NAMESPACE` returns `http://www.w3.org/1999/xhtml` where CPython raises AttributeError. STILL LIVE at `ca814b0aabcc` (re-measured 2026-09-10) and still a silent wrong value. BOUNDARY NARROWED: a real filesystem package is CORRECT in all three spellings, measured against a parent and child that both define the same name with different values -- so this is the DOTTED SHIM path (`xml.dom` flattened to `mimic_xml_dom`, trailing name dropped) and not `from <package> import <submodule>` in general. `lib/rtl/mimic_xml_dom_minidom.py` already exists, so the right target is in the tree, unused. | — |
 | bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused | N | 45 | bug | > | — |
 | bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method | N | 55 | bug | `hasattr(x, n)` with the name in a VARIABLE answers False for every builtin-container, str, int and float method — `n = 'keys'; hasattr(a_dict, n)` is False while `hasattr(a_dict, 'keys')` is True. The literal and computed spellings of one question resolve through two different mechanisms and only the literal one was fixed. | — |
@@ -1089,9 +1088,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3880)
+## done (3881)
 
-3880 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3881 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (84)
 
@@ -1421,7 +1420,6 @@ _none_
 - [p 45] [N] bug-n-a-shim-parameter-typed-as-a-container-blocks-the-callable-value-wrapper
 - [p 45] [N] bug-n-a-star-unpack-through-a-callable-value-stops-at-four-arguments
 - [p 45] [N] bug-n-exec-only-publishes-a-def-named-body-and-cannot-call-host-globals
-- [p 45] [N] bug-n-from-a-package-import-a-submodule-binds-nothing
 - [p 45] [N] bug-n-getattr-with-a-literal-method-name-on-a-builtin-container-or-str-is-refused
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-pyfixiterableargs-is-inert-its-own-test-passes-with-it-disabled

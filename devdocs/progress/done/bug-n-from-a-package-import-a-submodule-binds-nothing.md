@@ -14,7 +14,7 @@ track: N
 type: bug
 prio: 45
 owner: unassigned
-status: open
+status: done
 ---
 
 ## Measured 2026-09-13 (frankH), at 17eaf7f74
@@ -65,3 +65,31 @@ sub` is the form most Python code writes, and lekkerzeilen only avoids it by
 being inside its own package (`from . import geometry`), which takes the arm
 that works. Found from outside, writing a four-line probe against the demo's own
 `geometry` module.
+
+## Fixed 2026-09-19, frankH (compiler 2bfcfa8bf23e)
+
+`PyPackageSubmoduleKey` + one arm in `PyParseImportRun`'s from-import loop,
+exactly the shape this ticket's "Where the fix goes" names: when a name is not
+a member the package unit declares, and a module file or subpackage sits beside
+the package's resolved `__init__`, it is imported as `import pkg.sub` does and
+the alias is registered. Member first, which is CPython's order -- the fixture
+has `label` as both a def in `__init__` and a module file, and the def wins.
+
+Two things the fix needed that the analysis did not have:
+
+- The row scan. A unit's identity is still its NAME, so a package called
+  `platform` shares its key with the RTL's `platform.pas`; taking the FIRST
+  compiled row of that name gave the RTL unit, which has no `__init__` and no
+  submodules. It now takes the row whose file is an `__init__`.
+- A ZERO-BYTE `__init__.py` did not resolve at all (fixed separately,
+  `LoadPySource`). Any probe of this ticket written with an empty `__init__`
+  would have failed for that reason instead.
+
+Fixture: `test/test_nilpy_from_a_package_import_a_submodule.npy` (a member
+first, then a submodule, an aliased submodule, a subpackage, and the
+`label` collision). It fails on pin v411 with this ticket's own error.
+Measured beyond the fixture: `from lekkerzeilen import world` then
+`world.START`, from outside the package.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

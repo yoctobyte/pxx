@@ -1,0 +1,12 @@
+# `from pkg import sub`, where `sub` is a MODULE of the package and not a name
+# its __init__ binds. The loop took every name as a member, so this bound
+# nothing: "no member area came of the qualifier geo". A member (`NAME`) is
+# listed FIRST so the submodules are not the first names, a submodule is
+# aliased, a subpackage is imported, and `label` -- both a def in __init__ and
+# a module file -- must stay the def, as in CPython.
+# bug-n-from-a-package-import-a-submodule-binds-nothing
+from nilpy_subimp import NAME, geo, units as u, deep, label
+
+print(NAME, geo.area(2, 3), geo.SCALE)
+print(u.km(2500), deep.DEPTH)
+print(label())

@@ -4813,6 +4813,28 @@ begin
   Result := LowerCase(Result);
 end;
 
+{ Load a PYTHON source: exactly LoadFile, except that a file which EXISTS
+  and is EMPTY comes back as one newline instead of nothing. Every probe below
+  reads "no content" as "no such file", which is right for a Pascal unit and
+  wrong for Python, where a zero-byte `__init__.py` is the ordinary way to mark
+  a directory as a package -- so `from .plat import _gl` and `from app.plat
+  import _gl` both answered "no unit named plat" for a package that is there,
+  and a one-line comment in the `__init__` made both work (lekkerzeilen's
+  `from .platform import _gl`, where the Pascal RTL unit `platform` then took
+  the blame in the diagnostic). One newline is an empty module to the lexer. }
+procedure LoadPySource(const path: AnsiString; var dst: AnsiString);
+var fd: Integer;
+begin
+  LoadFile(path, dst);
+  if Length(dst) > 0 then Exit;
+  fd := sysopen(path, 0);
+  if fd >= 0 then
+  begin
+    sysclose(fd);
+    dst := #10;
+  end;
+end;
+
 { One package root's worth of probes for a dotted module: the module file
   itself, then the package directory's `__init__`. `.py` before `.npy` at each
   step so a package written in plain Python wins over a stray same-named NilPy
@@ -4824,19 +4846,19 @@ begin
   if Length(content) > 0 then Exit;
   if wantModuleFile then
   begin
-    ConcatThree(root, relPath, '.py', path); LoadFile(path, content);
+    ConcatThree(root, relPath, '.py', path); LoadPySource(path, content);
     if Length(content) = 0 then
     begin
-      ConcatThree(root, relPath, '.npy', path); LoadFile(path, content);
+      ConcatThree(root, relPath, '.npy', path); LoadPySource(path, content);
     end;
   end;
   if Length(content) = 0 then
   begin
-    ConcatThree(root, relPath, '/__init__.py', path); LoadFile(path, content);
+    ConcatThree(root, relPath, '/__init__.py', path); LoadPySource(path, content);
   end;
   if Length(content) = 0 then
   begin
-    ConcatThree(root, relPath, '/__init__.npy', path); LoadFile(path, content);
+    ConcatThree(root, relPath, '/__init__.npy', path); LoadPySource(path, content);
   end;
 end;
 
@@ -5328,11 +5350,11 @@ begin
       if isNilPy and pyLookupOK and (Length(UnitContent) = 0) then
       begin
         ConcatThree(basePath, '.py', '', path);
-        LoadFile(path, UnitContent);
+        LoadPySource(path, UnitContent);
         if Length(UnitContent) = 0 then
         begin
           ConcatThree(basePath, '.npy', '', path);
-          LoadFile(path, UnitContent);
+          LoadPySource(path, UnitContent);
         end;
         if Length(UnitContent) > 0 then isPyUnit := True;
       end;
@@ -5836,29 +5858,29 @@ begin
     while (Length(UnitContent) = 0) and (pyRootIdx < PasUnitDirCount) do
     begin
       ConcatThree(PasUnitDirs[pyRootIdx], lo, '.py', path);
-      LoadFile(path, UnitContent);
+      LoadPySource(path, UnitContent);
       if Length(UnitContent) = 0 then
       begin
         ConcatThree(PasUnitDirs[pyRootIdx], lo, '.npy', path);
-        LoadFile(path, UnitContent);
+        LoadPySource(path, UnitContent);
       end;
       Inc(pyRootIdx);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(rtldir, lo, '.py', path);   LoadFile(path, UnitContent);
+      ConcatThree(rtldir, lo, '.py', path);   LoadPySource(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(rtldir, lo, '.npy', path);  LoadFile(path, UnitContent);
+      ConcatThree(rtldir, lo, '.npy', path);  LoadPySource(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(lcldir, lo, '.py', path);   LoadFile(path, UnitContent);
+      ConcatThree(lcldir, lo, '.py', path);   LoadPySource(path, UnitContent);
     end;
     if Length(UnitContent) = 0 then
     begin
-      ConcatThree(lcldir, lo, '.npy', path);  LoadFile(path, UnitContent);
+      ConcatThree(lcldir, lo, '.npy', path);  LoadPySource(path, UnitContent);
     end;
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;

@@ -209,3 +209,20 @@ carry at least one `blocked-by` naming a closed ticket, five of them fully unblo
 **Track N is NOT being dispatched** (owner deprioritized it and reserved the call, 2026-08-27).
 This ticket is rankable again and correctly filed, but do not auto-claim it on a cold-start
 "take the global top" — ask the owner first.
+
+# 2026-09-19, frankH -- two neighbours fixed, the relative row measured again
+
+Found while chasing lekkerzeilen's `from .platform import _gl`. Two things
+that LOOKED like this ticket were other mechanisms and are fixed beside it
+(test_nilpy_an_empty_init_marks_a_package, test_nilpy_from_a_package_import_a_submodule):
+a ZERO-BYTE `__init__.py` read as "no such file" (the resolver's not-found test
+is empty content), and `from pkg import sub` never tried `sub` as a module.
+
+What is still THIS ticket, at compiler 1e386673bc6b+: the relative spelling
+from a module that is itself inside a package reached through `-Fu`.
+`nilpy_emptyinit/app.py` saying `from .platform.gl import area` gives `no unit
+named platform_gl` on HEAD and on pin v411 alike, while the absolute
+`from nilpy_emptyinit.platform.gl import area` prints 42 on both. From a MAIN
+script sitting in the package directory the relative spelling works, so the
+variable is the importer being a -Fu module, consistent with "the relative
+form hands the resolver a name with no package prefix".
