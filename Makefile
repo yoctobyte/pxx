@@ -7113,6 +7113,24 @@ test-threads: $(COMPILER)
 	@printf 'program tlsdeclarea;\nthreadvar t: LongInt;\nbegin t := 1; writeln(__pxxTlsBlockSize); end.\n' > $(TESTTMP)/tlsdeclarea.pas
 	./$(COMPILER) $(TESTTMP)/tlsdeclarea.pas $(TESTTMP)/tlsdeclarea
 	tools/expect_same.sh tlsdeclarea "$$($(TESTTMP)/tlsdeclarea)" "4224"
+	# THE NILPY ARM of the same saving, and it rests on a different argument
+	# from the Pascal one. There is no text scan and nothing for one to find:
+	# the language has no thread-local declaration, so no NilPy source can
+	# declare one however it is spelled. What the row actually guards is the
+	# PASCAL RTL CHAIN a NilPy program drags in -- isNilPy is true for that whole
+	# compilation, so "this frontend has no such keyword" is NOT "this
+	# compilation cannot declare one" -- and the fixture imports a real Pascal
+	# unit on purpose to put one on the chain. Measured rather than argued: at a
+	# zero-byte area a threadvar in an imported .pas unit ERRORS, naming the
+	# unit, the line and the flag, exit 1. So the worst case is a loud refusal
+	# with its own fix in the message, never a silent collision. The pinned
+	# compiler answers 4224 for this same file.
+	# C IS DELIBERATELY NOT HERE: it has __thread, its #includes expand after
+	# the size is chosen, and its arm of the allocator WARNS rather than errors
+	# -- the declaration becomes one copy shared by every thread and the program
+	# still compiles. C keeps the full area.
+	./$(COMPILER) test/test_a_nilpy_program_pays_no_threadvar_area.npy $(TESTTMP)/test_tlsnonenp26
+	tools/expect_same.sh test_tlsnonenp26 "$$($(TESTTMP)/test_tlsnonenp26)" "block=1152"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

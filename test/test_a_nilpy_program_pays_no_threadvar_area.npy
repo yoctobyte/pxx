@@ -1,0 +1,23 @@
+# feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar
+#
+# A NilPy program gets a ZERO-byte per-thread variable area with no flag, so
+# __pxxTlsBlockSize is TLS_USER_FIRST_OFF alone. Unlike the Pascal arm there is
+# no text scan behind this and there is nothing for one to find: the language
+# has no thread-local declaration, so no NilPy source can declare one however it
+# is spelled.
+#
+# WHAT IT IS REALLY GUARDING is the Pascal RTL chain a NilPy program drags in.
+# isNilPy is true for that whole compilation, so "this frontend has no such
+# keyword" is NOT the same claim as "this compilation cannot declare one" -- and
+# the import below puts a real Pascal unit on the chain on purpose. If any unit
+# on it ever declares a threadvar, the Pascal allocator refuses at 0 bytes and
+# this row fails to BUILD with the cap's own diagnostic, naming the unit, the
+# line, and the flag that fixes it. The path is relative to THIS file's own
+# directory, which is why it reads 'units/...' and not 'test/units/...'.
+# Measured, not assumed: a NilPy program
+# importing a .pas unit that declares a threadvar exits 1 at -dPXX_TLS_USER_0.
+#
+# The pinned compiler answers 4224 for this file, which is the positive control.
+import 'units/utlsblock.pas'
+
+print("block=%d" % TlsBlock())

@@ -1757,6 +1757,38 @@ begin
      (not SourceMentionsKeyword('uses')) then
     TlsUserBytes := 0;
 
+  { NILPY, WITH NO TEXT SCAN AT ALL, because there is nothing for one to find:
+    the language has no thread-local declaration, so no NilPy source can declare
+    one however it is spelled. What a NilPy program CAN do is drag in Pascal RTL
+    units, and that is the whole risk -- `isNilPy` is true for the entire
+    compilation including those units, so this is NOT the same claim as "this
+    compilation cannot declare a threadvar".
+
+    It is nevertheless safe, and the reason is MEASURED rather than argued: a
+    threadvar in a unit a NilPy program imports reaches the PASCAL allocator,
+    which ERRORS. Measured 2026-09-19 with a NilPy program importing a .pas unit
+    that declares one, at -dPXX_TLS_USER_0: `error: threadvar counter: the
+    per-thread variable area is full (0 bytes)`, naming the unit, the line and
+    the flag that fixes it, exit 1. So the worst case is a refusal that tells
+    the user what to pass -- an ACCEPTANCE regression, loud -- and never a
+    silent collision of per-thread state, which is what this guard was written
+    in fear of. Today the population it could refuse is EMPTY: no unit under
+    lib/ or compiler/builtin/ declares a threadvar. test_tlsnonenp26 is the
+    guard on that, the same way test_tlsnone26 is for Pascal.
+
+    WHY C IS NOT HERE, and it is not caution either. C HAS `__thread`, its
+    `#include`s are expanded LATER than this point so a scan could not see a
+    header's declaration, and -- the deciding measurement -- the C arm of the
+    allocator WARNS instead of erroring: `__thread counter: ... this declaration
+    therefore gets ONE copy shared by every thread`. The program still compiles
+    and still runs, correctly single-threaded and wrong under threads. A hard
+    refusal naming a flag is a fine failure; a warning that silently converts a
+    thread-local into a shared global is not, so C keeps the full area and the
+    3,072 bytes with it.
+    feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
+  if (not explicit) and IsNilPyFrontend then
+    TlsUserBytes := 0;
+
   { DERIVED, never a second spelling. }
   TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;
 end;

@@ -7,7 +7,7 @@ prio: 45
 status: new
 created: 2026-09-18
 owner: ""
-summary: "ROUTES C AND A BOTH SHIPPED. A Pascal program naming neither `threadvar` nor `uses` now gets a ZERO-byte threadvar area automatically — hello.pas, the hosted umbrella's floor subject, goes bss 38,396 -> 35,324 with no flag and __pxxTlsBlockSize becomes 1152. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen (compiler.pas clears TokCount above ApplyTlsUserBytesOption and every frontend lexes below it), and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, under IsPascalFrontend, which is why this is Pascal-only. Every way the scan can be wrong costs BYTES, never correctness. The `uses` rule stays because dropping it would REFUSE a program that compiles today — a used unit's threadvar is not in the main source — which caps the reach at unit-free programs, 11 of 49 under examples/, counted and not re-counted. STILL OPEN on two pieces: (1) the other frontends, each a flat -3,072 (a NilPy hello 62,724 -> 59,652, a C hello 72,448 -> 69,376), gated on the fact that isNilPy is true for the whole compilation INCLUDING the Pascal RTL units a NilPy program drags in, so "this frontend has no such keyword" is not the same claim as "this compilation cannot declare one"; (2) route B, still the only unsound route, blocker unchanged. Found on the way and filed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero (p55), which predates all of this and reproduces on the pin."
+summary: "ROUTES C AND A SHIPPED, AND THE NILPY ARM WITH THEM. A Pascal program naming neither `threadvar` nor `uses`, and EVERY NilPy program, now get a ZERO-byte threadvar area automatically -- hello.pas goes bss 38,396 -> 35,324 and a NilPy hello 62,724 -> 59,652, both a flat -3,072, with __pxxTlsBlockSize 1152 instead of 4224. On top of that -dPXX_TLS_USER_0/_1K/_2K/_4K/_8K/_16K sets it explicitly and always wins. THE PASCAL SCAN READS THE SOURCE TEXT, NOT TOKENS, and that is forced: the token array is EMPTY at the only moment the size may be chosen, and the call cannot move down because EmitTlsMainInstall bakes the size into the BSS reservation and the fold captures it. Source is include-expanded by then, which is why the text scan is Pascal-only. THE NILPY ARM NEEDS NO SCAN -- the language has no thread-local spelling -- and the blocker this ticket recorded for it turned out not to exist: a threadvar in a Pascal unit a NilPy program imports reaches the PASCAL allocator, which ERRORS at 0 bytes, naming the unit, the line and the flag. The worst case is a LOUD acceptance regression carrying its own remedy, never a silent collision, and today over a population of zero. C IS EXCLUDED FOR A MEASURED REASON: it has __thread, its #includes expand after the size is chosen, and its arm of the allocator WARNS rather than errors -- the declaration becomes one copy shared by every thread and the program still runs. Guards: test_tlsnone26 (Pascal) and test_tlsnonenp26 (NilPy, which imports a real Pascal unit on purpose to put one on the ambient chain). The `uses` rule stays on the Pascal side because dropping it would REFUSE a program that compiles today, capping that arm's reach at unit-free programs, 11 of 49 under examples/. STILL OPEN: the long-tail frontends (one `or Is<X>Frontend` term each, unrequested), and route B, still the only unsound route. Found on the way and fixed separately: bug-a-a-threadvar-in-a-units-implementation-section-silently-reads-zero, which was really the -O2 inliner retaining a threadvar read as a plain global."
 ---
 
 # Why it is a fixed cap, in the code's own words
@@ -123,11 +123,70 @@ reproduces on the pinned compiler and is independent of everything here — the
 program that exposes it has a `uses` and therefore gets the full default area
 under every setting.
 
+## THE NILPY ARM SHIPPED 2026-09-19, AND THE BLOCKER I RECORDED DOES NOT EXIST
+
+The section below said this arm was gated on `defs.inc`'s `PyImportLang`
+caveat -- `isNilPy` is true for the WHOLE compilation including the Pascal RTL
+units a NilPy program drags in, so "the frontend has no such keyword" is not
+"this compilation cannot declare one". **The caveat is real and it is not a
+blocker, and the reason is one measurement nobody had taken.**
+
+What I was afraid of was a SILENT collision of per-thread state. It is not
+silent. A threadvar in a unit a NilPy program imports reaches the PASCAL
+allocator, which **errors**:
+
+```
+$ pascal26 -dPXX_TLS_USER_0 np.npy o
+pascal26:3: error: threadvar counter: the per-thread variable area is full (0 bytes)...
+  in: tvnp.pas
+  near: ; interface threadvar counter : LongInt >>> ; function Bump
+(exit 1)
+```
+
+It names the unit, the line, and the flag that fixes it. So the worst case on
+this arm is an **acceptance regression that announces itself with its own
+remedy** -- the same class as the Pascal `uses` rule, and today over a population
+of ZERO, since no unit under `lib/` or `compiler/builtin/` declares one.
+`test_tlsnonenp26` is the guard: a NilPy fixture that imports a real Pascal unit
+ON PURPOSE, to put one on the chain, and asserts `block=1152`. The day an
+ambient unit declares a threadvar it fails to BUILD with the diagnostic above,
+rather than shipping a wrong size.
+
+Measured: a NilPy hello goes bss 62,724 -> 59,652, a flat -3,072, and
+`__pxxTlsBlockSize` 4224 -> 1152. The pinned compiler answers 4224 for the same
+fixture, which is the positive control.
+
+**C IS EXCLUDED, and not out of caution.** Three things, the third deciding:
+C has `__thread`; its `#include`s are expanded AFTER the size is chosen, so no
+text scan here could see a header's declaration; and -- measured the same hour
+-- the C arm of `TryAssignThreadVarStorage` **warns** where Pascal errors:
+
+```
+pascal26:2: warning: __thread counter: the per-thread variable area is full (0 bytes)...
+  -- this declaration therefore gets ONE copy shared by every thread, not one
+  per thread ... threaded code will read and write another thread's value with
+  no further warning
+```
+
+and the program compiles, links and runs. A hard refusal naming a flag is a
+fine failure mode; a warning that silently converts a thread-local into a shared
+global is not. **C keeps the full 3,072 bytes and that is the right answer, not
+a gap.** Changing it means giving C's arm the Pascal arm's refusal, which is a
+separate decision about a frontend I do not own.
+
 ## WHAT IS LEFT (frankS parked it 2026-09-19; nobody holds it)
 
 The ticket stays OPEN on two remaining pieces, in value order:
 
-1. **The other frontends.** NilPy, BASIC, Rust, Zig, Erlang, Ada, Algol,
+1. ~~**The other frontends.**~~ **NilPy SHIPPED (see the section above); C is
+   excluded for a measured reason and is not coming back without a decision
+   about its allocator arm.** What remains of this item is the LONG TAIL --
+   BASIC, Rust, Zig, Erlang, Ada, Algol, Fortran, Lol, Ws -- each a flat -3,072
+   and each worth exactly one `or Is<X>Frontend` term once someone confirms that
+   frontend's ambient chain refuses loudly the way NilPy's does. Nobody has
+   asked for those, so they are not scheduled. The original text follows.
+
+   The other frontends. NilPy, BASIC, Rust, Zig, Erlang, Ada, Algol,
    Fortran and the rest cannot declare a thread-local at all — only Pascal
    (`threadvar`) and C (`__thread`) reach `TryAssignThreadVarStorage`, which is a
    two-file census, not a guess. Each of them is a flat **-3,072** (measured: a
