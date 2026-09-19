@@ -162,4 +162,4 @@ six rows) and `c_block_static_survives_a_storage_class` (`6 rows OK`), both with
 zero `__thread` warnings.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 402d61e0d.
