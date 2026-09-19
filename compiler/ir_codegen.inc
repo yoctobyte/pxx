@@ -1724,6 +1724,16 @@ begin
     gets none of the area. An explicit rung always WINS -- a program whose
     thread-locals live somewhere this scan cannot see must have a way to ask.
 
+    BEFORE YOU TRY TO MAKE THIS CLEVERER: what bounds this scan is an ORDERING,
+    not a predicate, and that is the thing that reads as a design smell to
+    anyone who has not traced it. It cannot ask a better question because at
+    this point there is nothing better to ask -- and the ordering is not
+    incidental either: the size has to be a LITERAL at its use site, so it must
+    be final before anything is lexed. A cleverer scan is not the improvement
+    here; moving the decision is, and that is a different change with its own
+    measurement. (Raised by frankb-56 2026-09-19, after proposing exactly the
+    cleverer scan.)
+
     WHY THE TEXT AND NOT THE TOKENS, which is the thing to know before moving
     this. The token array is EMPTY here: compiler.pas clears TokCount well above
     and every frontend lexes inside its own branch BELOW this call. It cannot be
