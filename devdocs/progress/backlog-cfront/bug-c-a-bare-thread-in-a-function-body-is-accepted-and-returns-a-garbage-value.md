@@ -8,7 +8,7 @@ created: 2026-09-19
 found-by: frankS
 tags: [tls, threads, c-frontend]
 blocked-by: []
-summary: "`__thread int t;` inside a function body, with no `static`, is ACCEPTED and becomes an ordinary uninitialised stack local — measured 2026-09-19 at HEAD on x86-64: pxx returns a fresh indeterminate value per call (586162841, then 1551595657 on a rebuild) where gcc REFUSES the program outright (`function-scope 't' implicitly auto and declared `__thread`). SUMMARY CORRECTED THE SAME DAY: this said "with NO diagnostic", and 09de09465 — my own landing, hours later — made that false by warning here too. THE REMAINDER IS NARROWER THAN THE ORIGINAL SUMMARY AND STILL REAL: it now warns, and it still COMPILES and still returns garbage, where the oracle refuses. A warning is not a refusal, and acceptance for this ticket is the refusal. 09de09465 also got the TEXT wrong for one commit — it told the programmer this declaration "gets ONE copy shared by every thread", which is true of the `static` sibling and FALSE here, since this one is not shared at all but a fresh automatic; that is now a seventh reason (TLSREFUSE_FUNCAUTO) with its own message and its own warn-once flag, because two facts sharing one flag is the defect this family was rebuilt around, one size down. ONE CAUSE, TWO SPELLINGS — both come from cparser.inc's block-scope storage-class loop, which consumes `__thread`/`_Thread_local` and records only `static`, so the qualifier is gone before a symbol exists. The `static` sibling works single-threaded and is wrong only under threads; THIS one is wrong on one thread today and needs no threads to bite, which is why it outranks it. What is open is only whether we Error like gcc or keep warning — C requires a block-scope thread-local to be `static` or `extern`, so no correct program can want this shape and the population a refusal would break is empty by construction; measure it anyway before refusing, since that count went stale in eight days once already in this subsystem, in the flattering direction."
+summary: "`__thread int t;` inside a function body, with no `static`, is ACCEPTED and becomes an ordinary uninitialised stack local — measured 2026-09-19 at HEAD on x86-64: pxx returns a fresh indeterminate value per call (586162841, then 1551595657 on a rebuild) where gcc REFUSES the program outright (`function-scope 't' implicitly auto and declared `__thread`). SUMMARY CORRECTED THE SAME DAY, AND IT WAS BORN FALSE RATHER THAN GONE STALE: this said "with NO diagnostic", and the file was ADDED IN 09de09465 — the very commit whose warning falsifies it — so the sentence was never true for any reader. The remedy for that is not re-verifying later but deriving the summary from the tree you are COMMITTING TO rather than from the measurement you took before the fix. THE REMAINDER IS NARROWER THAN THE ORIGINAL SUMMARY AND STILL REAL: it now warns, and it still COMPILES and still returns garbage, where the oracle refuses. A warning is not a refusal, and acceptance for this ticket is the refusal. 09de09465 also got the TEXT wrong for one commit — it told the programmer this declaration "gets ONE copy shared by every thread", which is true of the `static` sibling and FALSE here, since this one is not shared at all but a fresh automatic; that is now a seventh reason (TLSREFUSE_FUNCAUTO) with its own message and its own warn-once flag, because two facts sharing one flag is the defect this family was rebuilt around, one size down. ONE CAUSE, TWO SPELLINGS — both come from cparser.inc's block-scope storage-class loop, which consumes `__thread`/`_Thread_local` and records only `static`, so the qualifier is gone before a symbol exists. The `static` sibling works single-threaded and is wrong only under threads; THIS one is wrong on one thread today and needs no threads to bite, which is why it outranks it. What is open is only whether we Error like gcc or keep warning — C requires a block-scope thread-local to be `static` or `extern`, so no correct program can want this shape and the population a refusal would break is empty by construction; measure it anyway before refusing, since that count went stale in eight days once already in this subsystem, in the flattering direction."
 ---
 
 # A bare `__thread` at block scope compiles to a garbage stack local
@@ -26,12 +26,29 @@ int bump(void) { __thread int t; t++; return t; }   /* no `static` */
 | gcc | **refuses**: `error: function-scope 't' implicitly auto and declared '__thread'` |
 | pxx | compiles, **warns since 09de09465**, and still prints a garbage value (**586162841**, then **1551595657** on a later build — it is indeterminate, so the digits are not the finding) |
 
-**THE "NO DIAGNOSTIC" CLAIM WAS TRUE WHEN FILED AND WAS FALSE FOUR HOURS
-LATER**, falsified by this ticket's own author landing `09de09465` in the same
-seam. Corrected in the commit that did it. That is the mechanism CLAUDE.md
-gained a clause for today, arriving on a summary written the same evening by
-the person best placed to know — which is the point: your own text reads as
-already-checked.
+**THE "NO DIAGNOSTIC" CLAIM WAS BORN FALSE — IT WAS NEVER TRUE FOR ANY READER,
+AND THAT IS A DIFFERENT DEFECT FROM A STALE SUMMARY.** My first account of this
+said the sentence went stale four hours after I wrote it. Checked rather than
+recalled, and it is worse than that: `git log --diff-filter=A` puts this file's
+creation in **`09de09465`** — *the same commit as the warning that falsifies
+it*. In that very tree `localSawThread := True` is set whether or not `static`
+is present, and the warn fires before both declaration arms, so a bare
+`__thread` warned at the exact revision that introduced the sentence saying it
+does not.
+
+**The remedy is not the one a stale summary needs.** "Re-verify the summary
+before you start" does nothing here — there was no interval in which re-reading
+would have helped, and the seat that files a ticket alongside a fix is the least
+likely to re-read it. What catches this shape is: **derive the summary from the
+tree you are COMMITTING TO, not from the measurement you took before the fix.**
+The measurement (`586162841`, no diagnostic) was true when taken and false by
+the time it was written down, and nothing in between announced the change.
+
+That is CLAUDE.md's **born red** shape — a guard that could never have passed
+once — arriving in a *summary* rather than an assertion, where nothing runs it
+and so nothing reports it. An assertion written from a report of the code fails
+loudly on arrival; a summary written from a superseded measurement just sits at
+the top of a queue being read.
 
 **The remainder is narrower and still real.** A warning is not a refusal, and
 the acceptance criterion here is the refusal: gcc rejects the program outright,
