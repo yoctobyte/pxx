@@ -4972,6 +4972,39 @@ begin
   Result := callNode;
 end;
 
+procedure PySkipGenericAliasParams;
+{ CurTok is the token after a builtin type name taken as a VALUE. When it is
+  '[', consume the balanced parameter list: `tuple[float, float, float]`,
+  `list[int]`, `dict[str, list[int]]`. The value is the ORIGIN type, the one the
+  bare name already gives.
+
+  That is PEP 585's module-level alias, `Vec3 = tuple[float, float, float]`
+  (That Space Program's tsp/ephem/spk.py:30), and the alias is then imported by
+  NAME from other modules, so it has to be a real binding and not something to
+  skip. The comma list inside the brackets is not an index expression, and the
+  subscript parser stopped on its first comma with "expected ']' before ','".
+
+  CPython binds a types.GenericAlias. Calling one constructs the origin, and
+  that is the only runtime use the corpus makes of an alias besides naming it
+  in an annotation. Two answers differ from CPython's, and both are stated
+  here: the repr (`tuple[float, float, float]` there, `<class 'tuple'>` here),
+  and `Vec3 is tuple`, which is False there and True here. An annotation that names the alias
+  still reads as an unknown name and degrades to Any, as `Vec3 = tuple` in
+  tsp/scene.py already does. Called from PyParseFactorCore's builtin-type arm
+  only. PyMakeFuncValue has a twin arm, but both of its callers enter it only
+  when the name is followed by the end of the statement, so a '[' can never
+  reach it; a call there was tried, and removing it changed nothing. }
+var depth: Integer;
+begin
+  if CurTok.Kind <> tkLBrack then Exit;
+  depth := 0;
+  repeat
+    if CurTok.Kind = tkLBrack then Inc(depth)
+    else if CurTok.Kind = tkRBrack then Dec(depth);
+    Next;
+  until (depth = 0) or (CurTok.Kind = tkEOF);
+end;
+
 function PyZeroArgCtorIsContainer(const nm: AnsiString): Boolean;
 { Of the zero-argument constructors, the ones whose `()` is parsed as an empty
   LITERAL (and so consumed by the literal parser) rather than discarded. }
@@ -52947,6 +52980,7 @@ begin
       begin
         Next;
         CurASTNode := PyMakeBuiltinTypeValue(PyBuiltinTypeCode(name));
+        PySkipGenericAliasParams;
         LastExprTk := tyVariant;
         Exit;
       end;

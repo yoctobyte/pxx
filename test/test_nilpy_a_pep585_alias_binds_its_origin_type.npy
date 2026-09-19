@@ -1,0 +1,53 @@
+# A PEP 585 type alias at module level, `Vec3 = tuple[float, float, float]`,
+# refused the whole module with "expected ']' before ','": a builtin type name in
+# VALUE position followed by '[' went to the subscript parser, which stopped on
+# the first comma. The alias now binds the origin type. That Space Program's
+# tsp/ephem/spk.py:30 defines two such aliases and its package imports them by name.
+# Differential: runs unchanged under CPython; the .expected came from CPython.
+# Not printed, because they are stated divergences: repr(alias), and `alias is tuple`.
+from nilpy_pep585_mod import Vec3, State, position, state
+
+Grid = list[list[int]]
+Table = dict[str, list[int]]
+Pair = tuple[int, int]
+Maybe = type[int]
+
+
+def origin(p: Vec3) -> float:
+    x, y, z = p
+    return x + y + z
+
+
+def make_grid(n: int) -> Grid:
+    return [[i * n + j for j in range(n)] for i in range(n)]
+
+
+def index(t: Table, k: str) -> int:
+    return t[k][1]
+
+
+print(position(1.5), origin(position(2.0)))
+print(state(1.0)[3:])
+print(make_grid(3))
+print(index({"a": [7, 8, 9]}, "a"))
+held = [Vec3, State, Grid, Table, Pair, Maybe]
+print(len(held))
+
+
+def count_params(*kinds) -> int:
+    return len(kinds)
+
+
+# a parameterised type as an ARGUMENT, not through a name
+print(count_params(tuple[int, str], list[float], dict[str, tuple[int, int]]))
+
+
+# the ROUTE control: a LOCAL named like a builtin type is a variable, and its
+# subscript is an ordinary index, not an alias
+def shadowed() -> int:
+    list = [5, 6, 7]
+    tuple = (8, 9)
+    return list[1] + tuple[0]
+
+
+print(shadowed())
