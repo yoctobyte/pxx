@@ -1,0 +1,4 @@
+absorbed       = 1
+absorbed-class = 1
+per-instance   = 64
+const-then-var = 64 TAG=5

@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:20 blocked:7 backlog:34 backlog-umbrella:13 backlog-core:167 backlog-nilpy:177 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3872 rejected:83`
+`working:31 unfinished:20 blocked:7 backlog:35 backlog-umbrella:13 backlog-core:167 backlog-nilpy:177 backlog-tools:61 backlog-pascal:11 backlog-decide:49 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3872 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout` [A] — owner: frankD
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `bug-n-os-environ-and-os-sep-are-not-values` [N] — owner: frankB
 - `bug-p-a-class-nested-type-as-a-specialization-argument-resolves-at-unit-scope` [P] — owner: frankZ
@@ -75,7 +74,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 540, ranked
+## Ready — top 30 of 541, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -108,4 +107,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
 - `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 
-_510 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_511 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

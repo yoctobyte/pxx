@@ -269,12 +269,21 @@ before ranking on volume. Done, and it moved:
 Neither is about PIL; both were reduced to units with no library in them.
 
 - [[bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout]]
-  — **p80, silent memory corruption.** A `class var` before an instance field is
-  counted into the INSTANCE layout, so two live objects overlap and constructing
-  the second reinitialises the first. This is what made `im.resize(...)`
-  segfault: the constructor emptied the image being resized. Four rows locate
-  it; three plausible reductions do *not* reproduce it and are recorded so a
-  fixer does not spend them again.
+  — **REJECTED 2026-09-19, FALSE PREMISE. Not a compiler bug: `const` and
+  `class var` open a SECTION in a class body and a plain field after one is
+  absorbed into it, so the field is a class var and every object shares it.
+  `var` closes the section; fpc 3.2.2 does the same thing from the same source.
+  Read the rejected ticket for the measurement — this bullet is left in place
+  rather than deleted because it is what a reader of this file believed, and
+  the correction is worth more here than a clean paragraph.** What it says
+  below was the reading at the time. ~~p80, silent memory corruption. A
+  `class var` before an instance field is counted into the INSTANCE layout, so
+  two live objects overlap and constructing the second reinitialises the
+  first.~~ The `im.resize(...)` segfault was real and is explained by the
+  shared field: the constructor emptied the one image every instance pointed
+  at. Four rows locate it; three plausible reductions do *not* reproduce it and
+  are recorded so a fixer does not spend them again — that data stands, only
+  the mechanism sentence was wrong.
 - [[bug-a-a-class-named-after-a-used-unit-cannot-be-constructed-from-outside-that-unit]]
   — p45, loud. `Image.Create(...)` is `undefined variable (Create)` when the
   unit also uses `image`. Both names are forced from outside, so the collision

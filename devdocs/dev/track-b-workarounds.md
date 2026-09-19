@@ -35,8 +35,21 @@ before assuming the workaround is still needed.
 
 ## Waiting on an open bug
 
-Six rows (two added 2026-09-14, both `lib/rtl/pil.pas`, both verified by
-behaviour at the time of writing). The first two re-verified **by behaviour** at pin v393
+Five rows (one added 2026-09-14, `lib/rtl/pil.pas`, verified by
+behaviour at the time of writing). A SIXTH was removed on 2026-09-19 without its
+blocker ever being fixed, because the blocker did not exist: `lib/rtl/pil.pas`
+(class declaration order) declared its instance fields before its class-level
+names to dodge [[bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout]],
+which reported a `class var` being counted into the INSTANCE layout. Measured
+2026-09-19: nothing is displaced. A `const` or `class var` in a class body opens
+a SECTION and a plain field after one is absorbed into it, so the field is never
+per-instance at all -- `var` is what closes the section, fpc 3.2.2 does exactly
+the same from the same source, and the pin takes the spelling too. The file now
+uses the natural order with `var`, re-verified by behaviour: the PIL differential
+is 32 rows byte-identical to Pillow 12.1.1 with it and REDDENS on the first row
+without it. **A workaround can outlive its bug by being wrong about what the bug
+was**, and this table is where that costs the most, because a row here reads as
+a standing claim that the tree is contorted for a reason. The first two re-verified **by behaviour** at pin v393
 (`1d69760deabe`) on 2026-08-30 — the repro was run, the folder was not consulted;
 the third at pin v398 (`992065f21f33`) on 2026-08-31, same way.
 
@@ -48,7 +61,6 @@ the third at pin v398 (`992065f21f33`) on 2026-08-31, same way.
 
 | `lib/crtl/src/fnmatch.c` (`class_match`) | the `[:class:]` table is **twelve `if (cls_eq(...)) return isX(c);` lines plus a hand-written `cls_eq`**, instead of a local table of `{ name, ctype-function }` pairs | **fixed at HEAD, not in the pin** — same category as the `sysutils.pas` row above, so read the PIN, not the ticket's folder. A LOCAL whose type is an anonymous struct with a function-pointer member did not parse: the struct body's member declarator left `CTypeFnPtrName` set and `ParseCLocalDeclAST` had no `baseTk = tyPointer` guard, so the declaration took the inline-fn-pointer branch, never consumed its own variable name, and the name then parsed as an expression (`undeclared identifier 'tbl' used as value`, then a hard error). `ParseCGlobalVarDecl` has carried that guard for a while — this was its unfixed sibling. Fixed in `cparser.inc` with `test/c_struct_fnptr_member_local.c`; crtl is compiled by **whatever compiler the user has**, `$(PXX_STABLE)` included, so the table shape cannot come back until a pin carries it | `struct { const char *n; int (*f)(int); } tbl[] = { { "alpha", isalpha }, ... };` with a loop, once a pin carries the fix. Re-check **by behaviour**: build `test/cfnmatch.c` with `stable_linux_amd64/default/pinned` — it currently succeeds only because of this workaround |
 
-| `lib/rtl/pil.pas` (class declaration order) | the **instance fields come FIRST**, then the class `const`s, then `class var MAX_IMAGE_PIXELS`. The natural order — constants and class-level storage at the top — is what this file was written with | [[bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout]] — a `class var` before an instance field is counted into the INSTANCE layout, so fields after it are displaced and two live objects OVERLAP: constructing a second image reinitialised the first one's `bmp` through the alias and `resize` then segfaulted reading the source it had just emptied. Silent, no diagnostic, and the damaged object is the one you are not looking at. Reduced to four rows with no PIL in them (class var first = wrong, last = right, absent = right); the type is irrelevant, `Integer` reproduces it | class-level declarations back at the top of the class, in the ordinary order. Re-check **by behaviour**: move `class var MAX_IMAGE_PIXELS` above `bmp` and run `make lib-test` — the PIL differential reddens, or the fixture segfaults |
 | `lib/rtl/pil.pas` (class NAME) | the class is declared as `TPILImage` with `Image = TPILImage;` as a type alias beside it; every implementation-side spelling uses `TPILImage` | [[bug-a-a-class-named-after-a-used-unit-cannot-be-constructed-from-outside-that-unit]] — this unit must declare a class called `Image` (Python writes `from PIL import Image`) **and** must `uses image` (that is where `TImage` lives), and a class whose name equals a used unit's name cannot be constructed from any other unit: `Image.Create(...)` answers `undefined variable (Create)`. Both names are forced from outside, so the collision cannot be designed away | declaring the class as `Image` directly and deleting the alias. Verified that NilPy resolves the class correctly **through** the alias, so the Python-facing surface is identical either way |
 
 ## Deliberate keeps — the bug is fixed, the shape stays

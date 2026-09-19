@@ -70,31 +70,6 @@ type
     through NilPy attribute access on the class name. }
   TPILImage = class
   public
-    { THE INSTANCE FIELDS COME FIRST AND THE CLASS-LEVEL NAMES COME AFTER, AND
-      THAT ORDER IS LOAD-BEARING RATHER THAN STYLE. Two separate reasons, both
-      measured 2026-09-14 on this file:
-
-      1. A `class var` declared BEFORE an instance field is counted into the
-         INSTANCE layout, so every field after it lands at the wrong offset and
-         two instances OVERLAP -- constructing a second object reinitialises the
-         first one's fields through the alias, silently, and the first crash is
-         somewhere else entirely. `im.resize(...)` segfaulted because
-         `TPILImage.Create(0, 0, ...)` emptied the image being resized. Reduced
-         to four rows with no PIL in them: class var first is wrong, class var
-         last is right, no class var is right.
-         bug-a-a-class-var-declared-before-an-instance-field-corrupts-the-instance-layout
-
-      2. A `const` section inside a class does not end at a plain field
-         declaration: after `const HAMMING = 5;` the parser reads `bmp: TImage;`
-         as another const and refuses it with "expected '=' before ';'". That
-         one is at least LOUD, which is the only reason it is a footnote here
-         and the other is a paragraph.
-
-      Registered in devdocs/dev/track-b-workarounds.md. When (1) lands, this
-      ordering stops mattering and the comment goes with it. }
-    bmp:   TImage;
-    FMode: AnsiString;
-
     { The resampling filters. Pillow's numbering, because a program may write
       the integer -- `Image.LANCZOS` is 1 there and 1 here. }
     const NEAREST  = 0;
@@ -111,6 +86,33 @@ type
       it is stored so the assignment works and reads back, and enforcing it
       belongs with whatever first opens an untrusted file. }
     class var MAX_IMAGE_PIXELS: Variant;
+
+    { THE `var` IS LOAD-BEARING AND IS NOT A STYLE CHOICE -- WITHOUT IT THESE
+      TWO ARE CLASS VARIABLES, SHARED BY EVERY IMAGE. A `const` or `class var`
+      in a class body opens a SECTION that runs until a member keyword, so a
+      plain `bmp: TImage;` after one is absorbed INTO that section rather than
+      ending it. `var` is how Delphi and FPC close it and go back to
+      per-instance storage; it is the whole reason the keyword is allowed
+      inside a class body at all.
+
+      This file used to dodge it by declaring the instance fields FIRST, on the
+      belief that a `class var` before them corrupted the instance layout. That
+      belief was wrong and it is worth saying why, because the symptom is
+      alarming and invites a compiler hunt: with `bmp` absorbed into the class
+      var section there is ONE `bmp` for the whole class, so
+      `TPILImage.Create(0, 0, ...)` inside `resize` emptied the very image
+      being resized and the next read segfaulted. Nothing was displaced and no
+      offset was wrong -- the field simply was not per-instance.
+
+      MEASURED 2026-09-19, fpc 3.2.2 on this box: the same source without the
+      `var` prints the same wrong answer under fpc, and the const-section half
+      is refused by fpc with the same message pxx gives. This is the language
+      rule, not a pxx defect, and both compilers are silent about it. The
+      pinned compiler takes this spelling too, which matters because lib/rtl is
+      built by whatever compiler the user has. }
+    var
+      bmp:   TImage;
+      FMode: AnsiString;
 
     constructor Create(w, h: Integer; const aMode: AnsiString);
 

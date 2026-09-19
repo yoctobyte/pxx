@@ -10893,6 +10893,18 @@ test-core: $(COMPILER)
 	@tools/expect_same.sh test_a_class_const_bounds_a_field_array \
 	  "$$($(TESTTMP)/test_ccbound26)" \
 	  "$$(cat test/test_a_class_const_bounds_a_field_array.expected)"
+	@# A `const` or `class var` in a class body opens a SECTION, and a plain field
+	@# declaration after one is ABSORBED into it -- `var` is what closes it. Pinned
+	@# as PARITY, not as a fix: fpc 3.2.2 prints this file's four rows identically,
+	@# silently for the class var half and with the same refusal for the const half.
+	@# Filed once as silent instance-layout corruption; a.reclayout shows nothing is
+	@# displaced -- the field never becomes an instance field at all, so every object
+	@# reads one shared global. Each class is constructed TWICE (64 then 1), because
+	@# both shapes compile and only the VALUE separates shared from per-instance.
+	@./$(COMPILER) test/test_a_class_var_section_absorbs_a_plain_field_until_var_closes_it.pas $(TESTTMP)/test_cvsect26
+	@tools/expect_same.sh test_a_class_var_section_absorbs_a_plain_field_until_var_closes_it \
+	  "$$($(TESTTMP)/test_cvsect26)" \
+	  "$$(cat test/test_a_class_var_section_absorbs_a_plain_field_until_var_closes_it.expected)"
 	@# A ROUTINE-LOCAL `var A: array[...] of T = (...)`, which was refused with
 	@# "local var-section ARRAY initializer not supported; assign in statements"
 	@# -- a message that reads like a missing capability and was a missing FORK.
