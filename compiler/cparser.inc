@@ -8546,6 +8546,8 @@ var node, exprNode, seq, seq2, blk: Integer;
     asmSections, asmStart, asmLen: Integer; asmEmpty: Boolean;   { GCC inline asm }
     localSawStatic: Boolean;   { a block-scope `static`, wherever it sat among the storage classes }
     localSawThread: Boolean;   { a block-scope `__thread`/`_Thread_local`, likewise. Recorded ONLY to warn: see CWarnFuncScopeThreadLocal }
+    localSawExtern: Boolean;   { a block-scope `extern`, likewise -- the declaration is parsed and DISCARDED; see the arm below }
+    externDepth: Integer;      { nesting while discarding that declaration }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
@@ -8611,17 +8613,44 @@ begin
     which is a legal STATEMENT at block scope; skipping those here would eat an
     `asm(...)` statement and a block-scope `_Static_assert` before anything
     could parse them. Only the storage classes that may precede a local type
-    belong here. `extern` is left out on purpose: it is legal at block scope and
-    is not handled today, and adding it is a behaviour change this fix has no
-    measurement for. }
+    belong here.
+
+    `extern` IS IN THE SET, AND THE ARM BELOW IS WHY IT CANNOT MERELY BE IN THE
+    SET. The paragraph here used to decline it for want of a measurement; the
+    measurement exists now
+    (bug-c-a-block-scope-extern-declaration-is-parsed-as-an-expression-and-refused)
+    and it says BOTH halves. Left out, `extern int g;` in a body is parsed as an
+    EXPRESSION and legal C is refused naming the wrong token -- `undeclared
+    identifier 'extern' used as value`. Put in the set AND NOTHING ELSE, the
+    declaration falls into the ordinary local-declaration arm and ALLOCATES A
+    LOCAL, so the name shadows the file-scope symbol it was written to import:
+    measured 2026-09-19, `int g = 7;` at file scope with `extern int g;` in the
+    body printed -80651752 against gcc's 7. That trades a loud refusal for a
+    SILENT WRONG VALUE, which is strictly worse than the bug it fixes, so the
+    one-line version of this fix is a trap and the discard arm below is the
+    fix. }
   localSawStatic := False;
   localSawThread := False;
+  localSawExtern := False;
   while (CurTok.Kind = tkIdent) and
         ((CurTok.SVal = 'register') or (CurTok.SVal = 'auto') or
-         (CurTok.SVal = 'static') or
+         (CurTok.SVal = 'static') or (CurTok.SVal = 'extern') or
          (CurTok.SVal = '__thread') or (CurTok.SVal = '_Thread_local')) do
   begin
     if CurTok.SVal = 'static' then localSawStatic := True;
+    { IN THE LOOP AND NOT BEFORE IT -- the same reason the loop exists at all:
+      a test placed ahead of it sees only the specifier that happens to come
+      first, which is what dropped the `static` in `static __thread int f;`.
+      NOT because the order is free. Measured 2026-09-19: gcc REJECTS
+      `__thread extern int g;` outright (`'__thread' before 'extern'`) while
+      accepting `extern __thread int g;` -- its `__thread` extension constrains
+      an order that C11's `_Thread_local` does not. Reading `extern` here means
+      we take the discard arm for both arrangements, so we ACCEPT the spelling
+      gcc refuses. That is a divergence on a declaration nobody writes on
+      purpose, it costs a wrong value nowhere, and it is not worth a special
+      case -- recorded so the next reader knows it was measured and chosen
+      rather than missed. }
+    if CurTok.SVal = 'extern' then localSawExtern := True;
     { BOTH SPELLINGS, ONE QUESTION -- the same pairing CDeclSawThreadLocal makes
       at file scope. Recording this is the whole of the function-scope fix: the
       token was being swallowed by the bare `Next` below, so by the time a
@@ -8631,9 +8660,64 @@ begin
       localSawThread := True;
     Next;
   end;
+  { BLOCK-SCOPE `extern`: PARSE AND DISCARD. It declares that a name exists with
+    external linkage and it DEFINES NOTHING (C 6.7.1, 6.2.2) -- so the correct
+    amount of storage to allocate here is none, and the correct binding for the
+    name is whatever the file scope already has. Discarding the declaration is
+    what produces both: no local is created, so every later reference in this
+    body resolves outward to the file-scope symbol, which is the symbol the
+    programmer wrote `extern` to reach.
+
+    THIS ARM IS THE FIX AND THE LOOP SET IS NOT. Adding `extern` to the loop and
+    stopping there hands the declaration to ParseCLocalDeclAST, which allocates
+    a stack slot named `g` -- measured, it printed -80651752 where gcc prints 7,
+    a silent wrong value in place of the loud refusal this ticket started from.
+
+    WHAT THIS DOES NOT DO, stated so nobody reads the silence as coverage: the
+    name is not REGISTERED. A symbol declared `extern` in a body and nowhere
+    else in the translation unit stays unknown, and its first use reports
+    `undeclared identifier <name>` -- pointing at the name instead of at
+    `extern`, which is the honest diagnostic and still not the C semantics. Pass
+    1 does not descend into function bodies, so registering it is a two-pass
+    change and not this one. The three shapes real code writes -- an object or a
+    function already declared at file scope or via a header -- are the ones this
+    arm makes work, and they are the reason the construct is written at all.
+
+    Depth-aware over parens, brackets AND braces -- written as token kinds
+    rather than as the characters, because the characters cannot appear in a
+    Pascal comment -- so a declarator like `extern int (*f)(int, int);`, or an
+    extern of an inline struct type whose body holds its own semicolons, cannot
+    be cut short by a `;` nested inside it. }
+  if localSawExtern then
+  begin
+    externDepth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if (CurTok.Kind = tkLParen) or (CurTok.Kind = tkLBrack) or
+         (CurTok.Kind = tkBegin) then Inc(externDepth)
+      else if (CurTok.Kind = tkRParen) or (CurTok.Kind = tkRBrack) or
+              (CurTok.Kind = tkEnd) then Dec(externDepth)
+      else if (CurTok.Kind = tkSemicolon) and (externDepth <= 0) then
+      begin
+        Next;
+        Break;
+      end;
+      Next;
+    end;
+    { An empty statement node, the same thing a block-scope typedef yields --
+      a declaration that generates no code. }
+    node := AllocNode(AN_BLOCK);
+    ASTLeft[node] := -1;
+    Result := node;
+    Exit;
+  end;
+
   { Warn BEFORE the two declaration arms below, because both of them Exit.
     `localSawStatic` is final here -- the loop has consumed every storage class,
-    so the two spellings are distinguishable at this point and nowhere later. }
+    so the two spellings are distinguishable at this point and nowhere later.
+    AFTER the `extern` arm above, which Exits: `extern __thread int g;` is the
+    very spelling this warning tells the programmer to write, so warning on it
+    would be the parser arguing with its own advice. }
   if localSawThread then CWarnFuncScopeThreadLocal(localSawStatic);
 
   { block-scope static declaration: parse as a normal local declaration but

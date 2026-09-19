@@ -16589,6 +16589,49 @@ test-core: $(COMPILER)
 	./$(COMPILER) $(TESTTMP)/fs_stat.c $(TESTTMP)/fs_stat >$(TESTTMP)/fs_stat.err 2>&1
 	@grep -q '^ok: ' $(TESTTMP)/fs_stat.err || { echo "c_func_scope_thread_local: FAIL - the Error caught the WORKING static sibling"; cat $(TESTTMP)/fs_stat.err; exit 1; }
 	@! grep -q 'error:' $(TESTTMP)/fs_stat.err || { echo "c_func_scope_thread_local: FAIL - static __thread must not error"; exit 1; }
+	# ...AND THE THIRD DEFECT AT THE SAME SEAM, which is not a thread-local bug
+	# at all: `extern` was not in that storage-class loop either, so a block-scope
+	# `extern int g;` was parsed as an EXPRESSION and legal C was refused with
+	# `undeclared identifier 'extern' used as value` -- naming the wrong token.
+	#
+	# EVERY ROW ASSERTS BINDING, NOT COMPILATION. The one-line fix (put `extern`
+	# in the loop and stop) compiles all of this and ALLOCATES A LOCAL, so the
+	# name shadows the file-scope symbol and the program silently returns the
+	# wrong number -- measured 2026-09-19, -80651752 against gcc's 7. Verified by
+	# building that variant: it passes a compiles-now row and fires THREE of the
+	# rows below. The fixture writes through the extern name and reads back via a
+	# function with no `extern` in it, because a shadowing local is uninitialised
+	# and CAN hold the right value by luck -- on that build row 1 read 0, so a
+	# read-only assertion was a coin flip and only the write rows discriminate.
+	./$(COMPILER) test/c_block_scope_extern_binds_the_file_scope_symbol.c $(TESTTMP)/c_bsextern26
+	tools/expect_same.sh c_bsextern26 "$$($(TESTTMP)/c_bsextern26)" "block-scope extern binds the file-scope symbol: 5 rows OK"
+	# 2. NEGATIVE CONTROL, and it is the one this fix could most easily break: an
+	#    unknown identifier in statement position must STILL be refused. A change
+	#    that made any leading identifier open a declaration passes every row
+	#    above and destroys the diagnostic for every typo in the language.
+	printf 'int main(void){ zorp int g; return 0; }\n' > $(TESTTMP)/bsx_neg.c
+	! ./$(COMPILER) $(TESTTMP)/bsx_neg.c $(TESTTMP)/bsx_neg >$(TESTTMP)/bsx_neg.err 2>&1
+	@grep -q "undeclared identifier 'zorp'" $(TESTTMP)/bsx_neg.err || { echo "c_block_scope_extern: FAIL - an unknown identifier is now a declaration opener"; cat $(TESTTMP)/bsx_neg.err; exit 1; }
+	# 3. THE HONEST FAILURE MODE, ASSERTED SO IT CANNOT DEGRADE SILENTLY. Pass 1
+	#    does not descend into function bodies, so a name declared `extern` in a
+	#    body and NOWHERE ELSE in the translation unit is still unknown. That is
+	#    a real gap against C and this row pins where it surfaces: at the NAME,
+	#    not at `extern`. If someone later makes this fold to 0 instead, the row
+	#    fires rather than the wrong value shipping.
+	printf 'int main(void){ extern int nowhere; return nowhere; }\n' > $(TESTTMP)/bsx_unk.c
+	! ./$(COMPILER) $(TESTTMP)/bsx_unk.c $(TESTTMP)/bsx_unk >$(TESTTMP)/bsx_unk.err 2>&1
+	@grep -q "undeclared identifier 'nowhere'" $(TESTTMP)/bsx_unk.err || { echo "c_block_scope_extern: FAIL - an extern-only name did not report at the NAME"; cat $(TESTTMP)/bsx_unk.err; exit 1; }
+	# 4. AND THE SPURIOUS SECOND DIAGNOSTIC IS GONE. `extern __thread int g;` is
+	#    the exact spelling row 5 above tells the programmer to write, and error
+	#    RECOVERY used to reach `__thread` after refusing `extern` and deliver
+	#    that advice to someone who had followed it. The value row is asserted
+	#    FIRST and BRANCHED ON -- an absent warning grepped out of a failed
+	#    compile passes for the wrong reason.
+	printf '__thread int g = 7;\nint main(void){ extern __thread int g; return g; }\n' > $(TESTTMP)/bsx_tls.c
+	./$(COMPILER) $(TESTTMP)/bsx_tls.c $(TESTTMP)/bsx_tls >$(TESTTMP)/bsx_tls.err 2>&1
+	@grep -q '^ok: ' $(TESTTMP)/bsx_tls.err || { echo "c_block_scope_extern: FAIL - extern __thread did not compile; its silence proves nothing"; cat $(TESTTMP)/bsx_tls.err; exit 1; }
+	@$(TESTTMP)/bsx_tls; rc=$$?; [ "$$rc" = 7 ] || { echo "c_block_scope_extern: FAIL - extern __thread returned $$rc, want 7 (gcc)"; exit 1; }
+	@! grep -q 'function scope' $(TESTTMP)/bsx_tls.err || { echo "c_block_scope_extern: FAIL - told a programmer who wrote extern that C requires extern"; exit 1; }
 	# _Static_assert is EVALUATED at every scope C11 allows one. The file above is
 	# the must-COMPILE half (true assertions must be invisible, and a struct
 	# carrying one must lay out unchanged -- the sizeof rows are what make that
