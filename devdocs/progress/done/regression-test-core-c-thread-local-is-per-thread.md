@@ -41,3 +41,6 @@ pascal26:19: error: __thread errno: the per-thread variable area is full (0 byte
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — auto-closed by the borg watcher: `test-core#src:test/c_thread_local_is_per_thread.c` passes at 3dc2317b83e9 (tier native); it was red at 5e9c8da7481e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
