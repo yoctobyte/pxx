@@ -1,0 +1,35 @@
+  extra: []
+tsp node nodes True
+[('description', 'nodes'), ('prog', 'tsp node')]
+  extra: [('color', True), ('exit_on_error', False)]
+x None True
+  extra: []
+None None True
+  extra: [('alpha', 2), ('zeta', 1)]
+None None False
+3
+  kw: [('extra', 'yes')]
+10 2
+  kw: []
+1 5
+1/0/[]
+1/3/[('z', 4)]
+TypeError: missing a
+  Q kw: [('extra', 'yes')]
+1/0/[]
+1/3/[('z', 4)]
+5/3/[('z', 4)]
+s/0/[('w', 0)]
+7/0/[('k', 1)]
+  Q kw: []
+2/0/[('r', 9)]
+1,2,[]
+1,2,[('c', 3)]
+[('u', 1)]
+[('x', 1), ('y', 2)]
+2 [('u', 1)]
+2 [('a', 1), ('u', 2)]
+TypeError: f missing a
+TypeError: f missing a
+TypeError: m missing x
+TypeError: Q missing a

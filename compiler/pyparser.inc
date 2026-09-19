@@ -8709,8 +8709,12 @@ begin
       — a different lowering. The shared expander counts EVERY signature slot,
       the packed ones included, so it would demand one element per container
       and fail at run time with an arity message about a call the program never
-      wrote. Refused at compile time by name instead. }
-    if (ProcPyStarIdx[ctorPi] >= 0) or (ProcPyKwIdx[ctorPi] >= 0) then
+      wrote. Refused at compile time by name instead.
+      The `**mapping` spelling is not refused here: PyStarExpandKwArgs binds a
+      mapping onto a `**kwargs` collector itself and refuses a `*args` one by
+      name. }
+    if ((ProcPyStarIdx[ctorPi] >= 0) or (ProcPyKwIdx[ctorPi] >= 0)) and
+       not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkStar)) then
       Error('Nil Python: ' + name + '(*xs) where the constructor itself takes '
             + '*args or **kwargs is not supported yet — pass the elements '
             + 'positionally');
@@ -18393,6 +18397,49 @@ begin
   ASTRight[Result] := addNode;
 end;
 
+{ The `**kwargs` collector's argument when a mapping is spread into a callee
+  that also has NAMED parameters: a fresh copy of the mapping with the names of
+  parameter slots [fromSlot, toSlot) popped, i.e. the keys no named slot took.
+  CPython's binding, and its collector is a fresh dict too, so a callee that
+  mutates it cannot reach the caller's mapping.
+
+  Built from TPyDict.pop(k, d) in the frontend — the two-argument overload,
+  because an optional parameter's key is legitimately absent — so nothing here
+  touches compiler/builtin/** and it needs no pin. ONE builder for the three
+  spellings that reach a collector with a mapping: the constructor and method
+  paths (PyStarExpandKwArgs) and the plain-function forwarder
+  (PyStarForwardCall). Returns the hidden TPyDict temp. }
+function PyStarKwRemainder(procIdx, fromSlot, toSlot, dictSym: Integer): Integer;
+var restSym, popMi, k, nameNode, selfA, keyA, dfltA, callNode: Integer;
+begin
+  restSym := PyNewContainerTemp('TPyDict', 'starkwrest');
+  PyHoistDictMergeAny(restSym, PyMakeIdent(dictSym));
+  popMi := FindUMethArity(FindUClass('TPyDict'), 'pop', 2);
+  if popMi < 0 then Error('Nil Python: pylib (TPyDict.pop(k, d)) not loaded');
+  for k := fromSlot to toSlot - 1 do
+  begin
+    nameNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[nameNode] := StoredName(Procs[procIdx].Params[k].Name);
+    ASTSLen[nameNode] := Length(Procs[procIdx].Params[k].Name);
+    ASTTk[nameNode] := Ord(tyString);
+    selfA := AllocNode(AN_ARG);
+    ASTLeft[selfA] := PyMakeIdent(restSym);
+    keyA := AllocNode(AN_ARG);
+    ASTLeft[keyA] := nameNode;
+    ASTRight[selfA] := keyA;
+    dfltA := AllocNode(AN_ARG);
+    ASTLeft[dfltA] := PyMakeNone;
+    ASTRight[dfltA] := -1;
+    ASTRight[keyA] := dfltA;
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := UMthProc_[popMi];
+    ASTTk[callNode] := Ord(tyVariant);
+    ASTLeft[callNode] := selfA;
+    PyHoistStmt(callNode);
+  end;
+  Result := restSym;
+end;
+
 { `**mapping` at a call WITH A RECEIVER — a method, a constructor, or a
   dynamically-dispatched member. THE TWIN OF PyStarExpandCallArgs BELOW IT, and
   it exists because the two fill the same declared slots from different
@@ -18427,19 +18474,26 @@ procedure PyStarExpandKwArgs(procIdx, firstSlot: Integer;
 var dictSym, listSym, asgn, total, required, wanted, lo, k: Integer;
     slotSym, elemNode, idxArg, callNode, argNode, a2, a3, chkArg: Integer;
     nameNode, hasArg, hasCall, ifNode, pairNode, dfltAsgn: Integer;
-    nfoundSym: Integer;
+    nfoundSym, kwIdx, declTotal, restSym, hi: Integer;
 begin
   if FindUClass('TPyDict') < 0 then Error('Nil Python: pylib (TPyDict) not loaded');
   if FindUClass('TPyList') < 0 then Error('Nil Python: pylib (TPyList) not loaded');
-  { A callee that DECLARES *args or **kwargs wants the container passed
-    through as its packed parameter, not spread over declared slots — a
-    different lowering, and the slot loop below would demand one key per
-    container and fail at run time with an arity message about a call the
-    program never wrote. Refused by name here, exactly as the constructor site
-    refuses the single-star spelling. }
-  if (ProcPyStarIdx[procIdx] >= 0) or (ProcPyKwIdx[procIdx] >= 0) then
+  { A callee that DECLARES *args wants a list passed through as its packed
+    parameter, and a mapping never supplies one — refused by name, exactly as
+    the constructor site refuses the single-star spelling.
+
+    A `**kwargs` COLLECTOR is the other half and it IS handled: the declared
+    slots are filled by name exactly as without one, and the collector gets the
+    keys NONE of them took (below, after the slot loop). That is CPython's
+    binding, and it is what `ArgumentParser(**kwargs)` inside argparse's own
+    add_parser needs — a callee with named options AND a collector, called with
+    a forwarded mapping. The collector must be the callee's LAST parameter,
+    which Python's grammar guarantees for a `def`. }
+  kwIdx := ProcPyKwIdx[procIdx];
+  if (ProcPyStarIdx[procIdx] >= 0) or
+     ((kwIdx >= 0) and ((kwIdx < firstSlot) or (kwIdx <> Procs[procIdx].ParamCount - 1))) then
     Error('Nil Python: **unpacking into ' + Procs[procIdx].Name
-          + '() where the callee itself takes *args or **kwargs is not '
+          + '() where the callee itself takes *args is not '
           + 'supported yet — pass the keywords one by one');
   Next;                          { the first '*' }
   Next;                          { the second — `**` is two tkStar }
@@ -18453,12 +18507,16 @@ begin
   listSym := PyNewContainerTemp('TPyList', 'starkwpos');
 
   total := Procs[procIdx].ParamCount;
-  required := total;
+  { the slots a key can land on: every parameter but the collector, which has
+    no default and would otherwise make every slot before it count as required }
+  declTotal := total;
+  if kwIdx >= 0 then declTotal := kwIdx;
+  required := declTotal;
   while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
     Dec(required);
-  wanted := total - firstSlot;
-  if wanted <= 0 then
+  wanted := declTotal - firstSlot;
+  if (wanted <= 0) and (kwIdx < 0) then
     Error('Nil Python: **unpacking has no parameter left to fill in .'
           + Procs[procIdx].Name + '()');
   if wanted > 16 then
@@ -18466,6 +18524,10 @@ begin
           + 'parameters');
   lo := required - firstSlot;
   if lo < 0 then lo := 0;
+  { with a collector any number of keys is legal; the lower bound still holds,
+    and it is what keeps pystar_arg_kw's missing-REQUIRED-name arm armed }
+  hi := wanted;
+  if kwIdx >= 0 then hi := MaxInt;
 
   { one guard: the mapping must hold between lo and wanted of the slots }
   chkArg := AllocNode(AN_ARG);
@@ -18480,7 +18542,7 @@ begin
   ASTRight[a2] := a3;
   idxArg := AllocNode(AN_ARG);
   ASTLeft[idxArg] := AllocNode(AN_INT_LIT);
-  ASTIVal[ASTLeft[idxArg]] := wanted;
+  ASTIVal[ASTLeft[idxArg]] := hi;
   ASTTk[ASTLeft[idxArg]] := Ord(tyInteger);
   ASTRight[a3] := idxArg;
   PyStarGuardName(chkArg, Procs[procIdx].Name);
@@ -18608,7 +18670,27 @@ begin
     for exactly `nfound` is the unexpected-keyword test. It reports
     `got N arguments, expected M to M` — a TypeError, which is the class
     CPython raises, worded about the count rather than about the offending
-    name. Naming the key needs a pylib entry point and therefore a pin. }
+    name. Naming the key needs a pylib entry point and therefore a pin.
+
+    WITH A COLLECTOR there is no such thing as an unexpected keyword: the keys
+    no slot took are the collector's. So the collector's argument is a COPY of
+    the mapping with every declared name popped — a copy, because the caller's
+    mapping must come back unchanged, and CPython's collector is a fresh dict
+    too — and the landed-count check does not apply. `pop(name, None)`, the
+    two-argument overload, because an optional parameter's key is legitimately
+    absent. }
+  if kwIdx >= 0 then
+  begin
+    restSym := PyStarKwRemainder(procIdx, firstSlot, declTotal, dictSym);
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := PyMakeIdent(restSym);
+    ASTIVal[argNode] := 0;
+    ASTRight[argNode] := -1;
+    if lastArg < 0 then headArg := argNode else ASTRight[lastArg] := argNode;
+    if headArg < 0 then headArg := argNode;
+    lastArg := argNode;
+    Exit;
+  end;
   chkArg := AllocNode(AN_ARG);
   ASTLeft[chkArg] := PyMakeIdent(listSym);
   a2 := AllocNode(AN_ARG);
@@ -19334,6 +19416,7 @@ end;
 function PyParseClassMethodCall(baseNode, ci: Integer; const mname: AnsiString): Integer;
 var mmi, mpi, selfArg, lastArg, argNode, callNode, n, k, kwIdx, minArgs, kwCap: Integer;
     anyKw: Boolean;
+    kwSpread: Boolean;   { a `**mapping` already built the whole chain, collector included }
     mn: AnsiString;
 begin
   { A dict whose static type is known — most visibly a LITERAL — failed with
@@ -19411,6 +19494,7 @@ begin
   Expect(tkLParen, '(');
   n := 0;
   anyKw := False;
+  kwSpread := False;
   while CurTok.Kind <> tkRParen do
   begin
     { keyword arguments here too — `WeightedDetector().analyze(rs, weights=w)`.
@@ -19421,6 +19505,7 @@ begin
     if (CurTok.Kind = tkStar) and (ProcPyStarIdx[mpi] < 0) then
     begin
       k := selfArg;
+      kwSpread := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkStar);
       kwCap := PyStarTrailingKwMinSlot(mpi);
       PyStarExpandCallArgs(mpi, n + 1, kwCap, k, lastArg);
       if kwCap = -2 then
@@ -19481,8 +19566,11 @@ begin
   { `*args` / `**kwargs` on a METHOD: pack the surplus arguments before the
     keyword bind, exactly as the top-level call path does. Self occupies slot 0
     of the parameter list, so the counter is passed INCLUDING it and the
-    argument count is re-derived afterwards. }
-  if (ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0) then
+    argument count is re-derived afterwards.
+    NOT after a `**mapping` spread: PyStarExpandKwArgs has already bound every
+    slot and handed the collector its dict, and packing that chain again read
+    the dict as a surplus positional — `Q(1).m(**{"x": 2})` printed `0//[]`. }
+  if ((ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0)) and not kwSpread then
   begin
     n := n + 1;
     PyPackStarArgs(mpi, selfArg, lastArg, n, 0);
@@ -19842,6 +19930,7 @@ var ci, mmi, mpi, i, k, unboxArg, unboxCall, castNode: Integer;
     selfArg, lastArg, argNode, callNode, hitCi, hitMmi, hitPi: Integer;
     kwDictNode: Integer;
     starKwCap: Integer;       { lowest slot a trailing `name=` claims, or -1 }
+    kwSpread: Boolean;        { a `**mapping` already built the whole chain, collector included }
     smPName: AnsiString; smTk: TTypeKind; smArgs: Integer; smArgN: Integer;
     kwMissName: AnsiString;   { a keyword no candidate has — see the scan below }
     dictKwHit: Boolean;       { the keywords-are-KEYS arm already claimed this call }
@@ -20825,6 +20914,7 @@ begin
   Expect(tkLParen, '(');
   i := 0;
   anyKw := False;
+  kwSpread := False;
   while CurTok.Kind <> tkRParen do
   begin
     { Keyword arguments here too — `detector.to_text(verbose=True)` on a
@@ -20851,6 +20941,7 @@ begin
     if (CurTok.Kind = tkStar) and (ProcPyStarIdx[hitPi] < 0) then
     begin
       kwIdx := selfArg;
+      kwSpread := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkStar);
       starKwCap := PyStarTrailingKwMinSlot(hitPi);
       PyStarExpandCallArgs(hitPi, i + 1, starKwCap, kwIdx, lastArg);
       if starKwCap = -2 then
@@ -20889,7 +20980,7 @@ begin
     keyword bind, exactly as the top-level call path does. Self occupies slot 0
     of the parameter list, so the counter is passed INCLUDING it and the
     argument count is re-derived afterwards. }
-  if (ProcPyStarIdx[hitPi] >= 0) or (ProcPyKwIdx[hitPi] >= 0) then
+  if ((ProcPyStarIdx[hitPi] >= 0) or (ProcPyKwIdx[hitPi] >= 0)) and not kwSpread then
   begin
     i := i + 1;
     PyPackStarArgs(hitPi, selfArg, lastArg, i, 0);
@@ -22320,17 +22411,18 @@ begin
     searched the dict for a key literally named "kw".
     bug-n-star-forwarder-spreads-a-dict-onto-a-kwargs-callee
 
-    Scoped to kwIdx = 0 — a callee whose ONLY parameter is the collector, so
-    the whole dict goes in and no key is consumed first. With named parameters
-    beside it (`def f(a=1, **kw)`, kwIdx > 0) the collector must receive the
-    UNCONSUMED keys, and there is no runtime helper for that remainder; adding
-    one means pylib.pas, which is `compiler/builtin/**` and needs a PIN. Left
-    exactly as it was rather than silently handing over the whole dict, which
-    would answer len(kw) = 3 where CPython says 1. }
+    With named parameters beside it (`def f(a, b=2, **kw)`, kwIdx > 0) the
+    collector receives the UNCONSUMED keys: a copy of the dict with every
+    declared name popped, built below from TPyDict.pop(k, d). This said the
+    remainder needed a new pylib helper and therefore a pin; it needs neither,
+    and PyStarExpandKwArgs builds the same remainder the same way for the
+    method and constructor spellings. Only for a collector that is the LAST
+    parameter of a callee without *args — the shape a `def` produces. }
   kwIdx := -1;
   if dictSym >= 0 then kwIdx := ProcPyKwIdx[procIdx];
-  if kwIdx > 0 then kwIdx := -1;   { the remainder case: unchanged }
-  if kwIdx = 0 then total := 0;    { the collector fills no positional slot }
+  if (kwIdx >= 0) and ((kwIdx <> total - 1) or (ProcPyStarIdx[procIdx] >= 0)) then
+    kwIdx := -1;
+  if kwIdx >= 0 then total := kwIdx;   { the collector fills no positional slot }
   required := total;
   while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
@@ -22363,7 +22455,11 @@ begin
   ASTLeft[chkArg] := PyMakeIdent(listSym);
   a2 := AllocNode(AN_ARG);
   ASTLeft[a2] := AllocNode(AN_INT_LIT);
-  ASTIVal[ASTLeft[a2]] := required;
+  { with a collector the list-only guard bounds the POSITIONAL count, and a
+    required parameter may equally arrive as a key — so its lower bound is 0
+    and the keyword-aware guard after it carries `required` }
+  if kwIdx >= 0 then ASTIVal[ASTLeft[a2]] := 0
+  else ASTIVal[ASTLeft[a2]] := required;
   ASTTk[ASTLeft[a2]] := Ord(tyInteger);
   a3 := AllocNode(AN_ARG);
   ASTLeft[a3] := AllocNode(AN_INT_LIT);
@@ -22403,6 +22499,34 @@ begin
   ASTTk[callNode] := Ord(tyInteger);
   ASTLeft[callNode] := chkArg;
   PyHoistStmt(callNode);
+  { ...and the required count, counting keys too. This is what keeps
+    pystar_arg_kw's missing-REQUIRED-name arm armed: it raises for an absent
+    name only at an index inside the supplied count. }
+  if (kwIdx > 0) and (required > 0) then
+  begin
+    chkArg := AllocNode(AN_ARG);
+    ASTLeft[chkArg] := PyMakeIdent(listSym);
+    a2 := AllocNode(AN_ARG);
+    ASTLeft[a2] := PyMakeIdent(dictSym);
+    ASTRight[chkArg] := a2;
+    a3 := AllocNode(AN_ARG);
+    ASTLeft[a3] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[a3]] := required;
+    ASTTk[ASTLeft[a3]] := Ord(tyInteger);
+    ASTRight[a2] := a3;
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTLeft[argNode]] := MaxInt;
+    ASTTk[ASTLeft[argNode]] := Ord(tyInteger);
+    ASTRight[a3] := argNode;
+    PyStarGuardName(chkArg, Procs[procIdx].Name);
+    callNode := AllocNode(AN_CALL);
+    ASTIVal[callNode] := FindProc('pystar_check_arity_kw');
+    if ASTIVal[callNode] < 0 then Error('Nil Python: pylib (pystar_check_arity_kw) not loaded');
+    ASTTk[callNode] := Ord(tyInteger);
+    ASTLeft[callNode] := chkArg;
+    PyHoistStmt(callNode);
+  end;
 
   { Every slot the widest arity could use, read ONCE into a hidden variant local.
     The arms are alternatives but the reads are not — a ternary arm cannot carry
@@ -22496,15 +22620,17 @@ begin
     PyHoistStmt(asgn);
   end;
 
-  { the collector's own slot: the forwarded dict, whole and unspread. Allocated
-    here rather than in the loop above because that loop walks the POSITIONAL
-    slots, which this is not. }
+  { the collector's own slot: the keys no named slot took. Allocated here
+    rather than in the loop above because that loop walks the POSITIONAL
+    slots, which this is not. A COPY even when there is nothing to pop
+    (`def g(**kw)`): CPython's collector is a fresh dict, so a callee that
+    mutates it must not reach the caller's mapping. }
   if kwIdx >= 0 then
   begin
     slotSyms[kwIdx] := AllocVar(PyHiddenName('fwda'), tyVariant);
     asgn := AllocNode(AN_ASSIGN);
     ASTLeft[asgn] := PyMakeIdent(slotSyms[kwIdx]);
-    ASTRight[asgn] := PyMakeIdent(dictSym);
+    ASTRight[asgn] := PyMakeIdent(PyStarKwRemainder(procIdx, 0, kwIdx, dictSym));
     PyHoistStmt(asgn);
   end;
 
@@ -22645,11 +22771,33 @@ end;
   Self at slot 0, which is what makes the parameter indices line up. }
 procedure PyParseStarMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
 var argNode, kwIdx, head, cnt: Integer;
+    sawKw: Boolean;
 begin
   head := ASTLeft[mcallNode];
   cnt := 1;                          { Self }
+  sawKw := False;
   while CurTok.Kind <> tkRParen do
   begin
+    { `obj.m(**d)` into a method that collects `**kwargs` (and not `*args`):
+      the mapping fills the declared slots by name and the collector gets the
+      rest, which is PyStarExpandKwArgs' job, shared with the constructor and
+      the fresh-receiver sites. ParseArgExpr on the '*' answered "expected
+      expression". After POSITIONAL arguments only — `firstSlot` is then just
+      the count so far. A keyword before the mapping, or anything after it, is
+      a different binding and stays refused by name. }
+    if (CurTok.Kind = tkStar) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkStar) and (ProcPyStarIdx[mpi] < 0) then
+    begin
+      if sawKw then
+        Error('Nil Python: a keyword argument before **unpacking into .'
+              + Procs[mpi].Name + '() is not supported yet');
+      PyStarExpandKwArgs(mpi, cnt, head, mlastArg);
+      if CurTok.Kind = tkComma then
+        Error('Nil Python: an argument after **unpacking is not supported yet');
+      ASTLeft[mcallNode] := head;
+      mai := Procs[mpi].ParamCount;
+      Exit;
+    end;
     { `obj.m(*xs)` into a method that COLLECTS — SPLICED into the packing, not
       expanded into slots (a collecting callee has none to expand into). Same
       arm the plain-call path has; PyPackStarArgs below reads the marker. A
@@ -22661,6 +22809,7 @@ begin
       Next;
       kwIdx := PY_ARG_SPLICE;
     end;
+    if (kwIdx <> 0) and (kwIdx <> PY_ARG_SPLICE) then sawKw := True;
     ParseArgExpr;
     argNode := AllocNode(AN_ARG);
     ASTLeft[argNode] := CurASTNode;

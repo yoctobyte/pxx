@@ -1,0 +1,119 @@
+# `**mapping` spread into a callee that ALSO collects `**kwargs`: the named
+# parameters take their keys, the collector gets the rest, and the caller's
+# mapping comes back unchanged. CPython's own argparse does this in
+# add_parser (`self._parser_class(**kwargs)` into an __init__ with named
+# options and **kwargs); it was refused at every spelling. One row per
+# spelling: constructor, named-receiver method, self.method, fresh-receiver
+# method, plain function; then aliasing and missing-required-argument rows.
+class P:
+    def __init__(self, prog=None, usage=None, description=None, add_help=True, **kwargs):
+        self.prog = prog
+        self.description = description
+        self.add_help = add_help
+        print("  extra:", sorted(kwargs.items()))
+
+
+class Q:
+    def __init__(self, a, b=2, **kw):
+        self.a = a
+        self.b = b
+        print("  kw:", sorted(kw.items()))
+
+    def m(self, x, y=0, **opts):
+        return str(x) + "/" + str(y) + "/" + str(sorted(opts.items()))
+
+
+def show(o):
+    print(o.prog, o.description, o.add_help)
+
+
+d = {"prog": "tsp node", "description": "nodes"}
+show(P(**d))
+print(sorted(d.items()))
+show(P(**{"prog": "x", "color": True, "exit_on_error": False}))
+show(P(**{}))
+e = {"add_help": False, "zeta": 1, "alpha": 2}
+show(P(**e))
+print(len(e))
+q = Q(**{"a": 10, "extra": "yes"})
+print(q.a, q.b)
+q2 = Q(**{"b": 5, "a": 1})
+print(q2.a, q2.b)
+print(q.m(**{"x": 1}))
+print(q.m(**{"x": 1, "y": 3, "z": 4}))
+try:
+    Q(**{"b": 1, "other": 2})
+    print("no error")
+except TypeError:
+    print("TypeError: missing a")
+
+
+class Q2:
+    def __init__(self, a, b=2, **kw):
+        self.a = a
+        self.b = b
+        print("  Q kw:", sorted(kw.items()))
+
+    def m(self, x, y=0, **opts):
+        return str(x) + "/" + str(y) + "/" + str(sorted(opts.items()))
+
+    def inner(self, d):
+        return self.m(**d)
+
+    def inner_pos(self, d):
+        return self.m(7, **d)
+
+
+def f(a, b=2, **kw):
+    return str(a) + "," + str(b) + "," + str(sorted(kw.items()))
+
+
+def g(**kw):
+    return str(sorted(kw.items()))
+
+
+r = Q2(**{"a": 10, "extra": "yes"})
+print(r.m(**{"x": 1}))
+print(r.m(**{"x": 1, "y": 3, "z": 4}))
+print(r.m(5, **{"y": 3, "z": 4}))
+print(r.inner({"x": "s", "w": 0}))
+print(r.inner_pos({"k": 1}))
+print(Q2(1).m(**{"x": 2, "r": 9}))
+print(f(**{"a": 1}))
+print(f(**{"a": 1, "c": 3}))
+print(g(**{"u": 1}))
+d = {"x": 1, "y": 2}
+r.m(**d)
+print(sorted(d.items()))
+
+
+def g_mut(**kw):
+    kw["added"] = 1
+    return len(kw)
+
+
+def f_mut(a, **kw):
+    kw["added"] = 1
+    return len(kw)
+
+
+src = {"u": 1}
+print(g_mut(**src), sorted(src.items()))
+src2 = {"a": 1, "u": 2}
+print(f_mut(**src2), sorted(src2.items()))
+for bad in [{"b": 1}, {}]:
+    try:
+        f(**bad)
+        print("no error")
+    except TypeError:
+        print("TypeError: f missing a")
+try:
+    r.m(**{"y": 1})
+    print("no error")
+except TypeError:
+    print("TypeError: m missing x")
+try:
+    Q2(**{})
+    print("no error")
+except TypeError:
+    print("TypeError: Q missing a")
