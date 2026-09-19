@@ -46,3 +46,6 @@ expect_same: MISMATCH [aarch64/test_aarch64_lfef]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-19 — the borg watcher saw `test-aarch64#src:test/test_loadfile_into_element_and_field.pas` GREEN at fa4bc8a13987 (tier full) and did NOT close this: the job's class is `qemu`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
