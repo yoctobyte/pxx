@@ -9,7 +9,7 @@ created: 2026-09-19
 found-by: frankuser
 tags: [nilpy, parser, tsp, demo]
 blocked-by: []
-summary: "Inside `[...]` the NilPy parser accepts a NARROWER expression grammar than the one it uses everywhere else: `d[unit or \"s\"]` is `expected ']' before 'or'` and `d[\"a\" if f else \"b\"]` is `expected ']' before 'if'`, while the IDENTICAL expression one line earlier (`k = unit or \"s\"`) compiles and runs. Two expression parsers, one of them wired into the subscript. Measured on That Space Program 2026-09-19: this is the FIRST wall in 15 of 59 modules, the single largest — but READ THE CAVEAT: a count of modules blocked is NOT a count of work, and in this repo clearing the largest wall has moved units-compiling by ZERO four times."
+summary: "Inside `[...]` the NilPy parser accepts a NARROWER expression grammar than the one it uses everywhere else: `d[unit or \"s\"]` is `expected ']' before 'or'` and `d[\"a\" if f else \"b\"]` is `expected ']' before 'if'`, while the IDENTICAL expression one line earlier (`k = unit or \"s\"`) compiles and runs. Two expression parsers, one of them wired into the subscript. Measured on That Space Program 2026-09-19: this is the FIRST wall in 16 of 61 modules, the single largest — AND RE-MEASURED 2026-09-19 THERE IS EXACTLY ONE SITE. All 16 rows report `pascal26:195:`, which is `tsp/timebase.py:195` (`total += float(num) * _DURATION_UNITS[unit or \"s\"]`) — an error raised inside an IMPORTED module prints with that module's line number, so the reader supplies the file they invoked. A fixed-string search over the whole corpus finds that one line and nothing else; the other `[... or ...]`/`[... if ...]` hits in `tsp/` are LIST COMPREHENSIONS, which are not this bug. So 16 is the size of timebase.py's import graph, not a count of sites, and three of the 16 (anchor, moons, reference) do not name timebase at all — they reach it transitively. The fix is worth 16 modules ADVANCING and is one line of parser; it is not sixteen call sites. (The instrument that first said "zero of 16 contain the construct" was a broken regex answering 0 for the file that demonstrably does contain it — caught by a positive control, and recorded here so nobody re-derives it.) READ THE CAVEAT TOO: a count of modules blocked is NOT a count of work, and in this repo clearing the largest wall has moved units-compiling by ZERO four times."
 ---
 
 # `or` and a conditional expression are refused inside a subscript and accepted outside it
@@ -52,3 +52,44 @@ The grep to run first is for the OTHER spelling's handler: find where a
 subscript parses its index and compare it against the general expression entry
 point, rather than grepping for `or`. Same shape as the `$cfnptr`/`$cfntype`
 and `ParseConstSection`/`ParseVarSection` pairs — two doors, one wired.
+
+## 2026-09-19 — re-measured: 16 modules, ONE site
+
+frankh-3f found it first, from the other end: it reported `universe.py:195` and
+then noticed the run printed `in: tsp/timebase.py` at the same line, so
+`universe` and `ascent` are one wall and not two.
+
+Checked across the whole census. **All 16 first-failure rows read
+`pascal26:195:`.** That is the diagnostic naming an IMPORTED module's line with
+no file name — the class already written up in CLAUDE.md, where two modules
+failing at line 31 read as one shared dependency and the fix was worth one
+module of three. Here the shared cause is REAL, and the count is still not a
+count of work:
+
+```
+$ grep -rn 'unit or "s"' --include=*.py tsp/
+tsp/timebase.py:195:   total += float(num) * _DURATION_UNITS[unit or "s"]
+```
+
+One line, one file. Three of the sixteen (`anchor.py`, `moons.py`,
+`reference.py`) never name `timebase` — they reach it transitively.
+
+**The broader search needs its own caveat.** A pattern for "a bracket containing
+` or `/` if `" matches 11 files, and almost every hit is a LIST COMPREHENSION
+(`[x for x in y if cond]`), which parses fine. `commentary.py:192`'s
+`max([...] or [launch])` is an `or` inside a CALL, not a subscript. The subject
+of this ticket is a conditional expression in SUBSCRIPT position, and there is
+one.
+
+**Instrument note, recorded so it is not re-derived.** The first pass at this
+used `grep -cE '\[[^]]*\b(or|if)\b[^]]*\]'` inside a shell loop and answered
+**0 for every file, `timebase.py` included** — the file that demonstrably
+contains the construct. The `\b` did not survive the quoting. It was caught by
+running the positive control (does the pattern find the KNOWN site?) before
+believing the zero, and it is the guard-that-cannot-fail shape exactly: a
+census answering 0 everywhere reads as a clean, confident finding.
+
+**What this changes about the ticket:** nothing about the defect, which is
+unchanged and real. The VALUE is unchanged too — fixing it advances 16 modules
+to their next wall. What changes is the SIZE: this is one parser fix against one
+call site, not sixteen sites, and nobody should scope it as the latter.
