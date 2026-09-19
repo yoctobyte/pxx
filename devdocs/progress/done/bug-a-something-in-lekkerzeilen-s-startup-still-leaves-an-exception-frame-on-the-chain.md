@@ -166,4 +166,4 @@ defence for that shape is not producing the frame.
 Inert under `$(PXX_STABLE)` until the next pin (v412 predates all of it).
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9d364688a.
