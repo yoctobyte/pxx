@@ -29063,3 +29063,79 @@ route answers, because the row's value is invisible from the row.
 Worked: `test/test_nilpy_math_frexp_isqrt_isfinite_are_exact.npy`.
 Banked, not promoted: merit met, second independent subsystem not — this is
 one instance in one. Promote if it recurs elsewhere.
+
+## WHICH SITE HANDLED THIS CONSTRUCT? — DIFFERENTIAL OVER THE COMPILER'S OWN EXECUTION, WITH A WITH/WITHOUT PAIR AS THE CONTROL
+
+Measured 2026-09-19 (frankD, Track N), fixing an attribute access on a scalar
+receiver in NilPy.
+
+**The debugging table above answers "what did the COMPILER INFER?"**
+(`PXXDBG=a.ast:<proc>`, `a.ir`, `n.locals`). It does not answer **"which SITE
+in the compiler HANDLED this?"** Those are different questions with different
+instruments, and the second one is the one you have when a guard you added does
+not fire and you cannot tell whether the guard is wrong or the file is.
+
+**The method.** Tag every candidate site with a `WriteLn` that carries **its own
+line number**, build, then compile **two subjects: one containing the construct
+and one identical without it.** Diff the tallies. The site whose count changed
+is the one that handles it. Insert the tags mechanically — one `sed` over the
+file — rather than by hand; hand-tagging 36 sites is its own bug surface, and
+the whole point is that this should cost one build, not an afternoon.
+
+**The with/without pair is not a nicety, it is the entire instrument.** A single
+instrumented run prints a tag storm: the compilation pulls in RTL units, a
+prologue, and every unrelated occurrence of the same node kind, so one run's
+tally is noise with the answer buried in it and no way to tell which is which.
+**The DIFFERENCE is the signal.** Here it went from 88 `AllocNode(AN_FIELD)`
+sites across the compiler — 36 in `pyparser.inc` alone — to **one site, three
+hits**, in a single pass, with no reading.
+
+**Why not read first: I did, twice, and both readings were wrong.**
+
+*Round one: the right-looking file was the wrong copy.* I put the guard in
+`pasparser_lval.inc` and it never fired. There are **two lvalue parsers by
+design** (`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`), and
+NilPy goes through `PyParseLValueAST` in `pyparser.inc`. **This failure mode is
+silent:** you patch the shared-looking copy, the guard never fires, nothing
+errors, and every conclusion after that is about a file the subject never
+enters.
+
+*Round two: a plausible site that does not run.* I put the guard in
+`PyParseClassRecordSelectors`, then probed it across **six receiver shapes** —
+**zero hits.** I **removed it rather than landing it.** A guard that cannot fire
+is not a guard; landed, it would have read as coverage forever, and the next
+person to trip the bug would have found a guard sitting over the hole and
+concluded the hole was elsewhere.
+
+That deletion is the part that does not show up in a diff — **nobody can see the
+guard you did not ship** — and it is the same discipline as a positive control
+that fails, or refusing to loosen a grep until it matches. The probe is not
+paperwork you do after choosing the site; it is what tells you the site is
+wrong while the cost is still one revert.
+
+**Generalise it past AST nodes.** Nothing here is about `AllocNode`. The shape
+is: *a differential over the COMPILER'S OWN EXECUTION rather than over the
+program's OUTPUT, with a with/without subject pair as the control.* It applies
+to any "which of N places did this?" — emit sites, symbol-table writes, an
+optimizer gate, a lowering branch — whenever N is large enough that reading is a
+guess and the construct is small enough to delete from a subject. The subject
+pair must differ **only** in the construct; if removing it also removes a `uses`
+or changes a type, the diff is measuring two things.
+
+**Take the tags back out before you measure anything else.** An instrumented
+compiler prints into every compiled program's stdout, so any fixture checked
+with `diff -u` against a `.expected` will fail for a reason that has nothing to
+do with the code under test. Revert and rebuild first; a build that happens
+while a suite is running invalidates that run, not just the fixture.
+
+Worked: `92136431f`. Sibling in CLAUDE.md: "A GUARD THAT CANNOT FAIL IS NOT A
+GUARD" — this is the instrument that tells you *which* guard cannot fire, before
+you land it.
+
+**THE TRIGGER THAT WOULD PROMOTE THIS TO CLAUDE.md**, written down so "not
+promoted" is not read as "not valued": **a second independent subsystem where
+the question was "which of N sites handled this?" and reading the N sites gave
+the wrong answer.** One subsystem so far, one instance in it. frankuser asked
+for it here on 2026-09-19 specifically because the table above has a row for
+what the compiler inferred and no row for which site acted; if it recurs
+elsewhere, that table gains a row and this entry is already written.
