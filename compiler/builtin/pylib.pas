@@ -5158,6 +5158,21 @@ begin
     raise AttributeError.Create('type object ''' + PyClsRefName(v)
       + ''' has no attribute ''' + name + '''');
   end;
+  { A BUILTIN type held as a value (VT_BTYPE) — `g = float; g.__name__`. Its
+    payload is a PYBT_* code, not an object, and the name is the same table
+    repr() already prints from. The attribute argparse reads to word
+    "invalid float value" for `type=float`.
+    bug-n-name-on-a-builtin-type-is-unimplemented }
+  if tg = 13 then
+  begin
+    if (name = '__name__') or (name = '__qualname__') then
+    begin
+      Result := pybtype_name(PPyVarRec(@v)^.Payload);
+      Exit;
+    end;
+    raise AttributeError.Create('type object ''' + pybtype_name(PPyVarRec(@v)^.Payload)
+      + ''' has no attribute ''' + name + '''');
+  end;
   obj := pyvarobj(v);
   if pydynattr_has(obj, name) then
   begin

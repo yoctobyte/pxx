@@ -1,0 +1,19 @@
+# `__name__` of a BUILTIN type held as a value (VT_BTYPE): `g = float;
+# g.__name__`, and through an untyped parameter, which is how argparse words
+# "invalid float value" for `type=float`. A user class already answered; a
+# builtin type raised AttributeError. Plus the miss, worded as CPython's.
+g = float
+print(g.__name__)
+h = str
+print(h.__qualname__)
+
+
+def name_of(conv):
+    return conv.__name__
+
+
+print(name_of(float), name_of(int), name_of(str))
+try:
+    print(g.nosuch)
+except AttributeError as e:
+    print("AttributeError:", e)

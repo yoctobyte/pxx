@@ -1222,6 +1222,8 @@ test-nilpy: $(COMPILER)
 	# one process per case: an exit ENDS the program, so each case is its own run
 	./$(COMPILER) test/test_nilpy_sys_exit_status_follows_cpython.npy $(TESTTMP)/test_nilpy_sysexit26
 	while IFS= read -r c; do $(TESTTMP)/test_nilpy_sysexit26 $$c 2>&1; echo "rc=$$?"; done < test/test_nilpy_sys_exit_status_follows_cpython.cases | diff -u test/test_nilpy_sys_exit_status_follows_cpython.expected -
+	./$(COMPILER) test/test_nilpy_name_of_a_builtin_type_held_as_a_value.npy $(TESTTMP)/test_nilpy_btypename26
+	$(TESTTMP)/test_nilpy_btypename26 | diff -u test/test_nilpy_name_of_a_builtin_type_held_as_a_value.expected -
 	# Multiple inheritance with an IMPORTED base -- `class SW(Codec, codecs.StreamWriter)`,
 	# how every CPython encodings module is written. WHICH base becomes the Pascal
 	# parent is a choice (only an imported one can be it -- nothing can flatten a body

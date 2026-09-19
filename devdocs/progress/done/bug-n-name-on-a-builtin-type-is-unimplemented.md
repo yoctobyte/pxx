@@ -4,7 +4,7 @@ prio: 20
 type: bug
 blocked-by: []
 summary: "`str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash."
-status: backlog
+status: done
 ---
 
 # `__name__` on a BUILTIN type is unimplemented
@@ -61,3 +61,6 @@ blocked on it. It is a completeness gap, not a defect that misleads.
 
 `print(str.__name__)` prints `str`, matching CPython, and the user-class rows
 above keep working.
+
+## Log
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

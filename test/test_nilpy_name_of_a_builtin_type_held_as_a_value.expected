@@ -1,0 +1,4 @@
+float
+str
+float int str
+AttributeError: type object 'float' has no attribute 'nosuch'
