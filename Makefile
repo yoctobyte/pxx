@@ -4844,6 +4844,12 @@ test-nilpy: $(COMPILER)
 	# right-hand side and the caller SIGSEGVed (pinned v411 too). CPython is the oracle.
 	./$(COMPILER) test/test_nilpy_return_of_an_unpack_target_takes_its_own_value_type.npy $(TESTTMP)/test_nilpy_retunptgt26
 	$(TESTTMP)/test_nilpy_retunptgt26 | diff -u test/test_nilpy_return_of_an_unpack_target_takes_its_own_value_type.expected -
+	# a def named like a class but for CASE keeps its nested defs (PyQualifyNested).
+	./$(COMPILER) test/test_nilpy_a_def_named_like_a_class_keeps_its_nested_defs.npy $(TESTTMP)/test_nilpy_defcasecls26
+	$(TESTTMP)/test_nilpy_defcasecls26 | diff -u test/test_nilpy_a_def_named_like_a_class_keeps_its_nested_defs.expected -
+	# math.dist, against CPython.
+	./$(COMPILER) test/test_nilpy_math_dist.npy $(TESTTMP)/test_nilpy_mathdist26
+	$(TESTTMP)/test_nilpy_mathdist26 | diff -u test/test_nilpy_math_dist.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

@@ -2620,6 +2620,7 @@ function pymath_isfinite(x: Double): Boolean;
   bug-nilpy-a-str-into-a-by-name-pylib-list-parameter-segfaults }
 function pymath_prod(const src: Variant): Variant;
 function pymath_fsum(const src: Variant): Double;
+function pymath_dist(const p, q: Variant): Double;
 function pymath_perm(n, k: Int64): Int64;
 { ---- random ------------------------------------------------------------
   `import random` had nothing behind it at all — `random.random()` was
@@ -8144,6 +8145,47 @@ begin
       sum := t;
     end;
   Result := sum + c;
+end;
+
+{ math.dist(p, q) — the Euclidean distance between two points given as
+  sequences of the same length, which CPython refuses otherwise. Scaled by the
+  largest coordinate difference before squaring, so points far from the origin
+  (TSP's are barycentric metres, ~1e11) neither overflow nor lose the small
+  differences to the large squares; the squares are summed compensated, as
+  fsum does. The root is PyCxSqrt, not Sqrt: naming Sqrt here pulls `math`
+  into every NilPy program through the builtin auto-include scan, and its
+  names then shadow the user's (a local `e` became math's E) -- see the note
+  above PyCxSqrt. }
+function PyCxSqrt(x: Double): Double; forward;
+
+function pymath_dist(const p, q: Variant): Double;
+var i: Integer; lp, lq: TPyList; d, m, sum, c, t, v: Double;
+begin
+  lp := pylist_v(p);
+  lq := pylist_v(q);
+  if (lp = nil) or (lq = nil) then
+    raise TypeError.Create('dist(): expected two sequences of numbers');
+  if lp.count <> lq.count then
+    raise ValueError.Create('both points must have the same number of dimensions');
+  m := 0.0;
+  for i := 0 to lp.count - 1 do
+  begin
+    d := Abs(pyvar_to_float(lp.at(i)) - pyvar_to_float(lq.at(i)));
+    if d > m then m := d;
+  end;
+  if (m = 0.0) or (m <> m) or (m - m <> 0.0) then begin Result := m; Exit; end;
+  sum := 0.0;
+  c := 0.0;
+  for i := 0 to lp.count - 1 do
+  begin
+    d := (pyvar_to_float(lp.at(i)) - pyvar_to_float(lq.at(i))) / m;
+    v := d * d;
+    t := sum + v;
+    if Abs(sum) >= Abs(v) then c := c + ((sum - t) + v)
+    else c := c + ((v - t) + sum);
+    sum := t;
+  end;
+  Result := m * PyCxSqrt(sum + c);
 end;
 
 { math.perm(n, k) — ordered arrangements, n!/(n-k)!, computed as the falling

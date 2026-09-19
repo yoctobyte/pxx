@@ -1,0 +1,41 @@
+# A def whose name differs from a class's ONLY BY CASE -- `design` and
+# `Design` -- must keep its nested defs. PyQualifyNested skipped a CLASS prefix
+# (correctly: a method body reaches the module's same-named function, not
+# itself) but tested for one case-insensitively, so `design` was taken for the
+# class, its nested `helio` was never qualified, and the call died as
+# "undefined variable (helio)". The class comes BEFORE the def (TSP's order,
+# departure.py:208) and AFTER it, since order is a variable. The method
+# delegating to a same-named module function is the control that the class
+# test exists for. CPython is the oracle.
+class Design:
+    def c3(self) -> float:
+        return 2.0
+
+
+def design(t_dep):
+    def helio(code: int, t: float) -> tuple:
+        return (t, code)
+    e = helio(399, t_dep)
+    return e
+
+
+def plan(x):
+    def step(y):
+        return y * 3
+    return step(x)
+
+
+class Plan:
+    pass
+
+
+def select_image():
+    return "module"
+
+
+class Ui:
+    def select_image(self):
+        return select_image()
+
+
+print(design(1.0), plan(2), Ui().select_image(), Design().c3())

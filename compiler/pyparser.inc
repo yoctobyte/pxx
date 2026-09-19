@@ -14017,6 +14017,7 @@ begin
   else if dotted = 'math.isfinite' then Result := 'pymath_isfinite'
   else if dotted = 'math.prod' then Result := 'pymath_prod'
   else if dotted = 'math.fsum' then Result := 'pymath_fsum'
+  else if dotted = 'math.dist' then Result := 'pymath_dist'
   else if dotted = 'math.perm' then Result := 'pymath_perm'
   { `import random` resolved to nothing at all — every name under it was
     `undefined variable`, and it is one of the first imports a script reaches
@@ -30693,8 +30694,12 @@ begin
       unqualified call names the module-level function even when the class has
       one of the same name — songformatter's `def select_image(self):
       select_image()` delegates exactly that way, and qualifying turned it into
-      a call of ITSELF with no arguments. }
-    if (FindProc(pfx + '.' + name) >= 0) and (FindUClass(pfx) < 0) then
+      a call of ITSELF with no arguments.
+      The class test is EXACT-case: FindUClass folds case (Pascal heritage), so
+      `def design():` in a module with `class Design:` was taken for a class
+      prefix, its nested `helio` was never qualified, and the call died as
+      "undefined variable (helio)" -- TSP departure.py:208. }
+    if (FindProc(pfx + '.' + name) >= 0) and (PyFindUClassExact(pfx) < 0) then
     begin
       { Position matters only for a reference in the SAME scope as the defs:
         `w()` written between two `def w`s means the first. From an INNER def's

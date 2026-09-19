@@ -1,0 +1,15 @@
+# math.dist(p, q): tuples, lists, a slice, ints, coordinates far from the origin
+# (TSP's are barycentric metres), the overflow edge, and the mismatched-length
+# ValueError. Found by That Space Program, reference.py:122. CPython is the oracle.
+import math
+print(math.dist((0.0, 0.0), (3.0, 4.0)))
+print(math.dist([1, 2, 3], [4, 6, 3]))
+bb = (1.5e11, -2.25e10, 3.1e9, 7.0, 8.0, 9.0)
+c = [1.5e11 + 1234.5, -2.25e10 - 99.0, 3.1e9 + 0.25]
+print(math.dist(bb[:3], c))
+print(math.dist((1e300, 0.0), (-1e300, 0.0)))
+print(math.dist((2.0,), (2.0,)))
+try:
+    math.dist((1.0, 2.0), (1.0,))
+except ValueError as e:
+    print("ValueError", e)
