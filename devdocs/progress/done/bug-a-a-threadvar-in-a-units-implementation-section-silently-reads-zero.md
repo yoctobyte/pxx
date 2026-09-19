@@ -191,4 +191,4 @@ Nothing under `lib/` or `compiler/builtin/` declares a threadvar, so the present
 cost is zero everywhere except inside a program that uses the feature.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4d1a64eba.
