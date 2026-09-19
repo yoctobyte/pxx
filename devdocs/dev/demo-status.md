@@ -10,7 +10,7 @@ except `mandelzoom`'s frame count:
 - **pin v411** (`8d9d69bdc`, binary `bc884808fda5`), which is what `make demos` uses;
 - **HEAD** binary `7ca269bd75ad` at tree `cbfc1338d`.
 
-The four rows marked *fixed* were re-verified after `196ab61a9` with both.
+The rows marked *fixed* were re-verified with both after their fix landed.
 
 **How each column was measured** (all runs bounded by `timeout 15`, environment
 scrubbed with `env -i`, under `GDK_BACKEND=x11 xvfb-run -a`, so no window can
@@ -49,7 +49,7 @@ that nothing crashed before the timer fired, so it is never counted as a check.
 | chess/chess | interactive | yes | exit 0 at EOF | start+EOF | — | |
 | fm/fm | TUI | yes | exit 0 at EOF | start+EOF | — | not driven with keys |
 | g2048/console_2048 | interactive | yes | exit 0 at EOF | start+EOF | — | |
-| **gl/triangle** | GTK + OpenGL | **NO** | — | — | — | GL imported from `libgl_c.so`, which does not exist: `bug-b-gl-triangle-demo-imports-gl-from-libgl-c-so-which-does-not-exist` |
+| gl/triangle | GTK + OpenGL 3.3 | yes | runs until quit (spins) | checked: screen readback under Xvfb (Mesa 4.5 core) shows the GL clear colour and about 33k triangle-coloured pixels, no stderr | **780x560** | *fixed*: GL was imported from a library that does not exist, GL_STATIC_DRAW was wrong, the render callback dropped Sender, and the label was not UTF-8 |
 | hello/hello | batch | yes | exit 0 | checked: prints its greeting | — | |
 | json/jsondemo | self-check | yes | ALL OK | verdict | — | |
 | kiosk | interactive | yes | exit 0 at EOF | checked: `sum 10` = 55, `primes 20` = 8 | — | *fixed*: spun forever at EOF |
@@ -79,20 +79,19 @@ that nothing crashed before the timer fired, so it is never counted as a check.
 | tui/menudemo | TUI | yes | exit 0, `selected=Open` | start+EOF (the default item) | — | |
 | vm/vmdemo | self-check | yes | ALL OK | verdict | — | |
 
-**Summary: 35 of 36 build; 35 of 35 built run as designed; all 4 GTK demos map
-a real window.** The one failure has a ticket. On evidence:
+**Summary: 36 of 36 build; all 36 run as designed; all 5 GTK demos map a
+real window.** On evidence:
 - 7 rows assert their own result and exit 1 on failure.
 - 9 print a verdict that I read, but exit 0 even on failure.
-- 6 were checked against known answers.
+- 7 were checked against known answers (triangle by screen readback).
 - The rest show only start-up, a self-quit, or nothing about the output.
 
 ## What this table does NOT show
 
 - **Interactive depth.** The TUI and game rows prove start-up, a prompt and a
   clean EOF, not a played game. Nothing was keyed into `fm` or `menudemo`.
-- **A GL context.** No demo that builds uses OpenGL, and `glxinfo` is not
-  installed, so whether Xvfb here can give `triangle` a 3.3 core context is
-  unmeasured.
+- **Real GPU drivers.** The triangle was verified on Mesa's software
+  renderer under Xvfb, not on the desk's NVIDIA driver.
 - **The other two goal-3 demos.** lekkerzeilen (NilPy) and busybox (C) are not
   `examples/**` Pascal programs and are tracked on their own umbrellas.
 - **Cross targets.** Everything above is x86-64 Linux; esp32 examples are

@@ -26,10 +26,14 @@ implementation
 
 uses uwidgetset, gtk3gl;   { gtk3gl only INSTALLS the backend; nothing here names it }
 
-{ Inline asm helper: calls a Pascal method(Self, Width, Height) from C context.
-  On entry: data=Self, code=method code ptr, w/h=dimensions.
-  Follows the same ABI/callee-save pattern as CallPaintMethod in gtk3widgets. }
-procedure CallRenderMethod(code: Pointer; data: Pointer; w, h: Integer);
+{ Inline asm helper: calls a Pascal method(Self, Sender, Width, Height) from C
+  context -- the PCL event shape, Sender first, as CallPaintMethod in gtk3widgets
+  passes it. On entry: data=Self, code=method code ptr, sender=the TGLArea, w/h=
+  dimensions. It used to pass (Self, Width, Height) with no Sender, so a handler
+  declared the PCL way, OnRender(Sender; W, H), got the width as Sender, the
+  height as W and a stray register as H: measured 2026-09-19, examples/gl/
+  triangle rendered into a 480x480 viewport of its 640x480 area. }
+procedure CallRenderMethod(code: Pointer; data: Pointer; sender: Pointer; w, h: Integer);
 begin
   asm
     push rbx
@@ -38,8 +42,9 @@ begin
     push r14
     push r15
     mov rdi, data
-    mov rsi, w
-    mov rdx, h
+    mov rsi, sender
+    mov rdx, w
+    mov rcx, h
     mov rax, code
     mov r11, rsp
     db 72, 131, 228, 240   { and rsp, -16 }
@@ -75,7 +80,7 @@ begin
   GLBackend.MakeCurrent(widget);
   m := gl.OnRender;
   if m.Code <> nil then
-    CallRenderMethod(m.Code, m.Data, gl.GLWidth, gl.GLHeight);
+    CallRenderMethod(m.Code, m.Data, Pointer(gl), gl.GLWidth, gl.GLHeight);
   asm
     pop r15
     pop r14

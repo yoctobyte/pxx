@@ -173,7 +173,7 @@ procedure TTriangleHandler.OnTimer(Sender: TObject);
 begin
   FAngle := FAngle + 0.03;
   if FAngle > 6.2832 then FAngle := FAngle - 6.2832;
-  FAngleLabel.Caption := 'Angle: ' + IntToStr(Round(FAngle * 57.2958)) + Chr(176);
+  FAngleLabel.Caption := 'Angle: ' + IntToStr(Round(FAngle * 57.2958)) + #$C2#$B0;   { the degree sign, in UTF-8: GTK labels take UTF-8, and Chr(176) alone is an invalid byte }
   FGLArea.QueueRender;
 end;
 
