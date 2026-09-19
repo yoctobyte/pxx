@@ -2076,6 +2076,34 @@ begin
     whole-corpus --dce differential. --no-dce opts back out; --dce turns it on
     at any -O level. compiler/dce.inc, feature-emission-size-dce }
   if (OptLevel >= 3) and not DceOff then DceEnabled := True;
+  { AND ON A BARE ESP IMAGE, AT ANY -O LEVEL. This is not the -O3 convention
+    being short-circuited; it is a different argument that happens to reach the
+    same flag.
+
+    A bare image has no external linker and no loader: whatever the pass does
+    not drop is flashed. Measured 2026-09-19 at this commit, the same three
+    fixtures test-esp-bare already boots, on both chips:
+
+      test_esp_bare         esp32c3  59528 -> 5320    esp32s3  47872 -> 4836
+      test_esp_bare_float   esp32c3 126384 -> 47400   esp32s3 103020 -> 39856
+      test_esp_bare_atomic  esp32c3  62816 -> 8608    esp32s3  50416 -> 7380
+
+    and an EMPTY program 46380 -> 732 (esp32s3), 13 live bodies of 104 in a
+    program that uses a record, a Double, a dynamic array and a string. So an
+    ESP image was ~87% code nothing in it could reach, on a part where flash is
+    the binding constraint and which the owner ranks as the primary target.
+    bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
+
+    WHAT MAKES IT SAFE HERE RATHER THAN EVERYWHERE: all six of those images were
+    BOOTED under Espressif QEMU (tools/esp_run_bare.sh, both chips) with and
+    without the pass, and the UART bytes are identical in all six. That is the
+    real instrument for this target -- a hosted --platform=posix run does not
+    exercise the bare startup or the PAL. The x86-64 whole-corpus differential
+    that -O3 buys says nothing about xtensa, where --dce is one day old.
+
+    `--no-dce` still opts out, and it is checked here rather than assumed from
+    option order: this runs after the whole option loop. }
+  if EspBareBoot and not DceOff then DceEnabled := True;
   if ParamCount < i then
     begin
       writeln(StdErr, 'usage: pxx [options] <source> [output]');

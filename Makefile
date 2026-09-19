@@ -34494,6 +34494,28 @@ test-emit-obj: $(COMPILER)
 # against the x86-64 oracle run. Each chip is skipped when its Espressif qemu is
 # absent (they are not part of the base toolchain). esp32c3=riscv32, esp32s3=xtensa.
 test-esp-bare: $(COMPILER)
+	# THE BARE PROFILE TURNS --dce ON BY ITSELF, and this row exists so it
+	# cannot stop doing so SILENTLY. Every row below boots an image and diffs
+	# UART against the x86-64 oracle, which guards the pass being CORRECT and is
+	# exactly blind to it being ABSENT: a bigger image with the same output
+	# passes all fourteen of them.
+	#
+	# A bare image has no external linker and no loader, so whatever the pass
+	# does not drop gets flashed. Measured 2026-09-19: 47872 -> 4836 on this
+	# fixture (esp32s3), and an EMPTY program 46380 -> 732, one live body of 68.
+	# Asserted as a RELATION -- default strictly smaller than --no-dce -- and
+	# never as byte counts, so the row survives the fixture and the RTL moving.
+	# bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
+	@for chip in esp32c3:riscv32 esp32s3:xtensa; do \
+	  soc=$${chip%%:*}; arch=$${chip##*:}; \
+	  ./$(COMPILER) --target=$$arch --esp-profile=bare test/test_esp_bare.pas $(TESTTMP)/test_ebd_$$soc > $(TESTTMP)/test_ebd_$$soc.log 2>&1 || { cat $(TESTTMP)/test_ebd_$$soc.log; exit 1; }; \
+	  ./$(COMPILER) --no-dce --target=$$arch --esp-profile=bare test/test_esp_bare.pas $(TESTTMP)/test_ebn_$$soc > $(TESTTMP)/test_ebn_$$soc.log 2>&1 || { cat $(TESTTMP)/test_ebn_$$soc.log; exit 1; }; \
+	  d=`sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_ebd_$$soc.log | head -1`; \
+	  n=`sed -n 's/.*code=\([0-9]*\)B.*/\1/p' $(TESTTMP)/test_ebn_$$soc.log | head -1`; \
+	  test -n "$$d" -a -n "$$n" || { echo "$$soc bare-dce: no code= line to read -- the assertion never ran"; exit 1; }; \
+	  if [ "$$d" -lt "$$n" ]; then echo "$$soc bare defaults to --dce ($$n -> $$d)"; \
+	  else echo "$$soc bare-dce NOT APPLIED: default $$d is not smaller than --no-dce $$n"; exit 1; fi; \
+	done
 	@./$(COMPILER) test/test_esp_bare.pas $(TESTTMP)/test_esp_bare_oracle >/dev/null && $(TESTTMP)/test_esp_bare_oracle > $(TESTTMP)/test_esp_bare.oracle
 	@RV=$$(ls $$HOME/.espressif/tools/qemu-riscv32/*/qemu/bin/qemu-system-riscv32 2>/dev/null | head -1); \
 	if [ -z "$$RV" ]; then echo "Espressif qemu-system-riscv32 not installed; esp32c3 bare-boot run skipped"; else \

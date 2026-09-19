@@ -2,10 +2,10 @@
 track: A+S
 prio: 55
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: frankD
-summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate. NO LONGER UNWATCHED and no longer only ESP: since 2026-09-05 tools/size_canary.py holds this number and it is FAILING — esp32c3-bare.code 50528 -> 57900 (+7372, +14.6%), over its 55580 budget — which is one of the reds holding seven's full tier. AND EVERY SUBJECT GREW against the 2026-08-30 baseline, x86_64-empty by +4025 code and +832 data, so an EMPTY PROGRAM ON THE HOST carries ~4KB more than it did six days ago: this is the always-linked surface growing, not an ESP profile problem. Raised 25 -> 55 on the argument that it was a gate failure with a live tier behind it. THAT ARGUMENT NO LONGER HOLDS AS OF 2026-09-06 AND THE PRIO HAS NOT BEEN CHANGED TO MATCH -- frankS re-baselined the canary to clear the row for a full-green pin the owner asked for, so this is watched-and-frozen rather than failing. The numbers above are the MEASUREMENT and stand; what changed is only that the canary no longer trips on them. Whoever ranks this next should decide whether 55 survives without the gate behind it -- it is left at 55 deliberately rather than churned by the person who removed its justification."
+summary: "An empty bare-profile ESP32 program was ~26 KB code / ~70 KB bss when docs/targets/esp32.md was written; at pin v393 it is ~50 KB / ~104 KB. Code roughly doubled, bss grew by half, on a part with ~400 KB of SRAM. Found while re-measuring published figures, not by a size gate. NO LONGER UNWATCHED and no longer only ESP: since 2026-09-05 tools/size_canary.py holds this number and it is FAILING — esp32c3-bare.code 50528 -> 57900 (+7372, +14.6%), over its 55580 budget — which is one of the reds holding seven's full tier. AND EVERY SUBJECT GREW against the 2026-08-30 baseline, x86_64-empty by +4025 code and +832 data, so an EMPTY PROGRAM ON THE HOST carries ~4KB more than it did six days ago: this is the always-linked surface growing, not an ESP profile problem. Raised 25 -> 55 on the argument that it was a gate failure with a live tier behind it. THAT ARGUMENT NO LONGER HOLDS AS OF 2026-09-06 AND THE PRIO HAS NOT BEEN CHANGED TO MATCH -- frankS re-baselined the canary to clear the row for a full-green pin the owner asked for, so this is watched-and-frozen rather than failing. The numbers above are the MEASUREMENT and stand; what changed is only that the canary no longer trips on them. FIXED 2026-09-19 (frankS), CODE HALF: the doubling was code NOTHING IN THE PROGRAM COULD REACH -- an empty bare image is 1 live body of 68, a real one 13 of 104, so ~87%% of the image was the always-linked surface, which is also why every canary subject grew and why hunting a unit xtensa has and riscv32 lacks found nothing. `--esp-profile=bare` now turns `--dce` on at any -O (`--no-dce` opts out): empty 46380 -> 732 (esp32s3) and 57764 -> 276 (esp32c3), test_esp_bare 47872 -> 4836. NOT the -O3 convention short-circuited -- a bare image has no external linker and no loader, so what the pass does not drop gets flashed. Safe on THIS target by the instrument that is about it: six images BOOTED under Espressif QEMU on both chips, UART byte-identical with and without the pass and again through the new default path, plus `make test-esp-bare` 14 rows 0 mismatches. Canary re-baselined; x86_64-empty 0/0/0, hosted untouched. BSS IS UNTOUCHED AND ITS HALF OF THIS HEADLINE IS STALE, NOT FIXED: d(bss)=0 on every subject because DCE drops code, and bss now reads 66808 (65536 of it the deliberate HEAP_ARENA) -- BELOW this ticket's own ~70 KB starting figure and far below the ~104 KB at v393. I did not cause that and have not attributed it; re-measure that half rather than inheriting the number."
 ---
 
 
@@ -274,3 +274,92 @@ largest unclaimed code-size item on riscv32, not as this ticket's cause.
 Also visible in that disassembly and worth someone's eye separately: the
 prologue does `addi sp,sp,-16` at +0x10 and again at +0x20 with two
 `addi zero,zero,0` between them. Not measured further and not this ticket.
+
+## 2026-09-19 (frankS) — the doubling was code nothing in the program could reach, and the pass that drops it now runs by default on this profile
+
+Four sessions looked for *which unit added the bytes*. That question has no
+answer, because the bytes were never reachable in the first place.
+
+### The measurement that reframes it
+
+`--dce-report`, `--esp-profile=bare`, at this commit:
+
+| program | chip | code before | code after | live bodies |
+| --- | --- | --- | --- | --- |
+| empty | esp32s3 | 46,380 | **732** | **1 of 68** |
+| empty | esp32c3 | 57,764 | **276** | — |
+| record + Double + dyn array + string | esp32s3 | 101,084 | **12,580** | **13 of 104** |
+| `test_esp_bare` | esp32c3 / esp32s3 | 59,528 / 47,872 | 5,320 / 4,836 | — |
+| `test_esp_bare_float` | esp32c3 / esp32s3 | 126,384 / 103,020 | 47,400 / 39,856 | — |
+| `test_esp_bare_atomic` | esp32c3 / esp32s3 | 62,816 / 50,416 | 8,608 / 7,380 | — |
+
+**87% of a real bare image was unreachable.** A `uses` pulls in a whole unit
+body, so every program paid for the float writer, the variant engine, the
+dynamic-array runtime and the record RTTI helpers whether or not it mentions
+one. That is not an ESP defect and never was — it is the always-linked surface,
+which is why **every** canary subject grew and why looking for a unit xtensa has
+and riscv32 lacks found nothing (frankF, 2026-09-06, correctly).
+
+### What changed
+
+`--esp-profile=bare` now turns `--dce` on at any `-O`. One line in
+`compiler.pas` beside the `-O3` rule, with `--no-dce` still opting out.
+
+**This is NOT the `-O3` convention being short-circuited.** It is a different
+argument reaching the same flag: a bare image has no external linker and no
+loader, so whatever the pass does not drop gets flashed, on a part where flash
+is the binding constraint and which the owner ranks as the primary target.
+Hosted builds are untouched — `x86_64-empty` moved 0/0/0 and a hosted xtensa
+build is byte-for-byte the size it was.
+
+### The evidence that makes it safe on THIS target
+
+The `-O3` tier buys a whole-corpus x86-64 differential (`tools/optdiff.sh`),
+and that says nothing about xtensa, where `--dce` is one day old (`095a7a794`).
+So the pass was measured with the instrument that is actually about this target:
+
+- **Six images BOOTED under Espressif QEMU** (`tools/esp_run_bare.sh`), both
+  chips, three fixtures, with and without the pass: **UART output byte-identical
+  in all six.** Re-run through the new DEFAULT path (no flag) against
+  `--no-dce`: identical again, 6 of 6.
+- **`make test-esp-bare` in full: 14 boot rows, 0 mismatches**, every one of
+  them now booting a DCE'd image and diffing UART against the x86-64 oracle.
+- A hosted cross differential over eight named fixtures on xtensa and riscv32
+  (`--platform=posix`): 14 built rows, **identical stdout and exit code on all
+  14**, 60–86% smaller. One fixture failed to build on BOTH arms, so DCE never
+  ran on it — excluded, not silently skipped.
+
+### The guard, and why the existing rows were not enough
+
+`test-esp-bare` boots an image and diffs UART. That guards the pass being
+**correct** and is exactly blind to it being **absent**: a bigger image with the
+same output passes all fourteen rows. So there is now a row asserting the
+default is applied at all — default strictly smaller than `--no-dce`, a
+RELATION rather than byte counts, so it survives the fixture and the RTL moving.
+Positive control: with `--no-dce` forced onto both arms it reports
+`47872 not smaller than 47872` and exits 1.
+
+### The canary, which exists because of this ticket
+
+Re-baselined at `a55b9fb1cec1` after review: esp32c3-bare.code 57,764 → 276;
+esp32s3 / esp32s2 / esp32-bare 46,380 → 732. `x86_64-empty` unchanged.
+
+### What is NOT fixed, and what is not mine
+
+- **bss is untouched. `d(bss) = 0` on every subject** — DCE drops code. bss
+  reads 66,808 for an empty bare program, of which 65,536 is the deliberate
+  `HEAP_ARENA`. That is BELOW this ticket's own `~70 KB` starting figure and far
+  below the `~104 KB` at v393, so **the bss half of this ticket's headline is no
+  longer reproducible — and I did not cause that.** I have not attributed the
+  recovery; whoever ranks this next should re-measure that half rather than
+  inherit the number. **The headline's bss claim is stale; the code claim was
+  real and is now addressed.**
+- The riscv32-vs-xtensa **1.23x bytes-per-procedure gap** (frankF, above) is a
+  separate quantity and is untouched. **RVC remains the largest unclaimed
+  code-size item on riscv32** and this does not close it.
+- Hosted and `--emit-obj` builds still ship unreachable bodies by default.
+  That is the sibling ticket's item 1 and the `-O3` -> `-O2` promotion, neither
+  of which this claims.
+
+Status: the code half is done. Resolving on that basis with the bss half called
+out as stale rather than fixed.
