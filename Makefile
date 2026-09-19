@@ -16536,6 +16536,26 @@ test-core: $(COMPILER)
 	./$(COMPILER) $(TESTTMP)/fs_file.c $(TESTTMP)/fs_file >$(TESTTMP)/fs_file.err 2>&1
 	@grep -q '^ok: ' $(TESTTMP)/fs_file.err 	  || { echo "c_func_scope_thread_local: FAIL - file-scope control did not compile"; cat $(TESTTMP)/fs_file.err; exit 1; }
 	@! grep -q 'function scope' $(TESTTMP)/fs_file.err 	  || { echo "c_func_scope_thread_local: FAIL - func-scope reason fired on a FILE-scope declaration"; exit 1; }
+	# 5. THE SAME SEAM WITHOUT `static` IS A DIFFERENT FACT AND MUST NOT BORROW
+	#    THIS MESSAGE. A bare `__thread` in a body is not shared at all -- it
+	#    falls through to the ordinary-local path and becomes an uninitialised
+	#    automatic, a fresh indeterminate value per call, which gcc refuses
+	#    outright. It shipped wearing the shared-copy wording for one commit
+	#    (09de09465) and that text was FALSE for this shape: a WRONG diagnostic,
+	#    not a missing one. Asserted both ways round so neither can drift into
+	#    the other.
+	printf 'int f(void){__thread int t; t++; return t;}\nint main(void){return f();}\n' > $(TESTTMP)/fs_auto.c
+	./$(COMPILER) $(TESTTMP)/fs_auto.c $(TESTTMP)/fs_auto >$(TESTTMP)/fs_auto.err 2>&1
+	@grep -q 'no `static`' $(TESTTMP)/fs_auto.err || { echo "c_func_scope_thread_local: FAIL - bare __thread did not get the no-static diagnostic"; cat $(TESTTMP)/fs_auto.err; exit 1; }
+	@! grep -q 'ONE copy shared' $(TESTTMP)/fs_auto.err || { echo "c_func_scope_thread_local: FAIL - bare __thread told the programmer it is SHARED; it is an uninitialised automatic"; exit 1; }
+	# 6. AND ONE TU CARRYING BOTH SHAPES MUST REPORT BOTH. Two facts sharing one
+	#    warn-once flag is the defect this family was rebuilt around, one size
+	#    down: a single flag reported a `__thread` array and suppressed a
+	#    `__thread` struct entirely. A fixture with one shape cannot see it.
+	printf 'int a(void){static __thread int x; x++; return x;}\nint b(void){__thread int y; y++; return y;}\nint main(void){return a()+b();}\n' > $(TESTTMP)/fs_both.c
+	./$(COMPILER) $(TESTTMP)/fs_both.c $(TESTTMP)/fs_both >$(TESTTMP)/fs_both.err 2>&1
+	@n=$$(grep -c '^pascal26:.*warning: __thread' $(TESTTMP)/fs_both.err); [ "$$n" = 2 ] || { echo "c_func_scope_thread_local: FAIL - want 2 warnings for the two block-scope shapes, got $$n (one suppressed the other)"; exit 1; }
+	@grep -q 'ONE copy shared' $(TESTTMP)/fs_both.err && grep -q 'no `static`' $(TESTTMP)/fs_both.err || { echo "c_func_scope_thread_local: FAIL - both fired but they are not the two DIFFERENT ones"; exit 1; }
 	# _Static_assert is EVALUATED at every scope C11 allows one. The file above is
 	# the must-COMPILE half (true assertions must be invisible, and a struct
 	# carrying one must lay out unchanged -- the sizeof rows are what make that

@@ -3065,8 +3065,27 @@ const
     per-thread storage, which is exactly what it claims and no more.
 
     bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
-  TLSREFUSE_FUNCSCOPE = 6;  { declared inside a function body: never reaches the allocator }
-  TLSREFUSE_MAX       = 6;
+  TLSREFUSE_FUNCSCOPE = 6;  { declared inside a function body WITH `static`: never reaches the allocator }
+  { AND THE SEVENTH IS A SEPARATE FLAG FOR A SEPARATE FACT, NOT A REFINEMENT.
+    A block-scope thread-local WITHOUT `static` is not the same degradation as
+    one with it, and saying so in one message would be FALSE for whichever case
+    it was not written for. With `static`, storage is correct and shared: one
+    copy every thread uses, and the value persists across calls. Without it, the
+    declaration falls through to the ordinary-local path and becomes an
+    UNINITIALISED AUTOMATIC -- a fresh garbage value per call, persisting
+    nowhere, and a program gcc refuses outright ("function-scope 't' implicitly
+    auto and declared '__thread'"). Measured 2026-09-19: 1551595657.
+
+    IT NEEDS ITS OWN FLAG AND NOT JUST ITS OWN TEXT, because the warn-once
+    bookkeeping is per REASON: a TU containing both shapes would report whichever
+    came first and suppress the other entirely. That is the exact failure this
+    family was rebuilt around -- a one-shot flag reported a `__thread` array and
+    hid a `__thread` struct -- and two facts sharing a slot is the same defect
+    one size down.
+
+    bug-c-a-bare-thread-in-a-function-body-is-accepted-and-returns-a-garbage-value }
+  TLSREFUSE_FUNCAUTO  = 7;  { declared inside a function body WITHOUT `static`: an uninitialised automatic; gcc refuses it }
+  TLSREFUSE_MAX       = 7;
 
 var
   TARGET_PTR_SIZE    : Integer;

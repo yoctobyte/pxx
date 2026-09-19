@@ -8453,7 +8453,7 @@ begin
   Result := blk;
 end;
 
-procedure CWarnFuncScopeThreadLocal;
+procedure CWarnFuncScopeThreadLocal(sawStatic: Boolean);
 { The sixth reason, and the only one that is not an answer from the allocator.
 
   A `static __thread int t;` inside a function body gets ONE shared object,
@@ -8487,6 +8487,26 @@ procedure CWarnFuncScopeThreadLocal;
 
   bug-c-thread-local-storage-still-shares-one-copy-off-x86-64-and-a-warning-is-all-that-stands-there }
 begin
+  if not sawStatic then
+  begin
+    { NO `static`: NOT a sharing problem, and saying so would be a WRONG
+      diagnostic rather than a missing one. This declaration is not shared at
+      all -- it fell through to the ordinary-local path and is an uninitialised
+      automatic, so it is a fresh garbage value on every call, with no threads
+      involved. Landed as the shared-copy message for one commit (09de09465)
+      and that was false for this shape. }
+    if CTlsWarnedReason[TLSREFUSE_FUNCAUTO] then Exit;
+    CTlsWarnedReason[TLSREFUSE_FUNCAUTO] := True;
+    Warn('__thread at function scope with no `static`: C requires a '
+       + 'block-scope thread-local to be `static` or `extern`, and gcc REFUSES '
+       + 'this program outright ("implicitly auto and declared __thread"). We '
+       + 'accept it and the storage class is DISCARDED — you get an ordinary '
+       + 'uninitialised local, so this reads a fresh indeterminate value on '
+       + 'every call and persists nowhere. This is not thread-related and does '
+       + 'not need threads to be wrong. Add `static`, or move the declaration '
+       + 'to file scope');
+    Exit;
+  end;
   if CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] then Exit;
   CTlsWarnedReason[TLSREFUSE_FUNCSCOPE] := True;
   Warn('__thread at function scope: a thread-local declared inside a function '
@@ -8590,8 +8610,10 @@ begin
       localSawThread := True;
     Next;
   end;
-  { Warn BEFORE the two declaration arms below, because both of them Exit. }
-  if localSawThread then CWarnFuncScopeThreadLocal;
+  { Warn BEFORE the two declaration arms below, because both of them Exit.
+    `localSawStatic` is final here -- the loop has consumed every storage class,
+    so the two spellings are distinguishable at this point and nowhere later. }
+  if localSawThread then CWarnFuncScopeThreadLocal(localSawStatic);
 
   { block-scope static declaration: parse as a normal local declaration but
     allocate the declared storage in BSS so pointers to it survive the block.
