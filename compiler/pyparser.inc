@@ -42692,8 +42692,12 @@ begin
                 PyParseClass (several bases, or a subclass of one) meets a base
                 already emitted with its OLD result type: widening it then
                 leaves callers reading a variant out of a routine that returns
-                an integer -- a crash with no diagnostic. Refused by name. }
-              if not PyInHeaderSweep then
+                an integer -- a crash with no diagnostic. Refused by name. A
+                pylib base (a subclass of list, bytearray, ...) is exempt: its
+                methods are reached through the builtin dispatch, and widening
+                them is the long-standing behaviour its fixtures pin. }
+              if (not PyInHeaderSweep) and
+                 (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + UClsParent[ci])) then
                 Error('Nil Python: ' + origName + ' overrides '
                       + Procs[ovPi].Name + ' with a different result type, in '
                       + 'a class laid out after its base was compiled (it has '
