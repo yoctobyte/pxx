@@ -2075,16 +2075,16 @@ begin
     an UNLOCKED runtime, so fail clearly instead
     (feature-threadsafe-heap-contract / feature-i386-threadsafe-locks).
 
-    THE CONDITION BELOW IS THE AUTHORITY on which targets are supported, and
-    the only place that list should be written down. Corrected 2026-08-30: this
-    comment named two targets while the code three lines under it admitted
-    four, and two other sites had copied the older, narrower answer
-    (builtinheap.pas PXXStrIncRef, ir_codegen_aarch64.inc EmitHeapAllocLockedA64
-    -- the latter inside the very backend that implements it). A target list
-    duplicated into a comment rots the moment a target is added, which is the
-    expected direction of travel; pointing here does not. }
-  if ThreadSafeMode and (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
-     and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
+    TargetHasThreadSafeLocks (util.inc) IS THE AUTHORITY on which targets are
+    supported, and the only place that list is written down. It used to be this
+    condition, and was corrected 2026-08-30 when this comment named two targets
+    while the code under it admitted four and two other sites had copied the
+    narrower answer (builtinheap.pas PXXStrIncRef, ir_codegen_aarch64.inc
+    EmitHeapAllocLockedA64 -- the latter inside the very backend that implements
+    it). It became a function when `import threading` needed to ask the same
+    question to tell a wasm32 user that threading is absent rather than
+    prescribe this flag, which this line would then refuse. }
+  if ThreadSafeMode and (not TargetHasThreadSafeLocks) then
   begin writeln(StdErr, '--threadsafe is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet'); Halt(1); end;
   if EspBareBoot and (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_WINDOWED) then
   begin writeln(StdErr, '--esp-profile=bare on xtensa requires Call0 (omit --xtensa-abi=windowed): the windowed ABI needs window-overflow exception handlers + vecbase that bare-metal does not install'); Halt(1); end;

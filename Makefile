@@ -2736,6 +2736,24 @@ test-nilpy: $(COMPILER)
 	# gets blamed on whatever landed beside it.
 	./$(COMPILER) --threadsafe test/test_nilpy_the_threading_module.npy $(TESTTMP)/test_nilpy_threading26
 	$(TESTTMP)/test_nilpy_threading26 | diff -u test/test_nilpy_the_threading_module.expected -
+	@# ...and the two REFUSALS, which are different questions and used to be one
+	@# answer. Where the locks exist, the flag is the remedy and the diagnostic
+	@# names it. Where they do NOT (wasm32 here), prescribing the flag was a dead
+	@# end: the driver refuses --threadsafe on that target, so the user was given
+	@# advice and its rejection in one sitting. Both arms are asserted because a
+	@# single-arm row passes whichever wording is wrong on the other target.
+	@out=$$(./$(COMPILER) test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 2>&1); \
+	  case "$$out" in *"requires --threadsafe"*) ;; \
+	    *) echo "x86-64 refusal should name the flag, got: $$out"; exit 1;; esac; \
+	  out=$$(./$(COMPILER) --target=wasm32 test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 2>&1); \
+	  case "$$out" in *"not available on this target"*) ;; \
+	    *) echo "wasm32 refusal should not prescribe the flag, got: $$out"; exit 1;; esac; \
+	  out=$$(./$(COMPILER) --target=wasm32 --threadsafe test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 2>&1); \
+	  case "$$out" in *"x86-64/i386/aarch64/arm32 only"*) ;; \
+	    *) echo "wasm32 --threadsafe should still be refused by the driver, got: $$out"; exit 1;; esac; \
+	  ./$(COMPILER) --threadsafe test/test_nilpy_import_threading_refusal.npy $(TESTTMP)/test_nilpy_thrref26 >/dev/null; \
+	  tools/expect_same.sh test_nilpy_thrref26 "$$($(TESTTMP)/test_nilpy_thrref26)" "locked and unlocked"; \
+	  echo "import_threading_refusal: ok (flag named where it exists, not where it does not)"
 	# A BOUNDED queue across two threads -- the corpus shape (lekkerzeilen's
 	# _ready is Queue(maxsize=2), filled by a loader and drained by the render
 	# loop). Separate from the queue row above because that one is

@@ -6733,10 +6733,25 @@ begin
       This is a DIAGNOSTIC and not a which-shim-needs-which-mode table: it
       cannot turn the mode on, because the lock-implementation defines
       (PXX_TS_HARDLOCK / PXX_TS_SOFTLOCK) are applied before lexing and the
-      lexer refuses `{$threadsafe on}` for exactly that reason. Making
-      `import threading` imply the flag has to happen at OPTION time, from a
-      pre-scan of the source, and is filed as its own ticket:
-      feature-n-import-threading-should-imply-threadsafe. }
+      lexer refuses `{$threadsafe on}` for exactly that reason. MEASURED here
+      2026-09-20 rather than inherited from this comment: at the moment this
+      line runs, builtinheap is already compiled and thirteen units are done,
+      so the mode cannot be switched on from here. Making `import threading`
+      imply the flag has to happen at OPTION time, and the shape of that is a
+      fork with a cost table on it:
+      feature-n-import-threading-should-imply-threadsafe.
+
+      TWO refusals, because prescribing the flag is only useful where the flag
+      EXISTS. On wasm32 the old single wording sent the user to --threadsafe
+      and the driver then told them --threadsafe is x86-64/i386/aarch64/arm32
+      only -- a dead end, advice and refusal in the same breath. The target
+      question is asked of TargetHasThreadSafeLocks, which is the one place
+      that list lives; do not spell it out again here. }
+    if (lo = 'threading') and (not TargetHasThreadSafeLocks) then
+      Error('import threading is not available on this target: the heap, ARC '
+            + 'and console-I/O locks a Python thread needs are not implemented '
+            + 'here, and --threadsafe is refused on this target too (it is '
+            + 'x86-64/i386/aarch64/arm32 only).');
     if (lo = 'threading') and (not ThreadSafeMode) then
       Error('import threading requires --threadsafe: a Python thread allocates '
             + 'on its first statement and the default heap, ARC and console-I/O '

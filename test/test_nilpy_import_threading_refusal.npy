@@ -1,0 +1,21 @@
+# A program that must NOT compile, in two different ways, which is the whole
+# point of it: `import threading` needs the thread-safe runtime, and that
+# runtime exists on x86-64/i386/aarch64/arm32 and nowhere else.
+#
+#   where the locks exist   -> name the flag, the user can act on it
+#   where they do not       -> say threading is absent, because prescribing
+#                              --threadsafe there sends the user into the
+#                              driver's own refusal of that same flag
+#
+# The Makefile row asserts both wordings, the driver's refusal of the flag on
+# wasm32, and -- the arm that makes the other three mean anything -- that WITH
+# the flag on the host this same file compiles and prints its line. Without
+# that arm every refusal row would also pass on a fixture that simply does not
+# compile. feature-n-import-threading-should-imply-threadsafe
+import threading
+
+
+lock = threading.Lock()
+lock.acquire()
+lock.release()
+print("locked and unlocked")

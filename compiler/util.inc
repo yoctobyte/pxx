@@ -150,6 +150,32 @@ begin
 end;
 
 
+function TargetHasThreadSafeLocks: Boolean;
+{ Does THIS target have the thread-safe runtime -- the heap/ARC locks and the
+  statement-atomic console I/O that `--threadsafe` selects?
+
+  x86-64 (hand-emitted lock blobs), i386 (the Pascal softlock in builtinheap
+  via PXX_TS_SOFTLOCK plus the 386 I/O lock stubs), and aarch64/arm32
+  (IR_ATOMIC lowered to a load-exclusive/store-exclusive loop plus each
+  backend's own port of EmitIoLockStubs). Nowhere else: on the rest
+  `--threadsafe` would silently emit an UNLOCKED runtime.
+
+  THIS FUNCTION IS THE AUTHORITY and the only place the list is written down.
+  That was already the intent -- compiler.pas's driver gate said so in its own
+  comment, having been corrected once (2026-08-30) when the comment named two
+  targets while the code under it admitted four and two other sites had copied
+  the narrower answer. The list is now a function because a SECOND caller
+  arrived: `import threading` has to tell a wasm32 user that threading is
+  absent here, rather than prescribe a flag the driver will then refuse
+  (feature-n-import-threading-should-imply-threadsafe). A target list is the
+  thing that rots; pointing at one place does not. }
+begin
+  TargetHasThreadSafeLocks :=
+    (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
+    (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32);
+end;
+
+
 function TargetIsEspClass: Boolean;
 { True for the ESP-class bare-metal targets — the ones that have no hosted OS
   under them and therefore no full RTL: EITHER ESP ISA under `--esp-profile=bare`,
