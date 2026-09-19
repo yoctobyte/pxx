@@ -112,4 +112,4 @@ block-scope family — which is the sibling's working case and the exact
 whole-family shape that has certified a broken half here before.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1e1e3f659.
