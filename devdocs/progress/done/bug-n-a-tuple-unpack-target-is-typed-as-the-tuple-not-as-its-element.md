@@ -78,10 +78,54 @@ SILENTLY by pxx (CPython raises NameError at def time, since a bare annotation
 is evaluated) -- that is a second, smaller divergence and it is what produced a
 misleading first measurement here.
 
+**THE SENTENCE ABOVE IS WRONG IN BOTH HALVES AND IS KEPT ONLY SO THE
+CORRECTION HAS SOMETHING TO POINT AT** -- see "The second item does NOT
+reproduce as stated" below. pxx warns twice and types the parameter Any;
+CPython 3.14.4, the only interpreter on this box, defers the annotation under
+PEP 649 and raises nothing. Worth recording HOW its author (frankb-8e) got it
+wrong, because neither half was a mistake of reasoning: the "silently" was
+written after grepping that compile's output for the timing line and for
+`ok:`, never for `warning:` -- a claim about a place nobody had looked -- and
+the NameError was asserted from knowledge of CPython <= 3.13 without running
+the interpreter that is installed, in a ticket that names its oracle on every
+other row. A claim about an oracle costs one command to check and was the one
+claim here not checked.
+
 ## What would retire this row
 
 The table's third row dropping to at or below the first. The type-name row is
 the cheap oracle check and does not need the app.
+
+### RETIRED 2026-09-20 (frankb-8e) -- the third row is now the FASTEST
+
+Re-measured at compiler `f99f37bcebe2` (repo sha 8826e6aec, which contains
+frankH's 47841c55b), same driver `scratchpad/lz/chartbench.py`, same tree
+lekkerzeilen 01d0fec + the `chart_view` workaround, `--threadsafe`, min-of-5
+inside the program, two runs each, check row `137505351 786432` identical in
+every arm:
+
+| chart.py `_sound` | before | after |
+| --- | --- | --- |
+| `grid` unannotated (`values` is a variant) | 3.40 s | 3.455 / 3.461 s |
+| `grid: world.Grid` + `from . import world` (resolves) | 16.85 s | 2.486 / 2.351 s |
+
+**7.2x on the row the bug was about, and the annotated arm is now 32% FASTER
+than the unannotated one** -- which is the answer you want from a type
+annotation and was the opposite of what it did yesterday. The delta is
+frankH's; this seat only measured it, deliberately, so the number is not the
+author's own.
+
+The unannotated row not moving is the control, not a disappointment: a variant
+`values` never went through the mis-typed unpack, so a change there would have
+meant the fix reached something it should not have.
+
+Precondition asserted rather than assumed, because "annotation degraded to Any"
+produces the unannotated timing and would have looked like a partial win:
+`PXXDBG=n.locals` on that exact build gives `_sound values tk=6 rec=154` with
+**zero** `treating it as Any` warnings in the whole compile. `rec=154` is named
+by a second holder that fails differently -- `Route.create raw tk=6 rec=154`,
+whose source is the unambiguous `raw = array.array("f")` -- so it is the array
+shim class and not a list. Before the fix this slot was `TPyList`.
 
 ## Resolution (frankH, 2026-09-20)
 
