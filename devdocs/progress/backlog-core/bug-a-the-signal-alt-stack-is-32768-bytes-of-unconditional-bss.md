@@ -2,12 +2,12 @@
 slug: bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss
 title: "The signal alt stack is 32,768 bytes of BSS in every image, --no-signals included"
 track: A
-prio: 60
+prio: 15
 type: bug
 status: new
 created: 2026-09-18
 owner: ""
-summary: "`EnsureSignalBss` (ir_codegen.inc:1307) reserves SIG_ALTSTACK_SIZE = 32768 unconditionally, and `ir_codegen.inc:1445` calls it BEFORE the `if NoSignals then Exit`. defs.inc justified it as \"zero-filled BSS with no file cost\" — true of a hosted target, and false wherever BSS is SRAM. Measured 2026-09-18: an x86-64 hello world at its 195-byte code floor still carries 41,800 bytes of bss, of which 32,768 is this one constant — 78%. The other two large items are the TLS main block (4,240) and the readln stdin line buffer (4,096, LINE_BUF_SIZE), neither of which a program that does not read stdin will ever touch. On an ESP32-C3 with ~400 KB usable SRAM this is 8% of the chip for a facility the program opted out of."
+summary: "TWO OF THE THREE PIECES ARE DONE AND THE SRAM CASE -- THE WHOLE REASON THIS RANKED -- IS DISCHARGED. Re-measured 2026-09-19 (frankS). This summary described the alt stack as reserved before the `if NoSignals then Exit` and therefore paid by every image; that stopped being true at `16ebf18ce` on 2026-09-18, the body has recorded it as FIXED forty lines down ever since, and the stale summary went on routing this as a live p60 SRAM bug -- which is the exact misroute \"a ticket's summary MUST be true\" exists to prevent, so it is fixed here rather than appended to. PIECE 1 (conditional on --no-signals): FIXED, `16ebf18ce`. PIECE 3 (LINE_BUF_SIZE, 4096 B of stdin line buffer in a program with no ReadLn): FIXED AND NOBODY RECORDED IT -- `0ab100740`, the same day, as a side effect of a CORRECTNESS fix (\"a long line no longer becomes two\"); PXXLineBuf is a Pointer realloc'd on demand and LINE_BUF_SIZE no longer appears in compiler/** at all, which also retires the twin-spelling hazard CLAUDE.md cites against this pair. PIECE 2 (size the constant per target) is what remains and it is hosted-only tuning: after piece 1 the constant costs nothing where no handler exists. MEASURED, hello world, plain vs --no-signals: BOTH BARE ESP PROFILES PAY ZERO (esp32c3 and esp32s3 bare, 66808 -> 66808, delta 0) because TargetHasSignalRuntime is false where there is no OS to deliver a signal; the six hosted profiles pay 32792 = SIG_ALTSTACK_SIZE + the 24-byte stack_t. THAT ATTRIBUTION IS A DIFFERENTIAL AND NOT A MATCHING NUMBER: halving the constant to 16384 moves the delta to 16408 on x86-64 and xtensa-posix and leaves bare at 0, so the source is that constant rather than something the same size. The body's own floor figures are stale too and are corrected below: x86-64 --no-signals bss is 2532, not 9008, and a bare hello is 66808, not 70936 -- both moved by piece 3. Where the cost still lands, it is hosted BSS, which is zero-filled pages with no file cost and where the runtime does install SIGINT/SIGTERM by default, so the alt stack is genuinely used. Re-ranked 60 -> 15 on that: real, correct, and not worth ranker attention."
 ---
 
 # The floor's bss, in full
@@ -113,3 +113,50 @@ moved it to 38,168.
 a seat a wrong diagnosis — two things called "the arena", both 64 KiB, and a
 grep reaches the compiler-side one first. Renamed, cross-referenced at both
 sites.
+
+## RE-MEASURED 2026-09-19 (frankS) — the floor figures above are stale, and piece 3 is done
+
+Arrived here as a p70-shaped lead from a peer, who was explicit that it was a
+lead to check rather than a conclusion. Two of the three things the summary
+said did not match the tree.
+
+**Piece 3 closed by events and nobody wrote it down.** `0ab100740`, 2026-09-18,
+*"one growable readln line buffer — a long line no longer becomes two"*. It was
+a correctness fix; the 4,096 bytes left the floor as a side effect.
+`PXXLineBuf` is a `Pointer` grown by `PXXRealloc`, and `LINE_BUF_SIZE` no
+longer appears anywhere under `compiler/**`.
+
+**The floor, re-measured.** Identical for `begin end.` and for a `WriteLn`
+hello, so this is the floor and not the program:
+
+| profile | plain | `--no-signals` | delta |
+| --- | --- | --- | --- |
+| x86-64 | 35324 | 2532 | 32792 |
+| i386 / arm32 / riscv32-posix / xtensa-posix | 34108 | 1316 | 32792 |
+| aarch64 | 34156 | 1364 | 32792 |
+| **esp32c3-bare** | **66808** | **66808** | **0** |
+| **esp32s3-bare** | **66808** | **66808** | **0** |
+
+The body above records 9,008 for the x86-64 `--no-signals` floor and 70,936 for
+a bare hello. Both predate piece 3.
+
+**The attribution is a differential, not a matching number.** 32,792 equals
+`SIG_ALTSTACK_SIZE` + 24 exactly, which is the shape that names a quantity and
+never a source — the `SocBareArenaSize`/`HEAP_ARENA` trap this ticket's own
+`Note 2026-09-18` was written about. So the constant was changed rather than
+read: at `SIG_ALTSTACK_SIZE = 16384` the delta becomes **16408** on x86-64 and
+xtensa-posix, and bare stays **0**. Reverted; the compiler rebuilt to the same
+sha it started at (`f4282f49e62e`).
+
+**Why bare pays nothing.** `EnsureSignalBss` runs unconditionally, and only
+`EnsureSignalAltStack` sits behind both `NoSignals` and
+`TargetHasSignalRuntime` — which asks the platform, and there is no OS on bare
+to deliver a signal. So the delta is structurally the alt stack alone, which is
+why the arithmetic comes out clean.
+
+**What this means for the ranking.** The SRAM argument was the reason this sat
+at p60, and it is discharged: the ESP profiles pay zero. What remains is piece
+2, sizing the constant per target, and it bites only where a handler can exist
+— hosted, where BSS is zero-filled pages with no file cost and where the
+runtime installs SIGINT/SIGTERM by default, so the alt stack is used rather
+than merely reserved. Re-ranked to 15.

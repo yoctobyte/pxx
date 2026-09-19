@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-08-25
-summary: "Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title."
+summary: "RE-MEASURED 2026-09-19 (frankS): the headline number is stale IN THE UNFAVOURABLE DIRECTION -- a `WriteLn('hello')` is **74,096 B** at the default -O now, not 63,760, and the ticket has been quoting the smaller figure since 2026-08-25. With `--dce` it is **24,944 B (-66%)**, and `-O3` gives exactly 24,944 too, which is the pass being on at -O3 by the free-tier convention rather than a coincidence. `begin end.` is 74,040 / 24,888, so this is the FLOOR and not the program. So the premise this was raised on -- decide-how-much-string-machinery-the-basic-frontend-gets accepting big binaries because \"binary size is a GENERAL problem with a general answer (reachability-gated emission)\" -- is now DISCHARGED where the pass runs: the general answer exists, works on five of six targets, and takes two thirds off. THE MECHANISM NAMED BELOW IS UNCHANGED and is still the right description: PasApplyDefaults defines PXX_MANAGED_STRING unconditionally, so every Pascal program still PULLS builtinheap whether or not it touches a managed string -- DCE removes the consequence (unreachable bodies) without changing the pull. What is left is therefore not this ticket as written but a narrower question: whether the DEFAULT -O level should enable the pass. That is not free and is not a goal question -- flipping the analogous default for --emit-obj surfaced bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main, an existing shipping path that dies before main on a two-object i386 link -- so it wants the same per-target evidence, not a flag flip. Original framing kept below."
 ---
 
 # The measurement
@@ -161,3 +161,35 @@ detection set is a judgement call whose wrong answers reach users as compile
 errors, and the quick gate covers x86-64. It wants its own pass with a real
 sweep, not a bolt-on. The manual lever is documented meanwhile
 (`docs/targets/esp32.md`, bare-profile notes).
+
+## RE-MEASURED 2026-09-19 (frankS)
+
+| program | plain `-O` | `--dce` |
+| --- | --- | --- |
+| `WriteLn('hello')` | 74,096 | 24,944 |
+| `begin end.` | 74,040 | 24,888 |
+
+`-O3` gives 24,944, identical to `--dce`.
+
+Two things follow, and the second is the one that changes the ranking.
+
+**The table at the top of this ticket is stale upward.** 63,760 was measured
+2026-08-25; the floor has grown 10,336 bytes since, and nobody re-measured
+because the number in the summary was never contradicted by anything. A figure
+only gets checked when someone disagrees with it, and nobody disagrees with a
+number in a summary.
+
+**The general answer the `decide` ticket bet on exists and delivers.** That
+decision accepted ~100 KB BASIC binaries on the grounds that size is a general
+problem with a general answer — reachability-gated emission. It is written, it
+runs on five of six targets, and it takes two thirds off this floor.
+
+What it does not do is change the mechanism this ticket names: the pull is
+still unconditional, and DCE only removes what the pull dragged in. So the
+residual is narrower than the title — whether the default `-O` should enable
+the pass — and that is not a flag flip. Turning the analogous default on for
+`--emit-obj` surfaced
+[[bug-a-dce-under-emit-obj-crashes-a-two-object-i386-link-before-main]]: an
+existing shipping path that links cleanly and dies before `main` on a
+two-object i386 link, invisible because every single-object row passes. The
+same per-target evidence is wanted here.
