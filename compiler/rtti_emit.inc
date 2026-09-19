@@ -985,6 +985,7 @@ begin
       begin
         UClsRTTIOff[ci] := DataLen;
         DataPutZeros(RTTI_CLS_SIZE);
+        if RoRtti then RoRangeAdd(UClsRTTIOff[ci], DataLen);
       end;
     end;
 

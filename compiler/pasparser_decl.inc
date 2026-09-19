@@ -7588,7 +7588,7 @@ var
   variantBaseOff, variantMax, branchFieldOff: Integer;
   enumNOff, enumNLen: Integer; enumNm: AnsiString;
   fTk: TTypeKind;
-  parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots: Integer;
+  parentCi, slot, mmi, mnOff, mnLen, pnOff, pnLen, rFOff, rFLen, rMOff, rMLen, wFOff, wFLen, wMOff, wMLen, rnOff, rnLen, wnOff, wnLen, propRec, i, vmtSlots, vmtStart: Integer;
   implIntf: array[0..15] of Integer; implCnt, tmpCi, ii, imSlot, imProc: Integer;
   imSig: Integer;   { the INTERFACE method's proc row — arity check below }
   imIface: AnsiString;   { the interface's OWN name for the slot, before a resolution clause rewrites it }
@@ -9384,6 +9384,7 @@ begin
           on Free by the instance's RUNTIME class. Stays 0 (nil = nothing to
           finalize) for classes with no managed fields
           (bug-a-class-managed-fields-not-finalized-on-destroy). }
+        vmtStart := DataLen;
         for i := 0 to 15 do
         begin
           DataEnsure(1);
@@ -9400,6 +9401,7 @@ begin
           Data[DataLen] := 0;
           Inc(DataLen);
         end;
+        if RoRtti then RoRangeAdd(vmtStart, DataLen);
         { Fill every VMT slot from the effective method (own override or an
           inherited one). The per-override fixup loop only covers subclasses
           that already exist when the override is parsed, so a subclass

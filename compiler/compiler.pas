@@ -1517,6 +1517,17 @@ begin
       MaxStackFrameSize := PasOptionInt(option, 19);
       Inc(i);
     end
+    else if option = '--ro-rtti' then
+    begin
+      { EXPERIMENTAL, off by default: also put every class RTTI header and every
+        VMT (with its two backlink words) in the read-only segment. The claim
+        that nothing writes them at run time is what this flag MEASURES -- a
+        write faults instead of landing. Not the RTTI registry table: that one
+        is filled by AddDataPtrFix at emission and stays where it is.
+        feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident }
+      RoRtti := True;
+      Inc(i);
+    end
     else if option = '--no-ro-data' then
     begin
       { Keep every data byte in the one RW segment: the A/B control for the

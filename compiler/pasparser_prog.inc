@@ -523,7 +523,7 @@ procedure RegisterBuiltinTObject;
   (ClassName/GetHashCode/...) are a separate ticket. Kept an IMPLICIT parent
   for every other class (the `class(TObject)` guard checks by name), so this
   adds a usable row without relocating any VMT. feature-pascal-builtin-tobject-class. }
-var ci, i, vmtN: Integer;
+var ci, i, vmtN, vmtStart: Integer;
 begin
   if FindUClass('TObject') >= 0 then Exit;
   ci := AddUClass(TokCharsAppend('TObject'), 7);
@@ -537,6 +537,7 @@ begin
     ClassName) walked wild memory for a plain TObject.Create instance. One
     padding slot, never dispatched (the root has no virtuals until an override
     materialises one). }
+  vmtStart := DataLen;
   for i := 0 to 15 do
   begin
     DataEnsure(1);
@@ -558,6 +559,7 @@ begin
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
+  if RoRtti then RoRangeAdd(vmtStart, DataLen);
 end;
 
 { Give TObject's row its four root METHODS, so a receiver statically typed

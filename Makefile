@@ -25498,6 +25498,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ro_data_literal_store-faults "$$( ( $(TESTTMP)/test_ro_store_ro 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nrc=139')"
 	./$(COMPILER) --no-ro-data test/test_ro_data_literal_store.pas $(TESTTMP)/test_ro_store_rw >/dev/null
 	tools/expect_same.sh test_ro_data_literal_store-control "$$( ( $(TESTTMP)/test_ro_store_rw 2>&1 ); echo "rc=$$?")" "$$(printf 'before: literal\nafter: Xiteral\nrc=0')"
+	# --ro-rtti (experimental): a store into a VMT or an RTTI header must fault
+	# with the flag and land without it. Ordinary class use must still run.
+	./$(COMPILER) --ro-rtti test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_ro >/dev/null
+	tools/expect_same.sh test_ro_rtti_write-plain "$$( ( $(TESTTMP)/test_ro_rtti_ro plain 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\ndone\nrc=0')"
+	tools/expect_same.sh test_ro_rtti_write-vmt-faults "$$( ( $(TESTTMP)/test_ro_rtti_ro vmt 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-vmt-write\nrc=139')"
+	tools/expect_same.sh test_ro_rtti_write-blob-faults "$$( ( $(TESTTMP)/test_ro_rtti_ro blob 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-blob-write\nrc=139')"
+	./$(COMPILER) test/test_ro_rtti_write.pas $(TESTTMP)/test_ro_rtti_rw >/dev/null
+	tools/expect_same.sh test_ro_rtti_write-control "$$( ( $(TESTTMP)/test_ro_rtti_rw vmt 2>&1; $(TESTTMP)/test_ro_rtti_rw blob 2>&1 ); echo "rc=$$?")" "$$(printf 'der TDer TRUE TRUE\nbefore-vmt-write\nafter-vmt-write\ndone\nder TDer TRUE TRUE\nbefore-blob-write\nafter-blob-write\ndone\nrc=0')"
 	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
 	@# verified identical to FPC 3.2.2. The status is the contract here, not the
 	@# printed line: FPC does not flush stdout after its unit finalizations, so
