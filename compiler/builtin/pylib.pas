@@ -1559,7 +1559,18 @@ function pytime_time: Double;
   a caller that needs an order sorts. }
 function pyos_listdir(const path: AnsiString): TPyList;
 function pyos_getcwd: AnsiString;
-procedure pysys_exit(code: Integer);
+{ sys.exit([arg]) — CPython's exit STATUS rules: no argument or None is 0, an
+  int is that status, and anything else is PRINTED to stderr and the status is
+  1. The last is the common application spelling — `sys.exit("No craft in
+  space.")` — and it used to take an Integer, so a string argument exited SILENTLY
+  with its pointer's low byte as the status (184, 192, 136 measured).
+  Still Halt, not a raised SystemExit: an `except SystemExit` or a `finally`
+  does not see it. That half is its own change — NilPy's SystemExit derives
+  from Exception, where CPython's derives from BaseException so that
+  `except Exception:` does not swallow an exit — and it has its own ticket.
+  bug-n-sys-exit-is-a-halt-so-no-handler-sees-it }
+procedure pysys_exit; overload;
+procedure pysys_exit(const code: Variant); overload;
 { sys.setswitchinterval / sys.getswitchinterval — the interpreter's thread switch
   interval, in seconds.
 
@@ -14001,9 +14012,24 @@ begin
   Result := outp;
 end;
 
-procedure pysys_exit(code: Integer);
+procedure pysys_exit; overload;
 begin
-  Halt(code);
+  Halt(0);
+end;
+
+procedure pysys_exit(const code: Variant); overload;
+var tag: Int64;
+begin
+  tag := pyvartag(code);
+  if tag = 0 then Halt(0);                            { None }
+  if (tag = 1) or (tag = 2) then Halt(Integer(pyvar_to_int(code) and $FF));
+  if tag = 4 then                                     { a bool is an int }
+  begin
+    if pyvar_to_int(code) <> 0 then Halt(1);
+    Halt(0);
+  end;
+  pystderr_write(pystr_of(code) + #10);
+  Halt(1);
 end;
 
 procedure pysys_setswitchinterval(v: Double);

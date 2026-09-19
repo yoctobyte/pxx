@@ -1,0 +1,30 @@
+before str
+Nothing ahead to jump to.
+rc=1
+before fmt
+Can't: 5
+rc=1
+before exc
+bad value
+rc=1
+before noarg
+rc=0
+before none
+rc=0
+before main_none
+rc=0
+before main_int
+rc=4
+before int
+rc=3
+before zero
+rc=0
+before wrap
+rc=3
+before true
+rc=1
+before false
+rc=0
+before float
+1.5
+rc=1

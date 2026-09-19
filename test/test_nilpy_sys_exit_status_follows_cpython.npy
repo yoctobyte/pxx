@@ -1,0 +1,49 @@
+# sys.exit's EXIT STATUS, one case per process (the Makefile row runs each and
+# prints rc): no argument or None is 0, an int is that status (mod 256), a
+# bool is 0/1, and anything else is PRINTED to stderr with status 1. The last
+# is how applications report a user error -- That Space Program does it ten
+# times -- and a string used to exit SILENTLY with its pointer's low byte as
+# the status. Still a Halt, not a catchable SystemExit:
+# bug-n-sys-exit-is-a-halt-so-no-handler-sees-it.
+import sys
+
+
+def main_none():
+    return None
+
+
+def main_int():
+    return 4
+
+
+case = sys.argv[1]
+print("before", case)
+sys.stdout.flush()
+if case == "str":
+    sys.exit("Nothing ahead to jump to.")
+elif case == "fmt":
+    sys.exit("Can't: %s" % 5)
+elif case == "exc":
+    e = ValueError("bad value")
+    sys.exit(str(e))
+elif case == "noarg":
+    sys.exit()
+elif case == "none":
+    sys.exit(None)
+elif case == "main_none":
+    sys.exit(main_none())
+elif case == "main_int":
+    sys.exit(main_int())
+elif case == "int":
+    sys.exit(3)
+elif case == "zero":
+    sys.exit(0)
+elif case == "wrap":
+    sys.exit(259)
+elif case == "true":
+    sys.exit(True)
+elif case == "false":
+    sys.exit(False)
+elif case == "float":
+    sys.exit(1.5)
+print("after", case)
