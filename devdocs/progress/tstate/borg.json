@@ -15619,6 +15619,7 @@
     "10c4a62622bf424af977b767ec9c3aacdf23ad7e",
     "47841c55b9a5c3fc2a1031b75c655a1c3222fee7"
    ],
+   "range_non_causal": false,
    "src": "test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh",
    "status": "fail"
   }
