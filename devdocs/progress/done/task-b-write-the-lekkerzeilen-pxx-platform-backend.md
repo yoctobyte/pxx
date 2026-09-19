@@ -3,7 +3,7 @@ slug: task-b-write-the-lekkerzeilen-pxx-platform-backend
 track: B
 type: task
 prio: 85
-status: backlog
+status: done
 owner: ""
 created: 2026-09-10
 found-by: frankuser
@@ -14,7 +14,7 @@ blocked-by:
   - bug-n-an-import-on-a-path-made-dead-by-a-failed-guarded-import-is-still-resolved
   - bug-a-max-proc-params-is-coupled-to-a-hardcoded-array-bound-by-a-comment
   - bug-c-an-unresolvable-synthesised-soname-still-reaches-dt-needed
-summary: "lekkerzeilen/platform/_pxx.py IS A 39-LINE STUB whose every entry point raises NotImplementedError. The app has a two-backend portability seam -- ctypes for CPython (327 lines, works) and pxx (not written) -- so EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN. This is the real distance to a running demo and no module-count ratio shows it. The stub's own docstring specifies the work: translate _ctypes_backend with the ctypes machinery removed -- `import SDL2/SDL.h`, `import GL/gl.h`, constants from the headers' #defines, out-parameters return-lifted by the compiler, no CDLL/restype/argtypes/create_string_buffer. Writing it is allowed: the owner's standing rule on this target is that we MAY change lekkerzeilen's source."
+summary: "DONE BY THE OWNER, NOT BY US -- lekkerzeilen commit 9ed69ed (2026-09-19) \"The pxx backend is written, and the seam holds from both sides\". `lekkerzeilen/platform/_pxx.py` is 974 lines with ZERO NotImplementedError; it was the 39-line stub this ticket describes until that commit. The seam is closed from both sides and the demo compiles end to end (rc 0, 14,227,820 bytes) on two seats three days apart."
 ---
 
 # CHAIN STATE 2026-09-10, after 967f9cc93
@@ -302,3 +302,26 @@ The consequence for this ticket: every lekkerzeilen number on record — 23/35,
 25/35, my own 24/29 — counts modules that COMPILE. That is the right answer to
 "does lekkerzeilen compile", which is what was asked, and it is not the distance
 to a demo that runs.
+
+# RESOLVED 2026-09-19 -- by the owner's own commit, and it sat open for a day
+
+Not closed by events in the usual sense: the owner WROTE it, in lekkerzeilen
+`9ed69ed`, and nothing in this repo noticed. `_pxx.py` went from 39 lines to
+**974, zero `NotImplementedError`**, and this ticket went on saying *"IS A
+39-LINE STUB ... EVEN IF ALL 32 MODULES COMPILED THE DEMO WOULD NOT RUN"* at
+**prio 85** -- the highest open number under the lekkerzeilen umbrella, and the
+loudest thing anyone reading that umbrella would have seen.
+
+**The distance this ticket was filed to measure is gone.** It was right to file
+and right about what it measured; what it could not see is the one actor who
+does not push to this repo.
+
+**What is NOT closed by it**, so nobody reads this as the umbrella closing:
+the demo COMPILING is established (neo-a2 and lekkerzeilen-c8, two compilers,
+three days apart); the demo RUNNING correctly is not measured, and
+`assets/facades.lzx` is a generated 6.8MB atlas that is **not committed**, so a
+clean checkout has no atlas at all. That is the owner's call, not a ticket.
+
+**The lesson for the umbrella and not for this ticket: an edge list is a board
+by another name.** 18 `blocked-by` edges, 13 already terminal. Measure the
+folders (`tools/progress.sh ready --track <X>`) before dispatching on one.
