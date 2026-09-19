@@ -128,4 +128,4 @@ manufacture measured a different mechanism. It is a regression guard, not a
 proof.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 04ce1c7f1.
