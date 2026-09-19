@@ -2,9 +2,10 @@
 track: N
 prio: 55
 type: feature
-owner:
+owner: frankb-8e
 blocked-by: []
 summary: "MECHANISM: a NilPy `def` is reachable only through a Python callable carrier and through `$pycallwrap_<pi>`, whose signature is all-Variant. A C or Pascal callback slot wants a routine whose ABI matches ITS declared signature, and no such entry point is emitted for a def, so there is nothing to take the address of. This SPRINGS wherever a def must be handed to code pxx did not generate -- an SDK callback, a qsort comparator, a signal handler. It is why examples/esp32/nilpy-hw-c3 keeps its timer callback in Pascal and POLLS a counter from Python."
+status: working
 ---
 
 # A NilPy def has no native-ABI entry point to hand to a C callback
