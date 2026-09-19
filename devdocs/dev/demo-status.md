@@ -26,47 +26,65 @@ reach a desktop session):
   owned by the pid, read with xdotool after about 1s. This is the same check as
   `tools/gui_suite.sh`'s `gui_realwindow`. `--gui-smoke` too where it exists.
 
-| demo | kind | builds | runs | GUI window | notes |
-| --- | --- | --- | --- | --- | --- |
-| adventure/adventure | text game | yes | exit 0 from `examples/adventure/`; from the repo root `EInOutError` | — | loads `world.dat` CWD-relative, so run it from its directory. *fixed*: spun forever at EOF |
-| bignum/bigmath | self-check | yes | exit 0, ALL OK | — | |
-| bignum/factorial | batch | yes | exit 0 | — | |
-| calc/calcdemo | self-check | yes | exit 0, ALL OK | — | |
-| chess/chess | interactive | yes | exit 0 at EOF | — | |
-| fm/fm | TUI | yes | exit 0 at EOF | — | not driven with keys |
-| g2048/console_2048 | interactive | yes | exit 0 at EOF | — | |
-| **gl/triangle** | GTK + OpenGL | **NO** | — | — | GL imported from `libgl_c.so`, which does not exist: `bug-b-gl-triangle-demo-imports-gl-from-libgl-c-so-which-does-not-exist` |
-| hello/hello | batch | yes | exit 0 | — | |
-| json/jsondemo | self-check | yes | exit 0, ALL OK | — | |
-| kiosk | interactive | yes | exit 0 at EOF; `sum`/`primes` answer | — | *fixed*: spun forever at EOF |
-| life/life | GTK | yes | `--smoke` exit 0 | **800x480** | |
-| lisp/lispdemo | self-check | yes | exit 0, ALL OK | — | |
-| mandelbrot/mandelbrot | self-check | yes | exit 0, ALL OK | — | |
-| mandelbrot/mandelbrot_gui | GTK | yes | `--smoke` exit 0, serial == parallel | **920x700**; `--gui-smoke` OK | |
-| mandelbrot/mandelbrot_parallel | self-check | yes | exit 0, CHECKSUM MATCH | — | |
-| mandelbrot/mandelzoom | terminal animation | yes | runs until quit | — | no self-exit mode |
-| mathf/mathdemo | self-check | yes | exit 0, ALL OK | — | |
-| maze/maze | batch | yes | exit 0 | — | |
-| net/httpdemo | loopback server + client | yes | exit 0 | — | 127.0.0.1 only |
-| parallel/collatz | self-check | yes | exit 0, ALL AGREE | — | |
-| parallel/membw | self-check | yes | exit 0, ALL AGREE | — | |
-| parallel/pow | self-check | yes | exit 0, ALL AGREE | — | |
-| parallel/primecount | self-check | yes | exit 0, ALL AGREE, pi = 148933 | — | *fixed*: const `N` was shadowed by the loop variable `n` |
-| player/player | terminal video player | yes | usage message, exit 1 | — | not run on a video: it needs a file argument |
-| primes/sieve | batch | yes | exit 0 | — | |
-| raytracer/raytracer | self-check | yes | exit 0, ALL OK | — | |
-| raytracer/raytracer_gui | GTK | yes | `--smoke` exit 0 | **660x560** | |
-| sat/satdemo | self-check | yes | exit 0, ALL OK | — | |
-| solitaire/console_solitaire | interactive | yes | exit 0 at EOF | — | |
-| solitaire_gui/solitaire_gui | GTK | yes | `--smoke` SMOKE OK | **820x640**; `--gui-smoke` OK | |
-| sudoku/sudoku | batch | yes | exit 0 | — | |
-| sudoku/sudoku_game | interactive | yes | exit 0 at EOF | — | *fixed*: spun forever at EOF |
-| tk/uses_tkinter_and_configparser | import check | yes | exit 0, "both ok" | — | |
-| tui/menudemo | TUI | yes | exit 0 | — | |
-| vm/vmdemo | self-check | yes | exit 0, ALL OK | — | |
+**Evidence: what a row's "runs" actually rests on.** A self-quit proves only
+that nothing crashed before the timer fired, so it is never counted as a check.
+
+- **asserts**: the demo checks its own result and exits 1 on failure (source read).
+- **verdict**: the demo prints its own verdict line and I read that line. That
+  `ALL OK` is printed only when every check passed was read in the source for
+  bigmath, calcdemo and raytracer, not for the other six. **It exits 0 even when it prints a
+  failure** (no nonzero exit path in the source), so a harness reading only rc
+  would pass a broken run.
+- **checked**: I compared the output with a known answer (given in the row).
+- **self-quit**: auto-quits on a timer; says nothing about output.
+- **start+EOF**: prints its prompt or screen and exits cleanly when input ends; not driven further.
+- **none**: nothing about the output was checked.
+
+| demo | kind | builds | runs | evidence | GUI window | notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| adventure/adventure | text game | yes | exit 0 from `examples/adventure/`; from the repo root `EInOutError` | start+EOF; scripted `look`/`quit` answered | — | loads `world.dat` CWD-relative, so run it from its directory. *fixed*: spun forever at EOF |
+| bignum/bigmath | self-check | yes | ALL OK | verdict | — | |
+| bignum/factorial | batch | yes | exit 0 | checked: 1000! has 249 trailing zeros | — | |
+| calc/calcdemo | self-check | yes | ALL OK | verdict | — | |
+| chess/chess | interactive | yes | exit 0 at EOF | start+EOF | — | |
+| fm/fm | TUI | yes | exit 0 at EOF | start+EOF | — | not driven with keys |
+| g2048/console_2048 | interactive | yes | exit 0 at EOF | start+EOF | — | |
+| **gl/triangle** | GTK + OpenGL | **NO** | — | — | — | GL imported from `libgl_c.so`, which does not exist: `bug-b-gl-triangle-demo-imports-gl-from-libgl-c-so-which-does-not-exist` |
+| hello/hello | batch | yes | exit 0 | checked: prints its greeting | — | |
+| json/jsondemo | self-check | yes | ALL OK | verdict | — | |
+| kiosk | interactive | yes | exit 0 at EOF | checked: `sum 10` = 55, `primes 20` = 8 | — | *fixed*: spun forever at EOF |
+| life/life | GTK | yes | `--smoke` exit 0 | self-quit | **800x480** | the window size is the real evidence |
+| lisp/lispdemo | self-check | yes | ALL OK | verdict | — | |
+| mandelbrot/mandelbrot | self-check | yes | ALL OK | verdict | — | |
+| mandelbrot/mandelbrot_gui | GTK | yes | `--smoke`: serial == parallel | asserts (checksum); `--gui-smoke` is self-quit | **920x700** | |
+| mandelbrot/mandelbrot_parallel | self-check | yes | CHECKSUM MATCH | asserts | — | |
+| mandelbrot/mandelzoom | terminal animation | yes | runs until quit | none | — | no self-exit mode |
+| mathf/mathdemo | self-check | yes | ALL OK | verdict | — | |
+| maze/maze | batch | yes | exit 0 | none | — | `path cells = 49` not verified |
+| net/httpdemo | loopback server + client | yes | exit 0 | checked: three GETs return 200 with the expected bodies, the cookie echoed and gzip decoded | — | 127.0.0.1 only |
+| parallel/collatz | self-check | yes | ALL AGREE | asserts | — | |
+| parallel/membw | self-check | yes | ALL AGREE | asserts | — | |
+| parallel/pow | self-check | yes | ALL AGREE | asserts | — | |
+| parallel/primecount | self-check | yes | ALL AGREE, pi = 148933 | asserts, against known constants | — | *fixed*: const `N` was shadowed by the loop variable `n` |
+| player/player | terminal video player | yes | usage message, exit 1 | none | — | not run on a video: it needs a file argument |
+| primes/sieve | batch | yes | exit 0 | checked: largest prime <= 10^6 is 999983 | — | |
+| raytracer/raytracer | self-check | yes | ALL OK | verdict (checksum) | — | |
+| raytracer/raytracer_gui | GTK | yes | `--smoke` exit 0 | self-quit | **660x560** | the window size is the real evidence |
+| sat/satdemo | self-check | yes | ALL OK | verdict | — | |
+| solitaire/console_solitaire | interactive | yes | exit 0 at EOF | start+EOF | — | |
+| solitaire_gui/solitaire_gui | GTK | yes | `--smoke` SMOKE OK | asserts (a stock press draws, a resize enlarges cards); `--gui-smoke` is self-quit | **820x640** | |
+| sudoku/sudoku | batch | yes | exit 0 | checked: all 3 printed grids are valid sudoku solutions | — | |
+| sudoku/sudoku_game | interactive | yes | exit 0 at EOF | start+EOF | — | *fixed*: spun forever at EOF |
+| tk/uses_tkinter_and_configparser | compile regression | yes | exit 0 | none: prints `both ok` unconditionally | — | a build test that lives in examples/, not a demo |
+| tui/menudemo | TUI | yes | exit 0, `selected=Open` | start+EOF (the default item) | — | |
+| vm/vmdemo | self-check | yes | ALL OK | verdict | — | |
 
 **Summary: 35 of 36 build; 35 of 35 built run as designed; all 4 GTK demos map
-a real window.** The one failure has a ticket.
+a real window.** The one failure has a ticket. On evidence:
+- 7 rows assert their own result and exit 1 on failure.
+- 9 print a verdict that I read, but exit 0 even on failure.
+- 6 were checked against known answers.
+- The rest show only start-up, a self-quit, or nothing about the output.
 
 ## What this table does NOT show
 
