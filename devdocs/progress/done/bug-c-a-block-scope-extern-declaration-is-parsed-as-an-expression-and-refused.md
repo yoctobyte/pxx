@@ -177,4 +177,4 @@ diagnostic for every typo in the language); the extern-only name must report at
 the NAME; and `extern __thread` must compile, return 7, and **not** warn.
 
 ## Log
-- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-19 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 09743b072.
