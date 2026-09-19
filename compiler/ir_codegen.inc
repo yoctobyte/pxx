@@ -1796,8 +1796,33 @@ begin
     thread-local into a shared global is not, so C keeps the full area and the
     3,072 bytes with it.
     feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
-  if (not explicit) and IsNilPyFrontend then
-    TlsUserBytes := 0;
+  { RETIRED 2026-09-19 (frankB), and the premise that retired it is stated two
+    paragraphs up in this same block: "C keeps the full area ... the C arm of
+    the allocator WARNS instead of erroring". That was measured and true when
+    6a87b7f89 was written. 402d61e0d made the AREAFULL reason a hard ERROR the
+    same day -- correctly, because a __thread that silently becomes one shared
+    copy is a data race that survives a green build -- and c5ae069c5 then made
+    errno `__thread`, so EVERY C unit now declares one.
+
+    The safety argument above reasons entirely about a threadvar in a PASCAL
+    unit a NilPy program imports, and that leg still holds: the population is
+    empty and the failure is a loud refusal naming the flag. What it never
+    considered is a C unit, which a NilPy program reaches through -Fu, and
+    which now declares a thread-local unconditionally via errno.h. Measured:
+    every mixed NilPy+C build refused at HEAD -- the six cpyext rows, plus
+    test_nilpy_qualifier_vs_cproc, which is not in that batch and is the tell
+    that the population is "mixed build", not "cpyext".
+
+    NOT REPAIRED BY LETTING THE C ARM DEGRADE HERE. That would hand a NilPy
+    program one errno shared across every thread, which is precisely the race
+    c5ae069c5 was written to remove -- trading a loud refusal for the silent
+    wrong answer, in the one configuration nobody would re-measure.
+
+    The 3,072 bytes are real and are the price. A NilPy program's code segment
+    is ~1.35 MB, so this is ~0.2% of it, and the Pascal arm above is untouched
+    because its includes ARE already expanded at this point, which is what
+    makes its scan sound and this one unfixable by the same trick.
+    feature-a-the-threadvar-area-is-3072-bytes-of-bss-in-every-program-that-has-no-threadvar }
 
   { DERIVED, never a second spelling. }
   TlsBlockSize := TLS_USER_FIRST_OFF + TlsUserBytes;

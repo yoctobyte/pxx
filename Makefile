@@ -7185,12 +7185,34 @@ test-threads: $(COMPILER)
 	# unit, the line and the flag, exit 1. So the worst case is a loud refusal
 	# with its own fix in the message, never a silent collision. The pinned
 	# compiler answers 4224 for this same file.
-	# C IS DELIBERATELY NOT HERE: it has __thread, its #includes expand after
-	# the size is chosen, and its arm of the allocator WARNS rather than errors
-	# -- the declaration becomes one copy shared by every thread and the program
-	# still compiles. C keeps the full area.
+	# THE NILPY SAVING IS RETIRED 2026-09-19 AND THIS ROW NOW PINS THE OPPOSITE.
+	# The paragraph below is kept as written because it is the premise that
+	# retired it, not because it is still true: "its arm of the allocator WARNS
+	# rather than errors -- the declaration becomes one copy shared by every
+	# thread and the program still compiles." 402d61e0d made that a hard ERROR
+	# the same day, and c5ae069c5 made errno `__thread`, so every C unit now
+	# declares one. A NilPy program reaches C units through -Fu, and with a
+	# zero-byte area every mixed NilPy+C build was refused -- all six cpyext
+	# rows and test_nilpy_qualifier_vs_cproc, which is in no cpyext batch and is
+	# the tell that the population is MIXED BUILDS and not cpyext.
+	#
+	# THE OLD TEXT, PRESERVED: C has __thread, its #includes expand after the
+	# size is chosen, and its arm of the allocator warned rather than errored.
+	#
+	# 4224 rather than 1152 is the 3,072-byte area arriving, and it is the
+	# assertion: a NilPy program can pull a C unit that declares a thread-local,
+	# and the size must be final before anything is lexed, so it cannot be
+	# decided later. Letting the C arm degrade here instead would hand a NilPy
+	# program ONE errno shared across every thread -- the exact race c5ae069c5
+	# removed -- so this row exists to stop that repair being made quietly.
 	./$(COMPILER) test/test_a_nilpy_program_pays_no_threadvar_area.npy $(TESTTMP)/test_tlsnonenp26
-	tools/expect_same.sh test_tlsnonenp26 "$$($(TESTTMP)/test_tlsnonenp26)" "block=1152"
+	tools/expect_same.sh test_tlsnonenp26 "$$($(TESTTMP)/test_tlsnonenp26)" "block=4224"
+	# AND THE ROW THAT WOULD HAVE CAUGHT IT: a NilPy program pulling a C unit.
+	# No gate had this combination, which is why three individually-correct
+	# commits could conjoin into eight red rows without any of them reddening
+	# anything on the way in. It needs no cpyext and no vendored source.
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy $(TESTTMP)/test_tlsmixed26
+	tools/expect_same.sh test_tlsmixed26_built "$$(test -x $(TESTTMP)/test_tlsmixed26 && echo yes)" "yes"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

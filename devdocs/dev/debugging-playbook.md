@@ -29139,3 +29139,106 @@ the wrong answer.** One subsystem so far, one instance in it. frankuser asked
 for it here on 2026-09-19 specifically because the table above has a row for
 what the compiler inferred and no row for which site acted; if it recurs
 elsewhere, that table gains a row and this entry is already written.
+## A REGRESSION THAT NEEDS N COMMITS TO CONJOIN HAS N-1 OF ITS CAUSES GREEN IN EVERY TEST BEFORE THE LAST ONE
+
+Measured 2026-09-19 (frankB, frankh-3f, frankuser; correction recorded at
+`11f66087e`). Eight rows red, three commits, and the last-green-to-first-red
+range contained **none** of them.
+
+### What happened
+
+T's full tier went RED with six `test-nilpy` cpyext rows at once —
+args_errors, containers, cython, errformat, hello, markupsafe. Six failing
+together is one cause, which is TRUE. It also reads as one commit, which is
+not, and that is the whole trap.
+
+The three commits, each correct alone and none of them in the bisect range:
+
+| commit | time | what |
+| --- | --- | --- |
+| `6a87b7f89` | 08:40 | a NilPy program reserves a ZERO-byte per-thread area |
+| `402d61e0d` | 11:28 | the C "area is full" reason becomes a hard ERROR, not a warning |
+| `c5ae069c5` | 12:33 | `errno` becomes `__thread` in `lib/crtl/include/errno.h` |
+
+The range under investigation started **after** 12:33. Every one of the three
+predates it, so no bisect over that range could have reached the answer, and a
+bisect over a wider one would have found whichever arrived last and blamed it.
+
+Each is defensible on its own. Zeroing the area is a real saving and its author
+measured the failure mode it could produce (a Pascal `threadvar` on the import
+chain, which refuses loudly with an empty population today). Making area-full a
+stop is right, because a `__thread` that silently becomes one shared copy is a
+data race that survives a green build. Making `errno` per-thread removes a real
+race. **The defect is the conjunction: a NilPy program reaching a C unit now
+declares a thread-local, into an area fixed at zero, under a policy that
+refuses rather than degrades.**
+
+### Why nothing reddened on the way in
+
+Each commit is green in every test that precedes the last arrival, **by
+construction** — the conjunction is not yet complete. So:
+
+- the last-green-to-first-red range contains **at most one** of the N;
+- if the last arrival is itself before the range start, it contains **none**;
+- and bisection's two assumptions both fail. It assumes a red has one cause,
+  and it assumes the cause is the change that introduced it. A conjunction has
+  N causes and was introduced by whichever happened to land last, which carries
+  no information about where the fix belongs.
+
+**The population was also mis-stated by the symptom.** Six cpyext rows read as
+a cpyext defect. The discriminating measurement was three builds:
+
+```
+plain .npy                        -> ok
+plain .npy -Ilib/cpyext/include   -> ok
+plain .c with <stdio.h>           -> ok      (default area; errno fits)
+.npy + -Futest/nilpy_units + C    -> REFUSED
+```
+
+So the population is **every mixed NilPy+C build**, not cpyext — confirmed by
+`test_nilpy_qualifier_vs_cproc`, which is in no cpyext batch and failed
+identically in the same tier. A cluster names the rows that happen to be
+wired, never the rows that are affected.
+
+### The discriminator that worked, and it was not the range
+
+`-dPXX_TLS_USER_4K` made the cpyext `hello` subject compile and print 42, with
+every commit held fixed. **A probe that changes the suspected CONDITION while
+holding the history fixed beats a bisect that can only vary the history** — and
+it is available immediately, where a bisect over five commits costs five
+builds and, here, could not have succeeded at any length.
+
+Corollary: where the failure names a resource, a flag that changes that
+resource is a one-command test of the whole hypothesis. This one named the
+byte count in its own diagnostic.
+
+### What to do with it
+
+1. **When several rows fail together, ask what they SHARE before asking what
+   CHANGED.** Here: they are the only rows that compile C from a NilPy entry.
+2. **If the range's commits are all individually plausible-but-innocent,
+   suspect a conjunction rather than widening the range.** Widening finds the
+   last arrival and blames it.
+3. **Do not revert one leg.** Three correct commits producing a wrong outcome
+   is the case where reverting is most tempting and least right — it deletes a
+   correctness fix to restore a saving. Decide which leg is cheapest to give
+   up and say why. Here the 3,072-byte saving lost to the two correctness
+   properties, and the reasoning is recorded beside the code it retired.
+4. **Keep the retired premise in the file.** `ir_codegen.inc`'s own comment said
+   C keeps the full area *because* its allocator arm warns rather than errors.
+   That sentence was true when written and is what makes the defect legible now
+   — a deleted premise leaves the next reader re-deriving it.
+
+### The guard that did not exist
+
+No gate compiled a NilPy program that pulls a C unit. Every `--threadsafe` job
+is Pascal, every NilPy job runs without C. **That combination is what three
+individually-green commits needed in order to conjoin**, and it is now one row
+in `test-core` needing no cpyext and no vendored source.
+
+Sibling: CLAUDE.md, "attribute a tier delta to a RANGE before attributing it to
+yourself" — this is the case where the range is not enough either.
+
+**THE TRIGGER THAT WOULD PROMOTE THIS TO CLAUDE.md:** a second regression where
+the last-green-to-first-red range provably cannot contain the cause. One
+subsystem so far.
