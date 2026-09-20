@@ -8,7 +8,7 @@ blocked-by: [bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter, bu
 status: new
 created: 2026-09-18
 owner: ""
-summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. RUNG 0 IS ANSWERED (2026-09-18): IDF costs 69,476 B of a C3's 409,600 and leaves **340,124 bytes** of free heap for a non-networking app, ~285,100 projected with WiFi linked — measured here with IDF v6.0.1 under the Espressif qemu, no chip needed. So the budget IS a number, and our NilPy hello-world's 146,612 B of data+bss is 43% of it. The runtime WiFi-buffer term he named still needs a chip (qemu has no radio model). Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) SUPERSEDED 2026-09-20 -- `--dce` runs on every target but wasm32 now and BOTH ESP demos boot with it: C3 image 3,326,224 -> 2,307,648 B (-31%), S3 3,246,288 -> 1,996,848 B (-38%). That is a flash win and still not a RAM win, and neither reaches the stock 1 MB partition, which needs -66%. What the remaining 2 MB IS, measured per unit: pylib 53.6% / pyeval 30.1% on riscv32 (47.5% / 39.3% on xtensa) -- a runtime eval() tree-walker whose own header says it is NOT auto-used by NilPy is the second largest component of a program that never calls eval. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one."
+summary: "Owner-set target 2026-09-18: same goal as [[umbrella-a-hosted-program-is-as-small-as-it-can-be]], on ESP, where it is the difference between running and not. RUNG 0 IS ANSWERED (2026-09-18): IDF costs 69,476 B of a C3's 409,600 and leaves **340,124 bytes** of free heap for a non-networking app, ~285,100 projected with WiFi linked — measured here with IDF v6.0.1 under the Espressif qemu, no chip needed. So the budget IS a number, and our NilPy hello-world's 146,612 B of data+bss is 43% of it. The runtime WiFi-buffer term he named still needs a chip (qemu has no radio model). Four facts frame it. (1) `--esp-profile=bare` loads code+data+bss into IRAM at $40380000 with a 256 KiB region, because qemu's esp32c3 machine models it as one RWX region (defs.inc:2275) — that is a QEMU shape, not a chip shape; the DEFAULT IDF profile keeps .text in flash. (2) SUPERSEDED 2026-09-20 -- `--dce` runs on every target but wasm32 now and BOTH ESP demos boot with it: C3 image 3,326,224 -> 2,307,648 B (-31%), S3 3,246,288 -> 1,996,848 B (-38%). That is a flash win and still not a RAM win, and neither reaches the stock 1 MB partition, which needs -66%. What the remaining 2 MB IS, measured per unit: pylib 53.6% / pyeval 30.1% on riscv32 (47.5% / 39.3% on xtensa) -- a runtime eval() tree-walker whose own header says it is NOT auto-used by NilPy is the second largest component of a program that never calls eval. (3) There is NO .rodata anywhere in the compiler — `grep -c rodata` is 0 in elfwriter.inc and defs.inc — so no constant can be flash-resident by construction. (4) The escape that would shrink an ESP image, `-uPXX_MANAGED_STRING`, SILENTLY EMITS AN EMPTY IMAGE on the bare path and reports `ok:`. That is the urgent one. **THERE IS AN SRAM INSTRUMENT SINCE 2026-09-20** (`examples/esp32/nilpy-c3/build.sh sram`: our object's data/bss plus the free DRAM pool read off the chip's own `heap_init`, positive-controlled by a 40,000-byte static array that moves the pool by exactly 40,000), and it settles the owner's SRAM ruling for the whole code-removal family: **a rung that removes CODE pays SRAM only where it drops the LAST RELOCATION to an SDK component**, because .text is flash-mapped and pxx's DCE drops bodies, not globals. Measured on the NilPy print demo, `--dce` cuts 30.8% of riscv32's code for +1,840 B of pool and 71.0% of xtensa's for +2,112 B — under 1% either way, all of it lwIP buffers that `--gc-sections` collects once the socket relocations go. So rank DATA rungs above code rungs on this umbrella: our own 178,008 B of data+bss is 84% of the 211,296 B free pool and `--dce` does not touch one byte of it."
 ---
 
 # The target, in the owner's words
@@ -174,3 +174,117 @@ umbrella is ranked on.
 **Every rung under here must say WHICH it measured** — several currently say
 "image" without distinguishing. A rung reporting only an image delta has not
 reported against this umbrella's own criterion.
+## 2026-09-20 (frankS) — THERE IS AN SRAM INSTRUMENT NOW, AND THE FLASH WINS ARE WORTH ~1% OF IT
+
+Answering the section directly above, which asks for **data + bss + the heap
+arena**. On the IDF profile there is no pxx arena to report — the pxx heap IS
+IDF's heap (`PXXAlloc` is calloc/free there; `builtinheap.pas`'s static
+`EspArena` is the BARE profile's), so the third term is IDF's pool and it is
+read off the chip rather than computed. Same three numbers, one of them
+measured instead of summed.
+
+The owner's ruling that started this: *"about memory use — SRAM here is most
+relevant, ESP's have 'plenty' flash memory so that's a lesser issue."* Every
+rung above this line was priced in FLASH whether or not it said so, because no
+SRAM instrument existed. It does now.
+
+### The instrument
+
+`examples/esp32/nilpy-c3/build.sh sram` — the ONE script all four NilPy demos
+symlink, so it works for both ISAs. It builds, boots the image under the
+Espressif qemu, and prints two readouts:
+
+- **our object's** `data=` / `bss=`, off the compiler's own `ok:` line;
+- **the free DRAM pool**, summed from IDF's own `heap_init: At <addr> len <hex>`
+  lines in the boot log — which is the COMPLEMENT of the whole link's static
+  footprint (ours, the RTL's, FreeRTOS's and the SDK's), measured on the
+  emulated part.
+
+`idf.py size`'s "Total" is deliberately not used: on this profile .text is
+flash-mapped, so a section total is not an SRAM figure
+([[measure-what-idf-itself-costs-in-sram-on-a-c3]]).
+
+**A missing `heap_init` line is a FAILURE here, never a 0.** A pool of zero and
+a pool never parsed would otherwise print the same, and zero is also what a
+failed boot gives — the readout-collides-with-the-default trap, in the one place
+it would have been invisible.
+
+### The positive control, and it moved both readouts
+
+A 40,000-byte static array in a Pascal unit imported by a copy of the demo
+(`PXX_MAIN` and `PXX_EXTRA_FLAGS=-Fu…` are the knobs; the unit is static
+precisely because a module-level NilPy `bytearray` is a HEAP allocation made
+after `heap_init` has already printed, and would have certified a dead
+instrument):
+
+```
+bss        89,352 -> 129,356   (+40,004)
+DRAM pool 211,296 -> 171,296   (-40,000 exactly)
+```
+
+40,000 is not a power of two and not any arena constant in the tree
+(`HEAP_ARENA` is 65,536), so it cannot be a default or a coincidence. The 4-byte
+difference between the two deltas is bss landing inside existing alignment
+padding.
+
+### The measurement, both ISAs, HEAD compiler, `--dce` on vs off
+
+Population: `examples/esp32/nilpy-c3/main/main.npy` and its `-s3` symlink — ONE
+program, the print demo — `--platform=esp --no-signals`, compiler
+`compiler/pascal26` at HEAD 2026-09-20. Oracle: the chip's own `heap_init`.
+(The PINNED compiler cannot build this program at all: it answers *"target
+riscv32 (hosted linux): a heap arena needs mmap"*, a wall fixed after the pin.
+Inert until pinned.)
+
+```
+                code                       data    bss     free DRAM pool
+riscv32  --     2,996,040                  88,656  89,352  211,296
+riscv32  --dce  2,074,564  (-30.8%)        88,656  89,352  213,136  (+1,840)
+xtensa   --     2,896,443                  88,600  89,352  278,580
+xtensa   --dce    840,955  (-71.0%)        88,600  89,352  280,692  (+2,112)
+```
+
+**I recorded the expectation before the run and it was nearly right: data and
+bss move by ZERO on both ISAs, exactly as predicted. The pool moving at all was
+not predicted**, so the 1,840 got chased rather than reported.
+
+### What the ~1% actually is, and the instrument that lied on the way
+
+The whole delta is lwIP's static buffers being garbage-collected:
+`sockets.c` (0xc8 + 0x118 + 0x78), `nd6.c` (0x20 + 0x14 + 0x24 + 0x8c + 0x1e0 +
+0xdc), `ip.c` (0x44), `tcp_in.c` (0x10), `tcp_isn_default.c` (0x40), plus 8 B of
+`.dram0.data`.
+
+**An UNDEFINED-SYMBOL CENSUS CANNOT SEE THIS, AND IT ANSWERS CONFIDENTLY.**
+`readelf -s` gives **38 UND symbols in BOTH objects**, `lwip_socket`,
+`lwip_bind`, `lwip_recv` and five siblings present in each — because pxx's DCE
+drops BODIES and does not prune the symbol table. The difference is in the
+RELOCATIONS: **5 without `--dce`, 0 with**. IDF links `--gc-sections`, so with
+no relocation reaching lwIP's socket path its buffers are collected. The symbol
+census is current, correctly parameterised, and enumerates a set that cannot
+contain the answer — count relocations, not symbols, when asking what a link
+will keep.
+
+### The consequence for ranking, which is the point of the ruling
+
+**On the axis the owner named, a code-removal rung pays ~0 unless it drops the
+LAST RELOCATION to an SDK component.** 921 KB of flash bought 1,840 B of SRAM on
+riscv32; 2,055 KB bought 2,112 B on xtensa — 0.87% and 0.76% of the free pool.
+Both landed wins ([[bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter]],
+−52% of the ESP NilPy image, and the −31%/−38% DCE rung) are strictly smaller
+levers of the same kind, and the pyeval interpreter references no SDK component
+that something else does not, so their SRAM figure is ~0 too.
+
+**That does not retire the flash rungs** — the stock 1 MB factory partition
+still needs −66% and xtensa `--dce` now reaches 841 KB, which clears it. It
+retires the idea that they are RAM work.
+
+**What IS SRAM work, and none of it is DCE:** our object's own 178,008 B of
+data+bss (88,656 + 89,352 on riscv32) against a 211,296 B free pool. That is
+the number the ruling points at — 84% of the remaining DRAM is our static data,
+and `--dce` does not touch one byte of it. The rungs that move it are the ones
+about DATA: [[feature-a-there-is-no-read-only-load-segment-so-nothing-can-be-flash-resident]]
+(there is no `.rodata` in the compiler at all, so no constant can be
+flash-resident by construction) and
+[[bug-a-the-signal-alt-stack-is-32768-bytes-of-unconditional-bss]].
+**Rank those above any further code-removal rung.**
