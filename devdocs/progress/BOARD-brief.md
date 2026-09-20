@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:32 unfinished:19 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:174 backlog-nilpy:184 backlog-tools:61 backlog-pascal:11 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3885 rejected:84`
+`working:31 unfinished:19 blocked:9 backlog:38 backlog-umbrella:13 backlog-core:174 backlog-nilpy:185 backlog-tools:61 backlog-pascal:11 backlog-decide:51 backlog-libs:25 backlog-cfront:10 backlog-web:8 backlog-windows:4 backlog-docs:1 backlog-esp:3 experimental:20 rainy-day:47 low-prio:77 known-incompat:6 float:23 done-followup:3 decided:151 done:3885 rejected:84`
 
 ## Held now (working/ — do not touch these files)
 
@@ -27,7 +27,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image` [A+S] — owner: frankS
 - `feature-b-buffered-text-io-and-settextbuf` [B] — owner: franks-ab
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
-- `feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback` [N] — owner: frankb-8e
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O] — owner: frank-optimize
 - `feature-pascal-corpus-expansion` [P] — owner: frankD
@@ -76,7 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `regression-lib-test-crtl-atexit-2` [C]
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 559, ranked
+## Ready — top 30 of 560, ranked
 
 - `[p 90] [N]` bug-n-a-class-level-method-through-a-class-value-is-refused-when-the-name-has-two-carriers (unblocks 1)
 - `[p 90] [U]` decide-n-what-does-dunder-file-mean-for-a-module-inside-a-package (unblocks 1)
@@ -87,6 +86,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` feature-p-legacy-value-object-types (unblocks 1)
 - `[p 85] [N]` bug-n-a-same-named-rtl-unit-shadows-both-a-relative-import-and-a-mimic-shim
 - `[p 85] [T]` bug-t-armed-autopin-has-refused-62-consecutive-times-and-the-tree-has-had-no-pin-for-99-hours
+- `[p 85] [N]` feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback
 - `[p 84] [N]` bug-n-a-run-time-dispatched-call-s-result-is-coerced-to-an-integer
 - `[p 80] [U]` decide-release-signing-key-custody (unblocks 2)
 - `[p 80] [T]` bug-t-the-documented-build-path-never-enumerates-what-it-needs (unblocks 1)
@@ -107,6 +107,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-lekkerzeilen-s-world-path-reads-grids-on-none-after-the-render-loop-starts
 - `[p 75] [P]` bug-p-a-var-parameter-accepts-a-narrower-actual-and-writes-past-it
 - `[p 75] [N]` feature-n-register-every-module-s-classes-before-any-module-s-methods-are-typed
-- `[p 70] [A]` bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce (unblocks 2)
 
-_529 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_530 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

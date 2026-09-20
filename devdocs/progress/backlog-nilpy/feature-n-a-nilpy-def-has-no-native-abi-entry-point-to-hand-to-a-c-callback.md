@@ -2,10 +2,10 @@
 track: N
 prio: 85
 type: feature
-owner: frankb-8e
+owner: 
 blocked-by: []
-summary: "CONSUMERS 1 AND 2 DONE; ESP INTERRUPTS NOT. A NilPy `def` compiles all-Variant, so it can never match a native procedural signature. `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT's signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 is the ARGUMENT site (2b28c3302), consumer 2 the STORE site -- a procedural FIELD, array element or procvar, via NodeProcSlotSig, which answers for all three lvalue shapes. WHAT REMAINS: ESP interrupts, which is NOT delivered by either and is a different contract -- boxing into Variants allocates, and an ISR that allocates is a latent crash with good latency numbers. A capturing def is still silent at both sites; that is its own ticket and the carrier shape is now measured there."
-status: working
+summary: "WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
+status: open
 ---
 
 # A NilPy def has no native-ABI entry point to hand to a C callback
