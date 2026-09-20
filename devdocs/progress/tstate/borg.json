@@ -15662,26 +15662,24 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-19T16:06:21Z",
+  "date": "2026-09-20T10:55:02Z",
   "red": [
    "lib-test#src:tools/crtl_reachability.py",
    "test-core#src:test/c_crtl_wait.c",
-   "test-core#src:test/test_nilpy_unbound_builtin_method.npy",
+   "test-core#src:test/test_set_in_64bit_element.pas",
    "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
-   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy",
-   "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy",
    "tools-devtest#00",
    "demos#00",
-   "test-pascal-conformance#shard3/6"
+   "test-pascal-conformance#shard3/6",
+   "size-canary#src:tools/size_canary.py"
   ],
-  "sha": "934f403764656371727a86e6cfc80ba6ef3bfc02",
+  "sha": "744284056e1e7a113c0268723983baba1f3830b2",
   "tier": "full",
-  "ver": "v412",
+  "ver": "v413",
   "verdict": "RED",
   "why": {
-   "test-core#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- a",
-   "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy": "pascal26:68: error: Nil Python: add overrides TPyList.add with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- annotat",
-   "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy": "pascal26:19: error: Nil Python: append overrides TPyList.append with a different result type, in a class laid out after its base was compiled (it has several bases, or derives from one that does) -- a",
+   "size-canary#src:tools/size_canary.py": "esp32c3-bare.code: 276 -> 14044 (+13768, +4988.4%), over the allowed 4372 | esp32s3-bare.code: 732 -> 11348 (+10616, +1450.3%), over the allowed 4828 | esp32s2-bare.code: 732 -> 11348 (+10616, +1450.3",
+   "test-core#src:test/test_set_in_64bit_element.pas": "ok: $TMP  [code=72227B  data=5464B  bss=35380B  procs=149  codeseg=73440B] | FAIL espnoop: xtensa --esp-profile=bare warned about a program containing no write at all",
    "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas": "expect_same: MISMATCH [test_ts_hl_diag26_exit] | --- expected | +++ actual | @@ -1 +1 @@ | -212 | +124"
   }
  },
