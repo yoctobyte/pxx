@@ -992,6 +992,7 @@ end;
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd, emittedCode, procMapRoShift: Integer;
     drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
     rlCi, rlK, rlFi, rlRecs, rlFlds: Integer;                 { PXXDBG a.reclayout's walk of the UClass/UFld tables }
+    dmI, dmK, dmBest, dmRank: Integer; dmNamed, dmBestSz: Int64;   { PXXDBG a.datamap's walk of the global-symbol BSS rows }
     tlsR: Integer;                                            { loop index for the per-reason C __thread warn flags. A LOOP and not six assignments on purpose: TLSREFUSE_MAX is the one place the count is written, and an unrolled reset is a second spelling that goes stale the first time a sixth refusal reason is added. It is reset here rather than in cparser.inc because that file is behind {$ifndef PXX_NO_CFRONT} while the flags are declared in defs.inc, which is not. }
 begin
 {$ifdef FPC}
@@ -3102,6 +3103,53 @@ begin
       and the rows above say how big each structure is -- two different
       questions, and on --emit-obj the answers differ. }
     WriteLn('PXXDBG a.datamap   of which marked ro   ', RoRangeBytes, 'B');
+
+    { BSS, which on ESP is the LARGER half of SRAM and which the rows above
+      cannot see at all: .bss has no contents, so nothing marks it and no
+      RoRangeAdd runs over it.
+
+      ATTRIBUTED FROM SymAllocSize, which the global reservation paths in
+      symtab.inc already record and which the object writers already use for
+      st_size -- so this adds no bookkeeping and cannot drift from what is
+      emitted. Two things it does NOT cover, both printed rather than assumed:
+      the fixed runtime slots (BSS_SIG_*, BSS_TLS_MAIN, BSS_HEAP_*, BSS_IO_*
+      and the ESP arena) have no Syms row at all, and ALIGNMENT PADDING between
+      slots belongs to nobody. Both land in `unattributed`, which is therefore
+      a real quantity and not a rounding error.
+
+      SUM OF SIZES IS A LOWER BOUND ON WHAT REMOVING A ROW WOULD SAVE -- the
+      same point a.impwaste makes for imports: a slot is aligned, so dropping
+      one also frees the padding after it. Do not read a row as a saving. }
+    dmNamed := 0;
+    for dmI := 0 to SymCount - 1 do
+      if (Syms[dmI].Kind = skGlobal) and (SymAllocSize[dmI] > 0) then
+        dmNamed := dmNamed + SymAllocSize[dmI];
+    WriteLn('PXXDBG a.datamap bss=', BSSSize, 'B  named globals ', dmNamed,
+            'B  unattributed ', BSSSize - dmNamed,
+            'B (fixed runtime slots + alignment)');
+    { Top rows by size. A repeated max scan rather than a sort: this runs once,
+      under a debug flag, and a sort here would be a second ordering of Syms
+      that nothing else needs. }
+    dmRank := 0;
+    while dmRank < 15 do
+    begin
+      dmBest := -1; dmBestSz := 0;
+      for dmI := 0 to SymCount - 1 do
+        if (Syms[dmI].Kind = skGlobal) and (SymAllocSize[dmI] > dmBestSz) then
+        begin
+          { skip the ones already printed }
+          dmK := 0;
+          while (dmK < dmRank) and (DmPrinted[dmK] <> dmI) do Inc(dmK);
+          if dmK >= dmRank then
+          begin
+            dmBest := dmI; dmBestSz := SymAllocSize[dmI];
+          end;
+        end;
+      if dmBest < 0 then Break;
+      DmPrinted[dmRank] := dmBest;
+      WriteLn('PXXDBG a.datamap   bss ', dmBestSz, 'B  ', Syms[dmBest].Name);
+      Inc(dmRank);
+    end;
   end;
   writeln('ok: ',outFile,'  [code=',emittedCode,'B  data=',DataLen,
           'B  bss=',BSSSize,'B  procs=',ProcCount,'  codeseg=',CodeLen,'B]');

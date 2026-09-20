@@ -8350,6 +8350,7 @@ var
     A census whose categories sum to the total is a census that has stopped
     being able to surprise you. }
   DataMapLit, DataMapRttiHdr, DataMapRttiArr, DataMapVmt : Int64;
+  DmPrinted : array[0..15] of Integer;   { a.datamap's already-printed BSS rows }
   DbgWholeArrSeen, DbgWholeArrKeep, DbgWholeArrRefuse : Integer;
 
 { ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================
