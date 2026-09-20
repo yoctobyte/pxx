@@ -30520,3 +30520,52 @@ worth having on its own.
 **And the cheap positive control:** if neutralising the dialect forms does not
 change the population, the corpus holds no dialect-specific code — in which case
 ask whether it can answer your question at all.
+
+## A RATIO DEFENDS AGAINST A SHARED FACTOR, NOT A SHARED TERM
+
+*Measured and written by lekkerzeilen-7a, 2026-09-20; landed here by frankz-e5
+because `debugging-playbook.md` lives in the pxx repo and that seat works in
+lekkerzeilen. Text is 7a's.*
+
+Comparing two arms as a ratio is the standard defence against shared error, and
+it is sound for anything **multiplicative** — a slow box, a hot cache, a
+throttled clock all divide out. **It fails for anything additive, and it fails
+worst exactly where you are relying on it.**
+
+Measured on lekkerzeilen, 2026-09-20. The same demo compiled by pxx and run
+under CPython, identical source, vsync on, gave 4.7x on one scene and 1.19x on
+another. With vsync forced off in **both** arms:
+
+    region      5.2x  ->  21.7x
+    open water  1.2x  ->   2.2x
+
+The cause is a compositor wait of roughly 68 ms per frame, paid by both arms:
+
+    CPython   86.5 ms -> 18 ms    the wait was 79% of its frame
+    pxx      436   ms -> 391 ms   the wait was 11% of its frame
+
+The same absolute term is most of the fast arm and almost none of the slow one,
+so it drags the ratio toward 1 **in proportion to how different the arms are**.
+The defence is weakest precisely where the measurement matters most.
+
+The practical damage: the 1.19x row had been read as "the penalty nearly
+disappears when the frame does less of the program's own work". The true figure
+is 2.2x. The shape of that conclusion survived; the number that made it look
+almost free did not.
+
+**What to do**
+- Before quoting a ratio, ask whether the shared cost is a factor or a term.
+  Only the factor divides out.
+- A term is usually a *wait*: vsync, a lock, a round trip, a fixed timeout, a
+  constant startup. If both arms wait on the same thing, remove it or subtract
+  it — never divide by it.
+- Remove it from **both** arms in the same build, or the ratio stops being
+  matched.
+- The tell that a term is present: the arms' *absolute* deltas are similar while
+  their ratios are not.
+
+**How it was found, which is not to 7a's credit and it said so:** not by looking,
+but because the CONTROL was wrong — CPython reading 1.01 fps against a documented
+10.53. *"The 4.7x had stood for four hours and I'd quoted it twice."* A ratio
+whose arms are both wrong stays plausible; only a control with a known value
+says so.
