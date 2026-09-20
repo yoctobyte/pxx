@@ -11722,6 +11722,63 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## A FILE THAT QUOTES ITS OWN SYNTAX DEFEATS THE SCANNER YOU WRITE TO PARSE IT — AND `.strip()` IS WHAT PROMOTES THE QUOTATION
+
+Measured 2026-09-20, twice in twenty minutes, on one file, by one seat writing
+two different instruments for the same job.
+
+`compiler/builtin/builtinheap.pas` is 7,000 lines of heavily commented Pascal
+whose comments **quote conditional-compilation directives** — because the
+comments explain the guards. So the file contains, on an indented continuation
+line inside a `{ ... }` comment:
+
+```
+  {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
+```
+
+**Instrument one, awk:** `/\{\$ifdef|\{\$ifndef|\{\$else|\{\$endif/` over a
+line range reported **no directives at all** in a span that contains two. mawk
+does not take `\$` as an escape for a literal `$` the way the author assumed,
+so the alternation silently matched nothing. It did not error. It printed a
+confident empty answer, and an empty answer to "where are the directives" reads
+as "this span has none" — which is a *finding*, not a failure. (Same family as
+mawk having no `strtonum`, which cost this session two probes earlier in the
+day: **mawk fails by answering, not by refusing.**)
+
+**Instrument two, Python, and this is the interesting one.** A correct regex,
+anchored at `^`, applied to `line.strip()`. The `.strip()` is the bug: it turns
+the indented quotation above into a column-0 directive, so the depth counter
+incremented on a comment and never found the block's real `{$endif}`. The
+scanner then walked to end-of-file and asserted.
+
+**The `.strip()` looked like robustness.** Every instinct says normalise
+whitespace before matching — and here whitespace was carrying the entire
+signal, because this file writes real directives at column 0 and quotes them
+indented. **Normalising away the only thing that distinguished the thing from
+prose about the thing is a very easy accident to have**, and it presents as a
+crash in your own tool rather than as a wrong answer, which is the one piece of
+luck in it.
+
+**The general form**, and it is CLAUDE.md's "a search for a NAME matches PROSE
+ABOUT the thing" arriving one level in: when the corpus is *source code with
+commentary*, the commentary is written in the same language as the code, so
+**every lexical pattern you can write matches both**. The discriminators are
+positional or structural, and they are exactly what a "clean up the input
+first" step destroys.
+
+**What to do:**
+- **Ask what distinguishes a real token from a quoted one IN THIS FILE**, and
+  check the answer survives your normalisation. Here it was column 0; assert it
+  (`grep -c '^{\$'` against the total) rather than assuming it.
+- **Print the pairings and eyeball them.** The scanner that finally worked
+  emitted `open -> close: [(3836, 3970), (3997, 3999), (4383, 5154), (5209,
+  5277)]`, which could be checked against a directive map taken earlier. A
+  scanner that returns a *structure* lets you sanity-check it; one that returns
+  a verdict does not.
+- **Distrust a range query that returns EMPTY.** Nothing in this family errors,
+  and "no matches" is the answer both a working instrument and a broken pattern
+  produce. Run the pattern against a line you know matches, first.
+
 ## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
 
 Measured 2026-09-20 (frankS + frankz-e5), four instances in one day. Companion
