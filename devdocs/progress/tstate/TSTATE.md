@@ -2,7 +2,7 @@
 
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
-| borg | `f674b3eb8b5c` | 2026-09-20T00:33:21Z | GREEN (slow) | 365.4s | `f674b3eb8b5c` RED |
+| borg | `0a03074b1139` | 2026-09-20T00:41:24Z | RED (native) | 325.7s | `f674b3eb8b5c` RED |
 | plexus _(retired 2026-09-11T20:19:53Z → borg)_ | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
 | seven _(retired 2026-09-11T16:29:49Z → plexus)_ | `120eeb39fd48` | 2026-09-11T16:28:30Z | GREEN (native) | 188.5s | `ae2280f1aa46` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `f674b3eb8b5c` on borg, 2026-09-20T00:27:04Z (6m ago).**
+**Newest full tier in the fleet: `f674b3eb8b5c` on borg, 2026-09-20T00:27:04Z (14m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| borg | `f674b3eb8b5c` | RED | 6m | — (newest) |
+| borg | `f674b3eb8b5c` | RED | 14m | — (newest) |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -32,6 +32,4 @@ Two hosts with different fingerprints did not measure the same thing, and a job 
 - **tools-devtest#00** (borg): bad `e115014ceb5e`, last good `9e3fd48adf7e`, 1 commit(s) in range
 - **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (borg): bad `cc03b4a51933`, last good `d0cad59b99e3`, 1 commit(s) in range
 - **optdiff#shard11/12** — tools/optdiff.sh (borg): bad `b291b321f185`, last good `ad85bf019f96`, 32 commit(s) in range
-- **test-core#src:test/test_platform_defines.pas@2** — test/test_platform_defines.pas tools/expect_same.sh (borg): bad `d250db9d3678`, last good `27dd469f12c0`, 1 commit(s) in range
-- **test-core#src:test/test_set_in_64bit_element.pas** — test/test_set_in_64bit_element.pas tools/expect_same.sh +2 (borg): bad `d250db9d3678`, last good `27dd469f12c0`, 1 commit(s) in range
 - **test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas** — test/test_threadsafe_heap_lock_deadlock_diag.pas tools/expect_same.sh (borg): bad `1bdaba382d42`, last good `974db9eb984b`, 2 commit(s) in range
