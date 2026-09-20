@@ -31433,6 +31433,17 @@ the construct it is promising is absent. A denial is the one kind of comment who
 someone looking for X finds this instead of concluding wrongly, **and spelling X verbatim is what stops
 it working.**
 
+**PROMOTION CONSIDERED AND DECLINED, 2026-09-20, so nobody has to re-derive the decision.** The
+coordinator argued this meets the second-subsystem test because the REMEDY recurs — the same "spell it
+so it cannot match its own pattern" that CLAUDE.md already prescribes for a self-checking guard whose
+published baseline joins the population it counts. **That is a real observation and it is not the
+test.** The FAILURE has exactly one instance. Accepting "the remedy generalises" as grounds for
+promotion is how a rules file gets argued up on how good a finding is, which is the specific route by
+which that file reached 72KB the first time. **The trigger is therefore stated rather than left to
+judgement: a SECOND denial comment, in an unrelated subsystem, found to have armed a search for the
+construct it promises is absent.** At that point it is one sentence extending the existing guard rule,
+not a new one.
+
 Checked before replying, per the neighbouring entry, so it cost nothing instead of costing a
 correction sent to the seat who was right.
 
