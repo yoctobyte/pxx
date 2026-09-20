@@ -85,3 +85,45 @@ shapes that actually reach it are a record **local to a procedure**, a
 **whole-record assignment**, and **`Finalize`**. Written from a prediction
 about the mechanism rather than from the built thing; the fixture now contains
 all three.
+
+## THE VARIANT SPAN, MEASURED 2026-09-20 — NOT SPLIT, AND NOW A DECIDED QUESTION
+
+The records half landed. The variant half was deliberately left, and this is
+the measurement it was waiting on, taken at `85eef644b`.
+
+The variant bodies live in **`builtinheap.pas:5701..6992`, one `{$ifndef
+PXX_ESP}` span of 1292 lines**, and they share it with the entire float
+FORMATTING family (`PXXWriteFloatNat/Fixed/Sci`, `PxxSci*`, `PxxIntDDigits`,
+`PxxFracDigits`). That is the genuine dependency the ticket's parent already
+names: `PullSoftFloatBeforeBuiltinHeap` skips bare on purpose so a float-free
+MCU program does not pay ~54-64 KB.
+
+**A per-routine census of the span, float-free versus float-coupled:**
+
+| float-free | float-coupled, and it is REAL |
+| --- | --- |
+| `VarOpIsBitwise`, `VarBitwiseInt`, `PXXVarStrAppend`, `PXXVarClear`, `PXXVarReleasePayload`, `PXXPromoRetainOne`, `PXXVarRetain`, `PXXVarSetIntf`, `PXXIntfFromVariant` | `PXXVarBinOp` (`lDbl`/`rDbl`/`resDbl`, reads and writes `PDouble(v+8)^`), `PXXVarNot` (`Round(PDouble(...)^)`), `PXXWriteVariant` (calls `PXXWriteFloatNat`) |
+
+**So the split is possible and it does not buy what it looks like it buys.**
+Nine routines come free, but `PXXVarBinOp` is the core of variant arithmetic —
+a bare Pascal program that uses an integer variant at all goes through it, and
+its double arm is unconditional code, not a branch the linker can drop. **The
+decision this reduces to is one sentence:** does a bare program that touches a
+variant pay softfloat, or does `PXXVarBinOp`'s float arm get its own guard so
+an integer/string variant is free? That is answerable with a size measurement
+and does not need anyone's opinion — build the same program both ways.
+
+**AND THE FIRST VERSION OF THAT TABLE WAS WRONG, IN THIS FILE'S OWN FAVOURITE
+WAY.** A grep for `PXXWriteFloat|PxxSci|Double|...` scored `PXXIntfFromVariant`
+at **four** float references, which would have put it on the coupled side. All
+four are **two comment lines and two `forward;` declarations that belong to the
+NEXT routine** — my routine-boundary scan attributed them upward. The routine
+is float-free. *A search for a NAME matches PROSE ABOUT the thing as readily as
+the thing*, and the count looked authoritative because it was per-routine and
+tabulated. Read the lines, not the count: it took one command and moved a
+routine across the table.
+
+**What is NOT done here and is the next step:** the bare runtime ORACLE for
+variants — a fixture in the shape of `test/test_esp_bare_managed.pas` that
+asserts VALUES, so a split that compiles and then corrupts a payload is a diff
+rather than a pass. Build it before touching the span, not after.
