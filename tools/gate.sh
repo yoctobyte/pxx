@@ -597,6 +597,25 @@ else
   RC=1
 fi
 
+# A COMPATIBILITY SHIM MUST BE REACHABLE. A NilPy `import X` prefers what we
+# ship, so writing mimic_X.pas for a module we already carry a unit X for --
+# or that PyRtlUnitServesPython already routes -- yields a shim that never
+# binds. It does not fail to compile; the program silently takes the unit.
+# The trap is UNSPRUNG (measured 2026-09-20: the sets are disjoint) and the
+# owner's standing instruction to craft a shim when a demo needs one is a live
+# way to spring it, which is why a guard and not a fix. The criterion is set
+# disjointness, so it carries no baseline count and cannot go stale as lib/
+# grows. --selftest proves it can fail, in both directions, against the real
+# code path rather than a copy of the comparison.
+if [ -f tools/mimic_shadow_check.py ]; then
+  step "no mimic shim is shadowed" "$LOGDIR/mimic-shadow.log" \
+       python3 tools/mimic_shadow_check.py --selftest .            || RC=1
+else
+  say "  FAIL  no mimic shim is shadowed — tools/mimic_shadow_check.py is MISSING"
+  echo "        It is TRACKED, so its absence is a broken tree, not a configuration."
+  RC=1
+fi
+
 # THE SEED CANARY. Same placement argument as the block above: before the case,
 # so no mode can forget it.
 #
