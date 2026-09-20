@@ -3,7 +3,7 @@ slug: feature-a-one-guard-excludes-both-the-unimplementable-and-the-merely-adjac
 track: A
 prio: 35
 type: feature
-status: working
+status: backlog
 created: 2026-09-20
 found-by: frankS
 blocked-by: []
