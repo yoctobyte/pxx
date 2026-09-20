@@ -1,7 +1,7 @@
 ---
 prio: 30
 track: A
-summary: "THE BLOCKER IS REMOVED AND THE PASS IS NOW WRITABLE AND UNWRITTEN, 2026-09-19 (frankB, `5bde993c5`). **The registry is no longer an unconditional root**: it is emitted only when the program contains a reader -- a parsed `__rttireg()` node -- so a program that never reflects no longer roots every class by name. That was the one thing standing between this ticket and its own proposal, and it cost 24 B directly on a hello (8-byte count slot + one 16-byte entry), which is NOT the win and must not travel as one: no blob is dropped, because Pass 1 still reserves a header per class for ClassName and the is/as backlink chain. **What remains is the pass itself -- nobody has written it**, and the next seat should read the `PARKED`/`BUILT` sections in the body before starting. IT NEVER FIRES FOR NILPY, by construction and not by degree: every NilPy program pulls pylib, `pylib.pas:40` is `uses ... typinfo`, and `typinfo.pas:755` is `reg := __rttireg()`, so `print(1)` alone reports reader=1. That weakens the ESP/SRAM case on NilPy specifically -- measure both frontends or name the one you measured. A follow-on that would fix it (move GetClass to its own unit) is fully analysed, priced at ~24-40 B against a four-file `uses` rewrite in Track B's ground, and DECLINED as a second enabler for a pass that does not exist; its prerequisite check is recorded UNRUN and labelled. || WHY IT WAS THE BLOCKER, MEASURED 2026-09-18 and still the reason the pass is shaped this way: ClassIsStreamable is `ClassHasPublished or ClassImplementsGuidedInterface`, and a class declared with NO visibility keyword defaults to PUBLISHED -- so `TU = class ... end` reports streamable=1 and `TU = class public ... end` reports 0, identical blob/vmt either side, the registry entry being the 24-byte difference in data=. Registry membership is name-reachability at run time, which this ticket's own Watch out lists as what makes a blob undroppable, so the pass AS SPECIFIED would have dropped almost nothing on ordinary Pascal while that held. **And the ticket's own headline example is one of them**: TInterfacedObject, which holds every method in the residue table, is streamable=1 because it implements a guided interface. THE LEVER WAS THAT THE REGISTRY WAS AN UNCONDITIONAL ROOT: it is emitted whenever any class is streamable and its only consumer is IR_RTTI_REG from one AST node (AN_RTTI_REG, verified across all six backends), so in a program that never asks for it the registry is dead data rooting every streamable class. Making it conditional (done, 5bde993c5) stops streamable being a root, at which point the residue becomes droppable -- that is the state the tree is in now. MEASURED: AN_RTTI_REG comes only from the `__rttireg()` intrinsic, which inside lib/ is called from three files (rtl/typinfo.pas GetClass, pcl/controls.pas, pcl/gtk3widgets.pas); a program with no `uses` contains ZERO GetClass/FindClass/typinfo symbols in its object, so typinfo is not pulled ambiently and its registry is emitted and never read -- silently, because emit.inc DROPS an unresolved registry reference rather than failing. It keys on the NODE and never on `uses typinfo`, since __rttireg() is a public intrinsic a user program can call directly; the flag is set at PARSE time because EmitRTTI runs before any IR lowering, which makes it conservative -- a __rttireg() in never-lowered code still emits the registry. THE --emit-obj EDGE IS MOOT, measured not argued: two objects in one binary, B finds its OWN class and NOT A's (a=1 B_finds_A=0 B_finds_its_own=1), because each object carries its own Data[] and its own registry -- so the cross-object lookup cannot be broken by node-conditional emission and no --emit-obj arm is needed. SEPARATE DEFECT UNCOVERED: emit.inc DROPS an unresolved registry reference and the intrinsic reads nil, so a registry with no reader gives no diagnostic and a reader with no registry gives no refusal -- the silent-negative shape, and why this went unnoticed. Weights via the new PXXDBG=a.rttiweight, profile named: hello hosted x86-64 = 5 classes, RTTI data 664, direct VMT-slot code 409; hello esp32c3 BARE --dce = 1 class, data 160 (the interface machinery is not pulled in on bare at all); esp_pal_fdsem_baseline.pas as an IDF xtensa object = 7 classes, data 608, direct code 556. directmethbytes is neither bound cleanly -- it over-counts inherited slots and under-counts far more, since the ~3.2 KB here is dominated by PXXTIOGetInterface/PXXIntfIMTOf/PXXVarStrAppend/PXXVarClear, runtime routines the methods REACH rather than methods in any VMT; only dce.inc's walk can price the closure. || AND THE SRAM ACCOUNTING, corrected the same day: MEASURED 2026-09-18 (frankB), AND CORRECTED THE SAME DAY -- ON THE BARE PROFILE CODE IS SRAM. defs.inc's own map: qemu's esp32c3 models internal SRAM as ONE RWX region and the whole image (code+data+bss) loads at the IRAM org, so SRAM(bare) = code + data + bss. A first pass of the measurement below read data/bss as the SRAM and code as the flash -- that is the IDF shape and it is false on bare; caught by frankh-3f. Consequences: (a) `--dce` saves **54344 B of SRAM on bare** (esp32c3 131276 -> 76932, -41%; esp32s3 -36%), not zero -- it is the largest SRAM lever measured on this profile after the 64 KiB heap arena; on IDF, where .text can be flash-mapped, the same removal is a flash win and that leg is unmeasured. (b) One unreferenced class with four virtual methods costs +268 B code and +808 B data = **+1076 B, all of it SRAM on bare**; the earlier `SRAM is 3x the flash cost` line is WITHDRAWN as an IDF-shaped split applied to bare numbers. What survives: this ticket's ~3.2 KB headline is the CODE residue (method bodies held by VMT slots), while the blob's own .data bytes -- noted here from the day it opened and never quantified -- are 3x that per class, so the blob is the larger half on either profile and the only half that is SRAM at all on IDF. (c) The fleet's stated bare baseline `data=616 bss=70936, SRAM=71552` omits code and is really ~129452 at plain -O. Scales at ~128 B one-off + ~200 B per class + ~120 B per virtual method, and the 4x4 row lands 360 B UNDER that because the fixture shares method NAMES between classes -- a real program pays more, not less. On IDF the blob is .data too with .rela.data +420 and NO .rodata section at all. Ownership settled with frankh-3f: placement is his, reachability and emission are mine, and read-only placement buys ZERO SRAM on bare because moving bytes inside one RWX region changes nothing."
+summary: "LARGEST REMAINING RUNG OF THE ESP UMBRELLA AS OF 2026-09-20 (frankS) -- AND THE PASS SPECIFIED BELOW DOES NOT REACH IT. Measured with --dce-why on the nilpy-c3 demo once the eval() interpreter stopped being linked: 172,637 B / 149 bodies are rooted `vmt/rtti slot`, 21% of the live image, and the classes holding those slots are all LEGITIMATELY LIVE (TPyList, TPyDict, TPyFile), so an unreferenced-CLASS criterion reaches none of it. The cost is a per-METHOD slot nothing can dispatch to: `TPyFile.writelines` alone heads three of the nine largest rows, 115,606 B, because it accepts any sequence and drags the iterator-drain path into a program that never opens a file. That is consistent with the `NEVER FIRES FOR NILPY` finding below rather than contradicting it -- the registry work cleared a different root. Whoever takes this should start from the 2026-09-20 section, which names the chains and says what the instrument cannot yet answer (a per-root SUBTREE total). || THE BLOCKER IS REMOVED AND THE PASS IS NOW WRITABLE AND UNWRITTEN, 2026-09-19 (frankB, `5bde993c5`). **The registry is no longer an unconditional root**: it is emitted only when the program contains a reader -- a parsed `__rttireg()` node -- so a program that never reflects no longer roots every class by name. That was the one thing standing between this ticket and its own proposal, and it cost 24 B directly on a hello (8-byte count slot + one 16-byte entry), which is NOT the win and must not travel as one: no blob is dropped, because Pass 1 still reserves a header per class for ClassName and the is/as backlink chain. **What remains is the pass itself -- nobody has written it**, and the next seat should read the `PARKED`/`BUILT` sections in the body before starting. IT NEVER FIRES FOR NILPY, by construction and not by degree: every NilPy program pulls pylib, `pylib.pas:40` is `uses ... typinfo`, and `typinfo.pas:755` is `reg := __rttireg()`, so `print(1)` alone reports reader=1. That weakens the ESP/SRAM case on NilPy specifically -- measure both frontends or name the one you measured. A follow-on that would fix it (move GetClass to its own unit) is fully analysed, priced at ~24-40 B against a four-file `uses` rewrite in Track B's ground, and DECLINED as a second enabler for a pass that does not exist; its prerequisite check is recorded UNRUN and labelled. || WHY IT WAS THE BLOCKER, MEASURED 2026-09-18 and still the reason the pass is shaped this way: ClassIsStreamable is `ClassHasPublished or ClassImplementsGuidedInterface`, and a class declared with NO visibility keyword defaults to PUBLISHED -- so `TU = class ... end` reports streamable=1 and `TU = class public ... end` reports 0, identical blob/vmt either side, the registry entry being the 24-byte difference in data=. Registry membership is name-reachability at run time, which this ticket's own Watch out lists as what makes a blob undroppable, so the pass AS SPECIFIED would have dropped almost nothing on ordinary Pascal while that held. **And the ticket's own headline example is one of them**: TInterfacedObject, which holds every method in the residue table, is streamable=1 because it implements a guided interface. THE LEVER WAS THAT THE REGISTRY WAS AN UNCONDITIONAL ROOT: it is emitted whenever any class is streamable and its only consumer is IR_RTTI_REG from one AST node (AN_RTTI_REG, verified across all six backends), so in a program that never asks for it the registry is dead data rooting every streamable class. Making it conditional (done, 5bde993c5) stops streamable being a root, at which point the residue becomes droppable -- that is the state the tree is in now. MEASURED: AN_RTTI_REG comes only from the `__rttireg()` intrinsic, which inside lib/ is called from three files (rtl/typinfo.pas GetClass, pcl/controls.pas, pcl/gtk3widgets.pas); a program with no `uses` contains ZERO GetClass/FindClass/typinfo symbols in its object, so typinfo is not pulled ambiently and its registry is emitted and never read -- silently, because emit.inc DROPS an unresolved registry reference rather than failing. It keys on the NODE and never on `uses typinfo`, since __rttireg() is a public intrinsic a user program can call directly; the flag is set at PARSE time because EmitRTTI runs before any IR lowering, which makes it conservative -- a __rttireg() in never-lowered code still emits the registry. THE --emit-obj EDGE IS MOOT, measured not argued: two objects in one binary, B finds its OWN class and NOT A's (a=1 B_finds_A=0 B_finds_its_own=1), because each object carries its own Data[] and its own registry -- so the cross-object lookup cannot be broken by node-conditional emission and no --emit-obj arm is needed. SEPARATE DEFECT UNCOVERED: emit.inc DROPS an unresolved registry reference and the intrinsic reads nil, so a registry with no reader gives no diagnostic and a reader with no registry gives no refusal -- the silent-negative shape, and why this went unnoticed. Weights via the new PXXDBG=a.rttiweight, profile named: hello hosted x86-64 = 5 classes, RTTI data 664, direct VMT-slot code 409; hello esp32c3 BARE --dce = 1 class, data 160 (the interface machinery is not pulled in on bare at all); esp_pal_fdsem_baseline.pas as an IDF xtensa object = 7 classes, data 608, direct code 556. directmethbytes is neither bound cleanly -- it over-counts inherited slots and under-counts far more, since the ~3.2 KB here is dominated by PXXTIOGetInterface/PXXIntfIMTOf/PXXVarStrAppend/PXXVarClear, runtime routines the methods REACH rather than methods in any VMT; only dce.inc's walk can price the closure. || AND THE SRAM ACCOUNTING, corrected the same day: MEASURED 2026-09-18 (frankB), AND CORRECTED THE SAME DAY -- ON THE BARE PROFILE CODE IS SRAM. defs.inc's own map: qemu's esp32c3 models internal SRAM as ONE RWX region and the whole image (code+data+bss) loads at the IRAM org, so SRAM(bare) = code + data + bss. A first pass of the measurement below read data/bss as the SRAM and code as the flash -- that is the IDF shape and it is false on bare; caught by frankh-3f. Consequences: (a) `--dce` saves **54344 B of SRAM on bare** (esp32c3 131276 -> 76932, -41%; esp32s3 -36%), not zero -- it is the largest SRAM lever measured on this profile after the 64 KiB heap arena; on IDF, where .text can be flash-mapped, the same removal is a flash win and that leg is unmeasured. (b) One unreferenced class with four virtual methods costs +268 B code and +808 B data = **+1076 B, all of it SRAM on bare**; the earlier `SRAM is 3x the flash cost` line is WITHDRAWN as an IDF-shaped split applied to bare numbers. What survives: this ticket's ~3.2 KB headline is the CODE residue (method bodies held by VMT slots), while the blob's own .data bytes -- noted here from the day it opened and never quantified -- are 3x that per class, so the blob is the larger half on either profile and the only half that is SRAM at all on IDF. (c) The fleet's stated bare baseline `data=616 bss=70936, SRAM=71552` omits code and is really ~129452 at plain -O. Scales at ~128 B one-off + ~200 B per class + ~120 B per virtual method, and the 4x4 row lands 360 B UNDER that because the fixture shares method NAMES between classes -- a real program pays more, not less. On IDF the blob is .data too with .rela.data +420 and NO .rodata section at all. Ownership settled with frankh-3f: placement is his, reachability and emission are mine, and read-only placement buys ZERO SRAM on bare because moving bytes inside one RWX region changes nothing."
 status: backlog
 owner: 
 ---
@@ -665,25 +665,78 @@ Registry root removed in 5bde993c5 -- the one blocker is gone and the pass itsel
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
 
-## 2026-09-20 (frankS) — this is now the LARGEST root in the ESP NilPy image, with a chain
+## 2026-09-20 (frankS) — the largest remaining rung of the ESP umbrella, written up so the next seat needs nothing from me
 
 Once the eval() interpreter stopped being linked
 ([[bug-a-a-static-nilpy-program-links-the-runtime-eval-interpreter]], −52%),
-`--dce-why` puts this rung at the top of what is left. xtensa,
-`examples/esp32/nilpy-c3`, `--dce`:
+this became the top root of what is left. Everything below is from
+`--dce-why` on `examples/esp32/nilpy-c3/main/main.npy`, xtensa windowed,
+`--platform=esp --no-signals --dce`, at `857dcdaac`. **Re-measure before
+quoting: the population is one program on one ISA.**
+
+### The shape of what is left
+
+| first reason | bytes | bodies |
+| --- | ---: | ---: |
+| called by (an ordinary call edge) | 639,962 | 340 |
+| **vmt/rtti slot** | **172,637** | **149** |
+| @proc taken in unowned code | 13,725 | 2 |
+| called from unowned code | 1,006 | 5 |
+| total live | 827,330 | |
+
+The two `@proc` rows are pyeval's unconditional `PyIterCallHook := @PyCallKey1`
+install and **stay by design** — a lazy install is
+`bug-nilpy-min-max-with-a-key-held-in-a-variable-picks-the-numeric-overload`.
+Do not treat them as a target.
+
+### The chains, which is the part that is new
 
 ```
 94665B  pyiter_has <- pyiter_drain <- pyseq_of_obj <- TPyFile.writelines <- [vmt/rtti slot]
+12761B  TPyBytes.decode <- [vmt/rtti slot]
 12161B  PyUserArithCallMeth <- pyiter_has <- ... <- TPyFile.writelines <- [vmt/rtti slot]
 10581B  pyvar_gt <- TPyList.sort <- [vmt/rtti slot]
+ 8780B  pyfloat_parse <- pyiter_has <- ... <- TPyFile.writelines <- [vmt/rtti slot]
+ 8393B  PyVarEq <- TPyDict.indexof <- [vmt/rtti slot]
+ 5903B  TPyList.sort <- [vmt/rtti slot]
+ 5801B  TPyDict.most_common <- [vmt/rtti slot]
+ 5111B  TPyDict.update <- [vmt/rtti slot]
 ```
 
-**The useful new fact is the METHOD, not the total.** `TPyFile.writelines` is in
-the VMT because `TPyFile` has one; nothing calls it; it accepts any sequence, so
-it pulls `pyseq_of_obj` and the whole iterator-drain path behind it — 94 KB into
-a program that never opens a file. 149 bodies / 172,637 B are rooted
-`vmt/rtti slot` in that image, so this row is 55% of the class.
+**One method, `TPyFile.writelines`, heads three of the nine largest rows —
+115,606 B between them, in a program that never opens a file.** It accepts any
+sequence, so it pulls `pyseq_of_obj` and the whole iterator-drain path behind
+it. Nothing calls it; it is in the VMT because `TPyFile` has one.
 
-That makes a per-METHOD criterion (a slot nothing can dispatch to) worth more
-here than a per-CLASS one, and `--dce-why=<name>` will name the dragger for any
-candidate in one command.
+### What this says about the CRITERION, and it is not what the title assumes
+
+The title says *unreferenced class* RTTI. **These classes are all legitimately
+live** — the program really does use `TPyList`, `TPyDict`, `TPyFile`. A
+per-CLASS criterion therefore reaches none of this. What costs is a **per-METHOD
+slot nothing can dispatch to**: `writelines`, `decode`, `most_common`, `update`
+are individually unreachable on a live class.
+
+So the design question for whoever takes this is devirtualisation-shaped, not
+emission-shaped: **when can a VMT slot be proven undispatchable?** A method
+whose name is never used in a dynamic attribute lookup, never overridden, and
+never reached by `getattr`, is a candidate. `PyUserObjGetattr` and
+`pydynattr_get_v` are live in this very image, which is what makes the
+conservative answer conservative — that is the thing to establish first, not
+the savings.
+
+### What the instrument already answers, and what it does NOT
+
+- `--dce-why` gives the per-reason table and the twenty biggest bodies with
+  chains. `--dce-why=<substring>` names any body you name, live or `DROPPED`,
+  with its chain — so you can test a candidate in one command rather than
+  rebuilding.
+- **It does NOT total a subtree.** The 115,606 B above is the sum of three rows
+  that happen to be in the top twenty; the true amount `TPyFile.writelines`
+  drags is larger and nothing reports it. **A per-root subtree total is the
+  missing instrument here**, and it is the same "nothing answers HOW MUCH"
+  hole the umbrella already names. Build that before ranking candidates
+  against each other.
+- Attribution is FIRST-reason, so a body reachable both by a call and through a
+  VMT slot is counted once, under whichever came first. Reading the vmt total
+  as "what would be freed" is wrong in both directions.
+

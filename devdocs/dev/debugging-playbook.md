@@ -29525,3 +29525,48 @@ truth.
 (`$BIN; echo "exit=$?"`), or `set -o pipefail`, or capture to a file and read
 it afterwards. And treat "succeeded but printed nothing" as a suspicion about
 the instrument before it is a fact about the program.
+
+## HOW AN UNMEASURED CLAUSE TRAVELS: IT INHERITS THE VOICE OF THE MEASUREMENTS IT IS WRITTEN BESIDE, AND ONLY BEING ASKED TO MOVE IT LOOKS AT IT
+
+CLAUDE.md already has the rule — *"a verification claim scopes to exactly what
+was checked, and an unlabelled claim travelling beside it inherits that
+credibility"*. This entry is not that rule again; it is the **transmission**
+half, measured 2026-09-20, because the interesting part was how far the claim
+got and what stopped it.
+
+Closing out the closure-hook work I wrote, in a ticket:
+
+> `pyparser.inc` emits a direct call to `pyclosure_call_ptr` for a call through
+> a **Callable field**. That is a frontend-emitted edge, so it is rooted by the
+> compiled program rather than by the hook, and any program using that shape
+> links the evaluator again.
+
+Every noun in it is real. It was written while holding the file open, in the
+same paragraph as four numbers I had actually measured, and it is **wrong**: the
+cut sits one layer BELOW what the frontend emits, so a probe answers
+`pyclosure_call_ptr <- DROPPED`, `ExecStatement <- DROPPED`. The edge keeps a
+459-byte trampoline.
+
+**It survived three transmissions** — a commit message, a ticket body, and a
+report to the coordinator — without anyone querying it, including me. Nothing
+flagged it, because it was phrased exactly like the measured sentences around
+it and arrived with them. What caught it was being asked to **file it as its
+own ticket**, and filing meant opening the file, and opening the file took one
+command.
+
+Two things worth taking from that:
+
+- **The moment of maximum risk is the write-up, not the investigation.** During
+  the work every claim is a question. While summarising, the measured and the
+  inferred get the same grammar, and the inferred ones are the ones that sound
+  like conclusions.
+- **"Move this somewhere else" is a cheap verifier.** Not because filing is
+  virtuous, but because relocating a claim forces a re-read of its subject,
+  which is the one thing re-reading the SENTENCE cannot do. If a residual is
+  worth recording, record it where it must be restated — the restating is the
+  check.
+
+The practical form: when a write-up contains a claim you did not run a command
+for, either run the command or mark the clause as unmeasured **in the same
+sentence**. A refuted line kept beside its probe teaches the next reader; a
+deleted one teaches nobody, which is why the refutation stayed in that ticket.
