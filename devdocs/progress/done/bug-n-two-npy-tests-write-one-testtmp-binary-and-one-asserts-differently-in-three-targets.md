@@ -5,7 +5,7 @@ track: N
 prio: 55
 type: bug
 blocked-by: []
-status: backlog
+status: done
 owner: ""
 created: 2026-09-20
 found-by: frankz-e5
@@ -93,3 +93,44 @@ Write-up: `devdocs/dev/debugging-playbook.md`, "AN AGGREGATE JOB SATURATES".
   (T, p55), whose own text already notes that `#00` does not survive what
   `#src:` does. That ticket is about the identifier as a **label**; this
   mechanism is about it being too **coarse to carry an event**.
+
+## 2026-09-20 — both repairs landed (frankS)
+
+`35841d247`. `tools/npy_cross_target_expectation_devtest.py` rc=1 -> rc=0:
+
+    ok   t_the_population_is_still_there      4768 blocks, 119 cross-target .npy sources, 4541 expectations
+    ok   t_no_cross_target_expectation_drift  119 sources asserted identically in every target
+    ok   t_no_new_binary_name_collision       15 known collisions, none new
+
+**1 — the collision.** Renamed the variant-zero test's output to
+`$(TESTTMP)/test_nilpy_negvarzero26`, leaving `test_nilpy_negzero26` to
+`test_nilpy_negative_zero_repr.npy`, which held it first. `cmp` confirms the
+two binaries genuinely differ, so the collision was live and not two names for
+one program. A comment at the site says why the name is not the obvious one,
+because the next person to add a variant-zero test will reach for `negzero26`.
+
+**2 — the drift.** `test_nilpy_qualifier_vs_cproc.npy` is compiled in three
+targets. `test-nilpy` and `test-core` both assert `main\nbye`; `test-threads`
+asserted only `test -x $(TESTTMP)/test_tlsmixed26 && echo yes`. Replaced with
+the same output assertion the other two make. **The two are not a trade:**
+running the program implies it built, so the new row is strictly stronger than
+the `test -x` it replaces, and all three targets now assert identically, which
+is what leaves the ratchet nothing to hold. Measured before changing it — same
+compile line, same flags, same binary, prints exactly `main` then `bye` — and
+the new row fails when fed a wrong expectation.
+
+**A correction to this ticket's own accounting, which matters for the count
+everyone is quoting.** The collision was **one of TWO sub-guards inside one of
+the two red guards**, not one of five peer defects: `npy_cross_target` has
+three sub-guards and was red on two of them. Measured by stashing the Makefile
+alone — HEAD showed two red sub-guards, the rename left one. So "five defects,
+two guards" is right as a count of defects and wrong as a picture of the
+structure, and a seat that fixed only the rename would have seen the aggregate
+stay red and concluded the rename had not worked.
+
+**`make tools-devtest` now prints `165 guard(s) green`**, zero red — the
+saturation both this ticket and the 2026-08-28 one named is over, which is the
+part worth more than either repair.
+
+## Log
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

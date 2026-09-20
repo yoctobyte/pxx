@@ -5,10 +5,10 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: done
 owner: ""
 created: 2026-08-28
-summary: "MECHANISM, not a file: a test that spells a temp path as a RUNTIME literal cannot be privatized by the Makefile sweep or rewritten by testmgr, so concurrent testmgr runs on one box race over one file -- and this box routinely runs several clones at once. The condition that springs it is any test writing a literal path instead of the env chain TESTMGR_TMP -> TESTTMP -> /tmp. tools/testmgr_hardcoded_tmp_devtest.py is the guard and prints both the offending source and the remedy. THE ORIGINALLY CITED INSTANCE IS FIXED and this summary cited it for 23 days after: test_nilpy_class_named_like_an_rtl_record.npy (introduced f3422cd14) now takes the env chain at line 38 and the guard no longer names it. Recurred instead in TWO new sources, measured 2026-09-20 at 0ae279ae9 by frankz-e5 via `make tools-devtest`: test_nilpy_io_open_in_a_module_that_rebound_open.npy (/tmp/test_nilpy_io_open.txt) and test_nilpy_mmap_read_only_and_struct_unpack_from.npy (/tmp/pxx_test_mmap_read_only.bin). Do not re-cite a firing row here; the recurrence is the point. Filed by Track T; T owns the tool, never the bug."
+summary: "MECHANISM, not a file: a test that spells a temp path as a RUNTIME literal cannot be privatized by the Makefile sweep or rewritten by testmgr, so concurrent testmgr runs on one box race over one file -- and this box routinely runs several clones at once. The condition that springs it is any test writing a literal path instead of the env chain TESTMGR_TMP -> TESTTMP -> /tmp. tools/testmgr_hardcoded_tmp_devtest.py is the guard and prints both the offending source and the remedy. THE ORIGINALLY CITED INSTANCE IS FIXED and this summary cited it for 23 days after: test_nilpy_class_named_like_an_rtl_record.npy (introduced f3422cd14) now takes the env chain at line 38 and the guard no longer names it. FIXED 2026-09-20 in 35841d247, and the recurrence was THREE sources, not the two measured on 09-20 -- the third is test/lib_findfirst.pas, a .pas, which is why a census reading this as a NilPy problem missed it: the guard globs compiled test sources of every frontend. The env chain ORDER is the part this ticket got wrong and a body note now records: TESTMGR_TMP must come FIRST, because testmgr launches a job through an allowlist (PXX_ TESTMGR_ LC_ QEMU_) that TESTTMP does not match, so the remedy the body prescribes passes the guard and still races. tools-devtest now prints 165 guard(s) green, zero red. Do not re-cite a firing row here; the recurrence is the point. Filed by Track T; T owns the tool, never the bug."
 ---
 
 # What is wrong
@@ -110,3 +110,50 @@ in `devdocs/dev/debugging-playbook.md`, "AN AGGREGATE JOB SATURATES".
 
 **The remedy the guard itself prints** is the env chain, in Pascal, C and NilPy
 spellings. Nothing here needs designing.
+
+## 2026-09-20 — fixed, and the remedy this ticket prescribed was HALF WRONG (frankS)
+
+`35841d247`. `tools/testmgr_hardcoded_tmp_devtest.py` rc=1 -> rc=0, and
+`make tools-devtest` now prints its own verdict as **`165 guard(s) green`** —
+no red, so the saturation this ticket predicted and priced is over.
+
+**THREE files, not the two measured on 09-20.** The third is not a `.npy` and
+that is why two censuses in a row missed it:
+
+    test/test_nilpy_io_open_in_a_module_that_rebound_open.npy   /tmp/test_nilpy_io_open.txt
+    test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy   /tmp/pxx_test_mmap_read_only.bin
+    test/lib_findfirst.pas                                      /tmp/pxx_lib_findfirst_sandbox
+
+The guard globs compiled test SOURCES, which is every frontend; the readers
+kept summarising it as a NilPy problem because the first instance and the
+recurrence both happened to be `.npy`. The mechanism is frontend-neutral.
+
+**THE ENV CHAIN IN "The fix" ABOVE IS THE DEFECT WEARING A FIX.** That section
+says to read `$TESTTMP`, *"which the sweep already exports"*. It does, to a
+`make` recipe — and **not to a testmgr job**, which is the run that actually
+races. testmgr launches jobs through an env allowlist
+(`ENV_ALLOW` / `ENV_ALLOW_PREFIXES` = `PXX_ TESTMGR_ LC_ QEMU_`), and
+`TESTTMP` matches no prefix in it. A test that consults `TESTTMP` alone gets
+nothing under testmgr and falls through to `/tmp` — passing this guard, in the
+wanted form, **still racing**. The order must be
+
+    TESTMGR_TMP  ->  TESTTMP  ->  /tmp
+
+with `TESTMGR_TMP` FIRST because it is the only one that survives into a job.
+All three files now take it in that order.
+
+**Positive control that the env arm is READ and not merely present**, since a
+chain whose first two arms are dead is indistinguishable from a correct one on
+a box where `/tmp` happens to be free: `TESTMGR_TMP=/nonexistent-franks-probe`
+gives `PRECONDITION FAILED: no sandbox at /nonexistent-franks-probe/pxx_lib_findfirst_sandbox`
+and `total ok 0 / 1`. With the env unset, 44/44; with an explicit argument,
+44/44; both `.npy` MATCH their `.expected`.
+
+**What should retire the guard, not just this ticket:** the guard cannot see a
+test that reads `TESTTMP` only, because that IS its prescribed remedy. A test
+written to the letter of the advice above passes and still races under
+testmgr. Teaching it to require `TESTMGR_TMP` first is a Track T change and is
+not filed — say so before quoting a green from it.
+
+## Log
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
