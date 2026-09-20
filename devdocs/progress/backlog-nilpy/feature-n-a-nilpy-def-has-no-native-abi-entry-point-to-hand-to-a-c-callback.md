@@ -5,7 +5,7 @@ type: feature
 owner:
 blocked-by: []
 summary: "PARTLY DONE. A NilPy `def` compiles all-Variant -- by-reference Variant parameters, the result on the Variant hidden destination -- so it can never match a native procedural signature. `PyGetOrMakeCallbackThunk` now synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT's signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. That covers a procedural PARAMETER, including on an `external cdecl` routine. WHAT REMAINS, and it is what the ESP demo actually needs: the same def assigned to a procedural FIELD takes no such path and segfaults with NO diagnostic, because the coercion lives in PyCoerceCallableArgsIn, which sees arguments only. SPRINGS wherever a callable reaches native code through a field or a struct rather than an argument list. The ISR question -- boxing into Variants allocates -- is deliberately out of scope and needs its own contract."
-status: working
+status: backlog
 ---
 
 # A NilPy def has no native-ABI entry point to hand to a C callback
