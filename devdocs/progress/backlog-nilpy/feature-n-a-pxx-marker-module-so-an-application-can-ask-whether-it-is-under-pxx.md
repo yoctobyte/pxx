@@ -121,12 +121,22 @@ party could make TRUE on ordinary CPython by publishing a package of that name?*
 is the unclaimable one.
 
 ```python
+# THE DETECTION, at the point of selection -- NOT a module-level boolean.
 try:
     import __pxx__
-    HAVE_PXX = True
+    _backend = _pxx_backend          # the live arm under pxx
 except ImportError:
-    HAVE_PXX = False
+    _backend = _ctypes_backend       # never compiled under pxx
 ```
+
+**THE SHAPE MATTERS AND THE FIRST RELAY OF IT WAS MISLEADING — CORRECTED HERE 2026-09-20 BY
+tuxspaceprogram-c6, AND IT IS RIGHT.** The relayed sketch was `HAVE_PXX = True` / `HAVE_PXX = False`
+with the branch taken elsewhere. **That form defeats the entire mechanism**: a module-level boolean
+tested later is a RUNTIME condition, so pxx compiles the ctypes arm anyway and the import hack's whole
+purpose — the arm that cannot compile is never compiled — is lost. **The guarded import must sit
+LEXICALLY where the choice is made, with the selected name bound on both arms.** TSP is already written
+this way (`tsp/platform/__init__.py`, commit `98e9e66`) and was right not to adopt the sketch. Read the
+boolean in any earlier relay as shorthand for "detect pxx", never as the shape to write.
 
 **This ticket is takeable now.** The name was the only thing it was missing; the mechanism, the
 measurements and the fixture requirement are already in the sections above, unchanged.
@@ -146,3 +156,21 @@ quiet substitution. Two applications are about to depend on the exact string.
 **Unchanged and still the point:** pxx resolves the guarded import at COMPILE time, so the CPython arm
 is never compiled, and the fixture must put the marker import in BOTH positions, with and without an
 `else:` — a first-wins table is exposed only by the arrangement that puts the correct entry last.
+
+### PROVENANCE OF THE NAME — read this before treating `__pxx__` as settled
+
+**The spelling reached me through ONE channel and I have not corroborated it.** `__pxx__` was
+**frankuser's own suggestion in an earlier relay, explicitly flagged at the time as NOT the owner's
+instruction**, and it has now come back through that same seat as the owner's decision. That is a
+circular-attribution shape, and tuxspaceprogram-c6 caught it and asked rather than assuming — correctly.
+
+**What is actually established:** the owner was asked the fork in goal terms (*should an application's
+pxx-check be something a third party could make TRUE on CPython by publishing a package of that
+name?*), and the answer relayed back is **no**, which is a real decision and is the load-bearing half.
+**What is NOT independently established is that the exact string `__pxx__` is his word rather than the
+relay's.** Any unclaimable spelling satisfies the decision.
+
+**Proceeding was right and holding would have bought nothing**: the module does not exist yet, so the
+guarded import fails on CPython exactly as the placeholder did, and a change of spelling is a one-token
+edit in each application. **Do not re-litigate it on this ticket.** If the owner's own words come back
+naming a different string, the coordinator relays it and the two applications edit one token each.
