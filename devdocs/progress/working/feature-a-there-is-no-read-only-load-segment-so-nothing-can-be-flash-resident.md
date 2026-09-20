@@ -533,3 +533,61 @@ because it certifies the readout it does not touch. A large string literal would
 have split `.data` from `.rodata` in one compile. franks-5b banked the general
 form in the playbook: a positive control proves the readout it MOVES and no
 other.
+
+## 2026-09-20 (frankS) — THE REMAINING LIST NOW HAS AN INSTRUMENT, AND TWO ITEMS MEASURE AS ZERO
+
+This list defers every item "each after its own never-written measurement".
+The measurement could not be taken: pxx emits `FUNC` symbols and **no `OBJECT`
+symbols**, so `readelf -s` on our object sees `.data` and `.bss` as two
+anonymous lumps. `PXXDBG=a.datamap` (landed `734c1df1e`) breaks the data
+segment down by category.
+
+### The numbers, NilPy print demo, riscv32 `--platform=esp --dce`
+
+```
+data=88,656B  bss=89,352B
+  string-literal pool   52,800B     <- marked ro, so FLASH
+  class RTTI headers    10,240B
+  prop/meth + IMT arrs       32B    <- the REMAINING list's own items
+  Pascal VMTs            1,848B
+  unattributed          23,736B
+  of which marked ro    52,800B     <- the literal pool ALONE on --emit-obj
+```
+
+Population: `examples/esp32/nilpy-c3/main/main.npy` (a class, a list, a loop,
+`print`), compiler at `734c1df1e`, oracle none — these are the compiler's own
+emission counters.
+
+### TWO ITEMS RETIRE ON A MEASURED ZERO
+
+**`prop/meth arrays` and `IMTs` are 32 bytes on this program.** Not "small" —
+32. A NilPy program publishes almost nothing and implements almost no
+interfaces, so the structures exist and are empty. Moving them to `.rodata`
+would buy 32 bytes of SRAM.
+
+They stay on the list for a **Pascal** program that publishes properties; what
+retires them is specifically *"for a NilPy image"*, which is the subject the
+ESP umbrella is about. Re-measure before quoting this at anything else.
+
+### WHERE THE BYTES ACTUALLY ARE
+
+Of 125,832 B of ESP SRAM (`.data` 36,480 + `.bss` 89,352):
+
+- **`.bss` is 89,352 B — 71%**, and read-only placement cannot touch a section
+  that has no contents. Anything in there is either genuinely mutable or is a
+  table *filled at startup* — and the second kind IS a candidate, by baking it
+  into `.rodata` instead of emitting fill code. That is not on this list and
+  is the larger prize.
+- **`unattributed` is 23,736 B — 66% of the SRAM `.data`.** No category names
+  it yet. That is the next thing to categorise, ahead of any item on the
+  current list.
+- **class RTTI headers, 10,240 B**, are already marked-able — they carry a
+  `RoRangeAdd` that simply does not run under `--emit-obj`.
+
+### THE ESP QUESTION IS NOT BYTES, IT IS REACHABILITY (frankH, 2026-09-20)
+
+Per item: **can an ISR reach this structure with the flash cache off?** ESP
+objects keep RTTI and VMTs in `.data` deliberately for that reason. The byte
+count only matters once that answers no. So the 10,240 B of RTTI headers are
+not free to move even though the marking already exists — that is the hazard
+this ticket's own body records, not an oversight.
