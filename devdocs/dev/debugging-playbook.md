@@ -31886,6 +31886,20 @@ go look.** Four reversals over one evening argued entirely about 24 versus 25 ve
 sorted-order question was one command and was never asked. A question about window edges
 is precisely the question a trailing newline and an off-by-one window decide.
 
+**INDEPENDENTLY CONFIRMED FROM THE OTHER SEAT'S ARTEFACT, WHICH IS WHAT MAKES IT SAFE TO BANK:** the
+replay at `0ae279ae9` emits the three findings at log lines 3, 4 and 5 in exactly that sort order, and
+the two survivors of `tail -25` are rows 2 and 3. Two seats, two artefacts neither could read, one
+prediction, no line count involved.
+
+**THE PRECONDITION, BECAUSE IT IS WHAT MAKES THE TECHNIQUE PORTABLE OR NOT:** identity discriminates
+here only because the emission order is **deterministic and knowable** — `sorted((ROOT / r).rglob("*"))`
+in the guard's own source. Truncation-from-the-top predicts that the survivors are a contiguous SUFFIX
+of the emission sequence, which is a statement about order, so an instrument that emits in arbitrary
+order (a bare `rglob`, a dict iteration, a thread pool, anything `set`-backed) still tells you
+*whether* something went missing but no longer predicts *which*, and the falsifiable half is gone.
+**So read the instrument's ordering before designing the identity test** — and where you own the
+instrument, `sorted()` is cheap and buys exactly this: a drop that announces which end it came from.
+
 **So "go back to the artefact" is necessary and NOT sufficient: go back to the artefact THE CONSUMER
 READS, through the SAME operator.** The consumer here is `tail -25` over a redirected file. A shell
 variable holding almost the same bytes is a different artefact for precisely the question being
