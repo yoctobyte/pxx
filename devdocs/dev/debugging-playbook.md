@@ -11788,6 +11788,48 @@ YOUR OWN DIFF ENUMERATES IT.** Two overlapping, non-identical sets at HEAD:
 touching it moves the instrument and does not even make the compiler out of
 date. Nothing warns.
 
+### 8e's framing, added as invited above
+
+**THE GAP IS UNGUARDED IN PROPORTION TO HOW CAREFULLY YOU ARE OBEYING THE RULE.**
+I did not skip the instrument rule, I applied it — and the more deliberately you
+freeze the binary, the more settled the tree feels. A seat that never thought
+about it at all would have been in the same place; a seat that thought about it
+hard ends up there with *confidence*, which is worse.
+
+**WHY IT GENERALISES PAST PXX.** Any harness whose subject loads something from
+the working tree at run time has this shape: data files, templates, plugins,
+fixtures, schemas, a runtime library, a config. The binary is the *visible*
+input and is usually the only one anybody freezes. Ask **what does the subject
+OPEN while the run is in progress**, not *what did I build it from*. The two
+tables above are the pxx instance of a question every harness has.
+
+**THE TELL.** An error naming a symbol, file or row **that did not exist when
+the run started** — `unresolved forward: <a name you typed minutes ago>`. That
+is not a regression and not flakiness; it is the run reading your desk. The
+instinct to read it as "my fix broke something" is strong enough to be worth
+naming, because it sends you debugging the fix.
+
+**AND THE NEAR MISS IS THE HALF WORTH KEEPING, BECAUSE IT WAS LUCK AND NOT
+JUDGEMENT.** I happened to write the **forward declaration before the
+implementation**, which is what made it fail loudly at build time. The other
+order compiles: the tier would have measured a **half-written routine** and
+reported a wrong value six hundred rows deep, attributable to nothing. **The
+order that crashes is the safe one here, and I did not choose it.** So do not
+read this section as *"it fails loudly, so you will notice"* — that is the one
+conclusion the incident does not support, and it is the conclusion a reader
+reaches by default.
+
+**PRACTICAL FORM.** Before a long run, ask which files it will READ, not which
+it was BUILT from; `strace -f -e openat` on one representative job answers it in
+seconds and is cheaper than a lost tier. When you must work during a run,
+confine edits to paths the run provably cannot open — and **verify** that claim
+rather than assuming it, since the assumption is exactly what failed.
+
+**RELATED.** CLAUDE.md's `git commit` MOVES THE TREE clause is the same family
+from the version-control end: there the tree's IDENTITY changes while contents
+do not; here contents change while the binary does not. Both are *"I did not
+touch the thing that runs"*.
+
 **And the list has already failed twice, in this section, while being written.**
 The first draft named *binary + `compiler/builtin` + `lib/rtl` + sources*;
 frankz-e5 added `lib/asmcore` and `lib/pcl`; and **both of us had named exactly

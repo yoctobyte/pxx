@@ -23,6 +23,7 @@ AN_ARG Left ASTLeft[clsSrcArg]
 AN_ARG Left ASTLeft[currArg]
 AN_ARG Left ASTLeft[lastArg]
 AN_ARG Left ASTLeft[n]
+AN_ARG Left ASTLeft[src]
 AN_ARG Left ASTRight[node]
 AN_ARG Left AllocNode(AN_IDENT)
 AN_ARG Left AllocNode(AN_INT_LIT)
@@ -709,6 +710,7 @@ AN_CALL Left flArg2
 AN_CALL Left flUnboxArg
 AN_CALL Left freeArg
 AN_CALL Left hasArg
+AN_CALL Left head
 AN_CALL Left headNode
 AN_CALL Left i
 AN_CALL Left ipA

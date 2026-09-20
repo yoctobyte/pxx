@@ -1,0 +1,81 @@
+# Every value kind PyPropertySet claims to serve, exercised through a BARE
+# (unannotated) receiver. The sibling fixture
+# test_nilpy_a_property_setter_runs_through_a_bare_receiver_despite_a_same_named_field
+# pins the MECHANISM (a same-named field in an unrelated class pushes the store
+# onto the dynamic path); this one pins the KIND TABLE, which is a different
+# axis and was the part that crashed.
+#
+# EVERY SETTER TRANSFORMS ITS ARGUMENT, and that is the point rather than
+# decoration: a shadow write answers its own value back unchanged, so a setter
+# that stored v verbatim would pass this file without ever running. "hi"->"hi!",
+# 21->42, True->False, 9.0->4.5, 5->[5,5]. None of the five expected values is
+# the value that was written, and none is a default, a width, a zero or an empty.
+#
+# THE SECOND PRINTED ROW IS THE OTHER HALF: it reads the BACKING fields directly.
+# On the unfixed compiler they are still "", 0, False, 0.0 and None -- the store
+# went to a shadow attribute and the object the setter should have written was
+# never touched. That row cannot be satisfied by any shadow.
+#
+# POSITIVE CONTROL MEASURED against PINNED v413 f94c2a7e2396d2be:
+#   ('hi', 21, True, 9.0, 5)      <- every value handed straight back, untransformed
+#    0 False 0.0 None             <- and the backing fields empty
+# bug-n-a-field-of-the-same-name-in-an-unrelated-class-defeats-a-property-setter-on-a-bare-receiver
+
+class Decoy:
+    # An unrelated class declaring a plain FIELD of every name, which is what
+    # sends each store down the dynamic path in the first place.
+    def __init__(self):
+        self.tag = ""
+        self.count = 0
+        self.armed = False
+        self.ratio = 0.0
+        self.anything = None
+
+
+class Box:
+    def __init__(self):
+        self._t = ""
+        self._c = 0
+        self._a = False
+        self._r = 0.0
+        self._x = None
+
+    @property
+    def tag(self): return self._t
+    @tag.setter
+    def tag(self, v: str): self._t = v + "!"          # kind 23, AnsiString
+
+    @property
+    def count(self): return self._c
+    @count.setter
+    def count(self, v: int): self._c = v * 2          # kind 13/11/1, integer
+
+    @property
+    def armed(self): return self._a
+    @armed.setter
+    def armed(self, v: bool): self._a = not v         # kind 2, Boolean
+
+    @property
+    def ratio(self): return self._r
+    @ratio.setter
+    def ratio(self, v: float): self._r = v / 2.0      # kind 19, Double
+
+    @property
+    def anything(self): return self._x
+    @anything.setter
+    def anything(self, v): self._x = [v, v]           # kind 22, Variant
+
+
+def poke(b):                    # UNANNOTATED: b has no static class here
+    b.tag = "hi"
+    b.count = 21
+    b.armed = True
+    b.ratio = 9.0
+    b.anything = 5
+    return b.tag, b.count, b.armed, b.ratio, b.anything
+
+
+d = Decoy()                     # declared and constructed so its fields register
+bx = Box()
+print(poke(bx))
+print(bx._t, bx._c, bx._a, bx._r, bx._x)

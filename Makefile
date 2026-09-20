@@ -2031,6 +2031,34 @@ test-nilpy: $(COMPILER)
 	# the fixture -- written in the passing order it would have certified the bug.
 	./$(COMPILER) test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy $(TESTTMP)/test_nilpy_callorder26
 	tools/expect_same.sh test_nilpy_callorder26 "$$($(TESTTMP)/test_nilpy_callorder26)" "$$(python3 test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy)"
+	# A @property SETTER runs when the receiver is UNANNOTATED, even though two
+	# unrelated classes declare a plain FIELD of the same name. The oracle is
+	# CPython on the same file, so nothing is restated here.
+	# THE CLAMPING ROW IS THE FIXTURE: a store of 4.0 through a setter that
+	# clamps to 1.0 reads back 1.0 if the setter RAN and 4.0 if it did not.
+	# Every other row can be satisfied by the shadow attribute answering its own
+	# write -- which is exactly what made this defect silent -- so a fixture
+	# without that row would pass while the setter was never called.
+	# POSITIVE CONTROL MEASURED against PINNED v413 f94c2a7e2396d2be: rows 1-2
+	# answer (0.6, 0.0) and (4.0, 0.0), the second being 4.0 read back unclamped.
+	# The receivers are NAMED LOCALS, not constructions: written as
+	# `drive(Boat())` the same fixture PASSES on the unfixed compiler, because a
+	# construction hands the call site the class the bare path is missing.
+	./$(COMPILER) test/test_nilpy_a_property_setter_runs_through_a_bare_receiver_despite_a_same_named_field.npy $(TESTTMP)/test_nilpy_propset26
+	tools/expect_same.sh test_nilpy_propset26 "$$($(TESTTMP)/test_nilpy_propset26)" "$$(python3 test/test_nilpy_a_property_setter_runs_through_a_bare_receiver_despite_a_same_named_field.npy)"
+	# The same fix's KIND TABLE, which is the half that CRASHED: every value kind
+	# PyPropertySet claims to serve, through a bare receiver. Separate from the
+	# fixture above because it is a different axis -- that one pins the mechanism
+	# that routes a store onto the dynamic path, this one pins the five ABI arms.
+	# EVERY SETTER TRANSFORMS ITS ARGUMENT and that is load-bearing: a shadow
+	# write hands its own value back, so a setter that stored v verbatim would
+	# pass without ever running. The second printed row reads the BACKING fields,
+	# which no shadow can satisfy at all.
+	# POSITIVE CONTROL MEASURED against PINNED v413 f94c2a7e2396d2be:
+	#   ('hi', 21, True, 9.0, 5)   every value handed straight back untransformed
+	#    0 False 0.0 None          and every backing field still empty
+	./$(COMPILER) test/test_nilpy_a_property_setter_serves_every_value_kind_it_claims.npy $(TESTTMP)/test_nilpy_propkinds26
+	tools/expect_same.sh test_nilpy_propkinds26 "$$($(TESTTMP)/test_nilpy_propkinds26)" "$$(python3 test/test_nilpy_a_property_setter_serves_every_value_kind_it_claims.npy)"
 	# A call that OMITS a trailing defaulted argument, where the argument's class
 	# declares __iter__. PyFixIterableArgs drains a user-iterable argument on
 	# SPECULATION so the overload match can be retried once (that is what gives

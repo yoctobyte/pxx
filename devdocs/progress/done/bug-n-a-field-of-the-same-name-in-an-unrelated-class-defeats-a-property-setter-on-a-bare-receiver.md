@@ -3,8 +3,8 @@ slug: bug-n-a-field-of-the-same-name-in-an-unrelated-class-defeats-a-property-se
 type: bug
 track: N
 prio: 70
-status: working
-summary: "SILENT WRONG VALUE: `v.prop = x` on an unannotated receiver silently writes a shadow attribute instead of calling the @property setter, whenever ANY declared class has a plain FIELD of that name — PyVariantPropClass's field-wins precedence loop scans every class and exits on the first hit, so a property on the receiver's real class stops being a property. The getter then reads the shadow back, so the value looks right from outside while the object the setter should have written is untouched."
+status: done
+summary: "FIXED 2026-09-20 in compiler/builtin/pylib.pas: PyPropertySet, the write twin of PyPropertyGet, finds __prop_set_<name> in the receiver RTTI and is called from pydynattr_set BEFORE the shadow write. Was: `v.prop = x` on an unannotated receiver silently wrote a shadow attribute instead of running the @property setter whenever ANY declared class had a plain FIELD of that name, and the getter read the shadow back so the value looked right from outside. NOTE the precedence loop in PyVariantPropClass is UNCHANGED and still field-wins-across-unrelated-classes; this makes the fallback correct, it does not correct the scan."
 owner: frankb-8e
 ---
 
@@ -241,3 +241,122 @@ and `propulsion.throttle` was never touched.
 The third class `Controls` is in the fixture deliberately, per the workarounds
 section above: it is what makes "rename the colliding field" fail to be a
 workaround, and its own row must keep passing.
+
+---
+
+## RESOLVED 2026-09-20 (frankb-8e) — `PyPropertySet`, called before the shadow write
+
+`compiler/builtin/pylib.pas`. The write twin of `PyPropertyGet`, which has sat
+directly above it since the computed-attribute-name fix and had no counterpart:
+find `__prop_set_<name>` in the receiver's RTTI, read the VALUE parameter's kind
+from `ParamKinds[1]`, call through that convention. `pydynattr_set` calls it and
+returns if it answers True.
+
+**THE FIX IS IN A BUILTIN, NOT IN THE COMPILER.** `compiler/pascal26` came out
+BYTE-IDENTICAL across this change — `05e1d35cd9930ea3` before and after, with
+`converged after 1 round(s)`, so the fixedpoint really ran and really did not
+move. Anyone verifying this by comparing compiler shas will conclude nothing
+landed. The artefact that changed is the one every NilPy program compiles
+against, which is why a `git pull` delivers it and a rebuild is not required
+for THIS blocker (03, in `pyparser.inc`, does require one).
+
+### The order is the fix, not just the call
+
+`PyPropertySet` runs BEFORE the store, and that is load-bearing rather than
+tidy. `pydynattr_get` consults the shadow store FIRST, before declared fields
+and before the property. So a shadow write does not merely miss the setter — it
+**masks the getter from that point on**. Writing first and calling second would
+leave the mask in place even on the arm that works.
+
+### Two ABI facts, both measured, both a SEGFAULT if guessed
+
+**The accessors are FUNCTIONS, not procedures.** A NilPy `def` returns None,
+None is a Variant, so the frontend emits every method — a property setter
+included — as a function returning Variant. I wrote the five pointer types as
+`procedure` first, on the reasoning that a setter returns nothing, and the
+fixture **segfaulted**: a Variant return is passed by hidden result pointer, so
+declaring it away shifts every argument by one and `recv` receives the sret
+slot. The authority is `pyeval`'s `PyHostCall`, which has **no procedure arm at
+all** — `TPMV_0_1 = function(self: Pointer; d0: Double): Variant` — and it is
+the routine that already calls arbitrary NilPy methods by RTTI. I should have
+read it before writing the types rather than after the crash.
+
+**The kind comes from `ParamKinds[1]`, not from `RetKind`.** Index 0 is Self.
+`RetKind` describes the None handed back, not the value accepted; a property is
+free to take what it does not return, and the clamping row is a case where the
+two disagree in value as well. Reading the convention off the wrong end of the
+pair is the same crash by a different route.
+
+Both are guarded rather than assumed: `Arity <> 2` declines, `RetKind <> 22`
+declines, `ParamKinds = nil` declines, and any value kind not spelled out
+declines. A decline falls through to the store, which is exactly today's
+behaviour — the getter's own discipline, and here the penalty for guessing is a
+shifted argument list rather than a wrong value.
+
+### Verification
+
+Fixture `test_nilpy_a_property_setter_runs_through_a_bare_receiver_despite_a_same_named_field`,
+wired into `test-nilpy`. Oracle is CPython on the same file, so no expected
+output is restated and no row's expected value is a default, a width or an empty.
+
+| row | CPython | pinned v413 | after |
+| --- | --- | --- | --- |
+| `drive(b1)` | `(0.6, 0.6)` | `(0.6, 0.0)` | `(0.6, 0.6)` |
+| **`drive_clamped(b2)`** | **`(1.0, 1.0)`** | **`(4.0, 0.0)`** | **`(1.0, 1.0)`** |
+| `drive_annotated(b3)` | `(0.6, 0.6)` | pass | pass |
+| `b.throttle = 0.9` literal | `0.9 0.9` | pass | pass |
+| `set_controls(Controls())` | `0.25` | pass | pass |
+
+**The clamping row is the fixture and the rest is scaffolding** (frankH's call,
+and it was right). A store of 4.0 through a setter that clamps to 1.0 reads back
+4.0 if the setter never ran — the shadow answering its own write, which is the
+entire reason this defect was silent. Every other row is satisfiable by that
+shadow.
+
+**Positive control measured, not predicted:** pinned v413 `f94c2a7e2396d2be`
+fails rows 1 and 2.
+
+### TWO RESIDUALS, both left open deliberately
+
+**A property with a getter and NO setter still shadow-writes instead of
+raising.** CPython raises `AttributeError: can't set attribute`. We store, and
+because the store is consulted before the property, the read-only property
+silently becomes writable AND its getter stops being called. That is a real
+divergence, it is adjacent, and it is NOT this ticket — fixing it means deciding
+whether to raise, which changes behaviour for programs that rely on today's
+answer. Filed separately rather than smuggled in here.
+
+**Unserved parameter kinds decline silently.** A setter taking a kind outside
+{Variant, int, double, string, Boolean} falls through to the store and is
+therefore still broken, with no diagnostic. Same shape as the getter's, which
+has carried it since it was written. A warning would be the repair; neither has
+one.
+
+### What this does NOT close
+
+Nothing about the READ path, which already worked. Nothing about
+`PyVariantPropClass`'s field-wins precedence loop — **the loop is still wrong
+and still scans every declared class**, and this fix works by making the
+fallback correct rather than by correcting the scan. That matters for anyone
+reading the summary as "the precedence loop was fixed": it was not. The loop
+sends the call site to `pydynattr_set`, and `pydynattr_set` now does the right
+thing. A future fix to the scan would make this path colder, not redundant.
+
+### A cost note, BANKED AND NOT CHASED
+
+`PyPropertySet` runs on **every** store that reaches `pydynattr_set` — i.e.
+every attribute write through a receiver whose class the frontend could not
+name — and it builds `'__prop_set_' + name` and walks the RTTI before it can
+decline. For a receiver with no property of that name, which is the common
+case, that is an allocation and a failed lookup per store.
+
+**It is symmetric with what the READ path already does:** `pydynattr_get` has
+called `PyPropertyGet` on the same terms since the computed-attribute-name fix,
+so this adds no new *class* of cost, only the write half of an existing one.
+
+**NOT MEASURED, and deliberately not measured.** The owner's steering on
+2026-09-20 is *"if framerate is still low it's worth profiling but let's not get
+ahead"*, so this is recorded as a starting point for whenever that happens and
+is not a line of work. If someone does open it: the cheap repair is to skip the
+lookup when the receiver's RTTI carries no `__prop_set_` accessors at all, which
+is a per-class fact and cacheable, not a per-store one.
