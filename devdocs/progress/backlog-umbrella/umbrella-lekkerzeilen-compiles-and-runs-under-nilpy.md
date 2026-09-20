@@ -1403,3 +1403,13 @@ Measured against the **39-module demo population** (`lekkerzeilen/**`, which is 
 `math.dist` IS used, nine times, and **every one is in `tools/`** (`corridor.py` 6, `import_nl.py` 3) — an offline toolchain that nothing under `lekkerzeilen/` imports. **That is the whole reason this edge looked live**: a scan over `*.py` at the repo root finds `math.dist` and stops, and the population question decides the answer. The demo's actual math surface is sin/cos/radians/hypot/degrees/atan2/sqrt/floor/ceil/asin/tan/log/log10/isnan/exp/copysign/acos/isinf/atan — all present.
 
 **And the build above is the stronger statement:** the demo compiles with zero errors, so **no ticket blocks the COMPILES half of this umbrella today.** Every remaining edge is either about RUNS or is discharged and has not been re-checked. Re-add either of these two the day the measurement changes.
+
+### PRE-REGISTERED, 2026-09-20, before the pin that was starting as this was written
+
+A pin is being cut by another seat under firsthand authorisation. **Recorded BEFORE the re-run, because a null row is only information to someone who said what they expected.**
+
+**EXPECTED:** after that pin lands, `./stable_linux_amd64/default/pinned devdocs/pxx-blockers/01-field-from-qualified-float-const/repro/__main__.py` **builds and prints 1700**, where against pin `a6a2a1cc2278e1a9` it errors with `cannot infer the type of field self.chart_view`. The fix is in `934f40376..a852664bb` and the pin is cut from a tree containing it.
+
+**If it holds, two retirements and no new work:** blocker 01 stops being inert, and `runbin.sh`'s header note documenting `PXX=pinned` as *"CURRENTLY BROKEN for this demo"* becomes retirable — that note is about a different failure (`TypeError: forwarded call got 5 arguments, expected 0 to 4`) also fixed after the old pin, and its own text says *"Re-measure before believing either half of this."* It is 7a's file; flagged here, not edited.
+
+**WHAT WOULD FALSIFY IT:** the pin cut from a tree without the fix, or the fix depending on something in `lib/**` the pin does not carry. **A still-failing repro under the new pinned binary is the interesting result and must not be quietly re-run** — it would mean the pin and the fix disagree about what carries it.
