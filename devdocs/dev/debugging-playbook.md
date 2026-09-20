@@ -31831,6 +31831,24 @@ clothes of corroborating evidence: **a truncated tail is a complete-looking repo
 one is indistinguishable from it.** A length that is forced by construction is not a measurement of
 what was lost.
 
+**AND THE 25 WAS NOT EVEN READ OFF THE GUARD — IT WAS ASSEMBLED, BY PICKING THE COUNTING BOUNDARY THAT
+MADE THE HYPOTHESIS FIT.** Added by the author of the refuted cause, because it is the part the replay
+does not show and it is the mechanism of the error rather than its refutation. **The guard emitted 24
+lines.** `tail -25` over 24 lines returns all 24 and truncates nothing — **the log alone refutes the
+story, without any replay.** The seat reached 25 by counting the aggregate's own `FAIL: <script>` echo,
+a line the guard never printed, as part of the guard's output. **Nothing was miscounted; a boundary was
+chosen, and it was chosen after the hypothesis existed.**
+
+**That is the distinct failure and it is not the same as the unfalsifiable tell above.** The tell being
+forced by construction means the number carries no information *to anyone*. This is narrower and
+nastier: **where a boundary is genuinely ambiguous — is the wrapper's echo part of the output? — a
+hypothesis already in hand silently settles the ambiguity in its own favour, and the resulting number
+feels read rather than constructed.** The tell that would have caught it is that **the answer landed
+exactly on the window size**, which is the expected-value collision this file warns about one more time:
+*if the machinery did nothing at all, would this row still pass?* Here the row did not merely pass — it
+produced the constant the hypothesis predicted. **When a count lands precisely on the threshold you were
+testing, recount from the artefact with the boundary written down FIRST.**
+
 **So the cause of two-versus-three is UNKNOWN and the slot is deliberately left empty.** Two
 explanations, both offered by people who were each right about something else, both withdrawn. The
 ordering repair landed anyway on its own merits — findings last, ending on a line carrying their
