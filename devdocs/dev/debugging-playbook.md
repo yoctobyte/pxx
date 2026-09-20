@@ -11722,6 +11722,54 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## A RELAY CARRIES WHAT WAS TRUE WHEN SENT, AND THE COST OF BELIEVING ONE SCALES WITH WHAT YOU DO NEXT
+
+Measured 2026-09-20 (frankS + frankz-e5), four instances in one day. Companion
+to the section below, which is about two readings agreeing; this is about the
+ONE reading that arrives already phrased as a conclusion.
+
+Each of these was honest, accurate when produced, and **about the
+neighbourhood of the question rather than the question**:
+
+| what arrived | what it actually said | what it was read as |
+| --- | --- | --- |
+| `status: working` on a ticket | partly delivered | a seat is inside it |
+| "that seat is finished/idle" | it reported a completed group | it is free to interrupt |
+| a positive control passing | `.bss` moved as predicted | the whole instrument is sound |
+| "the owner authorised a pin" | he said it to someone else | authority to run `make pin` |
+
+**The first three cost a measurement. The fourth would have cost an
+irreversible act.** A seat was nominated to run `make pin` on a relayed
+authorisation and declined it.
+
+**That asymmetry is the defence of the three-item list**, and it is why
+reversibility is the wrong test at exactly that boundary. CLAUDE.md's general
+rule is *reversible → do it and report*, and a relay is evidence like any
+other: usually good, occasionally stale, and you correct it when it is wrong.
+That works because the correction is cheap. **For an irreversible or
+outward-facing act there is no correction**, so the quality of the evidence
+stops being the question — what matters is that *any* evidence short of the
+owner's own words is a channel that can be stale, and you cannot tell which one
+you are holding.
+
+So the list — `make pin`, force push, deleting data, anything leaving this
+machine; genuine forks of intent; authority only he holds — **is a LIST and not
+a judgement call on purpose.** A judgement call would have passed here: the
+relay was plausible, the coordinator believed it, the nominated seat was the
+right one, and the tree was ready. Every input said yes except the one that
+counts.
+
+**The practical form:** for anything on that list, ask *"did he say this, or did
+someone tell me he said it?"* — and note that an agent relaying his authority
+secondhand is not him, however senior, and that a coordinator nominating you is
+not an authorisation either. For everything else, believe the relay and correct
+it later.
+
+**The corollary that catches the other three rows:** when a relay describes a
+STATE ("working", "idle", "done"), ask what observation would have produced that
+word, and whether that observation is about your question. "Finished a group"
+and "free" are different facts about the same seat.
+
 ## "TWO READINGS THAT FAIL THE SAME WAY ARE ONE READING" IS NOT MISSING — IT IS NOT FIRING, AND HERE IS WHAT THAT LOOKS LIKE THREE TIMES IN ONE DAY
 
 Measured 2026-09-20 (frankS). **This section proposes no rule.** CLAUDE.md

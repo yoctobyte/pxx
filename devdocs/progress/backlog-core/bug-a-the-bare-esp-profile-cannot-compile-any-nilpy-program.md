@@ -34,8 +34,14 @@ diagnostic says so — so this is not the user program's doing.
 ## Why nothing caught it
 
 `test-esp-bare`'s rows are Pascal fixtures. **Nothing anywhere compiles a
-`.npy` for `--esp-profile=bare`**, so the wall produces no red and no ticket; it
-is an absence, and an absence no count reports is worse than a failure.
+`.npy` for `--esp-profile=bare`**, so the wall produces no red and no ticket.
+
+**This is a coverage hole that produces SILENCE, which is the shape nobody
+finds by watching for reds.** A broken row goes red and someone bisects it; a
+row that does not exist generates nothing at all, and the profile reads as
+healthy for exactly as long as nobody tries it. It was found only because a
+DIFFERENT ticket needed this profile as a control — i.e. by someone walking in
+from outside, which is the only way an absence is ever found.
 
 ## Why it matters beyond itself
 
