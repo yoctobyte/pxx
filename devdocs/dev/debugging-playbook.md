@@ -29607,3 +29607,110 @@ most likely to trip over YESTERDAY'S.
 **So carry the control at the smallest shape that still fails for the right
 reason, and record in the fixture header WHY the fuller shape is not the
 control.** Otherwise the next reader deletes the small one as redundant.
+
+## A FIX THAT REMOVES A DIAGNOSTIC IS NOT VERIFIED BY THE DIAGNOSTIC DISAPPEARING — LOUD BECOMING SILENT IS A REGRESSION THAT PASSES EVERY "IS IT FIXED" CHECK
+
+Measured 2026-09-20 (frankH, Track N), closing `Coast has no method get` on
+three tuxspaceprogram files.
+
+The bug: with `class Coast` in scope, the `coast` of `u.coast("x")` was resolved
+by a case-FOLDING lookup to the class, so `self.info = u.coast("x")` recorded a
+Coast-typed field and the first `info.get("mass")` was refused — naming a class
+the source never wrote, at a line far from the assignment that decided the type.
+
+The prepared fix made the lookups exact-case. Rebuilt, re-ran the repro: **the
+error was gone.** That is the moment the session was one keystroke from landing
+a strictly worse tree. The program now COMPILED and `print(h.info)` emitted
+64MB of memory: exactness removed the wrong class and left the field typed as a
+STRING holding a dict pointer. **The patch converted a loud compile error into a
+silent wrong value**, and every check of the form "does it still error" passes
+for it.
+
+The only reason it was caught is that the fixture prints the VALUE. A fixture
+asserting "the program compiles" — which is what a wall-clearing census asserts,
+and what it is natural to write when the symptom was a refusal — would have
+certified it.
+
+**So: where a wrong TYPE is the defect, the assertion must be the VALUE.** A
+wrong type has exactly two behaviours, refusing and answering, and a fix that
+moves it from the first to the second looks identical to a fix from the outside.
+This is "match the assertion class to the defect class" (CLAUDE.md) in the
+direction that rule does not spell out: there the concern is an assertion too
+weak to SEE the defect; here the assertion sees the OLD defect perfectly and is
+blind to the one the fix introduces.
+
+The corollary is about census-driven work specifically. A census whose oracle is
+"does it compile" cannot distinguish a file that was fixed from a file whose
+defect went quiet, and a wall-clearing session is reading exactly that oracle
+all night. **Before crediting a census row to a fix, run the file and look at
+what it prints.**
+
+### The mechanism under it, which is where the real fix was
+
+The folded class was one layer above the damage. A token typed `tyClass` never
+reaches the call-form arm of the expression walk, so the argument group is never
+skipped and **the walk widens over the ARGUMENT**. Holding the collision fixed
+and varying only the argument, via a `PXXDBG=n.flddecl` probe added for this:
+
+| right-hand side | field kind decided |
+| --- | --- |
+| `u.coast("x")` | 23 AnsiString — the argument's type |
+| `u.coast(1)` | 13 Int64 |
+| `u.coast(1.5)` | 19 Double |
+| `u.coast()` | 6 tyClass, rec=17 — the RECEIVER's class |
+| `u.coast(oid)` | 6 tyClass, rec=17 |
+| no collision (control) | 22 tyVariant |
+
+None of that is visible from the error text, and the table is what named the
+real cause. **Two reads folded, not one** — `PyTypeFromTokenIndex`'s answer and
+the call-form arm's own `IsClassType` guard — so fixing either alone leaves the
+shape broken in a different way, which is how the first patch produced garbage
+rather than either the old error or the right answer. Fixed as one statement
+(Python is case-sensitive) with `PyIsClassTypeExact`, which already existed in
+the tree for this family. The colliding shape now decides tk=22, **identical to
+the non-colliding control** — the test for this kind of fix is not "is the new
+answer right" but "is it the SAME answer the working spelling gets".
+
+### And the instrument had to be built first
+
+Nothing in the tree could show what a field pre-pass DECIDED. A field's type is
+chosen in one pre-pass and consumed hundreds of lines away, so a wrong answer
+never surfaces where it was made. `PXXDBG=n.flddecl` (kind, rec id, signature,
+annotated-or-inferred) was added for this investigation and kept; the table
+above is its raw output. **When a defect's symptom is far from its decision,
+the cheap move is a probe at the DECISION, not more reasoning at the symptom.**
+
+## WORK CARRIED ACROSS A CONTEXT BOUNDARY IN AN UNCOMMITTED TREE IS INVISIBLE TO THE PREDICTION YOU MAKE AFTER THE BOUNDARY
+
+Measured 2026-09-20 (frankH, Track N). A census prediction was sent to the
+coordinator as "43 OK, the single addition being tsp/settings.py". The commit
+about to be measured contained THREE fixes, not one: `os.path.relpath` and
+`os.pardir`/`curdir`/`extsep` were still uncommitted in the working tree when
+the session resumed after a compaction, and `git add -A` swept them in with the
+`os.environ` work. The true answer was 44, with two files moving.
+
+The reconstruction was made from **what the session remembered doing**, and what
+it remembered was the LAST thing it did rather than the whole diff. Nothing in
+the exchange marked the gap; the number was specific, confidently sourced, and
+wrong by exactly the work that had crossed the boundary.
+
+The instrument that answers it costs one command and **was already in hand**:
+the git-status snapshot handed to the session at startup listed both modified
+files. It was read as scene-setting context rather than as evidence about the
+session's own pending delta — which is the failure, because that snapshot is
+precisely a statement of what the next commit will contain.
+
+**So: derive a prediction about a commit from the DIFF that is about to be
+committed, never from the work you remember doing.** This is CLAUDE.md's "derive
+a summary from the tree you are COMMITTING TO, never from the measurement that
+motivated the fix" arriving in a PREDICTION instead of in a summary, and the
+prediction is the worse host: a summary is read later by someone who can check
+it, while a prediction is consumed immediately by a coordinator who cannot.
+
+The recovery that made it a prediction rather than a story: the corrected number
+and both expected files were written to a file **before** the census ran, along
+with the one file predicted NOT to move and why (`tsp/menu.py` advances to a
+different wall). It came back exactly so. **A prediction corrected before the
+run is a prediction; corrected after, it is a reconstruction** — and the
+distinction is only visible if the correction has a timestamp earlier than the
+result.

@@ -1,0 +1,56 @@
+# Python is case-sensitive about names; the NilPy type scanners folded case,
+# Pascal-style. With `class Coast` in scope, the `coast` of `u.coast("x")` was
+# read as the CLASS -- and the cost was not the wrong class. A token typed as a
+# class never reaches the call-form arm, so the argument group was never
+# skipped and the walk WIDENED OVER THE ARGUMENT: the field took the argument's
+# type. `self.info = u.coast("x")` became a STRING holding a dict pointer, and
+# printing it walked memory.
+#
+# Every row below is diffed against CPython. The two controls are what make the
+# axis readable: renaming the class, or renaming the method, removes the
+# collision and both compiled on the pin -- so a row that merely passes proves
+# nothing unless the COLLIDING spelling is present, which is why it is first.
+
+
+class Coast:
+    def __init__(self):
+        self.k = 1
+
+
+class Universe:
+    def coast(self, oid: str) -> dict:
+        return {"mass": 7, "oid": oid}
+
+    def zoast(self, oid: str) -> dict:
+        return {"mass": 8}
+
+
+class Holder:
+    def __init__(self, u: Universe):
+        self.info = u.coast("x")          # the collision
+        self.other = u.zoast("y")         # control: no class spells `zoast`
+
+
+u = Universe()
+h = Holder(u)
+
+# the value, which is what the field being a str destroyed
+print(h.info.get("mass"))
+print(h.info.get("oid"))
+print(h.other.get("mass"))
+print(h.info)
+
+# the argument's type must not become the field's type: each of these took the
+# argument's own kind before the fix (str / int / float), and the receiver's
+# class when there was no argument at all
+print(sorted(h.info.keys()))
+
+# the class itself still constructs, under its OWN exact spelling
+c = Coast()
+print(c.k)
+
+# ...and a LOCAL through the same colliding spelling, which already worked and
+# must keep working -- the local path and the field path are two spellings of
+# one question
+x = u.coast("z")
+print(x.get("oid"))

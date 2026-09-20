@@ -4954,6 +4954,14 @@ test-nilpy: $(COMPILER)
 	# for this row's diff to read.
 	./$(COMPILER) test/test_nilpy_os_environ_subscript_raises_where_get_answers_none.npy $(TESTTMP)/test_nilpy_environ_subscript26
 	PXX_ENVPROBE=hello $(TESTTMP)/test_nilpy_environ_subscript26 | diff -u test/test_nilpy_os_environ_subscript_raises_where_get_answers_none.expected -
+	# Python is case-sensitive: a METHOD spelled like a class in another case is
+	# not that class. The cost was not the wrong class -- a token typed as a
+	# class never reached the call-form arm, so the argument group was never
+	# skipped and the walk widened over the ARGUMENT, making the field a string
+	# holding a dict pointer. Both controls (rename the class, rename the
+	# method) compiled on the pin, so the colliding spelling has to be present.
+	./$(COMPILER) test/test_nilpy_a_method_named_like_a_class_in_another_case_is_not_that_class.npy $(TESTTMP)/test_nilpy_casemeth26
+	$(TESTTMP)/test_nilpy_casemeth26 | diff -u test/test_nilpy_a_method_named_like_a_class_in_another_case_is_not_that_class.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

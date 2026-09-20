@@ -5626,6 +5626,34 @@ end;
   a same-named record is the trap FindUClassNonRecord exists for.
   -1 when nothing names a class. }
 function PyQualifiedCtorClass(qualTok, memberTok: Integer): Integer;
+{ EXACT-CASE throughout, because every question this helper is asked is about
+  PYTHON source and Python is case-sensitive about names. FindUClassInUnit and
+  FindUClassNonRecord both fold case, Pascal-style, which is right for the
+  language they were written for and wrong here: a module holding
+
+      class Coast: ...
+      class Universe:
+          def coast(self, oid) -> dict: ...
+
+  had `u.coast("x")` resolved to the CLASS Coast, so `self.info = u.coast("x")`
+  recorded a Coast-typed field and the first `info.get("mass")` was refused with
+  `Coast has no method get` -- a message naming a class the source never wrote
+  at a line far from the assignment that decided it. Two controls isolate the
+  axis: renaming the class compiles, renaming the method compiles.
+
+  THE FLAT FALLBACK IS THE HALF THAT MATTERS AND IT IS NOT ONLY A CASE
+  PROBLEM. It runs when the qualifier is not a unit at all -- in the shape
+  above `u` is a PARAMETER, FindUnitOrAlias answers -1, the unit arm is skipped
+  entirely, and the fallback then decides on the MEMBER name alone with the
+  qualifier discarded. Exactness narrows that to a collision the source really
+  spelled; it does not remove it. RESIDUAL, stated as a mechanism so it
+  survives this fix: a method spelled EXACTLY like a visible class, reached
+  through a VALUE qualifier, still resolves as a construction, because the
+  fallback ignores the qualifier rather than merely folding its case. What
+  would spring it is a module declaring `class X` and any object with a method
+  `X`; what would retire it is giving this helper the evidence to know its
+  qualifier names a value, which its two call sites have and it does not.
+  bug-n-a-qualified-method-is-taken-by-a-case-folded-class }
 var u: Integer; nm, rsv: AnsiString;
 begin
   Result := -1;
@@ -5633,16 +5661,21 @@ begin
   u := FindUnitOrAlias(LowerCase(GetTokenStr(qualTok)));
   if u >= 0 then
   begin
-    Result := FindUClassInUnit(nm, u);
+    if PyIsExactCtorNameInUnit(nm, u) then Result := FindUClassInUnit(nm, u);
     if (Result >= 0) and UClsIsRecord[Result] then Result := -1;
     if Result < 0 then
     begin
+      { the reserved-word spelling: the source writes `m.array(...)` and the
+        unit declares `array_`, so exactness is asked about the MAPPED name --
+        which is the one the unit actually spells. }
       rsv := PyMapReservedMember(nm);
-      if rsv <> nm then Result := FindUClassInUnit(rsv, u);
+      if (rsv <> nm) and PyIsExactCtorNameInUnit(rsv, u) then
+        Result := FindUClassInUnit(rsv, u);
       if (Result >= 0) and UClsIsRecord[Result] then Result := -1;
     end;
   end;
-  if Result < 0 then Result := FindUClassNonRecord(nm);
+  if (Result < 0) and PyIsExactCtorName(nm) then
+    Result := FindUClassNonRecord(nm);
 end;
 
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
@@ -6070,10 +6103,17 @@ begin
   if (startIdx + 2 < endIdx) and (Tokens[startIdx].Kind = tkIdent) and
      (Tokens[startIdx + 1].Kind = tkDot) and (Tokens[startIdx + 2].Kind = tkIdent) and
      (startIdx + 3 < endIdx) and (Tokens[startIdx + 3].Kind = tkLParen) and
-     ((FindUClass(GetTokenStr(startIdx + 2)) >= 0) or
+     ((PyIsExactCtorName(GetTokenStr(startIdx + 2)) and
+       (FindUClass(GetTokenStr(startIdx + 2)) >= 0)) or
       (PyQualifiedCtorClass(startIdx, startIdx + 2) >= 0)) then
   begin
-    ctorCi := FindUClass(GetTokenStr(startIdx + 2));
+    { exact-case, for the reason PyQualifiedCtorClass carries: this is the
+      same folding one call earlier, and guarding only the CONDITION above
+      would let the arm be entered correctly and then pick the folded class. }
+    if PyIsExactCtorName(GetTokenStr(startIdx + 2)) then
+      ctorCi := FindUClass(GetTokenStr(startIdx + 2))
+    else
+      ctorCi := -1;
     { ...unless the unit names it under the reserved-word spelling only }
     if ctorCi < 0 then ctorCi := PyQualifiedCtorClass(startIdx, startIdx + 2);
     ctorEnd := PyEndOfGroup(startIdx + 3, endIdx);
@@ -6278,6 +6318,30 @@ begin
       Continue;
     end;
     tk := PyTypeFromTokenIndex(i);
+    { A name that matches a class only by CASE FOLDING does not denote that
+      class, because Python is case-sensitive about names and this walk is
+      reading PYTHON source. PyTypeFromTokenIndex folds, Pascal-style, so in
+
+          class Coast: ...
+          class Universe:
+              def coast(self, oid) -> dict: ...
+
+      the `coast` of `u.coast("x")` was typed as the CLASS Coast. What that
+      cost is not the wrong class -- it is that a token typed tyClass never
+      reaches the call-form arm below, so the argument group was never skipped
+      and the walk WIDENED OVER THE ARGUMENT: the field took the argument's
+      type, measured as str for "x", Int64 for 1, Double for 1.5, and the
+      RECEIVER's class for no argument at all. `self.info = u.coast("x")`
+      became a string holding a dict pointer and `print(self.info)` walked
+      memory. The non-colliding spelling answers tyVariant here and is correct
+      at run time through dynamic dispatch, which is what this restores.
+      Guarded to a name that really does resolve to a user class by folding,
+      so builtin type names -- whose spelling IS exact -- are untouched.
+      bug-n-a-qualified-method-is-taken-by-a-case-folded-class }
+    if (tk = tyClass) and (Tokens[i].Kind = tkIdent) and
+       (FindUClassNonRecord(GetTokenStr(i)) >= 0) and
+       (not PyIsClassTypeExact(GetTokenStr(i))) then
+      tk := tyUnknown;
     { A name that merely SPELLS a class but is BOUND in this def denotes the
       local, not the class: `Box = Word(44); return Box.get() + v` typed the
       return tyClass (identity 0) from the token, so the Int64 the body then
@@ -6337,7 +6401,10 @@ begin
         { Call form `name(...)`: take the callee's return type and skip the
           whole argument group so arg tokens do not pollute the widening. }
         if (i + 1 < endIdx) and (Tokens[i + 1].Kind = tkLParen) and
-           ((not IsClassType(name)) or PyIsBuiltinConvName(name)) and
+           { EXACT, for the reason the folding note above carries: IsClassType
+             folds, so a member spelled like a class in another case was
+             refused entry here and its argument group was never skipped. }
+           ((not PyIsClassTypeExact(name)) or PyIsBuiltinConvName(name)) and
            { ...but NOT a method on a value bound in this def — see
              PyDottedRootIsLocal. Such a name falls through to this scan's
              tyVariant answer, which is the honest "cannot type it here" and
@@ -42549,6 +42616,16 @@ begin
     fldRec := REC_NONE;
     fldSig := -1;
   end;
+  { PXXDBG=n.flddecl -- what this pre-pass DECIDED for `self.<name> = <rhs>`,
+    which nothing else could show. A field's type is chosen here and consumed
+    hundreds of lines away, so a wrong answer surfaces as a member call failing
+    against a type the source never mentions. Prints the field, the kind and
+    the rec id; annotated fields print too, so an annotation and an inference
+    can be told apart at the point of decision. }
+  if PxxDbgEnabled('n.flddecl') then
+    WriteLn('PXXDBG n.flddecl self.', GetTokenStr(j + 2),
+            ' tk=', Ord(tk), ' rec=', fldRec, ' sig=', fldSig,
+            ' annotated=', Ord(fldAnn > 0));
 end;
 
 procedure PyCollectClassFieldJoins(ci, bodyStart, bodyEnd: Integer);
