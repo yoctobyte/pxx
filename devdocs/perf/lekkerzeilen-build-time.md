@@ -109,3 +109,108 @@ rule it illustrates.
 - **`.symtab` is empty even under `-g`**, so `nm` reports nothing; `pinned prog
   out` also writes `out.map`. Nearest-preceding-symbol always answers, so print
   the offset and disassemble anything not plausibly inside a body.
+
+---
+
+# FOUND: an imported module costs ~13x per function what the same code costs inline
+
+**And the cost does not depend on anything referencing it.**
+
+## The measurement
+
+Identical function bodies, written two ways: all in the main `.npy`, or moved
+verbatim into one module that main imports. Same compiler, same CWD, same flags,
+back to back.
+
+| functions | inline | through 1 import | ratio |
+|---|---|---|---|
+| 100 | 2.79 s | 6.81 s | 2.4x |
+| 200 | 2.95 s | 11.41 s | 3.9x |
+| 400 | 3.75 s | 20.35 s | **5.4x** |
+
+Net of the 2.40 s fixed cost, per function: **inline ~3.4 ms, imported ~45 ms.**
+Both linear in the function count over this range; the ratio grows only because
+the fixed term is a shrinking share of the inline arm.
+
+**The output is the same program.** 400 functions, inline against imported:
+
+    inline    code=1809848B  data=129204B  procs=2624
+    imported  code=1809866B  data=129292B  procs=2625
+
+18 bytes of code and one proc apart — and **5.4x the time to produce it.**
+
+## The discriminator: an UNREFERENCED import costs the same
+
+`main.npy` = `import mod0` + `print(1)`, touching nothing in the module:
+
+    unused-import  WALL 20.08 s      (referenced: 20.35 s)
+
+**So this is not name resolution, not lookup, not per-reference work.** The cost
+is incurred by compiling the imported module at all. That is what makes it a
+clean target: nothing about the importing program's use of the module changes it.
+
+## Module count is LINEAR — it is the per-module rate that is wrong
+
+K=400 functions per module, varying the number of modules:
+
+| modules | wall | s/module |
+|---|---|---|
+| 1 | 20.13 s | 20.13 |
+| 2 | 38.64 s | 19.32 |
+| 4 | 78.19 s | 19.55 |
+| 8 | 170.37 s | 21.30 |
+
+Flat. **There is no cross-module quadratic**, which is the reassuring half: the
+architecture scales, the per-module constant is 13x too big.
+
+**This inverted my prediction and that is why it was worth running.** I expected
+splitting to HELP, on the theory that the single-file quadratic below was the
+mechanism. The same 3200 functions take 53.25 s in one file and 170–173 s spread
+over eight modules — **3.2x worse, not better.** I had a reason and the reason
+was wrong; one experiment cost four minutes.
+
+## A SEPARATE, SECOND effect: single-file compilation is near-quadratic
+
+Everything above is linear. Within ONE file, it is not — N functions in one
+`.npy`, net of the 2.40 s fixed cost:
+
+| N | variable | ratio | implied exponent |
+|---|---|---|---|
+| 100 | 0.20 s | — | — |
+| 200 | 0.42 s | 2.10 | 1.07 |
+| 400 | 1.16 s | 2.76 | 1.47 |
+| 800 | 3.76 s | 3.24 | 1.70 |
+| 1600 | 13.63 s | 3.62 | 1.86 |
+| 3200 | 50.85 s | 3.73 | **1.90** |
+
+Converging on 2. Below ~400 functions the per-function cost is flat at ~3.4 ms,
+so **this term is invisible at the sizes real modules have** and does not explain
+lekkerzeilen. It is filed as its own finding because a 3200-function file is a
+generated-code shape someone will eventually produce. It is plausibly the same
+term `perf-c-parse-codegen-large-file-superlinear` saw on sqlite3.c.
+
+## What this says about the 125 s
+
+lekkerzeilen is ~35 modules, every one of them imported. **The dominant term in
+the owner's flagship demo is the one measured above**, and it is a per-module
+constant rather than anything about the program's size or shape. Nothing here
+identifies WHERE inside the import path the time goes — that needs the sampling
+profile, and the profile is the next step, not a conclusion I am drawing now.
+
+**Not yet measured, and each would sharpen the ticket:** whether the cost tracks
+declarations, lines, or bytes rather than function count; whether a module with
+one function and 400 statements behaves like one with 400 functions; whether
+class-heavy modules differ from function-heavy ones; and whether `.pas` imports
+show the same rate or only `.npy` ones.
+
+## Fixed cost: 2.40 s, and it is NOT the story
+
+A zero-byte `.npy` — the whole NilPy runtime, `pylib.pas` + `pyeval.pas`:
+
+    2.48 / 2.45 / 2.40 s      code=1384312B  procs=2224
+
+**1.9% of the 125 s.** I went looking for a large fixed term because of a rule I
+had written the same evening about fixed additive terms setting ceilings, and it
+is not there — `bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost` is in
+`done/` and stayed fixed. Recorded because a refuted hypothesis is worth exactly
+one line to the next person who has it.
