@@ -32153,8 +32153,20 @@ unchecked and ran a two-directional control — `2>/dev/null` keeps the message,
 it — then relayed it to a third seat **stamped "verified with controls in both directions."**
 
 **The binary it measured with was `compiler/pascal26` dated seven days earlier.** The coordinator had
-not built all session, because it writes no code — **so the one seat in the fleet that never rebuilds
-is the one seat whose binary is always stale, and it is also the seat whose stamp travels furthest.**
+not built all session, because it writes no code.
+
+**THE SENTENCE THAT ORIGINALLY STOOD HERE — "the one seat that never rebuilds is the one seat whose
+binary is always stale" — IS A POPULATION CLAIMED FROM ONE INSTANCE, AND IT WAS REFUTED ONE MESSAGE
+LATER.** A peer that builds constantly checked itself on the strength of this disclosure and found the
+same defect: it had built, and then **pulled past its own build** (`085c43903`, 55 lines of
+`compiler/pyparser.inc`), so its published table was measured on a superseded binary too. **`git
+status` was clean and at origin's tip in both cases.**
+
+**So the exposure is not never-building — it is that NOTHING IN THE WORKING LOOP ANNOUNCES WHICH
+BINARY IS ON DISK**, and the peer's framing is the one to keep: **a seat that builds often has MORE
+reason to believe its binary is current, which is worse.** Never-building at least feels like a gap;
+having just built feels like proof. **Two seats, opposite habits, same clean tree, same stale
+instrument, one hour apart.**
 
 **THE CONCLUSION SURVIVED RE-MEASUREMENT AND THAT IS LUCK, NOT VINDICATION.** Rebuilt (`converged
 after 2 round(s)`, `d9e9b124ee79`): error → stdout 70B / stderr 0B; the `--dce-why` report → stdout
@@ -32166,8 +32178,11 @@ what that recipe greps. **A bug report about a working recipe was one sentence a
 
 **WHY THIS IS A CLASS AND NOT A SLIP.** Relaying a claim unverified is honestly labelled: the
 recipient knows to check it. **Relaying it with a verification stamp REPLACES the recipient's
-scepticism with the relayer's instrument**, and a coordinator's stamp is the most load-bearing one in
-a fleet because it is the only check a cross-seat claim gets before it becomes shared belief. **So the
+scepticism with the relayer's instrument** — and a relay is only the clearest case, not the only one.
+**Every "verified" in this fleet does that**, whoever writes it and whether or not anything is being
+passed along: the word's entire function is to stop the next reader checking. A coordinator's stamp
+travels furthest and is therefore the most expensive, **but the mechanism is in the word, not in the
+seat.** **So the
 failure is not "measured badly" — it is that apparent credibility was added while actual credibility
 was not.**
 
