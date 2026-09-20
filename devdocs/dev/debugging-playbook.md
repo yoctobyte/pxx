@@ -31798,6 +31798,29 @@ LAST thing it prints, not the first, because every capture layer keeps the tail.
 findings, always** — or read the guard by running it directly, which is the only reading that has no
 window at all. **Never quote a member guard's findings out of an aggregate's log.**
 
+**AND THE SECOND HALF, WHICH IS WHY THIS NEEDS A COORDINATOR RATHER THAN BETTER DISCIPLINE PER SEAT:
+A SEAT CANNOT SEE WHICH AGGREGATE ITS CHANGE LANDS IN.** frankb-8e's phrasing, 2026-09-20, and it is
+the part saturation does not explain on its own: *"What I would not have caught unaided is that
+`check_test_wiring.py` lives inside `tools-devtest` at all; I ran my own gate and the NilPy tier, and
+neither reaches it."* **Both its gates were green and both were honest.** Verified: `tools/gate.sh:941`
+runs that checker only as `--since origin/<branch>`, and the CENSUS mode reaches a seat solely through
+`tools/check_test_wiring_devtest.py` and `tools/test_wiring_gate_devtest.py`, which are members of the
+`tools/*devtest*.py` glob — a set no per-fix loop enumerates. **This is not the topic collision git
+cannot see; it is a seat with no reason to know which job it is inside**, and no per-seat gate can
+close it by construction, because you cannot gate on an aggregate you do not know you are a member of.
+
+**AND HERE IS THE PART THAT PAYS: CLEARING AN AGGREGATE TO ZERO RED BUYS YOU A DISCRIMINATION PROOF
+YOU CANNOT BUY ANY OTHER WAY, AND ONLY TRAFFIC CAN DELIVER IT.** Also 8e's, and it is the sharpest
+thing said about this repair: *"An exemption census that could not detect a newly unwired file would
+have passed silently here and I would never have known it was broken."* **A green census is the one
+observation that cannot distinguish a working census from a broken one** — so `165 green, zero red`
+was, on its own evidence, *unfalsified* rather than proven. Within a day a real new file arrived that
+nothing ran, **the guard named it before any human did**, and the exemption machinery absorbed it
+correctly. That is the positive control arriving **from traffic, in the only direction that proves
+anything**, and it was only observable because the aggregate had been de-saturated first: behind a
+standing red it would have been one more `still_red`. **De-saturating a job is what converts its future
+greens from an absence of evidence into evidence.**
+
 ## A CORRECTION WHOSE HEADLINE IS VERIFIED LENDS ITS CREDIBILITY TO AN EXPLANATION NOBODY MEASURED
 
 Measured 2026-09-20. **Every rule in this file about invented quantifiers is written from the MAKING
