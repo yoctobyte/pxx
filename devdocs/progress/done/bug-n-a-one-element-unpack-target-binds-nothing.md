@@ -68,3 +68,7 @@ eleven rows against CPython 3.14.4, carrying both one-element spellings, both
 no-comma forms, both multi-element forms, the starred target, the nested group,
 and `struct.unpack_from` — the shape it was found on. Pinned control reds at the
 one-tuple with the original `undefined variable (n)`. `tsp/stars.py` compiles.
+
+Log: fixed and closed, commit dc17f567e. That sha is the FIX — the parser
+change, the fixture and the Makefile row — and the close rode in the same
+commit; there is no separate close to cite.
