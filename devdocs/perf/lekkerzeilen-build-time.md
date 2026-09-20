@@ -169,6 +169,29 @@ mechanism. The same 3200 functions take 53.25 s in one file and 170–173 s spre
 over eight modules — **3.2x worse, not better.** I had a reason and the reason
 was wrong; one experiment cost four minutes.
 
+## NARROWED: it is the DECLARATIONS, not the bodies
+
+Same 400-function imported module, bodies emptied to `pass`:
+
+| module contents | wall |
+|---|---|
+| 400 `def`s, real bodies (4 lines each) | 20.11 s |
+| 400 `def`s, `pass` bodies | **17.81 s** |
+
+**Emptying every body saves 2.3 s of 20.1 s.** 88% of the cost survives the
+removal of all body content, so the ~44.5 ms is charged **per declaration** and
+is spent at registration rather than in parsing or lowering a body.
+
+That is what a profile should be pointed at, and this is a better subject than
+anything in the demo: deterministic, headless, no display, 18 seconds.
+
+**Note what this does NOT say.** It does not say the work is redundant, and it
+does not name a routine. `UCls`-scanning appears in two open correctness tickets
+(`feature-n-register-the-class-shells-…`, `feature-n-register-every-module-s-classes-…`)
+and the temptation is to connect them — but this reproducer declares no classes
+and makes no method calls, so any such link is a guess and is recorded here as
+one, not as a finding.
+
 ## A SEPARATE, SECOND effect: single-file compilation is near-quadratic
 
 Everything above is linear. Within ONE file, it is not — N functions in one
