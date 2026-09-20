@@ -360,3 +360,5 @@ ahead"*, so this is recorded as a starting point for whenever that happens and
 is not a line of work. If someone does open it: the cheap repair is to skip the
 lookup when the receiver's RTTI carries no `__prop_set_` accessors at all, which
 is a per-class fact and cacheable, not a per-store one.
+
+Log: 2026-09-20 frankb-8e — resolved by PyPropertySet in compiler/builtin/pylib.pas, commit 12806ea63. Fixture and kind-coverage fixture wired into test-nilpy in the same commit; NilPy tier green at 1045 rows, gate quick GREEN.
