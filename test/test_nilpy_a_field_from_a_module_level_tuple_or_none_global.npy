@@ -1,0 +1,63 @@
+# A field assigned from a module-level global was typed by reading the global's
+# literal -- and the reader knew scalars, LISTS and DICTS but not TUPLES, and
+# had no arm for None at all. Both shapes were refused outright with "cannot
+# infer the type of field self.v - annotate it", demanding an annotation for
+# code that needs none in Python, while the list and dict spellings of the same
+# idea compiled two lines away. `_NO_WIND = (0.0, 0.0)` then
+# `self.wind = _NO_WIND` is the shape it was found on (lekkerzeilen, by
+# lekkerzeilen-7a); `_DEFAULT = None` is one of the commonest module-level
+# bindings there is.
+#
+# Python decides a TUPLE on the COMMA and never on the parentheses, so the
+# grouping row below is not decoration: it is the other side of the
+# discriminator. `(1 + 2)` must stay an INT. Reading it as a container would
+# type an int field as a variant -- a silent wrong type, in the direction no
+# error reports.
+
+_T_FLOATS = (0.0, 0.0)
+_T_INTS = (1, 2, 3)
+_T_EMPTY = ()
+_NONE = None
+_GROUPED = (1 + 2)
+_LIST = [0.0, 0.0]
+_DICT = {"a": 1}
+_SCALAR = 1.0
+_TEXT = "s"
+
+
+class Boat:
+    def __init__(self):
+        self.wind = _T_FLOATS
+        self.ints = _T_INTS
+        self.empty = _T_EMPTY
+        self.opt = _NONE
+        self.grouped = _GROUPED
+        self.lst = _LIST
+        self.dct = _DICT
+        self.scalar = _SCALAR
+        self.text = _TEXT
+
+    def show(self):
+        print(self.wind)
+        print(self.ints)
+        print(self.empty)
+        print(self.opt)
+        print(self.grouped)
+        print(self.lst)
+        print(self.dct)
+        print(self.scalar)
+        print(self.text)
+
+
+b = Boat()
+b.show()
+
+# the grouped global is an INT and must behave as one, not as a container
+print(b.grouped + 1)
+
+# a tuple field is indexable and has a length, as CPython's is
+print(b.ints[1])
+print(len(b.wind))
+
+# None compares as None, which is what a field holding it is for
+print(b.opt is None)

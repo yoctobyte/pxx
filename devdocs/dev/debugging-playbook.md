@@ -29773,6 +29773,38 @@ small — one flag set by the comma and by nothing else, replacing a target COUN
 at the two gates that decide whether a single value is indexed or stored whole,
 rather than a special case per spelling.
 
+**RECURRED THE SAME DAY IN A SECOND, UNRELATED SUBSYSTEM, which is what turns
+this from a worked example into a rule.** Hours after the unpack fix, a field
+assigned from a module-level global was refused — `_NO_WIND = (0.0, 0.0)` then
+`self.wind = _NO_WIND`. The literal reader knew scalars, LISTS and DICTS and had
+no arm for a TUPLE, so `[0.0, 0.0]` and `{"a": 1}` compiled two lines from the
+tuple that did not. Same discriminator, stated the same way: a tuple is decided
+by the COMMA and never by the parentheses.
+
+Two things the pair shows that neither instance shows alone:
+
+- **The discriminator is a property of the LANGUAGE, so it recurs wherever the
+  construct does** — a target list, a literal, and anywhere else a `(` has to be
+  read. A codebase that states it once per site will get it right at some sites
+  and wrong at others, and the wrong ones will not look related: one presented
+  as "undefined variable" at an assignment target, the other as "cannot infer
+  the type of field — annotate it". Grep for the OTHER READERS of the same
+  punctuation when you fix one.
+- **The second direction is where the silence is, in both.** In the target list,
+  reading `(a)` as a tuple binds the wrong thing. In the literal reader, treating
+  `(1 + 2)` as a container types an int field as a VARIANT — a wrong type, with
+  no diagnostic, in the direction nothing reports. Both fixes assert the
+  grouping row, and that row is not decoration; it is the half a fix written
+  only from the failing report will omit.
+
+The reporter's own diagnosis is also instructive, and it was careful and wrong
+in an informative way: they had ruled out the field NAME and the cross-module
+read, both correctly, and suspected the package. **The axis was the global's
+LITERAL KIND** — invisible to them, because the list and dict spellings of the
+same idea worked. When a reporter has eliminated the obvious axes and the bug
+still looks arbitrary, ask what else varies between the working and failing
+lines that neither of you has named.
+
 ### Put the invariant where the control flow cannot miss it
 
 The `Continue` above is worth generalising. A rule written as a loop TAIL is

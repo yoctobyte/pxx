@@ -4971,6 +4971,12 @@ test-nilpy: $(COMPILER)
 	# the fix.
 	./$(COMPILER) test/test_nilpy_a_one_element_unpack_target_binds_the_element.npy $(TESTTMP)/test_nilpy_onetuple26
 	$(TESTTMP)/test_nilpy_onetuple26 | diff -u test/test_nilpy_a_one_element_unpack_target_binds_the_element.expected -
+	# A field from a module-level global: the literal reader knew scalars, lists
+	# and dicts but not TUPLES, and had no arm for None. The grouping row
+	# `(1 + 2)` is the other side of the discriminator and must stay an INT --
+	# Python decides a tuple on the COMMA, never on the parentheses.
+	./$(COMPILER) test/test_nilpy_a_field_from_a_module_level_tuple_or_none_global.npy $(TESTTMP)/test_nilpy_modtuple26
+	$(TESTTMP)/test_nilpy_modtuple26 | diff -u test/test_nilpy_a_field_from_a_module_level_tuple_or_none_global.expected -
 	./$(COMPILER) test/test_nilpy_any_params.npy $(TESTTMP)/test_nilpy_any_params26
 	tools/expect_same.sh test_nilpy_any_params26 "$$($(TESTTMP)/test_nilpy_any_params26)" "$$(printf 'got\ngot\n20\n3')"
 	./$(COMPILER) test/test_nilpy_method_return_types.npy $(TESTTMP)/test_nilpy_method_return_types26

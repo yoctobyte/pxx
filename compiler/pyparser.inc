@@ -4865,6 +4865,45 @@ begin
   end;
 end;
 
+function PyIsTupleLiteralAt(op: Integer): Boolean;
+{ Is the group opening at `op` a TUPLE LITERAL rather than parenthesised
+  grouping? Python decides on the COMMA and never on the parentheses -- the same
+  rule that decides a one-element unpack TARGET -- so `(0.0, 0.0)` and `()` are
+  tuples while `(1 + 2)` is an int in brackets. Stated once here because getting
+  it wrong in either direction is a silent wrong TYPE: reading `(1 + 2)` as a
+  container types an int field as a variant, and reading `(0.0, 0.0)` as an
+  expression leaves it untypeable.
+  bug-n-a-field-from-a-module-level-tuple-or-none-global-is-refused }
+var d, k: Integer;
+begin
+  PyIsTupleLiteralAt := False;
+  if (op < 0) or (op + 1 >= MainProgramTokCount) then Exit;
+  if Tokens[op].Kind <> tkLParen then Exit;
+  if Tokens[op + 1].Kind = tkRParen then
+  begin
+    PyIsTupleLiteralAt := True;      { `()` -- the empty tuple }
+    Exit;
+  end;
+  d := 0;
+  k := op;
+  while k < MainProgramTokCount do
+  begin
+    if Tokens[k].Kind in [tkLParen, tkLBrack, tkBegin] then Inc(d)
+    else if Tokens[k].Kind in [tkRParen, tkRBrack, tkEnd] then
+    begin
+      Dec(d);
+      if d <= 0 then Exit;           { closed with no depth-0 comma: grouping }
+    end
+    else if Tokens[k].Kind = tkEOF then Exit
+    else if (Tokens[k].Kind = tkComma) and (d = 1) then
+    begin
+      PyIsTupleLiteralAt := True;
+      Exit;
+    end;
+    Inc(k);
+  end;
+end;
+
 { Does ANY user class declare this method? (Records excluded — the closed-world
   dispatch below skips them too.) }
 function PyAnyClassDeclaresMeth(const mname: AnsiString): Boolean;
@@ -35651,10 +35690,24 @@ begin
           Result := tyDouble
         else if (Tokens[rhs].Kind in [tkTrue, tkFalse]) and PyBlkRhsEndsAt(rhs) then
           Result := tyBoolean
-        else if (Tokens[rhs].Kind in [tkLBrack, tkBegin]) and
+        else if ((Tokens[rhs].Kind in [tkLBrack, tkBegin]) or
+                 PyIsTupleLiteralAt(rhs)) and
                 PyBlkRhsEndsAfterGroup(rhs) then
-          { a list or dict literal — variant, exactly as the depth>0 arm of
-            PyCollectModuleLocalsAST types the same shape }
+          { a list, dict or TUPLE literal — variant, exactly as the depth>0 arm
+            of PyCollectModuleLocalsAST types the same shape. The tuple was
+            missing and is the commonest of the three at module level:
+            `_NO_WIND = (0.0, 0.0)` then `self.wind = _NO_WIND` in the same
+            file was refused outright with "cannot infer the type of field
+            self.wind - annotate it", while the list and dict spellings of the
+            same idea compiled. Found in lekkerzeilen by lekkerzeilen-7a. }
+          Result := tyVariant
+        else if (Tokens[rhs].Kind = tkNil) and PyBlkRhsEndsAt(rhs) then
+          { `_DEFAULT = None` -- a VALUE, and one of the commonest module-level
+            bindings there is. tyVariant is what PyMakeNone tags a None node and
+            what the expression scanner answers for a lone None, so this is the
+            existing answer reaching a global rather than a new one; without it
+            the field was refused and an annotation was demanded for a shape
+            that needs none in Python. }
           Result := tyVariant
         else
         begin
@@ -35694,7 +35747,8 @@ begin
               answer rather than a refusal -- widening an arm that exists,
               not adding a reader. }
             if (Result = tyUnknown) and
-               (Tokens[rhs].Kind in [tkLBrack, tkBegin]) then
+               ((Tokens[rhs].Kind in [tkLBrack, tkBegin]) or
+                PyIsTupleLiteralAt(rhs)) then
               Result := tyVariant;
           end;
         end;
