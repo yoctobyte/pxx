@@ -132,4 +132,4 @@ is the first-failure blindness this tree keeps recording, working in the useful
 direction for once: the surface scan sees walls the census cannot.
 
 ## Log
-- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 60d4d96b0.
