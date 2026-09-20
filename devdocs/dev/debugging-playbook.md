@@ -31797,3 +31797,45 @@ makes the inner one look handled.**
 LAST thing it prints, not the first, because every capture layer keeps the tail. **Remedy text before
 findings, always** — or read the guard by running it directly, which is the only reading that has no
 window at all. **Never quote a member guard's findings out of an aggregate's log.**
+
+## A CORRECTION WHOSE HEADLINE IS VERIFIED LENDS ITS CREDIBILITY TO AN EXPLANATION NOBODY MEASURED
+
+Measured 2026-09-20. **Every rule in this file about invented quantifiers is written from the MAKING
+end. This is the same failure at the RECEIVING end, and it is the easier one, because the social
+gradient runs toward agreeing.**
+
+A peer corrected this seat's count of hardcoded-`/tmp` offenders from **two** to **three**. **The
+headline was right and verifiable in one command.** The same message explained *why* the row had been
+missed — *"the guard globs compiled test sources of every frontend"*, i.e. the seat had read it as a
+NilPy problem and skipped a `.pas`. **That explanation was never measured and is false.** The real
+cause was mechanical: the aggregate pipes each failing guard through `tail -25` and the guard prints
+findings first and a 22-line remedy after, so the third row fell off the top. **The captured block was
+exactly 25 lines.**
+
+**The seat nearly accepted the whole message**, because the correcting party was demonstrably right
+about the number, and because accepting a correction gracefully is what a good collaborator does.
+**Had it done so, a cause neither party measured would be sitting permanently in a `done/` ticket,
+attributed to the person it was wrong about, with nobody left who would ever query it.** A ticket in
+`done/` is the worst possible resting place for an unmeasured claim: nothing re-reads it and nothing
+re-runs it.
+
+**THE MECHANISM IS THE ONE THIS FILE ALREADY NAMES, ARRIVING THROUGH A DOOR IT DOES NOT WATCH.** A
+verified clause lends credibility to an unverified clause beside it. Here the verified clause is
+*someone else's correction of you*, which is the most credible sentence anyone can send — it costs
+them something to write, it is checkable, and checking it confirms them. **Confirming the headline
+feels like confirming the message.**
+
+**The discharge is one question, asked of a correction exactly as it would be asked of a claim:**
+**"which half of this did they measure?"** A correction routinely carries a measured WHAT and a
+narrated WHY, because the person who found the defect was fixing it, not diagnosing your error — they
+have no access to your log, your command, or your reasoning. **They are the worst-placed person to
+explain your mistake and the best-placed to prove it happened.** Take the fact; re-derive the cause.
+
+**Corroborating instance the same day, same pair, opposite direction:** the correcting seat had itself
+just retracted a finding whose measured half (`ENV_ALLOW_PREFIXES = PXX_ TESTMGR_ LC_ QEMU_`, read off
+the source) carried an invented half (*"and nobody has built this"*, read off nothing) — **at the end
+of a paragraph whose earlier clauses were all verified**, and inside the very message teaching the
+other seat to grep for prior art first. **Both directions of this failure occurred between two seats
+within one hour, each while the author was mid-sentence about the neighbouring rule.** That is the
+finding worth keeping: **knowing the rule, having just written the rule, and being the person applying
+the rule to someone else are all compatible with breaking it in the next clause.**
