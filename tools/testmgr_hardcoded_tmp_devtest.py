@@ -295,6 +295,55 @@ Or add the path to ALLOWED_PATHS with a reason.
 """
 
 
+def report(what, rows):
+    """Print the findings LAST, and end with a line carrying their COUNT.
+
+    Not cosmetic, and measured 2026-09-20. `make tools-devtest` captures each
+    failing guard as `tail -25` (twice — once to the terminal, once to the reds
+    log), and this script used to print its findings FIRST and then 22 lines of
+    remedy, so the window held the remedy and only as many findings as fitted.
+
+    WHAT THAT COST AT THE THREE-FINDING MARK, MEASURED BY REPLAY rather than by
+    arithmetic — the old script and the three offending sources restored from
+    `0ae279ae9` and re-run: 27 lines, and `tail -25` drops lines 1 and 2, which
+    are the blank and the **FAIL header**. All three findings survived. So at
+    three rows the loss is the SENTENCE SAYING WHAT FAILED, not a row.
+
+    Where rows DO start going, measured the same way against the old script,
+    one synthetic offender added at a time:
+
+        findings   1    2    3    4    5
+        lines     25   26   27   28   29
+        in tail    1    2    3    3    3
+
+    Four. Not three, and the fourth is silent: the block still ends tidily on
+    the remedy's last line.
+
+    THE TELL IS THAT THERE IS NO TELL, and the trap is worse than that: a
+    `tail -25` block is EXACTLY 25 lines whenever this script fails at all —
+    one finding or thirty, because the fixed remedy alone is 24. So "my captured
+    block was exactly 25 lines" is not evidence that anything was dropped. It is
+    evidence only that the guard failed. A truncated tail is a complete-looking
+    report AND an untruncated one is indistinguishable from it.
+
+    THE DISCHARGE IS ORDER, NOT A BIGGER WINDOW. Every capture layer anyone
+    wraps this in — tail, a terminal scrollback, a tstate excerpt — keeps the
+    END. So the findings go last and the remedy goes above them, where losing it
+    costs a reader nothing they cannot re-derive by running the script. The
+    trailing COUNT line then makes truncation detectable even if the list itself
+    is longer than the window: a reader who sees 12 rows under a line saying 30
+    knows to run the script directly.
+
+    The aggregate already applies this one level up — Makefile:39302 repeats the
+    failing script NAMES after the loop "so the log TAIL names them". Fixing the
+    outer instance is exactly what made this inner one look handled.
+    """
+    print("  ---- the %d %s, LAST so a `tail` keeps them:" % (len(rows), what))
+    for line in rows:
+        print(line)
+    print("FAIL: %d %s, listed above." % (len(rows), what))
+
+
 def main():
     seen, unlisted = set(), []
     for r in ROOTS:
@@ -344,10 +393,10 @@ def main():
     if unlisted:
         print("\nFAIL: new hardcoded /tmp path(s) in compiled test sources. These "
               "are written at RUNTIME, so no Makefile sweep reaches them and "
-              "testmgr cannot privatize them — two concurrent runs share the file:")
-        for rel, q in unlisted:
-            print("  %-52s %s" % (rel, q))
+              "testmgr cannot privatize them — two concurrent runs share the file.")
         print(ADVICE)
+        report("hardcoded /tmp path(s)",
+               ["  %-52s %s" % (rel, q) for rel, q in unlisted])
         return 1
 
     if env_only:
@@ -355,10 +404,10 @@ def main():
               "testmgr these are as collision-prone as the /tmp literal they "
               "replaced: the job environment is an ALLOWLIST (PXX_/TESTMGR_/LC_/"
               "QEMU_ plus a fixed set), TESTTMP is not in it, so the read returns "
-              "nothing and the fallback lands on the shared path:")
-        for rel in env_only:
-            print("  %s" % rel)
+              "nothing and the fallback lands on the shared path.")
         print(ADVICE)
+        report("source(s) reading $TESTTMP without $TESTMGR_TMP",
+               ["  %s" % rel for rel in env_only])
         return 1
 
     print("\n  ok   no unlisted hardcoded /tmp path (%d known, %d allowed file(s), "
