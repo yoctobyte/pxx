@@ -31807,10 +31807,36 @@ gradient runs toward agreeing.**
 A peer corrected this seat's count of hardcoded-`/tmp` offenders from **two** to **three**. **The
 headline was right and verifiable in one command.** The same message explained *why* the row had been
 missed — *"the guard globs compiled test sources of every frontend"*, i.e. the seat had read it as a
-NilPy problem and skipped a `.pas`. **That explanation was never measured and is false.** The real
-cause was mechanical: the aggregate pipes each failing guard through `tail -25` and the guard prints
-findings first and a 22-line remedy after, so the third row fell off the top. **The captured block was
-exactly 25 lines.**
+NilPy problem and skipped a `.pas`. **That explanation was never measured and is false.** A mechanical
+cause was then proposed in its place: the aggregate pipes each failing guard through `tail -25`, the
+guard printed findings first and a 22-line remedy after, and **the captured block was exactly 25
+lines**, so the third row had fallen off the top.
+
+**THAT SECOND CAUSE IS ALSO FALSE, AND ITS REFUTATION IS THE THIRD INSTANCE OF THIS SECTION'S OWN
+RULE IN ONE EVENING — the receiving seat replayed it instead of accepting it.** Measured at
+`383a817a4`: the `0ae279ae9` guard **and** all three offending sources restored into a tree and
+re-run give **27 lines**; `tail -25` drops lines 1 and 2, which are **the blank and the FAIL header**;
+**all three findings survive.** Rows start going at **four**, not three:
+
+| findings | 1 | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- | --- |
+| lines emitted | 25 | 26 | 27 | 28 | 29 |
+| surviving `tail -25` | 1 | 2 | 3 | 3 | 3 |
+
+**AND THE TELL THAT CARRIED IT IS UNFALSIFIABLE, WHICH IS THE PART WORTH KEEPING.** *"The captured
+block was exactly 25 lines"* is true **whenever this guard fails at all** — at one finding or at
+thirty — because the fixed remedy alone fills the window. It cannot come out any other way, so it
+confirms every hypothesis equally. That is this file's *"a guard that cannot fail"* wearing the
+clothes of corroborating evidence: **a truncated tail is a complete-looking report AND an untruncated
+one is indistinguishable from it.** A length that is forced by construction is not a measurement of
+what was lost.
+
+**So the cause of two-versus-three is UNKNOWN and the slot is deliberately left empty.** Two
+explanations, both offered by people who were each right about something else, both withdrawn. The
+ordering repair landed anyway on its own merits — findings last, ending on a line carrying their
+count — because *every capture layer keeps the tail* is correct independently of whether it explains
+this miss. **Separating a good remedy from a wrong diagnosis is the move**; the remedy did not need
+the story to be true, and keeping them joined is what would have preserved the story.
 
 **The seat nearly accepted the whole message**, because the correcting party was demonstrably right
 about the number, and because accepting a correction gracefully is what a good collaborator does.
@@ -31839,3 +31865,20 @@ other seat to grep for prior art first. **Both directions of this failure occurr
 within one hour, each while the author was mid-sentence about the neighbouring rule.** That is the
 finding worth keeping: **knowing the rule, having just written the rule, and being the person applying
 the rule to someone else are all compatible with breaking it in the next clause.**
+
+**FOUR EXPLANATIONS IN ONE EVENING, NOT TWO, AND THE SCORE IS NOT THE POINT — THE INSTRUMENT IS.**
+Every one of the four was caught the same way and by neither party reasoning harder: **someone went
+back to the artefact.** A line count against a saved log caught the first; a replay of the old script
+against restored sources caught the second; a `grep -rl` for prior art caught the third; a positive
+control on a scratch file caught the fourth. **Nothing was settled by argument, in either direction,
+at any point.** When a correction and a counter-correction are both plausible, the cheap move is not
+to weigh them — it is to ask **what artefact still exists that would decide it**, and there almost
+always is one: a log nobody deleted, a commit you can check out, a file you can restore and re-run.
+
+**AND NOTE WHICH EXPLANATION IS THE DANGEROUS ONE TO RECEIVE.** This section's rule is that a verified
+headline lends credibility to an unverified cause. The counter-correction shows the second lever:
+**the truncation story was accepted-until-replayed because it was BETTER than what it replaced** — it
+had a number, an arithmetic derivation, a named mechanism and a moral about compounding failure modes,
+where the honest answer was a shrug. **An explanation more satisfying than the gap it fills is the one
+to replay**, because satisfaction is available to the receiver long before verification is, and a
+shrug is the shape a true answer often has.
