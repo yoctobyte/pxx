@@ -31767,3 +31767,33 @@ paragraph.**
 **AND THE WRAPPER LIED AGAIN, ON THIS RUN, AFTER ALL OF THE ABOVE.** The background-task notification
 read `completed (exit code 0)`. **`make` really exited 2**, and the job's own line says
 `163 green, 2 RED`. Fourth instance on this box in one day. **Quote the verdict the job printed.**
+
+**AND THE SAME AGGREGATE TRUNCATES ITS MEMBERS' REPORTS, WHICH IS A SECOND WAY IT HIDES FINDINGS AND
+IS INVISIBLE FOR A DIFFERENT REASON.** Measured 2026-09-20, found only because a peer fixing the
+defects reported **three** files where this seat had reported **two**, and the disagreement was
+resolved by counting lines rather than by trusting either number.
+
+`make tools-devtest` captures each failing guard and prints **`tail -25`** of its log
+(`Makefile:39296`, and again at `:39297` for the repeated-reds block). `testmgr_hardcoded_tmp_devtest.py`
+prints **its findings FIRST and a 22-line remedy AFTER**. So:
+
+    2 findings + 22 remedy + 1 "FAIL:" header = 25 lines  -> fits, all rows visible
+    3 findings + 22 remedy + 1 "FAIL:" header = 26 lines  -> tail -25 silently drops the FIRST row
+
+**The captured block in this seat's log was exactly 25 lines**, which is the tell and is also why
+nothing looked wrong: a truncated tail is a complete-looking report. **The dropped row was
+`test/lib_findfirst.pas`, a real offender**, and the seat that read it went on to put "TWO new
+sources" into a ticket summary and two commit messages.
+
+**THE TWO FAILURE MODES IN THIS ONE JOB ARE INDEPENDENT AND COMPOUND.** Saturation loses the fact that
+a NEW member went red; truncation loses the EARLIEST rows within a member that is already reporting.
+**A finding has to survive both to reach a human, and neither announces itself.** The aggregate was
+already carrying a fix for a truncation problem one level up — its own comment says the failures are
+*"REPEATED at the end, after the loop, where the tail will carry them"* — so somebody had seen this
+class at the OUTER tail and left the INNER one. **Fixing the outer instance of a truncation is what
+makes the inner one look handled.**
+
+**The discharge is one line and it is not "make the window bigger":** a guard's findings must be the
+LAST thing it prints, not the first, because every capture layer keeps the tail. **Remedy text before
+findings, always** — or read the guard by running it directly, which is the only reading that has no
+window at all. **Never quote a member guard's findings out of an aggregate's log.**
