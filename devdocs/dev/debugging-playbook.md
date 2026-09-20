@@ -30577,3 +30577,81 @@ landed on a number 7a had published four hours earlier — close enough to have
 been cited as a replication of its own work. **A ratio can survive its arms
 being wrong; it can also land on the RIGHT ANSWER FOR NO REASON, which is worse,
 because then it corroborates.** Supplied by 7a as evidence against itself.
+
+## AN INSTRUCTION IS VERIFIED ONLY WHEN IT HAS BEEN RUN IN THE FORM THE RECIPIENT WILL RUN IT
+
+*Measured 2026-09-20 by `lekkerzeilen-7a`, in the lekkerzeilen repo; landed here by the pxx
+coordinator because the shape is not application-specific. One seat, one day, two instances — banked
+here rather than promoted to CLAUDE.md, which wants a second independent subsystem.*
+
+A result was handed upward as a one-line instruction: add one import to a file, run the demo, watch
+the frame rate. **The result was correct.** The seat re-measured it anyway, before the recipient
+acted on it, with nothing forcing the check — and found that it had **tested its own invocation and
+not his**. Its words: *"I had tested my invocation, not his. Those are not the same claim."*
+
+It had run a **hand-rolled compiler call into a scratch bin**. The recipient would run **the project's
+own `runbin.sh`**. Its own enumeration of what lies between the two, none of which appears in a green
+result:
+
+- the wrapper **picks the compiler**,
+- **decides whether to rebuild**,
+- **forces the SDL driver**,
+- **builds to its own path**,
+- and — the one that actually bit — **filters the output.**
+
+The re-run used the real script on a copy of the whole tree with exactly the one documented edit. It
+built and ran clean, confirming the result. **And it surfaced a defect the first measurement was
+structurally unable to see: the seat had passed `--quiet`, which suppresses the demo's own status
+line — the frame rate.** The recipient had asked to see the frame rate. **He would have followed a
+correct instruction, exactly, and seen no number**, with the program printing it the whole time and
+the flag eating it.
+
+**The defect was not in the tree, the fix, the compiler, or the claim. It was in the INVOCATION** —
+the one component a correct result never interrogates, because the result is what you were checking
+and the command is how you checked it.
+
+**This is the same failure as measuring on a tree the recipient does not have, one layer out.** Both
+are *"the way I tested it versus the way it is run"*; the tree version is well known and the
+invocation version is not, because an equivalent command **looks like the same measurement** in a way
+a different tree never does. The same seat had shipped the tree version that morning and recognised
+the link itself.
+
+**So:** before an instruction leaves your hands, run **the command the recipient will type**, on
+**the tree the recipient has**, with **no flags they were not told to pass** — and read what they
+would read, not what you can reconstruct. An equivalent invocation verifies an equivalent claim.
+
+## A SETTLED QUESTION DOES NOT STAY SETTLED IN A SUMMARY — THE LINE HAS TO BE DELETED
+
+*Measured 2026-09-20, two seats in two repos on one day: the pxx coordinator on a relay's open-items
+list, and `lekkerzeilen-7a` on a source comment. One question and one owner, so it is not yet a second
+independent subsystem; here rather than in CLAUDE.md for that reason.*
+
+An owner answered a naming question, then answered it twice more unprompted because the question kept
+coming back at him: *"i already said `__pxx__` is just fine, 3 times now"*, with an explicit
+instruction to stop asking. **It came back a fourth time anyway, inside a coordinator's routine
+open-items list, in a message addressed to the relay that reaches him** — hours after that same
+coordinator had written up the first occurrence under the heading *"the doubt outlived its own
+refutation, through me"*.
+
+**Knowing a question is settled does not remove it from the list. Reading your own list puts it
+back.** Nothing in the relaying seat's context asserted the question was open; **its own carried
+summary did, and that is what it read.** A carried list is **a standing request for attention,
+re-issued verbatim every time the list is quoted, and refreshed by the act of relaying rather than by
+any new doubt.** So the remedy is not vigilance, it is deletion: **when something is settled, strike
+the row, in the artefact, the same minute.**
+
+**THE ACTIVE INGREDIENT IS USUALLY A HEDGE, NOT AN ASSERTION.** The relayed row was not *"what should
+this be called?"* — it was a careful-looking parenthetical, *"marked RELAYED, correctly"*. The seat
+that originally wrote the RELAYED marking reached the same conclusion against itself, about a comment
+whose text said *if you need the provenance, ask him*:
+
+> **A hedge that hands a settled question back to the person who settled it is not caution. It is a
+> cost transferred to someone who cannot see where it came from.** *"Marking it RELAYED costs nothing
+> if I am right"* is sound reasoning about an **assertion** and blind to the **hedge's** own price.
+> Both directions cost something; what changes is who pays.
+
+Three shapes are not questions and are read as questions: **a hedge, a provenance note, and an
+open-items row.** All three are cheap to write, which is why they accumulate, and all three spend the
+attention of the one person who already closed the matter. **When you record a settled decision,
+record it as settled — dated, attributed, with the re-opening condition named — and delete every
+hedge pointing back at its author.**
