@@ -31450,3 +31450,42 @@ correction sent to the seat who was right.
 **The caveat the seat kept explicit is the right one and belongs with any stub-the-wall result: a stub
 answers what is NEXT, never what is LEFT.** Three walls were found in order; **nothing in the method
 says there is no fourth.**
+
+## A GUARD SCOPED `--since origin/<branch>` IS DISARMED BY THE PUSH — AND "PUSH OFTEN" IS WHAT PUTS YOU THERE
+
+Measured 2026-09-20. Not a defect in the guard; a defect in the ORDER almost everything else in this
+project recommends.
+
+`tools/check_test_wiring.py --since "origin/$GATE_BRANCH"` is what `gate.sh` runs as *"this push wires
+the tests it adds"*. It enumerates test files **added since origin**, counting committed, staged and
+untracked ones. Both directions verified:
+
+| state of a new test | what the guard says |
+| --- | --- |
+| untracked, unwired | **fires** — names the file and tells you to wire it or list it in `test/UNWIRED.txt` with a reason |
+| already pushed | `0 test file(s) added since origin/master` — **vacuous pass** |
+
+So a seat that adds a test, pushes it, then gates, gets a **green wiring row that examined nothing**.
+The row is not lying: it is correct about the diff against origin, and that diff no longer contains
+your work. **The instrument is current, correctly parameterised, and enumerates a set that cannot
+contain your subject** — the population failure, with the push as the thing that moved the population.
+
+**WHAT MAKES THIS WORTH A SECTION IS THAT THE PROJECT'S OWN ADVICE PRODUCES IT.** *Push often*,
+*a local commit is not banking*, *push before a measurement starts, never during one* — all correct,
+all load-bearing, and following them lands you on push-then-gate, which is the disarming order for
+this particular guard. **Committed-but-unpushed is still visible to it**, so the window that works is
+narrow and easy to miss: commit, gate, push.
+
+**Practically:**
+
+- **Gate between the commit and the push** when the commit adds a test file. That is the only ordering
+  where this row means anything, and it costs nothing — the guard reads committed work.
+- **If you have already pushed**, the row is vacuous and you have to close it by hand: run the test's
+  own recipe and confirm it passes, and confirm the row sits inside a target something actually
+  invokes. A Makefile row in no target is wired to a reader and to nothing else.
+- **Do not read a green wiring row as coverage of a test you pushed first.** Ask what set it
+  enumerated before quoting it, which is the general rule this is an instance of.
+
+**How it was found:** by running the checker directly after a green gate, noticing it reported **zero
+files added**, and recognising that as a statement about the population rather than about the tests.
+The gate had said PASS twice for a test neither run could see.
