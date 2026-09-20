@@ -29400,3 +29400,63 @@ for the construct, but for the OTHER ARM'S CONDITION. When you find it, use it
 rather than writing an equivalent; and when a guard exists, note in it what
 configuration it separates, because that is exactly what the next author needs
 and cannot see.
+## ADDING A CORRECT TYPE ANNOTATION IS WHAT BREAKS IT — A CLASS WITHOUT IDENTITY IS AN OFFSET OF ZERO, NOT AN "UNKNOWN"
+
+Three instances in two days (2026-09-19/20), across two different NilPy
+pre-passes and one AST builder, none of them found by looking for a pattern.
+The inversion is the part to lead with, because it is what stops a reader
+recognising their own bug: **the version WITHOUT the annotation is correct, and
+adding a correct annotation is what produces the wrong answer.** Every instinct
+says an annotation can only help, so the annotated arm is the one nobody
+re-measures.
+
+The mechanism is always the same pair:
+
+- an inference step answers **tyClass** — "this is an object" — and
+- cannot say **WHICH** class, so it leaves the rec at `REC_NONE`.
+
+`REC_NONE` is not read downstream as "unknown". Every consumer reads tyClass as
+"some class" and then resolves members against the rec, so **REC_NONE is an
+offset of ZERO**. That is the whole reason this class of bug is silent rather
+than loud: `o.f` compiles, reads the start of the object and answers garbage,
+where an honest "unknown" would have refused. Measured: for
+`def __init__(self, target: tuple)` then `self.target = target`,
+`self.target[0]` returned -1855979488 where CPython gives 3.0, while
+`lat, lon = self.target` on the SAME field was refused by name. One field, one
+read compiling to garbage and another refusing, which is what makes the reports
+look unrelated.
+
+The three instances, so the next one is recognised rather than filed as a
+fourth unrelated bug:
+
+1. **The unpack builder** (`47841c55b`). Every unpacked value was drained
+   through `PyDrainIfCursor`, which materialises anything declaring `__iter__`
+   into a TPyList. `v, b = g.values, g.base` typed the target from the list the
+   drain built. Here the identity was WRONG rather than missing — same family,
+   loud in one direction (`v.typecode` raised) and silent in another
+   (`type(v).__name__` answered `list`).
+2. **The field pre-pass** (this entry's headline). `PyHeaderParamType` reads the
+   full annotation grammar through `PyAnnTypeAt`, which resolves WHICH class
+   `tuple` means; its rec companion `PyHeaderParamRec` re-scanned the same
+   annotation with the single-token reader, which only knows names that are
+   USER classes. `tuple`, `list`, `dict`, `set`, `bytes` are not, so the pair
+   answered tyClass + REC_NONE. **Two readers of one annotation, disagreeing.**
+3. **`pylen_v` / `pyvar_to_bool`** (frankb-8e, `7a8db5e97`). A variant holding a
+   shim or user object knew list/dict/bytes only, so `if x:` on an empty
+   `array.array` answered True — the silently wrong branch.
+
+**The general statement, and it is the durable part** (frankb-8e's formulation):
+*an inference step that cannot name the class must not claim one.* Where it
+cannot resolve the identity it should answer **tyVariant**, which says "unknown"
+in the one way the rest of the frontend already understands and keeps the
+value's runtime tag. The trade is correct-but-slower instead of silently wrong,
+which is the right trade on a pre-pass. It is now a backstop at the end of
+`PyInferFieldDecl`: a tyClass with a rec below `REC_UCLASS_BASE` degrades to a
+variant.
+
+**How to look for it.** `PXXDBG=n.locals` prints `tk=` and `rec=` per name;
+`tk=6 rec=-1` is this bug, and it is visible without reproducing the wrong
+value at all. Do not check by reading the value back — a read against offset
+zero can return something plausible. And when a construct has an annotated and
+an unannotated spelling, **measure both**: the pair disagreeing, with the
+annotated one wrong, is this signature.

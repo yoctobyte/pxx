@@ -38170,14 +38170,36 @@ begin
 end;
 
 function PyHeaderParamRec(methodStart, stopIdx: Integer; const name: AnsiString): Integer;
-var i: Integer;
+{ THE SAME GRAMMAR ITS TYPE COMPANION READS, which it was not. PyHeaderParamType
+  runs the full annotation grammar through PyAnnTypeAt -- so `target: tuple`
+  answers tyClass and PyAnnTypeAt has already resolved WHICH class (TPyList) --
+  and this re-scanned the annotation with the single-token reader, which only
+  knows names that are USER classes. `tuple` and `list` are not, so the pair
+  answered tyClass with REC_NONE: a class-shaped field with no class.
+
+  The consequence was a SILENT WRONG VALUE, not a refusal. For
+  `def __init__(self, target: tuple)` then `self.target = target`,
+  `lat, lon = self.target` was refused ("not a list, tuple or variant") but
+  `self.target[0]` COMPILED and answered garbage, where dropping the annotation
+  made the field a variant and everything worked. Live in tuxspaceprogram's
+  landing.py. The single-token reader stays as the fallback for anything the
+  annotation grammar does not resolve to a class, so nothing it used to answer
+  changes. }
+var i, k: Integer; atk: TTypeKind;
 begin
   Result := REC_NONE;
   for i := methodStart to stopIdx - 2 do
     if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = name) and
        (Tokens[i + 1].Kind = tkColon) then
     begin
-      Result := PyRecFromTokenIndex(i + 2);
+      k := i + 2;
+      PyAnnParamScope := True;
+      atk := PyAnnTypeAt(k);
+      PyAnnParamScope := False;
+      if (atk = tyClass) and (PyAnnLastCi >= 0) then
+        Result := REC_UCLASS_BASE + PyAnnLastCi
+      else
+        Result := PyRecFromTokenIndex(i + 2);
       Exit;
     end;
 end;
@@ -42226,6 +42248,24 @@ begin
   { see the dataclass branch: str fields are managed, not string[N] }
   if tk = tyString then tk := tyAnsiString;
   if tk <> tyClass then fldRec := REC_NONE;
+  { A CLASS WITHOUT IDENTITY IS NOT A TYPE -- DEGRADE IT TO A VARIANT. Every
+    consumer downstream reads tyClass as "some class" and then resolves members
+    against fldRec, so REC_NONE there is not "unknown", it is an offset of zero:
+    the member read compiles and returns whatever lies at the start of the
+    object. A variant says "unknown" in the one way the rest of the frontend
+    already understands, and keeps the value's runtime tag.
+
+    This is a BACKSTOP, not the fix for any particular arm -- the annotation arm
+    above is fixed at its source. It is here because three instances of "a wrong
+    type costs more than no type" turned up in two days across two pre-passes,
+    and the general statement is that an inference step which cannot name the
+    class must not claim one. }
+  if (tk = tyClass) and (fldRec < REC_UCLASS_BASE) then
+  begin
+    tk := tyVariant;
+    fldRec := REC_NONE;
+    fldSig := -1;
+  end;
 end;
 
 procedure PyCollectClassFieldJoins(ci, bodyStart, bodyEnd: Integer);

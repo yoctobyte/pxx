@@ -1,0 +1,56 @@
+# A field assigned from an ANNOTATED parameter keeps the annotation's class.
+#
+# PyHeaderParamType reads the full annotation grammar (so `target: tuple` is
+# tyClass and PyAnnTypeAt has already resolved WHICH class), while its rec
+# companion re-scanned with the single-token reader, which only knows USER
+# classes. `tuple` and `list` are not, so the pair answered tyClass with
+# REC_NONE -- a class-shaped field with no class.
+#
+# The cost was a SILENT WRONG VALUE, not a refusal: `lat, lon = self.target`
+# was refused, but `self.target[0]` COMPILED and returned garbage, while
+# dropping the annotation made the field a variant and everything worked.
+# Live in tuxspaceprogram's landing.py.
+# bug-n-a-field-from-an-annotated-builtin-parameter-is-a-class-with-no-identity
+
+
+class Site:
+    def __init__(self, target: tuple = None):
+        self.target = target
+
+    def read(self):
+        lat, lon = self.target
+        return self.target[0] + lat + lon
+
+
+class Bag:
+    def __init__(self, xs: list, d: dict, s: set, b: bytes):
+        self.xs = xs
+        self.d = d
+        self.s = s
+        self.b = b
+
+    def read(self):
+        return len(self.xs), self.xs[0], self.d["k"], len(self.s), self.b[0]
+
+
+class Inner:
+    def __init__(self, n: int):
+        self.n = n
+
+    def twice(self):
+        return self.n * 2
+
+
+class Outer:
+    # a USER class annotation must keep working -- it is what the single-token
+    # reader was there for, and it stays the fallback
+    def __init__(self, inner: Inner):
+        self.inner = inner
+
+    def read(self):
+        return self.inner.twice(), self.inner.n
+
+
+print(Site((3.0, 4.0)).read())
+print(Bag([7, 8], {"k": 9}, {1, 2, 3}, b"AB").read())
+print(Outer(Inner(21)).read())
