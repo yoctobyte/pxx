@@ -174,3 +174,39 @@ relay's.** Any unclaimable spelling satisfies the decision.
 guarded import fails on CPython exactly as the placeholder did, and a change of spelling is a one-token
 edit in each application. **Do not re-litigate it on this ticket.** If the owner's own words come back
 naming a different string, the coordinator relays it and the two applications edit one token each.
+
+## THE SPELLING DOES NOT DELIVER THE PROPERTY — IT IS AN IMPLEMENTATION CONSTRAINT
+
+**Measured by lekkerzeilen-7a 2026-09-20, relayed secondhand through frankuser; recorded in that
+repo's blocker 07 README at `315e6ce` (lekkerzeilen tree, NOT verifiable from a pxx checkout).**
+
+**With a real `__pxx__.py` file on the path, CPYTHON TOOK THE MARKER ARM and selected the native pxx
+backend. Wrong, and silent.**
+
+**This qualifies the owner's decision rather than contradicting it.** The fork he answered was *should a
+third party be able to make the check come out TRUE on ordinary CPython by publishing a package of that
+name?* — no. **The dunder spelling defeats a PUBLISHED PACKAGE, because `__pxx__` is not claimable on
+PyPI. It does nothing about a LOCAL FILE**, and a stray `__pxx__.py` anywhere importable flips CPython
+onto the native backend with no diagnostic. **So the property he asked for is delivered by the
+IMPLEMENTATION, not by the string** — and every Name argument in the sections above reasons from PyPI
+claimability, which is the narrower threat.
+
+**CONSTRAINT ON WHOEVER IMPLEMENTS THIS: the marker must be something the COMPILER provides and CPython
+can never import.** If it is ever spellable as an ordinary file, the guarantee is gone. Note the
+protection cannot live in pxx: nothing pxx does can stop CPython importing a file that exists. It has
+to come from the marker not being file-shaped.
+
+**POSITIVE CONTROL THIS WANTS, and it is drawn from the population the hazard is in:** a real file of
+that name present on the path must NOT satisfy the check under CPython. **A fixture that only tests the
+absent-file case passes whether or not the hazard exists** — the failure mode is a file being there,
+so the control has to put one there.
+
+**ALSO UNTESTED, and labelled as such rather than folded in:** the third row of 7a's trace — *a future
+pxx that ships the marker takes the first arm* — was exercised only by putting a real `__pxx__.py` on
+the path, **which is not how the marker will work.** pxx did take the first arm as predicted. Treat
+that row as UNTESTED, not confirmed.
+
+**What IS confirmed by measurement (7a, same commit): the nested guard is correct on both compilers
+that exist today**, tested with plain assignments in the arms to avoid blocker 07's own trigger —
+CPython with no marker takes the ctypes arm, today's pxx with no marker takes the pxx arm. **So
+`__pxx__` is a SIMPLIFICATION for lekkerzeilen, not a prerequisite; blocker 07 is the unblocker.**
