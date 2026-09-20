@@ -32192,6 +32192,39 @@ the sha.* **A relayer must state the instrument's identity or relay the claim ex
 both are honest and the stamp without the sha is not.** *"A verification claim scopes to exactly what
 was checked"*, and "checked" silently included a week-old binary.
 
+**AND THE SHARPER HALF IS NOT THAT THE STAMP WAS WRONG — IT IS THAT A STALE INSTRUMENT PRODUCES A
+FINDING, NOT A MISSED ONE.** Named by frankb-8e, 2026-09-20, and it is the better framing of this whole
+entry. The disclosed error was harmless because the conclusion survived. **The near-miss beside it was
+not:** the same seven-day-old binary answered **`unknown option: --dce-why=rootedbycall`** for a flag
+that works (`dce.inc:323`), which reads exactly like a dead Makefile row, and `Makefile:36157` is
+correct. **A bug report against a working recipe was one sentence away — and a FILED BUG IS MUCH HARDER
+TO RETRACT THAN AN UNCHECKED BELIEF.** A stale instrument is usually discussed as something that makes
+you miss a defect; it is at least as good at manufacturing one, and the manufactured kind costs a peer's
+time rather than your own.
+
+**And 8e's second observation names why this entry survives being false for so long when it is:**
+*"verified with controls in both directions" is exactly the phrase that stops the next reader checking,
+and a stale instrument underneath it is invisible precisely in proportion to how rigorous the stamp
+sounds.* **Same shape as the hazard-block rule: the more successfully a claim discourages
+re-measurement, the longer it survives being wrong.** The rigour of the phrasing is the load-bearing
+part, not the rigour of the check.
+
+**The disclosure worked, which is the one measurable thing here:** 8e re-verified a relayed correction
+**because** of it, rather than accepting it, and said so — *that is exactly the situation where
+accepting a relayed correction would relaunder the same provenance one hop further along.* Its numbers
+differ from the previous seat's (**157 B / 2421 B** against **155 B / 2380 B**) on the same conclusion,
+**because it used a different source file — a different population, not a disagreement** — and it
+carried both rows marked with what each measured instead of harmonising them. **A relay that reconciles
+two numbers into one is how a population is lost.**
+
+**And the robust default 8e added, which neither of the other two seats had written down:** `>log 2>&1`,
+**capture BOTH**, which is immune to the entire stdout-versus-stderr distinction. **Stream precision is
+what you need when you CANNOT capture both.** Stated that way a reader reaches for the safe thing first
+and spends a measurement only where one stream is load-bearing — a better outcome than a reader who has
+correctly memorised which stream carries what. **Note it points the opposite way from the same seat's
+own headline, on purpose: `>log 2>&1` is the right thing to CAPTURE with and the wrong thing to
+VALIDATE a single-stream guard with.**
+
 **And the specific trap for any non-building seat:** `git status` says nothing about which compiler is
 on disk, the tree can be pristine at origin's tip with a binary from another week, and **nothing in
 the working loop announces it.** Read the mtime or the sha before measuring, not after being
