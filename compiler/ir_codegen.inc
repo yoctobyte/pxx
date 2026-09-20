@@ -3309,10 +3309,16 @@ begin
       xtensa encoding, so there is nothing to call. Scoped with `not EspBareBoot`
       rather than left unconditional because the old message fired on BOTH and
       told a hosted build it was bare metal. }
-    if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA = 0) then
+    { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
+      so there is no arena to reserve AND no mmap to want. It used to reserve
+      one purely to keep this message quiet, which cost 64 KiB of SRAM that
+      nothing read. HOSTED riscv32/xtensa is what is still genuinely refused. }
+    if withHeapArena and (not EspBareBoot) and
+       (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
       Error('target xtensa (hosted): a heap arena needs mmap and EmitMmapArena '
-            + 'has no xtensa arm. Bare metal (--esp-profile=bare) and ESP-IDF '
-            + '(--platform=esp) reserve the arena in BSS and do not need one '
+            + 'has no xtensa arm. Bare metal (--esp-profile=bare) reserves the '
+            + 'arena in BSS; ESP-IDF (--platform=esp) needs no arena at all, '
+            + 'because there PXXAlloc IS calloc '
             + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
     { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
       top of SRAM before entering main. EmitLoadConstXtensa drops a literal
@@ -3486,12 +3492,17 @@ begin
   begin
     { Same split as xtensa above: bare metal uses the BSS arena; the HOSTED
       riscv32 Linux profile is what still has no mmap encoding. }
-    if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA = 0) then
+    { PLATFORM_ESP excluded too: under IDF the heap IS IDF's heap (calloc/free),
+      so there is no arena to reserve AND no mmap to want. It used to reserve
+      one purely to keep this message quiet, which cost 64 KiB of SRAM that
+      nothing read. HOSTED riscv32/xtensa is what is still genuinely refused. }
+    if withHeapArena and (not EspBareBoot) and
+       (TargetPlatform <> PLATFORM_ESP) and (BSS_HEAP_ARENA = 0) then
       Error('target riscv32 (hosted linux): a heap arena needs mmap and '
             + 'EmitMmapArena has no riscv32 arm. Bare metal '
-            + '(--esp-profile=bare) and ESP-IDF (--platform=esp) reserve the '
-            + 'arena in BSS and do not need one '
-            + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+            + '(--esp-profile=bare) reserves the arena in BSS; ESP-IDF '
+            + '(--platform=esp) needs no arena at all, because there PXXAlloc '
+            + 'IS calloc (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
     { ESP-IDF: publish the BSS arena reserved in frontend_prologue.inc. t0/t1
       are caller-saved and nothing has run yet, same as the bare arm below. }
     if withHeapArena and (not EspBareBoot) and (BSS_HEAP_ARENA > 0) then

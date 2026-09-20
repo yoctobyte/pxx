@@ -3,7 +3,7 @@ slug: bug-a-the-nilpy-heap-arena-is-64-kib-of-dead-sram-on-the-esp-idf-profile
 track: A
 prio: 65
 type: bug
-status: new
+status: done
 created: 2026-09-20
 found-by: frankS
 blocked-by: []
@@ -146,3 +146,48 @@ DCE removes code and this is storage.
 `HeapPtr` — most plausibly routing `PXXAlloc` back onto the native allocator
 over an IDF-supplied region. Re-run the two-row table above; a `--dce` build
 that KEEPS `HeapMmap` means the arena is live again.
+
+## FIXED 2026-09-20 — and the runtime confirms the reachability proof
+
+`frontend_prologue.inc` no longer reserves the arena under `--platform=esp`;
+the condition is `EspBareBoot` alone again, which is what it was before the IDF
+arm was added. The IDF arm existed to keep a DIFFERENT diagnostic quiet — both
+backends refused a NilPy program with *"a heap arena needs mmap"* whenever
+`BSS_HEAP_ARENA = 0` — so the two guards in `ir_codegen.inc` now exclude
+`PLATFORM_ESP` as well. **That diagnosis was right about the symptom and wrong
+about the cure: IDF does not need an arena, it needs the mmap path not to
+fire.** Reserving 64 KiB to silence a message is what the fix removes.
+
+**Measured on the chip, two independent readouts, both moving by exactly the
+arena size.** `examples/esp32/nilpy-c3`, `esp32c3`, compiler at HEAD:
+
+| | before | after | delta |
+| --- | --- | --- | --- |
+| our object SRAM (`.data`+`.bss`) | 125,832 B | **60,296 B** | −65,536 (−52.1%) |
+| `.bss` alone | 89,352 B | 23,816 B | −65,536 |
+| free DRAM pool (chip's own `heap_init`) | 211,296 B | **276,832 B** | +65,536 |
+| code | 2,074,564 B | 2,074,492 B | −72 (the init stub) |
+
+The object's section table and the chip's `heap_init` are different
+instruments — one reads our ELF, the other is FreeRTOS reporting what it found
+at boot — and they agree to the byte.
+
+**The runtime confirms it, which the reachability argument alone did not.**
+`./build.sh qemu-assert` passes on **both** ISAs: `OK nilpy-c3 ... output ==
+main/main.expected, one boot` and the same for `nilpy-s3`. A program whose
+allocator had actually been reading `HeapPtr` would now be storing through a
+null base, so booting and producing correct output is a real assertion, not a
+smoke test.
+
+**Controls, both still holding:** bare still reserves its arena
+(`test_esp_bare_managed` builds, `bss=66,812`), and hosted riscv32/xtensa still
+refuse with the mmap message — now reworded, since it claimed IDF reserves an
+arena and IDF no longer does.
+
+**What would retire this:** anything giving the IDF profile a real reader of
+`HeapPtr` — routing `PXXAlloc` onto the native allocator over an IDF-supplied
+region. The tell is `HeapMmap` surviving a `--dce` build; re-run that two-row
+table first.
+
+## Log
+- 2026-09-20 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

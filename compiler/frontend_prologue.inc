@@ -95,12 +95,22 @@ begin
       the same reason they are. Costs nothing in the file (BSS is memsz-only, so
       `filesz` does not move); it costs SRAM, which CheckBareImageFitsSram is
       what bounds. Hosted targets leave it 0 and mmap as before.
-      THE IDF PROFILE TOO (--platform=esp): it is an object linked into an
-      ESP-IDF app, so there is no kernel to mmap from either, and its BSS lands
-      in DRAM through IDF's own linker script. Bare-only here left every NilPy
-      program refused on both ESP chips under IDF with "a heap arena needs
-      mmap" -- the route an ESP application actually takes. }
-    if EspBareBoot or (TargetPlatform = PLATFORM_ESP) then
+      NOT THE IDF PROFILE, and it WAS until 2026-09-20. Under --platform=esp
+      the pxx heap IS IDF's heap: builtinheap's PXX_ESP_IDF arm makes
+      PXXAlloc/PXXFree calloc/free, and the native allocator -- the ONLY reader
+      of HeapPtr/HeapEnd -- lives in the {$else} arm and is not compiled. So
+      the arena was 64 KiB of BSS that the entry stub wrote two pointers into
+      and nothing ever read again: 73.3% of a NilPy demo object's bss.
+      PROVED by reachability, not by survival: HeapMmap is the arena-refill
+      call, the only route to a HeapPtr read, and it is declared ABOVE the
+      PXX_ESP_IDF split, so it is compiled on every profile and dead-strippable
+      -- present under --no-dce, DROPPED under --dce.
+      It was added here because bare-only left every NilPy program refused
+      under IDF with "a heap arena needs mmap". That diagnosis was right about
+      the symptom and wrong about the cure: IDF does not need an arena, it
+      needs the mmap path not to fire, which is now what the two backend guards
+      say. bug-a-the-nilpy-heap-arena-is-64-kib-of-dead-sram-on-the-esp-idf-profile }
+    if EspBareBoot then
     begin
       BSS_HEAP_ARENA := BSSSize;
       Inc(BSSSize, SocNilPyArenaSize(TargetSoc));
