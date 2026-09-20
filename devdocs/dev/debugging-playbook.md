@@ -31353,3 +31353,54 @@ and the false-POSITIVE direction does not announce itself as a puzzle:**
 tabulated.** Structure reads as care. **A count presented as a table has already been through
 somebody's judgement, so the next reader audits the conclusion and not the count** — which is exactly
 backwards when the tabulation is what introduced the error.
+
+## A CENSUS CAN ENUMERATE A LAYER THE FAILURE NEVER REACHES — AND A SYMPTOM CARRIED FROM ANOTHER FRONTEND IS WHY
+
+*Measured 2026-09-20 by `franks-5b`, correcting its own census of two hours earlier. Landed by the
+coordinator at its request, with the coordinator's own instance of the neighbouring rule attached.*
+
+A seat censused a 1292-line conditional span routine by routine to decide whether it could be split:
+nine routines float-free, three float-coupled, **and the whole question reduced to one crisp,
+decidable sentence about the core of variant arithmetic.** The census was **correct about every line
+it read.** The coordinator endorsed the resulting question as *"the valuable output"*.
+
+**Then the seat wrote a fixture and ran it, which is the step the census had skipped.** The program
+does not reach that span at all. It dies one layer up, **in a different file**, at a builtin-unit pull
+suppressed for a whole target class — and the real chain is
+**variant → builtin unit → float formatting → softfloat → a deliberate policy line that skips bare.**
+**Splitting the routine everyone had agreed was the crux would have moved nothing.**
+
+> **A census answers the question you posed. Running the program answers the question the program
+> poses.** When those differ, the census is not wrong — **it is about a layer the failure never
+> reaches**, and nothing inside it can say so.
+
+This is the minimal-case rule arriving from the other end. The familiar form is *my ten lines pin an
+axis I did not enumerate*. This is **my enumeration covers a layer the execution never enters**, and
+it is harder to spot because **the census is exhaustive within its own boundary** — thoroughness is
+what makes it convincing.
+
+**THE TELL WAS AVAILABLE FROM THE START AND IT IS ITS OWN CLASS: THE SYMPTOM HAD BEEN CARRIED IN FROM
+ANOTHER FRONTEND.** The ticket's recorded error — an undefined reference naming the routine at the
+centre of the census — came from a **NilPy** program. The question being worked was about **Pascal**.
+**Different frontend, different unit pull, different first wall.** A symptom inherited from one
+configuration and reasoned about under another **keeps its wording and silently changes what it is
+evidence for** — and, being a real observed error, it never reads as an assumption.
+
+**Re-derive a recorded symptom under YOUR configuration before you let it name the layer to work on.**
+
+**AND THE INSTRUMENT FAILS THE SAME WAY WHEN YOU GO TO CHECK SOMEBODY.** Verifying the above, the
+coordinator's greps appeared to contradict two incidental claims — *"the routine is not in
+`builtinheap.pas`"* and *"`builtin.pas` has zero ESP directives"*. Both apparent contradictions were
+**the coordinator's own false positives**: the first hit is **one comment** mentioning the routine by
+name, and the eight directive "hits" are **all comments**, one of which states outright *"NO `$ifndef
+PXX_ESP` DIRECTIVE HERE ANY MORE, AND THERE NEVER EFFECTIVELY WAS ONE."*
+
+> **A grep counted a comment asserting the ABSENCE of the thing it was searching for as evidence of
+> its PRESENCE.**
+
+Checked before replying, per the neighbouring entry, so it cost nothing instead of costing a
+correction sent to the seat who was right.
+
+**The caveat the seat kept explicit is the right one and belongs with any stub-the-wall result: a stub
+answers what is NEXT, never what is LEFT.** Three walls were found in order; **nothing in the method
+says there is no fourth.**
