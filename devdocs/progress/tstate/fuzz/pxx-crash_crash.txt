@@ -1,0 +1,18 @@
+sig=pxx-crash_crash
+seed=247574
+sha=7df13a6d78ca
+compiler=/home/rene/trackt-watch/compiler/pascal26
+note=pxx-built binary crashed or hung (<crash>(rc=-11)) -- generated programs terminate by construction, so this is never the program's fault
+
+fpc-O0       3266184934265917344
+fpc-O2       3266184934265917344
+pxx-O0       <crash>(rc=-11)
+pxx-O2       <crash>(rc=-11)
+pxx-O3       <crash>(rc=-11)
+
+no localisation: pxx-O0 produced <crash>(rc=-11), not a trace -- the run has no checkpoints to compare, so the guilty statement is UNKNOWN.
+    pxx-O0     <crash>(rc=-11)
+    fpc-O0     15103663825321806055
+    (a crashing run discards its partial output, so this is a symptom, not a location)
+
+repro: tools/pasmith.py --seed 247574 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
