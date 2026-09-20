@@ -25842,32 +25842,65 @@ begin
   end;
 end;
 
+{ WHY THIS PREDICATE HAS A DEBUG TAG AND THE OTHERS NEARBY DO NOT: every answer
+  it gives is a SILENT routing decision. True sends the guard to the
+  compile-time resolver, False sends it to PyParseTry, which parses BOTH arms —
+  and parsing an arm is what resolves its imports. So a False here does not
+  produce a diagnostic about the guard; it produces an error inside a module on
+  the branch the program does not take, at that module's own line number, with
+  nothing naming the try that caused it. `PXXDBG=n.impguard` prints the verdict
+  and, on a refusal, the clause that refused. }
 function PyIsFallbackImportTry: Boolean;
 var i, blockAt: Integer;
+    why: AnsiString;
 begin
   PyIsFallbackImportTry := False;
+  why := '';
   i := TokPos;                    { the ':' after `try` }
   if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkColon) or
-     (Tokens[i + 1].Kind <> tkNewline) then Exit;
-  Inc(i, 2);
-  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
-  { the block must OPEN with an import — that is what makes the branch a
-    resolution question rather than a runtime one }
-  if (i >= TokCount) or (Tokens[i].Kind <> tkIndent) then Exit;
-  blockAt := i;                   { the INDENT, for the block skip below }
-  Inc(i);
-  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
-  if (i >= TokCount) then Exit;
-  if not ((Tokens[i].Kind = tkUses) or
-          ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from'))) then Exit;
-  { and the handler must be `except ImportError`, not a general one }
-  i := blockAt;
-  if not PySkipToMatchingDedent(i) then Exit;
-  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
-  if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkExcept) then Exit;
-  if (Tokens[i + 1].Kind <> tkIdent) or
-     not CaseEqual(GetTokenStr(i + 1), 'ImportError') then Exit;
-  PyIsFallbackImportTry := True;
+     (Tokens[i + 1].Kind <> tkNewline) then why := 'no `:` newline after try'
+  else
+  begin
+    Inc(i, 2);
+    while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+    { the block must OPEN with an import — that is what makes the branch a
+      resolution question rather than a runtime one }
+    if (i >= TokCount) or (Tokens[i].Kind <> tkIndent) then why := 'try block has no INDENT'
+    else
+    begin
+      blockAt := i;               { the INDENT, for the block skip below }
+      Inc(i);
+      while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+      if (i >= TokCount) then why := 'ran off the end inside the try block'
+      else if not ((Tokens[i].Kind = tkUses) or
+              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from'))) then
+        why := 'try block does not OPEN with an import'
+      else
+      begin
+        { and the handler must be `except ImportError`, not a general one }
+        i := blockAt;
+        if not PySkipToMatchingDedent(i) then why := 'try block has no matching DEDENT'
+        else
+        begin
+          while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+          if (i + 1 >= TokCount) or (Tokens[i].Kind <> tkExcept) then
+            why := 'no `except` follows the try block'
+          else if (Tokens[i + 1].Kind <> tkIdent) or
+             not CaseEqual(GetTokenStr(i + 1), 'ImportError') then
+            why := 'the handler is not `except ImportError`'
+          else
+            PyIsFallbackImportTry := True;
+        end;
+      end;
+    end;
+  end;
+  if PxxDbgEnabled('n.impguard') then
+  begin
+    if PyIsFallbackImportTry then
+      WriteLn('n.impguard: line ', CurTok.Line, ' COMPILE-TIME guard')
+    else
+      WriteLn('n.impguard: line ', CurTok.Line, ' runtime try — ', why);
+  end;
 end;
 
 { Consume the remainder of the block the parser is inside, stopping ON its
@@ -47775,6 +47808,24 @@ procedure PyPreScanImports;
 var i, depth, savedTok, tryAt, j, tryHandlerAt, deadFrom: Integer;
     savedAliases, clause, clauseAt, k, kdepth: Integer;
     savedSoft, savedMissed, tryMissed, guardSeen, guardMissed, clauseDead: Boolean;
+    { A STACK, because a guard nested in another try is NESTED CONDITIONAL
+      COMPILATION and each level decides its own arms. `try: import X / except
+      ImportError:` is the only #ifdef Python has, so a guard inside a guard is
+      an ordinary thing to write, not an exotic shape.
+
+      The scalars above are the TOP of this stack and are kept as the working
+      copy so the body below reads unchanged; PyTryPush/PyTryPop save and
+      restore the enclosing level. They were ONE set of scalars until
+      2026-09-20, and `tryAt` holds a DEPTH: an inner try left `tryAt` at the
+      OUTER try's depth, so `depth <= tryAt` was false at every clause boundary
+      of the inner one and the whole arm-deadness test was skipped. The dead arm
+      was then resolved like any other import -- which is to say the program's
+      own `#ifdef` was ignored and the branch it excluded was compiled.
+      Measured with PXXDBG=n.impscan: `DEDENT to depth 1 tryAt=0 -> clause logic
+      0`. bug-n-a-nested-import-guard-compiles-the-dead-arm }
+    tryDepthS, clauseS, tryHandlerS: array[0..31] of Integer;
+    tryMissedS, guardSeenS, guardMissedS: array[0..31] of Boolean;
+    tos: Integer;                      { SAVED enclosing levels; 0 = the scalars are the only try }
 begin
   savedTok := TokPos;
   i := PyScanLo;
@@ -47785,6 +47836,7 @@ begin
   clause := 0;
   guardSeen := False;
   guardMissed := False;
+  tos := 0;
   while i < MainProgramTokCount do
   begin
     if Tokens[i].Kind = tkIndent then Inc(depth)
@@ -47795,7 +47847,18 @@ begin
         `finally` block is a sibling at the same depth and its imports are just
         as soft (the fallback idiom's handler is `from pxxpdf import canvas`).
         Look past the newlines for the clause that follows. }
-      if (tryAt >= 0) and (depth <= tryAt) then
+      if PxxDbgEnabled('n.impscan') and (tryAt >= 0) then
+        WriteLn('n.impscan: line ', Tokens[i].Line, ' DEDENT to depth ', depth,
+                ' tryAt=', tryAt, ' open=', tos + 1,
+                ' -> clause logic ', Ord(depth <= tryAt), ' (1=runs, 0=INVISIBLE)');
+      { A LOOP, NOT AN `if`: ONE DEDENT CAN CLOSE SEVERAL TRIES AT ONCE. The
+        dedent that ends an inner guard's last block is also the one that ends
+        the handler of the try it sits in, so the enclosing level's clause must
+        be examined on the SAME token. An `if` here handles the innermost and
+        silently drops every level above it -- which would have turned the
+        nested-guard fix into a fix for exactly one nesting depth, the shape the
+        reduction happened to have. }
+      while (tryAt >= 0) and (depth <= tryAt) do
       begin
         j := i + 1;
         while (j < MainProgramTokCount) and (Tokens[j].Kind = tkNewline) do Inc(j);
@@ -47903,17 +47966,59 @@ begin
             end;
             Dec(i);          { the main loop's Inc(i) puts us back on it }
           end;
-          tryAt := -1;
-          tryHandlerAt := -1;
-          tryMissed := False;
-          clause := 0;
-          guardSeen := False;
-          guardMissed := False;
-        end;
+          { POP to the enclosing try, or to "no try open". Restores the level's
+            own clause/guard state, which is what lets an outer guard keep
+            deciding its arms after an inner one has finished deciding its. }
+          if tos > 0 then
+          begin
+            Dec(tos);
+            tryAt := tryDepthS[tos];
+            clause := clauseS[tos];
+            tryHandlerAt := tryHandlerS[tos];
+            tryMissed := tryMissedS[tos];
+            guardSeen := guardSeenS[tos];
+            guardMissed := guardMissedS[tos];
+          end
+          else
+          begin
+            tryAt := -1;
+            tryHandlerAt := -1;
+            tryMissed := False;
+            clause := 0;
+            guardSeen := False;
+            guardMissed := False;
+          end;
+        end
+        else Break;          { a clause of THIS try follows — it stays open }
       end;
     end
-    else if (Tokens[i].Kind = tkTry) and (tryAt < 0) then
+    else if (Tokens[i].Kind = tkTry) and
+            ((tryAt < 0) or (tos < 32)) then
     begin
+      { PUSH. The `tryAt < 0` arm is the old single-slot behaviour and is kept
+        as the first alternative only so an overflowing nest degrades to it
+        rather than mis-pairing: a try we decline to push is never popped
+        either, because a pop is triggered by comparing `depth` against the
+        TOP's own `tryAt` and not by counting tries. So the 32 is a fidelity
+        limit, not a correctness cliff -- past it the enclosing level simply
+        keeps deciding, exactly as it did for every depth before today. }
+      if tryAt >= 0 then
+      begin
+        tryDepthS[tos] := tryAt;
+        clauseS[tos] := clause;
+        tryHandlerS[tos] := tryHandlerAt;
+        tryMissedS[tos] := tryMissed;
+        guardSeenS[tos] := guardSeen;
+        guardMissedS[tos] := guardMissed;
+        Inc(tos);
+      end;
+      { AFTER the push, so `open` is the count that is now true. Printed before
+        it, this read one too few for every nested try -- the instrument would
+        have said `open=1` for a guard two levels down, which is the exact claim
+        the fix is about. }
+      if PxxDbgEnabled('n.impscan') then
+        WriteLn('n.impscan: line ', Tokens[i].Line, ' try TRACKED at depth ',
+                depth, ' (open=', tos + 1, ')');
       tryAt := depth;
       tryHandlerAt := -1;
       tryMissed := False;

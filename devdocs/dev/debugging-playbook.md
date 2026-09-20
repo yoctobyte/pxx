@@ -30255,3 +30255,204 @@ Three things that make it work, all of which the noisy first attempt lacked:
 **A site that never fires is the useful half.** Learning that six carefully
 chosen candidates are all dead costs one rebuild and kills a whole branch of
 the search; reading them can only ever confirm one.
+
+## A VARIANT THAT REMOVES THE SUBJECT IS NOT A CONTROL, AND IT PASSES
+
+Varying one axis at a time is the right method and it has a failure mode that
+looks identical to a result: **a variant that passes because it no longer
+contains the thing under test.** It is not a wrong measurement — the row is
+honest, the run is clean, the axis really did change — it is a wrong
+INFERENCE, and the inference is the one the variant was built to support.
+
+Measured 2026-09-20 (Track N, nested import guards). The defect was a guarded
+import inside another `try` compiling the arm the program excluded. Reducing
+it, one row was "the same shape but with no `else:`", and it PASSED. Read
+straight, that says the `else` is the trigger and points the search at `else`
+handling — which is where the previous bug in this area lived, so the reading
+had history behind it and felt like corroboration.
+
+**The `else` was where the dead arm HAPPENED TO LIVE.** Removing it removed
+the dead arm entirely, so there was nothing left to compile wrongly. The
+variant did not isolate the `else`; it deleted the subject and then reported
+that nothing went wrong.
+
+The row that actually discriminated kept a dead arm and moved it: dead arm in
+the HANDLER, try body resolving (`import math`). That fails inside an outer
+try and passes at top level — same guard, same arms, **only the nesting
+differs** — which named the axis in one run. The real trigger turned out to be
+any enclosing `try` at all, including `except ValueError:`, and the `else` was
+irrelevant.
+
+**THE QUESTION THAT CATCHES IT** is not "did I change one thing" but:
+**"does the passing variant still contain a case that COULD fail?"** If the
+edit deleted the dead code, the unreachable branch, the second writer, the
+aliased name — the thing whose mishandling IS the bug — then a pass is
+arithmetic, not evidence.
+
+It is the mirror of the setup-line rule ("does anything before the assertion
+make the subject stop being the thing I am testing?"), moved from a probe's
+SETUP into the reduction's OWN TEXT, where there is no setup line to inspect
+and the deletion looks like the simplification you were aiming for. Reducing a
+case and disarming it are the same edit seen from two sides, and minimality is
+the goal that makes the second one feel like progress.
+
+**Cheap discipline:** for each passing variant, say out loud what the FAILING
+version of that row would look like. If you cannot write it, the row is not a
+control and carries no information about the axis you think you varied.
+
+## A GREEN COLUMN DOES NOT SAY WHICH QUESTION IT ANSWERED, AND THE HEADING IS WHAT THE NEXT READER INHERITS
+
+The rule about matching the assertion class to the defect class is usually
+written about an assertion. It has a second home that is easier to miss: a
+VARIATION TABLE, where the column heading is the assertion and nobody reads it
+twice.
+
+Measured 2026-09-20 (Track N, nested import guards). Twelve variants, one axis
+at a time, honest rows, correct method — and the column meant *compiled and
+printed the right number*. One row, "guard inside a handler with no `else:`",
+read `ok` and sat there for an hour as evidence that shape was unaffected.
+
+It was not. A later probe with a `print` at module level in the dead arm showed
+that on that row **the excluded module's top-level code still executed**; what
+the no-`else` arrangement protected was the VALUE, because the alias table is
+first-wins and the live arm happens to be lexically first there. So the row was
+clean for the question the table asked and carried a second defect the table
+had no column for.
+
+**Nothing about a green cell announces which quantity it contains.** The axis
+was varied correctly, the run was clean, the heading was accurate — and a
+reader scanning the table takes away "that shape is fine", which is a claim the
+table never made. It is the leak-versus-value blindness (an output assertion
+cannot see a missing free; a value assertion cannot see side-effect ORDER)
+arriving as a table column instead of as a test, and the table is the worse
+host, because a test at least has a name that says what it checks.
+
+**The repair is not more rows, it is a LABEL.** Write what the column means
+beside it — "ok = compiled and printed 7; says nothing about side effects" —
+because the next reader inherits the heading and not your memory of what you
+were asking when you built it. And when a new observable turns up late, go back
+and re-read every green cell against it rather than assuming the table covered
+it; the cells do not change, but what they are evidence FOR does.
+
+**The question:** for each green column, what could be wrong with this program
+that this column is physically incapable of showing?
+
+## A CLOSED TICKET'S PROSE CAN INOCULATE A CASE IT NEVER TESTED, AND THE INOCULATION OUTLIVES THE TICKET
+
+Not a stale claim — a TRUE one, about a population it never touched, sitting in
+`done/` where nobody re-measures.
+
+Measured 2026-09-20 (Track N). `bug-nilpy-same-named-nested-defs-in-two-methods-collide`
+closed with a note ending:
+
+> *"two nested defs of the same name in two plain FUNCTIONS do NOT collide ...
+> so this is specific to methods."*
+
+**That sentence is correct.** Two same-named defs in two *different* functions
+genuinely do not collide; it was measured. It reads as clearing the function
+case, and **two same-named defs in ONE function was never tested** — where they
+collapse to one proc and the call resolves by position, giving a silent wrong
+value. Nobody looked, for a month, because the note said the area was
+method-specific.
+
+The same note also says **"Loud, which is the good case — a compile error, not
+a wrong value."** True of the shape it tested (arities differing) and
+**inverted for the shape people write**: two arms of an `if`/`else` defining
+one function naturally give it ONE signature, so the matching-arity case is
+both the idiomatic one and the silent one. A reassurance about failure MODE,
+backwards for the common input — *"the passing arrangements are not a sample,
+they are the population everyone writes"*, arriving in a closing note instead
+of in a fixture.
+
+**WHY IT PRODUCES NO SIGNAL, and this is the part that makes it worse than a
+stale summary.** A stale summary is read by people who may compare notes; a
+closing note is read **once by EACH person deciding not to investigate, and
+they never meet.** The failure is a series of independent non-events, at any
+population size. It decays like a LOCK rather than like a fact — silently, in
+the direction of doing nothing, for as long as it is trusted.
+
+**THE REMEDY IS NOT TO GO AND FIX IT.** CLAUDE.md is explicit that resolved
+tickets and `done/` write-ups are historical records and *"do not 'fix' them"*,
+and the diff being one trivial revertible sentence is exactly the reasoning the
+guardrail rule refuses — most acutely from the seat that has just produced a
+finding it likes. What IS available, and was done here:
+
+- **State the rebuttal in the LIVE ticket**, quoting the misleading sentences
+  verbatim so a reader meets both together.
+- **Make the new ticket reachable by every grep that reaches the old one** —
+  here `same-named nested defs`, `nested def`, `collide` all return it.
+- **Bound the residue honestly**: this reduces the exposed population to
+  "reads the note and does not grep", and no further without editing the
+  record.
+
+**WHEN YOU WRITE A CLOSING NOTE**, the cheap discipline is to say which
+population you measured rather than which conclusion you drew: *"two defs in
+two different functions do not collide (measured); one function untested"* is
+the same sentence with the stop sign removed.
+
+**BANKED, NOT PROMOTED, and the test was run rather than assumed:** three
+instances were counted on 2026-09-20 and they are **one** by the promotion
+test — all NilPy ticket prose, and two of the three are sentences in the SAME
+note. Merit decides banking; a second independent SUBSYSTEM decides promotion,
+and running the two together is the named way a good finding gets argued up.
+**What would promote it: a fourth instance outside NilPy tickets, ideally one
+where the grep does not reach.**
+
+**AND IF IT EVER EARNS PROMOTION, IT PROMOTES AS AN EXTENSION, NOT A NEW
+RULE — one clause, not a paragraph.** CLAUDE.md already says *a number in a
+ticket needs its population beside it*: a bare count looks reproducible, so the
+next reader re-runs and cannot tell a regression from a different denominator.
+**This is that rule arriving for a CONCLUSION instead of a count**, and the
+failure maps one-for-one — a conclusion without its population looks general,
+so the next reader stops rather than re-runs. The extension is a sentence
+saying a closing note needs its population for the same reason a number does.
+Recorded here so the eventual promoter does not price it as a new section;
+this tree prefers strengthening an existing rule to adding a neighbour, and an
+extension costs a sentence where a new rule costs a paragraph. **The bar is
+still the second subsystem, not the price.**
+
+**AND WHEN COUNTING TOWARD THAT BAR, THE REMEDY BEING PRACTISED IS NOT THE
+FAILURE RECURRING.** Recorded 2026-09-20 because a candidate arrived within
+hours and was declined: a lint docstring in another subsystem stated *"this
+rule is approximate on purpose, it will not see a closure escaping inside
+another call's arguments — I'd rather the docstring say so than have someone
+later mistake it for sound."* That is this section's writing-time remedy,
+independently arrived at, in a different artefact and a different subsystem —
+**and it is the opposite of the failure**, which is a conclusion inoculating a
+case it never tested. Convergence on the remedy is evidence the remedy is
+natural, not evidence the defect recurs. **Count failures, not cures.**
+
+The owner-question this leaves, kept escalation-ready rather than asked: *do we
+want a resolved ticket to be correctable when a later measurement shows its
+closing note clears a case it never tested?*
+
+## WHICH OF A FIXTURE'S ASSUMPTIONS CAN DECAY: THE ONES THAT HOLD BECAUSE SOMETHING EXISTS
+
+The precondition rule — *does anything before the assertion make the subject
+stop being the thing I am testing?* — asks about a setup line you can read.
+This is the same question **time-shifted**: an environmental fact that is true
+today, is load-bearing, and could stop being true later, with nothing in the
+fixture announcing the change.
+
+Measured 2026-09-20 on `test/nilpy_nestguard/`. Its innermost guard is
+`import math`, and the fixture's whole meaning depends on `math` RESOLVING
+under both runtimes. Stop shipping `math` and the file silently tests a
+different program: that guard takes its handler, the dead arm becomes live, and
+**the row fails reporting a wrong value as though the defect under test had
+regressed** — an unrelated change wearing the costume of the bug the fixture
+exists for.
+
+**THE CHEAP DISCRIMINATOR, and it costs one read of the fixture: an assumption
+that holds BECAUSE SOMETHING EXISTS can decay; one that holds because something
+does NOT exist cannot.** The same fixture's two `definitely_no_such_module_*`
+guards are immune — a name that resolves nowhere cannot start resolving. So the
+audit is not "list my assumptions", it is "list the ones with a positive
+dependency", which is usually a much shorter list and is mechanically
+identifiable.
+
+**Write it as a NOTE, not an assertion.** A guard on `math` existing would fire
+on a day when `math` is the story and this fixture is not, which is how a
+correct check earns itself deleted (the cry-wolf rule, reached from a second
+direction: not a wrong baseline, but a correct control outliving what it
+demonstrates). The note's job is to tell the next reader **what to check
+first** — does `import math` compile at all — rather than what to conclude.

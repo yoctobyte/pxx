@@ -1,0 +1,36 @@
+# A guarded import nested inside another guarded import compiled the arm the
+# program excluded.
+#
+# MECHANISM: PyPreScanImports -- the token walk that resolves every import
+# ahead of the parse -- tracked ONE try at a time and keyed its arm-deadness
+# test on `depth <= tryAt`, where `tryAt` is the DEPTH of that single try. A
+# nested try left `tryAt` at the OUTER try's depth, so the test was false at
+# every clause boundary of the inner one and the whole arm-deadness logic was
+# skipped. The walk then resolved the dead arm like any other import.
+# Measured with PXXDBG=n.impscan: `DEDENT to depth 1 tryAt=0 -> clause logic 0`.
+#
+# WHY IT IS A CORRECTNESS BUG AND NOT AN UNSUPPORTED SHAPE. `try: import X /
+# except ImportError:` is the only conditional-compilation mechanism Python
+# has, so a nested guard is nested conditional compilation and resolving the
+# excluded arm is compiling code the source said not to compile.
+#
+# THE OBSERVABLE IS A WRONG VALUE AS READILY AS AN ERROR. The reported case
+# errored only because its dead arm imported a module pxx cannot compile; where
+# the dead arm is ordinary Python it resolves silently and its unit alias --
+# first-wins -- answers every member read through the live arm's name.
+#
+# POSITIVE CONTROL, measured 2026-09-20 against stable_linux_amd64/default/
+# pinned (pin v412, which predates the fix): the three-deep shape is REFUSED,
+# `no member c_uint came of the qualifier ctypes` for the ctypes spelling, so
+# this row cannot pass on the pre-fix compiler.
+# bug-n-a-nested-import-guard-compiles-the-dead-arm
+import nilpy_nestguard as g
+
+# The program selects the INNERMOST guard's `else` arm: outer misses, middle
+# misses, `math` resolves. Every other arm is dead.
+#
+# Read through BOTH doors, because they reach the arm skip differently: a unit
+# alias (`from . import mod as impl`) is a compile-time first-wins table, and a
+# symbol import (`from .mod import N as sym`) resolves through flat unit scope.
+# A fix to one layer leaves the other silent, which is the history of this area.
+print("selected", g.selected())

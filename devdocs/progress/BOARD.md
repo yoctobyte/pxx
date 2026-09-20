@@ -326,7 +326,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (185)
+## backlog-nilpy (186)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -347,7 +347,7 @@ _none_
 | bug-n-a-classmethod-cannot-call-another-through-cls | N | 55 | bug | A classmethod cannot reach another one through its own receiver | — |
 | bug-n-a-collections-deque-segfaults-at-run-time | N | 70 | bug | `collections.deque()` COMPILES and then SEGFAULTS at run time (rc=139), producing no output at all where CPython prints a value. Minimal: `q = collections.deque(); q.append(5); print(q.pop())` inside a function -- compiles clean, crashes. MEASURED ON BOTH SIDES of the 2026-09-12 candidate-promotion fix, with binaries built from the same tree minus that one hunk, so it is PRE-EXISTING and unrelated to it. The pin cannot serve as a control because it predates deque support entirely (`no member deque came of the qualifier collections`). A compiling program that crashes is worse than a refused one, and the crash is silent -- no diagnostic, no partial output. | — |
 | bug-n-a-def-in-an-imported-module-does-not-shadow-len-or-sorted | N | 55 | bug | > | — |
-| bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 45 | bug | `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
+| bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name | N | 65 | bug | RE-RANKED 45 -> 65 2026-09-20 ON A SECOND OBSERVABLE THAT REFUTES THIS TICKET'S OWN by-design ESCAPE: a conditional def with NO PRIOR DEFINITION is not a rebinding question -- there is nothing to displace -- and it is REFUSED outright, `error: unresolved forward: <name>`. That makes the standard pure-Python fallback `try: from x import f / except ImportError: def f(...)` fail, which is HALF OF PYTHON'S ONLY #ifdef: pxx supports the conditional IMPORT (the owner ruled that idiom by design, 2026-09-20) and not the conditional DEFINITION. It is NOT if-specific -- `if`/`for`/`try`/`finally` all refuse -- and NOT a visibility problem, because a call from INSIDE the same block fails identically. Original observable: `def g(): return 1` followed by `if True: def g(): return 2` still calls the FIRST g. Split out of bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name when that one was fixed: it is a different mechanism — the def side, not the assignment side. A nested def has a position, but PyRegisterDefShells only walks module-level defs at DEPTH 0, so a def inside a branch never gets one. | — |
 | bug-n-a-def-returning-a-multi-hop-attribute-chain-is-typed-by-the-hop-before-last | N | 80 | bug | `def f(): h = Holder(); return h.c.v` declared the INTERMEDIATE hop's class as its result type and segfaulted the caller. FIXED 2026-09-15; the `return mk().v` shape (a field off a CALL result) is the named residual. | — |
 | bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string | N | 45 | bug | > | — |
 | bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned | N | 65 | bug | > | — |
@@ -451,6 +451,7 @@ _none_
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
 | bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values | N | 65 | bug | `a, b = X(), Y()` binds EVERY target to the whole right-hand list instead of unpacking it, when the values' type defines __iter__ or __getitem__. The swap idiom `p, q = q, p` is hit. A NAMED right-hand side (`a, b = tup`), a call (`a, b = f()`) and for-loop targets are all correct, and so is any class without __iter__/__getitem__ -- so it takes a container-ish class AND an inline tuple display to trigger. Silent: downstream sees a list, and a longer program segfaults. | — |
 | bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling | N | 40 | bug | Found by inspection, NOT reproduced: NodeEnumIdOf's call arm and PyEvalOnce's chained-receiver test both match AN_CALL without AN_VIRTUAL_CALL, so a VIRTUAL method call loses its enum result identity and a chained call receiver is re-evaluated per link. Both predate the dunder-dispatch fix that surfaced them. | — |
+| bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently | N | 60 | bug | `if flag: def pick(): return 7` / `else: def pick(): return 9` inside ONE function answers 9 for BOTH branches -- CPython gives 7 and 9. SILENT, exit 0, no diagnostic. Two same-named nested defs in one function collapse to one proc and the call resolves by POSITION, so a call after the if/else takes the LAST definition whatever ran. It is loud only when the arities DIFFER (`no overload of outer.pick$29 matches`), which is the already-closed method-collision case; when they MATCH -- the idiomatic shape, since exclusive branches naturally define the same signature -- it is a wrong value. Sequential rebinding in one function is CORRECT (`def pick` ... `def pick` answers 7 then 9), so this is specific to defs the program treats as alternatives. DISTINCT from bug-nilpy-same-named-nested-defs-in-two-methods-collide (two METHODS, loud, done) whose own note records that two plain FUNCTIONS do not collide -- one function was never tested. Cousin of bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name at module level, where the same source shape is REFUSED instead: conditional definition is broken at both scopes, differently. | — |
 | bug-n-type-of-a-member-read-on-a-bare-receiver-jumps-through-a-null-pointer-in-the-lekkerzeilen-demo | N | 45 | bug | `type(env.current).__name__` on an unannotated receiver segfaults with PC 0x0 — an indirect call whose callee address was never filled in — in the lekkerzeilen demo, reproducibly (3 of 3, also under setarch -R, also on an older compiler); NOT reduced, and the obvious same-named-field collision has been measured and REFUTED as the cause | — |
 | bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 45 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
 | bug-n-unary-dunders-do-not-dispatch-on-a-variant-operand | N | 55 | bug | `-v`, `~v` and `abs(v)` on a user class RAISE when the operand is a variant | — |
@@ -1105,9 +1106,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3886)
+## done (3887)
 
-3886 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3887 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (84)
 
@@ -1299,6 +1300,7 @@ _none_
 - [p 65] [U] decide-t-the-full-suite-hook-refuses-prose-about-the-suite (unblocks 5)
 - [p 65] [A] bug-a-a-hand-built-com-interface-cannot-be-called (unblocks 1)
 - [p 65] [A] bug-a-rv32-has-no-timerfd-settime-and-three-skips-hid-it
+- [p 65] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 65] [N] bug-n-a-dynamically-dispatched-call-loses-its-return-kind-when-it-is-returned
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
@@ -1329,6 +1331,7 @@ _none_
 - [p 60] [N] bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 - [p 60] [N] bug-n-pyeval-boxes-a-freshly-built-container-into-a-variant-and-retains-it
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
+- [p 60] [N] bug-n-two-same-named-defs-in-exclusive-branches-of-one-function-collapse-silently
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 60] [T] bug-t-the-full-matrix-switches-itself-off-when-the-fleet-is-busy
@@ -1432,7 +1435,6 @@ _none_
 - [p 45] [N] bug-n-a-builtin-function-is-not-a-first-class-value
 - [p 45] [N] bug-n-a-call-result-discarded-in-a-boolean-context-is-never-released
 - [p 45] [N] bug-n-a-class-level-method-read-off-a-class-value-as-a-value-is-refused
-- [p 45] [N] bug-n-a-def-inside-a-taken-branch-does-not-rebind-the-name
 - [p 45] [N] bug-n-a-def-returning-split-on-an-unannotated-receiver-is-typed-a-string
 - [p 45] [N] bug-n-a-free-function-keyword-argument-is-refused-in-a-pyeval-interpreted-lambda-body
 - [p 45] [N] bug-n-a-keyword-argument-does-not-bind-when-a-constructor-overload-set-contains-a-zero-parameter-arm

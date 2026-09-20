@@ -2184,6 +2184,35 @@ test-nilpy: $(COMPILER)
 	# parent COMMIT, and read the verb.
 	./$(COMPILER) test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy $(TESTTMP)/test_nilpy_tryelse26
 	tools/expect_same.sh test_nilpy_tryelse26 "$$($(TESTTMP)/test_nilpy_tryelse26)" "$$(python3 test/test_nilpy_try_except_else_with_an_import_in_the_try_body.npy)"
+	# A guarded import NESTED inside another one, THREE deep. The row above is
+	# the flat shape and stayed green throughout the nested defect, because
+	# PyPreScanImports keyed its arm-deadness test on the DEPTH of the single
+	# try it tracked -- so the flat case is exactly the one arrangement where
+	# that key is correct. Sibling spellings, one broken, and the suite covered
+	# only the working one.
+	#
+	# THREE DEEP ON PURPOSE. The reported reduction was two deep; a fix that
+	# restored only the second level passes a two-deep fixture. The interesting
+	# element goes where the population does not put it.
+	#
+	# NO ROW GUARDS ON ctypes, for the reason the sibling's header gives: the
+	# oracle resolves it and pxx does not, so the two would run DIFFERENT arms
+	# and the differential could never fail. Two modules absent under both
+	# runtimes and `math`, present under both.
+	#
+	# POSITIVE CONTROL, MEASURED 2026-09-20 against stable_linux_amd64/default/
+	# pinned (v412, predating the fix) -- and it is SILENT, which is why the
+	# fixture asserts a value rather than a compile:
+	#   correct  ('deep-else', 'deep-hit',  'sym-deep-hit',  2)
+	#   pinned   ('deep-else', 'deep-miss', 'sym-mid-else', 2)   exit 0, no diagnostic
+	# WHICH is right -- the parser selected the correct arm -- and both member
+	# reads are wrong, by DIFFERENT dead arms: the unit alias answers deep_miss
+	# (first-wins, and the live arm is lexically last), the symbol answers
+	# mid_else through flat unit scope. The lekkerzeilen reduction that reported
+	# this fails LOUDLY only because its dead arm imports ctypes; where a dead
+	# arm is ordinary Python the whole thing is a plausible wrong value.
+	./$(COMPILER) test/test_nilpy_a_nested_import_guard_does_not_compile_the_dead_arm.npy $(TESTTMP)/test_nilpy_nestguard26
+	tools/expect_same.sh test_nilpy_nestguard26 "$$($(TESTTMP)/test_nilpy_nestguard26)" "$$(python3 test/test_nilpy_a_nested_import_guard_does_not_compile_the_dead_arm.npy)"
 	# THE PAIR: dead-arm alias suppression AND the getattr fold, in ONE fixture,
 	# because each half alone passes every row a test of the other would write.
 	# The fold resolves through FindUnitOrAlias, which is FIRST-WINS
