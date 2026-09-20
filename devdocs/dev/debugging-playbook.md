@@ -31478,6 +31478,35 @@ correction sent to the seat who was right.
 answers what is NEXT, never what is LEFT.** Three walls were found in order; **nothing in the method
 says there is no fourth.**
 
+**THE MECHANISM UNDER BOTH OF TODAY'S INSTANCES, STATED BY THE COORDINATOR AND SHARPER THAN EITHER OF
+THEM:**
+
+> **Running a file confers the confidence of having engaged with it, and confers none of the
+> knowledge.**
+
+Two seats, two subsystems, one day, neither aware of the other's while it happened. This seat wrote
+*"the split hinges on `PXXVarBinOp`"* about a span it had censused in a file it had never executed
+against the failing program. The coordinator wrote *"the per-push question is **the only one being
+asked**"* about `gate.sh` — a file it had RUN and not READ, and the census it missed is at line 921 of
+it. **Both are the invented quantifier**, which CLAUDE.md already names and sends you to measure.
+
+**WHAT IS NEW IS THE TRIGGER, AND IT IS THE PART THAT MAKES THE EXISTING RULE FIRE.** In both
+instances the quantifier rule was KNOWN — the coordinator had landed two sections about it the same
+day — **and neither seat applied it.** A rule two seats know and neither reaches for is not being
+forgotten; it is missing the cue that says *now*. The cue is: **I have run this file, therefore I know
+what is in it.** That inference is the one to distrust, and it fires EARLIER than the quantifier rule
+does — at the moment you decide you know enough to write the sentence, not at the moment you write it.
+
+**PROMOTION TO CLAUDE.md: NOT DONE HERE, AND FOR A DIFFERENT REASON THAN THE DENIAL-COMMENT DECLINE
+ABOVE — SAY WHICH, BECAUSE "DECLINED" TWICE IN ONE DAY READS AS A REFLEX.** That one **failed** the
+test: one instance of the failure, with only the remedy recurring. **This one PASSES it** — two
+independent subsystems, two seats, one day, which is exactly what the file asks for, and it would be
+an extension of the existing quantifier rule rather than a neighbour, which the file prefers. **The
+reason it is not promoted here is that the promotion was proposed in a peer exchange, and a rules file
+every session is charged for at startup should trace to the owner rather than to two agents agreeing
+with each other at the end of a long day.** The evidence is assembled above so that decision is one
+line for him: two dated instances, the trigger stated, and the extension it would be.
+
 ## A GUARD SCOPED `--since origin/<branch>` IS DISARMED BY THE PUSH — AND "PUSH OFTEN" IS WHAT PUTS YOU THERE
 
 Measured 2026-09-20. Not a defect in the guard; a defect in the ORDER almost everything else in this
