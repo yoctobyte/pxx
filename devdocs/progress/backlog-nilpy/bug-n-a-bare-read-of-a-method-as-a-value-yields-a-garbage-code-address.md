@@ -15,7 +15,16 @@ owner:
 `test/nilpy_bareread/` plus
 `test/test_nilpy_a_bare_read_of_a_method_crashes_when_a_call_site_takes_the_dynamic_path.npy`,
 banked with this ticket. **Not wired into `test-nilpy`** — it fails at HEAD and
-wiring it would redden the tier for every seat. Wire it in the fixing commit.
+wiring it would redden the tier for every seat.
+
+**THE FIXING COMMIT MUST DO TWO THINGS:** wire the fixture into `test-nilpy`,
+**and delete its line from `test/UNWIRED.txt`.** Both, in that one commit. The
+exemption is a countdown, not a steady state, and `tools/check_test_wiring.py`
+re-reads that file every run — which is the only reason the condition is there
+rather than only in the fixture's own header. A header instruction of exactly
+this kind was written on 2026-09-14 (`f09f6bcde`), the fixing commit landed the
+same day, and the three files it named sat unwired for six days because nothing
+scans a source header.
 
 ```python
 class Craft:
