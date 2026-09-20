@@ -8,7 +8,7 @@ blocked-by: []
 status: backlog
 owner: ""
 created: 2026-08-28
-summary: "test_nilpy_class_named_like_an_rtl_record.npy opens, reads and os.remove()s /tmp/pxx_nilpy_rtlrec_probe.txt -- a fixed path chosen at RUNTIME, so the Makefile sweep cannot privatize it and testmgr cannot rewrite it. This box routinely runs several clones' testmgr at once, so one run can delete or overwrite another's probe file mid-test. Caught by tools/testmgr_hardcoded_tmp_devtest.py, which is RED on master today. Introduced by f3422cd14. Filed by Track T; T owns the tool, never the bug."
+summary: "MECHANISM, not a file: a test that spells a temp path as a RUNTIME literal cannot be privatized by the Makefile sweep or rewritten by testmgr, so concurrent testmgr runs on one box race over one file -- and this box routinely runs several clones at once. The condition that springs it is any test writing a literal path instead of the env chain TESTMGR_TMP -> TESTTMP -> /tmp. tools/testmgr_hardcoded_tmp_devtest.py is the guard and prints both the offending source and the remedy. THE ORIGINALLY CITED INSTANCE IS FIXED and this summary cited it for 23 days after: test_nilpy_class_named_like_an_rtl_record.npy (introduced f3422cd14) now takes the env chain at line 38 and the guard no longer names it. Recurred instead in TWO new sources, measured 2026-09-20 at 0ae279ae9 by frankz-e5 via `make tools-devtest`: test_nilpy_io_open_in_a_module_that_rebound_open.npy (/tmp/test_nilpy_io_open.txt) and test_nilpy_mmap_read_only_and_struct_unpack_from.npy (/tmp/pxx_test_mmap_read_only.bin). Do not re-cite a firing row here; the recurrence is the point. Filed by Track T; T owns the tool, never the bug."
 ---
 
 # What is wrong
@@ -81,3 +81,32 @@ the pattern for the rest of the NilPy suite.
   T's other 88 guards is currently hiding behind a known red. That is the reason
   for p45 rather than lower: a red gate that everyone knows about stops being
   read.
+
+## 2026-09-20 — the cited instance was fixed; the mechanism recurred twice (frankz-e5)
+
+**The summary above was rewritten today and this note records why, because the
+failure is one CLAUDE.md names and this is a dated instance of it.**
+
+`test_nilpy_class_named_like_an_rtl_record.npy:38` now reads
+`... or "/tmp") + "/pxx_nilpy_rtlrec_probe.txt"` — the env chain, correctly. It
+was fixed at some point after 2026-08-28 and **the summary went on naming it as
+the live offender**, so a seat dispatched to this p45 would have opened a
+correct file and reasonably concluded the ticket was done.
+
+**Measured 2026-09-20 at `0ae279ae9`,** `make tools-devtest`, job's own verdict
+`163 green, 2 RED` over 165 of the 166 files `tools/*devtest*.py` globs:
+
+    test/test_nilpy_io_open_in_a_module_that_rebound_open.npy   /tmp/test_nilpy_io_open.txt
+    test/test_nilpy_mmap_read_only_and_struct_unpack_from.npy   /tmp/pxx_test_mmap_read_only.bin
+
+**Why nobody noticed for 23 days, and it is not inattention.** This guard
+reports through `tools-devtest`, which is an AGGREGATE reporting under the
+opaque shard `tools-devtest#00`. That job has been continuously red since
+**2026-09-12** (`new_red` at `e115014ceb5e`, then **182 consecutive `still_red`**
+through 09-20, **zero transitions**). **A saturated aggregate cannot report a new
+red inside it** — so this recurrence, an unwired-test omission on 09-14 and a
+binary-name collision on 09-16 all landed into one unchanging level. Written up
+in `devdocs/dev/debugging-playbook.md`, "AN AGGREGATE JOB SATURATES".
+
+**The remedy the guard itself prints** is the env chain, in Pascal, C and NilPy
+spellings. Nothing here needs designing.

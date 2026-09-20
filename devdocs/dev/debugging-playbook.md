@@ -31621,6 +31621,24 @@ Measured 2026-09-20 by frankz-e5, chasing a residual from the section above — 
 reaches nobody, why?* **The answer is not that nobody read it. The tier ran, went red, and reported
 faithfully 183 times. It was structurally incapable of saying that anything had CHANGED.**
 
+**FIRST, THE CREDIT, BECAUSE I WROTE THIS UP AS A DISCOVERY AND IT IS NOT ONE.** The mechanism was
+**predicted in a ticket on 2026-08-28**, twenty-three days earlier, by the Track T seat that filed
+`bug-n-a-nilpy-test-writes-a-fixed-tmp-path-so-concurrent-runs-race` — in its *Boundaries* section,
+as its stated reason for the priority it chose:
+
+> *"`tools-devtest` stays red until this lands, so a real regression in any of T's other 88 guards is
+> currently hiding behind a known red. That is the reason for p45 rather than lower: **a red gate that
+> everyone knows about stops being read.**"*
+
+**It was right, it said why, it priced it into the prio, and then exactly that happened** — three more
+defects landed behind that red over the following weeks and none of them surfaced. **So the
+contribution here is not the mechanism. It is the CONFIRMATION and the COST**: 182 `still_red` rows
+with zero transitions, and three named victims with dates. **A predicted failure that nobody could
+price stayed at p45; the same failure with a body count attached is a different ticket.** That is the
+general lesson and it is worth more than the mechanism: **when you find a hazard, look for whoever
+already called it, and go and attach the evidence to THEIR ticket instead of writing a new page.**
+One `grep -rl` found it. I had already written two paragraphs first.
+
 **Oracle and population, so this is re-derivable:** `python3 tools/twatch.py --job-history
 'tools-devtest#00'` against the tstate archive as of 2026-09-20T13:04Z, 682 recorded runs all-time.
 
