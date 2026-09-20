@@ -1,6 +1,13 @@
 ---
-prio: 25
+slug: feature-esp-hardware-flash-validation
 track: S
+type: feature
+prio: 25
+status: backlog
+owner: ""
+created: 2026-06-30
+blocked-by: []
+summary: "HARDWARE-GATED AND NOT WORK ANYONE CAN PICK UP TODAY -- the prio is 25 for that reason and NOT because the ticket is unimportant. It is the row that decides whether the ESP work pays: two of the fleet's open technical claims live here and neither can be closed without a board on USB. (1) UART: tools/esp_flash.sh gained a --project pass/hang verdict (7d4f7ea33) and all four NilPy demos are OK in qemu against pin v413 -- but the log filter was written against QEMU output, so a filter tuned to qemu can strip a line a physical part prints and report a clean pass, which is this ticket's own first acceptance row failing silently. (2) ISR: the acceptance asks that a peripheral/ISR FIRE, and firing is necessary and not sufficient -- boxing ALLOCATES, an allocation inside an interrupt handler faults later on another context's heap, and every timing number in between is correct because the timing IS correct. A run printing tick=1..5 status=0 satisfies the row as written and says nothing about the contract; what settles it is an assertion on the ALLOCATOR (allocation count unchanged across N ticks), a different assertion class from expect_same. THE CONDITION THAT SHOULD MOVE THIS PRIO is a board existing on the box -- the owner said 2026-09-20 that ESP32 is priority and that he will try to set hardware up later; until then a high rank would send seats to work they cannot start. Raise it the day silicon arrives, not before. frankS holds both claims and can close neither."
 ---
 
 # ESP32 real-hardware flash + boot validation (S2/S3, C3)
