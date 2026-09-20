@@ -60,7 +60,14 @@ esac
 # The `ok: ... [code= data= bss=]` line is CAPTURED as well as printed: `sram`
 # mode reads data/bss off it, and every other mode must still see it on stdout.
 # Captured into a variable rather than a temp file so there is nothing to clean
-# up; `set -e` still aborts here if the compile fails.
+# up. THE ABORT IS NOT ENOUGH ON ITS OWN, and this comment used to stop at
+# "`set -e` still aborts here if the compile fails": pxx writes its diagnostics
+# to STDOUT, so a failing compile has already been swallowed into PXX_OUT by
+# the time set -e fires, and the printf below never runs. The script exited 1
+# with ZERO OUTPUT -- no error, no hint, nothing to search for. Measured
+# 2026-09-20 against the pinned compiler, which cannot build any of the four
+# NilPy demos. Hence the explicit `if !` and the branch that prints what the
+# compiler actually said.
 #
 # PXX_MAIN swaps the PROGRAM for the same reason: `sram` mode's positive control
 # is a copy of main.npy holding a known-size static array, and it has to be
@@ -69,7 +76,28 @@ esac
 # main.npy, so qemu-assert with a swapped program compares the wrong things.
 MAIN_SRC="${PXX_MAIN:-main/main.npy}"
 # shellcheck disable=SC2086
-PXX_OUT="$("$PXX" $ISA ${PXX_EXTRA_FLAGS:-} --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" "$MAIN_SRC" main/main.o)"
+if ! PXX_OUT="$("$PXX" $ISA ${PXX_EXTRA_FLAGS:-} --platform=esp --no-signals -Fu"$REPO_ROOT/lib/rtl" -Fu"$REPO_ROOT/lib/rtl/platform/esp" "$MAIN_SRC" main/main.o)"; then
+  printf '%s\n' "$PXX_OUT"
+  {
+    echo
+    echo "FAIL: pxx could not compile $MAIN_SRC -- the build stops here, nothing was flashed."
+    echo "      compiler: $PXX"
+    case "$PXX" in
+      *stable_linux_amd64*)
+        echo
+        echo "      That is the PINNED compiler, which is this script's default. A demo"
+        echo "      can be newer than the pin: as of 2026-09-20 none of the four NilPy"
+        echo "      demos builds under it, and the error it gives names --esp-profile=bare"
+        echo "      as the remedy, which is a DEAD END here (bare cannot compile NilPy at"
+        echo "      all, and would not fit in SRAM if it could). Build HEAD and retry:"
+        echo
+        echo "        make -C $REPO_ROOT compiler/pascal26"
+        echo "        PXX=$REPO_ROOT/compiler/pascal26 ./build.sh ${1:-}"
+        ;;
+    esac
+  } >&2
+  exit 1
+fi
 printf '%s\n' "$PXX_OUT"
 PXX_SIZE_LINE="$(printf '%s\n' "$PXX_OUT" | grep -a '^ok:' | tail -1)"
 ar rcs main/libpxx_app.a main/main.o
