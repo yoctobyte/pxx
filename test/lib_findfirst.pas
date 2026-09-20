@@ -83,8 +83,23 @@ var
 begin
   ok := 0; total := 0;
 
+  { The sandbox path comes from the environment rather than a literal when the
+    caller names none, because it is created by the COMPILED TEST at runtime:
+    no Makefile sweep reaches it and testmgr cannot privatize it either -- it
+    rewrites the recipe text it executes, not string constants inside a binary
+    it runs, so two concurrent runs would share this directory. TESTMGR_TMP
+    FIRST: testmgr launches jobs through an environment ALLOWLIST (ENV_ALLOW /
+    ENV_ALLOW_PREFIXES = PXX_ TESTMGR_ LC_ QEMU_), and TESTTMP is in neither
+    set, so under a bare testmgr run TESTTMP alone resolves to the default and
+    both runs land on the same directory again. TESTTMP second because that is
+    what `make test TESTTMP=$(mktemp -d)` exports; /tmp last keeps a bare run
+    byte-identical. ParamStr(1) still wins over all three -- an explicit
+    argument is the caller saying where. }
   base := ParamStr(1);
-  if base = '' then base := '/tmp/pxx_lib_findfirst_sandbox';
+  if base = '' then base := GetEnvironmentVariable('TESTMGR_TMP');
+  if base = '' then base := GetEnvironmentVariable('TESTTMP');
+  if base = '' then base := '/tmp';
+  if ParamStr(1) = '' then base := base + '/pxx_lib_findfirst_sandbox';
 
   { ---- setup, and the run STOPS if it did not work ---------------------
     Every assertion below is about the contents of this directory, so a

@@ -2705,8 +2705,13 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_lamcall26 | diff -u test/test_nilpy_a_lambda_returns_what_its_call_returns.expected -
 	@# -0.0 survives unary minus on a variant (the IR's `0 - v` rewrite gave +0.0),
 	@# and a class field's name no longer pre-creates a same-named global as variant.
-	./$(COMPILER) test/test_nilpy_negating_a_variant_zero_keeps_its_sign.npy $(TESTTMP)/test_nilpy_negzero26
-	$(TESTTMP)/test_nilpy_negzero26 | diff -u test/test_nilpy_negating_a_variant_zero_keeps_its_sign.expected -
+	@# NAMED negvarzero26, NOT negzero26, which Makefile:2606 already writes from
+	@# test_nilpy_negative_zero_repr.npy against a DIFFERENT .expected. Sequentially
+	@# each build precedes its own assertion so the collision was invisible; under
+	@# `make -j`, or if either compile fails and the stale binary survives, one
+	@# test's assertion runs the other test's program and BOTH rows can still pass.
+	./$(COMPILER) test/test_nilpy_negating_a_variant_zero_keeps_its_sign.npy $(TESTTMP)/test_nilpy_negvarzero26
+	$(TESTTMP)/test_nilpy_negvarzero26 | diff -u test/test_nilpy_negating_a_variant_zero_keeps_its_sign.expected -
 	@# A field bound throughout its class family to one class is a class site for
 	@# a bare parameter, read token-only, so a class the parser has not registered
 	@# yet still types a site; `V.zero()` through the class name types as V. The
@@ -7467,8 +7472,17 @@ test-threads: $(COMPILER)
 	# No gate had this combination, which is why three individually-correct
 	# commits could conjoin into eight red rows without any of them reddening
 	# anything on the way in. It needs no cpyext and no vendored source.
+	# ASSERTS THE OUTPUT, NOT MERELY THAT THE FILE EXISTS, AND THE TWO ARE NOT A
+	# TRADE: running the program implies it built, so this is strictly stronger
+	# than the `test -x` it replaces. It also retires the last row of
+	# npy_cross_target_expectation_devtest's drift ratchet -- the same source is
+	# compiled in test-nilpy and test-core asserting `main\nbye`, and a third
+	# copy asserting something ELSE is exactly what that guard exists to catch,
+	# because an edit to one expectation leaves the others red in a target the
+	# per-fix loop never runs. Measured 2026-09-20 before changing it: same
+	# compile line, same flags, same binary, prints `main` then `bye`.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_qualifier_vs_cproc.npy $(TESTTMP)/test_tlsmixed26
-	tools/expect_same.sh test_tlsmixed26_built "$$(test -x $(TESTTMP)/test_tlsmixed26 && echo yes)" "yes"
+	tools/expect_same.sh test_tlsmixed26 "$$($(TESTTMP)/test_tlsmixed26)" "$$(printf 'main\nbye')"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how
