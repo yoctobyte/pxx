@@ -31522,3 +31522,33 @@ status. The checker's real census status is **1**. Third instance on this box th
 that had read and relayed the other two within the hour. **Capture the process's own status before a
 pipe, and treat a status that agrees with what you were hoping for as the one to re-measure** — the
 friendly number is the one nobody queries.
+
+**THE TWO FILES IN THAT TABLE WERE WIRED THE SAME DAY (`f24ac2113`), SO CENSUS NOW EXITS 0 — read the
+rc=1 row as the measurement that prompted the fix, not as current state.** They had been held out on
+purpose while a bug was open and **their own headers said "wire all three in the commit that fixes the
+PAL"**; that commit landed the same day they were written and nobody did, because **the instruction
+lived in a source header and nothing scans one.** Six days. The former positive control was re-measured
+before wiring rather than assumed: **5/5 survive where it aborted 5/5.**
+**CORRECTION TO THE ABOVE, SAME DAY, AFTER READING THE GATE'S OWN REASONING — THE SCOPING IS
+DELIBERATE AND WELL-ARGUED, AND THE FINDING SURVIVES IN A SHARPER FORM.** `tools/gate.sh:915-937`
+states it outright: the CENSUS (no `--since`) runs in limited+full as part of `tools-devtest`, and the
+quick row deliberately asks only the cheap half, *"scoped to origin/$BRANCH..HEAD, so it names what you
+just wrote and nobody inherits a backlog"*. Its stated reason is the good one: **"the agent who wrote
+the file still has the oracle in their head; a sweep three weeks later has to reconstruct it."** So
+this is not a blind guard — it is a guard with a backstop, and reading it as merely broken would be
+wrong.
+
+**The finding is therefore not "the row is weak". It is that push-then-gate defeats the row's OWN
+STATED PURPOSE.** The row exists to catch the author while they still hold the oracle. Push first and
+the row examines nothing, and the only thing left is the census in a tier that runs elsewhere on
+another cadence — **which is exactly the "sweep three weeks later" case the design is written to avoid.**
+Nothing is broken; the value is silently transferred from the person who can act on it cheaply to the
+one who cannot.
+
+**Measured the same day, and it is what the backstop actually costs:** two files
+(`test/thread_glibc_malloc_controls.pas`, `test/thread_glibc_malloc_two_threads.pas`) had been unwired
+for **six days**. They were held out on purpose while a bug was open, and **their own headers said
+"wire all three in the commit that fixes the PAL"**. That commit landed the same day they were written.
+Nobody wired them, because **the instruction lived in a source header and nothing scans one** — the
+census had been exiting 1 about them the whole time, in a tier nobody was reading. Re-measured before
+wiring rather than assumed: the former positive control now survives 5/5 where it aborted 5/5.

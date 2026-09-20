@@ -8391,6 +8391,30 @@ test-threads: $(COMPILER)
 	# folded to PXXParallelForN; each form covers exactly once, composes w/ reduction.
 	./$(COMPILER) --threadsafe test/test_parallel_policy_named.pas $(TESTTMP)/test_parallel_policy_named26
 	tools/expect_same.sh test_parallel_policy_named26 "$$($(TESTTMP)/test_parallel_policy_named26)" "PARNAMED OK"
+	# glibc's malloc across a pxx-created thread, plus BOTH its controls. These
+	# three were held out of the Makefile on purpose while
+	# bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+	# was open -- two_threads aborted 5/5 with `free(): too many chunks detected
+	# in tcache` and wiring it would have put a permanent RED in every session's
+	# gate. Their own headers said "wire all three in the commit that fixes the
+	# PAL". THAT COMMIT WAS `934ba0418` ON 2026-09-14 and nobody wired them,
+	# because the instruction lived in a file header that nothing scans. Six
+	# days unwired, found 2026-09-20 via check_test_wiring.py's census mode.
+	# Re-measured before wiring, not assumed: 5/5 survive where it was 5/5 abort.
+	# The controls are what localise a future regression to the thread pointer
+	# rather than to the churn, so all three go in together or none do.
+	./$(COMPILER) --threadsafe test/thread_glibc_malloc_two_threads.pas $(TESTTMP)/test_tglibc226
+	tools/expect_same.sh test_tglibc226 "$$($(TESTTMP)/test_tglibc226 | tr '\n' '|')" "main churned 400000 worker churned 400000|survived: both threads churned glibc malloc concurrently|"
+	# CONTROL A -- same churn, twice the rounds, ONE thread. If this aborted the
+	# churn would be the defect and the thread incidental.
+	./$(COMPILER) test/thread_glibc_malloc_controls.pas $(TESTTMP)/test_tglibcc26
+	tools/expect_same.sh test_tglibcc26.a "$$($(TESTTMP)/test_tglibcc26 | tr '\n' '|')" "CONTROL A single thread: churned 800000|CONTROL A survived|"
+	# CONTROL B -- same churn on two threads, second created by GLIBC'S OWN
+	# pthread_create. One binary, arm selected by argv, so B is a SECOND row and
+	# not a second file. Both counts asserted: the program's own INSTRUMENT DEAD
+	# arms fire when a side never ran, and a row that only checked "survived"
+	# would pass a run in which nothing happened.
+	tools/expect_same.sh test_tglibcc26.b "$$($(TESTTMP)/test_tglibcc26 b | tr '\n' '|')" "CONTROL B glibc thread: main 400000 worker 400000|CONTROL B survived|"
 
 # MVP .asm -> exe frontend (feature-asm-mvp-frontend). A flat mov/add/ret .asm
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.

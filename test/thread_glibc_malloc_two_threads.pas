@@ -1,15 +1,17 @@
 program thread_glibc_malloc_two_threads;
 
-{ NOT WIRED INTO THE MAKEFILE, deliberately, and this is the note that says so.
+{ WIRED into `test-threads` since 2026-09-20, and it now must PASS.
 
-  This program is EXPECTED TO ABORT on today's compiler -- it is the positive
-  control for
-  bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state,
-  drawn from exactly the population that bug is about. Wiring it in now would
-  put a permanent RED into every session's gate for a known open bug, which is
-  the bookkeeping-stall failure mode CLAUDE.md names. Wire it, and its controls
-  beside it, in the commit that fixes the PAL -- the controls are what localise
-  a future regression to the thread pointer rather than to the churn. }
+  It was the positive control for
+  bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state
+  and was EXPECTED TO ABORT -- 5/5 with `free(): too many chunks detected in
+  tcache` -- so it was held out to keep a permanent RED out of every session's
+  gate. That bug was fixed by `934ba0418` on 2026-09-14 (pxx threads route
+  through pthread_create when libc is already linked) and this file's previous
+  header said to wire it in that commit. IT WAS NOT, AND NOBODY NOTICED FOR SIX
+  DAYS, because the instruction lived in a source header and nothing scans one.
+  Re-measured on 2026-09-20 before wiring rather than assumed: 5/5 survive.
+  It needs `--threadsafe`, which __pxxclone has required since the fix. }
 { Two threads, both churning GLIBC's malloc. pxx's own heap is mmap-backed and
   is deliberately NOT the subject: every allocation below is libc's.
 

@@ -1,15 +1,17 @@
 program thread_glibc_malloc_controls;
 
-{ NOT WIRED INTO THE MAKEFILE, deliberately, and this is the note that says so.
+{ WIRED into `test-threads` since 2026-09-20, as two rows off one binary.
 
-  These are the two CONTROLS (both pass today) for
+  These are the two CONTROLS (both pass, and always did) for
   bug-a-a-pxx-created-thread-shares-glibc-s-thread-pointer-so-two-threads-share-one-malloc-state,
-  drawn from exactly the population that bug is about. They are held out with the repro they
-  belong to, because a control that ships without its positive control is a
-  guard that cannot fail. Wire all three in the commit that fixes the PAL -- the controls are what localise
-  a future regression to the thread pointer rather than to the churn. }
-{ The two controls for test/thread_glibc_malloc_two_threads.pas, which aborts 5/5 with
-  `free(): too many chunks detected in tcache`.
+  drawn from exactly the population that bug is about. They travel WITH the
+  repro they belong to, because a control that ships without its positive
+  control is a guard that cannot fail. All three went in together on 2026-09-20, six days
+  after the fix landed -- the controls are what localise a future regression to
+  the thread pointer rather than to the churn. }
+{ The two controls for test/thread_glibc_malloc_two_threads.pas, which aborted
+  5/5 with `free(): too many chunks detected in tcache` BEFORE `934ba0418` and
+  survives 5/5 after it.
 
   CONTROL A -- the same churn, twice as many rounds, ONE thread. If this
   aborted, the churn itself would be the defect and the thread would be
@@ -18,9 +20,12 @@ program thread_glibc_malloc_controls;
   CONTROL B -- the same churn on two threads again, but the second thread is
   created by GLIBC'S OWN pthread_create instead of PalThreadCreate. A
   pthread_create thread gets CLONE_SETTLS and its own `fs` block, so it gets
-  its own tcache. If the mechanism is the shared thread pointer, this must
-  survive while tcache.pas aborts -- same work, same libc, same machine, one
-  difference.
+  its own tcache. That was the discriminator: if the mechanism is the shared
+  thread pointer, CONTROL B must survive while thread_glibc_malloc_two_threads
+  aborts -- same work, same libc, same machine, one difference. It did, which is
+  what named the thread pointer. Post-fix BOTH survive, so B no longer
+  discriminates anything and is kept as the regression guard for the
+  pthread_create route itself.
 
   Run with an argument: `ctl a` or `ctl b`. }
 
