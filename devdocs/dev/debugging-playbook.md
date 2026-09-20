@@ -31110,3 +31110,48 @@ where it came from.**
 was less than half what had been relayed. Per CLAUDE.md, **a number moving the way you wanted is the
 direction nobody queries**, so it would have been quoted with no instinct firing. **State the
 direction of a correction out loud rather than quietly substituting the better figure.**
+
+## "THE PIN CANNOT X" HAS A HALF-LIFE OF HOURS, AND A SEAT CANNOT DETECT A PIN FROM INSIDE ITS OWN WORK
+
+*Measured 2026-09-20 by `franks-5b`, retracting its own headline finding of the same morning. The
+standing line is its wording; the coordinator landed it.*
+
+A seat measured that **the pinned compiler could not build any of the four NilPy ESP demos**, all four
+building on HEAD. True when taken, relayed upward twice as practical advice — *use a `PXX=` override
+until there is a pin* — **and false within seventy-two minutes**, because the pin that landed in
+between **carried that same seat's own fix**:
+
+    arena fix   f028632c3  authored  11:17:20
+    pin v413    d79e66f07  committed 12:29:44
+    git merge-base --is-ancestor f028632c3 d79e66f07  ->  TRUE
+
+**Nobody re-measured the claim.** It was found sideways: the seat was chasing an unrelated question
+about which resolution arm the **stable** binary takes, noticed `stable_linux_amd64/default/builtin/`
+was **dated that day and byte-identical to the tree**, and recognised that as a pin rather than a
+coincidence.
+
+**THE STRUCTURAL PART, AND IT IS NOT CARELESSNESS:**
+
+> **A seat cannot detect a pin from inside its own work. Nothing in a session announces one.**
+
+The seat knew a pin was the fix, knew pinning is the owner's call, and still had no event to react to.
+`stable_linux_amd64/default/VERSION` and `pin.log` are **one cheap read** and went unread all day.
+
+**So the standing line:** **any finding of the form "the pin cannot X" carries a half-life measured in
+hours, and must state the pin version it was measured against.** A claim about the pin with no version
+beside it **reads as durable and is not** — and this is the "name the interval" remedy from the
+relay-freshness section applied to the one number that moves without anybody in the conversation
+touching it.
+
+**AND THE STALE ROW HAD ALREADY BEEN BAKED INTO THE FIX.** The same seat's `build.sh` hint read *"as
+of 2026-09-20 none of the four NilPy demos builds under it"* — **in the same commit whose own message
+warns that a stale message beside a correct guard is how the next seat re-derives the wrong cure.**
+The warning and the violation were written in one sitting. The repair is the general one: **state the
+MECHANISM, never the row that fires today** — *a demo can need a fix that has landed but not been
+pinned, and that fails exactly here* — which survives every future pin. Where a row genuinely does
+fire today, **keep it as a conditional keyed on the observable and label it with the version it
+belongs to.**
+
+**Note which direction the correction ran: FAVOURABLE.** The advice retired was *"you need an
+override"*; the truth is *"the default path works"*. Per the relay-freshness section, **a correction
+that makes things better is the one nobody queries**, so it must be stated as loudly as a regression.
