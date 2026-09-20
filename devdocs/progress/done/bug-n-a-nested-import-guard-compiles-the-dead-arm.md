@@ -305,4 +305,4 @@ one too few for every nested try -- an instrument understating exactly the
 quantity the fix is about. Corrected before landing.
 
 ## Log
-- 2026-09-20 — filed and fixed in one sitting; reported as lekkerzeilen blocker 07 with no pxx-side ticket, which is the coordination gap this file closes.
+- 2026-09-20 — filed and fixed in one sitting; reported as lekkerzeilen blocker 07 with no pxx-side ticket, which is the coordination gap this file closes, commit 49f59dcae.
