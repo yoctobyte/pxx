@@ -31419,6 +31419,20 @@ PXX_ESP` DIRECTIVE HERE ANY MORE, AND THERE NEVER EFFECTIVELY WAS ONE."*
 > **A grep counted a comment asserting the ABSENCE of the thing it was searching for as evidence of
 > its PRESENCE.**
 
+**AND THAT IS A STRICTLY NASTIER CELL THAN THE RULE IT SITS UNDER, WITH A CONSEQUENCE FOR HOW YOU
+WRITE.** The neighbouring rule is *prose ABOUT the thing matches as the thing*. This is **prose DENYING
+the thing, matching as the thing** — and the comment existed **specifically to stop a reader believing
+what the grep then concluded.** Documentation written to PREVENT an error became that error's evidence.
+
+**So a maintainer writing a careful "there is no X here, and here is why" note is arming the next
+grep.** The remedy is the one this file already prescribes for a self-checking guard whose published
+baseline joins the population it counts: **write the denial so it cannot match a search for the thing
+denied.** Name it in words rather than in its own syntax — *"this unit carries no ESP profile guard"*
+rather than spelling the directive out — or the note will be found by every future search for exactly
+the construct it is promising is absent. A denial is the one kind of comment whose whole value is that
+someone looking for X finds this instead of concluding wrongly, **and spelling X verbatim is what stops
+it working.**
+
 Checked before replying, per the neighbouring entry, so it cost nothing instead of costing a
 correction sent to the seat who was right.
 
