@@ -7,7 +7,7 @@ status: new
 created: 2026-09-20
 found-by: frankS
 blocked-by: []
-summary: "Every NilPy program built for --platform=esp reserves SocNilPyArenaSize = 64 KiB of BSS for a heap arena that nothing on that profile allocates from. Under PXX_ESP_IDF the pxx heap IS IDF's heap -- PXXAlloc/PXXFree are calloc/free -- and builtinheap.pas's native allocator, the ONLY reader of HeapPtr/HeapEnd, lives in the {$else} arm and is not compiled. Measured: 64 KiB is 31% of the 211,296 B free DRAM pool on a C3, and 52% of our own 125,832 B of SRAM. Attribution is a DIFFERENTIAL, not arithmetic on a matching number -- withHeapArena is true only for pyparser, so a Pascal program on identical target and flags reports 650 B of unattributed bss against NilPy's 66,237 -- which matters because SocNilPyArenaSize and the RTL's EspArena/HEAP_ARENA are both 64 KiB and a grep reaches the wrong one first. AND THE ARM WHERE THE ARENA WOULD BE LIVE IS ITSELF BROKEN: --esp-profile=bare cannot compile ANY NilPy program, not even `print(1)` ([[bug-a-the-bare-esp-profile-cannot-compile-any-nilpy-program]]), so today this constant costs 64 KiB on the one profile that works and delivers nothing on the one where it would matter. THE SENSITIVITY CONTROL IS UNAVAILABLE and that is stated rather than papered over: shrinking the arena to 16 bytes leaves the IDF demo passing qemu-assert, which is CONSISTENT with a dead arena and is not proof on its own, because the profile where a 16-byte arena must fail loudly is the broken one."
+summary: "Every NilPy program built for --platform=esp reserves SocNilPyArenaSize = 64 KiB of BSS for a heap arena that nothing on that profile allocates from. Under PXX_ESP_IDF the pxx heap IS IDF's heap -- PXXAlloc/PXXFree are calloc/free -- and builtinheap.pas's native allocator, the ONLY reader of HeapPtr/HeapEnd, lives in the {$else} arm and is not compiled. Measured: 64 KiB is 31% of the 211,296 B free DRAM pool on a C3, and 52% of our own 125,832 B of SRAM. Attribution is a DIFFERENTIAL, not arithmetic on a matching number -- withHeapArena is true only for pyparser, so a Pascal program on identical target and flags reports 650 B of unattributed bss against NilPy's 66,237 -- which matters because SocNilPyArenaSize and the RTL's EspArena/HEAP_ARENA are both 64 KiB and a grep reaches the wrong one first. AND THE ARM WHERE THE ARENA WOULD BE LIVE IS ITSELF BROKEN: --esp-profile=bare cannot compile ANY NilPy program, not even `print(1)` ([[bug-a-the-bare-esp-profile-cannot-compile-any-nilpy-program]]), so today this constant costs 64 KiB on the one profile that works and delivers nothing on the one where it would matter. PROVED DEAD 2026-09-20 by a DIFFERENT control than the one that was missing, and the runtime sensitivity test is no longer needed: HeapMmap -- the arena-refill call PXXAlloc's native arm makes, and the only route by which HeapPtr/HeapEnd are ever read -- is DECLARED ABOVE the {$ifdef PXX_ESP_IDF} split, so it is compiled on every profile and its SURVIVAL UNDER --dce is a reachability readout with both arms available on the working profile. On the IDF demo object it is PRESENT under --no-dce and DROPPED under --dce, so nothing calls it. "}
 ---
 
 # The NilPy heap arena is 64 KiB of dead SRAM on the ESP-IDF profile
@@ -96,3 +96,53 @@ readers of `HeapPtr` and `HeapEnd` outside the `{$else}` arm before changing
 anything**, and note `HeapPtr`/`HeapEnd`/`HeapLow`/`HeapHigh`/`HeapLiveBytes`
 are all still declared and still in `.bss` under IDF, so their presence proves
 nothing either way.
+
+## PROVED DEAD, 2026-09-20 — and the control came from reachability, not from survival
+
+The sensitivity control this ticket said was unavailable **is still
+unavailable**, and it is no longer what settles the question.
+
+**What was wrong with the plan.** Every probe considered — shrink the arena,
+fill it with a pattern, watch `HeapPtr` — asks whether the arena SURVIVES.
+That class of readout has no positive control on the only profile that
+compiles, for the reason this ticket already gave: if nothing allocates from
+the arena on either arm, it survives either way. Chasing a better survival
+probe was chasing a better instrument for the wrong question.
+
+**The question that does have a control is REACHABILITY.** `HeapPtr`/`HeapEnd`
+have exactly one runtime reader in the tree — `PXXAlloc`'s arena-refill block,
+`builtinheap.pas:1737-1754`, which is inside the native `{$else}` arm. That
+block's distinguishing call is `HeapMmap`, and `HeapMmap` is **declared at line
+1272, ABOVE the `{$ifdef PXX_ESP_IDF}` split at 1391**. So it is compiled on
+every profile, it is dead-strippable, and whether `--dce` removes it is a
+direct statement about whether anything calls it.
+
+Both arms, one program (`examples/esp32/nilpy-c3/main/main.npy`),
+`--target=riscv32 --platform=esp --emit-obj`, compiler `f18adc62d2ac`, oracle
+`readelf -sW`:
+
+| build | `HeapMmap` | code |
+| --- | --- | --- |
+| `--no-dce` | **present** | 3,002,932 B |
+| `--dce`    | **dropped** | 2,074,564 B |
+
+Present when compiled, dropped when unreferenced: **the instrument moves, so it
+is not a guard that cannot fail.** Nothing on the IDF profile calls the
+arena-refill path, so nothing reads `HeapPtr`, so the 64 KiB is written once by
+the entry stub (`EmitBareHeapArenaInit`, fired by `ir_codegen.inc:3458` whenever
+`BSS_HEAP_ARENA > 0`, which includes IDF) and never read again.
+
+**`calloc` IS NOT THE DISCRIMINATOR AND WAS NEARLY USED AS ONE.** `calloc`
+appears as UND in the demo object and the IDF arm calls it — but so does the
+native arm's own `{$ifdef PXX_LIBC_HEAP}` variant (`builtinheap.pas:1445`), so
+its presence is consistent with either arm. A census that had stopped there
+would have reported the right answer for a reason that does not hold.
+
+**Size, with its population:** the object's `bss=89,352 B` for that program, of
+which the arena is 65,536 — **73.3%**, and `--dce` does not touch it, because
+DCE removes code and this is storage.
+
+**What would retire this row:** anything that gives the IDF profile a reader of
+`HeapPtr` — most plausibly routing `PXXAlloc` back onto the native allocator
+over an IDF-supplied region. Re-run the two-row table above; a `--dce` build
+that KEEPS `HeapMmap` means the arena is live again.
