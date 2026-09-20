@@ -91,6 +91,39 @@ about +15%, not double. It is not free to build, though: the compiler
 deliberately has no `execve`, so restarting means resetting its own state in
 place.
 
+# What the demo actually uses -- measured 2026-09-20, not surveyed
+
+lekkerzeilen-7a supplied the list and I ran it, compiler `f17bf2485348`, so
+the surface this question is really about is small and fully supported:
+
+| name | sites | works? |
+| --- | --- | --- |
+| `threading.Thread(target=, args=, daemon=True, name=)` | 4 (app.py 842, 1258, 2527; gauges.py 435) | yes |
+| `.start()` / `.join(timeout=2.0)` | app.py 1163, 1198, 4293 | yes |
+| `threading.Event()` + `.set()` / `.is_set()` / `.wait(t)` | 1 (gauges.py 402) | yes |
+
+Nothing else: no Lock, RLock, Condition, Semaphore, Timer, `current_thread`,
+`local` or Barrier. Every `Thread` is `daemon=True`, which
+`lib/rtl/mimic_threading.pas` records as the FREE arm -- a non-daemon thread is
+the one that costs, and the app has none. One `target` is a BOUND METHOD, which
+reaches the thread entry through a different door than a plain function;
+checked on purpose, works.
+
+Oracle RUN rather than asserted: CPython 3.14.4 on the same file prints
+byte-identical output.
+
+**So nothing is missing.** There is no feature gap behind this question and no
+workaround anyone is carrying -- the ONLY thing between the unmodified tree and
+a compile is the `--threadsafe` flag, which makes this purely the stance
+question above and not a capability one.
+
+**Not the RTLEvent ticket, despite the name.**
+`feature-b-the-rtlevent-family-is-absent-from-the-threading-rtl` (backlog-libs,
+p35) is about FPC's Pascal `PRTLEvent`/`RTLEventCreate`/`RTLeventWaitFor`
+spelling, which nothing in the app touches. `threading.Event` is a separate
+class backed by palsync's futex-backed `TEvent`. The two were conflated on the
+strength of the word "Event"; they share no code.
+
 # Recommendation
 
 **Answer "as written", and we implement option 1.** It keeps your stance
