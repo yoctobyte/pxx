@@ -1,0 +1,44 @@
+# A call on a dynamically-typed receiver must resolve against the class the
+# object ACTUALLY is, not against whichever class happened to be registered when
+# the call was lowered.
+#
+# THE AXIS IS IMPORT ORDER, so both orders belong in the fixture. `traffic` is
+# imported FIRST, so when Craft.update is lowered the only registered carrier of
+# the name `wind` is Craft -- where it is a data field. Environment, which
+# declares it as a METHOD, is not in the class table yet: the class table is
+# global and cumulative while the registration pre-pass's window is ONE module's
+# token span, so a call resolves against the classes compiled SO FAR. The call
+# used to be lowered as a hard cast to Craft plus a field read, with no runtime
+# class test, so an Environment receiver read Craft's slot and called it:
+#   TypeError: object is not callable - the name is None
+# Swapping the two import lines below -- changing no code at all -- made the
+# identical program correct, and that asymmetry is what identified the mechanism.
+# bug-n-a-variant-field-is-claimed-as-the-callee-of-an-open-world-call-with-no-runtime-class-test
+#
+# A FIXTURE WRITTEN IN THE PASSING ORDER CERTIFIES THE DEFECT, so the failing
+# order is the one used here.
+from nilpy_callorder import traffic
+from nilpy_callorder.environment import Environment
+
+c = traffic.Craft()
+print(c.update(Environment()))
+
+# The same call with the result going to a LOCAL instead of to the shadowing
+# field. This row WARNED and was correct even before the fix.
+print(c.peek(Environment()))
+
+# A name NO class declares either way: the scan finds nothing, warns, and defers
+# to run time. That arm was always correct, and it is here because the warning it
+# emits was mistaken for this defect's signature -- the failing row above emits
+# ZERO warnings while this passing row emits one.
+print(c.gusty(Environment()))
+
+# THE MUST-NOT-BREAK ROW. A genuine dispatch table: `cb` is None at birth, armed
+# with a module-level def, and the receiver really IS the candidate class, so the
+# `is` test matches and the direct arm runs. A fix that sent every call to the
+# dynamic dispatcher would pass every row above and lose this one.
+print(traffic.through_table())
+
+# The field is still a field: reading it back proves the store landed in Craft's
+# own slot and not somewhere the dispatch invented.
+print(c.wind)

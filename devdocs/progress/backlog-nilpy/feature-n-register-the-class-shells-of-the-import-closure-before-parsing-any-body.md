@@ -148,3 +148,43 @@ carelessly, this fix could deliver that failure across a whole program at once,
 as a wrong object rather than a diagnostic, and a green tier would not
 necessarily catch it: the condition needs several modules and a class-name
 population a fixture author has no reason to construct.
+
+## 2026-09-20 — WHAT THIS IS NOW WORTH CHANGED, AND THERE IS EVIDENCE AGAINST DOING IT
+
+Two things moved today and they push in opposite directions. Read both before
+ranking this.
+
+**1. The dangerous half of the consequence is gone, so this is no longer a
+correctness ticket.** `bug-n-a-variant-field-is-claimed-as-the-callee-of-an-open-world-call-with-no-runtime-class-test`
+(done) made the call path `is`-test every candidate and fall back to open-world
+dispatch. Until then, "the class in the later module is invisible" had TWO
+outcomes: fall back to runtime dispatch with a warning — this ticket's summary,
+and the benign one — or find a same-named FIELD on an unrelated class and
+silently hard-cast to it, which is what lekkerzeilen blocker 03 was. The second
+outcome no longer exists. **What is left is resolution QUALITY: a spurious
+warning, a lost static call, and a slower path.** Real, and not the same
+argument.
+
+**2. BLOCKER 06 IS STANDING EVIDENCE THAT A MORE COMPLETE TABLE CAN BE WORSE,
+AND IT POINTS AT THIS TICKET SPECIFICALLY.** 06 is *"adding an UNUSED import to a
+module breaks an unrelated class"* — one line, `from .world import Grid` in
+wind.py, `Grid` never referenced, and the demo dies with `'World' object has no
+attribute 'flow'`, a World arriving as `self` in an `Environment` method.
+
+The direction is the point. **03 is a decision taken with too FEW classes
+registered; 06 is a wrong bind appearing when one MORE is registered.** This
+ticket proposes to register every class in the import closure up front — which
+is to say, it proposes doing to every program what 06's one unused import does
+to one module. If 06's mechanism is registration-order sensitivity in the other
+direction, **this change could promote a latent bug to an always-on one across
+the corpus.**
+
+Not measured, and deliberately not claimed: nobody has reduced 06 below the
+demo, and it may turn out to be unrelated. But it is cheap to check and
+expensive to skip.
+
+**So the sequencing is: reduce 06 FIRST, and treat this ticket as blocked on
+understanding it.** The runtime-test fix that landed today is correct whatever
+the table happens to contain, which is why it was the right first move and why
+this one can wait for evidence rather than being the obvious repair it looks
+like.

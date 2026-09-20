@@ -2018,6 +2018,19 @@ test-nilpy: $(COMPILER)
 	# nilpy_deadarm/deadctypes.py line 7 and not this file's.
 	./$(COMPILER) test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy $(TESTTMP)/test_nilpy_deadarmcompile26
 	tools/expect_same.sh test_nilpy_deadarmcompile26 "$$($(TESTTMP)/test_nilpy_deadarmcompile26)" "$$(python3 test/test_nilpy_a_dead_guarded_import_arm_does_not_compile_the_module_it_imports.npy)"
+	# A call on a dynamically-typed receiver resolves against the class the
+	# object ACTUALLY is. THE AXIS IS IMPORT ORDER: the fixture imports the
+	# module declaring the name as a data FIELD before the one declaring it as a
+	# METHOD, so when the call is lowered only the wrong carrier is registered.
+	# The oracle is CPython on the same file, so no expected output is restated
+	# here and none of the four rows is a default, a width or an empty.
+	# POSITIVE CONTROL MEASURED against compiler 3c6e31f94a62d295: dies at the
+	# first row with `TypeError: object is not callable - the name is None`,
+	# from the hard cast this replaced. The same file in the OTHER import order
+	# passed before the fix and passes after it, which is why both orders are in
+	# the fixture -- written in the passing order it would have certified the bug.
+	./$(COMPILER) test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy $(TESTTMP)/test_nilpy_callorder26
+	tools/expect_same.sh test_nilpy_callorder26 "$$($(TESTTMP)/test_nilpy_callorder26)" "$$(python3 test/test_nilpy_a_call_through_a_variant_receiver_dispatches_on_the_real_class.npy)"
 	# A call that OMITS a trailing defaulted argument, where the argument's class
 	# declares __iter__. PyFixIterableArgs drains a user-iterable argument on
 	# SPECULATION so the overload match can be retried once (that is what gives

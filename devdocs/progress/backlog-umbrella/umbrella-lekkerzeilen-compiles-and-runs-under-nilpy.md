@@ -1410,6 +1410,35 @@ A pin is being cut by another seat under firsthand authorisation. **Recorded BEF
 
 **EXPECTED:** after that pin lands, `./stable_linux_amd64/default/pinned devdocs/pxx-blockers/01-field-from-qualified-float-const/repro/__main__.py` **builds and prints 1700**, where against pin `a6a2a1cc2278e1a9` it errors with `cannot infer the type of field self.chart_view`. The fix is in `934f40376..a852664bb` and the pin is cut from a tree containing it.
 
-**If it holds, two retirements and no new work:** blocker 01 stops being inert, and `runbin.sh`'s header note documenting `PXX=pinned` as *"CURRENTLY BROKEN for this demo"* becomes retirable — that note is about a different failure (`TypeError: forwarded call got 5 arguments, expected 0 to 4`) also fixed after the old pin, and its own text says *"Re-measure before believing either half of this."* It is 7a's file; flagged here, not edited.
+**If it holds, two retirements and no new work:** blocker 01 stops being inert, and `runbin.sh`'s header note documenting `PXX=pinned` as *"CURRENTLY BROKEN for this demo"* becomes retirable — that note is about a different failure (`TypeError: forwarded call got 5 arguments, expected 0 to 4`) ~~also fixed after the old pin~~ **[CORRECTED 2026-09-20 — I NEVER MEASURED THAT AND IT SHOULD NOT HAVE BEEN STATED; see the correction block below]**, and its own text says *"Re-measure before believing either half of this."* It is 7a's file; flagged here, not edited.
 
 **WHAT WOULD FALSIFY IT:** the pin cut from a tree without the fix, or the fix depending on something in `lib/**` the pin does not carry. **A still-failing repro under the new pinned binary is the interesting result and must not be quietly re-run** — it would mean the pin and the fix disagree about what carries it.
+
+### OUTCOME of the pre-registration above — pin v413, measured 2026-09-20
+
+**CONFIRMED.** `./stable_linux_amd64/default/pinned .../01-field-from-qualified-float-const/repro/__main__.py` **builds and prints 1700**, where against pin `a6a2a1cc2278e1a9` it errored. Pinned binary after the pull: `f94c2a7e2396d2be`.
+
+**AND THE CALIBRATION, BECAUSE A CONFIRMED PREDICTION IS WORTH LESS THAN IT FEELS WHEN HALF OF IT WAS ALREADY SETTLED.** The pinned bytes are IDENTICAL to the compiler this umbrella's build row was measured with, so the binary half could hardly have come out otherwise. **What was genuinely open is the half the falsifier named — whether the fix depends on something in `lib/**` the pin does not carry.** A pin is a binary AND a `lib/` pairing, and byte-identity settles only the binary. The pair is coherent.
+
+**THE DEMO NOW COMPILES UNDER THE PIN, which is a real change of state and not a new measurement:** `./stable_linux_amd64/default/pinned` on lekkerzeilen `4379db0` gives **0 errors, 83 warnings, `code=12021473B procs=11589`** — byte-for-byte the same figures as the HEAD row above, because it is the same compiler bytes. **Before v413 this build died on blocker 01.**
+
+**WHAT IS NOT RETIRED: `runbin.sh`'s `PXX=pinned` note.** It documents a RUNTIME failure (`TypeError: forwarded call got 5 arguments, expected 0 to 4`), and a clean compile says nothing about it. Running the demo needs a window and belongs with whoever owns the `SDL_VIDEODRIVER` question. **Flagged, not claimed.**
+
+### CORRECTION 2026-09-20 (frankb-8e) — I USED THE NOTE'S CLAIM ABOUT ITSELF AS EVIDENCE, IN THE SENTENCE FLAGGING THE NOTE AS UNRELIABLE
+
+The pre-registration above said `runbin.sh`'s `PXX=pinned` note concerns a failure *"also fixed after the old pin"*. **I never measured that.** I took it from the note's own header — *"because the fix for that landed after the pin was cut"* — and restated it as established, **in the same sentence that quotes the note saying "Re-measure before believing either half of this."**
+
+**That is the failure and it is worse than an unmeasured claim.** I believed one half while quoting the instruction not to. A document under suspicion cannot be its own corroboration, and **a self-description is the FIRST thing to go stale in a stale document** — it is written once, at the moment the author is most confident, and nothing later contradicts it because nothing later reads it. So the rule is narrow and worth having: **when you flag a document as needing re-measurement, every claim you take FROM it inherits that flag, including the ones you are only passing along.** Mark it as the document's claim, or measure it.
+
+**WHAT 7a MEASURED (`b2eddde`), and it refutes the note without a repro:** `pinned` and `latest` are **byte-identical today** — both `f94c2a7e2396d2be` — so *"pinned is broken, latest works"* cannot be true of anything. **A note contrasting two configurations is refuted by showing the configurations are the same**, which is cheaper than reproducing either and settles it outright. Keep the shape: **check that two configurations CAN differ before investigating HOW they differ.**
+
+**ONE DISTINCTION I AM KEEPING, because collapsing it would misfile an open bug.** The relay reached me as *"the TypeError was not fixed"*. There are **two different TypeErrors** here:
+
+| | message | mechanism | status |
+| --- | --- | --- | --- |
+| the note's | `TypeError: forwarded call got 5 arguments, expected 0 to 4` | arity of a forwarded call | unknown to me; **still unmeasured**, and I am not claiming it either way this time |
+| 7a's, measured today | `TypeError: object is not callable` | a FIELD shadows a method, so the call lands on the field — blockers **03** and **04** | **open** |
+
+Same exception type, different messages, different causes. **This tree already says that when two subjects fail with the same diagnostic you suspect the diagnostic before believing a shared cause**; an exception CLASS is a coarser match than a line number, so the trap is larger. The live failure is 03/04 and it has **nothing to do with the pin** — the note blamed the pin for a failure the pin never caused.
+
+**WHY THE NOTE SURVIVED TO BE MEASURED PROPERLY:** I declined to retire it on a clean compile, because it describes a RUNTIME failure. Had it been retired on that green, the one line pointing at a live `TypeError` would have gone with it — **retired on a green that was about a different question.** That is the only part of my handling here that was right, and it was right for the stated reason rather than by luck.

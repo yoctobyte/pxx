@@ -3,8 +3,9 @@ slug: bug-n-a-field-of-the-same-name-in-an-unrelated-class-defeats-a-property-se
 type: bug
 track: N
 prio: 70
-status: open
+status: working
 summary: "SILENT WRONG VALUE: `v.prop = x` on an unannotated receiver silently writes a shadow attribute instead of calling the @property setter, whenever ANY declared class has a plain FIELD of that name — PyVariantPropClass's field-wins precedence loop scans every class and exits on the first hit, so a property on the receiver's real class stops being a property. The getter then reads the shadow back, so the value looks right from outside while the object the setter should have written is untouched."
+owner: frankb-8e
 ---
 
 # A same-named field in an unrelated class defeats a property setter
@@ -153,3 +154,90 @@ should fail on, and only then write the setter. The row that passes `4.0` to a
 clamping setter is the one that separates "the setter ran and wrote elsewhere"
 from "the setter never ran" — keep it. And read the workaround section above
 before proposing any compile-time repair.
+
+## 2026-09-20, frankb-8e — THE INLINE FIXTURE IS NOT INLINE, AND THE REPRO IS STILL LIVE
+
+**The parking note says "its source is inline in this ticket" and it is not.**
+There is no code block anywhere in this file. That sentence is load-bearing —
+it appears in the same paragraph that says the fixture lives in a scratchpad
+which does NOT survive a reboot, so it is the safeguard, and the safeguard was
+not taken. The twenty-minute re-derivation the note budgets is therefore the
+floor, not the risk.
+
+Recording it rather than quietly rebuilding, because the failure is the shape
+this tree spends the most on: a ticket that ASSERTS a thing was preserved, read
+by someone who then plans around it. The parking note is otherwise excellent and
+the fix specification in it is exact; this is the one clause to distrust.
+
+**Recoverable, and cheaper than twenty minutes:** the four probes exist in the
+demo repo at `devdocs/pxx-blockers/04-property-setter-skipped-through-bare-receiver/`
+(`repro.py` plus the three controls), which is not a scratchpad and does survive.
+
+**Re-measured at compiler `05e1d35cd993`** (which carries the blocker-03 fix, so
+this also establishes 03's repair did not touch this one — different function,
+as expected):
+
+| probe | CPython | pxx |
+| --- | --- | --- |
+| `repro.py` line 1 | `(0.6, 0.6)` | **`(0.6, 0.0)`** |
+| `repro.py` line 2 | `0.9 0.9` | `0.9 0.9` |
+| `control_annotated_param.py` | — | identical |
+| `control_local_receiver.py` | — | identical |
+| `control_module_level.py` | — | identical |
+
+**A WARNING ABOUT READING THAT REPRO, because it cost me a wrong verdict first
+time.** `repro.py` prints TWO lines and only the FIRST is the defect; the second
+is the module-level store, which has always worked. I read it with `tail -1`,
+got `0.9 0.9`, and briefly recorded all four probes as PASSING. **Diff the whole
+output against CPython — never the last line.** This is the interesting element
+not being last, in a file someone else wrote.
+
+## THE AXIS THAT MAKES A REDUCTION PASS: A CONSTRUCTION AS THE ARGUMENT
+
+**`drive(Boat())` PASSES. `b = Boat()` then `drive(b)` FAILS.** Same compiler
+(`05e1d35cd993`), same classes, same property, same setter, everything else
+identical — measured by bisecting from `repro.py` toward a reduction of mine,
+one change at a time.
+
+Handed a fresh CONSTRUCTION the frontend types the parameter from the call
+site, so the receiver stops being dynamic and the property resolves statically.
+The defect needs a receiver the frontend cannot narrow, and a bare name is one.
+
+**THIS IS WHY A FIXTURE FOR THIS BUG IS EASY TO WRITE GREEN.** I wrote one
+first with `drive(Boat())` — because constructing in the call is the natural
+way to write a self-contained test — and it **passed on the unfixed compiler**,
+reproducing nothing while looking like a complete four-row fixture with
+controls. Had it been written after a fix rather than before one, it would have
+certified this defect as repaired. The spelling is now pinned in a comment in
+the fixture itself rather than left to whoever edits it next.
+
+This is the CLAUDE.md rule about a minimal case fixing every axis you did not
+think about, in the shape where the unenumerated axis is **how the argument is
+spelled at the call site** — not the property, not the receiver's annotation,
+not the collision, all of which this ticket already enumerates.
+
+## Fixture, WRITTEN AND FAILING ON THE RIGHT ROWS, 2026-09-20
+
+`test/test_nilpy_a_property_setter_runs_through_a_bare_receiver_despite_a_same_named_field.npy`
+— not yet wired into `test-nilpy`, because it fails today. Oracle is CPython on
+the same file. At `05e1d35cd993`:
+
+| row | CPython | pxx | what it shows |
+| --- | --- | --- | --- |
+| `drive(b1)` | `(0.6, 0.6)` | **`(0.6, 0.0)`** | the setter never ran |
+| `drive_clamped(b2)` | `(1.0, 1.0)` | **`(4.0, 0.0)`** | **the shadow cannot fake this** |
+| `drive_annotated(b3)` | `(0.6, 0.6)` | `(0.6, 0.6)` | annotated receiver is fine |
+| module-level `b.throttle = 0.9` | `0.9 0.9` | `0.9 0.9` | ordinary path intact |
+| `set_controls(Controls())` | `0.25` | `0.25` | must-not-break: a plain field stays a plain field |
+
+**The clamping row is frankH's and it earns its place.** A setter that clamps to
+1.0 receiving 4.0 reads back `1.0` if it RAN and `4.0` if it did not. Every
+other row here can be satisfied by a shadow attribute answering its own write —
+which is precisely what makes this defect silent — so a fixture without that row
+would go green while the setter was never called. `(4.0, 0.0)` is the
+unambiguous signature: the 4.0 came straight back out of the shadow, unclamped,
+and `propulsion.throttle` was never touched.
+
+The third class `Controls` is in the fixture deliberately, per the workarounds
+section above: it is what makes "rename the colliding field" fail to be a
+workaround, and its own row must keep passing.

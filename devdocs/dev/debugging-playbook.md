@@ -23338,6 +23338,7 @@ anything nearby is edited — including when you edit it to add a probe. **A
 finding that survives your `WriteLn` is a different finding.** Anything that
 starts behaving when you insert a line in front of it is about NODE NUMBERING,
 not about the feature, and the next place to look is what resets the counter.
+
 ## A STRUCTURAL EDIT BY LINE NUMBER FAILS 4000 LINES AWAY, IN A FILE YOU DID NOT TOUCH, ABOUT A SYMBOL THAT IS DEFINED
 
 Measured 2026-09-09 (`435d656ac`, frankB). A refactor spliced three function
@@ -23741,6 +23742,7 @@ Companion to "A GUARD THAT CANNOT FAIL IS NOT A GUARD" in CLAUDE.md, which
 covers a control drawn from the wrong population. This is the neighbouring
 failure: a control drawn from the right population, differing from the subject
 in a dimension nobody enumerated.
+
 ## A REFUSAL WHOSE STATED REASON IS A CLAIM ABOUT MACHINERY — GO LOOK AT THE MACHINERY, IT IS OFTEN ALREADY THERE
 
 Four instances in `compiler/pyparser.inc` and its neighbours, 2026-09-09/10.
@@ -25914,6 +25916,7 @@ default*, *reading a NEGATIVE result*) already cover the pieces. What is new is
 the AGENT — the experimenter constructing the dead instrument by a sequence of
 individually-reasonable deletions — and that earns a clause on the negative-result
 rule the day a second subject shows it.
+
 ## TWO WAYS A CONTROL REPORTS ON SOMETHING THAT IS NOT YOUR SUBJECT — AND THEY ARE NOT THE SAME BUG, WHICH IS THE FINDING
 
 **frankZ and frankB, 2026-09-11.** Banked as TWO mechanisms that were briefly
@@ -26101,6 +26104,7 @@ this exact shape four hours earlier.
 one clause backed out (two mechanisms wearing one sentence), one promoted, one
 correctly declined by its own author and then re-decided on a different axis.
 frankB's closing note: that spread is the best evidence the test is real.
+
 ## A FIXTURE THAT PUTS THE INTERESTING ELEMENT LAST IN A LIST CANNOT SEE AN ORDER BUG — AND THE FIXED TICKET'S OWN FIXTURE PASSED ON THE UNFIXED COMPILER
 
 **frankH, 2026-09-11**, Track P, `401c00f2b`. A sibling of the first-wins
@@ -26242,6 +26246,7 @@ instead of on position, so it cannot silently drop it. And when a binary's
 identity is what you are claiming, read `compiler/.pascal26.fixedpoint`, which
 carries `sha256` AND `srchash`, rather than inferring it from whichever line
 survived your filter.
+
 ## A FULL DISK REDS A TIER WITH A SEGFAULT IN A TEST THAT IS FINE, AND THE COMPILER CERTIFIES IT
 
 Measured 2026-09-11 (frankuser). A full `make test-nilpy` reddened exactly one
@@ -28100,6 +28105,7 @@ guard-that-cannot-fire of that day (this probe, the busybox banner control, and
 `_Static_assert` itself as a guard in user code), but all three are the
 **existing** rule working, which argues against a new line at startup cost
 rather than for one.
+
 ## A DIAGNOSTIC CAN MANUFACTURE DISTINCTNESS AS EASILY AS AN EQUIVALENCE CLASS — and the splitting direction HIDES the wall instead of inventing one
 
 CLAUDE.md records the merging direction: two subjects failing at *the identical
@@ -28990,6 +28996,7 @@ reach a reader who never gets to it**, and a grep for "arena" does not land on
 the file carrying the warning. See also the sibling-is-a-SPELLING-not-a-shape
 rule in CLAUDE.md: there two spellings of one guard diverged, here two names
 for one quantity converged, and both are invisible to a grep for the feature.
+
 ## A LIVE INSTANCE OF THE CANARY'S DEFECT CLASS — DECLARATION ORDER PASSES THE BUILD *AND* THE QUICK TIER, AND ONLY THE FPC SEED SEES IT
 
 Measured 2026-09-18 (frankB, Track A). Recorded because the rule is in CLAUDE.md
@@ -29472,6 +29479,7 @@ the wrong answer.** One subsystem so far, one instance in it. frankuser asked
 for it here on 2026-09-19 specifically because the table above has a row for
 what the compiler inferred and no row for which site acted; if it recurs
 elsewhere, that table gains a row and this entry is already written.
+
 ## A REGRESSION THAT NEEDS N COMMITS TO CONJOIN HAS N-1 OF ITS CAUSES GREEN IN EVERY TEST BEFORE THE LAST ONE
 
 Measured 2026-09-19 (frankB, frankh-3f, frankuser; correction recorded at
@@ -29733,6 +29741,7 @@ for the construct, but for the OTHER ARM'S CONDITION. When you find it, use it
 rather than writing an equivalent; and when a guard exists, note in it what
 configuration it separates, because that is exactly what the next author needs
 and cannot see.
+
 ## ADDING A CORRECT TYPE ANNOTATION IS WHAT BREAKS IT — A CLASS WITHOUT IDENTITY IS AN OFFSET OF ZERO, NOT AN "UNKNOWN"
 
 Three instances in two days (2026-09-19/20), across two different NilPy
@@ -29793,6 +29802,7 @@ value at all. Do not check by reading the value back — a read against offset
 zero can return something plausible. And when a construct has an annotated and
 an unannotated spelling, **measure both**: the pair disagreeing, with the
 annotated one wrong, is this signature.
+
 ## MEASURE THE SHAPE YOU ARE ABOUT TO ASSERT, NOT THE ONE THE SOURCE WAS WRITTEN ABOUT
 
 Three instances on 2026-09-20, one seat, three subsystems. **In every one the
@@ -30150,6 +30160,7 @@ This is `normalise-dont-special-case.md`'s "the second path is the one that
 stays broken" arriving inside a SINGLE LOOP rather than across two files — which
 is why grepping for the other file would not have found it, and why the fixture
 did.
+
 ## A DIAGNOSIS NAMES A ROUTE, AND THE PROBE THAT SUGGESTED IT USUALLY REPORTS ONLY THE DESTINATION
 
 Measured 2026-09-20, Track N, lekkerzeilen blocker 03. A field `self.wind`
@@ -30769,3 +30780,29 @@ a setter that clamps to 1.0; handed 4.0, it reads back **1.0 if it ran and 4.0 i
 gives 4.0). **Every other row can be satisfied by a shadow field answering its own write** — which is
 exactly what makes the defect silent — so a fixture without that one row **goes green while the setter
 is never called.** The other rows are not weak; they are **structurally unable to observe the thing.**
+
+## AN ABSENCE IS ONLY EVIDENCE IF EXECUTION REACHED THE SITE — and a program that dies early produces a log that honestly lacks every later message
+
+Found and self-corrected by **lekkerzeilen-7a**, 2026-09-20 (`b2eddde` overclaimed, `40e101c` corrected). Recorded here because 7a works in the lekkerzeilen repo and its findings do not otherwise reach a pxx seat's tree; the wording and the rule are its own.
+
+It had been asked whether a failure named in a stale note — `TypeError: forwarded call got 5 arguments, expected 0 to 4` — still occurs. It ran the demo, found no such message, and wrote **"THE NAMED TypeError IS GONE ... that half is retired."**
+
+**The program dies at an unrelated defect well before it reaches the code that raises the arity error.** The log lacked the message for the same reason a log lacks every message from a function that was never called. Nothing was wrong with the grep, the build, or the run.
+
+> **The claim is not *"I ran it and it did not happen"* but *"I ran it, EXECUTION REACHED THE SITE, and it did not happen"* — and if the second clause cannot be written, the verdict is UNMEASURED.** — 7a
+
+**WHY THIS IS NOT THE SECTION ABOVE ABOUT ASSERTING PRECONDITIONS.** That one is a COMPARISON whose inputs were never built: `cmp` ran on two files that do not exist. Here there is no comparison, the program genuinely ran, and the thing that failed to happen genuinely did not happen — **in the part of the program that executed.** The precondition is not an input; it is *arrival*.
+
+**AND IT IS THE THIRD VARIANT OF THE FALSE NEGATIVE, WHICH IS WORTH LINING UP** because the three have different remedies:
+
+| | what went wrong | the question that catches it |
+| --- | --- | --- |
+| inputs never produced | the comparison ran on nothing | *were the things I am comparing actually built?* |
+| precondition destroyed | a setup line removed the condition under test (`UniqueString` before the refcount probe) | *does anything before the assertion stop the subject being the thing I am testing?* |
+| **site never reached** | the program died earlier; the log is honestly silent | ***did execution get to the code that could produce this symptom?*** |
+
+**THE ASYMMETRY IS THE WHOLE REASON THIS IS HARD: a POSITIVE result proves its own reachability, and an absence proves nothing about where it was absent from.** If the message appears, the site ran — no extra check needed, which is why nobody develops the habit. The check is only ever required in the direction where there is nothing to look at.
+
+**THE FAILURE IS NOT INSUFFICIENT CHECKING.** 7a's own summary is the sharpest statement of it: ***"I did not fail to check; I checked something that could not have come back the other way."*** More diligence applied to that grep produces the same answer.
+
+**PRACTICAL FORM.** Before reading an absence as a fix, make the site announce itself: a print at the site, a breakpoint, a counter, or — cheapest — confirm the program got PAST the site by observing something downstream of it. Where the program is known to die early, the honest verdict is **UNMEASURED**, and it is a different word from **FIXED**. `40e101c` leaves the confident wording visible and marked as the overclaim, which is the right treatment: the struck sentence is what tells the next reader the retirement was once believed.

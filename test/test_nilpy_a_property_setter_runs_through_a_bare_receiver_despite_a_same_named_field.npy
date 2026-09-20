@@ -1,0 +1,99 @@
+# `v.prop = x` on an unannotated receiver must call the @property SETTER of the
+# class the receiver actually is, even when some unrelated class in the program
+# declares a plain FIELD of that name.
+#
+# The precedence loop that decides this is "a real FIELD of that name anywhere
+# wins", scanning EVERY declared class and exiting on the first hit. That rule
+# is right WITHIN a class (a field beats a dynamic attribute) and wrong ACROSS
+# unrelated ones, because it never asks whether the receiver could be the class
+# it found. With the property suppressed the store falls through to the
+# dynamic-attribute path, which is STORE ONLY, so the setter never runs and the
+# value lands in a shadow attribute -- and pydynattr_get reads the shadow back
+# BEFORE the declared fields and the property, so the call site sees the value
+# it just wrote and nothing looks wrong.
+# bug-n-a-field-of-the-same-name-in-an-unrelated-class-defeats-a-property-setter-on-a-bare-receiver
+#
+# THE CLAMPING ROW IS THE ONE THAT CANNOT BE FAKED BY THE SHADOW, and it is here
+# on frankH's instruction. A store of 4.0 through a setter that clamps to 1.0
+# reads back 1.0 if the setter RAN and 4.0 if it never did. Every other row in
+# this file can be satisfied by a shadow attribute answering its own write --
+# that is exactly what makes this defect silent -- so a fixture without this row
+# would pass while the setter was never called.
+
+class Propulsion:
+    def __init__(self):
+        self.throttle = 0.0          # the field the setter is supposed to write
+
+
+class Controls:
+    def __init__(self):
+        self.throttle = 0.0          # A THIRD, UNRELATED class with the name.
+                                     # Renaming one collision hands the win to
+                                     # the next, which is why the workaround is
+                                     # "rename it everywhere" and is not one.
+
+
+class Boat:
+    def __init__(self):
+        self.propulsion = Propulsion()
+
+    @property
+    def throttle(self):
+        return self.propulsion.throttle
+
+    @throttle.setter
+    def throttle(self, v):
+        if v < 0.0:
+            v = 0.0
+        if v > 1.0:                  # the clamp the shadow cannot imitate
+            v = 1.0
+        self.propulsion.throttle = v
+
+
+def drive(boat):                     # UNANNOTATED: the receiver has no class
+    boat.throttle = 0.6
+    return boat.throttle, boat.propulsion.throttle
+
+
+def drive_clamped(boat):             # UNANNOTATED, and 4.0 is out of range
+    boat.throttle = 4.0
+    return boat.throttle, boat.propulsion.throttle
+
+
+def drive_annotated(boat: 'Boat'):   # the control: a known class needs no guard
+    boat.throttle = 0.6
+    return boat.throttle, boat.propulsion.throttle
+
+
+# THE ARGUMENT IS A NAME, NOT A CONSTRUCTION, AND THAT IS LOAD-BEARING.
+# Measured 2026-09-20: `drive(Boat())` PASSES and `b1 = Boat(); drive(b1)`
+# FAILS, on the same compiler, with everything else identical. Handed a fresh
+# construction the frontend types the parameter from the call site, so the
+# receiver stops being dynamic and the property resolves statically -- the
+# defect needs a receiver it cannot narrow. A fixture written the other way
+# round passes and certifies the bug; this one was written that way first and
+# did exactly that, which is why the spelling is pinned here in a comment
+# rather than left to whoever edits it next.
+b1 = Boat()
+print(drive(b1))
+b2 = Boat()
+print(drive_clamped(b2))
+b3 = Boat()
+print(drive_annotated(b3))
+
+# A module-level store straight to the property. This worked before the fix; it
+# is here so a repair that broke the ordinary path could not pass on the rows
+# above alone.
+b = Boat()
+b.throttle = 0.9
+print(b.throttle, b.propulsion.throttle)
+
+# THE MUST-NOT-BREAK ROW: an unrelated class's plain field of the same name is
+# still a plain field, and storing to it through a bare receiver must keep
+# writing the field rather than being diverted anywhere.
+def set_controls(c):
+    c.throttle = 0.25
+    return c.throttle
+
+
+print(set_controls(Controls()))

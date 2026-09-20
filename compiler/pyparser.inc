@@ -16786,19 +16786,127 @@ end;
   So the class is decided at RUN TIME — one `pyvarobj(v) is C ? <call as C> : ...`
   arm per candidate, which is exactly how the sibling METHOD path already
   dispatches (`dualCis` in the member scan) and how PyMakeVariantField reads a
-  field whose candidates disagree. The LAST candidate is the fallback arm, so a
-  receiver of none of these classes behaves as it did before rather than
-  becoming a new error.
+  field whose candidates disagree.
+
+  THE LAST CANDIDATE USED TO BE THE FALLBACK ARM — an UNCONDITIONAL hard cast,
+  justified here as "a receiver of none of these classes behaves as it did
+  before rather than becoming a new error". That justification is retired, and
+  so is the `nc = 1` short-circuit below that skipped the `is` test entirely.
+  Both were already deleted from the READ path on 2026-09-13, where the comment
+  in PyMakeVariantField names them as the two arms it removed (`sameShape`, and
+  the last candidate as the else arm) and records both being measured wrong on
+  lekkerzeilen. THE CALL PATH WAS NOT MIGRATED WITH IT. The resolved ticket's
+  own rule was "the READ and the WRITE must agree about which names dispatch" —
+  read and write were made to agree and CALL is the third spelling, so it kept
+  both holes for a week.
+  bug-n-a-call-through-a-variant-receiver-hard-casts-to-a-class-the-object-is-not
+
+  Measured 2026-09-20 on lekkerzeilen blocker 03: `env.wind(1.0, 2.0)` where
+  `Environment.wind` is a METHOD and an unrelated `Craft.wind` is a data field.
+  When the call is lowered, the importing module's classes are registered and
+  `Environment`'s are not — PyClassHeaderSweep's window is one module's token
+  span and the class table only ever grows — so the method scan finds nothing,
+  the field scan picks the one class it can see, and the hard cast reads a
+  tuple field off an Environment and calls it. Changing only the import ORDER
+  in __main__.py makes the identical program correct, which is the tell.
+  The same import-order mechanism was already fixed for the ARITY variant
+  (done/bug-n-a-method-call-is-refused-on-arity-from-the-candidates-compiled-
+  so-far-so-import-order-decides) by deferring to the run-time dispatcher; this
+  is that remedy applied to the silent-misbind variant rather than the refusal
+  variant.
 
   The arguments are parsed ONCE and shared by every arm. Only one arm runs, so
   the duplication is code size and not repeated evaluation — the same shape
   PyWrapClosureFieldCall already builds around this call.
   bug-nilpy-dynamic-receiver-callable-field-casts-to-the-wrong-class }
+
+{ The open-world fallback arm for a variant-receiver CALL, built from arguments
+  that are ALREADY PARSED — which is the only reason this is not just
+  PyMakeDynMethCall: that one parses its own argument list off the token
+  stream, and by the time the arms are assembled the tokens are long consumed.
+  The emitted call is the same `pydyn_meth<n>(recv, 'name', a0..)` it builds.
+
+  PyDynMethL behind it resolves against the RTTI of the class the receiver
+  ACTUALLY is: a declared METHOD first (PyFindMethCI + PyHostCall), then
+  pydynattr_get for a callable ATTRIBUTE, then AttributeError on a genuine
+  miss. Both halves matter here — 03's name is a method on the real class and a
+  data field on the wrongly-picked one — and the getter-only fallback the READ
+  path uses would have resolved only the second.
+
+  THE RUNG CAP IS DERIVED, NOT RESTATED. MAX_DYN_RUNGS is declared some 3600
+  lines further down and the ladder has already been extended once without its
+  readers noticing (pyeval's own comment records a cap that "was true at
+  95e7eb26e and stopped being true later the SAME DAY"). So ask FindProc for
+  the rung and let its absence be the answer: -1 means the caller keeps its
+  previous shape, and a rung added later is picked up with no edit here.
+
+  SO AN ARITY PAST THE LAST RUNG KEEPS THE OLD UNCHECKED CAST, AND THAT IS A
+  REAL RESIDUAL RATHER THAN A DETAIL — say it here because the -1 above reads
+  like a tidy no-op. Today the rungs are pydyn_meth0..4, so a call of FIVE or
+  more arguments through a variant field on a receiver that is none of the
+  candidates still hard-casts.
+
+  AND THE OBVIOUS REPAIR IS THE ONE TO AVOID. PyMakeDynMethCall serves those
+  arities through pydyn_methl, which takes the arguments as a TPyList — but
+  building that list means HOISTED append statements, and its own comment
+  records that hoisting in this frontend ESCAPES A TERNARY BRANCH
+  (bug-n-a-hoisted-argument-escapes-a-ternary-s-untaken-branch: `f(*[track(10)])
+  if c else 99` evaluates track() with c False). Every arm built here IS a
+  ternary branch, so routing the fallback through the list would evaluate the
+  arguments even when an `is` test sends the call down a different arm —
+  trading a wrong receiver for wrong evaluation order on calls that are correct
+  today. The two merge the day the hoist becomes branch-aware, which is the
+  same condition PyMakeDynMethCall already names for merging its own two
+  paths. }
+function PyMakeDynMethCallFromArgs(baseNode: Integer; const mname: AnsiString;
+                                   argsHead, n: Integer): Integer;
+var procIdx, litNode, head, lastArg, argNode, src: Integer;
+begin
+  Result := -1;
+  procIdx := FindProc('pydyn_meth' + PyIntLiteralText(n));
+  if procIdx < 0 then Exit;
+
+  litNode := AllocNode(AN_STR_LIT);
+  ASTSOffset[litNode] := StoredName(mname);
+  ASTSLen[litNode] := Length(mname);
+  ASTTk[litNode] := Ord(tyString);
+
+  head := AllocNode(AN_ARG);
+  ASTLeft[head] := baseNode;
+  ASTRight[head] := -1;
+  lastArg := head;
+
+  argNode := AllocNode(AN_ARG);
+  ASTLeft[argNode] := litNode;
+  ASTRight[argNode] := -1;
+  ASTRight[lastArg] := argNode;
+  lastArg := argNode;
+
+  { FRESH AN_ARG nodes over the SHARED value nodes. The caller's chain is
+    already linked into the other arms, so relinking its ASTRight would splice
+    this arm's prefix into theirs; sharing the VALUES is what every arm here
+    already does and is what makes "parsed once" true. }
+  src := argsHead;
+  while src >= 0 do
+  begin
+    argNode := AllocNode(AN_ARG);
+    ASTLeft[argNode] := ASTLeft[src];
+    ASTRight[argNode] := -1;
+    ASTRight[lastArg] := argNode;
+    lastArg := argNode;
+    src := ASTRight[src];
+  end;
+
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTLeft[Result] := head;
+  ASTTk[Result] := Ord(tyVariant);
+end;
 function PyMakeVariantFieldCall(baseNode, ci: Integer; const fname: AnsiString;
                                 sigPi: Integer): Integer;
 const MAX_FCALL_CANDS = 16;
 var argsHead, lastArg, argNode, n, i, nc: Integer;
-    armN, condN, pairN, tern, unboxArg, unboxCall: Integer;
+    armN, condN, pairN, tern, unboxArg, unboxCall, dynArm: Integer;
     cands: array[0..MAX_FCALL_CANDS - 1] of Integer;
     sigs: array[0..MAX_FCALL_CANDS - 1] of Integer;
     c, fi: Integer;
@@ -16922,6 +17030,48 @@ begin
   if (sigPi >= 0) and (kwNamesSym < 0) and (n <> Procs[sigPi].ParamCount) then
     Error('Nil Python: .' + fname + '() takes ' +
           PyIntLiteralText(Procs[sigPi].ParamCount) + ' argument(s)');
+
+  { EVERY candidate is `is`-tested and the FALLBACK IS OPEN-WORLD DISPATCH, so
+    there is no arm that casts a receiver without first proving what it is.
+    This mirrors PyMakeVariantField's read path arm for arm; see the doc block
+    above for why the two used to differ.
+
+    KEYWORDS KEEP THE OLD SHAPE, and that is the one arm of this fix that is
+    NOT done. pydyn_meth's keyword channel is a '|'-separated kwspec string
+    built at the call site, while the keyword arguments here have already been
+    hoisted into TPyList temps (kwNamesSym/kwValsSym) whose contents are only
+    known at run time; there is no honest conversion between the two at this
+    point. PyDynMethL refuses a kwspec on the callable-attribute arm anyway
+    ("takes positional arguments only"), so routing keywords there would trade
+    a wrong answer for a new refusal. A keyword call through a variant field
+    whose receiver is none of the candidates therefore still hard-casts — the
+    same defect, narrowed to a shape nothing measured today reaches. Closing it
+    means teaching the dynamic path the hoisted-list carrier, which is its own
+    ticket and not a line here. }
+  dynArm := -1;
+  if kwNamesSym < 0 then
+    dynArm := PyMakeDynMethCallFromArgs(baseNode, fname, argsHead, n);
+
+  if dynArm >= 0 then
+  begin
+    Result := PyForceVariant(dynArm);
+    for i := nc - 1 downto 0 do
+    begin
+      armN := PyForceVariant(PyVariantFieldCallArm(baseNode, cands[i], fname,
+                                                   sigs[i], argsHead, n,
+                                                   kwNamesSym, kwValsSym));
+      condN := PyMakeVariantIsTest(baseNode, cands[i]);
+      pairN := AllocNode(AN_PAIR);
+      ASTLeft[pairN] := armN;
+      ASTRight[pairN] := Result;
+      tern := AllocNode(AN_TERNARY);
+      ASTLeft[tern] := condN;
+      ASTRight[tern] := pairN;
+      ASTTk[tern] := Ord(tyVariant);
+      Result := tern;
+    end;
+    Exit;
+  end;
 
   { one layout, one class: emit exactly what this used to emit }
   if nc = 1 then
@@ -25896,7 +26046,10 @@ begin
   end;
   if PxxDbgEnabled('n.impguard') then
   begin
-    if PyIsFallbackImportTry then
+    { `Result`, not the function's own bare name: spelled that way this read
+      was indistinguishable from a recursive call to a reader, and the compiler
+      says so twice per build. Same value, no diagnostic. }
+    if Result then
       WriteLn('n.impguard: line ', CurTok.Line, ' COMPILE-TIME guard')
     else
       WriteLn('n.impguard: line ', CurTok.Line, ' runtime try — ', why);
@@ -34441,7 +34594,23 @@ begin
           ASTIVal[cbNode] := cbThunk;
           ASTTk[cbNode] := Ord(tyPointer);
           rhsNode := cbNode;
-        end;
+        end
+        else if not PyTypingPass then
+          { THE ONE SILENT PATH LEFT IN A FEATURE WHOSE POINT IS REMOVING SILENT
+            PATHS. PyDefFitsCallbackThunk ACCEPTED and the mint then failed, so
+            without this arm the store fell through to the assignment below and
+            the carrier HANDLE went into the slot -- the original defect, reached
+            by a different door, with the refusal arm beside it reading as though
+            it already covered this. It is unreachable short of a proc
+            registration failure, which is why no fixture covers it and why the
+            tier was green with the hole open; "unreachable" is a claim about
+            today's registration code, not a property of this branch. The message
+            is deliberately NOT the sibling's -- that one says the signature does
+            not fit, and here it did. }
+          Warn('Nil Python: ' + Procs[cbCode].Name + ' fits the procedural slot '
+               + 'it is being stored into, but no native-ABI thunk could be '
+               + 'created for it, so the callable object is stored rather than a '
+               + 'code address — calling through that slot will crash.');
       end
       else if (cbCode >= 0) and (not PyTypingPass) then
         Warn('Nil Python: ' + Procs[cbCode].Name + ' does not have the signature '

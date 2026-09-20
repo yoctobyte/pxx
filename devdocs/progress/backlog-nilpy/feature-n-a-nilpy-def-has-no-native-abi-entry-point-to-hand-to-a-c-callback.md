@@ -4,7 +4,7 @@ prio: 85
 type: feature
 owner: 
 blocked-by: []
-summary: "WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
+summary: "THE STORE ARM'S ONE SILENT FALLTHROUGH IS CLOSED 2026-09-20 (the `else` the `What this does NOT deliver` section prescribed; unreachable, so proved by forcing `cbThunk := -1` and watching both fixture stores warn, then reverted to a byte-identical binary). AND THREE PLACES IN THIS FILE SAID THE FIELD SITE WAS STILL UNDONE AFTER 8dba4c72e DELIVERED IT -- the four-row table, the next-step paragraph, and the three-consumer list whose own first line is "Say so before anyone builds half of it twice". The SUMMARY was updated in the delivering commit as required and the task LIST was not, so the part a seat reads to decide what to build was the wrong part. All three struck and dated rather than rewritten. WHAT REMAINS IS CONSUMER 3, ESP INTERRUPTS, AND IT IS A DIFFERENT CONTRACT -- not more of the same work. Boxing into Variants ALLOCATES, and an ISR that allocates is a latent crash with good latency numbers, so the thunk shape delivered here does not simply extend to it. DELIVERED: a NilPy `def` compiles all-Variant and can never match a native procedural signature, so `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 the ARGUMENT site (2b28c3302), consumer 2 the STORE site (8dba4c72e) -- procedural field, array element or procvar, via NodeProcSlotSig. `examples/esp32/nilpy-hw-c3` STILL POLLS and its header is still accurate; do not attach that demo sentence to this ticket until consumer 3 lands. A capturing def -- one whose captures are lambda-lifted into EXTRA PARAMETERS, so it cannot match any slot arity by construction -- remains silent at both delivered sites and is its own ticket."
 status: open
 ---
 
@@ -243,7 +243,7 @@ DIFFERENT shape than the one that blocks. Measured at HEAD rather than quoted:
 | a procedural PARAMETER, Pascal routine | works (thunk) |
 | a procedural PARAMETER on `external cdecl` | works (thunk) -- `$pycbthunk_<n>_<n>` minted, `ptypes 17 17` |
 | a bare `Pointer` parameter on `external` | taken as a DATA buffer, silently -- the header's sentence |
-| **a procedural FIELD** | **silent SIGSEGV** |
+| **a procedural FIELD** | ~~**silent SIGSEGV**~~ — **FIXED `8dba4c72e`**, 2026-09-20; the row below is the measurement that motivated it and is kept as such |
 
 `esptimer.pas` uses the last row, twice over: the user callback is the field
 `TEspTimer.OnElapsed: TTimerProc`, and it crosses to the SDK as the `Pointer`
@@ -341,11 +341,34 @@ which is the honest provenance and also the reason to distrust it least.
 
 ## Acceptance
 
-The ESP demo stops polling: its timer callback is a `def` in `main.npy`, and
-`main.expected` still matches what CPython prints for the stubbed program.
+~~The ESP demo stops polling: its timer callback is a `def` in `main.npy`, and
+`main.expected` still matches what CPython prints for the stubbed program.~~
 Cheaper host-side proof first -- a def handed to a Pascal `procedural`
 parameter of a non-Variant signature, called from Pascal, returning the value
 the def computed.
+
+**THE STRUCK CRITERION IS UNSATISFIABLE BY THIS TICKET, AND THAT IS THIS
+TICKET'S OWN POSITION** (frankb-8e, 2026-09-20). The `What this does NOT
+deliver` section says outright: *"Delivering THIS ticket does not by itself let
+the demo stop polling; the ISR path must be shown not to allocate."* So the
+acceptance criterion required something the same file rules out of scope --
+**a gate that cannot pass, which is not a gate.** Whoever tried to close this
+would have found the bar somewhere the work was never going.
+
+**REVISED ACCEPTANCE, what this ticket CAN deliver and has:**
+
+1. A def reaching a native procedural slot as an **argument** -- consumer 1,
+   `2b28c3302`. Done.
+2. A def **stored** into a procedural field, array element or procvar --
+   consumer 2, `8dba4c72e`, fixture
+   `test/test_nilpy_def_into_a_native_callback_slot.npy`. Done.
+3. No silent path at either site: a def that cannot get a thunk **warns**
+   rather than storing a carrier handle. Done 2026-09-20, including the
+   mint-failure arm.
+
+**The demo stopping polling is the ISR ticket's acceptance, not this one's:**
+[[feature-n-a-non-allocating-restricted-thunk-for-an-isr]]. Split rather than
+left implied, because a residual with no owner is half a finding.
 
 ## Why this should not sink in the backlog (frankz-e5, 2026-09-20)
 
@@ -356,10 +379,11 @@ with a ready next step is exactly what gets lost, and because a reader who
 knows a demo wants it will rank it differently from one who reads it as a
 frontend nicety.
 
-The next step is a one-sitting job for a rested seat: the argument path asks the
+~~The next step is a one-sitting job for a rested seat: the argument path asks the
 `ProcSigCompatible`/thunk question and a **field assignment** does not.
 `RecFieldProcSig(rec, field)` already exists. The four-row table above is the
-measurement; nothing about the thunk changes.
+measurement; nothing about the thunk changes.~~ **DONE, `8dba4c72e`** — second
+instance of the same staleness in one file; see the struck bullet below.
 
 ## OWNER: ESP INTERRUPTS ARE A MUST-HAVE (2026-09-20, relayed by frankuser)
 
@@ -371,9 +395,21 @@ Re-ranked 55 -> 85 on that basis; the number is his, not a seat's.
 
 **ONE CAPABILITY, THREE CONSUMERS. Say so before anyone builds half of it twice:**
 1. **ESP interrupts** — the demo takes its timer callback in Python instead of polling.
-2. **The field site** — frankb-8e's `2b28c3302` did the argument path; a procedural
+2. **The field site** — ~~frankb-8e's `2b28c3302` did the argument path; a procedural
    FIELD assignment still segfaults silently. `RecFieldProcSig(rec, field)` already
-   exists; the four-row table is above. Unowned, one sitting.
+   exists; the four-row table is above. Unowned, one sitting.~~
+   **DELIVERED `8dba4c72e` (2026-09-20), and this line was stale for the rest of
+   that day.** The store site takes the same `ProcSigCompatible`/thunk decision via
+   `NodeProcSlotSig` — procedural field, array element or procvar. Fixture
+   `test/test_nilpy_def_into_a_native_callback_slot.npy`, re-run 2026-09-20 at
+   compiler `3c6e31f94a62`: identical to `.expected`.
+   **WHY THIS LINE SURVIVED ITS OWN FIX, recorded because it is the inverse of the
+   usual case:** the SUMMARY was updated in the delivering commit exactly as
+   CLAUDE.md requires, and *this* list was not. So the part everyone reads was
+   right while the part a seat reads **to decide what to build** was wrong — and
+   this list opens with *"Say so before anyone builds half of it twice"*, which
+   makes it the section whose staleness causes precisely the duplication it was
+   written to prevent.
 3. **ffsfs** — a Python program handing a compiled routine to C as a callback
    (recorded in `abb2ae020`, also secondhand).
 
@@ -382,3 +418,19 @@ allocates, and an ISR that allocates is a latent crash with good latency numbers
 A non-allocating restricted thunk (fixed arity, scalar-only, no Variant) is a
 different contract. Delivering THIS ticket does not by itself let the demo stop
 polling; the ISR path must be shown not to allocate.
+
+## THE ONE SILENT PATH IS CLOSED, 2026-09-20 (frankb-8e) — and it was PROVED, not reasoned
+
+The `### What this does NOT deliver` section above recorded a hole I found by reading my own diff and left open because the fix arrived after a green tier: in the store arm, `PyDefFitsCallbackThunk` could ACCEPT and `PyGetOrMakeCallbackThunk` then return -1, and the inner `if cbThunk >= 0` had **no `else`** — so the store fell through and the carrier HANDLE went into the slot. **The original defect, reached by a different door, in the feature whose point is removing that door.**
+
+Closed with the `else` that section prescribed, with a message that is deliberately **not** the sibling refusal's: that one says the signature does not fit, and here it did fit — the mint failed. Saying "does not have the signature" for a mint failure would have sent the next reader to `ProcSigCompatible`.
+
+**THE ARM IS UNREACHABLE, SO IT WAS SHIPPED WITH A POSITIVE CONTROL RATHER THAN A FIXTURE.** No test can reach it short of a proc-registration failure, and *"unreachable"* is a claim about today's registration code, not a property of the branch — which is exactly the reasoning that leaves a defensive arm untested and wrong. Forced it instead: injected `cbThunk := -1` after the mint, rebuilt, and the fixture's two stores both warned with the def named and the line right —
+
+    pascal26:62: warning: Nil Python: two fits the procedural slot it is being stored
+    into, but no native-ABI thunk could be created for it, ...
+    pascal26:71: warning: ... add fits the procedural slot ...
+
+— then removed the injected line and rebuilt. **The binary returned to `3c6e31f94a62`, byte-identical to the pre-experiment one**, which is the control on the control: it says the revert was clean and the seed chain did not drift across the two cycles.
+
+Verified: `converged after 1 round(s)` on both rebuilds (a real recompute, not the stamp path); the consumer-2 fixture identical to `.expected`; **zero** occurrences of the new warning on that fixture with the control removed, which is the row that would catch the arm firing when it must not.
