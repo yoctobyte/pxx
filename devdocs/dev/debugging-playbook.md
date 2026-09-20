@@ -11722,6 +11722,64 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## STORAGE RESERVED TO SILENCE A DIAGNOSTIC READS AS A FIX FOREVER, BECAUSE THE MESSAGE REALLY DOES STOP
+
+Measured 2026-09-20: **64 KiB of a microcontroller's SRAM, spent so a build
+would stop printing an error.**
+
+The shape. A NilPy program for `--platform=esp` was refused with *"a heap arena
+needs mmap"*. The refusal came from two backend guards that fire when
+`withHeapArena` is set and `BSS_HEAP_ARENA = 0`. The fix applied was to make
+the ESP-IDF profile **reserve an arena** — which set `BSS_HEAP_ARENA` non-zero,
+so the guard stopped firing and every NilPy program built.
+
+It was the wrong cure for a correctly-diagnosed symptom. Under IDF the pxx heap
+**is** IDF's heap: `PXXAlloc`/`PXXFree` are `calloc`/`free`, and the native
+allocator — the only reader of `HeapPtr`/`HeapEnd` — is in the `{$else}` arm and
+is not compiled. So the arena was 64 KiB of BSS that the entry stub wrote two
+pointers into and **nothing ever read again**: 73.3% of the demo object's
+`.bss`. IDF did not need an arena; it needed the mmap path not to fire. The real
+fix excludes `PLATFORM_ESP` from the two guards and reserves nothing.
+
+**Why this class survives review.** Every other wrong fix leaves a symptom
+behind. This one *removes* the symptom completely and permanently — the error
+is gone, the programs build, the tests pass — so there is no residue for anyone
+to notice, and the only evidence is a number in a section table that nobody is
+diffing. **The cost is silent, and it is paid by every build forever.**
+
+**The tell, and it is a question rather than an observation:** when a fix works
+by *supplying a value that makes a check pass*, ask **"does anything CONSUME
+this value, or does it only exist to be non-zero?"** Reserving storage,
+registering an empty handler, defining an unused symbol, setting a flag — each
+makes a guard quiet, and each is either a real fix or a tax, with identical
+symptoms.
+
+**How to answer it, when a survival probe has no positive control:** ask whether
+the code that would CONSUME the value is REACHABLE. Reachability has an
+off-switch and survival does not. Here the distinguishing call was `HeapMmap`,
+declared *above* the profile split so it is compiled on every profile and
+dead-strippable: **present under `--no-dce`, dropped under `--dce`** — the
+instrument moves in both directions, so it can fail. The runtime then confirmed
+it: with the arena gone, an allocator that really had been reading `HeapPtr`
+would store through a null base, so both demos booting with correct output is
+an assertion, not a smoke test.
+
+**And reword the diagnostic in the same commit.** Both guards' messages said
+*"ESP-IDF (--platform=esp) reserve the arena in BSS"* — true when written,
+false the instant the code changed, and sitting right beside the corrected
+guard. **A stale message next to a correct guard is how the next seat
+re-derives the wrong cure**, because the message is the part they read first.
+
+**Corroboration footnote, same subject, same day, one of each.** The two
+readouts that confirmed the win were our object's **section table** (reads our
+ELF) and the chip's own **`heap_init`** (FreeRTOS reporting what it found at
+boot) — different producers, different layers, no shared code path, moving by
+exactly 65,536 in opposite directions. Earlier the same day, `calloc`/`free`
+surviving as externals was recorded as "independent corroboration" that the IDF
+arm was compiled, and it was **the same arm twice**: the native arm's own
+`PXX_LIBC_HEAP` variant calls `calloc` too. Same word, two very different
+things — see the section below on two readings that fail the same way.
+
 ## A FILE THAT QUOTES ITS OWN SYNTAX DEFEATS THE SCANNER YOU WRITE TO PARSE IT — AND `.strip()` IS WHAT PROMOTES THE QUOTATION
 
 Measured 2026-09-20, twice in twenty minutes, on one file, by one seat writing
