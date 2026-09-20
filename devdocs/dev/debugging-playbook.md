@@ -11742,11 +11742,40 @@ unrelated roles at once:
 - **a build input** — `Makefile:36`,
   `COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) ...`,
   so touching one makes the compiler out of date;
-- **a runtime input** — `pasparser_proc.inc:5759` does
-  `LoadFileCI('compiler/builtin/<unit>.pas')`, so **every compile reads the
-  current tree copy**, whatever binary is running.
+- **a runtime input** — and **BOTH resolution arms read from disk**, which is
+  the part that leaves no escape (precision from frankz-e5, re-verified here at
+  HEAD). The **primary, exe-dir-relative** arm is `pasparser_proc.inc:5168`,
+  `ConcatThree(ExeDir, 'builtin/', '', bdir)` with its own comment *"ExeDir is
+  `<root>/compiler/`"* — so a binary sitting in its own checkout's `compiler/`,
+  which is where the dev loop puts it, reads **the tree copy beside itself**.
+  The CWD-relative chain at **5759** is a *fallback*, guarded by `ExeDir <> ''`
+  and documented as *"only meaningful when ExeDir is set and differs from the
+  repo root"*.
 
-The second is what defeats freezing. A frozen binary still reads today's units.
+**Cite 5168 for the normal case.** An earlier version of this section cited only
+5759, and a reader who checks that line, finds it guarded, and concludes the
+trap does not apply to them would be wrong — **it fired at 5168 the whole time.**
+A frozen binary still reads today's units on either route.
+
+**AND THE READ-SET IS WIDER THAN THE BUILD-SET, WHICH IS WHY NEITHER `make` NOR
+YOUR OWN DIFF ENUMERATES IT.** Two overlapping, non-identical sets at HEAD:
+
+| | roots |
+| --- | --- |
+| **build inputs** (`Makefile:36`, `COMPILER_INC`) | `compiler/*.inc`, `compiler/builtin/*.pas`, `lib/rtl/*.pas`, `lib/asmcore/*.pas` |
+| **read at compile time** (`pasparser_proc.inc:5153-5172`, all three arms) | `compiler/`, `compiler/builtin/`, `lib/rtl/`, `lib/pcl/`, `lib/asmcore/` |
+
+**`lib/pcl/**` is read by every compile and is NOT a build dependency**, so
+touching it moves the instrument and does not even make the compiler out of
+date. Nothing warns.
+
+**And the list has already failed twice, in this section, while being written.**
+The first draft named *binary + `compiler/builtin` + `lib/rtl` + sources*;
+frankz-e5 added `lib/asmcore` and `lib/pcl`; and **both of us had named exactly
+the inputs we had personally touched that day.** *"A freeze must name its
+inputs"* is right, and **the naming is the step that fails** — the list you
+write is the list you can think of. Read the resolution routine and copy its
+roots; do not enumerate from memory.
 
 **Measured from the other direction, same directory, opposite behaviour,
 2026-09-20 (frankS).** Two edits under `compiler/` while chasing the bare-ESP
@@ -11764,11 +11793,13 @@ benign direction of the same confusion.
 
 **So "did I rebuild?" is the wrong question.** The right ones:
 
-- **What does this run READ, not what was it BUILT from?** For a pxx compile
-  that is the binary **plus** `compiler/builtin/**` **plus** `lib/rtl/**`
-  (CLAUDE.md already flags `lib/rtl` as a build input; it is a read-at-compile
-  input too) **plus** the sources under test.
-- **A freeze must name its inputs.** "I did not rebuild" freezes one of four.
+- **What does this run READ, not what was it BUILT from?** For a pxx compile:
+  the binary, **plus all five unit roots above** — `compiler/`,
+  `compiler/builtin/`, `lib/rtl/`, `lib/pcl/`, `lib/asmcore/` — **plus** the
+  sources under test. (CLAUDE.md already flags `lib/rtl` as a build input; it
+  is a read-at-compile input too, and so are two roots that are not build
+  inputs at all.)
+- **A freeze must name its inputs.** "I did not rebuild" freezes one of seven.
   Copy the units into a scratch tree, or record their hashes beside the binary
   sha — `sha256sum compiler/pascal26` alone does **not** identify the
   instrument.
