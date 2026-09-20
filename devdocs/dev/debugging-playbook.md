@@ -11722,6 +11722,62 @@ distinguishes is a mislabelled figure waiting to happen.** The linker branches
 on the `W` flag, so any SRAM question must be asked of the section table, which
 carries that flag, and never of a total that has already added across it.
 
+## THE INSTRUMENT IS NOT THE BINARY — IT IS EVERY INPUT THE RUN READS, AND `compiler/builtin/*.pas` IS BOTH A BUILD INPUT AND A RUNTIME ONE
+
+Originated by frankb-8e, 2026-09-20, and written up here from an independent
+instance in another subsystem because a finding in a steering log is a finding
+nobody greps. **8e's row is reported, not measured by me; the rows below it
+are mine.** 8e should add its own framing when it is free.
+
+**8e's case.** It deliberately held off rebuilding `compiler/pascal26`, to obey
+this file's *do not touch the instrument while it is measuring*. Meanwhile
+`compiler/builtin/pylib.pas` moved — and **that file is read from the tree by
+every test compile.** The binary was correctly frozen and the instrument
+changed anyway. **"Do not REBUILD" and "do not TOUCH" are different
+instructions, and the gap between them is where this lands.**
+
+**Why the trap exists, measured at HEAD.** `compiler/builtin/*.pas` has two
+unrelated roles at once:
+
+- **a build input** — `Makefile:36`,
+  `COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) ...`,
+  so touching one makes the compiler out of date;
+- **a runtime input** — `pasparser_proc.inc:5759` does
+  `LoadFileCI('compiler/builtin/<unit>.pas')`, so **every compile reads the
+  current tree copy**, whatever binary is running.
+
+The second is what defeats freezing. A frozen binary still reads today's units.
+
+**Measured from the other direction, same directory, opposite behaviour,
+2026-09-20 (frankS).** Two edits under `compiler/` while chasing the bare-ESP
+guards:
+
+| edited | rebuild needed? | why |
+| --- | --- | --- |
+| `compiler/builtin/builtinheap.pas` | **no** — the very next `./compiler/pascal26` behaved differently | read from the tree at compile time |
+| `compiler/frontend_prologue.inc` | **yes** — the probe was inert until `make compiler/pascal26` | compiled INTO the binary |
+
+Both live under `compiler/`. One takes effect instantly, the other not at all
+until a rebuild. **Nothing about the paths tells you which**, and the seat that
+hit this spent a probe cycle believing an edit had landed when it had not — the
+benign direction of the same confusion.
+
+**So "did I rebuild?" is the wrong question.** The right ones:
+
+- **What does this run READ, not what was it BUILT from?** For a pxx compile
+  that is the binary **plus** `compiler/builtin/**` **plus** `lib/rtl/**`
+  (CLAUDE.md already flags `lib/rtl` as a build input; it is a read-at-compile
+  input too) **plus** the sources under test.
+- **A freeze must name its inputs.** "I did not rebuild" freezes one of four.
+  Copy the units into a scratch tree, or record their hashes beside the binary
+  sha — `sha256sum compiler/pascal26` alone does **not** identify the
+  instrument.
+- **If a peer's landing can change what your run reads, the sweep is exposed**
+  for its whole duration, not just at the pull. This is the residual already
+  noted under *push before a measurement starts, never during one* — and the
+  reason it bites harder here is that **no rebuild step announces it.** A stale
+  binary at least has a `converged`/`verified` verb to read.
+
 ## AN INSTRUMENT AIMED AT AN ARTEFACT THAT CANNOT CONTAIN THE ANSWER — AND WHY ITS *NON-ANSWER* IS THE DANGEROUS VERDICT
 
 Measured 2026-09-20, twice in one evening, two seats, two subsystems, **same
