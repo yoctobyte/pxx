@@ -30813,6 +30813,12 @@ It had been asked whether a failure named in a stale note — `TypeError: forwar
 the unifying framing and the remedy from `frankuser`. One subsystem — relaying — so it sits here
 rather than in CLAUDE.md.*
 
+**THE REMEDY FIRST, BECAUSE WITHOUT IT THIS IS JUST ANOTHER OBSERVATION ABOUT STALENESS AND THIS FILE
+HAS PLENTY** (`frankuser`'s warning, and it is the right one): **a handover carries a TIMESTAMP and a
+note on WHETHER ANYONE IS ACTIVELY MOVING THE NUMBER.** *"True as of 11:00, and 5b is actively moving
+this"*; *"8e may discharge this within the hour"*. **Everything below is why that is the remedy rather
+than "check your facts".**
+
 Three things went stale between being recorded and being acted on. **Only the first is the kind
 anyone guards against:**
 
