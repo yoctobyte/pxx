@@ -30569,3 +30569,11 @@ but because the CONTROL was wrong — CPython reading 1.01 fps against a documen
 10.53. *"The 4.7x had stood for four hours and I'd quoted it twice."* A ratio
 whose arms are both wrong stays plausible; only a control with a known value
 says so.
+
+**And it is worse than "plausible" — the voided run's ratio was 1.22x, against
+the 1.19x already written up for that scene. Within 2.3%.** Both arms were
+pinned at a ~1 Hz compositor throttle, and the ratio between two throttled arms
+landed on a number 7a had published four hours earlier — close enough to have
+been cited as a replication of its own work. **A ratio can survive its arms
+being wrong; it can also land on the RIGHT ANSWER FOR NO REASON, which is worse,
+because then it corroborates.** Supplied by 7a as evidence against itself.
