@@ -1,26 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-19T16:50:12Z",
-   "fixed": [
-    "lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy",
-    "test-nilpy#src:test/test_nilpy_bytearray_unbound_and_subclass.npy",
-    "test-nilpy#src:test/test_nilpy_unbound_builtin_method.npy"
-   ],
-   "new_red": [
-    "test-aarch64#src:test/test_loadfile_into_element_and_field.pas",
-    "test-arm32#src:test/test_loadfile_into_element_and_field.pas",
-    "test-i386#src:test/test_loadfile_into_element_and_field.pas",
-    "test-riscv32#src:test/test_loadfile_into_element_and_field.pas",
-    "test-threads#src:test/test_threadsafe_heap_lock_deadlock_diag.pas",
-    "test-xtensa#src:test/test_loadfile_into_element_and_field.pas"
-   ],
-   "sha": "ff2d50a2bde9395c6a0c454a002e155017623632",
-   "tier": "full",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-19T16:56:55Z",
    "fixed": [
     "test-core#src:test/c_asm_in_inline_body.c@2",
@@ -491,6 +471,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-20T02:43:20Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "borg",
@@ -3607,9 +3596,9 @@
   "test-esp-bare#src:test/test_esp_stack_args.pas": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-esp-bare#src:test/test_esp_varparam.pas": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-esp-bare#src:tools/compiler_srchash.sh@1": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
-  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "9971022612d59f919a75bb338da9cbfee2786f43",
-  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "9971022612d59f919a75bb338da9cbfee2786f43",
-  "test-esp-idf#src:tools/compiler_srchash.sh": "9971022612d59f919a75bb338da9cbfee2786f43",
+  "test-esp-idf#src:test/test_esp_idf_nested_try.pas": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
+  "test-esp-idf#src:test/test_esp_idf_writeln_end.pas": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
+  "test-esp-idf#src:tools/compiler_srchash.sh": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-esp-softfloat#src:test/test_esp_softfloat_probe.pas": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-esp-softfloat#src:tools/compiler_srchash.sh": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-fgl#src:tools/compiler_srchash.sh": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
@@ -5270,7 +5259,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-threads#src:tools/compiler_srchash.sh": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
-  "test-uforth#src:tools/compiler_srchash.sh": "9971022612d59f919a75bb338da9cbfee2786f43",
+  "test-uforth#src:tools/compiler_srchash.sh": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-uforth#src:tools/compiler_srchash.sh@1": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-uforth#src:tools/compiler_srchash.sh@10": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
   "test-uforth#src:tools/compiler_srchash.sh@11": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
@@ -15362,14 +15351,14 @@
  },
  "last": {
   "code_fp": "1f06bcf02d3f",
-  "date": "2026-09-20T02:37:14Z",
+  "date": "2026-09-20T02:43:20Z",
   "deadline": 3600.0,
   "sha": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1011.9
+  "verdict": "GREEN",
+  "wall": 356.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -15420,14 +15409,14 @@
   },
   "slow": {
    "code_fp": "1f06bcf02d3f",
-   "date": "2026-09-20T01:29:52Z",
+   "date": "2026-09-20T02:43:20Z",
    "deadline": 3600.0,
-   "sha": "9971022612d59f919a75bb338da9cbfee2786f43",
+   "sha": "7df13a6d78caf5d874bc6d201988e4d1e257747b",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 356.4
+   "wall": 356.1
   }
  },
  "last_full": {
