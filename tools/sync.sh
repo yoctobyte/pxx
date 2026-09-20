@@ -40,6 +40,31 @@ if [ "$BRANCH" = "HEAD" ]; then
     exit 1
 fi
 
+# PIN SNAPSHOT -- taken HERE, before the first fetch, because the pull is what
+# moves it.
+#
+# WHY THIS IS IN SYNC.SH AND NOT IN A CHECKLIST: a seat cannot detect a pin from
+# inside its own work. Nothing in a session announces one, `git status` is silent
+# about it (the pinned binary is tracked but nobody reads its bytes), and the
+# pull that brings it in is the same pull that brings in everything else. So a
+# finding of the form "the pin cannot do X" keeps its shape and quietly changes
+# its truth value, hours after it was measured, with nothing in between to say
+# so.
+#
+# MEASURED 2026-09-20, which is why this exists: frankS spent an evening on
+# "the pinned compiler cannot build any of the four NilPy demos", relayed it
+# upward, and it was already false -- pin v413 (`d79e66f07`, 12:29:41) carries
+# the fix (`f028632c3`, 11:17:20) that retires it, 72 minutes apart. It was
+# caught by luck with a plausible-looking cause attached. `VERSION` is one
+# cheap read and nobody did it once all day.
+#
+# `|| true` is not decoration: this file can be absent in a fresh or partial
+# clone, and under `set -e` a bare `cat` of a missing file would kill every
+# lane's sync. This block must be incapable of changing sync's exit status --
+# it is a report, and a report that can fail the tool it rides on is worse than
+# no report.
+PIN_BEFORE=$(cat stable_linux_amd64/default/VERSION 2>/dev/null || true)
+
 # A REBASE COMMITS, AND A COMMIT NEEDS AN IDENTITY. Checked here, before
 # anything is touched, because the expensive part of this failure is not the
 # refusal -- it is being left MID-REBASE.
@@ -782,4 +807,23 @@ EOF
     verify_citations_landed
 else
     echo "sync: up to date — $(git log --oneline -1)"
+fi
+
+# THE PIN REPORT. Last thing the script says, on every success path, in both
+# arms above -- a seat that pushed and a seat that was already up to date have
+# the same need, and the one that pushed nothing is if anything likelier to be
+# sitting on a measurement.
+#
+# Deliberately NOT gated on whether we pushed, and deliberately unconditional
+# about re-measuring: this cannot tell which of your findings the new pin
+# touches, and the moment it starts guessing it becomes a thing to ignore.
+PIN_AFTER=$(cat stable_linux_amd64/default/VERSION 2>/dev/null || true)
+if [ -n "$PIN_AFTER" ] && [ "$PIN_AFTER" != "$PIN_BEFORE" ]; then
+    if [ -n "$PIN_BEFORE" ]; then
+        echo "sync: PIN MOVED — v$PIN_BEFORE -> v$PIN_AFTER, in the pull you just did."
+    else
+        echo "sync: PIN is v$PIN_AFTER — this tree had none before the pull you just did."
+    fi
+    echo "sync:   Anything you measured against the old pin is now unquotable until"
+    echo "sync:   re-run. Cite the pin version beside any claim about \$(PXX_STABLE)."
 fi
