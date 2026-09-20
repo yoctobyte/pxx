@@ -84,6 +84,27 @@ build is clean and the binary runs. So the mechanism this whole ticket rests on
 is confirmed at the strength the application needs — the CPython arm may contain
 anything, and pxx does not need to understand a line of it.
 
+**DO NOT LIFT THAT CONSTRUCTION INTO A DIFFERENTIAL TEST. It is right here and
+it is a guard that cannot fail there.** Raised by tuxspaceprogram-c6 and
+frankb-8e, 2026-09-20, and recorded beside the measurement rather than left in a
+message, because the probe is the part someone will copy. For THIS proof —
+*the dead arm is not compiled* — untypable `ctypes` code is arguably the
+sharpest possible filling, since code the compiler cannot type either errors or
+proves it was never reached. In a probe that compares pxx against a CPython
+ORACLE it is the opposite: CPython RESOLVES `ctypes` and pxx does not, so the
+two run DIFFERENT ARMS and the comparison can never fail, whatever is wrong.
+Same construction, one use sound and one certifying nothing.
+
+Worth knowing why it was loud, because it is the same property from the other
+side: `ctypes` in a dead arm is exactly what made lekkerzeilen's blocker 07
+LOUD while the identical defect stayed SILENT elsewhere. frankb-8e fixed 07 the
+same day — the import pre-scan tracked one `try` by depth rather than position —
+and found the ordinary case is silent: the excluded module resolves quietly,
+**its top-level code RUNS**, and member reads come off the dead arm with exit 0
+and no diagnostic. A probe filled with something the compiler cannot type is
+loud by construction; that is what made it a proof, and it is not a property a
+differential harness inherits.
+
 **2. `globals()` IS NOT SUPPORTED — `undefined variable (globals)`.** That
 retires the addendum's "UNVERIFIED — do not quote it as available without
 measuring it" and it retires the option with it: `if globals().get('__PXX__'):`
