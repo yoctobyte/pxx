@@ -29,7 +29,17 @@ absence of ctypes, so implementing ctypes later cannot flip anything.
 - **Measured**: NilPy resolves a guarded import at compile time (the mechanism this
   relies on) — same mechanism recorded in the hazard above.
 - **Measured**: 10 of TSP's 20 remaining compile failures are ctypes-gated
-  (`0dfa0d78d` census, frankh-c0).
+  (`0dfa0d78d` census, frankh-c0; unchanged at `45b8571d7`).
+- **Measured 2026-09-20, and it is the row that decides this ticket's value**:
+  `ls /home/neo/tuxspaceprogram/tsp/platform/` is `__init__.py`,
+  `_ctypes_backend.py`, `_gl.py`, `_sdl2.py`, `_vocab.py` — **there is no
+  `_pxx_backend.py`**, and `__init__.py:107` is `from . import _pxx_backend as
+  _backend`. So shipping the marker moves TSP's wall from `ctypes` to
+  `_pxx_backend not found`, one line earlier in the same file, and **delivers
+  zero compiling units**. It is still worth building (lekkerzeilen wants it, and
+  it is what lets a real ctypes ship later) — it is not a TSP unblocker, and the
+  ctypes-gated 10 above must not be read as its yield.
+  Full board: `devdocs/dev/tsp-compile-wall-inventory-2026-09-20.md`.
 - **NOT measured**: whether the guarded-import arm selection binds correctly when the
   live arm is lexically FIRST. CLAUDE.md records a first-wins alias-table defect of
   exactly this shape (`uses`/import order). **Whoever takes this must write the

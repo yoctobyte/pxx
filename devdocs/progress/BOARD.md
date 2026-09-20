@@ -325,7 +325,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (184)
+## backlog-nilpy (185)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -482,6 +482,7 @@ _none_
 | feature-n-route-pypal-through-wasi-imports-so-nilpy-can-do-file-io-on-wasm32 | N | 25 | feature | pypal on wasm32 returns a defined -1 from every entry point rather than trapping (the ESP precedent), which is what made NilPy compile for that target at all. It is not real file I/O: `open` fails, `os.listdir` is empty, `time.time()` raises. wasi preview1 HAS open/read/write/close/seek/getcwd/unlink/rename/readlink as imports, and lib/rtl/platform/wasi already binds them for the Pascal RTL -- so the work is a pypal backend that calls those imports, not new capability. ppoll is the one that does not map. | — |
 | feature-n-specialise-a-dunder-body-on-the-operand-type-the-call-site-already-knows | N | 80 | feature | An attribute read on a receiver whose class is not statically known runs the FULL dynamic protocol — a field read goes from 0 calls to 8, building a string key and probing a hash table. The call site usually knows the type already. Measured on real code: annotating the operand took Quat.rotate from 24674 B / 864 calls / 0 SSE to 2175 B / 18 calls / 30 SSE, and zeroed pydynattr_get_v in all three hot methods. Dunder operands are the commonest instance, but the rule is the receiver, not the dunder. | — |
 | feature-n-sys-version-info-implementation-and-the-probe-suite | N | 62 | feature | Implement sys.version_info / version / hexversion at (3, 9, 0, 'final', 0) plus sys.implementation carrying NilPy's own identity, per the owner's ruling. All four read ONE constant. The number is a compatibility affordance and must be backed by a probe suite that fails when it stops being true -- the same feature probes that produced the ruling. | — |
+| feature-n-there-is-no-wave-module-so-an-unguarded-stdlib-import-walls-tsp | N | 40 | feature | `import wave` has no unit and no shim, and TSP imports it UNGUARDED at `tsp/voice.py:29` — so unlike the ctypes seam beside it, no marker module and no application edit routes around this one. The surface TSP actually uses is six calls (`open` as a context manager, `getparams`, `getnframes`, `readframes`, `setparams`, `writeframes`) over plain RIFF/WAVE chunk parsing; `array` is already there (`lib/rtl/mimic_array.pas`). Independent of the ctypes/`_pxx_backend` work and of the `__pxx__` marker — neither waits on it and it waits on neither. | — |
 | feature-nilpy-a-genexpr-is-lazy-not-materialised | N | 30 | feature | A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression. | — |
 | feature-nilpy-ascii-flag-fast-path | N | 25 | feature | Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for | — |
 | feature-nilpy-collections-and-string-methods | N | 30 | feature | NilPy: list / dict + string methods (split/join/strip) | — |
@@ -1548,6 +1549,7 @@ _none_
 - [p 40] [B] feature-embed-dwscript-core
 - [p 40] [N] feature-n-dataclass-frozen-true-needs-a-store-guard-not-an-acceptance
 - [p 40] [N] feature-n-random-random-the-per-instance-rng-class-is-absent
+- [p 40] [N] feature-n-there-is-no-wave-module-so-an-unguarded-stdlib-import-walls-tsp
 - [p 40] [N] feature-nilpy-map-over-several-iterables
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
