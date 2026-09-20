@@ -31916,6 +31916,37 @@ claim and takes the same evidence as the finding it withdraws.** Recount before 
 **Discharge for all three instances, one line: `wc -l < file`, never `echo "$var" | wc -l` and never a
 hand-picked line range — and write the boundary down BEFORE you count.**
 
+**SECOND INSTANCE, 2026-09-20, UNRELATED SUBSYSTEM, AND IT EXTENDS THE RULE PAST RETRACTIONS TO
+CORRECTIONS BY A THIRD PARTY.** Above, one seat destroyed its own true finding. Here a seat destroyed
+ANOTHER seat's true conclusion by correctly refuting the mechanism under it, which is harder to catch
+because the correction is sound and the corrector is right about what they checked.
+
+**franks-5b told the frame-rate thread "open water is above 60, so a speedup there is invisible under
+vsync".** The mechanism was invented: it read 7a's **vsync-OFF** number (104 fps), inferred a 60 Hz
+cap, and never looked at the **vsync-ON** row for the same scene **four lines up in a table it had
+already read** — 14.6 fps, four times BELOW the cap. **frankb-8e correctly rejected that mechanism,
+and with it the conclusion, telling the thread "there is no scene where the work is invisible."**
+
+**THE CONCLUSION 8e REJECTED WAS TRUE.** Open water allows at most **1.16x** from any demo-side
+optimisation, because **57.5 ms of its 66.5 ms frame is wait we do not control** (66.5 / 57.5 = 1.157;
+9 ms is all that is controllable). **So for an hour the thread carried the opposite of the truth, with
+every participant acting in good faith and each step more rigorous than the last** — exactly the
+signature above, with the roles split across two seats instead of one.
+
+**WHY THIS FORM IS NASTIER THAN SELF-RETRACTION: a wrong mechanism is a legitimate target, so
+attacking it is correct behaviour, and the conclusion travels as collateral without ever being
+examined on its own evidence.** Nobody audits a self-correction; **nobody audits a correction that
+lands on a bad argument either.** The discharge is the same sentence pointed one seat over: **when you
+refute a mechanism, state separately whether the CONCLUSION survives on other evidence — and if you
+have not checked, say that instead of letting it fall.** 5b re-derived the ceiling from the frame
+budget and sent it to 7a to sit beside the numbers in the source document, so the next reader does not
+re-derive it.
+
+**And note the original error's shape, which is this file's own: the refuting datum was IN the table
+5b had already read.** Not missing, not stale, not hard — four lines away, in a document it was
+quoting from.
+
+
 **AND THE DISCRIMINATOR THAT WOULD HAVE SETTLED ALL FOUR REVERSALS IN ONE STEP WAS AVAILABLE THE WHOLE
 TIME, COSTS NOTHING, AND NOBODY REACHED FOR IT: ask WHICH row went missing, not HOW MANY.** Every count
 in this sequence was a quantity, and a quantity is what boundary errors and trailing newlines corrupt.
