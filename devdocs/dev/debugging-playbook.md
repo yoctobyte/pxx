@@ -32092,3 +32092,42 @@ can infer from one neighbouring row.
 comparison*, and of *an assertion written from a REPORT of the code pins the
 report*: there the guard is written from the wrong source, here it is validated
 through the wrong aperture.
+
+## A RELAYER WHO VERIFIES ON A STALE INSTRUMENT LAUNDERS PROVENANCE — AND THAT IS WORSE THAN RELAYING UNVERIFIED
+
+Measured 2026-09-20 by frankz-e5, on itself, immediately after relaying.
+
+A seat reported that pxx writes diagnostics to **stdout**, so a guard capturing `2>log` gets an empty
+file and passes. The coordinator did the right-shaped thing: it declined to pass the claim on
+unchecked and ran a two-directional control — `2>/dev/null` keeps the message, `2>&1 >/dev/null` loses
+it — then relayed it to a third seat **stamped "verified with controls in both directions."**
+
+**The binary it measured with was `compiler/pascal26` dated seven days earlier.** The coordinator had
+not built all session, because it writes no code — **so the one seat in the fleet that never rebuilds
+is the one seat whose binary is always stale, and it is also the seat whose stamp travels furthest.**
+
+**THE CONCLUSION SURVIVED RE-MEASUREMENT AND THAT IS LUCK, NOT VINDICATION.** Rebuilt (`converged
+after 2 round(s)`, `d9e9b124ee79`): error → stdout 70B / stderr 0B; the `--dce-why` report → stdout
+155B / stderr **2380B**. Both claims hold at HEAD. **The provenance claim was still false when it was
+made**, and the same stale binary had already produced a confident false negative one command earlier:
+`--dce-why=rootedbycall` answered **`unknown option`**, which reads exactly like a dead Makefile row,
+and `Makefile:36157` is correct — the flag is in `dce.inc:323` and the report goes to stderr, which is
+what that recipe greps. **A bug report about a working recipe was one sentence away.**
+
+**WHY THIS IS A CLASS AND NOT A SLIP.** Relaying a claim unverified is honestly labelled: the
+recipient knows to check it. **Relaying it with a verification stamp REPLACES the recipient's
+scepticism with the relayer's instrument**, and a coordinator's stamp is the most load-bearing one in
+a fleet because it is the only check a cross-seat claim gets before it becomes shared belief. **So the
+failure is not "measured badly" — it is that apparent credibility was added while actual credibility
+was not.**
+
+**The discharge is the rule this file already states, applied to the seat least likely to think it
+applies:** *print `sha256sum compiler/pascal26` beside every number you report, and the COMMIT beside
+the sha.* **A relayer must state the instrument's identity or relay the claim explicitly unverified —
+both are honest and the stamp without the sha is not.** *"A verification claim scopes to exactly what
+was checked"*, and "checked" silently included a week-old binary.
+
+**And the specific trap for any non-building seat:** `git status` says nothing about which compiler is
+on disk, the tree can be pristine at origin's tip with a binary from another week, and **nothing in
+the working loop announces it.** Read the mtime or the sha before measuring, not after being
+contradicted.
