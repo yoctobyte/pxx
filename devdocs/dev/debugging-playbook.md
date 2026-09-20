@@ -31261,3 +31261,36 @@ in the output that gets quoted.
 **Related and not the same:** *"record the METHOD beside the number, never the number alone"* is about
 a measurement you took. This is about a verdict a tool takes **for** you, where you may not have
 chosen the comparand at all — the mode did.
+
+## A ZERO IS ABOUT YOUR QUERY UNTIL YOU PROVE OTHERWISE — THREE CAUSES, ONE SHAPE, ONE DAY
+
+*Measured 2026-09-20: three zero-shaped false negatives between two seats, from three unrelated
+causes. Each seat found the other's; neither found their own.*
+
+An empty result is **the answer least likely to prompt a second look**, because it feels like the
+search worked and the world is empty. It is also the answer with the most ways of being about the
+searcher. Three in one day:
+
+| the zero | what it was really about |
+| --- | --- |
+| `grep WriteLn` over nine ESP demo sources → **0** | **the wrong spelling.** They print with `esp_rom_printf`, declared `external`, because there is no console before IDF's init. For a moment this was a finding: *nine demos that emit nothing, flash into silence* — exactly the gap being hunted. |
+| `grep` for a new block in `tools/sync.sh` → **0** | **the wrong tree.** `git fetch` had run; nothing had pulled. Two correct `merge-base --is-ancestor` checks had just returned true, **which supplied the confidence rather than preventing the error.** |
+| `grep v413 stable_linux_amd64/pin.log` → **0** | **the wrong path.** The file is at `stable_linux_amd64/default/pin.log`. Stopping there would have produced *"your citation does not resolve"* — an accusation, from a typo. |
+
+**Two of the three were about to be reported as findings against another seat**, and the third as a
+finding against the tree. **A zero converts naturally into an accusation**, because *"the thing you
+described is not there"* is the obvious reading, and it arrives with whatever credibility the rest of
+your session has earned.
+
+> **When a search returns zero, ask three things before believing it: what spelling would the code use
+> if it DID the thing; does my tree have it yet; and am I looking in the right place?**
+
+The first is the existing rule (*grep for the other spelling's handler, not for the feature*). The
+second and third are its siblings and are cheaper still — **one `git pull`, one `ls` of the directory
+you assumed.**
+
+**And note who catches these.** In all three cases **the author of the zero did not spot it and the
+other seat did, immediately** — because the other seat knows what the code actually says, or what
+their own commit contained. **A zero is worth one sentence to whoever owns the thing you searched**,
+before it becomes a finding. That sentence cost ten seconds each time and would have cost three
+retractions.
