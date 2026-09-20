@@ -18141,6 +18141,34 @@ end;
 var
   PyComputedGetattrScanned: Boolean = False;
   PyComputedGetattrSeen: Boolean = False;
+  { The LITERAL half, collected in ONE pass for the reason the computed half was
+    already memoised: `PyModuleGetattrsLiteral` is called PER NAME, from
+    `PyMethodUsedAsValue`, which class-member registration calls per member. An
+    unmemoised token scan there is O(members x tokens), and on 2026-09-20 it was
+    widened from the main file to EVERY module range -- correct, and it moved the
+    quadratic's inner term from "the main file" to "the whole program".
+
+    WHAT MADE THIS WORTH LOOKING FOR, because nothing in this file pointed at it:
+    a peer's flat profile of a 400-definition import had `GetTokenStrFromRaw` at
+    16% against 3% inline, ~30x in absolute time. A per-token string accessor at
+    the top of a profile is the SIGNATURE OF A SCAN RUN MANY TIMES, not of a slow
+    routine -- every one of these loops calls GetTokenStr on each token to compare
+    it against 'getattr'/'hasattr'. Read a hot accessor as a question about its
+    CALL COUNT. }
+  PyGetattrLitScanned: Boolean = False;
+  PyGetattrLitNames: array of AnsiString;
+  PyGetattrLitCount: Integer = 0;
+
+procedure PyGetattrLitAdd(const s: AnsiString);
+var i: Integer;
+begin
+  for i := 0 to PyGetattrLitCount - 1 do
+    if CaseEqual(PyGetattrLitNames[i], s) then Exit;
+  if PyGetattrLitCount >= Length(PyGetattrLitNames) then
+    SetLength(PyGetattrLitNames, 16 + PyGetattrLitCount * 2);
+  PyGetattrLitNames[PyGetattrLitCount] := s;
+  Inc(PyGetattrLitCount);
+end;
 
 function PyModuleHasComputedGetattr: Boolean;
 { Does this module call `getattr`/`hasattr` with a name it computes at RUN time?
@@ -18236,55 +18264,69 @@ function PyModuleGetattrsLiteral(const nm: AnsiString): Boolean;
   Same token rule as the parse and as the computed scan: the literal form is a
   string token whose very next token closes or separates the argument, so
   `"zz" + "z"` is not it. }
-var j, depth, ri, rlo, rhi: Integer;
+var j, depth, ri, rlo, rhi, i: Integer;
 begin
   Result := False;
   if nm = '' then Exit;
   { EVERY Python source range -- see the sibling above. This scanned the main
     file only, so `getattr(o, "gust")` in an IMPORTED MODULE normalised nothing
     and the bound pair was built against a native signature: rc=139, measured
-    2026-09-20. Independently sufficient to crash on its own. }
-  ri := 0;
-  while PyPyRangeAt(ri, rlo, rhi) do
+    2026-09-20. Independently sufficient to crash on its own.
+
+    COLLECT ONCE, ANSWER FROM THE LIST. This used to run the whole scan for
+    every `nm` it was asked about, which is the shape the sibling above had
+    already been memoised out of; widening it to every module made the inner
+    term the whole program rather than the main file. The set of literally
+    getattr'd names does not depend on `nm`, so there was never a reason to
+    re-derive it per question. Same token rule, same CaseEqual, same answers --
+    the only difference is how many times the tokens are walked. }
+  if not PyGetattrLitScanned then
   begin
-    j := rlo;
-    while j < rhi - 2 do
+    PyGetattrLitScanned := True;
+    ri := 0;
+    while PyPyRangeAt(ri, rlo, rhi) do
     begin
-      if (Tokens[j].Kind = tkIdent) and
-         (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
-         (Tokens[j + 1].Kind = tkLParen) then
+      j := rlo;
+      while j < rhi - 2 do
       begin
-        depth := 1;
-        Inc(j, 2);
-        while (j < rhi) and (depth > 0) do
+        if (Tokens[j].Kind = tkIdent) and
+           (CaseEqual(GetTokenStr(j), 'getattr') or CaseEqual(GetTokenStr(j), 'hasattr')) and
+           (Tokens[j + 1].Kind = tkLParen) then
         begin
-          if Tokens[j].Kind = tkLParen then Inc(depth)
-          else if Tokens[j].Kind = tkRParen then Dec(depth)
-          else if (depth = 1) and (Tokens[j].Kind = tkComma) then
+          depth := 1;
+          Inc(j, 2);
+          while (j < rhi) and (depth > 0) do
           begin
-            if (j + 2 < rhi) and
-               (Tokens[j + 1].Kind = tkString) and
-               (Tokens[j + 2].Kind in [tkComma, tkRParen]) and
-               CaseEqual(GetTokenStr(j + 1), nm) then
-            { `Tokens` is TRawToken (SOffset/SLen), not TToken — there is no
-              .SVal to read here, and GetTokenStr is the accessor the rest of
-              this file uses. CaseEqual, matching the sibling loop below:
-              over-normalising costs only boxing, under-normalising is the
-              bug this function exists to prevent. }
+            if Tokens[j].Kind = tkLParen then Inc(depth)
+            else if Tokens[j].Kind = tkRParen then Dec(depth)
+            else if (depth = 1) and (Tokens[j].Kind = tkComma) then
             begin
-              Result := True;
-              Exit;
+              if (j + 2 < rhi) and
+                 (Tokens[j + 1].Kind = tkString) and
+                 (Tokens[j + 2].Kind in [tkComma, tkRParen]) then
+              { `Tokens` is TRawToken (SOffset/SLen), not TToken — there is no
+                .SVal to read here, and GetTokenStr is the accessor the rest of
+                this file uses. CaseEqual on the way OUT, in the lookup below:
+                over-normalising costs only boxing, under-normalising is the
+                bug this function exists to prevent. }
+                PyGetattrLitAdd(GetTokenStr(j + 1));
+              Break;
             end;
-            Break;
+            Inc(j);
           end;
-          Inc(j);
+          Continue;
         end;
-        Continue;
+        Inc(j);
       end;
-      Inc(j);
+      Inc(ri);
     end;
-    Inc(ri);
   end;
+  for i := 0 to PyGetattrLitCount - 1 do
+    if CaseEqual(PyGetattrLitNames[i], nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 function PyMethodUsedAsValue(const nm: AnsiString): Boolean;
