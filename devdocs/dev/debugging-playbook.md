@@ -11664,6 +11664,64 @@ as a hypothesis with a mechanism, which is worth more than the count, and the
 mechanism is the paragraph at the top: the consumer is the component the symptom
 certifies is running.
 
+## A POSITIVE CONTROL PROVES THE READOUT IT MOVES AND NO OTHER — the instrument had two numbers and the control could only ever reach one
+
+Measured 2026-09-20 (frankS), on an SRAM instrument for the ESP demos.
+
+The instrument printed two numbers: **(a)** our object's `data=`/`bss=`, taken
+from the compiler's own `ok:` line, and **(b)** the free DRAM pool, summed from
+the chip's `heap_init` lines in a qemu boot log.
+
+It was positive-controlled, deliberately and in the way this file prescribes: a
+**40,000-byte static array** — not a power of two, not any arena constant in the
+tree — added to a copy of the program. It moved both numbers, in the right
+directions, by the right amounts:
+
+```
+bss        89,352 -> 129,356   (+40,004)
+DRAM pool 211,296 -> 171,296   (-40,000 exactly)
+```
+
+That is a good control and it passed. **Readout (a) was nevertheless wrong by
+42%**, and stayed wrong through a commit, a ticket summary and two peer reports.
+
+`data=` on the compiler's `ok:` line is the whole **data segment** — `.data`
+*and* `.rodata`. On the ESP-IDF profile `.rodata` carries no `W` flag, so the
+linker places it in the flash DROM window, not in SRAM:
+
+```
+.dram0.data     .data     0x3fc89f08   0x8e80  (36,480)   SRAM
+.dram0.bss      .bss      0x3fc94ef8  0x15d08  (89,352)   SRAM
+.flash.rodata   .rodata   0x3c216f30   0xd148  (53,576)   FLASH
+
+reported  88,656 + 89,352 = 178,008    true  36,480 + 89,352 = 125,832
+```
+
+**Why the control could not have caught it.** A static array lands in `.bss`.
+`.bss` is reported identically and correctly by the `ok:` line and by the
+section table — it was never the broken readout. The control moved the half
+that worked, passed, and was silent about the half that did not. It had the
+right population for *"does this instrument see memory appear"* and no
+population at all for *"is the data figure the right data figure"*.
+
+**The shape.** `A GUARD THAT CANNOT FAIL IS NOT A GUARD` is usually read as a
+question about the *assertion*. This is the same rule one level out: when an
+instrument prints **more than one number**, a single control licenses exactly
+the numbers it perturbs, and the others are unguarded while *feeling* guarded —
+worse than unguarded, because the instrument now carries a passing control.
+
+**The discharge, and it is one extra row per number.** For each figure the
+instrument prints, name a change that must move *that* figure and no other, and
+check it. Here: the static array for `.bss`; a large **string literal** for
+`.data`/`.rodata`, which would have split the two immediately and cost one
+compile. Ask of every readout: *what would I have to change for THIS number,
+alone, to move — and have I done it?*
+
+Corollary worth having on its own: **a figure that sums two things the system
+distinguishes is a mislabelled figure waiting to happen.** The linker branches
+on the `W` flag, so any SRAM question must be asked of the section table, which
+carries that flag, and never of a total that has already added across it.
+
 ## A SYMBOL CENSUS ANSWERS ABOUT SYMBOLS AND THE LINKER DECIDES ON RELOCATIONS — the two sets differ by exactly the thing you are measuring
 
 Measured 2026-09-20 (frankS), pricing `--dce` on the SRAM axis for

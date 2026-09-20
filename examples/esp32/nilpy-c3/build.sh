@@ -178,7 +178,42 @@ if [ "${1:-}" = "sram" ]; then
     exit 1
   fi
   echo "--- SRAM  $(basename "$PWD")  $CHIP  ${PXX_EXTRA_FLAGS:-(no extra flags)}  $MAIN_SRC"
-  echo "our object: $PXX_SIZE_LINE"
+  echo "compiler line: $PXX_SIZE_LINE"
+  # READ THE SECTION TABLE, NOT THE `ok:` LINE. The compiler's `data=` is the
+  # whole data segment -- .data AND .rodata -- and on this profile .rodata has
+  # no W flag, so the IDF linker puts it in the flash DROM window (measured:
+  # .flash.rodata at 0x3c216f30) while .data and .bss go to DRAM. Taking
+  # data+bss off that line therefore OVERSTATES SRAM by the whole read-only
+  # pool: 88,656+89,352 = 178,008 against the true 36,480+89,352 = 125,832 on
+  # the print demo, a 42% overstatement, and it is the number that got reported.
+  #
+  # The positive control did not catch it and could not have: a static array
+  # lands in .bss, the readout .bss is reported correctly by both instruments,
+  # so a control drawn from the bss population passes while the DATA readout is
+  # mislabelled. A control proves the readout it moves and no other.
+  if command -v readelf >/dev/null 2>&1 && [ -f main/main.o ]; then
+    # Shell arithmetic again, for the same reason as the pool sum above: mawk
+    # has no strtonum and reads "0x8e80" as 0, which here would print an SRAM
+    # figure of exactly .bss and look entirely plausible.
+    sec_d=0; sec_b=0; sec_r=0
+    while read -r nm sz; do
+      case "$nm" in
+        .data)   sec_d=$((16#$sz));;
+        .bss)    sec_b=$((16#$sz));;
+        .rodata) sec_r=$((16#$sz));;
+      esac
+    # Find the NAME and take the size four fields on, rather than a fixed
+    # column: readelf drops the space inside the index once it reaches [10],
+    # so every field index shifts by one partway down its own table -- which
+    # silently gave .data=0 .bss=0 on the first cut of this line.
+    done < <(readelf -SW main/main.o | awk '{ for (i = 1; i <= NF; i++)
+        if ($i == ".data" || $i == ".bss" || $i == ".rodata") print $i, $(i + 4) }')
+    [ "$sec_d" -gt 0 ] && [ "$sec_b" -gt 0 ] || { echo "FAIL sram -- section table gave .data=$sec_d .bss=$sec_b"; exit 1; }
+    printf 'our object SRAM  %d B  (.data %d + .bss %d)\n' "$((sec_d + sec_b))" "$sec_d" "$sec_b"
+    printf 'our object FLASH %d B  (.rodata, no W flag -> DROM)\n' "$sec_r"
+  else
+    echo "(no readelf: SRAM/flash split not available; the compiler line above merges .data and .rodata)"
+  fi
   printf '%s\n' "$regions" | sed 's/^/  /'
   # Shell arithmetic, not awk: mawk (make's awk on this box) has no strtonum,
   # and an awk that silently reads "0x14900" as 0 would print a plausible small
