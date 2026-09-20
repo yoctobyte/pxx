@@ -957,3 +957,4 @@
 2026-09-20T11:12:18Z	borg	9f57f3c18b3520fb51c434a55b3b8dbfc7c90cc6	would-pin PENDING 9f57f3c18b35 — qualifies, streak 1/2
 2026-09-20T12:27:46Z	borg	e3c4ae9ccc92cb8298824269c3652457f0ee46df	would NOT pin e3c4ae9ccc92 — 1 red(s) the current pin does not have, 9 inherited from the current pin: test-core#src:test/c_asm_in_inline_body.c@2
 2026-09-20T12:51:32Z	borg	751ab922ebf80b1152fa320e6bb795f6dfc7548a	would NOT pin 751ab922ebf8 — 1 red(s) the current pin does not have, 9 inherited from the current pin: test-core#src:test/c_asm_in_inline_body.c@2
+2026-09-20T13:21:45Z	borg	df19c8d958076d67f06e2422142e877a1aa41033	would-pin PENDING df19c8d95807 — qualifies, streak 1/2
