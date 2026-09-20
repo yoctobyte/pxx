@@ -30094,3 +30094,49 @@ spelling of it.
 Related: CLAUDE.md, "Do not ask 'is it verified' — ask 'what would this be if it
 were false', and go look at THAT" — of which this is the worked instance for a
 CAUSE rather than for a fact.
+
+## WHICH OF N PLACES BUILDS THIS NODE? INSTRUMENT ALL N AND DIFF ONE LINE OF SOURCE
+
+A differential over CONSTRUCTION SITES rather than over outputs. Reach for it
+the moment the question is *"which code path handles this shape"* in a compiler
+with more than a couple of candidates, because the cost difference against
+reading is not marginal.
+
+Measured 2026-09-20, finding where NilPy builds the store for `b.fn = f`:
+
+- **Reading**: six candidate `AN_FIELD` sites in the NilPy lvalue parser, plus
+  the shared Pascal walker, plus their callers. About an hour. **The answer was
+  none of them** — every site was a plausible reading of the code and every one
+  was wrong.
+- **Probing**: insert `if PxxDbgEnabled('...') then writeln('site=<line>')`
+  above *every* construction site, one rebuild (~12s here), run. Sites that
+  never fire are eliminated for free.
+
+The first probe run was still too noisy to read — the RTL's own parse fired
+thousands of times and drowned the program's one. **The discriminator is the
+differential**: compile the same file twice, once with the single line of
+interest and once with it deleted, and diff the per-site counts.
+
+```
+diff <(PXXDBG=... compile without_the_line) <(PXXDBG=... compile with_it)
+>       1 PXXDBG n.asg py=34339
+```
+
+**Exactly one site, exactly one extra construction.** No reading of callers, no
+reasoning about which arm a receiver takes.
+
+Three things that make it work, all of which the noisy first attempt lacked:
+
+1. **Probe EVERY site mechanically, not the ones you suspect.** A script over
+   `grep -n 'AllocNode(AN_X)'` is the point — hand-picking reintroduces the
+   guess. Inserting in REVERSE line order keeps the labels equal to the
+   ORIGINAL line numbers, so the report maps straight back to the unprobed file.
+2. **Diff, do not read.** Any shared runtime parsed alongside the subject swamps
+   an absolute count, and the busiest site is almost never yours.
+3. **Delete one LINE, not one file.** Everything else — the same unit, the same
+   imports, the same receiver — stays identical, so the single differing row
+   cannot be an artefact of compiling a different program.
+
+**A site that never fires is the useful half.** Learning that six carefully
+chosen candidates are all dead costs one rebuild and kills a whole branch of
+the search; reading them can only ever confirm one.

@@ -33539,6 +33539,7 @@ var chainN: Integer;   { targets in a chained assignment `a = b = v` }
     name: AnsiString; symIdx, lhsNode, node, ci, rhsNode, annIdx, delBase: Integer; tk: TTypeKind;
     unpStar: Boolean;   { the unsupported-unpack diagnostic below }
     annSig: Integer;   { Callable signature of an annotated target, or -1 }
+    cbSig, cbCode, cbThunk, cbNode: Integer;   { callable value into a procedural SLOT }
     augTk: TTokenKind;
     mmi, mpi, selfArg, lastArg, argNode, kwIdx, j, k: Integer;   { inherited (super()) call }
     cmpTmp, cmpSeq, cmpAsgn: Integer;   { comprehension into a non-list target }
@@ -34371,6 +34372,52 @@ begin
     { Storing a VARIANT (dict/list element, dynamically typed) into a tyClass slot
       must unbox to the instance pointer — otherwise the raw variant overwrites the
       8-byte class slot and the object reads as garbage / loses identity. }
+    { A callable VALUE stored into a PROCEDURAL SLOT -- `box.fn = f`, and by the
+      same arm a procvar and an array element, because NodeProcSlotSig answers
+      for all three lvalue shapes.
+
+      CONSUMER 2 of the callback capability. Consumer 1 is the ARGUMENT site
+      (PyCoerceCallableArgsIn, 2b28c3302) and this is deliberately the SAME
+      decision in the same order rather than a second policy: the carrier's
+      named routine, then ProcSigCompatible for a Pascal routine, then a
+      synthesized thunk for a def, then a named refusal. Two coercion sites
+      with two different answers for one question is the shape
+      normalise-dont-special-case names, and the store side is the one that
+      stayed broken -- it took no coercion path at all and the carrier HANDLE
+      went into the slot, so `CallFn(b)` jumped into the heap with NO
+      diagnostic. An ordinary field store (`b.n = 42`) was always correct and
+      reaches the real Pascal field, which is why this read as working.
+      feature-n-a-nilpy-def-has-no-native-abi-entry-point-to-hand-to-a-c-callback }
+    cbSig := NodeProcSlotSig(lhsNode);
+    if (cbSig >= 0) and (rhsNode >= 0) then
+    begin
+      cbCode := PyCarrierNamedProc(rhsNode);
+      if (cbCode >= 0) and ProcSigCompatible(cbCode, cbSig) then
+      begin
+        cbNode := AllocNode(AN_PROCADDR);
+        ASTIVal[cbNode] := cbCode;
+        ASTTk[cbNode] := Ord(tyPointer);
+        rhsNode := cbNode;
+      end
+      else if (cbCode >= 0) and PyDefFitsCallbackThunk(rhsNode, cbCode, cbSig) then
+      begin
+        cbThunk := PyGetOrMakeCallbackThunk(cbCode, cbSig);
+        if cbThunk >= 0 then
+        begin
+          cbNode := AllocNode(AN_PROCADDR);
+          ASTIVal[cbNode] := cbThunk;
+          ASTTk[cbNode] := Ord(tyPointer);
+          rhsNode := cbNode;
+        end;
+      end
+      else if (cbCode >= 0) and (not PyTypingPass) then
+        Warn('Nil Python: ' + Procs[cbCode].Name + ' does not have the signature '
+             + 'of the procedural slot it is being stored into, so the callable '
+             + 'object is stored rather than a code address — calling through '
+             + 'that slot will crash. Only a top-level def of matching arity '
+             + 'gets a native-ABI thunk; a closure or bound method would need '
+             + 'the carrier kept alive, which a bare code slot cannot do.');
+    end;
     if (IntToTypeKind(ASTTk[lhsNode]) = tyClass) and
        (IntToTypeKind(ASTTk[rhsNode]) = tyVariant) and
        (ResolveNodeRec(lhsNode) >= REC_UCLASS_BASE) then

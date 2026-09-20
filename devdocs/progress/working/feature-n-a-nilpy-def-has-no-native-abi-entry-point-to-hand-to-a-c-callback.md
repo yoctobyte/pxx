@@ -4,7 +4,7 @@ prio: 85
 type: feature
 owner: frankb-8e
 blocked-by: []
-summary: "PARTLY DONE. A NilPy `def` compiles all-Variant -- by-reference Variant parameters, the result on the Variant hidden destination -- so it can never match a native procedural signature. `PyGetOrMakeCallbackThunk` now synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT's signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. That covers a procedural PARAMETER, including on an `external cdecl` routine. WHAT REMAINS, and it is what the ESP demo actually needs: the same def assigned to a procedural FIELD takes no such path and segfaults with NO diagnostic, because the coercion lives in PyCoerceCallableArgsIn, which sees arguments only. SPRINGS wherever a callable reaches native code through a field or a struct rather than an argument list. The ISR question -- boxing into Variants allocates -- is deliberately out of scope and needs its own contract."
+summary: "CONSUMERS 1 AND 2 DONE; ESP INTERRUPTS NOT. A NilPy `def` compiles all-Variant, so it can never match a native procedural signature. `PyGetOrMakeCallbackThunk` synthesizes `$pycbthunk_<def>_<sig>` carrying the SLOT's signature and stores ITS address, keyed on the PAIR because one def can go to two differently-shaped slots. Consumer 1 is the ARGUMENT site (2b28c3302), consumer 2 the STORE site -- a procedural FIELD, array element or procvar, via NodeProcSlotSig, which answers for all three lvalue shapes. WHAT REMAINS: ESP interrupts, which is NOT delivered by either and is a different contract -- boxing into Variants allocates, and an ISR that allocates is a latent crash with good latency numbers. A capturing def is still silent at both sites; that is its own ticket and the carrier shape is now measured there."
 status: working
 ---
 
@@ -263,6 +263,81 @@ cb.MkTwo(two)      # works
 the field-assignment path needs the identical `ProcSigCompatible` / thunk
 decision the argument path now has. Nothing about the thunk changes; what
 changes is that a second site has to ask the question.
+
+## CONSUMER 2 DELIVERED 2026-09-20 -- the STORE site
+
+Same decision, same order, same code path shape as consumer 1: the carrier's
+named routine, then `ProcSigCompatible` for a Pascal routine, then a
+synthesized thunk for a def, then a named refusal. Deliberately NOT a second
+policy -- two coercion sites with two answers to one question is the shape
+`normalise-dont-special-case.md` names, and the store side is the one that had
+stayed broken.
+
+**A better hook than this ticket named.** The text above says
+`RecFieldProcSig`, which is field-only. `NodeProcSlotSig` (ir.inc) already
+answers for **all three** lvalue shapes -- symbol, array element, field -- so
+one arm covers `b.fn = f`, `arr[i] = f` and a plain procvar rather than a
+field-shaped special case. It needed a forward declaration in `compiler.pas`;
+that file's own comments record this as the FIFTH parser-file-reaching-into-
+ir.inc forward and warn that **`gate.sh quick`'s FPC seed canary is the only
+instrument that catches a missing one**, because pxx prescans headers and both
+`make compiler/pascal26` and the quick tier pass without it. Canary PASS.
+
+### How the site was found, because the searching was the expensive part
+
+Reading six candidate `AN_FIELD` sites in the NilPy lvalue parser and the
+shared Pascal walker cost an hour and found nothing -- **none of them fires for
+`b.fn = f`**. The answer came from a differential: probe every `AN_ASSIGN`
+construction site, compile the same file with and without the single line, diff
+the counts. Exactly one site differed, in one rebuild.
+
+### Measured, c72af31f3a6e
+
+| row | before | after |
+| --- | --- | --- |
+| def into a procedural FIELD | silent SIGSEGV | 502 |
+| Pascal routine into the same field | silent SIGSEGV | 502 |
+| one def into two differently-shaped FIELDS | silent SIGSEGV | 7 and 3.75 |
+| bound method into a field | silent SIGSEGV | **refused BY NAME** |
+| ordinary field store (`b.n = 42`) | correct | correct |
+
+That last row is why this read as working, and it was checked rather than
+assumed: a prediction that it went to a dynamic side table was **wrong** --
+Pascal reads back 42 from the real field. The store path was always fine; only
+the coercion was missing.
+
+### INERT UNTIL PINNED
+
+`stable_linux_amd64/default/pinned` (v412) **segfaults on this fixture**, and
+`lib/**` consumers build against the pin. So consumer 2 changes nothing for a
+pinned build until the next pin carries it. Stated here because a fix whose
+effect is invisible until a pin is the shape that gets re-reported as not
+working.
+
+### What this does NOT deliver
+
+**ESP interrupts.** Untouched, and a different contract: boxing into Variants
+allocates, and an ISR that allocates is a latent crash with good latency
+numbers. `examples/esp32/nilpy-hw-c3` still polls and its header is still
+accurate. Do not attach that demo sentence to this work.
+
+**A capturing def**, at either site -- see
+`bug-n-a-capturing-nested-def-into-a-procedural-slot-segfaults-with-no-diagnostic`,
+which now carries the measured carrier spelling.
+
+**ONE SILENT PATH SURVIVES IN THE FEATURE WHOSE POINT IS REMOVING SILENT
+PATHS, and it is named here rather than fixed because the fix arrived after a
+green tier.** In the store arm, if `PyDefFitsCallbackThunk` ACCEPTS and
+`PyGetOrMakeCallbackThunk` then returns -1, the arm falls through with no
+warning and the carrier handle goes into the slot -- exactly the original
+defect, reached by a different door. It is unreachable short of a proc
+registration failure, which is why the tier is green and why no fixture covers
+it. **It is recorded because "unreachable" is a claim about today's
+registration code and the refusal arm beside it is the thing a reader would
+assume already covers this.** The fix is one `else` on the inner `if`, sharing
+the existing refusal text; it needs a full tier and was not worth voiding a
+finished one. Found by reading the diff before committing, not by a test --
+which is the honest provenance and also the reason to distrust it least.
 
 ## Acceptance
 

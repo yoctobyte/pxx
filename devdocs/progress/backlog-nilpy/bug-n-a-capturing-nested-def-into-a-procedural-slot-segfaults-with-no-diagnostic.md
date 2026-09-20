@@ -75,6 +75,45 @@ thunk work:
 The last row is the only silent one left, which is the whole argument for
 ranking it: every sibling either works or says why not.
 
+## THE CARRIER SHAPE, MEASURED 2026-09-20 -- this ticket had GUESSED it
+
+The text above says `PyCarrierNamedProc` "does not recognise the carrier shape
+a capturing nested def produces". That was written from reasoning. Measured at
+`c72af31f3a6e` with a probe printing the callee name at the coercion site, the
+shape is **two layers deep**:
+
+```
+pyvar_of_callable( pyboundfn_bind( <lifted proc>, <captures> ) )
+```
+
+`pyvar_of_callable` is a FOURTH carrier spelling beside the three
+`PyCarrierNamedProc` knows (`pybound_new_sig`, `pybound_new_star`,
+`pybound_new`), and `pyboundfn_bind` is the closure binder inside it.
+
+**An attempt was made and reverted rather than half-landed.** Teaching the
+function to unwrap `pyvar_of_callable` and accept `pyboundfn_bind` gets as far
+as the binder and still answers -1, because the AN_PROCADDR fallback reads only
+the FIRST argument of the call and the lifted proc is not there. So the
+remaining work is to find where in `pyboundfn_bind`'s argument list the routine
+is, which is a small measurement this ticket now has the setup for.
+
+**It is still a naming problem and not a capability one.** Once named, a lifted
+routine carries its captures as EXTRA PARAMETERS, so it fails `ProcSigCompatible`
+on arity and fails `PyDefFitsCallbackThunk`'s all-Variant test, and takes the
+named refusal. That is the correct outcome and the whole goal.
+
+## It is silent at BOTH coercion sites, which is why it survived two fixes
+
+| site | a def | a bound method | a CAPTURING def |
+| --- | --- | --- | --- |
+| argument (`MkTwo(f)`) | thunk, works | refused by name | **silent SIGSEGV** |
+| store (`e.two = f`) | thunk, works | refused by name | **silent SIGSEGV** |
+
+Both sites ask `PyCarrierNamedProc` first and skip their whole arm on -1, so
+one unrecognised carrier shape produces the identical silence at both. Fixing
+the function fixes both rows at once -- which is the argument for fixing it
+there rather than adding a check at either site.
+
 ## Acceptance
 
 That program prints a diagnostic naming `inner` and the reason a capturing def

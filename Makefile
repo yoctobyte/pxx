@@ -1038,6 +1038,10 @@ test-nilpy: $(COMPILER)
 	@# siblings which key on the routine alone; with a def-keyed cache row 5 gets
 	@# row 4's thunk and is called with the wrong convention. Two slots of the
 	@# SAME shape would exercise none of that. Pin v412 segfaults on row 1.
+	@# Rows 7-10 are CONSUMER 2, the same capability reached by a STORE rather
+	@# than an argument -- one decision in one order at both sites, not two
+	@# policies. MkEmpty leaves every slot nil so only the store can make them
+	@# callable; a pre-filled slot would pass either way.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_def_into_a_native_callback_slot.npy $(TESTTMP)/test_nilpy_cbthunk
 	$(TESTTMP)/test_nilpy_cbthunk | diff - test/test_nilpy_def_into_a_native_callback_slot.expected
 	# A run-time dispatched method call PAST FOUR ARGUMENTS. The entry points

@@ -51,3 +51,23 @@ print(cb.CallDbl(cb.MkDbl(add)))
 # 6: two differently-shaped slots filled at one call site
 s = cb.FillTwoAndOne(two, one)
 print(cb.CallTwo(s), cb.CallOne(s))
+
+# 7-10: CONSUMER 2 -- the same capability reached by a STORE rather than an
+# argument. This took no coercion path at all before: the carrier handle went
+# into the slot and calling through it segfaulted with NO diagnostic, while an
+# ordinary field store (b.n = 42) was always correct, which is why it read as
+# working. MkEmpty leaves every slot nil, so ONLY the store can make these
+# callable -- a pre-filled slot would pass whether or not the store worked.
+e = cb.MkEmpty()
+e.two = two                  # a def into a procedural FIELD
+print(cb.CallTwo(e))
+
+e2 = cb.MkEmpty()
+e2.two = cb.TheMaker         # a PASCAL routine into the same field
+print(cb.CallTwo(e2))
+
+# one def into two differently-shaped FIELDS -- the pair key, via the store
+e3 = cb.MkEmpty()
+e3.two = add
+e3.dbl = add
+print(cb.CallTwo(e3), cb.CallDbl(e3))
