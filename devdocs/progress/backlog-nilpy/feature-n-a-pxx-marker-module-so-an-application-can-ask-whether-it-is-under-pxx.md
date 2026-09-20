@@ -1,7 +1,7 @@
 ---
 slug: feature-n-a-pxx-marker-module-so-an-application-can-ask-whether-it-is-under-pxx
 title: a pxx marker module, so an application can ask whether it is under pxx
-summary: "OWNER'S DECISION 2026-09-20 (relayed by frankuser, secondhand): instead of an application detecting pxx by `try: import ctypes` FAILING, give pxx a special named module that exists ONLY under pxx, so the application asks the question directly. His words: *\"we could have PXX have a special named module (could be mostly empty) that would indicate if we are compiling under pxx. that way, we don't need the 'ctypes import' hack - and can safely implement a ctypes. small change in the lekkerzeilen and TSP application, and allows us to move forward.\"* The mechanism already exists and needs no new machinery: NilPy resolves `try: import X / except ImportError:` at COMPILE time, and CPython takes the except arm naturally because the module is not there. UNBLOCKS 10 of TSP's 20 remaining failures (3 direct ctypes imports, 7 downstream of tsp/platform/__init__.py:89) and lekkerzeilen's backend selection, WITHOUT pxx pretending ctypes is absent -- and it leaves room to implement a real ctypes later. TWO ENGINEERING POINTS ARE OPEN, both raised to the owner and neither settled: the module's NAME (a claimable name like `pxx` answers TRUE under CPython for anyone who pip-installs a package of that name; a dunder-ish name such as `__pxx__` cannot be claimed -- and `sys.implementation.name` is where a CPython programmer looks first, with the module as the cheap check), and its CONTENT (he said \"mostly empty\"; a seat proposed target, pointer size and version, since applications have no way to ask today -- last week's `sys.maxsize` bug was that same gap)."
+summary: "OWNER'S DECISION 2026-09-20 (relayed by frankuser, secondhand): instead of an application detecting pxx by `try: import ctypes` FAILING, give pxx a special named module that exists ONLY under pxx, so the application asks the question directly. His words: *\"we could have PXX have a special named module (could be mostly empty) that would indicate if we are compiling under pxx. that way, we don't need the 'ctypes import' hack - and can safely implement a ctypes. small change in the lekkerzeilen and TSP application, and allows us to move forward.\"* The mechanism already exists and needs no new machinery: NilPy resolves `try: import X / except ImportError:` at COMPILE time, and CPython takes the except arm naturally because the module is not there. UNBLOCKS 10 of TSP's 20 remaining failures (3 direct ctypes imports, 7 downstream of tsp/platform/__init__.py:89) and lekkerzeilen's backend selection, WITHOUT pxx pretending ctypes is absent -- and it leaves room to implement a real ctypes later. TWO ENGINEERING POINTS ARE OPEN, both raised to the owner and neither settled: the module's NAME (a claimable name like `pxx` answers TRUE under CPython for anyone who pip-installs a package of that name; a dunder-ish name such as `__pxx__` cannot be claimed -- and `sys.implementation.name` is where a CPython programmer looks first, with the module as the cheap check), and its CONTENT (he said \"mostly empty\"; a seat proposed target, pointer size and version, since applications have no way to ask today -- last week's `sys.maxsize` bug was that same gap). **NAME DECIDED 2026-09-20 (owner, relayed by frankuser): the marker is `__pxx__`.** He picked the dunder spelling on the stated fork -- NO, a third party must not be able to make the check come out TRUE on ordinary CPython by publishing a package of that name -- so the name is unclaimable by construction. The approved shape is `try: import __pxx__ / HAVE_PXX = True / except ImportError: HAVE_PXX = False`. TAKEABLE NOW; the name was the only thing missing. STILL OURS AND NOT HIS: whether the module carries target/pointer-size/version rather than being empty, and whether `sys.implementation.name` is set alongside it -- he was asked and did not decide them, deliberately, as engineering."
 track: N
 type: feature
 prio: 80
@@ -113,3 +113,36 @@ dunder-ish one says no.
 The application-side edits stay with lekkerzeilen's and TSP's own seats — the
 marker is NECESSARY but not SUFFICIENT, because each application still has to
 invert its own guard.
+
+## NAME DECIDED — `__pxx__` (owner, 2026-09-20, relayed by frankuser, secondhand)
+
+He answered the fork as it was put to him: **should an application's pxx-check be something a third
+party could make TRUE on ordinary CPython by publishing a package of that name?** No. So the spelling
+is the unclaimable one.
+
+```python
+try:
+    import __pxx__
+    HAVE_PXX = True
+except ImportError:
+    HAVE_PXX = False
+```
+
+**This ticket is takeable now.** The name was the only thing it was missing; the mechanism, the
+measurements and the fixture requirement are already in the sections above, unchanged.
+
+**STILL OPEN AND EXPLICITLY OURS — he was asked and deliberately did not decide them:**
+- whether `__pxx__` carries target / pointer size / version, or is empty as he first suggested;
+- whether `sys.implementation.name` is set alongside it.
+
+Both are engineering. Do not send them back up.
+
+**Wiring is already in flight on the application side:** lekkerzeilen-7a and tuxspaceprogram-c6 have
+the spelling direct from frankuser and are wiring their one-line branches. **They take the final word
+from the coordinator if anything about the spelling changes** — so if an implementer finds a reason
+`__pxx__` cannot be the module name as spelled, that is a message to frankz-e5 BEFORE landing, not a
+quiet substitution. Two applications are about to depend on the exact string.
+
+**Unchanged and still the point:** pxx resolves the guarded import at COMPILE time, so the CPython arm
+is never compiled, and the fixture must put the marker import in BOTH positions, with and without an
+`else:` — a first-wins table is exposed only by the arrangement that puts the correct entry last.
